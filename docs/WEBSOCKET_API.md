@@ -48,6 +48,8 @@ If the selected deployment disconnects or the tunnel drops, the proxy closes the
   - [deployment.progress](#deploymentprogress)
   - [environment.health](#environmenthealth)
   - [approval-needed](#approval-needed)
+  - [Ask Armada thread events](#ask-armada-thread-events)
+  - [Planning session events](#planning-session-events)
   - [Generic Events](#generic-events)
 - [Command Actions](#command-actions)
   - [Status & Control](#status--control)
@@ -176,7 +178,8 @@ Messages sent from the client to the server must include a `Route` field to sele
 
 ### Server-to-Client
 
-All server messages include a `type` field indicating the event kind, and a `timestamp` field with the UTC time:
+Every server message includes a `type` field. Pushed events use the envelope `type`, `message`, `data`, `timestamp`
+(UTC); command replies use `type` (`command.result` or `command.error`), `action`, `data`, and `error`:
 
 ```json
 {
@@ -211,7 +214,7 @@ A global administrator may add `"AllTenants": true` to receive entity events of 
 
 **Server responds with:** a [`status.snapshot`](#statussnapshot) message.
 
-After the initial snapshot, the client will receive all broadcast events ([`mission.changed`](#missionchanged), [`voyage.changed`](#voyagechanged), [`captain.changed`](#captainchanged), [`objective.changed`](#objectivechanged), [`objective-refinement-session.changed`](#objective-refinement-sessionchanged), [`objective-refinement-session.message.created`](#objective-refinement-sessionmessagecreated), [`objective-refinement-session.message.updated`](#objective-refinement-sessionmessageupdated), [`objective-refinement-session.summary.created`](#objective-refinement-sessionsummarycreated), [`objective-refinement-session.applied`](#objective-refinement-sessionapplied), [`check-run.changed`](#check-runchanged), [`deployment.changed`](#deploymentchanged), [`deployment.progress`](#deploymentprogress), [`environment.health`](#environmenthealth), [`approval-needed`](#approval-needed), and [generic events](#generic-events)) as they occur.
+After the initial snapshot, the client will receive all broadcast events ([`mission.changed`](#missionchanged), [`voyage.changed`](#voyagechanged), [`captain.changed`](#captainchanged), [`objective.changed`](#objectivechanged), [`objective-refinement-session.changed`](#objective-refinement-sessionchanged), [`objective-refinement-session.message.created`](#objective-refinement-sessionmessagecreated), [`objective-refinement-session.message.updated`](#objective-refinement-sessionmessageupdated), [`objective-refinement-session.summary.created`](#objective-refinement-sessionsummarycreated), [`objective-refinement-session.applied`](#objective-refinement-sessionapplied), [`check-run.changed`](#check-runchanged), [`deployment.changed`](#deploymentchanged), [`deployment.progress`](#deploymentprogress), [`environment.health`](#environmenthealth), [`approval-needed`](#approval-needed), [planning session events](#planning-session-events), and [generic events](#generic-events)) as they occur. [Ask Armada thread events](#ask-armada-thread-events) go only to the thread owner's sockets.
 
 ---
 
@@ -721,6 +724,25 @@ The direct captain chat endpoint (`POST /api/v1/captains/{id}/chat` with a `Turn
   "timestamp": "2026-10-04T18:00:00.000Z"
 }
 ```
+
+### Planning session events
+
+Broadcast to the planning session's tenant. Field names are camelCase.
+
+| Type | Payload | When |
+|---|---|---|
+| `planning-session.changed` | `{ session }` | The session's status or metadata changed |
+| `planning-session.message.created` | `{ sessionId, message }` | A transcript message was added |
+| `planning-session.message.updated` | `{ sessionId, message }` | A streamed assistant message was updated |
+| `planning-session.thinking` | `{ sessionId, messageId, delta }` | Streamed reasoning for the running turn |
+| `planning-session.tool` | `{ sessionId, messageId, phase, id, name, arguments, ok, elapsedMs, result }` | A tool call started or completed |
+| `planning-session.summary.created` | `{ sessionId, messageId, draft }` | A dispatch draft was generated |
+| `planning-session.dispatch.created` | `{ sessionId, voyageId, messageId }` | A voyage was dispatched from the session |
+| `planning-session.deleted` | `{ sessionId }` | The session was deleted |
+| `objective-refinement-session.deleted` | `{ sessionId, objectiveId }` | A refinement session was deleted |
+
+`planning-session.created` and `planning-session.stopped` (and the refinement-session `created` and `stopped`
+events) are generic events (see below).
 
 ---
 
@@ -2631,6 +2653,9 @@ If a message is sent without a route:
 | `prUrl` | string \| null | Pull request URL |
 | `commitHash` | string \| null | Git commit hash (HEAD) captured at mission completion |
 | `diffSnapshot` | string \| null | Saved git diff snapshot captured at mission completion |
+| `persona` | string \| null | Persona for this mission (for example `Worker`, `Architect`, `Judge`) |
+| `failureReason` | string \| null | Human-readable failure detail (not stable; do not parse) |
+| `failureKind` | string \| null | Structured failure classification (`MissionFailureKindEnum`: `Compile`, `TestFail`, `Timeout`, `LandingConflict`, `Crash`, `NoOp`, `Boundary`, `ScopeViolation`, `JudgeRejected`, `Infra`, `Unknown`, `ReviewDenied`, `DependencyFailed`, `MaxRuntimeExceeded`, `StallRecoveryExhausted`, `OperatorAction`, `InvalidOutput`). Branch on this, not on `failureReason` |
 | `createdUtc` | string | ISO 8601 creation timestamp |
 | `startedUtc` | string \| null | ISO 8601 start timestamp |
 | `completedUtc` | string \| null | ISO 8601 completion timestamp |

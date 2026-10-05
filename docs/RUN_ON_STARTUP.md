@@ -147,7 +147,7 @@ Remove the agent:
 
 The installer writes `~/Library/LaunchAgents/com.armada.admiral.plist`.
 
-> **Note:** `LaunchAgent` runs in your user session. If you need machine-level startup before user login, you would need a separate `LaunchDaemon` flow and a service-compatible runtime context for Armada’s repos, agent binaries, and credentials.
+> **Note:** `LaunchAgent` runs in your user session. If you need machine-level startup before user login, you would need a separate `LaunchDaemon` flow and a service-compatible runtime context for Armada's repos, agent binaries, and credentials.
 
 ## Verifying the Server Is Running
 

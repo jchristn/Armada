@@ -4,9 +4,9 @@ Connect OpenAI Codex CLI to Armada's MCP server and use natural language to orch
 
 ## Prerequisites
 
-1. **Armada installed** — `dotnet tool install -g armada`
-2. **Codex CLI installed** — `npm install -g @openai/codex`
-3. **At least one vessel registered** — a git repository for agents to work in
+1. **Armada installed** - `dotnet tool install -g Armada.Helm`
+2. **Codex CLI installed** - `npm install -g @openai/codex`
+3. **At least one vessel registered** - a git repository for agents to work in
 
 ## Setup
 
@@ -14,31 +14,22 @@ Connect OpenAI Codex CLI to Armada's MCP server and use natural language to orch
 armada mcp install
 ```
 
-This now writes the MCP configuration for all supported tools automatically. For Codex specifically, it writes `~/.codex/config.json`. If you prefer to edit manually, use:
-
-```json
-{
-  "mcpServers": {
-    "armada": {
-      "type": "http",
-      "url": "http://localhost:7891/mcp"
-    }
-  }
-}
-```
+This writes the MCP configuration for all supported tools. For Codex it runs `codex mcp add armada -- armada mcp stdio`,
+which registers Armada's stdio bridge in `~/.codex/config.toml`, so Codex does not need the HTTP server. See the
+appendix to configure it by hand.
 
 Use `--dry-run` to preview without writing.
 
 ## Default Permission Mode
 
-Armada runs Codex captains with `--approval-mode full-auto` by default, so all commands are auto-approved without user prompts. This is configurable via the captain's `ApprovalMode` property.
+Armada runs Codex captains non-interactively (`codex exec`, which never prompts) with `--sandbox workspace-write` by default, so commands run without approval prompts inside the workspace sandbox. On Windows the default is `--dangerously-bypass-approvals-and-sandbox`. To run a captain without it, untick **Auto-approve agent tool use** when editing the captain in the dashboard (or pass `autoApprove: false` to the `create_captain` / `update_captain` MCP tools); the captain then always runs with `--sandbox workspace-write`.
 
 ## Verify It Works
 
 Start the Admiral server (`armada server start`), then:
 
 ```bash
-codex --approval-mode full-auto "Check Armada status and tell me what's running."
+codex "Check Armada status and tell me what's running."
 ```
 
 Codex will call `status` and report active captains, missions, and voyages.
@@ -59,31 +50,32 @@ For Codex to effectively orchestrate Armada, paste the contents of [`INSTRUCTION
 
 ## Appendix: Manual Configuration
 
-If you prefer to configure MCP manually instead of using `armada mcp install`, add the following to `~/.codex/config.json`:
+If you prefer to configure MCP manually instead of using `armada mcp install`, use `codex mcp add`, which writes
+`~/.codex/config.toml`. `armada mcp install` itself registers the stdio bridge.
 
-**HTTP Transport (recommended)** — requires Admiral server running (`armada server start`):
+**Stdio Transport** (what `armada mcp install` uses) - no server required, Armada runs as a subprocess:
 
-```json
-{
-  "mcpServers": {
-    "armada": {
-      "type": "http",
-      "url": "http://localhost:7891/mcp"
-    }
-  }
-}
+```bash
+codex mcp add armada -- armada mcp stdio
 ```
 
-**Stdio Transport** — no server required, Armada runs as a subprocess:
+which writes:
 
-```json
-{
-  "mcpServers": {
-    "armada": {
-      "type": "stdio",
-      "command": "armada",
-      "args": ["mcp", "stdio"]
-    }
-  }
-}
+```toml
+[mcp_servers.armada]
+command = "armada"
+args = ["mcp", "stdio"]
+```
+
+**HTTP Transport** - requires the Admiral server running (`armada server start`):
+
+```bash
+codex mcp add armada --url http://localhost:7891/mcp
+```
+
+which writes:
+
+```toml
+[mcp_servers.armada]
+url = "http://localhost:7891/mcp"
 ```

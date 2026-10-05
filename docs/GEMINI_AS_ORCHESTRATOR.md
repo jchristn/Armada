@@ -4,9 +4,9 @@ Connect the Gemini CLI to Armada's MCP server and use natural language to orches
 
 ## Prerequisites
 
-1. **Armada installed** — `dotnet tool install -g armada`
-2. **Gemini CLI installed** — See [Google Gemini CLI docs](https://github.com/google-gemini/gemini-cli) for installation
-3. **At least one vessel registered** — a git repository for agents to work in
+1. **Armada installed** - `dotnet tool install -g Armada.Helm`
+2. **Gemini CLI installed** - See [Google Gemini CLI docs](https://github.com/google-gemini/gemini-cli) for installation
+3. **At least one vessel registered** - a git repository for agents to work in
 
 ## Setup
 
@@ -14,7 +14,7 @@ Connect the Gemini CLI to Armada's MCP server and use natural language to orches
 armada mcp install
 ```
 
-This now writes the MCP configuration for all supported tools automatically. For Gemini CLI specifically, it writes `~/.gemini/settings.json`. If you prefer to edit manually, use:
+This writes the MCP configuration for all supported tools. For Gemini CLI it runs `gemini mcp add --scope user --transport http armada http://localhost:7891/mcp`, which writes `~/.gemini/settings.json`. If you prefer to edit manually, use:
 
 ```json
 {
@@ -30,22 +30,17 @@ Use `--dry-run` to preview without writing.
 
 ## Default Permission Mode
 
-Armada runs Gemini captains with `--sandbox none` by default, giving them full filesystem access without approval prompts. This is configurable via the captain's `SandboxMode` property.
+Armada runs Gemini captains with `--approval-mode yolo` by default, so tool calls are auto-approved without prompts. To run a captain without it, untick **Auto-approve agent tool use** when editing the captain in the dashboard (or pass `autoApprove: false` to the `create_captain` / `update_captain` MCP tools); the captain then runs with `--approval-mode auto_edit`.
 
-## Sandbox Modes
+## Approval Modes for the Orchestrator
 
-Gemini CLI supports three sandbox modes:
-
-| Mode | Description |
-|------|-------------|
-| `none` | No restrictions — full read/write/execute access |
-| `permissive` | Some operations require approval |
-| `strict` | All file writes and shell commands require approval |
-
-For orchestration, `none` is recommended since the orchestrator only calls Armada MCP tools:
+When you run Gemini yourself as the orchestrator, its `--approval-mode` decides whether each tool call (including
+Armada's MCP tools) needs your confirmation: `default` asks every time, `auto_edit` approves edits only, and `yolo`
+approves everything. Because the orchestrator only calls Armada MCP tools, `yolo` is convenient; keep `default` if
+you want to confirm each dispatch:
 
 ```bash
-gemini --sandbox none -p "Check Armada status and dispatch a test voyage"
+gemini --approval-mode yolo -p "Check Armada status and dispatch a test voyage"
 ```
 
 ## Verify It Works
@@ -53,7 +48,7 @@ gemini --sandbox none -p "Check Armada status and dispatch a test voyage"
 Start the Admiral server (`armada server start`), then:
 
 ```bash
-gemini --sandbox none -p "Check Armada status and tell me what's running."
+gemini -p "Check Armada status and tell me what's running."
 ```
 
 Gemini will call `status` and report active captains, missions, and voyages.
@@ -76,7 +71,7 @@ For Gemini to effectively orchestrate Armada, paste the contents of [`INSTRUCTIO
 
 If you prefer to configure MCP manually instead of using `armada mcp install`, add to `~/.gemini/settings.json`:
 
-**HTTP Transport (recommended)** — requires Admiral server running (`armada server start`):
+**HTTP Transport (recommended)** - requires Admiral server running (`armada server start`):
 
 ```json
 {
@@ -88,7 +83,7 @@ If you prefer to configure MCP manually instead of using `armada mcp install`, a
 }
 ```
 
-**Stdio Transport** — no server required, Armada runs as a subprocess:
+**Stdio Transport** - no server required, Armada runs as a subprocess:
 
 ```json
 {

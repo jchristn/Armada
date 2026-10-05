@@ -51,12 +51,14 @@ Missions stay in the `Pending` state until a captain finishes its current work a
 
 ## Heartbeat Cycle
 
-The Admiral runs a health-check loop on a configurable interval controlled by `HeartbeatIntervalSeconds` (default: **30 seconds**). On each cycle the Admiral:
+The Admiral runs a health-check loop on a configurable interval controlled by the `heartbeatIntervalSeconds` setting (default: **10 seconds**). It also runs one cycle immediately at startup. On each cycle the Admiral:
 
 1. **Detects idle captains** -- captains that have finished their current mission.
 2. **Assigns pending missions** -- matches idle captains with the highest-priority unassigned missions.
-3. **Checks for stalled captains** -- captains that have not reported progress within the `StallThresholdMinutes` window (default: 10 minutes).
-4. **Runs escalation rules** -- triggers recovery or alerts for stalled or failed missions.
+3. **Checks for stalled captains** -- captains that have not reported progress within the `stallThresholdMinutes` window (default: 10 minutes).
+4. **Runs recovery and background work** -- mission failure recovery, the merge queue, background job maintenance, the vessel health schedule, and fleet action runs.
+
+Every 10 cycles (about every 100 seconds at the default interval) it also rotates logs and maintains planning sessions. Every 100 cycles (about every 17 minutes at the default interval) it runs data expiry and retention pruning (request history, Ask threads, finished jobs, import batches, and fleet action runs).
 
 ## Manual Priority Override
 
@@ -67,13 +69,10 @@ You can set mission priority at creation time or update it later to reprioritize
 Using the CLI:
 
 ```bash
-armada go "Fix critical login bug" --priority 1
+armada mission create "Fix critical login bug" --vessel my-api --priority 1
 ```
 
-Using MCP tools:
-
-- `create_mission` with the `priority` parameter
-- `dispatch` with the `priority` parameter
+Using the REST API, set `Priority` in the `POST /api/v1/missions` body. The `armada go` command and the MCP `create_mission` and `dispatch` tools do not take a priority; their missions start at the default (100), and you can change it afterward.
 
 ### After Creation
 
@@ -88,13 +87,13 @@ Using MCP tools:
 A critical bug is reported while several missions are already queued. Set the priority to a low number to ensure it is picked up next:
 
 ```bash
-armada go "Fix: users cannot log in after password reset" --priority 1
+armada mission create "Fix: users cannot log in after password reset" --vessel my-api --priority 1
 ```
 
 If the mission already exists, update its priority via MCP:
 
 ```
-update_mission(id: "msn_abc123", priority: 1)
+update_mission(missionId: "msn_abc123", priority: 1)
 ```
 
 The mission will be assigned to the next captain that becomes idle, ahead of all default-priority (100) missions.
@@ -104,7 +103,7 @@ The mission will be assigned to the next captain that becomes idle, ahead of all
 Queue up non-urgent tasks that should only run when nothing more important is waiting:
 
 ```bash
-armada go "Add XML doc comments to all public methods" --priority 200
+armada mission create "Add XML doc comments to all public methods" --vessel my-api --priority 200
 ```
 
 These missions will sit in the queue and only be assigned when no higher-priority missions are pending.
@@ -115,7 +114,9 @@ When a mission has a `Persona` field set (from a pipeline stage), the Admiral co
 
 1. **Filter by AllowedPersonas:** If a captain has `AllowedPersonas` set (JSON array), only assign if the mission's persona is in the list. If `AllowedPersonas` is null, the captain can fill any role.
 2. **Prefer PreferredPersona:** Among eligible captains, prefer one whose `PreferredPersona` matches the mission's persona.
-3. **Fallback:** If no persona-matching captain is available, assign to any idle captain (soft constraint).
+3. **No match waits:** `AllowedPersonas` is a hard filter. If no idle captain is allowed to serve the persona, the mission stays `Pending` until one is; `PreferredPersona` only breaks ties among eligible captains.
+
+A mission with a preferred captain (`RequestedCaptainId`, from the dispatch payload, the voyage's per-persona override, or the persona's default captain) goes to that captain whenever it is idle, regardless of `AllowedPersonas`; when it is busy, assignment falls back by capability tier. See [CAPTAIN_ROUTING.md](CAPTAIN_ROUTING.md).
 
 This allows dedicating specific captains to specific roles (e.g., an Opus-backed captain for Architect work, Sonnet-backed captains for Worker tasks).
 

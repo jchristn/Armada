@@ -206,7 +206,7 @@ default.
   auto titles, summarize.
 - [x] **P1.3** Thread-aware `CaptainChatService` turn: server-side history, background turn with cancel,
   persisted assistant message and tool calls, owner-scoped streaming.
-- [x] **P1.4** REST routes above; `/api/v1/ask` and `/api/v1/captains/{id}/chat` keep working.
+- [x] **P1.4** REST routes above; `/api/v1/ask` and `/api/v1/captains/{id}/chat` keep working. (The keyword `/api/v1/ask` responder was later removed for 1.0, V1_READINESS D3.)
 
 ### Phase 2 -- Actions and approvals
 

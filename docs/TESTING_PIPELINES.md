@@ -6,7 +6,7 @@ This document walks through concrete examples for testing Armada pipelines end-t
 
 ## Prerequisites
 
-- Armada server running (v0.9.0+)
+- Armada server running (v1.0.0)
 - At least one vessel registered with a valid git repository
 - At least one captain running (idle state)
 - Built-in personas and pipelines are seeded automatically on startup
@@ -17,12 +17,12 @@ Verify setup:
 // MCP: check built-in personas exist
 enumerate({ entityType: "personas" })
 
-// Expected: Worker, Architect, Judge, Test Engineer
+// Expected: Worker, Architect, Product Manager, Usability Engineer, Judge, Test Engineer, Linter, Recorder
 
 // MCP: check built-in pipelines exist
 enumerate({ entityType: "pipelines" })
 
-// Expected: WorkerOnly, Reviewed, Tested, FullPipeline
+// Expected: WorkerOnly, Reviewed, Tested, FullPipeline, Recorded
 ```
 
 ---
@@ -99,9 +99,10 @@ enumerate({
 
 ---
 
-## Example 3: FullPipeline (Architect + Worker + Test Engineer + Judge)
+## Example 3: FullPipeline (Product Manager through Recorder)
 
-This tests the complete four-stage pipeline, including the Architect's special handling.
+This tests the complete eight-stage pipeline (Product Manager, Architect, Worker, Usability Engineer, Test Engineer,
+Linter, Judge, Recorder), including the Architect's special handling.
 
 ```
 dispatch({
@@ -119,13 +120,13 @@ dispatch({
 
 **What to verify:**
 
-**Stage 1 -- Architect:**
-1. Four missions are created initially:
-   - `"Add caching... [Architect]"` -- no dependency, assigned immediately
+**Stages 1-2 -- Product Manager, then Architect:**
+1. Eight missions are created initially, one per stage, each depending on the one before it:
+   - `"Add caching... [Product Manager]"` -- no dependency, assigned immediately
+   - `"Add caching... [Architect]"` -- depends on Product Manager
    - `"Add caching... [Worker]"` -- depends on Architect
-   - `"Add caching... [Test Engineer]"` -- depends on Worker
-   - `"Add caching... [Judge]"` -- depends on Test Engineer
-2. Only the Architect mission is assigned
+   - `"Add caching... [Usability Engineer]"`, `[Test Engineer]`, `[Linter]`, `[Judge]`, `[Recorder]` -- each depends on the stage before it
+2. Only the Product Manager mission is assigned; the Architect runs after it completes
 
 **After the Architect completes (with [ARMADA:MISSION] markers):**
 
@@ -144,13 +145,14 @@ Files: src/Middleware/CacheMiddleware.cs, src/Startup.cs
 
 3. The original Worker mission is updated with the first parsed mission's title and description
 4. A second Worker mission is created for the second parsed mission
-5. Each Worker mission gets its own Test Engineer and Judge stages chained after it
+5. Each additional Worker mission gets its own copy of the downstream chain (Usability Engineer, Test Engineer, Linter, Judge, Recorder)
 6. Worker missions are assigned to idle captains
 
 **After each Worker completes:**
-7. The corresponding Test Engineer mission receives the Worker's diff and branch
-8. Test Engineer writes tests, commits to the same branch
-9. After Test Engineer, the Judge reviews the combined diff
+7. The corresponding Usability Engineer mission receives the Worker's diff and branch, then the Test Engineer and
+   Linter stages commit to the same branch
+8. The Judge reviews the combined diff and must end with a standalone `[ARMADA:VERDICT] PASS|FAIL|NEEDS_REVISION` line
+9. The Recorder distills durable memories from the voyage
 
 ```
 // Monitor the full pipeline

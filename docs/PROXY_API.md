@@ -216,11 +216,11 @@ Blocked requests return `403` with an explicit policy message. The transport doe
 
 ## Tunnel Compatibility Notes
 
-The proxy now prefers generic relay methods:
+The proxy relays dashboard traffic with the generic methods:
 
 - `armada.http.request`
 - `armada.ws.open`
 - `armada.ws.message`
 - `armada.ws.close`
 
-It still accepts older feature-specific tunnel methods server-side for compatibility, but those are no longer the intended growth path for remote dashboard support.
+The Admiral serves only these generic methods; the older feature-specific tunnel methods were removed and now return `404 unsupported_method` (see [TUNNEL_PROTOCOL.md](TUNNEL_PROTOCOL.md#unsupported-methods)).

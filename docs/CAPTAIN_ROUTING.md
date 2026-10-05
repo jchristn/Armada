@@ -8,7 +8,7 @@ Three things decide where a mission runs.
 
 A **persona** names the role a step plays (Architect, Worker, TestEngineer, Judge, or one you define). Every pipeline stage is a persona, and every mission carries the persona of the stage that produced it.
 
-A **captain** declares what it can do: its runtime and model, an `AllowedPersonas` whitelist, a `PreferredPersona` bias, and a capability **tier** — Economy, Standard, or Premium, ordered cheapest to strongest. Tier is the lever that makes fallback meaningful, so set it on every captain you expect to route by capability.
+A **captain** declares what it can do: its runtime and model, an `AllowedPersonas` whitelist, a `PreferredPersona` bias, and a capability **tier** - Economy, Standard, or Premium, ordered cheapest to strongest. Tier is the lever that makes fallback meaningful, so set it on every captain you expect to route by capability.
 
 A **preferred captain** is the operator's dictate for a step. It can come from three places, resolved in this order when a mission is created or first assigned:
 
@@ -16,7 +16,7 @@ A **preferred captain** is the operator's dictate for a step. It can come from t
 2. the voyage's per-persona override chosen at dispatch, then
 3. the persona's default captain (`Persona.DefaultCaptainId`).
 
-Whatever wins becomes the mission's `RequestedCaptainId`, and it applies to every mission of that persona in the voyage — including the extra Worker missions an Architect stage fans out, which inherit the persona default rather than falling back to unrouted.
+Whatever wins becomes the mission's `RequestedCaptainId`, and it applies to every mission of that persona in the voyage - including the extra Worker missions an Architect stage fans out, which inherit the persona default rather than falling back to unrouted.
 
 ## How assignment resolves
 
@@ -26,7 +26,7 @@ The mission detail page shows both sides of this: the **preferred captain** you 
 
 ## Setting it up
 
-Give each persona a default captain on the persona detail page under Configuration. That default pre-fills the per-step picker every time you dispatch a pipeline through Dispatch, where you can accept it, swap in a different captain, or set only a fallback tier. The setup wizard captures each captain's tier during first-run so a fresh install already routes sensibly; it does not ask you to bind persona defaults there — that is a deliberate second step you do once in the dashboard.
+Give each persona a default captain on the persona detail page under Configuration. That default pre-fills the per-step picker every time you dispatch a pipeline through Dispatch, where you can accept it, swap in a different captain, or set only a fallback tier. The setup wizard captures each captain's tier during first-run so a fresh install already routes sensibly; it does not ask you to bind persona defaults there - that is a deliberate second step you do once in the dashboard.
 
 For cost and accuracy, the pattern that holds up is roles times tiers. Fence cheap Economy captains to the mechanical, parallelizable roles (Worker, TestEngineer) and run several of them; reserve one or two strong Premium captains for the reasoning-heavy roles (Architect, Judge) and gate those stages with review. Leave routine work untiered so it drains to the cheapest capable captain, and reach for a preferred captain or a Premium fallback tier only where the work genuinely warrants it.
 

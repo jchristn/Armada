@@ -242,21 +242,21 @@ To register Armada with Claude Code manually, add it as an HTTP MCP server:
 claude mcp add --transport http --scope user armada http://localhost:7891/mcp
 ```
 
-Drop `--scope user` to add it for the current project only. While the Admiral listens on localhost (the default), no token or header is required; if you changed `McpPort`, substitute your port. When the Admiral listens on any other address (for example in Docker), every MCP call needs a credential: add `--header "Authorization: Bearer <token>"` (or `X-Api-Key`). Armada's `armada mcp install` (or `scripts/*/install-mcp`) configures this automatically for Claude Code and the other supported runtimes.
+Drop `--scope user` to add it for the current project only. While the Admiral listens on localhost (the default), no token or header is required; if you changed `mcpPort`, substitute your port. When the Admiral listens on any other address (for example in Docker), every MCP call needs a credential: add `--header "Authorization: Bearer <token>"` (or `X-Api-Key`). Armada's `armada mcp install` (or `scripts/*/install-mcp`) configures this automatically for Claude Code and the other supported runtimes.
 
-**Enterprise-managed Claude Code.** If the add is rejected with `Cannot add MCP server 'armada': not allowed by enterprise policy`, your organization's Claude Code managed settings restrict which MCP servers may be added (via `allowedMcpServers` / `managed-mcp.json`). This is enforced by IT and **cannot** be overridden by a user, a project `.mcp.json`, or `--mcp-config`. Ask your Claude Code administrator to allow the Armada endpoint by adding it to `allowedMcpServers` in the managed settings — on Windows `C:\Program Files\ClaudeCode\managed-settings.json` (or, higher priority, the Claude.ai admin console at Admin Settings > Claude Code > Managed settings):
+**Enterprise-managed Claude Code.** If the add is rejected with `Cannot add MCP server 'armada': not allowed by enterprise policy`, your organization's Claude Code managed settings restrict which MCP servers may be added (via `allowedMcpServers` / `managed-mcp.json`). This is enforced by IT and **cannot** be overridden by a user, a project `.mcp.json`, or `--mcp-config`. Ask your Claude Code administrator to allow the Armada endpoint by adding it to `allowedMcpServers` in the managed settings - on Windows `C:\Program Files\ClaudeCode\managed-settings.json` (or, higher priority, the Claude.ai admin console at Admin Settings > Claude Code > Managed settings):
 
 ```json
 { "allowedMcpServers": [ { "serverUrl": "http://localhost:7891/mcp" } ] }
 ```
 
-Run `/status` in Claude Code to see the active setting sources. If Claude Code stays locked down, the same standard HTTP endpoint works from any other MCP client that is not under that policy — `armada mcp install` also configures Codex, Gemini, and Cursor.
+Run `/status` in Claude Code to see the active setting sources. If Claude Code stays locked down, the same standard HTTP endpoint works from any other MCP client that is not under that policy - `armada mcp install` also configures Codex, Gemini, and Cursor.
 
 The legacy `/rpc` + `/events` (separate SSE) endpoints remain served for older clients but `/mcp` is preferred. MCP clients communicate using the standard MCP JSON-RPC protocol over HTTP. The server supports the full MCP tool-calling lifecycle:
 
-1. **Initialize** — Client discovers server capabilities and available tools
-2. **Call Tool** — Client invokes a tool with arguments
-3. **Response** — Server returns the tool result
+1. **Initialize** - Client discovers server capabilities and available tools
+2. **Call Tool** - Client invokes a tool with arguments
+3. **Response** - Server returns the tool result
 
 ### Stdio Transport
 
@@ -266,10 +266,10 @@ Armada also supports an MCP stdio transport for direct process-based communicati
 
 | Setting | Default | Description |
 |---|---|---|
-| `ArmadaSettings.McpPort` | `7891` | MCP HTTP server port |
-| `RestSettings.Hostname` | `localhost` | Bind hostname |
+| `mcpPort` | `7891` | MCP HTTP server port |
+| `rest.hostname` | `localhost` | Bind hostname |
 
-The MCP port can be configured in the Armada settings file. The hostname is shared with the REST API configuration.
+Keys are the camelCase names used in `settings.json`. The MCP port can be configured in the Armada settings file. The hostname is shared with the REST API configuration.
 
 ---
 
@@ -280,8 +280,8 @@ REST API accepts: `Authorization: Bearer <token>`, `X-Token: <session token>`, o
 
 - A presented credential must be valid; an invalid or expired one gets HTTP `401` (it no longer falls back to an
   anonymous caller).
-- A request **without** a credential is accepted only when all of these hold: `Mcp.AllowUnauthenticatedLoopback` is
-  true (the default), the MCP listener's hostname (`Rest.Hostname`) is a loopback name (`localhost`, `127.0.0.1`,
+- A request **without** a credential is accepted only when all of these hold: `mcp.allowUnauthenticatedLoopback` is
+  true (the default), the MCP listener's hostname (`rest.hostname`) is a loopback name (`localhost`, `127.0.0.1`,
   `::1`), and the caller connects from loopback. Such a call runs as the default tenant's tenant admin, which is
   what the local Claude Code setup in the README relies on. Otherwise it gets `401` with a `WWW-Authenticate` header.
 - With a valid credential, the caller's tenant, user, and role flow into every tool handler through Voltaic's ambient
@@ -310,7 +310,7 @@ Owned (Category A) entities - fleets, vessels, captains, missions, voyages, dock
 ### Ask Armada Thread-Scoped Calls
 
 When a captain answers in an Ask Armada conversation, the server mints a short-lived **thread-scoped session token** for
-the thread owner (lifetime `Ask.TurnTimeoutMinutes` + 5 minutes) and gives it to the captain's MCP connection:
+the thread owner (lifetime `ask.turnTimeoutMinutes` + 5 minutes) and gives it to the captain's MCP connection:
 ApiEndpoint captains receive it through `ARMADA_MCP_URL` / `ARMADA_MCP_TOKEN` (sent as `X-Token`), and Claude Code
 captains are launched with `--strict-mcp-config --mcp-config <per-launch file>` whose `armada` server entry carries
 `"headers": { "X-Token": "<token>" }` (the file is written to a per-launch directory and deleted when the process exits).
@@ -342,7 +342,7 @@ handler is registered through the Ask gate, which checks that claim:
 Approving a proposal (`POST /api/v1/ask/threads/{id}/proposals/{pid}/approve`) executes the stored tool call in-process
 through the same registered handler, under an ambient caller context for the approving user, so validation and tenant
 scoping are identical to a direct MCP call by that user. A thread-scoped token whose thread no longer exists, or belongs
-to a different user, gets `{ "Error": "The conversation for this session no longer exists." }`. Thread-scoped tokens are
+to a different user, gets `{ "Error": "The conversation for this session no longer exists.", "ErrorCode": "NotFound" }`. Thread-scoped tokens are
 refused by the REST API and `/ws`. Calls without the claim (normal MCP clients, `armada mcp stdio`) are unaffected.
 
 ## Error Responses
@@ -367,7 +367,7 @@ When an MCP tool encounters an error, it returns a JSON object with a machine-re
 | `Unavailable` | A service the operation needs is not configured or not available (for example no saved diff) |
 | `Failed` | Any other failure |
 
-`Code` carries a feature-specific detail code where a tool has one (for example the vessel import codes such as `BatchNotFound` or `PathNotAllowed`), and `StatusCode` keeps the HTTP-equivalent status the fleet action tools have always returned. When a tool's service signals a missing entity, bad input, a state conflict, a missing permission, or an unavailable feature, the server maps the exception by type to the same JSON object (`NotFound`, `InvalidArgument`, `Conflict`, `Forbidden`, `Unavailable`). Any other unexpected handler error, a call the tool authorization gate refuses, and calls refused by the per-client rate limit (`Mcp.ToolCallsPerSecond`, default 100 per second, 0 for no limit) come back as MCP tool results with `isError: true` instead.
+`Code` carries a feature-specific detail code where a tool has one (for example the vessel import codes such as `BatchNotFound` or `PathNotAllowed`), and `StatusCode` keeps the HTTP-equivalent status the fleet action tools have always returned. When a tool's service signals a missing entity, bad input, a state conflict, a missing permission, or an unavailable feature, the server maps the exception by type to the same JSON object (`NotFound`, `InvalidArgument`, `Conflict`, `Forbidden`, `Unavailable`). Any other unexpected handler error, a call the tool authorization gate refuses, and calls refused by the per-client rate limit (`mcp.toolCallsPerSecond`, default 100 per second, 0 for no limit) come back as MCP tool results with `isError: true` instead.
 
 MCP tools do not return HTTP status codes (MCP uses JSON-RPC, not HTTP). The presence of an `ErrorCode` field (or a result with `isError: true`) indicates failure. On success, the response contains the requested data (entity object, status, list, etc.) without an `Error` field.
 
@@ -756,7 +756,7 @@ Paginated enumeration of any entity type with filtering and sorting. This is the
 
 ## Fleet Actions
 
-Fleet action tools apply one action across many vessels. A **Command** action runs `commandText` in each vessel's working directory (tenant admin only); a **Mission** action dispatches one voyage per vessel from `promptTemplate`. All tools act in the caller's tenant. Errors come back as `{ "Error": "...", "StatusCode": 400|403|404|409 }` rather than as thrown tool errors. These tools never return captured output; use `enumerate` with `entityType` `fleet_action_run_target`, a `runId`, and `includeOutput: true` when you need it. See [FLEET_ACTIONS.md](FLEET_ACTIONS.md) for behavior and the REST equivalents in [REST_API.md](REST_API.md#fleet-actions).
+Fleet action tools apply one action across many vessels. A **Command** action runs `commandText` in each vessel's working directory (tenant admin only); a **Mission** action dispatches one voyage per vessel from `promptTemplate`. All tools act in the caller's tenant. Errors come back as `{ "Error": "...", "ErrorCode": "...", "StatusCode": 400|403|404|409 }` rather than as thrown tool errors (`ErrorCode` `InvalidArgument`, `Forbidden`, `NotFound`, or `Conflict` respectively; `Unavailable` without a `StatusCode` when fleet actions are not available on the server). These tools never return captured output; use `enumerate` with `entityType` `fleet_action_run_target`, a `runId`, and `includeOutput: true` when you need it. See [FLEET_ACTIONS.md](FLEET_ACTIONS.md) for behavior and the REST equivalents in [REST_API.md](REST_API.md#fleet-actions).
 
 Templates may use `{{vessel.name}}`, `{{vessel.id}}`, `{{vessel.defaultBranch}}`, `{{vessel.workingDirectory}}`, `{{vessel.buildCommand}}` and `{{health.summary}}`. Any other `{{name}}` is rejected and the error names it.
 
@@ -952,7 +952,7 @@ Dispatch a new voyage with missions to a vessel. This is the primary way to assi
 > **Parity with REST.** This tool and `POST /api/v1/voyages` funnel through the same validation: a linked
 > objective must exist, a pipeline name must resolve, and a request with no vessel or no missions is created
 > as a **bare voyage** rather than dispatched. Both surfaces accept and reject the same inputs; only the error
-> shape differs (structured `{ "Error": ..., "Code": ... }` here, HTTP status codes over REST).
+> shape differs (structured `{ "Error": ..., "ErrorCode": ... }` here, HTTP status codes over REST).
 
 **Example Input:**
 
@@ -1118,7 +1118,7 @@ Get status of a specific mission.
 |---|---|---|---|
 | `missionId` | string | Yes | Mission ID (prefix `msn_`) |
 
-**Response:** [Mission](#mission) object, or `{"error": "Mission not found"}` if the ID does not exist.
+**Response:** [Mission](#mission) object, or `{ "Error": "Mission not found", "ErrorCode": "NotFound" }` if the ID does not exist.
 
 > **Note:** The `DiffSnapshot` field is excluded from status responses to keep payloads compact. Use `get_mission_diff` to retrieve the full diff.
 
@@ -1140,7 +1140,7 @@ Dry-run the vessel's auto-land predicate against a mission's captured diff witho
 }
 ```
 
-**Response:** `{ "Land": true }` or `{ "Land": false, "HoldReason": "..." }`, or `{ "Error": "Mission not found" }` / `{ "Error": "Mission does not have an associated vessel" }`.
+**Response:** `{ "Land": true }` or `{ "Land": false, "HoldReason": "..." }`, or `{ "Error": "Mission not found", "ErrorCode": "NotFound" }` / `{ "Error": "Mission does not have an associated vessel", "ErrorCode": "Conflict" }`.
 
 ---
 
@@ -1187,7 +1187,7 @@ Get details of a specific fleet including all its vessels.
 }
 ```
 
-Returns `{"error": "Fleet not found"}` if the ID does not exist.
+Returns `{ "Error": "Fleet not found", "ErrorCode": "NotFound" }` if the ID does not exist.
 
 | Field | Type | Description |
 |---|---|---|
@@ -1242,6 +1242,10 @@ Register a new vessel (git repository) in a fleet.
       "type": "boolean",
       "description": "Allow multiple concurrent missions on this vessel (default false)"
     },
+    "autoApprove": {
+      "type": "boolean",
+      "description": "Per-vessel auto-approve override for missions on this vessel: true or false wins over the captain's setting; omit to use the captain's setting"
+    },
     "enableModelContext": {
       "type": "boolean",
       "description": "Enable model context accumulation -- agents will update context with key information discovered during missions (default true)"
@@ -1282,7 +1286,7 @@ Register a new vessel (git repository) in a fleet.
 }
 ```
 
-**Response:** The newly created [Vessel](#vessel) object. `repoUrl` is required; when it is missing the tool returns `{ "Error": "repoUrl is required when creating a vessel" }`. `LocalPath` is never set by this tool.
+**Response:** The newly created [Vessel](#vessel) object. `repoUrl` is required by the input schema. An unknown or invisible `fleetId` returns `{ "Error": "Fleet not found", "ErrorCode": "NotFound" }`. `LocalPath` is never set by this tool.
 
 ---
 
@@ -1290,7 +1294,7 @@ Register a new vessel (git repository) in a fleet.
 
 Discover git repositories on the Admiral host to onboard as vessels. Scans the given directories and roots breadth-first (skipping excluded and dot-prefixed folders and symbolic links, never descending into a repository), classifies each candidate, and saves the result as an import batch with status `Discovered`. Creates no vessels; call [import_vessels](#import_vessels) with the returned `BatchId`.
 
-Requires a tenant admin caller. Every path must lie inside `Import.AllowedRoots` (or the user profile directory when none are configured). The rules, candidate statuses, and response shape match `POST /api/v1/vessels/import/discover` in [REST_API.md](REST_API.md#vessel-import).
+Requires a tenant admin caller. Every path must lie inside `import.allowedRoots` (or the user profile directory when none are configured). The rules, candidate statuses, and response shape match `POST /api/v1/vessels/import/discover` in [REST_API.md](REST_API.md#vessel-import).
 
 **Input Schema:**
 
@@ -1321,7 +1325,7 @@ Requires a tenant admin caller. Every path must lie inside `Import.AllowedRoots`
 
 **Response:** `VesselImportDiscoverResponse`: `BatchId`, `Batch` (a [VesselImportBatch](#vesselimportbatch)), `Candidates` (array of [VesselImportItem](#vesselimportitem)), `Truncated` (true when the 5,000-candidate cap was reached), and `Hints` (`{Code, Message}`; codes `PathNotVisibleToAdmiral`, `CandidateLimitReached`).
 
-On failure returns `{ "Error": "...", "Code": "..." }` with `Code` one of `InvalidRequest` (no paths, too many paths, or a relative path), `PathNotAllowed`, or `HarborNotSupported`, or `{ "Error": "discover_vessels requires a tenant admin" }`.
+On failure returns `{ "Error": "...", "ErrorCode": "...", "Code": "..." }` with `Code` one of `InvalidRequest` (no paths, too many paths, or a relative path), `PathNotAllowed` (`ErrorCode` `Forbidden`), or `HarborNotSupported`, or `{ "Error": "discover_vessels requires a tenant admin", "ErrorCode": "Forbidden" }`.
 
 ---
 
@@ -1329,7 +1333,7 @@ On failure returns `{ "Error": "...", "Code": "..." }` with `Code` one of `Inval
 
 Import candidates from a [discover_vessels](#discover_vessels) batch as vessels. Each vessel gets `RepoUrl` = the origin URL (or the local path when there is no origin), `WorkingDirectory` = the discovered path, `DefaultBranch` = the inferred default branch, and no `LocalPath`, so deleting the vessel never removes the checkout. Paths that already have a vessel are recorded as `SkippedExisting`, so repeating an import is safe. Unselected candidates are recorded as `SkippedNotSelected`.
 
-Selections at or below `Import.InlineBatchLimit` (default 25) run inline and return every item; larger selections run as a background job and return immediately with `RunsInBackground: true` and a `JobId`. Poll the batch with `enumerate` (`entityType: "vessel_import_batch"`) or `GET /api/v1/vessels/import/batches/{id}`.
+Selections at or below `import.inlineBatchLimit` (default 25) run inline and return every item; larger selections run as a background job and return immediately with `RunsInBackground: true` and a `JobId`. Poll the batch with `enumerate` (`entityType: "vessel_import_batch"`) or `GET /api/v1/vessels/import/batches/{id}`.
 
 Requires a tenant admin caller.
 
@@ -1375,7 +1379,7 @@ Requires a tenant admin caller.
 
 **Response:** `VesselImportResponse`: `BatchId`, `JobId` (null when inline), `RunsInBackground`, `Batch` (with `Status`, `CreatedCount`, `SkippedCount`, `FailedCount`), and `Items` (every [VesselImportItem](#vesselimportitem) with its `Outcome`, `OutcomeReason`, and `VesselId`; empty for a background import).
 
-On failure returns `{ "Error": "...", "Code": "..." }` with `Code` one of `InvalidRequest` (no paths, a path not in the batch, an unknown fleet or landing mode, or `allNew` with no New candidates), `BatchNotFound`, or `BatchBusy` (the batch is already being imported, is still discovering, or has a categorization running). A categorization with a missing or unknown captain returns `InvalidRequest` before any vessel is created.
+On failure returns `{ "Error": "...", "ErrorCode": "...", "Code": "..." }` with `Code` one of `InvalidRequest` (no paths, a path not in the batch, an unknown fleet or landing mode, or `allNew` with no New candidates), `BatchNotFound`, or `BatchBusy` (the batch is already being imported, is still discovering, or has a categorization running). A categorization with a missing or unknown captain returns `InvalidRequest` before any vessel is created.
 
 ---
 
@@ -1398,7 +1402,7 @@ Run or retry fleet categorization for an import batch whose import finished: a c
 }
 ```
 
-**Response:** the [VesselImportBatch](#vesselimportbatch) with `CategorizationStatus: "Pending"` and `CategorizationJobId`. On failure `{ "Error", "Code" }` with `BatchNotFound`, `BatchBusy` (import not finished or categorization already running), or `InvalidRequest` (no captain known, or the captain does not exist).
+**Response:** the [VesselImportBatch](#vesselimportbatch) with `CategorizationStatus: "Pending"` and `CategorizationJobId`. On failure `{ "Error", "ErrorCode", "Code" }` with `BatchNotFound`, `BatchBusy` (import not finished or categorization already running), or `InvalidRequest` (no captain known, or the captain does not exist).
 
 ---
 
@@ -1437,7 +1441,7 @@ Apply fleet recommendations to an import batch. Pass `fleets` to apply an edited
 { "batchId": "vib_mut1abcd_Rp7EygrpeVo", "fleets": [ { "name": "Payments Platform", "vesselIds": ["vsl_mut1b000_Q2w3e4r5t6y"] } ] }
 ```
 
-**Response:** `FleetRecommendationApplyResult`: `BatchId`, `Fleets` (created or reused), `CreatedFleetIds`, `Assignments` (`VesselId`, `VesselName`, `FleetId`, `FleetName`, `PreviousFleetId`), and `Batch`. On failure `{ "Error", "Code" }` with `BatchNotFound`, `BatchBusy` (discovery, import, or categorization still running), or `InvalidRequest` (unnamed fleet, a vessel listed twice or not in the batch, or no stored recommendations).
+**Response:** `FleetRecommendationApplyResult`: `BatchId`, `Fleets` (created or reused), `CreatedFleetIds`, `Assignments` (`VesselId`, `VesselName`, `FleetId`, `FleetName`, `PreviousFleetId`), and `Batch`. On failure `{ "Error", "ErrorCode", "Code" }` with `BatchNotFound`, `BatchBusy` (discovery, import, or categorization still running), or `InvalidRequest` (unnamed fleet, a vessel listed twice or not in the batch, or no stored recommendations).
 
 #### VesselImportBatch
 
@@ -1506,7 +1510,7 @@ Delete a single event by ID.
 }
 ```
 
-Returns `{ "Error": "Event not found: evt_..." }` if the event does not exist.
+Returns `{ "Error": "Event not found", "ErrorCode": "NotFound" }` if the event does not exist.
 
 ---
 
@@ -1542,7 +1546,7 @@ Delete multiple events by ID. Returns a summary of deleted and skipped entries.
 }
 ```
 
-Returns `{ "Error": "ids is required and must not be empty" }` if no IDs are provided.
+Returns `{ "Error": "ids is required and must not be empty", "ErrorCode": "InvalidArgument" }` if no IDs are provided.
 
 ---
 
@@ -1612,7 +1616,7 @@ Soft-delete multiple signals by marking them as read. Returns a summary of delet
 }
 ```
 
-Returns `{ "Error": "ids is required and must not be empty" }` if no IDs are provided.
+Returns `{ "Error": "ids is required and must not be empty", "ErrorCode": "InvalidArgument" }` if no IDs are provided.
 
 ---
 
@@ -1666,7 +1670,7 @@ Lift a captain's quarantine, returning it to the Idle pool so tier selection can
 }
 ```
 
-**Response:** The updated [Captain](#captain) object, or `{ "Status": "not_quarantined", "CaptainId": "..." }` when the captain was not quarantined, or `{ "Error": "Captain not found" }`.
+**Response:** The updated [Captain](#captain) object, or `{ "Status": "not_quarantined", "CaptainId": "..." }` when the captain was not quarantined, or `{ "Error": "Captain not found", "ErrorCode": "NotFound" }`.
 
 ---
 
@@ -1718,7 +1722,7 @@ Cancel a specific mission.
 |---|---|---|---|
 | `missionId` | string | Yes | Mission ID to cancel (prefix `msn_`) |
 
-Sets the mission status to `Cancelled`. Returns `{"error": "Mission not found"}` if the ID does not exist.
+Sets the mission status to `Cancelled`. Returns `{ "Error": "Mission not found", "ErrorCode": "NotFound" }` if the ID does not exist.
 
 **Response:** The updated [Mission](#mission) object with status `Cancelled`.
 
@@ -1757,7 +1761,7 @@ Restart a failed or cancelled mission, resetting it to `Pending` for re-dispatch
 | `title` | string | No | New mission title. Omit to keep the original. |
 | `description` | string | No | New description/instructions. Omit to keep the original. |
 
-Only `Failed` or `Cancelled` missions can be restarted. Returns `{"error": "..."}` if the mission is not found or is in an invalid status.
+Only `Failed` or `Cancelled` missions can be restarted. Returns `{ "Error": "Mission not found", "ErrorCode": "NotFound" }` if the mission does not exist, or `{ "Error": "Only Failed or Cancelled missions can be restarted (current: ...)", "ErrorCode": "Conflict" }` for any other status.
 
 **Response:** The updated [Mission](#mission) object with status `Pending`.
 
@@ -1783,7 +1787,7 @@ Retry landing for a mission in `LandingFailed` status. Rebases the mission branc
 |---|---|---|---|
 | `missionId` | string | Yes | Mission ID to retry landing for (prefix `msn_`) |
 
-**Response:** `{ "Success": true, "Mission": { "...": "..." } }` where `Success` reports whether the landing succeeded and `Mission` is the refreshed [Mission](#mission) object. Returns `{ "Error": "Landing service not configured" }` when the landing service is unavailable.
+**Response:** `{ "Success": true, "Mission": { "...": "..." } }` where `Success` reports whether the landing succeeded and `Mission` is the refreshed [Mission](#mission) object. Returns `{ "Error": "Landing service not configured", "ErrorCode": "Unavailable" }` when the landing service is unavailable.
 
 ---
 
@@ -1810,7 +1814,7 @@ Cancel an entire voyage and all its pending missions. Missions that are already 
 |---|---|---|---|
 | `voyageId` | string | Yes | Voyage ID to cancel (prefix `vyg_`) |
 
-Returns `{"error": "Voyage not found"}` if the ID does not exist.
+Returns `{ "Error": "Voyage not found", "ErrorCode": "NotFound" }` if the ID does not exist.
 
 **Response:**
 
@@ -1889,7 +1893,7 @@ Permanently delete multiple voyages and their associated missions from the datab
 }
 ```
 
-Returns `{ "Error": "ids is required and must not be empty" }` if no IDs are provided.
+Returns `{ "Error": "ids is required and must not be empty", "ErrorCode": "InvalidArgument" }` if no IDs are provided.
 
 ---
 
@@ -1933,7 +1937,7 @@ Update an existing fleet's name or description.
 }
 ```
 
-**Response:** Updated [Fleet](#fleet) object, or `{ "Error": "Fleet not found" }`.
+**Response:** Updated [Fleet](#fleet) object, or `{ "Error": "Fleet not found", "ErrorCode": "NotFound" }`.
 
 ---
 
@@ -1993,7 +1997,7 @@ Permanently delete multiple fleets from the database by ID. Returns a summary of
 }
 ```
 
-Returns `{ "Error": "ids is required and must not be empty" }` if no IDs are provided.
+Returns `{ "Error": "ids is required and must not be empty", "ErrorCode": "InvalidArgument" }` if no IDs are provided.
 
 ---
 
@@ -2013,7 +2017,7 @@ Get details of a specific vessel (repository).
 }
 ```
 
-**Response:** [Vessel](#vessel) object, or `{ "Error": "Vessel not found" }`.
+**Response:** [Vessel](#vessel) object, or `{ "Error": "Vessel not found", "ErrorCode": "NotFound" }`.
 
 ---
 
@@ -2055,11 +2059,13 @@ Update an existing vessel's properties.
 }
 ```
 
-**Response:** Updated [Vessel](#vessel) object, or `{ "Error": "Vessel not found" }`.
+**Response:** Updated [Vessel](#vessel) object, or `{ "Error": "Vessel not found", "ErrorCode": "NotFound" }`.
+
+The `autoLand*` and `definitionOfDone*` arguments are accepted by the handler but are not declared in the tool's advertised input schema, so they are not part of the frozen 1.0 surface in [API_SURFACE_1.0.md](API_SURFACE_1.0.md); prefer the REST vessel routes for those fields.
 
 `autoApprove` sets the per-vessel override (true or false wins over the captain's setting for missions on this vessel); `clearAutoApprove: true` removes it so the captain's own setting applies again. Omitting both keeps the stored value.
 
-When `gitHubTokenOverride` is omitted, MCP preserves the current stored override. Send `""` to clear the override and fall back to the global `GitHubToken` from Armada configuration.
+When `gitHubTokenOverride` is omitted, MCP preserves the current stored override. Send `""` to clear the override and fall back to the global `gitHubToken` from Armada configuration.
 
 ---
 
@@ -2089,7 +2095,7 @@ Update a vessel's project context and style guide without modifying other proper
 | `styleGuide` | string | No | Style guide describing naming conventions, patterns, and library preferences |
 | `modelContext` | string | No | Agent-accumulated context about this repository |
 
-**Response:** Updated [Vessel](#vessel) object, or `{ "Error": "Vessel not found" }`.
+**Response:** Updated [Vessel](#vessel) object, or `{ "Error": "Vessel not found", "ErrorCode": "NotFound" }`.
 
 ---
 
@@ -2149,7 +2155,7 @@ Permanently delete multiple vessels from the database by ID. Returns a summary o
 }
 ```
 
-Returns `{ "Error": "ids is required and must not be empty" }` if no IDs are provided.
+Returns `{ "Error": "ids is required and must not be empty", "ErrorCode": "InvalidArgument" }` if no IDs are provided.
 
 ---
 
@@ -2186,7 +2192,7 @@ Get one vessel's health: the row with effective (override-aware) statuses, the r
 }
 ```
 
-Returns `{ "Error": "Vessel not found" }` when the vessel is not in the caller's tenant.
+Returns `{ "Error": "Vessel not found", "ErrorCode": "NotFound" }` when the vessel is not in the caller's tenant.
 
 ---
 
@@ -2219,7 +2225,7 @@ Start a background vessel health evaluation job for specific vessels, a fleet, o
 { "JobId": "job_...", "AlreadyRunning": false, "VesselCount": 12 }
 ```
 
-Poll the job with `enumerate` (`entityType` `jobs`) or `GET /api/v1/jobs/{id}`. Returns `{ "Error": "Vessel vsl_... was not found." }` for an unknown vessel or fleet.
+Poll the job with `enumerate` (`entityType` `jobs`) or `GET /api/v1/jobs/{id}`. Returns `{ "Error": "...", "ErrorCode": "NotFound" }` for an unknown vessel or fleet.
 
 ---
 
@@ -2252,7 +2258,7 @@ Set, or with `remove` set to `true` remove, a manual status override for one cri
 }
 ```
 
-Returns `{ "Error": "..." }` for an unknown criterion, a missing or invalid status, a non-admin caller, or a vessel outside the caller's tenant.
+Returns an error object with `ErrorCode` `InvalidArgument` for an unknown criterion or a missing or invalid status, `Forbidden` for a non-admin caller, and `NotFound` for a vessel outside the caller's tenant.
 
 ---
 
@@ -2290,7 +2296,7 @@ Create and dispatch a standalone mission to a vessel. The Admiral assigns a capt
 }
 ```
 
-**Response:** [Mission](#mission) object.
+**Response:** [Mission](#mission) object. `tier` is accepted by the handler but is not declared in the tool's advertised input schema, so it is not part of the frozen 1.0 surface.
 
 ---
 
@@ -2334,7 +2340,7 @@ Update an existing mission's metadata fields. Operational fields (status, timest
 | `persona` | No | Persona for this mission |
 | `mode` | No | Execution mode: Implementation, Audit, or Research |
 
-**Response:** Updated [Mission](#mission) object, or `{ "Error": "Mission not found" }`.
+**Response:** Updated [Mission](#mission) object, or `{ "Error": "Mission not found", "ErrorCode": "NotFound" }`.
 
 ---
 
@@ -2364,7 +2370,7 @@ Permanently delete a mission from the database. This cannot be undone.
 { "Status": "deleted", "MissionId": "msn_..." }
 ```
 
-Returns `{ "Error": "Mission not found" }` if the ID does not exist.
+Returns `{ "Error": "Mission not found", "ErrorCode": "NotFound" }` if the ID does not exist.
 
 ---
 
@@ -2400,7 +2406,7 @@ Permanently delete multiple missions from the database by ID. Returns a summary 
 }
 ```
 
-Returns `{ "Error": "ids is required and must not be empty" }` if no IDs are provided.
+Returns `{ "Error": "ids is required and must not be empty", "ErrorCode": "InvalidArgument" }` if no IDs are provided.
 
 ---
 
@@ -2548,6 +2554,7 @@ Register a new captain (AI agent).
 | `muxMaxTokens` | integer | No | Optional Mux max tokens override (Mux runtime only) |
 | `muxSystemPromptPath` | string | No | Optional Mux system prompt file path (Mux runtime only) |
 | `muxApprovalPolicy` | string | No | Optional Mux approval policy override (Mux runtime only) |
+| `autoApprove` | boolean | No | Whether the CLI captain runs with its auto-approve or permission-bypass flag (default `true`). `false` runs it without auto-approve where the runtime supports it (Claude Code acceptEdits, Codex workspace-write sandbox, Gemini auto_edit, Cursor without --force, OpenCode without --auto, Mux deny) |
 
 **Response:** [Captain](#captain) object. Invalid or unavailable models are returned as MCP tool errors. The Mux options apply only when `runtime` is `Mux`.
 
@@ -2569,7 +2576,7 @@ Get details of a specific captain (AI agent).
 }
 ```
 
-**Response:** [Captain](#captain) object, or `{ "Error": "Captain not found" }`.
+**Response:** [Captain](#captain) object, or `{ "Error": "Captain not found", "ErrorCode": "NotFound" }`.
 
 ---
 
@@ -2589,13 +2596,13 @@ Describe the Armada MCP tools available to a specific captain.
 }
 ```
 
-**Response:** [CaptainToolAccessResult](#captaintoolaccessresult) object, or `{ "Error": "Captain not found" }`.
+**Response:** [CaptainToolAccessResult](#captaintoolaccessresult) object, or `{ "Error": "Captain not found", "ErrorCode": "NotFound" }`.
 
 ---
 
 ### update_captain
 
-Update a captain's name or runtime. Operational fields (state, process, mission) are preserved.
+Update a captain's properties (name, runtime, model, tier, personas, Mux options, auto-approve). Operational fields (state, process, mission) are preserved.
 
 **Input Schema:**
 
@@ -2619,7 +2626,8 @@ Update a captain's name or runtime. Operational fields (state, process, mission)
     "muxTemperature": { "type": "number", "description": "Optional Mux temperature override" },
     "muxMaxTokens": { "type": "integer", "description": "Optional Mux max tokens override" },
     "muxSystemPromptPath": { "type": "string", "description": "Optional Mux system prompt file path; empty string clears it" },
-    "muxApprovalPolicy": { "type": "string", "description": "Optional Mux approval policy override; empty string clears it" }
+    "muxApprovalPolicy": { "type": "string", "description": "Optional Mux approval policy override; empty string clears it" },
+    "autoApprove": { "type": "boolean", "description": "Whether the CLI captain runs with its auto-approve or permission-bypass flag. Omit to keep the current value." }
   },
   "required": ["captainId"]
 }
@@ -2644,8 +2652,9 @@ Update a captain's name or runtime. Operational fields (state, process, mission)
 | `muxMaxTokens` | integer | No | Optional Mux max tokens override (Mux runtime only) |
 | `muxSystemPromptPath` | string | No | Optional Mux system prompt file path; empty string clears it (Mux runtime only) |
 | `muxApprovalPolicy` | string | No | Optional Mux approval policy override; empty string clears it (Mux runtime only) |
+| `autoApprove` | boolean | No | Whether the CLI captain runs with its auto-approve or permission-bypass flag. Omit to keep the current value |
 
-**Response:** Updated [Captain](#captain) object, or `{ "Error": "Captain not found" }`. Invalid or unavailable models are returned as MCP tool errors. The Mux options apply only when the captain's `runtime` is `Mux`.
+**Response:** Updated [Captain](#captain) object, or `{ "Error": "Captain not found", "ErrorCode": "NotFound" }`. Invalid or unavailable models are returned as MCP tool errors. The Mux options apply only when the captain's `runtime` is `Mux`.
 
 ---
 
@@ -2705,7 +2714,7 @@ Permanently delete multiple captains from the database by ID. Captains that are 
 }
 ```
 
-Returns `{ "Error": "ids is required and must not be empty" }` if no IDs are provided.
+Returns `{ "Error": "ids is required and must not be empty", "ErrorCode": "InvalidArgument" }` if no IDs are provided.
 
 ---
 
@@ -2760,7 +2769,7 @@ Get a dock (git worktree) by ID.
 |---|---|---|---|
 | `dockId` | string | Yes | Dock ID (prefix `dck_`) |
 
-**Response:** Dock object, or `{ "Error": "Dock not found" }`.
+**Response:** Dock object, or `{ "Error": "Dock not found", "ErrorCode": "NotFound" }`.
 
 ---
 
@@ -2790,8 +2799,8 @@ Delete a dock and clean up its git worktree. Blocked if the dock is actively in 
 { "Status": "deleted", "DockId": "dck_..." }
 ```
 
-Returns `{ "Error": "Dock not found" }` if the ID does not exist.
-Returns `{ "Error": "Cannot delete dock while it is actively in use by a captain" }` if the dock is active.
+Returns `{ "Error": "Dock not found", "ErrorCode": "NotFound" }` if the ID does not exist.
+Returns `{ "Error": "Cannot delete dock while it is actively in use by a captain", "ErrorCode": "Conflict" }` if the dock is active.
 
 ---
 
@@ -2821,7 +2830,7 @@ Force purge a dock and its git worktree, even if a mission references it. **This
 { "Status": "purged", "DockId": "dck_..." }
 ```
 
-Returns `{ "Error": "Dock not found" }` if the ID does not exist.
+Returns `{ "Error": "Dock not found", "ErrorCode": "NotFound" }` if the ID does not exist.
 
 ---
 
@@ -2851,7 +2860,7 @@ Repair a dock's git worktree to fix a corrupted or relocated registration. Non-d
 { "Status": "repaired", "DockId": "dck_..." }
 ```
 
-Returns `{ "Error": "Dock not found" }` if the ID does not exist.
+Returns `{ "Error": "Dock not found", "ErrorCode": "NotFound" }` if the ID does not exist.
 
 ---
 
@@ -2881,7 +2890,7 @@ Unstick a wedged dock: release any captain still holding it back to Idle and rec
 { "Status": "unstuck", "DockId": "dck_..." }
 ```
 
-Returns `{ "Error": "Dock not found" }` if the ID does not exist.
+Returns `{ "Error": "Dock not found", "ErrorCode": "NotFound" }` if the ID does not exist.
 
 ---
 
@@ -2917,7 +2926,7 @@ Permanently delete multiple docks and their git worktrees from the database by I
 }
 ```
 
-Returns `{ "Error": "ids is required and must not be empty" }` if no IDs are provided.
+Returns `{ "Error": "ids is required and must not be empty", "ErrorCode": "InvalidArgument" }` if no IDs are provided.
 
 ---
 
@@ -2937,7 +2946,7 @@ Get a playbook by ID.
 }
 ```
 
-**Response:** [Playbook](#playbook) object, or `{ "Error": "Playbook not found: pbk_..." }`.
+**Response:** [Playbook](#playbook) object, or `{ "Error": "Playbook not found: pbk_...", "ErrorCode": "NotFound" }`.
 
 ---
 
@@ -2960,7 +2969,7 @@ Create a new markdown playbook in the default tenant context used by MCP.
 }
 ```
 
-**Response:** [Playbook](#playbook) object, or an error such as `{ "Error": "A playbook with that file name already exists." }`.
+**Response:** [Playbook](#playbook) object, or an error such as `{ "Error": "A playbook with that file name already exists.", "ErrorCode": "Conflict" }`.
 
 ---
 
@@ -2984,7 +2993,7 @@ Update an existing playbook by ID.
 }
 ```
 
-**Response:** Updated [Playbook](#playbook) object, or `{ "Error": "Playbook not found: pbk_..." }`.
+**Response:** Updated [Playbook](#playbook) object, or `{ "Error": "Playbook not found: pbk_...", "ErrorCode": "NotFound" }`.
 
 ---
 
@@ -3028,7 +3037,7 @@ Get details of a specific merge queue entry.
 }
 ```
 
-**Response:** [MergeEntry](#mergeentry) object, or `{ "Error": "Merge entry not found" }`.
+**Response:** [MergeEntry](#mergeentry) object, or `{ "Error": "Merge entry not found", "ErrorCode": "NotFound" }`.
 
 ---
 
@@ -3097,7 +3106,7 @@ Process a single queued merge entry by ID. Armada creates the integration branch
 }
 ```
 
-**Response:** [MergeEntry](#mergeentry) object, or `{ "Error": "Merge entry not found or not in Queued status" }`.
+**Response:** [MergeEntry](#mergeentry) object, or `{ "Error": "Merge entry not found or not in Queued status", "ErrorCode": "NotFound" }`.
 
 ---
 
@@ -3148,8 +3157,8 @@ Permanently delete a terminal merge queue entry from the database. Only entries 
 { "Status": "deleted", "EntryId": "mrg_..." }
 ```
 
-Returns `{ "Error": "Merge entry not found" }` if the ID does not exist.
-Returns `{ "Error": "Cannot delete merge entry in non-terminal status ..." }` if the entry is not in a terminal state.
+Returns `{ "Error": "Merge entry not found", "ErrorCode": "NotFound" }` if the ID does not exist.
+Returns `{ "Error": "Cannot delete merge entry in non-terminal status ...", "ErrorCode": "Conflict" }` if the entry is not in a terminal state.
 
 ---
 
@@ -3180,7 +3189,7 @@ Permanently delete all terminal merge queue entries (Landed, Failed, Cancelled) 
 { "Status": "purged", "EntriesDeleted": 5 }
 ```
 
-Returns `{ "Error": "Invalid status. Must be one of: Landed, Failed, Cancelled" }` if an invalid status is provided.
+Returns `{ "Error": "Invalid status. Must be one of: Landed, Failed, Cancelled", "ErrorCode": "InvalidArgument" }` if an invalid status is provided.
 
 ---
 
@@ -3210,8 +3219,8 @@ Permanently delete a single terminal merge queue entry from the database by ID. 
 { "Status": "purged", "EntryId": "mrg_..." }
 ```
 
-Returns `{ "Error": "Merge entry not found" }` if the ID does not exist.
-Returns `{ "Error": "Cannot purge merge entry in non-terminal status ..." }` if the entry is not in a terminal state.
+Returns `{ "Error": "Merge entry not found", "ErrorCode": "NotFound" }` if the ID does not exist.
+Returns `{ "Error": "Cannot purge merge entry in non-terminal status ...", "ErrorCode": "Conflict" }` if the entry is not in a terminal state.
 
 ---
 
@@ -3247,7 +3256,7 @@ Permanently delete multiple terminal merge queue entries from the database by ID
 }
 ```
 
-Returns `{ "Error": "entryIds is required and must not be empty" }` if no IDs are provided.
+Returns `{ "Error": "entryIds is required and must not be empty", "ErrorCode": "InvalidArgument" }` if no IDs are provided.
 
 ---
 
@@ -3275,7 +3284,7 @@ Inspect one registered Harbor (host runner) by ID, including its advertised capa
 |---|---|---|---|
 | `harborId` | string | Yes | Harbor ID (prefix `hbr_`) |
 
-**Response:** [Harbor](#harbor) object, or `{ "Error": "Harbor not found" }`.
+**Response:** [Harbor](#harbor) object, or `{ "Error": "Harbor not found", "ErrorCode": "NotFound" }`.
 
 ---
 
@@ -3303,7 +3312,7 @@ Pre-register a Harbor. A Harbor also self-registers on first handshake; use this
 | `maxConcurrentJobs` | int | No | Maximum concurrent jobs (default 4, clamped to a minimum of 1) |
 | `enabled` | bool | No | Whether the Harbor is enabled for routing (default true) |
 
-**Response:** The newly created [Harbor](#harbor) object, or `{ "Error": "..." }` on invalid input.
+**Response:** The newly created [Harbor](#harbor) object, or `{ "Error": "...", "ErrorCode": "InvalidArgument" }` on invalid input.
 
 ---
 
@@ -3333,7 +3342,7 @@ Update a Harbor's operator-editable fields (`name`, `maxConcurrentJobs`, `enable
 | `maxConcurrentJobs` | int | No | New concurrency cap. Omit to keep the current value. |
 | `enabled` | bool | No | New enabled flag. Omit to keep the current value. |
 
-**Response:** The updated [Harbor](#harbor) object, or `{ "Error": "Harbor not found" }`.
+**Response:** The updated [Harbor](#harbor) object, or `{ "Error": "Harbor not found", "ErrorCode": "NotFound" }`.
 
 ---
 
@@ -3363,7 +3372,7 @@ Delete a Harbor registration by ID.
 { "Deleted": true, "HarborId": "hbr_abc123" }
 ```
 
-Returns `{ "Error": "..." }` if the Harbor does not exist.
+Returns `{ "Error": "...", "ErrorCode": "NotFound" }` if the Harbor does not exist.
 
 ---
 
@@ -3389,7 +3398,7 @@ Enable or disable a Harbor for routing. A disabled Harbor keeps its docks but re
 | `harborId` | string | Yes | Harbor ID (prefix `hbr_`) |
 | `enabled` | bool | Yes | `true` to enable, `false` to disable |
 
-**Response:** The updated [Harbor](#harbor) object, or `{ "Error": "..." }`.
+**Response:** The updated [Harbor](#harbor) object, or an error object (`ErrorCode` `InvalidArgument` when `harborId` is missing, `NotFound` when the Harbor does not exist).
 
 ---
 
@@ -3409,7 +3418,7 @@ Inspect one scoped objective or intake-style record, including linked vessels, p
 }
 ```
 
-**Response:** serialized `Objective` object with the expanded backlog fields (`kind`, `category`, `priority`, `rank`, `backlogState`, `effort`, `targetVersion`, `dueUtc`, `parentObjectiveId`, `blockedByObjectiveIds`, `refinementSummary`, `suggestedPipelineId`, `refinementSessionIds`), or `{ "Error": "Objective not found" }`.
+**Response:** serialized `Objective` object with the expanded backlog fields (`kind`, `category`, `priority`, `rank`, `backlogState`, `effort`, `targetVersion`, `dueUtc`, `parentObjectiveId`, `blockedByObjectiveIds`, `refinementSummary`, `suggestedPipelineId`, `refinementSessionIds`), or `{ "Error": "Objective not found", "ErrorCode": "NotFound" }`.
 
 ---
 
@@ -3564,7 +3573,7 @@ Inspect one structured check run, including status, logs, parsed test summary, c
 }
 ```
 
-**Response:** serialized `CheckRun` object, or `{ "Error": "Check run not found" }`.
+**Response:** serialized `CheckRun` object, or `{ "Error": "Check run not found", "ErrorCode": "NotFound" }`.
 
 ---
 
@@ -3638,7 +3647,7 @@ Inspect one deployment including approval status, verification state, rollback s
 }
 ```
 
-**Response:** serialized `Deployment` object, or `{ "Error": "Deployment not found" }`.
+**Response:** serialized `Deployment` object, or `{ "Error": "Deployment not found", "ErrorCode": "NotFound" }`.
 
 ---
 
@@ -3749,7 +3758,7 @@ Inspect one release record, including linked voyages, missions, checks, versions
 }
 ```
 
-**Response:** serialized `Release` object, or `{ "Error": "Release not found" }`.
+**Response:** serialized `Release` object, or `{ "Error": "Release not found", "ErrorCode": "NotFound" }`.
 
 ---
 
@@ -3798,7 +3807,7 @@ Inspect one runbook including parameters, bound workflow profile, environment, a
 }
 ```
 
-**Response:** serialized `Runbook` object, or `{ "Error": "Runbook not found" }`.
+**Response:** serialized `Runbook` object, or `{ "Error": "Runbook not found", "ErrorCode": "NotFound" }`.
 
 ---
 
@@ -3818,7 +3827,7 @@ Inspect one runbook execution including completed steps, notes, and deployment o
 }
 ```
 
-**Response:** serialized `RunbookExecution` object, or `{ "Error": "Runbook execution not found" }`.
+**Response:** serialized `RunbookExecution` object, or `{ "Error": "Runbook execution not found", "ErrorCode": "NotFound" }`.
 
 ---
 
@@ -3910,7 +3919,7 @@ Create a new prompt template.
 | `description` | string | No | Template description |
 | `active` | bool | No | Whether the template is active |
 
-**Response:** Created [PromptTemplate](#prompttemplate) object, or `{ "Error": "Template already exists: ..." }`.
+**Response:** Created [PromptTemplate](#prompttemplate) object, or `{ "Error": "Template already exists: ...", "ErrorCode": "Conflict" }`.
 
 ---
 
@@ -3934,7 +3943,7 @@ Get a prompt template by name.
 |---|---|---|---|
 | `name` | string | Yes | Template name (e.g. `"mission.rules"`, `"persona.worker"`) |
 
-**Response:** [PromptTemplate](#prompttemplate) object, or `{ "Error": "Prompt template not found" }`.
+**Response:** [PromptTemplate](#prompttemplate) object, or `{ "Error": "Template not found: <name>", "ErrorCode": "NotFound" }`.
 
 ---
 
@@ -3986,7 +3995,7 @@ Reset a prompt template to its built-in default content.
 |---|---|---|---|
 | `name` | string | Yes | Template name to reset |
 
-**Response:** Reset [PromptTemplate](#prompttemplate) object with default content restored, or `{ "Error": "No built-in default exists for this template" }`.
+**Response:** Reset [PromptTemplate](#prompttemplate) object with default content restored, or `{ "Error": "No embedded default exists for template: <name>", "ErrorCode": "NotFound" }`.
 
 ---
 
@@ -4002,7 +4011,8 @@ Create a custom persona.
   "properties": {
     "name": { "type": "string", "description": "Persona name" },
     "description": { "type": "string", "description": "Persona description" },
-    "promptTemplateName": { "type": "string", "description": "Name of the prompt template to use for this persona" }
+    "promptTemplateName": { "type": "string", "description": "Name of the prompt template to use for this persona" },
+    "defaultCaptainId": { "type": "string", "description": "Optional default (preferred) captain id (cpt_ prefix) for this persona" }
   },
   "required": ["name", "promptTemplateName"]
 }
@@ -4013,6 +4023,7 @@ Create a custom persona.
 | `name` | string | Yes | Persona name |
 | `description` | string | No | Persona description |
 | `promptTemplateName` | string | Yes | Name of the prompt template to use for this persona |
+| `defaultCaptainId` | string | No | Optional default (preferred) captain id (prefix `cpt_`) for this persona |
 
 **Response:** The newly created [Persona](#persona) object.
 
@@ -4038,7 +4049,7 @@ Get a persona by name.
 |---|---|---|---|
 | `name` | string | Yes | Persona name |
 
-**Response:** [Persona](#persona) object, or `{ "Error": "Persona not found" }`.
+**Response:** [Persona](#persona) object, or `{ "Error": "Persona not found: <name>", "ErrorCode": "NotFound" }`.
 
 ---
 
@@ -4054,7 +4065,8 @@ Update persona properties.
   "properties": {
     "name": { "type": "string", "description": "Persona name" },
     "description": { "type": "string", "description": "New persona description" },
-    "promptTemplateName": { "type": "string", "description": "New prompt template name" }
+    "promptTemplateName": { "type": "string", "description": "New prompt template name" },
+    "defaultCaptainId": { "type": "string", "description": "Default (preferred) captain id (cpt_ prefix) for this persona; empty string clears it" }
   },
   "required": ["name"]
 }
@@ -4065,8 +4077,9 @@ Update persona properties.
 | `name` | string | Yes | Persona name |
 | `description` | string | No | New persona description |
 | `promptTemplateName` | string | No | New prompt template name |
+| `defaultCaptainId` | string | No | Default (preferred) captain id (prefix `cpt_`); empty string clears it |
 
-**Response:** Updated [Persona](#persona) object, or `{ "Error": "Persona not found" }`.
+**Response:** Updated [Persona](#persona) object, or `{ "Error": "Persona not found: <name>", "ErrorCode": "NotFound" }`.
 
 ---
 
@@ -4096,8 +4109,8 @@ Delete a custom persona. Built-in personas cannot be deleted.
 { "Status": "deleted", "Name": "my-custom-persona" }
 ```
 
-Returns `{ "Error": "Persona not found" }` if the name does not exist.
-Returns `{ "Error": "Cannot delete built-in persona" }` if the persona is built-in.
+Returns `{ "Error": "Persona not found: <name>", "ErrorCode": "NotFound" }` if the name does not exist.
+Returns `{ "Error": "Cannot delete built-in persona", "ErrorCode": "Conflict" }` if the persona is built-in.
 
 ---
 
@@ -4175,7 +4188,7 @@ Get a pipeline by name.
 |---|---|---|---|
 | `name` | string | Yes | Pipeline name |
 
-**Response:** [Pipeline](#pipeline) object with stages, or `{ "Error": "Pipeline not found" }`.
+**Response:** [Pipeline](#pipeline) object with stages, or `{ "Error": "Pipeline not found: <name>", "ErrorCode": "NotFound" }`.
 
 ---
 
@@ -4215,7 +4228,7 @@ Update pipeline properties and stages. If `stages` is provided, it replaces all 
 | `description` | string | No | New pipeline description |
 | `stages` | array | No | New ordered list of pipeline stages (replaces all existing stages if provided) |
 
-**Response:** Updated [Pipeline](#pipeline) object with stages, or `{ "Error": "Pipeline not found" }`.
+**Response:** Updated [Pipeline](#pipeline) object with stages, or `{ "Error": "Pipeline not found: <name>", "ErrorCode": "NotFound" }`.
 
 ---
 
@@ -4245,8 +4258,8 @@ Delete a custom pipeline. Built-in pipelines cannot be deleted.
 { "Status": "deleted", "Name": "my-custom-pipeline" }
 ```
 
-Returns `{ "Error": "Pipeline not found" }` if the name does not exist.
-Returns `{ "Error": "Cannot delete built-in pipeline" }` if the pipeline is built-in.
+Returns `{ "Error": "Pipeline not found: <name>", "ErrorCode": "NotFound" }` if the name does not exist.
+Returns `{ "Error": "Cannot delete built-in pipeline", "ErrorCode": "Conflict" }` if the pipeline is built-in.
 
 ---
 
@@ -4270,7 +4283,7 @@ Get details of a specific model endpoint (managed embedding or inference provide
 |---|---|---|---|
 | `endpointId` | string | Yes | Model endpoint ID (prefix `mep_`) |
 
-**Response:** [ModelEndpoint](#modelendpoint) object, or `{ "Error": "Model endpoint not found" }`.
+**Response:** [ModelEndpoint](#modelendpoint) object, or `{ "Error": "Model endpoint not found", "ErrorCode": "NotFound" }`.
 
 ---
 
@@ -4324,7 +4337,7 @@ Create a model endpoint. Supply `apiKey` to store a provider key; it is write-on
 }
 ```
 
-**Response:** The newly created [ModelEndpoint](#modelendpoint) object (with `hasApiKey: true`, no `apiKey` field). Returns `{ "Error": "..." }` when `Anthropic` is paired with `Embedding`, or `VoyageAI` is paired with `Inference`.
+**Response:** The newly created [ModelEndpoint](#modelendpoint) object (with `hasApiKey: true`, no `apiKey` field). Returns `{ "Error": "...", "ErrorCode": "InvalidArgument" }` when `Anthropic` is paired with `Embedding`, or `VoyageAI` is paired with `Inference`.
 
 **Provider-specific fields** (accepted on create and update): `AzureOpenAI` uses `baseUrl` (resource endpoint), `model` (deployment name), `apiKey`, and optional `apiVersion`. `VertexAI` requires `project` and `region`, with the service-account JSON supplied write-only as `apiKey`; `baseUrl` is an optional override. `Bedrock` requires `region` and `accessKeyId`, with the AWS secret access key supplied write-only as `apiKey`; `model` is the Bedrock model id and `baseUrl` is an optional override.
 
@@ -4368,7 +4381,7 @@ Update an existing model endpoint. Omit `apiKey` to keep the stored key; send `a
 | `timeoutMs` | integer | No | Request timeout in milliseconds (clamped to [1000, 600000]) |
 | `enabled` | boolean | No | Whether the endpoint participates in health sweeps |
 
-**Response:** Updated [ModelEndpoint](#modelendpoint) object, or `{ "Error": "Model endpoint not found" }`. A rejected provider/kind combination returns `{ "Error": "..." }`.
+**Response:** Updated [ModelEndpoint](#modelendpoint) object, or `{ "Error": "Model endpoint not found", "ErrorCode": "NotFound" }`. A rejected provider/kind combination returns `{ "Error": "...", "ErrorCode": "InvalidArgument" }`.
 
 When `apiKey` is omitted, MCP preserves the current stored key.
 
@@ -4400,7 +4413,7 @@ Delete a model endpoint by ID.
 { "Status": "deleted", "EndpointId": "mep_abc123" }
 ```
 
-Returns `{ "Error": "Model endpoint not found" }` if the ID does not exist.
+Returns `{ "Error": "Model endpoint not found", "ErrorCode": "NotFound" }` if the ID does not exist.
 
 ---
 
@@ -4439,7 +4452,7 @@ Validate one endpoint by issuing a real request against the provider: an embeddi
 }
 ```
 
-Returns `{ "Error": "Model endpoint not found" }` if the ID does not exist.
+Returns `{ "Error": "Model endpoint not found", "ErrorCode": "NotFound" }` if the ID does not exist.
 
 ---
 
@@ -4503,7 +4516,7 @@ Create a backup of the Armada database and settings as a ZIP archive.
 | File | Description |
 |---|---|
 | `armada.db` | SQLite database snapshot created via the SQLite online backup API |
-| `settings.json` | Current Armada server configuration, including `GitHubToken` when configured |
+| `settings.json` | Current Armada server configuration, including `gitHubToken` when configured |
 | `manifest.json` | Backup metadata: timestamp, schema version, Armada version, record counts per table |
 
 ---
@@ -4630,8 +4643,8 @@ Paginated result wrapper returned by `enumerate`.
 | `projectContext` | string \| null | Project context describing architecture, key files, and dependencies |
 | `styleGuide` | string \| null | Style guide describing naming conventions, patterns, and library preferences |
 | `hasGitHubTokenOverride` | bool | Indicates whether a per-vessel GitHub token override is stored. MCP never returns the raw token value. |
-| `landingMode` | string \| null | [LandingModeEnum](#landingmodeenum) — per-vessel landing policy override |
-| `branchCleanupPolicy` | string \| null | [BranchCleanupPolicyEnum](#branchcleanuppolicyenum) — per-vessel branch cleanup override |
+| `landingMode` | string \| null | [LandingModeEnum](#landingmodeenum) - per-vessel landing policy override |
+| `branchCleanupPolicy` | string \| null | [BranchCleanupPolicyEnum](#branchcleanuppolicyenum) - per-vessel branch cleanup override |
 | `active` | bool | Whether the vessel is active |
 | `createdUtc` | string | ISO 8601 creation timestamp |
 | `lastUpdateUtc` | string | ISO 8601 last update timestamp |
@@ -4651,7 +4664,7 @@ Paginated result wrapper returned by `enumerate`.
 | `autoPush` | bool \| null | Override global auto-push setting |
 | `autoCreatePullRequests` | bool \| null | Override global auto-create PR setting |
 | `autoMergePullRequests` | bool \| null | Override global auto-merge PR setting |
-| `landingMode` | string \| null | [LandingModeEnum](#landingmodeenum) — per-voyage landing policy override |
+| `landingMode` | string \| null | [LandingModeEnum](#landingmodeenum) - per-voyage landing policy override |
 
 #### Mission
 

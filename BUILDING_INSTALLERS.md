@@ -35,7 +35,7 @@ Produces the Harbor `.exe` (Inno), the Server `.msi` (WiX), and the CLI NuGet to
 ```powershell
 choco install innosetup -y
 dotnet tool install --global wix
-.\build-installers.bat 0.9.0
+.\build-installers.bat 1.0.0
 ```
 
 The WiX recipe (`src/Armada.Publisher/Channels/WixChannel.cs`) generates a `.wxs` per Windows runtime next to the
@@ -51,7 +51,7 @@ nothing to `brew install`.
 ```bash
 xcode-select --install   # once, if the command-line tools are missing
 chmod +x build-installers.sh
-./build-installers.sh 0.9.0
+./build-installers.sh 1.0.0
 ```
 
 - **`Armada Harbor.app`**: `Contents/Info.plist` (bundle id `com.joelchristner.armada.harbor`), the self-contained
@@ -71,7 +71,7 @@ Produces `.deb` / `.rpm` for all three components.
 ```bash
 sudo gem install --no-document fpm
 chmod +x build-installers.sh
-./build-installers.sh 0.9.0
+./build-installers.sh 1.0.0
 ```
 
 ## Where the installers land
@@ -81,13 +81,13 @@ flattened into a version-specific directory with a `SHA256SUMS` manifest:
 
 ```
 installers/
-  0.9.0/
-    armada-harbor-0.9.0-win-x64.exe
-    armada-server-0.9.0-win-x64.msi
-    armada-harbor-0.9.0-osx-arm64.dmg
-    armada-server-0.9.0-osx-arm64.pkg
-    armada-harbor_0.9.0_amd64.deb
-    Armada.Helm.0.9.0.nupkg
+  1.0.0/
+    armada-harbor-1.0.0-win-x64.exe
+    armada-server-1.0.0-win-x64.msi
+    armada-harbor-1.0.0-osx-arm64.dmg
+    armada-server-1.0.0-osx-arm64.pkg
+    armada-harbor_1.0.0_amd64.deb
+    Armada.Helm.1.0.0.nupkg
     SHA256SUMS
     ...
   _work/            <- intermediate publish + per-channel output (safe to delete)
@@ -105,7 +105,7 @@ download with `sha256sum -c SHA256SUMS --ignore-missing` (Linux) or `shasum -a 2
 regenerate the manifest for any directory:
 
 ```
-dotnet run --project src/Armada.Publisher -- checksums --dir installers/0.9.0
+dotnet run --project src/Armada.Publisher -- checksums --dir installers/1.0.0
 ```
 
 ## Source assets (where inputs live)
@@ -120,7 +120,7 @@ Pushing a tag runs the GitHub Actions matrix (`windows`/`macos`/`ubuntu`), which
 every installer to a GitHub Release. This is the normal release path.
 
 ```bash
-git tag v0.9.0 && git push origin v0.9.0
+git tag v1.0.0 && git push origin v1.0.0
 ```
 
 ## Signing

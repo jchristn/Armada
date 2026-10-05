@@ -1,6 +1,6 @@
 # Pipelines -- Implementation Reference
 
-This document covers the complete pipeline implementation in Armada v0.9.0: data model, dispatch flow, execution lifecycle, stage handoff, architect special handling, captain routing, and extensibility.
+This document covers the complete pipeline implementation in Armada v1.0.0: data model, dispatch flow, execution lifecycle, stage handoff, architect special handling, captain routing, and extensibility.
 
 ---
 
@@ -350,7 +350,8 @@ When an Architect stage completes with parseable markers:
 2. Update the existing Worker mission (next stage) with the first definition
 3. Create N-1 additional Worker missions for the remaining definitions
 4. For each additional Worker:
-   - Clone the post-Worker stages (Test Engineer, Judge) as new missions
+   - Clone the whole post-Worker chain (in FullPipeline: Usability Engineer, Test Engineer,
+     Linter, Judge, Recorder) as new missions
    - Chain dependencies: additional Worker depends on Architect,
      cloned stages depend on their Worker
 5. Assign the first Worker mission
@@ -362,9 +363,9 @@ Result for an Architect that produces 2 mission definitions in a FullPipeline:
 ```
 [Architect] (completed)
   |
-  +-- [Worker 1] "Add CacheService" --> [Test Engineer 1] --> [Judge 1]
+  +-- [Worker 1] "Add CacheService" --> [Usability Engineer 1] --> [Test Engineer 1] --> [Linter 1] --> [Judge 1] --> [Recorder 1]
   |
-  +-- [Worker 2] "Add middleware"    --> [Test Engineer 2] --> [Judge 2]
+  +-- [Worker 2] "Add middleware"    --> [Usability Engineer 2] --> [Test Engineer 2] --> [Linter 2] --> [Judge 2] --> [Recorder 2]
 ```
 
 If no `[ARMADA:MISSION]` markers are found, the Architect's output falls through to normal stage handoff (context injection).
@@ -391,7 +392,7 @@ Template resolution order:
 Database (user customization) -> Embedded Default (shipped with code) -> Hardcoded Fallback
 ```
 
-All 18 built-in templates are seeded into the database on startup via `PromptTemplateService.SeedDefaultsAsync()`. Users can edit them via dashboard, MCP, or REST without touching code.
+All built-in templates (27 in 1.0.0) are seeded into the database on startup via `PromptTemplateService.SeedDefaultsAsync()`. Users can edit them via dashboard, MCP, or REST without touching code.
 
 **Source:** `src/Armada.Core/Services/MissionService.cs`, `src/Armada.Core/Services/PromptTemplateService.cs`
 

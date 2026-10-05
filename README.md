@@ -160,7 +160,7 @@ Each step is a **persona** with its own prompt template. A sequence of personas 
 | **Reviewed** | Implement -> Review | Normal development |
 | **Tested** | Implement -> Test -> Review | When you need coverage |
 | **Recorded** | Implement -> Record | Capture durable memories from the work |
-| **FullPipeline** | Plan -> Implement -> Test -> Lint -> Review -> Record | Big features, unfamiliar codebases |
+| **FullPipeline** | Product Manager -> Architect -> Worker -> Usability Engineer -> Test Engineer -> Linter -> Judge -> Recorder | Big features, unfamiliar codebases |
 
 You can set a default pipeline per repository and override it on a single dispatch when needed. If the built-in roles are not enough, define your own personas and compose them into custom pipelines for security review, documentation, migration planning, release checks, architecture review, or any other project-specific step.
 
@@ -949,7 +949,7 @@ armada config init              # Interactive setup (optional)
 | `Ask.CaptainAutoApprove` | false | Run CLI captains with their auto-approve flags during Ask Armada turns |
 | `TerminalBell` | true | Ring terminal bell during `armada watch` |
 | `DefaultRuntime` | null (auto-detect) | Default agent runtime |
-| `PlanningSessionInactivityTimeoutMinutes` | 0 | Automatically stop idle planning sessions after this many minutes; 0 disables the timeout |
+| `PlanningSessionInactivityTimeoutMinutes` | 60 | Automatically stop idle planning sessions after this many minutes; 0 disables the timeout |
 | `PlanningSessionAbandonmentTimeoutMinutes` | 240 | Safety-valve cleanup for abandoned planning sessions with no running process; 0 disables abandonment cleanup |
 | `PlanningSessionRetentionDays` | 0 | Automatically delete stopped or failed planning transcripts after this many days; 0 disables retention cleanup |
 
@@ -1035,7 +1035,7 @@ armada server start
 Armada also exposes an MCP (Model Context Protocol) server so Claude Code and other MCP-compatible clients can call Armada tools directly.
 
 ```bash
-armada mcp install    # Configure Claude Code, Codex, Gemini, and Cursor for Armada MCP
+armada mcp install    # Configure Claude Code, Codex, Gemini, Cursor (and Mux, OpenCode when installed) for Armada MCP
 armada mcp remove     # Remove those Armada MCP entries again
 ```
 

@@ -11,7 +11,7 @@ The direction is now:
 - add generic dashboard transport relay for `/api/v1/*` and `/ws`
 - stop growing the proxy around feature-specific UI route families
 
-Legacy feature-specific tunnel methods still exist for compatibility, but they are no longer the preferred growth path for remote dashboard support.
+The Admiral serves only the generic relay methods (`armada.http.request` and `armada.ws.open`, `armada.ws.message`, `armada.ws.close`). The older feature-specific methods were removed; any other request method gets a `404` response with error code `unsupported_method`.
 
 ## Transport Overview
 
@@ -118,11 +118,11 @@ Representative successful response:
 }
 ```
 
-The feature list above is representative. Armada still advertises legacy feature-specific capabilities today, but the important new contract point is the presence of `dashboard.http.relay` and `dashboard.websocket.relay`.
+The Admiral advertises exactly these features in its handshake capability manifest; `dashboard.http.relay` and `dashboard.websocket.relay` signal the generic relay.
 
 ## Generic HTTP Relay
 
-The proxy now forwards dashboard REST traffic through `armada.http.request`.
+The proxy forwards dashboard REST traffic through `armada.http.request`.
 
 Payload shape:
 
@@ -170,11 +170,14 @@ Current limitation:
 
 ## Generic WebSocket Relay
 
-The proxy now forwards the dashboard websocket through these method families:
+The proxy forwards the dashboard websocket through these requests, which the Admiral serves:
 
 - `armada.ws.open`
 - `armada.ws.message`
 - `armada.ws.close`
+
+The Admiral reports socket state back to the proxy with these events:
+
 - `armada.ws.closed`
 - `armada.ws.error`
 
@@ -217,17 +220,28 @@ Current limitation:
 
 - reconnect and recovery semantics after tunnel interruption still need deeper verification
 
-## Legacy Feature-Specific Methods
+## Unsupported Methods
 
-The server still handles older `armada.*` request families for compatibility, including objective/backlog, planning, workflow, delivery, diagnostics, workspace, and reference methods.
+The Admiral answers only `armada.http.request`, `armada.ws.open`, `armada.ws.message`, and `armada.ws.close`. The
+older feature-specific request families (objective/backlog, planning, workflow, delivery, diagnostics, workspace, and
+reference methods) are no longer served. A request with any other method gets a response with status `404` and error
+code `unsupported_method`:
 
-Those methods are now considered compatibility surface:
+```json
+{
+  "type": "response",
+  "correlationId": "5a9b9ed0cc4343e5882e5f4abaf9d0e0",
+  "statusCode": 404,
+  "success": false,
+  "errorCode": "unsupported_method",
+  "message": "Tunnel method armada.objectives.list is not supported. Use generic dashboard relay methods instead."
+}
+```
 
-- they are not the preferred path for new dashboard support
-- the shared dashboard should reach new REST behavior through generic `/api/v1/*` relay
-- the shared dashboard should reach live behavior through generic `/ws` relay
+A request with no method gets `400` with error code `missing_method`.
 
-Removing the legacy method families remains follow-up work after compatibility confidence is high enough.
+The shared dashboard reaches REST behavior through the generic `/api/v1/*` relay and live behavior through the
+generic `/ws` relay; new remote features need no new tunnel methods.
 
 ## Connection Lifecycle And Health
 
@@ -248,7 +262,7 @@ Proxy-side instance state is derived as:
 
 - `connected`: websocket is attached and recent tunnel activity is fresh
 - `stale`: websocket is still attached but activity is older than `staleAfterSeconds`
-- `disconnected`: no active tunnel session
+- `offline`: no active tunnel session
 
 Useful health surfaces:
 
@@ -257,10 +271,6 @@ Useful health surfaces:
 
 ## Directional Summary
 
-The current tunnel is intentionally in a mixed state:
-
-- generic dashboard relay is now shipped
-- legacy feature-specific methods still exist for compatibility
-- new remote dashboard work should bias to generic transport, not new feature-specific tunnel methods
-
-That is the architectural direction this repo should continue following.
+- the generic dashboard relay (`armada.http.request`, `armada.ws.*`) is the whole request surface the Admiral serves
+- every other request method returns `404 unsupported_method`
+- new remote dashboard work uses the generic transport, not new feature-specific tunnel methods

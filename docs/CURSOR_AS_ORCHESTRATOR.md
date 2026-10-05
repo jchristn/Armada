@@ -4,9 +4,9 @@ Connect Cursor to Armada's MCP server and use natural language to orchestrate pa
 
 ## Prerequisites
 
-1. **Armada installed** — `dotnet tool install -g armada`
-2. **Cursor installed** — Download from [cursor.com](https://cursor.com) or install the CLI separately
-3. **At least one vessel registered** — a git repository for agents to work in
+1. **Armada installed** - `dotnet tool install -g Armada.Helm`
+2. **Cursor installed** - Download from [cursor.com](https://cursor.com) or install the CLI separately
+3. **At least one vessel registered** - a git repository for agents to work in
 
 ## Setup
 
@@ -14,7 +14,7 @@ Connect Cursor to Armada's MCP server and use natural language to orchestrate pa
 armada mcp install
 ```
 
-This now writes the MCP configuration for all supported tools automatically. For Cursor specifically, it writes `.cursor/mcp.json` in the current project. If you prefer to edit manually, use:
+This writes the MCP configuration for all supported tools. For Cursor it writes `.cursor/mcp.json` in the current project. If you prefer to edit manually, use:
 
 ```json
 {
@@ -30,7 +30,7 @@ Use `--dry-run` to preview without writing.
 
 ## Default Permission Mode
 
-Armada runs Cursor in `--agent` mode with no explicit permission gate — all tool calls proceed without approval prompts. There is no configurable permission property for Cursor.
+Armada runs Cursor captains in print mode (`cursor-agent -p`) with `--force` by default, so tool calls proceed without approval prompts. To run a captain without it, untick **Auto-approve agent tool use** when editing the captain in the dashboard (or pass `autoApprove: false` to the `create_captain` / `update_captain` MCP tools); the captain then runs without `--force`.
 
 ## Using Cursor Agent Mode
 
@@ -74,7 +74,7 @@ For Cursor to effectively orchestrate Armada, paste the contents of [`INSTRUCTIO
 
 If you prefer to configure MCP manually instead of using `armada mcp install`, add to `.cursor/mcp.json` (or Cursor Settings > MCP):
 
-**HTTP Transport (recommended)** — requires Admiral server running (`armada server start`):
+**HTTP Transport (recommended)** - requires Admiral server running (`armada server start`):
 
 ```json
 {
@@ -86,7 +86,7 @@ If you prefer to configure MCP manually instead of using `armada mcp install`, a
 }
 ```
 
-**Stdio Transport** — no server required, Armada runs as a subprocess:
+**Stdio Transport** - no server required, Armada runs as a subprocess:
 
 ```json
 {

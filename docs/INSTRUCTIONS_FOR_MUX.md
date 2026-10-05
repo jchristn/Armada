@@ -29,7 +29,7 @@ mux
    - **mcp path**: `/mcp` (the default -- leave as-is)
    - **auth**: `none`
 
-Each server row shows a live connectivity glyph -- `●` online (with its discovered tool count) or `○` offline. Once `armada` shows `●` with ~100 tools, you are connected. The server is saved to the Mux config directory's `mcp-servers.json`, so it loads automatically in future sessions.
+Each server row shows a live connectivity glyph -- a filled circle when online (with its discovered tool count) or a hollow circle when offline. Once `armada` shows the filled circle with its tool count (146 in 1.0.0), you are connected. The server is saved to the Mux config directory's `mcp-servers.json`, so it loads automatically in future sessions.
 
 ### Option B -- Config file (headless / scripted runs)
 

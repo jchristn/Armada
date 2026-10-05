@@ -2,7 +2,7 @@
 
 Go from zero to three AI agents working in parallel in under five minutes.
 
-> **⚠️ Security Note:** Armada runs AI agent captains with permission-bypassing flags enabled by default (e.g. `--dangerously-skip-permissions` for Claude Code, `--approval-mode full-auto` for Codex, `--sandbox none` for Gemini). Agents can read, write, and execute code without user confirmation. Be aware of this before proceeding.
+> **Security Note:** Armada runs AI agent captains with permission-bypassing flags enabled by default (e.g. `--dangerously-skip-permissions` for Claude Code, `--approval-mode yolo` for Gemini, `--force` for Cursor; Codex runs non-interactively in its `workspace-write` sandbox). Agents can read, write, and execute code without user confirmation. Be aware of this before proceeding; each captain's **Auto-approve agent tool use** switch (`autoApprove`) turns the flags off.
 
 ## Install
 
@@ -37,7 +37,7 @@ Those scripts build the solution, deploy dashboard assets, and install `Armada.H
 armada mcp install
 ```
 
-This configures Armada MCP for Claude Code, Codex, Gemini, and Cursor, and installs the Claude Code orchestrator agent. Use `armada mcp remove` to remove those entries later.
+This configures Armada MCP for Claude Code, Codex, Gemini, and Cursor (plus Mux and OpenCode when they are installed), and installs the Claude Code orchestrator agent. Use `armada mcp remove` to remove those entries later.
 
 ## Start the server
 
@@ -122,7 +122,7 @@ Dashboard Planning UI
 
 Current planning-session constraints:
 
-- Planning currently supports the built-in `ClaudeCode`, `Codex`, `Gemini`, `Cursor`, and `Mux` runtimes. `Custom` captains are blocked there.
+- Planning supports the CLI runtimes `ClaudeCode`, `Codex`, `Gemini`, `Cursor`, `Mux`, and `OpenCode`. `Custom` and `ApiEndpoint` captains and Harbor-hosted captains are blocked there.
 - A planning session reserves the selected captain and a dock/worktree for the selected vessel until you stop the session.
 - The captain can inspect and modify the repository while planning.
 - Planning is transcript-backed today. Each turn relaunches the runtime with the preserved transcript and repo context instead of keeping a persistent interactive stdin session alive.
@@ -195,7 +195,7 @@ git remote add origin https://github.com/you/bookshelf.git
 git push -u origin main
 ```
 
-A local-only repo works fine too — agents work in local worktrees.
+A local-only repo works fine too - agents work in local worktrees.
 
 ## Launch the orchestrator
 
@@ -241,7 +241,7 @@ Three captains spin up in isolated worktrees, each working on their own files.
 
 > Check voyage status.
 
-You'll see each mission's status — Pending, InProgress, or Complete.
+You'll see each mission's status - Pending, InProgress, or Complete.
 
 > Show the diff for the book CRUD mission.
 
@@ -299,30 +299,36 @@ armada log captain-1
 **CLI reference**
 
 ```
-armada go <prompt>             Dispatch a task (infers repo from CWD)
+armada go <prompt>             Dispatch a task (infers repo from CWD; repeat --task for several missions)
 armada watch                   Live dashboard
 armada diff [mission]          Review changes
-armada log <captain>           Tail agent output
+armada log <captain|mission>   Tail agent output
 armada status                  System overview
+armada inbox                   Items awaiting your attention
+armada health                  Vessel health
 armada doctor                  Health check
+armada tui                     Terminal UI
 
-armada mission list|create|show|cancel|retry
-armada voyage  list|create|show|cancel|retry
-armada vessel  list|add|remove
-armada captain list|add|stop|stop-all|remove
-armada fleet   list|add|remove
-armada server  start|status|stop
-armada config  show|set|init
-armada mcp     install|stdio
+armada mission  list|create|show|cancel|restart|retry
+armada voyage   list|create|show|cancel|retry
+armada vessel   list|add|import|remove
+armada captain  list|add|update|stop|stop-all|remove
+armada fleet    list|add|remove
+armada action   list|run|status|cancel
+armada playbook list|add|show|remove
+armada backlog  list|create|show|update|delete|reorder
+armada server   start|status|stop|restart
+armada config   show|set|init
+armada mcp      install|remove|stdio
 ```
 
-**Configuration** — `armada config show` to see all settings. Key ones: `MaxCaptains` (concurrent agents), `StallThresholdMinutes` (stall detection), `AutoPush`, `AutoCreatePullRequests`, `DefaultRuntime`.
+**Configuration** - `armada config show` to see all settings. Key ones: `MaxCaptains` (concurrent agents), `StallThresholdMinutes` (stall detection), `AutoPush`, `AutoCreatePullRequests`, `DefaultRuntime`.
 
-**Web dashboard** — Built-in web UI with live dashboards, diff viewer, log viewer, and settings editor. Served by the Admiral server at `http://localhost:7890/dashboard/`.
+**Web dashboard** - Built-in web UI with live dashboards, diff viewer, log viewer, and settings editor. Served by the Admiral server at `http://localhost:7890/dashboard/`.
 
-**REST API** — Full CRUD on port 7890 under `/api/v1/`. See `docs/REST_API.md`.
+**REST API** - Full CRUD on port 7890 under `/api/v1/`. See `docs/REST_API.md`.
 
-**MCP tools** — 43 tools for fleets, vessels, voyages, missions, captains, signals, events, docks, and the merge queue. Any MCP client can orchestrate Armada. See `docs/CLAUDE_CODE_AS_ORCHESTRATOR.md`.
+**MCP tools** - 146 tools for fleets, vessels, voyages, missions, captains, signals, events, docks, the merge queue, backlog, fleet actions, and more. Any MCP client can orchestrate Armada. See `docs/MCP_API.md` and `docs/CLAUDE_CODE_AS_ORCHESTRATOR.md`.
 
 ---
 
@@ -331,11 +337,11 @@ armada mcp     install|stdio
 If you prefer Docker over a local .NET SDK install:
 
 ```bash
-cd docker
-docker compose up -d
+cd docker/armada
+ARMADA_INITIAL_ADMIN_PASSWORD='choose-a-password' docker compose up -d
 ```
 
-This starts the Armada server on port 7890 and an optional React dashboard on port 3000. Open `http://localhost:7890/dashboard` or `http://localhost:3000` in your browser.
+This starts the Armada server on port 7890 (REST and the built-in dashboard; MCP on 7891), a standalone React dashboard container on port 3000, and the bundled observability stack. Open `http://localhost:7890/dashboard` or `http://localhost:3000` in your browser.
 
 Log in with the default credentials:
 
@@ -346,7 +352,7 @@ Log in with the default credentials:
 
 Set `ARMADA_INITIAL_ADMIN_PASSWORD` (8+ characters) before `docker compose up`: the Admiral listens on all interfaces in the container and refuses to start while the default password is in use. Sign in with `admin@armada` and that password; the `default` bearer token is disabled. Create a credential for scripts under Server > Credentials (the token is shown once).
 
-Data is persisted in `docker/armada/db/`. To stop: `docker compose down`. To reset all data: run `docker/factory/reset.sh` (or `reset.bat` on Windows).
+Data is persisted in `docker/armada/db/`. To stop: `docker compose down`. To reset all data: run `docker/armada/factory/reset.sh` (or `reset.bat` on Windows).
 
 See the [README](README.md#running-locally-with-docker) for full Docker details including volume layout, configuration, and building images from source.
 
@@ -354,7 +360,7 @@ See the [README](README.md#running-locally-with-docker) for full Docker details 
 
 ## Authentication (v0.3.0)
 
-As of v0.3.0, all REST API endpoints require authentication. The default bearer token (`default`) provides backward-compatible access:
+As of v0.3.0, all REST API endpoints require authentication. Until the default admin password is changed, the default bearer token (`default`) provides backward-compatible access:
 
 ```bash
 curl -H "Authorization: Bearer default" http://localhost:7890/api/v1/status
@@ -378,6 +384,6 @@ Operational records are owned by both tenant and user. Armada persists and index
 
 User creation and user updates accept a plaintext `Password` field. Armada hashes the password server-side before storing it. If `Password` is omitted on update, the existing password is preserved. The dashboard Users modal supports both admin-managed password resets and self-service password changes.
 
-If you want to harden server shutdown, set `RequireAuthForShutdown = true` in your settings. When enabled, `POST /api/v1/server/stop` requires a global admin user with `IsAdmin = true`; tenant admins and regular users cannot shut the server down through the REST API.
+Server stop, restart, rebuild, and rollback (`POST /api/v1/server/...`) always require a global admin (`IsAdmin = true`); tenant admins and regular users cannot shut the server down through the REST API. The old `requireAuthForShutdown` setting is deprecated and ignored.
 
 For production use, create additional users and credentials via the admin API or dashboard. See `docs/REST_API.md` for details.

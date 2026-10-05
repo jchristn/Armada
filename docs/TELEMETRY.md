@@ -1,6 +1,6 @@
 # Telemetry and Observability
 
-Armada v0.9.0 can export OpenTelemetry metrics and logs to a Prometheus / Loki / Grafana stack.
+Armada can export OpenTelemetry metrics and logs to a Prometheus / Loki / Grafana stack.
 Telemetry is **disabled by default** -- a fresh install ships no telemetry surface until an operator
 opts in.
 
