@@ -56,18 +56,20 @@ dotnet run --project src/Armada.Harbor
 
 On first run the app writes a settings file to `~/.armada-harbor/settings.json` (on Windows,
 `%USERPROFILE%\.armada-harbor\settings.json`), generating a Harbor id and defaulting the name to the machine
-name. Edit that file to point the Harbor at your Admiral and to describe what the host can do:
+name. Edit that file (with Harbor stopped; it rewrites the file on startup) to point the Harbor at your Admiral and to
+describe what the host can do. Keys are PascalCase and case-sensitive: a camelCase key is ignored and replaced
+with the default when Harbor saves.
 
 | Field | Description |
 |---|---|
-| `serverLinkUrl` | WebSocket URL of the Admiral's Harbor link (`ws://` or `wss://`). Default `ws://127.0.0.1:7891/v1.0/harbor/connect`. |
-| `dashboardUrl` | Dashboard URL opened by the app's "Open Dashboard" action. Default `http://127.0.0.1:7890/dashboard`. |
-| `harborId` | Harbor identifier (`hbr_` prefix). Generated on first run when empty. |
-| `name` | Human-facing Harbor name. Defaults to the machine name. |
-| `capabilities` | Runtimes and host tools advertised at handshake (e.g. `git`, `claude`). Drives capability-based routing. |
-| `maxConcurrentJobs` | Maximum concurrent jobs this Harbor will accept. Default 4. |
-| `heartbeatIntervalMs` | Heartbeat interval in milliseconds; `0` disables heartbeats. Default 15000. |
-| `accessKey` / `secret` | `accessKey` is an Armada credential (a bearer token from Server > Credentials, or the local API key); the Harbor registers under that credential's tenant and user. Leave it empty only for a Harbor on the same machine as a localhost-bound Admiral; a Harbor connecting from another host is refused without one. `secret` is not used for authentication today and is never logged. |
+| `ServerLinkUrl` | WebSocket URL of the Admiral's Harbor link (`ws://` or `wss://`), on the Admiral's REST port. Default `ws://127.0.0.1:7890/v1.0/harbor/connect`. |
+| `DashboardUrl` | Dashboard URL opened by the app's "Open Dashboard" action. Default `http://127.0.0.1:7890/dashboard`. |
+| `HarborId` | Harbor identifier (`hbr_` prefix). Generated on first run when empty. |
+| `Name` | Human-facing Harbor name. Defaults to the machine name. |
+| `Capabilities` | Runtimes and host tools advertised at handshake (e.g. `git`, `claude`). Drives capability-based routing. |
+| `MaxConcurrentJobs` | Maximum concurrent jobs this Harbor will accept. Default 4. |
+| `HeartbeatIntervalMs` | Heartbeat interval in milliseconds; `0` disables heartbeats. Default 15000. |
+| `AccessKey` / `Secret` | `AccessKey` is an Armada credential (a bearer token from Server > Credentials, or the local API key); the Harbor registers under that credential's tenant and user. Leave it empty only for a Harbor on the same machine as a localhost-bound Admiral; a Harbor connecting from another host is refused without one. `Secret` is not used for authentication today and is never logged. |
 
 A Harbor does not have to be pre-registered: it self-registers on its first handshake. Pre-registering is
 useful when you want to reserve a name and capacity, or set routing preferences, before the host connects.
