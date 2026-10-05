@@ -113,7 +113,7 @@ namespace Armada.Tui.Screens.Operations
             List<AskToolChip> tools = existing != null ? existing.ToList() : new List<AskToolChip>();
             if (e == null || String.IsNullOrEmpty(e.Id)) return tools;
             int idx = tools.FindIndex(t => t.Id == e.Id);
-            if (e.Phase == "started")
+            if (e.Phase == ToolCallPhaseEnum.Started)
             {
                 if (idx < 0)
                 {
@@ -125,7 +125,7 @@ namespace Armada.Tui.Screens.Operations
                     tools.Add(chip);
                 }
             }
-            else if (e.Phase == "completed")
+            else if (e.Phase == ToolCallPhaseEnum.Completed)
             {
                 AskToolChip? prior = idx >= 0 ? tools[idx] : null;
                 AskToolChip done = new AskToolChip();

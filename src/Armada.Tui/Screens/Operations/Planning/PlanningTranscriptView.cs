@@ -4,6 +4,7 @@ namespace Armada.Tui.Screens.Operations
     using System.Collections.Generic;
     using System.Linq;
     using System.Text;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Tui.Ask;
     using Armada.Tui.Text;
@@ -215,7 +216,7 @@ namespace Armada.Tui.Screens.Operations
             List<StyledText> rows = new List<StyledText>();
             List<int> rowOwner = new List<int>();
             _Starts = new List<int>();
-            if (_Owner.CaptainRuntime == "Codex") AddWrapped(rows, rowOwner, -1, StyledText.From(T("Codex responses cannot be streamed and will arrive upon completion."), Theme.Info), width);
+            if (_Owner.CaptainRuntime == AgentRuntimeEnum.Codex) AddWrapped(rows, rowOwner, -1, StyledText.From(T("Codex responses cannot be streamed and will arrive upon completion."), Theme.Info), width);
             if (messages.Count == 0)
             {
                 AddWrapped(rows, rowOwner, -1, StyledText.From(T("No transcript yet. Send the first planning message below."), Theme.Muted), width);
@@ -309,7 +310,7 @@ namespace Armada.Tui.Screens.Operations
                         string mark = chip.Status == AskToolChipStatusEnum.Running ? "[..]" : chip.Status == AskToolChipStatusEnum.Failed ? "[x!]" : "[ok]";
                         CellStyle st = chip.Status == AskToolChipStatusEnum.Running ? Theme.Info : chip.Status == AskToolChipStatusEnum.Failed ? Theme.Error : Theme.Success;
                         string tail = chip.Status == AskToolChipStatusEnum.Running ? "  " + T("running...") : chip.ElapsedMs.HasValue ? "  " + PlanningLogic.Ms(chip.ElapsedMs) : "";
-                        lines.Add(StyledText.From(mark + " ", st).Append(StyledText.From(chip.Name + tail + (String.IsNullOrEmpty(_Owner.CaptainRuntime) ? "" : "  (" + _Owner.CaptainRuntime + ")"), Theme.Muted)));
+                        lines.Add(StyledText.From(mark + " ", st).Append(StyledText.From(chip.Name + tail + (_Owner.CaptainRuntime == null ? "" : "  (" + _Owner.CaptainRuntime + ")"), Theme.Muted)));
                     }
                 }
 

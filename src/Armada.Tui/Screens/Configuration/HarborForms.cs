@@ -68,7 +68,7 @@ namespace Armada.Tui.Screens.Configuration
             if (harbor == null) throw new ArgumentNullException(nameof(harbor));
             LinkDetailView view = new LinkDetailView();
             view.Row("ID", harbor.Id, t => t.Code);
-            view.Row("Status", EntityUi.Badge(context, harbor.ConnectionStatus.ToString()), t => StatusBadge.Style(harbor.ConnectionStatus.ToString(), t));
+            view.Row("Status", EntityUi.Badge(context, harbor.ConnectionStatus.ToString()), t => StatusBadge.Style(harbor.ConnectionStatus, t));
             view.Row("Enabled", harbor.Enabled ? context.Loc.T("Yes") : context.Loc.T("No"));
             view.Row("Capacity", harbor.MaxConcurrentJobs.ToString(CultureInfo.InvariantCulture));
             view.Row("Platform", Platform(harbor));

@@ -214,11 +214,11 @@ namespace Test.Shared.Suites.Tui
         {
             stub = TuiFixtures.SignedInServer();
             stub.Json("GET", "/api/v1/inbox", "[" +
-                "{\"Kind\":\"review\",\"Severity\":\"Warning\",\"Title\":\"Review: Fix tables\",\"Detail\":\"Waiting 5m\",\"EntityType\":\"mission\",\"EntityId\":\"msn_r\",\"Href\":\"/missions/msn_r\"}," +
-                "{\"Kind\":\"landing_failed\",\"Severity\":\"Critical\",\"Title\":\"Landing failed: Ship it\",\"Detail\":\"Conflict\",\"EntityType\":\"mission\",\"EntityId\":\"msn_l\",\"Href\":\"/missions/msn_l\"}," +
-                "{\"Kind\":\"stalled_captain\",\"Severity\":\"Warning\",\"Title\":\"Stalled captain: slow\",\"Detail\":\"No heartbeat\",\"EntityType\":\"captain\",\"EntityId\":\"cpt_s\",\"Href\":\"/captains/cpt_s\"}," +
-                "{\"Kind\":\"deployment_approval\",\"Severity\":\"Warning\",\"Title\":\"Deployment awaiting approval: Staging\",\"Detail\":\"v1.2\",\"EntityType\":\"deployment\",\"EntityId\":\"dpl_1\",\"Href\":\"/deployments/dpl_1\"}," +
-                "{\"Kind\":\"failed\",\"Severity\":\"Warning\",\"Title\":\"Failed: Other\",\"Detail\":\"\",\"EntityType\":\"mission\",\"EntityId\":\"msn_f\",\"Href\":\"/missions/msn_f\"}]");
+                "{\"Kind\":\"review\",\"Severity\":\"Warning\",\"Title\":\"Review: Fix tables\",\"EntityName\":\"Fix tables\",\"Detail\":\"Waiting 5m\",\"EntityType\":\"mission\",\"EntityId\":\"msn_r\",\"Href\":\"/missions/msn_r\"}," +
+                "{\"Kind\":\"landing_failed\",\"Severity\":\"Critical\",\"Title\":\"Landing failed: Ship it\",\"EntityName\":\"Ship it\",\"Detail\":\"Conflict\",\"EntityType\":\"mission\",\"EntityId\":\"msn_l\",\"Href\":\"/missions/msn_l\"}," +
+                "{\"Kind\":\"stalled_captain\",\"Severity\":\"Warning\",\"Title\":\"Stalled captain: slow\",\"EntityName\":\"slow\",\"Detail\":\"No heartbeat\",\"EntityType\":\"captain\",\"EntityId\":\"cpt_s\",\"Href\":\"/captains/cpt_s\"}," +
+                "{\"Kind\":\"deployment_approval\",\"Severity\":\"Warning\",\"Title\":\"Deployment awaiting approval: Staging\",\"EntityName\":\"Staging\",\"Detail\":\"v1.2\",\"EntityType\":\"deployment\",\"EntityId\":\"dpl_1\",\"Href\":\"/deployments/dpl_1\"}," +
+                "{\"Kind\":\"failed\",\"Severity\":\"Warning\",\"Title\":\"Failed: Other\",\"EntityName\":\"Other\",\"Detail\":\"\",\"EntityType\":\"mission\",\"EntityId\":\"msn_f\",\"Href\":\"/missions/msn_f\"}]");
             stub.Json("POST", "/api/v1/missions/msn_r/review/approve", "{\"Id\":\"msn_r\",\"Title\":\"Fix tables\"}");
             stub.Json("POST", "/api/v1/missions/msn_r/review/deny", "{\"Id\":\"msn_r\",\"Title\":\"Fix tables\"}");
             stub.Json("POST", "/api/v1/deployments/dpl_1/approve", "{\"Id\":\"dpl_1\",\"Title\":\"Staging\"}");

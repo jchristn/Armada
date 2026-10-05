@@ -219,7 +219,7 @@ namespace Armada.Tui.Screens.Delivery
 
             Prepare(BacklogItems, "No backlog items currently reference this release.");
             BacklogItems.AddColumn(new GridColumn<Objective>("title", "Title", o => o.Title) { Weight = 3, Sortable = true });
-            BacklogItems.AddColumn(new GridColumn<Objective>("status", "Status", o => StatusBadge.Label(o.Status.ToString())) { Width = 14, Sortable = true, Style = (o, t) => StatusBadge.Style(o.Status.ToString(), t) });
+            BacklogItems.AddColumn(new GridColumn<Objective>("status", "Status", o => StatusBadge.Label(o.Status)) { Width = 14, Sortable = true, Style = (o, t) => StatusBadge.Style(o.Status, t) });
             BacklogItems.AddColumn(new GridColumn<Objective>("description", "Description", o => EntityUi.Dash(o.Description)) { Weight = 3 });
             BacklogItems.AddColumn(new GridColumn<Objective>("id", "ID", o => o.Id) { Width = 26 });
             BacklogItems.Activated += (s, o) => Context.Navigate("/backlog/" + o.Id);
@@ -232,8 +232,8 @@ namespace Armada.Tui.Screens.Delivery
 
             Prepare(Deployments, "No deployments are linked to this release yet.");
             Deployments.AddColumn(new GridColumn<Deployment>("title", "Deployment", d => d.Title) { Weight = 3, Sortable = true });
-            Deployments.AddColumn(new GridColumn<Deployment>("status", "Status", d => StatusBadge.Label(d.Status.ToString())) { Width = 20, Sortable = true, Style = (d, t) => StatusBadge.Style(d.Status.ToString(), t) });
-            Deployments.AddColumn(new GridColumn<Deployment>("verification", "Verification", d => StatusBadge.Label(d.VerificationStatus.ToString())) { Width = 14, Style = (d, t) => StatusBadge.Style(d.VerificationStatus.ToString(), t) });
+            Deployments.AddColumn(new GridColumn<Deployment>("status", "Status", d => StatusBadge.Label(d.Status)) { Width = 20, Sortable = true, Style = (d, t) => StatusBadge.Style(d.Status, t) });
+            Deployments.AddColumn(new GridColumn<Deployment>("verification", "Verification", d => StatusBadge.Label(d.VerificationStatus)) { Width = 14, Style = (d, t) => StatusBadge.Style(d.VerificationStatus, t) });
             Deployments.AddColumn(new GridColumn<Deployment>("environment", "Environment", d => String.IsNullOrEmpty(d.EnvironmentName) ? T("No environment") : d.EnvironmentName!) { Weight = 2 });
             Deployments.AddColumn(new GridColumn<Deployment>("checks", "Checks", d => d.CheckRunIds.Count.ToString(CultureInfo.InvariantCulture)) { Width = 7 });
             Deployments.AddColumn(new GridColumn<Deployment>("requests", "Requests", d => (d.RequestHistorySummary?.TotalCount ?? 0).ToString(CultureInfo.InvariantCulture)) { Width = 9 });
@@ -319,7 +319,7 @@ namespace Armada.Tui.Screens.Delivery
             Overview.Row("Last Updated", EntityUi.When(Context, r.LastUpdateUtc));
             Overview.Row("Published", EntityUi.Date(Context, r.PublishedUtc));
             Overview.Section("Release");
-            Overview.Row("Status", EntityUi.Badge(Context, r.Status.ToString()), t => StatusBadge.Style(r.Status.ToString(), t));
+            Overview.Row("Status", EntityUi.Badge(Context, r.Status.ToString()), t => StatusBadge.Style(r.Status, t));
             Overview.Link("Vessel", EntityLookups.Name(vessels, r.VesselId), !String.IsNullOrEmpty(r.VesselId) ? () => Context.Navigate("/vessels/" + r.VesselId) : (Action?)null);
             Overview.Link("Workflow Profile", !String.IsNullOrEmpty(r.WorkflowProfileId) ? EntityLookups.Name(profiles, r.WorkflowProfileId) : T("Resolved default workflow profile"),
                 !String.IsNullOrEmpty(r.WorkflowProfileId) ? () => Context.Navigate("/workflow-profiles/" + r.WorkflowProfileId) : (Action?)null);

@@ -11,6 +11,7 @@ import {
   renameWorkspaceEntry,
   saveWorkspaceFile,
   updateVessel,
+  isApiStatus,
 } from '../api/client';
 import type {
   Vessel,
@@ -369,7 +370,7 @@ export default function Workspace() {
       return true;
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : t('Failed to load directory.');
-      if (message.includes('Workspace path not found')) {
+      if (isApiStatus(error, 404)) {
         setExpandedPaths((current) => {
           const next = { ...current };
           delete next[normalizedPath];

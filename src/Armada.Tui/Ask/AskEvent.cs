@@ -1,6 +1,7 @@
 namespace Armada.Tui.Ask
 {
     using System;
+    using Armada.Client.Socket;
     using Armada.Core.Models;
 
     /// <summary>
@@ -34,9 +35,9 @@ namespace Armada.Tui.Ask
         public string Delta { get; set; } = "";
 
         /// <summary>
-        /// Tool phase (<c>started</c> or <c>completed</c>).
+        /// Tool phase, or null.
         /// </summary>
-        public string? ToolPhase { get; set; } = null;
+        public ToolCallPhaseEnum? ToolPhase { get; set; } = null;
 
         /// <summary>
         /// Tool call id.
@@ -69,9 +70,9 @@ namespace Armada.Tui.Ask
         public double? ToolElapsedMs { get; set; } = null;
 
         /// <summary>
-        /// Turn state, lower case (<c>started</c>, <c>completed</c>, <c>failed</c>, <c>cancelled</c>).
+        /// Turn state.
         /// </summary>
-        public string State { get; set; } = "started";
+        public AskTurnStateEnum State { get; set; } = AskTurnStateEnum.Started;
 
         /// <summary>
         /// Persisted message id of a finished turn, or null.

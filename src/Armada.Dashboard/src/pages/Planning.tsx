@@ -16,6 +16,7 @@ import {
   stopPlanningSession,
   stopPlanningTurn,
   summarizePlanningSession,
+  TimeoutError,
 } from '../api/client';
 import type {
   Captain,
@@ -479,7 +480,7 @@ export default function Planning() {
       });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : t('Failed to start planning session.');
-      if (message === 'Request timed out') {
+      if (err instanceof TimeoutError) {
         await loadCatalog();
         setError(t('Starting the planning session is taking longer than expected. Armada is still provisioning the dock and worktree. If setup completes, the session will appear in the list on the left.'));
       } else {

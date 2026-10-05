@@ -4,7 +4,7 @@ import { getInbox } from '../api/client';
 import type { InboxItem, InboxSeverity } from '../types/models';
 import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
-import { entityRoute } from '../lib/routing';
+import { notificationRoute } from '../lib/routing';
 import ErrorModal from '../components/shared/ErrorModal';
 import RefreshButton from '../components/shared/RefreshButton';
 import PageHeader from '../components/shared/PageHeader';
@@ -126,7 +126,7 @@ export default function Inbox() {
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
             {unreadAlerts.map((n) => {
-              const route = entityRoute(n.missionId || n.voyageId || n.captainId);
+              const route = notificationRoute(n);
               return (
                 <div
                   key={n.id}

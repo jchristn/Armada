@@ -255,7 +255,7 @@ namespace Armada.Tui.Screens.Delivery
             ExecutionGrid.MultiSelect = false;
             ExecutionGrid.EmptyText = "No executions recorded yet.";
             ExecutionGrid.AddColumn(new GridColumn<RunbookExecution>("title", "Title", e => e.Title) { Weight = 3, Sortable = true });
-            ExecutionGrid.AddColumn(new GridColumn<RunbookExecution>("status", "Status", e => StatusBadge.Label(e.Status.ToString())) { Width = 14, Sortable = true, Style = (e, t) => StatusBadge.Style(e.Status.ToString(), t) });
+            ExecutionGrid.AddColumn(new GridColumn<RunbookExecution>("status", "Status", e => StatusBadge.Label(e.Status)) { Width = 14, Sortable = true, Style = (e, t) => StatusBadge.Style(e.Status, t) });
             ExecutionGrid.AddColumn(new GridColumn<RunbookExecution>("environment", "Environment", e => String.IsNullOrEmpty(e.EnvironmentName) ? T("No environment") : e.EnvironmentName!) { Weight = 2 });
             ExecutionGrid.AddColumn(new GridColumn<RunbookExecution>("checkType", "Check Type", e => e.CheckType.HasValue ? e.CheckType.Value.ToString() : T("No check type")) { Weight = 2 });
             ExecutionGrid.AddColumn(new GridColumn<RunbookExecution>("steps", "Steps", e => e.CompletedStepIds.Count.ToString(CultureInfo.InvariantCulture) + "/" + (Entity?.Steps.Count ?? 0).ToString(CultureInfo.InvariantCulture) + " " + T("steps")) { Width = 12 });
@@ -445,7 +445,7 @@ namespace Armada.Tui.Screens.Delivery
             }
 
             ProgressSummary.Row("Title", x.Title);
-            ProgressSummary.Row("Status", EntityUi.Badge(Context, x.Status.ToString()), t => StatusBadge.Style(x.Status.ToString(), t));
+            ProgressSummary.Row("Status", EntityUi.Badge(Context, x.Status.ToString()), t => StatusBadge.Style(x.Status, t));
             ProgressSummary.Row("Environment", EntityUi.Dash(x.EnvironmentName));
             ProgressSummary.Row("Check Type", x.CheckType.HasValue ? x.CheckType.Value.ToString() : "-");
             ProgressSummary.Link("Deployment", EntityUi.Dash(x.DeploymentId), !String.IsNullOrEmpty(x.DeploymentId) ? () => Context.Navigate("/deployments/" + x.DeploymentId) : (Action?)null);

@@ -113,23 +113,58 @@ function formatRelative(locale: string, value: number, unit: Intl.RelativeTimeFo
   return new Intl.RelativeTimeFormat(locale, { numeric: 'auto' }).format(value, unit);
 }
 
+/**
+ * Translate a fixed UI label by catalog lookup only (exact phrase, or a single token), without applying the
+ * dynamic patterns below. Captured groups are passed through this instead of translateText so that text inside
+ * a captured group (which may hold an entity name) is never rewritten by a nested pattern.
+ */
+function translateLabel(locale: string, value: string, catalog: I18nCatalog | null | undefined): string {
+  const trimmed = value.trim();
+  if (!trimmed) return value;
+  const phrase = translateExactPhrase(locale, trimmed, catalog);
+  if (phrase) return preserveWhitespace(value, phrase);
+  if (!/\s/.test(trimmed)) {
+    const token = translateSingleToken(locale, trimmed, catalog);
+    if (token) return preserveWhitespace(value, token);
+  }
+  return value;
+}
+
 function translatePrefixedValue(locale: string, prefix: string, value: string, catalog: I18nCatalog | null | undefined): string | null {
-  const translatedPrefix = translateText(locale, prefix, catalog);
+  const translatedPrefix = translateLabel(locale, prefix, catalog);
   if (translatedPrefix === prefix && !translateSingleToken(locale, prefix, catalog)) return null;
   return `${translatedPrefix}: ${value}`;
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// Rendered-text patterns (legacy DOM translation).
+//
+// The document translator sees only rendered English text, so the patterns below recognize a few shapes of
+// message that code renders without a catalog key (counts, "Label: value" titles, confirmation prompts) and
+// translate their fixed parts. Rules that keep these from touching user data:
+//   - Captured values that may hold entity names, titles, ids or server messages are inserted unchanged; captured
+//     labels are translated with translateLabel (catalog lookup only, no nested patterns).
+//   - There is no catch-all "Anything: value" rule; only the fixed label list in `prefixed` is recognized, so a
+//     vessel named "Fix: login" is left alone.
+//   - Elements that render user data verbatim can opt out with data-i18n-skip="true" (see shouldSkipElement).
+// What remains and why: these patterns exist because many call sites still build English text before rendering
+// (template literals, server messages). New code must use t('Key {{param}}', params) so the template is the key
+// and params are never translated. A text node whose entire content is user data that happens to equal a catalog
+// phrase, a single catalog token, or a shape below (for example a mission titled "3 failed") can still be
+// translated; removing that needs every such call site keyed and the DOM translator retired.
+// ---------------------------------------------------------------------------------------------------------------
 
 function applyDynamicPatterns(locale: string, text: string, catalog: I18nCatalog | null | undefined): string | null {
   if (text === 'just now') return formatRelative(locale, 0, 'second');
 
   let match = text.match(/^\+\s+(.+)$/);
-  if (match) return `+ ${translateText(locale, match[1], catalog)}`;
+  if (match) return `+ ${translateLabel(locale, match[1], catalog)}`;
 
   match = text.match(/^←\s+(.+)$/);
-  if (match) return `← ${translateText(locale, match[1], catalog)}`;
+  if (match) return `← ${translateLabel(locale, match[1], catalog)}`;
 
   match = text.match(/^(.+)\s+→$/);
-  if (match) return `${translateText(locale, match[1], catalog)} →`;
+  if (match) return `${translateLabel(locale, match[1], catalog)} →`;
 
   const lowercaseStatus = [
     'healthy',
@@ -213,16 +248,16 @@ function applyDynamicPatterns(locale: string, text: string, catalog: I18nCatalog
   if (match) return `${translateText(locale, 'Mission', catalog)} ${formatNumber(locale, Number(match[1]))}`;
 
   match = text.match(/^(.+?) -- click to sort$/);
-  if (match) return `${translateText(locale, match[1], catalog)} -- ${translateText(locale, 'click to sort', catalog)}`;
+  if (match) return `${translateLabel(locale, match[1], catalog)} -- ${translateText(locale, 'click to sort', catalog)}`;
 
   match = text.match(/^Select all (.+)$/);
-  if (match) return `${translateText(locale, 'Select all', catalog)} ${translateText(locale, match[1], catalog)}`;
+  if (match) return `${translateText(locale, 'Select all', catalog)} ${translateLabel(locale, match[1], catalog)}`;
 
   match = text.match(/^Select this (.+)$/);
-  if (match) return `${translateText(locale, 'Select this', catalog)} ${translateText(locale, match[1], catalog)}`;
+  if (match) return `${translateText(locale, 'Select this', catalog)} ${translateLabel(locale, match[1], catalog)}`;
 
   match = text.match(/^Delete Selected (.+)$/);
-  if (match) return `${translateText(locale, 'Delete Selected', catalog)} ${translateText(locale, match[1], catalog)}`;
+  if (match) return `${translateText(locale, 'Delete Selected', catalog)} ${translateLabel(locale, match[1], catalog)}`;
 
   match = text.match(/^(Mission|Voyage|Captain): (.+)$/);
   if (match) return `${translateText(locale, match[1], catalog)}: ${match[2]}`;
@@ -231,7 +266,7 @@ function applyDynamicPatterns(locale: string, text: string, catalog: I18nCatalog
   if (match) return `${translateText(locale, 'Log', catalog)}: ${match[1]}`;
 
   match = text.match(/^Health: (.+)$/);
-  if (match) return `${translateText(locale, 'Health', catalog)}: ${translateText(locale, match[1], catalog)}`;
+  if (match) return `${translateText(locale, 'Health', catalog)}: ${translateLabel(locale, match[1], catalog)}`;
 
   match = text.match(/^Copy (.+) HTTP config to clipboard$/);
   if (match) {
@@ -349,21 +384,13 @@ function applyDynamicPatterns(locale: string, text: string, catalog: I18nCatalog
   match = text.match(/^Mission status refreshed: (.+)\.$/);
   if (match) {
     return interpolate(translateText(locale, 'Mission status refreshed: {{status}}.', catalog), {
-      status: translateText(locale, match[1], catalog),
+      status: translateLabel(locale, match[1], catalog),
     });
-  }
-
-  match = text.match(/^([A-Za-z ]+): (.+)$/);
-  if (match) {
-    const translatedPrefix = translateText(locale, match[1], catalog);
-    if (translatedPrefix !== match[1]) {
-      return `${translatedPrefix}: ${match[2]}`;
-    }
   }
 
   match = text.match(/^(Mission|Voyage|Captain) "(.+)" \u2014 (.+)$/);
   if (match) {
-    return `${translateText(locale, match[1], catalog)} "${match[2]}" \u2014 ${translateText(locale, match[3], catalog)}`;
+    return `${translateText(locale, match[1], catalog)} "${match[2]}" \u2014 ${translateLabel(locale, match[3], catalog)}`;
   }
 
   match = text.match(/^(Mission|Voyage|Captain) (Pending|Assigned|InProgress|WorkProduced|Testing|Review|Complete|Completed|Failed|LandingFailed|Cancelled|Idle|Working|Stalled|Stopping|Queued|Passed|Landed|Active|Inactive)$/);

@@ -8,6 +8,7 @@ namespace Armada.Tui.Screens.Operations
     using System.Text.RegularExpressions;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Core.Services;
     using Armada.Tui.Services;
 
     /// <summary>
@@ -329,13 +330,13 @@ namespace Armada.Tui.Screens.Operations
         {
             switch (code)
             {
-                case "DirtyTree": return "Working tree has uncommitted changes";
-                case "NoWorkingDirectory": return "Vessel has no working directory";
-                case "NoBuildCommand": return "Vessel has no build command";
-                case "DispatchRejected": return "Dispatch was rejected";
-                case "NotAuthorized": return "Not authorized";
-                case "VesselNotFound": return "Vessel no longer exists";
-                case "HarborUnavailable": return "Preferred harbor is not connected";
+                case FleetActionReasonCodes.DirtyTree: return "Working tree has uncommitted changes";
+                case FleetActionReasonCodes.NoWorkingDirectory: return "Vessel has no working directory";
+                case FleetActionReasonCodes.NoBuildCommand: return "Vessel has no build command";
+                case FleetActionReasonCodes.DispatchRejected: return "Dispatch was rejected";
+                case FleetActionReasonCodes.NotAuthorized: return "Not authorized";
+                case FleetActionReasonCodes.VesselNotFound: return "Vessel no longer exists";
+                case FleetActionReasonCodes.HarborUnavailable: return "Preferred harbor is not connected";
                 default: return null;
             }
         }
@@ -344,16 +345,16 @@ namespace Armada.Tui.Screens.Operations
         {
             switch (code)
             {
-                case "Interrupted": return "Interrupted by an Admiral restart";
-                case "NonZeroExit": return "Command exited with a non-zero code";
-                case "Timeout": return "Command timed out";
-                case "GitStatusFailed": return "Could not check the working tree";
-                case "TemplateError": return "Template could not be rendered";
-                case "ExecutionError": return "Command could not be started";
-                case "DispatchFailed": return "Voyage dispatch failed";
-                case "DispatchUnavailable": return "Dispatch is unavailable";
-                case "VoyageFailed": return "Voyage failed or did not land";
-                case "VoyageMissing": return "Voyage no longer exists";
+                case FleetActionReasonCodes.Interrupted: return "Interrupted by an Admiral restart";
+                case FleetActionReasonCodes.NonZeroExit: return "Command exited with a non-zero code";
+                case FleetActionReasonCodes.Timeout: return "Command timed out";
+                case FleetActionReasonCodes.GitStatusFailed: return "Could not check the working tree";
+                case FleetActionReasonCodes.TemplateError: return "Template could not be rendered";
+                case FleetActionReasonCodes.ExecutionError: return "Command could not be started";
+                case FleetActionReasonCodes.DispatchFailed: return "Voyage dispatch failed";
+                case FleetActionReasonCodes.DispatchUnavailable: return "Dispatch is unavailable";
+                case FleetActionReasonCodes.VoyageFailed: return "Voyage failed or did not land";
+                case FleetActionReasonCodes.VoyageMissing: return "Voyage no longer exists";
                 default: return null;
             }
         }

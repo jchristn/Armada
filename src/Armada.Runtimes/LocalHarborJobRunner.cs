@@ -52,9 +52,10 @@ namespace Armada.Runtimes
         {
             if (request == null) throw new ArgumentNullException(nameof(request));
 
-            AgentRuntimeEnum runtimeType;
-            if (!Enum.TryParse(request.Runtime, true, out runtimeType))
+            AgentRuntimeEnum? requested = request.RuntimeType;
+            if (requested == null)
                 throw new NotSupportedException("Unknown runtime requested: " + request.Runtime);
+            AgentRuntimeEnum runtimeType = requested.Value;
 
             IAgentRuntime runtime;
             if (runtimeType == AgentRuntimeEnum.ApiEndpoint)

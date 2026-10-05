@@ -72,7 +72,7 @@ namespace Armada.Tui.Screens.Build
             Column("name", "Name", c => c.Name + (c.Tier.HasValue ? "  [" + Tr(c.Tier.Value.ToString()) + "]" : ""), 3, null, c => c.Name.ToLowerInvariant()).Pinned = true;
             Column("id", "ID", c => c.Id, 0, 26);
             Column("runtime", "Runtime", c => c.Runtime.ToString(), 0, 12, c => c.Runtime.ToString().ToLowerInvariant());
-            Column("state", "State", StateText, 0, 28, c => c.State.ToString().ToLowerInvariant(), (c, t) => StatusBadge.Style(c.State.ToString(), t));
+            Column("state", "State", StateText, 0, 28, c => c.State.ToString().ToLowerInvariant(), (c, t) => StatusBadge.Style(c.State, t));
             Column("mission", "Current Mission", c => String.IsNullOrEmpty(c.CurrentMissionId) ? "-" : BuildText.Short(c.CurrentMissionId) + "...", 0, 16);
             Column("heartbeat", "Heartbeat", c => c.LastHeartbeatUtc.HasValue ? Context.Loc.FormatRelative(c.LastHeartbeatUtc.Value, Context.Clock.UtcNow) : "-", 0, 14);
             Column("createdUtc", "Created", c => Context.Loc.FormatRelative(c.CreatedUtc, Context.Clock.UtcNow), 0, 14, c => c.CreatedUtc);
@@ -176,7 +176,7 @@ namespace Armada.Tui.Screens.Build
 
         private string StateText(Captain c)
         {
-            string text = StatusBadge.Label(c.State.ToString());
+            string text = StatusBadge.Label(c.State);
             if (c.State == CaptainStateEnum.Quarantined)
             {
                 text += c.QuarantineUntilUtc.HasValue

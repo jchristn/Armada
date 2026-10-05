@@ -3,6 +3,7 @@ namespace Armada.Tui.Screens.Admin
     using System;
     using System.Collections.Generic;
     using System.Linq;
+    using Armada.Core.Enums;
     using Armada.Client.Models;
     using Armada.Tui.Routing;
     using Armada.Tui.Screens.Kit;
@@ -76,8 +77,8 @@ namespace Armada.Tui.Screens.Admin
         public static string Verdict(IReadOnlyCollection<DoctorCheck> results)
         {
             if (results == null || results.Count == 0) return "";
-            if (results.Any(r => r.Status == "Fail")) return "Unhealthy";
-            if (results.Any(r => r.Status == "Warn")) return "Warnings";
+            if (results.Any(r => r.Status == DoctorCheckStatusEnum.Fail)) return "Unhealthy";
+            if (results.Any(r => r.Status == DoctorCheckStatusEnum.Warn)) return "Warnings";
             return "Healthy";
         }
 
@@ -103,7 +104,7 @@ namespace Armada.Tui.Screens.Admin
                 {
                     DoctorCheck failure = new DoctorCheck();
                     failure.Name = Context.Loc.T("Error");
-                    failure.Status = "Fail";
+                    failure.Status = DoctorCheckStatusEnum.Fail;
                     failure.Message = Context.Loc.T("Failed to run health checks: {{message}}", LocalizationArgs.Of("message", ex.Message));
                     return new List<DoctorCheck> { failure };
                 }
@@ -150,9 +151,9 @@ namespace Armada.Tui.Screens.Admin
 
         private void UpdateSummary()
         {
-            int pass = Results.Count(r => r.Status == "Pass");
-            int warn = Results.Count(r => r.Status == "Warn");
-            int fail = Results.Count(r => r.Status == "Fail");
+            int pass = Results.Count(r => r.Status == DoctorCheckStatusEnum.Pass);
+            int warn = Results.Count(r => r.Status == DoctorCheckStatusEnum.Warn);
+            int fail = Results.Count(r => r.Status == DoctorCheckStatusEnum.Fail);
             Summary.SetCards(new List<KpiCard>
             {
                 new KpiCard("Passed", Context.Loc.FormatNumber(pass), t => t.Success),

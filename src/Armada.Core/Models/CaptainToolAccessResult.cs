@@ -1,5 +1,9 @@
 namespace Armada.Core.Models
 {
+    using System;
+    using System.Collections.Generic;
+    using Armada.Core.Enums;
+
     /// <summary>
     /// Describes the tool sources and named tools visible from a specific captain runtime.
     /// </summary>
@@ -16,9 +20,9 @@ namespace Armada.Core.Models
         public string CaptainName { get; set; } = String.Empty;
 
         /// <summary>
-        /// Captain runtime name.
+        /// Captain runtime (serialized by name), or null when unknown.
         /// </summary>
-        public string Runtime { get; set; } = String.Empty;
+        public AgentRuntimeEnum? Runtime { get; set; } = null;
 
         /// <summary>
         /// Whether Armada currently considers the catalog accessible through this captain.

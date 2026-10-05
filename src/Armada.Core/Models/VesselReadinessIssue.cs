@@ -31,5 +31,11 @@ namespace Armada.Core.Models
         /// Optional related value such as a command, path, or input key.
         /// </summary>
         public string? RelatedValue { get; set; } = null;
+
+        /// <summary>
+        /// Input provider when the issue concerns a workflow input reference (for example a missing environment
+        /// variable or file), or null. Use this instead of parsing the provider prefix of <see cref="RelatedValue"/>.
+        /// </summary>
+        public WorkflowInputReferenceProviderEnum? InputProvider { get; set; } = null;
     }
 }

@@ -527,7 +527,7 @@ export default function Dashboard() {
                             onClick: () =>
                               setJsonViewer({
                                 open: true,
-                                title: `Voyage: ${vp.voyage?.title || vp.voyage?.id}`,
+                                title: `${t('Voyage')}: ${vp.voyage?.title || vp.voyage?.id}`,
                                 data: vp.voyage,
                               }),
                           },
@@ -634,7 +634,7 @@ export default function Dashboard() {
                           {
                             label: 'View JSON',
                             onClick: () =>
-                              setJsonViewer({ open: true, title: `Mission: ${m.title}`, data: m }),
+                              setJsonViewer({ open: true, title: `${t('Mission')}: ${m.title}`, data: m }),
                           },
                           ...(m.status === 'Failed' || m.status === 'Cancelled' || m.status === 'LandingFailed' ? [{
                             label: 'Restart',

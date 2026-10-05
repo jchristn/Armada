@@ -475,9 +475,9 @@ export default function Missions() {
                         { label: 'Restart', onClick: () => handleRestart(m) },
                         ...((m.status === 'WorkProduced' || m.status === 'LandingFailed') ? [{ label: 'Retry Landing', onClick: () => handleRetryLanding(m) }] : []),
                         { label: 'View Diff', onClick: () => handleViewDiff(m.id) },
-                        { label: 'View Log', onClick: () => handleViewLog(m.id, `Log: ${m.title}`) },
+                        { label: 'View Log', onClick: () => handleViewLog(m.id, `${t('Log')}: ${m.title}`) },
                         { label: 'Transition Status', onClick: () => { setTransitionModal({ missionId: m.id, currentStatus: m.status }); setTransitionTarget(''); } },
-                        { label: 'View JSON', onClick: () => setJsonData({ open: true, title: `Mission: ${m.title}`, data: m }) },
+                        { label: 'View JSON', onClick: () => setJsonData({ open: true, title: `${t('Mission')}: ${m.title}`, data: m }) },
                         { label: 'Cancel', danger: true, onClick: () => handleDelete(m.id, m.title) },
                         { label: 'Purge (permanent)', danger: true, onClick: () => handlePurge(m.id, m.title) },
                       ]} />

@@ -35,9 +35,9 @@ namespace Armada.Client.Socket
         public string? Delta { get; set; } = null;
 
         /// <summary>
-        /// Tool phase: started or completed (tool).
+        /// Tool phase (tool events), or null.
         /// </summary>
-        public string? Phase { get; set; } = null;
+        public ToolCallPhaseEnum? Phase { get; set; } = null;
 
         /// <summary>
         /// Tool call id (tool).

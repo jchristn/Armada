@@ -77,8 +77,8 @@ namespace Armada.Tui.Screens.Operations
             MissionGrid.EmptyText = "No missions in this voyage.";
             MissionGrid.ModalHost = context.Modals;
             MissionGrid.AddColumn(new GridColumn<Mission>("title", "Mission", m => m.Title + "  " + m.Id) { Weight = 4 });
-            GridColumn<Mission> status = new GridColumn<Mission>("status", "Status", m => StatusBadge.Label(m.Status.ToString())) { Width = 16 };
-            status.Style = (m, t) => StatusBadge.Style(m.Status.ToString(), t);
+            GridColumn<Mission> status = new GridColumn<Mission>("status", "Status", m => StatusBadge.Label(m.Status)) { Width = 16 };
+            status.Style = (m, t) => StatusBadge.Style(m.Status, t);
             MissionGrid.AddColumn(status);
             MissionGrid.AddColumn(new GridColumn<Mission>("vessel", "Vessel", m => Reference.VesselName(m.VesselId)) { Weight = 2 });
             MissionGrid.AddColumn(new GridColumn<Mission>("captain", "Captain", m => Reference.CaptainName(m.CaptainId)) { Weight = 2 });
@@ -257,7 +257,7 @@ namespace Armada.Tui.Screens.Operations
             if (v == null) return doc;
             DateTime now = Context.Clock.UtcNow;
             doc.Section("Status");
-            doc.Add(StyledText.From(StatusBadge.Label(v.Status.ToString()), StatusBadge.Style(v.Status.ToString(), doc.Theme)));
+            doc.Add(StyledText.From(StatusBadge.Label(v.Status), StatusBadge.Style(v.Status, doc.Theme)));
             doc.Section("Details");
             doc.Field("ID", v.Id);
             doc.Field("Description", v.Description);

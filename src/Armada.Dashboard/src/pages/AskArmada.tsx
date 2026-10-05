@@ -47,7 +47,7 @@ import AskComposer, { type AskComposerHandle } from '../components/ask/AskCompos
 import { randomThinkingMessage } from '../components/askThinkingMessages';
 import { randomGreeting } from '../components/askGreetings';
 import { parseAskEvent } from '../lib/askEvents';
-import { conversationReducer, initialConversation } from '../lib/askConversation';
+import { conversationReducer, initialConversation, isLocalMessage } from '../lib/askConversation';
 import { applyActivityEvent, applyThreadUpdate, sortThreads, type ThreadActivityMap, type ThreadListFilter } from '../lib/askThreads';
 import { DEFAULT_QUICK_ACTIONS, mergeQuickActions } from '../lib/askQuickActions';
 import { isWorkActive, workRoute } from '../lib/askWork';
@@ -354,7 +354,7 @@ export default function AskArmada() {
     const localId = `local-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     const maxSeq = convRef.current.messages.reduce((max, m) => Math.max(max, m.sequence), 0);
     const optimistic: AskMessage = {
-      id: localId, threadId: id, sequence: maxSeq + 1, role: 'User', kind: 'Text', contentText: text, createdUtc: new Date().toISOString(),
+      id: localId, threadId: id, sequence: maxSeq + 1, role: 'User', kind: 'Text', contentText: text, createdUtc: new Date().toISOString(), isLocal: true,
     };
     dispatch({ type: 'optimisticUser', message: optimistic });
     messageListRef.current?.scrollToBottom();
@@ -469,7 +469,7 @@ export default function AskArmada() {
   async function loadOlder() {
     const id = convRef.current.threadId;
     if (!id || loadingOlder) return;
-    const oldest = convRef.current.messages.find((m) => !m.id.startsWith('local-'));
+    const oldest = convRef.current.messages.find((m) => !isLocalMessage(m));
     if (!oldest) return;
     setLoadingOlder(true);
     try {

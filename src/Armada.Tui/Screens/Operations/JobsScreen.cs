@@ -42,7 +42,7 @@ namespace Armada.Tui.Screens.Operations
             Grid.EmptyText = "No background jobs.";
             Column("name", "Name", j => j.Name + (String.IsNullOrEmpty(j.ErrorReason) ? "" : "  (" + j.ErrorReason + ")"), 4, null, j => j.Name);
             Column("kind", "Kind", j => j.Kind.ToString(), 2, null, j => j.Kind.ToString());
-            Column("status", "Status", j => StatusBadge.Label(j.Status.ToString()), 0, 14, j => j.Status.ToString(), (j, t) => StatusBadge.Style(j.Status.ToString(), t));
+            Column("status", "Status", j => StatusBadge.Label(j.Status), 0, 14, j => j.Status.ToString(), (j, t) => StatusBadge.Style(j.Status, t));
             Column("progress", "Progress", j => j.Progress + "%", 0, 9, j => j.Progress).Align = TUIKit.Widgets.CellAlignment.Right;
             Column("createdUtc", "Created", j => Context.Loc.FormatRelative(j.CreatedUtc, Context.Clock.UtcNow), 0, 16, j => j.CreatedUtc);
             Column("lastUpdateUtc", "Updated", j => Context.Loc.FormatRelative(j.LastUpdateUtc, Context.Clock.UtcNow), 0, 16, j => j.LastUpdateUtc);

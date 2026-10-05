@@ -24,7 +24,7 @@ export interface StreamingTurn {
 export interface ConversationState {
   threadId: string | null;
   thread: AskThread | null;
-  /** Ordered by sequence ascending. Optimistic user messages have ids starting with `local-`. */
+  /** Ordered by sequence ascending. Optimistic user messages carry `isLocal: true`. */
   messages: AskMessage[];
   hasMore: boolean;
   trackedWork: AskTrackedWork[];
@@ -68,7 +68,7 @@ export function initialConversation(threadId: string | null = null): Conversatio
 }
 
 export function isLocalMessage(message: AskMessage): boolean {
-  return message.id.startsWith('local-');
+  return message.isLocal === true;
 }
 
 /** Merge incoming messages by id (incoming wins), drop optimistic copies the server has now persisted, sort. */
@@ -77,7 +77,10 @@ export function mergeMessages(existing: AskMessage[], incoming: AskMessage[]): A
   for (const message of existing) byId.set(message.id, message);
   for (const message of incoming) {
     if (!message || !message.id) continue;
-    byId.set(message.id, { ...byId.get(message.id), ...message });
+    const next: AskMessage = { ...byId.get(message.id), ...message };
+    // Only an optimistic copy is local; a server copy of the same id replaces that state.
+    if (message.isLocal !== true) delete next.isLocal;
+    byId.set(message.id, next);
   }
   let merged = [...byId.values()];
   // An optimistic user message is superseded by a persisted user message with the same text at or after its
@@ -207,7 +210,7 @@ export function conversationReducer(state: ConversationState, action: Conversati
       return { ...state, messages: mergeMessages(state.messages, [action.message]), turnActive: true, turnError: null };
 
     case 'confirmUser': {
-      const messages = state.messages.map((m) => (m.id === action.localId && action.messageId ? { ...m, id: action.messageId } : m));
+      const messages = state.messages.map((m) => (m.id === action.localId && action.messageId ? { ...m, id: action.messageId, isLocal: undefined } : m));
       const deduped = mergeMessages([], messages);
       const streaming = action.turnId && (!state.streaming || state.streaming.turnId !== action.turnId)
         ? (state.streaming && !state.streaming.finished && state.streaming.text === '' ? { ...state.streaming, turnId: action.turnId } : emptyStream(action.turnId))

@@ -1,5 +1,5 @@
-import { parseAskEvent, type AskEvent } from './askEvents';
-import { conversationReducer, initialConversation, mergeMessages, proposalForMessage, workCardHosts, type ConversationState } from './askConversation';
+import { parseAskEvent, parseTurnState, type AskEvent } from './askEvents';
+import { conversationReducer, initialConversation, isLocalMessage, mergeMessages, proposalForMessage, workCardHosts, type ConversationState } from './askConversation';
 import { applyActivityEvent, applyThreadUpdate, isThreadWorking, sortThreads } from './askThreads';
 import { isWorkActive, statusCounts, workProgress, workRoute } from './askWork';
 import type { AskMessage, AskThread, AskThreadDetail, AskWorkSnapshot } from '../types/models';
@@ -79,7 +79,7 @@ describe('conversationReducer', () => {
 
   it('replaces an optimistic user message with the persisted one', () => {
     let state = loaded([msg('amg_1', 1, { role: 'User', contentText: 'same' })]);
-    state = conversationReducer(state, { type: 'optimisticUser', message: msg('local-1', 2, { role: 'User', contentText: 'same' }) });
+    state = conversationReducer(state, { type: 'optimisticUser', message: msg('local-1', 2, { role: 'User', contentText: 'same', isLocal: true }) });
     expect(state.messages).toHaveLength(2);
     state = conversationReducer(state, { type: 'confirmUser', localId: 'local-1', messageId: 'amg_2', turnId: 't9' });
     expect(state.messages.map((m) => m.id)).toEqual(['amg_1', 'amg_2']);
@@ -186,5 +186,44 @@ describe('work helpers', () => {
     expect(workRoute('Voyage', 'vyg_1')).toBe('/voyages/vyg_1');
     expect(workRoute('FleetActionRun', 'far_1')).toBe('/fleet-actions/runs/far_1');
     expect(workRoute('VesselImportBatch', 'vib_1')).toBe('/vessels/import?batch=vib_1');
+  });
+});
+
+describe('optimistic messages (isLocal flag, not an id prefix)', () => {
+  it('identifies optimistic messages by the flag only', () => {
+    expect(isLocalMessage(msg('local-1', 1, { role: 'User' }))).toBe(false);
+    expect(isLocalMessage(msg('tmp_9', 1, { role: 'User', isLocal: true }))).toBe(true);
+  });
+
+  it('replaces an optimistic message whose id has no special prefix', () => {
+    let state = loaded([msg('amg_1', 1)]);
+    state = conversationReducer(state, { type: 'optimisticUser', message: msg('pending-a', 2, { role: 'User', contentText: 'hi', isLocal: true }) });
+    state = conversationReducer(state, { type: 'event', event: ev('ask.message', { threadId: 'ath_1', message: msg('amg_2', 2, { role: 'User', contentText: 'hi' }) }) });
+    expect(state.messages.map((m) => m.id)).toEqual(['amg_1', 'amg_2']);
+    expect(state.messages.some(isLocalMessage)).toBe(false);
+  });
+
+  it('a persisted message with a local-looking id is not dropped as optimistic', () => {
+    let state = loaded([msg('local-7', 1, { role: 'User', contentText: 'same' })]);
+    state = conversationReducer(state, { type: 'event', event: ev('ask.message', { threadId: 'ath_1', message: msg('amg_2', 2, { role: 'User', contentText: 'same' }) }) });
+    expect(state.messages.map((m) => m.id)).toEqual(['local-7', 'amg_2']);
+  });
+
+  it('clears the flag when the server confirms the message id', () => {
+    let state = loaded();
+    state = conversationReducer(state, { type: 'optimisticUser', message: msg('pending-b', 1, { role: 'User', isLocal: true }) });
+    state = conversationReducer(state, { type: 'confirmUser', localId: 'pending-b', messageId: 'amg_1', turnId: null });
+    expect(state.messages[0].id).toBe('amg_1');
+    expect(isLocalMessage(state.messages[0])).toBe(false);
+  });
+});
+
+describe('ask.turn state parsing', () => {
+  it('maps wire states to the typed union', () => {
+    expect(parseTurnState(null)).toBe('started');
+    expect(parseTurnState('Completed')).toBe('completed');
+    expect(parseTurnState('failed')).toBe('failed');
+    expect(parseTurnState('cancelled')).toBe('cancelled');
+    expect(parseTurnState('something-new')).toBe('completed');
   });
 });

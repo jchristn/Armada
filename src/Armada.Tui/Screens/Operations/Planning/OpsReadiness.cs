@@ -3,6 +3,7 @@ namespace Armada.Tui.Screens.Operations
     using System;
     using System.Collections.Generic;
     using System.Linq;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Tui.Modals;
     using Armada.Tui.Theming;
@@ -135,10 +136,10 @@ namespace Armada.Tui.Screens.Operations
             {
                 foreach (VesselReadinessIssue issue in readiness.Issues)
                 {
-                    CellStyle sev = issue.Severity.ToString() == "Error" ? theme.Error : issue.Severity.ToString() == "Warning" ? theme.Warning : theme.Info;
+                    CellStyle sev = issue.Severity == ReadinessSeverityEnum.Error ? theme.Error : issue.Severity == ReadinessSeverityEnum.Warning ? theme.Warning : theme.Info;
                     doc.Add(StyledText.From("[" + issue.Severity + "] ", sev).Append(StyledText.From(issue.Title, theme.Text.WithAttribute(CellAttributes.Bold, true))));
                     doc.Text("    " + issue.Message, theme.Muted);
-                    if (!String.IsNullOrEmpty(issue.RelatedValue)) doc.Text("    " + issue.RelatedValue + ProviderSuffix(issue.RelatedValue!), theme.Code);
+                    if (!String.IsNullOrEmpty(issue.RelatedValue)) doc.Text("    " + issue.RelatedValue + ProviderSuffix(issue.InputProvider), theme.Code);
                 }
             }
             else
@@ -166,16 +167,25 @@ namespace Armada.Tui.Screens.Operations
             return modal;
         }
 
-        #endregion
-
-        #region Private-Methods
-
-        private static string ProviderSuffix(string related)
+        /// <summary>
+        /// Display suffix for the input provider of a readiness issue (from the typed field, never from a prefix of
+        /// the related value).
+        /// </summary>
+        /// <param name="provider">Input provider, or null when the issue is not about a workflow input.</param>
+        /// <returns>Suffix such as " (Environment variable)", or empty.</returns>
+        public static string ProviderSuffix(WorkflowInputReferenceProviderEnum? provider)
         {
-            if (related.StartsWith("env:", StringComparison.Ordinal)) return " (Environment variable)";
-            if (related.StartsWith("file:", StringComparison.Ordinal)) return " (File path)";
-            if (related.StartsWith("dir:", StringComparison.Ordinal)) return " (Directory path)";
-            return "";
+            switch (provider)
+            {
+                case WorkflowInputReferenceProviderEnum.EnvironmentVariable: return " (Environment variable)";
+                case WorkflowInputReferenceProviderEnum.FilePath: return " (File path)";
+                case WorkflowInputReferenceProviderEnum.DirectoryPath: return " (Directory path)";
+                case WorkflowInputReferenceProviderEnum.AwsSecretsManager: return " (AWS Secrets Manager)";
+                case WorkflowInputReferenceProviderEnum.AzureKeyVaultSecret: return " (Azure Key Vault secret)";
+                case WorkflowInputReferenceProviderEnum.HashiCorpVault: return " (HashiCorp Vault)";
+                case WorkflowInputReferenceProviderEnum.OnePassword: return " (1Password)";
+                default: return "";
+            }
         }
 
         #endregion

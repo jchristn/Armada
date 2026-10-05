@@ -127,7 +127,7 @@ namespace Armada.Helm.Commands
             {
                 AnsiConsole.MarkupLine("[dim]Remove the `armada` object from the `mcpServers` section. If it becomes empty, you can remove `mcpServers` entirely.[/]");
             }
-            if (target.ClientName == "Claude Code")
+            if (target.Kind == McpClientKindEnum.ClaudeCode)
             {
                 AnsiConsole.MarkupLine($"[dim]Claude agent file:[/] [green]{Markup.Escape(McpConfigHelper.GetClaudeAgentPath())}[/]");
             }

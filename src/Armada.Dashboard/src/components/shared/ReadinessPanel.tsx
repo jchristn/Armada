@@ -208,13 +208,7 @@ export default function ReadinessPanel(props: ReadinessPanelProps) {
             <div className="readiness-issues">
               {readiness.issues.map((issue, index) => {
                 const relatedValue = issue.relatedValue || '';
-                const providerLabel = relatedValue.startsWith('env:')
-                  ? formatInputProvider('EnvironmentVariable')
-                  : relatedValue.startsWith('file:')
-                    ? formatInputProvider('FilePath')
-                    : relatedValue.startsWith('dir:')
-                      ? formatInputProvider('DirectoryPath')
-                      : null;
+                const providerLabel = issue.inputProvider ? formatInputProvider(issue.inputProvider) : null;
                 const providerSuffix = providerLabel ? ` (${providerLabel})` : '';
 
                 return (

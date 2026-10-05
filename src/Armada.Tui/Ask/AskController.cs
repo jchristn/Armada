@@ -228,7 +228,7 @@ namespace Armada.Tui.Ask
             get
             {
                 if (NoCaptain || Tools == null || Tools.CaptainId != ActiveCaptainId) return false;
-                bool serverProvides = Tools.Runtime == "ApiEndpoint" || Tools.Runtime == "ClaudeCode";
+                bool serverProvides = Tools.Runtime == AgentRuntimeEnum.ApiEndpoint || Tools.Runtime == AgentRuntimeEnum.ClaudeCode;
                 return Tools.ArmadaToolCount <= 0 && !serverProvides;
             }
         }
@@ -309,19 +309,19 @@ namespace Armada.Tui.Ask
         /// Instructions page for connecting a captain runtime to Armada over MCP (the dashboard's
         /// <c>instructionsDocUrl</c>).
         /// </summary>
-        /// <param name="runtime">Runtime name, or null.</param>
+        /// <param name="runtime">Runtime, or null.</param>
         /// <returns>URL.</returns>
-        public static string InstructionsUrl(string? runtime)
+        public static string InstructionsUrl(AgentRuntimeEnum? runtime)
         {
             string file;
             switch (runtime)
             {
-                case "ClaudeCode": file = "INSTRUCTIONS_FOR_CLAUDE_CODE.md"; break;
-                case "Codex": file = "INSTRUCTIONS_FOR_CODEX.md"; break;
-                case "Cursor": file = "INSTRUCTIONS_FOR_CURSOR.md"; break;
-                case "Gemini": file = "INSTRUCTIONS_FOR_GEMINI.md"; break;
-                case "Mux": file = "INSTRUCTIONS_FOR_MUX.md"; break;
-                case "OpenCode": file = "INSTRUCTIONS_FOR_OPENCODE.md"; break;
+                case AgentRuntimeEnum.ClaudeCode: file = "INSTRUCTIONS_FOR_CLAUDE_CODE.md"; break;
+                case AgentRuntimeEnum.Codex: file = "INSTRUCTIONS_FOR_CODEX.md"; break;
+                case AgentRuntimeEnum.Cursor: file = "INSTRUCTIONS_FOR_CURSOR.md"; break;
+                case AgentRuntimeEnum.Gemini: file = "INSTRUCTIONS_FOR_GEMINI.md"; break;
+                case AgentRuntimeEnum.Mux: file = "INSTRUCTIONS_FOR_MUX.md"; break;
+                case AgentRuntimeEnum.OpenCode: file = "INSTRUCTIONS_FOR_OPENCODE.md"; break;
                 default: file = "MCP_API.md"; break;
             }
 
@@ -1212,7 +1212,7 @@ namespace Armada.Tui.Ask
             if (e.ThreadId != openId) return;
             AskTrackedWork? prior = e.Type == "ask.work" ? Conversation.Work(e.TrackedWorkId) : null;
             Conversation.Apply(e, Context.Clock.UtcNow);
-            if (e.Type == "ask.turn" && e.State != "started")
+            if (e.Type == "ask.turn" && e.State != AskTurnStateEnum.Started)
             {
                 _Stopping = false;
                 _ = RefreshLatestAsync(e.ThreadId);
@@ -1385,6 +1385,7 @@ namespace Armada.Tui.Ask
             int maxSeq = Conversation.Messages.Count == 0 ? 0 : Conversation.Messages.Max(m => m.Sequence);
             AskMessage optimistic = new AskMessage();
             optimistic.Id = localId;
+            optimistic.IsLocal = true;
             optimistic.ThreadId = threadId;
             optimistic.Sequence = maxSeq + 1;
             optimistic.Role = AskMessageRoleEnum.User;

@@ -5,6 +5,7 @@ namespace Armada.Tui.Screens.Operations
     using System.Globalization;
     using System.Linq;
     using Armada.Client.Models;
+    using Armada.Core;
     using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Tui.Routing;
@@ -347,7 +348,7 @@ namespace Armada.Tui.Screens.Operations
             doc.Section("Mission");
             doc.Field("ID", m.Id);
             doc.Field("Tenant ID", m.TenantId);
-            doc.Field("Status", StatusBadge.Label(m.Status.ToString()), StatusBadge.Style(m.Status.ToString(), doc.Theme));
+            doc.Field("Status", StatusBadge.Label(m.Status), StatusBadge.Style(m.Status, doc.Theme));
             doc.Field("Mode", Tr(m.Mode.ToString()));
             doc.Field("Review Gate", m.RequiresReview ? Tr(m.Status == MissionStatusEnum.Review ? "Waiting Review" : "Required") : Tr("None"));
             doc.Field("On Deny", m.RequiresReview ? Tr(m.ReviewDenyAction == ReviewDenyActionEnum.FailPipeline ? "Fail pipeline" : "Retry stage") : "-");
@@ -364,7 +365,7 @@ namespace Armada.Tui.Screens.Operations
             doc.Field("Parent Mission", m.ParentMissionId);
             doc.Field("Persona", String.IsNullOrEmpty(m.Persona) ? Tr("Worker") : m.Persona);
             if (!String.IsNullOrEmpty(m.DependsOnMissionId)) doc.Field("Depends On", m.DependsOnMissionId);
-            if (m.Status == MissionStatusEnum.WorkProduced && m.DependsOnMissionId == null && !String.IsNullOrEmpty(m.Persona) && m.Persona != "Worker")
+            if (m.Status == MissionStatusEnum.WorkProduced && m.DependsOnMissionId == null && !String.IsNullOrEmpty(m.Persona) && !PersonaCatalog.Matches(m.Persona, PersonaCatalog.Worker))
                 doc.Field("Pipeline Status", Tr("Work complete -- handed off to the next pipeline stage"));
             doc.Field("Branch Name", m.BranchName);
             doc.Field("Dock", m.DockId);

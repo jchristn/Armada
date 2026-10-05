@@ -255,7 +255,7 @@ export default function Events() {
               </thead>
               <tbody>
                 {sorted.map(evt => {
-                  const entRoute = entityRoute(evt.entityId);
+                  const entRoute = entityRoute(evt.entityType, evt.entityId);
                   return (
                     <tr key={evt.id} className="clickable" onClick={() => setViewRecord(evt as unknown as Record<string, unknown>)}>
                       <td className="col-checkbox" onClick={e => e.stopPropagation()}>

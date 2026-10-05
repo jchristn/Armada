@@ -160,7 +160,7 @@ namespace Armada.Tui.Screens.Delivery
             Executions.MultiSelect = false;
             Executions.EmptyText = "No runbook executions are linked to this deployment yet.";
             Executions.AddColumn(new GridColumn<RunbookExecution>("title", "Title", e => e.Title) { Weight = 3, Sortable = true });
-            Executions.AddColumn(new GridColumn<RunbookExecution>("status", "Status", e => StatusBadge.Label(e.Status.ToString())) { Width = 14, Sortable = true, Style = (e, t) => StatusBadge.Style(e.Status.ToString(), t) });
+            Executions.AddColumn(new GridColumn<RunbookExecution>("status", "Status", e => StatusBadge.Label(e.Status)) { Width = 14, Sortable = true, Style = (e, t) => StatusBadge.Style(e.Status, t) });
             Executions.AddColumn(new GridColumn<RunbookExecution>("environment", "Environment", e => String.IsNullOrEmpty(e.EnvironmentName) ? T("No environment") : e.EnvironmentName!) { Weight = 2 });
             Executions.AddColumn(new GridColumn<RunbookExecution>("checkType", "Check Type", e => e.CheckType.HasValue ? e.CheckType.Value.ToString() : T("No check type")) { Weight = 2 });
             Executions.AddColumn(new GridColumn<RunbookExecution>("id", "ID", e => e.Id) { Width = 26 });
@@ -199,8 +199,8 @@ namespace Armada.Tui.Screens.Delivery
         {
             Overview.Reset();
             Overview.Section("Overview");
-            Overview.Row("Status", EntityUi.Badge(Context, d.Status.ToString()), t => StatusBadge.Style(d.Status.ToString(), t));
-            Overview.Row("Verification", EntityUi.Badge(Context, d.VerificationStatus.ToString()), t => StatusBadge.Style(d.VerificationStatus.ToString(), t));
+            Overview.Row("Status", EntityUi.Badge(Context, d.Status.ToString()), t => StatusBadge.Style(d.Status, t));
+            Overview.Row("Verification", EntityUi.Badge(Context, d.VerificationStatus.ToString()), t => StatusBadge.Style(d.VerificationStatus, t));
             Overview.Row("Workflow Profile", !String.IsNullOrEmpty(d.WorkflowProfileId) ? EntityLookups.Name(_Profiles, d.WorkflowProfileId) : T("Resolved default"));
             Overview.Link("Environment", !String.IsNullOrEmpty(d.EnvironmentId) ? EntityLookups.Name(_Environments, d.EnvironmentId, d.EnvironmentName ?? "-") : EntityUi.Dash(d.EnvironmentName),
                 !String.IsNullOrEmpty(d.EnvironmentId) ? () => Context.Navigate("/environments/" + d.EnvironmentId) : (Action?)null);

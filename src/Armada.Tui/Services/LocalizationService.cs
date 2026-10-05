@@ -13,8 +13,12 @@ namespace Armada.Tui.Services
 
     /// <summary>
     /// The TUI's i18n runtime over the dashboard's shared catalog (<c>/dashboard/i18n/armada.json</c>): exact phrases,
-    /// section labels, single-word terms, the dashboard's dynamic patterns for counts and relative times, ICU plural
-    /// blocks with locale plural rules, <c>{{name}}</c> interpolation, and locale formatting. English is the source
+    /// section labels, single-word terms, ICU plural blocks with locale plural rules, <c>{{name}}</c> interpolation,
+    /// and locale formatting. Dynamic text is translated as a keyed template plus arguments (for example
+    /// <c>T("{{count}}s ago", args)</c>); rendered text is never re-parsed with patterns, and argument values (user
+    /// data such as names) are inserted after translation, so they are never translated themselves. Text passed to
+    /// <see cref="T(string)"/> is still looked up as an exact phrase, section, or single-word term, so callers pass
+    /// fixed English labels there, not user data. English is the source
     /// locale and the fallback. Reads are thread-safe; <see cref="SetLocale"/> and <see cref="SetCatalog"/> should be
     /// called on the UI loop thread.
     /// </summary>
@@ -64,8 +68,6 @@ namespace Armada.Tui.Services
         #region Private-Members
 
         private static readonly Regex _IcuPluralStart = new Regex(@"\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*,\s*plural\s*,", RegexOptions.Compiled);
-        private static readonly Regex _CountPattern = new Regex(@"^(\d+) (selected|unread|records|idle|working|stalled|failed|lines|chars)$", RegexOptions.Compiled);
-        private static readonly Regex _AgoPattern = new Regex(@"^(\d+)(s|m|h|d) ago$", RegexOptions.Compiled);
         private volatile I18nCatalog? _Catalog = null;
         private volatile string _Locale = "en";
 
@@ -188,10 +190,10 @@ namespace Armada.Tui.Services
         {
             TimeSpan span = nowUtc - utc;
             if (span.TotalSeconds < 5) return Translate("just now");
-            if (span.TotalSeconds < 60) return Translate(((int)span.TotalSeconds) + "s ago");
-            if (span.TotalMinutes < 60) return Translate(((int)span.TotalMinutes) + "m ago");
-            if (span.TotalHours < 24) return Translate(((int)span.TotalHours) + "h ago");
-            return Translate(((int)span.TotalDays) + "d ago");
+            if (span.TotalSeconds < 60) return T("{{count}}s ago", LocalizationArgs.Of("count", (int)span.TotalSeconds));
+            if (span.TotalMinutes < 60) return T("{{count}}m ago", LocalizationArgs.Of("count", (int)span.TotalMinutes));
+            if (span.TotalHours < 24) return T("{{count}}h ago", LocalizationArgs.Of("count", (int)span.TotalHours));
+            return T("{{count}}d ago", LocalizationArgs.Of("count", (int)span.TotalDays));
         }
 
         /// <summary>
@@ -246,39 +248,10 @@ namespace Armada.Tui.Services
             if (pack.Phrases != null && pack.Phrases.TryGetValue(trimmed, out string? phrase)) return Preserve(text, phrase);
             if (pack.Sections != null && pack.Sections.TryGetValue(trimmed, out string? section)) return Preserve(text, section);
 
-            string? dynamic = TranslateDynamic(trimmed, pack);
-            if (dynamic != null) return Preserve(text, dynamic);
-
             if (!trimmed.Contains(' ') && !trimmed.Contains('\n') && pack.Terms != null && pack.Terms.TryGetValue(trimmed, out string? term))
                 return Preserve(text, term);
 
             return text;
-        }
-
-        private string? TranslateDynamic(string text, I18nLocalePack pack)
-        {
-            Match count = _CountPattern.Match(text);
-            if (count.Success)
-            {
-                string word = Lookup(pack, count.Groups[2].Value);
-                return FormatNumber(Int64.Parse(count.Groups[1].Value, CultureInfo.InvariantCulture)) + " " + word;
-            }
-
-            Match ago = _AgoPattern.Match(text);
-            if (ago.Success)
-            {
-                string phrase = Lookup(pack, text);
-                if (!String.Equals(phrase, text, StringComparison.Ordinal)) return phrase;
-            }
-
-            return null;
-        }
-
-        private static string Lookup(I18nLocalePack pack, string key)
-        {
-            if (pack.Phrases != null && pack.Phrases.TryGetValue(key, out string? phrase)) return phrase;
-            if (pack.Terms != null && pack.Terms.TryGetValue(key, out string? term)) return term;
-            return key;
         }
 
         private static string Preserve(string original, string translated)

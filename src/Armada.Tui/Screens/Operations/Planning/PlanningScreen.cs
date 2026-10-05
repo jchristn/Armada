@@ -235,9 +235,9 @@ namespace Armada.Tui.Screens.Operations
         /// <summary>
         /// Captain runtime of the open session.
         /// </summary>
-        public string CaptainRuntime
+        public AgentRuntimeEnum? CaptainRuntime
         {
-            get { return Detail?.Captain != null ? Detail.Captain.Runtime.ToString() : ""; }
+            get { return Detail?.Captain?.Runtime; }
         }
 
         #endregion
@@ -329,9 +329,9 @@ namespace Armada.Tui.Screens.Operations
             SessionsGrid.AddColumn(Col("captain", "Captain", p => Reference.CaptainName(p.CaptainId), 2));
             SessionsGrid.AddColumn(Col("vessel", "Vessel", p => Reference.VesselName(p.VesselId), 2));
             SessionsGrid.AddColumn(Col("pipeline", "Pipeline", p => PipelineName(p.PipelineId), 2));
-            GridColumn<PlanningSession> status = Col("status", "Status", p => StatusBadge.Label(p.Status.ToString()), 1);
+            GridColumn<PlanningSession> status = Col("status", "Status", p => StatusBadge.Label(p.Status), 1);
             status.Width = 14;
-            status.Style = (p, t) => StatusBadge.Style(p.Status.ToString(), t);
+            status.Style = (p, t) => StatusBadge.Style(p.Status, t);
             SessionsGrid.AddColumn(status);
             GridColumn<PlanningSession> updated = Col("updated", "Updated", p => Context.Loc.FormatRelative(p.LastUpdateUtc, Context.Clock.UtcNow), 1);
             updated.Width = 16;
@@ -556,7 +556,7 @@ namespace Armada.Tui.Screens.Operations
             {
                 Creating = false;
                 string message = String.IsNullOrEmpty(ex.Message) ? Tr("Failed to start planning session.") : ex.Message;
-                if (message == "Request timed out")
+                if (ex is ArmadaApiException api && api.IsTimeout)
                 {
                     Load();
                     ShowMessage(Tr("Starting the planning session is taking longer than expected. Armada is still provisioning the dock and worktree. If setup completes, the session will appear in the list on the left."));
@@ -1080,8 +1080,9 @@ namespace Armada.Tui.Screens.Operations
         private void OnCaptainChanged(ArmadaSocketMessage message)
         {
             EntityChangedEvent? e = message.GetData<EntityChangedEvent>();
-            if (e == null || String.IsNullOrEmpty(e.Id) || String.IsNullOrEmpty(e.State)) return;
-            if (!Enum.TryParse(e.State, true, out CaptainStateEnum state)) return;
+            CaptainStateEnum? typed = e?.CaptainState;
+            if (e == null || String.IsNullOrEmpty(e.Id) || String.IsNullOrEmpty(e.State) || typed == null) return;
+            CaptainStateEnum state = typed.Value;
             foreach (Captain c in Reference.Captains.Where(c => c.Id == e.Id))
             {
                 c.State = state;

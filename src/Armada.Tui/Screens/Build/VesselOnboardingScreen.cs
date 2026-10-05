@@ -4,6 +4,7 @@ namespace Armada.Tui.Screens.Build
     using System.Collections.Generic;
     using System.Linq;
     using System.Threading.Tasks;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Tui.Routing;
     using Armada.Tui.Screens.Operations;
@@ -201,10 +202,10 @@ namespace Armada.Tui.Screens.Build
                 doc.Section("Open Issues");
                 foreach (VesselReadinessIssue issue in r.Issues)
                 {
-                    CellStyle sev = issue.Severity.ToString() == "Error" ? doc.Theme.Error : issue.Severity.ToString() == "Warning" ? doc.Theme.Warning : doc.Theme.Info;
+                    CellStyle sev = issue.Severity == ReadinessSeverityEnum.Error ? doc.Theme.Error : issue.Severity == ReadinessSeverityEnum.Warning ? doc.Theme.Warning : doc.Theme.Info;
                     doc.Add(StyledText.From("[" + issue.Severity + "] ", sev).Append(StyledText.From(issue.Title, doc.Theme.Text)));
                     doc.Text("    " + issue.Message, doc.Theme.Muted);
-                    if (!String.IsNullOrEmpty(issue.RelatedValue)) doc.Text("    " + issue.RelatedValue, doc.Theme.Code);
+                    if (!String.IsNullOrEmpty(issue.RelatedValue)) doc.Text("    " + issue.RelatedValue + OpsReadiness.ProviderSuffix(issue.InputProvider), doc.Theme.Code);
                 }
             }
 

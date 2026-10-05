@@ -55,7 +55,11 @@ namespace Armada.Tui.Services.Credentials
         {
             string command = "add-generic-password -U -s " + Quote(Service) + " -a " + Quote(key) + " -w " + Quote(secret ?? "") + "\n";
             ProcessResult result = await ProcessRunner.RunAsync(ToolPath, new List<string> { "-i" }, command, 10000, token).ConfigureAwait(false);
-            return result.ExitCode == 0 && result.StdErr.IndexOf("error", StringComparison.OrdinalIgnoreCase) < 0;
+            if (result.ExitCode != 0) return false;
+            // Interactive mode (-i, used so the secret is not on the command line) exits 0 even when the add fails, so
+            // confirm by reading the item back instead of scanning stderr for an error word.
+            string? stored = await GetAsync(key, token).ConfigureAwait(false);
+            return String.Equals(stored, secret ?? "", StringComparison.Ordinal) || (String.IsNullOrEmpty(secret) && stored == null);
         }
 
         /// <inheritdoc />

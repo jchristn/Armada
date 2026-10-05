@@ -61,6 +61,19 @@ namespace Armada.Client
         }
 
         /// <summary>
+        /// <see cref="Code"/> of a request that timed out on the client.
+        /// </summary>
+        public const string TimeoutCode = "timeout";
+
+        /// <summary>
+        /// True when the request timed out on the client (<see cref="Code"/> is <see cref="TimeoutCode"/>).
+        /// </summary>
+        public bool IsTimeout
+        {
+            get { return StatusCode == 0 && String.Equals(Code, TimeoutCode, StringComparison.Ordinal); }
+        }
+
+        /// <summary>
         /// True when the request timed out or never reached the server.
         /// </summary>
         public bool IsTransport

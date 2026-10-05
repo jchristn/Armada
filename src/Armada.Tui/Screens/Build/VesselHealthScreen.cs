@@ -173,18 +173,18 @@ namespace Armada.Tui.Screens.Build
 
             Column("vessel", "Vessel", h => (h.VesselName ?? h.VesselId) + (String.IsNullOrEmpty(h.CurrentBranch) ? "" : "  " + h.CurrentBranch), 4).Pinned = true;
             ServerSort(Column("fleet", "Fleet", h => h.FleetName ?? h.FleetId ?? "-", 2), "FleetName");
-            GridColumn<VesselHealth> overall = Column("overall", "Overall", h => HealthText.Badge(h.OverallStatus, Context.Loc), 0, 16, null, (h, t) => StatusBadge.Style(h.OverallStatus.ToString(), t));
+            GridColumn<VesselHealth> overall = Column("overall", "Overall", h => HealthText.Badge(h.OverallStatus, Context.Loc), 0, 16, null, (h, t) => StatusBadge.Style(h.OverallStatus, t));
             overall.Pinned = true;
             ServerSort(overall, "OverallStatus");
             Grid.Columns.First(c => c.Key == "vessel").Sortable = true;
             Grid.Columns.First(c => c.Key == "vessel").SortKey = "VesselName";
-            ServerSort(Column("divergence", "Divergence", DivergenceText, 0, 12, null, (h, t) => StatusBadge.Style(h.DivergenceStatus.ToString(), t)), "Divergence");
+            ServerSort(Column("divergence", "Divergence", DivergenceText, 0, 12, null, (h, t) => StatusBadge.Style(h.DivergenceStatus, t)), "Divergence");
             ServerSort(Column("dirty", "Dirty", DirtyText, 0, 14), "IsDirty");
             ServerSort(Column("branches", "Branches", BranchesText, 0, 14), "BranchCount");
-            ServerSort(Column("dependencies", "Dependencies", DepsText, 0, 22, null, (h, t) => StatusBadge.Style(h.DependencyStatus.ToString(), t)), "OutdatedCount");
-            ServerSort(Column("vulnerabilities", "Vulnerabilities", VulnText, 0, 22, null, (h, t) => StatusBadge.Style(h.VulnerabilityStatus.ToString(), t)), "VulnerableCount");
-            ServerSort(Column("tests", "Tests", h => HealthText.Badge(h.TestInfraStatus, Context.Loc), 0, 14, null, (h, t) => StatusBadge.Style(h.TestInfraStatus.ToString(), t)), "TestInfraStatus");
-            ServerSort(Column("ci", "CI", h => HealthText.Badge(h.CiStatus, Context.Loc), 0, 12, null, (h, t) => StatusBadge.Style(h.CiStatus.ToString(), t)), "CiStatus");
+            ServerSort(Column("dependencies", "Dependencies", DepsText, 0, 22, null, (h, t) => StatusBadge.Style(h.DependencyStatus, t)), "OutdatedCount");
+            ServerSort(Column("vulnerabilities", "Vulnerabilities", VulnText, 0, 22, null, (h, t) => StatusBadge.Style(h.VulnerabilityStatus, t)), "VulnerableCount");
+            ServerSort(Column("tests", "Tests", h => HealthText.Badge(h.TestInfraStatus, Context.Loc), 0, 14, null, (h, t) => StatusBadge.Style(h.TestInfraStatus, t)), "TestInfraStatus");
+            ServerSort(Column("ci", "CI", h => HealthText.Badge(h.CiStatus, Context.Loc), 0, 12, null, (h, t) => StatusBadge.Style(h.CiStatus, t)), "CiStatus");
             GridColumn<VesselHealth> lastCommit = Column("lastCommit", "Last commit", h => h.LastCommitUtc.HasValue ? Context.Loc.FormatRelative(h.LastCommitUtc.Value, Context.Clock.UtcNow) : "-", 0, 14);
             lastCommit.DefaultVisible = false;
             ServerSort(lastCommit, "LastCommitUtc");

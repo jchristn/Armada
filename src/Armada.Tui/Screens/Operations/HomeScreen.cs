@@ -269,7 +269,7 @@ namespace Armada.Tui.Screens.Operations
             Voyages.Dispatcher = context.Dispatcher;
             Voyages.ModalHost = context.Modals;
             Voyages.AddColumn(new GridColumn<VoyageProgress>("voyage", "Voyage", v => (v.Voyage?.Title ?? v.Voyage?.Id ?? "") + "  " + (v.Voyage?.Id ?? "")) { Weight = 4 });
-            Voyages.AddColumn(new GridColumn<VoyageProgress>("status", "Status", v => StatusBadge.Label(v.Voyage?.Status.ToString())) { Width = 14, Style = (v, t) => StatusBadge.Style(v.Voyage?.Status.ToString(), t) });
+            Voyages.AddColumn(new GridColumn<VoyageProgress>("status", "Status", v => StatusBadge.Label(v.Voyage?.Status)) { Width = 14, Style = (v, t) => StatusBadge.Style(v.Voyage?.Status, t) });
             Voyages.AddColumn(new GridColumn<VoyageProgress>("vessel", "Vessel", v => v.VesselIds == null || v.VesselIds.Count == 0 ? "-" : String.Join(", ", v.VesselIds.Select(id => Reference.VesselName(id)))) { Weight = 2 });
             Voyages.AddColumn(new GridColumn<VoyageProgress>("progress", "Progress", v => ProgressBar(Percent(v), 10) + " " + Percent(v) + "%") { Width = 17 });
             Voyages.AddColumn(new GridColumn<VoyageProgress>("missions", "Missions", v => v.CompletedMissions + "/" + v.TotalMissions + " " + Tr("done") + (v.FailedMissions > 0 ? ", " + v.FailedMissions + " " + Tr("failed") : "")) { Weight = 2 });
@@ -285,7 +285,7 @@ namespace Armada.Tui.Screens.Operations
             Missions.ModalHost = context.Modals;
             Missions.AddColumn(new GridColumn<MissionSummary>("title", "Mission", m => m.Title) { Weight = 4 });
             Missions.AddColumn(new GridColumn<MissionSummary>("id", "ID", m => m.Id) { Width = 24 });
-            Missions.AddColumn(new GridColumn<MissionSummary>("status", "Status", m => StatusBadge.Label(m.Status.ToString())) { Width = 16, Style = (m, t) => StatusBadge.Style(m.Status.ToString(), t) });
+            Missions.AddColumn(new GridColumn<MissionSummary>("status", "Status", m => StatusBadge.Label(m.Status)) { Width = 16, Style = (m, t) => StatusBadge.Style(m.Status, t) });
             Missions.AddColumn(new GridColumn<MissionSummary>("vessel", "Vessel", m => Reference.VesselName(m.VesselId)) { Weight = 2 });
             Missions.AddColumn(new GridColumn<MissionSummary>("captain", "Captain", m => Reference.CaptainName(m.CaptainId)) { Weight = 2 });
             Missions.AddColumn(new GridColumn<MissionSummary>("created", "Created", m => Context.Loc.FormatRelative(m.CreatedUtc, Context.Clock.UtcNow)) { Width = 16 });
@@ -330,9 +330,9 @@ namespace Armada.Tui.Screens.Operations
         /// </summary>
         /// <param name="status">Status.</param>
         /// <returns>Alerts.</returns>
-        public static List<string[]> ComputeAlerts(ArmadaStatus? status)
+        public static List<HomeAlert> ComputeAlerts(ArmadaStatus? status)
         {
-            List<string[]> result = new List<string[]>();
+            List<HomeAlert> result = new List<HomeAlert>();
             if (status == null) return result;
             Dictionary<string, int> ms = status.MissionsByStatus ?? new Dictionary<string, int>();
             int stalled = status.StalledCaptains;
@@ -342,11 +342,11 @@ namespace Armada.Tui.Screens.Operations
             int idle = status.IdleCaptains;
             int working = status.WorkingCaptains;
             int total = status.TotalCaptains;
-            if (stalled > 0) result.Add(new string[] { "error", stalled + " captain(s) stalled -- recovery attempts exhausted.", "Stop and restart stalled captains to resume work.", "/captains" });
-            if (failed > 0) result.Add(new string[] { "warning", failed + " mission(s) failed.", "Review and restart failed missions.", "/missions" });
-            if (landingFailed > 0) result.Add(new string[] { "warning", landingFailed + " mission(s) failed to land -- work was produced but could not be merged.", "Retry landing or restart these missions.", "/missions" });
-            if (pending > 0 && idle > 0 && working == 0) result.Add(new string[] { "warning", pending + " pending mission(s) but no captains are working. " + idle + " captain(s) idle.", "Vessels may have concurrent mission limits blocking dispatch, or missions may be assigned to a vessel with an active mission.", "" });
-            if (total == 0 && pending > 0) result.Add(new string[] { "error", pending + " pending mission(s) but no captains exist.", "Create a captain to start processing missions.", "/captains" });
+            if (stalled > 0) result.Add(new HomeAlert(NotificationSeverityEnum.Error, "{{count}} captain(s) stalled -- recovery attempts exhausted.", "Stop and restart stalled captains to resume work.", "/captains", LocalizationArgs.Of("count", stalled)));
+            if (failed > 0) result.Add(new HomeAlert(NotificationSeverityEnum.Warning, "{{count}} mission(s) failed.", "Review and restart failed missions.", "/missions", LocalizationArgs.Of("count", failed)));
+            if (landingFailed > 0) result.Add(new HomeAlert(NotificationSeverityEnum.Warning, "{{count}} mission(s) failed to land -- work was produced but could not be merged.", "Retry landing or restart these missions.", "/missions", LocalizationArgs.Of("count", landingFailed)));
+            if (pending > 0 && idle > 0 && working == 0) result.Add(new HomeAlert(NotificationSeverityEnum.Warning, "{{pending}} pending mission(s) but no captains are working. {{idle}} captain(s) idle.", "Vessels may have concurrent mission limits blocking dispatch, or missions may be assigned to a vessel with an active mission.", null, LocalizationArgs.Of("pending", pending, "idle", idle)));
+            if (total == 0 && pending > 0) result.Add(new HomeAlert(NotificationSeverityEnum.Error, "{{count}} pending mission(s) but no captains exist.", "Create a captain to start processing missions.", "/captains", LocalizationArgs.Of("count", pending)));
             return result;
         }
 
@@ -698,9 +698,9 @@ namespace Armada.Tui.Screens.Operations
                 "[" + s.Type + "] " + (s.Payload ?? ""), null, null, Context.Loc.FormatRelative(s.CreatedUtc, Context.Clock.UtcNow))).ToList();
             Alerts.Items = ComputeAlerts(Status).Select(a =>
             {
-                string link = a[3];
-                bool error = a[0] == "error";
-                string text = (error ? "x " : "! ") + Tr(a[1]) + "  " + Tr(a[2]);
+                string link = a.Route ?? "";
+                bool error = a.Severity == NotificationSeverityEnum.Error;
+                string text = (error ? "x " : "! ") + Tr(a.Message, a.Args) + "  " + Tr(a.Hint, a.Args);
                 return new OpsLinkItem(text, link.Length > 0 ? () => Context.Navigate(link) : (Action?)null, t => error ? t.Error : t.Warning, link.Length > 0 ? "[" + Tr("View") + "]" : "");
             }).ToList();
         }
@@ -709,7 +709,8 @@ namespace Armada.Tui.Screens.Operations
         {
             ArmadaStatus? s = Status;
             int totalMissions = s?.MissionsByStatus?.Values.Sum() ?? 0;
-            string captainDetail = (s?.IdleCaptains ?? 0) + " idle  " + (s?.WorkingCaptains ?? 0) + " working" + ((s?.StalledCaptains ?? 0) > 0 ? "  " + s!.StalledCaptains + " stalled" : "");
+            string captainDetail = Tr("{{count}} idle", LocalizationArgs.Of("count", s?.IdleCaptains ?? 0)) + "  " + Tr("{{count}} working", LocalizationArgs.Of("count", s?.WorkingCaptains ?? 0))
+                + ((s?.StalledCaptains ?? 0) > 0 ? "  " + Tr("{{count}} stalled", LocalizationArgs.Of("count", s!.StalledCaptains)) : "");
             string voyageDetail = (s?.MemoryPressureDeferrals ?? 0) > 0 ? Tr("{{count}} deferred for memory pressure", LocalizationArgs.Of("count", s!.MemoryPressureDeferrals)) : "";
             string missionDetail = s?.MissionsByStatus == null ? "" : String.Join("  ", s.MissionsByStatus.Select(kv => kv.Value + " " + kv.Key));
             int[]? runs = ActiveRuns;

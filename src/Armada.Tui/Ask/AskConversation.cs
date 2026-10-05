@@ -3,6 +3,7 @@ namespace Armada.Tui.Ask
     using System;
     using System.Collections.Generic;
     using System.Linq;
+    using Armada.Client.Socket;
     using Armada.Core.Enums;
     using Armada.Core.Models;
 
@@ -18,7 +19,8 @@ namespace Armada.Tui.Ask
         #region Public-Members
 
         /// <summary>
-        /// Prefix of optimistic (not yet persisted) message ids.
+        /// Prefix of generated optimistic message ids (for readability only; whether a message is local is
+        /// <see cref="AskMessage.IsLocal"/>, never this prefix).
         /// </summary>
         public const string LocalPrefix = "local-";
 
@@ -123,13 +125,13 @@ namespace Armada.Tui.Ask
         #region Public-Methods
 
         /// <summary>
-        /// True for an optimistic message id.
+        /// True for an optimistic (not yet persisted) message (<see cref="AskMessage.IsLocal"/>).
         /// </summary>
         /// <param name="message">Message.</param>
         /// <returns>True when local.</returns>
         public static bool IsLocal(AskMessage message)
         {
-            return message.Id.StartsWith(LocalPrefix, StringComparison.Ordinal);
+            return message != null && message.IsLocal;
         }
 
         /// <summary>
@@ -376,7 +378,7 @@ namespace Armada.Tui.Ask
         /// <summary>
         /// Add an optimistic user message and mark a turn active.
         /// </summary>
-        /// <param name="message">Message with a <see cref="LocalPrefix"/> id.</param>
+        /// <param name="message">Message with <see cref="AskMessage.IsLocal"/> set.</param>
         public void OptimisticUser(AskMessage message)
         {
             Messages = MergeMessages(Messages, new List<AskMessage> { message });
@@ -399,7 +401,11 @@ namespace Armada.Tui.Ask
             {
                 foreach (AskMessage m in Messages)
                 {
-                    if (m.Id == localId) m.Id = messageId!;
+                    if (m.Id == localId && m.IsLocal)
+                    {
+                        m.Id = messageId!;
+                        m.IsLocal = false;
+                    }
                 }
             }
 
@@ -564,7 +570,7 @@ namespace Armada.Tui.Ask
         {
             if (String.IsNullOrEmpty(e.ToolId)) return;
             int idx = tools.FindIndex(t => t.Id == e.ToolId);
-            if (e.ToolPhase == "started")
+            if (e.ToolPhase == ToolCallPhaseEnum.Started)
             {
                 if (idx >= 0) return;
                 AskToolChip chip = new AskToolChip();
@@ -574,7 +580,7 @@ namespace Armada.Tui.Ask
                 chip.Arguments = e.ToolArguments;
                 tools.Add(chip);
             }
-            else if (e.ToolPhase == "completed")
+            else if (e.ToolPhase == ToolCallPhaseEnum.Completed)
             {
                 AskToolChip? prior = idx >= 0 ? tools[idx] : null;
                 AskToolChip done = new AskToolChip();
@@ -591,7 +597,7 @@ namespace Armada.Tui.Ask
 
         private bool ApplyTurn(AskEvent e, DateTime nowUtc)
         {
-            if (e.State == "started")
+            if (e.State == AskTurnStateEnum.Started)
             {
                 _ClosedTurns.Remove(e.TurnId);
                 if (Streaming == null || Streaming.TurnId != e.TurnId) Streaming = new AskStreamingTurn(e.TurnId, nowUtc);
@@ -602,7 +608,7 @@ namespace Armada.Tui.Ask
             }
 
             _ClosedTurns.Add(e.TurnId);
-            bool failed = e.State == "failed";
+            bool failed = e.State == AskTurnStateEnum.Failed;
             bool alreadyPersisted = e.MessageId != null && Messages.Any(m => m.Id == e.MessageId);
             AskStreamingTurn? streaming = Streaming;
             if (streaming != null && streaming.TurnId == e.TurnId)

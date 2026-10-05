@@ -131,7 +131,7 @@ namespace Armada.Tui.Screens.Delivery
             grid.AddColumn(new GridColumn<CheckRun>("check", "Check", r => NameOf(r)) { Weight = 3, MinWidth = 14, Sortable = true, Pinned = true });
             grid.AddColumn(new GridColumn<CheckRun>("type", "Type", r => r.Type.ToString()) { Width = 18, Sortable = true });
             grid.AddColumn(new GridColumn<CheckRun>("vessel", "Vessel", r => EntityLookups.Name(_Vessels, r.VesselId)) { Weight = 2, Sortable = true });
-            grid.AddColumn(new GridColumn<CheckRun>("status", "Status", r => StatusBadge.Label(r.Status.ToString())) { Width = 11, Sortable = true, Style = (r, t) => StatusBadge.Style(r.Status.ToString(), t) });
+            grid.AddColumn(new GridColumn<CheckRun>("status", "Status", r => StatusBadge.Label(r.Status)) { Width = 11, Sortable = true, Style = (r, t) => StatusBadge.Style(r.Status, t) });
             grid.AddColumn(new GridColumn<CheckRun>("source", "Source", r => r.Source == CheckRunSourceEnum.External && !String.IsNullOrEmpty(r.ProviderName) ? r.Source + " / " + r.ProviderName : r.Source.ToString()) { Width = 16, Sortable = true });
             grid.AddColumn(new GridColumn<CheckRun>("environment", "Environment", r => EntityUi.Dash(r.EnvironmentName)) { Weight = 1, Sortable = true });
             grid.AddColumn(new GridColumn<CheckRun>("duration", "Duration", r => r.DurationMs.HasValue ? Math.Round((double)r.DurationMs.Value).ToString(CultureInfo.InvariantCulture) + " ms" : "-") { Width = 10, Sortable = true, Align = TUIKit.Widgets.CellAlignment.Right });

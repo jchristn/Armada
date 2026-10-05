@@ -90,7 +90,7 @@ namespace Armada.Tui.Screens.Operations
             Column("id", "ID", e => e.Id, 0, 24);
             Column("branchName", "Branch", e => e.BranchName, 3, null, e => e.BranchName);
             Column("targetBranch", "Target", e => e.TargetBranch, 2, null, e => e.TargetBranch);
-            Column("status", "Status", e => StatusBadge.Label(e.Status.ToString()), 0, 12, e => e.Status.ToString(), (e, t) => StatusBadge.Style(e.Status.ToString(), t));
+            Column("status", "Status", e => StatusBadge.Label(e.Status), 0, 12, e => e.Status.ToString(), (e, t) => StatusBadge.Style(e.Status, t));
             Column("priority", "Priority", e => e.Priority.ToString(CultureInfo.InvariantCulture), 0, 8, e => e.Priority).Align = TUIKit.Widgets.CellAlignment.Right;
             Column("mission", "Mission", e => e.MissionId ?? "-", 2);
             Column("vessel", "Vessel", e => Reference.VesselName(e.VesselId), 2);

@@ -179,7 +179,7 @@ namespace Armada.Tui.Screens.Operations
             Column("rank", "Rank", o => o.Rank.ToString(CultureInfo.InvariantCulture), 0, 6).Align = TUIKit.Widgets.CellAlignment.Right;
             Column("item", "Backlog Item", ItemText, 5);
             Column("shape", "Shape", o => o.Kind + " " + o.Priority + " " + o.Effort, 0, 18);
-            Column("state", "State", StateText, 3, null, null, (o, t) => StatusBadge.Style(o.Status.ToString(), t));
+            Column("state", "State", StateText, 3, null, null, (o, t) => StatusBadge.Style(o.Status, t));
             Column("scope", "Scope", ScopeText, 3);
             Column("due", "Due / Updated", DueText, 3);
             GridColumn<Objective> idCol = Column("id", "ID", o => o.Id, 0, 26);
@@ -411,7 +411,7 @@ namespace Armada.Tui.Screens.Operations
 
         private string StateText(Objective o)
         {
-            string text = StatusBadge.Label(o.Status.ToString()) + " " + o.BacklogState;
+            string text = StatusBadge.Label(o.Status) + " " + o.BacklogState;
             int blocked = o.BlockedByObjectiveIds?.Count ?? 0;
             if (blocked > 0) text += "  " + Tr("Blocked by") + " " + blocked;
             return text;
@@ -496,12 +496,12 @@ namespace Armada.Tui.Screens.Operations
             OpsFormDialog dialog = NewForm("Import GitHub Backlog Item", "Import");
             dialog.Intro = "Create a backlog item from a GitHub issue or pull request using the selected vessel repository and configured GitHub token.";
             SelectField<string> vessel = NewSelect("Vessel", Reference.VesselOptions(), "Select a vessel");
-            SelectField<string> source = NewSelect("Source Type", new List<SelectOption<string>>
+            SelectField<GitHubObjectiveSourceTypeEnum> source = NewSelect("Source Type", new List<SelectOption<GitHubObjectiveSourceTypeEnum>>
             {
-                new SelectOption<string>("Issue", Tr("Issue")),
-                new SelectOption<string>("PullRequest", Tr("Pull Request")),
+                new SelectOption<GitHubObjectiveSourceTypeEnum>(GitHubObjectiveSourceTypeEnum.Issue, Tr("Issue")),
+                new SelectOption<GitHubObjectiveSourceTypeEnum>(GitHubObjectiveSourceTypeEnum.PullRequest, Tr("Pull Request")),
             });
-            source.SetValue("Issue");
+            source.SetValue(GitHubObjectiveSourceTypeEnum.Issue);
             InputField number = new InputField();
             number.Placeholder = "123";
             dialog.AddField("Vessel", vessel);
@@ -521,9 +521,9 @@ namespace Armada.Tui.Screens.Operations
             {
                 GitHubObjectiveImportRequest req = new GitHubObjectiveImportRequest();
                 req.VesselId = vessel.Value;
-                req.SourceType = source.Value == "PullRequest" ? GitHubObjectiveSourceTypeEnum.PullRequest : GitHubObjectiveSourceTypeEnum.Issue;
+                req.SourceType = source.Value;
                 req.Number = Int32.Parse(number.Value.Trim(), CultureInfo.InvariantCulture);
-                string sourceType = source.Value ?? "Issue";
+                string sourceType = req.SourceType.ToString();
                 Call((c, t) => c.ImportObjectiveFromGitHubAsync(req, t), imported =>
                 {
                     d.Complete();

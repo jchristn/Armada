@@ -228,6 +228,7 @@ namespace Armada.Core.Services
                     "Required input missing",
                     BuildInputReferenceMessage(input, inputResolution.Message),
                     FormatInputReferenceDisplay(input));
+                result.Issues[result.Issues.Count - 1].InputProvider = input.Provider;
             }
 
             Dictionary<string, bool> commandProbeCache = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);

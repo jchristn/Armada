@@ -118,8 +118,8 @@ namespace Armada.Tui.Screens.Build
             MissionGrid.EmptyText = "No missions yet";
             MissionGrid.ModalHost = context.Modals;
             MissionGrid.AddColumn(new GridColumn<MissionSummary>("title", "Mission", m => m.Title + "  " + m.Id) { Weight = 4 });
-            GridColumn<MissionSummary> status = new GridColumn<MissionSummary>("status", "Status", m => StatusBadge.Label(m.Status.ToString())) { Width = 16 };
-            status.Style = (m, t) => StatusBadge.Style(m.Status.ToString(), t);
+            GridColumn<MissionSummary> status = new GridColumn<MissionSummary>("status", "Status", m => StatusBadge.Label(m.Status)) { Width = 16 };
+            status.Style = (m, t) => StatusBadge.Style(m.Status, t);
             MissionGrid.AddColumn(status);
             MissionGrid.AddColumn(new GridColumn<MissionSummary>("captain", "Captain", m => String.IsNullOrEmpty(m.CaptainId) ? "-" : m.CaptainId!) { Weight = 2 });
             MissionGrid.AddColumn(new GridColumn<MissionSummary>("branch", "Branch", m => String.IsNullOrEmpty(m.BranchName) ? "-" : m.BranchName!) { Weight = 3 });

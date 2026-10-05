@@ -177,7 +177,7 @@ namespace Armada.Tui.Screens.Activity
             Details.AddRow("Event Type", e.EventType);
             Details.AddRow("Message", String.IsNullOrEmpty(e.Message) ? "-" : e.Message);
             if (!String.IsNullOrEmpty(e.EntityType)) Details.AddRow("Entity Type", e.EntityType);
-            if (!String.IsNullOrEmpty(e.EntityId)) Details.AddRow("Entity ID", e.EntityId, ScreenOps.EntityRoute(e.EntityId));
+            if (!String.IsNullOrEmpty(e.EntityId)) Details.AddRow("Entity ID", e.EntityId, ScreenOps.EntityRoute(e.EntityType, e.EntityId));
             if (!String.IsNullOrEmpty(e.CaptainId)) Details.AddRow("Captain", Name(_CaptainNames, e.CaptainId), "/captains/" + e.CaptainId);
             if (!String.IsNullOrEmpty(e.MissionId)) Details.AddRow("Mission", e.MissionId, "/missions/" + e.MissionId);
             if (!String.IsNullOrEmpty(e.VesselId)) Details.AddRow("Vessel", Name(_VesselNames, e.VesselId), "/vessels/" + e.VesselId);

@@ -1,6 +1,7 @@
 namespace Armada.Runtimes
 {
     using System;
+    using Armada.Core;
     using Armada.Core.Enums;
     using Armada.Core.Services;
     using Armada.Runtimes.Interfaces;
@@ -49,7 +50,7 @@ namespace Armada.Runtimes
         /// <inheritdoc />
         public IAgentRuntime CreateRuntime(string name)
         {
-            if (Enum.TryParse<AgentRuntimeEnum>(name, true, out AgentRuntimeEnum parsed))
+            if (EnumNames.TryParse<AgentRuntimeEnum>(name, true, out AgentRuntimeEnum parsed))
                 return new RemoteAgentRuntime(_Manager, _HarborId, parsed, _EndpointResolver);
             throw new NotSupportedException("Harbor delegation does not support the custom runtime name: " + name);
         }

@@ -86,26 +86,23 @@ namespace Armada.Tui.Approvals
             ApprovalItem item = new ApprovalItem();
             switch (inbox.Kind)
             {
-                case "review":
+                case InboxItemKinds.Review:
                     item.Kind = ApprovalKindEnum.MissionReview;
-                    item.EntityName = Strip(inbox.Title, "Review: ");
                     break;
-                case "landing_failed":
+                case InboxItemKinds.LandingFailed:
                     item.Kind = ApprovalKindEnum.FailedLanding;
-                    item.EntityName = Strip(inbox.Title, "Landing failed: ");
                     break;
-                case "stalled_captain":
+                case InboxItemKinds.StalledCaptain:
                     item.Kind = ApprovalKindEnum.StalledCaptain;
-                    item.EntityName = Strip(inbox.Title, "Stalled captain: ");
                     break;
-                case "deployment_approval":
+                case InboxItemKinds.DeploymentApproval:
                     item.Kind = ApprovalKindEnum.DeploymentApproval;
-                    item.EntityName = Strip(inbox.Title, "Deployment awaiting approval: ");
                     break;
                 default:
                     return null;
             }
 
+            item.EntityName = !String.IsNullOrEmpty(inbox.EntityName) ? inbox.EntityName! : inbox.Title;
             item.EntityId = inbox.EntityId!;
             item.Title = inbox.Title;
             item.Detail = inbox.Detail;
@@ -149,24 +146,24 @@ namespace Armada.Tui.Approvals
             string id = data.Id!;
             if (message!.Type == ArmadaEventTypes.MissionChanged)
             {
-                string status = data.Status ?? "";
+                MissionStatusEnum? status = data.MissionStatus;
                 string title = data.Title ?? id;
-                Apply(ApprovalKindEnum.MissionReview, id, status == "Review", "Review: " + title, title, "/missions/" + id, 1);
-                Apply(ApprovalKindEnum.FailedLanding, id, status == "LandingFailed", "Landing failed: " + title, title, "/missions/" + id, 2);
+                Apply(ApprovalKindEnum.MissionReview, id, status == MissionStatusEnum.Review, "Review: " + title, title, "/missions/" + id, 1);
+                Apply(ApprovalKindEnum.FailedLanding, id, status == MissionStatusEnum.LandingFailed, "Landing failed: " + title, title, "/missions/" + id, 2);
             }
             else if (message.Type == ArmadaEventTypes.CaptainChanged)
             {
-                string state = data.State ?? data.Status ?? "";
-                if (state.Length == 0) return;
+                CaptainStateEnum? state = data.CaptainState;
+                if (state == null) return;
                 string name = data.Name ?? id;
-                Apply(ApprovalKindEnum.StalledCaptain, id, state == "Stalled", "Stalled captain: " + name, name, "/captains/" + id, 1);
+                Apply(ApprovalKindEnum.StalledCaptain, id, state == CaptainStateEnum.Stalled, "Stalled captain: " + name, name, "/captains/" + id, 1);
             }
             else if (message.Type == ArmadaEventTypes.DeploymentChanged)
             {
-                string status = data.Status ?? "";
-                if (status.Length == 0) return;
+                DeploymentStatusEnum? status = data.DeploymentStatus;
+                if (status == null) return;
                 string title = data.Title ?? id;
-                Apply(ApprovalKindEnum.DeploymentApproval, id, status == "PendingApproval", "Deployment awaiting approval: " + title, title, "/deployments/" + id, 1);
+                Apply(ApprovalKindEnum.DeploymentApproval, id, status == DeploymentStatusEnum.PendingApproval, "Deployment awaiting approval: " + title, title, "/deployments/" + id, 1);
             }
         }
 
@@ -201,12 +198,6 @@ namespace Armada.Tui.Approvals
 
             _Live[key] = new KeyValuePair<DateTime, ApprovalItem>(_Context.Clock.UtcNow, item);
             _Context.Approvals.Upsert(item, existing == null);
-        }
-
-        private static string Strip(string? text, string prefix)
-        {
-            string t = text ?? "";
-            return t.StartsWith(prefix, StringComparison.Ordinal) ? t.Substring(prefix.Length) : t;
         }
 
         private static int Hash(List<InboxItem> inbox)

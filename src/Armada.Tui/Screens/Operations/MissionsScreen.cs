@@ -87,7 +87,7 @@ namespace Armada.Tui.Screens.Operations
 
             Column("title", "Title", m => m.Title, 4, null, m => m.Title);
             Column("id", "ID", m => m.Id, 0, 24);
-            Column("status", "Status", m => StatusBadge.Label(m.Status.ToString()), 0, 16, m => m.Status.ToString(), (m, t) => StatusBadge.Style(m.Status.ToString(), t));
+            Column("status", "Status", m => StatusBadge.Label(m.Status), 0, 16, m => m.Status.ToString(), (m, t) => StatusBadge.Style(m.Status, t));
             Column("priority", "Priority", m => m.Priority.ToString(CultureInfo.InvariantCulture), 0, 8, m => m.Priority).Align = TUIKit.Widgets.CellAlignment.Right;
             Column("vessel", "Vessel", m => Reference.VesselName(m.VesselId), 2);
             Column("captain", "Captain", m => Reference.CaptainName(m.CaptainId), 2);

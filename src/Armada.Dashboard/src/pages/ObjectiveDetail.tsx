@@ -269,11 +269,7 @@ export default function ObjectiveDetail() {
     () => new URLSearchParams(location.search).get('refinementSessionId') || '',
     [location.search],
   );
-  const gitHubSourceNumber = useMemo(() => {
-    const sourceId = objective?.sourceId || '';
-    const match = sourceId.match(/#(\d+)$/);
-    return match ? Number(match[1]) : null;
-  }, [objective?.sourceId]);
+  const gitHubSourceNumber = objective?.sourceNumber ?? null;
   const gitHubSourceType = objective?.sourceType === 'PullRequest' ? 'PullRequest' : 'Issue';
   const primaryVesselName = primaryVesselId ? vesselMap.get(primaryVesselId) || primaryVesselId : '';
   const hasArmadaActivityLinks = useMemo(() => (

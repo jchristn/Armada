@@ -98,7 +98,7 @@ namespace Armada.Tui.Screens.Delivery
         protected override void BuildColumns(ArmadaGrid<Release> grid)
         {
             grid.AddColumn(new GridColumn<Release>("title", "Release", r => r.Title + "  (" + (String.IsNullOrEmpty(r.Version) ? T("Unversioned") : r.Version) + (String.IsNullOrEmpty(r.TagName) ? "" : ", " + r.TagName) + ")") { Weight = 3, MinWidth = 16, Sortable = true, Pinned = true });
-            grid.AddColumn(new GridColumn<Release>("status", "Status", r => StatusBadge.Label(r.Status.ToString())) { Width = 13, Sortable = true, Style = (r, t) => StatusBadge.Style(r.Status.ToString(), t) });
+            grid.AddColumn(new GridColumn<Release>("status", "Status", r => StatusBadge.Label(r.Status)) { Width = 13, Sortable = true, Style = (r, t) => StatusBadge.Style(r.Status, t) });
             grid.AddColumn(new GridColumn<Release>("vessel", "Vessel", r => EntityLookups.Name(_Vessels, r.VesselId)) { Weight = 2, Sortable = true });
             grid.AddColumn(new GridColumn<Release>("workflow", "Workflow", r => !String.IsNullOrEmpty(r.WorkflowProfileId) ? EntityLookups.Name(_Profiles, r.WorkflowProfileId) : T("Resolved default")) { Weight = 2, Sortable = true });
             grid.AddColumn(new GridColumn<Release>("linked", "Linked Work", r => r.VoyageIds.Count + " " + T("voyages") + ", " + r.MissionIds.Count + " " + T("missions") + ", " + r.CheckRunIds.Count + " " + T("checks") + ", " + r.Artifacts.Count + " " + T("artifacts")) { Weight = 3, Sortable = true });

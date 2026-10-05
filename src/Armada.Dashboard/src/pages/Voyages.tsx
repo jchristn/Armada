@@ -237,7 +237,7 @@ export default function Voyages() {
                       <ActionMenu id={`voyage-${v.id}`} items={[
                         { label: 'View Detail', onClick: () => navigate(`/voyages/${v.id}`) },
                         { label: 'View Status', onClick: () => handleViewStatus(v.id) },
-                        { label: 'View JSON', onClick: () => setJsonData({ open: true, title: `Voyage: ${v.title}`, data: v }) },
+                        { label: 'View JSON', onClick: () => setJsonData({ open: true, title: `${t('Voyage')}: ${v.title}`, data: v }) },
                         { label: 'Cancel', danger: true, onClick: () => handleCancel(v.id, v.title) },
                         { label: 'Purge', danger: true, onClick: () => handlePurge(v.id, v.title) },
                       ]} />

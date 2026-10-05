@@ -20,7 +20,8 @@ namespace Armada.Helm.Commands
             string? ManualInstallCommand = null,
             string? ManualRemoveCommand = null,
             bool IsMuxServers = false,
-            bool IsOpenCodeConfig = false);
+            bool IsOpenCodeConfig = false,
+            McpClientKindEnum Kind = McpClientKindEnum.ClaudeCode);
 
         internal sealed record ApplyResult(string ClientName, string FilePath, bool Changed, string Message, bool IsProjectScoped = false);
         internal sealed record InstructionTarget(string ClientName, string FilePath, string Content, bool IsProjectScoped = false);
@@ -230,7 +231,8 @@ namespace Armada.Helm.Commands
                         ["url"] = mcpUrl,
                     },
                     InstallAgent: true,
-                    ManualInstallCommand: BuildClaudeCliCommand(mcpPort, host)),
+                    ManualInstallCommand: BuildClaudeCliCommand(mcpPort, host),
+                    Kind: McpClientKindEnum.ClaudeCode),
                 new(
                     "Codex",
                     GetCodexConfigPath(),
@@ -239,7 +241,8 @@ namespace Armada.Helm.Commands
                     RemoveArgs: new[] { "mcp", "remove", "armada" },
                     RemoveBeforeInstallName: "armada",
                     ManualInstallCommand: BuildCodexManualInstallCommand(codexCommand),
-                    ManualRemoveCommand: codexCommand + " mcp remove armada"),
+                    ManualRemoveCommand: codexCommand + " mcp remove armada",
+                    Kind: McpClientKindEnum.Codex),
                 new(
                     "Gemini CLI",
                     GetGeminiConfigPath(),
@@ -247,7 +250,8 @@ namespace Armada.Helm.Commands
                     InstallArgs: new[] { "mcp", "add", "--scope", "user", "--transport", "http", "armada", mcpUrl },
                     RemoveArgs: new[] { "mcp", "remove", "armada" },
                     ManualInstallCommand: geminiCommand + " mcp add --scope user --transport http armada " + mcpUrl,
-                    ManualRemoveCommand: geminiCommand + " mcp remove armada"),
+                    ManualRemoveCommand: geminiCommand + " mcp remove armada",
+                    Kind: McpClientKindEnum.GeminiCli),
                 new(
                     "Cursor",
                     GetCursorConfigPath(),
@@ -256,7 +260,8 @@ namespace Armada.Helm.Commands
                         ["url"] = mcpUrl,
                         ["transport"] = "http",
                     },
-                    IsProjectScoped: true),
+                    IsProjectScoped: true,
+                    Kind: McpClientKindEnum.Cursor),
             };
 
             // Mux stores MCP servers as an array in mcp-servers.json (a different shape from the other
@@ -274,7 +279,8 @@ namespace Armada.Helm.Commands
                         ["url"] = ArmadaMcpConfigBuilder.GetMcpBaseUrl(mcpPort, host),
                         ["mcpPath"] = "/mcp",
                     },
-                    IsMuxServers: true));
+                    IsMuxServers: true,
+                    Kind: McpClientKindEnum.Mux));
             }
 
             // OpenCode reads MCP servers under an "mcp" object (not "mcpServers") in opencode.json, using a
@@ -291,7 +297,8 @@ namespace Armada.Helm.Commands
                         ["url"] = mcpUrl,
                         ["enabled"] = true,
                     },
-                    IsOpenCodeConfig: true));
+                    IsOpenCodeConfig: true,
+                    Kind: McpClientKindEnum.OpenCode));
             }
 
             return targets;

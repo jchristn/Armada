@@ -4,6 +4,7 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
     using System.Collections.Generic;
     using System.Linq;
     using System.Net;
+    using Armada.Core.Enums;
     using Armada.Tui.Screens;
     using Armada.Tui.Screens.Admin;
     using Armada.Tui.Widgets;
@@ -240,7 +241,7 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                     SetupWizardScreen screen = Current(host);
                     AssertTrue(host.PumpUntil(() => !screen.Loading), "loaded");
                     screen.GoTo(3);
-                    screen.Runtime.Choose(screen.Runtime.Options.First(o => o.Value == "Mux"));
+                    screen.Runtime.Choose(screen.Runtime.Options.First(o => o.Value == AgentRuntimeEnum.Mux));
                     AssertTrue(host.WaitForText("1 saved Mux endpoint(s) available."), "endpoint hint");
                     screen.SubmitCaptain();
                     AssertTrue(host.WaitForText("Mux captains require a named Mux endpoint."), "mux validation");
@@ -253,13 +254,13 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                     AssertEqual("Mux", body.Runtime, "runtime");
                     AssertNotNull(body.RuntimeOptionsJson, "runtime options sent");
                     AssertEqual("local", JsonHelper.Deserialize<SetupWizardMuxOptionsBody>(body.RuntimeOptionsJson!).Endpoint, "runtime options endpoint: " + body.RuntimeOptionsJson);
-                    string json = SetupWizardScreen.BuildMuxRuntimeOptionsJson("Mux", "", "local", "", "", "0.5", "2048x", "", "deny")!;
+                    string json = SetupWizardScreen.BuildMuxRuntimeOptionsJson(AgentRuntimeEnum.Mux, "", "local", "", "", "0.5", "2048x", "", "deny")!;
                     SetupWizardMuxOptionsBody options = JsonHelper.Deserialize<SetupWizardMuxOptionsBody>(json);
                     AssertEqual(1, options.SchemaVersion, "schema version: " + json);
                     AssertEqual(0.5, options.Temperature, "temperature: " + json);
                     AssertEqual(2048, options.MaxTokens, "max tokens: " + json);
                     AssertEqual("deny", options.ApprovalPolicy, "approval policy: " + json);
-                    AssertNull(SetupWizardScreen.BuildMuxRuntimeOptionsJson("ClaudeCode", "", "x", "", "", "", "", "", ""), "not mux");
+                    AssertNull(SetupWizardScreen.BuildMuxRuntimeOptionsJson(AgentRuntimeEnum.ClaudeCode, "", "x", "", "", "", "", "", ""), "not mux");
                     AssertEqual(100, SetupWizardScreen.ParsePriority("abc"), "invalid priority");
                     AssertEqual(7, SetupWizardScreen.ParsePriority("7days"), "parseInt prefix");
                 }

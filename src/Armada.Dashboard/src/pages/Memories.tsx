@@ -129,7 +129,7 @@ export default function Memories() {
               </thead>
               <tbody>
                 {memories.map(m => (
-                  <tr key={m.id} className="clickable" onClick={() => setJsonData({ open: true, title: `Memory: ${m.id}`, data: m })}>
+                  <tr key={m.id} className="clickable" onClick={() => setJsonData({ open: true, title: `${t('Memory')}: ${m.id}`, data: m })}>
                     <td><span className={`tag tag-${m.type.toLowerCase()}`}>{t(m.type)}</span></td>
                     <td className="text-dim">{m.topic || '-'}</td>
                     <td>{m.summary || (m.content.length > 80 ? `${m.content.slice(0, 80)}...` : m.content)}</td>

@@ -259,10 +259,8 @@ namespace Armada.Tui.Screens.Admin
         {
             if (raw == null) return "";
             if (raw is string s) return s;
-            string json = JsonSerializer.Serialize(raw, _JsOptions);
-            if (json.StartsWith("\"", StringComparison.Ordinal)) return JsonSerializer.Deserialize<string>(json) ?? "";
-            if (json == "null") return "null";
-            return json;
+            if (raw is ApiExplorerJsonValue value) return value.ToString();
+            return JsonSerializer.Serialize(raw, _JsOptions);
         }
 
         /// <summary>
@@ -273,16 +271,7 @@ namespace Armada.Tui.Screens.Admin
         public static string TypeName(ApiExplorerSchema? schema)
         {
             if (schema?.Type == null) return "";
-            if (schema.Type is string s) return s;
-            string json = JsonSerializer.Serialize(schema.Type, _JsOptions);
-            if (json.StartsWith("\"", StringComparison.Ordinal)) return JsonSerializer.Deserialize<string>(json) ?? "";
-            if (json.StartsWith("[", StringComparison.Ordinal))
-            {
-                List<string?>? list = JsonSerializer.Deserialize<List<string?>>(json);
-                return list?.FirstOrDefault(t => t != null && t != "null") ?? "";
-            }
-
-            return "";
+            return schema.Type.Names.FirstOrDefault(t => t != "null") ?? "";
         }
 
         /// <summary>

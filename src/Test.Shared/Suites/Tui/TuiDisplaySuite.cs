@@ -272,7 +272,7 @@ namespace Test.Shared.Suites.Tui
 
             cases.Add(TuiCase.Sync(Suite, "no_color_only_states", "Status, selection, progress, and connection states all carry text or a symbol", () =>
             {
-                Dictionary<string, string> markers = new Dictionary<string, string>();
+                Dictionary<StatusSeverityEnum, string> markers = new Dictionary<StatusSeverityEnum, string>();
                 foreach (string status in new string[] { "Complete", "Failed", "Stalled", "InProgress", "Pending", "Landed", "Unknown" })
                 {
                     string label = StatusBadge.Label(status);

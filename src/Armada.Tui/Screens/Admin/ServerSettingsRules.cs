@@ -3,6 +3,7 @@ namespace Armada.Tui.Screens.Admin
     using System;
     using System.Globalization;
     using System.Text.RegularExpressions;
+    using Armada.Core.Enums;
     using Armada.Tui.Services;
 
     /// <summary>
@@ -125,9 +126,10 @@ namespace Armada.Tui.Screens.Admin
         /// </summary>
         /// <param name="status">Status.</param>
         /// <returns>True when polling should stop.</returns>
-        public static bool RebuildDone(string? status)
+        public static bool RebuildDone(ServerRebuildStatusEnum? status)
         {
-            return status == "Succeeded" || status == "Failed" || status == "RolledBack" || status == "CuttingOver";
+            if (status == null) return false;
+            return status.Value.IsTerminal() || status.Value == ServerRebuildStatusEnum.CuttingOver;
         }
 
         #endregion

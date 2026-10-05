@@ -10,6 +10,11 @@ namespace Armada.Core.Models
     public class Objective
     {
         /// <summary>
+        /// <see cref="SourceProvider"/> value written by the GitHub issue and pull request import.
+        /// </summary>
+        public const string GitHubSourceProvider = "GitHub";
+
+        /// <summary>
         /// Unique identifier.
         /// </summary>
         public string Id
@@ -216,6 +221,16 @@ namespace Armada.Core.Models
         public string? SourceId { get; set; } = null;
 
         /// <summary>
+        /// Issue or pull request number of a GitHub-imported objective (the number in <see cref="SourceId"/>, which
+        /// the GitHub import writes as owner/repo#number), or null for other sources. Read-only; derived on the
+        /// server so clients never parse <see cref="SourceId"/>.
+        /// </summary>
+        public int? SourceNumber
+        {
+            get { return ParseGitHubSourceNumber(SourceProvider, SourceId); }
+        }
+
+        /// <summary>
         /// External source URL.
         /// </summary>
         public string? SourceUrl { get; set; } = null;
@@ -242,5 +257,26 @@ namespace Armada.Core.Models
 
         private string _Id = Constants.IdGenerator.GenerateKSortable(Constants.ObjectiveIdPrefix, 24);
         private string _Title = "Objective";
+
+        /// <summary>
+        /// Number of a GitHub source id (owner/repo#number) for a GitHub-provided objective, or null.
+        /// </summary>
+        /// <param name="provider">Source provider.</param>
+        /// <param name="sourceId">Source id.</param>
+        /// <returns>Number, or null.</returns>
+        public static int? ParseGitHubSourceNumber(string? provider, string? sourceId)
+        {
+            if (!String.Equals(provider, GitHubSourceProvider, StringComparison.Ordinal)) return null;
+            if (String.IsNullOrEmpty(sourceId)) return null;
+            int hash = sourceId!.LastIndexOf('#');
+            if (hash < 0 || hash == sourceId.Length - 1) return null;
+            string digits = sourceId.Substring(hash + 1);
+            foreach (char c in digits)
+            {
+                if (c < '0' || c > '9') return null;
+            }
+
+            return Int32.TryParse(digits, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out int number) && number > 0 ? number : (int?)null;
+        }
     }
 }

@@ -1,6 +1,8 @@
 namespace Armada.Core.Harbor
 {
     using System.Collections.Generic;
+    using System.Text.Json.Serialization;
+    using Armada.Core.Enums;
 
     /// <summary>
     /// Server-to-Harbor request to launch a captain process. Carries the fully resolved launch plan the
@@ -18,9 +20,20 @@ namespace Armada.Core.Harbor
         public string JobId { get; set; } = string.Empty;
 
         /// <summary>
-        /// Runtime identifier (for example "claude", "codex", "opencode").
+        /// Runtime: an <see cref="AgentRuntimeEnum"/> member name (for example "ClaudeCode", "Codex"). Kept as a
+        /// string on the wire for compatibility; read it through <see cref="RuntimeType"/>.
         /// </summary>
         public string Runtime { get; set; } = string.Empty;
+
+        /// <summary>
+        /// <see cref="Runtime"/> as a defined <see cref="AgentRuntimeEnum"/> name (case-insensitive), or null when it
+        /// is empty, numeric, or unknown. Not serialized.
+        /// </summary>
+        [JsonIgnore]
+        public AgentRuntimeEnum? RuntimeType
+        {
+            get { return EnumNames.ParseOrNull<AgentRuntimeEnum>(Runtime, true); }
+        }
 
         /// <summary>
         /// Absolute working directory (a dock worktree) on the Harbor host.

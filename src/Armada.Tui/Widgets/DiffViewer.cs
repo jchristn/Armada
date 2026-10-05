@@ -3,6 +3,9 @@ namespace Armada.Tui.Widgets
     using System;
     using System.Collections.Generic;
     using System.Linq;
+    using Armada.Core.Enums;
+    using Armada.Core.Models;
+    using Armada.Core.Services;
     using TUIKit;
     using TUIKit.Input;
 
@@ -24,8 +27,11 @@ namespace Armada.Tui.Widgets
             set
             {
                 _Diff = value ?? "";
-                _Lines = _Diff.Replace("\r\n", "\n").Split('\n').ToList();
-                Files = _Lines.Where(l => l.StartsWith("diff --git ", StringComparison.Ordinal)).Select(FileName).ToList();
+                string normalized = _Diff.Replace("\r\n", "\n");
+                _Lines = normalized.Split('\n').ToList();
+                List<UnifiedDiffFile> parsed = UnifiedDiffParser.Parse(normalized, out List<UnifiedDiffLineKindEnum> kinds);
+                _Kinds = kinds;
+                Files = parsed.Select(f => f.DisplayPath).ToList();
                 Invalidate();
             }
         }
@@ -47,6 +53,7 @@ namespace Armada.Tui.Widgets
 
         private string _Diff = "";
         private List<string> _Lines = new List<string>();
+        private List<UnifiedDiffLineKindEnum> _Kinds = new List<UnifiedDiffLineKindEnum>();
 
         #endregion
 
@@ -84,15 +91,22 @@ namespace Armada.Tui.Widgets
         protected override IReadOnlyList<StyledText> BuildLines()
         {
             List<StyledText> lines = new List<StyledText>();
-            foreach (string line in _Lines)
+            for (int i = 0; i < _Lines.Count; i++)
             {
+                string line = _Lines[i];
+                UnifiedDiffLineKindEnum kind = i < _Kinds.Count ? _Kinds[i] : UnifiedDiffLineKindEnum.Other;
                 CellStyle style;
-                if (line.StartsWith("diff --git ", StringComparison.Ordinal) || line.StartsWith("index ", StringComparison.Ordinal)) style = Theme.Accent;
-                else if (line.StartsWith("+++", StringComparison.Ordinal) || line.StartsWith("---", StringComparison.Ordinal)) style = Theme.Muted;
-                else if (line.StartsWith("@@", StringComparison.Ordinal)) style = Theme.Info;
-                else if (line.StartsWith("+", StringComparison.Ordinal)) style = Theme.Success;
-                else if (line.StartsWith("-", StringComparison.Ordinal)) style = Theme.Error;
-                else style = Theme.Text;
+                switch (kind)
+                {
+                    case UnifiedDiffLineKindEnum.FileHeader: style = Theme.Accent; break;
+                    case UnifiedDiffLineKindEnum.Meta: style = Theme.Muted; break;
+                    case UnifiedDiffLineKindEnum.HunkHeader: style = Theme.Info; break;
+                    case UnifiedDiffLineKindEnum.Added: style = Theme.Success; break;
+                    case UnifiedDiffLineKindEnum.Deleted: style = Theme.Error; break;
+                    case UnifiedDiffLineKindEnum.NoNewline: style = Theme.Muted; break;
+                    default: style = Theme.Text; break;
+                }
+
                 lines.Add(StyledText.From(line.Replace("\t", "    "), style));
             }
 
@@ -116,12 +130,6 @@ namespace Armada.Tui.Widgets
             Search("diff --git ");
             if (!forward) FindNext(false);
             return true;
-        }
-
-        private static string FileName(string header)
-        {
-            int b = header.LastIndexOf(" b/", StringComparison.Ordinal);
-            return b >= 0 ? header.Substring(b + 3) : header.Substring("diff --git ".Length);
         }
 
         #endregion

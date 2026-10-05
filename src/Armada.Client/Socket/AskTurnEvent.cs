@@ -20,9 +20,9 @@ namespace Armada.Client.Socket
         public string? TurnId { get; set; } = null;
 
         /// <summary>
-        /// Turn state.
+        /// Turn state, or null when absent.
         /// </summary>
-        public string? State { get; set; } = null;
+        public AskTurnStateEnum? State { get; set; } = null;
 
         /// <summary>
         /// Reply message id, or null.
@@ -33,6 +33,11 @@ namespace Armada.Client.Socket
         /// Failure reason, or null.
         /// </summary>
         public string? Error { get; set; } = null;
+
+        /// <summary>
+        /// Failure text under its alternate name (<c>errorText</c>), or null. Read when <see cref="Error"/> is empty.
+        /// </summary>
+        public string? ErrorText { get; set; } = null;
 
         #endregion
 

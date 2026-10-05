@@ -123,7 +123,7 @@ export default function Credentials() {
 
   function openEdit(credential: Credential) {
     if (remoteProxyMode) {
-      setJsonData({ open: true, title: `Credential: ${credential.name || credential.id}`, data: credential });
+      setJsonData({ open: true, title: `${t('Credential')}: ${credential.name || credential.id}`, data: credential });
       return;
     }
     setForm({
@@ -341,7 +341,7 @@ export default function Credentials() {
                     key={c.id}
                     className="clickable"
                     onClick={() => remoteProxyMode
-                      ? setJsonData({ open: true, title: `Credential: ${c.name || c.id}`, data: c })
+                      ? setJsonData({ open: true, title: `${t('Credential')}: ${c.name || c.id}`, data: c })
                       : openEdit(c)}
                   >
                     <td className="col-checkbox" onClick={e => e.stopPropagation()}><input aria-label={t('Select this credential')} type="checkbox" checked={selected.includes(c.id)} onChange={() => toggleSelect(c.id)} title={t('Select this credential')} /></td>
@@ -362,7 +362,7 @@ export default function Credentials() {
                     <td className="text-right" onClick={e => e.stopPropagation()}>
                       <ActionMenu id={c.id} items={[
                         ...(remoteProxyMode ? [] : [{ label: 'Edit', onClick: () => openEdit(c) }]),
-                        { label: 'View JSON', onClick: () => setJsonData({ open: true, title: `Credential: ${c.name || c.id}`, data: c }) },
+                        { label: 'View JSON', onClick: () => setJsonData({ open: true, title: `${t('Credential')}: ${c.name || c.id}`, data: c }) },
                         ...(remoteProxyMode ? [] : [{ label: 'Delete', danger: true, onClick: () => handleDelete(c.id, c.name ?? '') }]),
                       ]} />
                     </td>

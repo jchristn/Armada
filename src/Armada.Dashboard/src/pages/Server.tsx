@@ -1535,7 +1535,7 @@ export default function Server() {
             >
               {t('Rebuild Armada')}
             </button>
-            {rebuild && rebuild.status !== 'none' && (
+            {rebuild && rebuild.status != null && (
               <button
                 className="btn btn-sm"
                 onClick={() => { setRebuildLogOpen(true); refreshRebuildStatus(); }}
