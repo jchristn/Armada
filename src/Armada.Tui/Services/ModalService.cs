@@ -57,11 +57,16 @@ namespace Armada.Tui.Services
             if (modal == null) throw new ArgumentNullException(nameof(modal));
             ThemeApplicator.Apply(modal, _Theme.Current);
             Task<object?> completion = _App.ShowAsync(modal);
-            if (onClosed == null) return;
             completion.ContinueWith(t =>
             {
                 object? result = t.Status == TaskStatus.RanToCompletion ? t.Result : null;
-                _Dispatcher.Post(() => onClosed(result));
+                _Dispatcher.Post(() =>
+                {
+                    // A modal closed outside key handling (an async submit) stays on the stack until the next key,
+                    // which TUIKit would then swallow; drop it now.
+                    _App.Modals.RemoveClosed();
+                    onClosed?.Invoke(result);
+                });
             }, TaskScheduler.Default);
         }
 

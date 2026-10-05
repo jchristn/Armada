@@ -3,7 +3,7 @@
 > **Type:** implementation plan (work-tracking). Annotate task status and the progress log as you go; keep this
 > document in sync with what actually shipped.
 >
-> **Status:** In progress (W0 and W1 foundation done; screens start with W2)
+> **Status:** In progress (W0 and W1 foundation done; W7 Activity and System done; other screens in progress)
 > **Built on:** TUIKit 1.2.1 (`TUIKit` on NuGet; source at `~/Code/Tuikit`)
 > **Parity baseline:** the web dashboard at `src/Armada.Dashboard` as of 2026-10-04 (52 page routes, 37 hub tabs,
 > about 45 modals and drawers, 317 server-calling API client functions, 29 WebSocket event types)
@@ -435,7 +435,7 @@ API names are the dashboard `api/client.ts` functions; `Armada.Client` implement
 | Dashboard | TUI screen | Contents and actions | API |
 |---|---|---|---|
 | All Activity | `ActivityScreen` | KPIs (visible, errors, warnings, source types); filters (text, backlog item, actor, vessel, source type, postmortem only; Apply); saved views (save with name, delete; stored in TUI preferences); export JSON, CSV, Markdown (to a file path); grid (when, title, source, status, actor, vessel); row menu (View, View JSON, Open Workspace, Delete for request entries). | enumerateHistoryTimeline, listObjectives, listVessels, deleteRequestHistoryEntry |
-| API Requests | `RequestHistoryScreen` | KPIs (total, success rate, failures, average duration); activity chart (hour/day/week/month); filters (method, status code, route, principal, credential, result, tenant, user, from, to; Reset); grid (select, when, method, route, principal, status, duration, payloads); row menu (View, Replay in API Explorer, Delete); bulk (Delete Selected, Delete Filtered admin, Delete Visible Range tenant admin); request detail drawer (entry ID, auth method, captured, params, headers, bodies with truncation flag; Replay, Delete); deep link `/requests/:id`. | listRequestHistory, getRequestHistorySummary, getRequestHistoryEntry, deleteRequestHistoryEntry, deleteRequestHistoryEntries, deleteRequestHistoryByFilter |
+| API Requests | `RequestHistoryScreen` | KPIs (total, success rate, failures, average duration); activity chart (hour/day/week/month); filters (method, status code, route, principal, credential, result, tenant, user, from, to; Reset); grid (select, when, method, route, principal, status, duration, payloads); row menu (View, Replay in API Explorer, Delete); bulk (Delete Selected; Delete Visible Range, or Delete Filtered when filters are set; not role-gated, as in the dashboard); request detail drawer (entry ID, auth method, captured, params, headers, bodies with truncation flag; Replay, Delete); deep link `/requests/:id`. | listRequestHistory, getRequestHistorySummary, getRequestHistoryEntry, deleteRequestHistoryEntry, deleteRequestHistoryEntries, deleteRequestHistoryByFilter |
 | Events, `/events/:id` | `EventsScreen`, `EventScreen` | Grid (select, ID, event type, entity type, entity ID, captain, mission, vessel, voyage, message, created; sortable); row menu (View Detail, View JSON, Delete); bulk delete; detail adds payload and tenant. | listEvents, getEvent, deleteEventsBatch, listCaptains, listVessels |
 | Signals, `/signals/:id` | `SignalsScreen`, `SignalScreen` | Filters (type, captain, unread only); grid (ID, type, from, to, read, payload, time); row menu (View Detail, Mark Read, View JSON, Delete); bulk delete; Send Signal modal (type, payload, to captain or Admiral broadcast). | listSignals, getSignal, sendSignal, markSignalRead, deleteSignalsBatch, listCaptains |
 | Token Usage | `TokenUsageScreen` | Range (hour/day/week/month); metric by token type or by model; stacked bars or lines (`BarChart`/`LineChart`); copy chart as text (the dashboard copies an image; the TUI copies a text table and offers CSV export); estimated-records note. | getTokenUsage |
@@ -590,10 +590,14 @@ REST_API.md.
 
 ### W7. Activity and System
 
-- [ ] **W7.1** All Activity with saved views and export. **W7.2** API Requests with chart, filters, bulk deletes,
+- [x] **W7.1** All Activity with saved views and export. **W7.2** API Requests with chart, filters, bulk deletes,
   replay. **W7.3** Events. **W7.4** Signals with send. **W7.5** Token Usage. **W7.6** API Explorer.
   **W7.7** Settings Server tab (every section and action). **W7.8** Diagnostics. **W7.9** Tenants, Users,
-  Credentials. **W7.10** Setup wizard.
+  Credentials. **W7.10** Setup wizard. Also Jobs (`/jobs`, listed under W3.11). Notes: saved views live in
+  `tui-activity-views.json` next to `tui.json`; Token Usage copies charts as text tables and adds CSV export;
+  API Requests bulk deletes are not role-gated (the dashboard shows Delete Selected and Delete Visible Range /
+  Delete Filtered to anyone who can list requests; only the tenant and user filters are gated); the setup
+  wizard cannot highlight sidebar items yet (it shows a "Related:" line; needs a shell hook).
 
 ### W8. Quality
 
@@ -700,3 +704,4 @@ before Milestone B; U5, U6 before Milestone E).
 |------|--------|---------|--------|
 | 2026-10-04 | (design) | -- | Plan drafted from a full inventory of the dashboard (routes, tabs, modals, API functions, WebSocket events, settings) and a survey of TUIKit 1.2.1. |
 | 2026-10-04 | Claude (tui-foundation) | W0, W1, W8.1, W9.1 | Armada.Client (all 317 client.ts functions as typed async methods, generated by `scripts/tui/generate-client-methods.py` and hand-finished; ArmadaSocket with typed events, backoff 1-30 s with jitter, reconnect counter; paging helpers). Armada.Tui foundation: `armada tui` in Helm, preferences and profiles, keychain/wincred/secret-tool credential stores with a 0600 file fallback, single-root shell with responsive layout and focus router, binding layer, ArmadaGrid, form widgets, viewers, dialogs, themes, commands/menu/palette/help, notifications and approvals skeleton, event pump, refresh, router with every dashboard route (placeholders for unbuilt screens), clipboard, external editor, i18n over the dashboard catalog, login and session. Parity manifest and Tui.Parity suite. Tests: Tui.* and Client.* suites (headless and live server). Deviations: the dashboard handles 28 WebSocket event types plus `status.snapshot` (the plan said 29); `GET /fleets/{id}` returns `{ Fleet, Vessels }`, so `GetFleetAsync` returns `FleetDetail`; API keys pasted on the login screen are tried as X-Token, bearer, then X-Api-Key. |
+| 2026-10-04 | Claude (tui-activity-system) | W7.1-W7.10, W3.11 Jobs, W8.1 | Activity and System screens on a shared kit (`Armada.Tui.Screens.Kit`: StackScreen/GridScreen, ScreenHeader, FilterStrip, KpiBar, FormModal, PathPrompt, ToggleField, MultilineField, MultiSeriesChart, RecordDetailView, UserScopeField, DataExport, ScreenOps): All Activity, API Requests (+drawer, `/requests/:id`, replay), Events (+detail), Signals (+detail, send), Token Usage, Jobs, API Explorer, Settings Server tab (every section incl. Vessel Import, Fleet Actions, Repository Health, Data Retention, Remote Control, backup/restore to chosen files, restart/stop/reset/rebuild with live log and rollback, proxy restrictions), Diagnostics, Tenants, Users, Credentials, Setup wizard with auto-open. Parity: 8 routes, 10 tabs, 55 settings fields implemented (parser now covers Repository Health fields and thresholds and Data Retention fields). Fixes: modals closed outside key handling are dropped from the stack at once (TUIKit swallowed the next key); ArmadaGrid passes Alt+arrows through for history navigation; HubScreen forwards the tab's status hints. Armada.Client SettingsData gains Retention. |

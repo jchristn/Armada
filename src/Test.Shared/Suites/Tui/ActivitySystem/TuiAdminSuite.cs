@@ -204,9 +204,6 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                     AssertTrue(host.PumpUntil(() => stub.Count("GET /api/v1/tenants") >= 3 && screen.Grid.State == GridStateEnum.Ready), "reloaded");
                     host.Pump();
                     screen.Grid.MoveCursor(screen.Grid.Rows.ToList().FindIndex(t => t.Id == "ten_two"));
-                    // The first escape-sequence key after a form dialog closes is not delivered in the headless host
-                    // (observed, cause not identified); a harmless Right key absorbs it.
-                    host.Press("right");
                     host.Press("del");
                     AssertTrue(host.WaitForText("Delete tenant"), "confirm");
                     host.Type("delete").Press("enter");

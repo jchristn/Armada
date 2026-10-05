@@ -91,6 +91,7 @@ namespace Armada.Tui.Screens.Kit
             Form.DiscardButton.Label = "Cancel";
             Form.SaveRequested += (s, e) => RunSubmit();
             Form.DiscardRequested += (s, e) => RequestClose(false);
+            Form.MarkClean();
             Form.OnFocusChanged(true);
             Form.Scope.FocusFirst();
             FooterHint = " Ctrl+S " + T(submitLabel ?? "Save") + "  Tab " + T("Next") + "  Esc " + T("Cancel") + " ";

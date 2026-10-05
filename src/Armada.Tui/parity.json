@@ -18,10 +18,10 @@
     {
       "kind": "route",
       "key": "/activity",
-      "status": "planned",
-      "tui": "",
-      "workstream": "",
-      "notes": ""
+      "status": "implemented",
+      "tui": "HubScreen",
+      "workstream": "W7.1-W7.5",
+      "notes": "Activity hub: All Activity, API Requests, Events, Signals, Token Usage"
     },
     {
       "kind": "route",
@@ -50,18 +50,18 @@
     {
       "kind": "route",
       "key": "/api-explorer",
-      "status": "planned",
-      "tui": "",
-      "workstream": "",
+      "status": "implemented",
+      "tui": "ApiExplorerScreen",
+      "workstream": "W7.6",
       "notes": ""
     },
     {
       "kind": "route",
       "key": "/api-explorer/:operationId",
-      "status": "planned",
-      "tui": "",
-      "workstream": "",
-      "notes": ""
+      "status": "implemented",
+      "tui": "ApiExplorerScreen",
+      "workstream": "W7.6",
+      "notes": "opens on the operation"
     },
     {
       "kind": "route",
@@ -226,9 +226,9 @@
     {
       "kind": "route",
       "key": "/events/:id",
-      "status": "planned",
-      "tui": "",
-      "workstream": "",
+      "status": "implemented",
+      "tui": "EventScreen",
+      "workstream": "W7.3",
       "notes": ""
     },
     {
@@ -298,9 +298,9 @@
     {
       "kind": "route",
       "key": "/jobs",
-      "status": "planned",
-      "tui": "",
-      "workstream": "",
+      "status": "implemented",
+      "tui": "JobsScreen",
+      "workstream": "W3.11",
       "notes": ""
     },
     {
@@ -498,10 +498,10 @@
     {
       "kind": "route",
       "key": "/requests/:id",
-      "status": "planned",
-      "tui": "",
-      "workstream": "",
-      "notes": ""
+      "status": "implemented",
+      "tui": "RequestHistoryScreen",
+      "workstream": "W7.2",
+      "notes": "opens the request detail drawer"
     },
     {
       "kind": "route",
@@ -522,10 +522,10 @@
     {
       "kind": "route",
       "key": "/server",
-      "status": "planned",
-      "tui": "",
-      "workstream": "",
-      "notes": ""
+      "status": "implemented",
+      "tui": "HubScreen",
+      "workstream": "W7.7-W7.9",
+      "notes": "Settings hub: Server, Diagnostics, Tenants, Users, Credentials"
     },
     {
       "kind": "route",
@@ -539,7 +539,7 @@
       "kind": "route",
       "key": "/setup",
       "status": "extension",
-      "tui": "",
+      "tui": "SetupWizardScreen",
       "workstream": "",
       "notes": "TUI-only route"
     },
@@ -554,9 +554,9 @@
     {
       "kind": "route",
       "key": "/signals/:id",
-      "status": "planned",
-      "tui": "",
-      "workstream": "",
+      "status": "implemented",
+      "tui": "SignalScreen",
+      "workstream": "W7.4",
       "notes": ""
     },
     {
@@ -682,41 +682,41 @@
     {
       "kind": "tab",
       "key": "Activity:events",
-      "status": "planned",
-      "tui": "/activity?source=events",
-      "workstream": "",
+      "status": "implemented",
+      "tui": "EventsScreen",
+      "workstream": "W7.3",
       "notes": "Events"
     },
     {
       "kind": "tab",
       "key": "Activity:history",
-      "status": "planned",
-      "tui": "/activity?source=history",
-      "workstream": "",
+      "status": "implemented",
+      "tui": "ActivityScreen",
+      "workstream": "W7.1",
       "notes": "All Activity"
     },
     {
       "kind": "tab",
       "key": "Activity:requests",
-      "status": "planned",
-      "tui": "/activity?source=requests",
-      "workstream": "",
+      "status": "implemented",
+      "tui": "RequestHistoryScreen",
+      "workstream": "W7.2",
       "notes": "API Requests"
     },
     {
       "kind": "tab",
       "key": "Activity:signals",
-      "status": "planned",
-      "tui": "/activity?source=signals",
-      "workstream": "",
+      "status": "implemented",
+      "tui": "SignalsScreen",
+      "workstream": "W7.4",
       "notes": "Signals"
     },
     {
       "kind": "tab",
       "key": "Activity:tokens",
-      "status": "planned",
-      "tui": "/activity?source=tokens",
-      "workstream": "",
+      "status": "implemented",
+      "tui": "TokenUsageScreen",
+      "workstream": "W7.5",
       "notes": "Token Usage"
     },
     {
@@ -922,41 +922,41 @@
     {
       "kind": "tab",
       "key": "ServerHub:credentials",
-      "status": "planned",
-      "tui": "/server?tab=credentials",
-      "workstream": "",
+      "status": "implemented",
+      "tui": "CredentialsScreen",
+      "workstream": "W7.9",
       "notes": "Credentials"
     },
     {
       "kind": "tab",
       "key": "ServerHub:diagnostics",
-      "status": "planned",
-      "tui": "/server?tab=diagnostics",
-      "workstream": "",
+      "status": "implemented",
+      "tui": "DiagnosticsScreen",
+      "workstream": "W7.8",
       "notes": "Diagnostics"
     },
     {
       "kind": "tab",
       "key": "ServerHub:server",
-      "status": "planned",
-      "tui": "/server?tab=server",
-      "workstream": "",
+      "status": "implemented",
+      "tui": "ServerSettingsScreen",
+      "workstream": "W7.7",
       "notes": "Server"
     },
     {
       "kind": "tab",
       "key": "ServerHub:tenants",
-      "status": "planned",
-      "tui": "/server?tab=tenants",
-      "workstream": "",
+      "status": "implemented",
+      "tui": "TenantsScreen",
+      "workstream": "W7.9",
       "notes": "Tenants"
     },
     {
       "kind": "tab",
       "key": "ServerHub:users",
-      "status": "planned",
-      "tui": "/server?tab=users",
-      "workstream": "",
+      "status": "implemented",
+      "tui": "UsersScreen",
+      "workstream": "W7.9",
       "notes": "Users"
     },
     {
@@ -1077,7 +1077,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.CancelJobAsync",
       "workstream": "W0.2",
-      "notes": "Background jobs"
+      "notes": "Background jobs | used by JobsScreen"
     },
     {
       "kind": "api",
@@ -1157,7 +1157,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.CreateCaptainAsync",
       "workstream": "W0.2",
-      "notes": "Captains"
+      "notes": "Captains | used by SetupWizardScreen"
     },
     {
       "kind": "api",
@@ -1165,7 +1165,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.CreateCredentialAsync",
       "workstream": "W0.2",
-      "notes": "Credentials (admin)"
+      "notes": "Credentials (admin) | used by CredentialsScreen"
     },
     {
       "kind": "api",
@@ -1189,7 +1189,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.CreateFleetAsync",
       "workstream": "W0.2",
-      "notes": "Fleets"
+      "notes": "Fleets | used by SetupWizardScreen"
     },
     {
       "kind": "api",
@@ -1333,7 +1333,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.CreateTenantAsync",
       "workstream": "W0.2",
-      "notes": "Tenants (admin)"
+      "notes": "Tenants (admin) | used by TenantsScreen"
     },
     {
       "kind": "api",
@@ -1341,7 +1341,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.CreateUserAsync",
       "workstream": "W0.2",
-      "notes": "Users (admin)"
+      "notes": "Users (admin) | used by UsersScreen"
     },
     {
       "kind": "api",
@@ -1349,7 +1349,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.CreateVesselAsync",
       "workstream": "W0.2",
-      "notes": "Vessels"
+      "notes": "Vessels | used by SetupWizardScreen"
     },
     {
       "kind": "api",
@@ -1413,7 +1413,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.DeleteCredentialAsync",
       "workstream": "W0.2",
-      "notes": "Credentials (admin)"
+      "notes": "Credentials (admin) | used by CredentialsScreen"
     },
     {
       "kind": "api",
@@ -1445,7 +1445,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.DeleteEventsBatchAsync",
       "workstream": "W0.2",
-      "notes": "Events"
+      "notes": "Events | used by EventsScreen"
     },
     {
       "kind": "api",
@@ -1589,7 +1589,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.DeleteRequestHistoryByFilterAsync",
       "workstream": "W0.2",
-      "notes": "Request History"
+      "notes": "Request History | used by RequestHistoryScreen"
     },
     {
       "kind": "api",
@@ -1597,7 +1597,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.DeleteRequestHistoryEntriesAsync",
       "workstream": "W0.2",
-      "notes": "Request History"
+      "notes": "Request History | used by RequestHistoryScreen"
     },
     {
       "kind": "api",
@@ -1605,7 +1605,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.DeleteRequestHistoryEntryAsync",
       "workstream": "W0.2",
-      "notes": "Request History"
+      "notes": "Request History | used by ActivityScreen, RequestHistoryScreen"
     },
     {
       "kind": "api",
@@ -1629,7 +1629,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.DeleteSignalsBatchAsync",
       "workstream": "W0.2",
-      "notes": "Signals"
+      "notes": "Signals | used by SignalsScreen"
     },
     {
       "kind": "api",
@@ -1645,7 +1645,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.DeleteTenantAsync",
       "workstream": "W0.2",
-      "notes": "Tenants (admin)"
+      "notes": "Tenants (admin) | used by TenantsScreen"
     },
     {
       "kind": "api",
@@ -1653,7 +1653,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.DeleteUserAsync",
       "workstream": "W0.2",
-      "notes": "Users (admin)"
+      "notes": "Users (admin) | used by UsersScreen"
     },
     {
       "kind": "api",
@@ -1725,7 +1725,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.DispatchMissionAsync",
       "workstream": "W0.2",
-      "notes": "Missions"
+      "notes": "Missions | used by SetupWizardScreen"
     },
     {
       "kind": "api",
@@ -1741,7 +1741,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.DownloadBackupAsync",
       "workstream": "W0.2",
-      "notes": "Backup / Restore"
+      "notes": "Backup / Restore | used by ServerSettingsScreen"
     },
     {
       "kind": "api",
@@ -1829,7 +1829,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.EnumerateHistoryTimelineAsync",
       "workstream": "W0.2",
-      "notes": "History"
+      "notes": "History | used by ActivityScreen"
     },
     {
       "kind": "api",
@@ -1989,7 +1989,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.GetDoctorAsync",
       "workstream": "W0.2",
-      "notes": "Status / Health"
+      "notes": "Status / Health | used by DiagnosticsScreen"
     },
     {
       "kind": "api",
@@ -2013,7 +2013,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.GetEventAsync",
       "workstream": "W0.2",
-      "notes": "Events"
+      "notes": "Events | used by EventsScreen"
     },
     {
       "kind": "api",
@@ -2069,7 +2069,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.GetHealthAsync",
       "workstream": "W0.2",
-      "notes": "Status / Health"
+      "notes": "Status / Health | used by ServerSettingsScreen"
     },
     {
       "kind": "api",
@@ -2117,7 +2117,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.GetMissionAsync",
       "workstream": "W0.2",
-      "notes": "Missions"
+      "notes": "Missions | used by SetupWizardScreen"
     },
     {
       "kind": "api",
@@ -2253,7 +2253,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.GetProxySessionContextAsync",
       "workstream": "W0.2",
-      "notes": "Auth"
+      "notes": "Auth | used by ServerSettingsScreen"
     },
     {
       "kind": "api",
@@ -2261,7 +2261,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.GetRebuildStatusAsync",
       "workstream": "W0.2",
-      "notes": "Server"
+      "notes": "Server | used by ServerSettingsScreen"
     },
     {
       "kind": "api",
@@ -2285,7 +2285,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.GetRequestHistoryEntryAsync",
       "workstream": "W0.2",
-      "notes": "Request History"
+      "notes": "Request History | used by ApiExplorerScreen, RequestHistoryScreen"
     },
     {
       "kind": "api",
@@ -2293,7 +2293,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.GetRequestHistorySummaryAsync",
       "workstream": "W0.2",
-      "notes": "Request History"
+      "notes": "Request History | used by RequestHistoryScreen"
     },
     {
       "kind": "api",
@@ -2317,7 +2317,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.GetSettingsAsync",
       "workstream": "W0.2",
-      "notes": "Settings"
+      "notes": "Settings | used by ServerSettingsScreen"
     },
     {
       "kind": "api",
@@ -2325,7 +2325,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.GetSignalAsync",
       "workstream": "W0.2",
-      "notes": "Signals"
+      "notes": "Signals | used by SignalsScreen"
     },
     {
       "kind": "api",
@@ -2349,7 +2349,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.GetTokenUsageAsync",
       "workstream": "W0.2",
-      "notes": "Missions"
+      "notes": "Missions | used by TokenUsageScreen"
     },
     {
       "kind": "api",
@@ -2365,7 +2365,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.GetVesselBranchesAsync",
       "workstream": "W0.2",
-      "notes": "Vessels"
+      "notes": "Vessels | used by ServerSettingsScreen"
     },
     {
       "kind": "api",
@@ -2413,7 +2413,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.GetVesselReadinessAsync",
       "workstream": "W0.2",
-      "notes": "Vessels"
+      "notes": "Vessels | used by SetupWizardScreen"
     },
     {
       "kind": "api",
@@ -2533,7 +2533,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.ListCaptainsAsync",
       "workstream": "W0.2",
-      "notes": "Captains"
+      "notes": "Captains | used by EventsScreen, SetupWizardScreen, SignalsScreen"
     },
     {
       "kind": "api",
@@ -2549,7 +2549,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.ListCredentialsAsync",
       "workstream": "W0.2",
-      "notes": "Credentials (admin)"
+      "notes": "Credentials (admin) | used by CredentialsScreen"
     },
     {
       "kind": "api",
@@ -2573,7 +2573,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.ListEnvironmentsAsync",
       "workstream": "W0.2",
-      "notes": "Environments"
+      "notes": "Environments | used by SetupWizardScreen"
     },
     {
       "kind": "api",
@@ -2581,7 +2581,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.ListEventsAsync",
       "workstream": "W0.2",
-      "notes": "Events"
+      "notes": "Events | used by EventsScreen"
     },
     {
       "kind": "api",
@@ -2589,7 +2589,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.ListFleetsAsync",
       "workstream": "W0.2",
-      "notes": "Fleets"
+      "notes": "Fleets | used by SetupWizardScreen"
     },
     {
       "kind": "api",
@@ -2621,7 +2621,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.ListJobsAsync",
       "workstream": "W0.2",
-      "notes": "Background jobs"
+      "notes": "Background jobs | used by JobsScreen"
     },
     {
       "kind": "api",
@@ -2669,7 +2669,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.ListMuxEndpointsAsync",
       "workstream": "W0.2",
-      "notes": "Vessel Health"
+      "notes": "Vessel Health | used by SetupWizardScreen"
     },
     {
       "kind": "api",
@@ -2685,7 +2685,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.ListObjectivesAsync",
       "workstream": "W0.2",
-      "notes": "Objectives"
+      "notes": "Objectives | used by ActivityScreen"
     },
     {
       "kind": "api",
@@ -2749,7 +2749,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.ListRequestHistoryAsync",
       "workstream": "W0.2",
-      "notes": "Request History"
+      "notes": "Request History | used by RequestHistoryScreen"
     },
     {
       "kind": "api",
@@ -2773,7 +2773,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.ListSignalsAsync",
       "workstream": "W0.2",
-      "notes": "Signals"
+      "notes": "Signals | used by SignalsScreen"
     },
     {
       "kind": "api",
@@ -2789,7 +2789,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.ListTenantsAsync",
       "workstream": "W0.2",
-      "notes": "Tenants (admin)"
+      "notes": "Tenants (admin) | used by CredentialsScreen, TenantsScreen, UsersScreen"
     },
     {
       "kind": "api",
@@ -2797,7 +2797,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.ListUsersAsync",
       "workstream": "W0.2",
-      "notes": "Users (admin)"
+      "notes": "Users (admin) | used by CredentialsScreen, UsersScreen"
     },
     {
       "kind": "api",
@@ -2805,7 +2805,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.ListVesselsAsync",
       "workstream": "W0.2",
-      "notes": "Vessels"
+      "notes": "Vessels | used by ActivityScreen, EventsScreen, ServerSettingsScreen, SetupWizardScreen"
     },
     {
       "kind": "api",
@@ -2821,7 +2821,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.ListWorkflowProfilesAsync",
       "workstream": "W0.2",
-      "notes": "Workflow Profiles"
+      "notes": "Workflow Profiles | used by SetupWizardScreen"
     },
     {
       "kind": "api",
@@ -2853,7 +2853,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.MarkSignalReadAsync",
       "workstream": "W0.2",
-      "notes": "Signals"
+      "notes": "Signals | used by SignalsScreen"
     },
     {
       "kind": "api",
@@ -2925,7 +2925,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.RebuildServerAsync",
       "workstream": "W0.2",
-      "notes": "Server"
+      "notes": "Server | used by ServerSettingsScreen"
     },
     {
       "kind": "api",
@@ -2989,7 +2989,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.ResetServerAsync",
       "workstream": "W0.2",
-      "notes": "Server"
+      "notes": "Server | used by ServerSettingsScreen"
     },
     {
       "kind": "api",
@@ -3029,7 +3029,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.RestartServerAsync",
       "workstream": "W0.2",
-      "notes": "Server"
+      "notes": "Server | used by ServerSettingsScreen"
     },
     {
       "kind": "api",
@@ -3037,7 +3037,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.RestoreBackupAsync",
       "workstream": "W0.2",
-      "notes": "Backup / Restore"
+      "notes": "Backup / Restore | used by ServerSettingsScreen"
     },
     {
       "kind": "api",
@@ -3069,7 +3069,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.RollbackServerAsync",
       "workstream": "W0.2",
-      "notes": "Server"
+      "notes": "Server | used by ServerSettingsScreen"
     },
     {
       "kind": "api",
@@ -3149,7 +3149,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.SendSignalAsync",
       "workstream": "W0.2",
-      "notes": "Signals"
+      "notes": "Signals | used by SignalsScreen"
     },
     {
       "kind": "api",
@@ -3213,7 +3213,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.StopServerAsync",
       "workstream": "W0.2",
-      "notes": "Server"
+      "notes": "Server | used by ServerSettingsScreen"
     },
     {
       "kind": "api",
@@ -3317,7 +3317,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.UpdateCredentialAsync",
       "workstream": "W0.2",
-      "notes": "Credentials (admin)"
+      "notes": "Credentials (admin) | used by CredentialsScreen"
     },
     {
       "kind": "api",
@@ -3469,7 +3469,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.UpdateSettingsAsync",
       "workstream": "W0.2",
-      "notes": "Settings"
+      "notes": "Settings | used by ServerSettingsScreen"
     },
     {
       "kind": "api",
@@ -3485,7 +3485,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.UpdateTenantAsync",
       "workstream": "W0.2",
-      "notes": "Tenants (admin)"
+      "notes": "Tenants (admin) | used by TenantsScreen"
     },
     {
       "kind": "api",
@@ -3493,7 +3493,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.UpdateUserAsync",
       "workstream": "W0.2",
-      "notes": "Users (admin)"
+      "notes": "Users (admin) | used by UsersScreen"
     },
     {
       "kind": "api",
@@ -3778,7 +3778,7 @@
     {
       "kind": "setting",
       "key": "settings.admiralPort",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -3786,7 +3786,7 @@
     {
       "kind": "setting",
       "key": "settings.autoCreatePr",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -3794,7 +3794,7 @@
     {
       "kind": "setting",
       "key": "settings.dataDirectory",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -3802,7 +3802,7 @@
     {
       "kind": "setting",
       "key": "settings.databasePath",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -3810,7 +3810,7 @@
     {
       "kind": "setting",
       "key": "settings.docksDirectory",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -3818,7 +3818,7 @@
     {
       "kind": "setting",
       "key": "settings.fleetActions.defaultTimeoutSeconds",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -3826,7 +3826,7 @@
     {
       "kind": "setting",
       "key": "settings.fleetActions.maxConcurrency",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -3834,7 +3834,7 @@
     {
       "kind": "setting",
       "key": "settings.fleetActions.maxOutputBytes",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -3842,7 +3842,7 @@
     {
       "kind": "setting",
       "key": "settings.fleetActions.runRetentionDays",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -3850,7 +3850,7 @@
     {
       "kind": "setting",
       "key": "settings.heartbeatIntervalSeconds",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -3858,7 +3858,7 @@
     {
       "kind": "setting",
       "key": "settings.idleCaptainTimeoutSeconds",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -3866,7 +3866,7 @@
     {
       "kind": "setting",
       "key": "settings.import.allowedRoots",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -3874,7 +3874,7 @@
     {
       "kind": "setting",
       "key": "settings.import.categorizationTimeoutMinutes",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -3882,7 +3882,7 @@
     {
       "kind": "setting",
       "key": "settings.import.excludedDirectoryNames",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -3890,7 +3890,7 @@
     {
       "kind": "setting",
       "key": "settings.import.inlineBatchLimit",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -3898,7 +3898,7 @@
     {
       "kind": "setting",
       "key": "settings.import.maxDepth",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -3906,7 +3906,7 @@
     {
       "kind": "setting",
       "key": "settings.logDirectory",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -3914,7 +3914,7 @@
     {
       "kind": "setting",
       "key": "settings.maxCaptains",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -3922,7 +3922,7 @@
     {
       "kind": "setting",
       "key": "settings.mcpPort",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -3930,7 +3930,7 @@
     {
       "kind": "setting",
       "key": "settings.planningSessionAbandonmentTimeoutMinutes",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -3938,7 +3938,7 @@
     {
       "kind": "setting",
       "key": "settings.planningSessionInactivityTimeoutMinutes",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -3946,7 +3946,7 @@
     {
       "kind": "setting",
       "key": "settings.planningSessionRetentionDays",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -3954,7 +3954,7 @@
     {
       "kind": "setting",
       "key": "settings.rebuildSlotRetentionCount",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -3962,7 +3962,7 @@
     {
       "kind": "setting",
       "key": "settings.remoteControl.allowInvalidCertificates",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -3970,7 +3970,7 @@
     {
       "kind": "setting",
       "key": "settings.remoteControl.connectTimeoutSeconds",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -3978,7 +3978,7 @@
     {
       "kind": "setting",
       "key": "settings.remoteControl.enabled",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -3986,7 +3986,7 @@
     {
       "kind": "setting",
       "key": "settings.remoteControl.enrollmentToken",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -3994,7 +3994,7 @@
     {
       "kind": "setting",
       "key": "settings.remoteControl.heartbeatIntervalSeconds",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -4002,7 +4002,7 @@
     {
       "kind": "setting",
       "key": "settings.remoteControl.instanceId",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -4010,7 +4010,7 @@
     {
       "kind": "setting",
       "key": "settings.remoteControl.password",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -4018,7 +4018,7 @@
     {
       "kind": "setting",
       "key": "settings.remoteControl.reconnectBaseDelaySeconds",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -4026,7 +4026,7 @@
     {
       "kind": "setting",
       "key": "settings.remoteControl.reconnectMaxDelaySeconds",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -4034,7 +4034,7 @@
     {
       "kind": "setting",
       "key": "settings.remoteControl.tunnelUrl",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -4042,7 +4042,7 @@
     {
       "kind": "setting",
       "key": "settings.reposDirectory",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -4050,7 +4050,7 @@
     {
       "kind": "setting",
       "key": "settings.repositoryHealth.dependencyCommandTimeoutSeconds",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -4058,7 +4058,7 @@
     {
       "kind": "setting",
       "key": "settings.repositoryHealth.dependencyMaxAgeHours",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -4066,7 +4066,7 @@
     {
       "kind": "setting",
       "key": "settings.repositoryHealth.fetchBeforeEvaluate",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -4074,7 +4074,7 @@
     {
       "kind": "setting",
       "key": "settings.repositoryHealth.intervalMinutes",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -4082,7 +4082,7 @@
     {
       "kind": "setting",
       "key": "settings.repositoryHealth.maxConcurrency",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -4090,7 +4090,7 @@
     {
       "kind": "setting",
       "key": "settings.repositoryHealth.missionWindowDays",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -4098,7 +4098,7 @@
     {
       "kind": "setting",
       "key": "settings.repositoryHealth.scoredCriteria",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -4106,7 +4106,7 @@
     {
       "kind": "setting",
       "key": "settings.repositoryHealth.staleBranchDays",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -4114,7 +4114,7 @@
     {
       "kind": "setting",
       "key": "settings.repositoryHealth.thresholds.behindFail",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -4122,7 +4122,7 @@
     {
       "kind": "setting",
       "key": "settings.repositoryHealth.thresholds.behindWarn",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -4130,7 +4130,7 @@
     {
       "kind": "setting",
       "key": "settings.repositoryHealth.thresholds.missionFailureFail",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -4138,7 +4138,7 @@
     {
       "kind": "setting",
       "key": "settings.repositoryHealth.thresholds.missionFailureWarn",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -4146,7 +4146,7 @@
     {
       "kind": "setting",
       "key": "settings.repositoryHealth.thresholds.staleBranchFail",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -4154,7 +4154,7 @@
     {
       "kind": "setting",
       "key": "settings.repositoryHealth.thresholds.staleBranchWarn",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -4162,7 +4162,7 @@
     {
       "kind": "setting",
       "key": "settings.retention",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -4170,7 +4170,7 @@
     {
       "kind": "setting",
       "key": "settings.retention.askThreadArchiveAfterDays",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -4178,7 +4178,7 @@
     {
       "kind": "setting",
       "key": "settings.retention.askThreadDeleteAfterDays",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -4186,7 +4186,7 @@
     {
       "kind": "setting",
       "key": "settings.retention.importBatchRetentionDays",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -4194,7 +4194,7 @@
     {
       "kind": "setting",
       "key": "settings.retention.jobRetentionDays",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -4202,7 +4202,7 @@
     {
       "kind": "setting",
       "key": "settings.selfVesselId",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
@@ -4210,7 +4210,7 @@
     {
       "kind": "setting",
       "key": "settings.stallThresholdMinutes",
-      "status": "planned",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
