@@ -112,6 +112,34 @@ namespace Test.Shared.Infrastructure
         /// </summary>
         public string DetailBackKey { get; set; } = "alt+left";
 
+        /// <summary>
+        /// Builds the stub server for the flow, or null for <see cref="TuiEntityFixtures.Server"/> (the BUILD screens use
+        /// <c>BuildStubs.Server</c> for their reference lists).
+        /// </summary>
+        public Func<StubHttpHandler>? ServerFactory { get; set; } = null;
+
+        /// <summary>
+        /// Checks the requests the flow made, after the flow (structured: <see cref="StubHttpHandler.RequestsFor"/>,
+        /// <see cref="StubHttpHandler.LastBody{T}"/>, <see cref="StubRequest.QueryValue"/>), or null.
+        /// </summary>
+        public Action<StubHttpHandler>? VerifyRequests { get; set; } = null;
+
+        /// <summary>
+        /// For screens that filter on the server (after a debounce): true once the stub has seen the filtered request.
+        /// The flow waits for it after typing the filter. Null for screens that filter locally.
+        /// </summary>
+        public Func<StubHttpHandler, bool>? ServerFilterSeen { get; set; } = null;
+
+        /// <summary>
+        /// Terminal width for the flow.
+        /// </summary>
+        public int Width { get; set; } = 160;
+
+        /// <summary>
+        /// Terminal height for the flow.
+        /// </summary>
+        public int Height { get; set; } = 48;
+
         #endregion
 
         #region Public-Methods

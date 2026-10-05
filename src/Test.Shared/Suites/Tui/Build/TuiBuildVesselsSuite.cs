@@ -240,7 +240,12 @@ namespace Test.Shared.Suites.Tui.Build
             return (TUIKit.Widgets.IWidget)dialog.Form.Rows.First(r => r.Label == label).Field!;
         }
 
-        private static StubHttpHandler Stub()
+        /// <summary>
+        /// The vessels stub: sync, branches, readiness, landing preview, and missions for vsl_demo. Also used by
+        /// Tui.KeyboardFlows.Build.
+        /// </summary>
+        /// <returns>Stub.</returns>
+        internal static StubHttpHandler Stub()
         {
             StubHttpHandler stub = BuildStubs.Server();
             stub.Json("GET", "/api/v1/vessels/vsl_demo/git-status", "{\"VesselId\":\"vsl_demo\",\"CommitsAhead\":2,\"CommitsBehind\":0}");
