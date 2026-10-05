@@ -196,6 +196,18 @@ namespace Armada.Tui.Screens.Build
         public override bool CanFocus { get; set; } = true;
 
         /// <inheritdoc />
+        public override IReadOnlyList<KeyValuePair<string, string>> TypingHints
+        {
+            get
+            {
+                List<KeyValuePair<string, string>> hints = new List<KeyValuePair<string, string>>();
+                foreach (OpsScreenAction a in _Actions.Where(a => a.Key != null && a.Available && KeyGesture.WorksWhileTyping(a.Key)).Take(5))
+                    hints.Add(new KeyValuePair<string, string>(KeyLabel(a.Key!), a.Label));
+                return hints;
+            }
+        }
+
+        /// <inheritdoc />
         public override IReadOnlyList<KeyValuePair<string, string>> Hints
         {
             get

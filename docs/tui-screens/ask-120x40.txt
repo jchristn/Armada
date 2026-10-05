@@ -35,6 +35,6 @@
 |                      ||                                                                                              |
 |                      ||----------------------------------------------------------------------------------------------|
 |                      ||>  Message the captain, or type / for quick actions                                           |
-|                      ||[ ] Show thinking (Alt+T)   / Quick actions   Ctrl+E Editor   AI can make mistak... Enter Send|
+|                      ||[typing]  [ ] Show thinking (Alt+T)   / Quick actions   Ctrl+E Editor   AI can m... Enter Send|
 +----------------------++----------------------------------------------------------------------------------------------+
- Enter Send  Ctrl+J Newline  / Quick actions  Esc Messages  ? Help  Ctrl+K Palette  F10 Menu  Tab Next pane      manual
+ Esc Leave the message box  Enter Send  Ctrl+J Newline  / Quick actions  F1 Help  Ctrl+K Palette  F10 Menu       manual

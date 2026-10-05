@@ -16,6 +16,7 @@ namespace Test.Shared.Suites.Tui
     using Test.Shared.Infrastructure;
     using Test.Shared.Infrastructure.ApiSurface;
     using Touchstone.Core;
+    using TUIKit;
     using static Test.Shared.Infrastructure.Asserts;
 
     /// <summary>
@@ -333,7 +334,54 @@ namespace Test.Shared.Suites.Tui
                 }
             }));
 
+            cases.Add(TuiCase.Sync(Suite, "mouse_buttons", "Rows carry clickable [Approve] / [Reject] / [Deny] buttons that run the same confirmation and call as the keys, on their own row", () =>
+            {
+                AskFixtures fx = new AskFixtures();
+                fx.AddThread(AskFixtures.Thread("ath_2", "Greeting rollout"));
+                AskActionProposal p = AskFixtures.Proposal("aap_7", "ath_2", "dispatch", AskProposalStatusEnum.Pending);
+                fx.Decisions(p);
+                fx.Stub.Json("GET", "/api/v1/inbox", "[{\"Kind\":\"deployment_approval\",\"Severity\":\"Warning\",\"Title\":\"Deploy to Staging: Release 2.3 hotfix\",\"EntityName\":\"Staging\",\"EnvironmentName\":\"Staging\",\"DeploymentTitle\":\"Release 2.3 hotfix\",\"Detail\":\"v1.2\",\"EntityType\":\"deployment\",\"EntityId\":\"dpl_1\",\"Href\":\"/deployments/dpl_1\"}]");
+                fx.Stub.Json("POST", "/api/v1/deployments/dpl_1/deny", "{\"Id\":\"dpl_1\",\"Title\":\"Release 2.3 hotfix\",\"EnvironmentName\":\"Staging\"}");
+                using (TuiTestHost host = TuiCase.SignedIn(140, 45, "/approvals", fx.Stub))
+                {
+                    host.PumpUntil(() => host.Tui.Ask.Threads.Count == 1);
+                    host.Tui.ApprovalSources.SyncInbox();
+                    host.Tui.Context.Status.PollAllAsync().GetAwaiter().GetResult();
+                    host.Tui.Context.Events.Inject(AskFixtures.Event("ask.proposal", new AskProposalEvent { ThreadId = "ath_2", Proposal = p }));
+                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Approvals.Count == 2), "a deployment and a proposal are queued");
+                    ApprovalsScreen screen = (ApprovalsScreen)host.Tui.Shell.Screen!;
+                    string frame = host.Screen();
+                    TuiCase.Contains(frame, "[Approve] a  [Reject] r  [Arguments] x", "proposal row buttons with their keys");
+                    TuiCase.Contains(frame, "[Approve] a  [Deny] d", "deployment row buttons with their keys");
+
+                    // Keyboard focus is in the sidebar and the cursor is on the other row: the click still acts on the
+                    // button's own row.
+                    host.Tui.Shell.FocusPane("sidebar");
+                    ApprovalItem proposal = host.Tui.Context.Approvals.Items.First(i => i.Kind == ApprovalKindEnum.AskProposal);
+                    ApprovalItem deployment = host.Tui.Context.Approvals.Items.First(i => i.Kind == ApprovalKindEnum.DeploymentApproval);
+                    ClickButton(host, screen, deployment.Key, 'd');
+                    AssertTrue(host.PumpUntil(() => host.App.Modals.IsActive), "Deny asks for the same confirmation as d");
+                    TuiCase.Contains(host.Screen(), "Deny \"Deploy to Staging: Release 2.3 hotfix\" without executing it?", "deny confirmation text");
+                    host.Press("y");
+                    AssertTrue(host.PumpUntil(() => fx.Stub.CountFor("POST", "/api/v1/deployments/dpl_1/deny") == 1), "deny call");
+
+                    host.Pump();
+                    ClickButton(host, screen, proposal.Key, 'a');
+                    AssertTrue(host.PumpUntil(() => fx.Stub.CountFor("POST", "/api/v1/ask/threads/ath_2/proposals/aap_7/approve") == 1), "Approve sends the approve call");
+                    AssertEqual(0, fx.Stub.CountFor("POST", "/api/v1/ask/threads/ath_2/proposals/aap_7/reject"), "no reject");
+                }
+            }));
+
             return new TestSuiteDescriptor(suiteId: Suite, displayName: "TUI approvals center", cases: cases);
+        }
+
+        private static void ClickButton(TuiTestHost host, ApprovalsScreen screen, string itemKey, char decision)
+        {
+            host.Screen();
+            ApprovalButton? button = screen.Buttons().FirstOrDefault(b => b.ItemKey == itemKey && b.DecisionKey == decision);
+            if (button == null) throw new AssertionException("no '" + decision + "' button for " + itemKey + "\n" + host.Screen());
+            Rect main = host.Tui.Shell.LastLayout!.MainInner;
+            host.Click(main.X + button.Area.X + 1, main.Y + button.Area.Y);
         }
 
         private static TuiTestHost Host(out StubHttpHandler stub)

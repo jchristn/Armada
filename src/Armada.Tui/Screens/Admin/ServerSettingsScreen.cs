@@ -306,6 +306,19 @@ namespace Armada.Tui.Screens.Admin
         #region Public-Methods
 
         /// <inheritdoc />
+        public override IReadOnlyList<KeyValuePair<string, string>> TypingHints
+        {
+            get
+            {
+                return new List<KeyValuePair<string, string>>
+                {
+                    new KeyValuePair<string, string>("Ctrl+S", "Save section"),
+                    new KeyValuePair<string, string>("Ctrl+R", "Reveal")
+                };
+            }
+        }
+
+        /// <inheritdoc />
         public override IReadOnlyList<KeyValuePair<string, string>> Hints
         {
             get

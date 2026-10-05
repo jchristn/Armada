@@ -10,6 +10,7 @@ namespace Test.Shared.Infrastructure
     using Armada.Tui.Services;
     using Armada.Tui.Services.Credentials;
     using TUIKit.Hosting;
+    using TUIKit.Input;
     using TUIKit.Terminal;
 
     /// <summary>
@@ -68,6 +69,7 @@ namespace Test.Shared.Infrastructure
             ["pgup"] = "\u001b[5~", ["pgdn"] = "\u001b[6~", ["del"] = "\u001b[3~", ["backspace"] = "\u007f", ["f1"] = "\u001bOP",
             ["f2"] = "\u001bOQ", ["f5"] = "\u001b[15~", ["f6"] = "\u001b[17~", ["f10"] = "\u001b[21~", ["f12"] = "\u001b[24~",
             ["alt+left"] = "\u001b[1;3D", ["alt+right"] = "\u001b[1;3C", ["shift+up"] = "\u001b[1;2A", ["shift+down"] = "\u001b[1;2B",
+            ["alt+up"] = "\u001b[1;3A", ["alt+down"] = "\u001b[1;3B",
             ["space"] = " "
         };
 
@@ -171,6 +173,26 @@ namespace Test.Shared.Infrastructure
         public TuiTestHost Type(string text)
         {
             Backend.FeedInput(text);
+            Pump();
+            return this;
+        }
+
+        /// <summary>
+        /// Click the left mouse button at a cell (zero-based): a press and a release delivered to the shell the way
+        /// TUIKit routes them to the widget bound to the full-screen "shell" region (whose origin is the terminal's,
+        /// so the coordinates are unchanged). The headless host never composes through TUIKit's renderer, so its
+        /// hit-test map is empty and raw SGR input would not be routed.
+        /// </summary>
+        /// <param name="x">Column.</param>
+        /// <param name="y">Row.</param>
+        /// <returns>This host.</returns>
+        public TuiTestHost Click(int x, int y)
+        {
+            Pump();
+            TuiSnapshot.Render(Tui.Shell, App, Width, Height);
+            Tui.Shell.HandleMouse(new MouseEvent(MouseEventKind.Press, MouseButton.Left, x, y, KeyModifiers.None, 1));
+            Pump();
+            Tui.Shell.HandleMouse(new MouseEvent(MouseEventKind.Release, MouseButton.Left, x, y, KeyModifiers.None, 0));
             Pump();
             return this;
         }

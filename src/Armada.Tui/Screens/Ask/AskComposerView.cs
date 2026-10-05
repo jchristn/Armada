@@ -22,9 +22,15 @@ namespace Armada.Tui.Screens.Ask
     /// the import route, and anything else runs at once. The footer carries Show thinking, the quick actions hint, the
     /// send or stop state, and "AI can make mistakes. Check answers." Not thread-safe.
     /// </summary>
-    public class AskComposerView : ArmadaWidget, IPasteTarget
+    public class AskComposerView : ArmadaWidget, IPasteTarget, ITextEntry
     {
         #region Public-Members
+
+        /// <inheritdoc />
+        public virtual bool AcceptsText
+        {
+            get { return true; }
+        }
 
         /// <summary>
         /// The editor.
@@ -76,6 +82,11 @@ namespace Armada.Tui.Screens.Ask
         /// Raised when <c>Esc</c> is not used by the composer (the screen handles stop and focus).
         /// </summary>
         public event EventHandler? EscapePressed;
+
+        /// <summary>
+        /// Raised after the draft was sent to the captain (the screen returns the transcript to the live tail).
+        /// </summary>
+        public event EventHandler? Sent;
 
         #endregion
 
@@ -164,6 +175,7 @@ namespace Armada.Tui.Screens.Ask
             if (!_Ask.Send(text)) return false;
             Text = "";
             _HistoryIndex = -1;
+            Sent?.Invoke(this, EventArgs.Empty);
             return true;
         }
 
@@ -417,6 +429,15 @@ namespace Armada.Tui.Screens.Ask
 
             int rw = TextCells.Width(right);
             int x = 0;
+            if (IsFocused)
+            {
+                // Not color alone: while the composer has focus it says so in words, so it is clear that letters type
+                // here and single-key shortcuts wait until Esc.
+                string marker = TypingMarker.Text(Localizer);
+                x += SurfaceText.Draw(surface, x, y, marker, TypingMarker.Style(Theme), width - rw - 1 - x);
+                x += SurfaceText.Draw(surface, x, y, "  ", Theme.Muted, width - rw - 1 - x);
+            }
+
             x += SurfaceText.Draw(surface, x, y, (_Ask.ShowThinking ? "[x] " : "[ ] ") + T("Show thinking") + " (Alt+T)   ", Theme.Muted, width - rw - 1 - x);
             x += SurfaceText.Draw(surface, x, y, "/ " + T("Quick actions") + "   Ctrl+E " + T("Editor") + "   ", Theme.Muted, width - rw - 1 - x);
             SurfaceText.Draw(surface, x, y, T("AI can make mistakes. Check answers."), Theme.Muted, width - rw - 1 - x);

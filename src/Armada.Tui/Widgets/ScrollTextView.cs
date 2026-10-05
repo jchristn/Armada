@@ -13,7 +13,7 @@ namespace Armada.Tui.Widgets
     /// with Up/Down/PgUp/PgDn/Home/End and the wheel, searches with <c>/</c> or <c>Ctrl+F</c> (<c>n</c>/<c>N</c> for
     /// next/previous), and optionally follows the tail. Not thread-safe.
     /// </summary>
-    public abstract class ScrollTextView : ArmadaWidget
+    public abstract class ScrollTextView : ArmadaWidget, IFocusHintSource
     {
         #region Public-Members
 
@@ -119,6 +119,14 @@ namespace Armada.Tui.Widgets
             _Match = -1;
             EnsureWrapped(_WrappedWidth > 0 ? _WrappedWidth : 80);
             return FindNext(true);
+        }
+
+        /// <inheritdoc />
+        public FocusHints? GetFocusHints()
+        {
+            // While the search prompt is open, keys type into it; otherwise the screen's hints apply.
+            if (_Searching) return FocusHints.Typing("Esc", "Cancel search").Add("Enter", "Find");
+            return null;
         }
 
         /// <inheritdoc />

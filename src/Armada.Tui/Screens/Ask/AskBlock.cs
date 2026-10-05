@@ -73,6 +73,12 @@ namespace Armada.Tui.Screens.Ask
         public List<string?> RowRoutes { get; set; } = new List<string?>();
 
         /// <summary>
+        /// Clickable confirm card buttons, with <see cref="AskCardButton.Line"/> relative to <see cref="Lines"/>. Never
+        /// null.
+        /// </summary>
+        public List<AskCardButton> Buttons { get; set; } = new List<AskCardButton>();
+
+        /// <summary>
         /// The block can take focus.
         /// </summary>
         public bool Focusable { get; set; } = true;

@@ -16,9 +16,14 @@ namespace Armada.Tui.Widgets
     /// (<see cref="Escaped"/>), and every change raises <see cref="Changed"/>. Select filters use an empty string for
     /// "all". Not thread-safe.
     /// </summary>
-    public class FilterBar : ContainerWidget
+    public class FilterBar : ContainerWidget, IFocusHintSource
     {
         #region Public-Members
+
+        /// <summary>
+        /// English status bar description of where <c>Esc</c> takes focus. Default "Back to the list".
+        /// </summary>
+        public string ExitLabel { get; set; } = "Back to the list";
 
         /// <summary>
         /// Filter keys in display order.
@@ -252,6 +257,12 @@ namespace Armada.Tui.Widgets
             if (_Items.Count == 0) return 0;
             List<Rect> rects = Layout(width);
             return rects.Count == 0 ? 0 : rects.Max(r => r.Y) + 1;
+        }
+
+        /// <inheritdoc />
+        public FocusHints? GetFocusHints()
+        {
+            return FilterRowHints.For(Scope.Focused, ExitLabel);
         }
 
         /// <inheritdoc />

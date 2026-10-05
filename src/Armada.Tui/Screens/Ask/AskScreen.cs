@@ -3,6 +3,7 @@ namespace Armada.Tui.Screens.Ask
     using System;
     using System.Collections.Generic;
     using System.Linq;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Tui.Ask;
     using Armada.Tui.Input;
@@ -21,6 +22,9 @@ namespace Armada.Tui.Screens.Ask
     /// lives in <see cref="AskController"/>, so leaving and returning keeps the conversation, its live turn, and the
     /// draft. Below 100 columns the list becomes an overlay toggled with <c>Ctrl+T</c>. <c>Esc</c> in the composer moves
     /// to the transcript (focusing the newest pending card); pressed twice while a turn runs it stops the turn.
+    /// <c>Alt+Down</c> from anywhere on the screen focuses the oldest pending card. While a proposal in the open
+    /// conversation awaits approval, a strip above the composer says how many and how to decide, worded for where focus
+    /// is, and the status bar hints follow the focused control (<see cref="ResolveHints"/>).
     /// Not thread-safe.
     /// </summary>
     public class AskScreen : ScreenBase
@@ -86,44 +90,19 @@ namespace Armada.Tui.Screens.Ask
             get { return "Ask Armada"; }
         }
 
+        /// <summary>
+        /// Proposals in the open conversation waiting for a decision (not counting one whose approve or reject call
+        /// is already in flight).
+        /// </summary>
+        public int PendingApprovals
+        {
+            get { return Ask.Conversation.PendingProposals().Count(p => !Ask.IsProposalBusy(p.Id)); }
+        }
+
         /// <inheritdoc />
         public override IReadOnlyList<KeyValuePair<string, string>> Hints
         {
-            get
-            {
-                List<KeyValuePair<string, string>> hints = new List<KeyValuePair<string, string>>();
-                IWidget? focused = Scope.Focused;
-                if (ReferenceEquals(focused, Composer))
-                {
-                    hints.Add(Hint("Enter", "Send"));
-                    hints.Add(Hint("Ctrl+J", "Newline"));
-                    hints.Add(Hint("/", "Quick actions"));
-                    if (Ask.Conversation.TurnActive) hints.Add(Hint("Ctrl+C", "Stop"));
-                    hints.Add(Hint("Esc", "Messages"));
-                }
-                else if (ReferenceEquals(focused, Transcript))
-                {
-                    hints.Add(Hint("Up/Down", "Focus"));
-                    hints.Add(Hint("a/r", "Approve/Reject"));
-                    hints.Add(Hint("x", "Arguments"));
-                    hints.Add(Hint("Enter", "Open"));
-                    hints.Add(Hint("End", "Live tail"));
-                }
-                else if (ReferenceEquals(focused, ThreadList))
-                {
-                    hints.Add(Hint("Enter", "Open"));
-                    hints.Add(Hint("n", "New"));
-                    hints.Add(Hint("/", "Search"));
-                    hints.Add(Hint(".", "Actions"));
-                }
-                else if (Form != null && ReferenceEquals(focused, Form))
-                {
-                    hints.Add(Hint("Ctrl+S", "Submit"));
-                    hints.Add(Hint("Esc", "Cancel"));
-                }
-
-                return hints;
-            }
+            get { return ResolveHints(null, false).Keys; }
         }
 
         #endregion
@@ -154,6 +133,7 @@ namespace Armada.Tui.Screens.Ask
             TitleInput.MaxLength = 200;
             Composer.FormRequested += (s, action) => OpenForm(action);
             Composer.EscapePressed += (s, e) => OnComposerEscape();
+            Composer.Sent += (s, e) => Transcript.ReturnToTail();
             ThreadList.CloseRequested += (s, e) => CloseOverlay();
             Ask.DraftChanged += OnDraftChanged;
             RebuildScope(Composer);
@@ -207,6 +187,7 @@ namespace Armada.Tui.Screens.Ask
             list.Add(Cmd("ask.screen.delete", "Delete conversation", () => { if (Ask.Conversation.Thread != null) Ask.Delete(Ask.Conversation.Thread); }, hasThread));
             list.Add(Cmd("ask.screen.work", "Next tracked work", () => NextWork(), () => Ask.Conversation.TrackedWork.Count > 0, "w"));
             list.Add(Cmd("ask.screen.threads", "Toggle conversation list", () => ToggleList(), null, "ctrl+t"));
+            list.Add(Cmd("ask.screen.review-approval", "Go to the oldest action waiting for approval", () => FocusOldestPending(), () => PendingApprovals > 0, "alt+down"));
             list.Add(Cmd("ask.screen.stop", "Stop the captain", () => Ask.StopTurn(), () => Ask.Conversation.TurnActive, "ctrl+c"));
             list.Add(Cmd("ask.screen.thinking", "Toggle show thinking", () => Ask.ToggleShowThinking(), null, "alt+t", "ctrl+shift+t"));
             list.Add(Cmd("ask.screen.quick", "Quick actions...", () => { Scope.Focus(Composer); Composer.Text = "/"; }, null));
@@ -251,6 +232,114 @@ namespace Armada.Tui.Screens.Ask
             if (Form == null) return;
             Form = null;
             RebuildScope(Composer);
+        }
+
+        /// <inheritdoc />
+        public override FocusHints ResolveHints(FocusHints? inner, bool textEntry)
+        {
+            IWidget? focused = Scope.Focused;
+            int pending = PendingApprovals;
+            if (EditingTitle)
+            {
+                return FocusHints.Typing("Esc", "Cancel rename").Add("Enter", "Save");
+            }
+
+            if (ReferenceEquals(focused, Composer))
+            {
+                FocusHints hints = FocusHints.Typing("Esc", pending > 0 ? "Leave the message box (then a approve, r reject)" : "Leave the message box");
+                if (pending > 0) hints.Add("Alt+Down", "Go to approval");
+                hints.Add("Enter", "Send");
+                hints.Add("Ctrl+J", "Newline");
+                hints.Add("/", "Quick actions");
+                if (Ask.Conversation.TurnActive) hints.Add("Ctrl+C", "Stop");
+                return hints;
+            }
+
+            if (ReferenceEquals(focused, Transcript))
+            {
+                if (Transcript.Searching) return FocusHints.Typing("Esc", "Cancel search").Add("Enter", "Find");
+                FocusHints hints = new FocusHints();
+                AskBlock? block = Transcript.Selected();
+                AskActionProposal? proposal = block?.Proposal;
+                if (proposal != null && proposal.Status == AskProposalStatusEnum.Pending && !Ask.IsProposalBusy(proposal.Id))
+                {
+                    hints.Add("a", "Approve").Add("r", "Reject").Add("x", "Arguments").Add("y", "Copy");
+                }
+                else if (proposal != null)
+                {
+                    hints.Add("x", "Arguments").Add("y", "Copy");
+                }
+                else if (block != null && block.WorkId != null)
+                {
+                    hints.Add("Enter", "Open").Add("o/l/d", "PR/Log/Diff");
+                }
+                else
+                {
+                    if (pending > 0) hints.Add("Alt+Down", "Go to approval");
+                    hints.Add("Enter", "Open");
+                }
+
+                hints.Add("Up/Down", "Select");
+                hints.Add("Esc", "Back to the message box");
+                hints.Add("End", "Live tail");
+                return hints;
+            }
+
+            if (ReferenceEquals(focused, ThreadList))
+            {
+                if (ThreadList.RenamingId != null) return FocusHints.Typing("Esc", "Cancel rename").Add("Enter", "Save");
+                if (ThreadList.SearchFocused) return FocusHints.Typing("Esc", "Back to the list").Add("Enter", "Search");
+                return new FocusHints().Add("Enter", "Open").Add("n", "New").Add("/", "Search").Add(".", "Actions");
+            }
+
+            if (Form != null && ReferenceEquals(focused, Form))
+            {
+                FocusHints hints = new FocusHints(textEntry).Add("Esc", "Cancel").Add("Ctrl+S", "Submit");
+                if (inner != null) hints.AddRange(inner.Keys);
+                else hints.Add("Tab", "Next field");
+                return hints;
+            }
+
+            return new FocusHints(textEntry);
+        }
+
+        /// <summary>
+        /// Focus the transcript on the oldest action waiting for approval (<c>Alt+Down</c>, from anywhere on the
+        /// screen, including the composer).
+        /// </summary>
+        /// <returns>True when a pending card was focused.</returns>
+        public bool FocusOldestPending()
+        {
+            if (EditingTitle) EndTitleEdit(false);
+            if (Form != null) CloseForm();
+            Scope.Focus(Transcript);
+            return Transcript.SelectOldestPending();
+        }
+
+        /// <summary>
+        /// The pending-approval strip shown above the composer, worded for where focus is (from the composer: Esc
+        /// first; on a selected pending card: a or r; elsewhere: Alt+Down), or null when nothing in this conversation
+        /// waits for approval.
+        /// </summary>
+        /// <returns>Localized text or null.</returns>
+        public string? PendingStripText()
+        {
+            int pending = PendingApprovals;
+            if (pending == 0) return null;
+            Dictionary<string, object?> args = Services.LocalizationArgs.Of("count", pending);
+            IWidget? focused = Scope.Focused;
+            if (ReferenceEquals(focused, Composer) && !EditingTitle)
+            {
+                return Context.Loc.T("{count, plural, one {# action waiting for approval: Esc, then a to approve or r to reject (Ctrl+A for all)} other {# actions waiting for approval: Esc, then a to approve or r to reject (Ctrl+A for all)}}", args);
+            }
+
+            AskActionProposal? selected = Transcript.Selected()?.Proposal;
+            if (ReferenceEquals(focused, Transcript) && !Transcript.Searching && selected != null && selected.Status == AskProposalStatusEnum.Pending)
+            {
+                return Context.Loc.T("{count, plural, one {# action waiting for approval: a to approve or r to reject (Ctrl+A for all)} other {# actions waiting for approval: a to approve or r to reject (Ctrl+A for all)}}", args);
+            }
+
+            return Context.Loc.T("{count, plural, one {# action waiting for approval: Alt+Down to review it (Ctrl+A for all)} other {# actions waiting for approval: Alt+Down to review the oldest (Ctrl+A for all)}}", args);
         }
 
         /// <summary>
@@ -362,7 +451,11 @@ namespace Armada.Tui.Screens.Ask
             int top = RenderHeader(surface, x0, cw);
             int composerHeight = Math.Min(Composer.PreferredHeight(cw), Math.Max(3, height / 3));
             int formHeight = Form != null ? Math.Min(Form.PreferredHeight, Math.Max(6, (height - top - composerHeight) * 2 / 3)) : 0;
-            int transcriptHeight = Math.Max(1, height - top - composerHeight - formHeight - 1);
+            string? strip = PendingStripText();
+            // Wraps to a second row in narrow terminals so the keys at its end are never cut off.
+            List<string> stripLines = strip != null ? TextCells.Wrap("! " + strip, Math.Max(10, cw - 2)).Take(2).ToList() : new List<string>();
+            int stripHeight = stripLines.Count;
+            int transcriptHeight = Math.Max(1, height - top - composerHeight - formHeight - stripHeight - 1);
             if (Ask.ConvError != null)
             {
                 RenderConvError(surface, x0, top, cw, transcriptHeight);
@@ -383,6 +476,16 @@ namespace Armada.Tui.Screens.Ask
             if (_EscapeHint != null && Ask.Conversation.TurnActive) sep = "-- " + T(_EscapeHint) + " " + new string('-', cw);
             SurfaceText.Draw(surface, x0, y2, sep, Theme.Border, cw);
             y2++;
+            foreach (string stripLine in stripLines)
+            {
+                // Directly above the composer, so whoever is typing sees what waits on them and how to act on it;
+                // "!" and bold keep it readable without color.
+                CellStyle stripStyle = Theme.Warning.WithAttribute(CellAttributes.Bold, true);
+                SurfaceText.FillRow(surface, x0, y2, cw, Theme.Text);
+                SurfaceText.Draw(surface, x0 + 1, y2, stripLine, stripStyle, cw - 2);
+                y2++;
+            }
+
             if (Form != null)
             {
                 Scope.RenderChild(surface, Form, new Rect(x0, y2, cw, formHeight));
@@ -412,11 +515,6 @@ namespace Armada.Tui.Screens.Ask
         #endregion
 
         #region Private-Methods
-
-        private static KeyValuePair<string, string> Hint(string key, string label)
-        {
-            return new KeyValuePair<string, string>(key, label);
-        }
 
         private ArmadaCommand Cmd(string id, string title, Action handler, Func<bool>? enabled, params string[] gestures)
         {

@@ -19,7 +19,8 @@ namespace Armada.Tui.Shell
     /// one-cell border, drawn in the theme's focus color around the pane that holds keyboard focus (or along the
     /// stretch of the main border beside the focused sub-region; see <see cref="FocusFrame"/>). It is bound to one
     /// full-screen TUIKit region, so it owns focus routing (sidebar, main, dock via <see cref="FocusScope"/>), key
-    /// precedence (menu, focused pane, back on Backspace, then command bindings), and mouse hit-testing. Swaps the main screen when the router navigates. Not thread-safe.
+    /// precedence (menu, focused pane, back on Backspace, then command bindings), mouse hit-testing, and the status bar
+    /// hints, which follow the focused control (<see cref="CurrentFocusHints"/>). Swaps the main screen when the router navigates. Not thread-safe.
     /// </summary>
     public class ShellView : ArmadaWidget, IFocusScopeOwner, IPasteTarget
     {
@@ -206,6 +207,44 @@ namespace Armada.Tui.Shell
             return Scope.FocusedLeaf();
         }
 
+        /// <summary>
+        /// Hints for the control that holds keyboard focus: the sidebar's keys, the dock's, or the innermost screen's
+        /// answer for its focused control (<see cref="ScreenBase.ResolveHints"/>), given the deepest
+        /// <see cref="IFocusHintSource"/> below that screen and whether the focused leaf takes typed text.
+        /// </summary>
+        /// <returns>Hints. Never null.</returns>
+        public FocusHints CurrentFocusHints()
+        {
+            IWidget? pane = Scope.Focused;
+            if (pane == null) return new FocusHints();
+            if (ReferenceEquals(pane, Sidebar))
+            {
+                return new FocusHints().Add("Enter", "Open").Add("Left/Right", "Collapse/expand");
+            }
+
+            List<IWidget> chain = Scope.FocusedChain();
+            IWidget leaf = chain[chain.Count - 1];
+            bool textEntry = leaf is ITextEntry entry && entry.AcceptsText;
+            int screenIndex = -1;
+            for (int i = chain.Count - 1; i >= 0; i--)
+            {
+                if (chain[i] is ScreenBase)
+                {
+                    screenIndex = i;
+                    break;
+                }
+            }
+
+            FocusHints? inner = null;
+            for (int i = chain.Count - 1; i > screenIndex && inner == null; i--)
+            {
+                if (chain[i] is IFocusHintSource source) inner = source.GetFocusHints();
+            }
+
+            if (screenIndex < 0) return inner ?? new FocusHints(textEntry);
+            return ((ScreenBase)chain[screenIndex]).ResolveHints(inner, textEntry);
+        }
+
         /// <inheritdoc />
         public bool HandlePaste(string text)
         {
@@ -335,6 +374,7 @@ namespace Armada.Tui.Shell
                 };
                 StatusBar.Hints.Add(new KeyValuePair<string, string>("F2", "Switch login mode"));
                 StatusBar.Hints.Add(new KeyValuePair<string, string>("Ctrl+Q", "Quit"));
+                StatusBar.HelpIndex = -1;
                 StatusBar.Render(new SurfaceView(surface, new Rect(0, size.Height - 1, size.Width, 1)));
                 ToastLayer.Render(surface, 1, _Context.Notifications.ActiveToasts(), Theme, _Context.Loc);
                 return;
@@ -443,21 +483,15 @@ namespace Armada.Tui.Shell
 
         private List<KeyValuePair<string, string>> BuildHints()
         {
-            List<KeyValuePair<string, string>> hints = new List<KeyValuePair<string, string>>();
-            if (ReferenceEquals(Scope.Focused, Sidebar))
-            {
-                hints.Add(new KeyValuePair<string, string>("Enter", "Open"));
-                hints.Add(new KeyValuePair<string, string>("Left/Right", "Collapse/expand"));
-            }
-            else if (Screen != null)
-            {
-                hints.AddRange(Screen.Hints);
-            }
-
-            hints.Add(new KeyValuePair<string, string>("?", "Help"));
+            FocusHints focus = CurrentFocusHints();
+            List<KeyValuePair<string, string>> hints = new List<KeyValuePair<string, string>>(focus.Keys);
+            // While typing, ? types a question mark and Tab moves between fields, so the hints name the keys that
+            // still work there (F1 and F6 do everywhere).
+            StatusBar.HelpIndex = hints.Count;
+            hints.Add(new KeyValuePair<string, string>(focus.TextEntry ? "F1" : "?", "Help"));
             hints.Add(new KeyValuePair<string, string>("Ctrl+K", "Palette"));
             hints.Add(new KeyValuePair<string, string>("F10", "Menu"));
-            hints.Add(new KeyValuePair<string, string>("Tab", "Next pane"));
+            hints.Add(new KeyValuePair<string, string>(focus.TextEntry ? "F6" : "Tab", "Next pane"));
             hints.Add(new KeyValuePair<string, string>("F5", "Refresh"));
             return hints;
         }

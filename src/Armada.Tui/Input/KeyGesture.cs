@@ -62,6 +62,25 @@ namespace Armada.Tui.Input
             return String.Join(" ", Strokes.Select(s => s.ToLabel()));
         }
 
+        /// <summary>
+        /// True when a gesture's first stroke still reaches commands while a text field has focus (see
+        /// <see cref="KeyStroke.WorksWhileTyping"/>).
+        /// </summary>
+        /// <param name="gesture">Gesture text, for example <c>ctrl+s</c> or <c>D</c>, or null.</param>
+        /// <returns>True for a Ctrl or Alt chord or a function key; false otherwise or when the text does not parse.</returns>
+        public static bool WorksWhileTyping(string? gesture)
+        {
+            if (String.IsNullOrWhiteSpace(gesture)) return false;
+            try
+            {
+                return new KeyGesture(gesture!).Strokes[0].WorksWhileTyping();
+            }
+            catch (FormatException)
+            {
+                return false;
+            }
+        }
+
         /// <inheritdoc />
         public override string ToString()
         {

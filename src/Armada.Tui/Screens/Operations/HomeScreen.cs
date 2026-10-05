@@ -309,6 +309,7 @@ namespace Armada.Tui.Screens.Operations
             AddChild(Missions);
             AddChild(Signals);
             HistoryFilters.Exited += (s, e) => Scope.Move(true);
+            HistoryFilters.ExitLabel = "Next section";
             MissionFilters.Exited += (s, e) => Scope.Focus(Missions);
             Reference.Changed += (s, name) => ReferenceArrived(name);
             Scope.Focus(AskButtons);

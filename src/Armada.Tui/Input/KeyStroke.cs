@@ -98,6 +98,34 @@ namespace Armada.Tui.Input
         }
 
         /// <summary>
+        /// True when the stroke still reaches commands while a text field has focus: a Ctrl or Alt chord, or a function
+        /// key. Plain characters, Enter, Delete, and the arrows go into the field instead.
+        /// </summary>
+        /// <returns>True when it works while typing.</returns>
+        public bool WorksWhileTyping()
+        {
+            if ((Modifiers & (KeyModifiers.Ctrl | KeyModifiers.Alt)) != 0) return true;
+            switch (Code)
+            {
+                case KeyCode.F1:
+                case KeyCode.F2:
+                case KeyCode.F3:
+                case KeyCode.F4:
+                case KeyCode.F5:
+                case KeyCode.F6:
+                case KeyCode.F7:
+                case KeyCode.F8:
+                case KeyCode.F9:
+                case KeyCode.F10:
+                case KeyCode.F11:
+                case KeyCode.F12:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        /// <summary>
         /// Display label in ASCII words (Ctrl+K, Shift+F10, Alt+Left, ?).
         /// </summary>
         /// <returns>Label.</returns>

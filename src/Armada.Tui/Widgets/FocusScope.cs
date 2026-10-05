@@ -338,6 +338,27 @@ namespace Armada.Tui.Widgets
             return focused;
         }
 
+        /// <summary>
+        /// The focus path below this scope: the focused child, its focused child (following nested scopes), and so on
+        /// down to the leaf.
+        /// </summary>
+        /// <returns>Widgets, outermost first. Never null.</returns>
+        public List<IWidget> FocusedChain()
+        {
+            List<IWidget> chain = new List<IWidget>();
+            FocusScope scope = this;
+            for (int depth = 0; depth < 32; depth++)
+            {
+                IWidget? focused = scope.Focused;
+                if (focused == null) break;
+                chain.Add(focused);
+                if (!(focused is IFocusScopeOwner owner)) break;
+                scope = owner.Scope;
+            }
+
+            return chain;
+        }
+
         #endregion
 
         #region Private-Methods

@@ -13,9 +13,15 @@ namespace Armada.Tui.Screens.Operations
     /// and <c>Ctrl+E</c> opens the text in <c>$EDITOR</c> through <see cref="ExternalEditor"/>. Other Ctrl chords are left
     /// to the form (so <c>Ctrl+S</c> saves) except undo/redo. Not thread-safe.
     /// </summary>
-    public class OpsTextArea : ArmadaWidget, IFormField, IPasteTarget
+    public class OpsTextArea : ArmadaWidget, IFormField, IPasteTarget, ITextEntry
     {
         #region Public-Members
+
+        /// <inheritdoc />
+        public virtual bool AcceptsText
+        {
+            get { return true; }
+        }
 
         /// <summary>
         /// Editor.

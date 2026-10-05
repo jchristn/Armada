@@ -24,6 +24,11 @@ namespace Armada.Tui.Shell
         public List<KeyValuePair<string, string>> Hints { get; set; } = new List<KeyValuePair<string, string>>();
 
         /// <summary>
+        /// Index in <see cref="Hints"/> of the help hint, which is never pushed off by the others, or -1 for none.
+        /// </summary>
+        public int HelpIndex { get; set; } = -1;
+
+        /// <summary>
         /// Transient message (English) shown instead of the hints, or null.
         /// </summary>
         public string? Message { get; set; } = null;
@@ -74,16 +79,12 @@ namespace Armada.Tui.Shell
             else
             {
                 // The help hint is the way to every other binding, so it is never pushed off by screen hints.
-                KeyValuePair<string, string>? help = null;
-                foreach (KeyValuePair<string, string> hint in Hints)
+                bool hasHelp = HelpIndex >= 0 && HelpIndex < Hints.Count;
+                int reserve = hasHelp ? HintWidth(Hints[HelpIndex]) : 0;
+                for (int i = 0; i < Hints.Count; i++)
                 {
-                    if (hint.Key == "?") help = hint;
-                }
-
-                int reserve = help.HasValue ? HintWidth(help.Value) : 0;
-                foreach (KeyValuePair<string, string> hint in Hints)
-                {
-                    if (hint.Key == "?")
+                    KeyValuePair<string, string> hint = Hints[i];
+                    if (hasHelp && i == HelpIndex)
                     {
                         x = DrawHint(surface, x, hint, limit);
                         reserve = 0;
@@ -92,7 +93,7 @@ namespace Armada.Tui.Shell
 
                     if (x + HintWidth(hint) > limit - reserve)
                     {
-                        if (help.HasValue && reserve > 0) DrawHint(surface, x, help.Value, limit);
+                        if (hasHelp && reserve > 0) DrawHint(surface, x, Hints[HelpIndex], limit);
                         break;
                     }
 

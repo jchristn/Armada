@@ -19,8 +19,9 @@ namespace Armada.Tui.Approvals
     /// <c>x</c> arguments), mission reviews (<c>a</c> approve, <c>c</c> conditionally approve, <c>m</c> more work
     /// required, <c>d</c> deny, through the Resolve Review dialog), deployments pending approval (<c>a</c> approve,
     /// <c>d</c> deny, both confirmed), failed landings (<c>l</c> retry landing), and stalled captains (<c>s</c> stop,
-    /// <c>R</c> recall, <c>t</c> restart, confirmed). <c>Enter</c> opens the item's screen; <c>F5</c> re-polls the
-    /// inbox. Not thread-safe.
+    /// <c>R</c> recall, <c>t</c> restart, confirmed). Each row also draws its decisions as buttons ("[Approve] a")
+    /// that a mouse click runs on that row, with the same confirmation and call as the key. <c>Enter</c> opens the
+    /// item's screen; <c>F5</c> re-polls the inbox. Not thread-safe.
     /// </summary>
     public class ApprovalsScreen : ScreenBase
     {
@@ -68,6 +69,7 @@ namespace Armada.Tui.Approvals
 
         private string? _CursorKey = null;
         private int _Top = 0;
+        private List<ApprovalButton> _Buttons = new List<ApprovalButton>();
 
         #endregion
 
@@ -142,6 +144,15 @@ namespace Armada.Tui.Approvals
             }
 
             return keys;
+        }
+
+        /// <summary>
+        /// Decision buttons drawn in the last frame (screen coordinates). Never null.
+        /// </summary>
+        /// <returns>Buttons.</returns>
+        public IReadOnlyList<ApprovalButton> Buttons()
+        {
+            return _Buttons;
         }
 
         /// <summary>
@@ -254,6 +265,22 @@ namespace Armada.Tui.Approvals
         {
             if (mouse.Kind != MouseEventKind.Press || mouse.Y < 2) return mouse.Kind == MouseEventKind.Press;
             IReadOnlyList<ApprovalItem> items = Context.Approvals.Items;
+            if (mouse.Button == MouseButton.Left)
+            {
+                foreach (ApprovalButton button in _Buttons)
+                {
+                    if (!button.Area.Contains(new Point(mouse.X, mouse.Y))) continue;
+                    // A button acts on its own row: select it, then run the same decision (and confirmation) as the key.
+                    for (int i = 0; i < items.Count; i++)
+                    {
+                        if (items[i].Key != button.ItemKey) continue;
+                        Move(items, i);
+                        Decide(button.DecisionKey);
+                        return true;
+                    }
+                }
+            }
+
             Move(items, _Top + (mouse.Y - 2) / 2);
             if (mouse.ClickCount >= 2) OpenCurrent();
             return true;
@@ -267,6 +294,7 @@ namespace Armada.Tui.Approvals
             SurfaceText.FillRect(surface, new Rect(0, 0, width, height), Theme.Text);
             IReadOnlyList<ApprovalItem> items = Context.Approvals.Items;
             SyncCursor(items);
+            _Buttons = new List<ApprovalButton>();
             SurfaceText.FillRow(surface, 0, 0, width, Theme.Header);
             string head = T("Approvals") + "  (" + Context.Loc.T("{{count}} waiting", LocalizationArgs.Of("count", items.Count)) + ")";
             SurfaceText.Draw(surface, 1, 0, head, Theme.HeaderAccent, width - 2);
@@ -350,9 +378,20 @@ namespace Armada.Tui.Approvals
             int aw = TextCells.Width(age);
             SurfaceText.Draw(surface, x, y, item.Title, row.WithAttribute(CellAttributes.Bold, true), Math.Max(1, width - x - aw - 2));
             SurfaceText.Draw(surface, width - aw - 1, y, age, row.WithForeground(Theme.Muted.Foreground), aw);
-            string keys = String.Join("  ", KeysFor(item.Kind).Select(k => k.Key + " " + T(k.Value)));
-            string detail = String.IsNullOrEmpty(item.Detail) ? "" : item.Detail + "   ";
-            SurfaceText.Draw(surface, 4, y + 1, detail + "[" + keys + "]", row.WithForeground(Theme.Muted.Foreground), width - 5);
+            // Decision buttons: "[Approve] a  [Reject] r ...", clickable whatever has keyboard focus; the key after
+            // each works on the selected row.
+            int bx = 4;
+            if (!String.IsNullOrEmpty(item.Detail)) bx += SurfaceText.Draw(surface, bx, y + 1, item.Detail + "   ", row.WithForeground(Theme.Muted.Foreground), width - 1 - bx);
+            foreach (KeyValuePair<string, string> k in KeysFor(item.Kind))
+            {
+                string label = "[" + T(k.Value) + "]";
+                int lw = TextCells.Width(label);
+                if (bx + lw + 1 + TextCells.Width(k.Key) > width - 1) break;
+                SurfaceText.Draw(surface, bx, y + 1, label, row.WithForeground(Theme.Accent.Foreground).WithAttribute(CellAttributes.Bold, true), lw);
+                _Buttons.Add(new ApprovalButton { Area = new Rect(bx, y + 1, lw, 1), ItemKey = item.Key, DecisionKey = k.Key[0] });
+                bx += lw;
+                bx += SurfaceText.Draw(surface, bx, y + 1, " " + k.Key + "  ", row.WithForeground(Theme.Muted.Foreground), width - 1 - bx);
+            }
         }
 
         private void RenderDetail(ISurface surface, ApprovalItem item, int top, int rows, int width)
