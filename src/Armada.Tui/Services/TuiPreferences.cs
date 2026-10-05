@@ -101,6 +101,17 @@ namespace Armada.Tui.Services
         /// </summary>
         public Dictionary<string, string> KeyBindings { get; set; } = new Dictionary<string, string>();
 
+        /// <summary>
+        /// Workspace vessels opened most recently, newest first (at most eight; the dashboard keeps these in local
+        /// storage). Never null.
+        /// </summary>
+        public List<string> WorkspaceRecentVessels { get; set; } = new List<string>();
+
+        /// <summary>
+        /// Per-vessel Workspace state (expanded folders and recent files) keyed by vessel id. Never null.
+        /// </summary>
+        public Dictionary<string, WorkspacePreferences> Workspaces { get; set; } = new Dictionary<string, WorkspacePreferences>();
+
         #endregion
 
         #region Constructors-and-Factories
