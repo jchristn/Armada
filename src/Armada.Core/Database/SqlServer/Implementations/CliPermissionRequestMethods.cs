@@ -145,6 +145,23 @@ namespace Armada.Core.Database.SqlServer.Implementations
             }, FromReader, token).ConfigureAwait(false);
         }
 
+        /// <inheritdoc />
+        public async Task<int> DeleteFinishedBeforeAsync(DateTime cutoffUtc, CancellationToken token = default)
+        {
+            int deleted = 0;
+            await SqlServerCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqlConnection conn, SqlTransaction tx) =>
+            {
+                deleted = await SqlServerCommandHelper.ExecuteAsync(conn, tx,
+                    "DELETE FROM cli_permission_requests WHERE status <> @pending AND (decided_utc < @cutoff OR (decided_utc IS NULL AND created_utc < @cutoff));",
+                    cmd =>
+                    {
+                        SqlServerCommandHelper.Add(cmd, "@pending", CliPermissionRequestStatusEnum.Pending.ToString());
+                        SqlServerCommandHelper.AddDate(cmd, "@cutoff", cutoffUtc);
+                    }, token).ConfigureAwait(false);
+            }, token).ConfigureAwait(false);
+            return deleted;
+        }
+
         #endregion
 
         #region Private-Methods

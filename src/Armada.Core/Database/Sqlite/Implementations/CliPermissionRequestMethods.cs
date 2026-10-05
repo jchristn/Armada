@@ -145,6 +145,23 @@ namespace Armada.Core.Database.Sqlite.Implementations
             }, FromReader, token).ConfigureAwait(false);
         }
 
+        /// <inheritdoc />
+        public async Task<int> DeleteFinishedBeforeAsync(DateTime cutoffUtc, CancellationToken token = default)
+        {
+            int deleted = 0;
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
+            {
+                deleted = await SqliteCommandHelper.ExecuteAsync(conn, tx,
+                    "DELETE FROM cli_permission_requests WHERE status <> @pending AND (decided_utc < @cutoff OR (decided_utc IS NULL AND created_utc < @cutoff));",
+                    cmd =>
+                    {
+                        SqliteCommandHelper.Add(cmd, "@pending", CliPermissionRequestStatusEnum.Pending.ToString());
+                        SqliteCommandHelper.AddDate(cmd, "@cutoff", cutoffUtc);
+                    }, token).ConfigureAwait(false);
+            }, token).ConfigureAwait(false);
+            return deleted;
+        }
+
         #endregion
 
         #region Private-Methods

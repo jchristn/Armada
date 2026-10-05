@@ -26,8 +26,8 @@ namespace Test.Shared.Suites.E2E
     /// End-to-end CLI tool permissions through the real server: a captain's thread- or mission-scoped session calls
     /// cli_permission_prompt over MCP and waits; an admin decides over REST and the waiting call returns Claude Code's
     /// {"behavior":"allow","updatedInput":...} or {"behavior":"deny","message":...}; non-admins, captain sessions, and
-    /// unscoped callers are refused on REST, MCP, and WebSocket; rules, policies, the inbox kind, and the
-    /// cli_permission.* WebSocket events.
+    /// unscoped callers are refused on REST, MCP, and WebSocket; rules, policies, the inbox kind, the
+    /// cli_permission.* WebSocket events, and a cancelled prompt call resolving its request at once.
     /// </summary>
     public sealed class CliPermissionsApiSuite : IArmadaTestSuite
     {
@@ -267,6 +267,45 @@ namespace Test.Shared.Suites.E2E
                 }
             }));
 
+            cases.Add(CaseAsync("cancelled_prompt_call_resolves_at_once", "When the captain cancels its MCP prompt call (notifications/cancelled, as Claude Code sends on an interrupt), the pending request is resolved at once, not after the prompt timeout", async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this).ConfigureAwait(false);
+                E2ETenantUser owner = await E2ETenantUser.CreateAsync(fx.AuthClient, "cpd-owner", true).ConfigureAwait(false);
+                using HttpClient o = owner.CreateClient(fx.BaseUrl);
+                AskThread thread = await JsonHelper.DeserializeAsync<AskThread>(await o.PostAsync("/api/v1/ask/threads", JsonHelper.ToJsonContent(new { })).ConfigureAwait(false)).ConfigureAwait(false);
+                string endpoint = "http://127.0.0.1:" + fx.McpPort + "/mcp";
+                using (HttpClient raw = new HttpClient { Timeout = TimeSpan.FromSeconds(60) })
+                {
+                    raw.DefaultRequestHeaders.TryAddWithoutValidation("X-Token", ThreadToken(fx, owner, thread.Id));
+                    HttpResponseMessage init = await raw.SendAsync(McpPost(endpoint, null, "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{},\"clientInfo\":{\"name\":\"claude-code\",\"version\":\"test\"}}}")).ConfigureAwait(false);
+                    AssertStatusCode(HttpStatusCode.OK, init, "initialize");
+                    string session = init.Headers.GetValues("Mcp-Session-Id").First();
+                    await raw.SendAsync(McpPost(endpoint, session, "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}")).ConfigureAwait(false);
+
+                    Task<HttpResponseMessage> call = raw.SendAsync(McpPost(endpoint, session, "{\"jsonrpc\":\"2.0\",\"id\":42,\"method\":\"tools/call\",\"params\":{\"name\":\"cli_permission_prompt\",\"arguments\":{\"tool_name\":\"Bash\",\"input\":{\"command\":\"terraform apply\"}}}}"));
+                    CliPermissionRequest pending = await WaitForPendingAsync(o, thread.Id).ConfigureAwait(false);
+                    AssertTrue(pending.ExpiresUtc > DateTime.UtcNow.AddMinutes(5), "the prompt timeout is minutes away");
+                    AssertFalse(call.IsCompleted, "the call waits for a decision");
+
+                    await raw.SendAsync(McpPost(endpoint, session, "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/cancelled\",\"params\":{\"requestId\":42,\"reason\":\"user interrupted\"}}")).ConfigureAwait(false);
+
+                    CliPermissionRequest? resolved = null;
+                    bool done = await AskTestHarness.WaitUntilAsync(async () =>
+                    {
+                        HttpResponseMessage resp = await o.GetAsync("/api/v1/cli-permissions/requests/" + pending.Id).ConfigureAwait(false);
+                        if (resp.StatusCode != HttpStatusCode.OK) return false;
+                        resolved = await JsonHelper.DeserializeAsync<CliPermissionRequest>(resp).ConfigureAwait(false);
+                        return resolved.Status != CliPermissionRequestStatusEnum.Pending;
+                    }, 15000).ConfigureAwait(false);
+                    AssertTrue(done, "the request left Pending soon after the call was cancelled (status " + resolved?.Status + ")");
+                    AssertEqual(CliPermissionRequestStatusEnum.Cancelled, resolved!.Status, "resolved as cancelled");
+                    AssertEqual(CliPermissionDecisionSourceEnum.Cancelled, resolved.DecisionSource, "by the cancelled call");
+                    try { (await call.ConfigureAwait(false)).Dispose(); }
+                    catch (HttpRequestException) { }
+                    catch (TaskCanceledException) { }
+                }
+            }));
+
             cases.Add(CaseAsync("websocket_decide_command", "The WebSocket decide command acts as the caller (global admins only, as for every WebSocket command)", async () =>
             {
                 E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this).ConfigureAwait(false);
@@ -325,6 +364,21 @@ namespace Test.Shared.Suites.E2E
             }, 15000).ConfigureAwait(false);
             AssertTrue(ok, "a pending request appeared");
             return found!;
+        }
+
+        private static HttpRequestMessage McpPost(string endpoint, string? session, string json)
+        {
+            HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Post, endpoint);
+            request.Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+            request.Headers.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
+            request.Headers.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("text/event-stream"));
+            if (session != null)
+            {
+                request.Headers.TryAddWithoutValidation("Mcp-Session-Id", session);
+                request.Headers.TryAddWithoutValidation("MCP-Protocol-Version", "2025-06-18");
+            }
+
+            return request;
         }
 
         private static async Task<DatabaseDriver> OpenDatabaseAsync(E2EServerFixture fx)

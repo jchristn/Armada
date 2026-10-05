@@ -13,8 +13,8 @@ namespace Armada.Core.Services
 
     /// <summary>
     /// Applies <see cref="RetentionSettings"/> (V1 readiness W3.4): archives and optionally deletes inactive Ask
-    /// threads, deletes old finished background jobs (always keeping the newest of each kind and name per tenant), and deletes
-    /// old finished vessel import batches. Works on every database provider through the driver interfaces. The
+    /// threads, deletes old finished background jobs (always keeping the newest of each kind and name per tenant), deletes
+    /// old finished vessel import batches, and deletes old decided CLI tool permission requests. Works on every database provider through the driver interfaces. The
     /// Admiral calls <see cref="PruneAsync"/> on the health-check loop's slow cadence. Settings are read on every
     /// call, so changes apply live. Not designed for concurrent calls.
     /// </summary>
@@ -76,10 +76,13 @@ namespace Armada.Core.Services
             try { result.ImportBatchesDeleted = await PruneImportBatchesAsync(token).ConfigureAwait(false); }
             catch (Exception ex) when (!(ex is OperationCanceledException)) { _Logging.Warn(_Header + "import batch pruning error: " + ex.Message); }
 
+            try { result.CliPermissionRequestsDeleted = await PruneCliPermissionRequestsAsync(token).ConfigureAwait(false); }
+            catch (Exception ex) when (!(ex is OperationCanceledException)) { _Logging.Warn(_Header + "CLI permission request pruning error: " + ex.Message); }
+
             if (result.Total > 0)
             {
                 _Logging.Info(_Header + "archived " + result.AskThreadsArchived + " and deleted " + result.AskThreadsDeleted + " Ask thread(s); deleted " +
-                    result.JobsDeleted + " job(s) and " + result.ImportBatchesDeleted + " import batch(es)");
+                    result.JobsDeleted + " job(s), " + result.ImportBatchesDeleted + " import batch(es), and " + result.CliPermissionRequestsDeleted + " CLI permission request(s)");
             }
 
             return result;
@@ -230,6 +233,20 @@ namespace Armada.Core.Services
             }
 
             return deleted;
+        }
+
+        /// <summary>
+        /// Delete CLI tool permission requests decided, expired, or cancelled more than
+        /// <see cref="RetentionSettings.CliPermissionRequestRetentionDays"/> days ago. Pending requests are kept.
+        /// </summary>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Requests deleted.</returns>
+        public async Task<int> PruneCliPermissionRequestsAsync(CancellationToken token = default)
+        {
+            int days = _Settings.Retention.CliPermissionRequestRetentionDays;
+            if (days <= 0) return 0;
+            DateTime cutoff = _Clock().AddDays(-days);
+            return await _Database.CliPermissionRequests.DeleteFinishedBeforeAsync(cutoff, token).ConfigureAwait(false);
         }
 
         #endregion

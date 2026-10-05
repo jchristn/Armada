@@ -58,5 +58,14 @@ namespace Armada.Core.Database.Interfaces
         /// <param name="token">Cancellation token.</param>
         /// <returns>Requests.</returns>
         Task<List<CliPermissionRequest>> EnumerateAsync(CliPermissionRequestQuery query, CancellationToken token = default);
+
+        /// <summary>
+        /// Delete requests that are no longer pending (allowed, denied, expired, or cancelled) and were decided before a
+        /// cutoff (a request with no decision time counts from its creation). Pending requests are never deleted.
+        /// </summary>
+        /// <param name="cutoffUtc">Requests decided before this time are deleted.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Number of requests deleted.</returns>
+        Task<int> DeleteFinishedBeforeAsync(DateTime cutoffUtc, CancellationToken token = default);
     }
 }

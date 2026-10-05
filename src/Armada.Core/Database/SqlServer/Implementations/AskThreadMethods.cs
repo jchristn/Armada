@@ -233,6 +233,8 @@ namespace Armada.Core.Database.SqlServer.Implementations
                     SqlServerCommandHelper.Add(cmd, "@tenant_id", tenantId);
                     SqlServerCommandHelper.Add(cmd, "@thread_id", id);
                 };
+                // The thread's CLI tool permission requests go with it (their cards are its messages).
+                await SqlServerCommandHelper.ExecuteAsync(conn, tx, "DELETE FROM cli_permission_requests WHERE tenant_id = @tenant_id AND thread_id = @thread_id;", bindThread, token).ConfigureAwait(false);
                 await SqlServerCommandHelper.ExecuteAsync(conn, tx, "DELETE FROM ask_message_tool_calls WHERE tenant_id = @tenant_id AND thread_id = @thread_id;", bindThread, token).ConfigureAwait(false);
                 await SqlServerCommandHelper.ExecuteAsync(conn, tx, "DELETE FROM ask_action_proposals WHERE tenant_id = @tenant_id AND thread_id = @thread_id;", bindThread, token).ConfigureAwait(false);
                 await SqlServerCommandHelper.ExecuteAsync(conn, tx, "DELETE FROM ask_tracked_work WHERE tenant_id = @tenant_id AND thread_id = @thread_id;", bindThread, token).ConfigureAwait(false);

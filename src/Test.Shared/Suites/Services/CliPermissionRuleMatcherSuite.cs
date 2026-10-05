@@ -14,7 +14,8 @@ namespace Test.Shared.Suites.Services
     /// <summary>
     /// CLI permission rules in Claude Code permission rule syntax: parsing, shell splitting, and matching on typed tool
     /// input (Bash prefix, glob, exact, compound commands, substitution; WebFetch domains; gitignore-style paths; MCP
-    /// server patterns; tool families), deny-over-allow evaluation, and the suggested rule and summary of a call.
+    /// server patterns; tool families; run_process with Bash semantics on its command line or argument vector),
+    /// deny-over-allow evaluation, the suggested rule and summary of a call, and unrestricted shell rules.
     /// </summary>
     public sealed class CliPermissionRuleMatcherSuite : IArmadaTestSuite
     {
@@ -192,6 +193,53 @@ namespace Test.Shared.Suites.Services
                 AssertEqual("https://x.test/", CliPermissionRuleMatcher.Summarize("WebFetch", "{\"url\":\"https://x.test/\"}"));
                 AssertEqual("/repo/a.txt", CliPermissionRuleMatcher.Summarize("Read", "{\"file_path\":\"/repo/a.txt\"}"));
                 AssertTrue(CliPermissionRuleMatcher.Summarize("Bash", "{\"command\":\"" + new string('x', 600) + "\"}").Length <= 503, "clipped");
+            }));
+
+            cases.Add(Case("run_process_rules_match_the_command", "run_process rules take Bash specifiers: shell command lines split like Bash; an argument vector is one command; deny wins", () =>
+            {
+                List<CliPermissionRule> rules = new List<CliPermissionRule>
+                {
+                    Rule("run_process(git status:*)", CliPermissionRuleActionEnum.Allow),
+                    Rule("run_process(npm run *)", CliPermissionRuleActionEnum.Allow)
+                };
+                CliPermissionRuleEvaluation allowed = Evaluate(rules, "run_process", "{\"command\":\"git status --short\"}");
+                AssertEqual(CliPermissionRuleActionEnum.Allow, allowed.Action, "shell command line matches the prefix rule");
+                AssertEqual("run_process(git status:*)", allowed.Rule!.Pattern, "deciding rule");
+                AssertEqual(CliPermissionRuleActionEnum.Allow, Evaluate(rules, "run_process", "{\"command\":\"git\",\"args\":[\"status\",\"-s\"]}").Action, "argument vector joins into the command line");
+                AssertEqual(CliPermissionRuleActionEnum.Allow, Evaluate(rules, "run_process", "{\"command\":\"npm run test\"}").Action, "glob rule");
+                AssertNull(Evaluate(rules, "run_process", "{\"command\":\"git push origin main\"}").Action, "another command still asks");
+                AssertNull(Evaluate(rules, "run_process", "{\"command\":\"git status && rm -rf build\"}").Action, "every shell part must be allowed");
+                AssertNull(Evaluate(rules, "run_process", "{\"command\":\"git status $(rm -rf x)\"}").Action, "shell substitution is never allowed");
+                AssertEqual(CliPermissionRuleActionEnum.Allow, Evaluate(rules, "run_process", "{\"command\":\"git\",\"args\":[\"status\",\"$(literal)\",\"&&\",\"x\"]}").Action, "no shell runs for an argument vector, so operators and $() in it are literal arguments");
+                AssertNull(Evaluate(rules, "Bash", "{\"command\":\"git status\"}").Action, "run_process rules do not cover Bash");
+                AssertNull(Evaluate(new List<CliPermissionRule> { Rule("Bash(git status:*)", CliPermissionRuleActionEnum.Allow) }, "run_process", "{\"command\":\"git status\"}").Action, "Bash rules do not cover run_process");
+
+                rules.Add(Rule("run_process(rm:*)", CliPermissionRuleActionEnum.Deny));
+                AssertEqual(CliPermissionRuleActionEnum.Deny, Evaluate(rules, "run_process", "{\"command\":\"git status; rm -rf build\"}").Action, "a denied shell part denies");
+                AssertEqual(CliPermissionRuleActionEnum.Deny, Evaluate(rules, "run_process", "{\"command\":\"rm\",\"args\":[\"-rf\",\"build\"]}").Action, "deny matches an argument vector");
+                rules.Add(Rule("run_process", CliPermissionRuleActionEnum.Allow));
+                AssertEqual(CliPermissionRuleActionEnum.Deny, Evaluate(rules, "run_process", "{\"command\":\"rm -rf x\"}").Action, "deny wins over a bare allow");
+            }));
+
+            cases.Add(Case("run_process_suggestions_never_allow_everything", "run_process suggests a prefix rule from its command line, or the exact command, never the bare tool; its summary includes the arguments", () =>
+            {
+                AssertEqual("run_process(git status:*)", CliPermissionRuleMatcher.SuggestRule("run_process", "{\"command\":\"git status --short\"}"));
+                AssertEqual("run_process(git log:*)", CliPermissionRuleMatcher.SuggestRule("run_process", "{\"command\":\"git\",\"args\":[\"log\",\"-1\"]}"));
+                AssertEqual("run_process(ls:*)", CliPermissionRuleMatcher.SuggestRule("run_process", "{\"command\":\"ls -la && pwd\"}"));
+                AssertEqual("run_process(\"/opt/my tool/run\" --help)", CliPermissionRuleMatcher.SuggestRule("run_process", "{\"command\":\"\\\"/opt/my tool/run\\\" --help\"}"), "exact command when the program is not a plain word");
+                AssertEqual("Bash", CliPermissionRuleMatcher.SuggestRule("Bash", "{\"command\":\"\\\"/opt/my tool/run\\\" --help\"}"), "Bash keeps its bare fallback");
+                AssertEqual("git log -1", CliPermissionRuleMatcher.Summarize("run_process", "{\"command\":\"git\",\"args\":[\"log\",\"-1\"]}"), "summary with arguments");
+                string suggested = CliPermissionRuleMatcher.SuggestRule("run_process", "{\"command\":\"git status\"}");
+                AssertEqual(CliPermissionRuleActionEnum.Allow, Evaluate(new List<CliPermissionRule> { Rule(suggested, CliPermissionRuleActionEnum.Allow) }, "run_process", "{\"command\":\"git status\"}").Action, "the suggested rule allows the call it came from");
+                AssertNull(Evaluate(new List<CliPermissionRule> { Rule(suggested, CliPermissionRuleActionEnum.Allow) }, "run_process", "{\"command\":\"curl https://x\"}").Action, "and nothing else");
+            }));
+
+            cases.Add(Case("unrestricted_shell_rules", "Bare and wildcard shell rules are flagged as allowing every command; specific and non-shell rules are not", () =>
+            {
+                foreach (string open in new[] { "Bash", "run_process", "Bash(*)", "run_process(*)", "Bash(:*)", "run_process( :* )", "Bash(**)" })
+                    AssertTrue(CliPermissionRuleMatcher.IsUnrestrictedShellRule(open), "unrestricted: " + open);
+                foreach (string narrow in new[] { "Bash(git status:*)", "run_process(npm run *)", "WebFetch", "Read", "mcp__github", "", "Bash(" })
+                    AssertFalse(CliPermissionRuleMatcher.IsUnrestrictedShellRule(narrow), "not unrestricted: " + narrow);
             }));
 
             return new TestSuiteDescriptor(suiteId: SuiteId, displayName: "CLI permission rules", cases: cases);

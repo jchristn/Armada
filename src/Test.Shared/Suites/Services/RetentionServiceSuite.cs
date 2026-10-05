@@ -20,7 +20,8 @@ namespace Test.Shared.Suites.Services
     /// Retention (V1 readiness W3.4): <see cref="RetentionService"/> archives and deletes inactive Ask threads (never
     /// pinned ones; deletion removes messages), deletes finished jobs past retention while keeping the newest of each
     /// kind per tenant, and deletes finished import batches with their items while keeping in-progress or still
-    /// categorizing ones; 0 disables each rule. Also verifies fleet action pruning removes run output and that vessel
+    /// categorizing ones, and deletes decided CLI tool permission requests past retention while keeping pending ones;
+    /// 0 disables each rule. Also verifies fleet action pruning removes run output and that vessel
     /// health findings are current-state only (re-evaluation replaces them). Runs on the configured provider.
     /// </summary>
     public sealed class RetentionServiceSuite : IArmadaTestSuite
@@ -188,6 +189,47 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(Case("cli_permission_retention_setting", "CLI permission request retention defaults to 90 days and clamps to 0..3650", ct =>
+            {
+                RetentionSettings settings = new RetentionSettings();
+                AssertEqual(90, settings.CliPermissionRequestRetentionDays, "default");
+                settings.CliPermissionRequestRetentionDays = -5;
+                AssertEqual(0, settings.CliPermissionRequestRetentionDays, "negative clamps to 0 (never)");
+                settings.CliPermissionRequestRetentionDays = 99999;
+                AssertEqual(3650, settings.CliPermissionRequestRetentionDays, "maximum 3650");
+                RetentionSettings parsed = System.Text.Json.JsonSerializer.Deserialize<RetentionSettings>("{\"CliPermissionRequestRetentionDays\":14}")!;
+                AssertEqual(14, parsed.CliPermissionRequestRetentionDays, "settings file value");
+                return Task.CompletedTask;
+            }));
+
+            cases.Add(Case("prune_cli_permission_requests", "Decided, expired, and cancelled CLI permission requests past retention are deleted; pending and recent ones are kept; 0 disables", async ct =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    DatabaseDriver db = testDb.Driver;
+                    DateTime now = DateTime.UtcNow;
+                    CliPermissionRequest pending = await CreatePermissionRequestAsync(db, CliPermissionRequestStatusEnum.Pending, now.AddDays(-300), null).ConfigureAwait(false);
+                    CliPermissionRequest allowed = await CreatePermissionRequestAsync(db, CliPermissionRequestStatusEnum.Allowed, now.AddDays(-120), now.AddDays(-120)).ConfigureAwait(false);
+                    CliPermissionRequest expired = await CreatePermissionRequestAsync(db, CliPermissionRequestStatusEnum.Expired, now.AddDays(-100), now.AddDays(-95)).ConfigureAwait(false);
+                    CliPermissionRequest recent = await CreatePermissionRequestAsync(db, CliPermissionRequestStatusEnum.Denied, now.AddDays(-20), now.AddDays(-20)).ConfigureAwait(false);
+
+                    ArmadaSettings settings = new ArmadaSettings();
+                    settings.Retention.CliPermissionRequestRetentionDays = 0;
+                    AssertEqual(0, await new RetentionService(db, settings, QuietLogging()).PruneCliPermissionRequestsAsync(ct).ConfigureAwait(false), "0 disables");
+
+                    settings.Retention.CliPermissionRequestRetentionDays = 90;
+                    AssertEqual(2, await new RetentionService(db, settings, QuietLogging()).PruneCliPermissionRequestsAsync(ct).ConfigureAwait(false), "two old decided requests deleted");
+                    AssertNotNull(await db.CliPermissionRequests.ReadAsync(pending.Id, ct).ConfigureAwait(false), "pending kept however old");
+                    AssertNull(await db.CliPermissionRequests.ReadAsync(allowed.Id, ct).ConfigureAwait(false), "old allowed deleted");
+                    AssertNull(await db.CliPermissionRequests.ReadAsync(expired.Id, ct).ConfigureAwait(false), "old expired deleted");
+                    AssertNotNull(await db.CliPermissionRequests.ReadAsync(recent.Id, ct).ConfigureAwait(false), "recent denied kept");
+
+                    RetentionService later = new RetentionService(db, settings, QuietLogging(), () => now.AddDays(80));
+                    AssertEqual(1, await later.PruneCliPermissionRequestsAsync(ct).ConfigureAwait(false), "the denied request ages out later");
+                    AssertNotNull(await db.CliPermissionRequests.ReadAsync(pending.Id, ct).ConfigureAwait(false), "pending still kept");
+                }
+            }));
+
             cases.Add(Case("prune_pass_runs_all_rules", "One PruneAsync pass applies every rule and reports counts", async ct =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
@@ -197,12 +239,14 @@ namespace Test.Shared.Suites.Services
                     await CreateThreadAsync(db, "pass-stale", now.AddDays(-100), now.AddDays(-100), false).ConfigureAwait(false);
                     await CreateJobAsync(db, JobKindEnum.Generic, JobStatusEnum.Succeeded, now.AddDays(-60)).ConfigureAwait(false);
                     await CreateJobAsync(db, JobKindEnum.Generic, JobStatusEnum.Succeeded, now.AddDays(-50)).ConfigureAwait(false);
+                    await CreatePermissionRequestAsync(db, CliPermissionRequestStatusEnum.Allowed, now.AddDays(-200), now.AddDays(-200)).ConfigureAwait(false);
 
                     RetentionResult result = await new RetentionService(db, new ArmadaSettings(), QuietLogging()).PruneAsync(ct).ConfigureAwait(false);
                     AssertEqual(1, result.AskThreadsArchived, "archived");
                     AssertEqual(0, result.AskThreadsDeleted, "deletion off by default");
                     AssertEqual(1, result.JobsDeleted, "older of the two jobs deleted");
-                    AssertEqual(2, result.Total, "total");
+                    AssertEqual(1, result.CliPermissionRequestsDeleted, "old decided CLI permission request deleted at the 90-day default");
+                    AssertEqual(3, result.Total, "total");
                 }
             }));
 
@@ -293,6 +337,21 @@ namespace Test.Shared.Suites.Services
             message.Kind = AskMessageKindEnum.Text;
             message.ContentText = text;
             return await db.AskMessages.CreateAsync(message, false).ConfigureAwait(false);
+        }
+
+        private static async Task<CliPermissionRequest> CreatePermissionRequestAsync(DatabaseDriver db, CliPermissionRequestStatusEnum status, DateTime createdUtc, DateTime? decidedUtc)
+        {
+            CliPermissionRequest request = new CliPermissionRequest();
+            request.TenantId = Constants.DefaultTenantId;
+            request.UserId = Constants.DefaultUserId;
+            request.ToolName = "Bash";
+            request.InputText = "{\"command\":\"ls\"}";
+            request.SummaryText = "ls";
+            request.Status = status;
+            request.CreatedUtc = createdUtc;
+            request.ExpiresUtc = createdUtc.AddMinutes(10);
+            request.DecidedUtc = decidedUtc;
+            return await db.CliPermissionRequests.CreateAsync(request).ConfigureAwait(false);
         }
 
         private static async Task<Job> CreateJobAsync(DatabaseDriver db, JobKindEnum kind, JobStatusEnum status, DateTime? completedUtc, DateTime? createdUtc = null)

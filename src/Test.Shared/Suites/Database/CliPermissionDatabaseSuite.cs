@@ -17,8 +17,9 @@ namespace Test.Shared.Suites.Database
     /// Descriptors for the CLI tool permission persistence added by migration 78: cli_permission_requests (round trip,
     /// message link, compare-and-set decisions, filtered newest-first listing), cli_permission_rules (CRUD, tenant
     /// listing that includes rules for every tenant, applicable-rule selection), the captain and Ask thread
-    /// cli_permission_policy columns (dedicated setters that ordinary updates never overwrite), and the
-    /// ask_message_tool_calls permission_denied flag.
+    /// cli_permission_policy columns (dedicated setters that ordinary updates never overwrite), the
+    /// ask_message_tool_calls permission_denied flag, retention deletes of decided requests (pending requests are kept),
+    /// and the delete of a thread's requests with the thread.
     /// </summary>
     public sealed class CliPermissionDatabaseSuite : IArmadaTestSuite
     {
@@ -395,6 +396,56 @@ namespace Test.Shared.Suites.Database
                 AssertNull(calls.Single(c => c.Id == unknown.Id).PermissionDenied, "unknown");
             }));
 
+            cases.Add(CaseAsync("request_delete_finished_before", "DeleteFinishedBeforeAsync deletes decided, expired, and cancelled requests older than the cutoff and keeps pending and newer ones", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                DatabaseDriver db = testDb.Driver;
+                DateTime now = DateTime.UtcNow;
+
+                CliPermissionRequest oldPending = NewRequest("ten_ret", now.AddDays(-200));
+                CliPermissionRequest oldAllowed = Decided(NewRequest("ten_ret", now.AddDays(-101)), CliPermissionRequestStatusEnum.Allowed, now.AddDays(-100));
+                CliPermissionRequest oldDenied = Decided(NewRequest("ten_ret", now.AddDays(-96)), CliPermissionRequestStatusEnum.Denied, now.AddDays(-95));
+                CliPermissionRequest oldExpired = Decided(NewRequest("ten_ret", now.AddDays(-121)), CliPermissionRequestStatusEnum.Expired, now.AddDays(-120));
+                CliPermissionRequest oldCancelled = Decided(NewRequest("ten_ret", now.AddDays(-92)), CliPermissionRequestStatusEnum.Cancelled, now.AddDays(-91));
+                CliPermissionRequest recentAllowed = Decided(NewRequest("ten_ret", now.AddDays(-11)), CliPermissionRequestStatusEnum.Allowed, now.AddDays(-10));
+                CliPermissionRequest undatedOld = NewRequest("ten_ret", now.AddDays(-150));
+                undatedOld.Status = CliPermissionRequestStatusEnum.Denied;
+                foreach (CliPermissionRequest r in new[] { oldPending, oldAllowed, oldDenied, oldExpired, oldCancelled, recentAllowed, undatedOld })
+                    await db.CliPermissionRequests.CreateAsync(r).ConfigureAwait(false);
+
+                AssertEqual(5, await db.CliPermissionRequests.DeleteFinishedBeforeAsync(now.AddDays(-90)).ConfigureAwait(false), "five finished requests older than 90 days");
+                List<CliPermissionRequest> left = await db.CliPermissionRequests.EnumerateAsync(Query(q => q.TenantId = "ten_ret")).ConfigureAwait(false);
+                AssertEqual(String.Join(",", new[] { oldPending.Id, recentAllowed.Id }.OrderBy(i => i, StringComparer.Ordinal)), String.Join(",", left.Select(r => r.Id).OrderBy(i => i, StringComparer.Ordinal)), "pending and recent requests kept");
+                AssertEqual(0, await db.CliPermissionRequests.DeleteFinishedBeforeAsync(now.AddDays(-90)).ConfigureAwait(false), "second pass deletes nothing");
+                AssertEqual(1, await db.CliPermissionRequests.DeleteFinishedBeforeAsync(now).ConfigureAwait(false), "a later cutoff deletes the recent decided request but never the pending one");
+                AssertNotNull(await db.CliPermissionRequests.ReadAsync(oldPending.Id).ConfigureAwait(false), "pending request kept");
+            }));
+
+            cases.Add(CaseAsync("thread_delete_removes_requests", "Deleting an Ask thread deletes its CLI permission requests and keeps other threads' and missions' requests", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                DatabaseDriver db = testDb.Driver;
+
+                AskThread doomed = await db.AskThreads.CreateAsync(NewThread("usr_cascade")).ConfigureAwait(false);
+                AskThread kept = await db.AskThreads.CreateAsync(NewThread("usr_cascade")).ConfigureAwait(false);
+                CliPermissionRequest pending = NewRequest(Constants.DefaultTenantId, _Fixed);
+                pending.ThreadId = doomed.Id;
+                CliPermissionRequest decided = Decided(NewRequest(Constants.DefaultTenantId, _Fixed), CliPermissionRequestStatusEnum.Allowed, _Fixed.AddMinutes(1));
+                decided.ThreadId = doomed.Id;
+                CliPermissionRequest other = NewRequest(Constants.DefaultTenantId, _Fixed);
+                other.ThreadId = kept.Id;
+                CliPermissionRequest mission = NewRequest(Constants.DefaultTenantId, _Fixed);
+                mission.MissionId = "msn_cascade";
+                foreach (CliPermissionRequest r in new[] { pending, decided, other, mission })
+                    await db.CliPermissionRequests.CreateAsync(r).ConfigureAwait(false);
+
+                AssertTrue(await db.AskThreads.DeleteAsync(Constants.DefaultTenantId, "usr_cascade", doomed.Id).ConfigureAwait(false), "thread deleted");
+                AssertNull(await db.CliPermissionRequests.ReadAsync(pending.Id).ConfigureAwait(false), "pending request of the thread deleted");
+                AssertNull(await db.CliPermissionRequests.ReadAsync(decided.Id).ConfigureAwait(false), "decided request of the thread deleted");
+                AssertNotNull(await db.CliPermissionRequests.ReadAsync(other.Id).ConfigureAwait(false), "another thread's request kept");
+                AssertNotNull(await db.CliPermissionRequests.ReadAsync(mission.Id).ConfigureAwait(false), "a mission's request kept");
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
                 displayName: "CLI Permission Database",
@@ -416,6 +467,14 @@ namespace Test.Shared.Suites.Database
             request.SummaryText = "ls";
             request.ExpiresUtc = createdUtc.AddMinutes(10);
             request.CreatedUtc = createdUtc;
+            return request;
+        }
+
+        private static CliPermissionRequest Decided(CliPermissionRequest request, CliPermissionRequestStatusEnum status, DateTime decidedUtc)
+        {
+            request.Status = status;
+            request.DecisionSource = status == CliPermissionRequestStatusEnum.Expired ? CliPermissionDecisionSourceEnum.Timeout : CliPermissionDecisionSourceEnum.Approver;
+            request.DecidedUtc = decidedUtc;
             return request;
         }
 
