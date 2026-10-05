@@ -302,7 +302,7 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Captains")
                 .WithSummary("Set a captain's CLI tool permission policy")
-                .WithDescription("Sets (Refuse, ApproveInArmada, Bypass) or clears (null) the captain's CliPermissionPolicy. Requires a global admin or a tenant admin of the captain's tenant. Bypass runs the CLI with its permission-bypass flag. Captain create and update leave the policy unchanged.")
+                .WithDescription("Sets (Refuse, ApproveInArmada, Bypass) or clears (null) the captain's CliPermissionPolicy. Requires a global admin or a tenant admin of the captain's tenant. Bypass runs the CLI with its permission-bypass flag. Captain create accepts CliPermissionPolicy; captain update keeps the stored policy.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Captain ID (cpt_ prefix)"))
                 .WithRequestBody(OpenApiJson.BodyFor<CliPermissionPolicyUpdateRequest>("Policy", true))
                 .WithResponse(200, OpenApiJson.For<Captain>("The captain"))

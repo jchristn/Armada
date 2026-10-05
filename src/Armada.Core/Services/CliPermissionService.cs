@@ -243,7 +243,11 @@ namespace Armada.Core.Services
                 message,
                 token).ConfigureAwait(false);
             if (!decided)
+            {
+                // Lost the race with another decision or the expiry: do not leave a remembered rule behind.
+                if (ruleId != null) await _Database.CliPermissionRules.DeleteAsync(ruleId, CancellationToken.None).ConfigureAwait(false);
                 throw new InvalidOperationException("The CLI permission request " + request.Id + " is no longer pending.");
+            }
 
             CliPermissionRequest updated = await _Database.CliPermissionRequests.ReadAsync(request.Id, token).ConfigureAwait(false) ?? request;
             _Logging.Info(_Header + request.Id + " (" + request.ToolName + ") " + updated.Status + " by " + caller.UserId + (ruleId != null ? " with rule " + ruleId : ""));
