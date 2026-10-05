@@ -59,10 +59,15 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
-        /// Parse a test summary from command output and, if needed, collected artifacts.
+        /// Parse a test summary, preferring structured result artifacts (TRX, JUnit XML, NUnit XML, Jest/Vitest
+        /// JSON) and falling back to console summary lines only when no artifact yields one.
         /// </summary>
         public static CheckRunTestSummary? ParseTestSummary(string? output, string? workingDirectory, IEnumerable<CheckRunArtifact>? artifacts)
         {
+            CheckRunTestSummary? artifactSummary = ParseTestSummaryFromArtifacts(workingDirectory, artifacts);
+            if (artifactSummary != null)
+                return artifactSummary;
+
             CheckRunTestSummary? outputSummary = null;
             if (String.IsNullOrWhiteSpace(output))
             {
@@ -78,10 +83,7 @@ namespace Armada.Core.Services
                 ?? ParseNUnitConsoleSummary(output);
             }
 
-            if (outputSummary != null)
-                return outputSummary;
-
-            return ParseTestSummaryFromArtifacts(workingDirectory, artifacts);
+            return outputSummary;
         }
 
         /// <summary>
@@ -358,6 +360,9 @@ namespace Armada.Core.Services
         private static CheckRunTestSummary? ParseTestArtifact(string fullPath)
         {
             string extension = Path.GetExtension(fullPath);
+            if (extension.Equals(".json", StringComparison.OrdinalIgnoreCase))
+                return ParseJestJson(fullPath);
+
             if (!extension.Equals(".xml", StringComparison.OrdinalIgnoreCase)
                 && !extension.Equals(".trx", StringComparison.OrdinalIgnoreCase))
             {
@@ -377,6 +382,35 @@ namespace Armada.Core.Services
             }
 
             return null;
+        }
+
+        private static CheckRunTestSummary? ParseJestJson(string fullPath)
+        {
+            JestJsonReport? report;
+            try
+            {
+                report = JsonSerializer.Deserialize<JestJsonReport>(File.ReadAllText(fullPath));
+            }
+            catch (JsonException)
+            {
+                return null;
+            }
+
+            if (report == null || !report.NumTotalTests.HasValue)
+                return null;
+
+            int total = report.NumTotalTests.Value;
+            int failed = report.NumFailedTests ?? 0;
+            int skipped = (report.NumPendingTests ?? 0) + (report.NumTodoTests ?? 0);
+            int passed = report.NumPassedTests ?? Math.Max(0, total - failed - skipped);
+            return new CheckRunTestSummary
+            {
+                Format = "jest-json",
+                Total = total,
+                Passed = passed,
+                Failed = failed,
+                Skipped = skipped
+            };
         }
 
         private static CheckRunTestSummary? ParseTrx(XDocument document)
@@ -595,18 +629,18 @@ namespace Armada.Core.Services
 
         private static CheckRunCoverageSummary? ParseCoverageJson(string fullPath, string relativePath)
         {
-            using JsonDocument document = JsonDocument.Parse(File.ReadAllText(fullPath));
-            if (!document.RootElement.TryGetProperty("total", out JsonElement total))
+            IstanbulCoverageReport? report = JsonSerializer.Deserialize<IstanbulCoverageReport>(File.ReadAllText(fullPath));
+            if (report == null || report.Total == null)
                 return null;
 
             return new CheckRunCoverageSummary
             {
                 Format = "istanbul-summary",
                 SourcePath = relativePath,
-                Lines = CreateMetricFromIstanbul(total, "lines"),
-                Branches = CreateMetricFromIstanbul(total, "branches"),
-                Functions = CreateMetricFromIstanbul(total, "functions"),
-                Statements = CreateMetricFromIstanbul(total, "statements")
+                Lines = CreateMetricFromIstanbul(report.Total.Lines),
+                Branches = CreateMetricFromIstanbul(report.Total.Branches),
+                Functions = CreateMetricFromIstanbul(report.Total.Functions),
+                Statements = CreateMetricFromIstanbul(report.Total.Statements)
             };
         }
 
@@ -623,15 +657,12 @@ namespace Armada.Core.Services
             return CreateMetric(covered, total, null);
         }
 
-        private static CheckRunCoverageMetric? CreateMetricFromIstanbul(JsonElement total, string propertyName)
+        private static CheckRunCoverageMetric? CreateMetricFromIstanbul(IstanbulCoverageMetric? metric)
         {
-            if (!total.TryGetProperty(propertyName, out JsonElement metric))
+            if (metric == null)
                 return null;
 
-            int? covered = metric.TryGetProperty("covered", out JsonElement coveredElement) ? coveredElement.GetInt32() : null;
-            int? count = metric.TryGetProperty("total", out JsonElement totalElement) ? totalElement.GetInt32() : null;
-            double? percentage = metric.TryGetProperty("pct", out JsonElement pctElement) ? pctElement.GetDouble() : null;
-            return CreateMetric(covered, count, percentage);
+            return CreateMetric(metric.Covered, metric.Total, metric.Pct);
         }
 
         private static CheckRunCoverageMetric? CreateMetric(int? covered, int? total, double? percentage)

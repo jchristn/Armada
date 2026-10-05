@@ -341,7 +341,7 @@ namespace Armada.Core.Services
                 {
                 }
 
-                string output = await RunGitCommandAsync(rootPath, token, "status", "--porcelain=v1", "--branch", "--untracked-files=all").ConfigureAwait(false);
+                string output = await RunGitCommandAsync(rootPath, token, "status", "--porcelain=v2", "-z", "--branch", "--untracked-files=all").ConfigureAwait(false);
                 return ParseGitStatus(output);
             }
             catch (Exception ex)
@@ -833,6 +833,7 @@ namespace Armada.Core.Services
             // Never prompt for credentials or invoke a pager -- either would hang the request.
             psi.Environment["GIT_TERMINAL_PROMPT"] = "0";
             psi.Environment["GIT_PAGER"] = "cat";
+            GitProcessEnvironment.Apply(psi);
             foreach (string arg in args) psi.ArgumentList.Add(arg);
 
             using Process process = Process.Start(psi)
@@ -859,89 +860,95 @@ namespace Armada.Core.Services
             }
         }
 
+        /// <summary>
+        /// Parse git status --porcelain=v2 -z --branch output. Status codes keep the porcelain v1 shape
+        /// ("M", "A", "R", "MM", "??", "UU") with '.' (unchanged) rendered as a space and trimmed.
+        /// </summary>
         private static WorkspaceChangesResult ParseGitStatus(string output)
         {
             WorkspaceChangesResult result = new WorkspaceChangesResult();
-            string[] lines = output.Replace("\r\n", "\n").Split('\n', StringSplitOptions.RemoveEmptyEntries);
-            foreach (string line in lines)
+            List<string> fields = GitMachineOutputParser.SplitNul(output);
+            for (int i = 0; i < fields.Count; i++)
             {
-                if (line.StartsWith("## ", StringComparison.Ordinal))
+                string field = fields[i];
+                if (field.StartsWith("# ", StringComparison.Ordinal))
                 {
-                    ParseBranchHeader(result, line.Substring(3));
+                    ParseBranchHeader(result, field.Substring(2));
                     continue;
                 }
 
-                if (line.Length < 3)
+                if (field.Length < 3 || field[1] != ' ')
                     continue;
 
-                string status = line.Substring(0, 2).Trim();
-                string pathText = line.Substring(3).Trim();
-                string? originalPath = null;
-                string path = pathText;
-                int renameIndex = pathText.IndexOf(" -> ", StringComparison.Ordinal);
-                if (renameIndex >= 0)
+                switch (field[0])
                 {
-                    originalPath = pathText.Substring(0, renameIndex).Trim().Replace('\\', '/');
-                    path = pathText.Substring(renameIndex + 4).Trim();
+                    case '1':
+                        AddChange(result, field, 8, null);
+                        break;
+                    case '2':
+                        // Rename/copy: the original path follows as the next NUL-terminated field.
+                        string? originalPath = i + 1 < fields.Count ? fields[i + 1].Replace('\\', '/') : null;
+                        i++;
+                        AddChange(result, field, 9, originalPath);
+                        break;
+                    case 'u':
+                        AddChange(result, field, 10, null);
+                        break;
+                    case '?':
+                        result.Changes.Add(new WorkspaceChangeEntry
+                        {
+                            Path = field.Substring(2).Replace('\\', '/'),
+                            Status = "??",
+                            OriginalPath = null
+                        });
+                        break;
                 }
-
-                result.Changes.Add(new WorkspaceChangeEntry
-                {
-                    Path = path.Replace('\\', '/'),
-                    Status = status,
-                    OriginalPath = originalPath
-                });
             }
 
             result.IsDirty = result.Changes.Count > 0;
             return result;
         }
 
-        private static void ParseBranchHeader(WorkspaceChangesResult result, string header)
+        private static void AddChange(WorkspaceChangesResult result, string record, int fieldsBeforePath, string? originalPath)
         {
-            string branchName = header;
-            int relationIndex = header.IndexOf("...", StringComparison.Ordinal);
-            if (relationIndex >= 0)
-            {
-                branchName = header.Substring(0, relationIndex);
-            }
-            else
-            {
-                int statusIndex = header.IndexOf(' ');
-                if (statusIndex >= 0)
-                    branchName = header.Substring(0, statusIndex);
-            }
+            // Fixed-width fields are space separated; the path is everything after them (it may contain spaces).
+            string[] parts = record.Split(' ', fieldsBeforePath + 1);
+            if (parts.Length <= fieldsBeforePath) return;
 
-            result.BranchName = branchName.Trim();
-
-            int aheadIndex = header.IndexOf("ahead ", StringComparison.OrdinalIgnoreCase);
-            if (aheadIndex >= 0)
+            string xy = parts[1];
+            string status = xy.Replace('.', ' ').Trim();
+            result.Changes.Add(new WorkspaceChangeEntry
             {
-                string aheadText = ExtractNumber(header, aheadIndex + 6);
-                int.TryParse(aheadText, out int ahead);
-                result.CommitsAhead = ahead;
-            }
-
-            int behindIndex = header.IndexOf("behind ", StringComparison.OrdinalIgnoreCase);
-            if (behindIndex >= 0)
-            {
-                string behindText = ExtractNumber(header, behindIndex + 7);
-                int.TryParse(behindText, out int behind);
-                result.CommitsBehind = behind;
-            }
+                Path = parts[fieldsBeforePath].Replace('\\', '/'),
+                Status = status,
+                OriginalPath = originalPath
+            });
         }
 
-        private static string ExtractNumber(string text, int startIndex)
+        private static void ParseBranchHeader(WorkspaceChangesResult result, string header)
         {
-            StringBuilder builder = new StringBuilder();
-            for (int i = startIndex; i < text.Length; i++)
-            {
-                if (!Char.IsDigit(text[i]))
-                    break;
-                builder.Append(text[i]);
-            }
+            int space = header.IndexOf(' ');
+            if (space < 0) return;
+            string key = header.Substring(0, space);
+            string value = header.Substring(space + 1);
 
-            return builder.ToString();
+            if (String.Equals(key, "branch.head", StringComparison.Ordinal))
+            {
+                // Porcelain v1 reported a detached HEAD as "HEAD"; keep that value for API compatibility.
+                result.BranchName = String.Equals(value, "(detached)", StringComparison.Ordinal) ? "HEAD" : value;
+            }
+            else if (String.Equals(key, "branch.ab", StringComparison.Ordinal))
+            {
+                // "+<ahead> -<behind>"
+                string[] counts = value.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                foreach (string count in counts)
+                {
+                    if (count.Length < 2) continue;
+                    if (!int.TryParse(count.Substring(1), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out int parsed)) continue;
+                    if (count[0] == '+') result.CommitsAhead = parsed;
+                    else if (count[0] == '-') result.CommitsBehind = parsed;
+                }
+            }
         }
 
         #endregion

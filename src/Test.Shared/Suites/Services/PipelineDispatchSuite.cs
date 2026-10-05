@@ -2774,6 +2774,10 @@ namespace Test.Shared.Suites.Services
                 => Task.FromResult("");
 
             /// <inheritdoc />
+            public Task<IReadOnlyList<Armada.Core.Models.GitChangedFile>> GetBranchChangesAsync(string worktreePath, string baseBranch = "main", CancellationToken token = default)
+                => Task.FromResult<IReadOnlyList<Armada.Core.Models.GitChangedFile>>(Array.Empty<Armada.Core.Models.GitChangedFile>());
+
+            /// <inheritdoc />
             public Task<bool> IsPrMergedAsync(string workingDirectory, string prUrl, CancellationToken token = default) => Task.FromResult(true);
 
             /// <inheritdoc />

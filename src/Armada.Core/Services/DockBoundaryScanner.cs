@@ -3,6 +3,7 @@ namespace Armada.Core.Services
     using System;
     using System.Collections.Generic;
     using System.Text.RegularExpressions;
+    using Armada.Core.Models;
 
     /// <summary>
     /// Scans a mission's diff and changed-path set before landing for boundary violations: secrets a
@@ -35,8 +36,9 @@ namespace Armada.Core.Services
         /// Scan a diff + changed paths against the supplied policy and return structured findings.
         /// An empty list means the dock is clean under this policy.
         /// </summary>
-        /// <param name="diffText">Unified diff text for the mission (null/empty = no changes).</param>
-        /// <param name="changedPaths">The set of changed file paths (forward-slash relative).</param>
+        /// <param name="diffText">Unified git diff text for the mission (null/empty = no changes). Paths it names are
+        /// added to <paramref name="changedPaths"/> for the protected-path check.</param>
+        /// <param name="changedPaths">Additional changed file paths (forward-slash relative), for example from git --name-status.</param>
         /// <param name="policy">Per-vessel policy. Null disables all checks.</param>
         /// <returns>Structured findings; never contains secret bytes.</returns>
         public static List<BoundaryFinding> Scan(string? diffText, IEnumerable<string>? changedPaths, DockBoundaryPolicy? policy)
@@ -44,13 +46,33 @@ namespace Armada.Core.Services
             List<BoundaryFinding> findings = new List<BoundaryFinding>();
             if (policy == null) return findings;
 
-            // Protected paths -- evaluate the changed-path set against globs.
-            if (policy.ProtectedPathGlobs != null && policy.ProtectedPathGlobs.Count > 0 && changedPaths != null)
+            List<UnifiedDiffFile> diffFiles = UnifiedDiffParser.Parse(diffText);
+
+            // Protected paths -- evaluate every path the change touches: the supplied set plus every path
+            // the diff itself names (both sides of a rename, deleted paths, mode-only and binary changes).
+            if (policy.ProtectedPathGlobs != null && policy.ProtectedPathGlobs.Count > 0)
             {
-                foreach (string rawPath in changedPaths)
+                List<string> paths = new List<string>();
+                HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);
+                if (changedPaths != null)
                 {
-                    string path = NormalizePath(rawPath);
-                    if (String.IsNullOrEmpty(path)) continue;
+                    foreach (string rawPath in changedPaths)
+                    {
+                        string path = NormalizePath(rawPath);
+                        if (!String.IsNullOrEmpty(path) && seen.Add(path)) paths.Add(path);
+                    }
+                }
+                foreach (UnifiedDiffFile file in diffFiles)
+                {
+                    foreach (string rawPath in file.Paths)
+                    {
+                        string path = NormalizePath(rawPath);
+                        if (!String.IsNullOrEmpty(path) && seen.Add(path)) paths.Add(path);
+                    }
+                }
+
+                foreach (string path in paths)
+                {
                     foreach (string glob in policy.ProtectedPathGlobs)
                     {
                         if (GlobMatches(glob, path))
@@ -62,48 +84,40 @@ namespace Armada.Core.Services
                 }
             }
 
-            // Secrets + private identifiers -- scan only ADDED lines of the diff.
+            // Secrets + private identifiers -- scan only ADDED lines, taken from inside hunks by their @@ ranges.
             bool scanSecrets = policy.SecretScanEnabled;
             bool scanPrivate = policy.PrivateIdentifiers != null && policy.PrivateIdentifiers.Count > 0;
-            if ((scanSecrets || scanPrivate) && !String.IsNullOrEmpty(diffText))
+            if (scanSecrets || scanPrivate)
             {
-                string currentFile = String.Empty;
-                int lineNumber = 0;
-                foreach (string rawLine in diffText!.Replace("\r\n", "\n").Split('\n'))
+                foreach (UnifiedDiffFile file in diffFiles)
                 {
-                    lineNumber++;
-                    if (rawLine.StartsWith("+++ ", StringComparison.Ordinal))
+                    string currentFile = NormalizePath(file.DisplayPath);
+                    foreach (UnifiedDiffLine addedLine in file.AddedLines)
                     {
-                        currentFile = ExtractDiffFilePath(rawLine);
-                        continue;
-                    }
-                    if (rawLine.StartsWith("--- ", StringComparison.Ordinal) || rawLine.StartsWith("diff ", StringComparison.Ordinal))
-                        continue;
-                    // Only added content (a real '+' line, not the '+++' header).
-                    if (rawLine.Length == 0 || rawLine[0] != '+') continue;
-                    string added = rawLine.Substring(1);
+                        string added = addedLine.Content;
 
-                    if (scanSecrets)
-                    {
-                        foreach ((string ruleId, Regex pattern) in _SecretPatterns)
+                        if (scanSecrets)
                         {
-                            if (pattern.IsMatch(added))
+                            foreach ((string ruleId, Regex pattern) in _SecretPatterns)
                             {
-                                findings.Add(new BoundaryFinding("secret", ruleId, currentFile, lineNumber));
-                                break; // one secret finding per line is enough; do not echo the value
+                                if (pattern.IsMatch(added))
+                                {
+                                    findings.Add(new BoundaryFinding("secret", ruleId, currentFile, addedLine.NewLineNumber));
+                                    break; // one secret finding per line is enough; do not echo the value
+                                }
                             }
                         }
-                    }
 
-                    if (scanPrivate)
-                    {
-                        foreach (string identifier in policy.PrivateIdentifiers!)
+                        if (scanPrivate)
                         {
-                            if (String.IsNullOrWhiteSpace(identifier)) continue;
-                            if (added.IndexOf(identifier.Trim(), StringComparison.OrdinalIgnoreCase) >= 0)
+                            foreach (string identifier in policy.PrivateIdentifiers!)
                             {
-                                findings.Add(new BoundaryFinding("private-identifier", identifier.Trim(), currentFile, lineNumber));
-                                break;
+                                if (String.IsNullOrWhiteSpace(identifier)) continue;
+                                if (added.IndexOf(identifier.Trim(), StringComparison.OrdinalIgnoreCase) >= 0)
+                                {
+                                    findings.Add(new BoundaryFinding("private-identifier", identifier.Trim(), currentFile, addedLine.NewLineNumber));
+                                    break;
+                                }
                             }
                         }
                     }
@@ -138,16 +152,6 @@ namespace Armada.Core.Services
         {
             if (String.IsNullOrWhiteSpace(path)) return String.Empty;
             return path.Replace('\\', '/').TrimStart('/').Trim();
-        }
-
-        private static string ExtractDiffFilePath(string plusPlusPlusLine)
-        {
-            // "+++ b/path/to/file" -> "path/to/file"
-            string body = plusPlusPlusLine.Length > 4 ? plusPlusPlusLine.Substring(4).Trim() : String.Empty;
-            if (body == "/dev/null") return String.Empty;
-            if (body.StartsWith("b/", StringComparison.Ordinal) || body.StartsWith("a/", StringComparison.Ordinal))
-                body = body.Substring(2);
-            return NormalizePath(body);
         }
 
         // Minimal glob: supports * (any run within a segment) and ** (across segments), anchored to the full path.

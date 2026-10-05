@@ -2,7 +2,7 @@ namespace Armada.Core.Services
 {
     /// <summary>
     /// A single dock-boundary finding. Deliberately carries no secret bytes -- only the kind of
-    /// violation, the rule that matched, the offending path, and (for secrets) the diff line number.
+    /// violation, the rule that matched, the offending path, and (for secrets) the line number in the changed file.
     /// </summary>
     public sealed class BoundaryFinding
     {
@@ -24,7 +24,7 @@ namespace Armada.Core.Services
         public string Path { get; }
 
         /// <summary>
-        /// For secret/identifier findings, the 1-based line number within the diff; null for path findings.
+        /// For secret/identifier findings, the 1-based line number in the new version of the file; null for path findings.
         /// </summary>
         public int? Line { get; }
 
@@ -38,7 +38,7 @@ namespace Armada.Core.Services
         /// <param name="kind">Violation category.</param>
         /// <param name="ruleId">Matched rule identifier.</param>
         /// <param name="path">Offending path.</param>
-        /// <param name="line">Diff line number, or null.</param>
+        /// <param name="line">Line number in the new version of the file, or null.</param>
         public BoundaryFinding(string kind, string ruleId, string path, int? line)
         {
             Kind = kind ?? string.Empty;

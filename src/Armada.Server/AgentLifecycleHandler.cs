@@ -1137,6 +1137,7 @@ namespace Armada.Server
 
             startInfo.ArgumentList.Add("init");
             startInfo.ArgumentList.Add("--quiet");
+            Armada.Core.Services.GitProcessEnvironment.Apply(startInfo);
 
             using (Process process = new Process { StartInfo = startInfo })
             {

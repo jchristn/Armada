@@ -725,6 +725,184 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+
+            cases.Add(CaseAsync("branch_exists_does_not_treat_name_as_glob", "BranchExistsAsync matches the exact ref, not a glob", TestTags.Negative, async () =>
+            {
+                GitService service = CreateService();
+                string repoDir = TestGitRepoHelper.CreateWorkingRepoCopy();
+                try
+                {
+                    await RunGitAsync(repoDir, "branch", "feature-one").ConfigureAwait(false);
+
+                    // branch --list treats its argument as a pattern, so "feature-*" used to report true.
+                    AssertFalse(await service.BranchExistsAsync(repoDir, "feature-*").ConfigureAwait(false), "a glob must not match an existing branch");
+                    AssertTrue(await service.BranchExistsAsync(repoDir, "feature-one").ConfigureAwait(false), "the exact branch exists");
+                    AssertFalse(await service.BranchExistsAsync(repoDir, "feature").ConfigureAwait(false), "a prefix is not a branch");
+                }
+                finally
+                {
+                    TestTemp.TryDelete(repoDir);
+                }
+            }));
+
+            cases.Add(CaseAsync("get_branch_changes_reports_deletes_renames_and_counts", "GetBranchChangesAsync reports deletions, both rename sides, unusual names, and line counts", TestTags.Positive, async () =>
+            {
+                GitService service = CreateService();
+                string repoDir = TestGitRepoHelper.CreateWorkingRepoCopy();
+                try
+                {
+                    Directory.CreateDirectory(Path.Combine(repoDir, "protected"));
+                    await File.WriteAllTextAsync(Path.Combine(repoDir, "protected", "keep.txt"), "a\nb\n").ConfigureAwait(false);
+                    await File.WriteAllTextAsync(Path.Combine(repoDir, "protected", "move.txt"), "m\n").ConfigureAwait(false);
+                    await RunGitAsync(repoDir, "add", "-A").ConfigureAwait(false);
+                    await RunGitAsync(repoDir, "commit", "-m", "base files").ConfigureAwait(false);
+
+                    await RunGitAsync(repoDir, "checkout", "-b", "armada/changes").ConfigureAwait(false);
+                    await RunGitAsync(repoDir, "rm", "-q", "protected/keep.txt").ConfigureAwait(false);
+                    await RunGitAsync(repoDir, "mv", "protected/move.txt", "moved.txt").ConfigureAwait(false);
+                    await File.WriteAllTextAsync(Path.Combine(repoDir, "caf\u00e9 x.txt"), "1\n2\n3\n").ConfigureAwait(false);
+                    await RunGitAsync(repoDir, "add", "-A").ConfigureAwait(false);
+                    await RunGitAsync(repoDir, "commit", "-m", "changes").ConfigureAwait(false);
+
+                    IReadOnlyList<Armada.Core.Models.GitChangedFile> changes = await service.GetBranchChangesAsync(repoDir, "main").ConfigureAwait(false);
+                    Dictionary<string, Armada.Core.Models.GitChangedFile> byPath = new Dictionary<string, Armada.Core.Models.GitChangedFile>(StringComparer.Ordinal);
+                    foreach (Armada.Core.Models.GitChangedFile change in changes) byPath[change.Path] = change;
+
+                    AssertTrue(byPath.ContainsKey("protected/keep.txt"), "deleted path reported");
+                    AssertEqual(Armada.Core.Enums.GitChangeKindEnum.Deleted, byPath["protected/keep.txt"].Kind);
+                    AssertEqual(2, byPath["protected/keep.txt"].DeletedLines);
+                    AssertTrue(byPath.ContainsKey("protected/move.txt"), "rename source reported");
+                    AssertTrue(byPath.ContainsKey("moved.txt"), "rename target reported");
+                    AssertTrue(byPath.ContainsKey("caf\u00e9 x.txt"), "non-ASCII path reported verbatim, not C-quoted");
+                    AssertEqual(3, byPath["caf\u00e9 x.txt"].AddedLines);
+                }
+                finally
+                {
+                    TestTemp.TryDelete(repoDir);
+                }
+            }));
+
+            cases.Add(CaseAsync("changed_files_since_reports_unquoted_paths", "GetChangedFilesSinceAsync returns non-ASCII paths verbatim", TestTags.Positive, async () =>
+            {
+                GitService service = CreateService();
+                string repoDir = TestGitRepoHelper.CreateWorkingRepoCopy();
+                try
+                {
+                    string start = (await RunGitAsync(repoDir, "rev-parse", "HEAD").ConfigureAwait(false)).Trim();
+                    await File.WriteAllTextAsync(Path.Combine(repoDir, "na\u00efve.txt"), "x\n").ConfigureAwait(false);
+                    await RunGitAsync(repoDir, "add", "-A").ConfigureAwait(false);
+                    await RunGitAsync(repoDir, "commit", "-m", "unicode").ConfigureAwait(false);
+                    await File.WriteAllTextAsync(Path.Combine(repoDir, "untracked \u00e9.txt"), "y\n").ConfigureAwait(false);
+
+                    IReadOnlyList<string> changed = await service.GetChangedFilesSinceAsync(repoDir, start).ConfigureAwait(false);
+                    AssertTrue(changed.Contains("na\u00efve.txt"), "committed non-ASCII path should be verbatim");
+                    AssertTrue(changed.Contains("untracked \u00e9.txt"), "untracked non-ASCII path should be verbatim");
+                }
+                finally
+                {
+                    TestTemp.TryDelete(repoDir);
+                }
+            }));
+
+            cases.Add(CaseAsync("merge_branch_local_async_unrelated_histories_merges", "MergeBranchLocalAsync merges a branch with no common ancestor", TestTags.Positive, async () =>
+            {
+                GitService service = CreateService();
+                string rootDir = TestTemp.NewDirectory("gitservice");
+                string sourceDir = TestGitRepoHelper.CreateWorkingRepoCopy();
+                string bareDir = Path.Combine(rootDir, "bare.git");
+                string targetDir = Path.Combine(rootDir, "target");
+
+                try
+                {
+                    await RunGitAsync(rootDir, "clone", "--bare", sourceDir, bareDir).ConfigureAwait(false);
+                    await RunGitAsync(sourceDir, "remote", "add", "armada", bareDir).ConfigureAwait(false);
+                    await RunGitAsync(sourceDir, "checkout", "--orphan", "armada/orphan").ConfigureAwait(false);
+                    await RunGitAsync(sourceDir, "rm", "-rf", "-q", ".").ConfigureAwait(false);
+                    await File.WriteAllTextAsync(Path.Combine(sourceDir, "orphan.txt"), "orphan\n").ConfigureAwait(false);
+                    await RunGitAsync(sourceDir, "add", "orphan.txt").ConfigureAwait(false);
+                    await RunGitAsync(sourceDir, "commit", "-m", "Orphan").ConfigureAwait(false);
+                    await RunGitAsync(sourceDir, "push", "armada", "armada/orphan").ConfigureAwait(false);
+
+                    await RunGitAsync(rootDir, "clone", bareDir, targetDir).ConfigureAwait(false);
+                    await RunGitAsync(targetDir, "config", "user.name", "Armada Tests").ConfigureAwait(false);
+                    await RunGitAsync(targetDir, "config", "user.email", "armada-tests@example.com").ConfigureAwait(false);
+
+                    await service.MergeBranchLocalAsync(targetDir, bareDir, "armada/orphan", "main").ConfigureAwait(false);
+
+                    AssertTrue(File.Exists(Path.Combine(targetDir, "orphan.txt")), "orphan branch content should be merged");
+                    AssertTrue(File.Exists(Path.Combine(targetDir, "README.md")), "target content should remain");
+                    string parents = (await RunGitAsync(targetDir, "rev-list", "--parents", "-n", "1", "HEAD").ConfigureAwait(false)).Trim();
+                    AssertEqual(3, parents.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length, "HEAD should be a merge commit");
+                }
+                finally
+                {
+                    TestTemp.TryDelete(rootDir);
+                }
+            }));
+
+            cases.Add(CaseAsync("list_branches_reports_utc_commit_dates", "ListBranchesAsync parses iso-strict commit dates as UTC", TestTags.Positive, async () =>
+            {
+                GitService service = CreateService();
+                string repoDir = TestGitRepoHelper.CreateWorkingRepoCopy();
+                try
+                {
+                    IReadOnlyList<Armada.Core.Models.BranchInfo> branches = await service.ListBranchesAsync(repoDir, "main").ConfigureAwait(false);
+                    AssertEqual(1, branches.Count);
+                    AssertNotNull(branches[0].CommitDate, "commit date should parse");
+                    AssertEqual(DateTimeKind.Utc, branches[0].CommitDate!.Value.Kind);
+                    AssertTrue(Math.Abs((DateTime.UtcNow - branches[0].CommitDate!.Value).TotalDays) < 7, "commit date should be recent");
+                }
+                finally
+                {
+                    TestTemp.TryDelete(repoDir);
+                }
+            }));
+
+            cases.Add(CaseAsync("failed_git_command_throws_typed_exception", "A failing git command throws GitCommandException with the exit code", TestTags.Negative, async () =>
+            {
+                GitService service = CreateService();
+                string repoDir = TestGitRepoHelper.CreateWorkingRepoCopy();
+                try
+                {
+                    GitCommandException? failure = null;
+                    try
+                    {
+                        await service.DeleteLocalBranchAsync(repoDir, "does-not-exist").ConfigureAwait(false);
+                    }
+                    catch (GitCommandException ex)
+                    {
+                        failure = ex;
+                    }
+
+                    AssertNotNull(failure, "deleting a missing branch should throw GitCommandException");
+                    AssertNotEqual(0, failure!.ExitCode);
+                    AssertEqual("git", failure.Executable);
+                }
+                finally
+                {
+                    TestTemp.TryDelete(repoDir);
+                }
+            }));
+
+            cases.Add(CaseAsync("working_tree_status_counts_from_porcelain_v2", "GetWorkingTreeStatusAsync counts renames once and untracked unusual names", TestTags.Positive, async () =>
+            {
+                GitService service = CreateService();
+                string repoDir = TestGitRepoHelper.CreateWorkingRepoCopy();
+                try
+                {
+                    await RunGitAsync(repoDir, "mv", "README.md", "READ ME.md").ConfigureAwait(false);
+                    await File.WriteAllTextAsync(Path.Combine(repoDir, "a -> b.txt"), "x\n").ConfigureAwait(false);
+
+                    Armada.Core.Models.GitWorkingTreeStatus status = await service.GetWorkingTreeStatusAsync(repoDir).ConfigureAwait(false);
+                    AssertEqual(1, status.ModifiedCount);
+                    AssertEqual(1, status.UntrackedCount);
+                }
+                finally
+                {
+                    TestTemp.TryDelete(repoDir);
+                }
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: "Services.GitService",
                 displayName: "Git Service",

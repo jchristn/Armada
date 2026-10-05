@@ -543,6 +543,7 @@ namespace Armada.Core.Services
                 UseShellExecute = false,
                 CreateNoWindow = true,
             };
+            GitProcessEnvironment.Apply(psi);
             System.Diagnostics.Process? proc = System.Diagnostics.Process.Start(psi);
             if (proc == null) throw new InvalidOperationException("Failed to start git " + arguments);
             await proc.WaitForExitAsync(token).ConfigureAwait(false);

@@ -134,6 +134,18 @@ namespace Armada.Core.Services.Interfaces
         Task<string> DiffAsync(string worktreePath, string baseBranch = "main", CancellationToken token = default);
 
         /// <summary>
+        /// List the files the worktree's HEAD changes relative to the base branch, from git's machine formats
+        /// (diff --name-status -z --no-renames and diff --numstat -z --no-renames over base...HEAD, or base..HEAD
+        /// when the histories share no merge base). Deletions are reported, and a rename appears as a deletion
+        /// plus an addition, so both paths are visible to path rules.
+        /// </summary>
+        /// <param name="worktreePath">Path to the worktree.</param>
+        /// <param name="baseBranch">Base branch to compare against.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Changed files with kinds and line counts.</returns>
+        Task<IReadOnlyList<GitChangedFile>> GetBranchChangesAsync(string worktreePath, string baseBranch = "main", CancellationToken token = default);
+
+        /// <summary>
         /// Get the list of files with unresolved merge conflicts (unmerged paths) in a worktree.
         /// Returns an empty list when the working tree is clean.
         /// </summary>

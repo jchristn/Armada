@@ -164,6 +164,7 @@ namespace Armada.Server.Routes
                         UseShellExecute = false,
                         CreateNoWindow = true
                     };
+                    Armada.Core.Services.GitProcessEnvironment.Apply(gitPsi);
                     using (Process? gitProc = Process.Start(gitPsi))
                     {
                         if (gitProc != null)
