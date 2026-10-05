@@ -78,7 +78,7 @@ command = "armada"
 args = ["mcp", "stdio"]
 ```
 
-The stdio bridge opens the local Armada database directly, so the MCP connection needs no HTTP listener and no credential. It works only on the Admiral host, missions still run only while the Admiral server is running, and it does not register every tool (for example `inbox`, `stop_server`, and the fleet action, playbook, and memory tools are HTTP-only).
+The stdio bridge opens the local Armada database directly, so the MCP connection needs no HTTP listener and no credential. It works only on the Admiral host, missions still run only while the Admiral server is running, and it lists the same tools as the HTTP MCP server, but `stop_server` and the fleet action tools (`create_fleet_action`, `update_fleet_action`, `delete_fleet_action`, `run_fleet_action`, `fleet_action_run_status`, `cancel_fleet_action_run`) need the Admiral process and answer an `Unavailable` error over stdio; use the HTTP endpoint for them.
 
 **HTTP Transport** - requires the Admiral server running (`armada server start`):
 

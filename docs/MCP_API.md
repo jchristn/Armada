@@ -265,7 +265,7 @@ The legacy `/rpc` + `/events` (separate SSE) endpoints remain served for older c
 
 ### Stdio Transport
 
-Armada also supports an MCP stdio transport for direct process-based communication. The same tools registered via `McpToolRegistrar` are available on both transports. Use stdio when running Armada as a child process of an MCP client.
+Armada also supports an MCP stdio transport (`armada mcp stdio`) for direct process-based communication. Both transports register the same tool names via `McpToolRegistrar`. The stdio server runs standalone against the database (no Admiral process), so the tools that need the Admiral answer `ErrorCode` `Unavailable` over stdio: `stop_server`, and the fleet action tools (`create_fleet_action`, `update_fleet_action`, `delete_fleet_action`, `run_fleet_action`, `fleet_action_run_status`, `cancel_fleet_action_run`), whose runs are executed and tracked by the Admiral's runner. Use stdio when running Armada as a child process of an MCP client.
 
 ### Port Configuration
 
@@ -672,7 +672,7 @@ No parameters required.
 { "Status": "shutting_down" }
 ```
 
-> **Note:** Only available when the server provides a stop callback (HTTP transport, not stdio). Requires an admin credential (for example `X-Api-Key`), even on loopback.
+> **Note:** Over stdio (`armada mcp stdio`) the tool is listed but answers `ErrorCode` `Unavailable`: there is no Admiral process to stop (use `armada server stop`). Over HTTP it requires an admin credential (for example `X-Api-Key`), even on loopback.
 
 ---
 

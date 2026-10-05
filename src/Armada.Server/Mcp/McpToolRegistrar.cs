@@ -66,6 +66,9 @@ namespace Armada.Server.Mcp
         /// <param name="fleetActionService">Optional fleet action service for fleet action tools.</param>
         /// <param name="vesselHealthService">Optional vessel health service for health inspection, evaluation, and override tools.</param>
         /// <param name="fleetCategorizationService">Optional fleet categorization service for import categorization tools.</param>
+        /// <param name="stopServerUnavailableMessage">When <paramref name="onStop"/> is null and this is set, stop_server is
+        /// still registered and answers a typed Unavailable error with this message (used by the standalone stdio server,
+        /// so its tool list matches the HTTP server's).</param>
         public static void RegisterAll(
             RegisterToolDelegate register,
             DatabaseDriver database,
@@ -94,11 +97,12 @@ namespace Armada.Server.Mcp
             IVesselImportService? vesselImportService = null,
             FleetActionService? fleetActionService = null,
             VesselHealthService? vesselHealthService = null,
-            IFleetCategorizationService? fleetCategorizationService = null)
+            IFleetCategorizationService? fleetCategorizationService = null,
+            string? stopServerUnavailableMessage = null)
         {
             if (register == null) throw new ArgumentNullException(nameof(register));
             register = MapToolExceptions(MarkExperimental(register));
-            McpStatusTools.Register(register, admiral, onStop);
+            McpStatusTools.Register(register, admiral, onStop, stopServerUnavailableMessage);
             if (logging != null) McpInboxTools.Register(register, database, logging, settings);
             McpEnumerateTools.Register(register, database, mergeQueue);
             McpFleetTools.Register(register, database);
@@ -126,7 +130,8 @@ namespace Armada.Server.Mcp
             if (settings != null) McpBackupTools.Register(register, database, settings);
             if (modelEndpointService != null) McpModelEndpointTools.Register(register, modelEndpointService);
             if (harborService != null) McpHarborTools.Register(register, harborService);
-            if (fleetActionService != null) McpFleetActionTools.Register(register, fleetActionService);
+            // Registered even without the service: each fleet action tool then answers a typed Unavailable error.
+            McpFleetActionTools.Register(register, fleetActionService);
             if (vesselHealthService != null) McpVesselHealthTools.Register(register, vesselHealthService);
         }
 

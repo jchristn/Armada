@@ -121,6 +121,47 @@ namespace Test.Shared.Suites.E2E
                 }
             }));
 
+            cases.Add(CaseAsync("stdio_tool_list_matches_http_tool_list", "armada mcp stdio registers the same tools as the HTTP MCP server", TestTags.Positive, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
+                SortedSet<string> httpNames = new SortedSet<string>(StringComparer.Ordinal);
+                Dictionary<string, string> headers = new Dictionary<string, string> { ["X-Api-Key"] = fx.ApiKey };
+                using (Armada.Runtimes.Mcp.McpToolClient client = new Armada.Runtimes.Mcp.McpToolClient("http://127.0.0.1:" + fx.McpPort + "/mcp", null, headers, null, 60))
+                {
+                    // tools/list is paginated; the client follows nextCursor.
+                    await client.InitializeAsync().ConfigureAwait(false);
+                    foreach (Armada.Runtimes.Mcp.McpRemoteTool tool in await client.ListToolsAsync().ConfigureAwait(false))
+                        httpNames.Add(tool.Name);
+                }
+
+                Dictionary<string, Func<JsonElement?, Task<object>>> stdioTools = new Dictionary<string, Func<JsonElement?, Task<object>>>(StringComparer.Ordinal);
+                string dataDir = TestTemp.NewDirectory("mcp-stdio-tools");
+                Armada.Core.Settings.ArmadaSettings settings = new Armada.Core.Settings.ArmadaSettings();
+                settings.DataDirectory = dataDir;
+                settings.LogDirectory = Path.Combine(dataDir, "logs");
+                settings.DocksDirectory = Path.Combine(dataDir, "docks");
+                settings.ReposDirectory = Path.Combine(dataDir, "repos");
+                SyslogLogging.LoggingModule logging = new SyslogLogging.LoggingModule();
+                logging.Settings.EnableConsole = false;
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                using (Armada.Helm.Commands.McpStdioToolSet toolSet = new Armada.Helm.Commands.McpStdioToolSet(settings, logging, testDb.Driver))
+                {
+                    toolSet.Register((name, description, schema, handler) => stdioTools[name] = handler);
+
+                    SortedSet<string> stdioNames = new SortedSet<string>(stdioTools.Keys, StringComparer.Ordinal);
+                    List<string> missingOverStdio = httpNames.Except(stdioNames).ToList();
+                    List<string> extraOverStdio = stdioNames.Except(httpNames).ToList();
+                    AssertTrue(missingOverStdio.Count == 0, "tools missing over stdio: " + String.Join(", ", missingOverStdio));
+                    AssertTrue(extraOverStdio.Count == 0, "tools only over stdio: " + String.Join(", ", extraOverStdio));
+
+                    // Tools that need the Admiral process answer a typed Unavailable error over stdio.
+                    McpToolError stop = (McpToolError)await stdioTools["stop_server"](null).ConfigureAwait(false);
+                    AssertEqual(McpToolErrorCodeEnum.Unavailable, stop.ErrorCode);
+                    McpToolError run = (McpToolError)await stdioTools["run_fleet_action"](JsonDocument.Parse("{\"actionId\":\"fla_x\"}").RootElement.Clone()).ConfigureAwait(false);
+                    AssertEqual(McpToolErrorCodeEnum.Unavailable, run.ErrorCode);
+                }
+            }));
+
             cases.Add(CaseAsync("tools_list_each_tool_has_description", "ToolsList_EachToolHasDescription", TestTags.Positive, async () =>
             {
                 E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
