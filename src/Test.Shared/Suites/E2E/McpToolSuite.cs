@@ -162,6 +162,50 @@ namespace Test.Shared.Suites.E2E
                 }
             }));
 
+            cases.Add(CaseAsync("pipeline_tools_set_stage_review_fields", "create_pipeline and update_pipeline set requiresReview and reviewDenyAction on stages", TestTags.Positive, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
+                Dictionary<string, string> headers = new Dictionary<string, string> { ["X-Api-Key"] = fx.ApiKey };
+                string name = "ReviewedMcp" + Guid.NewGuid().ToString("N").Substring(0, 8);
+                using (Armada.Runtimes.Mcp.McpToolClient client = new Armada.Runtimes.Mcp.McpToolClient("http://127.0.0.1:" + fx.McpPort + "/mcp", null, headers, null, 60))
+                {
+                    await client.InitializeAsync().ConfigureAwait(false);
+                    Armada.Runtimes.Mcp.McpToolCallResult created = await client.CallToolResultAsync("create_pipeline", JsonHelper.Serialize(new
+                    {
+                        name = name,
+                        stages = new object[]
+                        {
+                            new { personaName = "Worker" },
+                            new { personaName = "Judge", requiresReview = true, reviewDenyAction = "FailPipeline" }
+                        }
+                    })).ConfigureAwait(false);
+                    AssertFalse(created.IsError, created.Text);
+                    Pipeline pipeline = JsonHelper.Deserialize<Pipeline>(created.Text);
+                    AssertFalse(pipeline.Stages[0].RequiresReview, "stage 1 keeps the default");
+                    AssertTrue(pipeline.Stages[1].RequiresReview, "stage 2 requires review");
+                    AssertEqual(ReviewDenyActionEnum.FailPipeline, pipeline.Stages[1].ReviewDenyAction);
+
+                    Armada.Runtimes.Mcp.McpToolCallResult updated = await client.CallToolResultAsync("update_pipeline", JsonHelper.Serialize(new
+                    {
+                        name = name,
+                        stages = new object[] { new { personaName = "Worker", requiresReview = true, reviewDenyAction = "retrystage" } }
+                    })).ConfigureAwait(false);
+                    AssertFalse(updated.IsError, updated.Text);
+                    Pipeline after = JsonHelper.Deserialize<Pipeline>(updated.Text);
+                    AssertTrue(after.Stages[0].RequiresReview, "updated stage requires review");
+                    AssertEqual(ReviewDenyActionEnum.RetryStage, after.Stages[0].ReviewDenyAction);
+
+                    Armada.Runtimes.Mcp.McpToolCallResult invalid = await client.CallToolResultAsync("update_pipeline", JsonHelper.Serialize(new
+                    {
+                        name = name,
+                        stages = new object[] { new { personaName = "Worker", reviewDenyAction = "Explode" } }
+                    })).ConfigureAwait(false);
+                    AssertEqual(McpToolErrorCodeEnum.InvalidArgument, McpToolResultProbe.From(invalid).ErrorCode);
+
+                    await client.CallToolResultAsync("delete_pipeline", JsonHelper.Serialize(new { name = name })).ConfigureAwait(false);
+                }
+            }));
+
             cases.Add(CaseAsync("tools_list_each_tool_has_description", "ToolsList_EachToolHasDescription", TestTags.Positive, async () =>
             {
                 E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);

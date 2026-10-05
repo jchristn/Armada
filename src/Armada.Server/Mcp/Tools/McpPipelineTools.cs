@@ -7,6 +7,7 @@ namespace Armada.Server.Mcp.Tools
     using Armada.Core;
     using ArmadaConstants = Armada.Core.Constants;
     using Armada.Core.Database;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
 
     /// <summary>
@@ -48,7 +49,9 @@ namespace Armada.Server.Mcp.Tools
                                 {
                                     personaName = new { type = "string", description = "Persona name for this stage" },
                                     isOptional = new { type = "boolean", description = "Whether this stage is optional (default false)" },
-                                    description = new { type = "string", description = "Description of what this stage does" }
+                                    description = new { type = "string", description = "Description of what this stage does" },
+                                    requiresReview = new { type = "boolean", description = "Whether the stage's mission waits for human review (approve or deny) before the pipeline advances (default false)" },
+                                    reviewDenyAction = new { type = "string", description = "What a review denial does: " + McpToolHelpers.EnumNames<ReviewDenyActionEnum>() + " (default RetryStage)" }
                                 },
                                 required = new[] { "personaName" }
                             }
@@ -76,10 +79,8 @@ namespace Armada.Server.Mcp.Tools
                         if (String.IsNullOrEmpty(stageArgs.PersonaName)) return (object)McpToolError.InvalidArgument("personaName is required for stage " + (i + 1));
 
                         PipelineStage stage = new PipelineStage(i + 1, stageArgs.PersonaName);
-                        if (stageArgs.IsOptional.HasValue)
-                            stage.IsOptional = stageArgs.IsOptional.Value;
-                        if (stageArgs.Description != null)
-                            stage.Description = stageArgs.Description;
+                        string? stageError = ApplyStageArgs(stage, stageArgs, i + 1);
+                        if (stageError != null) return (object)McpToolError.InvalidArgument(stageError);
                         stages.Add(stage);
                     }
                     pipeline.Stages = stages;
@@ -132,7 +133,9 @@ namespace Armada.Server.Mcp.Tools
                                 {
                                     personaName = new { type = "string", description = "Persona name for this stage" },
                                     isOptional = new { type = "boolean", description = "Whether this stage is optional (default false)" },
-                                    description = new { type = "string", description = "Description of what this stage does" }
+                                    description = new { type = "string", description = "Description of what this stage does" },
+                                    requiresReview = new { type = "boolean", description = "Whether the stage's mission waits for human review (approve or deny) before the pipeline advances (default false)" },
+                                    reviewDenyAction = new { type = "string", description = "What a review denial does: " + McpToolHelpers.EnumNames<ReviewDenyActionEnum>() + " (default RetryStage)" }
                                 },
                                 required = new[] { "personaName" }
                             }
@@ -165,10 +168,8 @@ namespace Armada.Server.Mcp.Tools
 
                             PipelineStage stage = new PipelineStage(i + 1, stageArgs.PersonaName);
                             stage.PipelineId = pipeline.Id;
-                            if (stageArgs.IsOptional.HasValue)
-                                stage.IsOptional = stageArgs.IsOptional.Value;
-                            if (stageArgs.Description != null)
-                                stage.Description = stageArgs.Description;
+                            string? stageError = ApplyStageArgs(stage, stageArgs, i + 1);
+                            if (stageError != null) return (object)McpToolError.InvalidArgument(stageError);
                             stages.Add(stage);
                         }
                         pipeline.Stages = stages;
@@ -207,6 +208,29 @@ namespace Armada.Server.Mcp.Tools
                     await database.Pipelines.DeleteAsync(pipeline.Id).ConfigureAwait(false);
                     return (object)new { Status = "deleted", Name = name };
                 });
+        }
+
+        /// <summary>
+        /// Copy a stage argument's optional fields onto a stage.
+        /// </summary>
+        /// <returns>An error message for an invalid value, or null.</returns>
+        private static string? ApplyStageArgs(PipelineStage stage, PipelineStageArgs stageArgs, int stageNumber)
+        {
+            if (stageArgs.IsOptional.HasValue)
+                stage.IsOptional = stageArgs.IsOptional.Value;
+            if (stageArgs.Description != null)
+                stage.Description = stageArgs.Description;
+            if (stageArgs.RequiresReview.HasValue)
+                stage.RequiresReview = stageArgs.RequiresReview.Value;
+            if (!String.IsNullOrWhiteSpace(stageArgs.ReviewDenyAction))
+            {
+                if (!Enum.TryParse<ReviewDenyActionEnum>(stageArgs.ReviewDenyAction.Trim(), true, out ReviewDenyActionEnum denyAction)
+                    || !Enum.IsDefined(typeof(ReviewDenyActionEnum), denyAction))
+                    return "reviewDenyAction for stage " + stageNumber + " must be one of " + McpToolHelpers.EnumNames<ReviewDenyActionEnum>();
+                stage.ReviewDenyAction = denyAction;
+            }
+
+            return null;
         }
     }
 }

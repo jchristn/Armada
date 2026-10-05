@@ -4171,7 +4171,9 @@ Create a custom pipeline with stages.
         "properties": {
           "personaName": { "type": "string", "description": "Persona name for this stage" },
           "isOptional": { "type": "boolean", "description": "Whether this stage is optional (default false)" },
-          "description": { "type": "string", "description": "Stage description" }
+          "description": { "type": "string", "description": "Stage description" },
+          "requiresReview": { "type": "boolean", "description": "Whether the stage's mission waits for human review before the pipeline advances (default false)" },
+          "reviewDenyAction": { "type": "string", "description": "What a review denial does: RetryStage, FailPipeline (default RetryStage)" }
         },
         "required": ["personaName"]
       },
@@ -4186,7 +4188,7 @@ Create a custom pipeline with stages.
 |---|---|---|---|
 | `name` | string | Yes | Pipeline name |
 | `description` | string | No | Pipeline description |
-| `stages` | array | Yes | Ordered list of pipeline stages, each with `personaName` (required), `isOptional` (optional, default false), and `description` (optional) |
+| `stages` | array | Yes | Ordered list of pipeline stages, each with `personaName` (required), `isOptional` (optional, default false), `description` (optional), `requiresReview` (optional, default false), and `reviewDenyAction` (optional, `RetryStage` or `FailPipeline`, default `RetryStage`; any other value is `InvalidArgument`) |
 
 **Example Input:**
 
@@ -4249,7 +4251,9 @@ Update pipeline properties and stages. If `stages` is provided, it replaces all 
         "properties": {
           "personaName": { "type": "string", "description": "Persona name for this stage" },
           "isOptional": { "type": "boolean", "description": "Whether this stage is optional (default false)" },
-          "description": { "type": "string", "description": "Stage description" }
+          "description": { "type": "string", "description": "Stage description" },
+          "requiresReview": { "type": "boolean", "description": "Whether the stage's mission waits for human review before the pipeline advances (default false)" },
+          "reviewDenyAction": { "type": "string", "description": "What a review denial does: RetryStage, FailPipeline (default RetryStage)" }
         },
         "required": ["personaName"]
       },
@@ -4264,7 +4268,7 @@ Update pipeline properties and stages. If `stages` is provided, it replaces all 
 |---|---|---|---|
 | `name` | string | Yes | Pipeline name |
 | `description` | string | No | New pipeline description |
-| `stages` | array | No | New ordered list of pipeline stages (replaces all existing stages if provided) |
+| `stages` | array | No | New ordered list of pipeline stages (replaces all existing stages if provided); each stage takes the same fields as in `create_pipeline`, including `requiresReview` and `reviewDenyAction` |
 
 **Response:** Updated [Pipeline](#pipeline) object with stages, or `{ "Error": "Pipeline not found: <name>", "ErrorCode": "NotFound" }`.
 
