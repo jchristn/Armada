@@ -150,14 +150,14 @@ namespace Test.Shared.Suites.Runtimes
 
                     ToolResult edit = await Run(registry, "edit_file", "{\"file_path\":\"src/notes.txt\",\"old_string\":\"two\",\"new_string\":\"TWO\"}", dir).ConfigureAwait(false);
                     AssertTrue(edit.Success, "edit_file: " + edit.Content);
-                    AssertEqual("one\nTWO\nthree\n", File.ReadAllText(Path.Combine(dir, "src", "notes.txt")), "edited content");
+                    AssertEqual("one\nTWO\nthree\n".Replace("\n", Environment.NewLine), File.ReadAllText(Path.Combine(dir, "src", "notes.txt")), "edited content");
 
                     ToolResult multi = await Run(registry, "multi_edit", "{\"file_path\":\"src/notes.txt\",\"edits\":[{\"old_string\":\"one\",\"new_string\":\"1\"},{\"old_string\":\"three\",\"new_string\":\"3\"}]}", dir).ConfigureAwait(false);
                     AssertTrue(multi.Success, "multi_edit: " + multi.Content);
                     MultiEditOutput? multiOutput = JsonSerializer.Deserialize<MultiEditOutput>(multi.Content);
                     AssertNotNull(multiOutput, "multi_edit output");
                     AssertEqual(2, multiOutput!.EditsApplied, "multi_edit edits_applied");
-                    AssertEqual("1\nTWO\n3\n", File.ReadAllText(Path.Combine(dir, "src", "notes.txt")), "multi-edited content");
+                    AssertEqual("1\nTWO\n3\n".Replace("\n", Environment.NewLine), File.ReadAllText(Path.Combine(dir, "src", "notes.txt")), "multi-edited content");
 
                     File.WriteAllText(Path.Combine(dir, "src", "other.cs"), "class X {}");
                     ToolResult glob = await Run(registry, "glob", "{\"pattern\":\"**/*.txt\"}", dir).ConfigureAwait(false);
