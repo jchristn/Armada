@@ -50,7 +50,7 @@ namespace Test.Shared.Suites.Tui
 
                 using (TuiTestHost host = TuiCase.SignedIn(Width, Height, "/missions", fx.Stub))
                 {
-                    host.PumpUntil(() => host.Screen().Contains("msn_f", StringComparison.Ordinal), 5000);
+                    host.PumpUntil(() => host.Screen().Contains("Fix column widths", StringComparison.Ordinal), 5000);
                     frames["missions"] = host.Screen();
                 }
 
@@ -66,7 +66,7 @@ namespace Test.Shared.Suites.Tui
                 TuiCase.Contains(frames["login"], "Continue", "login");
                 TuiCase.Contains(frames["ask"], "Release checklist", "ask");
                 TuiCase.Contains(frames["home"], "Mission History", "home");
-                TuiCase.Contains(frames["missions"], "msn_f", "missions");
+                TuiCase.Contains(frames["missions"], "Fix column widths", "missions");
                 TuiCase.Contains(frames["approvals"], "Staging", "approvals");
 
                 string? dir = Environment.GetEnvironmentVariable("ARMADA_TUI_README_DIR");

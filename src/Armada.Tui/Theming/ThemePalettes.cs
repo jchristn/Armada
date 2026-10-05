@@ -68,7 +68,8 @@ namespace Armada.Tui.Theming
         }
 
         /// <summary>
-        /// The high-contrast palette (black and white with bright accents, ASCII borders, bold emphasis).
+        /// The high-contrast palette (black and white with bright accents, ASCII borders, bold emphasis, and reverse video
+        /// or underline for every selected or focused state, so it also reads on a terminal without color).
         /// </summary>
         /// <returns>A new palette.</returns>
         public static ArmadaTheme HighContrast()
@@ -80,7 +81,9 @@ namespace Armada.Tui.Theming
                 fg,
                 Color.FromRgb(0x00, 0xFF, 0x00), yellow, Color.FromRgb(0xFF, 0x55, 0x55), Color.FromRgb(0x00, 0xFF, 0xFF));
             t.AsciiBorders = true;
-            CellStyle inverse = new CellStyle(bg, fg, CellAttributes.Bold);
+            // Reverse video rather than swapped colors, so selection still shows when the terminal has no color
+            // (NO_COLOR, monochrome); with color the result is the same black on white.
+            CellStyle inverse = new CellStyle(fg, bg, CellAttributes.Bold | CellAttributes.Reverse);
             t.Selection = inverse;
             t.SelectionInactive = new CellStyle(fg, bg, CellAttributes.Underline | CellAttributes.Bold);
             t.GridCursor = inverse;

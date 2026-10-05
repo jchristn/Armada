@@ -6,11 +6,11 @@
    Needs You            |[ + Mission n ]                                                          [auto 15s]  F5 Refresh
    Planning             |Status: All Statuses   v  User: All users            v  Title: Search...
    Dispatch             |Status text: Search...     Branch: Search...
-   Fleet Actions        |[ ] Title       ID                       Status           Priority Vessel Cap... Voyage Branch
->  Missions             |[ ] Fix colu... msn_f                    ~ InProgress          100 Alpha  cla... -      -
-- DELIVERY              |[ ] Broken      msn_x                    x Failed              100 Alpha  -      -      -
-   Delivery             |[ ] Update g... msn_d                    + Complete            100 Alpha  -      -      -
-- BUILD                 |[ ] Add retr... msn_r                    ! Review               50 Beta   -      -      -
+   Fleet Actions        |[ ] Title                        Status           Priority Vessel   Captain   Voyage   Branch
+>  Missions             |[ ] Fix column widths            ~ InProgress          100 Alpha    claude-1  -        -
+- DELIVERY              |[ ] Broken                       x Failed              100 Alpha    -         -        -
+   Delivery             |[ ] Update getting started guide + Complete            100 Alpha    -         -        -
+- BUILD                 |[ ] Add retry to webhook sender  ! Review               50 Beta     -         -        -
    Vessels              |
    Captains             |
 - CONFIGURATION         |

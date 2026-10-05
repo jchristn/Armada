@@ -120,6 +120,12 @@ namespace Armada.Tui
         public Armada.Tui.Ask.AskController? Ask { get; private set; } = null;
 
         /// <summary>
+        /// Ends the TUI when set (the run loop's stop), or null to call <see cref="TuiApplication.Quit"/>. Set during
+        /// composition by the host.
+        /// </summary>
+        public Action? QuitHandler { get; set; } = null;
+
+        /// <summary>
         /// The active client (shortcut for <c>Session.Client</c>).
         /// </summary>
         public ArmadaClient Client
@@ -206,6 +212,16 @@ namespace Armada.Tui
         public void AttachAsk(Armada.Tui.Ask.AskController ask)
         {
             if (Ask == null) Ask = ask ?? throw new ArgumentNullException(nameof(ask));
+        }
+
+        /// <summary>
+        /// Quit the TUI (Ctrl+Q): <see cref="QuitHandler"/> when set, otherwise <see cref="TuiApplication.Quit"/>.
+        /// </summary>
+        public void Quit()
+        {
+            Action? handler = QuitHandler;
+            if (handler != null) handler();
+            else App.Quit();
         }
 
         /// <summary>

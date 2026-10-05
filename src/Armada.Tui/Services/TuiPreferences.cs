@@ -32,6 +32,11 @@ namespace Armada.Tui.Services
         public ThemeModeEnum Theme { get; set; } = ThemeModeEnum.Auto;
 
         /// <summary>
+        /// Glyph (icon) mode: Auto picks ASCII when the terminal is not UTF-8. Default Auto.
+        /// </summary>
+        public GlyphModeEnum Glyphs { get; set; } = GlyphModeEnum.Auto;
+
+        /// <summary>
         /// Locale code, or null to follow the environment.
         /// </summary>
         public string? Locale { get; set; } = null;

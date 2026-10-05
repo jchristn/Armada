@@ -45,6 +45,14 @@ namespace Armada.Tui.Screens.Ask
         }
 
         /// <summary>
+        /// The block builder (cache statistics for diagnostics and tests).
+        /// </summary>
+        public AskTranscriptBuilder Builder
+        {
+            get { return _Builder; }
+        }
+
+        /// <summary>
         /// Key of the focused block, or null while following the live tail.
         /// </summary>
         public string? SelectedKey { get; private set; } = null;

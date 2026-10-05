@@ -19,6 +19,8 @@ All notable changes to Armada are documented in this file.
 
 ### Terminal UI: Operations, Delivery, Configuration, Activity, and System screens
 
+- Display: Icons setting (Auto, Unicode, ASCII); ASCII mode writes only ASCII and is picked automatically on non-UTF-8 terminals. High contrast is readable without color and is chosen automatically under `NO_COLOR`; no state is shown by color alone. Works at 80x24 with a clear "terminal too small" screen; tables give titles room and shorten or hide ID columns first.
+- Performance: an idle TUI uses about 1 percent of a core (was up to 10); long Ask conversations stay responsive while a reply streams (51 ms to 4 ms per chunk at 5,000 messages).
 - Build: Vessels with branches, build context and bulk fleet actions; the import wizard with background discovery, fleet recommendations and history; Vessel Health with server filters and the health inspector; the vessel page and onboarding; Fleets; the Workspace (file tree, editor, terminal, diff, context, search); Captains with Mux settings, the tools viewer and readable logs; and Docks. Every dashboard route now opens a real TUI screen.
 - Fixed: `Armada.Client` treated a 409 from vessel health evaluation (already running) as an error; TUI go-to sequences such as `g s` did not work from a list screen.
 - Operations: Home, Needs You, Planning (live streaming transcript, dispatch from a session), Dispatch (pre-fill from Planning, Backlog, Incident, Workspace), Backlog and Backlog item (GitHub import, refinement sessions), Fleet Actions (runs, live run detail, target drawer), Missions and Mission detail (diff, log, review, transition, landing preview, PR panel), Voyages, Voyage detail, Create Voyage, Merge Queue and entry detail, and Jobs.

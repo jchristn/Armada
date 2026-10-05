@@ -20,14 +20,32 @@ namespace Armada.Tui.Screens.Ask
     /// WorkUpdate milestones (with "show live card" when the card lives elsewhere), summaries, errors, and system notes;
     /// each tracked item's live work card on its host message; plus "Load earlier messages", the streaming reply
     /// (Markdown re-rendered on every chunk so lists, headings, and code read correctly while streaming), the rotating
-    /// waiting phrase, the turn failure, and the empty-state greeting. Markdown renders are cached per text and width.
-    /// Not thread-safe.
+    /// waiting phrase, the turn failure, and the empty-state greeting. Markdown renders are cached per text and width,
+    /// and message blocks are cached per message with a signature of everything they are built from (text, kind, tool
+    /// calls, relative time, expanded sections, captain name, metrics, width, theme, locale), so a rebuild after a
+    /// streaming chunk or a clock tick only lays out what changed (W8.5: 5,000-message transcripts). Messages with a
+    /// confirm card or a live work card are always rebuilt (they show live state). Not thread-safe.
     /// </summary>
     public class AskTranscriptBuilder
     {
+        #region Public-Members
+
+        /// <summary>
+        /// Message blocks reused from the cache by the last <see cref="Build"/>.
+        /// </summary>
+        public int LastReused { get; private set; } = 0;
+
+        /// <summary>
+        /// Message blocks laid out by the last <see cref="Build"/>.
+        /// </summary>
+        public int LastBuilt { get; private set; } = 0;
+
+        #endregion
+
         #region Private-Members
 
         private readonly Dictionary<string, List<StyledText>> _Markdown = new Dictionary<string, List<StyledText>>(StringComparer.Ordinal);
+        private Dictionary<string, AskBlockCacheEntry> _Blocks = new Dictionary<string, AskBlockCacheEntry>(StringComparer.Ordinal);
 
         #endregion
 
@@ -83,11 +101,32 @@ namespace Armada.Tui.Screens.Ask
                     .Where(id => id != null)
                     .Select(id => id!), StringComparer.Ordinal);
                 string? highlight = view.HighlightAt(nowUtc);
+                string frame = w + "|" + System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(theme) + "|" + loc.Locale + "|" + (ask.ActiveCaptain?.Name ?? "");
+                Dictionary<string, AskBlockCacheEntry> next = new Dictionary<string, AskBlockCacheEntry>(StringComparer.Ordinal);
+                int reused = 0;
+                int built = 0;
                 foreach (AskMessage message in conv.Messages)
                 {
-                    AskBlock? block = MessageBlock(ask, view, message, hosts, proposalHosts, highlight, theme, loc, nowUtc, w);
+                    string? signature = Signature(ask, view, message, hosts, frame, loc, nowUtc);
+                    AskBlock? block;
+                    if (signature != null && _Blocks.TryGetValue(message.Id, out AskBlockCacheEntry? hit) && hit.Signature == signature)
+                    {
+                        block = hit.Block;
+                        reused++;
+                    }
+                    else
+                    {
+                        block = MessageBlock(ask, view, message, hosts, proposalHosts, highlight, theme, loc, nowUtc, w);
+                        built++;
+                    }
+
+                    if (signature != null && !String.IsNullOrEmpty(message.Id)) next[message.Id] = new AskBlockCacheEntry(signature, block);
                     if (block != null) blocks.Add(block);
                 }
+
+                _Blocks = next;
+                LastReused = reused;
+                LastBuilt = built;
             }
 
             if (streamVisible) blocks.Add(StreamBlock(ask, view, stream!, theme, loc, nowUtc, w));
@@ -210,6 +249,43 @@ namespace Armada.Tui.Screens.Ask
         #endregion
 
         #region Private-Methods
+
+        private static string? Signature(AskController ask, AskViewState view, AskMessage message, Dictionary<string, string> hosts, string frame, LocalizationService loc, DateTime nowUtc)
+        {
+            AskConversation conv = ask.Conversation;
+            string? workId = message.TrackedWorkId ?? message.TrackedWork?.Id;
+            if (workId != null && hosts.TryGetValue(workId, out string? host) && host == message.Id) return null;
+            if (conv.ProposalFor(message) != null) return null;
+            string text = message.ContentText ?? "";
+            System.Text.StringBuilder sb = new System.Text.StringBuilder(160);
+            sb.Append(frame).Append('|').Append((int)message.Kind).Append('|').Append((int)message.Role)
+                .Append('|').Append(text.Length).Append(':').Append(text.GetHashCode())
+                .Append('|').Append(loc.FormatRelative(message.CreatedUtc, nowUtc))
+                .Append('|').Append(AskConversation.IsLocal(message) ? 'L' : 'P')
+                .Append('|').Append(workId ?? "")
+                .Append('|').Append(message.CaptainId ?? "").Append('=').Append(ask.CaptainName(message.CaptainId) ?? "")
+                .Append('|').Append(message.DurationMs?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "")
+                .Append('|').Append(message.ThinkingText?.Length ?? -1).Append(':').Append(message.ThinkingText?.GetHashCode() ?? 0)
+                .Append('|').Append(view.ExpandedTools.Contains(message.Id) ? 'T' : 't')
+                .Append(view.ExpandedThinking.Contains(message.Id) ? 'K' : 'k');
+            if (message.ToolCalls != null)
+            {
+                foreach (AskMessageToolCall call in message.ToolCalls)
+                {
+                    sb.Append('|').Append(call.ToolName).Append(':').Append(call.Ok?.ToString() ?? "?")
+                        .Append(':').Append(call.ArgumentsText?.Length ?? -1).Append(':').Append(call.ArgumentsText?.GetHashCode() ?? 0)
+                        .Append(':').Append(call.ResultText?.Length ?? -1).Append(':').Append(call.ResultText?.GetHashCode() ?? 0)
+                        .Append(':').Append(call.ElapsedMs?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "");
+                }
+            }
+
+            if (conv.Metrics.TryGetValue(message.Id, out AskTurnMetrics? metrics))
+            {
+                sb.Append("|m").Append(metrics.Describe("a", "b", "c", "d"));
+            }
+
+            return sb.ToString();
+        }
 
         private AskBlock EmptyState(AskController ask, ArmadaTheme theme, LocalizationService loc, int w)
         {

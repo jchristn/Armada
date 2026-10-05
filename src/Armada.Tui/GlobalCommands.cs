@@ -38,7 +38,7 @@ namespace Armada.Tui
             c.Register(Cmd("file.proxy-switch", "Switch Deployment", CommandMenuEnum.File, () => ProxySwitch(context), () => context.Session.Proxy != null));
             c.Register(Cmd("file.proxy-logout", "Proxy Logout", CommandMenuEnum.File, () => ProxyLogout(context), () => context.Session.Proxy != null));
             c.Register(Cmd("file.sign-out", "Sign out", CommandMenuEnum.File, () => _ = context.Session.SignOutAsync(), signedIn));
-            c.Register(Cmd("file.quit", "Quit", CommandMenuEnum.File, context.App.Quit, null, "ctrl+q"));
+            c.Register(Cmd("file.quit", "Quit", CommandMenuEnum.File, context.Quit, null, "ctrl+q"));
 
             // Go: every sidebar destination with the plan's g-letter keys.
             foreach (NavItem item in NavCatalog.AllItems())
@@ -59,6 +59,9 @@ namespace Armada.Tui
             c.Register(Cmd("view.theme.light", "Theme: Light", CommandMenuEnum.View, () => SetTheme(context, ThemeModeEnum.Light)));
             c.Register(Cmd("view.theme.high-contrast", "Theme: High contrast", CommandMenuEnum.View, () => SetTheme(context, ThemeModeEnum.HighContrast)));
             c.Register(Cmd("view.theme.auto", "Theme: Auto", CommandMenuEnum.View, () => SetTheme(context, ThemeModeEnum.Auto)));
+            c.Register(Cmd("view.icons.auto", "Icons: Auto", CommandMenuEnum.View, () => SetGlyphs(context, GlyphModeEnum.Auto)));
+            c.Register(Cmd("view.icons.unicode", "Icons: Unicode", CommandMenuEnum.View, () => SetGlyphs(context, GlyphModeEnum.Unicode)));
+            c.Register(Cmd("view.icons.ascii", "Icons: ASCII", CommandMenuEnum.View, () => SetGlyphs(context, GlyphModeEnum.Ascii)));
             c.Register(Cmd("view.language", "Language...", CommandMenuEnum.View, () => PickLanguage(context)));
             c.Register(Cmd("view.sidebar", "Toggle sidebar", CommandMenuEnum.View, shell.ToggleSidebar, signedIn, "ctrl+b"));
             c.Register(Cmd("view.dock", "Toggle Ask dock", CommandMenuEnum.View, shell.ToggleDock, signedIn, "ctrl+j"));
@@ -156,6 +159,16 @@ namespace Armada.Tui
             context.Prefs.Current.Theme = mode;
             context.Prefs.Save();
             context.Notifications.Toast(NotificationSeverityEnum.Info, context.Loc.T("Theme") + ": " + context.Loc.T(context.Theme.Current.Name));
+        }
+
+        private static void SetGlyphs(TuiContext context, GlyphModeEnum mode)
+        {
+            context.Theme.ApplyGlyphs(mode);
+            context.Prefs.Current.Glyphs = mode;
+            context.Prefs.Save();
+            string effective = context.Theme.AsciiGlyphs ? "ASCII" : "Unicode";
+            string label = mode == GlyphModeEnum.Auto ? context.Loc.T("Auto") + " (" + effective + ")" : effective;
+            context.Notifications.Toast(NotificationSeverityEnum.Info, context.Loc.T("Icons") + ": " + label);
         }
 
         private static void PickLanguage(TuiContext context)

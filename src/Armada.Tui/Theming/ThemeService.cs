@@ -6,7 +6,8 @@ namespace Armada.Tui.Theming
     using TUIKit.Theming;
 
     /// <summary>
-    /// Owns the active palette (Dark, Light, HighContrast, or Auto from the terminal background) and pushes it into
+    /// Owns the active palette (Dark, Light, HighContrast, or Auto from the terminal background; Auto is high contrast
+    /// when <c>NO_COLOR</c> is set) and the glyph mode (Unicode, ASCII, or Auto from the terminal encoding), and pushes it into
     /// every registered widget and into the TUIKit application theme (region backgrounds and built-in modals).
     /// TUIKit widgets do not read the application theme, so styles are pushed explicitly (see
     /// <see cref="ThemeApplicator"/>). Call on the UI loop thread.
@@ -19,6 +20,25 @@ namespace Armada.Tui.Theming
         /// Selected mode (may be Auto).
         /// </summary>
         public ThemeModeEnum Mode { get; private set; } = ThemeModeEnum.Dark;
+
+        /// <summary>
+        /// Selected glyph mode (may be Auto).
+        /// </summary>
+        public GlyphModeEnum GlyphMode { get; private set; } = GlyphModeEnum.Auto;
+
+        /// <summary>
+        /// True when the resolved glyph mode is ASCII.
+        /// </summary>
+        public bool AsciiGlyphs
+        {
+            get { return Current.AsciiGlyphs; }
+        }
+
+        /// <summary>
+        /// True when the terminal can display UTF-8 (consulted for <see cref="GlyphModeEnum.Auto"/>); replaceable for
+        /// tests. Defaults to <see cref="TerminalEncoding.CurrentSupportsUtf8"/>.
+        /// </summary>
+        public Func<bool> Utf8Probe { get; set; } = TerminalEncoding.CurrentSupportsUtf8;
 
         /// <summary>
         /// Concrete mode after resolving Auto.
@@ -71,13 +91,15 @@ namespace Armada.Tui.Theming
         #region Public-Methods
 
         /// <summary>
-        /// Resolve Auto to Dark or Light from <c>COLORFGBG</c> ("fg;bg"; background 7 or 15 means light). Unknown is Dark.
+        /// Resolve Auto: high contrast when <c>NO_COLOR</c> is set (selection then shows as reverse video), otherwise Dark
+        /// or Light from <c>COLORFGBG</c> ("fg;bg"; background 7 or 15 means light). Unknown is Dark.
         /// </summary>
         /// <param name="mode">Mode.</param>
         /// <returns>A concrete mode.</returns>
         public ThemeModeEnum Resolve(ThemeModeEnum mode)
         {
             if (mode != ThemeModeEnum.Auto) return mode;
+            if (!String.IsNullOrEmpty(EnvironmentReader("NO_COLOR"))) return ThemeModeEnum.HighContrast;
             string? colorFgBg = EnvironmentReader("COLORFGBG");
             if (String.IsNullOrWhiteSpace(colorFgBg)) return ThemeModeEnum.Dark;
             string[] parts = colorFgBg!.Split(';');
@@ -93,11 +115,29 @@ namespace Armada.Tui.Theming
         public void Apply(ThemeModeEnum mode)
         {
             Mode = mode;
-            Current = ThemePalettes.Build(Resolve(mode));
-            TuiKitTheme = BuildTuiKitTheme(Current);
-            PushAll();
-            EventHandler<ArmadaTheme>? handler = Changed;
-            if (handler != null) handler(this, Current);
+            Rebuild();
+        }
+
+        /// <summary>
+        /// Select a glyph mode, rebuild the palette, and push it everywhere.
+        /// </summary>
+        /// <param name="mode">Glyph mode.</param>
+        public void ApplyGlyphs(GlyphModeEnum mode)
+        {
+            GlyphMode = mode;
+            Rebuild();
+        }
+
+        /// <summary>
+        /// Resolve a glyph mode: Auto is ASCII when the terminal cannot display UTF-8.
+        /// </summary>
+        /// <param name="mode">Glyph mode.</param>
+        /// <returns>True for ASCII.</returns>
+        public bool ResolveAscii(GlyphModeEnum mode)
+        {
+            if (mode == GlyphModeEnum.Ascii) return true;
+            if (mode == GlyphModeEnum.Unicode) return false;
+            return !Utf8Probe();
         }
 
         /// <summary>
@@ -142,6 +182,22 @@ namespace Armada.Tui.Theming
         #endregion
 
         #region Private-Methods
+
+        private void Rebuild()
+        {
+            ArmadaTheme palette = ThemePalettes.Build(Resolve(Mode));
+            if (ResolveAscii(GlyphMode))
+            {
+                palette.AsciiGlyphs = true;
+                palette.AsciiBorders = true;
+            }
+
+            Current = palette;
+            TuiKitTheme = BuildTuiKitTheme(Current);
+            PushAll();
+            EventHandler<ArmadaTheme>? handler = Changed;
+            if (handler != null) handler(this, Current);
+        }
 
         private void PushAll()
         {

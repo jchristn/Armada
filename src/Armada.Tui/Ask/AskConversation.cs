@@ -82,10 +82,22 @@ namespace Armada.Tui.Ask
         /// </summary>
         public long Version { get; private set; } = 0;
 
+        /// <summary>
+        /// Most messages kept in memory (W8.5 memory cap). When live messages push the transcript past it, the oldest
+        /// are dropped and <see cref="HasMore"/> is set so "Load earlier messages" can fetch them again. Older pages the
+        /// user loads explicitly are kept. Default 10,000; clamped to 100..1,000,000.
+        /// </summary>
+        public int MaxMessages
+        {
+            get { return _MaxMessages; }
+            set { _MaxMessages = Math.Clamp(value, 100, 1000000); }
+        }
+
         #endregion
 
         #region Private-Members
 
+        private int _MaxMessages = 10000;
         private readonly HashSet<string> _ClosedTurns = new HashSet<string>(StringComparer.Ordinal);
 
         private static readonly HashSet<AskProposalStatusEnum> _DecidedStatuses = new HashSet<AskProposalStatusEnum>
@@ -332,6 +344,7 @@ namespace Armada.Tui.Ask
             if (threadId != ThreadId) return false;
             List<AskMessage> incoming = messages.ToList();
             Messages = MergeMessages(Messages, incoming);
+            TrimOldest();
             IndexWork(incoming);
             IndexProposals(incoming, null);
             if (Streaming != null && Streaming.Finished) Streaming = null;
@@ -367,6 +380,7 @@ namespace Armada.Tui.Ask
         public void OptimisticUser(AskMessage message)
         {
             Messages = MergeMessages(Messages, new List<AskMessage> { message });
+            TrimOldest();
             TurnActive = true;
             TurnError = null;
             Changed();
@@ -514,6 +528,13 @@ namespace Armada.Tui.Ask
             Version++;
         }
 
+        private void TrimOldest()
+        {
+            if (Messages.Count <= _MaxMessages) return;
+            Messages = Messages.GetRange(Messages.Count - _MaxMessages, _MaxMessages);
+            HasMore = true;
+        }
+
         private bool ApplyStream(AskEvent e, DateTime nowUtc)
         {
             // Late events for a turn that already finished are ignored (even after its stream was replaced).
@@ -605,6 +626,7 @@ namespace Armada.Tui.Ask
             if (e.Message == null) return false;
             List<AskMessage> one = new List<AskMessage> { e.Message };
             Messages = MergeMessages(Messages, one);
+            TrimOldest();
             IndexWork(one);
             IndexProposals(one, null);
             if (ClosesStream(e.Message)) Streaming = null;

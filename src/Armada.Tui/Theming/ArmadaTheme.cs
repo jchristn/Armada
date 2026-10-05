@@ -28,6 +28,12 @@ namespace Armada.Tui.Theming
         public bool AsciiBorders { get; set; } = false;
 
         /// <summary>
+        /// True in ASCII icon mode: widgets pick ASCII glyphs and the terminal output is transliterated by
+        /// <see cref="AsciiGlyphs"/> (borders are ASCII too).
+        /// </summary>
+        public bool AsciiGlyphs { get; set; } = false;
+
+        /// <summary>
         /// Body text on the main background.
         /// </summary>
         public CellStyle Text { get; set; } = CellStyle.Default;
