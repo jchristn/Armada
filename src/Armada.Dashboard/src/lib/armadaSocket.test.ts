@@ -85,7 +85,7 @@ describe('ArmadaSocket', () => {
 
     token.value = 'tok_2';
     h.timers[1].fn();
-    expect(h.sockets[2].url).toContain('token=tok_2');
+    expect(new URL(h.sockets[2].url).searchParams.get('token')).toBe('tok_2');
     expect(h.reconnects()).toBe(0);
     h.sockets[2].open();
     expect(h.reconnects()).toBe(1);

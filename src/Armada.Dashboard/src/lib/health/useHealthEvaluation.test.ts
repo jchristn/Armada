@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { evaluateVesselHealth, getJob, listJobs } from '../../api/client';
 import type { Job } from '../../types/models';
 import { describeEvaluationStart, HEALTH_JOB_NAME, useHealthEvaluation } from './useHealthEvaluation';
+import { onlyCallArgs } from '../../test/mockCalls';
 
 vi.mock('../../api/client', () => ({
   evaluateVesselHealth: vi.fn(),
@@ -41,7 +42,7 @@ describe('describeEvaluationStart', () => {
   it('409: warns that an evaluation is already running', () => {
     const message = describeEvaluationStart({ jobId: 'job_9', alreadyRunning: true, vesselCount: 0 });
     expect(message.severity).toBe('warning');
-    expect(message.key).toMatch(/already running/);
+    expect(message.key).toBe('An evaluation is already running. Showing its progress instead.');
   });
 });
 
@@ -67,7 +68,7 @@ describe('useHealthEvaluation', () => {
     expect(result.current.running).toBe(true);
 
     await waitFor(() => expect(onFinished).toHaveBeenCalledTimes(1));
-    expect(onFinished.mock.calls[0][0].status).toBe('Succeeded');
+    expect(onlyCallArgs(onFinished)[0].status).toBe('Succeeded');
     expect(result.current.running).toBe(false);
     expect(result.current.activeJob).toBeNull();
     expect(result.current.lastJob?.status).toBe('Succeeded');

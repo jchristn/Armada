@@ -47,9 +47,12 @@ describe('WebSocketProvider', () => {
 
     expect(StubSocket.instances).toHaveLength(1);
     const first = StubSocket.instances[0];
-    expect(first.url).toMatch(/\/ws\?token=tok_abc$/);
+    const firstUrl = new URL(first.url);
+    expect(firstUrl.pathname).toBe('/ws');
+    expect([...firstUrl.searchParams.keys()]).toEqual(['token']);
+    expect(firstUrl.searchParams.get('token')).toBe('tok_abc');
     act(() => { first.readyState = 1; first.onopen?.(); });
-    expect(first.sent).toContain(JSON.stringify({ Route: 'subscribe' }));
+    expect(first.sent.map((frame) => JSON.parse(frame))).toContainEqual({ Route: 'subscribe' });
 
     // Existing consumers (mission.changed) and Ask events both arrive.
     act(() => { first.onmessage?.({ data: JSON.stringify({ type: 'mission.changed', data: { id: 'msn_1', status: 'Complete' } }) }); });

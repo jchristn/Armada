@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import PlanningSessionListCard from './PlanningSessionListCard';
+import { onlyCallArgs } from '../../test/mockCalls';
 
 vi.mock('../shared/StatusBadge', () => ({
   default: ({ status }: { status: string }) => <span>{status}</span>,
@@ -76,7 +77,7 @@ describe('PlanningSessionListCard', () => {
     await user.click(screen.getByRole('menuitem', { name: 'End Session' }));
 
     expect(onEndSession).toHaveBeenCalledTimes(1);
-    expect(onEndSession.mock.calls[0][0].id).toBe('psn_active');
+    expect(onlyCallArgs(onEndSession)[0].id).toBe('psn_active');
     expect(onSelect).not.toHaveBeenCalled();
   });
 
@@ -90,6 +91,6 @@ describe('PlanningSessionListCard', () => {
     await user.click(screen.getByRole('menuitem', { name: 'Delete' }));
 
     expect(onDeleteSession).toHaveBeenCalledTimes(1);
-    expect(onDeleteSession.mock.calls[0][0].id).toBe('psn_active');
+    expect(onlyCallArgs(onDeleteSession)[0].id).toBe('psn_active');
   });
 });

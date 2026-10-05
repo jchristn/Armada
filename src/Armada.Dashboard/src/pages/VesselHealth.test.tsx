@@ -210,7 +210,10 @@ describe('VesselHealth page', () => {
     expect(await screen.findByText('Could not load vessel health: boom')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
     expect(await screen.findByText('app')).toBeInTheDocument();
-    expect(vi.mocked(enumerateVesselHealth).mock.calls[1][0]).toMatchObject({ OverallStatus: ['Fail'] });
+    // Both the failed fetch and the retry carry the filter (selecting by position would also accept a retry
+    // that dropped it if a third call happened).
+    await waitFor(() => expect(enumerateVesselHealth).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(enumerateVesselHealth).mock.calls.map(([query]) => query.OverallStatus)).toEqual([['Fail'], ['Fail']]);
     expect(screen.getByTestId('location').textContent).toBe('/vessels/health?overall=Fail');
   });
 

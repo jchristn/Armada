@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import History from './History';
 import { enumerateHistoryTimeline, listObjectives, listVessels } from '../api/client';
+import { callsMatching } from '../test/mockCalls';
 
 const translate = (text: string, params?: Record<string, string | number | null | undefined>) => {
   if (!params) return text;
@@ -154,14 +155,20 @@ describe('History', () => {
       expect(enumerateHistoryTimeline).toHaveBeenCalledTimes(2);
     });
 
-    expect(vi.mocked(enumerateHistoryTimeline).mock.calls[1][0]).toMatchObject({
+    // The export is the query with the export page size; select it by that, not by call position.
+    const exportCalls = callsMatching(vi.mocked(enumerateHistoryTimeline), ([query]) => query?.pageSize === 5000);
+    expect(exportCalls).toHaveLength(1);
+    expect(exportCalls[0][0]).toMatchObject({
       pageNumber: 1,
       pageSize: 5000,
       text: 'deploy',
     });
     expect(createObjectUrlMock).toHaveBeenCalled();
     expect(anchorClickSpy).toHaveBeenCalled();
-    expect(localStorage.getItem('armada_history_saved_views')).toContain('Deploy view');
+    const savedViews = JSON.parse(localStorage.getItem('armada_history_saved_views') ?? '[]') as Array<{ name: string; query: { text?: string | null } }>;
+    const savedView = savedViews.find((view) => view.name === 'Deploy view');
+    expect(savedView).toBeDefined();
+    expect(savedView?.query.text).toBe('deploy');
   });
 
   it('applies the postmortem-only filter to history queries', async () => {
@@ -182,7 +189,10 @@ describe('History', () => {
       expect(enumerateHistoryTimeline).toHaveBeenCalledTimes(2);
     });
 
-    expect(vi.mocked(enumerateHistoryTimeline).mock.calls[1][0]).toMatchObject({
+    // Exactly one query carries the postmortem filter (the one Apply sent), and it is the standard page.
+    const postmortemCalls = callsMatching(vi.mocked(enumerateHistoryTimeline), ([query]) => query?.postmortemOnly === true);
+    expect(postmortemCalls).toHaveLength(1);
+    expect(postmortemCalls[0][0]).toMatchObject({
       pageNumber: 1,
       pageSize: 250,
       postmortemOnly: true,
