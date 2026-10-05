@@ -2,6 +2,7 @@ namespace Test.Shared.Suites.E2E
 {
     using System;
     using System.Collections.Generic;
+    using System.Linq;
     using System.Net;
     using System.Net.Http;
     using System.Threading;
@@ -171,18 +172,14 @@ namespace Test.Shared.Suites.E2E
 
                 // Check that a status_changed event was emitted
                 EnumerationResult<ArmadaEvent> events = await GetTypedAsync<EnumerationResult<ArmadaEvent>>(authClient, "/api/v1/events?type=mission.status_changed&missionId=" + missionId);
-                bool found = false;
-                foreach (ArmadaEvent evt in events.Objects ?? new List<ArmadaEvent>())
-                {
-                    string? msg = evt.Message;
-                    // TODO(R5, production): mission.status_changed carries the new status only in its message text.
-                    if (msg == "Mission " + missionId + " transitioned to WorkProduced")
-                    {
-                        found = true;
-                        break;
-                    }
-                }
-                AssertTrue(found, "Expected mission.status_changed event mentioning WorkProduced for mission " + missionId);
+                // The new and previous status are typed fields of the event payload, not only words in the message.
+                List<MissionStatusChangedPayload> payloads = (events.Objects ?? new List<ArmadaEvent>())
+                    .Where(e => e.EventType == "mission.status_changed" && e.MissionId == missionId && !String.IsNullOrEmpty(e.Payload))
+                    .Select(e => JsonHelper.Deserialize<MissionStatusChangedPayload>(e.Payload!))
+                    .ToList();
+                MissionStatusChangedPayload? workProduced = payloads.FirstOrDefault(p => p.Status == MissionStatusEnum.WorkProduced);
+                AssertNotNull(workProduced, "Expected a mission.status_changed event with Status WorkProduced for mission " + missionId);
+                AssertEqual(MissionStatusEnum.InProgress, workProduced!.PreviousStatus, "previous status recorded");
             }));
 
             cases.Add(CaseAsync("landing_failed_transitions_back_to_work_produced", "LandingFailed_TransitionsBackToWorkProduced", TestTags.Positive, async () =>

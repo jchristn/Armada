@@ -1150,7 +1150,7 @@ namespace Armada.Server
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Missions
-            new MissionRoutes(_Database, _Admiral, _MissionService, _Settings, _Git, _LandingService, _LandingPreviewService, _GitHubIntegrationService, EmitEventAsync, _MissionLanding.HandleMissionCompleteAsync, _WebSocketHub, _Logging, _JsonOptions)
+            new MissionRoutes(_Database, _Admiral, _MissionService, _Settings, _Git, _LandingService, _LandingPreviewService, _GitHubIntegrationService, EmitEventAsync, EmitMissionStatusChangedAsync, _MissionLanding.HandleMissionCompleteAsync, _WebSocketHub, _Logging, _JsonOptions)
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Captains
@@ -1640,10 +1640,31 @@ namespace Armada.Server
             }
         }
 
-        private async Task EmitEventAsync(string eventType, string message,
+        private Task EmitEventAsync(string eventType, string message,
             string? entityType = null, string? entityId = null,
             string? captainId = null, string? missionId = null,
             string? vesselId = null, string? voyageId = null)
+        {
+            return EmitEventCoreAsync(eventType, message, entityType, entityId, captainId, missionId, vesselId, voyageId, null);
+        }
+
+        /// <summary>
+        /// Record and broadcast <c>mission.status_changed</c> with the new and previous status as typed fields (event
+        /// Payload JSON and WebSocket <c>status</c> / <c>previousStatus</c>), not only in the message text.
+        /// </summary>
+        private Task EmitMissionStatusChangedAsync(Mission mission, MissionStatusEnum? previousStatus, string message)
+        {
+            MissionStatusChangedPayload payload = new MissionStatusChangedPayload();
+            payload.Status = mission.Status;
+            payload.PreviousStatus = previousStatus;
+            return EmitEventCoreAsync("mission.status_changed", message, "mission", mission.Id, mission.CaptainId, mission.Id, mission.VesselId, mission.VoyageId, payload);
+        }
+
+        private async Task EmitEventCoreAsync(string eventType, string message,
+            string? entityType, string? entityId,
+            string? captainId, string? missionId,
+            string? vesselId, string? voyageId,
+            MissionStatusChangedPayload? statusPayload)
         {
             try
             {
@@ -1654,21 +1675,35 @@ namespace Armada.Server
                 evt.MissionId = missionId;
                 evt.VesselId = vesselId;
                 evt.VoyageId = voyageId;
+                if (statusPayload != null) evt.Payload = System.Text.Json.JsonSerializer.Serialize(statusPayload, _JsonOptions);
                 await _Database.Events.CreateAsync(evt).ConfigureAwait(false);
 
                 // Broadcast to the WebSocket clients of the entity's tenant
                 if (_WebSocketHub != null)
                 {
                     string? tenantId = await ResolveEventTenantAsync(entityType, entityId, captainId, missionId, vesselId, voyageId).ConfigureAwait(false);
-                    _WebSocketHub.BroadcastToTenant(tenantId, eventType, message, new
-                    {
-                        entityType = entityType,
-                        entityId = entityId,
-                        captainId = captainId,
-                        missionId = missionId,
-                        vesselId = vesselId,
-                        voyageId = voyageId
-                    });
+                    object data = statusPayload == null
+                        ? (object)new
+                        {
+                            entityType = entityType,
+                            entityId = entityId,
+                            captainId = captainId,
+                            missionId = missionId,
+                            vesselId = vesselId,
+                            voyageId = voyageId
+                        }
+                        : new
+                        {
+                            entityType = entityType,
+                            entityId = entityId,
+                            captainId = captainId,
+                            missionId = missionId,
+                            vesselId = vesselId,
+                            voyageId = voyageId,
+                            status = statusPayload.Status.ToString(),
+                            previousStatus = statusPayload.PreviousStatus?.ToString()
+                        };
+                    _WebSocketHub.BroadcastToTenant(tenantId, eventType, message, data);
                 }
 
                 await _RemoteTunnel.PublishEventAsync(eventType, new

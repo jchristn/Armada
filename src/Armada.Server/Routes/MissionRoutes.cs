@@ -37,6 +37,7 @@ namespace Armada.Server.Routes
         private readonly LandingPreviewService _landingPreview;
         private readonly GitHubIntegrationService _gitHub;
         private readonly Func<string, string, string?, string?, string?, string?, string?, string?, Task> _emitEvent;
+        private readonly Func<Mission, MissionStatusEnum?, string, Task> _emitMissionStatusChanged;
         private readonly Func<Mission, Dock, Task> _handleMissionComplete;
         private readonly ArmadaWebSocketHub? _webSocketHub;
         private readonly LoggingModule _logging;
@@ -60,6 +61,7 @@ namespace Armada.Server.Routes
         /// <param name="landingPreview">Mission landing-preview service.</param>
         /// <param name="gitHub">GitHub integration service.</param>
         /// <param name="emitEvent">Event broadcast callback.</param>
+        /// <param name="emitMissionStatusChanged">mission.status_changed callback (mission after the change, previous status, message).</param>
         /// <param name="handleMissionComplete">Mission completion callback.</param>
         /// <param name="webSocketHub">WebSocket hub for real-time notifications.</param>
         /// <param name="logging">Logging module.</param>
@@ -74,6 +76,7 @@ namespace Armada.Server.Routes
             LandingPreviewService landingPreview,
             GitHubIntegrationService gitHub,
             Func<string, string, string?, string?, string?, string?, string?, string?, Task> emitEvent,
+            Func<Mission, MissionStatusEnum?, string, Task> emitMissionStatusChanged,
             Func<Mission, Dock, Task> handleMissionComplete,
             ArmadaWebSocketHub? webSocketHub,
             LoggingModule logging,
@@ -88,6 +91,7 @@ namespace Armada.Server.Routes
             _landingPreview = landingPreview ?? throw new ArgumentNullException(nameof(landingPreview));
             _gitHub = gitHub ?? throw new ArgumentNullException(nameof(gitHub));
             _emitEvent = emitEvent;
+            _emitMissionStatusChanged = emitMissionStatusChanged ?? throw new ArgumentNullException(nameof(emitMissionStatusChanged));
             _handleMissionComplete = handleMissionComplete;
             _webSocketHub = webSocketHub;
             _logging = logging;
@@ -646,6 +650,8 @@ namespace Armada.Server.Routes
                 if (!Enum.TryParse<MissionStatusEnum>(transition.Status, true, out MissionStatusEnum newStatus))
                     { req.Http.Response.StatusCode = 400; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Invalid status: " + transition.Status }; }
 
+                MissionStatusEnum previousStatus = mission.Status;
+
                 // Validate transitions
                 bool valid = IsValidTransition(mission.Status, newStatus);
                 if (!valid)
@@ -696,8 +702,7 @@ namespace Armada.Server.Routes
                         if (!String.IsNullOrEmpty(mission.CaptainId)) landingSignal.FromCaptainId = mission.CaptainId;
                         await _database.Signals.CreateAsync(landingSignal).ConfigureAwait(false);
 
-                        await _emitEvent("mission.status_changed", "Mission " + id + " manually completed — landed as " + mission.Status,
-                            "mission", id, mission.CaptainId, id, mission.VesselId, mission.VoyageId).ConfigureAwait(false);
+                        await _emitMissionStatusChanged(mission, previousStatus, "Mission " + id + " manually completed - landed as " + mission.Status).ConfigureAwait(false);
 
                         if (_webSocketHub != null)
                             _webSocketHub.BroadcastMissionChange(mission, mission.Status.ToString());
@@ -737,8 +742,7 @@ namespace Armada.Server.Routes
                 if (!String.IsNullOrEmpty(mission.CaptainId)) signal.FromCaptainId = mission.CaptainId;
                 await _database.Signals.CreateAsync(signal).ConfigureAwait(false);
 
-                await _emitEvent("mission.status_changed", "Mission " + id + " transitioned to " + newStatus,
-                    "mission", id, mission.CaptainId, id, mission.VesselId, mission.VoyageId).ConfigureAwait(false);
+                await _emitMissionStatusChanged(mission, previousStatus, "Mission " + id + " transitioned to " + newStatus).ConfigureAwait(false);
 
                 // Broadcast specific mission change for dashboard toast notifications
                 if (_webSocketHub != null)
