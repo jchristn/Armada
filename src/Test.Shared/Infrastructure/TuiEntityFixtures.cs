@@ -131,6 +131,40 @@ namespace Test.Shared.Infrastructure
         }
 
         /// <summary>
+        /// Wait until the stub saw a request with exactly this method and path that satisfies an optional predicate, or fail.
+        /// </summary>
+        /// <param name="host">Host.</param>
+        /// <param name="stub">Stub.</param>
+        /// <param name="method">HTTP method.</param>
+        /// <param name="path">Absolute path (no query).</param>
+        /// <param name="predicate">Optional predicate on the request (query values, typed body).</param>
+        /// <param name="label">Failure label.</param>
+        /// <param name="timeoutMs">Timeout.</param>
+        /// <returns>The last matching request.</returns>
+        public static StubRequest WaitForRequest(TuiTestHost host, StubHttpHandler stub, string method, string path, Func<StubRequest, bool>? predicate = null, string? label = null, int timeoutMs = 5000)
+        {
+            if (!host.PumpUntil(() => stub.Saw(method, path, predicate), timeoutMs))
+                throw new AssertionException("No " + method + " " + path + " request" + (label != null ? " (" + label + ")" : "") + ". Seen:\n" + String.Join("\n", stub.Requests));
+            return stub.Log.Last(r => r.Is(method, path) && (predicate == null || predicate(r)));
+        }
+
+        /// <summary>
+        /// Wait until the stub saw a request with this method and path whose query has a parameter with exactly this value.
+        /// </summary>
+        /// <param name="host">Host.</param>
+        /// <param name="stub">Stub.</param>
+        /// <param name="method">HTTP method.</param>
+        /// <param name="path">Absolute path (no query).</param>
+        /// <param name="name">Query parameter name.</param>
+        /// <param name="value">Expected decoded value.</param>
+        /// <param name="timeoutMs">Timeout.</param>
+        /// <returns>The last matching request.</returns>
+        public static StubRequest WaitForQuery(TuiTestHost host, StubHttpHandler stub, string method, string path, string name, string value, int timeoutMs = 5000)
+        {
+            return WaitForRequest(host, stub, method, path, r => r.QueryValue(name) == value, name + "=" + value, timeoutMs);
+        }
+
+        /// <summary>
         /// The body of the last request with a method and path prefix, or null.
         /// </summary>
         /// <param name="stub">Stub.</param>
@@ -138,14 +172,8 @@ namespace Test.Shared.Infrastructure
         /// <returns>Body or null.</returns>
         public static string? LastBody(StubHttpHandler stub, string prefix)
         {
-            List<string> requests = stub.Requests.ToList();
-            List<string> bodies = stub.Bodies.ToList();
-            for (int i = Math.Min(requests.Count, bodies.Count) - 1; i >= 0; i--)
-            {
-                if (requests[i].StartsWith(prefix, StringComparison.Ordinal)) return bodies[i];
-            }
-
-            return null;
+            StubRequest? found = stub.Log.LastOrDefault(r => r.Text.StartsWith(prefix, StringComparison.Ordinal));
+            return found?.Body;
         }
 
         #endregion
