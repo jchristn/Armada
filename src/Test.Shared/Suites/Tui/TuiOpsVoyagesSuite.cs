@@ -42,7 +42,7 @@ namespace Test.Shared.Suites.Tui
                     AssertEqual("vyg_g", screen.Grid.Current!.Id, "first row");
                     host.Press("u");
                     AssertTrue(host.WaitForText("Voyage Status"), "status viewer");
-                    TuiCase.Contains(host.Screen(), "\"Complete\": 1", "status json");
+                    TuiCase.Contains(host.Screen(), "\"Status\": \"Complete\"", "status json (voyage with its missions)");
                     host.Press("esc");
                     host.Press("x");
                     TuiCase.Contains(host.Screen(), "Cancel voyage \"Greeting rollout\"? All pending missions will be", "cancel text");
@@ -146,7 +146,7 @@ namespace Test.Shared.Suites.Tui
             stub.Json("GET", "/api/v1/voyages", "{\"Success\":true,\"PageNumber\":1,\"PageSize\":25,\"TotalPages\":1,\"TotalRecords\":2,\"Objects\":[" +
                 "{\"Id\":\"vyg_g\",\"Title\":\"Greeting rollout\",\"Status\":\"InProgress\",\"AutoPush\":true,\"AutoCreatePullRequests\":false,\"LandingMode\":\"PullRequest\",\"CreatedUtc\":\"2026-10-04T10:00:00Z\",\"LastUpdateUtc\":\"2026-10-04T10:00:00Z\"}," +
                 "{\"Id\":\"vyg_b\",\"Title\":\"Billing cleanup\",\"Status\":\"Complete\",\"CreatedUtc\":\"2026-10-04T09:00:00Z\",\"LastUpdateUtc\":\"2026-10-04T09:00:00Z\"}]}");
-            stub.Json("GET", "/api/v1/voyages/vyg_g/status", "{\"Complete\":1,\"InProgress\":2}");
+            stub.Json("GET", "/api/v1/voyages/vyg_g", "{\"Voyage\":{\"Id\":\"vyg_g\",\"Title\":\"Greeting rollout\",\"Status\":\"InProgress\"},\"Missions\":[{\"Id\":\"msn_g1\",\"Title\":\"Greeting\",\"Status\":\"Complete\"}]}");
             stub.On("DELETE", "/api/v1/voyages/vyg_g", b => StubHttpHandler.Response(HttpStatusCode.NoContent, ""));
             stub.On("DELETE", "/api/v1/voyages/vyg_b", b => StubHttpHandler.Response(HttpStatusCode.NoContent, ""));
             stub.On("DELETE", "/api/v1/voyages/vyg_g/purge", b => StubHttpHandler.Response(HttpStatusCode.NoContent, ""));

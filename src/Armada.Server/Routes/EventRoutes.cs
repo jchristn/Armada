@@ -102,6 +102,32 @@ namespace Armada.Server.Routes
                 .WithRequestBody(OpenApiJson.BodyFor<EnumerationQuery>("Enumeration query", false))
                 .WithSecurity("ApiKey"));
 
+            app.Get("/api/v1/events/{id}", async (ApiRequest req) =>
+            {
+                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
+                {
+                    req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
+                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
+                }
+                string id = req.Parameters["id"];
+                ArmadaEvent? evt = ctx.IsAdmin
+                    ? await _database.Events.ReadAsync(id).ConfigureAwait(false)
+                    : ctx.IsTenantAdmin
+                        ? await _database.Events.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false)
+                        : await _database.Events.ReadAsync(ctx.TenantId!, ctx.UserId!, id).ConfigureAwait(false);
+                if (evt == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Event not found" }; }
+                return evt;
+            },
+            api => api
+                .WithTag("Events")
+                .WithSummary("Get an event")
+                .WithDescription("Returns one event by ID, scoped like the event list (global admins see every event, tenant admins their tenant's, users their own).")
+                .WithParameter(OpenApiParameterMetadata.Path("id", "Event ID (evt_ prefix)"))
+                .WithResponse(200, OpenApiJson.For<ArmadaEvent>("Event"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithSecurity("ApiKey"));
+
             app.Delete("/api/v1/events/{id}", async (ApiRequest req) =>
             {
                 AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);

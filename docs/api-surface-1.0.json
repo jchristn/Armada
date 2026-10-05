@@ -1315,6 +1315,23 @@
       "experimental": false
     },
     {
+      "method": "GET",
+      "route": "/api/v1/events/{id}",
+      "auth": "Authenticated",
+      "resource": "Event:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "ArmadaEvent",
+        "404": ""
+      },
+      "tags": [
+        "Events"
+      ],
+      "summary": "Get an event",
+      "experimental": false
+    },
+    {
       "method": "POST",
       "route": "/api/v1/fleet-action-runs/enumerate",
       "auth": "Authenticated",

@@ -117,6 +117,7 @@ namespace Armada.Core.Authorization
             // EventRoutes
             Add("GET", "/api/v1/events", "Event", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("POST", "/api/v1/events/enumerate", "Event", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/events/{id}", "Event", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("DELETE", "/api/v1/events/{id}", "Event", ResourceOperationEnum.Delete, PermissionLevel.TenantAdmin);
             Add("POST", "/api/v1/events/delete/multiple", "Event", ResourceOperationEnum.Delete, PermissionLevel.TenantAdmin);
 

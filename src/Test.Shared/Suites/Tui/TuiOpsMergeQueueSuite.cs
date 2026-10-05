@@ -57,7 +57,7 @@ namespace Test.Shared.Suites.Tui
                     host.Press("x");
                     TuiCase.Contains(host.Screen(), "Cancel merge entry mrg_1?", "cancel text");
                     host.Press("y");
-                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/merge-queue/mrg_1/cancel") == 1), "cancel");
+                    AssertTrue(host.PumpUntil(() => stub.Count("DELETE /api/v1/merge-queue/mrg_1") == 1), "cancel uses the server's delete-or-cancel route");
                     host.Press(".");
                     AssertTrue(host.PumpUntil(() => host.App.Modals.IsActive), "row menu");
                     TuiCase.Contains(host.Screen(), "Mission Diff", "diff offered with a mission");
@@ -68,11 +68,11 @@ namespace Test.Shared.Suites.Tui
                     host.Press("del");
                     TuiCase.Contains(host.Screen(), "Delete merge entry mrg_1? This cannot be undone.", "delete text");
                     host.Press("y");
-                    AssertTrue(host.PumpUntil(() => stub.Count("DELETE /api/v1/merge-queue/mrg_1") == 1), "delete");
+                    AssertTrue(host.PumpUntil(() => stub.Count("DELETE /api/v1/merge-queue/mrg_1") == 2), "delete");
                     host.Press("P");
                     TuiCase.Contains(host.Screen(), "Process all queued entries in the merge queue now?", "process all text");
                     host.Press("y");
-                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/merge-queue/process-all") == 1), "process all");
+                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/merge-queue/process") == 1), "process all");
                     host.Press("home").Press("space").Press("down").Press("space");
                     host.Press("D");
                     TuiCase.Contains(host.Screen(), "Delete 2 selected merge queue entries? This cannot be undone.", "bulk text");
@@ -124,8 +124,7 @@ namespace Test.Shared.Suites.Tui
             stub.Json("GET", "/api/v1/merge-queue/mrg_1", entry1);
             stub.Json("POST", "/api/v1/merge-queue", "{\"Id\":\"mrg_3\",\"BranchName\":\"feature/x\",\"TargetBranch\":\"main\"}");
             stub.Json("POST", "/api/v1/merge-queue/mrg_1/process", "{}");
-            stub.Json("POST", "/api/v1/merge-queue/mrg_1/cancel", "{}");
-            stub.Json("POST", "/api/v1/merge-queue/process-all", "{}");
+            stub.Json("POST", "/api/v1/merge-queue/process", "{}");
             stub.On("DELETE", "/api/v1/merge-queue/mrg_1", b => StubHttpHandler.Response(HttpStatusCode.NoContent, ""));
             stub.On("DELETE", "/api/v1/merge-queue/mrg_2", b => StubHttpHandler.Response(HttpStatusCode.NoContent, ""));
             stub.Json("GET", "/api/v1/missions/msn_1/diff", "{\"Diff\":\"diff --git a/z b/z\\n+merge change\\n\"}");

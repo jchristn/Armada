@@ -132,7 +132,7 @@ namespace Test.Shared.Suites.Tui
                     Load(host);
                     Select(host, ApprovalKindEnum.StalledCaptain);
                     host.Press("R").Press("y");
-                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/captains/cpt_s/recall") == 1), "recall");
+                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/captains/cpt_s/stop") == 2), "recall uses the server's stop (recall) route");
                     Load(host);
                     Select(host, ApprovalKindEnum.StalledCaptain);
                     host.Press("t");
@@ -197,7 +197,6 @@ namespace Test.Shared.Suites.Tui
             stub.Json("POST", "/api/v1/deployments/dpl_1/deny", "{\"Id\":\"dpl_1\",\"Title\":\"Staging\"}");
             stub.Json("POST", "/api/v1/missions/msn_l/retry-landing", "{\"Success\":true}");
             stub.Json("POST", "/api/v1/captains/cpt_s/stop", "{}");
-            stub.Json("POST", "/api/v1/captains/cpt_s/recall", "{}");
             stub.Json("GET", "/api/v1/captains/cpt_s", "{\"Id\":\"cpt_s\",\"Name\":\"slow\",\"Runtime\":\"ClaudeCode\"}");
             stub.On("DELETE", "/api/v1/captains/cpt_s", body => StubHttpHandler.Response(HttpStatusCode.NoContent, ""));
             stub.Json("POST", "/api/v1/captains", "{\"Id\":\"cpt_t\",\"Name\":\"slow\",\"Runtime\":\"ClaudeCode\"}");

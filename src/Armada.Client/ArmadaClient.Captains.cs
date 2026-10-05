@@ -127,14 +127,16 @@ namespace Armada.Client
         }
 
         /// <summary>
-        /// Dashboard <c>recallCaptain</c>: POST `/api/v1/captains/${id}/recall`.
+        /// Dashboard <c>recallCaptain</c>. The dashboard posts to <c>/api/v1/captains/{id}/recall</c>, which the server does
+        /// not have; the server's stop route recalls the captain (kills its process and returns it to Idle), so this calls
+        /// POST /api/v1/captains/{id}/stop, the same call as <see cref="StopCaptainAsync"/>.
         /// </summary>
         /// <param name="id">id.</param>
         /// <param name="token">Cancellation token.</param>
         /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
         public Task RecallCaptainAsync(string id, CancellationToken token = default)
         {
-            return SendNoResultAsync(HttpMethod.Post, $"/api/v1/captains/{E(id)}/recall", null, null, token);
+            return SendNoResultAsync(HttpMethod.Post, $"/api/v1/captains/{E(id)}/stop", null, null, token);
         }
 
         /// <summary>

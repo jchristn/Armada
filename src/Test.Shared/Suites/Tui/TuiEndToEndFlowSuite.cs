@@ -112,7 +112,7 @@ namespace Test.Shared.Suites.Tui
                         AskThread first = (await admin.CreateAskThreadAsync(new AskThreadCreateRequest { Title = "Approvals first", CaptainId = captain.Id }))!;
                         await admin.SendAskMessageAsync(first.Id, "Dispatch the first change " + DispatchMarker);
                         AssertTrue(host.PumpUntil(() => FindProposal(host, first.Id) != null, LiveTimeoutMs), "first proposal reaches the center live: " + Errors());
-                        AssertTrue(await LiveServerSetup.WaitUntilAsync(async () => await TurnIdleAsync(admin, first.Id), LiveTimeoutMs), "first turn finished");
+                        AssertTrue(LiveServerSetup.PumpUntilServer(host, async () => await TurnIdleAsync(admin, first.Id), LiveTimeoutMs), "first turn finished");
                         AskThread second = (await admin.CreateAskThreadAsync(new AskThreadCreateRequest { Title = "Approvals second", CaptainId = captain.Id }))!;
                         await admin.SendAskMessageAsync(second.Id, "Dispatch the second change " + DispatchMarker);
                         AssertTrue(host.PumpUntil(() => FindProposal(host, second.Id) != null, LiveTimeoutMs), "second proposal reaches the center live: " + Errors());
@@ -125,26 +125,29 @@ namespace Test.Shared.Suites.Tui
                         ApprovalItem approveItem = FindProposal(host, first.Id)!;
                         SelectItem(host, approveItem);
                         host.Press("a");
-                        AssertTrue(await LiveServerSetup.WaitUntilAsync(async () => await ProposalStatusAsync(admin, first.Id, approveItem.EntityId) == AskProposalStatusEnum.Executed, LiveTimeoutMs), "approved proposal executed on the server");
+                        AssertTrue(LiveServerSetup.PumpUntilServer(host, async () => await ProposalStatusAsync(admin, first.Id, approveItem.EntityId) == AskProposalStatusEnum.Executed, LiveTimeoutMs), "approved proposal executed on the server");
                         AssertTrue(host.PumpUntil(() => host.Tui.Context.Approvals.Find(ApprovalKindEnum.AskProposal, approveItem.EntityId) == null, 10000), "approved proposal left the center");
-                        AssertTrue(await LiveServerSetup.WaitUntilAsync(async () => ((await admin.ListVoyagesAsync(new ArmadaPageQuery(1, 100)))?.Objects ?? new List<Voyage>()).Any(v => v.Title == approveTitle), 15000), "the approved dispatch created its voyage");
+                        AssertTrue(LiveServerSetup.PumpUntilServer(host, async () => ((await admin.ListVoyagesAsync(new ArmadaPageQuery(1, 100)))?.Objects ?? new List<Voyage>()).Any(v => v.Title == approveTitle), 15000), "the approved dispatch created its voyage");
 
                         ApprovalItem rejectItem = FindProposal(host, second.Id)!;
                         SelectItem(host, rejectItem);
                         host.Press("r");
-                        AssertTrue(await LiveServerSetup.WaitUntilAsync(async () => await ProposalStatusAsync(admin, second.Id, rejectItem.EntityId) == AskProposalStatusEnum.Rejected, LiveTimeoutMs), "rejected proposal recorded on the server");
+                        AssertTrue(LiveServerSetup.PumpUntilServer(host, async () => await ProposalStatusAsync(admin, second.Id, rejectItem.EntityId) == AskProposalStatusEnum.Rejected, LiveTimeoutMs), "rejected proposal recorded on the server");
                         AssertFalse(((await admin.ListVoyagesAsync(new ArmadaPageQuery(1, 100)))?.Objects ?? new List<Voyage>()).Any(v => v.Title == rejectTitle), "the rejected dispatch never ran");
 
+                        AssertTrue(host.PumpUntil(() => host.Tui.Context.Approvals.Find(ApprovalKindEnum.AskProposal, rejectItem.EntityId) == null, 10000), "rejected proposal left the center");
                         ApprovalItem deployItem = host.Tui.Context.Approvals.Find(ApprovalKindEnum.DeploymentApproval, deployment.Id)!;
                         SelectItem(host, deployItem);
                         host.Press("a");
-                        AssertTrue(host.PumpUntil(() => host.App.Modals.IsActive, 5000), "deployment approval asks to confirm");
+                        AssertTrue(host.WaitForText("Approve and execute \"E2E production deploy\"?", 5000), "deployment approval asks to confirm\n" + host.Screen());
                         host.Press("y");
-                        AssertTrue(await LiveServerSetup.WaitUntilAsync(async () =>
+                        DeploymentStatusEnum? deployStatus = null;
+                        AssertTrue(LiveServerSetup.PumpUntilServer(host, async () =>
                         {
                             Deployment? current = await admin.GetDeploymentAsync(deployment.Id);
+                            deployStatus = current?.Status;
                             return current != null && current.Status != DeploymentStatusEnum.PendingApproval;
-                        }, LiveTimeoutMs), "deployment approved on the server");
+                        }, LiveTimeoutMs), "deployment approved on the server: " + deployStatus + "\n" + host.Screen());
                         Deployment? after = await admin.GetDeploymentAsync(deployment.Id);
                         AssertNotEqual(DeploymentStatusEnum.Denied, after!.Status, "approved, not denied");
                         StopLive(host);
@@ -222,7 +225,7 @@ namespace Test.Shared.Suites.Tui
                         AssertTrue(host.PumpUntil(() => host.Tui.Context.Router.Current!.FullPath.StartsWith("/fleet-actions/runs/", StringComparison.Ordinal), 15000), "navigated to the run\n" + host.Screen());
                         string runId = host.Tui.Context.Router.Current!.FullPath.Substring("/fleet-actions/runs/".Length);
                         FleetActionRunStatusEnum? serverStatus = null;
-                        AssertTrue(await LiveServerSetup.WaitUntilAsync(async () =>
+                        AssertTrue(LiveServerSetup.PumpUntilServer(host, async () =>
                         {
                             FleetActionRunDetail? detail = await admin.GetFleetActionRunAsync(runId);
                             serverStatus = detail?.Run?.Status;
