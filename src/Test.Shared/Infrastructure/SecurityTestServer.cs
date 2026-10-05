@@ -97,6 +97,7 @@ namespace Test.Shared.Infrastructure
             settings.LogDirectory = server.LogDirectory;
             settings.DocksDirectory = Path.Combine(server.TempDir, "docks");
             settings.ReposDirectory = Path.Combine(server.TempDir, "repos");
+            settings.SettingsFilePath = Path.Combine(server.TempDir, "settings.json");
             settings.AdmiralPort = NextFreePort();
             settings.McpPort = NextFreePort();
             settings.ApiKey = "test-key-" + Guid.NewGuid().ToString("N");

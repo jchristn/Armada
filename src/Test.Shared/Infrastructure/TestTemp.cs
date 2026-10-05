@@ -62,8 +62,15 @@ namespace Test.Shared.Infrastructure
         {
             Sweep();
             EnsureExitHook();
+            IsolateUserProfile();
         }
 #pragma warning restore CA2255
+
+        /// <summary>
+        /// The per-run sandbox that stands in for the user's <c>~/.armada</c> while tests run, or null before
+        /// <see cref="Initialize"/> ran.
+        /// </summary>
+        public static string? ProfileSandbox { get; private set; } = null;
 
         /// <summary>
         /// Create a fresh, uniquely-named temp directory under the system temp directory and register it
@@ -130,6 +137,26 @@ namespace Test.Shared.Infrastructure
         #endregion
 
         #region Private-Methods
+
+        private static void IsolateUserProfile()
+        {
+            // Tests must never read or write the developer's real ~/.armada (settings.json, the database, TUI
+            // preferences, or the OS keychain). Point every default at a per-run sandbox before Armada.Core's
+            // Constants resolve their defaults, and fail fast if they already resolved to the real profile.
+            string sandbox = NewDirectory("profile");
+            Environment.SetEnvironmentVariable(Armada.Core.Constants.DataDirectoryEnvVar, sandbox);
+            Environment.SetEnvironmentVariable("ARMADA_TUI_PREFERENCES", Path.Combine(sandbox, "tui.json"));
+            Environment.SetEnvironmentVariable("ARMADA_TUI_CREDENTIALS", Path.Combine(sandbox, "tui-credentials.json"));
+            Environment.SetEnvironmentVariable("ARMADA_TUI_CREDENTIAL_STORE", "file");
+            ProfileSandbox = sandbox;
+
+            if (!String.Equals(Armada.Core.Constants.DefaultDataDirectory, sandbox, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    "Test isolation failed: Armada.Core.Constants.DefaultDataDirectory resolved to '" +
+                    Armada.Core.Constants.DefaultDataDirectory + "' before the test sandbox was set. Tests would touch the real profile.");
+            }
+        }
 
         private static string ReservePath(string? label)
         {

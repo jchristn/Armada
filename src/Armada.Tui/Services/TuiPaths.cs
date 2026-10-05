@@ -42,13 +42,13 @@ namespace Armada.Tui.Services
         #region Public-Methods
 
         /// <summary>
-        /// The Armada data directory (<c>~/.armada</c>).
+        /// The Armada data directory: <c>ARMADA_DATA_DIR</c> when set, otherwise <c>~/.armada</c> (the same rule the
+        /// Admiral uses, see <see cref="Armada.Core.Constants.DefaultDataDirectory"/>).
         /// </summary>
         /// <returns>Directory path.</returns>
         public static string DataDirectory()
         {
-            string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            return Path.Combine(home, ".armada");
+            return Armada.Core.Constants.DefaultDataDirectory;
         }
 
         /// <summary>
