@@ -259,7 +259,7 @@ these packages, and these are the only supported install paths for 1.0:
 | Windows | Harbor `.exe` (Inno Setup) and the Admiral server `.msi` (WiX) |
 | macOS | `Armada Harbor.app` in a `.dmg`, and the Admiral server `.pkg` |
 | Linux | `.deb` and `.rpm` packages for the CLI, Harbor, and the server |
-| Docker | Admiral, dashboard, and proxy images on Docker Hub (`jchristn77/armada-server`, `jchristn77/armada-dashboard`, `jchristn77/armada-proxy`; tags `v1.0.0` and `latest`). The compose files `docker/armada/compose.yaml` and `docker/proxy/compose.yaml` build the same images from the checkout (see [docs/DOCKER.md](docs/DOCKER.md)); `docker/update.sh` or `docker/update.bat` refreshes and recreates the stack without touching its data |
+| Docker | Admiral, dashboard, and proxy images on Docker Hub (`jchristn77/armada-server`, `jchristn77/armada-dashboard`, `jchristn77/armada-proxy`; tags `v1.0.0` and `latest`). The compose files `docker/armada/compose.yaml`, `docker/armada/compose.split.yaml`, and `docker/proxy/compose.yaml` run the published `v1.0.0` images (see [docs/DOCKER.md](docs/DOCKER.md)); `docker/update.sh` or `docker/update.bat` pulls them and recreates the stack without touching its data |
 
 Each release carries a `SHA256SUMS` file. Installers are code-signed only when the release was built with signing
 credentials; an unsigned Windows installer shows a SmartScreen prompt ("More info", then "Run anyway"), and an
@@ -1370,7 +1370,8 @@ docker compose down
 
 ### Build Images Locally
 
-The compose files build the images from the checkout. To build one image by hand, from the repository root:
+The compose files run the published `v1.0.0` images. To build one image from the checkout instead, from the repository
+root, then point the service's `image:` at your tag:
 
 ```bash
 # Build server image

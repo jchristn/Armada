@@ -58,6 +58,36 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(Constants.ProductVersion, dashboardLock.Packages![""].Version, "Dashboard package-lock.json root package should align with the shared release version");
             }));
 
+            cases.Add(Case("compose_files_run_release_tagged_images", "Compose Files Run The Release-Tagged Armada Images", TestTags.Positive, () =>
+            {
+                string expectedTag = "v" + Constants.ProductVersion;
+                string[][] composeFiles =
+                {
+                    new[] { "docker/armada/compose.yaml", "jchristn77/armada-server", "jchristn77/armada-dashboard" },
+                    new[] { "docker/armada/compose.split.yaml", "jchristn77/armada-server" },
+                    new[] { "docker/proxy/compose.yaml", "jchristn77/armada-proxy" }
+                };
+
+                foreach (string[] entry in composeFiles)
+                {
+                    string contents = ReadRepositoryFile(entry[0].Split('/'));
+                    AssertFalse(Regex.IsMatch(contents, @"^\s+build:", RegexOptions.Multiline), entry[0] + " should run published images, not build contexts");
+
+                    MatchCollection armadaImages = Regex.Matches(contents, @"^\s+image:\s*(jchristn77/armada-[a-z]+):(\S+)\s*$", RegexOptions.Multiline);
+                    List<string> names = new List<string>();
+                    foreach (Match image in armadaImages)
+                    {
+                        names.Add(image.Groups[1].Value);
+                        AssertEqual(expectedTag, image.Groups[2].Value, entry[0] + " should pin " + image.Groups[1].Value + " to the release tag");
+                    }
+
+                    for (int i = 1; i < entry.Length; i++)
+                    {
+                        AssertTrue(names.Contains(entry[i]), entry[0] + " should run " + entry[i] + ":" + expectedTag);
+                    }
+                }
+            }));
+
             cases.Add(Case("helm_program_uses_product_version_constant", "Helm Program Uses ProductVersion Constant", TestTags.Positive, () =>
             {
                 string programContents = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "src", "Armada.Helm", "Program.cs"));

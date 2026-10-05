@@ -81,8 +81,8 @@ logs to Loki, and Grafana comes with provisioned dashboards.
 
 ## Getting started
 
-Clone the repository for the compose files and default configuration. The compose files build the Armada images
-from the checkout (the same Dockerfiles the published images come from) and pull the observability images:
+Clone the repository for the compose files and default configuration. The compose files run the published `v1.0.0`
+images and the observability images:
 
 ```bash
 git clone https://github.com/jchristn/armada.git

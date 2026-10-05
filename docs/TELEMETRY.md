@@ -92,7 +92,7 @@ push already pointed at the stack. Bring everything up with:
 ```bash
 cd docker/armada
 export ARMADA_INITIAL_ADMIN_PASSWORD='choose-a-password'   # 8+ characters; compose refuses to start without it
-docker compose up --build
+docker compose up -d
 ```
 
 Then open Grafana at http://localhost:3001 -> Dashboards -> Armada -> "Armada Reliability".

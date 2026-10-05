@@ -13,6 +13,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 echo "=== Building Armada Admiral image ==="
 "${SCRIPT_DIR}/build-admiral.sh" "$TAG"
 
+echo "=== Building Armada dashboard image ==="
+"${SCRIPT_DIR}/build-dashboard.sh" "$TAG"
+
 echo "=== Building Armada proxy image ==="
 "${SCRIPT_DIR}/build-proxy.sh" "$TAG"
 

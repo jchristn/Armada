@@ -102,9 +102,7 @@ defines `armada-dashboard`, `prometheus`, `loki`, and `grafana`, each with a hea
 ```yaml
 services:
   armada-server:
-    build:
-      context: ../..
-      dockerfile: src/Armada.Server/Dockerfile
+    image: jchristn77/armada-server:v1.0.0
     ports:
       - "7890:7890"
       - "7891:7891"
@@ -135,9 +133,7 @@ The proxy stack file is `docker/proxy/compose.yaml`:
 ```yaml
 services:
   armada-proxy:
-    build:
-      context: ../..
-      dockerfile: src/Armada.Proxy/Dockerfile
+    image: jchristn77/armada-proxy:v1.0.0
     ports:
       - "7893:7893"
     environment:
@@ -292,8 +288,8 @@ docker compose logs -f armada-server
 docker compose logs -f armada-dashboard
 ```
 
-To pick up a new version, `git pull` and run `docker/update.sh` (or `docker\update.bat`). It pulls the observability
-images, rebuilds the Admiral and dashboard from the checkout, and recreates the stack; `db/`, `logs/`, and the named
+To pick up a new version, `git pull` and run `docker/update.sh` (or `docker\update.bat`). It pulls the images the compose
+file names (the release tags, for example `jchristn77/armada-server:v1.0.0`) and recreates the stack; `db/`, `logs/`, and the named
 volumes are kept. Pass a compose file relative to `docker/` to update another stack, for example
 `docker/update.sh armada/compose.split.yaml` or `docker/update.sh proxy/compose.yaml`.
 
@@ -398,7 +394,7 @@ scripts\windows\build-all.bat v1.0.0
 
 ### Repository-root release scripts
 
-The repository root also carries `build-all`, `build-admiral`, and `build-proxy` scripts, as `.bat` for Windows and `.sh` for Linux/macOS. Each requires an image tag and builds both that tag and `latest` on the `cloud-jchristn77-jchristn77` cloud builder for `linux/amd64` and `linux/arm64/v8`, pushes to Docker Hub, then pulls both tags back to refresh the local copy:
+The repository root also carries `build-all`, `build-admiral`, `build-dashboard`, and `build-proxy` scripts, as `.bat` for Windows and `.sh` for Linux/macOS. Each requires an image tag and builds both that tag and `latest` on the `cloud-jchristn77-jchristn77` cloud builder for `linux/amd64` and `linux/arm64/v8`, pushes to Docker Hub, then pulls both tags back to refresh the local copy:
 
 ```bat
 build-all.bat v1.0.0
@@ -408,7 +404,7 @@ build-all.bat v1.0.0
 ./build-all.sh v1.0.0
 ```
 
-`build-all` calls `build-admiral` (`jchristn77/armada-server`) and then `build-proxy` (`jchristn77/armada-proxy`), stopping at the first failure.
+`build-all` calls `build-admiral` (`jchristn77/armada-server`), `build-dashboard` (`jchristn77/armada-dashboard`), and then `build-proxy` (`jchristn77/armada-proxy`), stopping at the first failure.
 
 ### Building locally (no push)
 
@@ -425,9 +421,9 @@ docker build -f src/Armada.Dashboard/Dockerfile -t armada-dashboard:local .
 docker build -f src/Armada.Proxy/Dockerfile -t armada-proxy:local .
 ```
 
-Run these from the repository root. The compose files already build from source (`build:`), so this is only needed
-when you want named images: replace a service's `build:` block with `image: armada-server:local` (or a published tag
-such as `jchristn77/armada-server:v1.0.0`) to use one.
+Run these from the repository root. The compose files run the published release tags (`image:
+jchristn77/armada-server:v1.0.0` and so on); to run a local build, change the service's `image:` to your tag, for
+example `armada-server:local`.
 
 ---
 

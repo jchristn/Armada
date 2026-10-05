@@ -7,7 +7,7 @@ something that was green last time.
 One rule sits above everything else: **version numbers change only on the maintainer's explicit instruction.** An
 agent preparing a release does not bump `Version` in `src/Directory.Build.props`, `src/Armada.Helm/Armada.Helm.csproj`,
 `ProductVersion` in `src/Armada.Core/Constants.cs`, the dashboard's `package.json` and `package-lock.json`, the build
-scripts, the Postman collection, or the CHANGELOG heading on its own. It may propose a bump and explain why, then wait
+scripts, the image tags in the `docker/` compose files, the Postman collection, or the CHANGELOG heading on its own. It may propose a bump and explain why, then wait
 for approval. The rules are in `VERSIONING.md` in the shared requirements. The tree is at `1.0.0`; release
 candidates (`1.0.0-rc.N`) and any other pre-release label are applied only on the maintainer's instruction.
 
@@ -104,7 +104,8 @@ Installers land in `installers/<version>/`. Each OS builds only its own formats;
 [BUILDING_INSTALLERS.md](../BUILDING_INSTALLERS.md) for the toolchain per platform. Docker images are built and
 pushed with `scripts/macos/build-all.sh <tag>` (or the `linux` / `windows` equivalent) to `jchristn77/armada-server`,
 `jchristn77/armada-dashboard`, and `jchristn77/armada-proxy`; the repository-root `build-all.sh <tag>` builds the
-Admiral and proxy images only (see [DOCKER.md](DOCKER.md#building-images-from-source)). The release workflow does not
+same three on the cloud builder (see [DOCKER.md](DOCKER.md#building-images-from-source)). Push the images before
+pushing a commit whose compose files name the new tag: the compose files pull those tags rather than building. The release workflow does not
 build or push Docker images, so run one of these for every release. The `scripts/` proxy build is `linux/amd64`
 only; use the repository-root `build-proxy.sh` for a multi-architecture proxy image.
 
@@ -132,7 +133,7 @@ commit must be green.
 
 | Path | Script | What it installs | Where |
 |------|--------|------------------|-------|
-| Docker | `verify-docker.sh` | `docker/armada/compose.yaml` built from the checkout, under a throwaway project with its own ports and data | ubuntu runner; local with Docker |
+| Docker | `verify-docker.sh` | `docker/armada/compose.yaml` with the Admiral and dashboard built from the checkout into per-run tags (`--no-build` runs the published images instead), under a throwaway project with its own ports and data | ubuntu runner; local with Docker |
 | Linux packages | `verify-linux-package.sh --format deb` / `--format rpm` | `linux-server` package installed with `apt-get` in `ubuntu:24.04` or `dnf` in `fedora:42`, plus `--install-service --dry-run` | ubuntu runner; local with Docker (builds with fpm in a container when fpm is missing) |
 | NuGet global tool | `verify-dotnet-tool.sh` | `Armada.Helm` packed locally and installed with `dotnet tool install --tool-path`, then `armada server start` / `stop` | ubuntu and macOS runners; local |
 | macOS server `.pkg` | `verify-macos-pkg.sh` | `pkg-server` built, expanded with `pkgutil`, payload checked and installed into a temp root, plus `--install-service --dry-run` | macOS runner; local Mac |
@@ -241,6 +242,5 @@ end; a release with one failed OS job is a partial release and should be fixed o
 Confirm the GitHub Release lists every expected artifact and `SHA256SUMS`, that the NuGet package is live
 (`dotnet tool install -g Armada.Helm --version <version>`), that the Docker Hub tags `v<version>` and `latest` exist
 for `jchristn77/armada-server`, `jchristn77/armada-dashboard`, and `jchristn77/armada-proxy`, and that `docker/update.sh`
-from the tagged checkout brings up a healthy stack (the compose files build from source, so this checks the tagged
-code rather than the pushed images). Then add a dated row for the release to the Progress Log in
+from the tagged checkout pulls those tags and brings up a healthy stack. Then add a dated row for the release to the Progress Log in
 [V1_READINESS.md](../V1_READINESS.md) while that plan is active, and tell users about any manual upgrade steps.

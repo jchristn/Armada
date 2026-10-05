@@ -21,7 +21,7 @@ then replace the binaries the way you installed them. The new Admiral migrates t
 |--------------|----------------|
 | Source checkout with the `armada` global tool | `git pull`, then `scripts/linux/update.sh`, `scripts/macos/update.sh`, or `scripts\windows\update.bat`. The script stops repo-backed MCP stdio hosts and the server, reinstalls the `Armada.Helm` tool, redeploys the dashboard, and starts the server again. |
 | Startup scripts ([RUN_ON_STARTUP.md](RUN_ON_STARTUP.md)) | `git pull`, then `update-systemd-user.sh`, `update-launchd-agent.sh`, or `update-windows-task.bat`. These republish `~/.armada/bin` and restart the registered server. |
-| Docker ([DOCKER.md](DOCKER.md)) | `git pull`, then `docker/update.sh` (or `docker\update.bat`), optionally with the compose file, for example `docker/update.sh armada/compose.split.yaml`. The compose files build the Admiral and dashboard from the checkout, so the script pulls the observability images, recreates the stack with `--build`, and keeps `db/`, `logs/`, and the named volumes. |
+| Docker ([DOCKER.md](DOCKER.md)) | `git pull`, then `docker/update.sh` (or `docker\update.bat`), optionally with the compose file, for example `docker/update.sh armada/compose.split.yaml`. The compose files name release tags (`jchristn77/armada-server:v1.0.0` and so on), so the script pulls the tags the pulled checkout names, recreates the stack, and keeps `db/`, `logs/`, and the named volumes. |
 | Packages (`.msi`, Inno, `.pkg`, Deb/Rpm) | Install the new package over the old one. The package re-registers the service (see "Service and startup registration" in [OPERATIONS.md](OPERATIONS.md)). |
 
 Use the update script that matches how you installed; they are not interchangeable (for example `update.bat`

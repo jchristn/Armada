@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-#  update.sh - pull the latest Armada images and recreate the stack.
+#  update.sh - pull the Armada images named in a compose file and recreate the stack.
 #
 #  Non-destructive: named volumes and the bind-mounted db/ and logs/ folders are
 #  preserved. For a destructive reset use docker/armada/factory/reset.sh.
@@ -30,10 +30,10 @@ echo " Compose file: $COMPOSE_FILE"
 echo "========================================"
 
 echo
-echo "[1/4] Pulling latest images..."
-# Services that are built from source (build:) have no published image to pull; skip them
-# instead of failing, then rebuild them on the way back up.
-docker compose -f "$COMPOSE_FILE" pull --ignore-buildable
+echo "[1/4] Pulling the images named in the compose file..."
+# The compose files pin release tags (for example jchristn77/armada-server:v1.0.0); edit the tags to move
+# to another release before running this.
+docker compose -f "$COMPOSE_FILE" pull
 
 echo
 echo "[2/4] Stopping the stack (volumes are preserved)..."
@@ -41,7 +41,7 @@ docker compose -f "$COMPOSE_FILE" down
 
 echo
 echo "[3/4] Starting the stack..."
-docker compose -f "$COMPOSE_FILE" up -d --build
+docker compose -f "$COMPOSE_FILE" up -d
 
 echo
 echo "[4/4] Container status:"

@@ -1,8 +1,8 @@
 services:
   armada-proxy:
-    build:
-      context: ../..
-      dockerfile: src/Armada.Proxy/Dockerfile
+    # Published release image. To run a locally built image instead, build it with this tag first
+    # (scripts/common/build-*.sh) or change the tag.
+    image: jchristn77/armada-proxy:v1.0.0
     ports:
       - "7893:7893"
     environment:

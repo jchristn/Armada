@@ -10,9 +10,9 @@
 # Standalone/local mode remains the default and does not need Docker at all (see compose.yaml).
 services:
   armada-server:
-    build:
-      context: ../..
-      dockerfile: src/Armada.Server/Dockerfile
+    # Published release image. To run a locally built image instead, build it with this tag first
+    # (scripts/common/build-*.sh) or change the tag.
+    image: jchristn77/armada-server:v1.0.0
     ports:
       # 7890: Admiral REST + WebSocket (the Harbor link). 7891: MCP (captain call-home). 9464: metrics.
       - "7890:7890"

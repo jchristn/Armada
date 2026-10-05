@@ -17,6 +17,11 @@ call "%~dp0build-admiral.bat" "%TAG%"
 set "EXIT_CODE=%ERRORLEVEL%"
 if not "%EXIT_CODE%"=="0" goto :done
 
+echo === Building Armada dashboard image ===
+call "%~dp0build-dashboard.bat" "%TAG%"
+set "EXIT_CODE=%ERRORLEVEL%"
+if not "%EXIT_CODE%"=="0" goto :done
+
 echo === Building Armada proxy image ===
 call "%~dp0build-proxy.bat" "%TAG%"
 set "EXIT_CODE=%ERRORLEVEL%"
