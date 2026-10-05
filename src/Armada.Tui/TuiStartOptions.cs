@@ -26,10 +26,10 @@ namespace Armada.Tui
         public string? Token { get; set; } = null;
 
         /// <summary>
-        /// Server used when nothing else names one (Helm passes its configured Admiral URL). Default
-        /// <c>http://127.0.0.1:7890</c>.
+        /// Server used when nothing else names one (Helm passes its configured Admiral URL). Default: the local
+        /// Admiral from <c>settings.json</c> in the data directory (<c>http://127.0.0.1:7890</c> when absent).
         /// </summary>
-        public string DefaultServerUrl { get; set; } = "http://127.0.0.1:7890";
+        public string DefaultServerUrl { get; set; } = Services.LocalAdmiralDefaults.Load().Url;
 
         /// <summary>
         /// Preferences file, or null for <see cref="Services.TuiPaths.PreferencesFile"/>.

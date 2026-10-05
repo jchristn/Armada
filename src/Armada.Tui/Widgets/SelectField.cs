@@ -48,6 +48,15 @@ namespace Armada.Tui.Widgets
         public string PickerTitle { get; set; } = "Select";
 
         /// <summary>
+        /// Width multiplier for the picker modal (1.0 = default; clamped to 1.0-3.0).
+        /// </summary>
+        public double PickerWidthScale
+        {
+            get { return _PickerWidthScale; }
+            set { _PickerWidthScale = Math.Clamp(value, 1.0, 3.0); }
+        }
+
+        /// <summary>
         /// Modal host used to open the picker. Required to open; without it Left/Right still cycle.
         /// </summary>
         public IModalHost? ModalHost { get; set; } = null;
@@ -70,6 +79,12 @@ namespace Armada.Tui.Widgets
         /// Raised after the selection changes.
         /// </summary>
         public event EventHandler<ValueChangedEventArgs<T?>>? ValueChanged;
+
+        #endregion
+
+        #region Private-Members
+
+        private double _PickerWidthScale = 1.0;
 
         #endregion
 
@@ -106,6 +121,7 @@ namespace Armada.Tui.Widgets
         {
             if (ModalHost == null) return null;
             PickerModal<T> picker = new PickerModal<T>(PickerTitle, Options, Localizer, Theme);
+            picker.WidthScale = PickerWidthScale;
             if (Selected != null) picker.List.SelectValue(Selected.Value);
             ModalHost.Show(picker, result =>
             {

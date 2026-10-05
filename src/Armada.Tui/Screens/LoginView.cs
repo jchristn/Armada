@@ -127,7 +127,6 @@ namespace Armada.Tui.Screens
             Modes.SelectedChanged += (s, e) => { Error = null; Rebuild(); };
 
             Email.Placeholder = "you@company.com";
-            Email.Value = context.Session.Profile.LastUser ?? "";
             Email.Submitted += (s, e) => SubmitEmail();
             Password.Masked = true;
             Password.Placeholder = "Password";
@@ -135,12 +134,14 @@ namespace Armada.Tui.Screens
             ApiKey.Masked = true;
             ApiKey.Placeholder = "Paste your API key";
             ApiKey.Submitted += (s, e) => SubmitApiKey();
+            ApplyLocalDefaults(context.Session.Profile);
             Tenant.PickerTitle = "Tenant";
             Tenant.Placeholder = "Select a tenant...";
             Tenant.ModalHost = context.Modals;
             Tenant.ValueChanged += (s, e) => _SelectedTenant = Tenants.FirstOrDefault(t => t.Id == e.NewValue);
 
             Server.PickerTitle = "Server";
+            Server.PickerWidthScale = 1.5;
             Server.ModalHost = context.Modals;
             Server.ValueChanged += (s, e) => OnServerChosen(e.NewValue);
             Language.PickerTitle = "Language";
@@ -481,10 +482,27 @@ namespace Armada.Tui.Screens
             if (chosen != null && !ReferenceEquals(chosen, _Context.Session.Profile)) SwitchTo(chosen);
         }
 
+        /// <summary>
+        /// Prefill the fields for a profile: its last user, or for a server on this machine the seeded admin (and,
+        /// until the profile has signed in once, the default password) plus the local settings' API key.
+        /// </summary>
+        /// <param name="profile">Profile.</param>
+        private void ApplyLocalDefaults(ServerProfile profile)
+        {
+            Email.Value = profile.LastUser ?? "";
+            Password.Value = "";
+            ApiKey.Value = "";
+            if (!LocalAdmiralDefaults.IsLoopback(profile.Url)) return;
+            LocalAdmiralDefaults local = LocalAdmiralDefaults.Load();
+            if (String.IsNullOrEmpty(profile.LastUser)) Email.Value = local.Email;
+            if (profile.LastUsedUtc == null && String.Equals(Email.Value, local.Email, StringComparison.OrdinalIgnoreCase)) Password.Value = local.Password;
+            if (local.ApiKey != null && local.Targets(profile.Url)) ApiKey.Value = local.ApiKey;
+        }
+
         private void SwitchTo(ServerProfile profile)
         {
             _Context.Session.SwitchProfile(profile);
-            Email.Value = profile.LastUser ?? "";
+            ApplyLocalDefaults(profile);
             Step = LoginStepEnum.Email;
             Error = null;
             RefreshPickers();

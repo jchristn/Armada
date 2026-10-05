@@ -24,6 +24,26 @@ namespace Armada.Tui.Modals
         /// </summary>
         public FilterList<T> List { get; }
 
+        /// <summary>
+        /// Width multiplier applied to the measured, minimum, and maximum width (1.0 = default; clamped to 1.0-3.0).
+        /// </summary>
+        public double WidthScale
+        {
+            get { return _WidthScale; }
+            set
+            {
+                _WidthScale = Math.Clamp(value, 1.0, 3.0);
+                MinContentWidth = (int)Math.Round(40 * _WidthScale);
+                MaxContentWidth = (int)Math.Round(90 * _WidthScale);
+            }
+        }
+
+        #endregion
+
+        #region Private-Members
+
+        private double _WidthScale = 1.0;
+
         #endregion
 
         #region Constructors-and-Factories
@@ -78,7 +98,7 @@ namespace Armada.Tui.Modals
         protected override int MeasureContentWidth(int availableWidth)
         {
             int widest = List.Visible.Select(o => TextCells.Width(o.Label) + TextCells.Width(o.Detail) + 6).DefaultIfEmpty(30).Max();
-            return Math.Min(availableWidth, Math.Max(40, widest));
+            return Math.Min(availableWidth, (int)Math.Round(Math.Max(40, widest) * _WidthScale));
         }
 
         /// <inheritdoc />

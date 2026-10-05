@@ -5,9 +5,11 @@ namespace Test.Shared.Suites.Tui
     using System.IO;
     using System.Linq;
     using System.Net;
+    using Armada.Tui.Modals;
     using Armada.Tui.Screens;
     using Armada.Tui.Services;
     using Armada.Tui.Services.Credentials;
+    using Armada.Tui.Widgets;
     using Test.Shared.Infrastructure;
     using Touchstone.Core;
     using static Test.Shared.Infrastructure.Asserts;
@@ -39,10 +41,12 @@ namespace Test.Shared.Suites.Tui
                     host.Start();
                     TuiCase.Contains(host.Screen(), "Default credentials", "hint");
                     AssertFalse(host.Tui.Context.Session.IsSignedIn, "starts signed out");
-                    host.Type("admin@armada").Press("enter");
+                    AssertEqual("admin@armada", host.Tui.Shell.Login.Email.Value, "localhost prefill: email");
+                    host.Press("enter");
                     AssertTrue(host.PumpUntil(() => host.Tui.Shell.Login.Step == LoginStepEnum.Password), "password step");
                     TuiCase.Contains(host.Screen(), "Signing in as admin@armada to Default Tenant", "context line");
-                    host.Type("password").Press("enter");
+                    AssertEqual("password", host.Tui.Shell.Login.Password.Value, "localhost prefill: password");
+                    host.Press("enter");
                     AssertTrue(host.PumpUntil(() => host.Tui.Context.Session.IsSignedIn && host.Tui.Shell.Screen != null), "signed in");
                     AssertEqual("/inbox", host.Tui.Context.Router.Current!.Path, "start route");
                     TuiCase.Contains(host.Screen(), "admin@armada", "header user");
@@ -184,6 +188,60 @@ namespace Test.Shared.Suites.Tui
                     login.Language.Choose(login.Language.Options.First(o => o.Value == "de"));
                     AssertEqual("de", host.Tui.Context.Loc.Locale, "locale applied");
                     AssertEqual("de", host.Tui.Context.Prefs.Current.Locale, "locale persisted");
+                }
+            }));
+
+            cases.Add(TuiCase.Sync(Suite, "localhost_prefill", "A localhost server prefills the seeded admin, the default password, and the local API key; a remote one prefills nothing", () =>
+            {
+                string settingsPath = Path.Combine(Armada.Core.Constants.DefaultDataDirectory, "settings.json");
+                Directory.CreateDirectory(Armada.Core.Constants.DefaultDataDirectory);
+                File.WriteAllText(settingsPath, "{\"admiralPort\":9,\"apiKey\":\"local-key-123\"}");
+                try
+                {
+                    LocalAdmiralDefaults local = LocalAdmiralDefaults.Load();
+                    AssertEqual("http://127.0.0.1:9", local.Url, "url from the settings port");
+                    AssertTrue(LocalAdmiralDefaults.IsLoopback("http://localhost:7890"), "localhost");
+                    AssertTrue(LocalAdmiralDefaults.IsLoopback("http://[::1]:7890"), "ipv6 loopback");
+                    AssertFalse(LocalAdmiralDefaults.IsLoopback("https://armada.example.com"), "remote");
+                    AssertEqual(7890, LocalAdmiralDefaults.Load(Path.Combine(Armada.Core.Constants.DefaultDataDirectory, "missing.json")).Port, "missing file falls back");
+
+                    using (TuiTestHost host = new TuiTestHost(120, 40, TuiFixtures.SignedInServer(1), "http://127.0.0.1:9"))
+                    {
+                        host.Start();
+                        LoginView login = host.Tui.Shell.Login;
+                        AssertEqual("admin@armada", login.Email.Value, "email");
+                        AssertEqual("password", login.Password.Value, "password");
+                        AssertEqual("local-key-123", login.ApiKey.Value, "api key");
+                        TuiCase.NotContains(host.Screen(), "local-key-123", "api key masked");
+                    }
+
+                    using (TuiTestHost host = new TuiTestHost(120, 40, TuiFixtures.SignedInServer(1), "https://armada.example.com"))
+                    {
+                        host.Start();
+                        LoginView login = host.Tui.Shell.Login;
+                        AssertEqual("", login.Email.Value, "no email for a remote server");
+                        AssertEqual("", login.Password.Value, "no password for a remote server");
+                        AssertEqual("", login.ApiKey.Value, "no api key for a remote server");
+                    }
+                }
+                finally
+                {
+                    File.Delete(settingsPath);
+                }
+            }));
+
+            cases.Add(TuiCase.Sync(Suite, "server_picker_wide", "The Server picker is 50% wider than other pickers", () =>
+            {
+                using (TuiTestHost host = new TuiTestHost(200, 40, TuiFixtures.SignedInServer(1), "http://127.0.0.1:9"))
+                {
+                    host.Start();
+                    AssertEqual(1.5, host.Tui.Shell.Login.Server.PickerWidthScale, "scale");
+                    PickerModal<string>? picker = host.Tui.Shell.Login.Server.Open();
+                    AssertNotNull(picker, "opened");
+                    AssertEqual(60, picker!.MinContentWidth, "min width");
+                    AssertEqual(135, picker.MaxContentWidth, "max width");
+                    PickerModal<string> plain = new PickerModal<string>("Plain", new List<SelectOption<string>>());
+                    AssertEqual(40, plain.MinContentWidth, "default min width");
                 }
             }));
 

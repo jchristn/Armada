@@ -64,9 +64,10 @@ Every REST route and every MCP tool declares an explicit requirement: a resource
   (`admin@armada` with the password `password`, or the seeded `default` bearer token), unless
   `AllowDefaultCredentialsOnNetwork` is true. Headless installs set `ARMADA_INITIAL_ADMIN_PASSWORD` before the first
   start; Docker compose requires it.
-- A dashboard session for an `admin@armada` account that still has the default password can call only whoami,
-  status, and `PUT /api/v1/account/password` until the password changes; the dashboard shows a password change
-  screen.
+- A session for an `admin@armada` account that still has the default password is flagged
+  (`PasswordChangeRequired` on authenticate and whoami) but not blocked; the dashboard shows a password change
+  screen and the TUI shows a header warning. (The server-side block was removed at the user's request so the TUI
+  and API work on a fresh local install.)
 - The seeded `default` bearer token stops working, and is deactivated, once its owner's default password is changed
   (chosen over "once another credential exists" because the password change is the explicit "this install is now
   secured" step, and it keeps the README's local `Bearer default` workflow working until then).
@@ -176,7 +177,7 @@ and the server log for them.
 | Tenant admin editing, deleting, or minting credentials for a global admin | Allowed | 403 |
 | Deleting `audit.*` events (REST and MCP) | Tenant admin (own tenant) | Global admin only |
 | `POST /api/v1/onboarding` | Enabled by default | Disabled by default (`AllowSelfRegistration`) |
-| Dashboard session of an `admin@armada` account with the default password | Full access | whoami, status, and password change only |
+| Dashboard session of an `admin@armada` account with the default password | Full access | Full access, flagged; the dashboard prompts for a change |
 | `PUT /api/v1/account/password` | (new) | Authenticated |
 | `POST /api/v1/ask` | Authenticated | Removed (D3) |
 

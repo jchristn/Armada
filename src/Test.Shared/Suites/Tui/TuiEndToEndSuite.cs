@@ -49,7 +49,8 @@ namespace Test.Shared.Suites.Tui
                 using (TuiTestHost host = new TuiTestHost(120, 40, null, fx.BaseUrl, o => o.StartRoute = "/jobs"))
                 {
                     host.Start();
-                    host.Type("admin@armada").Press("enter");
+                    AssertEqual("admin@armada", host.Tui.Shell.Login.Email.Value, "localhost prefill: email");
+                    host.Press("enter");
                     AssertTrue(host.PumpUntil(() => host.Tui.Shell.Login.Step != Armada.Tui.Screens.LoginStepEnum.Email, 10000), "lookup finished");
                     if (host.Tui.Shell.Login.Step == Armada.Tui.Screens.LoginStepEnum.Tenant)
                     {
@@ -58,7 +59,8 @@ namespace Test.Shared.Suites.Tui
                         host.Tui.Shell.Login.SubmitTenant();
                     }
 
-                    host.Type("password").Press("enter");
+                    AssertEqual("password", host.Tui.Shell.Login.Password.Value, "localhost prefill: password");
+                    host.Press("enter");
 
                     // The seeded admin still has the default password: the TUI signs in anyway and warns in the header.
                     AssertTrue(host.PumpUntil(() => host.Tui.Context.Session.IsSignedIn, 10000), "signed in with the default password");
