@@ -64,7 +64,7 @@ namespace Test.Shared.Suites.Services
                 UrlPathCanonicalizationResult reencoded = UrlPathCanonicalizer.Canonicalize("/files/a%20b/%C3%A9");
                 AssertTrue(reencoded.Success, "encoded space and UTF-8 should canonicalize");
                 AssertEqual("a b", reencoded.Segments[1]);
-                AssertEqual("é", reencoded.Segments[2]);
+                AssertEqual("\u00e9", reencoded.Segments[2]);
                 AssertEqual("/files/a%20b/%C3%A9", reencoded.Path);
             }));
 
