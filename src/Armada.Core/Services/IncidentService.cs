@@ -164,7 +164,7 @@ namespace Armada.Core.Services
             if (request == null) throw new ArgumentNullException(nameof(request));
 
             Incident incident = await ReadAsync(auth, id, token).ConfigureAwait(false)
-                ?? throw new InvalidOperationException("Incident not found.");
+                ?? throw new KeyNotFoundException("Incident not found.");
 
             incident.Title = Normalize(request.Title) ?? incident.Title;
             incident.Summary = request.Summary != null ? Normalize(request.Summary) : incident.Summary;
@@ -205,7 +205,7 @@ namespace Armada.Core.Services
 
             List<ArmadaEvent> snapshots = await ReadIncidentSnapshotEventsAsync(auth, id, token).ConfigureAwait(false);
             if (snapshots.Count == 0)
-                throw new InvalidOperationException("Incident not found.");
+                throw new KeyNotFoundException("Incident not found.");
 
             foreach (ArmadaEvent snapshot in snapshots)
             {

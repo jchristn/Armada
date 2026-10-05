@@ -149,9 +149,9 @@ namespace Armada.Core.Services
             if (request == null) throw new ArgumentNullException(nameof(request));
 
             Playbook existing = await ReadPlaybookAsync(auth, id, token).ConfigureAwait(false)
-                ?? throw new InvalidOperationException("Runbook not found.");
+                ?? throw new KeyNotFoundException("Runbook not found.");
             if (!ScopedVisibility.CanView(auth, existing.Scope, existing.TenantId, existing.UserId))
-                throw new InvalidOperationException("Runbook not found.");
+                throw new KeyNotFoundException("Runbook not found.");
             if (!ScopedVisibility.CanEdit(auth, existing.Scope, existing.TenantId, existing.UserId))
                 throw new UnauthorizedAccessException("You may only modify your own runbooks; a tenant-wide runbook requires a tenant admin.");
 
@@ -186,7 +186,7 @@ namespace Armada.Core.Services
 
             Playbook? existing = await ReadPlaybookAsync(auth, id, token).ConfigureAwait(false);
             if (existing == null || !ScopedVisibility.CanView(auth, existing.Scope, existing.TenantId, existing.UserId))
-                throw new InvalidOperationException("Runbook not found.");
+                throw new KeyNotFoundException("Runbook not found.");
             if (!ScopedVisibility.CanEdit(auth, existing.Scope, existing.TenantId, existing.UserId))
                 throw new UnauthorizedAccessException("You may only delete your own runbooks; a tenant-wide runbook requires a tenant admin.");
 
@@ -272,7 +272,7 @@ namespace Armada.Core.Services
             if (request == null) throw new ArgumentNullException(nameof(request));
 
             Runbook runbook = await ReadAsync(auth, runbookId, token).ConfigureAwait(false)
-                ?? throw new InvalidOperationException("Runbook not found.");
+                ?? throw new KeyNotFoundException("Runbook not found.");
 
             Dictionary<string, string> parameterValues = ResolveParameterValues(runbook, request.ParameterValues);
             RunbookExecution execution = new RunbookExecution
@@ -316,7 +316,7 @@ namespace Armada.Core.Services
             if (request == null) throw new ArgumentNullException(nameof(request));
 
             RunbookExecution execution = await ReadExecutionAsync(auth, id, token).ConfigureAwait(false)
-                ?? throw new InvalidOperationException("Runbook execution not found.");
+                ?? throw new KeyNotFoundException("Runbook execution not found.");
 
             execution.Status = request.Status ?? execution.Status;
             if (request.CompletedStepIds != null)
@@ -351,7 +351,7 @@ namespace Armada.Core.Services
 
             List<ArmadaEvent> snapshots = await ReadExecutionSnapshotEventsAsync(auth, id, token).ConfigureAwait(false);
             if (snapshots.Count == 0)
-                throw new InvalidOperationException("Runbook execution not found.");
+                throw new KeyNotFoundException("Runbook execution not found.");
 
             foreach (ArmadaEvent snapshot in snapshots)
             {

@@ -115,7 +115,7 @@ namespace Armada.Core.Services
             if (request == null) throw new ArgumentNullException(nameof(request));
 
             Release existing = await ReadAsync(auth, id, token).ConfigureAwait(false)
-                ?? throw new InvalidOperationException("Release not found.");
+                ?? throw new KeyNotFoundException("Release not found.");
 
             ResolvedReleaseDraft draft = await ResolveDraftAsync(auth, existing, request, token).ConfigureAwait(false);
             ApplyDraft(existing, draft, preserveExistingPublishedUtc: true);
@@ -136,7 +136,7 @@ namespace Armada.Core.Services
             if (String.IsNullOrWhiteSpace(id)) throw new ArgumentNullException(nameof(id));
 
             Release existing = await ReadAsync(auth, id, token).ConfigureAwait(false)
-                ?? throw new InvalidOperationException("Release not found.");
+                ?? throw new KeyNotFoundException("Release not found.");
 
             ReleaseUpsertRequest request = new ReleaseUpsertRequest
             {
@@ -173,7 +173,7 @@ namespace Armada.Core.Services
 
             Release? existing = await ReadAsync(auth, id, token).ConfigureAwait(false);
             if (existing == null)
-                throw new InvalidOperationException("Release not found.");
+                throw new KeyNotFoundException("Release not found.");
 
             await _Database.Releases.DeleteAsync(id, BuildScopeQuery(auth), token).ConfigureAwait(false);
             _Logging.Info(_Header + "deleted release " + id);
@@ -194,7 +194,7 @@ namespace Armada.Core.Services
             {
                 Voyage? voyage = await ReadAccessibleVoyageAsync(auth, voyageId, token).ConfigureAwait(false);
                 if (voyage == null)
-                    throw new InvalidOperationException("Voyage not found or not accessible: " + voyageId);
+                    throw new KeyNotFoundException("Voyage not found or not accessible: " + voyageId);
                 voyages.Add(voyage);
             }
 
@@ -204,7 +204,7 @@ namespace Armada.Core.Services
             {
                 Mission? mission = await ReadAccessibleMissionAsync(auth, missionId, token).ConfigureAwait(false);
                 if (mission == null)
-                    throw new InvalidOperationException("Mission not found or not accessible: " + missionId);
+                    throw new KeyNotFoundException("Mission not found or not accessible: " + missionId);
                 if (missionIdsSeen.Add(mission.Id))
                     missions.Add(mission);
             }
@@ -224,7 +224,7 @@ namespace Armada.Core.Services
             {
                 CheckRun? run = await ReadAccessibleCheckRunAsync(auth, checkRunId, token).ConfigureAwait(false);
                 if (run == null)
-                    throw new InvalidOperationException("Check run not found or not accessible: " + checkRunId);
+                    throw new KeyNotFoundException("Check run not found or not accessible: " + checkRunId);
                 checkRuns.Add(run);
             }
 
@@ -246,7 +246,7 @@ namespace Armada.Core.Services
 
             string resolvedVesselId = candidateVesselIds.First();
             Vessel vessel = await ReadAccessibleVesselAsync(auth, resolvedVesselId, token).ConfigureAwait(false)
-                ?? throw new InvalidOperationException("Vessel not found or not accessible.");
+                ?? throw new KeyNotFoundException("Vessel not found or not accessible.");
 
             foreach (Mission mission in missions)
             {
@@ -263,7 +263,7 @@ namespace Armada.Core.Services
             string? explicitWorkflowProfileId = Normalize(request.WorkflowProfileId) ?? Normalize(existing?.WorkflowProfileId);
             WorkflowProfile? workflowProfile = await _WorkflowProfiles.ResolveForVesselAsync(auth, vessel, explicitWorkflowProfileId, token).ConfigureAwait(false);
             if (!String.IsNullOrWhiteSpace(explicitWorkflowProfileId) && workflowProfile == null)
-                throw new InvalidOperationException("Workflow profile not found or not accessible.");
+                throw new KeyNotFoundException("Workflow profile not found or not accessible.");
 
             List<ReleaseArtifact> artifacts = BuildArtifacts(checkRuns);
             string version = await ResolveVersionAsync(auth, vessel, checkRuns, request, existing, token).ConfigureAwait(false);

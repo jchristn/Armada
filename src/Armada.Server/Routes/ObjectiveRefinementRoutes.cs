@@ -137,10 +137,9 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = 501;
                     return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = ex.Message };
                 }
-                catch (InvalidOperationException ex)
+                catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
                 {
-                    req.Http.Response.StatusCode = 409;
-                    return new ApiErrorResponse { Error = ApiResultEnum.Conflict, Message = ex.Message };
+                    return RouteErrorMapper.ToResponse(req, ex, 409);
                 }
             },
             api => api
@@ -247,10 +246,9 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = 501;
                     return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = ex.Message };
                 }
-                catch (InvalidOperationException ex)
+                catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
                 {
-                    req.Http.Response.StatusCode = 409;
-                    return new ApiErrorResponse { Error = ApiResultEnum.Conflict, Message = ex.Message };
+                    return RouteErrorMapper.ToResponse(req, ex, 409);
                 }
             },
             api => api
@@ -290,6 +288,10 @@ namespace Armada.Server.Routes
                 {
                     req.Http.Response.StatusCode = 501;
                     return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = ex.Message };
+                }
+                catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
+                {
+                    return RouteErrorMapper.ToResponse(req, ex, 409);
                 }
             },
             api => api
@@ -338,10 +340,9 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = 501;
                     return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = ex.Message };
                 }
-                catch (InvalidOperationException ex)
+                catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
                 {
-                    req.Http.Response.StatusCode = 409;
-                    return new ApiErrorResponse { Error = ApiResultEnum.Conflict, Message = ex.Message };
+                    return RouteErrorMapper.ToResponse(req, ex, 409);
                 }
             },
             api => api
@@ -384,10 +385,9 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = 501;
                     return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = ex.Message };
                 }
-                catch (InvalidOperationException ex)
+                catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
                 {
-                    req.Http.Response.StatusCode = 409;
-                    return new ApiErrorResponse { Error = ApiResultEnum.Conflict, Message = ex.Message };
+                    return RouteErrorMapper.ToResponse(req, ex, 409);
                 }
             },
             api => api
@@ -445,10 +445,9 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = 501;
                     return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = ex.Message };
                 }
-                catch (InvalidOperationException ex)
+                catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
                 {
-                    req.Http.Response.StatusCode = 409;
-                    return new ApiErrorResponse { Error = ApiResultEnum.Conflict, Message = ex.Message };
+                    return RouteErrorMapper.ToResponse(req, ex, 409);
                 }
             },
             api => api
@@ -489,6 +488,10 @@ namespace Armada.Server.Routes
                 {
                     req.Http.Response.StatusCode = 501;
                     return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = ex.Message };
+                }
+                catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
+                {
+                    return RouteErrorMapper.ToResponse(req, ex, 409);
                 }
             },
             api => api
@@ -531,10 +534,9 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = 501;
                     return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = ex.Message };
                 }
-                catch (InvalidOperationException ex)
+                catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
                 {
-                    req.Http.Response.StatusCode = 409;
-                    return new ApiErrorResponse { Error = ApiResultEnum.Conflict, Message = ex.Message };
+                    return RouteErrorMapper.ToResponse(req, ex, 409);
                 }
             },
             api => api
@@ -590,7 +592,7 @@ namespace Armada.Server.Routes
         {
             ObjectiveRefinementSession? refreshed = await ReadSessionForContextAsync(ctx, session.Id).ConfigureAwait(false);
             if (refreshed == null)
-                throw new InvalidOperationException("Objective refinement session not found: " + session.Id);
+                throw new KeyNotFoundException("Objective refinement session not found: " + session.Id);
 
             List<ObjectiveRefinementMessage> messages = await _database.ObjectiveRefinementMessages
                 .EnumerateBySessionAsync(refreshed.Id)

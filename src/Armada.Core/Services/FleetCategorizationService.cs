@@ -662,7 +662,7 @@ namespace Armada.Core.Services
                     await _Database.VesselImportBatches.UpdateAsync(batch).ConfigureAwait(false);
 
                     Captain? captain = String.IsNullOrEmpty(captainId) ? null : await _Database.Captains.ReadAsync(tenantId, captainId).ConfigureAwait(false);
-                    if (captain == null) throw new InvalidOperationException("Captain not found: " + (String.IsNullOrEmpty(captainId) ? "(none)" : captainId) + ".");
+                    if (captain == null) throw new KeyNotFoundException("Captain not found: " + (String.IsNullOrEmpty(captainId) ? "(none)" : captainId) + ".");
 
                     reserved = await _Database.Captains.TryReserveAsync(tenantId, captain.Id, CaptainStateEnum.Analyzing).ConfigureAwait(false);
                     if (!reserved)

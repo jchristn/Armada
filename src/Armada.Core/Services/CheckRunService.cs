@@ -52,7 +52,7 @@ namespace Armada.Core.Services
             if (String.IsNullOrWhiteSpace(request.VesselId)) throw new ArgumentNullException(nameof(request.VesselId));
 
             Vessel vessel = await ReadAccessibleVesselAsync(auth, request.VesselId, token).ConfigureAwait(false)
-                ?? throw new InvalidOperationException("Vessel not found or not accessible.");
+                ?? throw new KeyNotFoundException("Vessel not found or not accessible.");
 
             VesselReadinessResult readiness = await _Readiness.EvaluateAsync(
                 auth,
@@ -167,7 +167,7 @@ namespace Armada.Core.Services
             if (String.IsNullOrWhiteSpace(request.VesselId)) throw new ArgumentNullException(nameof(request.VesselId));
 
             Vessel vessel = await ReadAccessibleVesselAsync(auth, request.VesselId, token).ConfigureAwait(false)
-                ?? throw new InvalidOperationException("Vessel not found or not accessible.");
+                ?? throw new KeyNotFoundException("Vessel not found or not accessible.");
 
             WorkflowProfile? profile = await ResolveImportProfileAsync(auth, vessel, request.WorkflowProfileId, token).ConfigureAwait(false);
             CheckRun run = BuildImportedRun(auth, vessel, profile, request);
@@ -186,7 +186,7 @@ namespace Armada.Core.Services
             if (String.IsNullOrWhiteSpace(request.VesselId)) throw new ArgumentNullException(nameof(request.VesselId));
 
             Vessel vessel = await ReadAccessibleVesselAsync(auth, request.VesselId, token).ConfigureAwait(false)
-                ?? throw new InvalidOperationException("Vessel not found or not accessible.");
+                ?? throw new KeyNotFoundException("Vessel not found or not accessible.");
 
             WorkflowProfile? profile = await ResolveImportProfileAsync(auth, vessel, request.WorkflowProfileId, token).ConfigureAwait(false);
             CheckRun run = BuildImportedRun(auth, vessel, profile, request);
@@ -246,7 +246,7 @@ namespace Armada.Core.Services
 
             CheckRunQuery scope = BuildScopeQuery(auth);
             CheckRun? prior = await _Database.CheckRuns.ReadAsync(id, scope, token).ConfigureAwait(false);
-            if (prior == null) throw new InvalidOperationException("Check run not found.");
+            if (prior == null) throw new KeyNotFoundException("Check run not found.");
 
             return await RunAsync(auth, new CheckRunRequest
             {
@@ -284,7 +284,7 @@ namespace Armada.Core.Services
             {
                 profile = await _WorkflowProfiles.ResolveForVesselAsync(auth, vessel, workflowProfileId, token).ConfigureAwait(false);
                 if (profile == null)
-                    throw new InvalidOperationException("The supplied workflow profile is not accessible for this vessel.");
+                    throw new KeyNotFoundException("The supplied workflow profile is not accessible for this vessel.");
             }
 
             return profile;

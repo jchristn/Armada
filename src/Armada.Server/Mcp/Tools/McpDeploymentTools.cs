@@ -90,11 +90,10 @@ namespace Armada.Server.Mcp.Tools
                 },
                 async (args) =>
                 {
-                    JsonElement value = args!.Value;
-                    string deploymentId = value.GetProperty("deploymentId").GetString() ?? String.Empty;
-                    string? comment = value.TryGetProperty("comment", out JsonElement commentElement) ? commentElement.GetString() : null;
+                    DeploymentApprovalArgs request = JsonSerializer.Deserialize<DeploymentApprovalArgs>(args!.Value, _JsonOptions)
+                        ?? throw new InvalidOperationException("Could not deserialize DeploymentApprovalArgs.");
                     AuthContext auth = McpToolHelpers.ResolveCallerContext();
-                    return (object)await deploymentService.ApproveAsync(auth, deploymentId, comment).ConfigureAwait(false);
+                    return (object)await deploymentService.ApproveAsync(auth, request.DeploymentId, request.Comment).ConfigureAwait(false);
                 });
 
             register(

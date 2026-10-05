@@ -367,7 +367,7 @@ When an MCP tool encounters an error, it returns a JSON object with a machine-re
 | `Unavailable` | A service the operation needs is not configured or not available (for example no saved diff) |
 | `Failed` | Any other failure |
 
-`Code` carries a feature-specific detail code where a tool has one (for example the vessel import codes such as `BatchNotFound` or `PathNotAllowed`), and `StatusCode` keeps the HTTP-equivalent status the fleet action tools have always returned. Errors raised by a tool's handler, and calls refused by the per-client rate limit (`Mcp.ToolCallsPerSecond`, default 100 per second, 0 for no limit), come back as MCP tool results with `isError: true` instead.
+`Code` carries a feature-specific detail code where a tool has one (for example the vessel import codes such as `BatchNotFound` or `PathNotAllowed`), and `StatusCode` keeps the HTTP-equivalent status the fleet action tools have always returned. When a tool's service signals a missing entity, bad input, a state conflict, a missing permission, or an unavailable feature, the server maps the exception by type to the same JSON object (`NotFound`, `InvalidArgument`, `Conflict`, `Forbidden`, `Unavailable`). Any other unexpected handler error, a call the tool authorization gate refuses, and calls refused by the per-client rate limit (`Mcp.ToolCallsPerSecond`, default 100 per second, 0 for no limit) come back as MCP tool results with `isError: true` instead.
 
 MCP tools do not return HTTP status codes (MCP uses JSON-RPC, not HTTP). The presence of an `ErrorCode` field (or a result with `isError: true`) indicates failure. On success, the response contains the requested data (entity object, status, list, etc.) without an `Error` field.
 

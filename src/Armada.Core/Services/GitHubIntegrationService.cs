@@ -80,7 +80,7 @@ namespace Armada.Core.Services
             if (!String.IsNullOrWhiteSpace(request.ObjectiveId))
             {
                 objective = await _Objectives.ReadAsync(auth, request.ObjectiveId, token).ConfigureAwait(false)
-                    ?? throw new InvalidOperationException("Objective not found.");
+                    ?? throw new KeyNotFoundException("Objective not found.");
             }
             else
             {
@@ -135,7 +135,7 @@ namespace Armada.Core.Services
             if (!String.IsNullOrWhiteSpace(request.DeploymentId))
             {
                 deployment = await _Deployments.ReadAsync(auth, request.DeploymentId, token).ConfigureAwait(false)
-                    ?? throw new InvalidOperationException("Deployment not found.");
+                    ?? throw new KeyNotFoundException("Deployment not found.");
                 if (!String.Equals(deployment.VesselId, repository.Vessel.Id, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidOperationException("The selected deployment does not belong to the supplied vessel.");
             }
@@ -183,7 +183,7 @@ namespace Armada.Core.Services
                 throw new InvalidOperationException("Mission does not have a GitHub pull request URL.");
 
             Vessel vessel = await ReadAccessibleVesselAsync(auth, mission.VesselId, token).ConfigureAwait(false)
-                ?? throw new InvalidOperationException("Mission vessel not found or not accessible.");
+                ?? throw new KeyNotFoundException("Mission vessel not found or not accessible.");
             string tokenValue = ResolveToken(vessel);
             GitHubPullRequestReference reference = ParsePullRequestReference(mission.PrUrl);
             return await ReadPullRequestDetailAsync(reference, tokenValue, mission.Id, token).ConfigureAwait(false);
@@ -203,7 +203,7 @@ namespace Armada.Core.Services
                 throw new InvalidOperationException("Release is not linked to a vessel.");
 
             Vessel vessel = await ReadAccessibleVesselAsync(auth, release.VesselId, token).ConfigureAwait(false)
-                ?? throw new InvalidOperationException("Release vessel not found or not accessible.");
+                ?? throw new KeyNotFoundException("Release vessel not found or not accessible.");
             string tokenValue = ResolveToken(vessel);
             List<GitHubPullRequestDetail> results = new List<GitHubPullRequestDetail>();
             HashSet<string> seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -506,7 +506,7 @@ namespace Armada.Core.Services
             CancellationToken token)
         {
             Vessel vessel = await ReadAccessibleVesselAsync(auth, vesselId, token).ConfigureAwait(false)
-                ?? throw new InvalidOperationException("Vessel not found or not accessible.");
+                ?? throw new KeyNotFoundException("Vessel not found or not accessible.");
 
             string repoUrl = Normalize(vessel.RepoUrl)
                 ?? throw new InvalidOperationException("The selected vessel does not have a GitHub repository URL.");

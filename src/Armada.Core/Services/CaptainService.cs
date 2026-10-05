@@ -69,7 +69,7 @@ namespace Armada.Core.Services
             Captain? captain = !String.IsNullOrEmpty(tenantId)
                 ? await _Database.Captains.ReadAsync(tenantId, captainId, token).ConfigureAwait(false)
                 : await _Database.Captains.ReadAsync(captainId, token).ConfigureAwait(false);
-            if (captain == null) throw new InvalidOperationException("Captain not found: " + captainId);
+            if (captain == null) throw new KeyNotFoundException("Captain not found: " + captainId);
 
             _Logging.Info(_Header + "recalling captain " + captainId);
 

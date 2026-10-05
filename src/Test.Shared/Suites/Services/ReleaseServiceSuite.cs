@@ -264,7 +264,7 @@ namespace Test.Shared.Suites.Services
                 await EnsureTenantAndUserAsync(testDb, tenantId, userId).ConfigureAwait(false);
 
                 AuthContext auth = AuthContext.Authenticated(tenantId, userId, false, false, "UnitTest");
-                await AssertThrowsAsync<InvalidOperationException>(() => releases.RefreshAsync(auth, "rel_missing"));
+                await AssertThrowsAsync<KeyNotFoundException>(() => releases.RefreshAsync(auth, "rel_missing"));
             }));
 
             // Audit addition: create with a null request throws (confirmed against source).

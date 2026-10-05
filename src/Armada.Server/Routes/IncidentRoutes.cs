@@ -122,10 +122,9 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = 201;
                     return incident;
                 }
-                catch (InvalidOperationException ex)
+                catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
                 {
-                    req.Http.Response.StatusCode = 400;
-                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = ex.Message };
+                    return RouteErrorMapper.ToResponse(req, ex, 400);
                 }
             },
             api => api
@@ -150,14 +149,9 @@ namespace Armada.Server.Routes
                     await LinkObjectivesAsync(ctx, incident, request.ObjectiveIds).ConfigureAwait(false);
                     return incident;
                 }
-                catch (InvalidOperationException ex)
+                catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
                 {
-                    req.Http.Response.StatusCode = ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase) ? 404 : 400;
-                    return new ApiErrorResponse
-                    {
-                        Error = req.Http.Response.StatusCode == 404 ? ApiResultEnum.NotFound : ApiResultEnum.BadRequest,
-                        Message = ex.Message
-                    };
+                    return RouteErrorMapper.ToResponse(req, ex, 400);
                 }
             },
             api => api
@@ -181,10 +175,9 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = 204;
                     return null;
                 }
-                catch (InvalidOperationException ex)
+                catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
                 {
-                    req.Http.Response.StatusCode = 404;
-                    return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = ex.Message };
+                    return RouteErrorMapper.ToResponse(req, ex, 409);
                 }
             },
             api => api
@@ -236,7 +229,7 @@ namespace Armada.Server.Routes
 
                 Objective? objective = await _Objectives.ReadAsync(auth, normalized).ConfigureAwait(false);
                 if (objective == null)
-                    throw new InvalidOperationException("Objective not found: " + normalized);
+                    throw new KeyNotFoundException("Objective not found: " + normalized);
             }
         }
 

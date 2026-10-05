@@ -51,7 +51,17 @@ namespace Test.Shared.Infrastructure
         public static McpToolResultProbe From(Armada.Runtimes.Mcp.McpToolCallResult result)
         {
             if (result == null) throw new ArgumentNullException(nameof(result));
-            string text = result.Text;
+            return FromText(result.Text);
+        }
+
+        /// <summary>
+        /// Deserialize a tool result's text content. Returns an empty probe when the text is not a JSON object.
+        /// </summary>
+        /// <param name="text">Tool result text.</param>
+        /// <returns>Probe.</returns>
+        public static McpToolResultProbe FromText(string? text)
+        {
+            if (String.IsNullOrWhiteSpace(text)) return new McpToolResultProbe();
             try
             {
                 JsonSerializerOptions options = new JsonSerializerOptions();

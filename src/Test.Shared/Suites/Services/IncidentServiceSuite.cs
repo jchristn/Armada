@@ -304,7 +304,7 @@ namespace Test.Shared.Suites.Services
                 IncidentService incidents = new IncidentService(testDb.Driver);
 
                 AuthContext auth = AuthContext.Authenticated("ten_incident_update_missing", "usr_incident_update_missing", false, false, "UnitTest");
-                await AssertThrowsAsync<InvalidOperationException>(() => incidents.UpdateAsync(auth, "inc_missing", new IncidentUpsertRequest
+                await AssertThrowsAsync<KeyNotFoundException>(() => incidents.UpdateAsync(auth, "inc_missing", new IncidentUpsertRequest
                 {
                     Status = IncidentStatusEnum.Closed
                 }));

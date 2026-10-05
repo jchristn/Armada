@@ -499,6 +499,12 @@ Every REST error is an `ApiErrorResponse` with a stable `Error` code that matche
   `422` (vessel push or merge rejected), `501` (planning and refinement sessions on a runtime that does not support
   them, model context building unavailable), `503` (git unavailable), and `504` (model context build timed out). Use
   the HTTP status for these.
+- Routes choose the status by the service exception's type, never by its message: a missing or invisible entity is
+  `404 NotFound`, including an id referenced in a request body (for example `VesselId`, `EnvironmentId`, or
+  `ObjectiveIds` when creating a deployment, release, or incident; a captain, vessel, or dock when starting a
+  planning or refinement session), invalid input is `400 BadRequest`, a state that blocks the operation is
+  `400 BadRequest` or `409 Conflict` as each route documents (delete routes use `409`), and a role that cannot
+  perform the operation is `403 Forbidden`.
 - Unhandled exceptions become `500 InternalError` with the exception message in `Message`.
 - Exceptions to the shape, frozen for 1.0 and documented with their routes: `POST /api/v1/authenticate` returns
   `AuthenticateResult { Success: false, ... }` with 401 on bad credentials, `POST /api/v1/onboarding` returns

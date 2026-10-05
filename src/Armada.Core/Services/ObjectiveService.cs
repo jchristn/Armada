@@ -226,7 +226,7 @@ namespace Armada.Core.Services
             await EnsureBackfilledAsync(token).ConfigureAwait(false);
 
             Objective objective = await ReadAsync(auth, id, token).ConfigureAwait(false)
-                ?? throw new InvalidOperationException("Objective not found.");
+                ?? throw new KeyNotFoundException("Objective not found.");
 
             objective.Title = Normalize(request.Title) ?? objective.Title;
             objective.Description = request.Description != null ? Normalize(request.Description) : objective.Description;
@@ -302,7 +302,7 @@ namespace Armada.Core.Services
                     throw new InvalidOperationException("Duplicate rank in reorder request: " + item.Rank);
 
                 Objective objective = await ReadAsync(auth, objectiveId, token).ConfigureAwait(false)
-                    ?? throw new InvalidOperationException("Objective not found.");
+                    ?? throw new KeyNotFoundException("Objective not found.");
 
                 objective.Rank = item.Rank;
                 objective.LastUpdateUtc = now;
@@ -351,7 +351,7 @@ namespace Armada.Core.Services
             Objective? existing = await ReadObjectiveRowAsync(auth, id, token).ConfigureAwait(false);
             List<ArmadaEvent> snapshots = await ReadObjectiveSnapshotEventsAsync(auth, id, token).ConfigureAwait(false);
             if (existing == null && snapshots.Count == 0)
-                throw new InvalidOperationException("Objective not found.");
+                throw new KeyNotFoundException("Objective not found.");
 
             if (existing != null)
             {
@@ -399,10 +399,10 @@ namespace Armada.Core.Services
             if (String.IsNullOrWhiteSpace(refinementSessionId)) throw new ArgumentNullException(nameof(refinementSessionId));
 
             Objective objective = await ReadAsync(auth, objectiveId, token).ConfigureAwait(false)
-                ?? throw new InvalidOperationException("Objective not found.");
+                ?? throw new KeyNotFoundException("Objective not found.");
             ObjectiveRefinementSession? session = await ReadObjectiveRefinementSessionEntityAsync(auth, refinementSessionId, token).ConfigureAwait(false);
             if (session == null)
-                throw new InvalidOperationException("Objective refinement session not found or not accessible: " + refinementSessionId);
+                throw new KeyNotFoundException("Objective refinement session not found or not accessible: " + refinementSessionId);
 
             AddIfMissing(objective.RefinementSessionIds, session.Id);
             AddIfMissing(objective.VesselIds, session.VesselId);
@@ -426,7 +426,7 @@ namespace Armada.Core.Services
             if (String.IsNullOrWhiteSpace(refinementSessionId)) throw new ArgumentNullException(nameof(refinementSessionId));
 
             Objective objective = await ReadAsync(auth, objectiveId, token).ConfigureAwait(false)
-                ?? throw new InvalidOperationException("Objective not found.");
+                ?? throw new KeyNotFoundException("Objective not found.");
 
             objective.RefinementSessionIds = objective.RefinementSessionIds
                 .Where(id => !String.Equals(id, refinementSessionId, StringComparison.OrdinalIgnoreCase))
@@ -456,10 +456,10 @@ namespace Armada.Core.Services
             if (String.IsNullOrWhiteSpace(planningSessionId)) throw new ArgumentNullException(nameof(planningSessionId));
 
             Objective objective = await ReadAsync(auth, objectiveId, token).ConfigureAwait(false)
-                ?? throw new InvalidOperationException("Objective not found.");
+                ?? throw new KeyNotFoundException("Objective not found.");
             PlanningSession? session = await ReadPlanningSessionEntityAsync(auth, planningSessionId, token).ConfigureAwait(false);
             if (session == null)
-                throw new InvalidOperationException("Planning session not found or not accessible: " + planningSessionId);
+                throw new KeyNotFoundException("Planning session not found or not accessible: " + planningSessionId);
 
             AddIfMissing(objective.PlanningSessionIds, session.Id);
             AddIfMissing(objective.VesselIds, session.VesselId);
@@ -483,10 +483,10 @@ namespace Armada.Core.Services
             if (String.IsNullOrWhiteSpace(voyageId)) throw new ArgumentNullException(nameof(voyageId));
 
             Objective objective = await ReadAsync(auth, objectiveId, token).ConfigureAwait(false)
-                ?? throw new InvalidOperationException("Objective not found.");
+                ?? throw new KeyNotFoundException("Objective not found.");
             Voyage? voyage = await ReadVoyageEntityAsync(auth, voyageId, token).ConfigureAwait(false);
             if (voyage == null)
-                throw new InvalidOperationException("Voyage not found or not accessible: " + voyageId);
+                throw new KeyNotFoundException("Voyage not found or not accessible: " + voyageId);
 
             AddIfMissing(objective.VoyageIds, voyage.Id);
 
@@ -517,10 +517,10 @@ namespace Armada.Core.Services
             if (String.IsNullOrWhiteSpace(releaseId)) throw new ArgumentNullException(nameof(releaseId));
 
             Objective objective = await ReadAsync(auth, objectiveId, token).ConfigureAwait(false)
-                ?? throw new InvalidOperationException("Objective not found.");
+                ?? throw new KeyNotFoundException("Objective not found.");
             Release? release = await ReadReleaseEntityAsync(auth, releaseId, token).ConfigureAwait(false);
             if (release == null)
-                throw new InvalidOperationException("Release not found or not accessible: " + releaseId);
+                throw new KeyNotFoundException("Release not found or not accessible: " + releaseId);
 
             AddIfMissing(objective.ReleaseIds, release.Id);
             AddIfMissing(objective.VesselIds, release.VesselId);
@@ -551,10 +551,10 @@ namespace Armada.Core.Services
             if (String.IsNullOrWhiteSpace(deploymentId)) throw new ArgumentNullException(nameof(deploymentId));
 
             Objective objective = await ReadAsync(auth, objectiveId, token).ConfigureAwait(false)
-                ?? throw new InvalidOperationException("Objective not found.");
+                ?? throw new KeyNotFoundException("Objective not found.");
             Deployment? deployment = await ReadDeploymentEntityAsync(auth, deploymentId, token).ConfigureAwait(false);
             if (deployment == null)
-                throw new InvalidOperationException("Deployment not found or not accessible: " + deploymentId);
+                throw new KeyNotFoundException("Deployment not found or not accessible: " + deploymentId);
 
             AddIfMissing(objective.DeploymentIds, deployment.Id);
             AddIfMissing(objective.VesselIds, deployment.VesselId);
@@ -584,10 +584,10 @@ namespace Armada.Core.Services
             if (String.IsNullOrWhiteSpace(incidentId)) throw new ArgumentNullException(nameof(incidentId));
 
             Objective objective = await ReadAsync(auth, objectiveId, token).ConfigureAwait(false)
-                ?? throw new InvalidOperationException("Objective not found.");
+                ?? throw new KeyNotFoundException("Objective not found.");
             Incident? incident = await ReadIncidentEntityAsync(auth, incidentId, token).ConfigureAwait(false);
             if (incident == null)
-                throw new InvalidOperationException("Incident not found or not accessible: " + incidentId);
+                throw new KeyNotFoundException("Incident not found or not accessible: " + incidentId);
 
             AddIfMissing(objective.IncidentIds, incident.Id);
             AddIfMissing(objective.DeploymentIds, incident.DeploymentId);
@@ -774,7 +774,7 @@ namespace Armada.Core.Services
             if (!String.IsNullOrWhiteSpace(objective.ParentObjectiveId)
                 && !await ReadObjectiveExistsAsync(auth, objective.ParentObjectiveId, token).ConfigureAwait(false))
             {
-                throw new InvalidOperationException("Parent objective not found or not accessible: " + objective.ParentObjectiveId);
+                throw new KeyNotFoundException("Parent objective not found or not accessible: " + objective.ParentObjectiveId);
             }
 
             await ValidateIdsAsync(objective.BlockedByObjectiveIds, async id => await ReadObjectiveExistsAsync(auth, id, token).ConfigureAwait(false), "Blocking objective").ConfigureAwait(false);
@@ -792,7 +792,7 @@ namespace Armada.Core.Services
             if (!String.IsNullOrWhiteSpace(objective.SuggestedPipelineId)
                 && !await ReadPipelineAsync(objective.SuggestedPipelineId, token).ConfigureAwait(false))
             {
-                throw new InvalidOperationException("Pipeline not found or not accessible: " + objective.SuggestedPipelineId);
+                throw new KeyNotFoundException("Pipeline not found or not accessible: " + objective.SuggestedPipelineId);
             }
         }
 
@@ -805,7 +805,7 @@ namespace Armada.Core.Services
             {
                 bool present = await exists(id).ConfigureAwait(false);
                 if (!present)
-                    throw new InvalidOperationException(label + " not found or not accessible: " + id);
+                    throw new KeyNotFoundException(label + " not found or not accessible: " + id);
             }
         }
 

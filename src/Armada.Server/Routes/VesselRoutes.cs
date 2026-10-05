@@ -587,10 +587,9 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = 504;
                     return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = ex.Message };
                 }
-                catch (InvalidOperationException ex)
+                catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
                 {
-                    req.Http.Response.StatusCode = 409;
-                    return new ApiErrorResponse { Error = ApiResultEnum.Conflict, Message = ex.Message };
+                    return RouteErrorMapper.ToResponse(req, ex, 409);
                 }
             },
             api => api
