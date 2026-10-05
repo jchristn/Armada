@@ -35,6 +35,8 @@ import CopyButton from '../components/shared/CopyButton';
 import Markdown from '../components/shared/Markdown';
 import Button from '../components/shared/Button';
 import CaptainRef from '../components/shared/CaptainRef';
+import AssignmentBlockerCard from '../components/missions/AssignmentBlockerCard';
+import BranchesModal from '../components/vessels/BranchesModal';
 import { useLocale } from '../context/LocaleContext';
 
 const MISSION_STATUSES = [
@@ -78,6 +80,9 @@ export default function MissionDetail() {
   const [editDescription, setEditDescription] = useState('');
   const [editPriority, setEditPriority] = useState(100);
   const [editSaving, setEditSaving] = useState(false);
+
+  // Manage Branches (manual landing: Landing Mode None)
+  const [branchesOpen, setBranchesOpen] = useState(false);
 
   // JSON viewer
   const [jsonData, setJsonData] = useState<{ open: boolean; title: string; data: unknown }>({ open: false, title: '', data: null });
@@ -404,6 +409,19 @@ export default function MissionDetail() {
   const canLand = mission.status === 'WorkProduced' || mission.status === 'LandingFailed'
     || (mission.status === 'Review' && !mission.requiresReview);
   const landLabel = mission.status === 'LandingFailed' ? t('Retry Landing') : t('Land');
+  // Landing Mode None: Armada never lands the branch, so Land can only be refused. Offer the merge instead.
+  const manualLandingOnly = !!landingPreview?.manualLandingOnly;
+  const showManualMerge = canLand && manualLandingOnly && !!mission.vesselId && !!mission.branchName;
+  const showLand = canLand && !showManualMerge;
+  const landableStatus = mission.status === 'WorkProduced' || mission.status === 'LandingFailed' || mission.status === 'PullRequestOpen'
+    || (mission.status === 'Review' && !mission.requiresReview);
+  let landingPill: { className: string; label: string };
+  if (mission.status === 'Complete') landingPill = { className: 'ready', label: t('Landed') };
+  else if (!landableStatus) landingPill = { className: 'warning', label: t('Not Ready Yet') };
+  else if (manualLandingOnly) landingPill = { className: 'warning', label: t('Merge By Hand') };
+  else if (landingPreview?.isReadyToLand) landingPill = { className: 'ready', label: t('Ready To Land') };
+  else landingPill = { className: 'warning', label: t('Needs Review') };
+  const handleLand = async () => { try { await retryMissionLanding(mission.id); pushToast('success', t('Landing succeeded! Mission status updated.')); loadMission(); } catch (e) { setError(e instanceof Error ? e.message : t('Landing failed.')); } };
 
   return (
     <div>
@@ -430,8 +448,11 @@ export default function MissionDetail() {
                 {t('Run Check')}
               </button>
             )}
-            {canLand && (
-              <Button className="btn btn-sm btn-primary" onClick={async () => { try { await retryMissionLanding(mission.id); pushToast('success', t('Landing succeeded! Mission status updated.')); loadMission(); } catch (e) { setError(e instanceof Error ? e.message : t('Landing failed.')); } }} title={t('Rebase the mission branch and merge it into the target branch, then complete the mission')}>{landLabel}</Button>
+            {showLand && (
+              <Button className="btn btn-sm btn-primary" onClick={handleLand} title={t('Rebase the mission branch and merge it into the target branch, then complete the mission')}>{landLabel}</Button>
+            )}
+            {showManualMerge && (
+              <button className="btn btn-sm btn-primary" onClick={() => setBranchesOpen(true)} title={t('This vessel lands by hand (Landing Mode None). Merge the mission branch in Manage Branches; the mission completes once its branch is merged.')}>{t('Merge in Manage Branches')}</button>
             )}
             <ActionMenu id={`mission-action-${mission.id}`} items={[
               { label: 'Edit', onClick: openEdit },
@@ -448,7 +469,8 @@ export default function MissionDetail() {
               { label: 'Transition Status', onClick: () => setShowTransition(true) },
               { label: 'View JSON', onClick: () => setJsonData({ open: true, title: t('Mission: {{title}}', { title: mission.title }), data: mission }) },
               { label: 'Restart', onClick: handleRestart },
-              ...(canLand ? [{ label: mission.status === 'LandingFailed' ? 'Retry Landing' : 'Land', onClick: async () => { try { await retryMissionLanding(mission.id); pushToast('success', t('Landing succeeded! Mission status updated.')); loadMission(); } catch (e) { setError(e instanceof Error ? e.message : t('Landing failed.')); } } }] : []),
+              ...(showLand ? [{ label: mission.status === 'LandingFailed' ? 'Retry Landing' : 'Land', onClick: handleLand }] : []),
+              ...(showManualMerge ? [{ label: 'Merge in Manage Branches', onClick: () => setBranchesOpen(true) }] : []),
               { label: 'Purge', danger: true, onClick: handlePurge },
               { label: 'Delete', danger: true, onClick: handleDelete },
             ]} />
@@ -462,6 +484,21 @@ export default function MissionDetail() {
       <ConfirmDialog open={confirm.open} title={confirm.title} message={confirm.message}
         onConfirm={confirm.onConfirm} onCancel={() => setConfirm(c => ({ ...c, open: false }))} />
 
+      {mission.status === 'Pending' && mission.assignmentBlocker && (
+        <AssignmentBlockerCard blocker={mission.assignmentBlocker} />
+      )}
+
+      {showManualMerge && mission.vesselId && (
+        <BranchesModal
+          vesselId={mission.vesselId}
+          vesselName={vesselName(mission.vesselId)}
+          open={branchesOpen}
+          onClose={() => { setBranchesOpen(false); loadMission(); }}
+          initialMergeSource={mission.branchName}
+          onMerged={() => loadMission()}
+        />
+      )}
+
       <div className="card landing-preview-card">
         <div className="readiness-panel-header">
           <div>
@@ -470,8 +507,8 @@ export default function MissionDetail() {
               {landingPreview?.sourceBranch ? `${landingPreview.sourceBranch} -> ${landingPreview.targetBranch}` : mission.branchName || t('No branch selected')}
             </div>
           </div>
-          <span className={`readiness-pill ${landingPreview?.isReadyToLand ? 'ready' : 'warning'}`}>
-            {landingPreview?.isReadyToLand ? t('Ready To Land') : t('Needs Review')}
+          <span className={`readiness-pill ${landingPill.className}`}>
+            {landingPill.label}
           </span>
         </div>
         {loadingLandingPreview ? (

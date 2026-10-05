@@ -10,6 +10,10 @@ interface BranchesModalProps {
   vesselName: string;
   open: boolean;
   onClose: () => void;
+  /** Preselect this branch as the merge source (for example a mission's branch), with the default branch as target. */
+  initialMergeSource?: string | null;
+  /** Called after a successful merge (for example to refresh the mission that owns the branch). */
+  onMerged?: () => void;
 }
 
 /**
@@ -17,7 +21,7 @@ interface BranchesModalProps {
  * and lets the operator push a branch or merge one branch into another. Read from and write to the
  * vessel's repository via the /branches endpoints.
  */
-export default function BranchesModal({ vesselId, vesselName, open, onClose }: BranchesModalProps) {
+export default function BranchesModal({ vesselId, vesselName, open, onClose, initialMergeSource, onMerged }: BranchesModalProps) {
   const { t } = useLocale();
   const { pushToast } = useNotifications();
   const [loading, setLoading] = useState(false);
@@ -49,6 +53,13 @@ export default function BranchesModal({ vesselId, vesselName, open, onClose }: B
     if (open) load();
   }, [open, load]);
 
+  // Preselect the requested source branch and the default branch as target once the branches are known.
+  useEffect(() => {
+    if (!open || !initialMergeSource) return;
+    setMergeSource(initialMergeSource);
+    setMergeTarget(defaultBranch);
+  }, [open, initialMergeSource, defaultBranch]);
+
   async function handlePush(branch: string) {
     setBusy('push:' + branch);
     try {
@@ -76,6 +87,7 @@ export default function BranchesModal({ vesselId, vesselName, open, onClose }: B
       await mergeVesselBranch(vesselId, mergeSource, mergeTarget, mergePush);
       pushToast('success', t('Merged {{source}} into {{target}}', { source: mergeSource, target: mergeTarget }));
       await load();
+      onMerged?.();
     } catch (e) {
       pushToast('error', t('Merge failed: {{message}}', { message: e instanceof Error ? e.message : String(e) }));
     } finally {
