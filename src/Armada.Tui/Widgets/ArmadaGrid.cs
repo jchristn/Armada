@@ -189,6 +189,10 @@ namespace Armada.Tui.Widgets
 
         #region Private-Members
 
+        private const int PrimaryComfortWidth = 32;
+        private const int FlexComfortWidth = 12;
+        private const int IdentifierFloorWidth = 12;
+        private const int FlexAmpleWidth = 24;
         private List<T> _Rows = new List<T>();
         private List<T>? _Local = null;
         private int _PageSize = 25;
@@ -667,7 +671,7 @@ namespace Armada.Tui.Widgets
 
             List<GridColumn<T>> cols = VisibleColumns();
             int checkWidth = MultiSelect ? 4 : 0;
-            List<int> widths = LayoutColumns(cols, width - checkWidth);
+            List<int> widths = LayoutColumns(cols, width - checkWidth, ContentWidths(cols));
             _ColumnStarts = new List<int>();
             int x = checkWidth;
             CellStyle header = Theme.GridHeader;
@@ -736,6 +740,7 @@ namespace Armada.Tui.Widgets
                             if (custom.HasValue) cellStyle = custom.Value.WithBackground(rowStyle.Background);
                         }
 
+                        if (col.IsIdentifier) text = TextCells.ElideMiddle(text, widths[i]);
                         string cell = col.Align == CellAlignment.Right ? TextCells.PadLeft(text, widths[i]) : TextCells.PadRight(text, widths[i]);
                         SurfaceText.Draw(surface, cx, y, cell, cellStyle, widths[i]);
                         cx += widths[i] + 1;
@@ -778,41 +783,120 @@ namespace Armada.Tui.Widgets
             if (used + rw + 2 <= width) SurfaceText.Draw(surface, width - rw, y, right, Theme.StatusBar.WithForeground(Theme.Muted.Foreground), rw);
         }
 
-        private List<int> LayoutColumns(List<GridColumn<T>> cols, int available)
+        private List<int> ContentWidths(List<GridColumn<T>> cols)
         {
-            List<int> widths = cols.Select(c => 0).ToList();
-            List<int> included = Enumerable.Range(0, cols.Count).ToList();
-            while (true)
+            List<int> result = new List<int>();
+            int first = Math.Clamp(_Cursor < 0 ? _Scroll : Math.Min(_Scroll, _Cursor), 0, Math.Max(0, _Rows.Count - 1));
+            int last = Math.Min(_Rows.Count, first + Math.Max(1, _BodyHeight) + 1);
+            foreach (GridColumn<T> col in cols)
             {
-                int gaps = Math.Max(0, included.Count - 1);
-                int need = included.Sum(i => cols[i].Width ?? cols[i].MinWidth) + gaps;
-                if (need <= available || included.Count <= 1) break;
-                int drop = included.LastOrDefault(i => !cols[i].Pinned && i != _FocusedColumn);
-                if (!included.Contains(drop) || (cols[drop].Pinned)) drop = included.Last();
+                int w = TextCells.Width(T(col.Title)) + 2;
+                for (int r = first; r < last; r++) w = Math.Max(w, TextCells.Width(SafeValue(col, _Rows[r])));
+                result.Add(w);
+            }
+
+            return result;
+        }
+
+        private List<int> LayoutColumns(List<GridColumn<T>> cols, int available, List<int> content)
+        {
+            // W8.4: the title or name column keeps a comfortable width; identifier columns shrink (middle elision) and
+            // are dropped first; then other columns are dropped from the right; leftover width goes to proportional
+            // columns (first to a comfortable, then to an ample width), then grows identifiers back toward their natural
+            // width, then to proportional columns again.
+            List<int> widths = cols.Select(c => 0).ToList();
+            if (cols.Count == 0 || available <= 0) return widths;
+            int primary = PrimaryIndex(cols);
+            int primaryTarget = primary >= 0 ? Math.Max(cols[primary].MinWidth, Math.Min(content[primary], Math.Min(PrimaryComfortWidth, available * 35 / 100))) : 0;
+            List<int> floors = new List<int>();
+            for (int i = 0; i < cols.Count; i++)
+            {
+                GridColumn<T> c = cols[i];
+                if (i == primary) floors.Add(primaryTarget);
+                else if (c.IsIdentifier) floors.Add(Math.Max(c.MinWidth, Math.Min(c.Width ?? IdentifierFloorWidth, IdentifierFloorWidth)));
+                else floors.Add(c.Width ?? c.MinWidth);
+            }
+
+            List<int> included = Enumerable.Range(0, cols.Count).ToList();
+            while (included.Count > 1 && included.Sum(i => floors[i]) + included.Count - 1 > available)
+            {
+                int drop = included.LastOrDefault(i => cols[i].IsIdentifier && !cols[i].Pinned && i != primary && i != _FocusedColumn, -1);
+                if (drop < 0) drop = included.LastOrDefault(i => !cols[i].Pinned && i != primary && i != _FocusedColumn, -1);
+                if (drop < 0) drop = included.LastOrDefault(i => i != primary, -1);
+                if (drop < 0) drop = included.Last();
                 included.Remove(drop);
             }
 
-            int fixedTotal = included.Where(i => cols[i].Width.HasValue).Sum(i => cols[i].Width!.Value);
-            int gapTotal = Math.Max(0, included.Count - 1);
-            int remaining = Math.Max(0, available - fixedTotal - gapTotal);
-            List<int> flex = included.Where(i => !cols[i].Width.HasValue).ToList();
-            int weightTotal = flex.Sum(i => cols[i].Weight);
-            foreach (int i in included)
-            {
-                if (cols[i].Width.HasValue) widths[i] = Math.Min(cols[i].Width!.Value, available);
-            }
+            foreach (int i in included) widths[i] = Math.Min(floors[i], available);
+            int leftover = available - included.Sum(i => widths[i]) - Math.Max(0, included.Count - 1);
+            if (leftover <= 0) return widths;
 
-            int assigned = 0;
-            for (int k = 0; k < flex.Count; k++)
+            List<int> flex = included.Where(i => !cols[i].Width.HasValue).ToList();
+            List<int> comfortNeed = flex.Select(i => i == primary ? 0 : Math.Max(0, Math.Min(content[i], Math.Max(cols[i].MinWidth, FlexComfortWidth)) - widths[i])).ToList();
+            leftover -= Grow(widths, flex, comfortNeed, leftover);
+            List<int> ampleNeed = flex.Select(i => Math.Max(0, Math.Min(content[i], i == primary ? PrimaryComfortWidth + FlexAmpleWidth : FlexAmpleWidth) - widths[i])).ToList();
+            leftover -= Grow(widths, flex, ampleNeed, leftover);
+            List<int> contentNeed = flex.Select(i => Math.Max(0, content[i] - widths[i])).ToList();
+            leftover -= Grow(widths, flex, contentNeed, leftover);
+            List<int> ids = included.Where(i => cols[i].IsIdentifier && cols[i].Width.HasValue).ToList();
+            List<int> idNeed = ids.Select(i => Math.Max(0, cols[i].Width!.Value - widths[i])).ToList();
+            leftover -= Grow(widths, ids, idNeed, leftover);
+            if (leftover > 0 && flex.Count > 0)
             {
-                int i = flex[k];
-                int share = weightTotal > 0 ? remaining * cols[i].Weight / weightTotal : 0;
-                if (k == flex.Count - 1) share = remaining - assigned;
-                widths[i] = Math.Max(cols[i].MinWidth, share);
-                assigned += widths[i];
+                int weightTotal = flex.Sum(i => cols[i].Weight);
+                int assigned = 0;
+                for (int k = 0; k < flex.Count; k++)
+                {
+                    int share = k == flex.Count - 1 ? leftover - assigned : leftover * cols[flex[k]].Weight / weightTotal;
+                    widths[flex[k]] += share;
+                    assigned += share;
+                }
             }
 
             return widths;
+        }
+
+        private static int Grow(List<int> widths, List<int> targets, List<int> needs, int leftover)
+        {
+            int total = needs.Sum();
+            if (total <= 0 || leftover <= 0) return 0;
+            if (total <= leftover)
+            {
+                for (int k = 0; k < targets.Count; k++) widths[targets[k]] += needs[k];
+                return total;
+            }
+
+            int given = 0;
+            for (int k = 0; k < targets.Count; k++)
+            {
+                int share = needs[k] * leftover / total;
+                widths[targets[k]] += share;
+                given += share;
+            }
+
+            return given;
+        }
+
+        private static int PrimaryIndex(List<GridColumn<T>> cols)
+        {
+            for (int i = 0; i < cols.Count; i++)
+            {
+                if (cols[i].Primary == true) return i;
+            }
+
+            for (int i = 0; i < cols.Count; i++)
+            {
+                if (cols[i].Primary != false && cols[i].Pinned && !cols[i].Width.HasValue && !cols[i].IsIdentifier) return i;
+            }
+
+            int best = -1;
+            for (int i = 0; i < cols.Count; i++)
+            {
+                if (cols[i].Primary == false || cols[i].Width.HasValue || cols[i].IsIdentifier) continue;
+                if (best < 0 || cols[i].Weight > cols[best].Weight) best = i;
+            }
+
+            return best;
         }
 
         private string SafeValue(GridColumn<T> column, T row)

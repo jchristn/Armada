@@ -4,10 +4,20 @@ namespace Armada.Tui.Services
     using TUIKit.Hosting;
 
     /// <summary>
-    /// <see cref="IUiDispatcher"/> over <see cref="TuiApplication.Post"/>. Thread-safe.
+    /// <see cref="IUiDispatcher"/> over <see cref="TuiApplication.Post"/>. After each posted action runs (on the loop
+    /// thread) it calls <see cref="AfterRun"/>, which the TUI uses to wake the frame governor. Thread-safe.
     /// </summary>
     public class TuiApplicationDispatcher : IUiDispatcher
     {
+        #region Public-Members
+
+        /// <summary>
+        /// Called on the loop thread after each posted action runs (also when it throws), or null.
+        /// </summary>
+        public Action? AfterRun { get; set; } = null;
+
+        #endregion
+
         #region Private-Members
 
         private readonly TuiApplication _App;
@@ -34,7 +44,17 @@ namespace Armada.Tui.Services
         public void Post(Action action)
         {
             if (action == null) throw new ArgumentNullException(nameof(action));
-            _App.Post(action);
+            _App.Post(() =>
+            {
+                try
+                {
+                    action();
+                }
+                finally
+                {
+                    AfterRun?.Invoke();
+                }
+            });
         }
 
         #endregion

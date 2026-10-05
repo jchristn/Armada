@@ -9,7 +9,8 @@ namespace Armada.Tui
     /// <summary>
     /// Renders the whole TUI (shell plus open modals) into an in-memory buffer and returns it as text, exactly as the
     /// host composes a frame (the shell is bound to a single full-screen region with no padding). TUIKit does not
-    /// expose its composed frame, so this mirrors the compose order: shell, then modals. Use on the UI loop thread.
+    /// expose its composed frame, so this mirrors the compose order: shell, then modals. In ASCII icon mode the text is
+    /// transliterated exactly as the terminal output is. Use on the UI loop thread.
     /// </summary>
     public static class TuiSnapshot
     {
@@ -30,7 +31,8 @@ namespace Armada.Tui
             BufferSurface surface = new BufferSurface(buffer);
             shell.Render(surface);
             if (app != null && app.Modals.IsActive) app.Modals.Render(surface);
-            return Snapshot.ToText(buffer);
+            string text = Snapshot.ToText(buffer);
+            return shell.Theme.AsciiGlyphs ? Theming.AsciiGlyphs.Transliterate(text) : text;
         }
 
         #endregion

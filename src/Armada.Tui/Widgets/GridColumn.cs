@@ -83,6 +83,33 @@ namespace Armada.Tui.Widgets
         public bool DefaultVisible { get; set; } = true;
 
         /// <summary>
+        /// Identifier column (IDs): shrinks with middle elision and is the first column dropped when the table is
+        /// narrow, so names and titles keep their room. Null (default) detects it: key <c>id</c> or a title ending in
+        /// <c>ID</c>.
+        /// </summary>
+        public bool? Identifier { get; set; } = null;
+
+        /// <summary>
+        /// The table's main column (title or name): it gets a comfortable share of the width before other columns
+        /// grow. Null (default) detects it: the first pinned proportional column, otherwise the proportional column
+        /// with the largest weight.
+        /// </summary>
+        public bool? Primary { get; set; } = null;
+
+        /// <summary>
+        /// True when this is an identifier column (explicit or detected).
+        /// </summary>
+        public bool IsIdentifier
+        {
+            get
+            {
+                if (Identifier.HasValue) return Identifier.Value;
+                return String.Equals(Key, "id", StringComparison.OrdinalIgnoreCase)
+                    || (Title ?? "").EndsWith("ID", StringComparison.Ordinal);
+            }
+        }
+
+        /// <summary>
         /// Effective sort key.
         /// </summary>
         public string EffectiveSortKey

@@ -19,7 +19,7 @@ With no options the TUI connects to the last profile you used, or to the local A
 
 For scripted starts, `ARMADA_URL` supplies the server and `ARMADA_TOKEN` a session token or API key, which skips the login screen when the server accepts it.
 
-The terminal needs to be at least 80 columns by 24 rows. Below that the TUI shows a "terminal too small" screen and comes back when you resize. It works in Windows Terminal, iTerm2, kitty, WezTerm, Ghostty, Alacritty, GNOME Terminal, and inside tmux and SSH sessions. Terminal.app and legacy conhost run with fewer mouse and key features.
+The terminal needs to be at least 80 columns by 24 rows. Below that the TUI shows a "terminal too small" screen with the size it needs and the size it has (Ctrl+Q still quits) and comes back when you resize. It works in Windows Terminal, iTerm2, kitty, WezTerm, Ghostty, Alacritty, GNOME Terminal, and inside tmux and SSH sessions. Terminal.app and legacy conhost run with fewer mouse and key features.
 
 ## Profiles, preferences, and credentials
 
@@ -286,6 +286,18 @@ The help overlay (`?`) lists the bindings for the screen you are on. Any command
 
 Copying uses OSC 52, so it works over SSH. Terminals that do not support OSC 52 get a dialog with the text to select by hand.
 
-## Themes and languages
+## Themes, icons, and display
 
-View offers Dark, Light, High contrast, and Auto. Auto reads the terminal background from `COLORFGBG` and picks Dark when it cannot tell. High contrast also switches borders to ASCII. The language picker uses the dashboard's catalog (served at `/dashboard/i18n/armada.json`) and the same nine languages, including Simplified and Traditional Chinese, Cantonese, and Japanese; widths are measured in terminal cells, so CJK text lines up.
+View offers Dark, Light, High contrast, and Auto. Auto reads the terminal background from `COLORFGBG` and picks Dark when it cannot tell; when `NO_COLOR` is set it picks High contrast. High contrast uses black and white with bright accents, ASCII borders, and reverse video or underline for every selected or focused item, so it also reads on a terminal without color.
+
+View also offers Icons: Auto, Unicode, and ASCII (saved as `Glyphs` in `tui.json`). ASCII draws borders with `+`, `-`, and `|` and writes an ASCII equivalent for every box-drawing, block, Braille, arrow, and bullet character a widget uses (charts switch to `#`, `=`, `+`, and similar), so nothing depends on the terminal's Unicode font. Text you or the server wrote (names, CJK, accented letters) is never changed. Auto picks ASCII when the terminal is not UTF-8: `TERM=dumb`, a `LC_ALL`, `LC_CTYPE`, or `LANG` value that does not name UTF-8 (such as `C` or `POSIX`), or legacy conhost on Windows (Windows Terminal, ConEmu, and terminals that set `TERM_PROGRAM` count as UTF-8). If borders look broken over SSH or in an old console, choose Icons: ASCII.
+
+No state is shown by color alone. Statuses carry a symbol and their name (`+ Complete`, `x Failed`, `! Stalled`, `~ InProgress`, `- other`), the active tab is in brackets, the current sidebar item has `>`, completed wizard steps have `+`, and the header spells out `Live`, `Offline`, `Healthy`, and `Unreachable`.
+
+At the 80x24 minimum the sidebar is hidden (`Ctrl+B` shows it over the screen), between 90 and 109 columns it shows icons, and from 110 columns it is full. The status bar always keeps `? Help` visible, and the header gives approvals and the bell priority over your user and tenant name. Tables give their title or name column room first; ID columns shrink with the middle cut out (`msn_0...WXYZ4`) and are the first columns dropped when a table is narrow, so open a row or press `y` to copy a full ID.
+
+The language picker uses the dashboard's catalog (served at `/dashboard/i18n/armada.json`) and the same nine languages, including Simplified and Traditional Chinese, Cantonese, and Japanese; widths are measured in terminal cells, so CJK text lines up.
+
+## Performance
+
+The TUI composes a frame only when something changed (a key, mouse, or paste; data arriving; a resize) and otherwise a few times a second for clocks and relative times, so an idle TUI uses about 1 percent of one core. Tables draw only the rows on screen and page on the server where the API pages; a 10,000-row table renders a frame in about 1 ms. Ask transcripts reuse the layout of messages that did not change, so a 5,000-message conversation stays responsive while a reply streams, and at most 10,000 messages are kept in memory (older ones come back with "Load earlier messages"). Logs keep the last 20,000 lines. See `docs/TUI_PERFORMANCE.md` for the measurements and how to reproduce them.

@@ -7,6 +7,7 @@ namespace Test.Shared.Infrastructure
     using System.Threading;
     using Armada.Client;
     using Armada.Tui;
+    using Armada.Tui.Services;
     using Armada.Tui.Services.Credentials;
     using TUIKit.Hosting;
     using TUIKit.Terminal;
@@ -25,6 +26,11 @@ namespace Test.Shared.Infrastructure
         /// Backend.
         /// </summary>
         public HeadlessBackend Backend { get; }
+
+        /// <summary>
+        /// The adapter the TUI writes through (wraps <see cref="Backend"/>).
+        /// </summary>
+        public TerminalBackendAdapter Adapter { get; }
 
         /// <summary>
         /// Application.
@@ -84,16 +90,18 @@ namespace Test.Shared.Infrastructure
             TempDir = Path.Combine(Path.GetTempPath(), "armada-tui-test-" + Guid.NewGuid().ToString("N").Substring(0, 10));
             Directory.CreateDirectory(TempDir);
             Backend = new HeadlessBackend(width, height);
-            App = new TuiApplication(Backend);
+            Adapter = new TerminalBackendAdapter(Backend);
+            App = new TuiApplication(Adapter);
             TuiStartOptions options = new TuiStartOptions();
             options.ServerUrl = serverUrl;
             options.PreferencesPath = Path.Combine(TempDir, "tui.json");
             options.Live = false;
+            options.Utf8Probe = () => true;
             configure?.Invoke(options);
             Func<string, ArmadaClient>? factory = handler != null
                 ? (Func<string, ArmadaClient>)(url => new ArmadaClient(new ArmadaClientOptions(url), handler))
                 : null;
-            Tui = new ArmadaTuiApp(App, Backend, options, factory, new FileCredentialStore(Path.Combine(TempDir, "creds.json")));
+            Tui = new ArmadaTuiApp(App, Adapter, options, factory, new FileCredentialStore(Path.Combine(TempDir, "creds.json")));
         }
 
         #endregion

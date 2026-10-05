@@ -154,7 +154,8 @@ namespace Armada.Tui.Widgets
             int x = 0;
             for (int i = 0; i < _Steps.Count && x < width; i++)
             {
-                string chip = (i == _Index ? "[" : " ") + (i + 1) + ". " + T(_Steps[i].Title) + (i == _Index ? "]" : " ");
+                // Completed steps carry a "+" so progress never depends on color alone.
+                string chip = (i == _Index ? "[" : i < _Index ? "+" : " ") + (i + 1) + ". " + T(_Steps[i].Title) + (i == _Index ? "]" : " ");
                 CellStyle style = i == _Index ? Theme.TabActive : i < _Index ? Theme.Success : Theme.Muted;
                 x += SurfaceText.Draw(surface, x, 1, chip, style, width - x) + 1;
             }

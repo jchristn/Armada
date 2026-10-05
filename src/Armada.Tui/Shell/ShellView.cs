@@ -77,6 +77,12 @@ namespace Armada.Tui.Shell
         public bool NarrowSidebarOpen { get; private set; } = false;
 
         /// <summary>
+        /// Decides when the run loop composes a frame (off by default; <see cref="ArmadaTuiApp.RunConsoleAsync"/>
+        /// enables it). The shell invalidates it when the theme changes.
+        /// </summary>
+        public FrameGovernor Frames { get; } = new FrameGovernor();
+
+        /// <summary>
         /// Raised when the breakpoint changes (resize).
         /// </summary>
         public event EventHandler<LayoutModeEnum>? LayoutModeChanged;
@@ -245,6 +251,61 @@ namespace Armada.Tui.Shell
         /// <inheritdoc />
         public override void Render(ISurface surface)
         {
+            Compose(surface);
+        }
+
+        /// <summary>
+        /// Draw the terminal-too-small screen: what is needed, what there is, and how to continue.
+        /// </summary>
+        /// <param name="surface">Surface.</param>
+        /// <param name="minimum">Minimum size.</param>
+        /// <param name="size">Current size.</param>
+        /// <param name="style">Text style.</param>
+        /// <param name="loc">Localizer.</param>
+        public static void RenderTooSmall(ISurface surface, Size minimum, Size size, CellStyle style, Services.ITextLocalizer loc)
+        {
+            if (surface == null) throw new ArgumentNullException(nameof(surface));
+            if (loc == null) throw new ArgumentNullException(nameof(loc));
+            List<string> lines = new List<string>
+            {
+                loc.T("Terminal too small"),
+                loc.T("Need {{need}}, have {{have}}.", Services.LocalizationArgs.Of("need", minimum.Width + "x" + minimum.Height, "have", size.Width + "x" + size.Height)),
+                loc.T("Enlarge the window or reduce the font size."),
+                "Ctrl+Q " + loc.T("Quit")
+            };
+            int top = Math.Max(0, (size.Height - lines.Count) / 2);
+            for (int i = 0; i < lines.Count && top + i < size.Height; i++)
+            {
+                string line = TextCells.Truncate(lines[i], Math.Max(1, size.Width));
+                int x = Math.Max(0, (size.Width - TextCells.Width(line)) / 2);
+                SurfaceText.Draw(surface, x, top + i, line, i == 0 ? style.WithAttribute(CellAttributes.Bold, true) : style, size.Width - x);
+            }
+        }
+
+        #endregion
+
+        #region Protected-Methods
+
+        /// <inheritdoc />
+        protected override void OnFocusChangedCore(bool focused)
+        {
+            Scope.SetActive(focused);
+        }
+
+        /// <inheritdoc />
+        protected override void OnThemeChanged(ArmadaTheme theme)
+        {
+            foreach (ArmadaWidget w in new ArmadaWidget[] { Header, Menu, Sidebar, StatusBar, Dock, Login }) w.ApplyTheme(theme);
+            Screen?.ApplyTheme(theme);
+            Frames.Invalidate();
+        }
+
+        #endregion
+
+        #region Private-Methods
+
+        private void Compose(ISurface surface)
+        {
             Size size = surface.Size;
             _SurfaceWidth = size.Width;
             SurfaceText.FillRect(surface, new Rect(0, 0, size.Width, size.Height), Theme.Text);
@@ -253,7 +314,7 @@ namespace Armada.Tui.Shell
                 LastLayout = null;
                 if (size.Width < ShellLayout.MinimumSize.Width || size.Height < ShellLayout.MinimumSize.Height)
                 {
-                    LayoutBlockScreen.Render(surface, ShellLayout.MinimumSize, size, Theme.Text);
+                    RenderTooSmall(surface, ShellLayout.MinimumSize, size, Theme.Text, _Context.Loc);
                     return;
                 }
 
@@ -281,7 +342,7 @@ namespace Armada.Tui.Shell
 
             if (layout.Mode == LayoutModeEnum.TooSmall)
             {
-                LayoutBlockScreen.Render(surface, ShellLayout.MinimumSize, size, Theme.Text);
+                RenderTooSmall(surface, ShellLayout.MinimumSize, size, Theme.Text, _Context.Loc);
                 return;
             }
 
@@ -302,27 +363,6 @@ namespace Armada.Tui.Shell
             Rect menuArea = new Rect(0, layout.MenuBar.Y, size.Width, size.Height - layout.MenuBar.Y - 1);
             Menu.Render(new SurfaceView(surface, menuArea));
         }
-
-        #endregion
-
-        #region Protected-Methods
-
-        /// <inheritdoc />
-        protected override void OnFocusChangedCore(bool focused)
-        {
-            Scope.SetActive(focused);
-        }
-
-        /// <inheritdoc />
-        protected override void OnThemeChanged(ArmadaTheme theme)
-        {
-            foreach (ArmadaWidget w in new ArmadaWidget[] { Header, Menu, Sidebar, StatusBar, Dock, Login }) w.ApplyTheme(theme);
-            Screen?.ApplyTheme(theme);
-        }
-
-        #endregion
-
-        #region Private-Methods
 
         private void ShowRoute(RouteMatch match)
         {

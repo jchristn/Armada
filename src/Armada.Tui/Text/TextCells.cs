@@ -70,6 +70,26 @@ namespace Armada.Tui.Text
         }
 
         /// <summary>
+        /// Fit text in <paramref name="width"/> cells by cutting its middle (<c>msn_01J...4XQ2</c>), which keeps the
+        /// prefix and the distinctive end of identifiers.
+        /// </summary>
+        /// <param name="text">Text; null is empty.</param>
+        /// <param name="width">Maximum cells.</param>
+        /// <returns>The elided text.</returns>
+        public static string ElideMiddle(string? text, int width)
+        {
+            if (String.IsNullOrEmpty(text) || width < 1) return "";
+            if (Width(text) <= width) return text!;
+            if (width <= Ellipsis.Length + 2) return Truncate(text, width);
+            int keep = width - Ellipsis.Length;
+            int head = (keep + 1) / 2;
+            int tail = keep - head;
+            string end = text!.Length >= tail ? text.Substring(text.Length - tail) : text;
+            if (Width(end) != tail) return Truncate(text, width);
+            return Clip(text, head) + Ellipsis + end;
+        }
+
+        /// <summary>
         /// Truncate and pad with spaces to exactly <paramref name="width"/> cells (a wide grapheme that does not fit is
         /// replaced by padding).
         /// </summary>

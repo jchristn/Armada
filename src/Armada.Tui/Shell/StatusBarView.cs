@@ -73,19 +73,52 @@ namespace Armada.Tui.Shell
             }
             else
             {
+                // The help hint is the way to every other binding, so it is never pushed off by screen hints.
+                KeyValuePair<string, string>? help = null;
                 foreach (KeyValuePair<string, string> hint in Hints)
                 {
-                    string label = T(hint.Value);
-                    int need = TextCells.Width(hint.Key) + 1 + TextCells.Width(label) + 2;
-                    if (x + need > limit) break;
-                    x += SurfaceText.Draw(surface, x, 0, hint.Key, Theme.StatusKey, limit - x);
-                    x += 1;
-                    x += SurfaceText.Draw(surface, x, 0, label, Theme.StatusBar, limit - x);
-                    x += 2;
+                    if (hint.Key == "?") help = hint;
+                }
+
+                int reserve = help.HasValue ? HintWidth(help.Value) : 0;
+                foreach (KeyValuePair<string, string> hint in Hints)
+                {
+                    if (hint.Key == "?")
+                    {
+                        x = DrawHint(surface, x, hint, limit);
+                        reserve = 0;
+                        continue;
+                    }
+
+                    if (x + HintWidth(hint) > limit - reserve)
+                    {
+                        if (help.HasValue && reserve > 0) DrawHint(surface, x, help.Value, limit);
+                        break;
+                    }
+
+                    x = DrawHint(surface, x, hint, limit);
                 }
             }
 
             if (rw > 0 && rw < width) SurfaceText.Draw(surface, width - rw - 1, 0, rightText, Theme.StatusBar.WithForeground(Theme.Accent.Foreground), rw);
+        }
+
+        #endregion
+
+        #region Private-Methods
+
+        private int HintWidth(KeyValuePair<string, string> hint)
+        {
+            return TextCells.Width(hint.Key) + 1 + TextCells.Width(T(hint.Value)) + 2;
+        }
+
+        private int DrawHint(ISurface surface, int x, KeyValuePair<string, string> hint, int limit)
+        {
+            if (x + HintWidth(hint) > limit) return x;
+            x += SurfaceText.Draw(surface, x, 0, hint.Key, Theme.StatusKey, limit - x);
+            x += 1;
+            x += SurfaceText.Draw(surface, x, 0, T(hint.Value), Theme.StatusBar, limit - x);
+            return x + 2;
         }
 
         #endregion

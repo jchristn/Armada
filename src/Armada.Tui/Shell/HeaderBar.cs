@@ -55,14 +55,6 @@ namespace Armada.Tui.Shell
         {
             int width = surface.Size.Width;
             SurfaceText.FillRow(surface, 0, 0, width, Theme.Header);
-            int x = SurfaceText.Draw(surface, 0, 0, " Armada ", Theme.HeaderAccent, width);
-            if (_Context.Session.IsSignedIn)
-            {
-                x += SurfaceText.Draw(surface, x, 0, " [" + _Context.Session.TenantName + "] " + _Context.Session.UserEmail, Theme.Header, width - x);
-                string role = _Context.Session.IsGlobalAdmin ? "Global Admin" : _Context.Session.IsTenantAdmin ? "Tenant Admin" : "";
-                if (role.Length > 0) x += SurfaceText.Draw(surface, x, 0, "  [" + T(role) + "]", Theme.Header.WithForeground(Theme.Accent.Foreground), width - x);
-            }
-
             List<KeyValuePair<string, CellStyle>> right = new List<KeyValuePair<string, CellStyle>>();
             if (_Context.Status.HealthChecked)
             {
@@ -79,9 +71,29 @@ namespace Armada.Tui.Shell
             int unread = _Context.Notifications.UnreadCount;
             right.Add(Pair("[" + T("bell") + " " + unread.ToString(CultureInfo.InvariantCulture) + "]", unread > 0 ? Theme.Warning : Theme.Muted));
 
-            int totalWidth = 0;
-            foreach (KeyValuePair<string, CellStyle> p in right) totalWidth += TextCells.Width(p.Key) + 2;
-            int rx = Math.Max(x + 2, width - totalWidth);
+            // The status items on the right (approvals and the bell above all) outrank the user and tenant on the
+            // left: in narrow terminals the left side is shortened first, then the least important items are dropped.
+            const int productWidth = 8;
+            while (right.Count > 1 && productWidth + 1 + RightWidth(right) > width)
+            {
+                int drop = LeastImportant(right);
+                if (drop < 0) break;
+                right.RemoveAt(drop);
+            }
+            int totalWidth = RightWidth(right);
+            int x = SurfaceText.Draw(surface, 0, 0, " Armada ", Theme.HeaderAccent, width);
+            int leftLimit = Math.Max(x, width - totalWidth - 1);
+            if (_Context.Session.IsSignedIn && leftLimit > x)
+            {
+                string role = _Context.Session.IsGlobalAdmin ? "Global Admin" : _Context.Session.IsTenantAdmin ? "Tenant Admin" : "";
+                string user = " [" + _Context.Session.TenantName + "] " + _Context.Session.UserEmail;
+                string roleText = role.Length > 0 ? "  [" + T(role) + "]" : "";
+                if (x + TextCells.Width(user) + TextCells.Width(roleText) > leftLimit) roleText = "";
+                x += SurfaceText.Draw(surface, x, 0, TextCells.Truncate(user, leftLimit - x), Theme.Header, leftLimit - x);
+                if (roleText.Length > 0) x += SurfaceText.Draw(surface, x, 0, roleText, Theme.Header.WithForeground(Theme.Accent.Foreground), leftLimit - x);
+            }
+
+            int rx = Math.Max(x + 1, width - totalWidth);
             foreach (KeyValuePair<string, CellStyle> p in right)
             {
                 if (rx >= width) break;
@@ -112,6 +124,27 @@ namespace Armada.Tui.Shell
         #endregion
 
         #region Private-Methods
+
+        private int LeastImportant(List<KeyValuePair<string, CellStyle>> items)
+        {
+            string[] order = new string[] { "(", "* " + T("Healthy"), "x " + T("Unreachable"), "* " + T("Live"), "o " + T("Offline") };
+            foreach (string prefix in order)
+            {
+                for (int i = 0; i < items.Count; i++)
+                {
+                    if (items[i].Key.StartsWith(prefix, StringComparison.Ordinal)) return i;
+                }
+            }
+
+            return -1;
+        }
+
+        private static int RightWidth(List<KeyValuePair<string, CellStyle>> items)
+        {
+            int total = 0;
+            foreach (KeyValuePair<string, CellStyle> p in items) total += TextCells.Width(p.Key) + 2;
+            return total;
+        }
 
         private static KeyValuePair<string, CellStyle> Pair(string text, CellStyle style)
         {

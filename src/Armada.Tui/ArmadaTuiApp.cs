@@ -59,6 +59,20 @@ namespace Armada.Tui
         public Armada.Tui.Approvals.ApprovalSources ApprovalSources { get; }
 
         /// <summary>
+        /// The shell's frame governor (W8.5): recompose only on change or a slow idle tick. Enabled by
+        /// <see cref="RunConsoleAsync"/> when <see cref="TuiStartOptions.AdaptiveFrames"/> is set.
+        /// </summary>
+        public FrameGovernor Frames
+        {
+            get { return Shell.Frames; }
+        }
+
+        /// <summary>
+        /// The backend adapter (input activity and ASCII output), or null when the TUI was given a plain backend.
+        /// </summary>
+        public TerminalBackendAdapter? Adapter { get; }
+
+        /// <summary>
         /// Completes when the asynchronous startup (catalog and session resume) has finished.
         /// </summary>
         public Task StartupTask { get; private set; } = Task.CompletedTask;
@@ -90,10 +104,12 @@ namespace Armada.Tui
             if (backend == null) throw new ArgumentNullException(nameof(backend));
             Options = options ?? throw new ArgumentNullException(nameof(options));
             IClock clk = clock ?? new SystemClock();
-            IUiDispatcher dispatcher = new TuiApplicationDispatcher(app);
+            TuiApplicationDispatcher dispatcher = new TuiApplicationDispatcher(app);
+            Adapter = backend as TerminalBackendAdapter;
             PreferencesService prefs = new PreferencesService(options.PreferencesPath);
             prefs.Load();
             ThemeService theme = new ThemeService();
+            if (options.Utf8Probe != null) theme.Utf8Probe = options.Utf8Probe;
             LocalizationService loc = new LocalizationService();
             ITerminalOutput terminal = new BackendTerminalOutput(backend);
             ICredentialStore creds = credentials ?? CredentialStoreFactory.Create();
@@ -111,6 +127,7 @@ namespace Armada.Tui
                 new ClipboardService(terminal, modals, notifications, loc, () => theme.Current),
                 new ExternalService(app), modals, new StatusPoller(() => session.Client, dispatcher), terminal, creds);
 
+            theme.ApplyGlyphs(prefs.Current.Glyphs);
             theme.Apply(prefs.Current.Theme);
             string locale = loc.SetLocale(prefs.Current.Locale ?? CultureInfo.CurrentUICulture.Name);
             session.Client.Options.AcceptLanguage = locale;
@@ -123,6 +140,7 @@ namespace Armada.Tui
             Armada.Tui.Screens.DeliveryConfigScreens.Register(Screens);
             Armada.Tui.Screens.Operations.OperationsScreens.Register(Screens);
             Shell = new ShellView(Context, Screens);
+            dispatcher.AfterRun = Shell.Frames.Invalidate;
             GlobalCommands.Register(Context, Shell);
             Wire();
             ActivitySystemScreens.Register(Screens);
@@ -142,11 +160,15 @@ namespace Armada.Tui
         public static async Task<int> RunConsoleAsync(TuiStartOptions options, CancellationToken token = default)
         {
             using (ConsoleBackend backend = new ConsoleBackend())
-            using (TuiApplication app = new TuiApplication(backend))
-            using (ArmadaTuiApp tui = new ArmadaTuiApp(app, backend, options))
+            using (TerminalBackendAdapter adapter = new TerminalBackendAdapter(backend))
+            using (TuiApplication app = new TuiApplication(adapter))
+            using (ArmadaTuiApp tui = new ArmadaTuiApp(app, adapter, options))
             {
+                TuiRunLoop loop = new TuiRunLoop(app, adapter, tui.Frames);
+                tui.Context.QuitHandler = loop.RequestStop;
+                tui.Frames.Enabled = options.AdaptiveFrames;
                 tui.Start();
-                await app.RunAsync(token).ConfigureAwait(false);
+                await loop.RunAsync(token).ConfigureAwait(false);
                 app.Stop();
                 return 0;
             }
@@ -276,13 +298,21 @@ namespace Armada.Tui
             _App.AutoRenderNotifications = false;
             _App.Theme = Context.Theme.TuiKitTheme;
             _App.PasteReceived += text => Shell.HandlePaste(text);
+            if (Adapter != null)
+            {
+                Adapter.AsciiOutput = Context.Theme.AsciiGlyphs;
+                Adapter.InputReceived += Shell.Frames.NoteInput;
+            }
+
             _App.TerminalFocusChanged += focused =>
             {
+                Shell.Frames.TerminalFocused = focused;
                 Context.Notifications.TerminalFocused = focused;
                 Ask.OnTerminalFocusChanged(focused);
             };
             Context.Theme.Changed += (s, t) =>
             {
+                if (Adapter != null) Adapter.AsciiOutput = t.AsciiGlyphs;
                 _App.Theme = Context.Theme.TuiKitTheme;
                 Shell.ApplyTheme(t);
             };
