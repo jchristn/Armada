@@ -108,6 +108,88 @@ namespace Test.Shared.Suites.Database
                 return Task.CompletedTask;
             }));
 
+            cases.Add(CaseAsync("conditional_status_update", "TryUpdateIfStatusAsync writes lifecycle fields only when the stored status is expected", TestTags.Database, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                DateTime created = new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc);
+                Job job = new Job("conditional", JobKindEnum.Report);
+                job.TenantId = Constants.DefaultTenantId;
+                job.UserId = Constants.DefaultUserId;
+                job.Status = JobStatusEnum.Running;
+                job.Progress = 20;
+                job.CreatedUtc = created;
+                job.StartedUtc = created.AddMinutes(1);
+                job.LastUpdateUtc = created.AddMinutes(1);
+                await testDb.Driver.Jobs.CreateAsync(job).ConfigureAwait(false);
+
+                Job cancel = (await testDb.Driver.Jobs.ReadAsync(job.Id).ConfigureAwait(false))!;
+                cancel.Status = JobStatusEnum.Cancelled;
+                cancel.CompletedUtc = created.AddMinutes(2);
+                cancel.LastUpdateUtc = created.AddMinutes(2);
+                cancel.Name = "renamed";
+                cancel.TenantId = "other-tenant";
+                AssertFalse(await testDb.Driver.Jobs.TryUpdateIfStatusAsync(cancel, new JobStatusEnum[] { JobStatusEnum.Queued }).ConfigureAwait(false), "unexpected status refused");
+                AssertEqual(JobStatusEnum.Running, (await testDb.Driver.Jobs.ReadAsync(job.Id).ConfigureAwait(false))!.Status, "row unchanged");
+                AssertTrue(await testDb.Driver.Jobs.TryUpdateIfStatusAsync(cancel, new JobStatusEnum[] { JobStatusEnum.Queued, JobStatusEnum.Running }).ConfigureAwait(false), "expected status applied");
+
+                Job stored = (await testDb.Driver.Jobs.ReadAsync(job.Id).ConfigureAwait(false))!;
+                AssertEqual(JobStatusEnum.Cancelled, stored.Status);
+                AssertEqual(created.AddMinutes(2), stored.CompletedUtc!.Value, "completed time written");
+                AssertEqual("conditional", stored.Name, "name is not a lifecycle field");
+                AssertEqual(Constants.DefaultTenantId, stored.TenantId, "tenant is not a lifecycle field");
+
+                Job succeed = (await testDb.Driver.Jobs.ReadAsync(job.Id).ConfigureAwait(false))!;
+                succeed.Status = JobStatusEnum.Succeeded;
+                succeed.ResultJson = "{}";
+                AssertFalse(await testDb.Driver.Jobs.TryUpdateIfStatusAsync(succeed, new JobStatusEnum[] { JobStatusEnum.Running }).ConfigureAwait(false), "a terminal job is not overwritten");
+                AssertEqual(JobStatusEnum.Cancelled, (await testDb.Driver.Jobs.ReadAsync(job.Id).ConfigureAwait(false))!.Status);
+
+                Job missing = new Job("missing", JobKindEnum.Generic);
+                AssertFalse(await testDb.Driver.Jobs.TryUpdateIfStatusAsync(missing, new JobStatusEnum[] { JobStatusEnum.Queued }).ConfigureAwait(false), "missing job");
+            }));
+
+            cases.Add(CaseAsync("heartbeat_touches_only_running_jobs", "TryHeartbeatAsync raises progress and the update time of a Running job and never changes status", TestTags.Database, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                DateTime created = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+                Job running = new Job("heartbeat", JobKindEnum.Generic);
+                running.TenantId = Constants.DefaultTenantId;
+                running.Status = JobStatusEnum.Running;
+                running.Progress = 30;
+                running.ResultJson = "{\"partial\":1}";
+                running.CreatedUtc = created;
+                running.LastUpdateUtc = created;
+                await testDb.Driver.Jobs.CreateAsync(running).ConfigureAwait(false);
+
+                AssertTrue(await testDb.Driver.Jobs.TryHeartbeatAsync(running.Id, 50, created.AddMinutes(5)).ConfigureAwait(false), "heartbeat applied");
+                Job stored = (await testDb.Driver.Jobs.ReadAsync(running.Id).ConfigureAwait(false))!;
+                AssertEqual(JobStatusEnum.Running, stored.Status);
+                AssertEqual(50, stored.Progress, "progress raised");
+                AssertEqual(created.AddMinutes(5), stored.LastUpdateUtc, "update time refreshed");
+                AssertEqual("{\"partial\":1}", stored.ResultJson, "other fields untouched");
+
+                AssertTrue(await testDb.Driver.Jobs.TryHeartbeatAsync(running.Id, 10, created.AddMinutes(6)).ConfigureAwait(false), "lower progress heartbeat applied");
+                AssertEqual(50, (await testDb.Driver.Jobs.ReadAsync(running.Id).ConfigureAwait(false))!.Progress, "progress never lowered");
+
+                foreach (JobStatusEnum status in new JobStatusEnum[] { JobStatusEnum.Queued, JobStatusEnum.Succeeded, JobStatusEnum.Failed, JobStatusEnum.Cancelled })
+                {
+                    Job other = new Job("not running " + status, JobKindEnum.Generic);
+                    other.TenantId = Constants.DefaultTenantId;
+                    other.Status = status;
+                    other.Progress = 5;
+                    other.CreatedUtc = created;
+                    other.LastUpdateUtc = created;
+                    await testDb.Driver.Jobs.CreateAsync(other).ConfigureAwait(false);
+                    AssertFalse(await testDb.Driver.Jobs.TryHeartbeatAsync(other.Id, 90, created.AddMinutes(5)).ConfigureAwait(false), "heartbeat refused for " + status);
+                    Job after = (await testDb.Driver.Jobs.ReadAsync(other.Id).ConfigureAwait(false))!;
+                    AssertEqual(status, after.Status, status + " unchanged");
+                    AssertEqual(5, after.Progress, status + " progress unchanged");
+                    AssertEqual(created, after.LastUpdateUtc, status + " update time unchanged");
+                }
+
+                AssertFalse(await testDb.Driver.Jobs.TryHeartbeatAsync("job_missing", 10, created).ConfigureAwait(false), "missing job");
+            }));
+
             return new TestSuiteDescriptor(suiteId: SuiteId, displayName: "Job Database", cases: cases);
         }
 

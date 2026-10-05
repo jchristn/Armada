@@ -312,6 +312,30 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(JobStatusEnum.Cancelled, after!.Status);
             }));
 
+            cases.Add(CaseAsync("cancel_during_progress_write_is_durable", "A cancel that lands inside a progress update stays Cancelled and is not overwritten by the finish", TestTags.Reliability, async () =>
+            {
+                // Regression: the progress update read the Running job and wrote the whole row back, so a cancel committed
+                // between its read and write was overwritten with Running and the job then finished Succeeded.
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                JobHookDatabaseDriver hooked = new JobHookDatabaseDriver(testDb.Driver);
+                for (int i = 0; i < 3; i++) await CreateVesselAsync(testDb.Driver, null).ConfigureAwait(false);
+                ArmadaSettings settings = new ArmadaSettings();
+                settings.RepositoryHealth.MaxConcurrency = 1;
+                FakeHealthCriterion criterion = new FakeHealthCriterion { Code = VesselHealthCriterionEnum.MissionOutcomes };
+                using VesselHealthService service = CreateService(hooked, settings, CreateEvaluator(hooked, settings, criterion));
+                service.CancellationPollInterval = TimeSpan.FromMilliseconds(50);
+                JobCancelInjector injector = new JobCancelInjector(hooked, testDb.Driver, JobWriteMomentEnum.Heartbeat, j => j.Kind == JobKindEnum.Report);
+
+                VesselHealthEvaluationStart start = await service.StartEvaluationAsync(Constants.DefaultTenantId, null, null, false).ConfigureAwait(false);
+                Job injected = await injector.Injected.WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
+                AssertEqual(start.JobId, injected.Id, "evaluation job cancelled");
+                await service.WaitForIdleAsync(Constants.DefaultTenantId).WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
+
+                Job? after = await testDb.Driver.Jobs.ReadAsync(start.JobId).ConfigureAwait(false);
+                AssertEqual(JobStatusEnum.Cancelled, after!.Status, "job stays Cancelled");
+                AssertEqual(injected.CompletedUtc, after.CompletedUtc, "the cancel is not rewritten");
+            }));
+
             cases.Add(CaseAsync("end_to_end_failed_dotnet_list_never_pass", "Real criteria on a .NET repo: a failed dotnet list grades Unknown and the dependency columns stay null", TestTags.Negative, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);

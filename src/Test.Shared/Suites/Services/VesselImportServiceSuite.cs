@@ -281,6 +281,46 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(batch.CreatedCount, (await testDb.Driver.Vessels.EnumerateAsync(Constants.DefaultTenantId).ConfigureAwait(false)).Count, "vessels created before the cancel are kept");
             }));
 
+            cases.Add(CaseAsync("cancel_during_progress_write_is_durable", "A cancel that lands inside an import progress update stays Cancelled and stops the import", TestTags.Reliability, async () =>
+            {
+                // Regression: the progress update read the Running job and wrote the whole row back, so a cancel committed
+                // between its read and write was overwritten with Running and the import ran to the end as Succeeded.
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                JobHookDatabaseDriver hooked = new JobHookDatabaseDriver(testDb.Driver);
+                string root = TestTemp.NewDirectory("import");
+                for (int i = 0; i < 25; i++) MakeFakeRepo(Path.Combine(root, "race-repo-" + i.ToString("D2")));
+                ArmadaSettings settings = NewSettings(root);
+                settings.Import.InlineBatchLimit = 5;
+                LoggingModule logging = new LoggingModule();
+                logging.Settings.EnableConsole = false;
+                VesselImportService service = new VesselImportService(hooked, settings, new VesselDiscoveryService(hooked, settings), new VesselService(hooked), new JobService(hooked, logging), logging);
+                VesselImportDiscoverResponse discovered = await DiscoverRoot(service, root).ConfigureAwait(false);
+                JobCancelInjector injector = new JobCancelInjector(hooked, testDb.Driver, JobWriteMomentEnum.Heartbeat, j => j.Kind == JobKindEnum.VesselImport);
+
+                VesselImportResponse response = await service.ImportAsync(Constants.DefaultTenantId, Constants.DefaultUserId, SelectAll(discovered)).ConfigureAwait(false);
+                AssertTrue(response.RunsInBackground, "background job");
+                Job injected = await injector.Injected.WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
+                AssertEqual(response.JobId, injected.Id, "import job cancelled");
+
+                // The job is Cancelled from the moment of the cancel, so wait for the worker to finish the batch first.
+                VesselImportBatch? batch = null;
+                MonotonicDeadline deadline = MonotonicDeadline.After(TimeSpan.FromSeconds(30));
+                while (!deadline.Passed)
+                {
+                    batch = await testDb.Driver.VesselImportBatches.ReadAsync(discovered.BatchId).ConfigureAwait(false);
+                    if (batch != null && batch.Status != VesselImportBatchStatusEnum.Importing) break;
+                    await Task.Delay(50).ConfigureAwait(false);
+                }
+
+                AssertEqual(VesselImportBatchStatusEnum.Failed, batch!.Status, "a cancelled import ends Failed");
+                AssertTrue(batch.CreatedCount < 25, "stopped part way, created " + batch.CreatedCount);
+                Job after = (await testDb.Driver.Jobs.ReadAsync(response.JobId!).ConfigureAwait(false))!;
+                AssertEqual(JobStatusEnum.Cancelled, after.Status, "job stays Cancelled");
+                AssertEqual(injected.CompletedUtc, after.CompletedUtc, "the cancel is not rewritten");
+                List<VesselImportItem> items = await testDb.Driver.VesselImportItems.EnumerateByBatchAsync(Constants.DefaultTenantId, discovered.BatchId).ConfigureAwait(false);
+                AssertEqual(25 - batch.CreatedCount, items.Count(i => i.OutcomeReason == VesselImportCodes.Cancelled), "every unprocessed selected item says why");
+            }));
+
             cases.Add(CaseAsync("restart_fails_orphaned_import", "An import left Importing by a restart is failed at startup and its job too", TestTags.Reliability, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);

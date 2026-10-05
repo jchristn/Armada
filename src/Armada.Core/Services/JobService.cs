@@ -23,6 +23,7 @@ namespace Armada.Core.Services
         private readonly LoggingModule _Logging;
         private readonly string _Header = "[JobService] ";
         private int _StaleRunningMinutes = 30;
+        private const int _MaxTransitionAttempts = 4;
 
         #endregion
 
@@ -84,23 +85,120 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
-        /// Cancel a job. A terminal job cannot be cancelled.
+        /// Cancel a job. A terminal job cannot be cancelled. The transition is conditional on the stored status, so a
+        /// job that finished between the caller's read and this call is not overwritten (first terminal status wins),
+        /// and a worker heartbeat can never undo the cancellation.
         /// </summary>
         /// <param name="job">The job to cancel.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The updated job.</returns>
+        /// <exception cref="InvalidOperationException">The job is already in a terminal status.</exception>
+        /// <exception cref="KeyNotFoundException">The job no longer exists.</exception>
         public async Task<Job> CancelAsync(Job job, CancellationToken token = default)
         {
             if (job == null) throw new ArgumentNullException(nameof(job));
             if (!JobStateMachine.CanTransition(job.Status, JobStatusEnum.Cancelled))
                 throw new InvalidOperationException("Job " + job.Id + " cannot be cancelled from status " + job.Status + ".");
 
-            job.Status = JobStatusEnum.Cancelled;
-            job.CompletedUtc = DateTime.UtcNow;
-            job.LastUpdateUtc = DateTime.UtcNow;
-            job = await _Database.Jobs.UpdateAsync(job, token).ConfigureAwait(false);
-            _Logging.Info(_Header + "cancelled job " + job.Id);
-            return job;
+            for (int attempt = 0; attempt < _MaxTransitionAttempts; attempt++)
+            {
+                Job? current = await _Database.Jobs.ReadAsync(job.Id, token).ConfigureAwait(false);
+                if (current == null) throw new KeyNotFoundException("Job " + job.Id + " was not found.");
+                if (!JobStateMachine.CanTransition(current.Status, JobStatusEnum.Cancelled))
+                    throw new InvalidOperationException("Job " + job.Id + " cannot be cancelled from status " + current.Status + ".");
+
+                JobStatusEnum from = current.Status;
+                current.Status = JobStatusEnum.Cancelled;
+                current.CompletedUtc = DateTime.UtcNow;
+                current.LastUpdateUtc = DateTime.UtcNow;
+                if (await _Database.Jobs.TryUpdateIfStatusAsync(current, new JobStatusEnum[] { from }, token).ConfigureAwait(false))
+                {
+                    job.Status = current.Status;
+                    job.CompletedUtc = current.CompletedUtc;
+                    job.LastUpdateUtc = current.LastUpdateUtc;
+                    _Logging.Info(_Header + "cancelled job " + current.Id);
+                    return current;
+                }
+            }
+
+            throw new InvalidOperationException("Job " + job.Id + " changed status concurrently and could not be cancelled.");
+        }
+
+        /// <summary>
+        /// Move a Queued job to Running. Does nothing when the job is no longer Queued (for example it was cancelled
+        /// before its worker started); the worker must then not run.
+        /// </summary>
+        /// <param name="job">The job; on success its status, start time, progress, and last-update time are updated.</param>
+        /// <param name="progress">Initial progress (0 to 100).</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>True when the job is now Running for this worker; false when it was not Queued.</returns>
+        public async Task<bool> TryStartAsync(Job job, int progress = 0, CancellationToken token = default)
+        {
+            if (job == null) throw new ArgumentNullException(nameof(job));
+            Job? current = await _Database.Jobs.ReadAsync(job.Id, token).ConfigureAwait(false);
+            if (current == null || current.Status != JobStatusEnum.Queued) return false;
+
+            current.Status = JobStatusEnum.Running;
+            current.StartedUtc = DateTime.UtcNow;
+            current.LastUpdateUtc = current.StartedUtc.Value;
+            current.Progress = Math.Clamp(progress, 0, 100);
+            if (!await _Database.Jobs.TryUpdateIfStatusAsync(current, new JobStatusEnum[] { JobStatusEnum.Queued }, token).ConfigureAwait(false))
+                return false;
+
+            job.Status = current.Status;
+            job.StartedUtc = current.StartedUtc;
+            job.LastUpdateUtc = current.LastUpdateUtc;
+            job.Progress = current.Progress;
+            return true;
+        }
+
+        /// <summary>
+        /// Record a worker heartbeat: refresh the job's last-update time and raise its progress to at least
+        /// <paramref name="minimumProgress"/>. Never changes the job's status. A false result means the job is no
+        /// longer Running (cancelled, failed by the stale-job reaper, or deleted) and the worker should stop.
+        /// </summary>
+        /// <param name="jobId">Job identifier.</param>
+        /// <param name="minimumProgress">Progress floor (0 to 100); progress is never lowered.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>True when the job is still Running.</returns>
+        public async Task<bool> HeartbeatAsync(string jobId, int minimumProgress = 0, CancellationToken token = default)
+        {
+            if (String.IsNullOrWhiteSpace(jobId)) throw new ArgumentNullException(nameof(jobId));
+            return await _Database.Jobs.TryHeartbeatAsync(jobId, minimumProgress, DateTime.UtcNow, token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Move a Queued or Running job to a terminal status. The first terminal status wins: when the job is already
+        /// terminal (for example cancelled while the worker was finishing), nothing is written.
+        /// </summary>
+        /// <param name="jobId">Job identifier.</param>
+        /// <param name="status">Terminal status: Succeeded, Failed, or Cancelled.</param>
+        /// <param name="resultJson">Result payload, or null to keep the stored one.</param>
+        /// <param name="errorReason">Error reason, or null to keep the stored one.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>True when this call made the job terminal; false when it was missing or already terminal.</returns>
+        public async Task<bool> TryFinishAsync(string jobId, JobStatusEnum status, string? resultJson, string? errorReason, CancellationToken token = default)
+        {
+            if (String.IsNullOrWhiteSpace(jobId)) throw new ArgumentNullException(nameof(jobId));
+            if (!JobStateMachine.IsTerminal(status)) throw new ArgumentException("Status " + status + " is not terminal.", nameof(status));
+
+            for (int attempt = 0; attempt < _MaxTransitionAttempts; attempt++)
+            {
+                Job? current = await _Database.Jobs.ReadAsync(jobId, token).ConfigureAwait(false);
+                if (current == null || JobStateMachine.IsTerminal(current.Status)) return false;
+
+                JobStatusEnum from = current.Status;
+                current.Status = status;
+                if (status == JobStatusEnum.Succeeded) current.Progress = 100;
+                if (resultJson != null) current.ResultJson = resultJson;
+                if (errorReason != null) current.ErrorReason = errorReason;
+                current.CompletedUtc = DateTime.UtcNow;
+                current.LastUpdateUtc = current.CompletedUtc.Value;
+                if (await _Database.Jobs.TryUpdateIfStatusAsync(current, new JobStatusEnum[] { from }, token).ConfigureAwait(false))
+                    return true;
+            }
+
+            return false;
         }
 
         /// <summary>
@@ -121,12 +219,14 @@ namespace Armada.Core.Services
                 if (job.Status != JobStatusEnum.Running) continue;
                 if (job.LastUpdateUtc > cutoff) continue;
 
+                // Conditional on Running, so a job its worker finished (or that was cancelled) after the read above is
+                // left alone.
                 job.Status = JobStatusEnum.Failed;
                 job.ErrorReason = "job worker did not report within " + _StaleRunningMinutes + " minutes";
                 job.CompletedUtc = DateTime.UtcNow;
                 job.LastUpdateUtc = DateTime.UtcNow;
-                await _Database.Jobs.UpdateAsync(job, token).ConfigureAwait(false);
-                _Logging.Warn(_Header + "failed stale running job " + job.Id);
+                if (await _Database.Jobs.TryUpdateIfStatusAsync(job, new JobStatusEnum[] { JobStatusEnum.Running }, token).ConfigureAwait(false))
+                    _Logging.Warn(_Header + "failed stale running job " + job.Id);
             }
         }
 
