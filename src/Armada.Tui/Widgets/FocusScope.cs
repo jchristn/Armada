@@ -186,8 +186,10 @@ namespace Armada.Tui.Widgets
         }
 
         /// <summary>
-        /// True when a widget can take focus now: it is focusable and, for Armada widgets, visible and enabled for
-        /// focus. Tab stops and focus regions (<see cref="RegionFrames"/>) use the same test.
+        /// True when a widget can take focus now: it is focusable, shown with something to interact with and enabled
+        /// (TUIKit's <see cref="TUIKit.Widgets.FocusScope.IsFocusable"/>: <see cref="IHideable"/> and
+        /// <see cref="IEnableable"/>), and, for Armada widgets, <see cref="ArmadaWidget.CanFocus"/>. Tab stops and focus
+        /// regions (<see cref="RegionFrames"/>) use the same test.
         /// </summary>
         /// <param name="child">Widget.</param>
         /// <returns>True for a focus stop.</returns>
@@ -385,27 +387,6 @@ namespace Armada.Tui.Widgets
             return focused;
         }
 
-        /// <summary>
-        /// The focus path below this scope: the focused child, its focused child (following nested scopes), and so on
-        /// down to the leaf.
-        /// </summary>
-        /// <returns>Widgets, outermost first. Never null.</returns>
-        public List<IWidget> FocusedChain()
-        {
-            List<IWidget> chain = new List<IWidget>();
-            FocusScope scope = this;
-            for (int depth = 0; depth < 32; depth++)
-            {
-                IWidget? focused = scope.Focused;
-                if (focused == null) break;
-                chain.Add(focused);
-                if (!(focused is IFocusScopeOwner owner)) break;
-                scope = owner.Scope;
-            }
-
-            return chain;
-        }
-
         #endregion
 
         #region Private-Methods
@@ -437,27 +418,9 @@ namespace Armada.Tui.Widgets
 
         private static bool CanTakeFocus(IWidget child)
         {
-            return CanTakeFocus(child, 0);
-        }
-
-        private static bool CanTakeFocus(IWidget child, int depth)
-        {
-            if (!(child is IFocusable)) return false;
-            if (child is ArmadaWidget aw && (!aw.Visible || !aw.CanFocus)) return false;
-            // A plain container (a button row, an action bar) whose children are all hidden or disabled has nothing to
-            // focus, so it is not a Tab stop either (focus would land on nothing visible). Screens and other region
-            // hosts stay focusable; so does a container without children, which handles keys itself.
-            if (child is IFocusScopeOwner owner && !owner.Scope.RegionHost && owner.Scope.Children.Count > 0 && depth < 16)
-            {
-                foreach (IWidget inner in owner.Scope.Children)
-                {
-                    if (CanTakeFocus(inner, depth + 1)) return true;
-                }
-
-                return false;
-            }
-
-            return true;
+            // Hidden widgets, and containers left with nothing to focus (ContainerWidget.IsVisible), are not stops.
+            if (!(child is IFocusable) || !TUIKit.Widgets.FocusScope.IsFocusable(child)) return false;
+            return !(child is ArmadaWidget aw) || aw.CanFocus;
         }
 
         private static void Notify(IWidget? widget, bool focused)

@@ -30,12 +30,23 @@ namespace Armada.Tui.Shell
         #region Public-Members
 
         /// <summary>
+        /// The id of the TUIKit region the shell is bound to (it fills the terminal).
+        /// </summary>
+        public const string RegionId = "shell";
+
+        /// <summary>
         /// Size of the last composed frame (the terminal size), or 0x0 before the first frame.
         /// </summary>
         public Size LastSize { get; private set; } = new Size(0, 0);
 
         /// <inheritdoc />
         public FocusScope Scope { get; } = new FocusScope();
+
+        /// <inheritdoc />
+        public IFocusable? FocusedChild
+        {
+            get { return Scope.Focused as IFocusable; }
+        }
 
         /// <summary>
         /// Header.
@@ -222,6 +233,17 @@ namespace Armada.Tui.Shell
         }
 
         /// <summary>
+        /// Where keyboard focus is now: TUIKit's <see cref="FocusPath"/> from the shell (the first node) through every
+        /// <see cref="IFocusScopeOwner"/> down to the focused leaf, in the <see cref="RegionId"/> region. The same path
+        /// <c>TuiApplication.CurrentFocusPath</c> reports after input; this one is current mid-frame.
+        /// </summary>
+        /// <returns>Path. Never null.</returns>
+        public FocusPath BuildFocusPath()
+        {
+            return FocusPath.Build(RegionId, this);
+        }
+
+        /// <summary>
         /// Hints for the control that holds keyboard focus: the sidebar's keys, the dock's, or the innermost screen's
         /// answer for its focused control (<see cref="ScreenBase.ResolveHints"/>), given the deepest
         /// <see cref="IFocusHintSource"/> below that screen and whether the focused leaf takes typed text.
@@ -236,7 +258,12 @@ namespace Armada.Tui.Shell
                 return new FocusHints().Add("Enter", "Open").Add("Left/Right", "Collapse/expand");
             }
 
-            List<IWidget> chain = Scope.FocusedChain();
+            List<IWidget> chain = new List<IWidget>();
+            foreach (object node in BuildFocusPath().Nodes)
+            {
+                if (!ReferenceEquals(node, this) && node is IWidget widget) chain.Add(widget);
+            }
+
             IWidget leaf = chain[chain.Count - 1];
             bool textEntry = leaf is ITextEntry entry && entry.AcceptsText;
             int screenIndex = -1;

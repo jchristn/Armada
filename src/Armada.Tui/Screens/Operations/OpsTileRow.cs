@@ -32,11 +32,12 @@ namespace Armada.Tui.Screens.Operations
         /// </summary>
         public int TileHeight { get; set; } = 3;
 
-        /// <inheritdoc />
-        public override bool CanFocus
+        /// <summary>
+        /// Not a focus stop while there is nothing to act on (see <see cref="TUIKit.Widgets.IHideable"/>).
+        /// </summary>
+        public override bool IsVisible
         {
-            get { return Visible && Tiles.Any(t => t.Action != null); }
-            set { }
+            get { return base.IsVisible && Tiles.Any(t => t.Action != null); }
         }
 
         #endregion

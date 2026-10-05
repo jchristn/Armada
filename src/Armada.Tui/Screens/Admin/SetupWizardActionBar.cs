@@ -29,11 +29,12 @@ namespace Armada.Tui.Screens.Admin
         /// </summary>
         public bool AlignRight { get; set; } = false;
 
-        /// <inheritdoc />
-        public override bool CanFocus
+        /// <summary>
+        /// Not a focus stop while there is nothing to act on (see <see cref="TUIKit.Widgets.IHideable"/>).
+        /// </summary>
+        public override bool IsVisible
         {
-            get { return Visible && _Buttons.Any(b => b.Visible); }
-            set { }
+            get { return base.IsVisible && _Buttons.Any(b => b.Visible); }
         }
 
         #endregion

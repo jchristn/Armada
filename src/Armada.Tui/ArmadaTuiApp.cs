@@ -326,8 +326,8 @@ namespace Armada.Tui
 
         private void Wire()
         {
-            _App.AddRegion("shell", r => r.FillWidth().FillHeight().WithPadding(0));
-            _App.Bind("shell", Shell);
+            _App.AddRegion(ShellView.RegionId, r => r.FillWidth().FillHeight().WithPadding(0));
+            _App.Bind(ShellView.RegionId, Shell);
             _App.CtrlCPolicy = CtrlCPolicy.Custom;
             _App.AutoRenderNotifications = false;
             _App.Theme = Context.Theme.TuiKitTheme;

@@ -11,7 +11,7 @@ namespace Armada.Tui.Widgets
     /// Base class for Armada widgets: carries the palette and localizer pushed down the tree, tracks focus, and
     /// provides default (non-consuming) input handling. Not thread-safe; use on the UI loop thread.
     /// </summary>
-    public abstract class ArmadaWidget : IWidget, IFocusable, IFocusAware, IMouseAware, IThemeable
+    public abstract class ArmadaWidget : IWidget, IFocusable, IFocusAware, IMouseAware, IThemeable, IHideable
     {
         #region Public-Members
 
@@ -47,6 +47,16 @@ namespace Armada.Tui.Widgets
         /// Hidden widgets are skipped by containers. Default true.
         /// </summary>
         public bool Visible { get; set; } = true;
+
+        /// <summary>
+        /// True while the widget is shown with something to interact with (TUIKit's <see cref="IHideable"/>): focus
+        /// traversal skips it otherwise, so Tab never lands on something the user cannot see. Default
+        /// <see cref="Visible"/>; containers and widgets that render nothing while empty narrow it.
+        /// </summary>
+        public virtual bool IsVisible
+        {
+            get { return Visible; }
+        }
 
         /// <summary>
         /// Text drawn on the top line of this widget's box when it is a focus region of a screen (already translated),

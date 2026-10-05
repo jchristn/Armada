@@ -16,6 +16,32 @@ namespace Armada.Tui.Widgets
         /// <inheritdoc />
         public FocusScope Scope { get; } = new FocusScope();
 
+        /// <inheritdoc />
+        public IFocusable? FocusedChild
+        {
+            get { return Scope.Focused as IFocusable; }
+        }
+
+        /// <summary>
+        /// Shown with something to focus: a plain container (a button row, an action bar) whose children are all
+        /// hidden or unfocusable renders nothing to interact with, so it is not a Tab stop. Region hosts (screens) and
+        /// containers without children, which handle keys themselves, stay stops while <see cref="ArmadaWidget.Visible"/>.
+        /// </summary>
+        public override bool IsVisible
+        {
+            get
+            {
+                if (!base.IsVisible) return false;
+                if (Scope.RegionHost || Scope.Children.Count == 0) return true;
+                foreach (IWidget child in Scope.Children)
+                {
+                    if (FocusScope.IsFocusStop(child)) return true;
+                }
+
+                return false;
+            }
+        }
+
         #endregion
 
         #region Public-Methods

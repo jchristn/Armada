@@ -106,6 +106,15 @@ namespace Test.Shared.Suites.Tui
                 return problems;
             }
 
+            // TUIKit's focus path follows Armada's scopes to the same leaf, and focus never rests on a widget that reports
+            // itself hidden or empty (TUIKit's IHideable, the check behind FocusAudit's InvisibleStop).
+            FocusPath path = shell.BuildFocusPath();
+            if (!ReferenceEquals(path.Leaf, shell.FocusedLeaf())) problems.Add(label + ": focus path leaf " + path.Leaf + " is not the focused leaf " + Describe(shell.FocusedLeaf()));
+            foreach (object node in path.Nodes)
+            {
+                if (node is IHideable hideable && !hideable.IsVisible) problems.Add(label + ": focus rests on hidden " + node.GetType().Name);
+            }
+
             Rect focusedBox = shell.LastFocusedBox;
             if (focusedBox.IsEmpty)
             {
@@ -143,7 +152,7 @@ namespace Test.Shared.Suites.Tui
             {
                 IReadOnlyList<RegionFrame> regions = shell.LastRegions;
                 RegionFrame? focused = RegionFrames.FocusedOf(regions);
-                List<IWidget> chain = shell.Scope.FocusedChain();
+                List<IWidget> chain = shell.BuildFocusPath().Nodes.Skip(1).OfType<IWidget>().ToList();
                 IWidget? leaf = chain.Count > 0 ? chain[chain.Count - 1] : null;
                 bool leafPlaced = leaf != null && !ReferenceEquals(leaf, shell.Screen);
                 if (focused == null)
