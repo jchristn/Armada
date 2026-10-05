@@ -329,11 +329,7 @@ namespace Test.Shared.Suites.Services
 
         private static int ReservePort()
         {
-            using TcpListener listener = new TcpListener(IPAddress.Loopback, 0);
-            listener.Start();
-            int port = ((IPEndPoint)listener.LocalEndpoint).Port;
-            listener.Stop();
-            return port;
+            return TestPorts.Reserve(1)[0];
         }
 
         private static TestCaseDescriptor CaseAsync(string caseId, string displayName, string tag, Func<Task> body)

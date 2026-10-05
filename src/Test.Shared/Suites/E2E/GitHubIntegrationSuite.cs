@@ -609,11 +609,7 @@ namespace Test.Shared.Suites.E2E
 
             private static int GetAvailablePort()
             {
-                TcpListener listener = new TcpListener(IPAddress.Loopback, 0);
-                listener.Start();
-                int port = ((IPEndPoint)listener.LocalEndpoint).Port;
-                listener.Stop();
-                return port;
+                return TestPorts.Reserve(1)[0];
             }
         }
 
