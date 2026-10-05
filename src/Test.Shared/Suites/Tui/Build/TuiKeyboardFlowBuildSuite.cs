@@ -96,9 +96,10 @@ namespace Test.Shared.Suites.Tui.Build
             TuiFlowSpec workspace = TuiFlowSpec.Create("workspace", "/vessels?tab=workspace", "/api/v1/vessels", "vsl_alpha", "Alpharepo", "/workspace/vsl_alpha", vessel);
             workspace.ServerFactory = BuildStubs.Server;
             workspace.NewKey = null;
-            workspace.DetailText = null;
             workspace.ExtraRoutes.Add(new[] { "GET", "/api/v1/workspace/vessels/vsl_alpha/status", "{\"VesselId\":\"vsl_alpha\",\"HasWorkingDirectory\":true,\"BranchName\":\"main\"}" });
             workspace.ExtraRoutes.Add(new[] { "GET", "/api/v1/workspace/vessels/vsl_alpha/tree", "{\"Path\":\"\",\"Entries\":[{\"Name\":\"README.md\",\"Path\":\"README.md\",\"IsDirectory\":false}]}" });
+            // The workspace opens with focus in the file tree; wait for it to load so Alt+Left goes through the tree.
+            workspace.DetailText = "README.md";
             workspace.VerifyRequests = stub =>
             {
                 AssertTrue(stub.CountFor("GET", "/api/v1/vessels") >= 1, "the picker lists vessels");
