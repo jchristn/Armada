@@ -104,6 +104,12 @@ namespace Armada.Client.Socket
         /// <summary>status.snapshot: the status the server sends right after subscribe (<see cref="Armada.Core.Models.ArmadaStatus"/>).</summary>
         public const string StatusSnapshot = "status.snapshot";
 
+        /// <summary>cli_permission.requested: a captain's CLI permission prompt is waiting for an approver (<see cref="CliPermissionEvent"/>).</summary>
+        public const string CliPermissionRequested = "cli_permission.requested";
+
+        /// <summary>cli_permission.resolved: a CLI permission prompt was allowed, denied, expired, or cancelled (<see cref="CliPermissionEvent"/>).</summary>
+        public const string CliPermissionResolved = "cli_permission.resolved";
+
         /// <summary>
         /// The 29 event types in the dashboard parity checklist, in plan order. Never null.
         /// </summary>
@@ -160,6 +166,8 @@ namespace Armada.Client.Socket
             map[AskThread] = typeof(AskThreadEvent);
             map[StatusSnapshot] = typeof(Armada.Core.Models.ArmadaStatus);
             map[MissionStatusChanged] = typeof(MissionStatusChangedEvent);
+            map[CliPermissionRequested] = typeof(CliPermissionEvent);
+            map[CliPermissionResolved] = typeof(CliPermissionEvent);
             return map;
         }
 

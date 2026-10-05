@@ -1,9 +1,11 @@
 namespace Armada.Tui.Approvals
 {
     using System;
+    using System.Collections.Generic;
     using System.Threading.Tasks;
     using Armada.Client;
     using Armada.Client.Models;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Tui.Modals;
     using Armada.Tui.Services;
@@ -12,8 +14,9 @@ namespace Armada.Tui.Approvals
     /// <summary>
     /// Decisions on approval items with the same API calls, confirmations, and toasts as the dashboard screen each
     /// item comes from: Ask proposals (approve, reject), mission reviews (the Resolve Review dialog), deployments
-    /// (approve, deny with confirm), failed landings (retry landing), and stalled captains (stop, recall, restart with
-    /// confirm). A decided item leaves the queue and the inbox is re-polled. Call on the UI loop.
+    /// (approve, deny with confirm), failed landings (retry landing), stalled captains (stop, recall, restart with
+    /// confirm), and CLI permission requests (allow once, allow and remember through a rule dialog, deny with an
+    /// optional message). A decided item leaves the queue and the inbox is re-polled. Call on the UI loop.
     /// </summary>
     public class ApprovalActions
     {
@@ -310,6 +313,105 @@ namespace Armada.Tui.Approvals
         }
 
         /// <summary>
+        /// Allow a CLI permission request once (no dialog). Requests the user cannot decide show a notice instead.
+        /// </summary>
+        /// <param name="item">CLI permission item.</param>
+        /// <returns>True when the call started.</returns>
+        public bool AllowCliPermissionOnce(ApprovalItem item)
+        {
+            if (!CanDecideCliPermission(item)) return false;
+            CliPermissionDecisionRequest decision = new CliPermissionDecisionRequest();
+            decision.Decision = CliPermissionDecisionEnum.AllowOnce;
+            SubmitCliPermission(item, decision);
+            return true;
+        }
+
+        /// <summary>
+        /// Open the allow-and-remember dialog (rule pattern prefilled with the suggested rule, and the rule scope) for a
+        /// CLI permission request, then submit. Only when the request allows remembering (admins).
+        /// </summary>
+        /// <param name="item">CLI permission item.</param>
+        /// <returns>The dialog, or null.</returns>
+        public CliPermissionDecisionModal? RememberCliPermission(ApprovalItem item)
+        {
+            if (!CanDecideCliPermission(item)) return null;
+            if (!item.CliPermission!.CanRemember)
+            {
+                _Context.Notifications.Toast(NotificationSeverityEnum.Warning, _Context.Loc.T("Only an admin can save a permission rule. Allow once or deny instead."));
+                return null;
+            }
+
+            return ShowCliPermissionModal(item, true);
+        }
+
+        /// <summary>
+        /// Open the deny dialog (optional message for the captain) for a CLI permission request, then submit.
+        /// </summary>
+        /// <param name="item">CLI permission item.</param>
+        /// <returns>The dialog, or null.</returns>
+        public CliPermissionDecisionModal? DenyCliPermission(ApprovalItem item)
+        {
+            if (!CanDecideCliPermission(item)) return null;
+            return ShowCliPermissionModal(item, false);
+        }
+
+        /// <summary>
+        /// Submit a CLI permission decision (POST /api/v1/cli-permissions/requests/{id}/decide), toast the outcome, and
+        /// drop the item from the queue. A request that is no longer pending (409) also leaves the queue.
+        /// </summary>
+        /// <param name="item">CLI permission item.</param>
+        /// <param name="decision">Decision.</param>
+        public void SubmitCliPermission(ApprovalItem item, CliPermissionDecisionRequest decision)
+        {
+            if (item == null) throw new ArgumentNullException(nameof(item));
+            if (decision == null) throw new ArgumentNullException(nameof(decision));
+            Record(item, decision.Decision == CliPermissionDecisionEnum.AllowOnce ? "allow_once" : decision.Decision == CliPermissionDecisionEnum.AllowAndRemember ? "allow_remember" : "deny");
+            string tool = String.IsNullOrEmpty(item.ToolName) ? (item.EntityName ?? item.Title) : item.ToolName!;
+            ArmadaClient client = _Context.Client;
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await client.DecideCliPermissionRequestAsync(item.EntityId, decision).ConfigureAwait(false);
+                    string toast = "Denied {{tool}}.";
+                    NotificationSeverityEnum severity = NotificationSeverityEnum.Warning;
+                    if (decision.Decision == CliPermissionDecisionEnum.AllowOnce)
+                    {
+                        toast = "Allowed {{tool}} once.";
+                        severity = NotificationSeverityEnum.Success;
+                    }
+                    else if (decision.Decision == CliPermissionDecisionEnum.AllowAndRemember)
+                    {
+                        toast = "Allowed {{tool}} and saved the rule {{pattern}}.";
+                        severity = NotificationSeverityEnum.Success;
+                    }
+
+                    Dictionary<string, object?> args = LocalizationArgs.Of("tool", tool);
+                    args["pattern"] = decision.RulePattern ?? "";
+                    _Context.Dispatcher.Post(() =>
+                    {
+                        _Context.Notifications.Toast(severity, _Context.Loc.T(toast, args));
+                        Resolved(item);
+                    });
+                }
+                catch (ArmadaApiException ex)
+                {
+                    _Context.Dispatcher.Post(() =>
+                    {
+                        if (ex.StatusCode == 409)
+                        {
+                            _Context.Notifications.Toast(NotificationSeverityEnum.Warning, _Context.Loc.T("This permission request was already decided or expired."));
+                            Resolved(item);
+                            return;
+                        }
+
+                        _Context.ShowError("Permission decision failed.", ex);
+                    });
+                }
+            });
+        }
+
+        /// <summary>
         /// Pretty-print JSON text, or return it as-is.
         /// </summary>
         /// <param name="raw">Text.</param>
@@ -348,6 +450,24 @@ namespace Armada.Tui.Approvals
                 case ReviewVerdictEnum.MoreWork: return "more_work";
                 default: return "deny";
             }
+        }
+
+        private bool CanDecideCliPermission(ApprovalItem item)
+        {
+            if (item == null || item.Kind != ApprovalKindEnum.CliPermission || item.CliPermission == null) return false;
+            if (item.CliPermission.CanDecide) return true;
+            _Context.Notifications.Toast(NotificationSeverityEnum.Info, _Context.Loc.T("An admin must decide this request."));
+            return false;
+        }
+
+        private CliPermissionDecisionModal ShowCliPermissionModal(ApprovalItem item, bool remember)
+        {
+            CliPermissionDecisionModal modal = new CliPermissionDecisionModal(item.CliPermission!, remember, _Context.Loc, _Context.Theme.Current);
+            _Context.Modals.Show(modal, result =>
+            {
+                if (result is CliPermissionDecisionRequest decision) SubmitCliPermission(item, decision);
+            });
+            return modal;
         }
 
         private void Resolved(ApprovalItem item)

@@ -129,6 +129,14 @@
     },
     {
       "kind": "route",
+      "key": "/cli-permissions",
+      "status": "implemented",
+      "tui": "Router",
+      "workstream": "W3.3",
+      "notes": "redirect to /approvals: pending CLI permission requests are decided in the Approvals center (a allow once, A allow and remember, d deny); the rules list and editor are not in the TUI yet (follow-up)"
+    },
+    {
+      "kind": "route",
       "key": "/configuration",
       "status": "implemented",
       "tui": "HubScreen",
@@ -1161,6 +1169,14 @@
     },
     {
       "kind": "api",
+      "key": "createCliPermissionRule",
+      "status": "implemented",
+      "tui": "ArmadaClient.CreateCliPermissionRuleAsync",
+      "workstream": "W0.2",
+      "notes": "CLI tool permissions"
+    },
+    {
+      "kind": "api",
       "key": "createCredential",
       "status": "implemented",
       "tui": "ArmadaClient.CreateCredentialAsync",
@@ -1377,6 +1393,14 @@
     },
     {
       "kind": "api",
+      "key": "decideCliPermissionRequest",
+      "status": "implemented",
+      "tui": "ArmadaClient.DecideCliPermissionRequestAsync",
+      "workstream": "W0.2",
+      "notes": "CLI tool permissions"
+    },
+    {
+      "kind": "api",
       "key": "deleteAskThread",
       "status": "implemented",
       "tui": "ArmadaClient.DeleteAskThreadAsync",
@@ -1406,6 +1430,14 @@
       "tui": "ArmadaClient.DeleteCheckRunAsync",
       "workstream": "W0.2",
       "notes": "Check Runs"
+    },
+    {
+      "kind": "api",
+      "key": "deleteCliPermissionRule",
+      "status": "implemented",
+      "tui": "ArmadaClient.DeleteCliPermissionRuleAsync",
+      "workstream": "W0.2",
+      "notes": "CLI tool permissions"
     },
     {
       "kind": "api",
@@ -1966,6 +1998,22 @@
       "tui": "ArmadaClient.GetCheckRunAsync",
       "workstream": "W0.2",
       "notes": "Check Runs"
+    },
+    {
+      "kind": "api",
+      "key": "getCliPermissionRequest",
+      "status": "implemented",
+      "tui": "ArmadaClient.GetCliPermissionRequestAsync",
+      "workstream": "W0.2",
+      "notes": "CLI tool permissions"
+    },
+    {
+      "kind": "api",
+      "key": "getCliPermissionRule",
+      "status": "implemented",
+      "tui": "ArmadaClient.GetCliPermissionRuleAsync",
+      "workstream": "W0.2",
+      "notes": "CLI tool permissions"
     },
     {
       "kind": "api",
@@ -2542,6 +2590,22 @@
       "tui": "ArmadaClient.ListCheckRunsAsync",
       "workstream": "W0.2",
       "notes": "Check Runs"
+    },
+    {
+      "kind": "api",
+      "key": "listCliPermissionRequests",
+      "status": "implemented",
+      "tui": "ArmadaClient.ListCliPermissionRequestsAsync",
+      "workstream": "W0.2",
+      "notes": "CLI tool permissions"
+    },
+    {
+      "kind": "api",
+      "key": "listCliPermissionRules",
+      "status": "implemented",
+      "tui": "ArmadaClient.ListCliPermissionRulesAsync",
+      "workstream": "W0.2",
+      "notes": "CLI tool permissions"
     },
     {
       "kind": "api",
@@ -3153,6 +3217,22 @@
     },
     {
       "kind": "api",
+      "key": "setAskThreadCliPermissionPolicy",
+      "status": "implemented",
+      "tui": "ArmadaClient.SetAskThreadCliPermissionPolicyAsync",
+      "workstream": "W0.2",
+      "notes": "CLI tool permissions"
+    },
+    {
+      "kind": "api",
+      "key": "setCaptainCliPermissionPolicy",
+      "status": "implemented",
+      "tui": "ArmadaClient.SetCaptainCliPermissionPolicyAsync",
+      "workstream": "W0.2",
+      "notes": "CLI tool permissions"
+    },
+    {
+      "kind": "api",
       "key": "setVesselHealthOverride",
       "status": "implemented",
       "tui": "ArmadaClient.SetVesselHealthOverrideAsync",
@@ -3310,6 +3390,14 @@
       "tui": "ArmadaClient.UpdateCaptainAsync",
       "workstream": "W0.2",
       "notes": "Captains"
+    },
+    {
+      "kind": "api",
+      "key": "updateCliPermissionRule",
+      "status": "implemented",
+      "tui": "ArmadaClient.UpdateCliPermissionRuleAsync",
+      "workstream": "W0.2",
+      "notes": "CLI tool permissions"
     },
     {
       "kind": "api",
@@ -3926,6 +4014,14 @@
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.permissions",
+      "status": "not-applicable",
+      "tui": "ServerSettingsScreen",
+      "workstream": "W7.7",
+      "notes": "Server settings Permissions section (Ask and mission default policies, owner approval, prompt timeout) is not in the TUI Server settings screen yet; edit it in the dashboard or with PUT /api/v1/settings (follow-up)"
     },
     {
       "kind": "setting",

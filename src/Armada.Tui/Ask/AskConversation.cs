@@ -590,6 +590,7 @@ namespace Armada.Tui.Ask
                 done.Arguments = prior?.Arguments;
                 done.Result = e.ToolResult;
                 done.ElapsedMs = e.ToolElapsedMs;
+                done.PermissionDenied = e.ToolPermissionDenied == true;
                 if (idx >= 0) tools[idx] = done;
                 else tools.Add(done);
             }

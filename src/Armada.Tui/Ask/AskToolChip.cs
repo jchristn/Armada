@@ -48,6 +48,11 @@ namespace Armada.Tui.Ask
         /// </summary>
         public double? ElapsedMs { get; set; } = null;
 
+        /// <summary>
+        /// True when the CLI refused the call because the turn's CLI tool permission policy did not grant it.
+        /// </summary>
+        public bool PermissionDenied { get; set; } = false;
+
         #endregion
 
         #region Private-Members

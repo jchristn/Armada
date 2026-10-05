@@ -88,6 +88,7 @@ namespace Armada.Tui.Ask
             e.ToolResult = NodeText(data.Result);
             e.ToolOk = data.Ok;
             e.ToolElapsedMs = data.ElapsedMs;
+            e.ToolPermissionDenied = data.PermissionDenied;
             return e;
         }
 

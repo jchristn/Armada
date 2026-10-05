@@ -1,6 +1,7 @@
 namespace Armada.Tui.Services
 {
     using System;
+    using Armada.Core.Models;
 
     /// <summary>
     /// One item in the approvals queue.
@@ -58,7 +59,7 @@ namespace Armada.Tui.Services
         public string? ParentId { get; set; } = null;
 
         /// <summary>
-        /// Tool name of an Ask proposal, or null.
+        /// Tool name of an Ask proposal or a CLI permission request, or null.
         /// </summary>
         public string? ToolName { get; set; } = null;
 
@@ -68,7 +69,7 @@ namespace Armada.Tui.Services
         public string? Arguments { get; set; } = null;
 
         /// <summary>
-        /// Expiry of an Ask proposal, or null.
+        /// Expiry of an Ask proposal or a CLI permission request, or null.
         /// </summary>
         public DateTime? ExpiresUtc { get; set; } = null;
 
@@ -81,6 +82,12 @@ namespace Armada.Tui.Services
         /// Source of the item (English): Ask Armada, Needs You, or Live.
         /// </summary>
         public string Source { get; set; } = "";
+
+        /// <summary>
+        /// The CLI permission request of a <see cref="ApprovalKindEnum.CliPermission"/> item (tool, command, captain,
+        /// vessel, mission or thread, expiry, and whether the user may decide it), or null for other kinds.
+        /// </summary>
+        public CliPermissionRequest? CliPermission { get; set; } = null;
 
         #endregion
 

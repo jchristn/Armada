@@ -18,8 +18,10 @@ namespace Armada.Tui.Approvals
     /// sorted by urgency, with single-key decisions per item: Ask proposals (<c>a</c> approve, <c>r</c> reject,
     /// <c>x</c> arguments), mission reviews (<c>a</c> approve, <c>c</c> conditionally approve, <c>m</c> more work
     /// required, <c>d</c> deny, through the Resolve Review dialog), deployments pending approval (<c>a</c> approve,
-    /// <c>d</c> deny, both confirmed), failed landings (<c>l</c> retry landing), and stalled captains (<c>s</c> stop,
-    /// <c>R</c> recall, <c>t</c> restart, confirmed). <c>Enter</c> opens the item's screen; <c>F5</c> re-polls the
+    /// <c>d</c> deny, both confirmed), failed landings (<c>l</c> retry landing), stalled captains (<c>s</c> stop,
+    /// <c>R</c> recall, <c>t</c> restart, confirmed), and CLI permission prompts (<c>a</c> allow once, <c>A</c> allow
+    /// and remember with an editable rule and scope, <c>d</c> deny with an optional message; requests the user cannot
+    /// decide say an admin must). <c>Enter</c> opens the item's screen; <c>F5</c> re-polls the
     /// inbox. Not thread-safe.
     /// </summary>
     public class ApprovalsScreen : ScreenBase
@@ -55,7 +57,7 @@ namespace Armada.Tui.Approvals
                 hints.Add(new KeyValuePair<string, string>("Enter", "Open"));
                 if (item != null)
                 {
-                    foreach (KeyValuePair<string, string> k in KeysFor(item.Kind)) hints.Add(k);
+                    foreach (KeyValuePair<string, string> k in KeysFor(item)) hints.Add(k);
                 }
 
                 return hints;
@@ -102,6 +104,7 @@ namespace Armada.Tui.Approvals
                 case ApprovalKindEnum.DeploymentApproval: return "Deployment approval";
                 case ApprovalKindEnum.FailedLanding: return "Failed landing";
                 case ApprovalKindEnum.StalledCaptain: return "Stalled captain";
+                case ApprovalKindEnum.CliPermission: return "CLI permission";
                 default: return kind.ToString();
             }
         }
@@ -139,8 +142,29 @@ namespace Armada.Tui.Approvals
                     keys.Add(new KeyValuePair<string, string>("R", "Recall"));
                     keys.Add(new KeyValuePair<string, string>("t", "Restart"));
                     break;
+                case ApprovalKindEnum.CliPermission:
+                    keys.Add(new KeyValuePair<string, string>("a", "Allow once"));
+                    keys.Add(new KeyValuePair<string, string>("A", "Allow and remember"));
+                    keys.Add(new KeyValuePair<string, string>("d", "Deny"));
+                    break;
             }
 
+            return keys;
+        }
+
+        /// <summary>
+        /// Decision keys of an item (key, English label): the kind's keys, except that a CLI permission request the
+        /// user cannot decide has none and one the user cannot remember has no <c>A</c>.
+        /// </summary>
+        /// <param name="item">Item.</param>
+        /// <returns>Keys.</returns>
+        public static List<KeyValuePair<string, string>> KeysFor(ApprovalItem item)
+        {
+            if (item == null) throw new ArgumentNullException(nameof(item));
+            List<KeyValuePair<string, string>> keys = KeysFor(item.Kind);
+            if (item.Kind != ApprovalKindEnum.CliPermission) return keys;
+            if (item.CliPermission == null || !item.CliPermission.CanDecide) return new List<KeyValuePair<string, string>>();
+            if (!item.CliPermission.CanRemember) keys.RemoveAll(k => k.Key == "A");
             return keys;
         }
 
@@ -186,6 +210,11 @@ namespace Armada.Tui.Approvals
                     if (key == 's') return Actions.CaptainAction(item, "stop") != null;
                     if (key == 'R') return Actions.CaptainAction(item, "recall") != null;
                     if (key == 't') return Actions.CaptainAction(item, "restart") != null;
+                    return false;
+                case ApprovalKindEnum.CliPermission:
+                    if (key == 'a') return Actions.AllowCliPermissionOnce(item);
+                    if (key == 'A') return Actions.RememberCliPermission(item) != null;
+                    if (key == 'd') return Actions.DenyCliPermission(item) != null;
                     return false;
                 default:
                     return false;
@@ -346,13 +375,16 @@ namespace Armada.Tui.Approvals
             string kind = TextCells.PadRight(T(KindLabel(item.Kind)), 20);
             int x = SurfaceText.Draw(surface, 1, y, urgency + " ", row.WithForeground(Theme.Warning.Foreground), 3) + 1;
             x += SurfaceText.Draw(surface, x, y, kind + " ", row.WithForeground(Theme.Accent.Foreground), width - x);
-            string age = Context.Loc.FormatRelative(item.CreatedUtc, Context.Clock.UtcNow);
+            string age = item.Kind == ApprovalKindEnum.CliPermission && item.ExpiresUtc != null
+                ? CliPermissionText.ExpiresIn(Context.Loc, item.ExpiresUtc.Value, Context.Clock.UtcNow)
+                : Context.Loc.FormatRelative(item.CreatedUtc, Context.Clock.UtcNow);
             int aw = TextCells.Width(age);
             SurfaceText.Draw(surface, x, y, item.Title, row.WithAttribute(CellAttributes.Bold, true), Math.Max(1, width - x - aw - 2));
             SurfaceText.Draw(surface, width - aw - 1, y, age, row.WithForeground(Theme.Muted.Foreground), aw);
-            string keys = String.Join("  ", KeysFor(item.Kind).Select(k => k.Key + " " + T(k.Value)));
+            List<KeyValuePair<string, string>> itemKeys = KeysFor(item);
+            string keys = itemKeys.Count > 0 ? "[" + String.Join("  ", itemKeys.Select(k => k.Key + " " + T(k.Value))) + "]" : "";
             string detail = String.IsNullOrEmpty(item.Detail) ? "" : item.Detail + "   ";
-            SurfaceText.Draw(surface, 4, y + 1, detail + "[" + keys + "]", row.WithForeground(Theme.Muted.Foreground), width - 5);
+            SurfaceText.Draw(surface, 4, y + 1, detail + keys, row.WithForeground(Theme.Muted.Foreground), width - 5);
         }
 
         private void RenderDetail(ISurface surface, ApprovalItem item, int top, int rows, int width)
@@ -361,8 +393,18 @@ namespace Armada.Tui.Approvals
             int y = top + 1;
             SurfaceText.Draw(surface, 1, y++, T(KindLabel(item.Kind)) + ": " + (item.EntityName ?? item.Title) + "   (" + item.EntityId + ")", Theme.Accent, width - 2);
             if (!String.IsNullOrEmpty(item.Source)) SurfaceText.Draw(surface, 1, y++, T("Source") + ": " + T(item.Source) + (item.Route != null ? "   " + T("Opens") + ": " + item.Route : ""), Theme.Muted, width - 2);
-            if (item.ExpiresUtc != null) SurfaceText.Draw(surface, 1, y++, T("Expires") + ": " + Context.Loc.FormatDateTime(item.ExpiresUtc.Value), Theme.Muted, width - 2);
-            if (item.Kind == ApprovalKindEnum.AskProposal && !String.IsNullOrEmpty(item.Arguments))
+            if (item.ExpiresUtc != null)
+            {
+                string expires = T("Expires") + ": " + Context.Loc.FormatDateTime(item.ExpiresUtc.Value);
+                if (item.Kind == ApprovalKindEnum.CliPermission) expires += "  (" + CliPermissionText.ExpiresIn(Context.Loc, item.ExpiresUtc.Value, Context.Clock.UtcNow) + ")";
+                SurfaceText.Draw(surface, 1, y++, expires, Theme.Muted, width - 2);
+            }
+
+            if (item.Kind == ApprovalKindEnum.CliPermission && item.CliPermission != null)
+            {
+                RenderCliPermissionDetail(surface, item.CliPermission, y, top + rows, width);
+            }
+            else if (item.Kind == ApprovalKindEnum.AskProposal && !String.IsNullOrEmpty(item.Arguments))
             {
                 SurfaceText.Draw(surface, 1, y++, T("Exact arguments") + " (x):", Theme.Muted, width - 2);
                 foreach (string line in ApprovalActions.Pretty(item.Arguments).Split('\n'))
@@ -378,6 +420,20 @@ namespace Armada.Tui.Approvals
                     if (y >= top + rows) break;
                     SurfaceText.Draw(surface, 1, y++, line, Theme.Text, width - 2);
                 }
+            }
+        }
+
+        private void RenderCliPermissionDetail(ISurface surface, Armada.Core.Models.CliPermissionRequest request, int y, int bottom, int width)
+        {
+            string where = CliPermissionText.Where(Context.Loc, request);
+            if (where.Length > 0 && y < bottom) SurfaceText.Draw(surface, 1, y++, where, Theme.Text, width - 2);
+            if (!request.CanDecide && y < bottom) SurfaceText.Draw(surface, 1, y++, T("An admin must decide this request."), Theme.Warning, width - 2);
+            else if (!String.IsNullOrEmpty(request.SuggestedRule) && y < bottom) SurfaceText.Draw(surface, 1, y++, T("Suggested rule") + ": " + request.SuggestedRule, Theme.Muted, width - 2);
+            if (y < bottom) SurfaceText.Draw(surface, 1, y++, T("Input") + ":", Theme.Muted, width - 2);
+            foreach (string line in ApprovalActions.Pretty(request.InputText).Split('\n'))
+            {
+                if (y >= bottom) break;
+                SurfaceText.Draw(surface, 3, y++, line, Theme.Code, width - 4);
             }
         }
 

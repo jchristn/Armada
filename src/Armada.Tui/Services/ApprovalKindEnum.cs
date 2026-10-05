@@ -31,6 +31,11 @@ namespace Armada.Tui.Services
         /// <summary>
         /// A stalled captain.
         /// </summary>
-        StalledCaptain = 4
+        StalledCaptain = 4,
+
+        /// <summary>
+        /// A captain's CLI tool permission prompt (for example a shell command) awaiting allow or deny.
+        /// </summary>
+        CliPermission = 5
     }
 }

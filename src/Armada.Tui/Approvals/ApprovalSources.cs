@@ -10,9 +10,10 @@ namespace Armada.Tui.Approvals
 
     /// <summary>
     /// Feeds <see cref="ApprovalService"/> from the server (W3.3): every inbox poll (mission reviews, failed landings,
-    /// stalled captains, deployments pending approval) replaces those kinds, and <c>mission.changed</c>,
-    /// <c>captain.changed</c>, and <c>deployment.changed</c> events add or remove items immediately (an item added from an
-    /// event survives an older inbox result for <see cref="LiveGraceSeconds"/>). The first poll after sign-in does not
+    /// stalled captains, deployments pending approval, CLI permission prompts) replaces those kinds, and
+    /// <c>mission.changed</c>, <c>captain.changed</c>, <c>deployment.changed</c>, <c>cli_permission.requested</c>, and
+    /// <c>cli_permission.resolved</c> events add or remove items immediately (an item added from an event survives an
+    /// older inbox result for <see cref="LiveGraceSeconds"/>). The first poll after sign-in does not
     /// ring the bell. Ask proposals come from the Ask controller. Call on the UI loop.
     /// </summary>
     public class ApprovalSources
@@ -24,7 +25,8 @@ namespace Armada.Tui.Approvals
         /// </summary>
         public static IReadOnlyList<ApprovalKindEnum> Kinds { get; } = new List<ApprovalKindEnum>
         {
-            ApprovalKindEnum.MissionReview, ApprovalKindEnum.DeploymentApproval, ApprovalKindEnum.FailedLanding, ApprovalKindEnum.StalledCaptain
+            ApprovalKindEnum.MissionReview, ApprovalKindEnum.DeploymentApproval, ApprovalKindEnum.FailedLanding, ApprovalKindEnum.StalledCaptain,
+            ApprovalKindEnum.CliPermission
         };
 
         /// <summary>
@@ -63,6 +65,8 @@ namespace Armada.Tui.Approvals
             context.Events.Subscribe(ArmadaEventTypes.MissionChanged, OnEntityChanged);
             context.Events.Subscribe(ArmadaEventTypes.CaptainChanged, OnEntityChanged);
             context.Events.Subscribe(ArmadaEventTypes.DeploymentChanged, OnEntityChanged);
+            context.Events.Subscribe(ArmadaEventTypes.CliPermissionRequested, OnCliPermission);
+            context.Events.Subscribe(ArmadaEventTypes.CliPermissionResolved, OnCliPermission);
             context.Session.SignedIn += (s, e) =>
             {
                 _FirstSync = true;
@@ -95,6 +99,16 @@ namespace Armada.Tui.Approvals
         public static ApprovalItem? FromInbox(InboxItem inbox, ITextLocalizer? loc)
         {
             if (inbox == null || String.IsNullOrEmpty(inbox.EntityId)) return null;
+            if (inbox.Kind == InboxItemKinds.CliPermission)
+            {
+                if (inbox.CliPermission == null) return null;
+                ApprovalItem? cli = FromCliPermission(inbox.CliPermission, loc, null);
+                if (cli == null) return null;
+                if (inbox.ExpiresUtc != null) cli.ExpiresUtc = inbox.ExpiresUtc;
+                if (!String.IsNullOrEmpty(inbox.CliPermission.ThreadId) && String.Equals(inbox.Href, "/ask/" + inbox.CliPermission.ThreadId, StringComparison.Ordinal)) cli.Route = inbox.Href;
+                return cli;
+            }
+
             ApprovalItem item = new ApprovalItem();
             switch (inbox.Kind)
             {
@@ -128,6 +142,39 @@ namespace Armada.Tui.Approvals
             item.Route = String.IsNullOrEmpty(inbox.Href) ? null : inbox.Href;
             item.Urgency = inbox.Severity == InboxSeverityEnum.Critical ? 2 : 1;
             item.Source = "Needs You";
+            return item;
+        }
+
+        /// <summary>
+        /// Map a pending CLI permission request to an approval item (null when it is no longer pending): the title is the
+        /// tool and command, the detail names the captain, vessel, and mission or conversation (and that an admin must
+        /// decide when the user cannot), and Enter opens the mission, the user's own conversation, or the captain.
+        /// </summary>
+        /// <param name="request">Request.</param>
+        /// <param name="loc">Localizer, or null for English.</param>
+        /// <param name="currentUserId">Signed-in user id (a conversation opens only for its owner), or null.</param>
+        /// <returns>Approval item or null.</returns>
+        public static ApprovalItem? FromCliPermission(CliPermissionRequest request, ITextLocalizer? loc, string? currentUserId)
+        {
+            if (request == null || String.IsNullOrEmpty(request.Id) || request.Status != CliPermissionRequestStatusEnum.Pending) return null;
+            ApprovalItem item = new ApprovalItem();
+            item.Kind = ApprovalKindEnum.CliPermission;
+            item.EntityId = request.Id;
+            item.Title = CliPermissionText.Title(request);
+            item.EntityName = String.IsNullOrEmpty(request.ToolName) ? request.Id : request.ToolName;
+            item.ToolName = request.ToolName;
+            item.Arguments = request.InputText;
+            item.ExpiresUtc = request.ExpiresUtc;
+            item.ParentId = request.ThreadId;
+            string where = CliPermissionText.Where(loc, request);
+            string admin = request.CanDecide ? "" : (loc == null ? "An admin must decide this request." : loc.T("An admin must decide this request."));
+            item.Detail = (where + (where.Length > 0 && admin.Length > 0 ? "  " : "") + admin).Trim();
+            if (!String.IsNullOrEmpty(request.MissionId)) item.Route = "/missions/" + request.MissionId;
+            else if (!String.IsNullOrEmpty(request.ThreadId) && !String.IsNullOrEmpty(currentUserId) && String.Equals(request.UserId, currentUserId, StringComparison.Ordinal)) item.Route = "/ask/" + request.ThreadId;
+            else if (!String.IsNullOrEmpty(request.CaptainId)) item.Route = "/captains/" + request.CaptainId;
+            item.Urgency = 2;
+            item.Source = "Needs You";
+            item.CliPermission = request;
             return item;
         }
 
@@ -184,6 +231,33 @@ namespace Armada.Tui.Approvals
                 string label = DeploymentApprovalText.Label(_Context.Loc, data.EnvironmentName, data.Title, id);
                 Apply(ApprovalKindEnum.DeploymentApproval, id, status == DeploymentStatusEnum.PendingApproval, label, label, "/deployments/" + id, 1);
             }
+        }
+
+        /// <summary>
+        /// Apply a <c>cli_permission.requested</c> or <c>cli_permission.resolved</c> event: a pending request joins the
+        /// queue; any other status removes it.
+        /// </summary>
+        /// <param name="message">Socket message.</param>
+        public void OnCliPermission(ArmadaSocketMessage message)
+        {
+            CliPermissionEvent? data = message?.GetData<CliPermissionEvent>();
+            if (data == null) return;
+            string? id = !String.IsNullOrEmpty(data.Request?.Id) ? data.Request!.Id : data.RequestId;
+            if (String.IsNullOrEmpty(id)) return;
+            CliPermissionRequestStatusEnum status = data.Status ?? data.Request?.Status ?? CliPermissionRequestStatusEnum.Pending;
+            string key = ApprovalKindEnum.CliPermission + ":" + id;
+            ApprovalItem? item = data.Request != null && status == CliPermissionRequestStatusEnum.Pending ? FromCliPermission(data.Request, _Context.Loc, _Context.Session.Identity?.User?.Id) : null;
+            if (item == null)
+            {
+                _Live.Remove(key);
+                _Context.Approvals.Remove(ApprovalKindEnum.CliPermission, id!);
+                return;
+            }
+
+            bool isNew = _Context.Approvals.Find(ApprovalKindEnum.CliPermission, id!) == null;
+            item.Source = "Live";
+            _Live[key] = new KeyValuePair<DateTime, ApprovalItem>(_Context.Clock.UtcNow, item);
+            _Context.Approvals.Upsert(item, isNew);
         }
 
         #endregion
