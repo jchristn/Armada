@@ -122,14 +122,9 @@ namespace Test.Shared.Suites.E2E
 
         private static bool EnumerateContainsId(string enumerateText, string id)
         {
-            EnumerationResult<System.Text.Json.JsonElement> data = JsonHelper.Deserialize<EnumerationResult<System.Text.Json.JsonElement>>(enumerateText);
+            EnumerationResult<McpLengthHints> data = JsonHelper.Deserialize<EnumerationResult<McpLengthHints>>(enumerateText);
             if (data.Objects == null) return false;
-            foreach (System.Text.Json.JsonElement obj in data.Objects)
-            {
-                if (obj.TryGetProperty("Id", out System.Text.Json.JsonElement idElement) && String.Equals(idElement.GetString(), id, StringComparison.Ordinal))
-                    return true;
-            }
-            return false;
+            return data.Objects.Any(o => String.Equals(o.Id, id, StringComparison.Ordinal));
         }
 
         private static TestCaseDescriptor CaseAsync(string caseId, string displayName, string tag, Func<Task> body)
