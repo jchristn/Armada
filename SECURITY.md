@@ -18,7 +18,12 @@ CHANGELOG unless you ask otherwise. Please give us a reasonable window to ship a
 
 ## Supported versions
 
-Security fixes are made on the latest minor release. Before 1.0, upgrade to the latest release to receive fixes.
+| Version | Supported |
+|---------|-----------|
+| 1.0.x (latest 1.x minor) | Yes |
+| 0.x | No; upgrade to the latest 1.x release (see [docs/UPGRADING.md](docs/UPGRADING.md)) |
+
+Security fixes are made on the latest 1.x minor release.
 
 ## Security model summary
 

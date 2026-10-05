@@ -146,7 +146,8 @@ Publisher prints a line saying so.
   anything, and the `.dmg` and `.pkg` are unsigned. Gatekeeper then blocks the first open on any other Mac: use
   **System Settings > Privacy & Security > Open Anyway**, or run
   `xattr -dr com.apple.quarantine "/Applications/Armada Harbor.app"`.
-- **Linux:** repository metadata is GPG-signed (free) and is unaffected.
+- **Linux:** the `.deb` and `.rpm` packages are not signed in 1.0; verify them against `SHA256SUMS`. The
+  `signing.linux` block in `publisher.json` is reserved, and the Publisher does not use it yet.
 
 ## macOS signing and notarization
 

@@ -52,7 +52,7 @@ Everything else in Armada exists to support that: isolated worktrees, parallel d
 - **Integrated API tooling.** `Activity` preserves request history (filter by the Requests source), while `API Explorer` lets you execute live OpenAPI-backed requests and replay captured traffic without leaving the dashboard.
 - **A first-class repository workspace.** The `Vessels > Workspace` tab gives you a vessel-aware file tree, in-browser editing, search, git-aware status, and direct handoff into planning, dispatch, and context curation.
 - **Project-specific delivery profiles.** `Configuration > Workflow Profiles` lets each vessel or fleet declare how it lints, builds, tests, packages, versions, deploys, rolls back, and verifies itself.
-- **Managed model endpoints.** Register external embedding or inference providers (Ollama, OpenAI, OpenAI-compatible, Anthropic, Gemini, VoyageAI), health-check them deduplicated by base URL, and validate one with a real request. Stored API keys are write-only and never returned on reads. A registered inference endpoint can also back an `Ask Armada` captain, so the assistant can run against a hosted model instead of a local CLI runtime. See [docs/REST_API.md](docs/REST_API.md#model-endpoints) and [docs/MCP_API.md](docs/MCP_API.md).
+- **Managed model endpoints.** Register external embedding or inference providers (Ollama, OpenAI, OpenAI-compatible, Azure OpenAI, Anthropic, Gemini, Vertex AI, Bedrock, VoyageAI), health-check them deduplicated by base URL, and validate one with a real request. Stored API keys are write-only and never returned on reads. A registered inference endpoint can also back an `Ask Armada` captain, so the assistant can run against a hosted model instead of a local CLI runtime. See [docs/REST_API.md](docs/REST_API.md#model-endpoints) and [docs/MCP_API.md](docs/MCP_API.md).
 - **Structured check execution.** `Delivery > Checks` turns build, test, deploy, and verification runs into queryable records with logs, artifacts, retry, branch/commit metadata, and links back to missions and voyages.
 - **Scoped objectives and delivery memory.** `Dispatch > Backlog` captures acceptance criteria, non-goals, linked vessels, and evidence so work can be scoped before dispatch without falling back to external notes.
 - **Pull-based GitHub delivery context.** Objectives can import GitHub issue or PR scope, deployments can sync GitHub Actions into `Delivery > Checks`, and mission or release detail can show GitHub PR review/check evidence without exposing raw tokens on reads.
@@ -259,7 +259,7 @@ these packages, and these are the only supported install paths for 1.0:
 | Windows | Harbor `.exe` (Inno Setup) and the Admiral server `.msi` (WiX) |
 | macOS | `Armada Harbor.app` in a `.dmg`, and the Admiral server `.pkg` |
 | Linux | `.deb` and `.rpm` packages for the CLI, Harbor, and the server |
-| Docker | Admiral, dashboard, and proxy via `docker/armada/compose.yaml` and `docker/proxy/compose.yaml` (see [docs/DOCKER.md](docs/DOCKER.md)); `docker/update.sh` or `docker/update.bat` pulls and recreates the stack |
+| Docker | Admiral, dashboard, and proxy images on Docker Hub (`jchristn77/armada-server`, `jchristn77/armada-dashboard`, `jchristn77/armada-proxy`; tags `v1.0.0` and `latest`). The compose files `docker/armada/compose.yaml` and `docker/proxy/compose.yaml` build the same images from the checkout (see [docs/DOCKER.md](docs/DOCKER.md)); `docker/update.sh` or `docker/update.bat` refreshes and recreates the stack without touching its data |
 
 Each release carries a `SHA256SUMS` file. Installers are code-signed only when the release was built with signing
 credentials; an unsigned Windows installer shows a SmartScreen prompt ("More info", then "Run anyway"), and an
@@ -330,7 +330,7 @@ If you want to negotiate a plan with a captain before launching work, use the da
 
 Current planning-session behavior:
 
-- Planning currently supports the built-in `ClaudeCode`, `Codex`, `Gemini`, `Cursor`, `Mux`, and `OpenCode` runtimes. `Custom` captains are not yet supported there.
+- Planning currently supports the built-in `ClaudeCode`, `Codex`, `Gemini`, `Cursor`, `Mux`, and `OpenCode` runtimes. `ApiEndpoint` and `Custom` captains are not supported there.
 - Planning sessions reserve the selected captain and a dock/worktree for the selected vessel while the session is active.
 - The captain can inspect and modify the repository while planning. Treat the planning session as tool-capable, not read-only.
 - Planning is transcript-backed today: each turn relaunches the runtime against the preserved transcript and repo context rather than holding a persistent stdin session open.
@@ -358,13 +358,13 @@ The dashboard supports language selection from the login screen and keeps the ch
 
 ### Running Agents Safely
 
-Captains run as CLI agents with your account's permissions, and by default with their auto-approve flags (Claude Code `--dangerously-skip-permissions`, Codex `--sandbox workspace-write`, Gemini `--approval-mode yolo`, Cursor `--force`, Mux `--yolo`, OpenCode `--auto`), so they can read, write, and execute without confirmation. To run a captain without them, untick **Auto-approve agent tool use** when editing the captain (or pass `autoApprove: false` to the `create_captain` / `update_captain` MCP tools); the runtime then uses its safer mode (for example Claude Code `--permission-mode acceptEdits`, Codex `--sandbox workspace-write`), and shell commands need to be allowed in the runtime's own configuration. Run Armada under a dedicated account, keep it on localhost unless you need remote access, and review `audit.command` events for commands run through workspace exec, fleet actions, and check runs. See [Running agents safely](docs/SECURITY_REVIEW.md#running-agents-safely) and [SECURITY.md](SECURITY.md).
+Captains run as CLI agents with your account's permissions, and by default with their auto-approve flags (Claude Code `--dangerously-skip-permissions`, Codex `--sandbox workspace-write`, or `--dangerously-bypass-approvals-and-sandbox` on Windows, Gemini `--approval-mode yolo`, Cursor `--force`, Mux `--yolo`, OpenCode `--auto`), so they can read, write, and execute without confirmation. To run a captain without them, untick **Auto-approve agent tool use** when editing the captain (or pass `autoApprove: false` to the `create_captain` / `update_captain` MCP tools); the runtime then uses its safer mode (for example Claude Code `--permission-mode acceptEdits`, Codex `--sandbox workspace-write`), and shell commands need to be allowed in the runtime's own configuration. Run Armada under a dedicated account, keep it on localhost unless you need remote access, and review `audit.command` events for commands run through workspace exec, fleet actions, and check runs. See [Running agents safely](docs/SECURITY_REVIEW.md#running-agents-safely) and [SECURITY.md](SECURITY.md).
 
 For a deeper walkthrough, see the [Getting Started Guide](GETTING_STARTED.md).
 
 ### Remote Access Through Armada.Proxy
 
-`Armada.Proxy` now acts as a portal and relay for the real Armada dashboard rather than a second remote-operations dashboard.
+`Armada.Proxy` is a portal and relay for the real Armada dashboard: each Armada instance opens an outbound tunnel to the proxy (`RemoteControl` settings), and remote browsers reach that instance through the proxy. Run it with `docker/proxy/compose.yaml` (port 7893) or the `jchristn77/armada-proxy` image; it refuses to start with a blank or default password, so set `ARMADA_PROXY_PASSWORD` (the same value as `RemoteControl.Password` on each instance).
 
 The remote browser flow is:
 
@@ -452,8 +452,10 @@ Pipelines are the workflow layer in Armada. They let you run work through explic
 
 | Persona | Role | What it does |
 |---------|------|-------------|
+| **ProductManager** | Shape | Clarifies the user outcome and turns the request into durable requirements before design starts |
 | **Architect** | Plan | Reads the codebase, decomposes a high-level goal into concrete missions with file lists and dependency ordering |
 | **Worker** | Implement | Writes code. The default -- this is what you get without pipelines. |
+| **UsabilityEngineer** | Usability | Improves usability, edge-case experience, and consistency with the surrounding product |
 | **TestEngineer** | Test | Receives the Worker's diff, identifies gaps in coverage, writes tests |
 | **Linter** | Lint | Evaluates the changed code and documentation for style and correctness, corrects clear in-scope violations, and reports what it fixed and flagged |
 | **Judge** | Review | Examines the diff against the original mission description. Checks completeness, correctness, scope violations, style. Produces a verdict. |
@@ -615,7 +617,7 @@ armada tui --profile work --route /missions
 | Key | Does |
 |-----|------|
 | `Ctrl+K` | Command palette: every screen, tab, and command; type an id (`msn_...`, `vsl_...`) to open it |
-| `g` then a letter | Go to: `g a` Ask, `g h` Home, `g i` Needs You, `g m` Missions, `g v` Vessels, `g c` Captains, `g d` Delivery, `g s` Settings |
+| `g` then a letter | Go to, for example: `g a` Ask, `g h` Home, `g i` Needs You, `g m` Missions, `g v` Vessels, `g c` Captains, `g d` Delivery, `g s` Settings |
 | `Ctrl+A` | Approvals center (Ask proposals, reviews, deployment approvals, failed landings, stalled captains) |
 | `Ctrl+J` | Ask dock on any screen (in the Ask message box, `Ctrl+J` adds a line) |
 | `Alt+A` | Ask about this: a new conversation about the current screen's subject |
@@ -623,7 +625,7 @@ armada tui --profile work --route /missions
 | `Left` / `Right`, `[` / `]` | Hub tabs (`Left`/`Right` with the tab strip focused); `[` / `]` also switch detail panels |
 | `F10`, `?`, `Ctrl+N` | Menu bar, help for the current screen, notification center |
 
-**Display.** Dark, Light, High contrast, and Auto themes (High contrast under `NO_COLOR`); Icons: Auto, Unicode, or ASCII (ASCII is picked automatically on non-UTF-8 terminals); no state is shown by color alone; works from 80x24 up; the dashboard's nine languages.
+**Display.** Dark, Light, High contrast, and Auto themes (Auto picks High contrast when `NO_COLOR` is set); Icons: Auto, Unicode, or ASCII (ASCII is picked automatically on non-UTF-8 terminals); no state is shown by color alone; works from 80x24 up; the dashboard's nine languages.
 
 See [docs/TUI.md](docs/TUI.md) for profiles, every screen, and the full key map.
 
@@ -727,7 +729,7 @@ Armada is a C#/.NET solution with these main projects:
 | **Check Run** | Structured validation | A durable execution record for build, test, deploy, or verification work, including logs, artifacts, timings, exit status, and linked mission/voyage context. |
 | **Dock** | Worktree | A git worktree provisioned for a captain's isolated work. |
 | **Signal** | Message | Communication between the Admiral and captains. |
-| **Persona** | Agent role | A named agent role (Worker, Architect, Judge, TestEngineer) that determines what a captain does during a mission. Users can create custom personas with custom prompt templates. |
+| **Persona** | Agent role | A named agent role (Worker, Architect, TestEngineer, Linter, Judge, Recorder, and others) that determines what a captain does during a mission. Users can create custom personas with custom prompt templates. |
 | **Pipeline** | Workflow | An ordered sequence of persona stages (e.g. Architect -> Worker -> TestEngineer -> Judge). Configured at fleet/vessel level with per-dispatch override. |
 | **Prompt Template** | Instructions | A user-editable template controlling the instructions given to agents. Every prompt in the system is template-driven with `{Placeholder}` parameters. |
 
@@ -935,7 +937,7 @@ armada config init              # Interactive setup (optional)
 | Setting | Default | Description |
 |---------|---------|-------------|
 | `AdmiralPort` | 7890 | REST API port |
-| `MaxCaptains` | 0 (auto, defaults to 5) | Maximum total captains |
+| `MaxCaptains` | 0 (no limit; `armada go` auto-creates at most 5) | Maximum total captains |
 | `StallThresholdMinutes` | 10 | Minutes before a captain is considered stalled |
 | `MaxRecoveryAttempts` | 3 | Auto-recovery attempts before giving up |
 | `AutoPush` | true | Push branches to remote on mission completion |
@@ -957,13 +959,13 @@ The file uses camelCase keys (for example `mcp.toolCallsPerSecond`). The full li
 
 ## Authentication
 
-As of v0.3.0, Armada supports multi-tenant authentication with three methods:
+Armada supports multi-tenant authentication with three methods:
 
 | Method | Header | Description |
 |--------|--------|-------------|
 | **Bearer Token** (recommended) | `Authorization: Bearer <token>` | 64-character tokens linked to a tenant and user. Default token: `default` |
 | **Session Token** | `X-Token: <token>` | AES-256-CBC encrypted, 24-hour lifetime. Returned by `POST /api/v1/authenticate` |
-| **API Key** (deprecated) | `X-Api-Key: <key>` | Legacy. Maps to a synthetic admin identity. Migrate to bearer tokens |
+| **Local API Key** | `X-Api-Key: <key>` | Generated on first start (`apiKey` in `settings.json`) for trusted local clients such as the `armada` CLI, the TUI, and a same-machine Harbor. Maps to a synthetic admin identity; use bearer tokens for other clients |
 
 The default installation works with `Authorization: Bearer default` until the default admin password is changed, which disables that token.
 
@@ -1053,7 +1055,7 @@ Or run Armada's MCP server over stdio as a child process (requires the `armada` 
 claude mcp add --scope user armada -- armada mcp stdio
 ```
 
-When the Admiral listens on another address (for example in Docker), MCP requires a credential: add `--header "Authorization: Bearer <token>"` to the `claude mcp add` command. Check the connection with `claude mcp list`; inside Claude Code, `/mcp` lists Armada's tools. For orchestrator instructions to paste into a `CLAUDE.md`, see [docs/INSTRUCTIONS_FOR_CLAUDE_CODE.md](docs/INSTRUCTIONS_FOR_CLAUDE_CODE.md). You do not need any of this for Ask Armada itself: captains used in Ask Armada conversations are connected to Armada's MCP tools for every turn through a thread-scoped token.
+When the Admiral listens on another address (for example in Docker), MCP requires a credential: add `--header "Authorization: Bearer <token>"` to the `claude mcp add` command. Check the connection with `claude mcp list`; inside Claude Code, `/mcp` lists Armada's tools. For orchestrator instructions to paste into a `CLAUDE.md`, see [docs/INSTRUCTIONS_FOR_CLAUDE_CODE.md](docs/INSTRUCTIONS_FOR_CLAUDE_CODE.md). You do not need any of this for Ask Armada itself: captains used in Ask Armada conversations are connected to Armada's MCP tools for every turn through a thread-scoped token. Likewise, every captain launched for a mission gets a mission-scoped MCP token (`mcp.missionScopedTokens`, default true): MCP only, bound to the mission's tenant, owner, and captain, and valid only while the mission is assigned or in progress, so mission captains act as the mission's owner instead of the unauthenticated loopback identity (Gemini and Cursor captains get it only with `isolateCaptainLaunch`). See [docs/MCP_API.md](docs/MCP_API.md#mission-scoped-captain-calls).
 
 Drop `--scope user` to add it for the current project only; substitute your port if you changed `McpPort`. On **enterprise-managed** Claude Code this may fail with `not allowed by enterprise policy`. That restriction is set by your IT administrator (Claude Code's `allowedMcpServers` managed setting) and cannot be overridden locally; a Claude Code admin must allow `http://localhost:7891/mcp`. See [docs/MCP_API.md](docs/MCP_API.md#http-transport) for the exact managed-settings snippet and alternatives.
 
@@ -1084,7 +1086,7 @@ the captain paid to write it and the next captain still pays the same cost.
 
    | Category | Owner |
    | --- | --- |
-   | `MissingDoc`, `BrokenLink`, `RepoFriction`, `TestFlake` | Backlog item on that vessel |
+   | `MissingDoc`, `BrokenLink`, `RepoFriction`, `TestFlake`, `Other` | Backlog item on that vessel |
    | `EnvSetup` | Dock or workflow-profile fix, then a Check to prove it |
    | `BriefContradiction`, `PlatformBug` | Armada objective, direct-edit only |
    | `ToolFailure` | Read the mission log before you accept it; a captain calling a tool it never received is a `BriefContradiction` |
@@ -1147,8 +1149,11 @@ Docker Compose runs the server (and the optional standalone React dashboard) in 
 
 ```bash
 cd docker/armada
+export ARMADA_INITIAL_ADMIN_PASSWORD='choose-a-strong-password'   # 8+ characters, or put it in docker/armada/.env
 docker compose up -d
 ```
+
+The compose file refuses to start without `ARMADA_INITIAL_ADMIN_PASSWORD`: the Admiral listens on all interfaces inside the container, so it will not run with the default password. Sign in as `admin@armada` with the password you set.
 
 This brings up `armada-server` (7890 REST/dashboard/WebSocket, 7891 MCP, 9464 Prometheus scrape) and `armada-dashboard` (3000), and the default stack also starts a Prometheus/Loki/Grafana observability stack. Images are built from `src/Armada.Server/Dockerfile`, `src/Armada.Dashboard/Dockerfile`, and `src/Armada.Proxy/Dockerfile`; you can build them locally with `docker build -f <dockerfile> -t <tag> .` or via the `scripts/<os>/build-*` helpers. Configuration lives in `docker/armada/armada.json`, and data persists under `docker/armada/`. Full reference, including the proxy stack and volume layout, is in [docs/DOCKER.md](docs/DOCKER.md).
 
@@ -1293,6 +1298,7 @@ Docker Compose can run the server and the optional React dashboard in containers
 
 ```bash
 cd docker/armada
+export ARMADA_INITIAL_ADMIN_PASSWORD='choose-a-strong-password'   # required; 8+ characters
 docker compose up -d
 ```
 
@@ -1300,10 +1306,13 @@ docker compose up -d
 
 | Service | Port | URL | Description |
 |---------|------|-----|-------------|
-| `armada-server` | 7890 | `http://localhost:7890/dashboard` | REST API, MCP, WebSocket, embedded dashboard |
-| `armada-dashboard` | 3000 | `http://localhost:3000` | Standalone React dashboard |
+| `armada-server` | 7890 | `http://localhost:7890/dashboard` | REST API, WebSocket (`/ws`), dashboard |
+| `armada-server` | 7891 | `http://localhost:7891/mcp` | MCP server (send a credential; the container is not loopback-bound) |
+| `armada-server` | 9464 | `http://localhost:9464/metrics` | Prometheus scrape endpoint |
+| `armada-dashboard` | 3000 | `http://localhost:3000/dashboard/` | Standalone React dashboard (nginx, proxies the API to `armada-server`) |
+| `prometheus` / `loki` / `grafana` | 9090 / 3100 / 3001 | `http://localhost:3001` | Observability stack (Grafana login `admin` / `admin`) |
 
-Both dashboards connect to the same server. The embedded dashboard at port 7890 is always available. The React dashboard at port 3000 is an optional separate frontend.
+Both dashboards are the same React build and talk to the same server. The dashboard served by the Admiral on port 7890 is always available; the container on port 3000 is an optional separate frontend.
 
 ### Data Persistence
 
@@ -1314,7 +1323,7 @@ docker/
 +-- armada/
 |   +-- compose.yaml # Armada server + dashboard
 |   +-- armada.json  # Server configuration
-|   +-- compose.split.yaml, armada.split.json  # Split mode (Admiral only; agents run on a Harbor)
+|   +-- compose.split.yaml, armada.split.json  # Split mode (Admiral and observability, no dashboard; agents run on a Harbor)
 |   +-- db/          # SQLite database (persistent across restarts)
 |   +-- factory/
 |   |   +-- reset.bat
@@ -1361,7 +1370,7 @@ docker compose down
 
 ### Build Images Locally
 
-To build the Docker images from source instead of pulling from Docker Hub:
+The compose files build the images from the checkout. To build one image by hand, from the repository root:
 
 ```bash
 # Build server image
@@ -1369,9 +1378,12 @@ docker build -f src/Armada.Server/Dockerfile -t armada-server:local .
 
 # Build dashboard image
 docker build -f src/Armada.Dashboard/Dockerfile -t armada-dashboard:local .
+
+# Build proxy image
+docker build -f src/Armada.Proxy/Dockerfile -t armada-proxy:local .
 ```
 
-Build scripts for multi-platform images are provided under `scripts/windows/`, `scripts/linux/`, and `scripts/macos/`. Each script builds once, pushes the tags to Docker Hub, and pulls them back into the local registry. Use the `build-all` script (for example `scripts\windows\build-all.bat v1.0.0`) to build, push, and locally pull every image in one command. See `docs/DOCKER.md` for details.
+Release build scripts for multi-platform images (`linux/amd64`, `linux/arm64/v8`) are under `scripts/windows/`, `scripts/linux/`, and `scripts/macos/`. Each script builds once, pushes the tag and `latest` to Docker Hub, and pulls them back into the local registry; `build-all` (for example `scripts/macos/build-all.sh v1.0.0` or `scripts\windows\build-all.bat v1.0.0`) does this for the server, dashboard, and proxy images. See [docs/DOCKER.md](docs/DOCKER.md) for details.
 
 ## Upgrading / Migration
 
@@ -1522,7 +1534,7 @@ v0.3.0 introduces multi-tenant support. The database schema is automatically mig
 - **Tenant-created seed admin:** Creating a tenant also creates `admin@armada` with password `password` plus a default credential inside that tenant; that seeded user is tenant admin only (`IsAdmin = false`, `IsTenantAdmin = true`) and those child resources are protected from direct delete
 - **Authentication required:** All REST API endpoints now require authentication. Use `Authorization: Bearer default` for backward-compatible access
 - **`X-Api-Key` deprecated:** The `X-Api-Key` header still works but is deprecated. If configured, it maps to a synthetic admin identity. Migrate to bearer tokens
-- **New settings:** `AllowSelfRegistration` (default: `true`), `RequireAuthForShutdown` (default: `false`), `SessionTokenEncryptionKey` (auto-generated)
+- **New settings:** `AllowSelfRegistration` (default then: `true`; 1.0 defaults to `false`), `RequireAuthForShutdown` (default: `false`), `SessionTokenEncryptionKey` (auto-generated)
 
 No manual changes to `settings.json` are required. Existing `ApiKey` settings continue to work.
 
@@ -1638,7 +1650,7 @@ v1.0.0 is the first stable release: security hardening, a frozen and documented 
 - A vessel with Landing Mode `None` stops at WorkProduced and `MergeQueue` enqueues; neither merges into the vessel's working directory any more.
 - Codex captains run with `--sandbox workspace-write` (codex 0.159 removed `--full-auto`).
 
-**New settings worth reviewing:** `mcp.toolCallsPerSecond`, `ask.*` (including `captainAutoApprove`, default false), `retention.*` (Ask threads archive after 90 idle days, finished jobs deleted after 30), `loginRateLimit`, `database.migrationBackupRetentionCount`, `database.requireBackupConfirmationForMigrations`, and the per-vessel `AutoApprove` override.
+**New settings worth reviewing:** `mcp.toolCallsPerSecond`, `mcp.missionScopedTokens` (default true), `mcp.allowUnauthenticatedLoopback` (default true), `ask.*` (including `captainAutoApprove`, default false), `retention.*` (Ask threads archive after 90 idle days, finished jobs deleted after 30), `loginRateLimit`, `database.migrationBackupRetentionCount`, `database.requireBackupConfirmationForMigrations`, and the per-vessel `AutoApprove` override.
 
 ## Issues and Discussions
 
