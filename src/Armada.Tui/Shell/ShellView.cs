@@ -212,6 +212,7 @@ namespace Armada.Tui.Shell
                 return true;
             }
 
+            if (_Context.Session.IsSignedIn && _Context.Commands.TryCompletePending(key, _Context.Clock.UtcNow)) return true;
             if (Scope.HandleKey(key)) return true;
             if (_Context.Session.IsSignedIn && key.Code == KeyCode.Backspace && key.Modifiers == KeyModifiers.None)
             {

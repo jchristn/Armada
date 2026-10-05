@@ -37,9 +37,8 @@ namespace Test.Shared.Suites.Tui
                         TuiCase.Contains(frame, "Help", "menu bar help");
                         TuiCase.Contains(frame, "Captains", "hub tab");
                         TuiCase.Contains(frame, "Docks", "hub tab");
-                        TuiCase.Contains(frame, "Coming in a later milestone", "placeholder");
-                        TuiCase.Contains(frame, "CaptainsScreen", "screen name");
-                        TuiCase.Contains(frame, "Ctrl+K", "status hints");
+                        TuiCase.Contains(frame, "Stop All", "captains toolbar");
+                        TuiCase.Contains(frame, "? Help", "status hints");
                         ShellLayout layout = host.Tui.Shell.LastLayout!;
                         LayoutModeEnum expected = w >= 110 ? LayoutModeEnum.Wide : w >= 90 ? LayoutModeEnum.Compact : LayoutModeEnum.Narrow;
                         AssertEqual(expected, layout.Mode, "mode");
@@ -154,7 +153,7 @@ namespace Test.Shared.Suites.Tui
                 {
                     host.Press("]");
                     AssertEqual("/captains?tab=docks", host.Tui.Context.Router.Current!.FullPath, "docks tab");
-                    TuiCase.Contains(host.Screen(), "DocksScreen", "docks placeholder");
+                    TuiCase.Contains(host.Screen(), "Git worktrees provisioned for captains", "docks tab");
                     host.Press("alt+1");
                     AssertEqual("/captains?tab=captains", host.Tui.Context.Router.Current!.FullPath, "alt+1");
                 }
