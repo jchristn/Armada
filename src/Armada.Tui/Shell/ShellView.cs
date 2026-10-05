@@ -263,7 +263,7 @@ namespace Armada.Tui.Shell
                     new KeyValuePair<string, string>("Tab", "Next field"),
                     new KeyValuePair<string, string>("Enter", "Continue")
                 };
-                if (Login.Step != LoginStepEnum.ChangePassword) StatusBar.Hints.Add(new KeyValuePair<string, string>("F2", "Switch login mode"));
+                StatusBar.Hints.Add(new KeyValuePair<string, string>("F2", "Switch login mode"));
                 StatusBar.Hints.Add(new KeyValuePair<string, string>("Ctrl+Q", "Quit"));
                 StatusBar.Render(new SurfaceView(surface, new Rect(0, size.Height - 1, size.Width, 1)));
                 ToastLayer.Render(surface, 1, _Context.Notifications.ActiveToasts(), Theme, _Context.Loc);

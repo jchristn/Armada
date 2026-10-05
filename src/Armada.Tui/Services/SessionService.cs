@@ -89,20 +89,6 @@ namespace Armada.Tui.Services
         }
 
         /// <summary>
-        /// Identity of a session that signed in with the default password and must change it before it can use the
-        /// API (only whoami, status, and the password change are allowed), or null.
-        /// </summary>
-        public WhoAmIResult? PendingIdentity { get; private set; } = null;
-
-        /// <summary>
-        /// True while a forced password change is pending.
-        /// </summary>
-        public bool PasswordChangePending
-        {
-            get { return PendingIdentity != null; }
-        }
-
-        /// <summary>
         /// True when the server reports default credentials still in use (admins and tenant admins only).
         /// </summary>
         public bool DefaultCredentialsInUse
@@ -114,11 +100,6 @@ namespace Armada.Tui.Services
         /// Raised on the UI loop after sign-in.
         /// </summary>
         public event EventHandler? SignedIn;
-
-        /// <summary>
-        /// Raised on the UI loop when the credentials were accepted but the default password must be changed first.
-        /// </summary>
-        public event EventHandler? PasswordChangeRequired;
 
         /// <summary>
         /// Raised on the UI loop after sign-out or expiry, with an English reason (null for a user sign-out).
@@ -282,24 +263,6 @@ namespace Armada.Tui.Services
 
                 if (me == null || me.User == null) continue;
 
-                if (me.PasswordChangeRequired)
-                {
-                    // The server refuses everything but whoami, status, and the password change for this session.
-                    Proxy = null;
-                    if (store) await _Credentials.SetAsync(CredentialKey(Profile), secret, token).ConfigureAwait(false);
-                    if (Profile.AuthMethod != "password" || String.IsNullOrEmpty(Profile.LastUser)) Profile.LastUser = me.User.Email;
-                    _Prefs.Current.ActiveProfile = Profile.Name;
-                    _Prefs.Save();
-                    _Dispatcher.Post(() =>
-                    {
-                        PendingIdentity = me;
-                        PasswordChangeRequired?.Invoke(this, EventArgs.Empty);
-                    });
-                    SignInResult pending = SignInResult.Ok();
-                    pending.PasswordChangeRequired = true;
-                    return pending;
-                }
-
                 try { Proxy = await Client.GetProxySessionContextAsync(token).ConfigureAwait(false); }
                 catch (ArmadaApiException) { Proxy = null; }
 
@@ -310,7 +273,6 @@ namespace Armada.Tui.Services
                 _Prefs.Save();
                 _Dispatcher.Post(() =>
                 {
-                    PendingIdentity = null;
                     Identity = me;
                     SignedIn?.Invoke(this, EventArgs.Empty);
                 });
@@ -319,42 +281,6 @@ namespace Armada.Tui.Services
 
             ClearCredentials();
             return SignInResult.Fail("API key authentication failed.");
-        }
-
-        /// <summary>
-        /// Change the password of a session that must replace the default one (<c>PUT /api/v1/account/password</c>),
-        /// then confirm with <c>whoami</c> and sign in. Errors use the dashboard's wording.
-        /// </summary>
-        /// <param name="currentPassword">Current password.</param>
-        /// <param name="newPassword">New password.</param>
-        /// <param name="token">Cancellation token.</param>
-        /// <returns>Result.</returns>
-        public async Task<SignInResult> ChangePasswordAsync(string currentPassword, string newPassword, CancellationToken token = default)
-        {
-            try
-            {
-                PasswordChangeRequest req = new PasswordChangeRequest();
-                req.CurrentPassword = currentPassword;
-                req.NewPassword = newPassword;
-                await Client.ChangePasswordAsync(req, token).ConfigureAwait(false);
-                WhoAmIResult? me = await Client.WhoamiAsync(token).ConfigureAwait(false);
-                if (me == null || me.User == null || me.PasswordChangeRequired) return SignInResult.Fail("Password change failed. Check the current password and try again.");
-                try { Proxy = await Client.GetProxySessionContextAsync(token).ConfigureAwait(false); }
-                catch (ArmadaApiException) { Proxy = null; }
-                Profile.LastUsedUtc = DateTime.UtcNow;
-                _Prefs.Save();
-                _Dispatcher.Post(() =>
-                {
-                    PendingIdentity = null;
-                    Identity = me;
-                    SignedIn?.Invoke(this, EventArgs.Empty);
-                });
-                return SignInResult.Ok();
-            }
-            catch (ArmadaApiException)
-            {
-                return SignInResult.Fail("Password change failed. Check the current password and try again.");
-            }
         }
 
         /// <summary>
@@ -408,7 +334,6 @@ namespace Armada.Tui.Services
 
         private void EndSession(string? reason)
         {
-            PendingIdentity = null;
             Identity = null;
             Proxy = null;
             SignedOut?.Invoke(this, reason);

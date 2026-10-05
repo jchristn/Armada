@@ -18,7 +18,7 @@ namespace Test.Shared.Suites.E2E
 
     /// <summary>
     /// W1.3 and W1.4 coverage on dedicated servers: MCP authentication by binding (loopback vs non-loopback), the
-    /// non-loopback default-credential refusal, the forced password change for the seeded admin, retirement of the
+    /// non-loopback default-credential refusal, the default-password flag (not a block) for the seeded admin, retirement of the
     /// seeded "default" bearer token, and password login refusal for the synthetic system identity.
     /// </summary>
     public sealed class SecurityDefaultsSuite : IArmadaTestSuite
@@ -144,7 +144,7 @@ namespace Test.Shared.Suites.E2E
                 }
             }));
 
-            cases.Add(CaseAsync("forced_password_change_flow", "A session for admin@armada with the default password must change it first", TestTags.Positive, async () =>
+            cases.Add(CaseAsync("default_password_change_flow", "A session for admin@armada with the default password is flagged, not blocked, and can change it", TestTags.Positive, async () =>
             {
                 using (SecurityTestServer server = await SecurityTestServer.PrepareAsync("127.0.0.1", null).ConfigureAwait(false))
                 {
@@ -159,9 +159,9 @@ namespace Test.Shared.Suites.E2E
                         AssertTrue(login.Success, "default login");
                         AssertTrue(login.PasswordChangeRequired, "login reports the required change");
 
-                        HttpResponseMessage blocked = await SendAsync(rest, HttpMethod.Get, "/api/v1/fleets", null, null, login.Token).ConfigureAwait(false);
-                        AssertEqual(403, (int)blocked.StatusCode, "API blocked until the password changes");
-                        AssertContains("Password change required", await blocked.Content.ReadAsStringAsync().ConfigureAwait(false));
+                        // Clients warn (and the dashboard prompts) but the API is not blocked while the default password is in place.
+                        HttpResponseMessage notBlocked = await SendAsync(rest, HttpMethod.Get, "/api/v1/fleets", null, null, login.Token).ConfigureAwait(false);
+                        AssertEqual(200, (int)notBlocked.StatusCode, "API usable before the password changes");
 
                         HttpResponseMessage whoami = await SendAsync(rest, HttpMethod.Get, "/api/v1/whoami", null, null, login.Token).ConfigureAwait(false);
                         AssertEqual(200, (int)whoami.StatusCode, "whoami allowed");

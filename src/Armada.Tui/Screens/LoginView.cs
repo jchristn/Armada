@@ -51,21 +51,6 @@ namespace Armada.Tui.Screens
         public InputField ApiKey { get; } = new InputField();
 
         /// <summary>
-        /// Current password (change-password step).
-        /// </summary>
-        public InputField CurrentPassword { get; } = new InputField();
-
-        /// <summary>
-        /// New password (change-password step).
-        /// </summary>
-        public InputField NewPassword { get; } = new InputField();
-
-        /// <summary>
-        /// Confirm new password (change-password step).
-        /// </summary>
-        public InputField ConfirmPassword { get; } = new InputField();
-
-        /// <summary>
         /// Server profile picker.
         /// </summary>
         public SelectField<string> Server { get; } = new SelectField<string>();
@@ -150,19 +135,6 @@ namespace Armada.Tui.Screens
             ApiKey.Masked = true;
             ApiKey.Placeholder = "Paste your API key";
             ApiKey.Submitted += (s, e) => SubmitApiKey();
-            foreach (InputField f in new InputField[] { CurrentPassword, NewPassword, ConfirmPassword })
-            {
-                f.Masked = true;
-                f.Submitted += (s, e) =>
-                {
-                    if (ReferenceEquals(Scope.Focused, ConfirmPassword)) SubmitPasswordChange();
-                    else Scope.Move(true);
-                };
-            }
-
-            CurrentPassword.Placeholder = "Current password";
-            NewPassword.Placeholder = "New password";
-            ConfirmPassword.Placeholder = "Confirm new password";
             Tenant.PickerTitle = "Tenant";
             Tenant.Placeholder = "Select a tenant...";
             Tenant.ModalHost = context.Modals;
@@ -223,8 +195,7 @@ namespace Armada.Tui.Screens
         /// </summary>
         public void SubmitCurrent()
         {
-            if (Step == LoginStepEnum.ChangePassword) SubmitPasswordChange();
-            else if (ApiKeyMode) SubmitApiKey();
+            if (ApiKeyMode) SubmitApiKey();
             else if (Step == LoginStepEnum.Email) SubmitEmail();
             else if (Step == LoginStepEnum.Tenant) SubmitTenant();
             else SubmitPassword();
@@ -349,82 +320,11 @@ namespace Armada.Tui.Screens
         }
 
         /// <summary>
-        /// Show the change-password step (the server accepted the default password and requires a new one before the
-        /// session can use the API), like the dashboard's <c>PasswordChangeRequired</c> screen.
-        /// </summary>
-        public void ShowChangePassword()
-        {
-            Busy = false;
-            Error = null;
-            Notice = null;
-            CurrentPassword.Value = "";
-            NewPassword.Value = "";
-            ConfirmPassword.Value = "";
-            GoTo(LoginStepEnum.ChangePassword);
-        }
-
-        /// <summary>
-        /// Validate and submit the password change (the dashboard's rules and messages), then continue signed in.
-        /// </summary>
-        /// <returns>True when the request started.</returns>
-        public bool SubmitPasswordChange()
-        {
-            if (Busy) return false;
-            string current = CurrentPassword.Value;
-            string next = NewPassword.Value;
-            string confirm = ConfirmPassword.Value;
-            Error = null;
-            if (next.Length < 8)
-            {
-                Error = "The new password must be at least 8 characters.";
-                return false;
-            }
-
-            if (next != confirm)
-            {
-                Error = "The new passwords do not match.";
-                return false;
-            }
-
-            if (next == "password" || next == current)
-            {
-                Error = "Choose a password different from the default and the current one.";
-                return false;
-            }
-
-            Busy = true;
-            _ = Task.Run(async () =>
-            {
-                SignInResult result = await _Context.Session.ChangePasswordAsync(current, next).ConfigureAwait(false);
-                _Context.Dispatcher.Post(() =>
-                {
-                    Busy = false;
-                    if (!result.Success)
-                    {
-                        Error = result.Error ?? "Password change failed. Check the current password and try again.";
-                        return;
-                    }
-
-                    CurrentPassword.Value = "";
-                    NewPassword.Value = "";
-                    ConfirmPassword.Value = "";
-                });
-            });
-            return true;
-        }
-
-        /// <summary>
         /// Back to the previous step.
         /// </summary>
         public void Back()
         {
             Error = null;
-            if (Step == LoginStepEnum.ChangePassword)
-            {
-                _ = _Context.Session.SignOutAsync();
-                return;
-            }
-
             if (Step == LoginStepEnum.Password && Tenants.Count > 1) GoTo(LoginStepEnum.Tenant);
             else GoTo(LoginStepEnum.Email);
         }
@@ -432,7 +332,7 @@ namespace Armada.Tui.Screens
         /// <inheritdoc />
         public override bool HandleKey(KeyEvent key)
         {
-            if (key.Code == KeyCode.F2 && Step != LoginStepEnum.ChangePassword)
+            if (key.Code == KeyCode.F2)
             {
                 Modes.SelectedIndex = ApiKeyMode ? 0 : 1;
                 Error = null;
@@ -443,7 +343,7 @@ namespace Armada.Tui.Screens
             if (Scope.HandleKey(key)) return true;
             if (key.Code == KeyCode.Down) return Scope.Move(true);
             if (key.Code == KeyCode.Up) return Scope.Move(false);
-            if (key.Code == KeyCode.Escape && !ApiKeyMode && Step != LoginStepEnum.Email && Step != LoginStepEnum.ChangePassword)
+            if (key.Code == KeyCode.Escape && !ApiKeyMode && Step != LoginStepEnum.Email)
             {
                 Back();
                 return true;
@@ -468,7 +368,7 @@ namespace Armada.Tui.Screens
             Scope.RenderChild(surface, Server, new Rect(left + 14, y++, cardWidth - 14, 1));
             SurfaceText.Draw(surface, left + 14, y++, _Context.Session.Profile.Url, Theme.Muted, cardWidth - 14);
             y++;
-            if (Step != LoginStepEnum.ChangePassword) Scope.RenderChild(surface, Modes, new Rect(left, y, cardWidth, 1));
+            Scope.RenderChild(surface, Modes, new Rect(left, y, cardWidth, 1));
             y++;
             y++;
             string? message = Error ?? Notice;
@@ -482,12 +382,6 @@ namespace Armada.Tui.Screens
             }
 
             y += 2;
-            if (Step == LoginStepEnum.ChangePassword)
-            {
-                RenderChangePassword(surface, left, y, cardWidth, width);
-                return;
-            }
-
             if (ApiKeyMode)
             {
                 SurfaceText.Draw(surface, left, y++, T("API Key / Bearer Token"), Theme.Muted, cardWidth);
@@ -534,32 +428,6 @@ namespace Armada.Tui.Screens
 
         #region Private-Methods
 
-        private void RenderChangePassword(ISurface surface, int left, int y, int cardWidth, int width)
-        {
-            SurfaceText.Draw(surface, left, y++, T("Change the default password"), Theme.Accent.WithAttribute(CellAttributes.Bold, true), cardWidth);
-            foreach (string line in TextCells.Wrap(T("This account still uses the default password. Choose a new one to continue. Changing it also disables the default bearer token."), cardWidth))
-            {
-                SurfaceText.Draw(surface, left, y++, line, Theme.Muted, cardWidth);
-            }
-
-            string who = _Context.Session.PendingIdentity?.User?.Email ?? Email.Value.Trim();
-            if (who.Length > 0) SurfaceText.Draw(surface, left, y++, T("Signed in as") + " " + who, Theme.Muted, cardWidth);
-            y++;
-            SurfaceText.Draw(surface, left, y, T("Current password"), Theme.Muted, 21);
-            Scope.RenderChild(surface, CurrentPassword, new Rect(left + 22, y++, cardWidth - 22, 1));
-            SurfaceText.Draw(surface, left, y, T("New password"), Theme.Muted, 21);
-            Scope.RenderChild(surface, NewPassword, new Rect(left + 22, y++, cardWidth - 22, 1));
-            SurfaceText.Draw(surface, left, y, T("Confirm new password"), Theme.Muted, 21);
-            Scope.RenderChild(surface, ConfirmPassword, new Rect(left + 22, y++, cardWidth - 22, 1));
-            SurfaceText.Draw(surface, left + 22, y++, "Ctrl+R " + T("Show password"), Theme.Muted, cardWidth - 22);
-            y++;
-            _Primary.Label = Busy ? "Saving..." : "Change password";
-            _Primary.Enabled = !Busy;
-            _Back.Label = "Sign out";
-            _Back.Visible = true;
-            Scope.RenderChild(surface, _Buttons, new Rect(left + 22, y++, cardWidth - 22, 1));
-        }
-
         private void GoTo(LoginStepEnum step)
         {
             Step = step;
@@ -572,18 +440,6 @@ namespace Armada.Tui.Screens
             if (active) Scope.SetActive(false);
             Scope.Clear();
             ArmadaWidget primary;
-            if (Step == LoginStepEnum.ChangePassword)
-            {
-                AddChild(CurrentPassword);
-                AddChild(NewPassword);
-                AddChild(ConfirmPassword);
-                AddChild(_Buttons);
-                Scope.Wrap = true;
-                Scope.Focus(CurrentPassword);
-                if (active) Scope.SetActive(true);
-                return;
-            }
-
             if (ApiKeyMode) primary = ApiKey;
             else if (Step == LoginStepEnum.Email) primary = Email;
             else if (Step == LoginStepEnum.Tenant) primary = Tenant;

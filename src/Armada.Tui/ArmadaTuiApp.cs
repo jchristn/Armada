@@ -292,7 +292,6 @@ namespace Armada.Tui
                 Context.Router.Navigate(Options.StartRoute ?? Context.Prefs.Current.LastRoute ?? "/ask");
                 Shell.FocusPane("main");
             };
-            Context.Session.PasswordChangeRequired += (s, e) => Shell.Login.ShowChangePassword();
             Context.Session.SignedOut += (s, reason) =>
             {
                 Context.Events.Stop();

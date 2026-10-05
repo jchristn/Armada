@@ -17,12 +17,6 @@ namespace Armada.Tui.Services
         /// </summary>
         public string? Error { get; set; } = null;
 
-        /// <summary>
-        /// True when the credentials were accepted but the account must change its default password before the
-        /// session can use the API (the login screen shows the change-password step).
-        /// </summary>
-        public bool PasswordChangeRequired { get; set; } = false;
-
         #endregion
 
         #region Constructors-and-Factories

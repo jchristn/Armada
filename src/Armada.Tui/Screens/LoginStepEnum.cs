@@ -18,11 +18,6 @@ namespace Armada.Tui.Screens
         /// <summary>
         /// Enter the password.
         /// </summary>
-        Password = 2,
-
-        /// <summary>
-        /// Change the default password (the server requires it before the session can use the API).
-        /// </summary>
-        ChangePassword = 3
+        Password = 2
     }
 }

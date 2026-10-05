@@ -785,28 +785,6 @@ namespace Armada.Server
                 await ctx.Response.Send(_App.Serializer.SerializeJson(denied, false)).ConfigureAwait(false);
                 return;
             }
-
-            if (auth.PasswordChangeRequired && !IsAllowedDuringPasswordChange(method, template))
-            {
-                ctx.Response.StatusCode = 403;
-                ctx.Response.ContentType = "application/json";
-                ApiErrorResponse blocked = new ApiErrorResponse
-                {
-                    Error = ApiResultEnum.Forbidden,
-                    Message = "Password change required: change the default password with PUT /api/v1/account/password before using the API with this session"
-                };
-                await ctx.Response.Send(_App.Serializer.SerializeJson(blocked, false)).ConfigureAwait(false);
-            }
-        }
-
-        private static bool IsAllowedDuringPasswordChange(string method, string template)
-        {
-            if (String.Equals(template, "/api/v1/whoami", StringComparison.OrdinalIgnoreCase)) return true;
-            if (String.Equals(template, "/api/v1/account/password", StringComparison.OrdinalIgnoreCase)) return true;
-            if (String.Equals(template, "/api/v1/authenticate", StringComparison.OrdinalIgnoreCase)) return true;
-            if (String.Equals(template, "/api/v1/status/health", StringComparison.OrdinalIgnoreCase)) return true;
-            if (String.Equals(method, "GET", StringComparison.OrdinalIgnoreCase) && String.Equals(template, "/api/v1/status", StringComparison.OrdinalIgnoreCase)) return true;
-            return false;
         }
 
         private async Task<AuthContext> AuthenticateRequestAsync(WatsonWebserver.Core.HttpContextBase ctx)
