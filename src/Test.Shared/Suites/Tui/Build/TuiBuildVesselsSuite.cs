@@ -23,6 +23,44 @@ namespace Test.Shared.Suites.Tui.Build
         {
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
 
+            cases.Add(TuiCase.Sync(Suite, "page_size_controls", "The table footer names the page size keys; z cycles the size and Z picks one", () =>
+            {
+                StubHttpHandler stub = BuildStubs.Server();
+                using (TuiTestHost host = TuiCase.SignedIn(180, 48, "/vessels", stub))
+                {
+                    AssertTrue(host.WaitForText("DemoRepo"), "rows");
+                    TuiCase.Contains(host.Screen(), "z/Z Page size: 25 (10/25/50/100/250)  < > Page  c Columns", "footer explains the keys");
+                    host.Press("z");
+                    AssertTrue(host.WaitForText("z/Z Page size: 50"), "z cycles to the next size");
+                    host.Press("Z");
+                    AssertTrue(host.WaitForText("rows per page"), "Z opens the page size picker");
+                    host.Press("home").Press("enter");
+                    AssertTrue(host.WaitForText("z/Z Page size: 10 "), "the chosen size applies");
+                }
+            }));
+
+            cases.Add(TuiCase.Sync(Suite, "hub_tabs_keep_focus", "With the tab strip focused, Left/Right keep switching hub tabs (not just the first press)", () =>
+            {
+                StubHttpHandler stub = BuildStubs.Server();
+                using (TuiTestHost host = TuiCase.SignedIn(180, 48, "/vessels", stub))
+                {
+                    HubScreen hub = (HubScreen)host.Tui.Shell.Screen!;
+                    string first = hub.Route.Tab!.Key;
+                    hub.Scope.Focus(hub.Tabs);
+                    host.Press("right");
+                    AssertTrue(host.PumpUntil(() => host.Tui.Shell.Screen is HubScreen h && h.Route.Tab!.Key != first), "first Right switches tabs");
+                    HubScreen second = (HubScreen)host.Tui.Shell.Screen!;
+                    string secondKey = second.Route.Tab!.Key;
+                    AssertTrue(second.Tabs.IsFocused, "tab strip still focused after the switch");
+                    host.Press("right");
+                    AssertTrue(host.PumpUntil(() => host.Tui.Shell.Screen is HubScreen h && h.Route.Tab!.Key != secondKey && h.Route.Tab!.Key != first), "second Right switches tabs again");
+                    host.Press("left");
+                    AssertTrue(host.PumpUntil(() => host.Tui.Shell.Screen is HubScreen h && h.Route.Tab!.Key == secondKey), "Left goes back");
+                    host.Tui.Context.Navigate("/vessels");
+                    AssertTrue(host.PumpUntil(() => host.Tui.Shell.Screen is HubScreen h && h.Content.IsFocused), "other navigation focuses the content");
+                }
+            }));
+
             cases.Add(TuiCase.Sync(Suite, "list", "Vessels lists sync and branch counts, filters by landing mode, and deletes in bulk", () =>
             {
                 StubHttpHandler stub = Stub();

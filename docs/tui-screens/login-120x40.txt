@@ -3,11 +3,11 @@
 
 
 
-
-
-
-                                                      A R M A D A
-                                           Multi-agent orchestration  v0.9.0
+                                                                    _
+                                             __ _ _ _ _ __  __ _ __| |__ _
+                                            / _` | '_| '  \/ _` / _` / _` |
+                                            \__,_|_| |_|_|_\__,_\__,_\__,_|
+                                           Multi-agent orchestration  v1.0.0
 
                             Server        127.0.0.1:9                                      v
                                           http://127.0.0.1:9

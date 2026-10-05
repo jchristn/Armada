@@ -422,10 +422,38 @@ namespace Armada.Tui.Widgets
         {
             List<int> sizes = PageSizes.ToList();
             int idx = sizes.IndexOf(PageSize);
-            PageSize = sizes[(idx + 1) % sizes.Count];
+            SetPageSize(sizes[(idx + 1) % sizes.Count]);
+        }
+
+        /// <summary>
+        /// Set the page size (clamped to 1-10000), go back to the first page, and reload.
+        /// </summary>
+        /// <param name="pageSize">Rows per page.</param>
+        public void SetPageSize(int pageSize)
+        {
+            PageSize = pageSize;
             PageNumber = 1;
             RaiseQueryChanged();
             Reload();
+        }
+
+        /// <summary>
+        /// Open a picker listing the allowed page sizes (<c>Z</c>); choosing one applies it.
+        /// </summary>
+        /// <returns>The modal, or null without a host.</returns>
+        public PickerModal<int>? OpenPageSizePicker()
+        {
+            if (ModalHost == null) return null;
+            List<SelectOption<int>> options = PageSizes
+                .Select(size => new SelectOption<int>(size, Localizer.FormatNumber(size) + " " + T("rows per page"), size == PageSize ? T("current") : ""))
+                .ToList();
+            PickerModal<int> picker = new PickerModal<int>(T("Page size"), options, Localizer, Theme);
+            picker.List.SelectValue(PageSize);
+            ModalHost.Show(picker, result =>
+            {
+                if (result is SelectOption<int> chosen && chosen.Value != PageSize) SetPageSize(chosen.Value);
+            });
+            return picker;
         }
 
         /// <summary>
@@ -603,6 +631,9 @@ namespace Armada.Tui.Widgets
                         case 'z':
                             CyclePageSize();
                             return true;
+                        case 'Z':
+                            OpenPageSizePicker();
+                            return ModalHost != null;
                         default:
                             return false;
                     }
@@ -778,9 +809,21 @@ namespace Armada.Tui.Widgets
             if (Marked.Count > 0) left += "  " + Localizer.T("{count, plural, one {# selected} other {# selected}}", LocalizationArgs.Of("count", Marked.Count));
             if (State == GridStateEnum.Loading && _Rows.Count > 0) left += "  " + T("Refreshing...");
             int used = SurfaceText.Draw(surface, 0, y, left, Theme.StatusBar, width);
-            string right = T("Page size") + " " + PageSize + "  < >  z  c";
-            int rw = TextCells.Width(right);
-            if (used + rw + 2 <= width) SurfaceText.Draw(surface, width - rw, y, right, Theme.StatusBar.WithForeground(Theme.Muted.Foreground), rw);
+            // Spell out the paging keys, longest form that fits: z cycles the page size, Z picks one, < > change page.
+            string sizes = String.Join("/", PageSizes.Select(size => Localizer.FormatNumber(size)));
+            string[] forms = new string[]
+            {
+                "z/Z " + T("Page size") + ": " + Localizer.FormatNumber(PageSize) + " (" + sizes + ")  < > " + T("Page") + "  c " + T("Columns"),
+                "z/Z " + T("Page size") + ": " + Localizer.FormatNumber(PageSize) + "  < > " + T("Page") + "  c " + T("Columns"),
+                "z/Z " + T("Page size") + ": " + Localizer.FormatNumber(PageSize)
+            };
+            foreach (string right in forms)
+            {
+                int rw = TextCells.Width(right);
+                if (used + rw + 2 > width) continue;
+                SurfaceText.Draw(surface, width - rw, y, right, Theme.StatusBar.WithForeground(Theme.Muted.Foreground), rw);
+                break;
+            }
         }
 
         private List<int> ContentWidths(List<GridColumn<T>> cols)

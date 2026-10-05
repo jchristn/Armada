@@ -60,6 +60,12 @@ namespace Armada.Tui
         public Router Router { get; }
 
         /// <summary>
+        /// Set by a hub screen's tab strip just before it switches tabs, so the hub built for the new tab keeps focus on
+        /// the tab strip (Left/Right keep switching tabs) instead of moving it into the tab's content. Consumed once.
+        /// </summary>
+        public bool KeepHubTabFocus { get; set; } = false;
+
+        /// <summary>
         /// Session.
         /// </summary>
         public SessionService Session { get; }

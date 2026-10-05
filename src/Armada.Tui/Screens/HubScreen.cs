@@ -57,10 +57,18 @@ namespace Armada.Tui.Screens
             if (route.Route.Hub == null || route.Tab == null) throw new ArgumentException("Route is not a hub.", nameof(route));
             foreach (HubTab tab in VisibleTabs()) Tabs.Add(tab.Key, tab.Label);
             Tabs.SelectKey(route.Tab.Key);
-            Tabs.SelectedChanged += (s, e) => Context.Router.SelectTab(e.NewValue);
+            Tabs.SelectedChanged += (s, e) =>
+            {
+                // The switch came from the tab strip: keep focus there on the rebuilt hub so the next Left/Right
+                // switches tabs again instead of going to the new tab's content.
+                Context.KeepHubTabFocus = Tabs.IsFocused;
+                Context.Router.SelectTab(e.NewValue);
+            };
             AddChild(Tabs);
             Content = AddChild(contentFactory(route, route.Tab));
-            Scope.Focus(Content);
+            if (Context.KeepHubTabFocus) Scope.Focus(Tabs);
+            else Scope.Focus(Content);
+            Context.KeepHubTabFocus = false;
         }
 
         #endregion

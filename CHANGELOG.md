@@ -63,6 +63,9 @@ All notable changes to Armada are documented in this file.
 
 ### Terminal UI: Operations, Delivery, Configuration, Activity, and System screens
 
+- Tables: the footer spells out the page size keys (`z/Z Page size: 25 (10/25/50/100/250)  < > Page  c Columns`); `Z` opens a picker to choose a page size directly; `z` still cycles. Sizes are remembered per table.
+- Fixed: with a hub's tab strip focused, Left/Right switched tabs only once (the rebuilt hub moved focus into the new tab's content); focus now stays on the tab strip.
+- Login shows the ASCII Armada logo on terminals with at least 32 rows.
 - Fixed: `Armada.Client` dispatch and create-mission calls lost the server's warning and the mission id when no captain could take the mission; five client calls used routes the server does not have (merge queue process-all and cancel, captain recall, voyage status, event detail); voyage get and unquarantine misread the server's replies.
 - Added: `GET /api/v1/events/{id}`; the dashboard and TUI event detail pages now load. Fixed: vessel landing preview with a branch name containing `/`.
 - Tests: the client is checked against the REST route surface and exercised live; end-to-end TUI flows (Ask dispatch through approval and landing, approvals, notifications, fleet action run, settings save) run through a scripted stub captain; one keyboard-flow test per built list screen.

@@ -36,5 +36,5 @@
                         |
                         |
                         |
-                        |Showing 1-4 of 4. Page 1 of 1.                                          Page size 25  < >  z  c
+                        |Showing 1-4 of 4. Page 1 of 1.        z/Z Page size: 25 (10/25/50/100/250)  < > Page  c Columns
  Enter Open  . Actions  / Filter  n + Mission  ? Help  Ctrl+K Palette  F10 Menu  Tab Next pane  F5 Refresh     auto 15s
