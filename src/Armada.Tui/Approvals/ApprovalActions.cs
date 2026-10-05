@@ -319,10 +319,22 @@ namespace Armada.Tui.Approvals
         /// <returns>True when the call started.</returns>
         public bool AllowCliPermissionOnce(ApprovalItem item)
         {
+            return AllowCliPermissionOnce(item, null);
+        }
+
+        /// <summary>
+        /// Allow a CLI permission request once (no dialog), then run <paramref name="finished"/>.
+        /// </summary>
+        /// <param name="item">CLI permission item.</param>
+        /// <param name="finished">Runs on the UI loop when the call ends: the decided request, or null when it failed
+        /// or was already decided. Null for none.</param>
+        /// <returns>True when the call started.</returns>
+        public bool AllowCliPermissionOnce(ApprovalItem item, Action<CliPermissionRequest?>? finished)
+        {
             if (!CanDecideCliPermission(item)) return false;
             CliPermissionDecisionRequest decision = new CliPermissionDecisionRequest();
             decision.Decision = CliPermissionDecisionEnum.AllowOnce;
-            SubmitCliPermission(item, decision);
+            SubmitCliPermission(item, decision, finished);
             return true;
         }
 
@@ -334,6 +346,19 @@ namespace Armada.Tui.Approvals
         /// <returns>The dialog, or null.</returns>
         public CliPermissionDecisionModal? RememberCliPermission(ApprovalItem item)
         {
+            return RememberCliPermission(item, null);
+        }
+
+        /// <summary>
+        /// Open the allow-and-remember dialog for a CLI permission request, then submit and run
+        /// <paramref name="finished"/>.
+        /// </summary>
+        /// <param name="item">CLI permission item.</param>
+        /// <param name="finished">Runs on the UI loop when the call ends (see <see cref="AllowCliPermissionOnce(ApprovalItem, Action{CliPermissionRequest})"/>),
+        /// or null.</param>
+        /// <returns>The dialog, or null.</returns>
+        public CliPermissionDecisionModal? RememberCliPermission(ApprovalItem item, Action<CliPermissionRequest?>? finished)
+        {
             if (!CanDecideCliPermission(item)) return null;
             if (!item.CliPermission!.CanRemember)
             {
@@ -341,7 +366,7 @@ namespace Armada.Tui.Approvals
                 return null;
             }
 
-            return ShowCliPermissionModal(item, true);
+            return ShowCliPermissionModal(item, true, finished);
         }
 
         /// <summary>
@@ -351,8 +376,19 @@ namespace Armada.Tui.Approvals
         /// <returns>The dialog, or null.</returns>
         public CliPermissionDecisionModal? DenyCliPermission(ApprovalItem item)
         {
+            return DenyCliPermission(item, null);
+        }
+
+        /// <summary>
+        /// Open the deny dialog for a CLI permission request, then submit and run <paramref name="finished"/>.
+        /// </summary>
+        /// <param name="item">CLI permission item.</param>
+        /// <param name="finished">Runs on the UI loop when the call ends, or null.</param>
+        /// <returns>The dialog, or null.</returns>
+        public CliPermissionDecisionModal? DenyCliPermission(ApprovalItem item, Action<CliPermissionRequest?>? finished)
+        {
             if (!CanDecideCliPermission(item)) return null;
-            return ShowCliPermissionModal(item, false);
+            return ShowCliPermissionModal(item, false, finished);
         }
 
         /// <summary>
@@ -363,6 +399,19 @@ namespace Armada.Tui.Approvals
         /// <param name="decision">Decision.</param>
         public void SubmitCliPermission(ApprovalItem item, CliPermissionDecisionRequest decision)
         {
+            SubmitCliPermission(item, decision, null);
+        }
+
+        /// <summary>
+        /// Submit a CLI permission decision, toast the outcome, drop the item from the queue, and run
+        /// <paramref name="finished"/> on the UI loop with the decided request (null when the call failed or the request
+        /// was already decided).
+        /// </summary>
+        /// <param name="item">CLI permission item.</param>
+        /// <param name="decision">Decision.</param>
+        /// <param name="finished">Callback, or null.</param>
+        public void SubmitCliPermission(ApprovalItem item, CliPermissionDecisionRequest decision, Action<CliPermissionRequest?>? finished)
+        {
             if (item == null) throw new ArgumentNullException(nameof(item));
             if (decision == null) throw new ArgumentNullException(nameof(decision));
             Record(item, decision.Decision == CliPermissionDecisionEnum.AllowOnce ? "allow_once" : decision.Decision == CliPermissionDecisionEnum.AllowAndRemember ? "allow_remember" : "deny");
@@ -372,7 +421,7 @@ namespace Armada.Tui.Approvals
             {
                 try
                 {
-                    await client.DecideCliPermissionRequestAsync(item.EntityId, decision).ConfigureAwait(false);
+                    CliPermissionRequest? updated = await client.DecideCliPermissionRequestAsync(item.EntityId, decision).ConfigureAwait(false);
                     string toast = "Denied {{tool}}.";
                     NotificationSeverityEnum severity = NotificationSeverityEnum.Warning;
                     if (decision.Decision == CliPermissionDecisionEnum.AllowOnce)
@@ -392,6 +441,7 @@ namespace Armada.Tui.Approvals
                     {
                         _Context.Notifications.Toast(severity, _Context.Loc.T(toast, args));
                         Resolved(item);
+                        finished?.Invoke(updated);
                     });
                 }
                 catch (ArmadaApiException ex)
@@ -402,10 +452,12 @@ namespace Armada.Tui.Approvals
                         {
                             _Context.Notifications.Toast(NotificationSeverityEnum.Warning, _Context.Loc.T("This permission request was already decided or expired."));
                             Resolved(item);
+                            finished?.Invoke(null);
                             return;
                         }
 
                         _Context.ShowError("Permission decision failed.", ex);
+                        finished?.Invoke(null);
                     });
                 }
             });
@@ -460,12 +512,12 @@ namespace Armada.Tui.Approvals
             return false;
         }
 
-        private CliPermissionDecisionModal ShowCliPermissionModal(ApprovalItem item, bool remember)
+        private CliPermissionDecisionModal ShowCliPermissionModal(ApprovalItem item, bool remember, Action<CliPermissionRequest?>? finished)
         {
             CliPermissionDecisionModal modal = new CliPermissionDecisionModal(item.CliPermission!, remember, _Context.Loc, _Context.Theme.Current);
             _Context.Modals.Show(modal, result =>
             {
-                if (result is CliPermissionDecisionRequest decision) SubmitCliPermission(item, decision);
+                if (result is CliPermissionDecisionRequest decision) SubmitCliPermission(item, decision, finished);
             });
             return modal;
         }

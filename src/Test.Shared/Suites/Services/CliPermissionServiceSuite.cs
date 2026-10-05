@@ -140,6 +140,34 @@ namespace Test.Shared.Suites.Services
                 await AssertThrowsAsync<ArgumentException>(() => svc.CreateRuleAsync(admin, new CliPermissionRule { Pattern = "Bash(", Action = CliPermissionRuleActionEnum.Allow }), "invalid pattern").ConfigureAwait(false);
             }));
 
+            cases.Add(Case("run_process_remember_matches_the_command", "Allow and remember on an API-endpoint run_process request stores a command rule that allows matching commands only", async () =>
+            {
+                using AskTestHarness h = await AskTestHarness.CreateAsync().ConfigureAwait(false);
+                CliPermissionService svc = Service(h);
+                AuthContext admin = TenantAdmin("usr_cpa_rp");
+                Captain captain = await h.Db.Driver.Captains.CreateAsync(new Captain("cp-cap-rp") { TenantId = Constants.DefaultTenantId, Runtime = AgentRuntimeEnum.ApiEndpoint }).ConfigureAwait(false);
+                AskThread thread = await NewThreadAsync(h, "usr_cpo_rp").ConfigureAwait(false);
+                CliPermissionPromptContext context = ThreadContext(thread, captain);
+                context.Runtime = AgentRuntimeEnum.ApiEndpoint;
+
+                Task<CliPermissionPromptOutcome> first = svc.PromptAsync(context, "run_process", "{\"command\":\"git status --short\"}");
+                CliPermissionRequest pending = await WaitForPendingAsync(h, thread.Id).ConfigureAwait(false);
+                AssertEqual("run_process(git status:*)", pending.SuggestedRule, "the suggestion names the command, not every shell command");
+                CliPermissionRequest decided = await svc.DecideAsync(admin, pending.Id, new CliPermissionDecisionRequest { Decision = CliPermissionDecisionEnum.AllowAndRemember, RuleScope = CliPermissionRuleScopeEnum.Captain }).ConfigureAwait(false);
+                AssertTrue((await first.ConfigureAwait(false)).Allowed, "the first call is allowed");
+                CliPermissionRule rule = (await h.Db.Driver.CliPermissionRules.ReadAsync(decided.RuleId!).ConfigureAwait(false))!;
+                AssertEqual("run_process(git status:*)", rule.Pattern, "remembered rule");
+
+                CliPermissionPromptOutcome again = await svc.PromptAsync(context, "run_process", "{\"command\":\"git\",\"args\":[\"status\"]}").ConfigureAwait(false);
+                AssertTrue(again.Allowed, "a matching command is allowed by the rule");
+                AssertEqual(CliPermissionDecisionSourceEnum.AllowRule, again.Request!.DecisionSource);
+                AssertEqual(rule.Id, again.Request.RuleId);
+
+                CliPermissionPromptOutcome other = await PromptWithQuickDecisionAsync(svc, h, context, "run_process", "{\"command\":\"rm -rf build\"}", admin, CliPermissionDecisionEnum.Deny).ConfigureAwait(false);
+                AssertFalse(other.Allowed, "another command still asks an approver");
+                AssertEqual(CliPermissionDecisionSourceEnum.Approver, other.Request!.DecisionSource, "decided by the approver, not the rule");
+            }));
+
             cases.Add(Case("owner_approval_follows_the_setting", "The owner may decide only with Permissions.AllowOwnerApproval, and never remember", async () =>
             {
                 using AskTestHarness h = await AskTestHarness.CreateAsync().ConfigureAwait(false);

@@ -961,7 +961,10 @@ vessel, and dock) and evaluates the applicable rules (the tenant's `Global` rule
 mission's `Vessel` rules, the captain's `Captain` rules). A matching deny rule denies and a matching allow rule allows
 at once; both are recorded. Otherwise a `Pending` request is stored (input redacted), a `CliPermission` card is posted
 when the session is an Ask thread, `cli_permission.requested` is announced, and the call waits until an approver
-decides, `Permissions.PromptTimeoutSeconds` passes (`Expired`), or the turn or mission ends (`Cancelled`).
+decides, `Permissions.PromptTimeoutSeconds` passes (`Expired`), the turn or mission ends (`Cancelled`), or the caller
+cancels the call (`Cancelled` at once: the server cancels the tool's handler when the client sends
+`notifications/cancelled` for it, as Claude Code does when a tool call is interrupted). A connection that drops without a
+cancel is resolved when the turn or mission ends, or by the timeout.
 
 **Response:** the answer in the shape Claude Code reads from the tool result text. Allowed (the original input,
 unchanged):

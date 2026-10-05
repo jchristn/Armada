@@ -317,7 +317,8 @@ namespace Test.Shared.Suites.Tui
                     TuiCase.Contains(text, "git push origin main", "command");
                     TuiCase.Contains(text, "Captain claude-1", "captain");
                     TuiCase.Contains(text, "Expires in ", "countdown");
-                    TuiCase.Contains(text, "Decide in the Approvals center (Ctrl+A)", "how to decide");
+                    TuiCase.Contains(text, "Decide here or in the Approvals center (Ctrl+A).", "how to decide");
+                    TuiCase.Contains(text, "[Allow once] (a)   [Allow and remember] (A)   [Deny] (d)", "decision buttons on the card");
                     TuiCase.Contains(text, "WebFetch", "second card tool");
                     TuiCase.Contains(text, "Waiting for an admin to decide.", "non-approver wording");
                     TuiCase.Contains(text, "+ Allowed", "allowed status");

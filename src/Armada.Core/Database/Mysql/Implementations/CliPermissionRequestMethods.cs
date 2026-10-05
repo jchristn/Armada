@@ -138,6 +138,23 @@ namespace Armada.Core.Database.Mysql.Implementations
             }, FromReader, token).ConfigureAwait(false);
         }
 
+        /// <inheritdoc />
+        public async Task<int> DeleteFinishedBeforeAsync(DateTime cutoffUtc, CancellationToken token = default)
+        {
+            int deleted = 0;
+            await MysqlCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (MySqlConnection conn, MySqlTransaction tx) =>
+            {
+                deleted = await MysqlCommandHelper.ExecuteAsync(conn, tx,
+                    "DELETE FROM cli_permission_requests WHERE status <> @pending AND (decided_utc < @cutoff OR (decided_utc IS NULL AND created_utc < @cutoff));",
+                    cmd =>
+                    {
+                        MysqlCommandHelper.Add(cmd, "@pending", CliPermissionRequestStatusEnum.Pending.ToString());
+                        MysqlCommandHelper.AddDate(cmd, "@cutoff", cutoffUtc);
+                    }, token).ConfigureAwait(false);
+            }, token).ConfigureAwait(false);
+            return deleted;
+        }
+
         #endregion
 
         #region Private-Methods

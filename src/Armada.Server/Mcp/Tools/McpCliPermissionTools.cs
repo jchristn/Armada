@@ -70,7 +70,9 @@ namespace Armada.Server.Mcp.Tools
                     if (context == null) return (object)McpToolError.NotFound("The mission or conversation of this session no longer exists.");
 
                     string input = String.IsNullOrWhiteSpace(request.InputJson) ? "{}" : request.InputJson!;
-                    CliPermissionPromptOutcome outcome = await service.PromptAsync(context, request.ToolName, input).ConfigureAwait(false);
+                    // The MCP call's token: when the captain cancels the call or its connection drops, the pending
+                    // request is resolved at once instead of waiting for the prompt timeout.
+                    CliPermissionPromptOutcome outcome = await service.PromptAsync(context, request.ToolName, input, McpToolHelpers.CallToken).ConfigureAwait(false);
                     if (outcome.Allowed) return (object)new CliPermissionPromptResult { Behavior = CliPermissionPromptResult.Allow, UpdatedInput = input };
                     return (object)new CliPermissionPromptResult { Behavior = CliPermissionPromptResult.Deny, Message = outcome.Message };
                 });

@@ -238,7 +238,9 @@ namespace Armada.Tui.Screens.Ask
                 AskToolChip chip = new AskToolChip();
                 chip.Id = !String.IsNullOrEmpty(call.CallId) ? call.CallId! : !String.IsNullOrEmpty(call.Id) ? call.Id : "call-" + i;
                 chip.Name = String.IsNullOrEmpty(call.ToolName) ? "tool" : call.ToolName;
-                chip.Status = call.Ok == false ? AskToolChipStatusEnum.Failed : (call.Ok == null && String.IsNullOrEmpty(call.ResultText) ? AskToolChipStatusEnum.Running : AskToolChipStatusEnum.Success);
+                // A call the CLI refused for lack of permission is a failure whatever its ok flag says (the dashboard's
+                // toolCallsToEvents), so it shows [x!] with the explanation under it.
+                chip.Status = call.PermissionDenied == true || call.Ok == false ? AskToolChipStatusEnum.Failed : (call.Ok == null && String.IsNullOrEmpty(call.ResultText) ? AskToolChipStatusEnum.Running : AskToolChipStatusEnum.Success);
                 chip.Arguments = call.ArgumentsText;
                 chip.Result = call.ResultText;
                 chip.ElapsedMs = call.ElapsedMs;
@@ -260,7 +262,8 @@ namespace Armada.Tui.Screens.Ask
             string? workId = message.TrackedWorkId ?? message.TrackedWork?.Id;
             if (workId != null && hosts.TryGetValue(workId, out string? host) && host == message.Id) return null;
             if (conv.ProposalFor(message) != null) return null;
-            if (message.Kind == AskMessageKindEnum.CliPermission && (message.CliPermissionRequest == null || message.CliPermissionRequest.Status == CliPermissionRequestStatusEnum.Pending)) return null;
+            CliPermissionRequest? cliRequest = conv.CliPermissionFor(message);
+            if (message.Kind == AskMessageKindEnum.CliPermission && (cliRequest == null || cliRequest.Status == CliPermissionRequestStatusEnum.Pending)) return null;
             string text = message.ContentText ?? "";
             System.Text.StringBuilder sb = new System.Text.StringBuilder(160);
             sb.Append(frame).Append('|').Append((int)message.Kind).Append('|').Append((int)message.Role)
@@ -273,9 +276,9 @@ namespace Armada.Tui.Screens.Ask
                 .Append('|').Append(message.ThinkingText?.Length ?? -1).Append(':').Append(message.ThinkingText?.GetHashCode() ?? 0)
                 .Append('|').Append(view.ExpandedTools.Contains(message.Id) ? 'T' : 't')
                 .Append(view.ExpandedThinking.Contains(message.Id) ? 'K' : 'k');
-            if (message.CliPermissionRequest != null)
+            if (cliRequest != null)
             {
-                CliPermissionRequest request = message.CliPermissionRequest;
+                CliPermissionRequest request = cliRequest;
                 sb.Append("|p").Append(request.Status).Append(':').Append(request.DecisionSource?.ToString() ?? "").Append(':').Append(request.DecisionMessage ?? "");
             }
 
@@ -387,7 +390,17 @@ namespace Armada.Tui.Screens.Ask
             }
             else if (message.Kind == AskMessageKindEnum.CliPermission)
             {
-                lines.AddRange(AskCliPermissionCard.Lines(message.CliPermissionRequest, text, theme, loc, nowUtc, w));
+                CliPermissionRequest? request = conv.CliPermissionFor(message);
+                block.CliRequest = request;
+                List<AskCardButton> buttons = new List<AskCardButton>();
+                int offset = lines.Count;
+                bool busy = request != null && ask.IsCliPermissionBusy(request.Id);
+                lines.AddRange(AskCliPermissionCard.Lines(request, text, busy, view.FocusedKey == message.Id, theme, loc, nowUtc, w, buttons));
+                foreach (AskCardButton button in buttons)
+                {
+                    button.Line += offset;
+                    block.Buttons.Add(button);
+                }
             }
             else if (message.Kind == AskMessageKindEnum.Error)
             {
@@ -462,7 +475,7 @@ namespace Armada.Tui.Screens.Ask
         {
             List<AskCardButton> buttons = new List<AskCardButton>();
             int offset = lines.Count;
-            lines.AddRange(AskCardRenderer.ConfirmCard(proposal, compact, view.ExpandedArguments.Contains(proposal.Id), ask.IsProposalBusy(proposal.Id), theme, loc, nowUtc, w, buttons));
+            lines.AddRange(AskCardRenderer.ConfirmCard(proposal, compact, view.ExpandedArguments.Contains(proposal.Id), ask.IsProposalBusy(proposal.Id), view.FocusedKey == block.Key, theme, loc, nowUtc, w, buttons));
             foreach (AskCardButton button in buttons)
             {
                 button.Line += offset;

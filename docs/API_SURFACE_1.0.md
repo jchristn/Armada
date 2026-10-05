@@ -30,7 +30,7 @@ administrator).
 | WebSocket commands | 61 | 0 |
 | WebSocket event types | 67 | 0 |
 | CLI commands | 58 | 0 |
-| Settings keys | 181 | 12 |
+| Settings keys | 182 | 12 |
 
 ## REST API
 
@@ -898,6 +898,7 @@ install with the home directory written as `~`; defaults are not frozen (see COM
 | `retention` | object |  |  |
 | `retention.askThreadArchiveAfterDays` | int | `90` |  |
 | `retention.askThreadDeleteAfterDays` | int | `0` |  |
+| `retention.cliPermissionRequestRetentionDays` | int | `90` |  |
 | `retention.importBatchRetentionDays` | int | `90` |  |
 | `retention.jobRetentionDays` | int | `30` |  |
 | `reviewTimeoutMinutes` | int | `1440` |  |

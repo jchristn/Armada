@@ -26,6 +26,7 @@ const draft = (overrides: Partial<Record<keyof typeof RETENTION_DEFAULTS, string
   askThreadDeleteAfterDays: '0',
   jobRetentionDays: '30',
   importBatchRetentionDays: '90',
+  cliPermissionRequestRetentionDays: '90',
   ...overrides,
 });
 
@@ -48,7 +49,7 @@ describe('RetentionSettings', () => {
   });
 
   it('shows the server values and saves the whole Retention group', async () => {
-    const saved = { retention: { askThreadArchiveAfterDays: 30, askThreadDeleteAfterDays: 365, jobRetentionDays: 30, importBatchRetentionDays: 90 } };
+    const saved = { retention: { askThreadArchiveAfterDays: 30, askThreadDeleteAfterDays: 365, jobRetentionDays: 30, importBatchRetentionDays: 90, cliPermissionRequestRetentionDays: 14 } };
     vi.mocked(updateSettings).mockResolvedValue(saved);
     const onSaved = vi.fn();
     const notify = vi.fn();
@@ -61,12 +62,13 @@ describe('RetentionSettings', () => {
 
     fireEvent.change(archive, { target: { value: '30' } });
     fireEvent.change(screen.getByLabelText('Delete Ask threads after (days)'), { target: { value: '365' } });
+    fireEvent.change(screen.getByLabelText('CLI permission request retention (days)'), { target: { value: '14' } });
     expect(save).toBeEnabled();
     fireEvent.click(save);
 
     await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
     expect(updateSettings).toHaveBeenCalledWith({
-      retention: { askThreadArchiveAfterDays: 30, askThreadDeleteAfterDays: 365, jobRetentionDays: 30, importBatchRetentionDays: 90 },
+      retention: { askThreadArchiveAfterDays: 30, askThreadDeleteAfterDays: 365, jobRetentionDays: 30, importBatchRetentionDays: 90, cliPermissionRequestRetentionDays: 14 },
     });
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith(saved));
     expect(notify).toHaveBeenCalledWith('success', 'Retention settings saved and applied.');

@@ -673,7 +673,7 @@ namespace Armada.Server
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(logFilePath)!);
-                File.AppendAllText(logFilePath, "[" + DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss") + "] Armada: " + note + Environment.NewLine);
+                File.AppendAllText(logFilePath, "[" + DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss") + "] " + CliPermissionPolicyResolver.MissionLogNoteLabel + note + Environment.NewLine);
             }
             catch (Exception ex)
             {

@@ -1,6 +1,7 @@
 namespace Armada.Core.Models
 {
     using System;
+    using System.Collections.Generic;
     using System.Text.Json.Serialization;
 
     /// <summary>
@@ -46,6 +47,12 @@ namespace Armada.Core.Models
         /// </summary>
         [JsonPropertyName("query")]
         public string? Query { get; set; } = null;
+
+        /// <summary>
+        /// Argument vector (run_process: when non-empty, the command runs directly with these arguments and no shell).
+        /// </summary>
+        [JsonPropertyName("args")]
+        public List<string>? Args { get; set; } = null;
 
         /// <summary>
         /// Search pattern (Glob, Grep).

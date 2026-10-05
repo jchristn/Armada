@@ -123,6 +123,100 @@ namespace Armada.Tui.Approvals
         }
 
         /// <summary>
+        /// Label of a policy (the dashboard's <c>policyLabel</c>): Refuse, Approve in Armada, Bypass, or Inherit for null.
+        /// </summary>
+        /// <param name="loc">Localizer, or null for English.</param>
+        /// <param name="policy">Policy, or null for Inherit.</param>
+        /// <returns>Label.</returns>
+        public static string Policy(ITextLocalizer? loc, CliPermissionPolicyEnum? policy)
+        {
+            switch (policy)
+            {
+                case CliPermissionPolicyEnum.Refuse: return L(loc, "Refuse");
+                case CliPermissionPolicyEnum.ApproveInArmada: return L(loc, "Approve in Armada");
+                case CliPermissionPolicyEnum.Bypass: return L(loc, "Bypass");
+                case null: return L(loc, "Inherit");
+                default: return policy.Value.ToString();
+            }
+        }
+
+        /// <summary>
+        /// The strong warning every Bypass choice must confirm (the dashboard's <c>bypassWarning</c>).
+        /// </summary>
+        /// <param name="loc">Localizer, or null for English.</param>
+        /// <returns>Warning.</returns>
+        public static string BypassWarning(ITextLocalizer? loc)
+        {
+            return L(loc, "Bypass lets the captain run any command on the Admiral host as the Armada service user without asking. Shell commands, file edits, and network fetches all run immediately with no approval and no rules applied. Only choose Bypass for captains and work you fully trust.");
+        }
+
+        /// <summary>
+        /// "Effective: Approve in Armada (from the server default)." with the fallback sentence when there is one (the
+        /// dashboard's <c>resolutionSummary</c>).
+        /// </summary>
+        /// <param name="loc">Localizer, or null for English.</param>
+        /// <param name="resolution">Resolution, or null.</param>
+        /// <param name="includeFallback">Append the fallback sentence.</param>
+        /// <returns>Summary, or empty when there is no resolution.</returns>
+        public static string Effective(ITextLocalizer? loc, CliPermissionResolution? resolution, bool includeFallback)
+        {
+            if (resolution == null) return "";
+            Dictionary<string, object?> args = LocalizationArgs.Of("policy", Policy(loc, resolution.Effective), "source", Source(loc, resolution.Source));
+            string text = loc != null
+                ? loc.T("Effective: {{policy}} (from {{source}}).", args)
+                : "Effective: " + Policy(null, resolution.Effective) + " (from " + Source(null, resolution.Source) + ").";
+            if (includeFallback && resolution.FallbackReason != null) text += " " + Fallback(loc, resolution.FallbackReason.Value);
+            return text;
+        }
+
+        /// <summary>
+        /// Rule action label (Allow or Deny).
+        /// </summary>
+        /// <param name="loc">Localizer, or null for English.</param>
+        /// <param name="action">Action.</param>
+        /// <returns>Label.</returns>
+        public static string RuleAction(ITextLocalizer? loc, CliPermissionRuleActionEnum action)
+        {
+            return action == CliPermissionRuleActionEnum.Deny ? L(loc, "Deny") : L(loc, "Allow");
+        }
+
+        /// <summary>
+        /// Rule scope name for the rules list and form (Global, Vessel, Captain).
+        /// </summary>
+        /// <param name="loc">Localizer, or null for English.</param>
+        /// <param name="scope">Scope.</param>
+        /// <returns>Label.</returns>
+        public static string ScopeName(ITextLocalizer? loc, CliPermissionRuleScopeEnum scope)
+        {
+            switch (scope)
+            {
+                case CliPermissionRuleScopeEnum.Vessel: return L(loc, "Vessel");
+                case CliPermissionRuleScopeEnum.Captain: return L(loc, "Captain");
+                default: return L(loc, "Global");
+            }
+        }
+
+        /// <summary>
+        /// What a rule applies to: "Global", "Vessel web", or "Captain claude-1" (names when known, ids otherwise),
+        /// with " (all tenants)" for a global admin's rule with no tenant.
+        /// </summary>
+        /// <param name="loc">Localizer, or null for English.</param>
+        /// <param name="rule">Rule.</param>
+        /// <param name="vesselName">Vessel name for the rule's vessel, or null.</param>
+        /// <param name="captainName">Captain name for the rule's captain, or null.</param>
+        /// <returns>Text.</returns>
+        public static string Target(ITextLocalizer? loc, CliPermissionRule rule, string? vesselName, string? captainName)
+        {
+            if (rule == null) throw new ArgumentNullException(nameof(rule));
+            string text;
+            if (rule.Scope == CliPermissionRuleScopeEnum.Vessel) text = L(loc, "Vessel {{name}}", "name", First(vesselName, rule.VesselId) ?? "-");
+            else if (rule.Scope == CliPermissionRuleScopeEnum.Captain) text = L(loc, "Captain {{name}}", "name", First(captainName, rule.CaptainId) ?? "-");
+            else text = L(loc, "Global");
+            if (String.IsNullOrEmpty(rule.TenantId)) text += " " + L(loc, "(all tenants)");
+            return text;
+        }
+
+        /// <summary>
         /// One-line explanation of a tool call the CLI refused for lack of permission, from the thread's resolution:
         /// Refuse names the policy source (and the fallback reason) and where to change it; ApproveInArmada points at
         /// the permission card.

@@ -1586,7 +1586,7 @@ namespace Armada.Server
                     RegistrationSource = "Armada MCP"
                 });
             }
-            _McpServer.RegisterTool(name, description, inputSchema, (RpcParameters? parameters) =>
+            _McpServer.RegisterTool(name, description, inputSchema, async (RpcParameters? parameters, CancellationToken callToken) =>
             {
                 System.Text.Json.JsonElement? args = null;
                 if (parameters != null && parameters.HasValue && !string.IsNullOrEmpty(parameters.RawJson))
@@ -1594,7 +1594,11 @@ namespace Armada.Server
                     using System.Text.Json.JsonDocument doc = System.Text.Json.JsonDocument.Parse(parameters.RawJson);
                     args = doc.RootElement.Clone();
                 }
-                return handler(args);
+
+                // The call's token (cancelled when the client cancels or drops the call) flows to handlers that wait,
+                // such as cli_permission_prompt. Set inside this async lambda, so it never leaks to the caller's flow.
+                McpToolHelpers.SetCallToken(callToken);
+                return await handler(args).ConfigureAwait(false);
             });
         }
 

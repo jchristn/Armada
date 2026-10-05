@@ -19,6 +19,10 @@ namespace Armada.Core.Services
     /// The command is split at shell control operators (<see cref="ShellCommandSplitter"/>): a call is allowed only when
     /// every subcommand matches an allow rule, and denied when any subcommand matches a deny rule. A subcommand with
     /// command substitution is never allowed by a specifier rule.</item>
+    /// <item><c>run_process(...)</c> (the built-in shell tool of API-endpoint captains) takes the same specifiers as
+    /// <c>Bash(...)</c>, matched against its command line: the command run through the shell (split at control operators
+    /// like Bash), or, when the call passes an argument vector, the command followed by its arguments (one simple command;
+    /// no shell runs, so it is not split).</item>
     /// <item><c>WebFetch(domain:example.com)</c> matches the URL host; <c>domain:*.example.com</c> matches subdomains.</item>
     /// <item><c>Read(...)</c> and <c>Edit(...)</c> take gitignore-style paths: <c>//abs/path</c> is absolute, <c>~/path</c>
     /// is under the home directory, and <c>/path</c>, <c>./path</c>, or <c>path</c> are relative to the working directory.
@@ -30,6 +34,20 @@ namespace Armada.Core.Services
     /// </summary>
     public static class CliPermissionRuleMatcher
     {
+        #region Public-Members
+
+        /// <summary>
+        /// Name of the built-in shell tool of API-endpoint captains, matched with Bash semantics.
+        /// </summary>
+        public const string RunProcessToolName = "run_process";
+
+        /// <summary>
+        /// Name of Claude Code's shell tool.
+        /// </summary>
+        public const string BashToolName = "Bash";
+
+        #endregion
+
         #region Private-Members
 
         private static readonly HashSet<string> _EditTools = new HashSet<string>(StringComparer.Ordinal) { "Edit", "Write", "MultiEdit", "NotebookEdit" };
@@ -84,18 +102,20 @@ namespace Armada.Core.Services
 
             List<KeyValuePair<CliPermissionRule, CliPermissionRulePattern>> denies = parsed.Where(p => p.Key.Action == CliPermissionRuleActionEnum.Deny && ToolMatches(p.Value, toolName)).ToList();
             List<KeyValuePair<CliPermissionRule, CliPermissionRulePattern>> allows = parsed.Where(p => p.Key.Action == CliPermissionRuleActionEnum.Allow && ToolMatches(p.Value, toolName)).ToList();
-            bool isBash = String.Equals(toolName, "Bash", StringComparison.Ordinal);
-            ShellCommandSplit split = isBash ? ShellCommandSplitter.Split(input.Command) : new ShellCommandSplit();
+            bool isShell = IsShellTool(toolName);
+            bool direct = false;
+            string? line = isShell ? ShellCommandLine(toolName, input, out direct) : null;
+            ShellCommandSplit split = !isShell ? new ShellCommandSplit() : direct ? SingleCommand(line) : ShellCommandSplitter.Split(line);
 
             foreach (KeyValuePair<CliPermissionRule, CliPermissionRulePattern> deny in denies)
             {
                 bool matched;
                 if (deny.Value.Specifier == null) matched = true;
-                else if (isBash)
+                else if (isShell)
                 {
                     // Deny broadly: any subcommand, or the whole line.
                     matched = split.Commands.Any(c => BashSpecifierMatches(deny.Value.Specifier!, c, true))
-                        || (!String.IsNullOrWhiteSpace(input.Command) && BashSpecifierMatches(deny.Value.Specifier!, input.Command!.Trim(), true));
+                        || (!String.IsNullOrWhiteSpace(line) && BashSpecifierMatches(deny.Value.Specifier!, line!.Trim(), true));
                 }
                 else matched = SpecifierMatches(deny.Value, toolName, input, ctx, true);
 
@@ -115,15 +135,20 @@ namespace Armada.Core.Services
                 return evaluation;
             }
 
-            if (isBash)
+            if (isShell)
             {
                 if (split.Unbalanced || split.Commands.Count == 0) return evaluation;
                 ShellCommandSplit perCommand;
                 CliPermissionRule? first = null;
                 foreach (string command in split.Commands)
                 {
-                    perCommand = ShellCommandSplitter.Split(command);
-                    if (perCommand.HasSubstitution) return evaluation;
+                    // An argument vector runs without a shell, so "$(...)" in it is literal text, not a substitution.
+                    if (!direct)
+                    {
+                        perCommand = ShellCommandSplitter.Split(command);
+                        if (perCommand.HasSubstitution) return evaluation;
+                    }
+
                     KeyValuePair<CliPermissionRule, CliPermissionRulePattern> match = allows.FirstOrDefault(a => BashSpecifierMatches(a.Value.Specifier!, command));
                     if (match.Key == null) return evaluation;
                     if (first == null) first = match.Key;
@@ -171,6 +196,51 @@ namespace Armada.Core.Services
             if (String.Equals(ruleTool, "Edit", StringComparison.Ordinal) && _EditTools.Contains(toolName)) return true;
             if (String.Equals(ruleTool, "Read", StringComparison.Ordinal) && _ReadTools.Contains(toolName)) return true;
             return false;
+        }
+
+        /// <summary>
+        /// Whether a tool is a shell tool whose rules take Bash specifiers (Bash and run_process).
+        /// </summary>
+        /// <param name="toolName">Tool name.</param>
+        /// <returns>True for Bash and run_process.</returns>
+        public static bool IsShellTool(string? toolName)
+        {
+            return String.Equals(toolName, BashToolName, StringComparison.Ordinal) || String.Equals(toolName, RunProcessToolName, StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// The command line a shell-tool rule is matched against: the Bash command; for run_process the command, or with
+        /// an argument vector the command followed by its arguments (joined with spaces; <paramref name="direct"/> is then
+        /// true because no shell runs).
+        /// </summary>
+        /// <param name="toolName">Tool name.</param>
+        /// <param name="input">Typed tool input.</param>
+        /// <param name="direct">True when the command runs directly with an argument vector (no shell).</param>
+        /// <returns>The command line, or null when the input has no command.</returns>
+        public static string? ShellCommandLine(string toolName, CliToolInput input, out bool direct)
+        {
+            direct = false;
+            if (input == null || String.IsNullOrWhiteSpace(input.Command)) return null;
+            string command = input.Command!.Trim();
+            if (!String.Equals(toolName, RunProcessToolName, StringComparison.Ordinal) || input.Args == null || input.Args.Count == 0) return command;
+            direct = true;
+            return command + " " + String.Join(" ", input.Args.Select(a => a ?? String.Empty));
+        }
+
+        /// <summary>
+        /// Whether a rule allows every call of a shell tool without looking at the command (for example <c>Bash</c>,
+        /// <c>run_process</c>, <c>run_process(*)</c>, or <c>Bash(:*)</c>). Approvers are warned before remembering one.
+        /// </summary>
+        /// <param name="rule">Rule text.</param>
+        /// <returns>True for an unrestricted shell rule; false for anything else, including invalid rules.</returns>
+        public static bool IsUnrestrictedShellRule(string? rule)
+        {
+            if (!CliPermissionRuleParser.TryParse(rule, out CliPermissionRulePattern? pattern) || pattern == null) return false;
+            if (!IsShellTool(pattern.ToolName)) return false;
+            if (pattern.Specifier == null) return true;
+            string spec = pattern.Specifier.Trim();
+            if (spec.EndsWith(":*", StringComparison.Ordinal) && spec.Substring(0, spec.Length - 2).Trim().Length == 0) return true;
+            return spec.Trim('*').Trim().Length == 0;
         }
 
         /// <summary>
@@ -308,15 +378,26 @@ namespace Armada.Core.Services
         {
             if (String.IsNullOrWhiteSpace(toolName)) return String.Empty;
             CliToolInput input = ParseInput(inputJson);
-            if (String.Equals(toolName, "Bash", StringComparison.Ordinal))
+            if (IsShellTool(toolName))
             {
-                ShellCommandSplit split = ShellCommandSplitter.Split(input.Command);
-                if (split.Commands.Count == 0) return "Bash";
+                bool runProcess = String.Equals(toolName, RunProcessToolName, StringComparison.Ordinal);
+                bool direct;
+                string? line = ShellCommandLine(toolName, input, out direct);
+                ShellCommandSplit split = direct ? SingleCommand(line) : ShellCommandSplitter.Split(line);
+                if (split.Commands.Count == 0) return toolName;
                 string[] tokens = split.Commands[0].Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
-                if (tokens.Length == 0 || !IsPlainWord(tokens[0])) return "Bash";
+                if (tokens.Length == 0 || !IsPlainWord(tokens[0]))
+                {
+                    // run_process never suggests the bare tool name (that would allow every command); it falls back to
+                    // the exact command line instead.
+                    if (runProcess && split.Commands.Count == 1 && line != null && CliPermissionRuleParser.TryParse(toolName + "(" + line.Trim() + ")", out CliPermissionRulePattern? exact) && exact != null && exact.Specifier != null)
+                        return exact.Raw;
+                    return toolName;
+                }
+
                 if (tokens.Length >= 2 && IsPlainWord(tokens[1]) && !tokens[1].StartsWith("-", StringComparison.Ordinal))
-                    return "Bash(" + tokens[0] + " " + tokens[1] + ":*)";
-                return "Bash(" + tokens[0] + ":*)";
+                    return toolName + "(" + tokens[0] + " " + tokens[1] + ":*)";
+                return toolName + "(" + tokens[0] + ":*)";
             }
 
             if (String.Equals(toolName, "WebFetch", StringComparison.Ordinal)
@@ -350,7 +431,7 @@ namespace Armada.Core.Services
         {
             CliToolInput input = ParseInput(inputJson);
             string? text = null;
-            if (!String.IsNullOrWhiteSpace(input.Command)) text = input.Command;
+            if (!String.IsNullOrWhiteSpace(input.Command)) text = IsShellTool(toolName) ? ShellCommandLine(toolName, input, out bool _) : input.Command;
             else if (!String.IsNullOrWhiteSpace(input.Url)) text = input.Url;
             else if (!String.IsNullOrWhiteSpace(input.Query)) text = input.Query;
             else if (!String.IsNullOrWhiteSpace(input.TargetPath)) text = input.TargetPath + (String.IsNullOrWhiteSpace(input.Pattern) ? "" : " (" + input.Pattern + ")");
@@ -363,6 +444,13 @@ namespace Armada.Core.Services
         #endregion
 
         #region Private-Methods
+
+        private static ShellCommandSplit SingleCommand(string? line)
+        {
+            ShellCommandSplit split = new ShellCommandSplit();
+            if (!String.IsNullOrWhiteSpace(line)) split.Commands.Add(line!.Trim());
+            return split;
+        }
 
         private static bool SpecifierMatches(CliPermissionRulePattern pattern, string toolName, CliToolInput input, CliPermissionMatchContext ctx, bool forDeny)
         {

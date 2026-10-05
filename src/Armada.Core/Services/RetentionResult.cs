@@ -26,11 +26,16 @@ namespace Armada.Core.Services
         public int ImportBatchesDeleted { get; set; } = 0;
 
         /// <summary>
-        /// Total rows (threads, jobs, batches) affected.
+        /// Decided, expired, or cancelled CLI tool permission requests deleted.
+        /// </summary>
+        public int CliPermissionRequestsDeleted { get; set; } = 0;
+
+        /// <summary>
+        /// Total rows (threads, jobs, batches, CLI permission requests) affected.
         /// </summary>
         public int Total
         {
-            get { return AskThreadsArchived + AskThreadsDeleted + JobsDeleted + ImportBatchesDeleted; }
+            get { return AskThreadsArchived + AskThreadsDeleted + JobsDeleted + ImportBatchesDeleted + CliPermissionRequestsDeleted; }
         }
     }
 }

@@ -1170,7 +1170,8 @@ Returns current server settings including ports, agent configuration, system pat
     "AskThreadArchiveAfterDays": 90,
     "AskThreadDeleteAfterDays": 0,
     "JobRetentionDays": 30,
-    "ImportBatchRetentionDays": 90
+    "ImportBatchRetentionDays": 90,
+    "CliPermissionRequestRetentionDays": 90
   },
   "Permissions": {
     "AskDefaultPolicy": "ApproveInArmada",
@@ -1209,6 +1210,7 @@ Retention settings (see [UPGRADING.md](UPGRADING.md#data-retention)): `GET /api/
 | `AskThreadDeleteAfterDays` | 0 | Delete Ask threads (with messages, tool calls, proposals, and tracked work) inactive for this many days, archived or not. Pinned threads are never deleted. |
 | `JobRetentionDays` | 30 | Delete finished background jobs (Succeeded, Failed, Cancelled) older than this; the newest finished job of each kind and name per tenant is kept. |
 | `ImportBatchRetentionDays` | 90 | Delete finished vessel import batches (Completed, CompletedWithFailures, Failed) with their items and recommendations; imported vessels are not affected. |
+| `CliPermissionRequestRetentionDays` | 90 | Delete CLI permission requests that were allowed, denied, expired, or cancelled more than this many days ago. Pending requests are never deleted, and remembered rules are not affected. Deleting an Ask thread also deletes its requests. |
 
 CLI tool permission settings (see [CLI Permissions](#cli-permissions) and [CAPTAINS.md](CAPTAINS.md#cli-tool-permissions)): `GET /api/v1/settings` returns a `Permissions` object, and when `Permissions` is supplied on PUT it replaces the whole object (omitted fields take their defaults). Changes apply live to the next captain launch; a pending permission request keeps its expiry.
 

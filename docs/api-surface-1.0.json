@@ -16381,6 +16381,12 @@
       "experimental": false
     },
     {
+      "key": "retention.cliPermissionRequestRetentionDays",
+      "type": "int",
+      "default": "90",
+      "experimental": false
+    },
+    {
       "key": "retention.importBatchRetentionDays",
       "type": "int",
       "default": "90",

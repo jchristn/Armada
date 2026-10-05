@@ -265,6 +265,8 @@ namespace Armada.Tui.Screens.Build
             doc.Field("Name", c.Name);
             doc.Field("Tenant ID", String.IsNullOrEmpty(c.TenantId) ? "-" : c.TenantId);
             doc.Field("Runtime", c.Runtime.ToString());
+            doc.Field("CLI tool permissions", c.CliPermissionPolicy.HasValue ? Armada.Tui.Approvals.CliPermissionText.Policy(Context.Loc, c.CliPermissionPolicy) : Tr("Inherit (auto-approve option, then server default)"),
+                c.CliPermissionPolicy == CliPermissionPolicyEnum.Bypass ? doc.Theme.Warning : (TUIKit.CellStyle?)null);
             if (c.Runtime == AgentRuntimeEnum.Mux)
             {
                 MuxCaptainOptions? mux = null;

@@ -5,6 +5,7 @@ namespace Armada.Server.Mcp.Tools
     using System.IO;
     using System.IO.Compression;
     using System.Text.Json;
+    using System.Threading;
     using System.Threading.Tasks;
     using Microsoft.Data.Sqlite;
     using Armada.Core;
@@ -21,6 +22,27 @@ namespace Armada.Server.Mcp.Tools
     /// </summary>
     public static class McpToolHelpers
     {
+        private static readonly AsyncLocal<CancellationToken> _CallToken = new AsyncLocal<CancellationToken>();
+
+        /// <summary>
+        /// Cancellation token of the current MCP tool call (cancelled when the client cancels the call or the transport
+        /// drops it), or <see cref="CancellationToken.None"/> outside an MCP call (stdio, in-process execution).
+        /// </summary>
+        public static CancellationToken CallToken
+        {
+            get { return _CallToken.Value; }
+        }
+
+        /// <summary>
+        /// Set the current MCP tool call's token for this async flow. Call from inside the per-call async handler so the
+        /// value never flows back to the transport.
+        /// </summary>
+        /// <param name="token">Token of the call.</param>
+        public static void SetCallToken(CancellationToken token)
+        {
+            _CallToken.Value = token;
+        }
+
         /// <summary>
         /// Checks whether a mission status transition is valid.
         /// </summary>

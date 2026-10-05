@@ -15,7 +15,8 @@ namespace Armada.Tui.Approvals
     /// <summary>
     /// The dialog behind <c>A</c> (allow and remember) and <c>d</c> (deny) on a CLI permission request in the Approvals
     /// center. Allow and remember edits the rule pattern (prefilled with the request's suggested rule) and picks the
-    /// rule scope with Up/Down: this captain, this vessel (only when the request has a vessel), or everywhere. Deny
+    /// rule scope with Up/Down: this captain, this vessel (only when the request has a vessel), or everywhere; a pattern
+    /// that allows every shell command (for example a bare <c>Bash</c> or <c>run_process</c>) shows a warning. Deny
     /// takes an optional message for the captain. Enter (or Ctrl+S) submits and closes with a
     /// <see cref="CliPermissionDecisionRequest"/>; Esc closes with null. Not thread-safe.
     /// </summary>
@@ -53,6 +54,14 @@ namespace Armada.Tui.Approvals
         /// Validation message (English), or null.
         /// </summary>
         public string? Error { get; private set; } = null;
+
+        /// <summary>
+        /// True while the rule pattern allows every shell command (allow and remember only).
+        /// </summary>
+        public bool AllowsEveryShellCommand
+        {
+            get { return Remember && Armada.Core.Services.CliPermissionRuleMatcher.IsUnrestrictedShellRule(Input.Value); }
+        }
 
         #endregion
 
@@ -192,7 +201,7 @@ namespace Armada.Tui.Approvals
         /// <inheritdoc />
         protected override int MeasureContentHeight(int contentWidth)
         {
-            return Remember ? 9 + _Scopes.Count : 7;
+            return Remember ? 10 + _Scopes.Count : 7;
         }
 
         /// <inheritdoc />
@@ -211,6 +220,8 @@ namespace Armada.Tui.Approvals
             SurfaceText.Draw(content, 0, y++, help, Dim(), width);
             if (Remember)
             {
+                if (AllowsEveryShellCommand) SurfaceText.Draw(content, 0, y, "! " + T("This rule allows every shell command for its scope."), On(Theme.Warning), width);
+                y++;
                 y++;
                 SurfaceText.Draw(content, 0, y++, T("Remember for") + "  (Up/Down)", Body(), width);
                 for (int i = 0; i < _Scopes.Count; i++)

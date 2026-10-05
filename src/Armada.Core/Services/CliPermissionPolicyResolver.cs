@@ -42,6 +42,17 @@ namespace Armada.Core.Services
         /// </summary>
         public const string ClaudePromptToolName = "mcp__armada__" + PromptToolName;
 
+        /// <summary>
+        /// Start of every policy note (<see cref="CliPermissionResolution.Note"/>).
+        /// </summary>
+        public const string NotePrefix = "CLI tool permissions: ";
+
+        /// <summary>
+        /// Label the Admiral writes before a note in a mission log (the line reads "[time] Armada: CLI tool permissions:
+        /// ..."). <see cref="FindMissionLogNote"/> reads it back.
+        /// </summary>
+        public const string MissionLogNoteLabel = "Armada: ";
+
         #endregion
 
         #region Public-Methods
@@ -147,6 +158,29 @@ namespace Armada.Core.Services
             return resolution;
         }
 
+        /// <summary>
+        /// The policy note the Admiral wrote into a mission log when it launched the captain (the line
+        /// <see cref="MissionLogNoteLabel"/> + <see cref="NotePrefix"/>...), the last one when the text holds several
+        /// launches.
+        /// </summary>
+        /// <param name="log">Mission log text (or its first lines), or null.</param>
+        /// <returns>The note, starting with <see cref="NotePrefix"/>, or null when the text has none.</returns>
+        public static string? FindMissionLogNote(string? log)
+        {
+            if (String.IsNullOrEmpty(log)) return null;
+            string marker = MissionLogNoteLabel + NotePrefix;
+            string? found = null;
+            foreach (string raw in log!.Replace("\r\n", "\n").Split('\n'))
+            {
+                int at = raw.IndexOf(marker, StringComparison.Ordinal);
+                if (at < 0) continue;
+                string note = raw.Substring(at + MissionLogNoteLabel.Length).Trim();
+                if (note.Length > NotePrefix.Length) found = note;
+            }
+
+            return found;
+        }
+
         #endregion
 
         #region Private-Methods
@@ -180,7 +214,7 @@ namespace Armada.Core.Services
                 ? "Change it in the conversation header (CLI tools), on the captain, or in Settings > CLI Tool Permissions."
                 : "Change it on the captain, with the vessel's auto-approve override, or in Settings > CLI Tool Permissions.";
 
-            string text = "CLI tool permissions: " + resolution.Effective + " (from " + from + ").";
+            string text = NotePrefix + resolution.Effective + " (from " + from + ").";
             if (resolution.FallbackReason.HasValue)
             {
                 string why;
@@ -191,7 +225,7 @@ namespace Armada.Core.Services
                     default: why = "the captain runs on a Harbor, which cannot route permission prompts to Armada yet"; break;
                 }
 
-                text = "CLI tool permissions: ApproveInArmada requested (from " + from + "), running as Refuse because " + why + ".";
+                text = NotePrefix + "ApproveInArmada requested (from " + from + "), running as Refuse because " + why + ".";
             }
 
             if (resolution.Effective == CliPermissionPolicyEnum.Refuse)

@@ -14,7 +14,9 @@ namespace Armada.Tui.Screens.Build
 
     /// <summary>
     /// The dashboard's Create Captain / Edit Captain dialog: name, runtime, model, inference endpoint (API Endpoint
-    /// captains), reasoning effort, capability tier, the auto-approve switch (CLI runtimes), the Mux fields (config
+    /// captains), reasoning effort, capability tier, the auto-approve switch (CLI runtimes), the CLI tool permission policy
+    /// (Inherit, Refuse, Approve in Armada, Bypass; admins only, Bypass after the strong warning, saved through its own
+    /// endpoint on edit), the Mux fields (config
     /// directory, endpoint with discovery and refresh, base URL, adapter type, temperature, max tokens, system prompt
     /// path, approval policy), and system instructions; the captain page adds allowed personas (JSON array) and the
     /// preferred persona. Runtime options are written the way <c>lib/mux.ts</c> and <c>lib/captainApproval.ts</c>
@@ -153,6 +155,13 @@ namespace Armada.Tui.Screens.Build
             });
             tier.SetValue(editing?.Tier?.ToString() ?? "");
 
+            bool canManagePolicy = screen.Context.Session.IsGlobalAdmin || screen.Context.Session.IsTenantAdmin;
+            CliPermissionPolicyEnum? storedPolicy = editing?.CliPermissionPolicy;
+            SelectField<string> cliPolicy = screen.NewSelect("CLI tool permissions", Armada.Tui.Approvals.CliPermissionPolicyChoice.Options(loc, true, null, canManagePolicy, storedPolicy));
+            cliPolicy.SetValue(Armada.Tui.Approvals.CliPermissionPolicyChoice.ValueOf(storedPolicy));
+            cliPolicy.CanFocus = canManagePolicy;
+            Armada.Tui.Approvals.CliPermissionPolicyChoice.GuardBypass(screen.Context, cliPolicy, () => canManagePolicy);
+
             OpsCheckField autoApprove = new OpsCheckField("Auto-approve agent tool use (runs the CLI with its permission-bypass flag)", editing == null || CaptainRuntimeOptions.GetAutoApprove(editing));
 
             MuxCaptainOptions mux = (editing != null && editing.Runtime == AgentRuntimeEnum.Mux ? SafeMux(editing) : null) ?? new MuxCaptainOptions();
@@ -209,6 +218,7 @@ namespace Armada.Tui.Screens.Build
             dialog.AddField("Reasoning effort", effort);
             dialog.AddField("Capability tier", tier, detail ? "Missions requiring a tier route to captains at or above it. Leave on Auto to classify from the model name." : null);
             dialog.AddField("Auto-approve", autoApprove);
+            dialog.AddField("CLI tool permissions", cliPolicy, "How this captain handles shell commands, file edits, and fetches that need permission. Inherit: missions follow the auto-approve option when it is set, then the server default; Ask conversations use the server default (Settings > CLI Tool Permissions). A conversation can override it." + (canManagePolicy ? "" : " Only admins can change this."));
             dialog.AddField("Mux Config Directory", muxConfig);
             dialog.AddField("Mux Endpoint", muxEndpoint);
             dialog.AddField("", muxPick);
@@ -362,18 +372,34 @@ namespace Armada.Tui.Screens.Build
                 options.SystemPromptPath = muxPrompt.Value;
                 options.ApprovalPolicy = muxPolicy.Value;
                 body.RuntimeOptionsJson = RuntimeOptionsJson(r, options, autoApprove.Checked);
+                CliPermissionPolicyEnum? chosenPolicy = Armada.Tui.Approvals.CliPermissionPolicyChoice.Parse(cliPolicy.Value);
                 string label = body.Name;
                 if (editing != null)
                 {
-                    screen.Call((c, t) => c.UpdateCaptainAsync(editing.Id, body, t), result =>
+                    // A captain update keeps the stored CLI tool permission policy; it changes through its own (admin)
+                    // endpoint, after the update.
+                    body.CliPermissionPolicy = storedPolicy;
+                    Action<Captain?> finish = result =>
                     {
                         d.Complete();
                         screen.Toast(NotificationSeverityEnum.Success, screen.Tr("Captain \"{{name}}\" saved.", LocalizationArgs.Of("name", label)));
                         saved?.Invoke(result);
-                    }, null, ex => d.Fail(ex is ArmadaApiException api && !String.IsNullOrEmpty(api.Message) ? api.Message : screen.Tr("Save failed.")));
+                    };
+                    Action<Exception> fail = ex => d.Fail(ex is ArmadaApiException api && !String.IsNullOrEmpty(api.Message) ? api.Message : screen.Tr("Save failed."));
+                    screen.Call((c, t) => c.UpdateCaptainAsync(editing.Id, body, t), result =>
+                    {
+                        if (!canManagePolicy || chosenPolicy == storedPolicy)
+                        {
+                            finish(result);
+                            return;
+                        }
+
+                        screen.Call((c, t) => c.SetCaptainCliPermissionPolicyAsync(editing.Id, chosenPolicy, t), updated => finish(updated ?? result), null, fail);
+                    }, null, fail);
                 }
                 else
                 {
+                    body.CliPermissionPolicy = canManagePolicy ? chosenPolicy : null;
                     screen.Call((c, t) => c.CreateCaptainAsync(body, t), result =>
                     {
                         d.Complete();

@@ -115,9 +115,14 @@ namespace Armada.Client.Models
         public Armada.Core.Settings.RepositoryHealthSettings? RepositoryHealth { get; set; } = null;
 
         /// <summary>
-        /// Data retention settings (Ask threads, jobs, import batches), or null.
+        /// Data retention settings (Ask threads, jobs, import batches, CLI permission requests), or null.
         /// </summary>
         public Armada.Core.Settings.RetentionSettings? Retention { get; set; } = null;
+
+        /// <summary>
+        /// CLI tool permission settings (Ask and mission default policies, owner approval, prompt timeout), or null.
+        /// </summary>
+        public Armada.Core.Settings.CliPermissionSettings? Permissions { get; set; } = null;
 
         #endregion
 

@@ -42,6 +42,11 @@ namespace Armada.Tui.Screens.Ask
         /// </summary>
         public long Version { get; private set; } = 0;
 
+        /// <summary>
+        /// Key of the block the focused transcript has selected (its pending card shows its keys inline), or null.
+        /// </summary>
+        public string? FocusedKey { get; private set; } = null;
+
         #endregion
 
         #region Constructors-and-Factories
@@ -72,9 +77,21 @@ namespace Armada.Tui.Screens.Ask
         }
 
         /// <summary>
+        /// Record the block the focused transcript has selected (null when nothing is selected or the transcript does
+        /// not have focus).
+        /// </summary>
+        /// <param name="key">Block key, or null.</param>
+        public void Focus(string? key)
+        {
+            if (String.Equals(key, FocusedKey, StringComparison.Ordinal)) return;
+            FocusedKey = key;
+            Version++;
+        }
+
+        /// <summary>
         /// Highlight a work card for two seconds.
         /// </summary>
-        /// <param name="workId">Work id.</param>
+        /// <param name="workId">Tracked work id.</param>
         /// <param name="nowUtc">Now.</param>
         public void Highlight(string workId, DateTime nowUtc)
         {
