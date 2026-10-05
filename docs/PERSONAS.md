@@ -329,7 +329,8 @@ A pipeline is an ordered list of persona stages that a dispatch goes through.
 - [x] Create `src/Armada.Core/Models/PipelineStage.cs`
   - `Order` (int, 1-based)
   - `PersonaName` (string, references a Persona by name)
-  - `IsOptional` (bool, if true the Admiral may skip this stage)
+  - `IsOptional` (bool, if true the Admiral may skip this stage). Reserved: no skip policy was implemented, so
+    dispatch runs every stage regardless (see [PIPELINES.md](PIPELINES.md))
   - `Description` (string?, e.g. "Plan the voyage", "Execute the mission", "Review the diff")
   - Current: stages also carry `RequiresReview` (bool) and `ReviewDenyAction` (`RetryStage` by default, or
     `FailPipeline`); see [PIPELINES.md](PIPELINES.md)
@@ -741,7 +742,9 @@ output unchanged. Source: `MissionPromptBuilder.BuildTemplateParams` and `Missio
 | `{MissionPersona}` | `mission.Persona` | Persona assigned to this mission (`Worker` when unset) |
 | `{VoyageId}` | `mission.VoyageId` | Parent voyage identifier |
 | `{BranchName}` | dock or mission branch | Git branch for this mission |
-| `{PersonaPrompt}` | rendered `persona.*` template | Resolved persona prompt (used by `mission.metadata`) |
+| `{PersonaPrompt}` | rendered persona template (`persona.PromptTemplateName`, else `persona.*`) | Resolved persona prompt (used by `mission.metadata`) |
+| `{Diff}` | prior stage `DiffSnapshot` | Diff of the prior pipeline stage (the mission this one depends on), capped at 20000 characters; a "not available" note without one |
+| `{PreviousStageOutput}` | prior stage `AgentOutput` | Agent output of the prior pipeline stage, capped at 8000 characters; a "not available" note without one |
 | `{SelectedPlaybooksMarkdown}` | selected playbooks | Rendered playbook content (used by `mission.playbooks_wrapper`) |
 
 ### Vessel Context
@@ -769,7 +772,8 @@ output unchanged. Source: `MissionPromptBuilder.BuildTemplateParams` and `Missio
 | `{ExistingClaudeMd}` | file read | Contents of the repository's existing CLAUDE.md (used by `mission.existing_instructions_wrapper`) |
 
 The original plan also listed `{VoyageTitle}`, `{DockId}`, `{WorktreePath}`, `{PipelineName}`, `{StageNumber}`,
-`{TotalStages}`, `{PreviousStageDiff}`, and `{PreviousStageOutput}`. None of these is filled for prompt templates.
+`{TotalStages}`, and `{PreviousStageDiff}`. None of these is filled for prompt templates (`{Diff}` covers the
+prior-stage diff).
 `{VoyageTitle}` and `{DockId}` exist only for the commit and PR message templates (see
-[MESSAGE_TEMPLATES.md](MESSAGE_TEMPLATES.md)). Prior-stage context reaches the next stage through the mission
-description, which the stage handoff rewrites, not through placeholders.
+[MESSAGE_TEMPLATES.md](MESSAGE_TEMPLATES.md)). Prior-stage context also reaches the next stage through the mission
+description, which the stage handoff rewrites (with the full, uncapped diff).

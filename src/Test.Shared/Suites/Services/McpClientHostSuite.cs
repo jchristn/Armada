@@ -230,6 +230,24 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("tool_catalog_api_endpoint_is_mcp_client", "The tool catalog reports API-endpoint captains as having tools and as Armada MCP clients", TestTags.Negative, async () =>
+            {
+                RecordingRuntimeToolDiscoverySource discovery = new RecordingRuntimeToolDiscoverySource();
+                LoggingModule logging = new LoggingModule();
+                logging.Settings.EnableConsole = false;
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    CaptainRuntimeToolCatalogService catalog = new CaptainRuntimeToolCatalogService(logging, null, discovery, _Port, _Loopback);
+                    Captain captain = new Captain("api-test") { Runtime = AgentRuntimeEnum.ApiEndpoint };
+                    CaptainRuntimeToolCatalogService.RuntimeToolCatalogSnapshot? snapshot = await catalog.TryDescribeAsync(captain, testDb.Driver).ConfigureAwait(false);
+
+                    AssertNotNull(snapshot, "snapshot");
+                    AssertTrue(snapshot!.ToolsAccessible, "API-endpoint captains always have the built-in coding tools");
+                    AssertFalse(snapshot.Summary.Contains("do not act as an MCP client", StringComparison.Ordinal), "summary must not deny MCP client behavior: " + snapshot.Summary);
+                    AssertContains("ARMADA_MCP_URL", snapshot.Summary);
+                }
+            }));
+
             return new TestSuiteDescriptor(suiteId: SuiteId, displayName: "MCP Client Host", cases: cases);
         }
 

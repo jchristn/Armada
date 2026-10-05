@@ -120,7 +120,34 @@ namespace Test.Shared.Suites.Models
                 AssertTrue(builtIn.SupportsPlanningSessions);
                 AssertNull(builtIn.PlanningSessionSupportReason);
                 AssertFalse(custom.SupportsPlanningSessions);
-                AssertContains("built-in ClaudeCode, Codex, Gemini, Cursor, and Mux runtimes", custom.PlanningSessionSupportReason ?? String.Empty);
+                AssertContains("built-in ClaudeCode, Codex, Gemini, Cursor, Mux, and OpenCode runtimes", custom.PlanningSessionSupportReason ?? String.Empty);
+            }));
+
+            cases.Add(Case("planning_support_matches_runtime_adapter", "Captain planning support matches the runtime adapter for every runtime (ApiEndpoint unsupported, OpenCode supported)", TestTags.Negative, () =>
+            {
+                Captain api = new Captain("api", AgentRuntimeEnum.ApiEndpoint);
+                AssertFalse(api.SupportsPlanningSessions, "ApiEndpoint captains must not be offered planning; the coordinator refuses their runtime");
+                AssertNotNull(api.PlanningSessionSupportReason, "ApiEndpoint reason");
+                Captain openCode = new Captain("oc", AgentRuntimeEnum.OpenCode);
+                AssertTrue(openCode.SupportsPlanningSessions, "OpenCode supports planning");
+                AssertNull(openCode.PlanningSessionSupportReason);
+
+                SyslogLogging.LoggingModule logging = new SyslogLogging.LoggingModule();
+                logging.Settings.EnableConsole = false;
+                Armada.Runtimes.AgentRuntimeFactory factory = new Armada.Runtimes.AgentRuntimeFactory(logging, (string id) => null);
+                foreach (AgentRuntimeEnum runtime in Enum.GetValues<AgentRuntimeEnum>())
+                {
+                    Captain captain = new Captain("c", runtime);
+                    if (runtime == AgentRuntimeEnum.Custom)
+                    {
+                        AssertFalse(captain.SupportsPlanningSessions, "Custom");
+                        continue;
+                    }
+
+                    Armada.Runtimes.Interfaces.IAgentRuntime adapter = factory.Create(runtime);
+                    AssertEqual(adapter.SupportsPlanningSessions, captain.SupportsPlanningSessions, "captain and runtime adapter disagree for " + runtime);
+                    AssertEqual(captain.SupportsPlanningSessions, captain.PlanningSessionSupportReason == null, "reason present exactly when unsupported for " + runtime);
+                }
             }));
 
             cases.Add(Case("state_enum_serializes_as_string", "Captain state enum serializes as string", TestTags.Positive, () =>

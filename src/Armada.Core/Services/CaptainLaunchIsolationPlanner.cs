@@ -2,6 +2,8 @@ namespace Armada.Core.Services
 {
     using System;
     using System.IO;
+    using System.Text.Json;
+    using System.Text.Json.Nodes;
     using Armada.Core.Enums;
 
     /// <summary>
@@ -40,8 +42,8 @@ namespace Armada.Core.Services
 
         /// <summary>
         /// Build the isolation plan for a runtime, optionally binding the scoped Armada MCP connection to a session token
-        /// (sent as an X-Token header) so the agent's tool calls reach Armada as that caller. Mux has no header support in
-        /// its server document, so the token is not applied there.
+        /// (sent as an X-Token header) so the agent's tool calls reach Armada as that caller. Mux carries the token as API-key
+        /// authentication in its server document. OpenCode has no isolation plan (see <see cref="CarriesSessionToken"/>).
         /// </summary>
         /// <param name="runtime">The captain's runtime.</param>
         /// <param name="mcpPort">The Admiral MCP port (must be positive).</param>
@@ -103,7 +105,7 @@ namespace Armada.Core.Services
                     }
                 case AgentRuntimeEnum.Mux:
                     {
-                        plan.FilesToWrite.Add(new IsolationConfigFile("mcp-servers.json", ArmadaMcpConfigBuilder.BuildMuxServersJson(mcpPort, host)));
+                        plan.FilesToWrite.Add(new IsolationConfigFile("mcp-servers.json", BuildMuxServersJson(mcpPort, host, mcpSessionToken)));
                         plan.EnvironmentOverrides["MUX_CONFIG_DIR"] = scopedConfigDirectory;
                         break;
                     }
@@ -114,9 +116,55 @@ namespace Armada.Core.Services
             return plan;
         }
 
+        /// <summary>
+        /// True when <see cref="Plan(AgentRuntimeEnum, int, string, string?, string)"/> binds a session token for this
+        /// runtime. A token launch with full isolation for any other runtime (OpenCode, which has no isolation plan) must
+        /// use the per-invocation binding of <see cref="CaptainThreadMcpPlanner"/> instead, so it is never launched without
+        /// its token.
+        /// </summary>
+        /// <param name="runtime">The captain's runtime.</param>
+        /// <returns>True when the isolation plan carries the token.</returns>
+        public static bool CarriesSessionToken(AgentRuntimeEnum runtime)
+        {
+            switch (runtime)
+            {
+                case AgentRuntimeEnum.ClaudeCode:
+                case AgentRuntimeEnum.Codex:
+                case AgentRuntimeEnum.Gemini:
+                case AgentRuntimeEnum.Cursor:
+                case AgentRuntimeEnum.Mux:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
         #endregion
 
         #region Private-Methods
+
+        private static string BuildMuxServersJson(int mcpPort, string host, string? mcpSessionToken)
+        {
+            if (String.IsNullOrWhiteSpace(mcpSessionToken)) return ArmadaMcpConfigBuilder.BuildMuxServersJson(mcpPort, host);
+
+            // The scoped document lives in a per-launch directory deleted on exit, like the Claude Code and Codex files
+            // that carry the token as a literal header.
+            JsonObject server = new JsonObject
+            {
+                ["name"] = CaptainThreadMcpPlanner.ServerName,
+                ["transport"] = "http",
+                ["url"] = ArmadaMcpConfigBuilder.GetMcpBaseUrl(mcpPort, host),
+                ["mcpPath"] = "/mcp",
+                ["auth"] = new JsonObject
+                {
+                    ["type"] = "apikey",
+                    ["apiKeyHeader"] = "X-Token",
+                    ["apiKeyValue"] = mcpSessionToken,
+                },
+            };
+            JsonObject root = new JsonObject { ["servers"] = new JsonArray(server) };
+            return root.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
+        }
 
         private static void ApplyHomeOverride(CaptainLaunchIsolationPlan plan, string scopedConfigDirectory)
         {

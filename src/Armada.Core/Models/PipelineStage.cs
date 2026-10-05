@@ -52,7 +52,9 @@ namespace Armada.Core.Models
         }
 
         /// <summary>
-        /// Whether this stage is optional. Optional stages may be skipped by the Admiral.
+        /// Reserved. Marks a stage as optional (the original design let the Admiral skip such a stage), but no skip
+        /// policy was ever defined: the value is stored, returned, and shown in the dashboard and TUI, and dispatch
+        /// currently runs every stage regardless. Kept for API compatibility.
         /// </summary>
         public bool IsOptional { get; set; } = false;
 

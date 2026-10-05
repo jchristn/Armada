@@ -19,7 +19,9 @@ namespace Armada.Core.Enums
         Testing,
 
         /// <summary>
-        /// Tests passed, ready to land.
+        /// Reserved: tests passed, ready to land. The merge queue lands an entry as soon as its tests pass, so no entry is
+        /// currently left in this status; it is accepted as a filter value and counted as active (non-terminal). Kept for
+        /// API compatibility and a future hold-before-landing step.
         /// </summary>
         Passed,
 

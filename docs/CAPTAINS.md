@@ -95,8 +95,9 @@ mission's owner rather than as the unauthenticated loopback caller (`Mcp.AllowUn
 `true`, which only applies while the MCP listener is bound to a loopback hostname). The binding is the one in the table
 above with two differences: no client files are written into the mission's worktree, so Gemini and Cursor missions get
 the token only when `IsolateCaptainLaunch` is on, and with `IsolateCaptainLaunch` on the token rides in the isolated
-configuration described under "How Armada launches each runtime" instead (that configuration has no token for Mux,
-and OpenCode has no isolated form, so both then run without one). ApiEndpoint missions receive
+configuration described under "How Armada launches each runtime" instead (for Mux the scoped `mcp-servers.json`
+authenticates with the token as an `X-Token` API key; OpenCode has no isolated form, so it keeps the
+`OPENCODE_CONFIG_CONTENT` binding from the table above). ApiEndpoint missions receive
 `ARMADA_MCP_URL` and `ARMADA_MCP_TOKEN`, and Harbor launches bind the token on the Harbor. Because Claude Code's binding
 is `--strict-mcp-config`, a Claude Code mission sees only Armada's MCP server, not other servers in the user's Claude
 Code configuration. Set `Mcp.MissionScopedTokens` to `false` to launch missions without a token.
@@ -106,8 +107,10 @@ A `Custom` runtime is not gated, and neither is a captain on a server whose MCP 
 note under the header: "Actions from this captain run without approval cards."
 
 **Planning** runs for any CLI runtime. ApiEndpoint and Harbor-hosted (remote) runtimes report
-`SupportsPlanningSessions = false`, and the coordinator refuses them. The user-facing reason string on `Captain` still
-lists only Claude Code, Codex, Gemini, Cursor, and Mux; OpenCode works anyway because it inherits the base CLI runtime.
+`SupportsPlanningSessions = false`, and the coordinator refuses them. `Captain.SupportsPlanningSessions` and the
+`PlanningSessionSupportReason` string come from the same per-runtime capability (`AgentRuntimeCapabilities`) that the
+runtime adapters report, so an ApiEndpoint or Custom captain is shown as "planning unsupported" in the dashboard and
+TUI instead of failing when the session starts, and the reason lists every supported runtime, OpenCode included.
 
 **Streaming.** Claude Code switches to `--output-format stream-json --include-partial-messages` for Ask and interactive
 planning turns, which gives real token deltas plus a clean final message and token counts from the `result` event.
@@ -227,7 +230,8 @@ type, temperature, max tokens, system prompt path, approval policy) are stored o
 `MUX_CONFIG_DIR`, then `~/.mux`). An empty, `auto`, or `autoapprove` approval policy becomes `--yolo`; anything else is passed as
 `--approval-policy`. With no policy set and auto-approve off, the policy is `deny`. Mux is the only runtime with a
 named approval policy per captain (`muxApprovalPolicy` on the captain MCP tools); the other runtimes have only the
-on/off `autoApprove` switch. Isolated launches write `mcp-servers.json` and set `MUX_CONFIG_DIR`.
+on/off `autoApprove` switch. Isolated launches write `mcp-servers.json` and set `MUX_CONFIG_DIR`; for a mission with a
+mission-scoped token that document authenticates with the token (API-key auth in `X-Token`).
 Mux is the one CLI runtime that takes the prompt as a positional argument (the last one) rather than on stdin.
 
 Guides: [INSTRUCTIONS_FOR_MUX.md](INSTRUCTIONS_FOR_MUX.md), [MUX_AS_ORCHESTRATOR.md](MUX_AS_ORCHESTRATOR.md).
@@ -238,7 +242,8 @@ Guides: [INSTRUCTIONS_FOR_MUX.md](INSTRUCTIONS_FOR_MUX.md), [MUX_AS_ORCHESTRATOR
 opencode run --format json [--model <model>] [--variant <variant>] [--thinking] [--auto] --dir <workingDirectory>
 ```
 
-`--auto` is omitted when the captain runs without auto-approve. OpenCode has no entry in the launch isolation planner, so `IsolateCaptainLaunch` has no effect on it; it always reads
+`--auto` is omitted when the captain runs without auto-approve. OpenCode has no entry in the launch isolation planner, so `IsolateCaptainLaunch` does not isolate it (a mission with a
+mission-scoped token still gets the `OPENCODE_CONFIG_CONTENT` token binding); it always reads
 the user's `~/.config/opencode/opencode.json` (or `.jsonc`), where `armada mcp install` writes a `remote` entry under
 `mcp`. It is also missing from `armada doctor` runtime detection, as noted above.
 

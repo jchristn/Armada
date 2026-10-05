@@ -24,10 +24,11 @@ namespace Armada.Runtimes
         public abstract bool SupportsResume { get; }
 
         /// <summary>
-        /// Whether this runtime can participate in planning sessions.
-        /// The default transcript-relaunch planning flow works for all built-in runtimes.
+        /// Whether this runtime can participate in planning sessions. Defaults to
+        /// <see cref="Armada.Core.Services.AgentRuntimeCapabilities.SupportsPlanningSessions"/> for the runtime type, the
+        /// same answer the captain model reports.
         /// </summary>
-        public virtual bool SupportsPlanningSessions => true;
+        public virtual bool SupportsPlanningSessions => Armada.Core.Services.AgentRuntimeCapabilities.SupportsPlanningSessions(RuntimeType);
 
         /// <summary>
         /// Event raised when the agent writes a line to either stdout or stderr.
@@ -191,7 +192,11 @@ namespace Armada.Runtimes
                     perLaunchConfigDirectory = scopedConfigDirectory;
                 }
 
-                if (!String.IsNullOrEmpty(McpSessionToken) && !McpTokenWithFullIsolation)
+                // A full-isolation token launch falls back to the per-invocation binding for a runtime whose isolation
+                // plan cannot carry the token (OpenCode), so the captain is never launched without its token.
+                bool tokenNeedsInvocationBinding = !McpTokenWithFullIsolation
+                    || !Armada.Core.Services.CaptainLaunchIsolationPlanner.CarriesSessionToken(RuntimeType);
+                if (!String.IsNullOrEmpty(McpSessionToken) && tokenNeedsInvocationBinding)
                 {
                     // Thread-scoped (Ask) or mission-scoped launch: bind the Armada MCP connection to the session token through each CLI's
                     // per-invocation override, never by redirecting HOME / CODEX_HOME / the config directory, so the

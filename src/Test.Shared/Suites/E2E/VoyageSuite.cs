@@ -381,6 +381,25 @@ namespace Test.Shared.Suites.E2E
                 AssertTrue(voyage.LastUpdateUtc != default);
             }));
 
+            cases.Add(CaseAsync("create_voyage_unknown_pipeline_returns_404", "Create Voyage With An Unknown PipelineId Or Pipeline Name Returns 404 And Creates Nothing", TestTags.Negative, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
+                HttpClient authClient = fx.AuthClient;
+                List<string> createdFleetIds = new List<string>();
+                List<string> createdVesselIds = new List<string>();
+
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync(authClient, createdFleetIds, createdVesselIds);
+                string title = "Unknown Pipeline Voyage " + Guid.NewGuid().ToString("N");
+
+                StringContent byId = JsonHelper.ToJsonContent(new { Title = title, VesselId = prereqs.VesselId, PipelineId = "ppl_doesnotexist", Missions = new[] { new { Title = "m", Description = "d" } } });
+                HttpResponseMessage idResp = await authClient.PostAsync("/api/v1/voyages", byId);
+                await E2eApiErrorAssert.ExpectAsync(idResp, HttpStatusCode.NotFound, "an unknown PipelineId must not fall back to the default pipeline");
+
+                StringContent byName = JsonHelper.ToJsonContent(new { Title = title, VesselId = prereqs.VesselId, Pipeline = "NoSuchPipeline", Missions = new[] { new { Title = "m", Description = "d" } } });
+                HttpResponseMessage nameResp = await authClient.PostAsync("/api/v1/voyages", byName);
+                await E2eApiErrorAssert.ExpectAsync(nameResp, HttpStatusCode.NotFound, "an unknown pipeline name is not found");
+            }));
+
             cases.Add(CaseAsync("get_voyage_not_found_returns_error", "Get Voyage Not Found Returns Error", TestTags.Negative, async () =>
             {
                 E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);

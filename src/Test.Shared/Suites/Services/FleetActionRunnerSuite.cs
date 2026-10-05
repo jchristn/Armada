@@ -315,6 +315,22 @@ namespace Test.Shared.Suites.Services
                 AssertContains(FleetActionHealthSummaryBuilder.NoHealthDataText, prompt);
             }));
 
+            cases.Add(CaseAsync("mission_persona_passed_to_dispatch", "A Mission action's Persona reaches the dispatcher", TestTags.Negative, async () =>
+            {
+                using FleetActionTestHarness h = await FleetActionTestHarness.CreateAsync().ConfigureAwait(false);
+                Vessel vessel = await h.CreateVesselAsync("persona", null).ConfigureAwait(false);
+
+                await h.Service.StartRunAsync(h.Admin, null, new FleetActionRunRequest
+                {
+                    VesselIds = new List<string> { vessel.Id },
+                    Definition = new FleetActionUpsertRequest { Name = "review", Kind = FleetActionKindEnum.Mission, PromptTemplate = "review {{vessel.name}}", Persona = "Judge" }
+                }).ConfigureAwait(false);
+
+                await h.Runner.SyncMissionRunsAsync().ConfigureAwait(false);
+                AssertTrue(h.Dispatcher.PersonasByVessel.ContainsKey(vessel.Id), "expected a dispatch");
+                AssertEqual("Judge", h.Dispatcher.PersonasByVessel[vessel.Id], "the action's persona must be applied at dispatch");
+            }));
+
             cases.Add(CaseAsync("mission_dispatch_rejected_and_failed", "Rejected dispatch is Skipped/DispatchRejected; a failed voyage fails the target", TestTags.Negative, async () =>
             {
                 using FleetActionTestHarness h = await FleetActionTestHarness.CreateAsync().ConfigureAwait(false);

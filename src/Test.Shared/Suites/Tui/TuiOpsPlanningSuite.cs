@@ -35,7 +35,7 @@ namespace Test.Shared.Suites.Tui
                     string frame = host.Screen();
                     TuiCase.Contains(frame, "Plan it", "title pre-filled");
                     TuiCase.Contains(frame, "Planning sessions reserve the selected captain and dock", "reservation notice");
-                    TuiCase.Contains(frame, "Planning currently supports the built-in ClaudeCode", "runtime note");
+                    TuiCase.Contains(frame, "Planning runs this captain", "runtime note");
                     TuiCase.Contains(frame, "Vessel Readiness", "readiness panel");
                     PlanningScreen screen = (PlanningScreen)host.Tui.Shell.Screen!;
                     AssertEqual("obj_1", screen.ObjectiveId, "objective carried");

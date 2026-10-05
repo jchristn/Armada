@@ -84,6 +84,17 @@ namespace Test.Shared.Infrastructure
             }
         }
 
+        /// <summary>
+        /// Last persona dispatched per vessel ID (null when none was passed).
+        /// </summary>
+        public Dictionary<string, string?> PersonasByVessel
+        {
+            get
+            {
+                lock (_Lock) return new Dictionary<string, string?>(_Personas);
+            }
+        }
+
         #endregion
 
         #region Private-Members
@@ -91,6 +102,7 @@ namespace Test.Shared.Infrastructure
         private readonly object _Lock = new object();
         private readonly Dictionary<string, FleetActionVoyageOutcomeEnum> _Outcomes = new Dictionary<string, FleetActionVoyageOutcomeEnum>(StringComparer.Ordinal);
         private readonly Dictionary<string, string> _Prompts = new Dictionary<string, string>(StringComparer.Ordinal);
+        private readonly Dictionary<string, string?> _Personas = new Dictionary<string, string?>(StringComparer.Ordinal);
         private readonly List<string> _Order = new List<string>();
         private readonly List<string> _Cancelled = new List<string>();
         private int _MaxActive = 0;
@@ -111,8 +123,15 @@ namespace Test.Shared.Infrastructure
         /// <inheritdoc />
         public Task<string> DispatchAsync(Vessel vessel, string title, string prompt, string? pipelineId, CancellationToken token = default)
         {
+            return DispatchAsync(vessel, title, prompt, pipelineId, null, token);
+        }
+
+        /// <inheritdoc />
+        public Task<string> DispatchAsync(Vessel vessel, string title, string prompt, string? pipelineId, string? persona, CancellationToken token = default)
+        {
             lock (_Lock)
             {
+                _Personas[vessel.Id] = persona;
                 _Counter++;
                 string id = "vyg_stub" + _Counter.ToString("D4");
                 _Outcomes[id] = FleetActionVoyageOutcomeEnum.Running;

@@ -217,6 +217,9 @@ namespace Armada.Core.Services
                     mission.RequiresReview = singleStagePolicy.RequiresReview;
                     mission.ReviewDenyAction = singleStagePolicy.ReviewDenyAction;
                 }
+
+                if (!String.IsNullOrWhiteSpace(md.Persona))
+                    mission.Persona = md.Persona!.Trim();
                 mission = await _Database.Missions.CreateAsync(mission, token).ConfigureAwait(false);
                 await PersistMissionPlaybooksAsync(mission, voyage.SelectedPlaybooks, token).ConfigureAwait(false);
                 _Logging.Info(_Header + "created mission " + mission.Id + ": " + md.Title);
@@ -278,8 +281,12 @@ namespace Armada.Core.Services
                 await _Playbooks.ResolveSelectionsAsync(vessel.TenantId, selectedPlaybooks, token).ConfigureAwait(false);
             }
 
-            // Resolve pipeline: explicit > vessel default > fleet default > WorkerOnly
-            Pipeline? pipeline = await ResolvePipelineAsync(pipelineId, vessel, token).ConfigureAwait(false);
+            // Resolve pipeline: explicit > vessel default > fleet default > WorkerOnly. When no pipeline is named and
+            // every mission carries its own persona (a Mission fleet action's Persona), the missions run as single
+            // stages with those personas instead of the vessel or fleet default pipeline.
+            bool personaDispatch = String.IsNullOrWhiteSpace(pipelineId)
+                && missionDescriptions.All(md => !String.IsNullOrWhiteSpace(md.Persona));
+            Pipeline? pipeline = personaDispatch ? null : await ResolvePipelineAsync(pipelineId, vessel, token).ConfigureAwait(false);
 
             // If pipeline is single-stage Worker (or null), use the standard dispatch path
             if (pipeline == null)
@@ -723,9 +730,18 @@ namespace Armada.Core.Services
                     return DispatchValidationResult.Invalid(DispatchValidationErrorEnum.ObjectiveNotFound, "Objective not found: " + objectiveId);
             }
 
-            // Resolve a pipeline by explicit id, else by name.
-            string? resolvedPipelineId = pipelineId;
-            if (String.IsNullOrWhiteSpace(resolvedPipelineId) && !String.IsNullOrWhiteSpace(pipelineName))
+            // Resolve a pipeline by explicit id (an id that is really a name is accepted too), else by name. A named
+            // pipeline that does not exist is an error; the vessel and fleet defaults apply only when none was named.
+            string? resolvedPipelineId = String.IsNullOrWhiteSpace(pipelineId) ? null : pipelineId!.Trim();
+            if (resolvedPipelineId != null)
+            {
+                Pipeline? explicitPipeline = await _Database.Pipelines.ReadAsync(resolvedPipelineId, token).ConfigureAwait(false)
+                    ?? await _Database.Pipelines.ReadByNameAsync(resolvedPipelineId, token).ConfigureAwait(false);
+                if (explicitPipeline == null)
+                    return DispatchValidationResult.Invalid(DispatchValidationErrorEnum.PipelineNotFound, "Pipeline not found: " + resolvedPipelineId);
+                resolvedPipelineId = explicitPipeline.Id;
+            }
+            else if (!String.IsNullOrWhiteSpace(pipelineName))
             {
                 Pipeline? namedPipeline = await _Database.Pipelines.ReadByNameAsync(pipelineName!, token).ConfigureAwait(false);
                 if (namedPipeline == null)
@@ -1008,18 +1024,23 @@ namespace Armada.Core.Services
         /// <summary>
         /// Resolve which pipeline to use for a dispatch.
         /// Resolution order: explicit pipelineId > vessel default > fleet default > null (WorkerOnly).
+        /// An explicit pipeline that does not resolve throws <see cref="PipelineNotFoundException"/> instead of
+        /// silently falling back to a default.
         /// </summary>
         private async Task<Pipeline?> ResolvePipelineAsync(string? pipelineId, Vessel vessel, CancellationToken token)
         {
             // Explicit pipeline ID takes priority
-            if (!String.IsNullOrEmpty(pipelineId))
+            if (!String.IsNullOrWhiteSpace(pipelineId))
             {
-                Pipeline? explicit_ = await _Database.Pipelines.ReadAsync(pipelineId, token).ConfigureAwait(false);
+                string reference = pipelineId!.Trim();
+                Pipeline? explicit_ = await _Database.Pipelines.ReadAsync(reference, token).ConfigureAwait(false);
                 if (explicit_ != null) return explicit_;
 
                 // Try by name if not found by ID
-                explicit_ = await _Database.Pipelines.ReadByNameAsync(pipelineId, token).ConfigureAwait(false);
+                explicit_ = await _Database.Pipelines.ReadByNameAsync(reference, token).ConfigureAwait(false);
                 if (explicit_ != null) return explicit_;
+
+                throw new PipelineNotFoundException(reference);
             }
 
             // Vessel default

@@ -18,7 +18,7 @@ namespace Armada.Core.Enums
         ObjectiveNotFound,
 
         /// <summary>
-        /// A pipeline name was supplied but no pipeline with that name exists.
+        /// A pipeline id or name was supplied but no such pipeline exists (dispatch does not fall back to a default).
         /// </summary>
         PipelineNotFound,
 

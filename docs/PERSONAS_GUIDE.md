@@ -27,8 +27,9 @@ Without personas, every captain behaves the same way -- reads a description, mak
 changes, commits, and exits. Personas let you assign specialized roles so that different
 captains perform different tasks: planning, implementing, testing, or reviewing.
 
-Each persona points to a **prompt template** containing the instructions given to the
-agent. Changing the persona changes the instructions, which changes the behavior.
+Each persona points to a **prompt template** (`PromptTemplateName`) containing the instructions given to
+the agent. Changing the persona changes the instructions, which changes the behavior. When the named
+template does not exist, mission prompts fall back to `persona.<name in snake_case>` and log a warning.
 
 ### How Personas Fit into the Architecture
 
@@ -184,7 +185,9 @@ When a voyage is dispatched, the Admiral determines which pipeline to use. **Hig
 | 3 | **Fleet default** | `DefaultPipelineId` on the vessel's parent fleet (dashboard, MCP, REST) |
 | 4 (lowest) | **System fallback** | WorkerOnly (no configuration needed) |
 
-This means a fleet-level default applies to all vessels in that fleet unless overridden at the vessel level, and any explicit pipeline on a dispatch overrides both. If a referenced pipeline has been deleted, the stale reference is automatically cleared.
+This means a fleet-level default applies to all vessels in that fleet unless overridden at the vessel level, and any explicit pipeline on a dispatch overrides both. An explicit pipeline that does not exist rejects the
+dispatch (REST 404, MCP `PipelineNotFound`) instead of falling back to a default. If a vessel or fleet default
+references a pipeline that has been deleted, the stale reference is automatically cleared.
 
 ### How Missions Chain
 
@@ -434,12 +437,18 @@ and the structure wrappers):
 **Captain Context:**
 `{CaptainId}`, `{CaptainName}`, `{CaptainInstructions}`
 
+**Pipeline Context:**
+`{Diff}` (the prior stage's diff, capped at 20000 characters), `{PreviousStageOutput}` (the prior
+stage's agent output, capped at 8000 characters). The prior stage is the mission this one depends on;
+without one they hold a short "not available" note. The built-in `persona.judge`,
+`persona.test_engineer`, and `persona.linter` templates use them.
+
 **System:**
 `{Timestamp}`, `{ExistingClaudeMd}`
 
-There are no pipeline placeholders. Prior-stage context (persona, title, branch, agent output, and diff)
-reaches the next stage through its mission description, which the stage handoff rewrites,
-so `{MissionDescription}` carries it. The commit and PR message templates use a different
+Prior-stage context (persona, title, branch, agent output, and full diff) also reaches the next stage
+through its mission description, which the stage handoff rewrites, so `{MissionDescription}` carries
+it too. The dashboard and TUI placeholder panels list exactly these placeholders. The commit and PR message templates use a different
 set, including `{VoyageTitle}` and `{DockId}`; see [MESSAGE_TEMPLATES.md](MESSAGE_TEMPLATES.md).
 
 ### Editing via Dashboard

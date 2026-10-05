@@ -147,7 +147,7 @@ export default function PlanningStartCard(props: PlanningStartCardProps) {
 
           {selectedCaptain?.supportsPlanningSessions && (
             <div className="text-muted" style={{ marginTop: '-0.25rem', marginBottom: '0.25rem' }}>
-              {t('Planning currently supports the built-in ClaudeCode, Codex, Gemini, Cursor, and Mux runtimes through transcript-backed turn relaunches.')}
+              {t("Planning runs this captain's CLI through transcript-backed turn relaunches.")}
             </div>
           )}
 

@@ -34,6 +34,20 @@ namespace Armada.Core.Services.Interfaces
         Task<string> DispatchAsync(Vessel vessel, string title, string prompt, string? pipelineId, CancellationToken token = default);
 
         /// <summary>
+        /// Dispatch one voyage with a single mission to a vessel, with an optional persona (a Mission fleet action's
+        /// <c>Persona</c>). Without a pipeline, the mission runs as a single stage with that persona (vessel and fleet
+        /// default pipelines are skipped); see <see cref="MissionDescription.Persona"/> for the pipeline cases.
+        /// </summary>
+        /// <param name="vessel">Target vessel.</param>
+        /// <param name="title">Voyage and mission title.</param>
+        /// <param name="prompt">Rendered prompt, used as the mission description.</param>
+        /// <param name="pipelineId">Optional pipeline identifier.</param>
+        /// <param name="persona">Optional persona name; null or empty behaves like the overload without it.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The dispatched voyage identifier.</returns>
+        Task<string> DispatchAsync(Vessel vessel, string title, string prompt, string? pipelineId, string? persona, CancellationToken token = default);
+
+        /// <summary>
         /// Read the outcome of a dispatched voyage.
         /// </summary>
         /// <param name="voyageId">Voyage identifier.</param>

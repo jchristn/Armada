@@ -38,7 +38,7 @@ namespace Armada.Runtimes
         public bool SupportsResume => false;
 
         /// <inheritdoc />
-        public bool SupportsPlanningSessions => false;
+        public bool SupportsPlanningSessions => Armada.Core.Services.AgentRuntimeCapabilities.SupportsPlanningSessions(Armada.Core.Enums.AgentRuntimeEnum.ApiEndpoint);
 
         /// <inheritdoc />
         public event Action<int, string>? OnOutputReceived;

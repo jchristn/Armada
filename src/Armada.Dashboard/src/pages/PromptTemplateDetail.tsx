@@ -61,7 +61,9 @@ const PARAMETER_GROUPS: ParameterGroup[] = [
     label: 'Pipeline Context',
     params: [
       { name: '{PersonaPrompt}', description: 'Resolved persona prompt text' },
-      { name: '{PreviousStageDiff}', description: 'Diff from prior pipeline stage' },
+      { name: '{Diff}', description: 'Diff from the prior pipeline stage' },
+      { name: '{PreviousStageOutput}', description: 'Agent output from the prior pipeline stage' },
+      { name: '{SelectedPlaybooksMarkdown}', description: 'Rendered content of the selected playbooks' },
       { name: '{ExistingClaudeMd}', description: "Contents of repo's existing CLAUDE.md" },
     ],
   },

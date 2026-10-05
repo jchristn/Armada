@@ -85,7 +85,7 @@ namespace Armada.Tui.Screens.Operations
             if (captain != null && !captain.SupportsPlanningSessions)
                 doc.Text(String.IsNullOrEmpty(captain.PlanningSessionSupportReason) ? T("This captain runtime is not currently supported for planning sessions.") : captain.PlanningSessionSupportReason, Theme.Warning);
             if (captain != null && captain.SupportsPlanningSessions)
-                doc.Note("Planning currently supports the built-in ClaudeCode, Codex, Gemini, Cursor, and Mux runtimes through transcript-backed turn relaunches.");
+                doc.Note("Planning runs this captain's CLI through transcript-backed turn relaunches.");
             if (banner != null && _Owner.StartPrompt.Text.Trim().Length > 0)
                 doc.Note("Workspace prefilled an initial planning brief. Start the session and review the draft message in the transcript composer before sending it to the captain.", Theme.Info);
             if (_Owner.Creating)

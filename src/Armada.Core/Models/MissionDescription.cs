@@ -1,5 +1,7 @@
 namespace Armada.Core.Models
 {
+    using System.Text.Json.Serialization;
+
     /// <summary>
     /// Describes a mission's title and description for voyage dispatch.
     /// Carries a mission title and description as a dedicated model.
@@ -31,6 +33,16 @@ namespace Armada.Core.Models
         /// <see cref="Tier"/>. Null means normal persona/tier routing.
         /// </summary>
         public string? RequestedCaptainId { get; set; } = null;
+
+        /// <summary>
+        /// Optional persona for this mission, set by in-process callers (a Mission fleet action's <c>Persona</c>). When
+        /// every mission of a dispatch carries a persona and no pipeline is named, the vessel and fleet default pipelines
+        /// are skipped and each mission runs as a single stage with its persona; with a single-stage pipeline the
+        /// persona replaces the stage persona (the stage's review policy still applies); a multi-stage pipeline decides
+        /// its own personas and this is ignored. Not part of the wire format.
+        /// </summary>
+        [JsonIgnore]
+        public string? Persona { get; set; } = null;
 
         #endregion
 

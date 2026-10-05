@@ -2641,6 +2641,9 @@ Create a new voyage with optional missions. Missions are automatically dispatche
 
 **Response:** `201 Created` - [Voyage](#voyage)
 
+**Errors:** `404` when `ObjectiveId`, `PipelineId`, or `Pipeline` names something that does not exist (an unknown
+pipeline is not replaced by the vessel or fleet default); `400` for other validation failures.
+
 ```bash
 curl -X POST http://localhost:7890/api/v1/voyages \
   -H "Content-Type: application/json" \
@@ -5487,7 +5490,7 @@ Create a new pipeline with stages.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `PersonaName` | string | yes | Name of the persona for this stage |
-| `IsOptional` | bool | no | Whether this stage can be skipped (default: false) |
+| `IsOptional` | bool | no | Reserved: stored and returned, but dispatch runs every stage regardless (default: false) |
 | `Description` | string | no | Stage description |
 | `Order` | int | no | 1-based execution order (default 1). Set it on every stage of a multi-stage pipeline; the REST API does not number stages for you |
 | `RequiresReview` | bool | no | Park the stage's mission in `Review` until a reviewer approves it (default: false) |

@@ -118,9 +118,10 @@ namespace Armada.Server
                 case AgentRuntimeEnum.ApiEndpoint:
                     return new RuntimeToolCatalogSnapshot
                     {
+                        ToolsAccessible = true,
                         AvailabilityVerified = true,
                         AvailabilitySource = "api-endpoint-builtin-tools",
-                        Summary = "API-endpoint captains run Armada's built-in coding tools (read, write, edit, search, run-process) in-process against a working directory. They do not act as an MCP client, so Armada's fleet, mission, and voyage orchestration tools are not exposed to them and there is no runtime MCP config to connect."
+                        Summary = "API-endpoint captains run Armada's built-in coding tools (read, write, edit, search, run-process) in-process against a working directory. When Armada launches them for an Ask Armada turn or a mission, it also hands them its MCP endpoint and a scoped session token (ARMADA_MCP_URL and ARMADA_MCP_TOKEN), and the in-process loop connects to Armada's MCP server as an MCP client and adds Armada's tools to the built-in ones. They read no other MCP configuration, so there is no runtime MCP config file to inspect or connect."
                     };
                 case AgentRuntimeEnum.Custom:
                     return new RuntimeToolCatalogSnapshot

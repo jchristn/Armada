@@ -897,6 +897,80 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("validate_dispatch_unknown_pipeline_id_is_rejected", "ValidateDispatchAsync rejects an unknown pipeline id and resolves an id given as a name", TestTags.Negative, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    AdmiralService service = CreateAdmiralService(CreateLogging(), testDb.Driver, CreateSettings(), new StubGitService());
+                    Vessel vessel = await testDb.Driver.Vessels.CreateAsync(new Vessel("v", "https://github.com/test/repo.git"));
+
+                    DispatchValidationResult missing = await service.ValidateDispatchAsync(null, "ppl_doesnotexist", null, vessel.Id, 1, allowBareVoyage: true);
+                    AssertFalse(missing.IsValid, "an unknown pipeline id should reject");
+                    AssertEqual(DispatchValidationErrorEnum.PipelineNotFound, missing.Error);
+
+                    Pipeline pipeline = new Pipeline("NamedPipe");
+                    pipeline.Stages.Add(new PipelineStage(1, "Worker"));
+                    pipeline = await testDb.Driver.Pipelines.CreateAsync(pipeline);
+                    DispatchValidationResult byName = await service.ValidateDispatchAsync(null, "NamedPipe", null, vessel.Id, 1, allowBareVoyage: true);
+                    AssertTrue(byName.IsValid, "a pipeline name passed as the id still resolves");
+                    AssertEqual(pipeline.Id, byName.ResolvedPipelineId);
+                }
+            }));
+
+            cases.Add(CaseAsync("dispatch_unknown_pipeline_does_not_fall_back_to_default", "DispatchVoyageAsync with an unknown pipeline throws PipelineNotFoundException instead of using the vessel default", TestTags.Negative, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    AdmiralService service = CreateAdmiralService(CreateLogging(), testDb.Driver, CreateSettings(), new StubGitService());
+                    Pipeline fallback = new Pipeline("VesselDefault");
+                    fallback.Stages.Add(new PipelineStage(1, "Worker"));
+                    fallback = await testDb.Driver.Pipelines.CreateAsync(fallback);
+                    Vessel vessel = new Vessel("v", "https://github.com/test/repo.git");
+                    vessel.DefaultPipelineId = fallback.Id;
+                    vessel = await testDb.Driver.Vessels.CreateAsync(vessel);
+
+                    PipelineNotFoundException? thrown = null;
+                    try
+                    {
+                        await service.DispatchVoyageAsync("t", "d", vessel.Id, new List<MissionDescription> { new MissionDescription("m", "d") }, "ppl_doesnotexist");
+                    }
+                    catch (PipelineNotFoundException ex)
+                    {
+                        thrown = ex;
+                    }
+
+                    AssertNotNull(thrown, "expected PipelineNotFoundException");
+                    AssertEqual("ppl_doesnotexist", thrown!.PipelineReference);
+                    List<Voyage> voyages = await testDb.Driver.Voyages.EnumerateAsync();
+                    AssertEqual(0, voyages.Count, "no voyage may be created");
+                }
+            }));
+
+            cases.Add(CaseAsync("fleet_action_persona_dispatch_sets_mission_persona", "A persona dispatch runs one mission with that persona instead of the vessel default pipeline", TestTags.Negative, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    AdmiralService service = CreateAdmiralService(CreateLogging(), testDb.Driver, CreateSettings(), new StubGitService());
+                    Pipeline reviewed = new Pipeline("WorkerThenJudge");
+                    reviewed.Stages.Add(new PipelineStage(1, "Worker"));
+                    reviewed.Stages.Add(new PipelineStage(2, "Judge"));
+                    reviewed = await testDb.Driver.Pipelines.CreateAsync(reviewed);
+                    Vessel vessel = new Vessel("v", "https://github.com/test/repo.git");
+                    vessel.DefaultPipelineId = reviewed.Id;
+                    vessel = await testDb.Driver.Vessels.CreateAsync(vessel);
+
+                    AdmiralFleetActionMissionDispatcher dispatcher = new AdmiralFleetActionMissionDispatcher(testDb.Driver, service);
+                    string voyageId = await dispatcher.DispatchAsync(vessel, "Fleet action: review", "Review the repo", null, "Judge");
+                    List<Mission> missions = await testDb.Driver.Missions.EnumerateByVoyageAsync(voyageId);
+                    AssertEqual(1, missions.Count, "a persona dispatch is a single stage");
+                    AssertEqual("Judge", missions[0].Persona);
+
+                    string plainVoyageId = await dispatcher.DispatchAsync(vessel, "Fleet action: plain", "Do the work", null, null);
+                    List<Mission> plain = await testDb.Driver.Missions.EnumerateByVoyageAsync(plainVoyageId);
+                    AssertEqual(2, plain.Count, "without a persona the vessel default pipeline still applies");
+                }
+            }));
+
             cases.Add(CaseAsync("validate_dispatch_missing_vessel_bare_allowed_is_bare", "ValidateDispatchAsync treats a missing vessel as a bare voyage when allowed", TestTags.Positive, async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())

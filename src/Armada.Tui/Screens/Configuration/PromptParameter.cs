@@ -47,7 +47,9 @@ namespace Armada.Tui.Screens.Configuration
             new PromptParameter("Captain Context", "{CaptainName}", "Captain display name"),
             new PromptParameter("Captain Context", "{CaptainInstructions}", "User-supplied captain instructions"),
             new PromptParameter("Pipeline Context", "{PersonaPrompt}", "Resolved persona prompt text"),
-            new PromptParameter("Pipeline Context", "{PreviousStageDiff}", "Diff from prior pipeline stage"),
+            new PromptParameter("Pipeline Context", "{Diff}", "Diff from the prior pipeline stage"),
+            new PromptParameter("Pipeline Context", "{PreviousStageOutput}", "Agent output from the prior pipeline stage"),
+            new PromptParameter("Pipeline Context", "{SelectedPlaybooksMarkdown}", "Rendered content of the selected playbooks"),
             new PromptParameter("Pipeline Context", "{ExistingClaudeMd}", "Contents of repo's existing CLAUDE.md"),
             new PromptParameter("System", "{Timestamp}", "Current UTC timestamp")
         };

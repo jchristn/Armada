@@ -61,7 +61,7 @@ Key design decisions:
 | `PipelineId` | string | Parent pipeline ID |
 | `Order` | int | Execution order (1-based) |
 | `PersonaName` | string | Persona name for this stage (e.g. "Worker", "Judge") |
-| `IsOptional` | bool | Stored and shown in the UI; dispatch currently runs every stage regardless |
+| `IsOptional` | bool | Reserved: stored and shown in the UI; dispatch currently runs every stage regardless |
 | `Description` | string? | What this stage does |
 | `RequiresReview` | bool | When true, the stage's mission stops in `Review` and waits for an explicit approve/deny before the pipeline continues (default false) |
 | `ReviewDenyAction` | `ReviewDenyActionEnum` | What a denied review does: `RetryStage` (default; send the same stage back for rework) or `FailPipeline` (fail the stage and cancel downstream stages) |
@@ -190,6 +190,8 @@ The Admiral resolves which pipeline to use in `ResolvePipelineAsync`. Resolution
    a. Try ReadAsync(pipelineId)      -- lookup by ID
    b. Try ReadByNameAsync(pipelineId) -- lookup by name (convenience)
    c. If found, use it (highest priority)
+   d. If not found: reject the dispatch (PipelineNotFoundException; REST and MCP
+      validation report PipelineNotFound first). The defaults below are NOT used.
 
 2. If vessel.DefaultPipelineId is set:
    a. Try ReadAsync(vessel.DefaultPipelineId)
@@ -203,6 +205,8 @@ The Admiral resolves which pipeline to use in `ResolvePipelineAsync`. Resolution
 
 4. Return null (falls back to WorkerOnly behavior)
 ```
+
+**Unknown explicit pipeline:** a `pipelineId` or `pipeline` that matches no pipeline is an error, not a fallback. `POST /api/v1/voyages` returns `404 Not Found` (`Error: NotFound`), the MCP `voyage_dispatch` tool returns an `InvalidArgument` error with code `PipelineNotFound`, and a Mission fleet action skips the vessel with `DispatchRejected`. The vessel and fleet defaults apply only when no pipeline is named.
 
 **Stale reference handling:** If a vessel or fleet references a pipeline that has been deleted, the Admiral automatically clears the `DefaultPipelineId` to null, persists the update, and logs a warning. This prevents stale IDs from accumulating.
 
@@ -431,10 +435,13 @@ Each persona references a prompt template by name. When `GenerateClaudeMdAsync` 
 
 ```
 1. Build template parameter dictionary from mission/vessel/captain context
-2. Resolve persona prompt: "persona.{persona name in snake_case}"
-   (Worker -> persona.worker, Test Engineer -> persona.test_engineer,
-   SecurityAuditor -> persona.security_auditor). A project profile's
-   persona override can swap in a different template and append instructions.
+2. Resolve persona prompt: the persona's PromptTemplateName (looked up by the
+   mission's persona name, tenant first). When the persona is not found, or its
+   template does not exist (logged as a warning), use the conventional name
+   "persona.{persona name in snake_case}" (Worker -> persona.worker,
+   Test Engineer -> persona.test_engineer, SecurityAuditor -> persona.security_auditor).
+   A project profile's persona override can swap in a different template and
+   append instructions; it wins over both.
    - IPromptTemplateService.RenderAsync checks DB first, then embedded defaults
 3. Resolve each section (rules, context conservation, etc.) via ResolveSectionAsync
 4. Fallback: GetHardcodedFallback returns the original inline strings
@@ -446,7 +453,7 @@ Template resolution order:
 Database (user customization) -> Embedded Default (shipped with code) -> Hardcoded Fallback
 ```
 
-Mission prompts derive the template name from the persona name as shown above; give a custom persona's template the matching `persona.{snake_case}` name.
+Mission prompts use the template named by the persona's `PromptTemplateName`, so a custom persona can point at any template. The conventional `persona.{snake_case}` name is the fallback when that template is missing.
 
 All built-in templates (27 in 1.0.0) are seeded into the database on startup via `PromptTemplateService.SeedDefaultsAsync()`. Users can edit them via dashboard, MCP, or REST without touching code.
 
