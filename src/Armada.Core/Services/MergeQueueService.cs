@@ -669,6 +669,7 @@ namespace Armada.Core.Services
                 RedirectStandardError = true,
                 CreateNoWindow = true
             };
+            GitProcessEnvironment.Apply(startInfo);
 
             foreach (string arg in args)
             {

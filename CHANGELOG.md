@@ -6,6 +6,14 @@ All notable changes to Armada are documented in this file.
 
 ## Unreleased
 
+### Fragility remediation
+
+- Dock boundary scan and auto-land read diffs structurally: a new `UnifiedDiffParser` consumes hunks by their `@@` line ranges, so an added line whose text starts with "++ " (shown as "+++ ...") is no longer skipped by the secret scan, and content that looks like a file header no longer changes the reported file. Deleted files, both sides of a rename (including pure renames), and C-quoted (non-ASCII) paths now reach protected-path and auto-land path rules, and auto-land line counts include such lines. When the dock worktree still exists, paths and counts are also taken from `git diff --name-status -z --no-renames` and `--numstat -z` (new `IGitService.GetBranchChangesAsync`) and combined with the snapshot.
+- `GitService` no longer branches on git's wording: failures throw `GitCommandException` (exit code, stderr); unrelated histories and missing merge bases are decided by `git merge-base` exit codes, an in-progress merge by `rev-parse -q --verify MERGE_HEAD`, and a refused fetch falls back to fetching origin into remote-tracking refs. Branch existence uses `show-ref --verify` (branch names are no longer glob patterns); worktrees are read with `worktree list --porcelain -z` (newline form on git older than 2.36); changed, conflicted, tracked and untracked paths use `-z`; branch dates use `iso-strict` with invariant parsing; `gh pr create` reads the URL from `gh pr view --json url`, and merged state from `--json state`.
+- `GitInference.GetDefaultBranch` keeps slashes in the origin/HEAD target (`release/v2`, was `v2`) and its fallback checks exact refs instead of searching `branch -r` text. Workspace changes use `git status --porcelain=v2 -z --branch` (a file named `a -> b.txt` was read as a rename; "No commits yet" was read as a branch name).
+- Every git and gh launch in Core and Server (and host commands for git/gh) runs with `LC_ALL=C` / `LANG=C` and UTF-8 output decoding.
+- Check runs prefer structured result artifacts (TRX, JUnit, NUnit XML, and now Jest/Vitest JSON) over console summary text; Istanbul coverage JSON is read through typed classes and tolerates the `"Unknown"` percentage.
+
 ### Test runs no longer raise desktop notifications
 
 - `NotificationService` (used by `armada watch`) runs its platform command through `INotificationCommandRunner`; the test suite records the command instead of running it. Before, every full test run sent four real "Test Title" notifications through `osascript`, which macOS shows as coming from Script Editor. The tests now check the exact command and escaping for macOS, Linux, and Windows.

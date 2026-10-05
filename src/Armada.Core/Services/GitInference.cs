@@ -16,7 +16,7 @@ namespace Armada.Core.Services
         /// <returns>True if the directory is in a git repo.</returns>
         public static bool IsGitRepository(string directory)
         {
-            string? result = RunGit(directory, "rev-parse --is-inside-work-tree");
+            string? result = RunGit(directory, "rev-parse", "--is-inside-work-tree");
             return result != null && result.Trim().Equals("true", StringComparison.OrdinalIgnoreCase);
         }
 
@@ -27,7 +27,7 @@ namespace Armada.Core.Services
         /// <returns>Remote URL, or null if not found.</returns>
         public static string? GetRemoteUrl(string directory)
         {
-            string? result = RunGit(directory, "remote get-url origin");
+            string? result = RunGit(directory, "remote", "get-url", "origin");
             return result?.Trim();
         }
 
@@ -38,7 +38,7 @@ namespace Armada.Core.Services
         /// <returns>Root path, or null if not in a repo.</returns>
         public static string? GetRepoRoot(string directory)
         {
-            string? result = RunGit(directory, "rev-parse --show-toplevel");
+            string? result = RunGit(directory, "rev-parse", "--show-toplevel");
             return result?.Trim();
         }
 
@@ -49,24 +49,19 @@ namespace Armada.Core.Services
         /// <returns>Default branch name, or "main" as fallback.</returns>
         public static string GetDefaultBranch(string directory)
         {
-            // Try to get the remote HEAD
-            string? result = RunGit(directory, "symbolic-ref refs/remotes/origin/HEAD");
-            if (!string.IsNullOrWhiteSpace(result))
+            // origin/HEAD as a short ref ("origin/main", or "origin/release/v2" for a branch with slashes).
+            string? remoteHead = RunGit(directory, "symbolic-ref", "-q", "--short", "refs/remotes/origin/HEAD");
+            if (!String.IsNullOrWhiteSpace(remoteHead))
             {
-                string branch = result.Trim();
-                // refs/remotes/origin/main -> main
-                int lastSlash = branch.LastIndexOf('/');
-                if (lastSlash >= 0) return branch.Substring(lastSlash + 1);
-                return branch;
+                string shortRef = remoteHead.Trim();
+                const string remotePrefix = "origin/";
+                if (shortRef.StartsWith(remotePrefix, StringComparison.Ordinal) && shortRef.Length > remotePrefix.Length)
+                    return shortRef.Substring(remotePrefix.Length);
             }
 
-            // Fallback: check if main or master exists
-            string? branches = RunGit(directory, "branch -r");
-            if (branches != null)
-            {
-                if (branches.Contains("origin/main")) return "main";
-                if (branches.Contains("origin/master")) return "master";
-            }
+            // Fallback: exact ref checks (exit codes), not a substring search over branch -r output.
+            if (RunGit(directory, "show-ref", "--verify", "--quiet", "refs/remotes/origin/main") != null) return "main";
+            if (RunGit(directory, "show-ref", "--verify", "--quiet", "refs/remotes/origin/master") != null) return "master";
 
             return "main";
         }
@@ -104,26 +99,33 @@ namespace Armada.Core.Services
 
         #region Private-Methods
 
-        private static string? RunGit(string workingDirectory, string arguments)
+        private static string? RunGit(string workingDirectory, params string[] arguments)
         {
             try
             {
                 ProcessStartInfo startInfo = new ProcessStartInfo
                 {
                     FileName = "git",
-                    Arguments = arguments,
                     WorkingDirectory = workingDirectory,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     UseShellExecute = false,
                     CreateNoWindow = true
                 };
+                foreach (string argument in arguments) startInfo.ArgumentList.Add(argument);
+                GitProcessEnvironment.Apply(startInfo);
 
                 using Process? process = Process.Start(startInfo);
                 if (process == null) return null;
 
+                System.Threading.Tasks.Task<string> stderr = process.StandardError.ReadToEndAsync();
                 string output = process.StandardOutput.ReadToEnd();
-                process.WaitForExit(5000);
+                if (!process.WaitForExit(5000))
+                {
+                    try { process.Kill(entireProcessTree: true); } catch { }
+                    return null;
+                }
+                stderr.Wait(1000);
 
                 return process.ExitCode == 0 ? output : null;
             }

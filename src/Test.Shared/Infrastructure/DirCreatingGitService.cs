@@ -67,6 +67,10 @@ namespace Test.Shared.Infrastructure
         /// <summary>Return a diff (empty).</summary>
         public Task<string> DiffAsync(string worktreePath, string baseBranch = "main", CancellationToken token = default) => Task.FromResult(String.Empty);
 
+        /// <summary>Return branch changes (none).</summary>
+        public Task<IReadOnlyList<Armada.Core.Models.GitChangedFile>> GetBranchChangesAsync(string worktreePath, string baseBranch = "main", CancellationToken token = default)
+            => Task.FromResult<IReadOnlyList<Armada.Core.Models.GitChangedFile>>(Array.Empty<Armada.Core.Models.GitChangedFile>());
+
         /// <summary>Return files changed since a commit (none).</summary>
         public Task<IReadOnlyList<string>> GetChangedFilesSinceAsync(string worktreePath, string startCommit, CancellationToken token = default)
             => Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());

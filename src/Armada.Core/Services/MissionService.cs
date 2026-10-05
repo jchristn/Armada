@@ -744,8 +744,8 @@ namespace Armada.Core.Services
             };
             if (!policy.HasAnyRule()) return false;
 
-            List<string> changedPaths = ExtractChangedPathsFromDiff(mission.DiffSnapshot);
-            List<BoundaryFinding> findings = DockBoundaryScanner.Scan(mission.DiffSnapshot, changedPaths, policy);
+            DiffChangeSummary changes = await ResolveDiffChangeSummaryAsync(mission, vessel, dock, token).ConfigureAwait(false);
+            List<BoundaryFinding> findings = DockBoundaryScanner.Scan(mission.DiffSnapshot, changes.ChangedPaths, policy);
             if (findings.Count == 0) return false;
 
             if (dock != null)
@@ -768,36 +768,28 @@ namespace Armada.Core.Services
             return true;
         }
 
-        private static List<string> ExtractChangedPathsFromDiff(string? diff)
-        {
-            List<string> paths = new List<string>();
-            if (String.IsNullOrEmpty(diff)) return paths;
-            foreach (string raw in diff!.Replace("\r\n", "\n").Split('\n'))
-            {
-                if (!raw.StartsWith("+++ ", StringComparison.Ordinal)) continue;
-                string body = raw.Length > 4 ? raw.Substring(4).Trim() : String.Empty;
-                if (body == "/dev/null") continue;
-                if (body.StartsWith("b/", StringComparison.Ordinal) || body.StartsWith("a/", StringComparison.Ordinal))
-                    body = body.Substring(2);
-                body = body.Replace('\\', '/').TrimStart('/').Trim();
-                if (!String.IsNullOrEmpty(body)) paths.Add(body);
-            }
-            return paths;
-        }
-
         /// <summary>
-        /// Count changed lines (added + removed) in a unified diff, ignoring the +++/--- file headers.
+        /// Size and path facts for a mission's change. Parses the persisted diff snapshot by its hunk ranges and,
+        /// when the dock's worktree is still on disk, combines it with git's --name-status / --numstat output for
+        /// the branch (union of paths, larger counts), so a missing or partial snapshot cannot hide a change.
         /// </summary>
-        private static int CountChangedDiffLines(string? diff)
+        private async Task<DiffChangeSummary> ResolveDiffChangeSummaryAsync(Mission mission, Vessel vessel, Dock? dock, CancellationToken token)
         {
-            if (String.IsNullOrEmpty(diff)) return 0;
-            int count = 0;
-            foreach (string raw in diff!.Replace("\r\n", "\n").Split('\n'))
+            DiffChangeSummary summary = DiffChangeSummary.FromUnifiedDiff(mission.DiffSnapshot);
+            if (_Git == null || dock == null || String.IsNullOrEmpty(dock.WorktreePath) || !Directory.Exists(dock.WorktreePath))
+                return summary;
+
+            string baseBranch = String.IsNullOrEmpty(vessel.DefaultBranch) ? "main" : vessel.DefaultBranch;
+            try
             {
-                if (raw.StartsWith("+++", StringComparison.Ordinal) || raw.StartsWith("---", StringComparison.Ordinal)) continue;
-                if (raw.StartsWith("+", StringComparison.Ordinal) || raw.StartsWith("-", StringComparison.Ordinal)) count++;
+                IReadOnlyList<GitChangedFile> gitChanges = await _Git.GetBranchChangesAsync(dock.WorktreePath!, baseBranch, token).ConfigureAwait(false);
+                return DiffChangeSummary.Combine(summary, DiffChangeSummary.FromGitChanges(gitChanges));
             }
-            return count;
+            catch (Exception ex) when (ex is InvalidOperationException || ex is TimeoutException)
+            {
+                _Logging.Warn(_Header + "could not list branch changes for mission " + mission.Id + " in " + dock.WorktreePath + ": " + ex.Message);
+                return summary;
+            }
         }
 
         /// <summary>
@@ -847,7 +839,13 @@ namespace Armada.Core.Services
             Vessel? vessel = await _Database.Vessels.ReadAsync(mission.VesselId!, token).ConfigureAwait(false);
             if (vessel == null) return null;
 
-            List<string> changedPaths = ExtractChangedPathsFromDiff(mission.DiffSnapshot);
+            Dock? dock = null;
+            if (!String.IsNullOrEmpty(mission.DockId))
+                dock = !String.IsNullOrEmpty(mission.TenantId)
+                    ? await _Database.Docks.ReadAsync(mission.TenantId, mission.DockId!, token).ConfigureAwait(false)
+                    : await _Database.Docks.ReadAsync(mission.DockId!, token).ConfigureAwait(false);
+
+            DiffChangeSummary changes = await ResolveDiffChangeSummaryAsync(mission, vessel, dock, token).ConfigureAwait(false);
             AutoLandPolicy policy = new AutoLandPolicy
             {
                 Enabled = vessel.AutoLandEnabled,
@@ -857,18 +855,19 @@ namespace Armada.Core.Services
                 PathDenyGlobs = vessel.AutoLandPathDenyGlobs ?? new List<string>(),
             };
 
-            return AutoLandPredicate.Evaluate(changedPaths.Count, CountChangedDiffLines(mission.DiffSnapshot), changedPaths, policy);
+            return AutoLandPredicate.Evaluate(changes.FileCount, changes.ChangedLineCount, changes.ChangedPaths, policy);
         }
 
-        private async Task<bool> TryHoldForAutoLandAsync(Mission mission, CancellationToken token)
+        private async Task<bool> TryHoldForAutoLandAsync(Mission mission, Dock? dock, CancellationToken token)
         {
             if (String.IsNullOrEmpty(mission.VesselId)) return false;
             Vessel? vessel = await _Database.Vessels.ReadAsync(mission.VesselId, token).ConfigureAwait(false);
             if (vessel == null || !vessel.AutoLandEnabled) return false;
 
-            List<string> changedPaths = ExtractChangedPathsFromDiff(mission.DiffSnapshot);
-            int filesChanged = changedPaths.Count;
-            int linesChanged = CountChangedDiffLines(mission.DiffSnapshot);
+            DiffChangeSummary changes = await ResolveDiffChangeSummaryAsync(mission, vessel, dock, token).ConfigureAwait(false);
+            List<string> changedPaths = changes.ChangedPaths;
+            int filesChanged = changes.FileCount;
+            int linesChanged = changes.ChangedLineCount;
 
             AutoLandPolicy policy = new AutoLandPolicy
             {
@@ -1214,7 +1213,7 @@ namespace Armada.Core.Services
 
             // Per-vessel auto-land predicate: a change that is too large or touches denied/out-of-scope
             // paths holds for review instead of landing unattended.
-            if (shouldAttemptLanding && await TryHoldForAutoLandAsync(mission, token).ConfigureAwait(false))
+            if (shouldAttemptLanding && await TryHoldForAutoLandAsync(mission, dock, token).ConfigureAwait(false))
             {
                 shouldAttemptLanding = false;
                 awaitingManualReview = true;
@@ -4097,6 +4096,7 @@ namespace Armada.Core.Services
             startInfo.RedirectStandardError = true;
             startInfo.UseShellExecute = false;
             startInfo.CreateNoWindow = true;
+            GitProcessEnvironment.Apply(startInfo);
             foreach (string arg in args) startInfo.ArgumentList.Add(arg);
 
             using (System.Diagnostics.Process process = new System.Diagnostics.Process())

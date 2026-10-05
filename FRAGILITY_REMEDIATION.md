@@ -38,7 +38,7 @@ always pass because `DescriptionLength` contains "Description".
 - [x] **R0 MCP tool errors.** `McpToolErrorCodeEnum` + `McpToolError` on all 210 MCP error returns;
   `McpToolClient.CallToolResultAsync` with `isError`; `Mcp.ToolCallsPerSecond`; McpTenantIsolation suite rewritten
   on typed results (commit 73541c11). Follow-up in R2: remove `_UntypedNotFoundTools`.
-- [ ] **R1a Git, diffs, boundary, auto-land.** DockBoundaryScanner and MissionService diff counting from
+- [x] **R1a Git, diffs, boundary, auto-land.** DockBoundaryScanner and MissionService diff counting from
   `--name-status -z` / `--numstat -z` (High: secret scan bypass, protected-path bypass, auto-land limits);
   GitService exception-message filters replaced by exit codes and pre-checks; branch existence via `show-ref
   --verify`; default branch via `symbolic-ref`; WorkspaceService `status --porcelain=v2 -z --branch`; `gh pr create`
@@ -78,3 +78,4 @@ always pass because `DescriptionLength` contains "Description".
 | Date | Who | Items | Notes |
 |---|---|---|---|
 | 2026-10-04 | Claude | Scan, R0 | Scan reports from three read-only passes; R0 merged to main. |
+| 2026-10-04 | Claude | R1a | `UnifiedDiffParser` (hunk ranges, C-quoted paths, deletes/renames) drives the boundary scan and auto-land; dock branch facts from `--name-status -z` / `--numstat -z`; `GitCommandException` + exit-code pre-checks; `show-ref --verify`; `symbolic-ref`; porcelain v2 -z; `gh pr view --json`; worktree list -z; iso-strict dates; `LC_ALL=C` on git/gh launches; check-run artifacts preferred and typed JSON. Branch work/fx-git. |

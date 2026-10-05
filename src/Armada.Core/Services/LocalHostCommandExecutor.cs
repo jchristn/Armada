@@ -32,6 +32,10 @@ namespace Armada.Core.Services
             foreach (string argument in request.Arguments)
                 startInfo.ArgumentList.Add(argument);
 
+            // git and gh run under the C locale so callers that read their text output see stable wording.
+            if (GitProcessEnvironment.IsGitTool(request.Executable))
+                GitProcessEnvironment.Apply(startInfo);
+
             StringBuilder standardOutput = new StringBuilder();
             StringBuilder standardError = new StringBuilder();
 

@@ -278,6 +278,7 @@ namespace Test.Shared.Suites.Services
             public Task MergeBranchLocalAsync(string targetWorkDir, string sourceRepoPath, string branchName, string? targetBranch = null, string? commitMessage = null, CancellationToken token = default) => Task.CompletedTask;
             public Task PullAsync(string workingDirectory, CancellationToken token = default) => Task.CompletedTask;
             public Task<string> DiffAsync(string worktreePath, string baseBranch = "main", CancellationToken token = default) => Task.FromResult(String.Empty);
+            public Task<IReadOnlyList<Armada.Core.Models.GitChangedFile>> GetBranchChangesAsync(string worktreePath, string baseBranch = "main", CancellationToken token = default) => Task.FromResult<IReadOnlyList<Armada.Core.Models.GitChangedFile>>(Array.Empty<Armada.Core.Models.GitChangedFile>());
             public Task<string?> GetHeadCommitHashAsync(string worktreePath, CancellationToken token = default) => Task.FromResult<string?>("abc123");
             public Task<IReadOnlyList<string>> GetChangedFilesSinceAsync(string worktreePath, string startCommit, CancellationToken token = default) => Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
             public Task<IReadOnlyList<string>> GetConflictedFilesAsync(string worktreePath, CancellationToken token = default) => Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());

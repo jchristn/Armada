@@ -152,6 +152,39 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+
+            cases.Add(Case("get_default_branch_keeps_slashes_in_origin_head", "GetDefaultBranch keeps a slash in the origin/HEAD target", TestTags.Positive, () =>
+            {
+                string repoDir = TestGitRepoHelper.CreateWorkingRepoCopy();
+                try
+                {
+                    // origin/HEAD -> origin/release/v2. Taking the text after the last '/' returned "v2".
+                    RunGit(repoDir, "update-ref", "refs/remotes/origin/release/v2", "HEAD");
+                    RunGit(repoDir, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/release/v2");
+                    AssertEqual("release/v2", GitInference.GetDefaultBranch(repoDir));
+                }
+                finally
+                {
+                    TestTemp.TryDelete(repoDir);
+                }
+            }));
+
+            cases.Add(Case("get_default_branch_fallback_uses_exact_refs", "GetDefaultBranch fallback checks exact refs, not substrings", TestTags.Negative, () =>
+            {
+                string repoDir = TestGitRepoHelper.CreateWorkingRepoCopy();
+                try
+                {
+                    // No origin/HEAD. "origin/main-legacy" contains the text "origin/main" but is not origin/main.
+                    RunGit(repoDir, "update-ref", "refs/remotes/origin/main-legacy", "HEAD");
+                    RunGit(repoDir, "update-ref", "refs/remotes/origin/master", "HEAD");
+                    AssertEqual("master", GitInference.GetDefaultBranch(repoDir));
+                }
+                finally
+                {
+                    TestTemp.TryDelete(repoDir);
+                }
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: "Services.GitInference",
                 displayName: "Git Inference",
@@ -161,6 +194,24 @@ namespace Test.Shared.Suites.Services
         #endregion
 
         #region Private-Methods
+
+        private static void RunGit(string workingDirectory, params string[] args)
+        {
+            System.Diagnostics.ProcessStartInfo startInfo = new System.Diagnostics.ProcessStartInfo("git")
+            {
+                WorkingDirectory = workingDirectory,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true
+            };
+            foreach (string arg in args) startInfo.ArgumentList.Add(arg);
+            using System.Diagnostics.Process process = System.Diagnostics.Process.Start(startInfo)!;
+            string stderr = process.StandardError.ReadToEnd();
+            process.StandardOutput.ReadToEnd();
+            process.WaitForExit();
+            if (process.ExitCode != 0) throw new InvalidOperationException("git failed (exit " + process.ExitCode + "): " + stderr);
+        }
 
         private static TestCaseDescriptor Case(string caseId, string displayName, string tag, Action body)
         {

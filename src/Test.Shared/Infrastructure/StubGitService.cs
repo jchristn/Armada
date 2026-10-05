@@ -31,6 +31,16 @@ namespace Test.Shared.Infrastructure
         public bool IsPrMergedResult { get; set; } = true;
         public string CreatePrResult { get; set; } = "https://github.com/test/repo/pull/1";
         public string DiffResult { get; set; } = "";
+
+        /// <summary>
+        /// Worktree paths passed to GetBranchChangesAsync.
+        /// </summary>
+        public List<string> BranchChangesCalls { get; } = new List<string>();
+
+        /// <summary>
+        /// Changed files returned by GetBranchChangesAsync.
+        /// </summary>
+        public List<GitChangedFile> BranchChangesResult { get; set; } = new List<GitChangedFile>();
         public IReadOnlyList<string> ChangedFilesSinceResult { get; set; } = Array.Empty<string>();
         public bool DefaultBranchExistsResult { get; set; } = true;
         public HashSet<string> ExistingBranches { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "main" };
@@ -121,6 +131,15 @@ namespace Test.Shared.Infrastructure
         {
             DiffCalls.Add(worktreePath);
             return Task.FromResult(DiffResult);
+        }
+
+        /// <summary>
+        /// Return <see cref="BranchChangesResult"/> and record the call.
+        /// </summary>
+        public Task<IReadOnlyList<GitChangedFile>> GetBranchChangesAsync(string worktreePath, string baseBranch = "main", CancellationToken token = default)
+        {
+            BranchChangesCalls.Add(worktreePath);
+            return Task.FromResult<IReadOnlyList<GitChangedFile>>(BranchChangesResult);
         }
 
         public Task<IReadOnlyList<string>> GetChangedFilesSinceAsync(string worktreePath, string startCommit, CancellationToken token = default)

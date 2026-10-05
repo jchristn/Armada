@@ -170,6 +170,52 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+
+            cases.Add(CaseAsync("get_changes_async_reads_porcelain_v2", "GetChangesAsync reports renames, arrow-named files, branch, and ahead count from porcelain v2", TestTags.Positive, async () =>
+            {
+                string bareDir = TestGitRepoHelper.CreateBareRepoCopy();
+                string root = TestTemp.NewDirectory("workspace-changes");
+                string cloneDir = Path.Combine(root, "clone");
+                try
+                {
+                    RunGit(root, "clone", "-q", bareDir, cloneDir);
+                    RunGit(cloneDir, "config", "user.name", "Armada Tests");
+                    RunGit(cloneDir, "config", "user.email", "armada-tests@example.com");
+                    await File.WriteAllTextAsync(Path.Combine(cloneDir, "local.txt"), "local\n").ConfigureAwait(false);
+                    RunGit(cloneDir, "add", "local.txt");
+                    RunGit(cloneDir, "commit", "-q", "-m", "local commit");
+
+                    RunGit(cloneDir, "mv", "README.md", "READ ME.md");
+                    // Porcelain v1 prints this untracked name unquoted, and its " -> " was read as a rename.
+                    await File.WriteAllTextAsync(Path.Combine(cloneDir, "a -> b.txt"), "x\n").ConfigureAwait(false);
+
+                    WorkspaceService service = new WorkspaceService();
+                    WorkspaceChangesResult result = await service.GetChangesAsync(CreateVessel(cloneDir)).ConfigureAwait(false);
+
+                    AssertNull(result.Error, "status should succeed");
+                    AssertEqual("main", result.BranchName);
+                    AssertEqual(1, result.CommitsAhead);
+                    AssertEqual(0, result.CommitsBehind);
+                    AssertTrue(result.IsDirty, "working tree is dirty");
+                    AssertEqual(2, result.Changes.Count);
+
+                    WorkspaceChangeEntry? rename = result.Changes.Find(c => c.Path == "READ ME.md");
+                    AssertNotNull(rename, "rename target reported");
+                    AssertEqual("R", rename!.Status);
+                    AssertEqual("README.md", rename.OriginalPath);
+
+                    WorkspaceChangeEntry? arrow = result.Changes.Find(c => c.Path == "a -> b.txt");
+                    AssertNotNull(arrow, "arrow-named untracked file reported under its full name");
+                    AssertEqual("??", arrow!.Status);
+                    AssertNull(arrow.OriginalPath);
+                }
+                finally
+                {
+                    TestTemp.TryDelete(root);
+                    TestTemp.TryDelete(bareDir);
+                }
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: "Services.WorkspaceService",
                 displayName: "Workspace Service",
@@ -179,6 +225,24 @@ namespace Test.Shared.Suites.Services
         #endregion
 
         #region Private-Methods
+
+        private static void RunGit(string workingDirectory, params string[] args)
+        {
+            System.Diagnostics.ProcessStartInfo startInfo = new System.Diagnostics.ProcessStartInfo("git")
+            {
+                WorkingDirectory = workingDirectory,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true
+            };
+            foreach (string arg in args) startInfo.ArgumentList.Add(arg);
+            using System.Diagnostics.Process process = System.Diagnostics.Process.Start(startInfo)!;
+            string stderr = process.StandardError.ReadToEnd();
+            process.StandardOutput.ReadToEnd();
+            process.WaitForExit();
+            if (process.ExitCode != 0) throw new InvalidOperationException("git failed (exit " + process.ExitCode + "): " + stderr);
+        }
 
         private static Vessel CreateVessel(string workingDirectory)
         {

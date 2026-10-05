@@ -801,6 +801,7 @@ namespace Armada.Server.Routes
                 CreateNoWindow = true
             };
             foreach (string arg in args) psi.ArgumentList.Add(arg);
+            Armada.Core.Services.GitProcessEnvironment.Apply(psi);
 
             using (Process process = Process.Start(psi)!)
             {

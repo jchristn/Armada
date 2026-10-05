@@ -1085,6 +1085,7 @@ namespace Armada.Core.Services
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
+            GitProcessEnvironment.Apply(startInfo);
 
             foreach (string arg in args)
             {

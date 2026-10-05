@@ -4,6 +4,7 @@ namespace Armada.Core.Services
     using System.Diagnostics;
     using System.IO;
     using System.Linq;
+    using System.Text.Json;
     using SyslogLogging;
     using Armada.Core.Models;
     using Armada.Core.Services.Interfaces;
@@ -213,21 +214,13 @@ namespace Armada.Core.Services
             {
                 await RunGitAsync(repoPath, "fetch", "--all", "--prune").ConfigureAwait(false);
             }
-            catch (InvalidOperationException ex) when (ex.Message.Contains("refusing to fetch"))
+            catch (GitCommandException ex)
             {
-                // A checked-out worktree is blocking the full fetch.
-                // Fall back to fetching just the remote refs without updating local branches.
-                _Logging.Warn(_Header + "full fetch blocked by checked-out worktree, trying fetch origin: " + ex.ToString());
-                try
-                {
-                    await RunGitAsync(repoPath, "fetch", "origin").ConfigureAwait(false);
-                }
-                catch (Exception fallbackEx)
-                {
-                    _Logging.Warn(_Header + "fallback fetch also failed: " + fallbackEx.Message);
-                    // Continue without fetch — worktree creation may still succeed
-                    // if the base branch is already available locally.
-                }
+                // Some remote's configured refspec could not be applied (for example a refspec that targets a
+                // branch checked out in a worktree). Fetch origin with an explicit remote-tracking refspec,
+                // which never writes to refs/heads and so cannot be refused for a checked-out branch.
+                _Logging.Warn(_Header + "full fetch failed (exit " + ex.ExitCode + "), fetching origin into remote-tracking refs: " + ex.StandardError.Trim());
+                await RunGitAsync(repoPath, "fetch", "--prune", "origin", _SafeFetchRefspec).ConfigureAwait(false);
             }
         }
 
@@ -252,8 +245,31 @@ namespace Armada.Core.Services
 
             _Logging.Debug(_Header + "creating PR: " + title);
 
-            string result = await RunProcessAsync(worktreePath, "gh", "pr", "create", "--title", title, "--body", body ?? "").ConfigureAwait(false);
-            string prUrl = result.Trim();
+            string createOutput = await RunProcessAsync(worktreePath, "gh", "pr", "create", "--title", title, "--body", body ?? "").ConfigureAwait(false);
+
+            // Read the URL back as structured data rather than from the create command's console text.
+            string? prUrl = null;
+            GitProcessResult view = await ExecuteProcessAsync(worktreePath, "gh", token, "pr", "view", "--json", "url").ConfigureAwait(false);
+            if (view.Succeeded)
+            {
+                GhPullRequestView? parsed = DeserializeGh(view.StandardOutput);
+                if (parsed != null && IsAbsoluteHttpUrl(parsed.Url)) prUrl = parsed.Url!.Trim();
+            }
+
+            if (prUrl == null)
+            {
+                // gh documents that pr create prints the new pull request URL; accept it only as a valid URL.
+                string[] createLines = createOutput.Replace("\r\n", "\n").Split('\n', StringSplitOptions.RemoveEmptyEntries);
+                for (int i = createLines.Length - 1; i >= 0 && prUrl == null; i--)
+                {
+                    if (IsAbsoluteHttpUrl(createLines[i])) prUrl = createLines[i].Trim();
+                }
+            }
+
+            if (prUrl == null)
+            {
+                throw new GitCommandException("gh", new List<string> { "pr", "view", "--json", "url" }, view.Succeeded ? 1 : view.ExitCode, view.StandardOutput, view.StandardError);
+            }
 
             _Logging.Debug(_Header + "PR created: " + prUrl);
             return prUrl;
@@ -331,14 +347,17 @@ namespace Armada.Core.Services
             string message = commitMessage ?? ("Merge armada mission: " + branchName);
             try
             {
-                try
+                // Decide up front from git merge-base's exit code (1 = no common ancestor) instead of
+                // retrying after matching git's error wording.
+                GitProcessResult mergeBase = await ExecuteProcessAsync(targetWorkDir, "git", token, "merge-base", "HEAD", fetchedBranchRef).ConfigureAwait(false);
+                if (mergeBase.ExitCode == 1)
+                {
+                    _Logging.Warn(_Header + "no merge base between target and " + branchName + ", merging with --allow-unrelated-histories");
+                    await RunGitAsync(targetWorkDir, token, "merge", fetchedBranchRef, "--no-edit", "--allow-unrelated-histories", "-m", message).ConfigureAwait(false);
+                }
+                else
                 {
                     await RunGitAsync(targetWorkDir, token, "merge", fetchedBranchRef, "--no-edit", "-m", message).ConfigureAwait(false);
-                }
-                catch (InvalidOperationException ex) when (ex.Message.Contains("refusing to merge unrelated histories", StringComparison.OrdinalIgnoreCase))
-                {
-                    _Logging.Warn(_Header + "merge reported unrelated histories for " + branchName + ", retrying with --allow-unrelated-histories");
-                    await RunGitAsync(targetWorkDir, token, "merge", fetchedBranchRef, "--no-edit", "--allow-unrelated-histories", "-m", message).ConfigureAwait(false);
                 }
             }
             catch
@@ -371,8 +390,9 @@ namespace Armada.Core.Services
 
             try
             {
-                string result = await RunProcessAsync(workingDirectory, "gh", "pr", "view", prUrl, "--json", "state", "--jq", ".state").ConfigureAwait(false);
-                return result.Trim().Equals("MERGED", StringComparison.OrdinalIgnoreCase);
+                string result = await RunProcessAsync(workingDirectory, "gh", "pr", "view", prUrl, "--json", "state").ConfigureAwait(false);
+                GhPullRequestView? view = DeserializeGh(result);
+                return view != null && String.Equals(view.State, "MERGED", StringComparison.OrdinalIgnoreCase);
             }
             catch
             {
@@ -390,14 +410,8 @@ namespace Armada.Core.Services
 
             try
             {
-                string output = await RunGitAsync(worktreePath, token, "diff", "--name-only", "--diff-filter=U").ConfigureAwait(false);
-                List<string> files = new List<string>();
-                foreach (string line in output.Replace("\r\n", "\n").Split('\n', StringSplitOptions.RemoveEmptyEntries))
-                {
-                    string trimmed = line.Trim();
-                    if (trimmed.Length > 0) files.Add(trimmed);
-                }
-                return files;
+                string output = await RunGitAsync(worktreePath, token, "diff", "--name-only", "-z", "--diff-filter=U").ConfigureAwait(false);
+                return GitMachineOutputParser.ParsePathListZ(output);
             }
             catch (Exception ex)
             {
@@ -413,26 +427,43 @@ namespace Armada.Core.Services
 
             _Logging.Debug(_Header + "diffing worktree " + worktreePath + " against " + baseBranch);
 
-            // Diff committed changes on the current branch vs the base branch
-            try
+            // Diff committed changes on the current branch vs the base branch. Branches with unrelated
+            // history (merge-base exit code 1) use a direct tree-to-tree comparison against the base tip.
+            string? range = await ResolveDiffRangeAsync(worktreePath, baseBranch, token).ConfigureAwait(false);
+            if (range != null)
             {
-                return await RunGitAsync(worktreePath, token, "diff", baseBranch + "...HEAD").ConfigureAwait(false);
+                try
+                {
+                    return await RunGitAsync(worktreePath, token, BuildDiffArgs(range)).ConfigureAwait(false);
+                }
+                catch (GitCommandException ex)
+                {
+                    _Logging.Debug(_Header + "diff " + range + " failed (exit " + ex.ExitCode + "), diffing working tree instead");
+                }
             }
-            catch (TimeoutException)
-            {
-                throw;
-            }
-            catch (InvalidOperationException ex) when (ex.Message.Contains("no merge base", StringComparison.OrdinalIgnoreCase))
-            {
-                // Branches with unrelated history still need a stable diff snapshot for landing.
-                // Fall back to a direct tree-to-tree comparison against the base tip.
-                return await RunGitAsync(worktreePath, token, "diff", baseBranch + "..HEAD").ConfigureAwait(false);
-            }
-            catch
-            {
-                // Fallback: diff against working tree (uncommitted changes)
-                return await RunGitAsync(worktreePath, token, "diff", "HEAD").ConfigureAwait(false);
-            }
+
+            // Fallback: diff against working tree (uncommitted changes)
+            return await RunGitAsync(worktreePath, token, BuildDiffArgs("HEAD")).ConfigureAwait(false);
+        }
+
+        /// <inheritdoc />
+        public async Task<IReadOnlyList<GitChangedFile>> GetBranchChangesAsync(string worktreePath, string baseBranch = "main", CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(worktreePath)) throw new ArgumentNullException(nameof(worktreePath));
+            if (String.IsNullOrEmpty(baseBranch)) throw new ArgumentNullException(nameof(baseBranch));
+
+            string? range = await ResolveDiffRangeAsync(worktreePath, baseBranch, token).ConfigureAwait(false);
+            if (range == null)
+                throw new InvalidOperationException("Base branch " + baseBranch + " or HEAD does not resolve in " + worktreePath);
+
+            string nameStatus = await RunGitAsync(worktreePath, token,
+                "diff", "--no-color", "--no-ext-diff", "--no-renames", "--name-status", "-z", range).ConfigureAwait(false);
+            string numstat = await RunGitAsync(worktreePath, token,
+                "diff", "--no-color", "--no-ext-diff", "--no-renames", "--numstat", "-z", range).ConfigureAwait(false);
+
+            return GitMachineOutputParser.MergeNameStatusAndNumstat(
+                GitMachineOutputParser.ParseNameStatusZ(nameStatus),
+                GitMachineOutputParser.ParseNumstatZ(numstat));
         }
 
         /// <summary>
@@ -544,13 +575,14 @@ namespace Armada.Core.Services
 
             HashSet<string> changedFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            string committedOutput = await RunGitAsync(worktreePath, token, "diff", "--name-only", startCommit + "..HEAD").ConfigureAwait(false);
+            // --no-renames reports both sides of a rename; -z keeps unusual path names verbatim (no C-quoting).
+            string committedOutput = await RunGitAsync(worktreePath, token, "diff", "--no-renames", "--name-only", "-z", startCommit + "..HEAD").ConfigureAwait(false);
             AddChangedPaths(committedOutput, changedFiles);
 
-            string workingTreeOutput = await RunGitAsync(worktreePath, token, "diff", "--name-only", "HEAD").ConfigureAwait(false);
+            string workingTreeOutput = await RunGitAsync(worktreePath, token, "diff", "--no-renames", "--name-only", "-z", "HEAD").ConfigureAwait(false);
             AddChangedPaths(workingTreeOutput, changedFiles);
 
-            string untrackedOutput = await RunGitAsync(worktreePath, token, "ls-files", "--others", "--exclude-standard").ConfigureAwait(false);
+            string untrackedOutput = await RunGitAsync(worktreePath, token, "ls-files", "-z", "--others", "--exclude-standard").ConfigureAwait(false);
             AddChangedPaths(untrackedOutput, changedFiles);
 
             return changedFiles
@@ -587,12 +619,13 @@ namespace Armada.Core.Services
         {
             if (String.IsNullOrEmpty(path)) return false;
 
+            if (!Directory.Exists(path)) return false;
             try
             {
-                await RunGitAsync(path, "rev-parse", "--git-dir").ConfigureAwait(false);
-                return true;
+                GitProcessResult result = await ExecuteProcessAsync(path, "git", token, "rev-parse", "--git-dir").ConfigureAwait(false);
+                return result.Succeeded;
             }
-            catch
+            catch (TimeoutException)
             {
                 return false;
             }
@@ -606,15 +639,8 @@ namespace Armada.Core.Services
             if (String.IsNullOrEmpty(repoPath)) throw new ArgumentNullException(nameof(repoPath));
             if (String.IsNullOrEmpty(branchName)) throw new ArgumentNullException(nameof(branchName));
 
-            try
-            {
-                string result = await RunGitAsync(repoPath, "branch", "--list", branchName).ConfigureAwait(false);
-                return !String.IsNullOrWhiteSpace(result);
-            }
-            catch
-            {
-                return false;
-            }
+            // show-ref --verify matches the exact ref; branch --list treats the name as a glob pattern.
+            return await ShowRefExistsAsync(repoPath, "refs/heads/" + branchName, token).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -630,7 +656,7 @@ namespace Armada.Core.Services
             if (String.IsNullOrEmpty(repoPath)) throw new ArgumentNullException(nameof(repoPath));
 
             // Field-separated, one line per branch. Unit separator (\x1f) avoids collisions with commit text.
-            string format = "%(refname:short)\x1f%(HEAD)\x1f%(objectname:short)\x1f%(committerdate:iso8601)\x1f%(contents:subject)";
+            string format = "%(refname:short)\x1f%(HEAD)\x1f%(objectname:short)\x1f%(committerdate:iso-strict)\x1f%(contents:subject)";
             string raw = await RunGitAsync(repoPath, "for-each-ref", "--format=" + format, "refs/heads/").ConfigureAwait(false);
 
             List<BranchInfo> branches = new List<BranchInfo>();
@@ -644,8 +670,8 @@ namespace Armada.Core.Services
                 info.Name = parts[0].Trim();
                 info.IsCurrent = parts.Length > 1 && parts[1].Trim() == "*";
                 info.CommitHash = parts.Length > 2 ? parts[2].Trim() : null;
-                if (parts.Length > 3 && DateTime.TryParse(parts[3].Trim(), out DateTime parsedDate))
-                    info.CommitDate = parsedDate.ToUniversalTime();
+                if (parts.Length > 3 && DateTimeOffset.TryParse(parts[3].Trim(), System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out DateTimeOffset parsedDate))
+                    info.CommitDate = parsedDate.UtcDateTime;
                 info.CommitSubject = parts.Length > 4 ? parts[4].Trim() : null;
                 info.IsDefault = String.Equals(info.Name, defaultBranch, StringComparison.Ordinal);
 
@@ -787,24 +813,20 @@ namespace Armada.Core.Services
 
             try
             {
-                string result = await RunGitAsync(repoPath, "worktree", "list", "--porcelain").ConfigureAwait(false);
+                List<GitWorktreeEntry> worktrees = await ListWorktreesAsync(repoPath, token).ConfigureAwait(false);
                 // git reports symlink-resolved paths (e.g. /private/var on macOS), so compare canonical forms.
                 string normalizedTarget = PathCanonicalizer.Canonicalize(worktreePath);
 
-                foreach (string line in result.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+                foreach (GitWorktreeEntry entry in worktrees)
                 {
-                    if (line.StartsWith("worktree "))
-                    {
-                        string registeredPath = line.Substring("worktree ".Length).Trim();
-                        string normalizedRegistered = PathCanonicalizer.Canonicalize(registeredPath);
-                        if (String.Equals(normalizedRegistered, normalizedTarget, StringComparison.OrdinalIgnoreCase))
-                            return true;
-                    }
+                    string normalizedRegistered = PathCanonicalizer.Canonicalize(entry.Path);
+                    if (String.Equals(normalizedRegistered, normalizedTarget, StringComparison.OrdinalIgnoreCase))
+                        return true;
                 }
 
                 return false;
             }
-            catch
+            catch (Exception ex) when (ex is InvalidOperationException || ex is TimeoutException)
             {
                 return false;
             }
@@ -871,16 +893,30 @@ namespace Armada.Core.Services
         {
             if (String.IsNullOrEmpty(repoPath)) throw new ArgumentNullException(nameof(repoPath));
 
-            string output = await RunGitAsync(repoPath, token, "status", "--porcelain=v1", "--untracked-files=all").ConfigureAwait(false);
+            string output = await RunGitAsync(repoPath, token, "status", "--porcelain=v2", "-z", "--untracked-files=all").ConfigureAwait(false);
             GitWorkingTreeStatus status = new GitWorkingTreeStatus();
             int modified = 0;
             int untracked = 0;
-            foreach (string line in output.Replace("\r\n", "\n").Split('\n', StringSplitOptions.RemoveEmptyEntries))
+            List<string> fields = GitMachineOutputParser.SplitNul(output);
+            for (int i = 0; i < fields.Count; i++)
             {
-                if (line.Length < 2) continue;
-                if (line.StartsWith("??", StringComparison.Ordinal)) untracked++;
-                else if (line.StartsWith("!!", StringComparison.Ordinal)) continue;
-                else modified++;
+                string field = fields[i];
+                if (field.Length < 2 || field[1] != ' ') continue;
+                switch (field[0])
+                {
+                    case '1':
+                    case 'u':
+                        modified++;
+                        break;
+                    case '2':
+                        // A rename or copy record is followed by its original path as a separate field.
+                        modified++;
+                        i++;
+                        break;
+                    case '?':
+                        untracked++;
+                        break;
+                }
             }
 
             status.ModifiedCount = modified;
@@ -897,16 +933,10 @@ namespace Armada.Core.Services
         public async Task<string?> GetCurrentBranchAsync(string repoPath, CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(repoPath)) throw new ArgumentNullException(nameof(repoPath));
-            try
-            {
-                string output = await RunGitAsync(repoPath, token, "symbolic-ref", "--short", "-q", "HEAD").ConfigureAwait(false);
-                string trimmed = output.Trim();
-                return String.IsNullOrEmpty(trimmed) ? null : trimmed;
-            }
-            catch (InvalidOperationException)
-            {
-                return null;
-            }
+            GitProcessResult result = await ExecuteProcessAsync(repoPath, "git", token, "symbolic-ref", "--short", "-q", "HEAD").ConfigureAwait(false);
+            if (!result.Succeeded) return null;
+            string trimmed = result.StandardOutput.Trim();
+            return String.IsNullOrEmpty(trimmed) ? null : trimmed;
         }
 
         /// <summary>
@@ -944,12 +974,8 @@ namespace Armada.Core.Services
             if (String.IsNullOrEmpty(repoPath)) throw new ArgumentNullException(nameof(repoPath));
             if (!await RefResolvesAsync(repoPath, "HEAD", token).ConfigureAwait(false)) return new List<string>();
 
-            string output = await RunGitAsync(repoPath, token, "-c", "core.quotepath=off", "ls-tree", "-r", "--name-only", "HEAD").ConfigureAwait(false);
-            return output.Replace("\r\n", "\n")
-                .Split('\n', StringSplitOptions.RemoveEmptyEntries)
-                .Select(line => line.Trim())
-                .Where(line => line.Length > 0)
-                .ToList();
+            string output = await RunGitAsync(repoPath, token, "ls-tree", "-r", "-z", "--name-only", "HEAD").ConfigureAwait(false);
+            return GitMachineOutputParser.ParsePathListZ(output);
         }
 
         /// <summary>
@@ -962,15 +988,8 @@ namespace Armada.Core.Services
         {
             if (String.IsNullOrEmpty(path)) return false;
             if (!Directory.Exists(path)) return false;
-            try
-            {
-                string output = await RunGitAsync(path, token, "rev-parse", "--is-bare-repository").ConfigureAwait(false);
-                return String.Equals(output.Trim(), "true", StringComparison.OrdinalIgnoreCase);
-            }
-            catch (InvalidOperationException)
-            {
-                return false;
-            }
+            GitProcessResult result = await ExecuteProcessAsync(path, "git", token, "rev-parse", "--is-bare-repository").ConfigureAwait(false);
+            return result.Succeeded && String.Equals(result.StandardOutput.Trim(), "true", StringComparison.Ordinal);
         }
 
         #endregion
@@ -979,15 +998,8 @@ namespace Armada.Core.Services
 
         private async Task<bool> RefResolvesAsync(string repoPath, string gitRef, CancellationToken token)
         {
-            try
-            {
-                await RunGitAsync(repoPath, token, "rev-parse", "--verify", "--quiet", gitRef + "^{commit}").ConfigureAwait(false);
-                return true;
-            }
-            catch (InvalidOperationException)
-            {
-                return false;
-            }
+            GitProcessResult result = await ExecuteProcessAsync(repoPath, "git", token, "rev-parse", "--verify", "--quiet", gitRef + "^{commit}").ConfigureAwait(false);
+            return result.Succeeded;
         }
 
         private async Task<string> RunGitAsync(string? workingDirectory, params string[] args)
@@ -1020,21 +1032,9 @@ namespace Armada.Core.Services
 
         private static void AddChangedPaths(string gitOutput, HashSet<string> changedFiles)
         {
-            if (String.IsNullOrWhiteSpace(gitOutput))
+            foreach (string path in GitMachineOutputParser.ParsePathListZ(gitOutput))
             {
-                return;
-            }
-
-            string[] lines = gitOutput.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-            foreach (string line in lines)
-            {
-                string trimmed = line.Trim();
-                if (String.IsNullOrEmpty(trimmed))
-                {
-                    continue;
-                }
-
-                changedFiles.Add(trimmed.Replace('\\', '/'));
+                changedFiles.Add(path);
             }
         }
 
@@ -1108,16 +1108,13 @@ namespace Armada.Core.Services
 
         private async Task<string?> TryResolveRemoteHeadRefAsync(string repoPath)
         {
-            try
+            GitProcessResult result = await ExecuteProcessAsync(repoPath, "git", CancellationToken.None, "symbolic-ref", "-q", "refs/remotes/origin/HEAD").ConfigureAwait(false);
+            if (!result.Succeeded) return null;
+
+            string remoteHead = result.StandardOutput.Trim();
+            if (!String.IsNullOrEmpty(remoteHead) && await RefExistsAsync(repoPath, remoteHead).ConfigureAwait(false))
             {
-                string remoteHead = (await RunGitAsync(repoPath, "symbolic-ref", "refs/remotes/origin/HEAD").ConfigureAwait(false)).Trim();
-                if (!String.IsNullOrEmpty(remoteHead) && await RefExistsAsync(repoPath, remoteHead).ConfigureAwait(false))
-                {
-                    return remoteHead;
-                }
-            }
-            catch
-            {
+                return remoteHead;
             }
 
             return null;
@@ -1128,15 +1125,8 @@ namespace Armada.Core.Services
             if (String.IsNullOrEmpty(repoPath)) throw new ArgumentNullException(nameof(repoPath));
             if (String.IsNullOrEmpty(gitRef)) throw new ArgumentNullException(nameof(gitRef));
 
-            try
-            {
-                await RunGitAsync(repoPath, "rev-parse", "--verify", gitRef).ConfigureAwait(false);
-                return true;
-            }
-            catch
-            {
-                return false;
-            }
+            GitProcessResult result = await ExecuteProcessAsync(repoPath, "git", CancellationToken.None, "rev-parse", "--verify", "--quiet", gitRef).ConfigureAwait(false);
+            return result.Succeeded;
         }
 
         private async Task<string?> GetFirstBranchRefAsync(string repoPath, string refPrefix)
@@ -1149,7 +1139,7 @@ namespace Armada.Core.Services
             {
                 refs = await RunGitAsync(repoPath, "for-each-ref", "--format=%(refname)", refPrefix).ConfigureAwait(false);
             }
-            catch
+            catch (InvalidOperationException)
             {
                 return null;
             }
@@ -1170,8 +1160,7 @@ namespace Armada.Core.Services
             if (String.IsNullOrEmpty(repoPath)) throw new ArgumentNullException(nameof(repoPath));
             if (String.IsNullOrEmpty(branchName)) throw new ArgumentNullException(nameof(branchName));
 
-            string remoteBranch = (await RunGitAsync(repoPath, "branch", "-r", "--list", "origin/" + branchName).ConfigureAwait(false)).Trim();
-            if (String.IsNullOrEmpty(remoteBranch))
+            if (!await ShowRefExistsAsync(repoPath, "refs/remotes/origin/" + branchName, CancellationToken.None).ConfigureAwait(false))
             {
                 return false;
             }
@@ -1199,12 +1188,12 @@ namespace Armada.Core.Services
             if (String.IsNullOrEmpty(repoPath)) throw new ArgumentNullException(nameof(repoPath));
             if (String.IsNullOrEmpty(branchName)) throw new ArgumentNullException(nameof(branchName));
 
-            string worktrees = await RunGitAsync(repoPath, "worktree", "list", "--porcelain").ConfigureAwait(false);
-            string targetRef = "branch refs/heads/" + branchName;
+            List<GitWorktreeEntry> worktrees = await ListWorktreesAsync(repoPath, CancellationToken.None).ConfigureAwait(false);
+            string targetRef = "refs/heads/" + branchName;
 
-            foreach (string line in worktrees.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+            foreach (GitWorktreeEntry entry in worktrees)
             {
-                if (String.Equals(line.Trim(), targetRef, StringComparison.Ordinal))
+                if (String.Equals(entry.BranchRef, targetRef, StringComparison.Ordinal))
                 {
                     return true;
                 }
@@ -1215,20 +1204,32 @@ namespace Armada.Core.Services
 
         private async Task RestoreAfterFailedMergeAsync(string targetWorkDir, string sourceRepoPath, string? targetBranch, CancellationToken token)
         {
+            bool mergeInProgress = false;
             try
             {
-                await RunGitAsync(targetWorkDir, token, "merge", "--abort").ConfigureAwait(false);
-                _Logging.Warn(_Header + "aborted failed merge in " + targetWorkDir);
+                GitProcessResult mergeHead = await ExecuteProcessAsync(targetWorkDir, "git", token, "rev-parse", "-q", "--verify", "MERGE_HEAD").ConfigureAwait(false);
+                mergeInProgress = mergeHead.Succeeded;
             }
-            catch (Exception ex) when (
-                ex.Message.Contains("MERGE_HEAD missing", StringComparison.OrdinalIgnoreCase) ||
-                ex.Message.Contains("There is no merge to abort", StringComparison.OrdinalIgnoreCase))
+            catch (TimeoutException ex)
+            {
+                _Logging.Warn(_Header + "unable to check merge state in " + targetWorkDir + ": " + ex.Message);
+            }
+
+            if (!mergeInProgress)
             {
                 _Logging.Debug(_Header + "no merge in progress to abort in " + targetWorkDir);
             }
-            catch (Exception ex)
+            else
             {
-                _Logging.Warn(_Header + "unable to abort failed merge in " + targetWorkDir + ": " + ex.ToString());
+                try
+                {
+                    await RunGitAsync(targetWorkDir, token, "merge", "--abort").ConfigureAwait(false);
+                    _Logging.Warn(_Header + "aborted failed merge in " + targetWorkDir);
+                }
+                catch (Exception ex)
+                {
+                    _Logging.Warn(_Header + "unable to abort failed merge in " + targetWorkDir + ": " + ex.ToString());
+                }
             }
 
             try
@@ -1321,6 +1322,24 @@ namespace Armada.Core.Services
 
         private async Task<string> RunProcessAsync(string? workingDirectory, string command, CancellationToken token, params string[] args)
         {
+            GitProcessResult result = await ExecuteProcessAsync(workingDirectory, command, token, args).ConfigureAwait(false);
+            if (!result.Succeeded)
+            {
+                GitCommandException failure = new GitCommandException(command, args, result.ExitCode, result.StandardOutput, result.StandardError);
+                // The exception carries the exit code and stderr; callers decide whether it is expected.
+                _Logging.Debug(_Header + failure.Message);
+                throw failure;
+            }
+
+            return result.StandardOutput;
+        }
+
+        /// <summary>
+        /// Run a git or gh process and return its exit code and output without throwing on a non-zero exit.
+        /// Launches with LC_ALL=C. Throws <see cref="TimeoutException"/> after 120 seconds.
+        /// </summary>
+        private static async Task<GitProcessResult> ExecuteProcessAsync(string? workingDirectory, string command, CancellationToken token, params string[] args)
+        {
             ProcessStartInfo startInfo = new ProcessStartInfo
             {
                 FileName = command,
@@ -1329,6 +1348,7 @@ namespace Armada.Core.Services
                 RedirectStandardError = true,
                 CreateNoWindow = true
             };
+            GitProcessEnvironment.Apply(startInfo);
 
             if (!String.IsNullOrEmpty(workingDirectory))
                 startInfo.WorkingDirectory = workingDirectory;
@@ -1346,43 +1366,87 @@ namespace Armada.Core.Services
             using Process process = new Process { StartInfo = startInfo };
             process.Start();
 
-            string stdout = await process.StandardOutput.ReadToEndAsync(linkedCts.Token).ConfigureAwait(false);
-            string stderr = await process.StandardError.ReadToEndAsync(linkedCts.Token).ConfigureAwait(false);
-
             try
             {
+                // Read both streams concurrently so a full stderr pipe cannot stall stdout.
+                Task<string> stdoutTask = process.StandardOutput.ReadToEndAsync(linkedCts.Token);
+                Task<string> stderrTask = process.StandardError.ReadToEndAsync(linkedCts.Token);
                 await process.WaitForExitAsync(linkedCts.Token).ConfigureAwait(false);
+                string stdout = await stdoutTask.ConfigureAwait(false);
+                string stderr = await stderrTask.ConfigureAwait(false);
+
+                return new GitProcessResult
+                {
+                    ExitCode = process.ExitCode,
+                    StandardOutput = stdout,
+                    StandardError = stderr
+                };
             }
             catch (OperationCanceledException)
             {
                 try { process.Kill(entireProcessTree: true); } catch { }
+                if (token.IsCancellationRequested) throw;
                 throw new TimeoutException(command + " timed out after 120 seconds");
             }
+        }
 
-            if (process.ExitCode != 0)
+        private async Task<bool> ShowRefExistsAsync(string repoPath, string fullRef, CancellationToken token)
+        {
+            GitProcessResult result = await ExecuteProcessAsync(repoPath, "git", token, "show-ref", "--verify", "--quiet", fullRef).ConfigureAwait(false);
+            return result.Succeeded;
+        }
+
+        private async Task<List<GitWorktreeEntry>> ListWorktreesAsync(string repoPath, CancellationToken token)
+        {
+            GitProcessResult nul = await ExecuteProcessAsync(repoPath, "git", token, "worktree", "list", "--porcelain", "-z").ConfigureAwait(false);
+            if (nul.Succeeded) return GitMachineOutputParser.ParseWorktreeList(nul.StandardOutput, true);
+
+            // git older than 2.36 rejects -z as a usage error (exit 129); use the newline form there.
+            if (nul.ExitCode == 129)
             {
-                string trimmedStdErr = stderr.Trim();
-                string trimmedStdOut = stdout.Trim();
-                string detail = !String.IsNullOrEmpty(trimmedStdErr)
-                    ? trimmedStdErr
-                    : trimmedStdOut;
-                string errorMessage = command + " failed (exit " + process.ExitCode + "): " + detail;
-
-                // Demote expected "not found" messages during cleanup to Debug level
-                bool isExpectedFailure =
-                    stderr.Contains("not a working tree", StringComparison.OrdinalIgnoreCase) ||
-                    stderr.Contains("not found", StringComparison.OrdinalIgnoreCase) ||
-                    stderr.Contains("is not a git repository", StringComparison.OrdinalIgnoreCase);
-
-                if (isExpectedFailure)
-                    _Logging.Debug(_Header + errorMessage);
-                else
-                    _Logging.Warn(_Header + errorMessage);
-
-                throw new InvalidOperationException(errorMessage);
+                string output = await RunGitAsync(repoPath, token, "worktree", "list", "--porcelain").ConfigureAwait(false);
+                return GitMachineOutputParser.ParseWorktreeList(output, false);
             }
 
-            return stdout;
+            throw new GitCommandException("git", new List<string> { "worktree", "list", "--porcelain", "-z" }, nul.ExitCode, nul.StandardOutput, nul.StandardError);
+        }
+
+        /// <summary>
+        /// Choose the diff range for HEAD against a base branch from git merge-base's exit code:
+        /// 0 = base...HEAD, 1 (no common ancestor) = base..HEAD, anything else = null (a ref does not resolve).
+        /// </summary>
+        private async Task<string?> ResolveDiffRangeAsync(string worktreePath, string baseBranch, CancellationToken token)
+        {
+            GitProcessResult mergeBase = await ExecuteProcessAsync(worktreePath, "git", token, "merge-base", baseBranch, "HEAD").ConfigureAwait(false);
+            if (mergeBase.ExitCode == 0) return baseBranch + "...HEAD";
+            if (mergeBase.ExitCode == 1) return baseBranch + "..HEAD";
+            return null;
+        }
+
+        private static string[] BuildDiffArgs(string range)
+        {
+            // Fixed prefixes and no external diff/color so the snapshot is canonical regardless of user config.
+            return new string[] { "diff", "--no-color", "--no-ext-diff", "--src-prefix=a/", "--dst-prefix=b/", range };
+        }
+
+        private static GhPullRequestView? DeserializeGh(string json)
+        {
+            if (String.IsNullOrWhiteSpace(json)) return null;
+            try
+            {
+                return JsonSerializer.Deserialize<GhPullRequestView>(json);
+            }
+            catch (JsonException)
+            {
+                return null;
+            }
+        }
+
+        private static bool IsAbsoluteHttpUrl(string? value)
+        {
+            if (String.IsNullOrWhiteSpace(value)) return false;
+            return Uri.TryCreate(value.Trim(), UriKind.Absolute, out Uri? uri)
+                && (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp);
         }
 
         #endregion
