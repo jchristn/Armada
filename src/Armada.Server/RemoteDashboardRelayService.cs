@@ -467,6 +467,9 @@ namespace Armada.Server
 
                         if (result.MessageType == WebSocketMessageType.Close)
                         {
+                            // Forget the session before announcing the close: once the proxy hears "closed" it may send
+                            // more frames for this socket, and those must get 404 (gone), not a 502 from a half-closed socket.
+                            _WebSocketSessions.TryRemove(relaySession.ProxySocketId, out RelayWebSocketSession? _);
                             await PublishCloseAsync(relaySession, result.CloseStatus, result.CloseStatusDescription).ConfigureAwait(false);
                             await CloseRelaySocketAsync(relaySession.ProxySocketId, relaySession, result.CloseStatus ?? WebSocketCloseStatus.NormalClosure, result.CloseStatusDescription ?? "Remote websocket closed").ConfigureAwait(false);
                             return;
