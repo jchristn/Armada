@@ -508,7 +508,8 @@ No parameters required.
 **Response:** counts plus the ordered item list. The wrapper fields are camelCase (`count`, `criticalCount`,
 `warningCount`, `items`); each item is an `InboxItem` with `Kind`, `Severity`, `Title`, `Detail`, `EntityType`,
 `EntityName` (display name of the referenced entity; use it instead of parsing `Title`), `EntityId`, and a dashboard
-`Href`. `Severity` is emitted as its numeric value over MCP: `2` (Critical), `1` (Warning), or `0` (Info).
+`Href`. Deployment items also carry `EnvironmentName` and `DeploymentTitle`, and their `Title` reads
+"Deploy to <environment>: <title>". `Severity` is emitted as its numeric value over MCP: `2` (Critical), `1` (Warning), or `0` (Info).
 
 ```json
 {

@@ -104,7 +104,7 @@ If the environment requires approval, the deployment starts in `PendingApproval`
 - `Approve`
 - `Deny`
 
-from deployment detail instead of bypassing the workflow manually. A pending approval also appears in `Needs You` (`/inbox`) and in the terminal UI's Approvals center (`Ctrl+A`) as "Deployment awaiting approval: <environment>", named by the environment (the deployment id when the deployment has no environment name). The MCP equivalent is `approve_deployment`.
+from deployment detail instead of bypassing the workflow manually. A pending approval also appears in `Needs You` (`/inbox`) and in the terminal UI's Approvals center (`Ctrl+A`) as "Deploy to <environment>: <title>" (the same label as the dashboard's approve and deny dialogs; "Deploy to <environment>" without a title, "Deploy: <title>" without an environment). The MCP equivalent is `approve_deployment`.
 
 ## 4. Verify The Rollout
 

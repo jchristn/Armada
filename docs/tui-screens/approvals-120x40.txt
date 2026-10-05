@@ -9,7 +9,7 @@
 |   Dispatch           ||    Waiting 12m   [a Approve  c Conditionally Approve  m More Work Required  d Deny]          |
 |   Fleet Actions      ||    Stalled captain      Stalled captain: codex-2                                    just now |
 |   Missions           ||    No heartbeat for 6m   [s Stop  R Recall  t Restart]                                       |
-|- DELIVERY            ||    Deployment approval  Deployment awaiting approval: Staging                       just now |
+|- DELIVERY            ||    Deployment approval  Deploy to Staging: Release v1.0.0-rc1                       just now |
 |   Delivery           ||    v1.0.0-rc1   [a Approve  d Deny]                                                          |
 |- BUILD               ||                                                                                              |
 |   Vessels            ||                                                                                              |

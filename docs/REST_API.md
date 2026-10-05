@@ -4854,7 +4854,10 @@ Return the operator "needs you" inbox.
 ```
 
 `EntityName` is the display name of the referenced entity (mission title, captain name, deployment environment, merge
-target branch, or the proposal summary); use it instead of parsing `Title`.
+target branch, or the proposal summary); use it instead of parsing `Title`. Deployment items also carry
+`EnvironmentName` and `DeploymentTitle` (null for other kinds); their `Title` is the approval label
+"Deploy to <environment>: <title>" ("Deploy to <environment>" without a title, "Deploy: <title>" without an
+environment), which clients can rebuild and localize from those two fields.
 
 ---
 
