@@ -55,6 +55,12 @@ namespace Armada.Core.Models
         public string? LastError { get; set; } = null;
 
         /// <summary>
+        /// Machine-readable code for <see cref="LastError"/>: a <see cref="RemoteTunnelErrorCodes"/> value for errors the
+        /// Admiral detects, or the proxy's envelope ErrorCode (for example invalid_handshake). Null when there is no error.
+        /// </summary>
+        public string? LastErrorCode { get; set; } = null;
+
+        /// <summary>
         /// Number of consecutive reconnect attempts in the current cycle.
         /// </summary>
         public int ReconnectAttempts { get; set; } = 0;

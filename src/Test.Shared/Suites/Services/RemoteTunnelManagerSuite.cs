@@ -63,11 +63,16 @@ namespace Test.Shared.Suites.Services
 
             cases.Add(Case("try_normalize_tunnel_url_rejects_invalid_inputs", "TryNormalizeTunnelUrl Rejects Invalid Inputs", TestTags.Negative, () =>
             {
-                AssertFalse(RemoteTunnelManager.TryNormalizeTunnelUrl(null, out Uri? _, out string? missingError));
-                AssertContains("no tunnel URL", missingError ?? String.Empty, "Missing URL should explain the error");
+                AssertFalse(RemoteTunnelManager.TryNormalizeTunnelUrl(null, out Uri? _, out string? missingError, out string? missingCode));
+                AssertEqual(RemoteTunnelErrorCodes.MissingTunnelUrl, missingCode, "Missing URL has a typed code");
+                AssertFalse(String.IsNullOrWhiteSpace(missingError), "Missing URL keeps a human-readable message");
 
-                AssertFalse(RemoteTunnelManager.TryNormalizeTunnelUrl("ftp://example.com/tunnel", out Uri? _, out string? schemeError));
-                AssertContains("ws, wss, http, or https", schemeError ?? String.Empty, "Unsupported scheme should explain the allowed schemes");
+                AssertFalse(RemoteTunnelManager.TryNormalizeTunnelUrl("ftp://example.com/tunnel", out Uri? _, out string? schemeError, out string? schemeCode));
+                AssertEqual(RemoteTunnelErrorCodes.UnsupportedScheme, schemeCode, "Unsupported scheme has a typed code");
+                AssertFalse(String.IsNullOrWhiteSpace(schemeError), "Unsupported scheme keeps a human-readable message");
+
+                AssertFalse(RemoteTunnelManager.TryNormalizeTunnelUrl("not a uri", out Uri? _, out string? _, out string? relativeCode));
+                AssertEqual(RemoteTunnelErrorCodes.InvalidTunnelUrl, relativeCode, "A relative or malformed URL has a typed code");
             }));
 
             cases.Add(Case("build_capability_manifest_uses_current_release_version", "BuildCapabilityManifest UsesCurrentReleaseVersion", TestTags.Positive, () =>
@@ -104,6 +109,34 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(RemoteTunnelStateEnum.Disabled, status.State);
                 AssertNotNull(status.CapabilityManifest);
                 AssertTrue(status.InstanceId.StartsWith("armada-"), "Auto-generated instance ID should be stable and prefixed");
+            }));
+
+            cases.Add(Case("status_reports_typed_error_code", "A misconfigured tunnel reports LastErrorCode in the status", TestTags.Negative, () =>
+            {
+                LoggingModule logging = new LoggingModule();
+                logging.Settings.EnableConsole = false;
+                ArmadaSettings settings = new ArmadaSettings();
+                settings.RemoteControl.Enabled = true;
+                settings.RemoteControl.TunnelUrl = "ftp://example.invalid/tunnel";
+
+                RemoteTunnelManager manager = new RemoteTunnelManager(logging, settings);
+                using (CancellationTokenSource cts = new CancellationTokenSource())
+                {
+                    manager.Start(cts.Token);
+                    try
+                    {
+                        bool reported = SpinWait.SpinUntil(() => manager.GetStatus().State == RemoteTunnelStateEnum.Error, TimeSpan.FromSeconds(30));
+                        AssertTrue(reported, "the manager reports the configuration error");
+                        RemoteTunnelStatus status = manager.GetStatus();
+                        AssertEqual(RemoteTunnelErrorCodes.UnsupportedScheme, status.LastErrorCode, "typed code for the unsupported scheme");
+                        AssertFalse(String.IsNullOrWhiteSpace(status.LastError), "human-readable message kept");
+                    }
+                    finally
+                    {
+                        cts.Cancel();
+                        manager.StopAsync().GetAwaiter().GetResult();
+                    }
+                }
             }));
 
             cases.Add(Case("compute_reconnect_delay_honors_configured_bounds", "ComputeReconnectDelay HonorsConfiguredBounds", TestTags.Positive, () =>
