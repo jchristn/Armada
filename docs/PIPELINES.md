@@ -1,6 +1,6 @@
 # Pipelines -- Implementation Reference
 
-This document covers the complete pipeline implementation in Armada v1.0.0: data model, dispatch flow, execution lifecycle, stage handoff, architect special handling, captain routing, and extensibility.
+This document covers the complete pipeline implementation in Armada v1.0.0: data model, dispatch flow, execution lifecycle, review gates, stage handoff, architect special handling, captain routing, and extensibility.
 
 ---
 
@@ -43,6 +43,8 @@ Key design decisions:
 |-------|------|-------------|
 | `Id` | string (`ppl_` prefix) | Unique identifier |
 | `TenantId` | string? | Tenant scope |
+| `UserId` | string? | Owning user |
+| `Scope` | `ScopeEnum` | `TenantWide` (default) or `UserSpecific` |
 | `Name` | string | Unique pipeline name |
 | `Description` | string? | Human-readable description |
 | `Stages` | List\<PipelineStage\> | Ordered list of stages |
@@ -59,8 +61,10 @@ Key design decisions:
 | `PipelineId` | string | Parent pipeline ID |
 | `Order` | int | Execution order (1-based) |
 | `PersonaName` | string | Persona name for this stage (e.g. "Worker", "Judge") |
-| `IsOptional` | bool | If true, the Admiral may skip this stage |
+| `IsOptional` | bool | Stored and shown in the UI; dispatch currently runs every stage regardless |
 | `Description` | string? | What this stage does |
+| `RequiresReview` | bool | When true, the stage's mission stops in `Review` and waits for an explicit approve/deny before the pipeline continues (default false) |
+| `ReviewDenyAction` | `ReviewDenyActionEnum` | What a denied review does: `RetryStage` (default; send the same stage back for rework) or `FailPipeline` (fail the stage and cancel downstream stages) |
 
 **Source:** `src/Armada.Core/Models/PipelineStage.cs`
 
@@ -71,8 +75,11 @@ Key design decisions:
 | `Id` | string (`prs_` prefix) | Unique identifier |
 | `Name` | string | Unique persona name |
 | `Description` | string? | What this persona does |
-| `PromptTemplateName` | string | References a prompt template by name |
+| `PromptTemplateName` | string | References a prompt template by name (see [Prompt Template Resolution](#10-prompt-template-resolution) for how mission prompts pick a template) |
 | `IsBuiltIn` | bool | True for system-shipped personas |
+| `Active` | bool | Whether the persona is active |
+| `Scope` | `ScopeEnum` | `TenantWide` (default) or `UserSpecific` |
+| `DefaultCaptainId` | string? | Optional preferred captain for missions of this persona (see [CAPTAIN_ROUTING.md](CAPTAIN_ROUTING.md)) |
 
 **Source:** `src/Armada.Core/Models/Persona.cs`
 
@@ -81,6 +88,8 @@ Key design decisions:
 **Mission** (new fields):
 - `Persona` (string?) -- Which persona this mission requires. Null defaults to Worker.
 - `DependsOnMissionId` (string?) -- Mission ID this mission depends on. Cannot be assigned until dependency completes.
+- `RequiresReview` / `ReviewDenyAction` -- Copied from the owning pipeline stage when the mission is created.
+- `WaitForVoyageWorkers` (bool) -- Set by an Architect plan to defer a worker until the voyage's other workers settle.
 
 **Captain** (new fields):
 - `AllowedPersonas` (string?) -- JSON array of persona names this captain can fill. Null means any.
@@ -111,10 +120,12 @@ Key design decisions:
 | Name | Stages | Description |
 |------|--------|-------------|
 | WorkerOnly | Worker | Backward-compatible default |
-| Reviewed | Worker -> Judge | Implementation + review |
-| Tested | Worker -> Test Engineer -> Judge | Implementation + testing + review |
-| FullPipeline | Product Manager -> Architect -> Worker -> Usability Engineer -> Test Engineer -> Linter -> Judge -> Recorder | Full lifecycle: frame, plan, implement, refine, test, lint, review, and record durable memory |
-| Recorded | Worker -> Recorder | Do the work, then distill durable memories from it |
+| Reviewed | Worker [review] -> Judge [review] | Implementation + review |
+| Tested | Worker [review] -> Test Engineer [review] -> Judge [review] | Implementation + testing + review |
+| FullPipeline | Product Manager [review] -> Architect [review] -> Worker [review] -> Usability Engineer [review] -> Test Engineer [review] -> Linter [review] -> Judge [review] -> Recorder | Full lifecycle: frame, plan, implement, refine, test, lint, review, and record durable memory |
+| Recorded | Worker [review] -> Recorder | Do the work, then distill durable memories from it |
+
+`[review]` marks a stage seeded with `RequiresReview = true` (a human review gate; see [Review Gates](#review-gates)). Judge stages are seeded with `ReviewDenyAction = FailPipeline`; every other gated stage uses the default `RetryStage`. WorkerOnly and the Recorder stages have no gate.
 
 **Source:** `src/Armada.Core/Services/PersonaSeedService.cs`
 
@@ -136,7 +147,7 @@ ResolvePipelineAsync(pipelineId, vessel)
     |
     v
 Is pipeline null or single-stage Worker?
-    |-- YES --> Standard dispatch (existing behavior, no persona fields)
+    |-- YES --> Standard dispatch (one Worker mission per description)
     |-- NO  --> Multi-stage pipeline dispatch
                     |
                     v
@@ -146,9 +157,10 @@ Is pipeline null or single-stage Worker?
                 For each mission description:
                     For each pipeline stage (ordered):
                         Create Mission with:
-                            - Title: "{original title} [{PersonaName}]"
+                            - Title: "[{PersonaName}] {title}" (title truncated to 60 chars)
                             - Persona: stage.PersonaName
                             - DependsOnMissionId: previous stage's mission ID (null for first)
+                            - RequiresReview / ReviewDenyAction: copied from the stage
                         If first stage: TryAssignAsync (may assign immediately)
                     |
                     v
@@ -203,15 +215,15 @@ The Admiral resolves which pipeline to use in `ResolvePipelineAsync`. Resolution
 For a 3-stage pipeline (Architect, Worker, Judge) dispatching one mission description "Add caching":
 
 ```
-Mission 1: "Add caching [Architect]"
+Mission 1: "[Architect] Add caching"
   persona: "Architect"
   dependsOnMissionId: null        <-- assigned immediately
 
-Mission 2: "Add caching [Worker]"
+Mission 2: "[Worker] Add caching"
   persona: "Worker"
   dependsOnMissionId: Mission 1   <-- waits for Architect
 
-Mission 3: "Add caching [Judge]"
+Mission 3: "[Judge] Add caching"
   persona: "Judge"
   dependsOnMissionId: Mission 2   <-- waits for Worker
 ```
@@ -237,30 +249,39 @@ Before assigning a mission, `TryAssignAsync` checks:
 if (!String.IsNullOrEmpty(mission.DependsOnMissionId))
 {
     Mission? dependency = await _Database.Missions.ReadAsync(mission.DependsOnMissionId);
+    if (dependency == null) return false;
     if (dependency.Status != Complete && dependency.Status != WorkProduced)
         return false;  // Dependency not satisfied -- skip assignment
+    if (dependency.Status == WorkProduced && !IsPipelineHandoffPrepared(mission, dependency))
+        return false;  // Handoff (branch + context) not written yet
 }
 ```
 
-This runs on every assignment attempt (including health check retries), so dependent missions are automatically picked up once their dependency completes.
+A dependency waiting in `Review` (a review gate) is neither `Complete` nor `WorkProduced`, so the next stage waits until the review is approved. This runs on every assignment attempt (including health check retries), so dependent missions are automatically picked up once their dependency completes.
 
 **Source:** `src/Armada.Core/Services/MissionService.cs`, method `TryAssignAsync`
 
 ### Captain Selection
 
-`FindAvailableCaptainAsync(persona)` selects a captain for a mission:
+`FindAvailableCaptainAsync(persona, requiredTier, requestedCaptainId)` selects a captain for a mission:
 
 ```
-1. Get all idle captains
-2. If no persona requirement: return first idle captain
+1. Get all idle captains (none -> mission stays Pending)
+2. If the mission has a preferred captain (RequestedCaptainId) and it is idle:
+   return it, bypassing AllowedPersonas and tier routing
 3. Filter by AllowedPersonas:
+   - no persona on the mission = every idle captain is eligible
    - null AllowedPersonas = captain can fill any role
    - Non-null = check if persona is in the JSON array
-4. If no eligible captains: fall back to any idle captain
-   (soft constraint -- work still gets done)
-5. Among eligible, prefer PreferredPersona match
-6. Return best match
+4. If no eligible captains: return null (hard constraint -- the mission
+   stays Pending; see "Why This Mission Is Waiting" on the mission page)
+5. If the mission requires a tier: keep captains at or above it,
+   preferring the lowest qualifying tier (none -> stays Pending)
+6. Among eligible, prefer a PreferredPersona match
+7. Otherwise return the first eligible captain
 ```
+
+The preferred captain comes from the dispatch payload, the voyage's per-persona override, or the persona's `DefaultCaptainId`. See [CAPTAIN_ROUTING.md](CAPTAIN_ROUTING.md) and [SCHEDULING.md](SCHEDULING.md#why-a-mission-is-waiting).
 
 **Source:** `src/Armada.Core/Services/MissionService.cs`, method `FindAvailableCaptainAsync`
 
@@ -268,7 +289,18 @@ This runs on every assignment attempt (including health check retries), so depen
 
 ## 8. Stage Handoff
 
-When a mission reaches `WorkProduced` status, `TryHandoffToNextStageAsync` runs:
+### Review Gates
+
+When a stage's mission finishes and its `RequiresReview` is true, the mission moves to `Review` instead of handing off. It waits there for a person to resolve it:
+
+- **Dashboard / TUI:** the mission page's **Resolve Review** action (also reachable from **Needs You**). The dialog offers Approve, Conditionally Approve (continue, but the next stage must consider your feedback), More Work Required, and Deny; feedback is required for Conditionally Approve and More Work Required.
+- **REST:** `POST /api/v1/missions/{id}/review/approve` and `POST /api/v1/missions/{id}/review/deny`.
+
+Approving a non-terminal stage continues to the next pipeline stage; approving the last stage continues to landing. Denying applies the stage's `ReviewDenyAction` (or an action supplied with the deny): `RetryStage` sends the same stage back for rework, `FailPipeline` fails the stage and cancels its downstream stages. If nobody resolves a review within `ReviewTimeoutMinutes` (default 1440; 0 disables), the watchdog escalates and releases the held captain while preserving the mission and its dock for the reviewer.
+
+### Handoff
+
+When a mission reaches `WorkProduced` status (and is not waiting at a review gate), `TryHandoffToNextStageAsync` runs:
 
 ```
 1. Find all missions in the same voyage that depend on this mission
@@ -276,8 +308,10 @@ When a mission reaches `WorkProduced` status, `TryHandoffToNextStageAsync` runs:
 
 2. For each dependent mission:
    a. Inject handoff context into the mission's description:
+      - A persona-specific preamble for the next stage
       - Prior stage persona, title, ID
       - Branch name
+      - The prior stage's agent output (first 8000 characters)
       - Diff snapshot (if available, rendered as a code block)
    b. Set the same branch name (next stage works on the same branch)
    c. Attempt to assign the mission (dependency check will now pass)
@@ -304,8 +338,11 @@ The handoff context is appended to the mission description as a markdown section
 ```markdown
 ---
 ## Prior Stage Output
-The previous pipeline stage (Worker) completed mission "Add caching" (msn_abc123).
+The previous pipeline stage (Worker) completed mission "[Worker] Add caching" (msn_abc123).
 Branch: armada/captain-1/msn_abc123
+
+### Agent Output (from Worker stage)
+...
 
 ### Diff from prior stage
 ```diff
@@ -323,7 +360,20 @@ The Architect persona is special: instead of passing context to the next stage, 
 
 ### Output Format
 
-The Architect agent is instructed (via the `persona.architect` template) to output mission definitions using markers:
+The Architect agent is instructed (via the `persona.architect` template) to output mission definitions. The preferred format is a fenced code block whose info string is `armada-plan`, containing JSON:
+
+````
+```armada-plan
+{"missions":[
+  {"title":"Add CacheService with TTL support","description":"Implement CacheService ...","dependsOn":null,"waitForOtherMissions":false},
+  {"title":"Add caching middleware to GET endpoints","description":"Add CacheMiddleware ...","dependsOn":1,"waitForOtherMissions":false}
+]}
+```
+````
+
+`dependsOn` is the 1-based number of an earlier mission in the plan whose whole Worker chain must finish before this one starts (null when it can start immediately), and `waitForOtherMissions` defers the mission until the voyage's other workers settle. When the output has several plan blocks, the last well-formed one wins; missions without a title, with a placeholder title such as `<title>`, or with a repeated title are dropped.
+
+When there is no valid plan block, Armada falls back to the legacy `[ARMADA:MISSION]` markers (optionally closed with `[/ARMADA:MISSION]`, with a `Depends on:` line for sequencing), and then to numbered summary lines:
 
 ```
 [ARMADA:MISSION] Add CacheService with TTL support
@@ -337,25 +387,26 @@ Files: src/Middleware/CacheMiddleware.cs, src/Startup.cs
 
 ### Parsing
 
-`ParseArchitectOutput` searches the architect mission's `DiffSnapshot` first, then `Description`, for `[ARMADA:MISSION]` markers. It splits on the marker, extracts the title (first line) and description (remaining lines).
+`ParseArchitectOutput` first looks for an `armada-plan` block in the architect mission's `AgentOutput`. Without one, it searches `AgentOutput`, then `DiffSnapshot`, then `Description` for `[ARMADA:MISSION]` markers (then numbered summary lines). Marker blocks split on the marker; the first line is the title and the remaining lines are the description.
 
 **Source:** `src/Armada.Core/Services/MissionService.cs`, method `ParseArchitectOutput`
 
 ### Mission Fan-Out
 
-When an Architect stage completes with parseable markers:
+When an Architect stage completes with parseable mission definitions:
 
 ```
-1. Parse [ARMADA:MISSION] markers into N mission definitions
+1. Parse the plan into N mission definitions
 2. Update the existing Worker mission (next stage) with the first definition
+   (title "{definition title} [Worker]") and retitle its downstream chain
 3. Create N-1 additional Worker missions for the remaining definitions
 4. For each additional Worker:
    - Clone the whole post-Worker chain (in FullPipeline: Usability Engineer, Test Engineer,
-     Linter, Judge, Recorder) as new missions
+     Linter, Judge, Recorder) as new missions, copying each stage's review gate
    - Chain dependencies: additional Worker depends on Architect,
      cloned stages depend on their Worker
-5. Assign the first Worker mission
-6. Skip normal handoff (return early)
+5. Apply the plan's dependsOn / waitForOtherMissions sequencing
+6. Skip normal handoff (return early); the Workers are picked up by normal assignment
 ```
 
 Result for an Architect that produces 2 mission definitions in a FullPipeline:
@@ -368,7 +419,7 @@ Result for an Architect that produces 2 mission definitions in a FullPipeline:
   +-- [Worker 2] "Add middleware"    --> [Usability Engineer 2] --> [Test Engineer 2] --> [Linter 2] --> [Judge 2] --> [Recorder 2]
 ```
 
-If no `[ARMADA:MISSION]` markers are found, the Architect's output falls through to normal stage handoff (context injection).
+If the Architect produces no valid mission definitions, the Architect mission is marked `Failed` (failure kind `InvalidOutput`, reason "Architect produced no [ARMADA:MISSION] markers in output" or "...no valid [ARMADA:MISSION] definitions...") rather than handing its raw output to the Worker.
 
 **Source:** `src/Armada.Core/Services/MissionService.cs`, within `TryHandoffToNextStageAsync`
 
@@ -376,11 +427,14 @@ If no `[ARMADA:MISSION]` markers are found, the Architect's output falls through
 
 ## 10. Prompt Template Resolution
 
-Each persona references a prompt template by name. When `GenerateClaudeMdAsync` builds the CLAUDE.md for a mission:
+Each persona references a prompt template by name. When `GenerateClaudeMdAsync` builds the mission instructions file (`CLAUDE.md`, `CODEX.md`, `CURSOR.md`, `GEMINI.md`, or `MUX.md`, depending on the captain's runtime):
 
 ```
 1. Build template parameter dictionary from mission/vessel/captain context
-2. Resolve persona prompt: "persona.{mission.Persona.ToLower()}"
+2. Resolve persona prompt: "persona.{persona name in snake_case}"
+   (Worker -> persona.worker, Test Engineer -> persona.test_engineer,
+   SecurityAuditor -> persona.security_auditor). A project profile's
+   persona override can swap in a different template and append instructions.
    - IPromptTemplateService.RenderAsync checks DB first, then embedded defaults
 3. Resolve each section (rules, context conservation, etc.) via ResolveSectionAsync
 4. Fallback: GetHardcodedFallback returns the original inline strings
@@ -391,6 +445,8 @@ Template resolution order:
 ```
 Database (user customization) -> Embedded Default (shipped with code) -> Hardcoded Fallback
 ```
+
+Mission prompts derive the template name from the persona name as shown above; give a custom persona's template the matching `persona.{snake_case}` name.
 
 All built-in templates (27 in 1.0.0) are seeded into the database on startup via `PromptTemplateService.SeedDefaultsAsync()`. Users can edit them via dashboard, MCP, or REST without touching code.
 
@@ -447,6 +503,8 @@ ALTER TABLE fleets ADD COLUMN default_pipeline_id TEXT;
 ALTER TABLE vessels ADD COLUMN default_pipeline_id TEXT;
 ```
 
+Later migrations added review gates (SQLite migration 32: `requires_review` and `review_deny_action` on `pipeline_stages` and `missions`, plus the mission review columns), `personas.default_captain_id`, and a `scope` column on personas, pipelines, and prompt templates.
+
 All migrations are implemented for SQLite, MySQL, PostgreSQL, and SQL Server. Standalone migration scripts are in `migrations/`.
 
 ### Indexes
@@ -483,31 +541,41 @@ All migrations are implemented for SQLite, MySQL, PostgreSQL, and SQL Server. St
 | `get_pipeline` | Get pipeline by name (includes stages) |
 | `update_pipeline` | Update pipeline and stages |
 | `delete_pipeline` | Delete (blocked for built-in) |
+| `list_prompt_templates` | List templates, optionally by category |
+| `create_prompt_template` | Create a template |
 | `get_prompt_template` | Get template by name |
-| `update_prompt_template` | Update template content |
+| `update_prompt_template` | Update template content (creates the template if it does not exist) |
 | `reset_prompt_template` | Reset to built-in default |
 | `dispatch` | Now accepts `pipelineId` and `pipeline` params |
 | `enumerate` | Now supports `personas`, `prompt_templates`, `pipelines` entity types |
+
+The MCP `create_pipeline` and `update_pipeline` stage objects accept `personaName`, `isOptional`, and `description` only; set `requiresReview` and `reviewDenyAction` through the REST API, the dashboard, or the TUI.
 
 ### REST Endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/v1/personas` | List personas |
+| POST | `/api/v1/personas/enumerate` | Paginated persona list |
 | POST | `/api/v1/personas` | Create persona |
 | GET | `/api/v1/personas/{name}` | Get by name |
 | PUT | `/api/v1/personas/{name}` | Update |
 | DELETE | `/api/v1/personas/{name}` | Delete |
 | GET | `/api/v1/pipelines` | List pipelines |
+| POST | `/api/v1/pipelines/enumerate` | Paginated pipeline list |
 | POST | `/api/v1/pipelines` | Create pipeline |
 | GET | `/api/v1/pipelines/{name}` | Get by name |
 | PUT | `/api/v1/pipelines/{name}` | Update |
 | DELETE | `/api/v1/pipelines/{name}` | Delete |
 | GET | `/api/v1/prompt-templates` | List templates |
+| POST | `/api/v1/prompt-templates/enumerate` | Paginated template list |
+| POST | `/api/v1/prompt-templates` | Create template |
 | GET | `/api/v1/prompt-templates/{name}` | Get by name |
 | PUT | `/api/v1/prompt-templates/{name}` | Update content |
 | POST | `/api/v1/prompt-templates/{name}/reset` | Reset to default |
 | POST | `/api/v1/voyages` | Now accepts `pipelineId` and `pipeline` |
+| POST | `/api/v1/missions/{id}/review/approve` | Approve a mission waiting at a review gate |
+| POST | `/api/v1/missions/{id}/review/deny` | Deny a mission waiting at a review gate |
 
 ### WebSocket Commands
 
@@ -521,9 +589,9 @@ All migrations are implemented for SQLite, MySQL, PostgreSQL, and SQL Server. St
 
 ### New Pages
 
-- **Personas** (`/personas`) -- List, create, edit, delete. Prompt template name is a dropdown.
-- **Pipelines** (`/pipelines`) -- List, create, edit with drag-to-reorder stages. Persona name is a dropdown.
-- **Prompt Templates** (`/prompt-templates`) -- List with category tab bar. Click to open two-column editor.
+- **Personas** (**Configuration > Personas**, `/configuration?tab=personas`; detail at `/personas/{name}`) -- List, create, edit, delete. Prompt template name is a dropdown.
+- **Pipelines** (**Configuration > Pipelines**, `/configuration?tab=pipelines`; detail at `/pipelines/{name}`) -- List, create, edit with up/down stage reordering. Persona name is a dropdown, and each stage has review-gate and deny-action settings; the stage chain shows `[review]` on gated stages.
+- **Prompt Templates** (**Configuration > Prompts**, `/configuration?tab=prompts`) -- List with a category filter. Click to open the two-column editor.
 - **Prompt Template Editor** (`/prompt-templates/{name}`) -- Monospace editor + parameter reference panel with click-to-insert.
 
 ### Updated Pages
@@ -531,13 +599,13 @@ All migrations are implemented for SQLite, MySQL, PostgreSQL, and SQL Server. St
 - **Vessel Detail** -- `Default Pipeline` dropdown (not a text field)
 - **Fleet Detail** -- `Default Pipeline` dropdown
 - **Captain Detail** -- `Allowed Personas` and `Preferred Persona` fields
-- **Mission Detail** -- `Persona` field, `Depends On` link to dependency mission
+- **Mission Detail** -- `Persona` field, `Depends On` link to dependency mission, **Resolve Review** for a mission waiting at a review gate
 - **Dispatch** -- Pipeline dropdown showing stage names
 - **Voyage Create** -- Pipeline dropdown
 
 ### Navigation
 
-Personas, Pipelines, and Templates are in the **System** section of the sidebar.
+Personas, Pipelines, and Prompts are tabs of the **Configuration** hub (sidebar section **CONFIGURATION**). The old `/personas`, `/pipelines`, and `/prompt-templates` URLs redirect to those tabs. The TUI uses the same routes.
 
 ---
 
@@ -547,7 +615,7 @@ Personas, Pipelines, and Templates are in the **System** section of the sidebar.
 
 Set a default pipeline on a vessel so all dispatches to it use a specific workflow:
 
-```json
+```jsonc
 // update_vessel
 { "vesselId": "vsl_abc", "defaultPipelineId": "ppl_reviewed" }
 ```
@@ -556,7 +624,7 @@ Set a default pipeline on a vessel so all dispatches to it use a specific workfl
 
 Set at the fleet level -- applies to all vessels in the fleet unless overridden:
 
-```json
+```jsonc
 // update_fleet
 { "fleetId": "flt_abc", "defaultPipelineId": "ppl_tested" }
 ```
@@ -565,7 +633,7 @@ Set at the fleet level -- applies to all vessels in the fleet unless overridden:
 
 Override for a single voyage regardless of vessel/fleet defaults:
 
-```json
+```jsonc
 // dispatch
 { "title": "Quick fix", "vesselId": "vsl_abc", "pipeline": "WorkerOnly", "missions": [...] }
 ```
@@ -574,7 +642,7 @@ Override for a single voyage regardless of vessel/fleet defaults:
 
 Assign captains to specific roles:
 
-```json
+```jsonc
 // Opus captain for planning and review
 // update_captain
 { "captainId": "cpt_opus", "preferredPersona": "Architect", "allowedPersonas": "[\"Architect\",\"Judge\"]" }
@@ -591,19 +659,19 @@ Assign captains to specific roles:
 ### Creating a Custom Persona
 
 1. **Create a prompt template** with instructions for the new role:
-   ```json
+   ```jsonc
    // update_prompt_template
    { "name": "persona.security_auditor", "content": "You are a security auditor...", "description": "Security review" }
    ```
 
 2. **Create the persona** referencing the template:
-   ```json
+   ```jsonc
    // create_persona
    { "name": "SecurityAuditor", "promptTemplateName": "persona.security_auditor" }
    ```
 
 3. **Create a pipeline** using the persona:
-   ```json
+   ```jsonc
    // create_pipeline
    {
      "name": "SecureReview",
@@ -616,7 +684,7 @@ Assign captains to specific roles:
    ```
 
 4. **Dispatch** with the pipeline:
-   ```json
+   ```jsonc
    // dispatch
    { "title": "Add login", "vesselId": "vsl_abc", "pipeline": "SecureReview", "missions": [...] }
    ```
@@ -631,7 +699,8 @@ Assign captains to specific roles:
 | `src/Armada.Core/Models/PromptTemplate.cs` | Template model |
 | `src/Armada.Core/Services/AdmiralService.cs` | Dispatch + pipeline resolution |
 | `src/Armada.Core/Services/MissionService.cs` | Assignment, handoff, architect parsing, captain routing |
-| `src/Armada.Core/Services/PromptTemplateService.cs` | Template resolution + 18 embedded defaults |
+| `src/Armada.Core/Services/PromptTemplateService.cs` | Template resolution + 27 embedded defaults |
+| `src/Armada.Core/Services/MissionPromptBuilder.cs` | Persona template naming and prompt assembly |
 | `src/Armada.Core/Services/PersonaSeedService.cs` | Startup seeding of personas + pipelines |
 | `src/Armada.Server/Mcp/Tools/McpPersonaTools.cs` | Persona MCP tools |
 | `src/Armada.Server/Mcp/Tools/McpPipelineTools.cs` | Pipeline MCP tools |
@@ -643,6 +712,6 @@ Assign captains to specific roles:
 | `src/Armada.Dashboard/src/pages/Personas.tsx` | Persona dashboard page |
 | `src/Armada.Dashboard/src/pages/PromptTemplates.tsx` | Template list page |
 | `src/Armada.Dashboard/src/pages/PromptTemplateDetail.tsx` | Template editor page |
-| `docs/PERSONAS.md` | Implementation plan with progress tracking |
+| `docs/PERSONAS.md` | Original implementation record |
 | `docs/PERSONAS_GUIDE.md` | User-facing guide |
 | `docs/TESTING_PIPELINES.md` | End-to-end test examples |

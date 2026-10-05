@@ -10,6 +10,9 @@ This document walks through concrete examples for testing Armada pipelines end-t
 - At least one vessel registered with a valid git repository
 - At least one captain running (idle state)
 - Built-in personas and pipelines are seeded automatically on startup
+- Someone available to resolve review gates: the built-in Reviewed, Tested, FullPipeline, and Recorded pipelines stop
+  each gated stage in `Review` until it is approved (dashboard or TUI mission page **Resolve Review**, or
+  `POST /api/v1/missions/{id}/review/approve`). See [PIPELINES.md](PIPELINES.md#review-gates).
 
 Verify setup:
 
@@ -44,7 +47,8 @@ dispatch({
 
 **What to verify:**
 1. One voyage is created
-2. One mission is created with `persona: null` (defaults to Worker behavior)
+2. One mission is created with `persona: null` (defaults to Worker behavior), assuming the vessel and its fleet have no
+   default pipeline
 3. Mission is assigned to any idle captain
 4. No `dependsOnMissionId` is set
 
@@ -77,8 +81,8 @@ dispatch({
 **What to verify:**
 1. One voyage is created
 2. **Two missions** are created:
-   - `"Add input validation [Worker]"` with `persona: "Worker"`, `dependsOnMissionId: null`
-   - `"Add input validation [Judge]"` with `persona: "Judge"`, `dependsOnMissionId: <worker_mission_id>`
+   - `"[Worker] Add input validation"` with `persona: "Worker"`, `dependsOnMissionId: null`
+   - `"[Judge] Add input validation"` with `persona: "Judge"`, `dependsOnMissionId: <worker_mission_id>`
 3. Only the Worker mission is assigned immediately
 4. The Judge mission stays in Pending status
 
@@ -92,10 +96,13 @@ enumerate({
 ```
 
 **After the Worker completes:**
-5. The Judge mission's description is updated with the Worker's diff
-6. The Judge mission's `branchName` is set to the Worker's branch
-7. The Judge mission is automatically assigned to an idle captain
-8. The Judge captain reviews the diff and produces a PASS/FAIL/NEEDS_REVISION verdict
+5. The Worker mission moves to `Review` (the Worker stage has a review gate); approve it to continue
+6. The Judge mission's description is updated with the Worker's output and diff
+7. The Judge mission's `branchName` is set to the Worker's branch
+8. The Judge mission is automatically assigned to an idle captain
+9. The Judge captain reviews the diff and must end with a standalone `[ARMADA:VERDICT] PASS|FAIL|NEEDS_REVISION` line.
+   `FAIL` or `NEEDS_REVISION` fails the Judge mission; `PASS` sends it to its own review gate, and approving it
+   continues to landing
 
 ---
 
@@ -122,15 +129,17 @@ dispatch({
 
 **Stages 1-2 -- Product Manager, then Architect:**
 1. Eight missions are created initially, one per stage, each depending on the one before it:
-   - `"Add caching... [Product Manager]"` -- no dependency, assigned immediately
-   - `"Add caching... [Architect]"` -- depends on Product Manager
-   - `"Add caching... [Worker]"` -- depends on Architect
-   - `"Add caching... [Usability Engineer]"`, `[Test Engineer]`, `[Linter]`, `[Judge]`, `[Recorder]` -- each depends on the stage before it
-2. Only the Product Manager mission is assigned; the Architect runs after it completes
+   - `"[Product Manager] Add caching..."` -- no dependency, assigned immediately
+   - `"[Architect] Add caching..."` -- depends on Product Manager
+   - `"[Worker] Add caching..."` -- depends on Architect
+   - `"[Usability Engineer] ..."`, `"[Test Engineer] ..."`, `"[Linter] ..."`, `"[Judge] ..."`, `"[Recorder] ..."` -- each depends on the stage before it
+2. Only the Product Manager mission is assigned; the Architect runs after it completes and its review gate is approved
+   (every FullPipeline stage except the Recorder has a review gate)
 
-**After the Architect completes (with [ARMADA:MISSION] markers):**
+**After the Architect completes (with mission definitions):**
 
-If the Architect outputs structured mission definitions:
+The Architect should output an `armada-plan` block (see [PIPELINES.md](PIPELINES.md#9-architect-special-handling));
+the legacy `[ARMADA:MISSION]` marker format is still accepted as a fallback:
 ```
 [ARMADA:MISSION] Add CacheService with TTL support
 Implement CacheService in src/Services/CacheService.cs with Get, Set, Remove methods.
@@ -143,13 +152,14 @@ Wire into the request pipeline for all GET routes.
 Files: src/Middleware/CacheMiddleware.cs, src/Startup.cs
 ```
 
-3. The original Worker mission is updated with the first parsed mission's title and description
+3. The original Worker mission is updated with the first parsed mission's title and description (title
+   `"Add CacheService with TTL support [Worker]"`)
 4. A second Worker mission is created for the second parsed mission
 5. Each additional Worker mission gets its own copy of the downstream chain (Usability Engineer, Test Engineer, Linter, Judge, Recorder)
 6. Worker missions are assigned to idle captains
 
-**After each Worker completes:**
-7. The corresponding Usability Engineer mission receives the Worker's diff and branch, then the Test Engineer and
+**After each Worker completes (and its review gate is approved):**
+7. The corresponding Usability Engineer mission receives the Worker's output, diff, and branch, then the Test Engineer and
    Linter stages commit to the same branch
 8. The Judge reviews the combined diff and must end with a standalone `[ARMADA:VERDICT] PASS|FAIL|NEEDS_REVISION` line
 9. The Recorder distills durable memories from the voyage
@@ -223,9 +233,11 @@ dispatch({
 ```
 
 **What to verify:**
-1. Three missions created: Worker, SecurityAuditor, Judge (chained by dependency)
+1. Three missions created: Worker, SecurityAuditor, Judge (chained by dependency). Pipelines created through MCP have
+   no review gates, so the stages run back to back
 2. Worker executes first, implements the login endpoint
-3. SecurityAuditor receives the diff and reviews for vulnerabilities
+3. SecurityAuditor receives the diff and reviews for vulnerabilities (its mission prompt uses
+   `persona.security_auditor`, the template name derived from the persona name `SecurityAuditor`)
 4. Judge reviews the final result
 
 ---
@@ -268,9 +280,11 @@ dispatch({
 
 **What to verify:**
 1. The Architect mission is preferably assigned to captain_1 (PreferredPersona match)
-2. The Worker mission is assigned to captain_2 or captain_3 (both are eligible)
+2. The Worker mission is assigned to any idle captain (all three are eligible)
 3. The Judge mission is NOT assigned to captain_2 (AllowedPersonas excludes Judge)
-4. If only captain_2 is idle when the Judge stage is ready, the system falls back to assigning it anyway (soft preference, not a hard block)
+4. If only captain_2 is idle when the Judge stage is ready, the Judge mission stays `Pending` until captain_1 or
+   captain_3 is idle (`AllowedPersonas` is a hard filter; the mission page's Why This Mission Is Waiting shows
+   `NoEligibleCaptain`)
 
 ```
 // Check which captain got which mission
@@ -315,7 +329,7 @@ dispatch({
 
 **What to verify:**
 1. Even though no `pipeline` or `pipelineId` was passed to dispatch, the vessel's default kicks in
-2. Two missions are created (Worker + Judge) because "Reviewed" is the default
+2. Two missions are created (Worker + Judge, both with review gates) because "Reviewed" is the default
 3. The dependency chain is set up correctly
 
 **Override the default for one dispatch:**
@@ -354,14 +368,17 @@ enumerate({
 ### Common issues
 
 **Mission stuck in Pending:**
-- Check `dependsOnMissionId` -- the dependency mission may not have completed yet
+- Open the mission in the dashboard or TUI: the **Why This Mission Is Waiting** card shows the server's reason (the
+  `AssignmentBlocker` on `GET /api/v1/missions/{id}`)
+- Check `dependsOnMissionId` -- the dependency mission may not have completed yet, or may be waiting in `Review` for
+  its review gate to be approved
 - Check if any idle captains are available
 - If `AllowedPersonas` is set on all captains, verify at least one can fill the required persona
 
 **Architect didn't produce multiple missions:**
-- The Architect must output `[ARMADA:MISSION]` markers in its response
-- If no markers are found, the system falls through to normal handoff (passes context to the next stage as-is)
-- Check the Architect mission's description or diff for the markers
+- The Architect must output an `armada-plan` block (or legacy `[ARMADA:MISSION]` markers) in its response
+- If no valid mission definitions are found, the Architect mission is marked `Failed` with failure kind `InvalidOutput`
+- Check the Architect mission's agent output for the plan block or markers
 
 **Judge always sees empty diff:**
 - The diff is injected from the prior stage's `diffSnapshot` field
@@ -371,7 +388,7 @@ enumerate({
 ### Dashboard monitoring
 
 The dashboard shows persona and dependency information on:
-- **Mission detail page** -- `Persona` field and `Depends On` link
+- **Mission detail page** -- `Persona` field, `Depends On` link, and **Resolve Review** for a gated stage
 - **Voyage detail page** -- all missions listed with their status
 - **Captain detail page** -- `Preferred Persona` and `Allowed Personas` fields
 - **Vessel detail page** -- `Default Pipeline` field

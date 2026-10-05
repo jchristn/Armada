@@ -10,19 +10,21 @@ Connect [Mux](https://github.com/jchristn/mux) to Armada's MCP server and use na
 
 ## Setup
 
-When Mux is installed, `armada mcp install` adds an HTTP `armada` entry (`http://localhost:7891/mcp`) to the `mcp-servers.json` in Mux's config directory, alongside Claude Code, Codex, Gemini, and Cursor. To configure Mux yourself instead, point it at Armada's MCP server with a small config file. The recommended transport is Armada's stdio bridge (`armada mcp stdio`), which reuses the local `armada` CLI's credentials - Mux's HTTP MCP transport does not currently expose per-server auth headers.
+```bash
+armada mcp install
+```
 
-Create `armada.mcp.json`:
+When Mux is detected (its config directory, `MUX_CONFIG_DIR` or `~/.mux`, exists, or a `mux` executable is on PATH), `armada mcp install` adds an HTTP `armada` entry to that directory's `mcp-servers.json`, alongside Claude Code, Codex, Gemini CLI, and Cursor:
 
 ```json
 {
   "servers": [
-    { "name": "armada", "transport": "stdio", "command": "armada", "args": ["mcp", "stdio"] }
+    { "name": "armada", "transport": "http", "url": "http://localhost:7891", "mcpPath": "/mcp" }
   ]
 }
 ```
 
-For interactive use, save the same server into the Mux config directory's `mcp-servers.json` (or run `/mcp add` inside the Mux shell) so it loads automatically.
+The command asks before each change; pass `--yes` to accept them all, or `--dry-run` to preview without writing. To configure Mux yourself instead, see the appendix: run `/mcp` inside a Mux session, or save the entry above to a file such as `armada.mcp.json` and pass it with `--mcp-config`.
 
 ## Launch
 
@@ -34,7 +36,7 @@ armada server start
 # Interactive shell (loads mcp-servers.json automatically):
 mux
 
-# Headless, one-shot orchestration:
+# Headless, one-shot orchestration (headless runs load MCP servers only from --mcp-config):
 mux print --yolo --mcp-config ./armada.mcp.json "show me all fleets and vessels"
 ```
 
@@ -43,6 +45,12 @@ With the config loaded, Mux can call all of Armada's `armada` MCP tools (`status
 ## Default Permission Mode
 
 Armada runs Mux captains headless with `mux print --yolo` by default, so all tool calls are auto-approved without prompts. Keep destructive operations inside the worktree. To run a captain without it, untick **Auto-approve agent tool use** when editing the captain in the dashboard (or pass `autoApprove: false` to the `create_captain` / `update_captain` MCP tools); with no explicit `--mux-approval-policy`, the captain then runs with `--approval-policy deny`.
+
+## Authentication
+
+The Admiral accepts MCP calls without a credential only while it listens on a loopback hostname (`rest.hostname` is `localhost`, `::1`, or a `127.x.x.x` address), the caller connects from the same machine, and `Mcp.AllowUnauthenticatedLoopback` is true (the default). Those calls act as the default tenant's tenant admin. If the Admiral is bound to any other hostname, or the setting is false, every MCP call must carry a credential: `Authorization: Bearer <token>`, `X-Token`, or `X-Api-Key`. Mux sends one through an `auth` block on the server entry, for example `"auth": { "type": "apikey", "apiKeyHeader": "X-Api-Key", "apiKeyValue": "<key>" }`.
+
+`armada mcp install` writes the MCP URL with the host the listener is bound with (for example `http://127.0.0.1:7891/mcp` when `rest.hostname` is `127.0.0.1`), because the listener answers only that host; the examples below use the default `localhost`.
 
 ## Verify It Works
 
@@ -110,7 +118,7 @@ mux print --yolo --mcp-config '{"servers":[{"name":"armada","transport":"http","
 
 Use `--strict-mcp-config` to load only the servers from the flag and ignore the config directory's `mcp-servers.json`.
 
-**Stdio transport (fallback)** - no MCP port required; Mux launches Armada as a subprocess. Useful when a proxy in front of the MCP port requires an auth header:
+**Stdio transport (fallback)** - Mux launches Armada as a subprocess instead of connecting over HTTP:
 
 ```json
 {
@@ -119,3 +127,5 @@ Use `--strict-mcp-config` to load only the servers from the flag and ignore the 
   ]
 }
 ```
+
+The stdio bridge opens the local Armada database directly, so the MCP connection needs no HTTP listener and no credential. It works only on the Admiral host, missions still run only while the Admiral server is running, and it does not register every tool (for example `inbox`, `stop_server`, and the fleet action, playbook, and memory tools are HTTP-only).

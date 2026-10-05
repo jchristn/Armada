@@ -10,13 +10,13 @@ Connect [OpenCode](https://opencode.ai) to Armada's MCP server and use natural l
 
 ## Setup
 
-`armada mcp install` wires up Claude Code, Codex, Gemini, Cursor, Mux, and -- when OpenCode is present on the machine -- OpenCode automatically. It writes a remote MCP server entry (`{ "type": "remote", "url": "http://localhost:7891/mcp", "enabled": true }`) under the `mcp` block of `~/.config/opencode/opencode.json`. To configure OpenCode yourself instead, point it at Armada's Streamable HTTP endpoint at `http://localhost:7891/mcp` as a remote MCP server with one command:
-
 ```bash
-opencode mcp add armada --url http://localhost:7891/mcp
+armada mcp install
 ```
 
-That writes an `mcp` entry into your OpenCode config (`~/.config/opencode/opencode.json`, or the equivalent user config directory on Windows). If you prefer to manage the config by hand, add the server yourself:
+`armada mcp install` wires up Claude Code, Codex, Gemini CLI, and Cursor, plus Mux and OpenCode when they are present. OpenCode counts as present when `~/.config/opencode` exists or `opencode` is on PATH. The command writes a remote MCP server entry (`{ "type": "remote", "url": "http://localhost:7891/mcp", "enabled": true }`) under the `mcp` block of `~/.config/opencode/opencode.jsonc` if that file exists, otherwise `~/.config/opencode/opencode.json` (the same path on every OS). It asks before each change; pass `--yes` to accept them all, or `--dry-run` to preview without writing.
+
+To configure OpenCode yourself instead, run `opencode mcp add` and register a remote server named `armada` with URL `http://localhost:7891/mcp`, or add the server to the config by hand:
 
 ```json
 {
@@ -50,6 +50,12 @@ With the config loaded, OpenCode can call all of Armada's `armada` MCP tools (`s
 ## Default Permission Mode
 
 Armada runs OpenCode captains headless with `opencode run --auto` by default, so permissions that are not explicitly denied are auto-approved without prompts. Keep destructive operations inside the worktree. To run a captain without it, untick **Auto-approve agent tool use** when editing the captain in the dashboard (or pass `autoApprove: false` to the `create_captain` / `update_captain` MCP tools); the captain then runs without `--auto`.
+
+## Authentication
+
+The Admiral accepts MCP calls without a credential only while it listens on a loopback hostname (`rest.hostname` is `localhost`, `::1`, or a `127.x.x.x` address), the caller connects from the same machine, and `Mcp.AllowUnauthenticatedLoopback` is true (the default). Those calls act as the default tenant's tenant admin. If the Admiral is bound to any other hostname, or the setting is false, every MCP call must carry a credential: `Authorization: Bearer <token>`, `X-Token`, or `X-Api-Key`. OpenCode sends one through a `headers` object on the remote entry.
+
+`armada mcp install` writes the MCP URL with the host the listener is bound with (for example `http://127.0.0.1:7891/mcp` when `rest.hostname` is `127.0.0.1`), because the listener answers only that host; the examples below use the default `localhost`.
 
 ## Verify It Works
 
@@ -99,7 +105,7 @@ For the full tool reference and decision-making guidance, see [`INSTRUCTIONS_FOR
 
 ## Appendix: Manual Configuration
 
-**HTTP transport (recommended)** -- the Admiral serves MCP over Streamable HTTP at `http://localhost:7891/mcp` (MCP port 7891; REST is on 7890). Add it with `opencode mcp add armada --url http://localhost:7891/mcp`, or write the `mcp` block directly:
+**HTTP transport (recommended)** -- the Admiral serves MCP over Streamable HTTP at `http://localhost:7891/mcp` (MCP port 7891; REST is on 7890). Add it with `opencode mcp add`, or write the `mcp` block directly:
 
 ```json
 {
@@ -113,7 +119,7 @@ For the full tool reference and decision-making guidance, see [`INSTRUCTIONS_FOR
 }
 ```
 
-**Stdio transport (fallback)** -- no MCP port required; OpenCode launches Armada as a subprocess. Useful when a proxy in front of the MCP port requires an auth header, since the stdio bridge reuses the local `armada` CLI's credentials:
+**Stdio transport (fallback)** -- OpenCode launches Armada as a subprocess instead of connecting over HTTP. The stdio bridge opens the local Armada database directly, so the MCP connection needs no HTTP listener and no credential. It works only on the Admiral host, missions still run only while the Admiral server is running, and it does not register every tool (for example `inbox`, `stop_server`, and the fleet action, playbook, and memory tools are HTTP-only).
 
 ```json
 {

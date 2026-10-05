@@ -3,10 +3,10 @@
 > **Type:** implementation plan (work-tracking). Annotate task status and the
 > progress log as you go; keep this doc in sync with what actually shipped.
 >
-> **Status:** Phases A-C implemented on `feature/codehub-capabilities`; visual QA and simulated user testing not yet run; Phase D (optional) not started
+> **Status:** Phases A-C shipped in 1.0.0 (merged to `main`); visual QA done under V1_READINESS W6.4; the simulated user session in the compliance checklist is still open; Phase D (optional) not started
 > **Owner:** _unassigned_
 > **Requirements baseline:** `~/Code/Agents/requirements` (see the compliance checklist near the end)
-> **Last updated:** 2026-10-03
+> **Last updated:** 2026-10-05
 
 Status values used throughout: `[ ]` not started, `[~]` in progress, `[x]` done,
 `[!]` blocked. Put a one-line note under any task you touch, and add a dated row
@@ -141,9 +141,9 @@ vessel. What's missing is multi-vessel orchestration and persistence.
 | Git facts | `IGitService.ListBranchesAsync` returns `BranchInfo` with Ahead/Behind; `GET /api/v1/vessels/{id}/git-status` (ahead/behind after fetch); `FetchAsync`, `IsRepositoryAsync` |
 | Readiness | `VesselReadinessService.EvaluateAsync` (error/warning issues) |
 | Test results | `CheckRunService` (build/test/coverage runs per vessel) |
-| Dashboard | `VesselsHub.tsx` (tabs: Vessels, Fleets, Workspace), `api/client.ts`, `lib/useResourceTable.ts`, `lib/useAutoRefresh.ts`, `components/navConfig.tsx`, `i18n/runtime.ts` |
+| Dashboard | `VesselsHub.tsx` (tabs at the time: Vessels, Fleets, Workspace; Health was added by this plan), `api/client.ts`, `lib/useResourceTable.ts`, `lib/useAutoRefresh.ts`, `components/navConfig.tsx`, `i18n/runtime.ts` |
 | MCP enumeration | `McpEnumerateTools.cs`: add to the `entityType` description and the `switch` |
-| Persistence | Interface-per-entity on `DatabaseDriver`, four providers, `SchemaMigration` in each `TableQueries.cs` (MySQL is wired by hand in `MysqlDatabaseDriver.cs`). The latest migration is v70 (memories), which makes a good template. |
+| Persistence | Interface-per-entity on `DatabaseDriver`, four providers, `SchemaMigration` in each `TableQueries.cs` (MySQL is wired by hand in `MysqlDatabaseDriver.cs`). At the time of writing the latest migration was v70 (memories), which made a good template. |
 | Tests | `Test.Shared/Suites/**`, found by reflection; `TestGitRepoHelper`, `E2EServerFixture` |
 
 **Naming.** Armada already has a `Signal` entity (admiral-captain messages, `sig_`).
@@ -297,7 +297,9 @@ dashboard. A run is a thin parent over N voyages, so voyages stay as they are.
 **Security.**
 - Command kind is arbitrary code execution on the host, so creating and running it
   requires `TenantAdmin`, matching workspace exec.
-- Mission kind follows the existing voyage dispatch permission.
+- Mission kind was planned to follow the existing voyage dispatch permission; as
+  shipped, every fleet action create, update, delete, run, and cancel route requires
+  `TenantAdmin` (`RouteAuthorizationRegistry`).
 - Before execution begins, every target vessel is re-read with the tenant-scoped
   `ReadAsync`. Vessels from another tenant are rejected for the whole request, not
   silently skipped.
@@ -440,15 +442,20 @@ metadata, uses typed request and response DTOs, and validates before doing work.
 | POST | `/api/v1/vessels/import` | TenantAdmin | `{batchId, paths[], fleetId?, defaults?}` returns per-item results, or `{jobId}` for large batches |
 | POST | `/api/v1/vessels/import/batches/enumerate` | Authenticated | Paged import history |
 | GET | `/api/v1/vessels/import/batches/{id}` | Authenticated | Batch with items |
+| GET | `/api/v1/vessels/import/categorization/default-prompt` | TenantAdmin | Default fleet-categorization prompt (added after this plan) |
+| POST | `/api/v1/vessels/import/batches/{id}/categorize` | TenantAdmin | Ask a captain to recommend fleets for a batch's candidates (added after this plan) |
+| POST | `/api/v1/vessels/import/batches/{id}/fleet-recommendations/apply` | TenantAdmin | Apply the recommended fleets (added after this plan) |
 | POST | `/api/v1/fleet-actions/enumerate` | Authenticated | Paged action definitions |
-| POST / GET / PUT / DELETE | `/api/v1/fleet-actions[/{id}]` | TenantAdmin for Command kind, Authenticated for Mission kind | CRUD |
-| POST | `/api/v1/fleet-actions/{id}/run` | as above | `{vesselIds[], concurrency?, overrides?}` returns 202 `{runId}` |
-| POST | `/api/v1/fleet-actions/run` | as above | Ad hoc run with an inline definition |
+| POST | `/api/v1/fleet-actions` | TenantAdmin | Create |
+| GET | `/api/v1/fleet-actions/{id}` | Authenticated | Read |
+| PUT / DELETE | `/api/v1/fleet-actions/{id}` | TenantAdmin | Update, delete |
+| POST | `/api/v1/fleet-actions/{id}/run` | TenantAdmin | `{vesselIds[], concurrency?, overrides?}` returns 202 `{runId}` |
+| POST | `/api/v1/fleet-actions/run` | TenantAdmin | Ad hoc run with an inline definition |
 | POST | `/api/v1/fleet-action-runs/enumerate` | Authenticated | Paged runs |
 | GET | `/api/v1/fleet-action-runs/{id}` | Authenticated | Run with target summaries (no output) |
 | POST | `/api/v1/fleet-action-runs/{id}/targets/enumerate` | Authenticated | Paged targets, filterable by status |
 | GET | `/api/v1/fleet-action-runs/{id}/targets/{targetId}` | Authenticated | Target with `OutputText` and `ErrorText` |
-| POST | `/api/v1/fleet-action-runs/{id}/cancel` | as the run | Cancel |
+| POST | `/api/v1/fleet-action-runs/{id}/cancel` | TenantAdmin | Cancel |
 | POST | `/api/v1/vessel-health/enumerate` | Authenticated | Filtered, sorted, paged health rows |
 | GET | `/api/v1/vessel-health/summary` | Authenticated | KPI counts (override-aware) |
 | GET | `/api/v1/vessels/{id}/health` | Authenticated | Row + findings + dependencies + overrides |
@@ -481,7 +488,7 @@ design.
 
 | Feature | Tools |
 |---|---|
-| Vessel import | `discover_vessels`, `import_vessels` |
+| Vessel import | `discover_vessels`, `import_vessels` (plus `categorize_vessel_import` and `apply_fleet_recommendations`, added after this plan) |
 | Fleet actions | `create_fleet_action`, `update_fleet_action`, `delete_fleet_action`, `run_fleet_action`, `fleet_action_run_status`, `cancel_fleet_action_run` |
 | Vessel health | `vessel_health`, `evaluate_vessel_health`, `set_vessel_health_override` |
 
@@ -493,8 +500,10 @@ uses.
 
 **Helm CLI** adds three command groups:
 
-- `armada vessel import <paths...> [--root <dir>]... [--fleet <id>] [--dry-run] [--yes]`.
-  Dry-run prints the candidate table; without `--yes` it prompts once.
+- `armada vessel import <paths...> [--root <dir>]... [--fleet <id>] [--depth <n>] [--dry-run] [--yes]`.
+  Dry-run prints the candidate table; without `--yes` it prompts once. Fleet
+  categorization, added after this plan, adds `--categorize`, `--captain`,
+  `--prompt-file`, and `--apply`.
 - `armada action list|run|status|cancel`.
 - `armada health [--status Fail] [--fleet <id>] [--evaluate]`.
 
@@ -546,7 +555,8 @@ both respect permissions.
 
 Three nested settings objects are added to `ArmadaSettings`, each one class per file
 with validated, clamped setters and XML docs stating defaults and ranges. All of them
-show up on the Settings page and accept environment-variable overrides.
+are returned and accepted by `GET` and `PUT /api/v1/settings` and show up on the
+Settings page. (Environment-variable overrides were planned but not built; see A1.)
 
 | Setting | Default | Range | Applied |
 |---|---|---|---|
@@ -554,6 +564,7 @@ show up on the Settings page and accept environment-variable overrides.
 | `Import.MaxDepth` | 6 | 1-16 | live |
 | `Import.ExcludedDirectoryNames` | CodeHub's list plus `.armada`, `target`, `venv`, `.venv`, `__pycache__` | -- | live |
 | `Import.InlineBatchLimit` | 25 | 1-500 | live |
+| `Import.CategorizationTimeoutMinutes` | 20 | 1-240 | live (added after this plan, for fleet categorization) |
 | `FleetActions.MaxConcurrency` | 8 | 1-32 | live |
 | `FleetActions.DefaultTimeoutSeconds` | 300 | 5-7200 | live |
 | `FleetActions.MaxOutputBytes` | 65536 | 1024-1048576 | live |
@@ -579,7 +590,7 @@ because Phase C has nothing to grade until vessels exist in bulk.
   with the fields above.
   _Acceptance:_ out-of-range values clamp; env overrides apply; the Settings page
   shows and saves them.
-  _Note (2026-10-03):_ `VesselImportSettings` class and `ArmadaSettings.Import` added with clamping; Settings page/API exposure and env overrides not done (no existing env-override mechanism).
+  _Note (2026-10-03):_ `VesselImportSettings` class and `ArmadaSettings.Import` added with clamping; env overrides not done (no existing env-override mechanism). Settings page and API exposure shipped later (`GET`/`PUT /api/v1/settings`, Settings page Vessel Import and Fleet Actions sections).
 
 - [x] **A2 -- Discovery engine.** `VesselDiscoveryService` in
   `src/Armada.Core/Services/` (interface in `Interfaces/`), with
@@ -633,13 +644,13 @@ because Phase C has nothing to grade until vessels exist in bulk.
 - [x] **A8 -- Helm.** Add `armada vessel import` with dry-run and confirm.
   _Acceptance:_ manual run against `~/Code` lists candidates; `--yes` imports.
 
-- [~] **A9 -- Dashboard wizard.** Three steps: Source, Review, Results. Source has a
+- [x] **A9 -- Dashboard wizard.** Three steps: Source, Review, Results. Source has a
   paste list (with a live line count) and a server-side browse tree with checkboxes.
   Review has a candidate table with a status filter, select-all-new, and a fleet
   picker. All strings go through i18n.
   _Acceptance:_ visual QA at 1280 / 768 / 390, in light and dark, for every step,
   including an empty discovery and a 500-candidate review.
-  _Notes:_ Built and unit-tested; the Playwright visual QA pass (1280/768/390, light/dark) has not been run.
+  _Notes:_ Built and unit-tested; visual QA done under V1_READINESS W6.4 (1920/1512/1280/768/390, light and dark).
 
 - [x] **A10 -- Docs.** Update `docs/REST_API.md`, `docs/MCP_API.md`, the Postman
   collection (an "Import" folder), README "Onboarding many repositories", and a
@@ -648,7 +659,7 @@ because Phase C has nothing to grade until vessels exist in bulk.
 ### Phase B -- Fleet Actions
 
 - [x] **B1 -- Settings.** Add `FleetActionSettings`.
-  _Note (2026-10-03):_ class and `ArmadaSettings.FleetActions` added; Settings page/API exposure pending.
+  _Note (2026-10-03):_ class and `ArmadaSettings.FleetActions` added; Settings page/API exposure shipped later.
 
 - [x] **B2 -- Models and persistence.** `FleetAction` (`fac_`), `FleetActionRun`
   (`far_`), `FleetActionRunTarget` (`fat_`), with enums `FleetActionKindEnum`,
@@ -690,14 +701,14 @@ because Phase C has nothing to grade until vessels exist in bulk.
 - [x] **B8 -- MCP, enumerate, Helm.** Add the tools listed above, the enumerate
   types with `includeOutput`, and `armada action`.
 
-- [~] **B9 -- Dashboard.** Add the `/fleet-actions` page (actions and runs tabs), the
+- [x] **B9 -- Dashboard.** Add the `/fleet-actions` page (actions and runs tabs), the
   run-detail page with the output drawer, and a **Run action...** bulk action on the
   Vessels table. The run modal covers: pick or define an action, preview the
   rendered command for the first selected vessel, set concurrency, and confirm. The
   confirmation for a Command run states the vessel count and that the command runs
   in each working directory.
   _Acceptance:_ visual QA as in A9; a 50-target run stays responsive.
-  _Notes:_ Built and unit-tested; visual QA not run. Actions/Runs tables have no column chooser and sort only by Created (the server supports no other order).
+  _Notes:_ Built and unit-tested; visual QA done under V1_READINESS W6.4. Actions/Runs tables have no column chooser and sort only by Created (the server supports no other order).
 
 - [x] **B10 -- Docs.** Update REST_API.md, MCP_API.md, Postman ("Fleet Actions"
   folder), a new `docs/FLEET_ACTIONS.md` guide, and the CHANGELOG.
@@ -705,7 +716,7 @@ because Phase C has nothing to grade until vessels exist in bulk.
 ### Phase C -- Vessel Health
 
 - [x] **C1 -- Settings.** Add `RepositoryHealthSettings`, including thresholds.
-  _Note (2026-10-03):_ `RepositoryHealthSettings` + `RepositoryHealthThresholds` added; Settings page/API exposure pending.
+  _Note (2026-10-03):_ `RepositoryHealthSettings` + `RepositoryHealthThresholds` added; Settings page/API exposure shipped later.
 
 - [x] **C2 -- Models and persistence.** Add the four tables above (`vhl_`, `vhf_`,
   `vdp_`, `vho_`), interfaces, provider implementations, and a migration. Index every
@@ -752,16 +763,17 @@ because Phase C has nothing to grade until vessels exist in bulk.
 - [x] **C9 -- REST, MCP, Helm.** Add `VesselHealthRoutes`, the enumerate DTO, tools,
   the `vessel_health` enumerate type, and `armada health`.
 
-- [~] **C10 -- Dashboard.** Health tab, detail modal (sections: Summary, Findings,
+- [x] **C10 -- Dashboard.** Health tab, detail modal (sections: Summary, Findings,
   Dependencies, Branches, Overrides, Raw JSON), Home KPIs and CTAs, and a bulk
   **Run action...** that pre-selects the Mission kind and offers the built-in
   templates that reference `{{health.summary}}`.
   _Acceptance:_ visual QA; Home tiles deep-link into filtered views; a filter set
   survives reload through the URL.
-  _Notes:_ Built and unit-tested; visual QA not run. Overridden values are marked only in the detail modal, not in the list.
+  _Notes:_ Built and unit-tested; visual QA done under V1_READINESS W6.4. Overridden values are marked only in the detail modal, not in the list.
 
 - [x] **C11 -- Telemetry.** On the existing `ArmadaMetrics` meter, add:
-  - `armada_health_evaluations_total{outcome}`
+  - `armada_health_evaluations_total{outcome}` (Prometheus names; the instruments are
+    `armada.health.evaluations` and so on)
   - `armada_health_criterion_duration_seconds{criterion}`
   - `armada_fleet_action_targets_total{kind,outcome}`
   - `armada_fleet_action_target_duration_seconds{kind}`
@@ -769,7 +781,8 @@ because Phase C has nothing to grade until vessels exist in bulk.
 
   Spans: a root span per job or run and `stage:<Criterion>` children. No vessel IDs,
   paths or commands go in metric labels; they belong only on span attributes. Add a
-  Grafana panel group under `assets/grafana/`.
+  Grafana panel group (shipped as
+  `docker/armada/observability/grafana/dashboards/armada-fleet-operations.json`).
 
 - [x] **C12 -- Docs.** Update REST_API.md, MCP_API.md, Postman ("Vessel Health"),
   a new `docs/VESSEL_HEALTH.md` (criteria, thresholds, and what each status means),
@@ -838,13 +851,13 @@ These items apply to every phase. Tick them off per phase in the progress log.
   run under `Test.Automated`, `Test.Xunit` and `Test.Nunit` on net8.0 and net10.0.
   Tests bind to `127.0.0.1`, write nothing to the console, and set up and clean up
   their own data.
-- [~] **DASHBOARD_STYLE_AND_USABILITY.** The route inventory is in this doc.
+- [x] **DASHBOARD_STYLE_AND_USABILITY.** The route inventory is in this doc.
   Filtering, sorting and paging run on the server, and filter state lives in the URL.
   The pagination bar sits above the table with page sizes 10/25/50/100. Each row has
   an actions menu and each table a bulk bar with a clear-selection control. Dialogs
   are custom, with no browser dialogs. Empty, loading and error states have a retry
-  that keeps the filters. Status uses icon plus text. Playwright visual QA runs at
-  1280, 768 and 390 px in light and dark.
+  that keeps the filters. Status uses icon plus text. Playwright visual QA ran at
+  1920, 1512, 1280, 768 and 390 px in light and dark (V1_READINESS W6.4).
 - [x] **I18N.** Every new string, `aria-*` attribute and tooltip goes through the
   dashboard i18n runtime. Counts use plurals; ahead, behind and relative times use the
   locale formatters. The server returns stable codes, and the client localizes them.
@@ -900,3 +913,4 @@ Append a dated row whenever you advance a task. Keep newest at the bottom.
 | 2026-10-04 | Claude | B3-B8, B10 | Fleet Actions backend: renderer, runner, mission fan-out, seeding, REST, MCP, Helm, FLEET_ACTIONS.md. |
 | 2026-10-04 | Claude | C3-C9, C11, C12 | Vessel Health backend: criteria, evaluator, scheduling, overrides, REST, MCP, Helm, telemetry, VESSEL_HEALTH.md, Grafana "Armada Fleet Operations" dashboard. Full Test.Automated 2792/2792 on net10.0. |
 | 2026-10-04 | Claude | A9, B9, C10 | Dashboard: import wizard, Fleet Actions pages and RunActionModal, Health tab and detail modal, Home KPIs, Settings sections; 143/143 vitest. Visual QA and simulated user testing still to do. |
+| 2026-10-05 | docs pass | A9, B9, C10, checklist | Status synced with what shipped in 1.0.0: visual QA done under V1_READINESS W6.4; fleet action route permissions corrected (every write and run is TenantAdmin); import categorization routes, tools, CLI flags, and setting noted; Grafana dashboard path. |

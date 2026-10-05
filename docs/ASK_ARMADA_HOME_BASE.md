@@ -3,7 +3,7 @@
 > **Type:** implementation plan (work-tracking). Annotate task status and the progress log as you go.
 >
 > **Status:** Implemented and verified end to end (Phases 0-5); merged to `main`
-> **Last updated:** 2026-10-04
+> **Last updated:** 2026-10-05
 
 Status values: `[ ]` not started, `[~]` in progress, `[x]` done, `[!]` blocked.
 
@@ -30,7 +30,10 @@ message whenever something meaningful happens (started, a mission failed, landed
 - **Visibility.** Threads are private to the user who created them. The work they start stays visible
   tenant-wide on the normal pages.
 
-## What exists today (2026-10-04)
+## Starting point (before this plan, 2026-10-04)
+
+This section records what the code looked like when the plan was written; everything below it has since shipped.
+
 
 - `src/Armada.Dashboard/src/pages/AskArmada.tsx` is a single, unsaved chat with a chosen captain. History
   lives only in the browser and is re-sent each turn.
@@ -85,9 +88,13 @@ untouched).
    captain: "Proposed as aap_... and waiting for the user's approval in this conversation. Do not retry;
    tell the user what you proposed." When `auto_approve` is true the tool runs immediately and is recorded
    as an `Executed` proposal so the thread still shows what ran.
-5. The read-only allowlist is explicit and lives in one place (e.g. `AskToolPolicy`): `enumerate`,
-   `status`, `voyage_status`, `mission_status`, `fleet_action_run_status`, `vessel_health`, `get_*`,
-   `list_*`-style readers, and similar. Everything not on the list is treated as state-changing.
+5. The read-only allowlist is explicit and lives in one place (`AskToolPolicy`, in
+   `src/Armada.Core/Services/Ask/AskToolPolicy.cs`). It names each tool individually (no wildcards): `status`,
+   `enumerate`, `inbox`, `voyage_status`, `mission_status`, `fleet_action_run_status`, `vessel_health`,
+   `papercut_summary`, `token_usage_summary`, `search_memory`, `evaluate_autoland`, and specific `get_*` and
+   `list_*` readers (for example `get_vessel`, `get_mission_diff`, `get_captain_log`, `list_objectives`). The
+   `mcp__armada__` prefix Claude Code adds is ignored. Everything not on the list, including any new tool until
+   it is added deliberately, is treated as state-changing.
 
 ### Proposals and execution
 
@@ -101,11 +108,17 @@ untouched).
 - **Quick actions** call `POST /api/v1/ask/threads/{id}/actions` with `{ ToolName, Arguments }` (the same
   tool names and argument shapes as MCP). They go through the identical proposal path: with auto-approve
   off the action is created already approved by the user who submitted the form (the form is the
-  confirmation), so it executes immediately and is recorded with `source = QuickAction`.
-- **Work linking** is by tool, in one mapping table: `dispatch` -> Voyage id,
+  confirmation), so it executes immediately and is recorded with `source = QuickAction`. `/fleet-action`,
+  `/health`, and `/import` require tenant admin; `/dispatch` and `/status` do not.
+- **Work linking** is by tool, in one mapping table (`AskWorkLinker`): `dispatch` -> Voyage id,
   `create_mission` / `restart_mission` -> Mission id, `run_fleet_action` -> FleetActionRun
   id, `evaluate_vessel_health` -> Job id, `import_vessels` / `discover_vessels` -> VesselImportBatch (and
-  Job) id, `cancel_*` -> refreshes the existing tracked item.
+  Job) id, `cancel_voyage` / `cancel_mission` / `cancel_fleet_action_run` -> refreshes the existing tracked
+  item.
+- **Needs You.** Pending, unexpired proposals in the caller's own threads also appear in the inbox
+  (`GET /api/v1/inbox`, MCP `inbox`) as kind `ask_proposal` ("Ask approval: <summary>", linking to
+  `/ask/<threadId>`), so the dashboard's Needs You page (`/inbox`) and the TUI's Needs You and Approvals
+  center show them. Only the thread owner sees them; admins are not shown other users' proposals.
 
 ### Live monitoring
 
@@ -188,6 +201,14 @@ default.
 - All updates arrive over the scoped WebSocket; the page also reconciles by refetching on reconnect.
   All strings go through the i18n runtime with catalog entries for every locale.
 
+### Terminal UI
+
+`armada tui` opens into the same experience at `/ask/:threadId?` (`AskScreen`): the conversation list,
+header with the Auto-approve toggle, streaming transcript with confirm cards (`a` approve, `r` reject) and
+live work cards, and a composer with `/` quick actions and inline Dispatch and Fleet action forms. The Ask
+dock (`Ctrl+J`) follows the active thread from any screen, and the Approvals center (`Ctrl+A`) lists pending
+proposals next to mission reviews and deployment approvals. See `docs/TUI.md`.
+
 ## Tasks
 
 ### Phase 0 -- WebSocket security
@@ -232,7 +253,7 @@ default.
 
 ### Phase 5 -- Docs and verification
 
-- [~] **P5.1** REST_API.md, MCP_API.md (thread-scoped behavior and the approval result text),
+- [x] **P5.1** REST_API.md, MCP_API.md (thread-scoped behavior and the approval result text),
   WEBSOCKET_API.md, Postman ("Ask Threads" folder), CHANGELOG, README Ask Armada section.
 - [x] **P5.2** Real end-to-end on macOS with a throwaway data directory and a real Claude Code captain:
   start a thread, ask a question, ask it to dispatch a small voyage against a temp repo, approve the confirm
@@ -250,6 +271,10 @@ default.
 | `CaptainAutoApprove` | false | -- (when false, turns and narrations run the CLI captain without its auto-approve flags whatever the captain setting; see docs/SECURITY_REVIEW.md, O-02) |
 | `NarrationTimeoutSeconds` | 60 | 10-600 |
 | `TurnTimeoutMinutes` | 15 | 1-120 |
+
+Retention is configured separately in `ArmadaSettings.Retention`: `AskThreadArchiveAfterDays` (default 90, 0
+never archives) and `AskThreadDeleteAfterDays` (default 0, never deletes), 0-3650; pinned threads are never
+archived or deleted.
 
 ## Progress Log
 
@@ -356,4 +381,5 @@ These refine the contract above; the dashboard's "UI assumptions" (on `feature/a
   settled, so landing outcomes still reach the thread. Milestones add "Mission X produced its work on branch Y".
 - **Unread**: every captain or Armada message (reply, proposal card, action result, work update, summary, error)
   increments `UnreadCount`; user messages do not. `POST .../read` resets it.
-- **Retention**: none beyond delete.
+- **Retention**: idle threads are archived after `Retention.AskThreadArchiveAfterDays` (default 90) and optionally
+  deleted after `Retention.AskThreadDeleteAfterDays` (default 0, off); pinned threads are exempt.

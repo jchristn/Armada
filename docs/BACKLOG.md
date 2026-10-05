@@ -1,6 +1,6 @@
 # Armada Backlog Guide
 
-`Backlog` is the user-facing workflow for future work in Armada. Internally the persisted record is still `Objective`, so objective IDs, event history, and compatibility routes remain intact while the product language shifts to backlog-first usage.
+`Backlog` is the user-facing workflow for future work in Armada. Internally the persisted record is `Objective` (IDs use the `obj_` prefix), so objective IDs, event history, and the `/api/v1/objectives` compatibility routes remain intact while the product language is backlog-first.
 
 ## What A Backlog Item Is
 
@@ -13,6 +13,8 @@ A backlog item can represent:
 - a chore
 - an initiative
 
+(`Kind`: `Feature`, `Bug`, `Refactor`, `Research`, `Chore`, `Initiative`.)
+
 Each backlog item can carry:
 
 - title and description
@@ -22,6 +24,15 @@ Each backlog item can carry:
 - acceptance criteria, non-goals, rollout constraints, and evidence links
 - linked fleets, vessels, refinement sessions, planning sessions, voyages, missions, checks, releases, deployments, and incidents
 
+Field values:
+
+| Field | Values |
+|---|---|
+| `Priority` | `P0`, `P1`, `P2`, `P3` |
+| `BacklogState` | `Inbox`, `Triaged`, `Refining`, `ReadyForPlanning`, `ReadyForDispatch`, `Dispatched` |
+| `Effort` | `XS`, `S`, `M`, `L`, `XL` |
+| `Status` | `Draft`, `Scoped`, `Planned`, `InProgress`, `Released`, `Deployed`, `Completed`, `Blocked`, `Cancelled` |
+
 Armada keeps that current state in normalized database tables and still emits `objective.snapshot` events for audit and timeline continuity.
 
 ## Dashboard Workflow
@@ -29,14 +40,14 @@ Armada keeps that current state in normalized database tables and still emits `o
 The React dashboard is the primary user-facing backlog surface.
 
 1. Open `http://localhost:7890/dashboard`
-2. Go to `Backlog`
-3. Create or open a backlog item
+2. Go to **Dispatch** and open the **Backlog** tab (`/dispatch?tab=backlog`; `/backlog` redirects there)
+3. Create or open a backlog item (detail page at `/backlog/{id}`)
 4. Set the backlog metadata you know now
 5. Start refinement if you want model help before repository-aware planning
 6. Start planning when you are ready to choose the vessel, captain, pipeline, and playbooks
 7. Dispatch implementation or draft a release from the same detail view
 
-Backlog detail now keeps the same item linked through:
+Backlog detail keeps the same item linked through:
 
 - refinement transcripts
 - planning sessions
@@ -45,6 +56,8 @@ Backlog detail now keeps the same item linked through:
 - deployments
 - incidents
 - `Activity` (All Activity)
+
+The TUI mirrors this workflow: **Dispatch > Backlog** lists items, and the backlog item screen offers Start Refinement, Send, Summarize, Apply To Backlog Item, Stop Session, Start Planning, Open In Dispatch, and Draft Release.
 
 ## Refinement Vs Planning
 
@@ -57,6 +70,9 @@ Refinement:
 - can run without a vessel
 - is meant for shaping the implementation intent
 - stores a transcript, summary, and apply-back path
+- holds its captain in the `Refining` state while the session is active
+
+Applying a summary (**Apply To Backlog Item**, `POST /api/v1/objective-refinement-sessions/{id}/apply`, or `apply_backlog_refinement_summary`) writes the summary back to the backlog item and, by default, **ends the session** so its captain is released for missions. Pass `EndSession: false` (MCP: `endSession: false`) to keep refining in the same session. The apply request also accepts `MessageId` (which transcript message to apply), `MarkMessageSelected` (default true), and `PromoteBacklogState` (default true).
 
 Planning:
 
@@ -120,12 +136,14 @@ Helm ships first-class backlog CRUD and reorder coverage.
 armada backlog list
 armada backlog show obj_abc123
 armada backlog create --title "Stabilize release rollout" --priority P1 --backlog-state Inbox
-armada backlog update obj_abc123 --kind Feature --target-version 0.9.0
+armada backlog update obj_abc123 --kind Feature --target-version 1.1.0
 armada backlog reorder obj_abc123 --rank 10
 armada backlog delete obj_abc123
 ```
 
-Helm does not currently expose interactive refinement chat. Use the dashboard, REST API, or MCP when you need the transcript workflow.
+`create` and `update` also accept `--description`, `--status`, `--category`, `--rank`, `--effort`, `--owner`, `--due-utc`, `--parent`, `--blocked-by`, `--summary`, `--pipeline`, `--tag`, `--acceptance`, `--non-goal`, `--constraint`, `--evidence`, `--fleet`, and `--vessel`. `list` filters by `--search`, `--status`, `--kind`, `--priority`, `--backlog-state`, `--effort`, `--owner`, `--target-version`, `--fleet`, and `--vessel`.
+
+Helm does not expose interactive refinement chat. Use the dashboard, the TUI, the REST API, or MCP when you need the transcript workflow.
 
 ## MCP
 
@@ -136,9 +154,11 @@ Core backlog tools:
 - `list_backlog`
 - `get_backlog_item`
 - `create_backlog_item`
-- `update_objective`
+- `update_backlog_item`
 - `reorder_backlog_items`
 - `delete_backlog_item`
+
+The objective-named tools (`list_objectives`, `get_objective`, `create_objective`, `update_objective`, `reorder_objectives`, `delete_objective`) remain as compatibility aliases.
 
 Refinement tools:
 
