@@ -21,7 +21,13 @@ namespace Armada.Server
     {
         private sealed class TurnState
         {
-            public bool StopRequested { get; set; } = false;
+            private volatile bool _StopRequested = false;
+
+            public bool StopRequested
+            {
+                get { return _StopRequested; }
+                set { _StopRequested = value; }
+            }
         }
 
         private readonly string _Header = "[ObjectiveRefinementCoordinator] ";
@@ -183,9 +189,27 @@ namespace Armada.Server
             session = await RequireSessionAsync(session.Id, token).ConfigureAwait(false);
             if (session.Status != ObjectiveRefinementSessionStatusEnum.Active)
                 throw new InvalidOperationException("Objective refinement session " + session.Id + " is not ready for a new message.");
-            if (!_ActiveTurns.TryAdd(session.Id, new TurnState()))
+            TurnState turn = new TurnState();
+            if (!_ActiveTurns.TryAdd(session.Id, turn))
                 throw new InvalidOperationException("Objective refinement session " + session.Id + " is already generating a response.");
 
+            try
+            {
+                return await BeginTurnAsync(session, content, turn, token).ConfigureAwait(false);
+            }
+            catch
+            {
+                ReleaseTurn(session.Id, turn);
+                throw;
+            }
+        }
+
+        private async Task<ObjectiveRefinementMessage> BeginTurnAsync(
+            ObjectiveRefinementSession session,
+            string content,
+            TurnState turn,
+            CancellationToken token)
+        {
             List<ObjectiveRefinementMessage> existingMessages = await _Database.ObjectiveRefinementMessages
                 .EnumerateBySessionAsync(session.Id, token)
                 .ConfigureAwait(false);
@@ -228,7 +252,9 @@ namespace Armada.Server
             session = await _Database.ObjectiveRefinementSessions.UpdateAsync(session, token).ConfigureAwait(false);
             BroadcastSessionChanged(session);
 
-            _ = Task.Run(() => ExecuteTurnAsync(session.Id, assistantMessage.Id), CancellationToken.None);
+            string sessionId = session.Id;
+            string assistantMessageId = assistantMessage.Id;
+            _ = Task.Run(() => ExecuteTurnAsync(sessionId, assistantMessageId, turn), CancellationToken.None);
             return userMessage;
         }
 
@@ -274,7 +300,8 @@ namespace Armada.Server
             if (request == null) throw new ArgumentNullException(nameof(request));
 
             session = await RequireSessionAsync(session.Id, token).ConfigureAwait(false);
-            if (!_ActiveTurns.TryAdd(session.Id, new TurnState()))
+            TurnState summaryTurn = new TurnState();
+            if (!_ActiveTurns.TryAdd(session.Id, summaryTurn))
                 throw new InvalidOperationException("Objective refinement session " + session.Id + " is already generating a response.");
 
             try
@@ -353,7 +380,7 @@ namespace Armada.Server
             }
             finally
             {
-                _ActiveTurns.TryRemove(session.Id, out _);
+                ReleaseTurn(session.Id, summaryTurn);
             }
         }
 
@@ -555,7 +582,12 @@ namespace Armada.Server
             return Task.CompletedTask;
         }
 
-        private async Task ExecuteTurnAsync(string sessionId, string assistantMessageId)
+        /// <summary>
+        /// Run one refinement turn. The session's transition back to Active is the turn's last durable write
+        /// and happens only after the captain is settled and the turn reservation is released, so a client that
+        /// observes an Active session can immediately send, summarize, or apply without a busy conflict.
+        /// </summary>
+        private async Task ExecuteTurnAsync(string sessionId, string assistantMessageId, TurnState turn)
         {
             try
             {
@@ -657,10 +689,10 @@ namespace Armada.Server
                 captain.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.Captains.UpdateAsync(captain).ConfigureAwait(false);
 
+                ReleaseTurn(sessionId, turn);
                 session = await RequireSessionAsync(session.Id, CancellationToken.None).ConfigureAwait(false);
-                bool stopRequested = _ActiveTurns.TryGetValue(session.Id, out TurnState? turnState) && turnState.StopRequested;
                 session.ProcessId = null;
-                if (!stopRequested)
+                if (CanReturnToActive(session, turn))
                 {
                     session.Status = ObjectiveRefinementSessionStatusEnum.Active;
                     session.FailureReason = null;
@@ -674,7 +706,6 @@ namespace Armada.Server
                 _Logging.Warn(_Header + "objective refinement turn error for session " + sessionId + ": " + ex.ToString());
                 try
                 {
-                    ObjectiveRefinementSession? session = await _Database.ObjectiveRefinementSessions.ReadAsync(sessionId).ConfigureAwait(false);
                     ObjectiveRefinementMessage? assistantMessage = await _Database.ObjectiveRefinementMessages.ReadAsync(assistantMessageId).ConfigureAwait(false);
                     if (assistantMessage != null)
                     {
@@ -684,31 +715,37 @@ namespace Armada.Server
                         BroadcastMessageUpdated(assistantMessage);
                     }
 
+                    ObjectiveRefinementSession? session = await _Database.ObjectiveRefinementSessions.ReadAsync(sessionId).ConfigureAwait(false);
                     if (session != null)
                     {
-                        session.ProcessId = null;
-                        if (!_ActiveTurns.TryGetValue(session.Id, out TurnState? turnState) || !turnState.StopRequested)
-                        {
-                            session.Status = ObjectiveRefinementSessionStatusEnum.Active;
-                            session.FailureReason = ex.Message;
-                        }
-                        session.LastUpdateUtc = DateTime.UtcNow;
-                        await _Database.ObjectiveRefinementSessions.UpdateAsync(session).ConfigureAwait(false);
-                        BroadcastSessionChanged(session);
-                    }
-
-                    if (session != null)
-                    {
+                        // Settle the captain before the session is reported Active again. A stop that is
+                        // in flight owns the captain (it releases it to Idle), so the failed turn must not
+                        // re-reserve it.
                         Captain? captain = await _Database.Captains.ReadAsync(session.CaptainId).ConfigureAwait(false);
                         if (captain != null)
                         {
                             captain.ProcessId = null;
-                            if (captain.State != CaptainStateEnum.Refining)
+                            if (!turn.StopRequested && captain.State != CaptainStateEnum.Refining)
                                 captain.State = CaptainStateEnum.Refining;
                             captain.LastHeartbeatUtc = DateTime.UtcNow;
                             captain.LastUpdateUtc = DateTime.UtcNow;
                             await _Database.Captains.UpdateAsync(captain).ConfigureAwait(false);
                             _WebSocketHub?.BroadcastCaptainChange(captain);
+                        }
+
+                        ReleaseTurn(sessionId, turn);
+                        session = await _Database.ObjectiveRefinementSessions.ReadAsync(sessionId).ConfigureAwait(false);
+                        if (session != null)
+                        {
+                            session.ProcessId = null;
+                            if (CanReturnToActive(session, turn))
+                            {
+                                session.Status = ObjectiveRefinementSessionStatusEnum.Active;
+                                session.FailureReason = ex.Message;
+                            }
+                            session.LastUpdateUtc = DateTime.UtcNow;
+                            await _Database.ObjectiveRefinementSessions.UpdateAsync(session).ConfigureAwait(false);
+                            BroadcastSessionChanged(session);
                         }
                     }
                 }
@@ -719,8 +756,18 @@ namespace Armada.Server
             }
             finally
             {
-                _ActiveTurns.TryRemove(sessionId, out _);
+                ReleaseTurn(sessionId, turn);
             }
+        }
+
+        /// <summary>
+        /// A finished turn returns its session to Active only when no stop was requested for the turn and the
+        /// session is still in the Responding state the turn put it in (a stop that arrived after the turn
+        /// released its reservation has already moved it to Stopping or Stopped).
+        /// </summary>
+        private static bool CanReturnToActive(ObjectiveRefinementSession session, TurnState turn)
+        {
+            return !turn.StopRequested && session.Status == ObjectiveRefinementSessionStatusEnum.Responding;
         }
 
         private async Task<string> WritePromptFileAsync(
@@ -1233,6 +1280,15 @@ namespace Armada.Server
                 SuggestedPipelineId = document.SuggestedPipelineId
             };
             return true;
+        }
+
+        /// <summary>
+        /// Remove a session's turn reservation only when it is still the given turn, so a finishing turn
+        /// never drops the reservation of a newer turn on the same session.
+        /// </summary>
+        private void ReleaseTurn(string sessionId, TurnState turn)
+        {
+            _ActiveTurns.TryRemove(new KeyValuePair<string, TurnState>(sessionId, turn));
         }
 
         private bool IsStopRequested(string sessionId)

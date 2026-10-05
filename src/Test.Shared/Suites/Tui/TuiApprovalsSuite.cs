@@ -58,6 +58,37 @@ namespace Test.Shared.Suites.Tui
                 }
             }));
 
+            cases.Add(TuiCase.Sync(Suite, "deployment_name_agrees_across_sources", "A deployment approval reads the same from a live event and from the inbox, so its confirmation names it the same way", () =>
+            {
+                // Regression: the live path named the item by the deployment title and the inbox by the environment,
+                // so whichever source reported last decided the row and the confirmation text (an end-to-end test that
+                // pressed a after an inbox poll replaced the live item saw a different name than it expected).
+                using (TuiTestHost host = Host(out StubHttpHandler stub))
+                {
+                    host.Tui.Context.Events.Inject(AskFixtures.EventJson("deployment.changed", "{\"id\":\"dpl_1\",\"title\":\"Deploy web v1.2\",\"environmentName\":\"Staging\",\"status\":\"PendingApproval\"}"));
+                    host.Pump();
+                    ApprovalItem live = host.Tui.Context.Approvals.Find(ApprovalKindEnum.DeploymentApproval, "dpl_1")
+                        ?? throw new AssertionException("deployment from the event");
+                    AssertEqual("Live", live.Source, "item came from the event");
+
+                    InboxItem inbox = new InboxItem { Kind = InboxItemKinds.DeploymentApproval, Title = "Deployment awaiting approval: Staging", EntityName = "Staging", EntityType = "deployment", EntityId = "dpl_1", Href = "/deployments/dpl_1" };
+                    ApprovalItem polled = ApprovalSources.FromInbox(inbox)!;
+                    AssertEqual(polled.EntityName, live.EntityName, "entity name");
+                    AssertEqual(polled.Title, live.Title, "row title");
+                    AssertEqual(polled.Route, live.Route, "route");
+
+                    Select(host, ApprovalKindEnum.DeploymentApproval);
+                    host.Press("a");
+                    AssertTrue(host.PumpUntil(() => host.App.Modals.IsActive), "confirm");
+                    TuiCase.Contains(host.Screen(), "Approve and execute \"Staging\"?", "the confirmation uses the inbox's name");
+                    host.Press("n");
+
+                    host.Tui.Context.Events.Inject(AskFixtures.EventJson("deployment.changed", "{\"id\":\"dpl_3\",\"title\":\"No environment\",\"status\":\"PendingApproval\"}"));
+                    host.Pump();
+                    AssertEqual("dpl_3", host.Tui.Context.Approvals.Find(ApprovalKindEnum.DeploymentApproval, "dpl_3")?.EntityName, "no environment falls back to the id, like the inbox");
+                }
+            }));
+
             cases.Add(TuiCase.Sync(Suite, "review_decisions", "Mission reviews: approve, conditionally approve and more work need feedback, deny", () =>
             {
                 using (TuiTestHost host = Host(out StubHttpHandler stub))

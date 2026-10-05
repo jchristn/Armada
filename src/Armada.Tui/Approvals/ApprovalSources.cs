@@ -162,8 +162,8 @@ namespace Armada.Tui.Approvals
             {
                 DeploymentStatusEnum? status = data.DeploymentStatus;
                 if (status == null) return;
-                string title = data.Title ?? id;
-                Apply(ApprovalKindEnum.DeploymentApproval, id, status == DeploymentStatusEnum.PendingApproval, "Deployment awaiting approval: " + title, title, "/deployments/" + id, 1);
+                string name = DeploymentEntityName(id, data.EnvironmentName);
+                Apply(ApprovalKindEnum.DeploymentApproval, id, status == DeploymentStatusEnum.PendingApproval, "Deployment awaiting approval: " + name, name, "/deployments/" + id, 1);
             }
         }
 
@@ -198,6 +198,17 @@ namespace Armada.Tui.Approvals
 
             _Live[key] = new KeyValuePair<DateTime, ApprovalItem>(_Context.Clock.UtcNow, item);
             _Context.Approvals.Upsert(item, existing == null);
+        }
+
+        /// <summary>
+        /// The name a deployment approval item carries: the server inbox's rule (the environment name, or the
+        /// deployment id when it has none). An item from a <c>deployment.changed</c> event and the same deployment
+        /// from the next inbox poll must read the same, or the row and its confirmation text change under the user
+        /// depending on which source reported it last.
+        /// </summary>
+        private static string DeploymentEntityName(string id, string? environmentName)
+        {
+            return String.IsNullOrWhiteSpace(environmentName) ? id : environmentName!;
         }
 
         private static int Hash(List<InboxItem> inbox)
