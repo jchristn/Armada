@@ -5,6 +5,7 @@ namespace Test.Shared.Suites.Services
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Core;
+    using Armada.Core.Authorization;
     using Armada.Core.Enums;
     using Armada.Core.Models;
     using Test.Shared.Infrastructure;
@@ -114,6 +115,16 @@ namespace Test.Shared.Suites.Services
                 UrlPathCanonicalizationResult real = UrlPathCanonicalizer.Canonicalize("/Dashboard/index.html");
                 AssertTrue(real.StartsWithSegments("dashboard"), "segment match is case-insensitive");
                 AssertFalse(real.MatchesSegments("dashboard"), "exact match needs the same segment count");
+            }));
+
+            cases.Add(Case("authorization_dashboard_exemption_requires_segment_boundary", "Anonymous dashboard exemption matches whole segments only", TestTags.Negative, () =>
+            {
+                AssertEqual(PermissionLevel.NoAuthRequired, AuthorizationConfig.GetRequirement("GET", "/dashboard").Level);
+                AssertEqual(PermissionLevel.NoAuthRequired, AuthorizationConfig.GetRequirement("GET", "/dashboard/missions/msn_1").Level);
+                AssertEqual(PermissionLevel.NoAuthRequired, AuthorizationConfig.GetRequirement("GET", "/assets/index.js").Level);
+                AssertEqual(PermissionLevel.AdminOnly, AuthorizationConfig.GetRequirement("GET", "/dashboardx").Level, "'/dashboardx' is not the dashboard");
+                AssertEqual(PermissionLevel.AdminOnly, AuthorizationConfig.GetRequirement("GET", "/dashboard-admin/x").Level, "'/dashboard-admin' is not the dashboard");
+                AssertEqual(PermissionLevel.AdminOnly, AuthorizationConfig.GetRequirement("GET", "/dashboard/%2e%2e/undeclared").Level, "ambiguous spelling is not exempt");
             }));
 
             return new TestSuiteDescriptor(

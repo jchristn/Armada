@@ -182,8 +182,8 @@ namespace Armada.Core.Services.Health
             if (String.IsNullOrWhiteSpace(root)) return path.Replace('\\', '/');
             try
             {
+                if (!PathContainment.IsInside(root, path, allowRoot: true)) return path.Replace('\\', '/');
                 string relative = Path.GetRelativePath(root, path);
-                if (relative.StartsWith("..", StringComparison.Ordinal)) return path.Replace('\\', '/');
                 return relative.Replace('\\', '/');
             }
             catch (ArgumentException)

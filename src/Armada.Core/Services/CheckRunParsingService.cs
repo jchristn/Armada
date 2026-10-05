@@ -101,7 +101,7 @@ namespace Armada.Core.Services
                 try
                 {
                     string fullPath = Path.GetFullPath(Path.Combine(root, artifact.Path));
-                    if (!fullPath.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+                    if (!PathContainment.IsInside(root, fullPath))
                         continue;
                     if (!File.Exists(fullPath))
                         continue;
@@ -338,7 +338,7 @@ namespace Armada.Core.Services
                 try
                 {
                     string fullPath = Path.GetFullPath(Path.Combine(root, artifact.Path));
-                    if (!fullPath.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+                    if (!PathContainment.IsInside(root, fullPath))
                         continue;
                     if (!File.Exists(fullPath))
                         continue;

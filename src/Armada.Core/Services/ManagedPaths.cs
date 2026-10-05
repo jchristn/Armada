@@ -31,11 +31,7 @@ namespace Armada.Core.Services
                 DirectoryInfo info = new DirectoryInfo(fullPath);
                 if (info.Exists && info.LinkTarget != null) return false;
 
-                StringComparison comparison = OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()
-                    ? StringComparison.OrdinalIgnoreCase
-                    : StringComparison.Ordinal;
-                string prefix = fullRoot + Path.DirectorySeparatorChar;
-                return fullPath.Length > prefix.Length && fullPath.StartsWith(prefix, comparison);
+                return PathContainment.IsInside(fullRoot, fullPath);
             }
             catch (Exception)
             {

@@ -1372,7 +1372,7 @@ namespace Armada.Server
             if (value is string stringValue)
             {
                 if (String.IsNullOrWhiteSpace(stringValue)) return null;
-                return stringValue.StartsWith("?") ? stringValue.Substring(1) : stringValue;
+                return stringValue.StartsWith('?') ? stringValue.Substring(1) : stringValue;
             }
 
             if (value is System.Collections.Specialized.NameValueCollection nameValueCollection)
@@ -1441,10 +1441,10 @@ namespace Armada.Server
         /// </summary>
         private async Task DashboardDefaultRouteAsync(HttpContextBase ctx)
         {
-            string path = ctx.Request.Url.RawWithoutQuery;
+            UrlPathCanonicalizationResult canonical = UrlPathCanonicalizer.Canonicalize(ctx.Request.Url.RawWithoutQuery);
 
             // Redirect root to dashboard
-            if (path == "/" || path == "")
+            if (String.IsNullOrEmpty(ctx.Request.Url.RawWithoutQuery) || (canonical.Success && canonical.Segments.Count == 0))
             {
                 ctx.Response.StatusCode = 302;
                 ctx.Response.Headers.Add("Location", "/dashboard");
@@ -1453,9 +1453,9 @@ namespace Armada.Server
             }
 
             // Serve dashboard static files
-            if (path.StartsWith("/dashboard"))
+            if (canonical.StartsWithSegments("dashboard"))
             {
-                if (Dashboard.StaticFileHandler.TryGetFile(path, out byte[] content, out string contentType))
+                if (Dashboard.StaticFileHandler.TryGetFile(canonical.Path, out byte[] content, out string contentType))
                 {
                     ctx.Response.ContentType = contentType;
                     await ctx.Response.Send(content).ConfigureAwait(false);
@@ -1474,9 +1474,9 @@ namespace Armada.Server
 
             // Also serve /img/* and /assets/* at root level for the React dashboard
             // (Vite builds reference assets from root, not /dashboard/)
-            if (path.StartsWith("/assets/") || path.StartsWith("/img/"))
+            if (canonical.Segments.Count > 1 && (canonical.StartsWithSegments("assets") || canonical.StartsWithSegments("img")))
             {
-                string dashPath = "/dashboard" + path;
+                string dashPath = "/dashboard" + canonical.Path;
                 if (Dashboard.StaticFileHandler.TryGetFile(dashPath, out byte[] assetContent, out string assetType))
                 {
                     ctx.Response.ContentType = assetType;

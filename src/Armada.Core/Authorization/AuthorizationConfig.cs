@@ -1,6 +1,7 @@
 namespace Armada.Core.Authorization
 {
     using System;
+    using Armada.Core.Models;
 
     /// <summary>
     /// Path-based lookup over <see cref="RouteAuthorizationRegistry"/>. Kept for callers that only have a concrete
@@ -37,8 +38,12 @@ namespace Armada.Core.Authorization
             if (RouteAuthorizationRegistry.TryResolvePath(method, path, out AuthorizationRequirement? requirement, out string? _) && requirement != null)
                 return requirement;
 
-            string lower = path.ToLowerInvariant();
-            if (lower == "/" || lower.StartsWith("/dashboard", StringComparison.Ordinal) || lower.StartsWith("/assets/", StringComparison.Ordinal) || lower.StartsWith("/img/", StringComparison.Ordinal))
+            UrlPathCanonicalizationResult canonical = UrlPathCanonicalizer.Canonicalize(path);
+            bool isDashboardAsset = canonical.Success &&
+                (canonical.Segments.Count == 0 ||
+                 canonical.StartsWithSegments("dashboard") ||
+                 (canonical.Segments.Count > 1 && (canonical.StartsWithSegments("assets") || canonical.StartsWithSegments("img"))));
+            if (isDashboardAsset)
                 return new AuthorizationRequirement("Dashboard", ResourceOperationEnum.Read, PermissionLevel.NoAuthRequired);
 
             return new AuthorizationRequirement("Undeclared", ResourceOperationEnum.Admin, PermissionLevel.AdminOnly);

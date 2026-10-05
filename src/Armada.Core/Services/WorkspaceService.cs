@@ -578,10 +578,7 @@ namespace Armada.Core.Services
                 ? rootPath
                 : Path.GetFullPath(Path.Combine(rootPath, relativePath.Replace('/', Path.DirectorySeparatorChar)));
 
-            string normalizedRoot = EnsureTrailingSeparator(rootPath);
-            string normalizedCandidate = EnsureTrailingSeparator(candidate);
-            bool exactRoot = candidate.Equals(rootPath, StringComparison.OrdinalIgnoreCase);
-            if (!exactRoot && !normalizedCandidate.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase))
+            if (!PathContainment.IsInside(rootPath, candidate, allowRoot: true))
                 throw new UnauthorizedAccessException("Requested path is outside the workspace root.");
 
             GuardAgainstReparsePoints(rootPath, candidate);
@@ -653,13 +650,6 @@ namespace Armada.Core.Services
                 return String.Empty;
 
             return normalized.Substring(0, lastSlash);
-        }
-
-        private static string EnsureTrailingSeparator(string path)
-        {
-            return path.EndsWith(Path.DirectorySeparatorChar)
-                ? path
-                : path + Path.DirectorySeparatorChar;
         }
 
         private static bool ShouldHideEntry(string name, FileAttributes attributes)

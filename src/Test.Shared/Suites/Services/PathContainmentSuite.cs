@@ -7,6 +7,7 @@ namespace Test.Shared.Suites.Services
     using System.Threading.Tasks;
     using Armada.Core;
     using Armada.Core.Models;
+    using Armada.Core.Services.Health;
     using Armada.Proxy.Services;
     using Test.Shared.Infrastructure;
     using Touchstone.Core;
@@ -84,6 +85,22 @@ namespace Test.Shared.Suites.Services
                     UrlPathCanonicalizationResult canonical = UrlPathCanonicalizer.Canonicalize(escape);
                     AssertNull(DashboardAssetResolver.Resolve(dashboard, canonical), "'" + escape + "' must not resolve");
                 }
+            }));
+
+            cases.Add(Case("repository_inventory_read_text_refuses_sibling_directory", "RepositoryFileInventory.ReadText refuses a sibling directory with a shared prefix", TestTags.Negative, () =>
+            {
+                string parent = TestTemp.NewDirectory("inventory");
+                string root = Path.Combine(parent, "repo");
+                string sibling = Path.Combine(parent, "repo-secrets");
+                Directory.CreateDirectory(root);
+                Directory.CreateDirectory(sibling);
+                File.WriteAllText(Path.Combine(root, "inside.txt"), "inside");
+                File.WriteAllText(Path.Combine(sibling, "key.txt"), "secret");
+
+                RepositoryFileInventory inventory = RepositoryFileInventory.FromDirectory(root, null);
+                AssertEqual("inside", inventory.ReadText("inside.txt"));
+                AssertNull(inventory.ReadText("../repo-secrets/key.txt"), "sibling directory must be refused");
+                AssertNull(inventory.ReadText("../repo/../repo-secrets/key.txt"), "climbing through the root must be refused");
             }));
 
             return new TestSuiteDescriptor(
