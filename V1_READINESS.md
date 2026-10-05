@@ -183,8 +183,13 @@ The goal is a written threat model and a closed list of findings, not just fixes
 
 ### W6. Product completeness and usability
 
-- [ ] **W6.1 Simulated user testing.** Run a full session per `SIMULATED_USER_TESTING.md` against each release
+- [~] **W6.1 Simulated user testing.** Run a full session per `SIMULATED_USER_TESTING.md` against each release
   candidate in an isolated `armada-usertest` stack; triage S1/S2 findings before release.
+  `SIMULATED_USER_TESTING.md` written; the first unattended run (agent, stub captain, dashboard in headless Chrome,
+  TUI in a pty) is in `docs/SIMULATED_USER_TESTING_RESULTS_1.0.md`: every P1/P2 task and P3 except restore passed on
+  the dashboard after fixes; 3 S2 and 4 S3 fixed, 0 S1/S2 and 13 S3 open. Left for a human: the same session with
+  real captains (reply quality, streaming, gating, the W6.7 ten-minute path), visual judgement, the TUI flows that
+  were only screen-checked, a restore, and triage of the open S3 findings.
 - [x] **W6.2 Captain support matrix.** `docs/CAPTAINS.md`: supported versions of Claude Code, Codex, Gemini, Cursor,
   Mux, OpenCode, and API endpoints, and which features each supports (missions, planning, Ask threads, Ask approval
   gating -- today only Claude Code and ApiEndpoint are gated -- streaming, thinking, tool display).
@@ -197,7 +202,8 @@ The goal is a written threat model and a closed list of findings, not just fixes
 - [x] **W6.6 Localization.** Native-speaker review of all eight non-English locales, or ship them labeled "beta" in
   the language picker.
 - [~] **W6.7 Onboarding.** First-run path from install to first landed mission in under ten minutes, verified in
-  W6.1.
+  W6.1. The unattended W6.1 run took 7 to 32 s from sign-in to a landed mission (stub captain); the timed human run
+  with a real captain is still open.
   _Notes:_ Scripted and timed: `scripts/common/install-verify/verify-onboarding.sh` (NuGet tool install into a fresh HOME and data dir, `armada server start`, login, fleet, vessel from a local checkout, one stub-captain mission landed with LocalMerge into the checkout) prints stage times and fails on any step or over 600 s; install-verify.yml runs it on Linux and macOS. Local run (macOS arm64): 5.9 s total. The manual equivalent with a real captain is in RELEASING.md "Onboarding by hand"; open until it is timed in a W6.1 session.
 
 ### W7. Documentation
@@ -260,3 +266,4 @@ history), captain-suggested Ask thread titles, commit-message enforcement at lan
 | 2026-10-05 | ops agent | W5.3, W5.5, W6.7 | Docker install-verify root cause (git strips command-scope config from a local clone's upload-pack; safe.directory now via GIT_CONFIG_GLOBAL, test origin owned by another UID on every host, one-line GitCommandException messages); Harbor .app as a menu bar app (LSUIElement, activation policy, login item) with scripts/macos/build-harbor-app.sh and the owner's signing checklist; timed onboarding script and CI job; OPERATIONS/DOCKER/RELEASING/HARBOR/BUILDING_INSTALLERS/DOCKERHUB_README drift fixed (settings mount path, 1.0.0, retention, Harbor settings and install). |
 | 2026-10-05 | security agent | W1.9 | Final security pass: fixed MCP `enumerate` cross-tenant leak (mission summaries, model endpoints, harbors, releases, check runs, personas, templates, pipelines, playbooks, jobs, profiles, skills) and scoped DB enumerations ignoring filters on all four providers (F-33, F-34); typed errors (MCP gate Forbidden, restore 400, WebSocket `command.error` code, status_changed payload, categorization/fleet action/captain validation codes, bind/dirty/not-idle/dock exceptions, tunnel LastErrorCode); mission-scoped MCP tokens for local and Harbor captains (O-04 closed, O-20 mostly closed); O-06, O-17 closed; O-11 narrowed (persisted proxy lockouts, AllowInvalidCertificates warning). API surface additive (+1 setting, +2 event fields, +1 reply field, tenant create response). Full suite 3770 (3761 passed, 9 skipped, 0 failed); Database suites green on SQLite (465), PostgreSQL, MySQL, SQL Server (455 + 10 skipped each). |
 | 2026-10-05 | ui security agent | W1.9 | UI follow-ups for F-37 and the typed errors: dashboard and TUI self password change send `CurrentPassword`, tenant create offers an admin password and shows a generated one once; categorization code labels (fixture regenerated, 16 catalog translations); Armada.Client typed `mission.status_changed` and `command.error` readers (no UI parsed them from text before); WEBSOCKET_API.md documents `code` and `status` / `previousStatus`. Dashboard Vitest 294/294; Tui suites 428 + 9 new; full suite 3778 (3768 passed, 9 skipped, 1 failed: Tui.Parity reflection on a client overload, fixed by dropping the overload, suite rerun green). |
+| 2026-10-05 | sim-testing agent | W6.1, W6.7 | `SIMULATED_USER_TESTING.md` (personas, task scripts, recording, S1-S4, exit criterion) and the first unattended run in `docs/SIMULATED_USER_TESTING_RESULTS_1.0.md` (throwaway Admiral with the stub captain, 13 temp repos with bare origins, dashboard via Playwright, TUI via pty and pyte). Fixed: six locales blanked the dashboard on Settings (i18n template recursion), Draft Release stuck on Loading, backlog refinement Summarize crash, voyage and mission pages not live, jobs `status` filter 400 (header activity indicator), stale translated tooltips and aria-labels, `armada-landing/*` branches left in checkouts. 31 findings recorded with suggested fixes (13 S3, 18 S4), among them sign-outs on every Admiral restart (session key not persisted). W6.1 stays open for the human run with real captains. |

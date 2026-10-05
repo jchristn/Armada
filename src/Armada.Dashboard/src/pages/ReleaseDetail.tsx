@@ -51,7 +51,8 @@ export default function ReleaseDetail() {
   const { t, formatDateTime, formatRelativeTime } = useLocale();
   const { pushToast } = useNotifications();
 
-  const createMode = id === 'new';
+  // The static route releases/new has no :id parameter; releases/:id with id "new" is the same page.
+  const createMode = !id || id === 'new';
   const canManage = isAdmin || isTenantAdmin;
 
   const [release, setRelease] = useState<Release | null>(null);
