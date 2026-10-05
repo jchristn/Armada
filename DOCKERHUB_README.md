@@ -38,7 +38,7 @@ and a **dock** is the worktree a captain works in.
 | Image | What it runs | Port |
 |-------|--------------|------|
 | [`jchristn77/armada-server`](https://hub.docker.com/r/jchristn77/armada-server) | The Admiral: REST API, built-in dashboard, WebSocket (`/ws`), MCP server, Prometheus metrics | 7890, 7891, 9464 |
-| [`jchristn77/armada-dashboard`](https://hub.docker.com/r/jchristn77/armada-dashboard) | Standalone React dashboard served by nginx | 80 |
+| [`jchristn77/armada-dashboard`](https://hub.docker.com/r/jchristn77/armada-dashboard) | Standalone React dashboard served by nginx (unprivileged) | 8080 |
 | [`jchristn77/armada-proxy`](https://hub.docker.com/r/jchristn77/armada-proxy) | Armada.Proxy, a relay for reaching an Admiral that is not directly exposed | 7893 |
 
 Every image that serves HTTP includes `curl`, and the compose files define healthchecks that probe
@@ -67,8 +67,9 @@ The Admiral is a single .NET process. It stores everything in SQLite by default 
 are also supported), serves the REST API and dashboard on port 7890, and serves MCP on port 7891 so agents can call
 home. Captains run as CLI processes in their own worktrees.
 
-In the default compose stack the Admiral also runs those captains inside its container, which means the agent CLIs
-and their logins would have to live there too. Most people instead use **split mode** (`compose.split.yaml`): the
+The server image includes `git` but no agent CLIs, so in the default compose stack the Admiral can run missions on
+API-endpoint captains (a hosted or local model endpoint) but not on Claude Code, Codex, or the other CLI runtimes.
+For those, use **split mode** (`compose.split.yaml`): the
 Admiral runs in Docker while the **Harbor** host-runner app on your machine executes agents, git, and worktrees
 where your repositories and tool logins already are. Split mode is experimental in this release.
 
@@ -82,6 +83,7 @@ Clone the repository for the compose files and default configuration:
 ```bash
 git clone https://github.com/jchristn/armada.git
 cd armada/docker/armada
+export ARMADA_INITIAL_ADMIN_PASSWORD='choose-a-strong-password'   # 8+ characters, or put it in .env
 docker compose up -d
 ```
 
@@ -93,11 +95,14 @@ docker compose up -d
 | `armada-dashboard` | 3000 | Standalone dashboard |
 | `prometheus` / `loki` / `grafana` | 9090 / 3100 / 3001 | Observability (Grafana login `admin` / `admin`) |
 
-Open `http://localhost:7890/dashboard` and sign in with the default account (`admin@armada` / `password`). Change
-that password before the Admiral is reachable from any other machine; the defaults are meant for a local first run.
+Open `http://localhost:7890/dashboard` and sign in as `admin@armada` with the password you set. The Admiral listens
+on all interfaces inside the container, so it refuses to start while the default password is in use, and the
+`default` bearer token does not work; create a credential under Server > Credentials for scripts and MCP clients.
 
-The SQLite database and logs are bind-mounted from `docker/armada/db` and `docker/armada/logs`, and the server
-configuration is `docker/armada/armada.json`.
+The SQLite database and logs are bind-mounted from `docker/armada/db` and `docker/armada/logs` (writable by UID
+1654, the image's non-root user), and the server configuration `docker/armada/armada.json` is mounted at
+`/app/data/settings.json`. To use a repository checked out on the host as a vessel, mount it and trust its path for
+git as described in the Docker guide.
 
 To pull newer images and recreate the stack without touching your data:
 

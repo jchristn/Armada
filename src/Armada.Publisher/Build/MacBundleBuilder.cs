@@ -6,10 +6,12 @@ namespace Armada.Publisher.Build
     using System.Security;
     using System.Text;
     using Armada.Publisher.Channels;
+    using Armada.Publisher.Manifest;
 
     /// <summary>
     /// Assembles a macOS .app bundle (Contents/Info.plist, Contents/MacOS, Contents/Resources/AppIcon.icns)
-    /// around a self-contained publish, and writes the hardened-runtime entitlements .NET needs.
+    /// around a self-contained publish, and writes the hardened-runtime entitlements .NET needs. Tray artifacts
+    /// are marked as menu-bar agents (LSUIElement) that allow a single instance.
     /// </summary>
     public static class MacBundleBuilder
     {
@@ -142,11 +144,12 @@ namespace Armada.Publisher.Build
                 { "CFBundleInfoDictionaryVersion", "6.0" },
                 { "CFBundleName", context.Artifact.DisplayName },
                 { "CFBundlePackageType", "APPL" },
+                { "CFBundleSignature", "????" },
                 { "CFBundleShortVersionString", context.Version },
                 { "CFBundleVersion", numericVersion },
                 { "LSApplicationCategoryType", "public.app-category.developer-tools" },
                 { "LSMinimumSystemVersion", MinimumSystemVersion },
-                { "NSHumanReadableCopyright", context.Manifest.Product.Publisher }
+                { "NSHumanReadableCopyright", "Copyright (c) " + context.Manifest.Product.Publisher }
             };
             if (hasIcon) strings.Add("CFBundleIconFile", IconName);
 
@@ -164,6 +167,14 @@ namespace Armada.Publisher.Build
             }
 
             plist.Append("    <key>NSHighResolutionCapable</key>\n    <true/>\n");
+            if (context.Artifact.Kind == ArtifactKindEnum.Tray)
+            {
+                // A tray (menu bar) app: no Dock icon or app menu at launch, so the login item starts it in the menu
+                // bar only. The app switches itself to a regular Dock app while its window is open. One instance.
+                plist.Append("    <key>LSUIElement</key>\n    <true/>\n");
+                plist.Append("    <key>LSMultipleInstancesProhibited</key>\n    <true/>\n");
+            }
+
             plist.Append("    <key>NSSupportsAutomaticGraphicsSwitching</key>\n    <true/>\n");
             plist.Append("</dict>\n</plist>\n");
             return plist.ToString();

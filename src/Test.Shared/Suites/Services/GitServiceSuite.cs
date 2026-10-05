@@ -889,6 +889,18 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(Case("git_command_exception_message_is_one_line_with_all_of_stderr", "GitCommandException.Message keeps every stderr line on one log line", TestTags.Negative, () =>
+            {
+                // A multi-line message is split across log lines (and syslog records), so the line naming the cause
+                // ("fatal: detected dubious ownership ...") was lost when only the first line was kept or grepped.
+                string stderr = "Cloning into bare repository '/app/data/repos/x.git'...\nfatal: detected dubious ownership in repository at '/iv/origin.git'\r\n\nfatal: Could not read from remote repository.\n";
+                GitCommandException ex = new GitCommandException("git", new List<string> { "clone", "--bare" }, 128, String.Empty, stderr);
+                AssertFalse(ex.Message.Contains('\n'), "message has no line feed");
+                AssertFalse(ex.Message.Contains('\r'), "message has no carriage return");
+                AssertEqual("git failed (exit 128): Cloning into bare repository '/app/data/repos/x.git'... | fatal: detected dubious ownership in repository at '/iv/origin.git' | fatal: Could not read from remote repository.", ex.Message);
+                AssertEqual(stderr, ex.StandardError, "StandardError keeps the raw text");
+            }));
+
             cases.Add(CaseAsync("working_tree_status_counts_from_porcelain_v2", "GetWorkingTreeStatusAsync counts renames once and untracked unusual names", TestTags.Positive, async () =>
             {
                 GitService service = CreateService();

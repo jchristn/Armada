@@ -23,7 +23,7 @@ The Admiral listens on all interfaces inside the container, so it refuses to sta
 is in use; `ARMADA_INITIAL_ADMIN_PASSWORD` (8+ characters) replaces it on first start and disables the `default`
 bearer token. Compose stops with an error if the variable is not set.
 
-This starts two containers:
+This starts five containers:
 
 | Service | Port | Description |
 |---------|------|-------------|
@@ -61,8 +61,10 @@ UID 101 on port 8080 (nginx-unprivileged). After upgrading an existing install, 
 writable by the Admiral's user, for example:
 
 ```bash
-sudo chown -R 1654:1654 docker/armada/db docker/armada/logs docker/armada/armada.json
+sudo chown -R 1654:1654 docker/armada/db docker/armada/logs
 ```
+
+The settings file only needs to be readable by UID 1654 (mode 0644 is enough).
 
 The Admiral reads its settings from `/app/data/settings.json` (`ARMADA_DATA_DIR=/app/data`); compose mounts
 `docker/armada/armada.json` there.
@@ -72,17 +74,16 @@ The Admiral reads its settings from `/app/data/settings.json` (`ARMADA_DATA_DIR=
 ## Architecture
 
 ```
-┌──────────────────┐       ┌──────────────────┐
-│    Dashboard     │──────▶│  Armada Server   │
-│ Planning +       │ :7890 │  (REST + WS)     │
-│ Dispatch UI      │       │  ports 7890-7891 │
-│ port 3000        │       │                  │
-└──────────────────┘       └──────────────────┘
-                                │
-                         ┌──────┴──────┐
-                         │  SQLite DB  │
-                         │  /app/data/ │
-                         └─────────────┘
++--------------------+         +--------------------+
+|  Dashboard         |  :7890  |  Armada Server     |
+|  (nginx, React)    |-------->|  REST + WS  :7890  |
+|  port 3000         |         |  MCP        :7891  |
++--------------------+         +---------+----------+
+                                         |
+                                +--------+---------+
+                                |  SQLite DB       |
+                                |  /app/data/db    |
+                                +------------------+
 ```
 
 The dashboard container serves the React build under `/dashboard/` and proxies everything else (the REST API, the WebSocket at `/ws`, images, and translations) to the Admiral at `ARMADA_SERVER_URL` (default `http://armada-server:7890`), so the browser only talks to port 3000. The server container runs the .NET application with an embedded SQLite database; it also serves the same React build at `/dashboard` on port 7890.
@@ -95,7 +96,8 @@ That dashboard includes the planning workflow as well as direct dispatch: you ca
 
 ## Docker Compose Configuration
 
-The default Armada stack file is `docker/armada/compose.yaml`:
+The default Armada stack file is `docker/armada/compose.yaml`. The Admiral service, abridged (the file also
+defines `armada-dashboard`, `prometheus`, `loki`, and `grafana`, each with a healthcheck):
 
 ```yaml
 services:
@@ -106,24 +108,27 @@ services:
     ports:
       - "7890:7890"
       - "7891:7891"
+      - "9464:9464"
     environment:
-      # Relocate the entire data directory (settings.json, database, logs, docks, repos) with one variable
-      # instead of mapping individual paths. Defaults to ~/.armada when unset.
-      - ARMADA_DATA_DIR=/app/data
+      - ARMADA_INITIAL_ADMIN_PASSWORD=${ARMADA_INITIAL_ADMIN_PASSWORD:?Set ARMADA_INITIAL_ADMIN_PASSWORD ...}
     volumes:
-      - ./data:/app/data
-
-  armada-dashboard:
-    build:
-      context: ../..
-      dockerfile: src/Armada.Dashboard/Dockerfile
-    ports:
-      - "3000:8080"
-    environment:
-      - ARMADA_SERVER_URL=http://armada-server:7890
+      - ./armada.json:/app/data/settings.json
+      - ./db:/app/data/db
+      - ./logs:/app/data/logs
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:7890/api/v1/status/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 2
+      start_period: 30s
     depends_on:
-      - armada-server
+      loki:
+        condition: service_healthy
 ```
+
+The image sets `ARMADA_DATA_DIR=/app/data`, so settings, database, logs, docks, and bare repository clones all live
+under `/app/data`. Only the settings file, `db/`, and `logs/` are bind-mounted; docks and repository clones live in
+the container and are recreated from each vessel's repository URL when the container is replaced.
 
 The proxy stack file is `docker/proxy/compose.yaml`:
 
@@ -142,6 +147,12 @@ services:
       - ./proxysettings.json:/config/proxysettings.json:ro
       - ./data:/app/data
       - ./logs:/app/data/logs
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:7893/proxy-api/v1/status/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 2
+      start_period: 20s
 ```
 
 `ARMADA_PROXY_PASSWORD` is required: it is the shared proxy login and tunnel password, and the proxy refuses to start
@@ -151,7 +162,7 @@ with the built-in default. Set the same value as `remoteControl.password` on eac
 
 | Host Path | Container Path | Purpose |
 |-----------|----------------|---------|
-| `docker/armada/armada.json` | `/app/data/armada.json` | Server configuration |
+| `docker/armada/armada.json` | `/app/data/settings.json` | Server configuration |
 | `docker/armada/db/` | `/app/data/db/` | SQLite database files |
 | `docker/armada/logs/` | `/app/data/logs/` | Server log files |
 | `docker/proxy/proxysettings.json` | `/config/proxysettings.json` | Proxy configuration |
@@ -160,7 +171,7 @@ with the built-in default. Set the same value as `remoteControl.password` on eac
 
 ### Server Configuration
 
-Edit `docker/armada/armada.json` to customize:
+Edit `docker/armada/armada.json` to customize (this is the file as shipped):
 
 ```json
 {
@@ -171,19 +182,29 @@ Edit `docker/armada/armada.json` to customize:
   "admiralPort": 7890,
   "mcpPort": 7891,
   "gitHubToken": null,
+  "webSocketEnabled": true,
   "syslogServers": [
     {
       "hostname": "127.0.0.1",
       "port": 514
     }
   ],
-  "allowSelfRegistration": true,
+  "allowSelfRegistration": false,
+  "requireAuthForShutdown": true,
   "rest": {
     "hostname": "0.0.0.0"
   },
   "database": {
     "type": "Sqlite",
     "filename": "/app/data/db/armada.db"
+  },
+  "telemetry": {
+    "enabled": true,
+    "serviceName": "armada",
+    "otlpEndpoint": null,
+    "prometheusEnabled": true,
+    "prometheusPort": 9464,
+    "lokiEndpoint": "http://loki:3100"
   }
 }
 ```
@@ -200,6 +221,36 @@ To use MySQL, PostgreSQL, or SQL Server instead of SQLite, change the `database`
 ```
 
 Valid `type` values: `Sqlite`, `Mysql`, `Postgresql`, `SqlServer`.
+
+### Vessels from repositories mounted into the container
+
+A vessel's repository URL can be a path inside the container, for example a host checkout mounted at
+`/repos/myproject`. The mounted files keep their host owner (your UID on Linux, `root` as seen through Docker
+Desktop), which is not the container's user (UID 1654), and git refuses to read a repository owned by another user:
+dock provisioning fails with `fatal: detected dubious ownership in repository` (exit 128) and the mission stays
+Pending. Trust each mounted path in a git config file and point `GIT_CONFIG_GLOBAL` at it:
+
+```ini
+# docker/armada/gitconfig
+[safe]
+	directory = /repos/myproject
+```
+
+```yaml
+services:
+  armada-server:
+    environment:
+      - GIT_CONFIG_GLOBAL=/app/data/gitconfig
+    volumes:
+      - ./gitconfig:/app/data/gitconfig:ro
+      - /home/me/code/myproject:/repos/myproject
+```
+
+Use the global or system scope. Command-scope settings (`git -c`, or `GIT_CONFIG_COUNT` / `GIT_CONFIG_KEY_n` /
+`GIT_CONFIG_VALUE_n` in the container environment) do not work here: a local clone runs `git-upload-pack` in the
+source repository, and git removes command-scope configuration from that process's environment. List each path
+rather than `*`, which trusts every repository the Admiral can read. Repositories cloned over HTTPS or SSH are not
+affected. `scripts/common/install-verify/verify-docker.sh` uses exactly this setup for its test repository.
 
 ---
 
@@ -280,25 +331,25 @@ scripts\windows\build-dashboard.bat
 
 ```bash
 Linux:
-./scripts/linux/build-server.sh v0.9.0
+./scripts/linux/build-server.sh v1.0.0
 
 macOS:
-./scripts/macos/build-server.sh v0.9.0
+./scripts/macos/build-server.sh v1.0.0
 
 Windows:
-scripts\windows\build-server.bat v0.9.0
+scripts\windows\build-server.bat v1.0.0
 
 Linux:
-./scripts/linux/build-dashboard.sh v0.9.0
+./scripts/linux/build-dashboard.sh v1.0.0
 
 macOS:
-./scripts/macos/build-dashboard.sh v0.9.0
+./scripts/macos/build-dashboard.sh v1.0.0
 
 Windows:
-scripts\windows\build-dashboard.bat v0.9.0
+scripts\windows\build-dashboard.bat v1.0.0
 ```
 
-This produces both `jchristn77/armada-server:latest` and `jchristn77/armada-server:v0.9.0` (and the same for the dashboard). After the push completes, each script pulls those tags back into the local registry so they are also available for local `docker run` / compose use.
+This produces both `jchristn77/armada-server:latest` and `jchristn77/armada-server:v1.0.0` (and the same for the dashboard). After the push completes, each script pulls those tags back into the local registry so they are also available for local `docker run` / compose use.
 
 ### Build everything at once
 
@@ -306,27 +357,27 @@ To build, push, and locally pull the server, dashboard, and proxy images in one 
 
 ```bash
 Linux:
-./scripts/linux/build-all.sh v0.9.0
+./scripts/linux/build-all.sh v1.0.0
 
 macOS:
-./scripts/macos/build-all.sh v0.9.0
+./scripts/macos/build-all.sh v1.0.0
 
 Windows:
-scripts\windows\build-all.bat v0.9.0
+scripts\windows\build-all.bat v1.0.0
 ```
 
-The Windows `build-all.bat` covers server, dashboard, and proxy; the shell `build-all.sh` covers server and dashboard (the proxy image is published from Windows only). Omit the tag argument to build and push `:latest` only.
+`build-all` covers the server, dashboard, and proxy images on every platform. Omit the tag argument to build and push `:latest` only.
 
 ### Repository-root release scripts
 
 The repository root also carries `build-all`, `build-admiral`, and `build-proxy` scripts, as `.bat` for Windows and `.sh` for Linux/macOS. Each requires an image tag and builds both that tag and `latest` on the `cloud-jchristn77-jchristn77` cloud builder for `linux/amd64` and `linux/arm64/v8`, pushes to Docker Hub, then pulls both tags back to refresh the local copy:
 
 ```bat
-build-all.bat v0.9.0
+build-all.bat v1.0.0
 ```
 
 ```bash
-./build-all.sh v0.9.0
+./build-all.sh v1.0.0
 ```
 
 `build-all` calls `build-admiral` (`jchristn77/armada-server`) and then `build-proxy` (`jchristn77/armada-proxy`), stopping at the first failure.
@@ -353,7 +404,11 @@ Then update `docker/armada/compose.yaml` or `docker/proxy/compose.yaml` to refer
 |------|----------|---------|-------------|
 | 7890 | HTTP | Admiral REST API | REST endpoints, OpenAPI, built-in dashboard, WebSocket at /ws |
 | 7891 | TCP | MCP | Model Context Protocol for agent communication |
+| 9464 | HTTP | Admiral metrics | Prometheus scrape endpoint (`/metrics`) |
 | 3000 | HTTP | React Dashboard | Standalone SPA (nginx) |
+| 9090 | HTTP | Prometheus | Metrics UI |
+| 3100 | HTTP | Loki | Log ingestion |
+| 3001 | HTTP | Grafana | Dashboards |
 
 ---
 
@@ -364,13 +419,19 @@ Then update `docker/armada/compose.yaml` or `docker/proxy/compose.yaml` to refer
 cd docker/armada
 docker compose logs armada-server
 ```
-Check that `armada.json` exists and has valid JSON.
+Check that `docker/armada/armada.json` exists, is valid JSON, and is readable by UID 1654 (it is mounted at
+`/app/data/settings.json`), and that `ARMADA_INITIAL_ADMIN_PASSWORD` is set.
 
 **Database permission errors:**
-Ensure the `docker/armada/db/` directory is writable. On Linux:
+The container runs as UID 1654, so `docker/armada/db/` and `docker/armada/logs/` must be writable by that user. On
+Linux, fix the ownership rather than making the directories world writable:
 ```bash
-chmod 777 docker/armada/db
+sudo chown -R 1654:1654 docker/armada/db docker/armada/logs
 ```
+
+**Missions stay Pending with `detected dubious ownership` in `admiral.log`:**
+The vessel's repository is a path mounted from the host. Trust it as described under
+[Vessels from repositories mounted into the container](#vessels-from-repositories-mounted-into-the-container).
 
 **Dashboard can't reach server:**
 The standalone dashboard proxies API and WebSocket calls to `ARMADA_SERVER_URL` from inside the container. Check that the variable names the Admiral as the dashboard container sees it (the compose default is `http://armada-server:7890`) and that `armada-server` is healthy; `docker compose logs armada-dashboard` shows proxy errors.

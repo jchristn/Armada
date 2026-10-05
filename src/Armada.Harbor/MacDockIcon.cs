@@ -5,9 +5,9 @@ namespace Armada.Harbor
     using System.Runtime.InteropServices;
 
     /// <summary>
-    /// Sets the macOS Dock icon for the running process. Harbor ships as a plain executable rather than an
-    /// .app bundle, and Avalonia does not apply the window icon to the Dock, so without this macOS shows the
-    /// generic "exec" icon. Uses the Objective-C runtime directly: NSApplication.sharedApplication
+    /// Sets the macOS Dock icon for the running process. The packaged .app bundle carries AppIcon.icns, but
+    /// dotnet run and the bare executable have no bundle, and Avalonia does not apply the window icon to the Dock,
+    /// so without this macOS shows the generic "exec" icon there. Uses the Objective-C runtime directly: NSApplication.sharedApplication
     /// .applicationIconImage = [[NSImage alloc] initWithData:png]. Must be called on the main (UI) thread.
     /// Thread safety: not thread safe; call once from the UI thread.
     /// </summary>

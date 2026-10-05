@@ -8,8 +8,8 @@ One rule sits above everything else: **version numbers change only on the mainta
 agent preparing a release does not bump `Version` in `src/Directory.Build.props`, `src/Armada.Helm/Armada.Helm.csproj`,
 `ProductVersion` in `src/Armada.Core/Constants.cs`, the dashboard's `package.json` and `package-lock.json`, the build
 scripts, the Postman collection, or the CHANGELOG heading on its own. It may propose a bump and explain why, then wait
-for approval. The rules are in `VERSIONING.md` in the shared requirements; while Armada is `0.x`, releases carry the
-`alpha` label unless the maintainer says otherwise.
+for approval. The rules are in `VERSIONING.md` in the shared requirements. The tree is at `1.0.0`; release
+candidates (`1.0.0-rc.N`) and any other pre-release label are applied only on the maintainer's instruction.
 
 ## 1. Decide what is in the release
 
@@ -69,7 +69,7 @@ Packaging is driven by `publisher.json` and `src/Armada.Publisher`. The 1.0 inst
 
 | Platform | Channel | Artifact |
 |----------|---------|----------|
-| Any | Docker images (`build-all.sh` / `build-all.bat`) | Admiral, dashboard, proxy |
+| Any | Docker images (`scripts/<os>/build-all`) | Admiral, dashboard, proxy |
 | Any | NuGet global tool (`nuget-cli`) | CLI (`armada`) |
 | Windows | Inno Setup (`inno-harbor`) | Harbor `.exe` installer |
 | Windows | WiX (`wix-server`) | Admiral `.msi` |
@@ -92,8 +92,15 @@ build-installers.bat <version>           # Windows
 
 Installers land in `installers/<version>/`. Each OS builds only its own formats; see
 [BUILDING_INSTALLERS.md](../BUILDING_INSTALLERS.md) for the toolchain per platform. Docker images are built and
-pushed with `build-all.sh <tag>` (or `build-admiral.sh` and `build-proxy.sh` separately) to `jchristn77/armada-server`
-and `jchristn77/armada-proxy`.
+pushed with `scripts/macos/build-all.sh <tag>` (or the `linux` / `windows` equivalent) to `jchristn77/armada-server`,
+`jchristn77/armada-dashboard`, and `jchristn77/armada-proxy`; the repository-root `build-all.sh <tag>` builds the
+Admiral and proxy images only (see [DOCKER.md](DOCKER.md#building-images-from-source)).
+
+On macOS, `scripts/macos/build-harbor-app.sh` builds the Harbor `.app` and `.dmg` for both architectures and checks
+the result: the image verifies, the drag-to-install layout, every required `Info.plist` key (bundle id, version,
+`LSUIElement`), the `.icns`, the code signature, and `--install-startup --dry-run` from the bundled binary. It reports
+whether the image is Developer ID signed, notarized, and stapled; pass `--require-notarized` for a release build so an
+unsigned image fails.
 
 Then run the install verification below on the release commit, and smoke-test at least one built artifact per
 platform by hand before publishing: install it on a clean machine or VM, start it, reach a logged-in dashboard, and
@@ -118,6 +125,7 @@ commit must be green.
 | NuGet global tool | `verify-dotnet-tool.sh` | `Armada.Helm` packed locally and installed with `dotnet tool install --tool-path`, then `armada server start` / `stop` | ubuntu and macOS runners; local |
 | macOS server `.pkg` | `verify-macos-pkg.sh` | `pkg-server` built, expanded with `pkgutil`, payload checked and installed into a temp root, plus `--install-service --dry-run` | macOS runner; local Mac |
 | Windows | `verify-windows.ps1` | the NuGet global tool as above, plus `Armada.Server.exe --install-service --dry-run` | windows runner |
+| First-run (onboarding) | `verify-onboarding.sh` | the NuGet tool into a fresh `HOME` and data directory, then the first-run path to a mission landed (LocalMerge) into a local checkout, timed against the ten-minute goal | ubuntu and macOS runners; local |
 
 To run one locally (each needs the .NET SDK, git, and Python 3; Docker for the first two):
 
@@ -128,6 +136,7 @@ scripts/common/install-verify/verify-linux-package.sh --format rpm
 scripts/common/install-verify/verify-dotnet-tool.sh
 scripts/common/install-verify/verify-macos-pkg.sh            # macOS only
 pwsh scripts/common/install-verify/verify-windows.ps1        # Windows only
+scripts/common/install-verify/verify-onboarding.sh           # prints a stage timing table
 ```
 
 The scripts never touch `~/.armada`, the global dotnet tool directory, `docker/armada/db`, or any system location:
@@ -137,9 +146,31 @@ range with `IV_PORT_BASE`), installs the macOS payload into a temp root instead 
 the temp directory (and, for Docker, the stack) for inspection. A script prints `PASS` or `FAIL` per step and exits
 non-zero on any failure.
 
-Not covered: the Windows `.msi` and Inno installers (a real install registers a service and a login item), the Harbor
-`.dmg` and Harbor packages (Harbor needs a desktop session), real service registration, and CLI captains (Claude Code,
-Codex, and the others need their own logins). Exercise those by hand on a clean machine as above.
+`verify-onboarding.sh` fails when any step fails or when the total exceeds `ONBOARDING_BUDGET_SECONDS` (600 by
+default). With the stub captain the whole path takes seconds, so a run that approaches the budget is a regression to
+investigate even when it passes.
+
+Not covered: the Windows `.msi` and Inno installers (a real install registers a service and a login item), installing
+the Harbor `.dmg` and Harbor packages (Harbor needs a desktop session; `build-harbor-app.sh` checks the built image
+only), real service registration, and CLI captains (Claude Code, Codex, and the others need their own logins).
+Exercise those by hand on a clean machine as above.
+
+### Onboarding by hand with a real captain
+
+Once per release candidate, time the first-run path as a new user would, on a machine with no `~/.armada` (or with
+`ARMADA_DATA_DIR` pointed at an empty directory) and a working Claude Code login:
+
+1. Start a timer. Install: `dotnet tool install -g Armada.Helm` (or the platform package).
+2. `armada server start`; open `http://localhost:7890/dashboard` and sign in as `admin@armada` / `password`; change the
+   password when asked.
+3. Create a fleet, then a vessel from a local checkout (repository URL and working directory both set to the
+   checkout, landing mode LocalMerge).
+4. Add a captain with the Claude Code runtime, and dispatch a voyage with one small mission, for example
+   "Add a CONTRIBUTORS.md file listing the maintainer".
+5. Stop the timer when the mission shows Complete and the file is committed in the checkout.
+
+Record the time and anything that made you stop and think in the release notes. Over ten minutes, or any step that
+needed documentation the dashboard did not point to, is an S2 onboarding finding.
 
 ## 7. Signing
 
@@ -150,7 +181,8 @@ On Windows, the Inno and WiX channels Authenticode-sign their installers with `s
 (a base64-encoded PFX) and `WINDOWS_CERT_PASSWORD` are set. On macOS, the `.app`, `.dmg`, and `.pkg` are signed with
 the Developer ID identity from the imported certificate (or `APPLE_SIGNING_IDENTITY` and `APPLE_INSTALLER_IDENTITY`)
 and submitted for notarization and stapling when the `APPLE_CERT_*`
-and `APPLE_NOTARY_*` secrets are set. Without them, the macOS app is ad-hoc signed (Apple Silicon will not run a
+and `APPLE_NOTARY_*` secrets are set. The certificates, App Store Connect key, environment variables, and
+`publisher.json` keys are listed in [BUILDING_INSTALLERS.md](../BUILDING_INSTALLERS.md#macos-signing-and-notarization). Without them, the macOS app is ad-hoc signed (Apple Silicon will not run a
 completely unsigned binary) and is not notarized. Linux packages are not signed individually; the apt and yum
 repository metadata is signed with the GPG key in `GPG_PRIVATE_KEY`.
 

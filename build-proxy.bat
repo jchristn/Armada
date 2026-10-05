@@ -3,7 +3,7 @@ setlocal
 
 if "%~1"=="" (
     echo Usage: build-proxy.bat ^<tag^>
-    echo Example: build-proxy.bat v0.9.0
+    echo Example: build-proxy.bat v1.0.0
     endlocal
     exit /b 1
 )

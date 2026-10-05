@@ -65,9 +65,17 @@ namespace Armada.Core.Services
 
         private static string BuildMessage(string executable, int exitCode, string? standardOutput, string? standardError)
         {
-            string trimmedError = (standardError ?? String.Empty).Trim();
-            string detail = !String.IsNullOrEmpty(trimmedError) ? trimmedError : (standardOutput ?? String.Empty).Trim();
+            string detail = OneLine(standardError);
+            if (String.IsNullOrEmpty(detail)) detail = OneLine(standardOutput);
             return (executable ?? "process") + " failed (exit " + exitCode + "): " + detail;
+        }
+
+        private static string OneLine(string? text)
+        {
+            // Keep every line, joined, so the message is one log record: git puts the cause ("fatal: ...") after a
+            // progress line, and a multi-line message is split across log lines and syslog records.
+            string[] lines = (text ?? String.Empty).Split(new char[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            return String.Join(" | ", lines);
         }
 
         #endregion

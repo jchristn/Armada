@@ -9,8 +9,13 @@ Steps (each prints PASS or FAIL):
   4. Register the stub inference endpoint (POST /api/v1/model-endpoints) and an ApiEndpoint captain.
   5. Create a fleet and a vessel pointing at --repo-url.
   6. Dispatch one voyage with one mission assigned to that captain.
-  7. Poll the mission until it leaves Pending (and, with --expect complete, until it reaches a
-     successful terminal state). The final status, the captain, and the mission log tail are printed.
+  7. Poll the mission until it leaves Pending (and, with --expect complete, until it produces work;
+     with --expect landed, until it is Complete, i.e. landed). The final status, the captain, and the
+     mission log tail are printed.
+
+--working-directory and --landing-mode set the vessel's checkout and landing mode (the onboarding check
+uses a local checkout with LocalMerge so the mission lands into it). --timings prefixes every step with the
+seconds elapsed since the script started.
 
 Exit code 0 when every step passed. Standard library only (Python 3.8+), so it runs unchanged on
 Linux, macOS, and Windows runners and inside minimal containers.
@@ -35,6 +40,8 @@ SUCCESS_STATES = {"WorkProduced", "PullRequestOpen", "Testing", "Review", "Compl
 TERMINAL_STATES = SUCCESS_STATES | {"Failed", "Cancelled", "LandingFailed"}
 
 FAILURES = []
+STARTED = time.time()
+TIMINGS = False
 
 
 def log(message):
@@ -42,7 +49,8 @@ def log(message):
 
 
 def step(ok, label, detail=""):
-    log(("PASS  " if ok else "FAIL  ") + label + (("  (" + detail + ")") if detail else ""))
+    prefix = ("[%6.1fs] " % (time.time() - STARTED)) if TIMINGS else ""
+    log(prefix + ("PASS  " if ok else "FAIL  ") + label + (("  (" + detail + ")") if detail else ""))
     if not ok:
         FAILURES.append(label)
     return ok
@@ -113,9 +121,17 @@ def main():
     parser.add_argument("--tenant", default="default")
     parser.add_argument("--health-timeout", type=int, default=180)
     parser.add_argument("--mission-timeout", type=int, default=240)
-    parser.add_argument("--expect", choices=["nonpending", "complete"], default="complete",
-                        help="nonpending: any state after Pending passes; complete: the mission must produce work")
+    parser.add_argument("--expect", choices=["nonpending", "complete", "landed"], default="complete",
+                        help="nonpending: any state after Pending passes; complete: the mission must produce work; "
+                             "landed: the mission must reach Complete (landed)")
+    parser.add_argument("--working-directory", default=None, help="Vessel WorkingDirectory (the user's checkout)")
+    parser.add_argument("--landing-mode", default=None, choices=["LocalMerge", "PullRequest", "MergeQueue", "None"],
+                        help="Vessel LandingMode")
+    parser.add_argument("--timings", action="store_true", help="Prefix each step with the elapsed seconds")
     args = parser.parse_args()
+
+    global TIMINGS
+    TIMINGS = args.timings
 
     api = Api(args.base_url)
     tag = uuid.uuid4().hex[:8]
@@ -199,12 +215,17 @@ def main():
         log("      response: " + json.dumps(fleet)[:400])
         return 1
 
-    status, vessel = api.request("POST", "/api/v1/vessels", {
+    vessel_body = {
         "Name": "install-smoke-" + tag,
         "FleetId": fleet_id,
         "RepoUrl": args.repo_url,
         "DefaultBranch": args.default_branch,
-    })
+    }
+    if args.working_directory:
+        vessel_body["WorkingDirectory"] = args.working_directory
+    if args.landing_mode:
+        vessel_body["LandingMode"] = args.landing_mode
+    status, vessel = api.request("POST", "/api/v1/vessels", vessel_body)
     vessel_id = vessel.get("Id") if isinstance(vessel, dict) else None
     if not step(status in (200, 201) and bool(vessel_id), "Create vessel from " + args.repo_url, "HTTP " + str(status)):
         log("      response: " + json.dumps(vessel)[:400])
@@ -251,6 +272,8 @@ def main():
     else:
         step(final_state is not None and final_state not in PENDING, "Mission left Pending", path)
         step(final_state in SUCCESS_STATES, "Mission produced work", path)
+        if args.expect == "landed":
+            step(final_state == "Complete", "Mission landed (Complete)", path)
 
     if mission:
         step(mission.get("CaptainId") == captain_id or final_state in PENDING,

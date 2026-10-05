@@ -91,10 +91,15 @@ namespace Armada.Harbor
             // Keep the runner alive in the tray instead of exiting; the tray "Quit" item shuts the app down.
             e.Cancel = true;
             Hide();
+            // On macOS, leave only the menu-bar icon while the window is closed (see MacActivationPolicy).
+            MacActivationPolicy.HideFromDock();
         }
 
         private void OnWindowOpened(object? sender, EventArgs e)
         {
+            // Once the window is on screen (and the native application has finished launching), make sure Harbor has
+            // a Dock icon and app menu; a policy set earlier in startup can be reset by LSUIElement.
+            MacActivationPolicy.ShowInDock();
             // Connect automatically on startup so an operator does not have to click Connect; the link loop
             // reconnects on its own after transient drops.
             StartConnecting(true);
