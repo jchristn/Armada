@@ -52,16 +52,15 @@ namespace Armada.Core.Models
         public AgentRuntimeEnum Runtime { get; set; } = AgentRuntimeEnum.ClaudeCode;
 
         /// <summary>
-        /// Whether this captain's runtime is currently supported by Armada planning sessions.
+        /// Whether this captain's runtime is currently supported by Armada planning sessions. Derived from
+        /// <see cref="Armada.Core.Services.AgentRuntimeCapabilities"/>, the same source the runtime adapters report.
         /// </summary>
-        public bool SupportsPlanningSessions => Runtime != AgentRuntimeEnum.Custom;
+        public bool SupportsPlanningSessions => Armada.Core.Services.AgentRuntimeCapabilities.SupportsPlanningSessions(Runtime);
 
         /// <summary>
         /// Reason the captain cannot be used for planning sessions, if any.
         /// </summary>
-        public string? PlanningSessionSupportReason => SupportsPlanningSessions
-            ? null
-            : "Planning sessions currently support only the built-in ClaudeCode, Codex, Gemini, Cursor, and Mux runtimes.";
+        public string? PlanningSessionSupportReason => Armada.Core.Services.AgentRuntimeCapabilities.PlanningSessionUnsupportedReason(Runtime);
 
         /// <summary>
         /// Optional model override for the captain's runtime.

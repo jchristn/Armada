@@ -72,7 +72,7 @@ namespace Test.Shared.Suites.Services
                 AssertEqual("User", userMessage.Role);
                 AssertEqual(2, persistedMessages.Count);
                 AssertContains("Refinement response failed", assistantMessage.Content);
-                AssertContains("built-in ClaudeCode, Codex, Gemini, Cursor, and Mux runtimes", persistedSession.FailureReason ?? String.Empty);
+                AssertContains("built-in ClaudeCode, Codex, Gemini, Cursor, Mux, and OpenCode runtimes", persistedSession.FailureReason ?? String.Empty);
                 AssertEqual(ObjectiveRefinementSessionStatusEnum.Active, persistedSession.Status);
             }));
 

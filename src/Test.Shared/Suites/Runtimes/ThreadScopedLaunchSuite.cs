@@ -108,6 +108,60 @@ namespace Test.Shared.Suites.Runtimes
                 AssertFalse(record.MuxConfigDirOverridden, "MUX_CONFIG_DIR must not be redirected");
             }));
 
+            // Mission launches with IsolateCaptainLaunch on (McpTokenWithFullIsolation): every MCP-capable CLI runtime must
+            // carry the mission-scoped token. OpenCode and Mux used to launch without it.
+            cases.Add(Case("isolated_mission_claude_carries_token", "Isolated mission launch: Claude Code strict MCP config carries the token", async () =>
+            {
+                LaunchRecord? record = await LaunchAsync((LoggingModule logging, string stub) => new ClaudeCodeRuntime(logging) { ExecutablePath = stub }, true).ConfigureAwait(false);
+                if (record == null) return;
+                AssertTrue(record.Arguments.Contains("--strict-mcp-config"), "expected strict MCP config");
+                AssertContains(Token, record.MuxConfig, "expected the token in the --mcp-config document");
+            }));
+
+            cases.Add(Case("isolated_mission_codex_carries_token", "Isolated mission launch: Codex scoped CODEX_HOME config carries the token", async () =>
+            {
+                LaunchRecord? record = await LaunchAsync((LoggingModule logging, string stub) => new CodexRuntime(logging) { ExecutablePath = stub }, true).ConfigureAwait(false);
+                if (record == null) return;
+                AssertContains(Token, record.CodexHomeConfig, "expected the token in the scoped config.toml");
+            }));
+
+            cases.Add(Case("isolated_mission_gemini_carries_token", "Isolated mission launch: Gemini scoped home settings carry the token", async () =>
+            {
+                LaunchRecord? record = await LaunchAsync((LoggingModule logging, string stub) => new GeminiRuntime(logging) { ExecutablePath = stub }, true).ConfigureAwait(false);
+                if (record == null) return;
+                AssertContains(Token, record.HomeGeminiSettings, "expected the token in the scoped settings.json");
+                AssertEqual(String.Empty, record.GeminiSettings, "nothing may be written into the worktree");
+            }));
+
+            cases.Add(Case("isolated_mission_cursor_carries_token", "Isolated mission launch: Cursor scoped home mcp.json carries the token", async () =>
+            {
+                LaunchRecord? record = await LaunchAsync((LoggingModule logging, string stub) => new CursorRuntime(logging) { ExecutablePath = stub }, true).ConfigureAwait(false);
+                if (record == null) return;
+                AssertContains(Token, record.HomeCursorMcp, "expected the token in the scoped mcp.json");
+                AssertEqual(String.Empty, record.CursorMcp, "nothing may be written into the worktree");
+            }));
+
+            cases.Add(Case("isolated_mission_mux_carries_token", "Isolated mission launch: Mux scoped server document authenticates with the token", async () =>
+            {
+                LaunchRecord? record = await LaunchAsync((LoggingModule logging, string stub) => new MuxRuntime(logging) { ExecutablePath = stub }, true).ConfigureAwait(false);
+                if (record == null) return;
+                MuxServersFile mux = JsonSerializer.Deserialize<MuxServersFile>(record.MuxHomeConfig)!;
+                AssertTrue(mux.Servers != null && mux.Servers.Count == 1, "expected one scoped server in MUX_CONFIG_DIR");
+                AssertEqual("X-Token", mux.Servers![0].Auth?.ApiKeyHeader, "expected the X-Token header");
+                AssertEqual(Token, mux.Servers[0].Auth?.ApiKeyValue, "expected the mission token");
+            }));
+
+            cases.Add(Case("isolated_mission_opencode_carries_token", "Isolated mission launch: OpenCode binds the token through its inline config", async () =>
+            {
+                LaunchRecord? record = await LaunchAsync((LoggingModule logging, string stub) => new OpenCodeRuntime(logging) { ExecutablePath = stub }, true).ConfigureAwait(false);
+                if (record == null) return;
+                AssertFalse(String.IsNullOrEmpty(record.OpenCodeContent), "expected OPENCODE_CONFIG_CONTENT");
+                OpenCodeConfigFile openCode = JsonSerializer.Deserialize<OpenCodeConfigFile>(record.OpenCodeContent)!;
+                AssertNotNull(openCode.Mcp, "expected an mcp section in the inline config");
+                AssertEqual(1, openCode.Mcp!.Values.Count(e => e.Enabled == true && e.Headers != null && e.Headers.TryGetValue("X-Token", out string? header) && header == "{env:" + CaptainThreadMcpPlanner.TokenEnvironmentVariable + "}"), "expected one enabled server with the env token header");
+                AssertEqual(Token, record.Token);
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
                 displayName: "Thread-Scoped Runtime Launch",
@@ -118,7 +172,12 @@ namespace Test.Shared.Suites.Runtimes
 
         #region Private-Methods
 
-        private static async Task<LaunchRecord?> LaunchAsync(Func<LoggingModule, string, BaseAgentRuntime> factory)
+        private static Task<LaunchRecord?> LaunchAsync(Func<LoggingModule, string, BaseAgentRuntime> factory)
+        {
+            return LaunchAsync(factory, false);
+        }
+
+        private static async Task<LaunchRecord?> LaunchAsync(Func<LoggingModule, string, BaseAgentRuntime> factory, bool missionWithFullIsolation)
         {
             if (OperatingSystem.IsWindows()) return null;
 
@@ -138,6 +197,10 @@ namespace Test.Shared.Suites.Runtimes
                 + "printf 'OPENCODE:%s\\n' \"$OPENCODE_CONFIG_CONTENT\" >> \"$out\"\n"
                 + "if [ -f .gemini/settings.json ]; then printf 'GEMINI:%s\\n' \"$(tr -d '\\n' < .gemini/settings.json)\" >> \"$out\"; fi\n"
                 + "if [ -f .cursor/mcp.json ]; then printf 'CURSOR:%s\\n' \"$(tr -d '\\n' < .cursor/mcp.json)\" >> \"$out\"; fi\n"
+                + "if [ -n \"$CODEX_HOME\" ] && [ -f \"$CODEX_HOME/config.toml\" ]; then printf 'CODEXHOME:%s\\n' \"$(tr -d '\\n' < \"$CODEX_HOME/config.toml\")\" >> \"$out\"; fi\n"
+                + "if [ -f \"$HOME/.gemini/settings.json\" ]; then printf 'HOMEGEMINI:%s\\n' \"$(tr -d '\\n' < \"$HOME/.gemini/settings.json\")\" >> \"$out\"; fi\n"
+                + "if [ -f \"$HOME/.cursor/mcp.json\" ]; then printf 'HOMECURSOR:%s\\n' \"$(tr -d '\\n' < \"$HOME/.cursor/mcp.json\")\" >> \"$out\"; fi\n"
+                + "if [ -n \"$MUX_CONFIG_DIR\" ] && [ -f \"$MUX_CONFIG_DIR/mcp-servers.json\" ]; then printf 'MUXHOME:%s\\n' \"$(tr -d '\\n' < \"$MUX_CONFIG_DIR/mcp-servers.json\")\" >> \"$out\"; fi\n"
                 + "prev=''; for a in \"$@\"; do if [ \"$prev\" = '--mcp-config' ] && [ -f \"$a\" ]; then printf 'MUX:%s\\n' \"$(tr -d '\\n' < \"$a\")\" >> \"$out\"; fi; prev=\"$a\"; done\n"
                 + "cat > /dev/null\n"
                 + "echo done\n";
@@ -148,6 +211,12 @@ namespace Test.Shared.Suites.Runtimes
             logging.Settings.EnableConsole = false;
             BaseAgentRuntime runtime = factory(logging, stub);
             runtime.McpSessionToken = Token;
+            if (missionWithFullIsolation)
+            {
+                // Exactly what AgentLifecycleHandler sets for a mission launch with IsolateCaptainLaunch on.
+                runtime.McpTokenWithFullIsolation = true;
+                runtime.McpAllowWorkingDirectoryFiles = false;
+            }
             TaskCompletionSource<bool> exited = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             runtime.OnProcessExited += (int pid, int? code) => exited.TrySetResult(true);
 
@@ -170,6 +239,10 @@ namespace Test.Shared.Suites.Runtimes
                     else if (line.StartsWith("GEMINI:", StringComparison.Ordinal)) record.GeminiSettings = line.Substring(7);
                     else if (line.StartsWith("CURSOR:", StringComparison.Ordinal)) record.CursorMcp = line.Substring(7);
                     else if (line.StartsWith("MUX:", StringComparison.Ordinal)) record.MuxConfig = line.Substring(4);
+                    else if (line.StartsWith("CODEXHOME:", StringComparison.Ordinal)) record.CodexHomeConfig = line.Substring(10);
+                    else if (line.StartsWith("HOMEGEMINI:", StringComparison.Ordinal)) record.HomeGeminiSettings = line.Substring(11);
+                    else if (line.StartsWith("HOMECURSOR:", StringComparison.Ordinal)) record.HomeCursorMcp = line.Substring(11);
+                    else if (line.StartsWith("MUXHOME:", StringComparison.Ordinal)) record.MuxHomeConfig = line.Substring(8);
                 }
 
                 return record;
@@ -205,6 +278,10 @@ namespace Test.Shared.Suites.Runtimes
             public string GeminiSettings { get; set; } = String.Empty;
             public string CursorMcp { get; set; } = String.Empty;
             public string MuxConfig { get; set; } = String.Empty;
+            public string CodexHomeConfig { get; set; } = String.Empty;
+            public string HomeGeminiSettings { get; set; } = String.Empty;
+            public string HomeCursorMcp { get; set; } = String.Empty;
+            public string MuxHomeConfig { get; set; } = String.Empty;
         }
 
         #endregion
