@@ -128,6 +128,37 @@ namespace Test.Shared.Suites.Services
                 AssertEqual("/Users/a&b/<x>/Armada.Server", ParsePlist(escaped)["ProgramArguments"].Elements("string").First().Value);
             }));
 
+            cases.Add(Case("target_platform_paths", "Working directories follow the target platform's path rules, not the host's", TestTags.Positive, () =>
+            {
+                // Generated units describe paths on the target machine. These cases fail on a host whose
+                // System.IO.Path rules differ from the target's (Windows host for Linux/macOS, any other host for Windows).
+                AssertEqual("/opt/My Apps", TargetPath.GetDirectoryName("/opt/My Apps/armada-server", HostPlatformEnum.Linux));
+                AssertEqual("/usr/local/lib/armada-server", TargetPath.GetDirectoryName("/usr/local/lib/armada-server/Armada.Server", HostPlatformEnum.MacOS));
+                AssertEqual("/", TargetPath.GetDirectoryName("/armada-server", HostPlatformEnum.Linux));
+                AssertEqual("/opt/a\\b", TargetPath.GetDirectoryName("/opt/a\\b/armada-server", HostPlatformEnum.Linux), "a backslash is a file name character on Linux");
+                AssertEqual("/opt/armada", TargetPath.GetDirectoryName("/opt/armada//armada-server/", HostPlatformEnum.Linux));
+                AssertNull(TargetPath.GetDirectoryName("armada-server", HostPlatformEnum.Linux), "no directory part");
+                AssertEqual("C:\\Program Files\\Armada", TargetPath.GetDirectoryName("C:\\Program Files\\Armada\\armada-server.exe", HostPlatformEnum.Windows));
+                AssertEqual("C:\\", TargetPath.GetDirectoryName("C:\\armada-server.exe", HostPlatformEnum.Windows));
+                AssertEqual("C:/Tools", TargetPath.GetDirectoryName("C:/Tools/armada-server.exe", HostPlatformEnum.Windows));
+                AssertNull(TargetPath.GetDirectoryName("armada-server.exe", HostPlatformEnum.Windows), "no directory part");
+
+                RegistrationContext linux = new RegistrationContext();
+                linux.Platform = HostPlatformEnum.Linux;
+                linux.ExecutablePath = "/opt/My Apps/armada-server";
+                AssertEqual("/opt/My Apps", linux.WorkingDirectory, "Linux default working directory");
+
+                RegistrationContext windows = new RegistrationContext();
+                windows.Platform = HostPlatformEnum.Windows;
+                windows.ExecutablePath = "C:\\Program Files\\Armada\\armada-server.exe";
+                AssertEqual("C:\\Program Files\\Armada", windows.WorkingDirectory, "Windows default working directory");
+
+                RegistrationContext bare = new RegistrationContext();
+                bare.Platform = HostPlatformEnum.Linux;
+                bare.ExecutablePath = "armada-server";
+                AssertEqual("/", bare.WorkingDirectory, "no directory part falls back to the root");
+            }));
+
             cases.Add(Case("launchd_login_item_plist", "launchd Harbor login item", TestTags.Positive, () =>
             {
                 RegistrationContext context = HarborContext(HostPlatformEnum.MacOS, "/Applications/Armada Harbor.app/Contents/MacOS/Armada.Harbor", false, NewHome());

@@ -87,6 +87,13 @@ namespace Test.Shared.Infrastructure
         /// </summary>
         public string TempDir { get; private set; } = "";
 
+        /// <summary>
+        /// The stub agent runtime every CLI captain runtime of this server launches (see <see cref="StubAgentProcesses"/>).
+        /// Dispatch in E2E tests never starts a real agent CLI: the result is the same whether or not Claude Code,
+        /// Codex, or another CLI is installed on the machine running the tests, and no model is ever called.
+        /// </summary>
+        public StubAgentProcesses StubAgents { get; private set; } = null!;
+
         #endregion
 
         #region Private-Members
@@ -122,15 +129,8 @@ namespace Test.Shared.Infrastructure
 
         private ArmadaServer _Server = null!;
 
-        // Fixture ports come from 20000-31999: below the ephemeral (outbound) port ranges of Linux (32768+),
-        // macOS and Windows (49152+), so client sockets never compete for them. A port is not reused within one
-        // test process, which also rules out a lingering TIME_WAIT from a previous fixture.
-        private const int _PortRangeStart = 20000;
-        private const int _PortRangeEnd = 32000;
         private const int _MaxStartAttempts = 3;
         private const int _ReadyTimeoutSeconds = 30;
-        private static readonly Random _PortRandom = new Random();
-        private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, byte> _PortsHandedOut = new System.Collections.Concurrent.ConcurrentDictionary<int, byte>();
 
         #endregion
 
@@ -286,7 +286,7 @@ namespace Test.Shared.Infrastructure
             // draw from: between releasing the probe listener and the server binding, a client socket of this or
             // another test process could take the port, and the MCP listener used to fail silently when that
             // happened, leaving the fixture to time out.
-            int[] ports = ReservePorts(2);
+            int[] ports = TestPorts.Reserve(2);
             RestPort = ports[0];
             McpPort = ports[1];
             ApiKey = "test-key-" + Guid.NewGuid().ToString("N");
@@ -365,6 +365,9 @@ namespace Test.Shared.Infrastructure
                 return Describe(attempt, elapsed, "server StartAsync threw " + ex.GetType().Name + ": " + ex.Message, null, null, logPath);
             }
             SessionTokenEncryptionKey = settings.SessionTokenEncryptionKey ?? "";
+
+            StubAgents = new StubAgentProcesses(logging);
+            StubAgents.InstallOn(_Server);
 
             ReadinessProbe probe = await WaitForReadyAsync(TimeSpan.FromSeconds(_ReadyTimeoutSeconds)).ConfigureAwait(false);
             if (probe.Ready) return null;
@@ -463,51 +466,13 @@ namespace Test.Shared.Infrastructure
             if (workers < floor || io < floor) ThreadPool.SetMinThreads(Math.Max(workers, floor), Math.Max(io, floor));
         }
 
-        private static int[] ReservePorts(int count)
-        {
-            List<TcpListener> held = new List<TcpListener>();
-            try
-            {
-                int tries = 0;
-                while (held.Count < count)
-                {
-                    if (++tries > 500) throw new InvalidOperationException("could not reserve " + count + " free loopback ports in " + _PortRangeStart + "-" + _PortRangeEnd);
-                    int candidate = _PortRandom.Next(_PortRangeStart, _PortRangeEnd);
-                    if (candidate >= 25000 && candidate < 25100) continue; // left for manually started local servers
-                    if (candidate >= 21000 && candidate < 21100) continue; // left for developer and agent Admirals started by hand
-                    if (_PortsHandedOut.ContainsKey(candidate)) continue;
-                    TcpListener listener = new TcpListener(IPAddress.Loopback, candidate);
-                    try
-                    {
-                        listener.Start();
-                    }
-                    catch (SocketException)
-                    {
-                        continue;
-                    }
-                    held.Add(listener);
-                }
-
-                int[] ports = new int[count];
-                for (int i = 0; i < count; i++)
-                {
-                    ports[i] = ((IPEndPoint)held[i].LocalEndpoint).Port;
-                    _PortsHandedOut[ports[i]] = 0;
-                }
-                return ports;
-            }
-            finally
-            {
-                foreach (TcpListener listener in held) listener.Stop();
-            }
-        }
-
         private void Shutdown()
         {
             try { AuthClient?.Dispose(); } catch { }
             try { UnauthClient?.Dispose(); } catch { }
             try { McpClient?.Dispose(); } catch { }
             try { _Server?.Stop(); } catch { }
+            try { StubAgents?.StopAll(); } catch { }
             try
             {
                 if (Directory.Exists(TempDir)) Directory.Delete(TempDir, true);

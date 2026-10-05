@@ -16,7 +16,7 @@ namespace Test.Shared.Infrastructure
 
     /// <summary>
     /// A dedicated in-process Admiral for security suites that need their own configuration (a non-loopback hostname,
-    /// a changed default password, MCP settings). Ports come from the 21000-21099 range; the server and its temp
+    /// a changed default password, MCP settings). Ports come from <see cref="TestPorts"/>; the server and its temp
     /// directory are removed by <see cref="Dispose"/>.
     /// </summary>
     public sealed class SecurityTestServer : IDisposable
@@ -27,6 +27,11 @@ namespace Test.Shared.Infrastructure
         /// The server.
         /// </summary>
         public ArmadaServer Server { get; private set; } = null!;
+
+        /// <summary>
+        /// The stub agent runtime the server's CLI captain runtimes launch, so no test starts a real agent CLI.
+        /// </summary>
+        public StubAgentProcesses StubAgents { get; private set; } = null!;
 
         /// <summary>
         /// Settings the server runs with.
@@ -62,8 +67,6 @@ namespace Test.Shared.Infrastructure
 
         #region Private-Members
 
-        private static readonly object _PortLock = new object();
-        private static int _NextPort = 21000;
 
         #endregion
 
@@ -98,8 +101,9 @@ namespace Test.Shared.Infrastructure
             settings.DocksDirectory = Path.Combine(server.TempDir, "docks");
             settings.ReposDirectory = Path.Combine(server.TempDir, "repos");
             settings.SettingsFilePath = Path.Combine(server.TempDir, "settings.json");
-            settings.AdmiralPort = NextFreePort();
-            settings.McpPort = NextFreePort();
+            int[] ports = TestPorts.Reserve(2);
+            settings.AdmiralPort = ports[0];
+            settings.McpPort = ports[1];
             settings.ApiKey = "test-key-" + Guid.NewGuid().ToString("N");
             settings.HeartbeatIntervalSeconds = 300;
             settings.Rest.Hostname = hostname;
@@ -149,6 +153,8 @@ namespace Test.Shared.Infrastructure
             Server = new ArmadaServer(logging, Settings, quiet: true);
             Server.RuntimeToolDiscoverySource = new RecordingRuntimeToolDiscoverySource();
             await Server.StartAsync().ConfigureAwait(false);
+            StubAgents = new StubAgentProcesses(logging);
+            StubAgents.InstallOn(Server);
 
             using (HttpClient client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) })
             {
@@ -202,35 +208,8 @@ namespace Test.Shared.Infrastructure
         public void Dispose()
         {
             try { Server?.Stop(); } catch { }
+            try { StubAgents?.StopAll(); } catch { }
             TestTemp.TryDelete(TempDir);
-        }
-
-        #endregion
-
-        #region Private-Methods
-
-        private static int NextFreePort()
-        {
-            lock (_PortLock)
-            {
-                for (int attempt = 0; attempt < 100; attempt++)
-                {
-                    int port = _NextPort;
-                    _NextPort = _NextPort >= 21099 ? 21000 : _NextPort + 1;
-                    try
-                    {
-                        TcpListener probe = new TcpListener(IPAddress.Any, port);
-                        probe.Start();
-                        probe.Stop();
-                        return port;
-                    }
-                    catch (SocketException)
-                    {
-                    }
-                }
-            }
-
-            throw new InvalidOperationException("no free port in 21000-21099");
         }
 
         #endregion

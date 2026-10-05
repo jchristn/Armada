@@ -83,44 +83,61 @@ namespace Test.Shared.Suites.E2E
                 E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
                 HttpClient authClient = fx.AuthClient;
 
-                // Setup: fleet + vessel
-                Fleet fleet = await CreateFleetAsync(authClient, "Voyage Fleet").ConfigureAwait(false);
-                string fleetId = fleet.Id!;
-                Vessel vessel = await CreateVesselAsync(authClient, "VoyageRepo", TestRepoHelper.GetLocalBareRepoUrl(), fleetId).ConfigureAwait(false);
-                string vesselId = vessel.Id!;
+                // A voyage only becomes InProgress when a mission is assigned and its agent launches. Captains run the
+                // Claude Code runtime by default, so this case used to depend on the host: it passed where the claude CLI
+                // is installed (and then launched a real agent) and failed everywhere else (CI) with the launch rolled
+                // back and the voyage left Open. The fixture's stub runtime launches a process the test owns instead.
+                StubAgentProcesses agents = fx.StubAgents;
+                int launchedBefore = agents.StartedProcessIds.Count;
+                try
+                {
+                    // Setup: fleet + vessel + an idle captain of its own (the case must not depend on earlier cases)
+                    Fleet fleet = await CreateFleetAsync(authClient, "Voyage Fleet").ConfigureAwait(false);
+                    string fleetId = fleet.Id!;
+                    Vessel vessel = await CreateVesselAsync(authClient, "VoyageRepo", TestRepoHelper.GetLocalBareRepoUrl(), fleetId).ConfigureAwait(false);
+                    string vesselId = vessel.Id!;
+                    await CreateCaptainAsync(authClient, "voyage-captain").ConfigureAwait(false);
 
-                // Create voyage with multiple missions
-                Voyage voyage = await CreateVoyageAsync(
-                    authClient, "API Hardening", vesselId,
-                    new MissionDescription("Add rate limiting", "Add rate limiting middleware"),
-                    new MissionDescription("Add input validation", "Validate all POST endpoints"),
-                    new MissionDescription("Add request logging", "Log with correlation IDs")).ConfigureAwait(false);
+                    // Create voyage with multiple missions
+                    Voyage voyage = await CreateVoyageAsync(
+                        authClient, "API Hardening", vesselId,
+                        new MissionDescription("Add rate limiting", "Add rate limiting middleware"),
+                        new MissionDescription("Add input validation", "Validate all POST endpoints"),
+                        new MissionDescription("Add request logging", "Log with correlation IDs")).ConfigureAwait(false);
 
-                string voyageId = voyage.Id!;
-                AssertStartsWith("vyg_", voyageId);
-                AssertEqual("InProgress", voyage.Status.ToString());
+                    string voyageId = voyage.Id!;
+                    AssertStartsWith("vyg_", voyageId);
+                    AssertEqual("InProgress", voyage.Status.ToString());
+                    AssertTrue(agents.StartedProcessIds.Count > launchedBefore, "a mission was launched on the stub runtime");
 
-                // Verify voyage details show missions
-                VoyageDetailResponse voyageDetail = await GetAsync<VoyageDetailResponse>(authClient, "/api/v1/voyages/" + voyageId).ConfigureAwait(false);
-                AssertEqual(3, voyageDetail.Missions!.Count);
+                    // Verify voyage details show missions
+                    VoyageDetailResponse voyageDetail = await GetAsync<VoyageDetailResponse>(authClient, "/api/v1/voyages/" + voyageId).ConfigureAwait(false);
+                    AssertEqual(3, voyageDetail.Missions!.Count);
+                    AssertTrue(voyageDetail.Missions.Any(m => m.Status == MissionStatusEnum.InProgress), "one mission is InProgress");
 
-                // Verify missions are linked to the voyage
-                EnumerationResult<Mission> missionsByVoyage = await GetAsync<EnumerationResult<Mission>>(authClient, "/api/v1/missions?voyageId=" + voyageId).ConfigureAwait(false);
-                AssertEqual(3, missionsByVoyage.Objects.Count);
+                    // Verify missions are linked to the voyage
+                    EnumerationResult<Mission> missionsByVoyage = await GetAsync<EnumerationResult<Mission>>(authClient, "/api/v1/missions?voyageId=" + voyageId).ConfigureAwait(false);
+                    AssertEqual(3, missionsByVoyage.Objects.Count);
 
-                // Cancel the voyage
-                HttpResponseMessage cancelResp = await authClient.DeleteAsync("/api/v1/voyages/" + voyageId).ConfigureAwait(false);
-                AssertStatusCode(HttpStatusCode.OK, cancelResp);
+                    // Cancel the voyage
+                    HttpResponseMessage cancelResp = await authClient.DeleteAsync("/api/v1/voyages/" + voyageId).ConfigureAwait(false);
+                    AssertStatusCode(HttpStatusCode.OK, cancelResp);
 
-                // Verify cancel response has voyage data
-                CancelVoyageResponse cancelResult = await JsonHelper.DeserializeAsync<CancelVoyageResponse>(cancelResp).ConfigureAwait(false);
-                Assert(cancelResult.Voyage != null, "Cancel response should have Voyage property");
+                    // Verify cancel response has voyage data
+                    CancelVoyageResponse cancelResult = await JsonHelper.DeserializeAsync<CancelVoyageResponse>(cancelResp).ConfigureAwait(false);
+                    Assert(cancelResult.Voyage != null, "Cancel response should have Voyage property");
 
-                // Verify via GET that voyage still exists and has a valid status
-                VoyageDetailResponse cancelledDetail = await GetAsync<VoyageDetailResponse>(authClient, "/api/v1/voyages/" + voyageId).ConfigureAwait(false);
-                string voyageStatus = cancelledDetail.Voyage!.Status.ToString();
-                Assert(voyageStatus == "Cancelled" || voyageStatus == "InProgress" || voyageStatus == "Complete",
-                    "Expected Cancelled, InProgress, or Complete but got " + voyageStatus);
+                    // Verify via GET that the voyage is cancelled and its waiting missions with it
+                    VoyageDetailResponse cancelledDetail = await GetAsync<VoyageDetailResponse>(authClient, "/api/v1/voyages/" + voyageId).ConfigureAwait(false);
+                    AssertEqual(VoyageStatusEnum.Cancelled, cancelledDetail.Voyage!.Status, "voyage status after cancel");
+                    AssertFalse(cancelledDetail.Missions!.Any(m => m.Status == MissionStatusEnum.Pending || m.Status == MissionStatusEnum.Assigned),
+                        "no mission of a cancelled voyage is still waiting for a captain");
+                }
+                finally
+                {
+                    // Cancelling a voyage leaves an InProgress mission's agent running; stop the stub processes now.
+                    agents.StopAll();
+                }
             }));
 
             cases.Add(CaseAsync("signal_flow_create_and_retrieve", "SignalFlow_CreateAndRetrieve", TestTags.Positive, async () =>

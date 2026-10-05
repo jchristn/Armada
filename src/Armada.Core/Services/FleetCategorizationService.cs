@@ -646,6 +646,9 @@ namespace Armada.Core.Services
             string workingDirectory = Path.Combine(_Settings.DataDirectory, "fleet-categorization", job.Id);
             bool reserved = false;
             bool succeeded = false;
+            string? resultJson = null;
+            string? failureMessage = null;
+            bool cancelled = false;
 
             using (CancellationTokenSource cts = new CancellationTokenSource())
             {
@@ -691,9 +694,13 @@ namespace Armada.Core.Services
                         async (int processId) => await RecordProcessAsync(tenantId, captain.Id, processId).ConfigureAwait(false),
                         cts.Token).ConfigureAwait(false);
 
+                    // The captain's part is over once its process has returned: give it back before anything else is
+                    // recorded, so no observer can see a finished batch or job while the captain is still Analyzing.
+                    reserved = !await ReleaseCaptainAsync(tenantId, captainId).ConfigureAwait(false);
+
                     if (run.Cancelled || cts.IsCancellationRequested)
                     {
-                        await FailBatchAsync(batch, "Fleet categorization was cancelled.").ConfigureAwait(false);
+                        cancelled = true;
                         return;
                     }
 
@@ -754,20 +761,22 @@ namespace Armada.Core.Services
                     summary.UncategorizedCount = recommendations.Where(r => r.Name == UncategorizedFleetName).Sum(r => r.VesselIds.Count);
                     summary.Applied = applied;
                     summary.Warnings = warnings;
-                    await CompleteJobAsync(job.Id, JsonSerializer.Serialize(summary, _ResultJsonOptions)).ConfigureAwait(false);
+                    resultJson = JsonSerializer.Serialize(summary, _ResultJsonOptions);
 
                     succeeded = true;
                     _Logging.Info(_Header + "batch " + batch.Id + " categorized into " + recommendations.Count + " fleets" + (applied ? " (applied)" : ""));
                 }
                 catch (Exception ex)
                 {
-                    string message = cts.IsCancellationRequested && ex is OperationCanceledException ? "Fleet categorization was cancelled." : ex.Message;
-                    _Logging.Warn(_Header + "fleet categorization of batch " + batch.Id + " failed: " + message);
-                    await FailBatchAsync(batch, message).ConfigureAwait(false);
-                    await FailJobAsync(job.Id, message).ConfigureAwait(false);
+                    failureMessage = cts.IsCancellationRequested && ex is OperationCanceledException ? "Fleet categorization was cancelled." : ex.Message;
+                    _Logging.Warn(_Header + "fleet categorization of batch " + batch.Id + " failed: " + failureMessage);
                 }
                 finally
                 {
+                    // Finish in a fixed order. The job's terminal state is the completion signal callers wait for, so it
+                    // is written last, after the captain is Idle, the batch is in its final state, and the batch can be
+                    // categorized again. The heartbeat is stopped first: it rewrites the whole job row, and a heartbeat
+                    // that read the job before the terminal write would otherwise put it back to Running.
                     cts.Cancel();
                     if (monitor != null)
                     {
@@ -775,21 +784,37 @@ namespace Armada.Core.Services
                         catch (Exception) { }
                     }
 
-                    if (reserved)
-                    {
-                        try
-                        {
-                            await _Database.Captains.TryReleaseAsync(tenantId, captainId, CaptainStateEnum.Analyzing).ConfigureAwait(false);
-                        }
-                        catch (Exception ex)
-                        {
-                            _Logging.Warn(_Header + "could not return captain " + captainId + " to Idle: " + ex.Message);
-                        }
-                    }
+                    if (reserved) await ReleaseCaptainAsync(tenantId, captainId).ConfigureAwait(false);
+
+                    if (cancelled) await FailBatchAsync(batch, "Fleet categorization was cancelled.").ConfigureAwait(false);
+                    else if (failureMessage != null) await FailBatchAsync(batch, failureMessage).ConfigureAwait(false);
 
                     if (succeeded && !KeepWorkingDirectory) TryDeleteDirectory(workingDirectory);
                     ReleaseBatch(batch.Id);
+
+                    if (resultJson != null) await CompleteJobAsync(job.Id, resultJson).ConfigureAwait(false);
+                    else if (failureMessage != null) await FailJobAsync(job.Id, failureMessage).ConfigureAwait(false);
                 }
+            }
+        }
+
+        /// <summary>
+        /// Return a captain reserved for categorization to Idle.
+        /// </summary>
+        /// <param name="tenantId">Tenant identifier.</param>
+        /// <param name="captainId">Captain identifier.</param>
+        /// <returns>True when the release was attempted without an error (the captain is no longer held by this run).</returns>
+        private async Task<bool> ReleaseCaptainAsync(string tenantId, string captainId)
+        {
+            try
+            {
+                await _Database.Captains.TryReleaseAsync(tenantId, captainId, CaptainStateEnum.Analyzing).ConfigureAwait(false);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _Logging.Warn(_Header + "could not return captain " + captainId + " to Idle: " + ex.Message);
+                return false;
             }
         }
 
@@ -980,14 +1005,21 @@ namespace Armada.Core.Services
 
         private async Task CompleteJobAsync(string jobId, string resultJson)
         {
-            Job? latest = await _Database.Jobs.ReadAsync(jobId).ConfigureAwait(false);
-            if (latest == null || (latest.Status != JobStatusEnum.Running && latest.Status != JobStatusEnum.Queued)) return;
-            latest.Status = JobStatusEnum.Succeeded;
-            latest.Progress = 100;
-            latest.ResultJson = resultJson;
-            latest.CompletedUtc = DateTime.UtcNow;
-            latest.LastUpdateUtc = DateTime.UtcNow;
-            await _Database.Jobs.UpdateAsync(latest).ConfigureAwait(false);
+            try
+            {
+                Job? latest = await _Database.Jobs.ReadAsync(jobId).ConfigureAwait(false);
+                if (latest == null || (latest.Status != JobStatusEnum.Running && latest.Status != JobStatusEnum.Queued)) return;
+                latest.Status = JobStatusEnum.Succeeded;
+                latest.Progress = 100;
+                latest.ResultJson = resultJson;
+                latest.CompletedUtc = DateTime.UtcNow;
+                latest.LastUpdateUtc = DateTime.UtcNow;
+                await _Database.Jobs.UpdateAsync(latest).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _Logging.Warn(_Header + "could not mark job " + jobId + " succeeded: " + ex.Message);
+            }
         }
 
         private async Task FailJobAsync(string jobId, string message)

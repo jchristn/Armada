@@ -25,6 +25,10 @@ namespace Test.Shared.Suites.E2E
     {
         #region Private-Members
 
+        // Requests the seeded_secrets_never_leak case makes before it reads the history: settings PUT, credential
+        // POST, two authenticate POSTs, fleets GET and POST, five reads, and the redacted settings round trip.
+        private const int ExpectedCapturedRequests = 12;
+
         private const string SuiteId = "E2E.SecretsAndAudit";
 
         #endregion
@@ -113,9 +117,11 @@ namespace Test.Shared.Suites.E2E
 
                         // Request history: every captured entry and its detail (headers and bodies).
                         StringBuilder history = new StringBuilder();
-                        EnumerationResult<RequestHistoryEntry> entries = JsonHelper.Deserialize<EnumerationResult<RequestHistoryEntry>>(
-                            await (await admin.GetAsync("/api/v1/request-history?pageSize=500").ConfigureAwait(false)).Content.ReadAsStringAsync().ConfigureAwait(false));
-                        Assert(entries.Objects.Count >= 8, "expected captured requests, found " + entries.Objects.Count);
+                        // The server records request history after it has sent the response (PostRouting), so the
+                        // last requests above can still be in flight to the database when the client reads the
+                        // history. Wait until every request this case made is recorded instead of assuming the
+                        // write finished before the response arrived (on slow disks it does not).
+                        EnumerationResult<RequestHistoryEntry> entries = await WaitForCapturedRequestsAsync(admin, ExpectedCapturedRequests).ConfigureAwait(false);
                         foreach (RequestHistoryEntry entry in entries.Objects)
                         {
                             history.AppendLine(await (await admin.GetAsync("/api/v1/request-history/" + entry.Id).ConfigureAwait(false)).Content.ReadAsStringAsync().ConfigureAwait(false));
@@ -231,6 +237,28 @@ namespace Test.Shared.Suites.E2E
         #endregion
 
         #region Private-Methods
+
+        private static async Task<EnumerationResult<RequestHistoryEntry>> WaitForCapturedRequestsAsync(HttpClient admin, int expected)
+        {
+            MonotonicDeadline deadline = MonotonicDeadline.After(TimeSpan.FromSeconds(15));
+            EnumerationResult<RequestHistoryEntry> entries = new EnumerationResult<RequestHistoryEntry>();
+            List<RequestHistoryEntry> captured = new List<RequestHistoryEntry>();
+            while (true)
+            {
+                HttpResponseMessage response = await admin.GetAsync("/api/v1/request-history?pageSize=500").ConfigureAwait(false);
+                AssertEqual(200, (int)response.StatusCode, "request history list");
+                entries = JsonHelper.Deserialize<EnumerationResult<RequestHistoryEntry>>(await response.Content.ReadAsStringAsync().ConfigureAwait(false));
+
+                // The history reads made by this wait are captured too; count only the requests under test.
+                captured = entries.Objects.Where(e => !(e.Route ?? "").StartsWith("/api/v1/request-history", StringComparison.Ordinal)).ToList();
+                if (captured.Count >= expected || deadline.Passed) break;
+                await Task.Delay(50).ConfigureAwait(false);
+            }
+
+            Assert(captured.Count >= expected, "expected " + expected + " captured requests, found " + captured.Count + ": "
+                + String.Join(", ", captured.Select(e => e.Method + " " + e.Route + " " + e.StatusCode)));
+            return entries;
+        }
 
         private static void AssertNoSecrets(string text, List<string> secrets, string where)
         {

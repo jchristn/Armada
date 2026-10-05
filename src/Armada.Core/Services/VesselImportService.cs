@@ -416,6 +416,9 @@ namespace Armada.Core.Services
 
         private async Task RunDiscoveryJobAsync(Job job, VesselImportBatch batch, VesselDiscoveryRequest request)
         {
+            string? resultJson = null;
+            string? failureMessage = null;
+
             using (CancellationTokenSource cts = new CancellationTokenSource())
             {
                 Task? monitor = null;
@@ -438,21 +441,12 @@ namespace Armada.Core.Services
                     batch.ErrorMessage = null;
                     await _Database.VesselImportBatches.UpdateAsync(batch).ConfigureAwait(false);
 
-                    Job? latest = await _Database.Jobs.ReadAsync(job.Id).ConfigureAwait(false);
-                    if (latest != null && latest.Status == JobStatusEnum.Running)
+                    resultJson = JsonSerializer.Serialize(new VesselDiscoveryJobSummary
                     {
-                        latest.Status = JobStatusEnum.Succeeded;
-                        latest.Progress = 100;
-                        latest.ResultJson = JsonSerializer.Serialize(new VesselDiscoveryJobSummary
-                        {
-                            BatchId = batch.Id,
-                            CandidateCount = items.Count,
-                            Truncated = discovered.Truncated
-                        }, _ResultJsonOptions);
-                        latest.CompletedUtc = DateTime.UtcNow;
-                        latest.LastUpdateUtc = DateTime.UtcNow;
-                        await _Database.Jobs.UpdateAsync(latest).ConfigureAwait(false);
-                    }
+                        BatchId = batch.Id,
+                        CandidateCount = items.Count,
+                        Truncated = discovered.Truncated
+                    }, _ResultJsonOptions);
 
                     _Logging.Info(_Header + "background discovery found " + items.Count + " candidates for batch " + batch.Id);
                 }
@@ -473,17 +467,41 @@ namespace Armada.Core.Services
                         _Logging.Warn(_Header + "could not mark batch " + batch.Id + " failed: " + updateEx.Message);
                     }
 
-                    await FailJobAsync(job.Id, message).ConfigureAwait(false);
+                    failureMessage = message;
                 }
                 finally
                 {
+                    // Stop the heartbeat before writing the job's terminal state: the heartbeat rewrites the whole job
+                    // row, so one that read the job before the terminal write would put it back to Running for good.
                     cts.Cancel();
                     if (monitor != null)
                     {
                         try { await monitor.ConfigureAwait(false); }
                         catch (Exception) { }
                     }
+
+                    if (resultJson != null) await CompleteDiscoveryJobAsync(job.Id, resultJson).ConfigureAwait(false);
+                    else if (failureMessage != null) await FailJobAsync(job.Id, failureMessage).ConfigureAwait(false);
                 }
+            }
+        }
+
+        private async Task CompleteDiscoveryJobAsync(string jobId, string resultJson)
+        {
+            try
+            {
+                Job? latest = await _Database.Jobs.ReadAsync(jobId).ConfigureAwait(false);
+                if (latest == null || latest.Status != JobStatusEnum.Running) return;
+                latest.Status = JobStatusEnum.Succeeded;
+                latest.Progress = 100;
+                latest.ResultJson = resultJson;
+                latest.CompletedUtc = DateTime.UtcNow;
+                latest.LastUpdateUtc = DateTime.UtcNow;
+                await _Database.Jobs.UpdateAsync(latest).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _Logging.Warn(_Header + "could not mark discovery job " + jobId + " succeeded: " + ex.Message);
             }
         }
 

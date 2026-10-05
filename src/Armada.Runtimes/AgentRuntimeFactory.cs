@@ -44,7 +44,7 @@ namespace Armada.Runtimes
         #region Public-Methods
 
         /// <summary>
-        /// Create an agent runtime by type.
+        /// Create an agent runtime by type. An override registered with <see cref="Override"/> wins over the built-in adapter.
         /// </summary>
         /// <param name="runtimeType">Runtime type.</param>
         /// <returns>Agent runtime instance.</returns>
@@ -111,6 +111,16 @@ namespace Armada.Runtimes
 
             _Overrides[runtimeType] = factory;
             _Logging.Debug(_Header + "registered runtime override for " + runtimeType);
+        }
+
+        /// <summary>
+        /// Remove an override registered with <see cref="Override"/>, restoring the built-in adapter.
+        /// </summary>
+        /// <param name="runtimeType">Runtime type.</param>
+        /// <returns>True when an override was removed.</returns>
+        public bool ClearOverride(AgentRuntimeEnum runtimeType)
+        {
+            return _Overrides.TryRemove(runtimeType, out _);
         }
 
         /// <summary>
