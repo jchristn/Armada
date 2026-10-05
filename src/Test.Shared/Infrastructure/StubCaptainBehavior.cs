@@ -19,6 +19,17 @@ namespace Test.Shared.Infrastructure
         public Func<StubCaptainTurn, Task<string>> OnTurn { get; set; } = turn => Task.FromResult("Done.");
 
         /// <summary>
+        /// Reply to a prompt that is neither a thread-scoped turn nor a mission (planning, refinement, vessel context,
+        /// categorization). Default replies with a short plan.
+        /// </summary>
+        public Func<string, string> OnPrompt { get; set; } = prompt => "Plan:\n1. Add a file written by the stub captain.";
+
+        /// <summary>
+        /// Prompts of every other (planning, refinement, context) launch, in order.
+        /// </summary>
+        public ConcurrentQueue<string> PromptTexts { get; } = new ConcurrentQueue<string>();
+
+        /// <summary>
         /// When false, a mission exits with code 1 without committing (a failed mission). Default true.
         /// </summary>
         public bool MissionsSucceed { get; set; } = true;

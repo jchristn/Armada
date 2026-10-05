@@ -16,9 +16,10 @@ namespace Test.Shared.Infrastructure
     /// <summary>
     /// Scripted in-process captain for end-to-end tests. It stands in for the Claude Code runtime (installed through
     /// <see cref="Armada.Runtimes.AgentRuntimeFactory.Override"/>), so no agent CLI is launched: a thread-scoped turn
-    /// (Ask Armada) runs <see cref="StubCaptainBehavior.OnTurn"/> with the turn's MCP session token, and a mission writes one
-    /// file in the dock and commits it, then exits 0, so the server's completion and landing pipeline runs for real.
-    /// Process ids are synthetic.
+    /// (Ask Armada, captain chat) runs <see cref="StubCaptainBehavior.OnTurn"/> with the turn's MCP session token; a mission
+    /// launch (an MCP port and a log file, without a session token) writes one file in the dock and commits it, then exits 0, so the
+    /// server's completion and landing pipeline runs for real; any other prompt (direct captain chat, planning, refinement,
+    /// vessel context, categorization) replies with <see cref="StubCaptainBehavior.OnPrompt"/>. Process ids are synthetic.
     /// </summary>
     public sealed class StubCaptainRuntime : BaseAgentRuntime
     {
@@ -31,12 +32,13 @@ namespace Test.Shared.Infrastructure
         public override bool SupportsResume => false;
 
         /// <inheritdoc />
-        public override bool SupportsPlanningSessions => false;
+        public override bool SupportsPlanningSessions => true;
 
         #endregion
 
         #region Private-Members
 
+        private const int MinimumMissionLifetimeMs = 500;
         private static int _PidCounter = 2_100_000_000;
         private static readonly ConcurrentDictionary<int, CancellationTokenSource> _Running = new ConcurrentDictionary<int, CancellationTokenSource>();
         private readonly StubCaptainBehavior _Behavior;
@@ -107,10 +109,26 @@ namespace Test.Shared.Infrastructure
                         foreach (string line in reply.Split('\n')) RaiseStdout(processId, line);
                         code = 0;
                     }
-                    else
+                    else if (mcpPort > 0 && !String.IsNullOrEmpty(logFilePath))
                     {
                         _Behavior.MissionDirectories.Enqueue(workingDirectory);
+                        Stopwatch lifetime = Stopwatch.StartNew();
                         code = RunMission(processId, workingDirectory, logFilePath);
+
+                        // A real agent process lives at least as long as the server takes to record the launch (the
+                        // captain's current mission is written after StartAsync returns); an exit reported before then is
+                        // ignored as belonging to no mission. Keep a minimum lifetime like any real process has.
+                        int remaining = MinimumMissionLifetimeMs - (int)lifetime.ElapsedMilliseconds;
+                        if (remaining > 0) await Task.Delay(remaining).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        _Behavior.PromptTexts.Enqueue(prompt);
+                        string reply = _Behavior.OnPrompt(prompt);
+                        if (!String.IsNullOrEmpty(finalMessageFilePath)) File.WriteAllText(finalMessageFilePath, reply);
+                        foreach (string line in reply.Split('\n')) RaiseStdout(processId, line);
+                        WriteLog(logFilePath, new List<string>(reply.Split('\n')));
+                        code = 0;
                     }
                 }
                 catch (Exception ex)
