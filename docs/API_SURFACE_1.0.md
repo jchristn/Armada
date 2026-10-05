@@ -24,7 +24,7 @@ administrator).
 
 | Surface | Total | Experimental |
 |---|---|---|
-| REST routes | 350 | 11 |
+| REST routes | 351 | 11 |
 | MCP tools | 146 | 5 |
 | WebSocket endpoints | 2 | 1 |
 | WebSocket commands | 59 | 0 |
@@ -121,6 +121,7 @@ Base path `/api/v1`. Request and response bodies are PascalCase JSON; errors are
 | POST | `/api/v1/events/delete/multiple` | TenantAdmin | `DeleteMultipleRequest` | 200 `DeleteMultipleResult` |  |
 | POST | `/api/v1/events/enumerate` | Authenticated | `EnumerationQuery` (optional) |  |  |
 | DELETE | `/api/v1/events/{id}` | TenantAdmin |  | 204, 404 |  |
+| GET | `/api/v1/events/{id}` | Authenticated |  | 200 `ArmadaEvent`, 404 |  |
 | POST | `/api/v1/fleet-action-runs/enumerate` | Authenticated | `EnumerationQuery` (optional) | 200 `EnumerationResult<FleetActionRun>` |  |
 | GET | `/api/v1/fleet-action-runs/{id}` | Authenticated |  | 200 `FleetActionRunDetail`, 404 |  |
 | POST | `/api/v1/fleet-action-runs/{id}/cancel` | TenantAdmin |  | 200 `FleetActionRun`, 404 |  |

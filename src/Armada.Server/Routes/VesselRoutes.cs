@@ -529,7 +529,7 @@ namespace Armada.Server.Routes
                     return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Vessel not found" };
                 }
 
-                string? sourceBranch = NormalizeEmpty(req.Query.GetValueOrDefault("sourceBranch"));
+                string? sourceBranch = NormalizeEmpty(UnescapeQueryValue(req.Query.GetValueOrDefault("sourceBranch")));
                 return await _landingPreview.PreviewForVesselAsync(ctx, vessel, sourceBranch).ConfigureAwait(false);
             },
             api => api
@@ -812,6 +812,20 @@ namespace Armada.Server.Routes
                     throw new InvalidOperationException("git exited with code " + process.ExitCode + ": " + error.Trim());
                 }
                 return output;
+            }
+        }
+
+        private static string? UnescapeQueryValue(string? value)
+        {
+            // Query values arrive percent-encoded (a branch such as feature/x is sent as feature%2Fx).
+            if (String.IsNullOrEmpty(value)) return value;
+            try
+            {
+                return Uri.UnescapeDataString(value);
+            }
+            catch (UriFormatException)
+            {
+                return value;
             }
         }
 

@@ -106,11 +106,13 @@ namespace Armada.Client
         /// </summary>
         /// <param name="data">data.</param>
         /// <param name="token">Cancellation token.</param>
-        /// <returns>The response.</returns>
+        /// <returns>The created mission. The server wraps a mission no captain could take yet as
+        /// <c>{ Mission, Warning }</c>; this method unwraps it (use <see cref="DispatchMissionAsync"/> to keep the warning).</returns>
         /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
-        public Task<Mission?> CreateMissionAsync(Mission data, CancellationToken token = default)
+        public async Task<Mission?> CreateMissionAsync(Mission data, CancellationToken token = default)
         {
-            return PostAsync<Mission>("/api/v1/missions", data, null, token);
+            ArmadaRawJson? raw = await PostAsync<ArmadaRawJson>("/api/v1/missions", data, null, token).ConfigureAwait(false);
+            return MissionDispatchResult.Parse(raw?.Json)?.Mission;
         }
 
         /// <summary>
@@ -153,11 +155,13 @@ namespace Armada.Client
         /// </summary>
         /// <param name="data">data.</param>
         /// <param name="token">Cancellation token.</param>
-        /// <returns>The response.</returns>
+        /// <returns>The created mission and, when no captain could take it yet, the server's warning (the server
+        /// replies with the bare mission or with <c>{ Mission, Warning }</c>; both are read).</returns>
         /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
-        public Task<Mission?> DispatchMissionAsync(DispatchRequest data, CancellationToken token = default)
+        public async Task<MissionDispatchResult?> DispatchMissionAsync(DispatchRequest data, CancellationToken token = default)
         {
-            return PostAsync<Mission>("/api/v1/missions", data, null, token);
+            ArmadaRawJson? raw = await PostAsync<ArmadaRawJson>("/api/v1/missions", data, null, token).ConfigureAwait(false);
+            return MissionDispatchResult.Parse(raw?.Json);
         }
 
         /// <summary>

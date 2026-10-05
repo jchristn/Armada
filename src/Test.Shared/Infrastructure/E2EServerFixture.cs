@@ -474,6 +474,7 @@ namespace Test.Shared.Infrastructure
                     if (++tries > 500) throw new InvalidOperationException("could not reserve " + count + " free loopback ports in " + _PortRangeStart + "-" + _PortRangeEnd);
                     int candidate = _PortRandom.Next(_PortRangeStart, _PortRangeEnd);
                     if (candidate >= 25000 && candidate < 25100) continue; // left for manually started local servers
+                    if (candidate >= 21000 && candidate < 21100) continue; // left for developer and agent Admirals started by hand
                     if (_PortsHandedOut.ContainsKey(candidate)) continue;
                     TcpListener listener = new TcpListener(IPAddress.Loopback, candidate);
                     try

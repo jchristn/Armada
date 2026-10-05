@@ -439,6 +439,37 @@ namespace Armada.Runtimes
         }
 
         /// <summary>
+        /// Raise <see cref="OnProcessStarted"/> (for derived runtimes that run in-process instead of launching a process).
+        /// </summary>
+        /// <param name="processId">Process id (synthetic for in-process runtimes).</param>
+        protected void RaiseProcessStarted(int processId)
+        {
+            OnProcessStarted?.Invoke(processId);
+        }
+
+        /// <summary>
+        /// Raise <see cref="OnOutputReceived"/> and <see cref="OnStdoutReceived"/> for one stdout line (for derived
+        /// runtimes that run in-process instead of launching a process).
+        /// </summary>
+        /// <param name="processId">Process id.</param>
+        /// <param name="line">Output line.</param>
+        protected void RaiseStdout(int processId, string line)
+        {
+            OnOutputReceived?.Invoke(processId, line);
+            OnStdoutReceived?.Invoke(processId, line);
+        }
+
+        /// <summary>
+        /// Raise <see cref="OnProcessExited"/> (for derived runtimes that run in-process instead of launching a process).
+        /// </summary>
+        /// <param name="processId">Process id.</param>
+        /// <param name="exitCode">Exit code, or null when unknown.</param>
+        protected void RaiseProcessExited(int processId, int? exitCode)
+        {
+            OnProcessExited?.Invoke(processId, exitCode);
+        }
+
+        /// <summary>
         /// The runtime this adapter drives. Used to plan launch isolation (scoped config / strict MCP).
         /// </summary>
         protected abstract Armada.Core.Enums.AgentRuntimeEnum RuntimeType { get; }

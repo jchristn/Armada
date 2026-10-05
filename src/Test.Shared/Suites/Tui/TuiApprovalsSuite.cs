@@ -132,7 +132,7 @@ namespace Test.Shared.Suites.Tui
                     Load(host);
                     Select(host, ApprovalKindEnum.StalledCaptain);
                     host.Press("R").Press("y");
-                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/captains/cpt_s/recall") == 1), "recall");
+                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/captains/cpt_s/stop") == 2), "recall uses the server's stop (recall) route");
                     Load(host);
                     Select(host, ApprovalKindEnum.StalledCaptain);
                     host.Press("t");
@@ -179,6 +179,32 @@ namespace Test.Shared.Suites.Tui
                 }
             }));
 
+            cases.Add(TuiCase.Sync(Suite, "keyboard_flow_back", "Keyboard flow: select a proposal, view its arguments, open its thread, and Alt+Left back to the center with the item kept", () =>
+            {
+                AskFixtures fx = new AskFixtures();
+                fx.AddThread(AskFixtures.Thread("ath_3", "Docs rollout"));
+                AskActionProposal p = AskFixtures.Proposal("aap_k", "ath_3", "dispatch", AskProposalStatusEnum.Pending);
+                fx.Decisions(p);
+                using (TuiTestHost host = TuiCase.SignedIn(140, 45, "/approvals", fx.Stub))
+                {
+                    host.PumpUntil(() => host.Tui.Ask.Threads.Count == 1);
+                    host.Tui.Context.Events.Inject(AskFixtures.Event("ask.proposal", new AskProposalEvent { ThreadId = "ath_3", Proposal = p }));
+                    host.Pump();
+                    ApprovalsScreen screen = Select(host, ApprovalKindEnum.AskProposal);
+                    AssertEqual("aap_k", screen.Current()?.EntityId, "selected");
+                    host.Press("x");
+                    AssertTrue(host.PumpUntil(() => host.App.Modals.IsActive), "arguments modal");
+                    host.Press("esc");
+                    AssertTrue(host.PumpUntil(() => !host.App.Modals.IsActive), "modal closed");
+                    host.Press("enter");
+                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Router.Current!.FullPath == "/ask/ath_3"), "Enter opens the thread");
+                    host.Press("esc");
+                    host.Press("alt+left");
+                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Router.Current!.Path == "/approvals"), "Alt+Left back to the center: " + host.Tui.Context.Router.Current!.FullPath);
+                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Approvals.Find(ApprovalKindEnum.AskProposal, "aap_k") != null), "the item is still queued");
+                }
+            }));
+
             return new TestSuiteDescriptor(suiteId: Suite, displayName: "TUI approvals center", cases: cases);
         }
 
@@ -197,7 +223,6 @@ namespace Test.Shared.Suites.Tui
             stub.Json("POST", "/api/v1/deployments/dpl_1/deny", "{\"Id\":\"dpl_1\",\"Title\":\"Staging\"}");
             stub.Json("POST", "/api/v1/missions/msn_l/retry-landing", "{\"Success\":true}");
             stub.Json("POST", "/api/v1/captains/cpt_s/stop", "{}");
-            stub.Json("POST", "/api/v1/captains/cpt_s/recall", "{}");
             stub.Json("GET", "/api/v1/captains/cpt_s", "{\"Id\":\"cpt_s\",\"Name\":\"slow\",\"Runtime\":\"ClaudeCode\"}");
             stub.On("DELETE", "/api/v1/captains/cpt_s", body => StubHttpHandler.Response(HttpStatusCode.NoContent, ""));
             stub.Json("POST", "/api/v1/captains", "{\"Id\":\"cpt_t\",\"Name\":\"slow\",\"Runtime\":\"ClaudeCode\"}");

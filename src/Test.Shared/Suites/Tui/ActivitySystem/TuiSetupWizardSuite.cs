@@ -100,6 +100,37 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                 }
             }));
 
+            cases.Add(TuiCase.Sync(Suite, "dispatch_wrapped_warning", "A mission no captain can take yet: the wrapped { Mission, Warning } reply shows the warning and the mission id", () =>
+            {
+                StubHttpHandler stub = EmptyServer();
+                stub.On("POST", "/api/v1/missions", body => StubHttpHandler.Response(HttpStatusCode.Created,
+                    "{\"Mission\":{\"Id\":\"msn_wait1\",\"Title\":\"Repository onboarding survey\",\"Status\":\"Pending\",\"VesselId\":\"vsl_new\"},\"Warning\":\"Mission created but could not be assigned to any captain.\"}"));
+                stub.Json("GET", "/api/v1/missions/msn_wait1", "{\"Id\":\"msn_wait1\",\"Title\":\"Repository onboarding survey\",\"Status\":\"Pending\",\"VesselId\":\"vsl_new\"}");
+                using (TuiTestHost host = TuiCase.SignedIn(140, 44, "/setup", stub))
+                {
+                    SetupWizardScreen screen = Current(host);
+                    AssertTrue(host.PumpUntil(() => !screen.Loading), "resources loaded");
+                    TuiCase.Contains(host.Screen(), "Step 1 of 6", "objective step drawn");
+                    host.Press("tab");
+                    AssertTrue(ReferenceEquals(screen.Scope.Focused, screen.Navigation), "navigation focused");
+                    host.Press("right").Press("enter");
+                    AssertEqual(1, screen.Current, "fleet step");
+                    host.Press("ctrl+u").Type("Lab Fleet").Press("tab").Press("ctrl+u").Type("Setup lab");
+                    host.Press("ctrl+s");
+                    AssertTrue(host.PumpUntil(() => screen.Current == 2), "vessel step\n" + host.Screen());
+                    host.Type("armada").Press("tab").Press("tab").Type("/tmp/repo").Press("ctrl+s");
+                    AssertTrue(host.PumpUntil(() => screen.Current == 3), "captain step");
+                    host.Press("ctrl+s");
+                    AssertTrue(host.PumpUntil(() => screen.Current == 4), "dispatch step");
+                    host.Press("ctrl+s");
+                    AssertTrue(host.PumpUntil(() => screen.Current == 5), "handoff");
+                    AssertEqual("msn_wait1", screen.DispatchedMission?.Id, "mission id read from the wrapped reply");
+                    AssertEqual("Mission created but could not be assigned to any captain.", screen.DispatchWarning, "warning kept");
+                    AssertTrue(host.WaitForText("could not be assigned to any captain"), "warning shown\n" + host.Screen());
+                    TuiCase.Contains(host.Screen(), "msn_wait1", "mission id shown");
+                }
+            }));
+
             cases.Add(TuiCase.Sync(Suite, "validation_and_back", "Validation blocks the step with the dashboard message and Back keeps entered values", () =>
             {
                 StubHttpHandler stub = EmptyServer();

@@ -3758,6 +3758,23 @@ Paginated enumeration of events with optional filtering and sorting.
 
 ---
 
+#### `GET /api/v1/events/{id}`
+
+Get a single event by ID. Scoped like the event list: global admins read any event, tenant admins their tenant's
+events, and users their own.
+
+**Path Parameters:**
+
+| Parameter | Description |
+|---|---|
+| `id` | Event ID (`evt_` prefix) |
+
+**Response:** `200 OK` - [ArmadaEvent](#armadaevent)
+
+**Error:** `404` - Event not found
+
+---
+
 #### `DELETE /api/v1/events/{id}`
 
 Delete a single event by ID.

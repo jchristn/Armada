@@ -76,24 +76,27 @@ namespace Armada.Client
         }
 
         /// <summary>
-        /// Dashboard <c>processAllMergeQueue</c>: POST '/api/v1/merge-queue/process-all'.
+        /// Dashboard <c>processAllMergeQueue</c>. The dashboard posts to <c>/api/v1/merge-queue/process-all</c>, which the
+        /// server does not have; this calls the server's route, POST /api/v1/merge-queue/process.
         /// </summary>
         /// <param name="token">Cancellation token.</param>
         /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
         public Task ProcessAllMergeQueueAsync(CancellationToken token = default)
         {
-            return SendNoResultAsync(HttpMethod.Post, "/api/v1/merge-queue/process-all", null, null, token);
+            return SendNoResultAsync(HttpMethod.Post, "/api/v1/merge-queue/process", null, null, token);
         }
 
         /// <summary>
-        /// Dashboard <c>cancelMergeEntry</c>: POST `/api/v1/merge-queue/${id}/cancel`.
+        /// Dashboard <c>cancelMergeEntry</c>. The dashboard posts to <c>/api/v1/merge-queue/{id}/cancel</c>, which the
+        /// server does not have; this calls the server's cancel route, DELETE /api/v1/merge-queue/{id} ("Delete or cancel a
+        /// merge queue entry"), the same call as <see cref="DeleteMergeEntryAsync"/>.
         /// </summary>
         /// <param name="id">id.</param>
         /// <param name="token">Cancellation token.</param>
         /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
         public Task CancelMergeEntryAsync(string id, CancellationToken token = default)
         {
-            return SendNoResultAsync(HttpMethod.Post, $"/api/v1/merge-queue/{E(id)}/cancel", null, null, token);
+            return SendNoResultAsync(HttpMethod.Delete, $"/api/v1/merge-queue/{E(id)}", null, null, token);
         }
 
         #endregion

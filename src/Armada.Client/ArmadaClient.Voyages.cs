@@ -34,11 +34,13 @@ namespace Armada.Client
         /// </summary>
         /// <param name="id">id.</param>
         /// <param name="token">Cancellation token.</param>
-        /// <returns>The response.</returns>
+        /// <returns>The voyage. The server replies with <c>{ Voyage, Missions }</c>; this returns the voyage (use
+        /// <see cref="GetVoyageDetailAsync"/> for the missions too).</returns>
         /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
-        public Task<Voyage?> GetVoyageAsync(string id, CancellationToken token = default)
+        public async Task<Voyage?> GetVoyageAsync(string id, CancellationToken token = default)
         {
-            return GetAsync<Voyage>($"/api/v1/voyages/{E(id)}", null, token);
+            VoyageDetail? detail = await GetVoyageDetailAsync(id, token).ConfigureAwait(false);
+            return detail?.Voyage;
         }
 
         /// <summary>
@@ -55,7 +57,8 @@ namespace Armada.Client
         }
 
         /// <summary>
-        /// Dashboard <c>getVoyageStatus</c>: GET `/api/v1/voyages/${id}/status`.
+        /// Dashboard <c>getVoyageStatus</c>. The dashboard reads <c>/api/v1/voyages/{id}/status</c>, which the server does
+        /// not have; this returns the voyage with its missions (GET /api/v1/voyages/{id}, <c>{ Voyage, Missions }</c>) as raw JSON.
         /// </summary>
         /// <param name="id">id.</param>
         /// <param name="token">Cancellation token.</param>
@@ -63,7 +66,7 @@ namespace Armada.Client
         /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
         public Task<ArmadaRawJson?> GetVoyageStatusAsync(string id, CancellationToken token = default)
         {
-            return GetAsync<ArmadaRawJson>($"/api/v1/voyages/{E(id)}/status", null, token);
+            return GetAsync<ArmadaRawJson>($"/api/v1/voyages/{E(id)}", null, token);
         }
 
         /// <summary>

@@ -119,22 +119,29 @@ namespace Armada.Client
         /// </summary>
         /// <param name="id">id.</param>
         /// <param name="token">Cancellation token.</param>
-        /// <returns>The response.</returns>
+        /// <returns>The captain. When it was not quarantined the server replies <c>{ Status: "not_quarantined", CaptainId }</c>
+        /// instead of the captain; the captain is then read with <see cref="GetCaptainAsync"/>.</returns>
         /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
-        public Task<Captain?> UnquarantineCaptainAsync(string id, CancellationToken token = default)
+        public async Task<Captain?> UnquarantineCaptainAsync(string id, CancellationToken token = default)
         {
-            return PostAsync<Captain>($"/api/v1/captains/{E(id)}/unquarantine", null, null, token);
+            ArmadaRawJson? raw = await PostAsync<ArmadaRawJson>($"/api/v1/captains/{E(id)}/unquarantine", null, null, token).ConfigureAwait(false);
+            if (raw == null || String.IsNullOrWhiteSpace(raw.Json)) return null;
+            UnquarantineReply? reply = ArmadaJson.Deserialize<UnquarantineReply>(raw.Json);
+            if (reply != null && reply.Status == "not_quarantined") return await GetCaptainAsync(reply.CaptainId ?? id, token).ConfigureAwait(false);
+            return ArmadaJson.Deserialize<Captain>(raw.Json);
         }
 
         /// <summary>
-        /// Dashboard <c>recallCaptain</c>: POST `/api/v1/captains/${id}/recall`.
+        /// Dashboard <c>recallCaptain</c>. The dashboard posts to <c>/api/v1/captains/{id}/recall</c>, which the server does
+        /// not have; the server's stop route recalls the captain (kills its process and returns it to Idle), so this calls
+        /// POST /api/v1/captains/{id}/stop, the same call as <see cref="StopCaptainAsync"/>.
         /// </summary>
         /// <param name="id">id.</param>
         /// <param name="token">Cancellation token.</param>
         /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
         public Task RecallCaptainAsync(string id, CancellationToken token = default)
         {
-            return SendNoResultAsync(HttpMethod.Post, $"/api/v1/captains/{E(id)}/recall", null, null, token);
+            return SendNoResultAsync(HttpMethod.Post, $"/api/v1/captains/{E(id)}/stop", null, null, token);
         }
 
         /// <summary>

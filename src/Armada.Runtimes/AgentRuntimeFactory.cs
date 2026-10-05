@@ -1,5 +1,6 @@
 namespace Armada.Runtimes
 {
+    using System.Collections.Concurrent;
     using SyslogLogging;
     using Armada.Core.Enums;
     using Armada.Core.Models;
@@ -20,6 +21,7 @@ namespace Armada.Runtimes
         private LoggingModule _Logging;
         private Func<string, ModelEndpoint?>? _EndpointResolver;
         private Dictionary<string, Func<IAgentRuntime>> _CustomRuntimes = new Dictionary<string, Func<IAgentRuntime>>();
+        private ConcurrentDictionary<AgentRuntimeEnum, Func<IAgentRuntime>> _Overrides = new ConcurrentDictionary<AgentRuntimeEnum, Func<IAgentRuntime>>();
 
         #endregion
 
@@ -48,6 +50,8 @@ namespace Armada.Runtimes
         /// <returns>Agent runtime instance.</returns>
         public IAgentRuntime Create(AgentRuntimeEnum runtimeType)
         {
+            if (_Overrides.TryGetValue(runtimeType, out Func<IAgentRuntime>? overridden)) return overridden();
+
             switch (runtimeType)
             {
                 case AgentRuntimeEnum.ClaudeCode:
@@ -88,6 +92,25 @@ namespace Armada.Runtimes
             }
 
             throw new InvalidOperationException("No custom runtime registered with name: " + name);
+        }
+
+        /// <summary>
+        /// Replace the runtime created for a built-in runtime type (for example, a scripted stub captain in end-to-end
+        /// tests, so no real agent CLI is launched). Pass null to restore the built-in runtime.
+        /// </summary>
+        /// <param name="runtimeType">Runtime type to replace.</param>
+        /// <param name="factory">Factory for the replacement, or null to remove the override.</param>
+        public void Override(AgentRuntimeEnum runtimeType, Func<IAgentRuntime>? factory)
+        {
+            if (factory == null)
+            {
+                _Overrides.TryRemove(runtimeType, out _);
+                _Logging.Debug(_Header + "removed runtime override for " + runtimeType);
+                return;
+            }
+
+            _Overrides[runtimeType] = factory;
+            _Logging.Debug(_Header + "registered runtime override for " + runtimeType);
         }
 
         /// <summary>

@@ -40,6 +40,15 @@ namespace Armada.Server
         public Action? OnStopping { get; set; }
 
         /// <summary>
+        /// Factory the server creates captain runtimes from. End-to-end tests replace a runtime type through
+        /// <see cref="AgentRuntimeFactory.Override"/> to run a scripted stub captain instead of a real agent CLI.
+        /// </summary>
+        public AgentRuntimeFactory RuntimeFactory
+        {
+            get { return _RuntimeFactory; }
+        }
+
+        /// <summary>
         /// MCP tool names registered on the HTTP MCP server, in registration order (populated by <see cref="StartAsync"/>).
         /// Used by the authorization coverage test to prove every tool has a declared requirement.
         /// </summary>
