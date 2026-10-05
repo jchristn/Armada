@@ -551,8 +551,8 @@ namespace Armada.Core.Settings
         /// connects. A Harbor's owning user comes only from the Armada credential it presents (its AccessKey);
         /// a credential-less loopback Harbor has no owner, so it satisfies this only for missions with no user.
         /// When false (default), the Admiral delegates to a connected Harbor when one is available and otherwise
-        /// runs the captain locally. Either way, a mission whose dock is already on a Harbor is only relaunched
-        /// on that Harbor.
+        /// runs the captain locally. Either way, a mission whose dock is already on a Harbor is never relaunched
+        /// on another Harbor; with this off it falls back to the Admiral host when that Harbor is unavailable.
         /// </summary>
         public bool RequireHarborForLaunch { get; set; } = false;
 

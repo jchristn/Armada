@@ -155,8 +155,9 @@ depends on `requireHarborForLaunch`:
   lands on a shared Harbor or another user's Harbor, and if none can take it at launch time the launch is refused and
   the mission returns to Pending.
 
-Either way, a launch for a dock that is already pinned to a Harbor never falls back to the Admiral host: if that Harbor
-is offline or no longer registered, the launch is refused.
+A dock that is already pinned to a Harbor never moves to another Harbor. If that Harbor is offline or no longer
+registered, a relaunch runs on the Admiral host when `requireHarborForLaunch` is off (the dock's worktree is created on
+the Admiral, so the path is valid there; a warning names the pinned Harbor), and is refused when it is on.
 
 ## Harbor disconnects
 
@@ -173,14 +174,17 @@ Otherwise the mission is recovered by stall detection, which is the accepted 1.0
 2. Once no output has arrived for `stallThresholdMinutes` (default 10), the health check marks the captain stalled,
    asks the Harbor to stop it (a no-op while the Harbor is disconnected), and runs auto-recovery: it relaunches the
    captain in the mission's existing dock, up to `maxRecoveryAttempts` (default 3) times. The dock is pinned to its
-   Harbor, so the relaunch runs only there: if that Harbor has reconnected, the captain restarts on it; if it is still
-   offline, the relaunch is refused (it never falls back to the Admiral host), the attempt is spent, and the mission
-   fails with `StallRecoveryExhausted`.
+   Harbor, so the relaunch lands there if that Harbor has reconnected, and never on another Harbor. If it is still
+   offline, the relaunch falls back to the Admiral host when `requireHarborForLaunch` is off. When it is on, the
+   relaunch is refused and spends one recovery attempt; the captain keeps the mission with no process, and the next
+   stall check (after another `stallThresholdMinutes`) tries again, so a Harbor that reconnects within the remaining
+   attempts gets the mission back.
 3. When recovery is exhausted, the mission fails with `StallRecoveryExhausted`. A recovery that cannot use the dock
    fails the mission as `Infra`. `maxMissionRuntimeMinutes` still applies throughout.
 
 So a short blip costs nothing, while a Harbor that stays away holds its missions for about `stallThresholdMinutes`
-and then fails them. Lower `stallThresholdMinutes` to recover sooner, at the cost of flagging captains that are
+before recovery starts (and, with `requireHarborForLaunch` on, for up to `maxRecoveryAttempts` stall intervals
+before they fail). Lower `stallThresholdMinutes` to recover sooner, at the cost of flagging captains that are
 merely quiet.
 
 ## Status

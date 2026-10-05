@@ -212,8 +212,9 @@ connected Harbor owned by the same user that advertises the requested runtime. A
 credential it presents (`AccessKey` in the Harbor app): a credential-less loopback Harbor has no owner and never counts,
 so give the Harbor one of the mission user's credentials. Check the Harbors page; a Harbor shows Disconnected once its
 link closes (the Admiral does not time out heartbeats). Missions that were already running on a Harbor when it
-disconnected are not moved: the stall watchdog (`stallThresholdMinutes`) relaunches them only on that Harbor, and if it
-is still offline the mission fails with `StallRecoveryExhausted`.
+disconnected are not moved to another Harbor: the stall watchdog (`stallThresholdMinutes`) relaunches them on that Harbor
+once it is back; while it is still offline and the policy is on, each recovery attempt waits another stall interval, and
+the mission fails with `StallRecoveryExhausted` when `maxRecoveryAttempts` run out.
 
 **A captain launched from a Harbor cannot reach MCP.** The Harbor hands captains the URL in
 `harbor.advertisedMcpBaseUrl`. From the Harbor host, `curl` that URL. In the split compose file it is

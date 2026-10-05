@@ -3,20 +3,18 @@ namespace Armada.Core.Services
     using System;
 
     /// <summary>
-    /// Raised when a captain launch must run on a Harbor and no acceptable Harbor can take it: the mission's dock is
-    /// pinned to a Harbor that is offline or no longer registered (a worktree cannot move hosts), or
-    /// <c>requireHarborForLaunch</c> is on and no eligible Harbor owned by the mission's user is connected. The launch
-    /// is refused instead of falling back to the Admiral host. Callers treat it like any other launch failure: a
-    /// first launch returns the mission to Pending, and a stall-recovery relaunch counts as a spent recovery attempt
-    /// and fails the mission with a typed failure kind.
+    /// Raised when <c>requireHarborForLaunch</c> is on and no eligible Harbor owned by the mission's user can take a
+    /// captain launch (for a pinned dock, its Harbor is offline or no longer registered). The launch is refused
+    /// instead of falling back to the Admiral host. A first launch returns the mission to Pending; a stall-recovery
+    /// relaunch spends one recovery attempt and waits for the next stall check, and the mission fails as
+    /// StallRecoveryExhausted once the attempts run out.
     /// </summary>
     public class HarborLaunchUnavailableException : InvalidOperationException
     {
         #region Public-Members
 
         /// <summary>
-        /// The Harbor the mission's dock is pinned to, or null when the launch was refused by the
-        /// <c>requireHarborForLaunch</c> policy for an unpinned dock.
+        /// The Harbor the mission's dock is pinned to, or null when the dock is not pinned.
         /// </summary>
         public string? PinnedHarborId { get; }
 
