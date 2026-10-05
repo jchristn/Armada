@@ -431,10 +431,13 @@ Each persona references a prompt template by name. When `GenerateClaudeMdAsync` 
 
 ```
 1. Build template parameter dictionary from mission/vessel/captain context
-2. Resolve persona prompt: "persona.{persona name in snake_case}"
-   (Worker -> persona.worker, Test Engineer -> persona.test_engineer,
-   SecurityAuditor -> persona.security_auditor). A project profile's
-   persona override can swap in a different template and append instructions.
+2. Resolve persona prompt: the persona's PromptTemplateName (looked up by the
+   mission's persona name, tenant first). When the persona is not found, or its
+   template does not exist (logged as a warning), use the conventional name
+   "persona.{persona name in snake_case}" (Worker -> persona.worker,
+   Test Engineer -> persona.test_engineer, SecurityAuditor -> persona.security_auditor).
+   A project profile's persona override can swap in a different template and
+   append instructions; it wins over both.
    - IPromptTemplateService.RenderAsync checks DB first, then embedded defaults
 3. Resolve each section (rules, context conservation, etc.) via ResolveSectionAsync
 4. Fallback: GetHardcodedFallback returns the original inline strings
@@ -446,7 +449,7 @@ Template resolution order:
 Database (user customization) -> Embedded Default (shipped with code) -> Hardcoded Fallback
 ```
 
-Mission prompts derive the template name from the persona name as shown above; give a custom persona's template the matching `persona.{snake_case}` name.
+Mission prompts use the template named by the persona's `PromptTemplateName`, so a custom persona can point at any template. The conventional `persona.{snake_case}` name is the fallback when that template is missing.
 
 All built-in templates (27 in 1.0.0) are seeded into the database on startup via `PromptTemplateService.SeedDefaultsAsync()`. Users can edit them via dashboard, MCP, or REST without touching code.
 

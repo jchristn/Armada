@@ -237,7 +237,7 @@ dispatch({
    no review gates, so the stages run back to back
 2. Worker executes first, implements the login endpoint
 3. SecurityAuditor receives the diff and reviews for vulnerabilities (its mission prompt uses
-   `persona.security_auditor`, the template name derived from the persona name `SecurityAuditor`)
+   `persona.security_auditor`, the persona's `promptTemplateName`)
 4. Judge reviews the final result
 
 ---

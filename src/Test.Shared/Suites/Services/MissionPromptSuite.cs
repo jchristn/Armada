@@ -988,6 +988,134 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("pipeline_placeholders_filled_from_prior_stage", "Judge, test engineer and linter prompts get {Diff} and {PreviousStageOutput} from the prior stage", TestTags.Negative, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    LoggingModule logging = CreateLogging();
+                    MissionService service = CreateMissionServiceWithTemplates(logging, testDb.Driver, CreateSettings(), new StubGitService(), out IPromptTemplateService templates);
+
+                    Mission prior = new Mission("Implement feature", "Do the work");
+                    prior.Persona = "Worker";
+                    prior.DiffSnapshot = "diff --git a/src/a.cs b/src/a.cs\n+PRIOR_DIFF_MARKER";
+                    prior.AgentOutput = "PRIOR_OUTPUT_MARKER\n[ARMADA:RESULT] COMPLETE";
+                    prior = await testDb.Driver.Missions.CreateAsync(prior);
+
+                    foreach (string persona in new[] { "Judge", "TestEngineer", "Linter" })
+                    {
+                        string tempDir = Path.Combine(Path.GetTempPath(), "armada_prompt_test_" + Guid.NewGuid().ToString("N"));
+                        Directory.CreateDirectory(tempDir);
+                        try
+                        {
+                            Vessel vessel = new Vessel("PromptVessel", "https://github.com/test/repo");
+                            Mission mission = new Mission("Review feature", "Review the work");
+                            mission.Persona = persona;
+                            mission.DependsOnMissionId = prior.Id;
+
+                            await service.GenerateClaudeMdAsync(tempDir, mission, vessel);
+
+                            string content = await File.ReadAllTextAsync(Path.Combine(tempDir, "CLAUDE.md"));
+                            AssertContains("PRIOR_DIFF_MARKER", content, persona + " diff");
+                            AssertContains("PRIOR_OUTPUT_MARKER", content, persona + " output");
+                            AssertFalse(content.Contains("{Diff}", StringComparison.Ordinal), persona + ": {Diff} left unfilled");
+                            AssertFalse(content.Contains("{PreviousStageOutput}", StringComparison.Ordinal), persona + ": {PreviousStageOutput} left unfilled");
+                        }
+                        finally
+                        {
+                            try { Directory.Delete(tempDir, true); } catch { }
+                        }
+                    }
+
+                    Dictionary<string, string> standalone = MissionPromptBuilder.BuildTemplateParams(new Mission("Solo", "Solo"), new Vessel("V", "https://github.com/test/repo"), null, null, null);
+                    AssertEqual(MissionPromptBuilder.NoPreviousStageDiffText, standalone["Diff"]);
+                    AssertEqual(MissionPromptBuilder.NoPreviousStageOutputText, standalone["PreviousStageOutput"]);
+                }
+            }));
+
+            cases.Add(CaseAsync("builtin_template_placeholders_are_supplied", "Every placeholder in every built-in template is one the mission prompt builder supplies", TestTags.Negative, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    PromptTemplateService templates = new PromptTemplateService(testDb.Driver, CreateLogging());
+                    HashSet<string> supplied = new HashSet<string>(MissionPromptBuilder.TemplateParameterNames, StringComparer.Ordinal);
+
+                    Dictionary<string, string> built = MissionPromptBuilder.BuildTemplateParams(new Mission("T", "D"), new Vessel("V", "https://github.com/test/repo"), new Captain("c"), null, null);
+                    HashSet<string> builtKeys = new HashSet<string>(built.Keys, StringComparer.Ordinal) { "PersonaPrompt", "ExistingClaudeMd" };
+                    AssertTrue(builtKeys.SetEquals(supplied), "TemplateParameterNames must match what the builder fills: builder=" + String.Join(",", builtKeys) + " list=" + String.Join(",", supplied));
+
+                    foreach (string name in templates.GetEmbeddedDefaultNames())
+                    {
+                        string content = templates.GetEmbeddedDefault(name) ?? String.Empty;
+                        foreach (Match match in Regex.Matches(content, "\\{([A-Z][A-Za-z0-9]*)\\}"))
+                        {
+                            AssertTrue(supplied.Contains(match.Groups[1].Value), "template " + name + " uses {" + match.Groups[1].Value + "}, which nothing fills");
+                        }
+                    }
+                }
+            }));
+
+            cases.Add(CaseAsync("placeholder_panels_match_builder", "The dashboard and TUI placeholder panels list exactly the placeholders the builder supplies", TestTags.Negative, () =>
+            {
+                HashSet<string> expected = new HashSet<string>(StringComparer.Ordinal);
+                foreach (string name in MissionPromptBuilder.TemplateParameterNames) expected.Add("{" + name + "}");
+
+                string tsx = File.ReadAllText(Path.Combine(DashboardSource.Src(), "pages", "PromptTemplateDetail.tsx"));
+                int start = tsx.IndexOf("PARAMETER_GROUPS", StringComparison.Ordinal);
+                int end = tsx.IndexOf("PROMPT_TEMPLATE_CATEGORY_OPTIONS", StringComparison.Ordinal);
+                AssertTrue(start >= 0 && end > start, "PARAMETER_GROUPS block not found");
+                HashSet<string> dashboard = new HashSet<string>(StringComparer.Ordinal);
+                foreach (Match match in Regex.Matches(tsx.Substring(start, end - start), "name:\\s*'(\\{[A-Za-z0-9]+\\})'"))
+                {
+                    dashboard.Add(match.Groups[1].Value);
+                }
+
+                AssertTrue(dashboard.SetEquals(expected), "dashboard panel=" + String.Join(",", dashboard) + " builder=" + String.Join(",", expected));
+
+                HashSet<string> tui = new HashSet<string>(StringComparer.Ordinal);
+                foreach (Armada.Tui.Screens.Configuration.PromptParameter parameter in Armada.Tui.Screens.Configuration.PromptParameter.All) tui.Add(parameter.Name);
+                AssertTrue(tui.SetEquals(expected), "TUI panel=" + String.Join(",", tui) + " builder=" + String.Join(",", expected));
+                return Task.CompletedTask;
+            }));
+
+            cases.Add(CaseAsync("persona_prompt_template_name_is_applied", "A mission uses its persona's PromptTemplateName, falling back to the default template when it does not exist", TestTags.Negative, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    LoggingModule logging = CreateLogging();
+                    MissionService service = CreateMissionServiceWithTemplates(logging, testDb.Driver, CreateSettings(), new StubGitService(), out IPromptTemplateService templates);
+
+                    await testDb.Driver.PromptTemplates.CreateAsync(new PromptTemplate("custom.security_review", "CUSTOM_PERSONA_TEMPLATE_MARKER for {MissionTitle}") { Category = "persona" });
+                    await testDb.Driver.Personas.CreateAsync(new Persona("SecurityAuditor", "custom.security_review"));
+                    await testDb.Driver.Personas.CreateAsync(new Persona("Judge", "missing.template_name"));
+
+                    Vessel vessel = new Vessel("PromptVessel", "https://github.com/test/repo");
+
+                    string dirA = Path.Combine(Path.GetTempPath(), "armada_prompt_test_" + Guid.NewGuid().ToString("N"));
+                    string dirB = Path.Combine(Path.GetTempPath(), "armada_prompt_test_" + Guid.NewGuid().ToString("N"));
+                    Directory.CreateDirectory(dirA);
+                    Directory.CreateDirectory(dirB);
+                    try
+                    {
+                        Mission custom = new Mission("Audit auth", "Audit the auth code");
+                        custom.Persona = "SecurityAuditor";
+                        await service.GenerateClaudeMdAsync(dirA, custom, vessel);
+                        string customContent = await File.ReadAllTextAsync(Path.Combine(dirA, "CLAUDE.md"));
+                        AssertContains("CUSTOM_PERSONA_TEMPLATE_MARKER for Audit auth", customContent);
+
+                        Mission judge = new Mission("Review", "Review the work");
+                        judge.Persona = "Judge";
+                        await service.GenerateClaudeMdAsync(dirB, judge, vessel);
+                        string judgeContent = await File.ReadAllTextAsync(Path.Combine(dirB, "CLAUDE.md"));
+                        AssertContains("You are an Armada judge agent", judgeContent, "missing persona template falls back to persona.judge");
+                    }
+                    finally
+                    {
+                        try { Directory.Delete(dirA, true); } catch { }
+                        try { Directory.Delete(dirB, true); } catch { }
+                    }
+                }
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
                 displayName: "Mission Prompt (ProjectContext/StyleGuide/ModelContext)",

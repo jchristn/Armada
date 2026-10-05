@@ -1494,7 +1494,8 @@ namespace Armada.Core.Services
             string instructionsFileName = MissionPromptBuilder.GetInstructionsFileName(captain != null ? captain.Runtime.ToString() : null);
             string instructionsPath = Path.Combine(worktreePath, instructionsFileName);
 
-            Dictionary<string, string> templateParams = MissionPromptBuilder.BuildTemplateParams(mission, vessel, captain);
+            Mission? previousStage = await ReadPreviousStageAsync(mission, token).ConfigureAwait(false);
+            Dictionary<string, string> templateParams = MissionPromptBuilder.BuildTemplateParams(mission, vessel, captain, null, previousStage);
             List<MissionPlaybookSnapshot> playbookSnapshots = await LoadMissionPlaybookSnapshotsAsync(mission, token).ConfigureAwait(false);
 
             string content = "";
@@ -1546,7 +1547,8 @@ namespace Armada.Core.Services
             // Mission preamble and metadata -- resolve persona prompt first, then inject into metadata template.
             // Apply the vessel's project-profile persona override (if any) so per-project customization takes effect.
             PersonaOverride? personaOverride = await ResolvePersonaOverrideAsync(vessel, mission.Persona, token).ConfigureAwait(false);
-            string personaPrompt = await ResolvePersonaPromptAsync(mission.Persona, templateParams, personaOverride, token).ConfigureAwait(false);
+            string? personaTemplateName = await ResolvePersonaTemplateNameAsync(mission, token).ConfigureAwait(false);
+            string personaPrompt = await MissionPromptBuilder.ResolvePersonaPromptAsync(mission.Persona, personaTemplateName, templateParams, _PromptTemplates, personaOverride, token).ConfigureAwait(false);
             templateParams["PersonaPrompt"] = personaPrompt;
             content += await ResolveSectionAsync("mission.metadata", templateParams, token).ConfigureAwait(false);
             content += "\n";
@@ -1888,11 +1890,58 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
-        /// Resolve a persona prompt template by persona name. Falls back to default worker preamble.
+        /// Resolve the prompt template configured on the mission's persona (<see cref="Persona.PromptTemplateName"/>).
+        /// Returns null (use the conventional persona.&lt;name&gt; template) when the persona is not found or names no
+        /// template, and logs and returns null when the configured template does not exist.
         /// </summary>
-        private async Task<string> ResolvePersonaPromptAsync(string? persona, Dictionary<string, string> templateParams, PersonaOverride? personaOverride, CancellationToken token)
+        private async Task<string?> ResolvePersonaTemplateNameAsync(Mission mission, CancellationToken token)
         {
-            return await MissionPromptBuilder.ResolvePersonaPromptAsync(persona, templateParams, _PromptTemplates, personaOverride, token).ConfigureAwait(false);
+            string personaName = PersonaCatalog.NormalizeName(mission.Persona ?? PersonaCatalog.Worker);
+            if (String.IsNullOrWhiteSpace(personaName)) return null;
+
+            Persona? persona;
+            try
+            {
+                persona = await ReadPersonaByNameAsync(mission.TenantId, personaName, token).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _Logging.Warn(_Header + "could not read persona " + personaName + " for mission " + mission.Id + "; using the default persona template: " + ex.Message);
+                return null;
+            }
+
+            if (persona == null || String.IsNullOrWhiteSpace(persona.PromptTemplateName)) return null;
+            string templateName = persona.PromptTemplateName.Trim();
+            if (_PromptTemplates == null) return templateName;
+
+            PromptTemplate? template = await _PromptTemplates.ResolveAsync(templateName, token).ConfigureAwait(false);
+            if (template == null)
+            {
+                _Logging.Warn(_Header + "persona " + persona.Name + " references prompt template " + templateName +
+                    ", which does not exist; mission " + mission.Id + " uses the default template " + MissionPromptBuilder.GetPersonaTemplateName(personaName));
+                return null;
+            }
+
+            return templateName;
+        }
+
+        /// <summary>
+        /// Read the prior pipeline stage (the mission this one depends on), or null. Best-effort.
+        /// </summary>
+        private async Task<Mission?> ReadPreviousStageAsync(Mission mission, CancellationToken token)
+        {
+            if (String.IsNullOrEmpty(mission.DependsOnMissionId)) return null;
+            try
+            {
+                return !String.IsNullOrEmpty(mission.TenantId)
+                    ? await _Database.Missions.ReadAsync(mission.TenantId!, mission.DependsOnMissionId!, token).ConfigureAwait(false)
+                    : await _Database.Missions.ReadAsync(mission.DependsOnMissionId!, token).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _Logging.Warn(_Header + "could not read prior stage " + mission.DependsOnMissionId + " for mission " + mission.Id + ": " + ex.Message);
+                return null;
+            }
         }
 
         /// <summary>

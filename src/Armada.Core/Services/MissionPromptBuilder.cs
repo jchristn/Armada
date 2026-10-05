@@ -15,6 +15,50 @@ namespace Armada.Core.Services
         private const int MaxPersonaSummaryChars = 320;
         private const int MaxCaptainInstructionChars = 800;
         private const int MaxMissionDescriptionChars = 3500;
+        private const int MaxPreviousStageOutputChars = 8000;
+        private const int MaxPreviousStageDiffChars = 20000;
+
+        /// <summary>
+        /// Text placed in <c>{Diff}</c> when the mission has no prior pipeline stage diff.
+        /// </summary>
+        public const string NoPreviousStageDiffText = "No diff from a prior pipeline stage is available. Inspect the changes on the mission branch with git.";
+
+        /// <summary>
+        /// Text placed in <c>{PreviousStageOutput}</c> when the mission has no prior pipeline stage output.
+        /// </summary>
+        public const string NoPreviousStageOutputText = "No prior pipeline stage output is available.";
+
+        /// <summary>
+        /// Every placeholder (without braces) that mission prompt rendering supplies: the keys of
+        /// <see cref="BuildTemplateParams(Mission, Vessel, Captain?, Dock?, Mission?)"/> plus <c>PersonaPrompt</c> and
+        /// <c>ExistingClaudeMd</c>, which mission instruction generation adds while it renders. The dashboard and TUI
+        /// placeholder panels list exactly these.
+        /// </summary>
+        public static IReadOnlyList<string> TemplateParameterNames { get; } = new List<string>
+        {
+            "MissionId",
+            "MissionTitle",
+            "MissionDescription",
+            "MissionPersona",
+            "VoyageId",
+            "BranchName",
+            "VesselId",
+            "VesselName",
+            "DefaultBranch",
+            "ProjectContext",
+            "StyleGuide",
+            "ModelContext",
+            "FleetId",
+            "CaptainId",
+            "CaptainName",
+            "CaptainInstructions",
+            "PersonaPrompt",
+            "Diff",
+            "PreviousStageOutput",
+            "SelectedPlaybooksMarkdown",
+            "ExistingClaudeMd",
+            "Timestamp"
+        };
 
         /// <summary>
         /// Resolve the runtime-specific mission instructions filename.
@@ -43,6 +87,29 @@ namespace Armada.Core.Services
             Captain? captain = null,
             Dock? dock = null)
         {
+            return BuildTemplateParams(mission, vessel, captain, dock, null);
+        }
+
+        /// <summary>
+        /// Build the template parameter dictionary, filling the pipeline placeholders <c>{Diff}</c> and
+        /// <c>{PreviousStageOutput}</c> from the prior pipeline stage (the mission this one depends on). The diff is
+        /// capped at 20000 characters and the output at 8000 (the full diff and output are also in the mission
+        /// description, which the stage handoff rewrites); without a prior stage they hold
+        /// <see cref="NoPreviousStageDiffText"/> and <see cref="NoPreviousStageOutputText"/>.
+        /// </summary>
+        /// <param name="mission">Mission.</param>
+        /// <param name="vessel">Vessel.</param>
+        /// <param name="captain">Captain, or null.</param>
+        /// <param name="dock">Dock, or null.</param>
+        /// <param name="previousStage">The prior pipeline stage mission, or null.</param>
+        /// <returns>Placeholder values keyed by name (without braces).</returns>
+        public static Dictionary<string, string> BuildTemplateParams(
+            Mission mission,
+            Vessel vessel,
+            Captain? captain,
+            Dock? dock,
+            Mission? previousStage)
+        {
             if (mission == null) throw new ArgumentNullException(nameof(mission));
             if (vessel == null) throw new ArgumentNullException(nameof(vessel));
 
@@ -65,6 +132,8 @@ namespace Armada.Core.Services
                 ["CaptainId"] = captain?.Id ?? "",
                 ["CaptainName"] = captain?.Name ?? "",
                 ["CaptainInstructions"] = BuildCaptainInstructions(captain?.SystemInstructions, mission.Persona),
+                ["Diff"] = BuildPreviousStageDiff(previousStage),
+                ["PreviousStageOutput"] = BuildPreviousStageOutput(previousStage),
                 ["Timestamp"] = DateTime.UtcNow.ToString("o")
             };
         }
@@ -89,8 +158,33 @@ namespace Armada.Core.Services
         /// project profile is supplied and enabled, it swaps the persona's prompt template and/or appends
         /// per-project additional instructions to the rendered prompt.
         /// </summary>
+        public static Task<string> ResolvePersonaPromptAsync(
+            string? persona,
+            Dictionary<string, string> templateParams,
+            IPromptTemplateService? promptTemplates,
+            PersonaOverride? personaOverride = null,
+            CancellationToken token = default)
+        {
+            return ResolvePersonaPromptAsync(persona, null, templateParams, promptTemplates, personaOverride, token);
+        }
+
+        /// <summary>
+        /// Resolve the persona prompt for the mission using the persona's own prompt template
+        /// (<see cref="Persona.PromptTemplateName"/>) when one is supplied. Precedence: an enabled project-profile
+        /// override's template, then <paramref name="personaTemplateName"/>, then the conventional
+        /// <c>persona.&lt;name&gt;</c> template; a template that renders empty (missing) falls back to the conventional
+        /// template and then to the built-in role summary.
+        /// </summary>
+        /// <param name="persona">Mission persona name.</param>
+        /// <param name="personaTemplateName">The persona's configured prompt template name, or null for the convention.</param>
+        /// <param name="templateParams">Template parameters.</param>
+        /// <param name="promptTemplates">Template service, or null.</param>
+        /// <param name="personaOverride">Project-profile persona override, or null.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The resolved persona prompt.</returns>
         public static async Task<string> ResolvePersonaPromptAsync(
             string? persona,
+            string? personaTemplateName,
             Dictionary<string, string> templateParams,
             IPromptTemplateService? promptTemplates,
             PersonaOverride? personaOverride = null,
@@ -100,7 +194,8 @@ namespace Armada.Core.Services
 
             bool overrideActive = personaOverride != null && personaOverride.Enabled;
 
-            string templateName = GetPersonaTemplateName(persona);
+            string conventionalName = GetPersonaTemplateName(persona);
+            string templateName = String.IsNullOrWhiteSpace(personaTemplateName) ? conventionalName : personaTemplateName!.Trim();
             if (overrideActive && !String.IsNullOrWhiteSpace(personaOverride!.PromptTemplateName))
                 templateName = personaOverride.PromptTemplateName!.Trim();
 
@@ -108,6 +203,8 @@ namespace Armada.Core.Services
             if (promptTemplates != null)
             {
                 string rendered = await promptTemplates.RenderAsync(templateName, templateParams, token).ConfigureAwait(false);
+                if (String.IsNullOrEmpty(rendered) && !String.Equals(templateName, conventionalName, StringComparison.Ordinal))
+                    rendered = await promptTemplates.RenderAsync(conventionalName, templateParams, token).ConfigureAwait(false);
                 if (!String.IsNullOrEmpty(rendered))
                     result = rendered;
             }
@@ -162,6 +259,22 @@ namespace Armada.Core.Services
             string overflowMessage = "\n\n" + instructionsFileName + " contains the remaining context. Keep working from that file if this launch prompt was truncated.";
             int allowed = Math.Max(256, MaxLaunchPromptChars - overflowMessage.Length);
             return Task.FromResult(prompt.Substring(0, allowed).TrimEnd() + overflowMessage);
+        }
+
+        private static string BuildPreviousStageDiff(Mission? previousStage)
+        {
+            if (previousStage == null || String.IsNullOrWhiteSpace(previousStage.DiffSnapshot)) return NoPreviousStageDiffText;
+            string diff = previousStage.DiffSnapshot!.Trim();
+            if (diff.Length <= MaxPreviousStageDiffChars) return diff;
+            return diff.Substring(0, MaxPreviousStageDiffChars) + "\n...(truncated; the full diff is in the mission description under \"Diff from prior stage\")";
+        }
+
+        private static string BuildPreviousStageOutput(Mission? previousStage)
+        {
+            if (previousStage == null || String.IsNullOrWhiteSpace(previousStage.AgentOutput)) return NoPreviousStageOutputText;
+            string output = previousStage.AgentOutput!.Trim();
+            if (output.Length <= MaxPreviousStageOutputChars) return output;
+            return output.Substring(0, MaxPreviousStageOutputChars) + "\n...(truncated)";
         }
 
         private static string BuildBootstrapRoleSummary(string? persona)
