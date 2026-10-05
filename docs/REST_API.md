@@ -46,6 +46,7 @@ camelizes REST responses.
   - [Missions](#missions)
   - [Captains](#captains)
   - [Ask](#ask)
+  - [CLI Permissions](#cli-permissions)
   - [Signals](#signals)
   - [Events](#events)
   - [Docks](#docks)
@@ -264,6 +265,11 @@ without a declaration requires a global admin. The complete per-route list is th
 | `/api/v1/vessels/{id}/health` | GET | Authenticated | Tenant-scoped; 404 for another tenant's vessel |
 | `/api/v1/vessels/{id}/health/overrides/{criterion}` | PUT, DELETE | TenantAdmin | Manual overrides |
 | `/api/v1/captains` | GET, POST `.../enumerate` | Authenticated | Tenant-scoped reads. Every create, update, delete, and action route under the prefix is TenantAdmin |
+| `/api/v1/captains/{id}/cli-permission-policy` | PUT | TenantAdmin | Global admin, or a tenant admin of the captain's tenant |
+| `/api/v1/cli-permissions/requests` | GET | Authenticated | Global admins see all; tenant admins their tenant; other users requests from their own Ask threads and missions |
+| `/api/v1/cli-permissions/requests/{id}/decide` | POST | Authenticated | Checked per request: global admin, tenant admin of the request's tenant, or the owner when `Permissions.AllowOwnerApproval` is true (`403` otherwise); `AllowAndRemember` needs an admin |
+| `/api/v1/cli-permissions/rules` | GET | Authenticated | Caller's tenant plus rules for every tenant. `POST`, `PUT`, and `DELETE` (`.../rules/{id}`) are TenantAdmin (a tenant admin only within their tenant) |
+| `/api/v1/ask/threads/{id}/cli-permission-policy` | PUT | Authenticated | Thread owner only (`404` otherwise); `Bypass` requires a global or tenant admin (`403`) |
 | `/api/v1/missions` | GET, POST `.../enumerate` | Authenticated | Tenant-scoped reads. Every create, update, delete, and action route under the prefix is TenantAdmin |
 | `/api/v1/voyages` | GET, POST `.../enumerate` | Authenticated | Tenant-scoped reads. Every create, update, delete, and action route under the prefix is TenantAdmin |
 | `/api/v1/docks` | GET, POST `.../enumerate` | Authenticated | Tenant-scoped reads. Every create, update, delete, and action route under the prefix is TenantAdmin |
@@ -1165,6 +1171,12 @@ Returns current server settings including ports, agent configuration, system pat
     "AskThreadDeleteAfterDays": 0,
     "JobRetentionDays": 30,
     "ImportBatchRetentionDays": 90
+  },
+  "Permissions": {
+    "AskDefaultPolicy": "ApproveInArmada",
+    "MissionDefaultPolicy": "Bypass",
+    "AllowOwnerApproval": false,
+    "PromptTimeoutSeconds": 600
   }
 }
 ```
@@ -1173,7 +1185,7 @@ Returns current server settings including ports, agent configuration, system pat
 
 #### PUT /api/v1/settings
 
-Accepts partial updates to editable server settings and saves them to `settings.json`. Editable top-level fields: `AdmiralPort`, `McpPort`, `MaxCaptains`, `HeartbeatIntervalSeconds`, `StallThresholdMinutes`, `IdleCaptainTimeoutSeconds`, `PlanningSessionInactivityTimeoutMinutes`, `PlanningSessionAbandonmentTimeoutMinutes`, `PlanningSessionRetentionDays`, `AutoCreatePr`, `SelfVesselId`, `RebuildSlotRetentionCount`, `RemoteControl`, `Import`, `FleetActions`, `RepositoryHealth`, and `Retention`; omitted fields are unchanged. When `RemoteControl` is supplied, it replaces the full `RemoteControl` settings object (send `Password` or `EnrollmentToken` as `********` to keep the stored value). When `Import` is supplied, it replaces the full `Import` (vessel import) settings object; see [Vessel Import](#vessel-import) for the fields and their ranges. When `FleetActions` is supplied, it replaces the full `FleetActions` object (omitted fields take their defaults; values are clamped: `MaxConcurrency` 1-32, `DefaultTimeoutSeconds` 5-7200, `MaxOutputBytes` 1024-1048576, `RunRetentionDays` 1-3650) and applies immediately.
+Accepts partial updates to editable server settings and saves them to `settings.json`. Editable top-level fields: `AdmiralPort`, `McpPort`, `MaxCaptains`, `HeartbeatIntervalSeconds`, `StallThresholdMinutes`, `IdleCaptainTimeoutSeconds`, `PlanningSessionInactivityTimeoutMinutes`, `PlanningSessionAbandonmentTimeoutMinutes`, `PlanningSessionRetentionDays`, `AutoCreatePr`, `SelfVesselId`, `RebuildSlotRetentionCount`, `RemoteControl`, `Import`, `FleetActions`, `RepositoryHealth`, `Retention`, and `Permissions`; omitted fields are unchanged. When `RemoteControl` is supplied, it replaces the full `RemoteControl` settings object (send `Password` or `EnrollmentToken` as `********` to keep the stored value). When `Import` is supplied, it replaces the full `Import` (vessel import) settings object; see [Vessel Import](#vessel-import) for the fields and their ranges. When `FleetActions` is supplied, it replaces the full `FleetActions` object (omitted fields take their defaults; values are clamped: `MaxConcurrency` 1-32, `DefaultTimeoutSeconds` 5-7200, `MaxOutputBytes` 1024-1048576, `RunRetentionDays` 1-3650) and applies immediately.
 
 **Permission:** AdminOnly
 
@@ -1197,6 +1209,15 @@ Retention settings (see [UPGRADING.md](UPGRADING.md#data-retention)): `GET /api/
 | `AskThreadDeleteAfterDays` | 0 | Delete Ask threads (with messages, tool calls, proposals, and tracked work) inactive for this many days, archived or not. Pinned threads are never deleted. |
 | `JobRetentionDays` | 30 | Delete finished background jobs (Succeeded, Failed, Cancelled) older than this; the newest finished job of each kind and name per tenant is kept. |
 | `ImportBatchRetentionDays` | 90 | Delete finished vessel import batches (Completed, CompletedWithFailures, Failed) with their items and recommendations; imported vessels are not affected. |
+
+CLI tool permission settings (see [CLI Permissions](#cli-permissions) and [CAPTAINS.md](CAPTAINS.md#cli-tool-permissions)): `GET /api/v1/settings` returns a `Permissions` object, and when `Permissions` is supplied on PUT it replaces the whole object (omitted fields take their defaults). Changes apply live to the next captain launch; a pending permission request keeps its expiry.
+
+| Field | Default | Effect |
+|-------|---------|--------|
+| `AskDefaultPolicy` | `ApproveInArmada` | Policy for Ask turns when neither the thread nor the captain sets one (`Refuse`, `ApproveInArmada`, or `Bypass`). Narrations and summaries run `ApproveInArmada` as `Refuse`. |
+| `MissionDefaultPolicy` | `Bypass` | Policy for missions when neither the vessel's `AutoApprove` override nor the captain (policy or explicit `autoApprove`) sets one. `Bypass` is the behavior before CLI tool permissions. |
+| `AllowOwnerApproval` | `false` | When true, the owner of the Ask thread or mission may allow once or deny its requests. Global admins and the tenant's tenant admins can always decide; remembering a decision as a rule always needs an admin. |
+| `PromptTimeoutSeconds` | 600 | Seconds a permission request waits before it expires and is denied. Clamped to 10..3600. |
 
 ```json
 {
@@ -3384,6 +3405,7 @@ Register a new captain (AI agent).
 | `Name` | string | yes | Captain name |
 | `Runtime` | string | no | Agent runtime type (default: `ClaudeCode`) |
 | `Model` | string | no | Optional model override for this captain. When omitted, the runtime selects its default model |
+| `CliPermissionPolicy` | string | no | CLI tool permission policy: `Refuse`, `ApproveInArmada`, `Bypass`, or null to inherit (see [CAPTAINS.md](CAPTAINS.md#cli-tool-permissions)) |
 
 **Response:** `201 Created` - [Captain](#captain)
 **Error:** `400 Bad Request` - Invalid or unavailable model. `Data` is a `CaptainModelValidationFailure`: `{"Reason": "...", "Message": "..."}` with `Reason` one of `EndpointRequired`, `EndpointNotFound`, `EndpointNotInference`, `EndpointDisabled`, `RuntimeUnavailable`, `ModelRejected`, `TimedOut`, `InvalidRuntimeOptions`, `NamedEndpointRequired`, `UnsupportedContractVersion`, `EndpointProbeFailed`, `EndpointNotToolEnabled` (the same on `PUT /api/v1/captains/{id}`; MCP `create_captain` / `update_captain` return `ErrorCode` `InvalidArgument` with `Code` = the reason).
@@ -3455,8 +3477,9 @@ Describe the Armada MCP tools available through a specific captain, including ru
 
 #### PUT /api/v1/captains/{id}
 
-Update a captain's name, runtime, or model. `tenantId`, `userId`, `createdUtc`, and the operational fields (state,
-current mission and dock, process, recovery attempts, quarantine, heartbeats) are preserved.
+Update a captain's name, runtime, or model. `tenantId`, `userId`, `createdUtc`, `CliPermissionPolicy` (change it with
+[`PUT /api/v1/captains/{id}/cli-permission-policy`](#put-apiv1captainsidcli-permission-policy)), and the operational
+fields (state, current mission and dock, process, recovery attempts, quarantine, heartbeats) are preserved.
 
 **Permission:** TenantAdmin
 
@@ -3486,6 +3509,38 @@ curl -X PUT http://localhost:7890/api/v1/captains/cpt_abc123 \
   -H "Content-Type: application/json" \
   -H "x-api-key: YOUR_KEY" \
   -d '{"name": "captain-bravo", "runtime": "Codex"}'
+```
+
+---
+
+#### PUT /api/v1/captains/{id}/cli-permission-policy
+
+Set or clear the captain's CLI tool permission policy: how the CLI's own tools (shell commands, web fetches, file tools
+outside the accepted edits) are permitted on its missions and Ask turns. `null` clears it, so the next level of the
+resolution order applies (the legacy `autoApprove` option, then the server default). For Ask turns a captain-level
+`Bypass` is honored only when `Ask.CaptainAutoApprove` is true. See [CAPTAINS.md](CAPTAINS.md#cli-tool-permissions).
+
+**Permission:** TenantAdmin (a global admin, or a tenant admin of the captain's tenant)
+
+**Path Parameters:**
+| Parameter | Description |
+|---|---|
+| `id` | Captain ID (`cpt_` prefix) |
+
+**Request Body:** [CliPermissionPolicyUpdateRequest](#clipermissionpolicyupdaterequest)
+
+```json
+{ "Policy": "ApproveInArmada" }
+```
+
+**Response:** `200 OK` - [Captain](#captain)
+**Error:** `403` - Not an admin of the captain's tenant; `404` - Captain not found (or in another tenant)
+
+```bash
+curl -X PUT http://localhost:7890/api/v1/captains/cpt_abc123/cli-permission-policy \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
+  -d '{"Policy": "Refuse"}'
 ```
 
 ---
@@ -3701,6 +3756,7 @@ WEBSOCKET_API.md). Retention: threads are kept until deleted; there is no automa
 | POST | `/api/v1/ask/threads/{id}/proposals/{pid}/approve` | | `200` `AskActionProposal` (`Executed` or `Failed`); `409` when not pending or expired |
 | POST | `/api/v1/ask/threads/{id}/proposals/{pid}/reject` | | `200` `AskActionProposal` (`Rejected`); `409` when not pending |
 | GET | `/api/v1/ask/threads/{id}/work/{workId}` | | `200` `AskWorkSnapshot` |
+| PUT | `/api/v1/ask/threads/{id}/cli-permission-policy` | `CliPermissionPolicyUpdateRequest` | `200` `AskThread` (with `CliPermission`); `403` when a non-admin sets `Bypass` |
 | GET | `/api/v1/ask/quick-actions` | | `200` `AskQuickAction[]` |
 
 **Turn flow.** `POST .../messages` persists the user message (the first message also names a thread still titled
@@ -3730,24 +3786,39 @@ opened a pull request, or could not land, and the item succeeded, failed, or was
 thread's captain when it is idle (`Ask.NarrateMilestones`, bounded by `Ask.NarrationTimeoutSeconds`) and otherwise a
 deterministic sentence. Captain and Armada messages increment `UnreadCount`; `POST .../read` resets it.
 
-Thread turns and narrations run the CLI captain without its auto-approve or permission-bypass flags unless the
-`Ask.CaptainAutoApprove` setting is true (default false). Armada's own MCP tools stay available to the captain (state
-changes become proposals); the CLI's shell and file tools outside its temporary working directory are refused, not
-prompted, so a turn never waits for input.
+**CLI tool permissions.** The CLI's own tools (shell commands, web fetches, file tools outside its temporary working
+directory) follow the turn's CLI tool permission policy, resolved in this order: the thread's `CliPermissionPolicy`; the
+captain's `CliPermissionPolicy` (a captain-level `Bypass` only when `Ask.CaptainAutoApprove` is true); when
+`Ask.CaptainAutoApprove` is true, the captain's legacy `autoApprove` option (absent or true is `Bypass`, false is
+`Refuse`); `Permissions.AskDefaultPolicy` (default `ApproveInArmada`). Under `ApproveInArmada` a Claude Code captain's
+permission prompt (or an ApiEndpoint captain's `run_process` call) becomes a [CLI permission request](#cli-permissions)
+and a `CliPermission` card in the thread; the tool waits until an approver decides or the request expires
+(`Permissions.PromptTimeoutSeconds`). Other runtimes, and Claude Code turns without a thread-scoped token, run
+`ApproveInArmada` as `Refuse`. Narrations and
+summaries never prompt (`ApproveInArmada` runs them as `Refuse`). Armada's own MCP tools stay available to the captain in
+every policy (state changes become proposals). `PUT .../cli-permission-policy` is owner-only (another user's thread
+returns `404`); `{ "Policy": null }` clears the override, and `Bypass` requires the owner to be a global admin or a
+tenant admin. See [ASK_ARMADA_HOME_BASE.md](ASK_ARMADA_HOME_BASE.md#cli-tool-permissions).
 
 **Models.**
 
-`AskThread`: `Id` (ath_), `TenantId`, `UserId`, `Title`, `CaptainId`, `AutoApprove`, `SummaryText`, `SummaryUtc`,
-`Pinned`, `Archived`, `LastMessageUtc`, `MessageCount`, `UnreadCount`, `ActiveWorkCount` (computed), `ActiveTurnId`
-(computed; set while a turn runs), `CreatedUtc`, `LastUpdateUtc`.
+`AskThread`: `Id` (ath_), `TenantId`, `UserId`, `Title`, `CaptainId`, `AutoApprove`, `CliPermissionPolicy` (`Refuse`,
+`ApproveInArmada`, `Bypass`, or null to inherit), `CliPermission` (computed [CliPermissionResolution](#clipermissionresolution)
+for the next turn, or null without a captain), `SummaryText`, `SummaryUtc`, `Pinned`, `Archived`, `LastMessageUtc`,
+`MessageCount`, `UnreadCount`, `ActiveWorkCount` (computed), `ActiveTurnId` (computed; set while a turn runs),
+`CreatedUtc`, `LastUpdateUtc`.
 
-`AskThreadDetail`: `{ Thread, TrackedWork: AskTrackedWork[] (each with Snapshot), PendingProposals: AskActionProposal[] }`.
+`AskThreadDetail`: `{ Thread, TrackedWork: AskTrackedWork[] (each with Snapshot), PendingProposals: AskActionProposal[],
+PendingCliPermissions: CliPermissionRequest[] (pending requests of the thread's captain, newest first) }`.
 
 `AskMessage`: `Id` (amg_), `ThreadId`, `Sequence` (per-thread, strictly increasing), `Role` (`User`, `Assistant`,
-`System`), `Kind` (`Text`, `ActionProposal`, `ActionResult`, `WorkUpdate`, `Summary`, `Error`), `ContentText`,
-`ThinkingText`, `ProposalId`, `TrackedWorkId`, `CaptainId`, `DurationMs`, `CreatedUtc`, `LastUpdateUtc`, plus embedded
-`ToolCalls` (`AskMessageToolCall`: `Id` atc_, `CallId`, `ToolName`, `ArgumentsText`, `ResultText`, `Ok`, `ElapsedMs`),
-`Proposal`, and `TrackedWork` (with `Snapshot`).
+`System`), `Kind` (`Text`, `ActionProposal`, `ActionResult`, `WorkUpdate`, `Summary`, `Error`, `CliPermission`),
+`ContentText`, `ThinkingText`, `ProposalId`, `TrackedWorkId`, `CaptainId`, `DurationMs`, `CreatedUtc`, `LastUpdateUtc`,
+plus embedded `ToolCalls` (`AskMessageToolCall`: `Id` atc_, `CallId`, `ToolName`, `ArgumentsText`, `ResultText`, `Ok`,
+`ElapsedMs`, `PermissionDenied` (true when the CLI refused the call because the turn's CLI tool permission policy did not
+grant it; null when unknown)), `Proposal`, `TrackedWork` (with `Snapshot`), and `CliPermissionRequest` (on a
+`CliPermission` card, a `System` message whose `ContentText` is `<Tool>: <summary>`; refreshed through `ask.message` when
+the request is decided).
 
 `AskMessagePage`: `{ Messages, HasMore }`. Without `BeforeSequence` the newest page is returned; messages are in ascending
 sequence within the page; pass the oldest loaded `Sequence` as `BeforeSequence` for older pages. `PageSize` 1-200
@@ -3780,6 +3851,85 @@ Requests: `AskThreadEnumerateRequest { PageNumber (1), PageSize (25, 1-100), Sea
 AutoApprove?, Pinned?, Archived? }` (absent fields unchanged; `"CaptainId": null` clears the captain);
 `AskMessageEnumerateRequest { BeforeSequence?, PageSize }`; `AskMessageSendRequest { Content (required, max 32000),
 ShowThinking? }`; `AskActionRequest { ToolName, Arguments }`.
+
+---
+
+### CLI Permissions
+
+CLI tool permissions govern a CLI captain's own tools (shell commands, web fetches, file tools outside the accepted
+edits; not Armada's MCP tools, which are governed by Ask proposals and per-tool authorization). When a launch runs with
+the `ApproveInArmada` policy, Claude Code sends each permission prompt to Armada's `cli_permission_prompt` MCP tool and a
+**CLI permission request** (`cpr_`) waits for an approver; a matching **rule** (`cpl_`) decides it without asking. See
+[CAPTAINS.md](CAPTAINS.md#cli-tool-permissions) for the policy resolution and the per-runtime flags.
+
+Who may act (`CliPermissionAccess`, the same on REST, MCP, WebSocket, and the inbox):
+
+| Action | Who |
+|---|---|
+| See a request | Global admins; tenant admins of the request's tenant; the owner of the Ask thread or mission. Other requests return `404` |
+| Decide (`AllowOnce`, `Deny`) | Global admins; tenant admins of the request's tenant; the owner only when `Permissions.AllowOwnerApproval` is true |
+| `AllowAndRemember` (also stores an allow rule) | Global admins; tenant admins of the request's tenant |
+| List and read rules | Every authenticated user (the caller's tenant plus rules for every tenant; global admins see all) |
+| Create, update, delete rules | Global admins (any tenant, or no tenant for every tenant); tenant admins (their own tenant) |
+
+Captain sessions (mission- and thread-scoped tokens) can never decide; REST already refuses thread-scoped tokens.
+Request inputs are stored redacted (`InputText`, `SummaryText`, `SuggestedRule`); the original input is held only in
+memory by the waiting call. A request no approver decides within `Permissions.PromptTimeoutSeconds` becomes `Expired`;
+one whose Ask turn or mission process ends first becomes `Cancelled`. Both are denials for the captain.
+
+**Rules** use Claude Code permission rule syntax:
+
+| Pattern | Matches |
+|---|---|
+| `Bash` (or `Bash(*)`) | Every shell command |
+| `Bash(git status:*)` | A command equal to `git status` or starting with `git status ` |
+| `Bash(npm run *)` | Glob: `*` matches any characters |
+| `Bash(make test)` | Exactly that command |
+| `WebFetch(domain:example.com)`, `WebFetch(domain:*.example.com)` | The URL's host, or its subdomains |
+| `Read(...)`, `Edit(...)` | Gitignore-style paths: `//abs/path/**` is absolute, `~/path` is under the home directory, `path`, `./path`, or `/path` are relative to the mission's dock. `*` stays within a segment, `**` crosses segments. `Edit` covers Edit, Write, MultiEdit, NotebookEdit; `Read` covers Read, Glob, Grep, LS |
+| `mcp__server`, `mcp__server__*`, `mcp__server__tool` | Every tool of an MCP server, or one tool |
+
+A matching deny rule denies without asking and wins over allow rules; otherwise a matching allow rule allows. A Bash
+command line is split at `&&`, `||`, `;`, `|`, `|&`, `&`, and newlines outside quotes: it is allowed only when every
+subcommand matches an allow rule, and denied when any subcommand matches a deny rule. A command with command substitution
+or unbalanced quotes is never allowed by a `Bash(...)` rule, so it goes to an approver. A specifier on any other tool is
+not interpreted and never matches. Rule scope: `Global` (every captain of the rule's tenant, or of every tenant when a
+global admin leaves `TenantId` empty), `Vessel` (missions on one vessel), or `Captain` (one captain, missions and Ask
+turns).
+
+| Method | Path | Body | Response |
+|---|---|---|---|
+| GET | `/api/v1/cli-permissions/requests` | | `200` `CliPermissionRequest[]`, newest first. Query: `status` (`Pending`, `Allowed`, `Denied`, `Expired`, `Cancelled`), `missionId`, `threadId`, `captainId`, `vesselId`, `limit` (1-1000, default 100); `400` for an invalid status or limit |
+| GET | `/api/v1/cli-permissions/requests/{id}` | | `200` `CliPermissionRequest`; `404` when missing or not visible |
+| POST | `/api/v1/cli-permissions/requests/{id}/decide` | `CliPermissionDecisionRequest` | `200` the decided `CliPermissionRequest`; `400` invalid rule pattern or scope; `403` the caller may not decide (or remember); `404`; `409` no longer pending |
+| GET | `/api/v1/cli-permissions/rules` | | `200` `CliPermissionRule[]`. Query: `scope` (`Global`, `Vessel`, `Captain`), `vesselId`, `captainId` |
+| POST | `/api/v1/cli-permissions/rules` | `CliPermissionRule` | `201` `CliPermissionRule`; `400` invalid pattern, or a `Vessel`/`Captain` rule without its id; `403` not an admin; `404` vessel or captain not visible |
+| GET | `/api/v1/cli-permissions/rules/{id}` | | `200` `CliPermissionRule`; `404` |
+| PUT | `/api/v1/cli-permissions/rules/{id}` | `CliPermissionRule` (`Pattern`, `Action`, `Description`) | `200` `CliPermissionRule`; `400`; `403` not an admin of the rule's tenant; `404`. Scope and target are fixed (delete and recreate to change them) |
+| DELETE | `/api/v1/cli-permissions/rules/{id}` | | `204`; `403`; `404` |
+| PUT | `/api/v1/captains/{id}/cli-permission-policy` | `CliPermissionPolicyUpdateRequest` | `200` `Captain`; see [Captains](#put-apiv1captainsidcli-permission-policy) |
+| PUT | `/api/v1/ask/threads/{id}/cli-permission-policy` | `CliPermissionPolicyUpdateRequest` | `200` `AskThread`; see [Ask Armada threads](#ask-armada-threads) |
+
+Every list and decision is the same set of rows the dashboard's CLI Tool Permissions page, the TUI Approvals center,
+the inbox (`cli_permission`), MCP, and WebSocket show. Events: `cli_permission.requested` and `cli_permission.resolved`
+(see [WEBSOCKET_API.md](WEBSOCKET_API.md)).
+
+```bash
+# Allow a pending request once
+curl -X POST http://localhost:7890/api/v1/cli-permissions/requests/cpr_abc123/decide \
+  -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  -d '{"Decision": "AllowOnce"}'
+
+# Allow it and remember an allow rule for this captain
+curl -X POST http://localhost:7890/api/v1/cli-permissions/requests/cpr_abc123/decide \
+  -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  -d '{"Decision": "AllowAndRemember", "RulePattern": "Bash(npm test:*)", "RuleScope": "Captain"}'
+
+# Deny every force push for the tenant
+curl -X POST http://localhost:7890/api/v1/cli-permissions/rules \
+  -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  -d '{"Pattern": "Bash(git push --force:*)", "Action": "Deny", "Scope": "Global"}'
+```
 
 ---
 
@@ -4835,10 +4985,13 @@ then `Warning`), then by `Title`; each category is capped at 100 items.
 | `deployment_approval` | `Warning` | `deployment` | Deployment pending approval |
 | `deployment_failed` | `Critical` | `deployment` | Deployment `Failed` or `VerificationFailed` |
 | `ask_proposal` | `Warning` | `ask_proposal` | Pending, unexpired Ask Armada action proposal in one of the caller's own threads (`Href` is `/ask/{threadId}`) |
+| `cli_permission` | `Warning` | `cli_permission_request` | Pending, unexpired [CLI permission request](#cli-permissions) the caller may see (`Href` is `/ask/{threadId}` for a request from the caller's own Ask thread, otherwise `/cli-permissions?request={id}`) |
 
 Operational items are scoped like other reads: a global admin sees everything, a tenant admin sees the tenant, and a
 regular user sees only the items they own. Ask proposals are always limited to the caller's own threads (only the
-thread owner can approve them), and proposals older than `Ask.ProposalExpiryMinutes` are left out.
+thread owner can approve them), and proposals older than `Ask.ProposalExpiryMinutes` are left out. CLI permission
+requests are visible to global admins, the tenant's tenant admins, and the owner of the thread or mission; the owner can
+decide only when `Permissions.AllowOwnerApproval` is on, otherwise `Detail` ends with "An admin must decide it."
 
 #### GET /api/v1/inbox
 
@@ -4868,6 +5021,10 @@ target branch, or the proposal summary); use it instead of parsing `Title`. Depl
 `EnvironmentName` and `DeploymentTitle` (null for other kinds); their `Title` is the approval label
 "Deploy to <environment>: <title>" ("Deploy to <environment>" without a title, "Deploy: <title>" without an
 environment), which clients can rebuild and localize from those two fields.
+
+`cli_permission` items also carry `CliPermission` (the [CliPermissionRequest](#clipermissionrequest): tool, input summary,
+captain, vessel, mission or thread, expiry, and the caller's `CanDecide` and `CanRemember`) and `ExpiresUtc` (the request
+expiry); both are null for other kinds. Their `EntityName` is the tool name.
 
 ---
 
@@ -7792,6 +7949,7 @@ A worker AI agent instance executing missions.
 | `ReasoningEffort` | string? | null | Reasoning-effort level (`ReasoningEffortEnum`) translated to each runtime's native control; null uses the runtime default |
 | `Tier` | string? | null | Capability/cost tier (`CaptainTierEnum`); null auto-classifies from the model name |
 | `RuntimeOptionsJson` | string? | null | Runtime-specific options as JSON |
+| `CliPermissionPolicy` | [CliPermissionPolicyEnum](#clipermissionpolicyenum)? | null | CLI tool permission policy for the captain's own tools; null inherits (the legacy `autoApprove` option, then the server default). Accepted on create; captain updates keep it; change it with `PUT /api/v1/captains/{id}/cli-permission-policy` |
 | `QuarantineUntilUtc` | datetime? | null | Captain is excluded from dispatch until this time |
 | `QuarantineReason` | string? | null | Why the captain was quarantined |
 | `LastProcessAliveUtc` | datetime? | null | When the captain's OS process was last seen alive (distinct from `LastHeartbeatUtc`, which advances only on agent output) |
@@ -8288,6 +8446,117 @@ Each health probe (from the base-URL-deduplicated background sweep or from `/val
 
 ---
 
+#### CliPermissionRequest
+
+A permission prompt a CLI captain raised for one of its own tools (see [CLI Permissions](#cli-permissions)).
+
+```json
+{
+  "Id": "cpr_abc123",
+  "TenantId": "ten_abc123",
+  "UserId": "usr_abc123",
+  "CaptainId": "cpt_abc123",
+  "MissionId": null,
+  "VoyageId": null,
+  "VesselId": null,
+  "ThreadId": "ath_abc123",
+  "MessageId": "amg_abc123",
+  "Runtime": "ClaudeCode",
+  "ToolName": "Bash",
+  "InputText": "{\"command\":\"npm test\",\"description\":\"Run the tests\"}",
+  "SummaryText": "npm test",
+  "SuggestedRule": "Bash(npm test:*)",
+  "Status": "Pending",
+  "DecisionSource": null,
+  "RuleId": null,
+  "DecidedByUserId": null,
+  "DecisionMessage": null,
+  "ExpiresUtc": "2026-10-05T12:10:00Z",
+  "DecidedUtc": null,
+  "CreatedUtc": "2026-10-05T12:00:00Z",
+  "LastUpdateUtc": "2026-10-05T12:00:00Z",
+  "CaptainName": "captain-1",
+  "VesselName": null,
+  "MissionTitle": null,
+  "ThreadTitle": "Fix the flaky test",
+  "CanDecide": true,
+  "CanRemember": true
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `Id` | string | `cpr_` prefix |
+| `TenantId`, `UserId` | string? | Tenant and owner (the thread or mission owner) |
+| `CaptainId` | string? | Captain that asked |
+| `MissionId`, `VoyageId`, `VesselId` | string? | The mission, its voyage and vessel; null for an Ask turn |
+| `ThreadId`, `MessageId` | string? | The Ask thread and its `CliPermission` card message; null for a mission |
+| `Runtime` | [AgentRuntimeEnum](#agentruntimeenum) | Runtime of the captain |
+| `ToolName` | string | Tool as the CLI reported it (`Bash`, `WebFetch`, `Edit`, `mcp__server__tool`, ...) |
+| `InputText` | string | Tool input JSON with secrets redacted (display only; the original input is never persisted) |
+| `SummaryText` | string | One line: the command, URL, query, or path (redacted) |
+| `SuggestedRule` | string? | Suggested allow rule, the starting pattern of `AllowAndRemember` (for Bash, the first subcommand's program and subcommand word as a prefix rule; for WebFetch the domain; for file tools the exact path) |
+| `Status` | [CliPermissionRequestStatusEnum](#clipermissionrequeststatusenum) | |
+| `DecisionSource` | [CliPermissionDecisionSourceEnum](#clipermissiondecisionsourceenum)? | What decided it; null while pending |
+| `RuleId` | string? | Rule (`cpl_`) that decided it, or that `AllowAndRemember` created |
+| `DecidedByUserId` | string? | Approver |
+| `DecisionMessage` | string? | Message returned to the captain with a denial, or the approver's note |
+| `ExpiresUtc` | datetime | When a pending request expires (`Permissions.PromptTimeoutSeconds` after creation) |
+| `DecidedUtc`, `CreatedUtc`, `LastUpdateUtc` | datetime | Timestamps (UTC) |
+| `CaptainName`, `VesselName`, `MissionTitle` | string? | Filled on read |
+| `ThreadTitle` | string? | Filled on read for the thread owner only |
+| `CanDecide`, `CanRemember` | bool | Whether the caller may decide this pending request, and also remember it as a rule (filled per caller) |
+
+---
+
+#### CliPermissionRule
+
+```json
+{
+  "Id": "cpl_abc123",
+  "TenantId": "ten_abc123",
+  "Scope": "Captain",
+  "VesselId": null,
+  "CaptainId": "cpt_abc123",
+  "Pattern": "Bash(npm test:*)",
+  "Action": "Allow",
+  "Description": "Remembered from cpr_abc123",
+  "CreatedByUserId": "usr_admin",
+  "CreatedUtc": "2026-10-05T12:01:00Z",
+  "LastUpdateUtc": "2026-10-05T12:01:00Z"
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `Id` | string | `cpl_` prefix |
+| `TenantId` | string? | Tenant the rule applies to; null (global admins only) applies to every tenant. Tenant admins' rules always belong to their tenant; `Vessel` and `Captain` rules take the target's tenant |
+| `Scope` | [CliPermissionRuleScopeEnum](#clipermissionrulescopeenum) | Default `Global` |
+| `VesselId` | string? | Required for a `Vessel` rule |
+| `CaptainId` | string? | Required for a `Captain` rule |
+| `Pattern` | string | Rule in Claude Code permission rule syntax (validated; `400` when malformed) |
+| `Action` | [CliPermissionRuleActionEnum](#clipermissionruleactionenum) | Default `Allow` |
+| `Description` | string? | Optional note (max 1000 characters) |
+| `CreatedByUserId` | string? | Creator (server-set) |
+| `CreatedUtc`, `LastUpdateUtc` | datetime | Timestamps (UTC) |
+
+---
+
+#### CliPermissionResolution
+
+The policy a captain launch runs with (`AskThread.CliPermission` for the thread's next turn; mission logs print its
+`Note`).
+
+| Field | Type | Description |
+|---|---|---|
+| `Requested` | [CliPermissionPolicyEnum](#clipermissionpolicyenum) | The policy the resolution order selected |
+| `Effective` | [CliPermissionPolicyEnum](#clipermissionpolicyenum) | The policy the launch uses (`Requested`, or `Refuse` after a fallback) |
+| `Source` | string | `AskThread`, `VesselAutoApprove`, `Captain`, `CaptainAutoApprove` (the legacy `autoApprove` option), or `ServerDefault` |
+| `FallbackReason` | string? | Why `ApproveInArmada` runs as `Refuse`: `RuntimeUnsupported` (no permission prompt hook; only Claude Code and ApiEndpoint have one), `NoSessionToken` (a Claude Code launch without a scoped MCP token), or `RemoteHarbor`; null otherwise |
+| `Note` | string | One-line English explanation, including where to change the policy |
+
+---
+
 ### Enumerations
 
 All enumerations serialize as strings in JSON (e.g., `"InProgress"`, not `2`).
@@ -8445,6 +8714,53 @@ Ownership scope for Category B configuration entities (see [Data Scoping](#data-
 
 ---
 
+#### CliPermissionPolicyEnum
+
+| Value | Description |
+|---|---|
+| `Refuse` | Tools that need approval are refused; the turn or mission continues without them |
+| `ApproveInArmada` | The CLI's permission prompts become CLI permission requests that an approver decides (Claude Code, and the built-in `run_process` tool of ApiEndpoint captains; other runtimes run it as `Refuse`) |
+| `Bypass` | The runtime's own permission-bypass flag (for example `--dangerously-skip-permissions`) |
+
+---
+
+#### CliPermissionRequestStatusEnum
+
+| Value | Description |
+|---|---|
+| `Pending` | Waiting for an approver |
+| `Allowed` | Allowed by an approver or an allow rule; the tool ran with its original input |
+| `Denied` | Denied by an approver or a deny rule |
+| `Expired` | Not decided within `Permissions.PromptTimeoutSeconds`; denied |
+| `Cancelled` | The turn or mission ended (or the Admiral restarted) before a decision; denied |
+
+---
+
+#### CliPermissionDecisionSourceEnum
+
+`Approver`, `AllowRule`, `DenyRule`, `Timeout`, `Cancelled`.
+
+---
+
+#### CliPermissionDecisionEnum
+
+`AllowOnce`, `AllowAndRemember` (admins only; also stores an allow rule), `Deny`.
+
+---
+
+#### CliPermissionRuleActionEnum
+
+`Allow`, `Deny` (deny rules win).
+
+---
+
+#### CliPermissionRuleScopeEnum
+
+`Global` (every captain of the rule's tenant, or of every tenant when the rule has no tenant), `Vessel` (missions on one
+vessel), `Captain` (one captain).
+
+---
+
 ### Request Types
 
 #### EnumerationQuery
@@ -8535,6 +8851,38 @@ Request body for transitioning a mission status.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `Status` | string | yes | Target status name (case-insensitive) |
+
+---
+
+#### CliPermissionDecisionRequest
+
+Body of `POST /api/v1/cli-permissions/requests/{id}/decide` (and the WebSocket `decide_cli_permission_request` data).
+
+```json
+{
+  "Decision": "AllowAndRemember",
+  "Message": null,
+  "RulePattern": "Bash(npm test:*)",
+  "RuleScope": "Captain"
+}
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `Decision` | [CliPermissionDecisionEnum](#clipermissiondecisionenum) | yes | `AllowOnce`, `AllowAndRemember`, or `Deny` (default `Deny`) |
+| `Message` | string? | no | Returned to the captain with a denial; recorded with an allow (max 2000 characters) |
+| `RulePattern` | string? | no | Rule stored by `AllowAndRemember`; defaults to the request's `SuggestedRule` |
+| `RuleScope` | [CliPermissionRuleScopeEnum](#clipermissionrulescopeenum) | no | Scope of that rule (default `Captain`); `Vessel` uses the request's vessel (missions only), `Global` the request's tenant |
+
+---
+
+#### CliPermissionPolicyUpdateRequest
+
+Body of `PUT /api/v1/captains/{id}/cli-permission-policy` and `PUT /api/v1/ask/threads/{id}/cli-permission-policy`.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `Policy` | [CliPermissionPolicyEnum](#clipermissionpolicyenum)? | no | New policy, or null to clear the override (the next level of the resolution order applies) |
 
 ---
 
@@ -8714,348 +9062,358 @@ the matrix and each route's section describe. `/openapi.json` and `/swagger` rem
 | 7 | DELETE | `/api/v1/ask/threads/{id}` | Delete an Ask Armada thread | Authenticated |
 | 8 | POST | `/api/v1/ask/threads/{id}/actions` | Run a quick action | Authenticated |
 | 9 | POST | `/api/v1/ask/threads/{id}/cancel` | Stop the running turn | Authenticated |
-| 10 | POST | `/api/v1/ask/threads/{id}/messages` | Send a message | Authenticated |
-| 11 | POST | `/api/v1/ask/threads/{id}/messages/enumerate` | Enumerate thread messages | Authenticated |
-| 12 | POST | `/api/v1/ask/threads/{id}/proposals/{pid}/approve` | Approve a proposal | Authenticated |
-| 13 | POST | `/api/v1/ask/threads/{id}/proposals/{pid}/reject` | Reject a proposal | Authenticated |
-| 14 | POST | `/api/v1/ask/threads/{id}/read` | Mark a thread read | Authenticated |
-| 15 | POST | `/api/v1/ask/threads/{id}/summarize` | Summarize a thread | Authenticated |
-| 16 | GET | `/api/v1/ask/threads/{id}/work/{workId}` | Read a work snapshot | Authenticated |
-| 17 | POST | `/api/v1/authenticate` | Authenticate and get session token | NoAuthRequired |
-| 18 | GET | `/api/v1/backlog` | List backlog items | Authenticated |
-| 19 | POST | `/api/v1/backlog` | Create a backlog item | TenantAdmin |
-| 20 | POST | `/api/v1/backlog/enumerate` | Enumerate backlog items | Authenticated |
-| 21 | POST | `/api/v1/backlog/reorder` | Reorder backlog items | TenantAdmin |
-| 22 | GET | `/api/v1/backlog/{id}` | Get a backlog item | Authenticated |
-| 23 | PUT | `/api/v1/backlog/{id}` | Update a backlog item | TenantAdmin |
-| 24 | DELETE | `/api/v1/backlog/{id}` | Delete a backlog item | TenantAdmin |
-| 25 | GET | `/api/v1/backlog/{id}/refinement-sessions` | List backlog refinement sessions | Authenticated |
-| 26 | POST | `/api/v1/backlog/{id}/refinement-sessions` | Create a backlog refinement session | TenantAdmin |
-| 27 | GET | `/api/v1/backup` | Download backup | AdminOnly |
-| 28 | GET | `/api/v1/captains` | List all captains | Authenticated |
-| 29 | POST | `/api/v1/captains` | Create a captain | TenantAdmin |
-| 30 | POST | `/api/v1/captains/delete/multiple` | Batch delete multiple captains | TenantAdmin |
-| 31 | POST | `/api/v1/captains/enumerate` | Enumerate captains | Authenticated |
-| 32 | POST | `/api/v1/captains/stop-all` | Stop all captains | TenantAdmin |
-| 33 | GET | `/api/v1/captains/{id}` | Get a captain | Authenticated |
-| 34 | PUT | `/api/v1/captains/{id}` | Update a captain | TenantAdmin |
-| 35 | DELETE | `/api/v1/captains/{id}` | Delete a captain | TenantAdmin |
-| 36 | POST | `/api/v1/captains/{id}/chat` | Chat with a captain | TenantAdmin |
-| 37 | GET | `/api/v1/captains/{id}/log` | Get current log for a captain | Authenticated |
-| 38 | POST | `/api/v1/captains/{id}/stop` | Stop a captain | TenantAdmin |
-| 39 | GET | `/api/v1/captains/{id}/tools` | Describe captain tools | Authenticated |
-| 40 | POST | `/api/v1/captains/{id}/unquarantine` | Lift a captain's quarantine | TenantAdmin |
-| 41 | GET | `/api/v1/check-runs` | List check runs | Authenticated |
-| 42 | POST | `/api/v1/check-runs` | Run a check | TenantAdmin |
-| 43 | POST | `/api/v1/check-runs/enumerate` | Enumerate check runs | Authenticated |
-| 44 | POST | `/api/v1/check-runs/import` | Import an external check | TenantAdmin |
-| 45 | POST | `/api/v1/check-runs/sync/github-actions` | Sync GitHub Actions runs | TenantAdmin |
-| 46 | GET | `/api/v1/check-runs/{id}` | Get a check run | Authenticated |
-| 47 | DELETE | `/api/v1/check-runs/{id}` | Delete a check run | TenantAdmin |
-| 48 | POST | `/api/v1/check-runs/{id}/retry` | Retry a check run | TenantAdmin |
-| 49 | GET | `/api/v1/credentials` | List credentials | Authenticated |
-| 50 | POST | `/api/v1/credentials` | Create credential | Authenticated |
-| 51 | GET | `/api/v1/credentials/{id}` | Get credential by ID | Authenticated |
-| 52 | PUT | `/api/v1/credentials/{id}` | Update credential (admin only) | Authenticated |
-| 53 | DELETE | `/api/v1/credentials/{id}` | Delete credential | Authenticated |
-| 54 | GET | `/api/v1/deployments` | List deployments | Authenticated |
-| 55 | POST | `/api/v1/deployments` | Create a deployment | TenantAdmin |
-| 56 | POST | `/api/v1/deployments/enumerate` | Enumerate deployments | Authenticated |
-| 57 | GET | `/api/v1/deployments/{id}` | Get a deployment | Authenticated |
-| 58 | PUT | `/api/v1/deployments/{id}` | Update a deployment | TenantAdmin |
-| 59 | DELETE | `/api/v1/deployments/{id}` | Delete a deployment | TenantAdmin |
-| 60 | POST | `/api/v1/deployments/{id}/approve` | Approve a deployment | TenantAdmin |
-| 61 | POST | `/api/v1/deployments/{id}/deny` | Deny a deployment | TenantAdmin |
-| 62 | POST | `/api/v1/deployments/{id}/rollback` | Rollback a deployment | TenantAdmin |
-| 63 | POST | `/api/v1/deployments/{id}/verify` | Run post-deploy verification | TenantAdmin |
-| 64 | GET | `/api/v1/docks` | List docks | Authenticated |
-| 65 | POST | `/api/v1/docks/delete/multiple` | Batch delete multiple docks | TenantAdmin |
-| 66 | POST | `/api/v1/docks/enumerate` | Enumerate docks | Authenticated |
-| 67 | GET | `/api/v1/docks/{id}` | Get a dock | Authenticated |
-| 68 | DELETE | `/api/v1/docks/{id}` | Delete a dock | TenantAdmin |
-| 69 | DELETE | `/api/v1/docks/{id}/purge` | Force purge a dock | TenantAdmin |
-| 70 | POST | `/api/v1/docks/{id}/repair` | Repair a dock worktree | TenantAdmin |
-| 71 | POST | `/api/v1/docks/{id}/unstick` | Unstick a wedged dock | TenantAdmin |
-| 72 | GET | `/api/v1/doctor` | Run system health diagnostics | Authenticated |
-| 73 | GET | `/api/v1/environments` | List environments | Authenticated |
-| 74 | POST | `/api/v1/environments` | Create an environment | TenantAdmin |
-| 75 | POST | `/api/v1/environments/enumerate` | Enumerate environments | Authenticated |
-| 76 | GET | `/api/v1/environments/{id}` | Get an environment | Authenticated |
-| 77 | PUT | `/api/v1/environments/{id}` | Update an environment | TenantAdmin |
-| 78 | DELETE | `/api/v1/environments/{id}` | Delete an environment | TenantAdmin |
-| 79 | GET | `/api/v1/events` | List events | Authenticated |
-| 80 | POST | `/api/v1/events/delete/multiple` | Batch delete multiple events | TenantAdmin |
-| 81 | POST | `/api/v1/events/enumerate` | Enumerate events | Authenticated |
-| 82 | GET | `/api/v1/events/{id}` | Get an event | Authenticated |
-| 83 | DELETE | `/api/v1/events/{id}` | Delete an event | TenantAdmin |
-| 84 | POST | `/api/v1/fleet-action-runs/enumerate` | Enumerate fleet action runs | Authenticated |
-| 85 | GET | `/api/v1/fleet-action-runs/{id}` | Get a fleet action run | Authenticated |
-| 86 | POST | `/api/v1/fleet-action-runs/{id}/cancel` | Cancel a fleet action run | TenantAdmin |
-| 87 | POST | `/api/v1/fleet-action-runs/{id}/targets/enumerate` | Enumerate fleet action run targets | Authenticated |
-| 88 | GET | `/api/v1/fleet-action-runs/{id}/targets/{targetId}` | Get a fleet action run target | Authenticated |
-| 89 | POST | `/api/v1/fleet-actions` | Create a fleet action | TenantAdmin |
-| 90 | POST | `/api/v1/fleet-actions/enumerate` | Enumerate fleet actions | Authenticated |
-| 91 | POST | `/api/v1/fleet-actions/run` | Start an ad hoc fleet action run | TenantAdmin |
-| 92 | GET | `/api/v1/fleet-actions/{id}` | Get a fleet action | Authenticated |
-| 93 | PUT | `/api/v1/fleet-actions/{id}` | Update a fleet action | TenantAdmin |
-| 94 | DELETE | `/api/v1/fleet-actions/{id}` | Delete a fleet action | TenantAdmin |
-| 95 | POST | `/api/v1/fleet-actions/{id}/run` | Run a fleet action | TenantAdmin |
-| 96 | GET | `/api/v1/fleets` | List all fleets | Authenticated |
-| 97 | POST | `/api/v1/fleets` | Create a fleet | TenantAdmin |
-| 98 | POST | `/api/v1/fleets/delete/multiple` | Batch delete multiple fleets | TenantAdmin |
-| 99 | POST | `/api/v1/fleets/enumerate` | Enumerate fleets | Authenticated |
-| 100 | GET | `/api/v1/fleets/{id}` | Get a fleet | Authenticated |
-| 101 | PUT | `/api/v1/fleets/{id}` | Update a fleet | TenantAdmin |
-| 102 | DELETE | `/api/v1/fleets/{id}` | Delete a fleet | TenantAdmin |
-| 103 | GET | `/api/v1/harbors` | List Harbors (experimental) | Authenticated |
-| 104 | POST | `/api/v1/harbors` | Register a Harbor (experimental) | Authenticated |
-| 105 | GET | `/api/v1/harbors/{id}` | Get a Harbor (experimental) | Authenticated |
-| 106 | PUT | `/api/v1/harbors/{id}` | Update a Harbor (experimental) | Authenticated |
-| 107 | DELETE | `/api/v1/harbors/{id}` | Delete a Harbor (experimental) | Authenticated |
-| 108 | POST | `/api/v1/harbors/{id}/disable` | Disable a Harbor (experimental) | Authenticated |
-| 109 | POST | `/api/v1/harbors/{id}/enable` | Enable a Harbor (experimental) | Authenticated |
-| 110 | POST | `/api/v1/harbors/{id}/probe` | Probe a Harbor (experimental) | TenantAdmin |
-| 111 | GET | `/api/v1/history` | List historical timeline entries | Authenticated |
-| 112 | POST | `/api/v1/history/enumerate` | Enumerate historical timeline entries | Authenticated |
-| 113 | GET | `/api/v1/inbox` | Get the needs-you inbox | Authenticated |
-| 114 | GET | `/api/v1/incidents` | List incidents | Authenticated |
-| 115 | POST | `/api/v1/incidents` | Create an incident | TenantAdmin |
-| 116 | POST | `/api/v1/incidents/enumerate` | Enumerate incidents | Authenticated |
-| 117 | GET | `/api/v1/incidents/{id}` | Get an incident | Authenticated |
-| 118 | PUT | `/api/v1/incidents/{id}` | Update an incident | TenantAdmin |
-| 119 | DELETE | `/api/v1/incidents/{id}` | Delete an incident | TenantAdmin |
-| 120 | GET | `/api/v1/jobs` | List background jobs | Authenticated |
-| 121 | GET | `/api/v1/jobs/{id}` | Get a background job | Authenticated |
-| 122 | POST | `/api/v1/jobs/{id}/cancel` | Cancel a background job | Authenticated |
-| 123 | GET | `/api/v1/memories` | List/search memories | Authenticated |
-| 124 | POST | `/api/v1/memories` | Create or upsert a memory | Authenticated |
-| 125 | GET | `/api/v1/memories/{id}` | Get a memory | Authenticated |
-| 126 | PUT | `/api/v1/memories/{id}` | Update a memory | Authenticated |
-| 127 | DELETE | `/api/v1/memories/{id}` | Delete a memory | Authenticated |
-| 128 | GET | `/api/v1/merge-queue` | List merge queue entries | Authenticated |
-| 129 | POST | `/api/v1/merge-queue` | Enqueue a branch for merge | TenantAdmin |
-| 130 | POST | `/api/v1/merge-queue/enumerate` | Enumerate merge queue entries | Authenticated |
-| 131 | POST | `/api/v1/merge-queue/process` | Process the merge queue | TenantAdmin |
-| 132 | POST | `/api/v1/merge-queue/purge` | Batch purge merge queue entries | TenantAdmin |
-| 133 | GET | `/api/v1/merge-queue/{id}` | Get a merge queue entry | Authenticated |
-| 134 | DELETE | `/api/v1/merge-queue/{id}` | Delete or cancel a merge queue entry | TenantAdmin |
-| 135 | POST | `/api/v1/merge-queue/{id}/process` | Process a single merge queue entry | TenantAdmin |
-| 136 | DELETE | `/api/v1/merge-queue/{id}/purge` | Purge a single merge queue entry | TenantAdmin |
-| 137 | GET | `/api/v1/missions` | List all missions | Authenticated |
-| 138 | POST | `/api/v1/missions` | Create a mission | TenantAdmin |
-| 139 | POST | `/api/v1/missions/delete/multiple` | Batch delete multiple missions | TenantAdmin |
-| 140 | POST | `/api/v1/missions/enumerate` | Enumerate missions | Authenticated |
-| 141 | GET | `/api/v1/missions/history` | Get aggregated mission history | Authenticated |
-| 142 | GET | `/api/v1/missions/summaries` | List lightweight mission summaries | Authenticated |
-| 143 | POST | `/api/v1/missions/summaries/enumerate` | Enumerate lightweight mission summaries | Authenticated |
-| 144 | GET | `/api/v1/missions/{id}` | Get a mission | Authenticated |
-| 145 | PUT | `/api/v1/missions/{id}` | Update a mission | TenantAdmin |
-| 146 | DELETE | `/api/v1/missions/{id}` | Cancel a mission | TenantAdmin |
-| 147 | GET | `/api/v1/missions/{id}/diff` | Get diff for a mission | Authenticated |
-| 148 | GET | `/api/v1/missions/{id}/evaluate-autoland` | Dry-run the auto-land predicate for a mission | Authenticated |
-| 149 | GET | `/api/v1/missions/{id}/github/pull-request` | Get GitHub pull-request evidence for a mission | Authenticated |
-| 150 | GET | `/api/v1/missions/{id}/instructions` | Get mission instructions | Authenticated |
-| 151 | GET | `/api/v1/missions/{id}/landing-preview` | Preview mission landing readiness | Authenticated |
-| 152 | GET | `/api/v1/missions/{id}/log` | Get log for a mission | Authenticated |
-| 153 | DELETE | `/api/v1/missions/{id}/purge` | Permanently delete a mission | TenantAdmin |
-| 154 | POST | `/api/v1/missions/{id}/restart` | Restart a failed or cancelled mission | TenantAdmin |
-| 155 | POST | `/api/v1/missions/{id}/retry-landing` | Retry landing for a mission | TenantAdmin |
-| 156 | POST | `/api/v1/missions/{id}/review/approve` | Approve a mission review gate | TenantAdmin |
-| 157 | POST | `/api/v1/missions/{id}/review/deny` | Deny a mission review gate | TenantAdmin |
-| 158 | PUT | `/api/v1/missions/{id}/status` | Transition mission status | TenantAdmin |
-| 159 | GET | `/api/v1/model-endpoints` | List model endpoints | Authenticated |
-| 160 | POST | `/api/v1/model-endpoints` | Create a model endpoint | Authenticated |
-| 161 | POST | `/api/v1/model-endpoints/health-check` | Run a health sweep | Authenticated |
-| 162 | GET | `/api/v1/model-endpoints/{id}` | Get a model endpoint | Authenticated |
-| 163 | PUT | `/api/v1/model-endpoints/{id}` | Update a model endpoint | Authenticated |
-| 164 | DELETE | `/api/v1/model-endpoints/{id}` | Delete a model endpoint | Authenticated |
-| 165 | POST | `/api/v1/model-endpoints/{id}/validate` | Validate a model endpoint | Authenticated |
-| 166 | GET | `/api/v1/objective-refinement-sessions/{id}` | Get an objective refinement session | Authenticated |
-| 167 | DELETE | `/api/v1/objective-refinement-sessions/{id}` | Delete an objective refinement session | TenantAdmin |
-| 168 | POST | `/api/v1/objective-refinement-sessions/{id}/apply` | Apply an objective refinement summary | TenantAdmin |
-| 169 | POST | `/api/v1/objective-refinement-sessions/{id}/messages` | Send an objective refinement message | TenantAdmin |
-| 170 | POST | `/api/v1/objective-refinement-sessions/{id}/stop` | Stop an objective refinement session | TenantAdmin |
-| 171 | POST | `/api/v1/objective-refinement-sessions/{id}/summarize` | Summarize an objective refinement session | TenantAdmin |
-| 172 | GET | `/api/v1/objectives` | List objectives | Authenticated |
-| 173 | POST | `/api/v1/objectives` | Create an objective | TenantAdmin |
-| 174 | POST | `/api/v1/objectives/enumerate` | Enumerate objectives | Authenticated |
-| 175 | POST | `/api/v1/objectives/import/github` | Import an objective from GitHub | TenantAdmin |
-| 176 | POST | `/api/v1/objectives/reorder` | Reorder objectives | TenantAdmin |
-| 177 | GET | `/api/v1/objectives/{id}` | Get an objective | Authenticated |
-| 178 | PUT | `/api/v1/objectives/{id}` | Update an objective | TenantAdmin |
-| 179 | DELETE | `/api/v1/objectives/{id}` | Delete an objective | TenantAdmin |
-| 180 | GET | `/api/v1/objectives/{id}/refinement-sessions` | List objective refinement sessions | Authenticated |
-| 181 | POST | `/api/v1/objectives/{id}/refinement-sessions` | Create an objective refinement session | TenantAdmin |
-| 182 | POST | `/api/v1/onboarding` | Self-register a new user | NoAuthRequired |
-| 183 | GET | `/api/v1/personas` | List all personas | Authenticated |
-| 184 | POST | `/api/v1/personas` | Create a persona | Authenticated |
-| 185 | POST | `/api/v1/personas/enumerate` | Enumerate personas | Authenticated |
-| 186 | GET | `/api/v1/personas/{name}` | Get a persona by name | Authenticated |
-| 187 | PUT | `/api/v1/personas/{name}` | Update a persona | Authenticated |
-| 188 | DELETE | `/api/v1/personas/{name}` | Delete a persona | Authenticated |
-| 189 | GET | `/api/v1/pipelines` | List all pipelines | Authenticated |
-| 190 | POST | `/api/v1/pipelines` | Create a pipeline | Authenticated |
-| 191 | POST | `/api/v1/pipelines/enumerate` | Enumerate pipelines | Authenticated |
-| 192 | GET | `/api/v1/pipelines/{name}` | Get a pipeline by name | Authenticated |
-| 193 | PUT | `/api/v1/pipelines/{name}` | Update a pipeline | Authenticated |
-| 194 | DELETE | `/api/v1/pipelines/{name}` | Delete a pipeline | Authenticated |
-| 195 | GET | `/api/v1/planning-sessions` | List planning sessions | Authenticated |
-| 196 | POST | `/api/v1/planning-sessions` | Create a planning session | TenantAdmin |
-| 197 | GET | `/api/v1/planning-sessions/{id}` | Get a planning session | Authenticated |
-| 198 | DELETE | `/api/v1/planning-sessions/{id}` | Delete a planning session | TenantAdmin |
-| 199 | POST | `/api/v1/planning-sessions/{id}/dispatch` | Dispatch from a planning session | TenantAdmin |
-| 200 | POST | `/api/v1/planning-sessions/{id}/messages` | Send a planning message | TenantAdmin |
-| 201 | POST | `/api/v1/planning-sessions/{id}/stop` | Stop a planning session | TenantAdmin |
-| 202 | POST | `/api/v1/planning-sessions/{id}/stop-turn` | Stop the current planning turn | TenantAdmin |
-| 203 | POST | `/api/v1/planning-sessions/{id}/summarize` | Summarize planning output into a dispatch draft | TenantAdmin |
-| 204 | GET | `/api/v1/playbooks` | List playbooks | Authenticated |
-| 205 | POST | `/api/v1/playbooks` | Create a playbook | TenantAdmin |
-| 206 | POST | `/api/v1/playbooks/enumerate` | Enumerate playbooks | Authenticated |
-| 207 | GET | `/api/v1/playbooks/{id}` | Get a playbook | Authenticated |
-| 208 | PUT | `/api/v1/playbooks/{id}` | Update a playbook | TenantAdmin |
-| 209 | DELETE | `/api/v1/playbooks/{id}` | Delete a playbook | TenantAdmin |
-| 210 | GET | `/api/v1/project-profiles` | List project profiles | Authenticated |
-| 211 | POST | `/api/v1/project-profiles` | Create a project profile | Authenticated |
-| 212 | POST | `/api/v1/project-profiles/enumerate` | Enumerate project profiles | Authenticated |
-| 213 | GET | `/api/v1/project-profiles/resolve/vessels/{vesselId}` | Resolve the active project profile for a vessel | Authenticated |
-| 214 | POST | `/api/v1/project-profiles/validate` | Validate a project profile | Authenticated |
-| 215 | GET | `/api/v1/project-profiles/{id}` | Get a project profile | Authenticated |
-| 216 | PUT | `/api/v1/project-profiles/{id}` | Update a project profile | Authenticated |
-| 217 | DELETE | `/api/v1/project-profiles/{id}` | Delete a project profile | Authenticated |
-| 218 | GET | `/api/v1/project-profiles/{id}/persona-preview/{persona}` | Preview a persona prompt for a project profile | Authenticated |
-| 219 | GET | `/api/v1/prompt-templates` | List all prompt templates | Authenticated |
-| 220 | POST | `/api/v1/prompt-templates` | Create a prompt template | Authenticated |
-| 221 | POST | `/api/v1/prompt-templates/enumerate` | Enumerate prompt templates | Authenticated |
-| 222 | GET | `/api/v1/prompt-templates/{name}` | Get a prompt template by name | Authenticated |
-| 223 | PUT | `/api/v1/prompt-templates/{name}` | Update a prompt template | Authenticated |
-| 224 | POST | `/api/v1/prompt-templates/{name}/reset` | Reset a prompt template to default | Authenticated |
-| 225 | GET | `/api/v1/releases` | List releases | Authenticated |
-| 226 | POST | `/api/v1/releases` | Create a release | TenantAdmin |
-| 227 | POST | `/api/v1/releases/enumerate` | Enumerate releases | Authenticated |
-| 228 | GET | `/api/v1/releases/{id}` | Get a release | Authenticated |
-| 229 | PUT | `/api/v1/releases/{id}` | Update a release | TenantAdmin |
-| 230 | DELETE | `/api/v1/releases/{id}` | Delete a release | TenantAdmin |
-| 231 | GET | `/api/v1/releases/{id}/github/pull-requests` | Get GitHub pull-request evidence for a release | Authenticated |
-| 232 | POST | `/api/v1/releases/{id}/refresh` | Refresh a release | TenantAdmin |
-| 233 | GET | `/api/v1/request-history` | List request-history entries | Authenticated |
-| 234 | POST | `/api/v1/request-history/delete/by-filter` | Delete filtered request-history entries | TenantAdmin |
-| 235 | POST | `/api/v1/request-history/delete/multiple` | Delete multiple request-history entries | TenantAdmin |
-| 236 | GET | `/api/v1/request-history/summary` | Summarize request history | Authenticated |
-| 237 | GET | `/api/v1/request-history/{id}` | Get one request-history entry | Authenticated |
-| 238 | DELETE | `/api/v1/request-history/{id}` | Delete one request-history entry | TenantAdmin |
-| 239 | POST | `/api/v1/restore` | Restore from backup | AdminOnly |
-| 240 | GET | `/api/v1/runbook-executions` | List runbook executions | Authenticated |
-| 241 | POST | `/api/v1/runbook-executions/enumerate` | Enumerate runbook executions | Authenticated |
-| 242 | GET | `/api/v1/runbook-executions/{id}` | Get a runbook execution | Authenticated |
-| 243 | PUT | `/api/v1/runbook-executions/{id}` | Update a runbook execution | TenantAdmin |
-| 244 | DELETE | `/api/v1/runbook-executions/{id}` | Delete a runbook execution | TenantAdmin |
-| 245 | GET | `/api/v1/runbooks` | List runbooks | Authenticated |
-| 246 | POST | `/api/v1/runbooks` | Create a runbook | TenantAdmin |
-| 247 | POST | `/api/v1/runbooks/enumerate` | Enumerate runbooks | Authenticated |
-| 248 | GET | `/api/v1/runbooks/{id}` | Get a runbook | Authenticated |
-| 249 | PUT | `/api/v1/runbooks/{id}` | Update a runbook | TenantAdmin |
-| 250 | DELETE | `/api/v1/runbooks/{id}` | Delete a runbook | TenantAdmin |
-| 251 | POST | `/api/v1/runbooks/{id}/executions` | Start a runbook execution | TenantAdmin |
-| 252 | GET | `/api/v1/runtimes/mux/endpoints` | List saved Mux endpoints | Authenticated |
-| 253 | GET | `/api/v1/runtimes/mux/endpoints/{name}` | Inspect a saved Mux endpoint | Authenticated |
-| 254 | POST | `/api/v1/server/rebuild` | Rebuild the Admiral server (experimental) | AdminOnly |
-| 255 | GET | `/api/v1/server/rebuild/status` | Get the latest rebuild status (experimental) | AdminOnly |
-| 256 | POST | `/api/v1/server/reset` | Factory reset | AdminOnly |
-| 257 | POST | `/api/v1/server/restart` | Restart the Admiral server | AdminOnly |
-| 258 | POST | `/api/v1/server/rollback` | Roll back the last rebuild (experimental) | AdminOnly |
-| 259 | POST | `/api/v1/server/stop` | Stop the Admiral server | AdminOnly |
-| 260 | GET | `/api/v1/settings` | Get server settings | AdminOnly |
-| 261 | PUT | `/api/v1/settings` | Update server settings | AdminOnly |
-| 262 | GET | `/api/v1/signals` | List recent signals | Authenticated |
-| 263 | POST | `/api/v1/signals` | Send a signal | TenantAdmin |
-| 264 | POST | `/api/v1/signals/delete/multiple` | Batch delete multiple signals | TenantAdmin |
-| 265 | POST | `/api/v1/signals/enumerate` | Enumerate signals | Authenticated |
-| 266 | GET | `/api/v1/signals/recent` | Get recent signals | Authenticated |
-| 267 | GET | `/api/v1/signals/recipient/{captainId}` | Enumerate signals by recipient | Authenticated |
-| 268 | GET | `/api/v1/signals/{id}` | Get a signal | Authenticated |
-| 269 | DELETE | `/api/v1/signals/{id}` | Delete a signal | TenantAdmin |
-| 270 | PUT | `/api/v1/signals/{id}/read` | Mark a signal as read | TenantAdmin |
-| 271 | GET | `/api/v1/skills` | List skills | Authenticated |
-| 272 | POST | `/api/v1/skills` | Create a skill | Authenticated |
-| 273 | POST | `/api/v1/skills/enumerate` | Enumerate skills | Authenticated |
-| 274 | GET | `/api/v1/skills/{id}` | Get a skill | Authenticated |
-| 275 | PUT | `/api/v1/skills/{id}` | Update a skill | Authenticated |
-| 276 | DELETE | `/api/v1/skills/{id}` | Delete a skill | Authenticated |
-| 277 | GET | `/api/v1/status` | Get Armada status | Authenticated |
-| 278 | GET | `/api/v1/status/health` | Health check | NoAuthRequired |
-| 279 | GET | `/api/v1/tenants` | List tenants (admin only) | AdminOnly |
-| 280 | POST | `/api/v1/tenants` | Create tenant (admin only) | AdminOnly |
-| 281 | POST | `/api/v1/tenants/lookup` | Look up tenants by email | NoAuthRequired |
-| 282 | GET | `/api/v1/tenants/{id}` | Get tenant by ID | Authenticated |
-| 283 | PUT | `/api/v1/tenants/{id}` | Update tenant (admin only) | AdminOnly |
-| 284 | DELETE | `/api/v1/tenants/{id}` | Delete tenant (admin only) | AdminOnly |
-| 285 | GET | `/api/v1/token-usage` | List token-usage records | Authenticated |
-| 286 | POST | `/api/v1/token-usage/delete/by-filter` | Delete filtered token-usage records | Authenticated |
-| 287 | GET | `/api/v1/token-usage/summary` | Summarize token usage | Authenticated |
-| 288 | GET | `/api/v1/users` | List users | Authenticated |
-| 289 | POST | `/api/v1/users` | Create user (admin only) | TenantAdmin |
-| 290 | GET | `/api/v1/users/{id}` | Get user by ID | Authenticated |
-| 291 | PUT | `/api/v1/users/{id}` | Update user (admin only) | Authenticated |
-| 292 | DELETE | `/api/v1/users/{id}` | Delete user (admin only) | Authenticated |
-| 293 | POST | `/api/v1/vessel-health/enumerate` | Enumerate vessel health | Authenticated |
-| 294 | POST | `/api/v1/vessel-health/evaluate` | Evaluate vessel health | TenantAdmin |
-| 295 | GET | `/api/v1/vessel-health/summary` | Vessel health summary | Authenticated |
-| 296 | GET | `/api/v1/vessels` | List all vessels | Authenticated |
-| 297 | POST | `/api/v1/vessels` | Create a vessel | TenantAdmin |
-| 298 | POST | `/api/v1/vessels/delete/multiple` | Batch delete multiple vessels | TenantAdmin |
-| 299 | POST | `/api/v1/vessels/enumerate` | Enumerate vessels | Authenticated |
-| 300 | POST | `/api/v1/vessels/import` | Import discovered vessels | TenantAdmin |
-| 301 | POST | `/api/v1/vessels/import/batches/enumerate` | Enumerate import batches | Authenticated |
-| 302 | GET | `/api/v1/vessels/import/batches/{id}` | Get an import batch | Authenticated |
-| 303 | POST | `/api/v1/vessels/import/batches/{id}/categorize` | Run or retry fleet categorization | TenantAdmin |
-| 304 | POST | `/api/v1/vessels/import/batches/{id}/fleet-recommendations/apply` | Apply fleet recommendations | TenantAdmin |
-| 305 | GET | `/api/v1/vessels/import/browse` | Browse directories for import | TenantAdmin |
-| 306 | GET | `/api/v1/vessels/import/categorization/default-prompt` | Get the default fleet categorization prompt | TenantAdmin |
-| 307 | POST | `/api/v1/vessels/import/discover` | Discover vessel import candidates | TenantAdmin |
-| 308 | GET | `/api/v1/vessels/{id}` | Get a vessel | Authenticated |
-| 309 | PUT | `/api/v1/vessels/{id}` | Update a vessel | TenantAdmin |
-| 310 | DELETE | `/api/v1/vessels/{id}` | Delete a vessel | TenantAdmin |
-| 311 | GET | `/api/v1/vessels/{id}/branches` | List vessel branches | Authenticated |
-| 312 | POST | `/api/v1/vessels/{id}/branches/merge` | Merge a vessel branch into another | TenantAdmin |
-| 313 | POST | `/api/v1/vessels/{id}/branches/push` | Push a vessel branch | TenantAdmin |
-| 314 | POST | `/api/v1/vessels/{id}/build-context` | Build or refine the vessel Model Context | TenantAdmin |
-| 315 | PATCH | `/api/v1/vessels/{id}/context` | Update vessel context | TenantAdmin |
-| 316 | GET | `/api/v1/vessels/{id}/git-status` | Get vessel git status | Authenticated |
-| 317 | GET | `/api/v1/vessels/{id}/health` | Get vessel health | Authenticated |
-| 318 | PUT | `/api/v1/vessels/{id}/health/overrides/{criterion}` | Set a vessel health override | TenantAdmin |
-| 319 | DELETE | `/api/v1/vessels/{id}/health/overrides/{criterion}` | Remove a vessel health override | TenantAdmin |
-| 320 | GET | `/api/v1/vessels/{id}/landing-preview` | Preview landing readiness | Authenticated |
-| 321 | GET | `/api/v1/vessels/{id}/readiness` | Get vessel readiness | Authenticated |
-| 322 | GET | `/api/v1/voyages` | List all voyages | Authenticated |
-| 323 | POST | `/api/v1/voyages` | Create a voyage | TenantAdmin |
-| 324 | POST | `/api/v1/voyages/delete/multiple` | Batch delete multiple voyages | TenantAdmin |
-| 325 | POST | `/api/v1/voyages/enumerate` | Enumerate voyages | Authenticated |
-| 326 | GET | `/api/v1/voyages/{id}` | Get a voyage | Authenticated |
-| 327 | DELETE | `/api/v1/voyages/{id}` | Cancel a voyage | TenantAdmin |
-| 328 | DELETE | `/api/v1/voyages/{id}/purge` | Permanently delete a voyage | TenantAdmin |
-| 329 | GET | `/api/v1/whoami` | Get current identity | Authenticated |
-| 330 | GET | `/api/v1/workflow-profiles` | List workflow profiles | Authenticated |
-| 331 | POST | `/api/v1/workflow-profiles` | Create a workflow profile | TenantAdmin |
-| 332 | POST | `/api/v1/workflow-profiles/enumerate` | Enumerate workflow profiles | Authenticated |
-| 333 | GET | `/api/v1/workflow-profiles/preview/vessels/{vesselId}` | Preview resolved workflow commands for a vessel | Authenticated |
-| 334 | GET | `/api/v1/workflow-profiles/resolve/vessels/{vesselId}` | Resolve the active workflow profile for a vessel | Authenticated |
-| 335 | POST | `/api/v1/workflow-profiles/validate` | Validate a workflow profile | TenantAdmin |
-| 336 | GET | `/api/v1/workflow-profiles/{id}` | Get a workflow profile | Authenticated |
-| 337 | PUT | `/api/v1/workflow-profiles/{id}` | Update a workflow profile | TenantAdmin |
-| 338 | DELETE | `/api/v1/workflow-profiles/{id}` | Delete a workflow profile | TenantAdmin |
-| 339 | GET | `/api/v1/workspace/vessels/{vesselId}/changes` | Get workspace changes | Authenticated |
-| 340 | GET | `/api/v1/workspace/vessels/{vesselId}/diff` | Get a working-tree diff | Authenticated |
-| 341 | POST | `/api/v1/workspace/vessels/{vesselId}/directory` | Create one workspace directory | Authenticated |
-| 342 | DELETE | `/api/v1/workspace/vessels/{vesselId}/entry` | Delete one workspace entry | Authenticated |
-| 343 | POST | `/api/v1/workspace/vessels/{vesselId}/exec` | Run a command in the vessel workspace | TenantAdmin |
-| 344 | GET | `/api/v1/workspace/vessels/{vesselId}/file` | Read one workspace file | Authenticated |
-| 345 | PUT | `/api/v1/workspace/vessels/{vesselId}/file` | Save one workspace file | Authenticated |
-| 346 | POST | `/api/v1/workspace/vessels/{vesselId}/rename` | Rename or move one workspace entry | Authenticated |
-| 347 | GET | `/api/v1/workspace/vessels/{vesselId}/search` | Search one workspace | Authenticated |
-| 348 | GET | `/api/v1/workspace/vessels/{vesselId}/status` | Get workspace status | Authenticated |
-| 349 | GET | `/api/v1/workspace/vessels/{vesselId}/tree` | List one workspace directory | Authenticated |
-| 350 | GET | `/openapi.json` |  | NoAuthRequired |
-| 351 | GET | `/swagger` |  | NoAuthRequired |
+| 10 | PUT | `/api/v1/ask/threads/{id}/cli-permission-policy` | Set a thread's CLI tool permission policy | Authenticated |
+| 11 | POST | `/api/v1/ask/threads/{id}/messages` | Send a message | Authenticated |
+| 12 | POST | `/api/v1/ask/threads/{id}/messages/enumerate` | Enumerate thread messages | Authenticated |
+| 13 | POST | `/api/v1/ask/threads/{id}/proposals/{pid}/approve` | Approve a proposal | Authenticated |
+| 14 | POST | `/api/v1/ask/threads/{id}/proposals/{pid}/reject` | Reject a proposal | Authenticated |
+| 15 | POST | `/api/v1/ask/threads/{id}/read` | Mark a thread read | Authenticated |
+| 16 | POST | `/api/v1/ask/threads/{id}/summarize` | Summarize a thread | Authenticated |
+| 17 | GET | `/api/v1/ask/threads/{id}/work/{workId}` | Read a work snapshot | Authenticated |
+| 18 | POST | `/api/v1/authenticate` | Authenticate and get session token | NoAuthRequired |
+| 19 | GET | `/api/v1/backlog` | List backlog items | Authenticated |
+| 20 | POST | `/api/v1/backlog` | Create a backlog item | TenantAdmin |
+| 21 | POST | `/api/v1/backlog/enumerate` | Enumerate backlog items | Authenticated |
+| 22 | POST | `/api/v1/backlog/reorder` | Reorder backlog items | TenantAdmin |
+| 23 | GET | `/api/v1/backlog/{id}` | Get a backlog item | Authenticated |
+| 24 | PUT | `/api/v1/backlog/{id}` | Update a backlog item | TenantAdmin |
+| 25 | DELETE | `/api/v1/backlog/{id}` | Delete a backlog item | TenantAdmin |
+| 26 | GET | `/api/v1/backlog/{id}/refinement-sessions` | List backlog refinement sessions | Authenticated |
+| 27 | POST | `/api/v1/backlog/{id}/refinement-sessions` | Create a backlog refinement session | TenantAdmin |
+| 28 | GET | `/api/v1/backup` | Download backup | AdminOnly |
+| 29 | GET | `/api/v1/captains` | List all captains | Authenticated |
+| 30 | POST | `/api/v1/captains` | Create a captain | TenantAdmin |
+| 31 | POST | `/api/v1/captains/delete/multiple` | Batch delete multiple captains | TenantAdmin |
+| 32 | POST | `/api/v1/captains/enumerate` | Enumerate captains | Authenticated |
+| 33 | POST | `/api/v1/captains/stop-all` | Stop all captains | TenantAdmin |
+| 34 | GET | `/api/v1/captains/{id}` | Get a captain | Authenticated |
+| 35 | PUT | `/api/v1/captains/{id}` | Update a captain | TenantAdmin |
+| 36 | DELETE | `/api/v1/captains/{id}` | Delete a captain | TenantAdmin |
+| 37 | POST | `/api/v1/captains/{id}/chat` | Chat with a captain | TenantAdmin |
+| 38 | PUT | `/api/v1/captains/{id}/cli-permission-policy` | Set a captain's CLI tool permission policy | TenantAdmin |
+| 39 | GET | `/api/v1/captains/{id}/log` | Get current log for a captain | Authenticated |
+| 40 | POST | `/api/v1/captains/{id}/stop` | Stop a captain | TenantAdmin |
+| 41 | GET | `/api/v1/captains/{id}/tools` | Describe captain tools | Authenticated |
+| 42 | POST | `/api/v1/captains/{id}/unquarantine` | Lift a captain's quarantine | TenantAdmin |
+| 43 | GET | `/api/v1/check-runs` | List check runs | Authenticated |
+| 44 | POST | `/api/v1/check-runs` | Run a check | TenantAdmin |
+| 45 | POST | `/api/v1/check-runs/enumerate` | Enumerate check runs | Authenticated |
+| 46 | POST | `/api/v1/check-runs/import` | Import an external check | TenantAdmin |
+| 47 | POST | `/api/v1/check-runs/sync/github-actions` | Sync GitHub Actions runs | TenantAdmin |
+| 48 | GET | `/api/v1/check-runs/{id}` | Get a check run | Authenticated |
+| 49 | DELETE | `/api/v1/check-runs/{id}` | Delete a check run | TenantAdmin |
+| 50 | POST | `/api/v1/check-runs/{id}/retry` | Retry a check run | TenantAdmin |
+| 51 | GET | `/api/v1/cli-permissions/requests` | List CLI permission requests | Authenticated |
+| 52 | GET | `/api/v1/cli-permissions/requests/{id}` | Get a CLI permission request | Authenticated |
+| 53 | POST | `/api/v1/cli-permissions/requests/{id}/decide` | Decide a CLI permission request | Authenticated |
+| 54 | GET | `/api/v1/cli-permissions/rules` | List CLI permission rules | Authenticated |
+| 55 | POST | `/api/v1/cli-permissions/rules` | Create a CLI permission rule | TenantAdmin |
+| 56 | GET | `/api/v1/cli-permissions/rules/{id}` | Get a CLI permission rule | Authenticated |
+| 57 | PUT | `/api/v1/cli-permissions/rules/{id}` | Update a CLI permission rule | TenantAdmin |
+| 58 | DELETE | `/api/v1/cli-permissions/rules/{id}` | Delete a CLI permission rule | TenantAdmin |
+| 59 | GET | `/api/v1/credentials` | List credentials | Authenticated |
+| 60 | POST | `/api/v1/credentials` | Create credential | Authenticated |
+| 61 | GET | `/api/v1/credentials/{id}` | Get credential by ID | Authenticated |
+| 62 | PUT | `/api/v1/credentials/{id}` | Update credential (admin only) | Authenticated |
+| 63 | DELETE | `/api/v1/credentials/{id}` | Delete credential | Authenticated |
+| 64 | GET | `/api/v1/deployments` | List deployments | Authenticated |
+| 65 | POST | `/api/v1/deployments` | Create a deployment | TenantAdmin |
+| 66 | POST | `/api/v1/deployments/enumerate` | Enumerate deployments | Authenticated |
+| 67 | GET | `/api/v1/deployments/{id}` | Get a deployment | Authenticated |
+| 68 | PUT | `/api/v1/deployments/{id}` | Update a deployment | TenantAdmin |
+| 69 | DELETE | `/api/v1/deployments/{id}` | Delete a deployment | TenantAdmin |
+| 70 | POST | `/api/v1/deployments/{id}/approve` | Approve a deployment | TenantAdmin |
+| 71 | POST | `/api/v1/deployments/{id}/deny` | Deny a deployment | TenantAdmin |
+| 72 | POST | `/api/v1/deployments/{id}/rollback` | Rollback a deployment | TenantAdmin |
+| 73 | POST | `/api/v1/deployments/{id}/verify` | Run post-deploy verification | TenantAdmin |
+| 74 | GET | `/api/v1/docks` | List docks | Authenticated |
+| 75 | POST | `/api/v1/docks/delete/multiple` | Batch delete multiple docks | TenantAdmin |
+| 76 | POST | `/api/v1/docks/enumerate` | Enumerate docks | Authenticated |
+| 77 | GET | `/api/v1/docks/{id}` | Get a dock | Authenticated |
+| 78 | DELETE | `/api/v1/docks/{id}` | Delete a dock | TenantAdmin |
+| 79 | DELETE | `/api/v1/docks/{id}/purge` | Force purge a dock | TenantAdmin |
+| 80 | POST | `/api/v1/docks/{id}/repair` | Repair a dock worktree | TenantAdmin |
+| 81 | POST | `/api/v1/docks/{id}/unstick` | Unstick a wedged dock | TenantAdmin |
+| 82 | GET | `/api/v1/doctor` | Run system health diagnostics | Authenticated |
+| 83 | GET | `/api/v1/environments` | List environments | Authenticated |
+| 84 | POST | `/api/v1/environments` | Create an environment | TenantAdmin |
+| 85 | POST | `/api/v1/environments/enumerate` | Enumerate environments | Authenticated |
+| 86 | GET | `/api/v1/environments/{id}` | Get an environment | Authenticated |
+| 87 | PUT | `/api/v1/environments/{id}` | Update an environment | TenantAdmin |
+| 88 | DELETE | `/api/v1/environments/{id}` | Delete an environment | TenantAdmin |
+| 89 | GET | `/api/v1/events` | List events | Authenticated |
+| 90 | POST | `/api/v1/events/delete/multiple` | Batch delete multiple events | TenantAdmin |
+| 91 | POST | `/api/v1/events/enumerate` | Enumerate events | Authenticated |
+| 92 | GET | `/api/v1/events/{id}` | Get an event | Authenticated |
+| 93 | DELETE | `/api/v1/events/{id}` | Delete an event | TenantAdmin |
+| 94 | POST | `/api/v1/fleet-action-runs/enumerate` | Enumerate fleet action runs | Authenticated |
+| 95 | GET | `/api/v1/fleet-action-runs/{id}` | Get a fleet action run | Authenticated |
+| 96 | POST | `/api/v1/fleet-action-runs/{id}/cancel` | Cancel a fleet action run | TenantAdmin |
+| 97 | POST | `/api/v1/fleet-action-runs/{id}/targets/enumerate` | Enumerate fleet action run targets | Authenticated |
+| 98 | GET | `/api/v1/fleet-action-runs/{id}/targets/{targetId}` | Get a fleet action run target | Authenticated |
+| 99 | POST | `/api/v1/fleet-actions` | Create a fleet action | TenantAdmin |
+| 100 | POST | `/api/v1/fleet-actions/enumerate` | Enumerate fleet actions | Authenticated |
+| 101 | POST | `/api/v1/fleet-actions/run` | Start an ad hoc fleet action run | TenantAdmin |
+| 102 | GET | `/api/v1/fleet-actions/{id}` | Get a fleet action | Authenticated |
+| 103 | PUT | `/api/v1/fleet-actions/{id}` | Update a fleet action | TenantAdmin |
+| 104 | DELETE | `/api/v1/fleet-actions/{id}` | Delete a fleet action | TenantAdmin |
+| 105 | POST | `/api/v1/fleet-actions/{id}/run` | Run a fleet action | TenantAdmin |
+| 106 | GET | `/api/v1/fleets` | List all fleets | Authenticated |
+| 107 | POST | `/api/v1/fleets` | Create a fleet | TenantAdmin |
+| 108 | POST | `/api/v1/fleets/delete/multiple` | Batch delete multiple fleets | TenantAdmin |
+| 109 | POST | `/api/v1/fleets/enumerate` | Enumerate fleets | Authenticated |
+| 110 | GET | `/api/v1/fleets/{id}` | Get a fleet | Authenticated |
+| 111 | PUT | `/api/v1/fleets/{id}` | Update a fleet | TenantAdmin |
+| 112 | DELETE | `/api/v1/fleets/{id}` | Delete a fleet | TenantAdmin |
+| 113 | GET | `/api/v1/harbors` | List Harbors (experimental) | Authenticated |
+| 114 | POST | `/api/v1/harbors` | Register a Harbor (experimental) | Authenticated |
+| 115 | GET | `/api/v1/harbors/{id}` | Get a Harbor (experimental) | Authenticated |
+| 116 | PUT | `/api/v1/harbors/{id}` | Update a Harbor (experimental) | Authenticated |
+| 117 | DELETE | `/api/v1/harbors/{id}` | Delete a Harbor (experimental) | Authenticated |
+| 118 | POST | `/api/v1/harbors/{id}/disable` | Disable a Harbor (experimental) | Authenticated |
+| 119 | POST | `/api/v1/harbors/{id}/enable` | Enable a Harbor (experimental) | Authenticated |
+| 120 | POST | `/api/v1/harbors/{id}/probe` | Probe a Harbor (experimental) | TenantAdmin |
+| 121 | GET | `/api/v1/history` | List historical timeline entries | Authenticated |
+| 122 | POST | `/api/v1/history/enumerate` | Enumerate historical timeline entries | Authenticated |
+| 123 | GET | `/api/v1/inbox` | Get the needs-you inbox | Authenticated |
+| 124 | GET | `/api/v1/incidents` | List incidents | Authenticated |
+| 125 | POST | `/api/v1/incidents` | Create an incident | TenantAdmin |
+| 126 | POST | `/api/v1/incidents/enumerate` | Enumerate incidents | Authenticated |
+| 127 | GET | `/api/v1/incidents/{id}` | Get an incident | Authenticated |
+| 128 | PUT | `/api/v1/incidents/{id}` | Update an incident | TenantAdmin |
+| 129 | DELETE | `/api/v1/incidents/{id}` | Delete an incident | TenantAdmin |
+| 130 | GET | `/api/v1/jobs` | List background jobs | Authenticated |
+| 131 | GET | `/api/v1/jobs/{id}` | Get a background job | Authenticated |
+| 132 | POST | `/api/v1/jobs/{id}/cancel` | Cancel a background job | Authenticated |
+| 133 | GET | `/api/v1/memories` | List/search memories | Authenticated |
+| 134 | POST | `/api/v1/memories` | Create or upsert a memory | Authenticated |
+| 135 | GET | `/api/v1/memories/{id}` | Get a memory | Authenticated |
+| 136 | PUT | `/api/v1/memories/{id}` | Update a memory | Authenticated |
+| 137 | DELETE | `/api/v1/memories/{id}` | Delete a memory | Authenticated |
+| 138 | GET | `/api/v1/merge-queue` | List merge queue entries | Authenticated |
+| 139 | POST | `/api/v1/merge-queue` | Enqueue a branch for merge | TenantAdmin |
+| 140 | POST | `/api/v1/merge-queue/enumerate` | Enumerate merge queue entries | Authenticated |
+| 141 | POST | `/api/v1/merge-queue/process` | Process the merge queue | TenantAdmin |
+| 142 | POST | `/api/v1/merge-queue/purge` | Batch purge merge queue entries | TenantAdmin |
+| 143 | GET | `/api/v1/merge-queue/{id}` | Get a merge queue entry | Authenticated |
+| 144 | DELETE | `/api/v1/merge-queue/{id}` | Delete or cancel a merge queue entry | TenantAdmin |
+| 145 | POST | `/api/v1/merge-queue/{id}/process` | Process a single merge queue entry | TenantAdmin |
+| 146 | DELETE | `/api/v1/merge-queue/{id}/purge` | Purge a single merge queue entry | TenantAdmin |
+| 147 | GET | `/api/v1/missions` | List all missions | Authenticated |
+| 148 | POST | `/api/v1/missions` | Create a mission | TenantAdmin |
+| 149 | POST | `/api/v1/missions/delete/multiple` | Batch delete multiple missions | TenantAdmin |
+| 150 | POST | `/api/v1/missions/enumerate` | Enumerate missions | Authenticated |
+| 151 | GET | `/api/v1/missions/history` | Get aggregated mission history | Authenticated |
+| 152 | GET | `/api/v1/missions/summaries` | List lightweight mission summaries | Authenticated |
+| 153 | POST | `/api/v1/missions/summaries/enumerate` | Enumerate lightweight mission summaries | Authenticated |
+| 154 | GET | `/api/v1/missions/{id}` | Get a mission | Authenticated |
+| 155 | PUT | `/api/v1/missions/{id}` | Update a mission | TenantAdmin |
+| 156 | DELETE | `/api/v1/missions/{id}` | Cancel a mission | TenantAdmin |
+| 157 | GET | `/api/v1/missions/{id}/diff` | Get diff for a mission | Authenticated |
+| 158 | GET | `/api/v1/missions/{id}/evaluate-autoland` | Dry-run the auto-land predicate for a mission | Authenticated |
+| 159 | GET | `/api/v1/missions/{id}/github/pull-request` | Get GitHub pull-request evidence for a mission | Authenticated |
+| 160 | GET | `/api/v1/missions/{id}/instructions` | Get mission instructions | Authenticated |
+| 161 | GET | `/api/v1/missions/{id}/landing-preview` | Preview mission landing readiness | Authenticated |
+| 162 | GET | `/api/v1/missions/{id}/log` | Get log for a mission | Authenticated |
+| 163 | DELETE | `/api/v1/missions/{id}/purge` | Permanently delete a mission | TenantAdmin |
+| 164 | POST | `/api/v1/missions/{id}/restart` | Restart a failed or cancelled mission | TenantAdmin |
+| 165 | POST | `/api/v1/missions/{id}/retry-landing` | Retry landing for a mission | TenantAdmin |
+| 166 | POST | `/api/v1/missions/{id}/review/approve` | Approve a mission review gate | TenantAdmin |
+| 167 | POST | `/api/v1/missions/{id}/review/deny` | Deny a mission review gate | TenantAdmin |
+| 168 | PUT | `/api/v1/missions/{id}/status` | Transition mission status | TenantAdmin |
+| 169 | GET | `/api/v1/model-endpoints` | List model endpoints | Authenticated |
+| 170 | POST | `/api/v1/model-endpoints` | Create a model endpoint | Authenticated |
+| 171 | POST | `/api/v1/model-endpoints/health-check` | Run a health sweep | Authenticated |
+| 172 | GET | `/api/v1/model-endpoints/{id}` | Get a model endpoint | Authenticated |
+| 173 | PUT | `/api/v1/model-endpoints/{id}` | Update a model endpoint | Authenticated |
+| 174 | DELETE | `/api/v1/model-endpoints/{id}` | Delete a model endpoint | Authenticated |
+| 175 | POST | `/api/v1/model-endpoints/{id}/validate` | Validate a model endpoint | Authenticated |
+| 176 | GET | `/api/v1/objective-refinement-sessions/{id}` | Get an objective refinement session | Authenticated |
+| 177 | DELETE | `/api/v1/objective-refinement-sessions/{id}` | Delete an objective refinement session | TenantAdmin |
+| 178 | POST | `/api/v1/objective-refinement-sessions/{id}/apply` | Apply an objective refinement summary | TenantAdmin |
+| 179 | POST | `/api/v1/objective-refinement-sessions/{id}/messages` | Send an objective refinement message | TenantAdmin |
+| 180 | POST | `/api/v1/objective-refinement-sessions/{id}/stop` | Stop an objective refinement session | TenantAdmin |
+| 181 | POST | `/api/v1/objective-refinement-sessions/{id}/summarize` | Summarize an objective refinement session | TenantAdmin |
+| 182 | GET | `/api/v1/objectives` | List objectives | Authenticated |
+| 183 | POST | `/api/v1/objectives` | Create an objective | TenantAdmin |
+| 184 | POST | `/api/v1/objectives/enumerate` | Enumerate objectives | Authenticated |
+| 185 | POST | `/api/v1/objectives/import/github` | Import an objective from GitHub | TenantAdmin |
+| 186 | POST | `/api/v1/objectives/reorder` | Reorder objectives | TenantAdmin |
+| 187 | GET | `/api/v1/objectives/{id}` | Get an objective | Authenticated |
+| 188 | PUT | `/api/v1/objectives/{id}` | Update an objective | TenantAdmin |
+| 189 | DELETE | `/api/v1/objectives/{id}` | Delete an objective | TenantAdmin |
+| 190 | GET | `/api/v1/objectives/{id}/refinement-sessions` | List objective refinement sessions | Authenticated |
+| 191 | POST | `/api/v1/objectives/{id}/refinement-sessions` | Create an objective refinement session | TenantAdmin |
+| 192 | POST | `/api/v1/onboarding` | Self-register a new user | NoAuthRequired |
+| 193 | GET | `/api/v1/personas` | List all personas | Authenticated |
+| 194 | POST | `/api/v1/personas` | Create a persona | Authenticated |
+| 195 | POST | `/api/v1/personas/enumerate` | Enumerate personas | Authenticated |
+| 196 | GET | `/api/v1/personas/{name}` | Get a persona by name | Authenticated |
+| 197 | PUT | `/api/v1/personas/{name}` | Update a persona | Authenticated |
+| 198 | DELETE | `/api/v1/personas/{name}` | Delete a persona | Authenticated |
+| 199 | GET | `/api/v1/pipelines` | List all pipelines | Authenticated |
+| 200 | POST | `/api/v1/pipelines` | Create a pipeline | Authenticated |
+| 201 | POST | `/api/v1/pipelines/enumerate` | Enumerate pipelines | Authenticated |
+| 202 | GET | `/api/v1/pipelines/{name}` | Get a pipeline by name | Authenticated |
+| 203 | PUT | `/api/v1/pipelines/{name}` | Update a pipeline | Authenticated |
+| 204 | DELETE | `/api/v1/pipelines/{name}` | Delete a pipeline | Authenticated |
+| 205 | GET | `/api/v1/planning-sessions` | List planning sessions | Authenticated |
+| 206 | POST | `/api/v1/planning-sessions` | Create a planning session | TenantAdmin |
+| 207 | GET | `/api/v1/planning-sessions/{id}` | Get a planning session | Authenticated |
+| 208 | DELETE | `/api/v1/planning-sessions/{id}` | Delete a planning session | TenantAdmin |
+| 209 | POST | `/api/v1/planning-sessions/{id}/dispatch` | Dispatch from a planning session | TenantAdmin |
+| 210 | POST | `/api/v1/planning-sessions/{id}/messages` | Send a planning message | TenantAdmin |
+| 211 | POST | `/api/v1/planning-sessions/{id}/stop` | Stop a planning session | TenantAdmin |
+| 212 | POST | `/api/v1/planning-sessions/{id}/stop-turn` | Stop the current planning turn | TenantAdmin |
+| 213 | POST | `/api/v1/planning-sessions/{id}/summarize` | Summarize planning output into a dispatch draft | TenantAdmin |
+| 214 | GET | `/api/v1/playbooks` | List playbooks | Authenticated |
+| 215 | POST | `/api/v1/playbooks` | Create a playbook | TenantAdmin |
+| 216 | POST | `/api/v1/playbooks/enumerate` | Enumerate playbooks | Authenticated |
+| 217 | GET | `/api/v1/playbooks/{id}` | Get a playbook | Authenticated |
+| 218 | PUT | `/api/v1/playbooks/{id}` | Update a playbook | TenantAdmin |
+| 219 | DELETE | `/api/v1/playbooks/{id}` | Delete a playbook | TenantAdmin |
+| 220 | GET | `/api/v1/project-profiles` | List project profiles | Authenticated |
+| 221 | POST | `/api/v1/project-profiles` | Create a project profile | Authenticated |
+| 222 | POST | `/api/v1/project-profiles/enumerate` | Enumerate project profiles | Authenticated |
+| 223 | GET | `/api/v1/project-profiles/resolve/vessels/{vesselId}` | Resolve the active project profile for a vessel | Authenticated |
+| 224 | POST | `/api/v1/project-profiles/validate` | Validate a project profile | Authenticated |
+| 225 | GET | `/api/v1/project-profiles/{id}` | Get a project profile | Authenticated |
+| 226 | PUT | `/api/v1/project-profiles/{id}` | Update a project profile | Authenticated |
+| 227 | DELETE | `/api/v1/project-profiles/{id}` | Delete a project profile | Authenticated |
+| 228 | GET | `/api/v1/project-profiles/{id}/persona-preview/{persona}` | Preview a persona prompt for a project profile | Authenticated |
+| 229 | GET | `/api/v1/prompt-templates` | List all prompt templates | Authenticated |
+| 230 | POST | `/api/v1/prompt-templates` | Create a prompt template | Authenticated |
+| 231 | POST | `/api/v1/prompt-templates/enumerate` | Enumerate prompt templates | Authenticated |
+| 232 | GET | `/api/v1/prompt-templates/{name}` | Get a prompt template by name | Authenticated |
+| 233 | PUT | `/api/v1/prompt-templates/{name}` | Update a prompt template | Authenticated |
+| 234 | POST | `/api/v1/prompt-templates/{name}/reset` | Reset a prompt template to default | Authenticated |
+| 235 | GET | `/api/v1/releases` | List releases | Authenticated |
+| 236 | POST | `/api/v1/releases` | Create a release | TenantAdmin |
+| 237 | POST | `/api/v1/releases/enumerate` | Enumerate releases | Authenticated |
+| 238 | GET | `/api/v1/releases/{id}` | Get a release | Authenticated |
+| 239 | PUT | `/api/v1/releases/{id}` | Update a release | TenantAdmin |
+| 240 | DELETE | `/api/v1/releases/{id}` | Delete a release | TenantAdmin |
+| 241 | GET | `/api/v1/releases/{id}/github/pull-requests` | Get GitHub pull-request evidence for a release | Authenticated |
+| 242 | POST | `/api/v1/releases/{id}/refresh` | Refresh a release | TenantAdmin |
+| 243 | GET | `/api/v1/request-history` | List request-history entries | Authenticated |
+| 244 | POST | `/api/v1/request-history/delete/by-filter` | Delete filtered request-history entries | TenantAdmin |
+| 245 | POST | `/api/v1/request-history/delete/multiple` | Delete multiple request-history entries | TenantAdmin |
+| 246 | GET | `/api/v1/request-history/summary` | Summarize request history | Authenticated |
+| 247 | GET | `/api/v1/request-history/{id}` | Get one request-history entry | Authenticated |
+| 248 | DELETE | `/api/v1/request-history/{id}` | Delete one request-history entry | TenantAdmin |
+| 249 | POST | `/api/v1/restore` | Restore from backup | AdminOnly |
+| 250 | GET | `/api/v1/runbook-executions` | List runbook executions | Authenticated |
+| 251 | POST | `/api/v1/runbook-executions/enumerate` | Enumerate runbook executions | Authenticated |
+| 252 | GET | `/api/v1/runbook-executions/{id}` | Get a runbook execution | Authenticated |
+| 253 | PUT | `/api/v1/runbook-executions/{id}` | Update a runbook execution | TenantAdmin |
+| 254 | DELETE | `/api/v1/runbook-executions/{id}` | Delete a runbook execution | TenantAdmin |
+| 255 | GET | `/api/v1/runbooks` | List runbooks | Authenticated |
+| 256 | POST | `/api/v1/runbooks` | Create a runbook | TenantAdmin |
+| 257 | POST | `/api/v1/runbooks/enumerate` | Enumerate runbooks | Authenticated |
+| 258 | GET | `/api/v1/runbooks/{id}` | Get a runbook | Authenticated |
+| 259 | PUT | `/api/v1/runbooks/{id}` | Update a runbook | TenantAdmin |
+| 260 | DELETE | `/api/v1/runbooks/{id}` | Delete a runbook | TenantAdmin |
+| 261 | POST | `/api/v1/runbooks/{id}/executions` | Start a runbook execution | TenantAdmin |
+| 262 | GET | `/api/v1/runtimes/mux/endpoints` | List saved Mux endpoints | Authenticated |
+| 263 | GET | `/api/v1/runtimes/mux/endpoints/{name}` | Inspect a saved Mux endpoint | Authenticated |
+| 264 | POST | `/api/v1/server/rebuild` | Rebuild the Admiral server (experimental) | AdminOnly |
+| 265 | GET | `/api/v1/server/rebuild/status` | Get the latest rebuild status (experimental) | AdminOnly |
+| 266 | POST | `/api/v1/server/reset` | Factory reset | AdminOnly |
+| 267 | POST | `/api/v1/server/restart` | Restart the Admiral server | AdminOnly |
+| 268 | POST | `/api/v1/server/rollback` | Roll back the last rebuild (experimental) | AdminOnly |
+| 269 | POST | `/api/v1/server/stop` | Stop the Admiral server | AdminOnly |
+| 270 | GET | `/api/v1/settings` | Get server settings | AdminOnly |
+| 271 | PUT | `/api/v1/settings` | Update server settings | AdminOnly |
+| 272 | GET | `/api/v1/signals` | List recent signals | Authenticated |
+| 273 | POST | `/api/v1/signals` | Send a signal | TenantAdmin |
+| 274 | POST | `/api/v1/signals/delete/multiple` | Batch delete multiple signals | TenantAdmin |
+| 275 | POST | `/api/v1/signals/enumerate` | Enumerate signals | Authenticated |
+| 276 | GET | `/api/v1/signals/recent` | Get recent signals | Authenticated |
+| 277 | GET | `/api/v1/signals/recipient/{captainId}` | Enumerate signals by recipient | Authenticated |
+| 278 | GET | `/api/v1/signals/{id}` | Get a signal | Authenticated |
+| 279 | DELETE | `/api/v1/signals/{id}` | Delete a signal | TenantAdmin |
+| 280 | PUT | `/api/v1/signals/{id}/read` | Mark a signal as read | TenantAdmin |
+| 281 | GET | `/api/v1/skills` | List skills | Authenticated |
+| 282 | POST | `/api/v1/skills` | Create a skill | Authenticated |
+| 283 | POST | `/api/v1/skills/enumerate` | Enumerate skills | Authenticated |
+| 284 | GET | `/api/v1/skills/{id}` | Get a skill | Authenticated |
+| 285 | PUT | `/api/v1/skills/{id}` | Update a skill | Authenticated |
+| 286 | DELETE | `/api/v1/skills/{id}` | Delete a skill | Authenticated |
+| 287 | GET | `/api/v1/status` | Get Armada status | Authenticated |
+| 288 | GET | `/api/v1/status/health` | Health check | NoAuthRequired |
+| 289 | GET | `/api/v1/tenants` | List tenants (admin only) | AdminOnly |
+| 290 | POST | `/api/v1/tenants` | Create tenant (admin only) | AdminOnly |
+| 291 | POST | `/api/v1/tenants/lookup` | Look up tenants by email | NoAuthRequired |
+| 292 | GET | `/api/v1/tenants/{id}` | Get tenant by ID | Authenticated |
+| 293 | PUT | `/api/v1/tenants/{id}` | Update tenant (admin only) | AdminOnly |
+| 294 | DELETE | `/api/v1/tenants/{id}` | Delete tenant (admin only) | AdminOnly |
+| 295 | GET | `/api/v1/token-usage` | List token-usage records | Authenticated |
+| 296 | POST | `/api/v1/token-usage/delete/by-filter` | Delete filtered token-usage records | Authenticated |
+| 297 | GET | `/api/v1/token-usage/summary` | Summarize token usage | Authenticated |
+| 298 | GET | `/api/v1/users` | List users | Authenticated |
+| 299 | POST | `/api/v1/users` | Create user (admin only) | TenantAdmin |
+| 300 | GET | `/api/v1/users/{id}` | Get user by ID | Authenticated |
+| 301 | PUT | `/api/v1/users/{id}` | Update user (admin only) | Authenticated |
+| 302 | DELETE | `/api/v1/users/{id}` | Delete user (admin only) | Authenticated |
+| 303 | POST | `/api/v1/vessel-health/enumerate` | Enumerate vessel health | Authenticated |
+| 304 | POST | `/api/v1/vessel-health/evaluate` | Evaluate vessel health | TenantAdmin |
+| 305 | GET | `/api/v1/vessel-health/summary` | Vessel health summary | Authenticated |
+| 306 | GET | `/api/v1/vessels` | List all vessels | Authenticated |
+| 307 | POST | `/api/v1/vessels` | Create a vessel | TenantAdmin |
+| 308 | POST | `/api/v1/vessels/delete/multiple` | Batch delete multiple vessels | TenantAdmin |
+| 309 | POST | `/api/v1/vessels/enumerate` | Enumerate vessels | Authenticated |
+| 310 | POST | `/api/v1/vessels/import` | Import discovered vessels | TenantAdmin |
+| 311 | POST | `/api/v1/vessels/import/batches/enumerate` | Enumerate import batches | Authenticated |
+| 312 | GET | `/api/v1/vessels/import/batches/{id}` | Get an import batch | Authenticated |
+| 313 | POST | `/api/v1/vessels/import/batches/{id}/categorize` | Run or retry fleet categorization | TenantAdmin |
+| 314 | POST | `/api/v1/vessels/import/batches/{id}/fleet-recommendations/apply` | Apply fleet recommendations | TenantAdmin |
+| 315 | GET | `/api/v1/vessels/import/browse` | Browse directories for import | TenantAdmin |
+| 316 | GET | `/api/v1/vessels/import/categorization/default-prompt` | Get the default fleet categorization prompt | TenantAdmin |
+| 317 | POST | `/api/v1/vessels/import/discover` | Discover vessel import candidates | TenantAdmin |
+| 318 | GET | `/api/v1/vessels/{id}` | Get a vessel | Authenticated |
+| 319 | PUT | `/api/v1/vessels/{id}` | Update a vessel | TenantAdmin |
+| 320 | DELETE | `/api/v1/vessels/{id}` | Delete a vessel | TenantAdmin |
+| 321 | GET | `/api/v1/vessels/{id}/branches` | List vessel branches | Authenticated |
+| 322 | POST | `/api/v1/vessels/{id}/branches/merge` | Merge a vessel branch into another | TenantAdmin |
+| 323 | POST | `/api/v1/vessels/{id}/branches/push` | Push a vessel branch | TenantAdmin |
+| 324 | POST | `/api/v1/vessels/{id}/build-context` | Build or refine the vessel Model Context | TenantAdmin |
+| 325 | PATCH | `/api/v1/vessels/{id}/context` | Update vessel context | TenantAdmin |
+| 326 | GET | `/api/v1/vessels/{id}/git-status` | Get vessel git status | Authenticated |
+| 327 | GET | `/api/v1/vessels/{id}/health` | Get vessel health | Authenticated |
+| 328 | PUT | `/api/v1/vessels/{id}/health/overrides/{criterion}` | Set a vessel health override | TenantAdmin |
+| 329 | DELETE | `/api/v1/vessels/{id}/health/overrides/{criterion}` | Remove a vessel health override | TenantAdmin |
+| 330 | GET | `/api/v1/vessels/{id}/landing-preview` | Preview landing readiness | Authenticated |
+| 331 | GET | `/api/v1/vessels/{id}/readiness` | Get vessel readiness | Authenticated |
+| 332 | GET | `/api/v1/voyages` | List all voyages | Authenticated |
+| 333 | POST | `/api/v1/voyages` | Create a voyage | TenantAdmin |
+| 334 | POST | `/api/v1/voyages/delete/multiple` | Batch delete multiple voyages | TenantAdmin |
+| 335 | POST | `/api/v1/voyages/enumerate` | Enumerate voyages | Authenticated |
+| 336 | GET | `/api/v1/voyages/{id}` | Get a voyage | Authenticated |
+| 337 | DELETE | `/api/v1/voyages/{id}` | Cancel a voyage | TenantAdmin |
+| 338 | DELETE | `/api/v1/voyages/{id}/purge` | Permanently delete a voyage | TenantAdmin |
+| 339 | GET | `/api/v1/whoami` | Get current identity | Authenticated |
+| 340 | GET | `/api/v1/workflow-profiles` | List workflow profiles | Authenticated |
+| 341 | POST | `/api/v1/workflow-profiles` | Create a workflow profile | TenantAdmin |
+| 342 | POST | `/api/v1/workflow-profiles/enumerate` | Enumerate workflow profiles | Authenticated |
+| 343 | GET | `/api/v1/workflow-profiles/preview/vessels/{vesselId}` | Preview resolved workflow commands for a vessel | Authenticated |
+| 344 | GET | `/api/v1/workflow-profiles/resolve/vessels/{vesselId}` | Resolve the active workflow profile for a vessel | Authenticated |
+| 345 | POST | `/api/v1/workflow-profiles/validate` | Validate a workflow profile | TenantAdmin |
+| 346 | GET | `/api/v1/workflow-profiles/{id}` | Get a workflow profile | Authenticated |
+| 347 | PUT | `/api/v1/workflow-profiles/{id}` | Update a workflow profile | TenantAdmin |
+| 348 | DELETE | `/api/v1/workflow-profiles/{id}` | Delete a workflow profile | TenantAdmin |
+| 349 | GET | `/api/v1/workspace/vessels/{vesselId}/changes` | Get workspace changes | Authenticated |
+| 350 | GET | `/api/v1/workspace/vessels/{vesselId}/diff` | Get a working-tree diff | Authenticated |
+| 351 | POST | `/api/v1/workspace/vessels/{vesselId}/directory` | Create one workspace directory | Authenticated |
+| 352 | DELETE | `/api/v1/workspace/vessels/{vesselId}/entry` | Delete one workspace entry | Authenticated |
+| 353 | POST | `/api/v1/workspace/vessels/{vesselId}/exec` | Run a command in the vessel workspace | TenantAdmin |
+| 354 | GET | `/api/v1/workspace/vessels/{vesselId}/file` | Read one workspace file | Authenticated |
+| 355 | PUT | `/api/v1/workspace/vessels/{vesselId}/file` | Save one workspace file | Authenticated |
+| 356 | POST | `/api/v1/workspace/vessels/{vesselId}/rename` | Rename or move one workspace entry | Authenticated |
+| 357 | GET | `/api/v1/workspace/vessels/{vesselId}/search` | Search one workspace | Authenticated |
+| 358 | GET | `/api/v1/workspace/vessels/{vesselId}/status` | Get workspace status | Authenticated |
+| 359 | GET | `/api/v1/workspace/vessels/{vesselId}/tree` | List one workspace directory | Authenticated |
+| 360 | GET | `/openapi.json` |  | NoAuthRequired |
+| 361 | GET | `/swagger` |  | NoAuthRequired |
 
 ---
 

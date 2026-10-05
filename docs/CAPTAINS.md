@@ -48,6 +48,7 @@ captain hosts and upgrade them on purpose.
 | Planning sessions | Yes | Yes | Yes | Yes | Yes | Yes | No |
 | Ask Armada threads | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 | Ask approval gating | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| CLI tool approval in Armada (`ApproveInArmada`) | Yes | Runs as `Refuse` | Runs as `Refuse` | Runs as `Refuse` | Runs as `Refuse` | Runs as `Refuse` | `run_process` only |
 | Streaming replies (chat and planning) | Token deltas | Line by line | Line by line | Line by line | Token deltas | JSON events | Per model response |
 | Thinking display | Prompted block | Prompted block | Prompted block | Prompted block | Native | Native | Prompted block |
 | Tool-call cards in chat | Yes | No | No | No | Yes | Yes | Yes |
@@ -158,12 +159,17 @@ MCP server at `http://<host>:<mcpPort>/mcp` (`localhost` unless the Admiral is b
 
 ```
 claude --print --verbose [--output-format stream-json --include-partial-messages] [--model <model>]
-    (--dangerously-skip-permissions | --permission-mode acceptEdits --allowedTools mcp__armada)
+    (--dangerously-skip-permissions | --permission-mode acceptEdits --allowedTools mcp__armada
+     [--permission-prompt-tool mcp__armada__cli_permission_prompt])
 ```
 
-The stream-json flags are added only for Ask and interactive planning turns. Without auto-approve (see "Running agents
-safely") Claude Code accepts file edits, allows Armada's own MCP tools, and refuses any other tool, including shell
-commands, that the project's Claude Code settings do not allow; print mode refuses rather than prompts. Armada sets
+The stream-json flags are added only for Ask and interactive planning turns. Without auto-approve (the `Refuse` and
+`ApproveInArmada` policies, see [CLI tool permissions](#cli-tool-permissions)) Claude Code accepts file edits, allows
+Armada's own MCP tools, and refuses any other tool, including shell commands, that the project's Claude Code settings do
+not allow; print mode refuses rather than prompts. Under `ApproveInArmada` the launch adds `--permission-prompt-tool
+mcp__armada__cli_permission_prompt`, so such a tool is sent to Armada and waits for an approver instead of being refused,
+and `MCP_TOOL_TIMEOUT` is raised to `Permissions.PromptTimeoutSeconds` plus two minutes so Claude Code does not abandon
+the waiting call first. Armada sets
 `CLAUDE_CODE_DISABLE_NONINTERACTIVE_HINT=1`, removes `CLAUDECODE` and `CLAUDE_CODE_ENTRYPOINT` so a captain can start
 even when the Admiral itself was launched from inside a Claude Code session, and sets `MAX_THINKING_TOKENS` from the
 captain's reasoning effort. Isolated launches add `--setting-sources project,local --strict-mcp-config --mcp-config
@@ -262,36 +268,135 @@ on (the default), and otherwise a mission run by an API-endpoint captain has the
 
 ## Running agents safely
 
-By default every CLI runtime is launched with its "do not ask me" switch on: `--dangerously-skip-permissions` for
-Claude Code, `--sandbox workspace-write` for Codex (and `--dangerously-bypass-approvals-and-sandbox` on Windows),
-`--approval-mode yolo` for Gemini, `--force` for Cursor, `--yolo` for Mux unless an approval policy is set, and `--auto`
-for OpenCode. A captain runs unattended inside a git worktree, so there is nobody to answer a permission prompt; without
-these flags a mission stalls or is refused on its first shell command.
+By default every mission launches its CLI with its "do not ask me" switch on (the `Bypass` CLI tool permission policy,
+`Permissions.MissionDefaultPolicy`): `--dangerously-skip-permissions` for Claude Code, `--sandbox workspace-write` for
+Codex (and `--dangerously-bypass-approvals-and-sandbox` on Windows), `--approval-mode yolo` for Gemini, `--force` for
+Cursor, `--yolo` for Mux unless an approval policy is set, and `--auto` for OpenCode. A captain runs unattended inside a
+git worktree, so there is nobody to answer a permission prompt; without these flags a mission stalls or is refused on
+its first shell command.
 
 The consequence is that a captain can run any command the Admiral's (or Harbor's) user account can run, on that
 machine, with that user's credentials. The worktree is a working directory, not a sandbox. Run captains under an
 account that has only what the work needs, keep secrets you do not want an agent to read out of that account's home
 directory, and prefer a dedicated machine or VM for fleets that touch untrusted repositories.
 
-Three settings turn the switch off:
+These settings turn the switch off (the full resolution order is under [CLI tool permissions](#cli-tool-permissions)):
 
-- **Per captain:** `autoApprove` (default `true`) on `create_captain` / `update_captain`, stored in the captain's
-  `runtimeOptionsJson`; in the dashboard it is the "Auto-approve agent tool use" checkbox on the captain form, and the
-  TUI captain form has the same field. With it off, Claude Code runs with `--permission-mode acceptEdits --allowedTools
-  mcp__armada`, Codex with `--sandbox workspace-write`, Gemini with `--approval-mode auto_edit`, Cursor without
-  `--force`, OpenCode without `--auto`, and Mux with approval policy `deny` (unless `muxApprovalPolicy` is set). It does
-  not apply to ApiEndpoint captains, which run Armada's coding tools in-process.
+- **Per captain:** `CliPermissionPolicy` (`Refuse`, `ApproveInArmada`, `Bypass`, or unset to inherit), set with
+  `PUT /api/v1/captains/{id}/cli-permission-policy`, the MCP tool `set_captain_cli_permission_policy`, or the captain
+  page in the dashboard (global admins, or tenant admins of the captain's tenant). The older `autoApprove` switch
+  (default `true`) on `create_captain` / `update_captain`, stored in the captain's `runtimeOptionsJson` and shown as the
+  "Auto-approve agent tool use" checkbox on the dashboard and TUI captain forms, still applies when the captain has no
+  `CliPermissionPolicy`: an explicit `true` is `Bypass` and `false` is `Refuse`. With auto-approve off, Claude Code runs
+  with `--permission-mode acceptEdits --allowedTools mcp__armada`, Codex with `--sandbox workspace-write`, Gemini with
+  `--approval-mode auto_edit`, Cursor without `--force`, OpenCode without `--auto`, and Mux with approval policy `deny`
+  (unless `muxApprovalPolicy` is set).
 - **Per vessel:** `autoApprove` on `add_vessel` / `update_vessel` (`clearAutoApprove` removes it), shown as "Agent
   Auto-Approve" on the vessel form (On, Off, or use the captain setting). When set it wins over the captain's setting
-  for missions on that vessel, including Harbor launches.
-- **Ask Armada:** `Ask.CaptainAutoApprove` in `settings.json` (default `false`). While it is false, Ask thread turns and
-  milestone narrations run CLI captains without auto-approve whatever the captain's own setting, because any
-  authenticated user can start an Ask turn. Set it to `true` only when everyone who can use Ask is trusted with a shell
-  on the Admiral host.
+  for missions on that vessel, including Harbor launches: `true` is `Bypass`, and `false` turns a `Bypass` result into
+  `Refuse`.
+- **Server defaults:** `Permissions.MissionDefaultPolicy` (default `Bypass`, the behavior before CLI tool permissions)
+  and `Permissions.AskDefaultPolicy` (default `ApproveInArmada`) in `settings.json` or Settings > CLI Tool Permissions.
+- **Ask Armada:** Ask turns resolve their own policy (the conversation's CLI tools setting, the captain's policy, then
+  `Permissions.AskDefaultPolicy`), and never bypass by default. `Ask.CaptainAutoApprove` (default `false`) decides
+  whether a captain's `Bypass` reaches Ask turns: while it is false, a captain-level `Bypass` and the legacy
+  `autoApprove` switch are ignored for Ask turns, because any authenticated user can start an Ask turn. Set it to `true`
+  only when everyone who can use Ask is trusted with a shell on the Admiral host.
 
 Every command Armada itself runs on a user's behalf (workspace exec, fleet action commands, check runs, Harbor probes,
 merge-queue tests) is recorded as an `audit.command` event. See [SECURITY_REVIEW.md](SECURITY_REVIEW.md#running-agents-safely) for the threat
 model.
 
-Ask threads are the one place where a human approves Armada actions, and that gate covers Armada's own MCP tools, not
-the agent's shell or file tools. Those are governed by the auto-approve settings above.
+Ask thread proposals cover Armada's own MCP tools, not the agent's shell or file tools. Those are governed by CLI tool
+permissions, which under `ApproveInArmada` put a person in front of each tool call that needs approval.
+
+## CLI tool permissions
+
+A CLI tool permission policy decides what happens when a captain's own tool needs permission (a shell command, a web
+fetch, a file tool outside the accepted edits). Armada's own MCP tools are not affected: they are authorized per tool
+for the captain's caller, and Ask threads turn state changes into proposals.
+
+| Policy | Effect |
+|--------|--------|
+| `Refuse` | Tools that need approval are refused; the turn or mission continues without them. |
+| `ApproveInArmada` | The CLI's permission prompt becomes a CLI permission request that an approver allows or denies in Armada (dashboard Approvals and CLI Tool Permissions, TUI Approvals, the inbox, the Ask conversation, REST, MCP, or WebSocket). A matching rule decides without asking. An undecided request expires after `Permissions.PromptTimeoutSeconds` (default 600) and is denied. |
+| `Bypass` | The runtime's own permission-bypass flag: the captain can run any command as the Admiral's (or Harbor's) user. |
+
+**Resolution.** Each launch resolves one policy, most specific first, in `CliPermissionPolicyResolver`:
+
+| Ask turns | Missions |
+|-----------|----------|
+| 1. The thread's `CliPermissionPolicy` (the conversation header; `Bypass` only by an admin) | 1. The vessel's `AutoApprove` override: `true` is `Bypass` |
+| 2. The captain's `CliPermissionPolicy`; a captain-level `Bypass` only when `Ask.CaptainAutoApprove` is `true` | 2. The captain's `CliPermissionPolicy` |
+| 3. When `Ask.CaptainAutoApprove` is `true`, the captain's legacy `autoApprove` (absent or `true` is `Bypass`, `false` is `Refuse`) | 3. The captain's explicit legacy `autoApprove` (`true` is `Bypass`, `false` is `Refuse`) |
+| 4. `Permissions.AskDefaultPolicy` (default `ApproveInArmada`) | 4. `Permissions.MissionDefaultPolicy` (default `Bypass`) |
+
+A vessel `AutoApprove` of `false` turns a mission's `Bypass` into `Refuse`. Milestone narrations and conversation
+summaries resolve like Ask turns but never prompt (nobody is waiting for them), so `ApproveInArmada` runs them as
+`Refuse`. Finally, `ApproveInArmada` falls back to `Refuse` when the captain runs on a Harbor (`RemoteHarbor`), when its
+runtime has no permission prompt hook Armada can answer (`RuntimeUnsupported`), or when a Claude Code launch has no
+mission- or thread-scoped MCP token (`NoSessionToken`, for example with `Mcp.MissionScopedTokens` off). The result
+(`Requested`, `Effective`, `Source`, `FallbackReason`, and a one-line `Note` that says where to change it) is shown in
+the Ask conversation header (`AskThread.CliPermission`) and written as the first Armada line of every mission log.
+
+Why the defaults differ: missions run unattended, and before CLI tool permissions every captain without
+`autoApprove: false` ran with its bypass flag, so `Bypass` keeps existing fleets working and a prompting default would
+hold every mission on approvals. Ask turns can be started by any user of the tenant and someone is watching the
+conversation, so they ask instead.
+
+**Per runtime.**
+
+| Runtime | `Refuse` | `ApproveInArmada` | `Bypass` |
+|---------|----------|-------------------|----------|
+| Claude Code | `--permission-mode acceptEdits --allowedTools mcp__armada` (print mode refuses) | The same plus `--permission-prompt-tool mcp__armada__cli_permission_prompt`, `MCP_TOOL_TIMEOUT` raised above the prompt timeout | `--dangerously-skip-permissions` |
+| Codex | `--sandbox workspace-write` | Runs as `Refuse` | The approval mode: `full-auto` (the default) is `--sandbox workspace-write`, still sandboxed, on macOS and Linux and `--dangerously-bypass-approvals-and-sandbox` on Windows; only `dangerous` bypasses on every OS |
+| Gemini | `--approval-mode auto_edit` | Runs as `Refuse` | `--approval-mode yolo` |
+| Cursor | Without `--force` | Runs as `Refuse` | `--force` |
+| OpenCode | Without `--auto` | Runs as `Refuse` | `--auto` |
+| Mux | `--approval-policy deny` | Runs as `Refuse` | `--yolo` |
+| ApiEndpoint | No CLI flags; the built-in `run_process` tool refuses every call | Each `run_process` call becomes a CLI permission request, answered in-process (no MCP token needed) | `run_process` runs without asking |
+
+`Refuse` and `Bypass` are carried by the launched captain's auto-approve option, so a Mux captain with an explicit
+`muxApprovalPolicy` keeps that policy in both. Harbor launches apply `Refuse` and `Bypass` the same way (through the
+captain's auto-approve option) and run `ApproveInArmada` as `Refuse`, because the Harbor launch protocol does not carry
+the permission prompt tool yet.
+
+ApiEndpoint captains have no CLI: the policy applies only to their built-in shell tool, `run_process`. Their other
+built-in tools (read, write, edit, multi-edit, delete, directory and task-plan tools) run without asking under every
+policy, and direct captain chat and planning sessions do not apply a policy at all. Rules match `run_process` only by
+its bare name (a specifier on a tool other than Bash, WebFetch, Read, and Edit never matches), so an allow rule for it,
+including the one "Allow and remember" suggests, allows every command that captain runs.
+
+**How a request flows (Claude Code).** Claude Code calls `cli_permission_prompt` on the scoped `armada` MCP server with
+the tool name and input. Armada checks the applicable rules: a matching deny rule denies, a matching allow rule allows,
+and either way the request is recorded with `DecisionSource` `DenyRule` or `AllowRule`. Otherwise it stores a `Pending`
+request (input redacted; the original stays only in memory), posts a permission card when the request comes from an Ask
+thread, announces `cli_permission.requested`, and holds the call until an approver decides, the request expires, or the
+turn or mission ends (`Cancelled`). An allowed call runs with its original input; a denied one returns a message that
+tells the model not to retry. Requests are listed at `/cli-permissions` in the dashboard and in the TUI Approvals
+center.
+
+**Who decides.** Global admins and tenant admins of the request's tenant. The owner of the thread or mission can decide
+too when `Permissions.AllowOwnerApproval` is `true` (default `false`). "Allow and remember" also stores an allow rule
+(pattern defaulting to the request's suggested rule, scope `Captain`, `Vessel`, or `Global`) and is for admins only. A
+captain session can never decide, and an Ask thread's captain cannot call the decide, rule, or policy tools.
+
+**Rules.** Rules use Claude Code permission rule syntax and apply to the captain (`Captain` scope, missions and Ask
+turns), the vessel (`Vessel` scope, missions), or every captain of the tenant (`Global`; a global admin can leave the
+tenant empty for every tenant).
+
+| Pattern | Matches |
+|---------|---------|
+| `Bash` or `Bash(*)` | Every shell command (an allow rule like this is `Bypass` for shell commands) |
+| `Bash(git status:*)` | `git status` and `git status <anything>` |
+| `Bash(npm run *)` | Glob: `*` matches any characters |
+| `Bash(make test)` | Exactly `make test` |
+| `WebFetch(domain:example.com)` | URLs on that host; `domain:*.example.com` matches subdomains |
+| `Edit(src/**)`, `Read(~/notes/*)`, `Edit(//srv/repo/**)` | Gitignore-style paths: relative to the mission's dock, under the home directory, or absolute (`//`). `*` stays within a path segment, `**` crosses segments. `Edit` covers Edit, Write, MultiEdit, NotebookEdit; `Read` covers Read, Glob, Grep, LS |
+| `mcp__server`, `mcp__server__*`, `mcp__server__tool` | Every tool of an MCP server, or one tool |
+
+Deny rules win over allow rules. A shell command line is split at `&&`, `||`, `;`, `|`, `|&`, `&`, and newlines outside
+quotes, the way Claude Code applies Bash rules: it is allowed only when every subcommand matches an allow rule, and
+denied when any subcommand matches a deny rule (deny rules also match the whole line and a prefix without a following
+space). A command with command or process substitution (`$(...)`, backticks, `<(...)`, `>(...)`) or unbalanced quotes is never allowed by a
+`Bash(...)` rule, so it goes to an approver. A specifier on any other tool is not interpreted and never matches.

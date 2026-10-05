@@ -13,7 +13,8 @@
 1. [Security model](#security-model) explains who can do what and how it is enforced.
 2. [Findings](#findings) lists every gap found, its severity, its status (Fixed in W1, or Open with an owner), and the
    entry points it applies to. Finding ids (F-nn fixed, O-nn open) are referenced from the inventory tables.
-3. [Running agents safely](#running-agents-safely) covers the captain auto-approve flags.
+3. [Running agents safely](#running-agents-safely) covers the captain auto-approve flags and the risks of CLI tool
+   permissions ([who may decide](#cli-tool-permissions) is in the security model).
 4. The inventory: [REST](#rest-routes), [MCP tools](#mcp-tools), [WebSocket](#websocket-routes-and-commands), and
    [other entry points](#other-entry-points) (Harbor link, proxy, tunnel, stdio MCP, static files, file system and
    process entry points). The REST and MCP tables are generated from `RouteAuthorizationRegistry` and
@@ -33,8 +34,8 @@ defense in depth), **Low** (hardening).
 | User session | `POST /api/v1/authenticate` (email + password, or any valid credential header) returns an encrypted session token sent as `X-Token` | The user's tenant; `IsAdmin` users are global admins, `IsTenantAdmin` users administer their tenant |
 | Bearer credential | `Authorization: Bearer <token>`; tokens are server-generated, shown once at creation, redacted on every read | The owning user |
 | Local API key | `X-Api-Key: <ApiKey from settings.json>`; generated on first start, read by the Helm CLI | The synthetic global admin `system@armada` (tenant `ten_system`), which can never log in with a password |
-| Ask thread token | Session token bound to one Ask thread, minted for a captain's MCP connection | MCP only; refused on REST and WebSocket; state-changing tool calls become proposals. When present it always wins over other credentials on the request; combined with a credential for a different identity (or the API key, or an invalid bearer) the request is refused (F-31) |
-| Mission token | Session token bound to one mission and the captain launched for it, minted at every mission launch (`Mcp.MissionScopedTokens`, default on) and bound to the captain's Armada MCP connection | MCP only; refused on REST, WebSocket and the Harbor link; acts as the mission's owner, only while the mission is `Assigned` or `InProgress` on that captain; may additionally update the context of the mission's own vessel (F-36) |
+| Ask thread token | Session token bound to one Ask thread, minted for a captain's MCP connection | MCP only; refused on REST and WebSocket; state-changing tool calls become proposals. When present it always wins over other credentials on the request; combined with a credential for a different identity (or the API key, or an invalid bearer) the request is refused (F-31). May call `cli_permission_prompt` for its own thread; can never decide a CLI permission request, and the decide, rule, and policy tools are refused, never proposed |
+| Mission token | Session token bound to one mission and the captain launched for it, minted at every mission launch (`Mcp.MissionScopedTokens`, default on) and bound to the captain's Armada MCP connection | MCP only; refused on REST, WebSocket and the Harbor link; acts as the mission's owner, only while the mission is `Assigned` or `InProgress` on that captain; may additionally update the context of the mission's own vessel (F-36). May call `cli_permission_prompt` for its own mission; can never decide, remember, or change CLI permission rules or policies, even when the mission's owner is an admin |
 | Loopback MCP caller | No credential, MCP listener bound to loopback, caller on loopback, `Mcp.AllowUnauthenticatedLoopback` true (default) | The default tenant's tenant admin (the local Claude Code setup); since F-25 every by-id tool is confined to the default tenant, so this caller is not unscoped. Mission captains no longer use it (F-36); see O-20 for the residual |
 | Harbor | Link upgrade with `x-access-key` = an Armada credential (bearer token, session token, or API key) | The credential's tenant and user; unauthenticated links only from loopback to a loopback-bound Admiral, with no owning user (`x-user-guid` is never read), so they never satisfy `RequireHarborForLaunch` for a mission that has a user |
 | Proxy user | Shared proxy password (challenge-response); the proxy refuses to start with a blank or default password (F-30) | Reaches only the relay; every relayed call still needs Armada credentials (no per-user identity at the proxy, see O-11) |
@@ -58,6 +59,33 @@ Every REST route and every MCP tool declares an explicit requirement: a resource
   sockets of the entity's tenant (global admins can opt in to all tenants).
 - **Bypass rules:** global admins pass every level; tenant admins pass `TenantAdmin` within their tenant; tenant
   admins cannot modify, delete, or mint credentials for a global admin account.
+
+### CLI tool permissions
+
+A captain's own CLI tools (shell, web fetch, file tools outside the accepted edits) run under a CLI tool permission
+policy: `Refuse`, `ApproveInArmada` (the CLI's permission prompt becomes a request a person decides in Armada), or
+`Bypass` (the runtime's permission-bypass flag). Resolution and per-runtime flags are in
+[CAPTAINS.md](CAPTAINS.md#cli-tool-permissions); the access rules live in `CliPermissionAccess` and are shared by REST,
+MCP, WebSocket, and the inbox.
+
+| Action | Who | Enforcement |
+|--------|-----|-------------|
+| Raise a request (`cli_permission_prompt`) | Only a captain's own mission- or thread-scoped session, which presented its token | The tool refuses every other caller (`Forbidden`), including the unauthenticated loopback identity and people's credentials; the request is bound to the session's mission or thread (the thread owner is checked against the token) |
+| See a request | Global admins; tenant admins of the request's tenant; the owner of the thread or mission | Other callers get `404` / `NotFound`; scoped captain sessions see nothing; WebSocket events go only to these recipients |
+| Decide (allow once, deny) | Global admins; tenant admins of the request's tenant; the owner only when `Permissions.AllowOwnerApproval` is true (default false) | `403` / `Forbidden`; decisions are a database compare-and-set, so a second decision gets `409` / `Conflict` |
+| Allow and remember (stores an allow rule) | Global admins; tenant admins of the request's tenant | `403`; the owner can never create a rule through a decision |
+| Decide over MCP | As above, and only with a presented credential | Captain sessions (mission or thread tokens) and the unauthenticated loopback identity are refused, so a captain cannot approve its own prompt even through the loopback port |
+| Decide, change rules, or change policies from an Ask thread | Nobody | `AskToolPolicy` refuses `decide_cli_permission_request`, the rule tools, and `set_captain_cli_permission_policy` in thread-scoped calls (never turned into proposals) |
+| Create, update, delete rules | Global admins (any tenant, or `TenantId` null for every tenant); tenant admins (their own tenant only) | Rules are tenant-scoped: a tenant admin's rule always gets their tenant, `Vessel` and `Captain` rules take the target's tenant, and a rule for every tenant needs a global admin to change it. Rule reads return the caller's tenant plus rules for every tenant |
+| Set a captain's policy | Global admins; tenant admins of the captain's tenant | `PUT /api/v1/captains/{id}/cli-permission-policy` and `set_captain_cli_permission_policy`; captain create (TenantAdmin) accepts it, captain update keeps it |
+| Set an Ask thread's policy | The thread owner; `Bypass` only when the owner is a global or tenant admin | `404` for other users' threads, `403` for a non-admin `Bypass` |
+| Change the server defaults (`Permissions`) | Global admins | `PUT /api/v1/settings` (AdminOnly) |
+
+Request inputs are stored redacted (`SecretRedactor` on the input JSON, the summary, and the suggested rule; input
+clipped to 16,000 characters); the original input is held only in memory by the waiting call, and an allowed tool runs
+with that original input. Pending requests expire (`Permissions.PromptTimeoutSeconds`, 10-3600, default 600) and are
+cancelled when their turn or mission process ends or the Admiral no longer waits for them (for example after a
+restart); expired and cancelled requests are denials.
 
 ### Safe defaults
 
@@ -149,7 +177,7 @@ and the server log for them.
 | Id | Severity | Surface | Finding | Owner |
 |----|----------|---------|---------|-------|
 | O-01 | High (multi-tenant only) | MCP | 62 non-admin MCP tools read or changed entities by id without a caller tenant check. | Closed in W1.9 (F-25). `status` is tenant-scoped like `GET /api/v1/status` (O-03, closed). |
-| O-02 | High | REST (Ask, chat, planning) | Any authenticated user could start an Ask thread turn, which ran a CLI captain on the Admiral host with that captain's auto-approve flags. | Closed in W1.9 (F-27) for Ask turns. Direct captain chat and planning (`TenantAdmin`) still use the captain's own setting. Residual: in `acceptEdits` mode Claude Code may still edit files and run file-system commands inside the turn's temporary working directory; other runtimes keep their documented auto-approve-off behavior (Codex `--sandbox workspace-write`, Gemini `auto_edit`, Mux `deny`). Owner: W6.3. |
+| O-02 | High | REST (Ask, chat, planning) | Any authenticated user could start an Ask thread turn, which ran a CLI captain on the Admiral host with that captain's auto-approve flags. | Closed in W1.9 (F-27) for Ask turns; since CLI tool permissions an Ask turn resolves its own policy (default `ApproveInArmada`) and bypasses only when an admin sets the thread to `Bypass` or `Ask.CaptainAutoApprove` is true. Direct captain chat and planning (`TenantAdmin`) still use the captain's own setting. Residual: in `acceptEdits` mode Claude Code may still edit files and run file-system commands inside the turn's temporary working directory; other runtimes keep their documented auto-approve-off behavior (Codex `--sandbox workspace-write`, Gemini `auto_edit`, Mux `deny`). Owner: W6.3. |
 | O-03 | Medium | REST, WebSocket | `GET /api/v1/status` and the WebSocket `subscribe` snapshot are server-wide: captain and mission counts, active voyage titles, and the last signals of every tenant reach any authenticated user. | Closed: status is scoped to the caller's tenant on REST, the MCP `status` tool, and the WebSocket snapshot; global admins still see every tenant (`E2E.SurfaceScoping`). Server-wide `RemoteTunnel` and `MemoryPressureDeferrals` fields remain visible. |
 | O-04 | Medium | Harbor | Split-mode captains (experimental, D3) receive no MCP credential, so with authenticated MCP on a non-loopback Admiral their call-home tool calls are refused. | Closed (F-29 id takeover, F-36 credential). Decision: the token acts as the mission's owner and is visible to the Harbor host while the mission runs (a Harbor operated by another user of the tenant, or a shared Harbor, can use it over MCP until the mission leaves `InProgress`); it is never valid on REST, WebSocket or the Harbor link. Residual (post-1.0): an advertised MCP URL that is not plain `http://host:port/mcp` (https, path prefix) gets the token in the environment only, not a per-launch binding; Gemini and Cursor bind only with `IsolateCaptainLaunch`. |
 | O-05 | Medium | Authentication | Passwords used unsalted SHA-256; no rate limiting or lockout. | Closed in W1.9 (F-26). Residual: lockouts are in memory (reset on restart); the WebSocket upgrade and Harbor link are not limited; behind a reverse proxy every client shares one address (raise `maxFailuresPerAddress`); an upgraded database cannot be used for password login by an older Admiral (UPGRADING.md). Owner: W1 follow-up. |
@@ -192,10 +220,13 @@ and the server log for them.
 ## Running agents safely
 
 Captains are AI coding agents that run as CLI processes on the Admiral host (or on a Harbor) with the operating
-system permissions of the account that runs Armada. By default each runtime is launched with its auto-approve or
-permission-bypass flag so missions can run unattended:
+system permissions of the account that runs Armada. By default each mission launches its runtime with its
+auto-approve or permission-bypass flag (the `Bypass` CLI tool permission policy, `Permissions.MissionDefaultPolicy`)
+so missions can run unattended; Ask turns default to `ApproveInArmada`. The policy is resolved per launch from the Ask
+thread, the vessel's `AutoApprove` override, the captain's `CliPermissionPolicy` (or its legacy `autoApprove` switch),
+and the server defaults ([CAPTAINS.md](CAPTAINS.md#cli-tool-permissions)):
 
-| Runtime | Default flag | With `autoApprove` false |
+| Runtime | `Bypass` (default for missions) | `Refuse` (`autoApprove` false) |
 |---------|--------------|--------------------------|
 | Claude Code | `--dangerously-skip-permissions` | `--permission-mode acceptEdits --allowedTools mcp__armada` (file edits allowed; Armada's MCP tools allowed because Armada authorizes each call; shell and other tools need allow rules in the project's Claude Code settings and are refused, not prompted, in print mode) |
 | Codex | `--sandbox workspace-write` (the `full-auto` approval mode; `codex exec` never prompts) or `--dangerously-bypass-approvals-and-sandbox` (on Windows, or with the `dangerous` approval mode) | `--sandbox workspace-write` (no approval bypass; writes confined to the workspace) |
@@ -203,7 +234,12 @@ permission-bypass flag so missions can run unattended:
 | Cursor | `--force` | no `--force` |
 | OpenCode | `--auto` | no `--auto` |
 | Mux | `--yolo` | `--approval-policy deny` (an explicit Mux approval policy on the captain wins) |
-| ApiEndpoint | not applicable (tools run in-process through Armada) | not applicable |
+| ApiEndpoint | no CLI flags; the built-in `run_process` tool runs commands in-process | `run_process` refuses every call (the file tools still run) |
+
+`ApproveInArmada` is the `Refuse` launch plus a way to ask: Claude Code gets `--permission-prompt-tool
+mcp__armada__cli_permission_prompt`, so a tool that would be refused waits for a person's decision instead.
+ApiEndpoint captains ask the same way for each `run_process` call, in-process.
+Every other runtime, and every Harbor launch, runs `ApproveInArmada` as `Refuse`.
 
 With auto-approve on, a captain can run any command the Armada account can run: read files outside the dock,
 use credentials in the environment, and reach the network. Treat every mission prompt, repository, and Ask
@@ -213,27 +249,66 @@ Recommendations:
 
 1. Run Armada under a dedicated, unprivileged OS account (or in the container), not your daily account, and give it
    only the repository and cloud credentials the missions need.
-2. Turn auto-approve off for captains whose missions do not need unattended shell access. Set it per captain in the
-   dashboard (Captains, edit, "Auto-approve agent tool use"), through MCP (`create_captain` / `update_captain` with
-   `autoApprove`), or through REST (`runtimeOptionsJson` containing `{"autoApprove": false}`), or per vessel (Vessels,
-   edit, "Agent Auto-Approve"; MCP `add_vessel` / `update_vessel` `autoApprove`; REST `AutoApprove`), which wins over
-   the captain setting for missions on that vessel. Without auto-approve, unattended missions that need shell commands
-   stall or fail unless the runtime's own configuration allows those commands. Harbor launches apply the same resolved
-   setting.
-   Ask thread turns always run without auto-approve unless `Ask.CaptainAutoApprove` is true (default false): any
-   authenticated user can start a turn, and Ask's proposal gate covers Armada's MCP tools, not the CLI's own shell.
-   Leave it off unless every account that can use Ask is trusted with a shell on the Admiral host.
+2. Use `Refuse` or `ApproveInArmada` for captains whose missions do not need unattended shell access. Set the
+   captain's CLI tool permission policy on the captain page, with `PUT /api/v1/captains/{id}/cli-permission-policy`, or
+   with MCP `set_captain_cli_permission_policy`; the legacy switch still works (dashboard "Auto-approve agent tool
+   use", MCP `create_captain` / `update_captain` `autoApprove`, REST `runtimeOptionsJson` `{"autoApprove": false}`),
+   and so does the per-vessel override (Vessels, edit, "Agent Auto-Approve"; MCP `add_vessel` / `update_vessel`
+   `autoApprove`; REST `AutoApprove`), which wins over the captain for missions on that vessel. To change every mission
+   at once, set `Permissions.MissionDefaultPolicy`. Without `Bypass`, unattended missions that need shell commands
+   stall on approvals (`ApproveInArmada`, until the request expires) or fail (`Refuse`) unless a rule or the runtime's
+   own configuration allows those commands. Harbor launches apply the same resolved setting.
+   Ask thread turns never bypass unless an admin sets the conversation to `Bypass`, or `Ask.CaptainAutoApprove` is true
+   (default false) and the captain bypasses: any authenticated user can start a turn, and Ask's proposal gate covers
+   Armada's MCP tools, not the CLI's own shell. Leave `Ask.CaptainAutoApprove` off unless every account that can use
+   Ask is trusted with a shell on the Admiral host.
 3. Prefer Harbors on separate machines or VMs for untrusted repositories, and turn `RequireHarborForLaunch` on (default
    off) when captains must never run on the Admiral host.
 4. Keep the Admiral on localhost unless you need remote access; when you expose it, change the default password
    first (the Admiral refuses otherwise) and put TLS in front of it.
 5. Review `audit.command` events (`enumerate` with entityType `events`, or the Events page) for commands run
    through workspace exec, fleet actions, check runs, Harbor probes, and merge queue tests. Commands a captain runs
-   inside its own CLI session are visible in the mission log, not as audit events.
+   inside its own CLI session are visible in the mission log, not as audit events; under `ApproveInArmada` each one
+   that needed permission is also a CLI permission request (who decided, when, by which rule).
+
+### CLI tool permission risks
+
+- **`Bypass` is a shell as the Admiral's user.** A captain with its bypass flag can run any command the Armada (or
+  Harbor) account can, read anything that account can read, and reach the network. It is the default for missions
+  (`Permissions.MissionDefaultPolicy` = `Bypass`) only for backward compatibility: before CLI tool permissions every
+  captain without `autoApprove: false` ran this way, and a prompting default would hold every existing fleet's missions
+  on approvals. Installs that do not need unattended shell access should set the mission default to `Refuse` or
+  `ApproveInArmada`. Only admins can choose `Bypass` for a captain or a thread.
+- **Owner approval.** With `Permissions.AllowOwnerApproval` on, the owner of a mission or Ask thread (a regular user)
+  can allow the shell commands their own captain asks for, on the Admiral host (or Harbor), as the Armada account. That
+  is equivalent to giving that user a shell there, scoped only by the requests their captain raises. Leave it off
+  unless every user is trusted with that; admins can decide in any case.
+- **Allow rules that are too broad.** An allow rule decides without a person. A bare `Bash` (or `Bash(*)`) allow rule
+  is `Bypass` for shell commands, and `WebFetch` without a domain allows every URL. Bash prefix rules are matched per
+  subcommand: a compound command (`&&`, `||`, `;`, `|`, `&`, newlines) is allowed only when every subcommand matches,
+  and command or process substitution (`$(...)`, backticks, `<(...)`) is never allowed by a `Bash(...)` rule. A prefix
+  can still cover more than it looks like: `Bash(git:*)` includes `git -c core.pager=... log` and `git config alias...`,
+  `Bash(npm run *)` runs whatever the repository's `package.json` says, and interpreters (`Bash(python:*)`,
+  `Bash(sh:*)`, `Bash(bash -c:*)`), `find -exec`, `xargs`, and environment-variable expansion are not inspected.
+  Prefer narrow rules (`Bash(npm test:*)`), `Captain` or `Vessel` scope over `Global`, and deny rules for dangerous
+  commands (deny rules win). "Allow and remember" pre-fills the request's suggested rule (the first program and
+  subcommand as a prefix); review it before saving.
+- **`Ask.CaptainAutoApprove`.** When true, a captain's `Bypass` (policy or legacy `autoApprove`) applies to Ask turns,
+  which any authenticated user of the tenant can start: every such user effectively gets that captain's shell.
+- **Rules are not a sandbox.** Rules and approvals apply only to tool calls the CLI asks permission for. File edits in
+  the working directory are accepted without asking (`acceptEdits`), and Claude Code's own allow rules in the project's
+  settings still apply.
+- **ApiEndpoint captains are only partly governed.** The policy covers their `run_process` tool; their in-process file
+  tools (read, write, edit, delete) are not governed by any policy and work wherever the Admiral account can write.
+  Their requests can only be matched by a bare `run_process` rule, so remembering one of their requests allows every
+  command that captain runs (scope it to the captain).
+- **Inputs at rest.** Request inputs are redacted before they are stored and the original input is never persisted,
+  but redaction is pattern-based: a secret that does not look like one can still appear in `InputText` or
+  `SummaryText`, visible to the request's approvers and owner.
 
 ## REST routes
 
-Generated from `RouteAuthorizationRegistry` (351 declarations: 349 API routes plus the OpenAPI document and Swagger
+Generated from `RouteAuthorizationRegistry` (361 declarations: 359 API routes plus the OpenAPI document and Swagger
 UI). Columns: requirement (`Resource:Operation`), permission level, tenant scoping (how the handler limits data to the
 caller), input (how the request is parsed; every typed body is deserialized into a model, unknown fields ignored), and
 the findings that apply. "caller tenant/user (handler)" means the handler or the service it calls reads and writes
@@ -260,6 +335,15 @@ only within the caller's tenant (tenant admins) or the caller's own records (reg
 | POST | `/api/v1/ask/threads/{id}/proposals/{pid}/reject` | AskRoutes | AskThread:Execute | Authenticated | caller tenant/user (handler) | no body / path | - |
 | GET | `/api/v1/ask/threads/{id}/work/{workId}` | AskRoutes | AskThread:Read | Authenticated | caller tenant/user (handler) | path | - |
 | GET | `/api/v1/ask/quick-actions` | AskRoutes | AskThread:Read | Authenticated | caller tenant/user (handler) | typed JSON body | - |
+| PUT | `/api/v1/ask/threads/{id}/cli-permission-policy` | CliPermissionRoutes | AskThread:Update | Authenticated | thread owner only; `Bypass` needs a global or tenant admin (handler) | typed JSON body | - |
+| GET | `/api/v1/cli-permissions/requests` | CliPermissionRoutes | CliPermission:Read | Authenticated | `CliPermissionAccess`: global admin all, tenant admin own tenant, user own threads and missions (handler) | path + query | - |
+| GET | `/api/v1/cli-permissions/requests/{id}` | CliPermissionRoutes | CliPermission:Read | Authenticated | `CliPermissionAccess` (404 when not visible) | path | - |
+| POST | `/api/v1/cli-permissions/requests/{id}/decide` | CliPermissionRoutes | CliPermission:Execute | Authenticated | `CliPermissionAccess`: admins of the request's tenant, owner only with `Permissions.AllowOwnerApproval`; remember admins only (handler) | typed JSON body | - |
+| GET | `/api/v1/cli-permissions/rules` | CliPermissionRoutes | CliPermission:Read | Authenticated | caller tenant plus all-tenant rules (handler) | path + query | - |
+| POST | `/api/v1/cli-permissions/rules` | CliPermissionRoutes | CliPermission:Create | TenantAdmin | tenant admin own tenant; global admin any or all tenants (handler) | typed JSON body | - |
+| GET | `/api/v1/cli-permissions/rules/{id}` | CliPermissionRoutes | CliPermission:Read | Authenticated | caller tenant plus all-tenant rules (handler) | path | - |
+| PUT | `/api/v1/cli-permissions/rules/{id}` | CliPermissionRoutes | CliPermission:Update | TenantAdmin | rule's tenant; all-tenant rules global admin only (handler) | typed JSON body | - |
+| DELETE | `/api/v1/cli-permissions/rules/{id}` | CliPermissionRoutes | CliPermission:Delete | TenantAdmin | rule's tenant; all-tenant rules global admin only (handler) | path | - |
 | POST | `/api/v1/authenticate` | AuthRoutes | Session:Execute | None (public) | none | typed JSON body | F-08, F-26 Fixed |
 | GET | `/api/v1/whoami` | AuthRoutes | Session:Read | Authenticated | caller tenant/user (handler) | path | - |
 | POST | `/api/v1/tenants/lookup` | AuthRoutes | Session:Read | None (public) | none | typed JSON body | F-26 Fixed (rate limited) |
@@ -272,6 +356,7 @@ only within the caller's tenant (tenant admins) or the caller's own records (reg
 | GET | `/api/v1/captains/{id}` | CaptainRoutes | Captain:Read | Authenticated | caller tenant/user (handler) | path | - |
 | GET | `/api/v1/captains/{id}/tools` | CaptainRoutes | Captain:Read | Authenticated | caller tenant/user (handler) | path | - |
 | PUT | `/api/v1/captains/{id}` | CaptainRoutes | Captain:Update | TenantAdmin | caller tenant/user (handler) | typed JSON body | - |
+| PUT | `/api/v1/captains/{id}/cli-permission-policy` | CliPermissionRoutes | Captain:Update | TenantAdmin | captain's tenant (handler) | typed JSON body | - |
 | POST | `/api/v1/captains/{id}/unquarantine` | CaptainRoutes | Captain:Execute | TenantAdmin | caller tenant/user (handler) | no body / path | - |
 | POST | `/api/v1/captains/{id}/stop` | CaptainRoutes | Captain:Execute | TenantAdmin | caller tenant/user (handler) | no body / path | - |
 | POST | `/api/v1/captains/stop-all` | CaptainRoutes | Captain:Execute | TenantAdmin | caller tenant/user (handler) | no body / path | - |
@@ -594,7 +679,7 @@ only within the caller's tenant (tenant admins) or the caller's own records (reg
 | GET | `/api/v1/workspace/vessels/{vesselId}/status` | WorkspaceRoutes | Workspace:Read | Authenticated | caller tenant/user (handler) | path | - |
 ## MCP tools
 
-Generated from `McpToolAuthorizationRegistry` (146 tools). Authentication: credential (`Authorization: Bearer`,
+Generated from `McpToolAuthorizationRegistry` (155 tools). Authentication: credential (`Authorization: Bearer`,
 `X-Token`, `X-Api-Key`) or, on a loopback-bound listener with `Mcp.AllowUnauthenticatedLoopback`, no credential
 (acts as the default tenant's tenant admin). Input: every tool deserializes its arguments into a typed `*Args` class.
 "Caller scoping": every tool that takes an entity id resolves it through `McpCallerScope` (F-25, W1.9), proven for every
@@ -630,6 +715,11 @@ advertised tool by `E2E.McpTenantIsolation`; `status` is tenant-scoped like `GET
 | `get_runbook` | Runbook:Read | Authenticated | caller tenant/user | - |
 | `get_vessel` | Vessel:Read | Authenticated | caller tenant/user | F-25 Fixed |
 | `inbox` | Inbox:Read | Authenticated | caller tenant/user | - |
+| `list_cli_permission_requests` | CliPermission:Read | Authenticated | `CliPermissionAccess` (captain sessions get none) | - |
+| `get_cli_permission_request` | CliPermission:Read | Authenticated | `CliPermissionAccess` | - |
+| `list_cli_permission_rules` | CliPermission:Read | Authenticated | caller tenant plus all-tenant rules | - |
+| `cli_permission_prompt` | CliPermission:Execute | Authenticated | handler: only a presented mission- or thread-scoped captain session; bound to its own mission or thread | - |
+| `decide_cli_permission_request` | CliPermission:Execute | Authenticated | handler: `CliPermissionAccess`; requires a presented credential; refused for captain sessions and in Ask threads | - |
 | `list_backlog_refinement_sessions` | ObjectiveRefinementSession:Read | Authenticated | caller tenant/user | - |
 | `list_backlog` | Objective:Read | Authenticated | caller tenant/user | - |
 | `list_objectives` | Objective:Read | Authenticated | caller tenant/user | - |
@@ -665,6 +755,10 @@ advertised tool by `E2E.McpTenantIsolation`; `status` is tenant-scoped like `GET
 | `delete_fleets` | Fleet:Delete | TenantAdmin | caller tenant/user | - |
 | `create_captain` | Captain:Create | TenantAdmin | caller tenant/user | - |
 | `update_captain` | Captain:Update | TenantAdmin | caller tenant/user | F-25 Fixed |
+| `set_captain_cli_permission_policy` | Captain:Update | TenantAdmin | captain's tenant; refused for captain sessions and in Ask threads | - |
+| `create_cli_permission_rule` | CliPermission:Create | TenantAdmin | tenant admin own tenant (vessel or captain through `McpCallerScope`); global admin any or all tenants; refused in Ask threads | - |
+| `update_cli_permission_rule` | CliPermission:Update | TenantAdmin | rule's tenant; all-tenant rules global admin only; refused in Ask threads | - |
+| `delete_cli_permission_rule` | CliPermission:Delete | TenantAdmin | rule's tenant; all-tenant rules global admin only; refused in Ask threads | - |
 | `delete_captain` | Captain:Delete | TenantAdmin | caller tenant/user | F-25 Fixed |
 | `delete_captains` | Captain:Delete | TenantAdmin | caller tenant/user | F-25 Fixed |
 | `stop_captain` | Captain:Execute | TenantAdmin | caller tenant/user | F-25 Fixed |
@@ -771,7 +865,9 @@ request logs (F-15).
 | command `enumerate` (fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue) | Global admin | all tenants | typed query | - |
 | commands `backup`, `restore` | Global admin | server-wide; arbitrary host paths | typed | O-12 Accepted |
 | commands `get_persona`, `create_persona`, `update_persona`, `delete_persona`, `get_prompt_template`, `update_prompt_template`, `get_pipeline`, `create_pipeline`, `update_pipeline`, `delete_pipeline` | Global admin | any tenant by name | typed | - |
+| commands `list_cli_permission_requests`, `decide_cli_permission_request` | Global admin (decisions also go through `CliPermissionAccess` as the socket's identity) | any tenant | typed | - |
 | server broadcasts (mission, voyage, captain, check-run, objective, deployment, incident, runbook-execution, approval-needed, Ask `ask.*`) | n/a | entity's tenant; `ask.*` to the owning user only | n/a | O-13 Open (unscrubbed output) |
+| server broadcasts `cli_permission.requested`, `cli_permission.resolved` | n/a | the request's approvers and owner: global admins of its tenant or opted in to all tenants, its tenant admins, the owning user; `canDecide` / `canRemember` computed per socket | n/a | - |
 
 ## Other entry points
 
@@ -802,7 +898,7 @@ request logs (F-15).
 | Backup and restore (REST download and upload; MCP and WebSocket with host paths) | Credential | AdminOnly | Server-wide (backups include `settings.json` with secrets) | Restore replaces the database and settings from the zip | F-03 Fixed; O-12 Accepted |
 | Factory reset (`POST /server/reset`: deletes logs, docks, repos, and the database) | Credential | AdminOnly | Server-wide | none | - |
 | Status doctor (`GET /doctor`: `git --version`, `command -v` for fixed names) | Credential | Authenticated | Server-wide | Fixed inputs | - |
-| Captain processes (mission, chat, planning, Ask turns) | n/a (launched by the Admiral) | Launching requires the route's level (dispatch TenantAdmin; Ask Authenticated) | Captain and mission tenant | Prompt text; runtime flags per [Running agents safely](#running-agents-safely) (captain setting, vessel override, Ask turns forced off) | F-23 Mitigated; F-27, F-28, F-36 Fixed; O-20 residual (loopback exception) |
+| Captain processes (mission, chat, planning, Ask turns) | n/a (launched by the Admiral) | Launching requires the route's level (dispatch TenantAdmin; Ask Authenticated) | Captain and mission tenant | Prompt text; runtime flags per [Running agents safely](#running-agents-safely) (the resolved CLI tool permission policy: Ask thread, vessel override, captain policy or `autoApprove`, server defaults) | F-23 Mitigated; F-27, F-28, F-36 Fixed; O-20 residual (loopback exception) |
 
 ## Verification
 
