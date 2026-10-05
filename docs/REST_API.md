@@ -722,17 +722,31 @@ List all tenants (paginated). Global admin only.
 
 #### POST /api/v1/tenants
 
-Create a new tenant. Global admin only.
+Create a new tenant. Global admin only. The tenant's admin account `admin@armada` is seeded with `AdminPassword` when
+supplied (at least 8 characters, not the default password; otherwise `400`), or with a random password that is returned
+once in the response and never again.
 
-**Request Body:** [TenantMetadata](#tenantmetadata)
+**Request Body:** [TenantMetadata](#tenantmetadata) plus optional `AdminPassword`
 
 ```json
 {
-  "Name": "Acme Corp"
+  "Name": "Acme Corp",
+  "AdminPassword": "a-strong-password"
 }
 ```
 
-**Response:** `201 Created` - [TenantMetadata](#tenantmetadata)
+**Response:** `201 Created` - `TenantCreateResult`: the [TenantMetadata](#tenantmetadata) fields plus `AdminEmail`
+(`admin@armada`) and `AdminPassword` (the generated password, or null when you supplied one).
+
+```json
+{
+  "Id": "ten_...",
+  "Name": "Acme Corp",
+  "Active": true,
+  "AdminEmail": "admin@armada",
+  "AdminPassword": "q3Zt...generated..."
+}
+```
 
 ---
 
@@ -823,6 +837,7 @@ Update a user. Global admins can update any user. Tenant admins can update users
 
 `Id`, `TenantId`, `CreatedUtc`, `LastUpdateUtc`, and `IsProtected` are server-controlled and cannot be modified by API clients.
 If `Password` is supplied, the server hashes and stores the new password. If `Password` is omitted or empty, the current password is preserved.
+When the caller changes **their own** password this way, `CurrentPassword` is required and verified: `400 Bad Request` when it is missing, `403 Forbidden` when it is wrong (as for `PUT /api/v1/account/password`). An administrator setting another user's password does not send it.
 
 **Request Body:** user upsert payload
 
@@ -830,6 +845,7 @@ If `Password` is supplied, the server hashes and stores the new password. If `Pa
 {
   "Email": "updated@example.com",
   "Password": "newpassword",
+  "CurrentPassword": "oldpassword",
   "FirstName": "Jane",
   "LastName": "Smith",
   "IsAdmin": false,
@@ -1796,7 +1812,7 @@ The run is limited by `Import.CategorizationTimeoutMinutes` and honors job cance
 
 **Categorization statuses (`CategorizationStatus` on the batch):** `None` (not requested), `Pending` (requested; waiting for the import or the job to start), `Running`, `Completed` (recommendations ready to review), `Failed` (see `CategorizationError`), `Applied`.
 
-**Error responses** carry a machine-readable `Data` object, `{"Code": "...", "Path": "..."}`, with one of these codes: `InvalidRequest` (400), `HarborNotSupported` (400), `PathNotAllowed` (403), `DirectoryNotFound` (404), `BatchNotFound` (404), `BatchBusy` (409; the batch is being imported or discovered, or its fleet categorization is running).
+**Error responses** carry a machine-readable `Data` object, `{"Code": "...", "Path": "..."}`, with one of these codes: `InvalidRequest` (400), `CategorizationCaptainRequired` (400; categorization enabled without a captain), `CategorizationCaptainNotFound` (400; the categorization captain is not in the caller's tenant), `HarborNotSupported` (400), `PathNotAllowed` (403), `DirectoryNotFound` (404), `BatchNotFound` (404), `BatchBusy` (409; the batch is being imported or discovered, or its fleet categorization is running).
 
 ---
 
@@ -3189,7 +3205,7 @@ Register a new captain (AI agent).
 | `Model` | string | no | Optional model override for this captain. When omitted, the runtime selects its default model |
 
 **Response:** `201 Created` - [Captain](#captain)
-**Error:** `400 Bad Request` - Invalid or unavailable model
+**Error:** `400 Bad Request` - Invalid or unavailable model. `Data` is a `CaptainModelValidationFailure`: `{"Reason": "...", "Message": "..."}` with `Reason` one of `EndpointRequired`, `EndpointNotFound`, `EndpointNotInference`, `EndpointDisabled`, `RuntimeUnavailable`, `ModelRejected`, `TimedOut`, `InvalidRuntimeOptions`, `NamedEndpointRequired`, `UnsupportedContractVersion`, `EndpointProbeFailed`, `EndpointNotToolEnabled` (the same on `PUT /api/v1/captains/{id}`; MCP `create_captain` / `update_captain` return `ErrorCode` `InvalidArgument` with `Code` = the reason).
 
 ```bash
 curl -X POST http://localhost:7890/api/v1/captains \
@@ -4352,7 +4368,7 @@ Create an action. Command kind requires tenant admin.
 | `RequiresCleanWorkingTree` | bool | Default `true` for Command, `false` for Mission |
 
 - Response: `201 Created` - `FleetAction`
-- Errors: `400`, `403`
+- Errors: `400`, `403`. A command or prompt template that uses an unknown template variable is `400` with `Data: {"Code": "UnknownTemplateVariable", "VariableName": "<name>"}` (also on update and ad-hoc runs; MCP returns `Code` `UnknownTemplateVariable`).
 
 #### GET /api/v1/fleet-actions/{id}
 
@@ -7126,7 +7142,7 @@ A recorded event representing a state change in the system.
   "VesselId": "vsl_abc123",
   "VoyageId": "vyg_abc123",
   "Message": "Mission msn_abc123 transitioned to Complete",
-  "Payload": null,
+  "Payload": "{\"Status\":\"Complete\",\"PreviousStatus\":\"Review\"}",
   "CreatedUtc": "2026-03-07T12:00:00Z"
 }
 ```
@@ -7147,7 +7163,7 @@ A recorded event representing a state change in the system.
 
 **Known Event Types:**
 - `mission.created` - Mission was created
-- `mission.status_changed` - Mission status transitioned
+- `mission.status_changed` - Mission status transitioned. `Payload` is a `MissionStatusChangedPayload` JSON object with `Status` (the new status) and `PreviousStatus`; the WebSocket event carries them as `status` and `previousStatus`. Read the status from these fields, not from `Message`.
 - `mission.completed` - Mission completed successfully
 - `mission.failed` - Mission failed
 - `captain.launched` - Captain agent process started

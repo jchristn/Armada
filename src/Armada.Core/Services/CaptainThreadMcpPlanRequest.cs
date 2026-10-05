@@ -64,16 +64,16 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
-        /// Contents of the host user's Codex <c>config.toml</c> (read from <c>CODEX_HOME</c> or <c>~/.codex</c>), or null.
-        /// Used only to find existing Armada server entries to disable for the turn.
-        /// </summary>
-        /// <summary>
         /// Whether the plan may write client configuration into <see cref="WorkingDirectory"/> (Gemini, Cursor). True for
         /// Ask turns, whose working directory is a throwaway directory. Mission launches set false because the working
         /// directory is a real repository worktree; Gemini and Cursor then get an empty plan.
         /// </summary>
         public bool AllowWorkingDirectoryFiles { get; set; } = true;
 
+        /// <summary>
+        /// Contents of the host user's Codex <c>config.toml</c> (read from <c>CODEX_HOME</c> or <c>~/.codex</c>), or null.
+        /// Used only to find existing Armada server entries to disable for the turn.
+        /// </summary>
         public string? HostCodexConfigToml { get; set; } = null;
 
         /// <summary>

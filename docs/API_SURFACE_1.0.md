@@ -30,7 +30,7 @@ administrator).
 | WebSocket commands | 59 | 0 |
 | WebSocket event types | 65 | 0 |
 | CLI commands | 58 | 0 |
-| Settings keys | 175 | 12 |
+| Settings keys | 176 | 12 |
 
 ## REST API
 
@@ -318,7 +318,7 @@ Base path `/api/v1`. Request and response bodies are PascalCase JSON; errors are
 | GET | `/api/v1/status` | Authenticated |  | 200 `ArmadaStatus` |  |
 | GET | `/api/v1/status/health` | NoAuthRequired |  |  |  |
 | GET | `/api/v1/tenants` | AdminOnly |  |  |  |
-| POST | `/api/v1/tenants` | AdminOnly |  |  |  |
+| POST | `/api/v1/tenants` | AdminOnly |  | 201 `TenantCreateResult` |  |
 | POST | `/api/v1/tenants/lookup` | NoAuthRequired |  |  |  |
 | DELETE | `/api/v1/tenants/{id}` | AdminOnly |  |  |  |
 | GET | `/api/v1/tenants/{id}` | Authenticated |  |  |  |
@@ -812,6 +812,7 @@ install with the home directory written as `~`; defaults are not frozen (see COM
 | `maxRecoveryAttempts` | int | `3` |  |
 | `mcp` | object |  |  |
 | `mcp.allowUnauthenticatedLoopback` | bool | `true` |  |
+| `mcp.missionScopedTokens` | bool | `true` |  |
 | `mcp.toolCallsPerSecond` | int | `100` |  |
 | `mcpPort` | int | `7891` |  |
 | `mergeQueueTestCommand` | string | `null` |  |

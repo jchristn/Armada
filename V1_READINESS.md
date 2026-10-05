@@ -99,12 +99,12 @@ The goal is a written threat model and a closed list of findings, not just fixes
   _Acceptance:_ a test seeds known secrets and greps responses, logs, and request history for them.
 - [x] **W1.7 Dependency and container hygiene.** Enable dependency vulnerability scanning (NuGet and npm) in CI, run
   the containers as a non-root user, and pin base images.
-- [~] **W1.9 Security follow-ups from W1.1** (`docs/SECURITY_REVIEW.md`): O-01 tenant checks in the 62 MCP tools that
+- [x] **W1.9 Security follow-ups from W1.1** (`docs/SECURITY_REVIEW.md`): O-01 tenant checks in the 62 MCP tools that
   act on entities by id; O-02 Ask turns run CLI captains on the host with auto-approve flags (default Ask captains to
   auto-approve off, or require tenant admin); O-04 split-mode captains get no MCP credential; O-05 salted password
   hashing (PBKDF2/Argon2 with transparent rehash) and login rate limiting; O-11 proxy hardening; per-vessel
   auto-approve setting (W1.5 shipped per-captain only).
-  _Notes:_ Closed O-01 (MCP tenant isolation, 74 tools exercised cross-tenant), O-02 (Ask turns auto-approve off by default), O-05 (PBKDF2-SHA256 600k with transparent rehash; login rate limiting with 429), per-vessel auto-approve, and Ask thread-token precedence. Open: O-04 (MCP credential for Harbor-launched captains, experimental), O-11 leftovers (per-user proxy identity, AllowInvalidCertificates, route blocking), O-20 (local mission captains act in the default tenant; per-mission tokens).
+  _Notes:_ Closed O-01 (MCP tenant isolation, 74 tools exercised cross-tenant), O-02 (Ask turns auto-approve off by default), O-05 (PBKDF2-SHA256 600k with transparent rehash; login rate limiting with 429), per-vessel auto-approve, and Ask thread-token precedence. Final pass: fixed an MCP `enumerate` cross-tenant leak and scoped-filter bug (F-33, F-34); closed O-04 and most of O-20 with mission-scoped MCP tokens for local and Harbor captains (F-36), O-06 and O-17 (F-37); O-11 narrowed (persisted proxy lockouts, AllowInvalidCertificates warning). Explicit post-1.0 decisions: per-user proxy identity and challenge rate limiting (O-11); defaulting the loopback MCP exception off (O-20 residual: other local processes, Gemini/Cursor mission captains without IsolateCaptainLaunch); per-launch binding for https or path-prefixed advertised Harbor MCP URLs.
 - [ ] **W1.8 External review.** One review pass by someone other than the author against the W1.1 inventory.
 
 ### W2. API and contract freeze
