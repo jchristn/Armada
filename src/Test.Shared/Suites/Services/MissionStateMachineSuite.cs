@@ -87,6 +87,22 @@ namespace Test.Shared.Suites.Services
                 AssertFalse(MissionStateMachine.IsActive(MissionStatusEnum.Complete));
             }));
 
+            cases.Add(Case("agent_reportable_transitions_are_the_phase_toggle_only", "Agents may only toggle InProgress and Testing", TestTags.Negative, () =>
+            {
+                AssertTrue(MissionStateMachine.IsAgentReportableTransition(MissionStatusEnum.InProgress, MissionStatusEnum.Testing), "InProgress -> Testing");
+                AssertTrue(MissionStateMachine.IsAgentReportableTransition(MissionStatusEnum.Testing, MissionStatusEnum.InProgress), "Testing -> InProgress");
+                foreach (MissionStatusEnum from in Enum.GetValues<MissionStatusEnum>())
+                {
+                    foreach (MissionStatusEnum to in Enum.GetValues<MissionStatusEnum>())
+                    {
+                        bool toggle = (from == MissionStatusEnum.InProgress && to == MissionStatusEnum.Testing)
+                            || (from == MissionStatusEnum.Testing && to == MissionStatusEnum.InProgress);
+                        if (toggle) continue;
+                        AssertFalse(MissionStateMachine.IsAgentReportableTransition(from, to), from + " -> " + to + " is not agent-reportable");
+                    }
+                }
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: "Services.MissionStateMachine",
                 displayName: "Mission State Machine",

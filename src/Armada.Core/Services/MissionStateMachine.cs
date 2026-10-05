@@ -72,6 +72,23 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
+        /// Whether an agent's own <c>[ARMADA:STATUS]</c> protocol line may move a mission from
+        /// <paramref name="current"/> to <paramref name="target"/>. Only the informational in-flight phase toggle
+        /// InProgress to Testing and back is agent-reportable. Every other status (Review, WorkProduced, Complete,
+        /// Failed, Cancelled, and the landing states) is decided by Armada from the process exit and the completion
+        /// pipeline, so a status line in output (for example a file the agent printed) can never complete, fail, or
+        /// queue a mission for review.
+        /// </summary>
+        /// <param name="current">Current mission status.</param>
+        /// <param name="target">Status named by the agent.</param>
+        /// <returns>True when the agent may make this transition.</returns>
+        public static bool IsAgentReportableTransition(MissionStatusEnum current, MissionStatusEnum target)
+        {
+            return (current == MissionStatusEnum.InProgress && target == MissionStatusEnum.Testing)
+                || (current == MissionStatusEnum.Testing && target == MissionStatusEnum.InProgress);
+        }
+
+        /// <summary>
         /// Terminal statuses: the mission is finished and will not transition again.
         /// </summary>
         /// <param name="status">Status to classify.</param>

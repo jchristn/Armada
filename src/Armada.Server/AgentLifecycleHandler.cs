@@ -418,6 +418,7 @@ namespace Armada.Server
             runtime.OnProcessStarted += processId => HandleProcessStarted(processId, launchKey);
             runtime.OnOutputReceived += HandleAgentOutput;
             runtime.OnOutputReceived += HandleAgentHeartbeat;
+            runtime.OnStdoutReceived += HandleAgentStdout;
             runtime.OnProviderError += HandleAgentProviderError;
             runtime.OnProcessExited += HandleAgentProcessExited;
 
@@ -722,18 +723,9 @@ namespace Armada.Server
 
                     if (String.IsNullOrEmpty(targetMissionId)) return;
 
-                    if (signal.Type == "status" && signal.MissionStatus.HasValue)
-                    {
-                        Mission? mission = await _Database.Missions.ReadAsync(targetMissionId).ConfigureAwait(false);
-                        if (mission != null && IsValidTransition(mission.Status, signal.MissionStatus.Value))
-                        {
-                            mission.Status = signal.MissionStatus.Value;
-                            mission.LastUpdateUtc = DateTime.UtcNow;
-                            await _Database.Missions.UpdateAsync(mission).ConfigureAwait(false);
-                            _Logging.Info(_Header + "mission " + mission.Id + " transitioned to " + signal.MissionStatus.Value + " via agent signal");
-                        }
-                    }
-
+                    // Status lines are recorded here as informational progress only. A mission status change is
+                    // applied by HandleAgentStdout, from the agent's own stdout, and only for the agent-reportable
+                    // InProgress/Testing phase toggle (MissionStateMachine.IsAgentReportableTransition).
                     Signal dbSignal = new Signal(SignalTypeEnum.Progress, "[" + signal.Type + "] " + signal.Value);
                     dbSignal.FromCaptainId = capturedCaptainId;
                     await _Database.Signals.CreateAsync(dbSignal).ConfigureAwait(false);
@@ -743,6 +735,73 @@ namespace Armada.Server
                     _Logging.Warn(_Header + "error processing progress signal: " + ex.ToString());
                 }
             });
+        }
+
+        /// <summary>
+        /// Handle one stdout line from an agent process: apply an <c>[ARMADA:STATUS]</c> protocol line as a mission
+        /// status change. Only stdout counts, because agent CLIs print tool and command output (for example a file the
+        /// agent printed with cat) on stderr in text mode, and only the informational InProgress/Testing phase toggle
+        /// is honored (see <see cref="MissionStateMachine.IsAgentReportableTransition"/>). Review, completion, failure,
+        /// and cancellation are never taken from output; Armada decides them from the process exit and the completion
+        /// pipeline. The combined-output handler records the line as an informational progress signal.
+        /// </summary>
+        /// <param name="processId">Process ID.</param>
+        /// <param name="line">One stdout record.</param>
+        public void HandleAgentStdout(int processId, string line)
+        {
+            ProgressParser.ProgressSignal? signal = ProgressParser.TryParse(line);
+            if (signal == null || signal.Type != "status" || !signal.MissionStatus.HasValue) return;
+
+            string? captainId = null;
+            string? missionId = null;
+            lock (_ProcessToCaptain)
+            {
+                _ProcessToCaptain.TryGetValue(processId, out captainId);
+                _ProcessToMission.TryGetValue(processId, out missionId);
+            }
+
+            if (String.IsNullOrEmpty(captainId) || String.IsNullOrEmpty(missionId)) return;
+
+            MissionStatusEnum requested = signal.MissionStatus.Value;
+            string capturedMissionId = missionId;
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await ApplyAgentReportedStatusAsync(capturedMissionId, requested).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    _Logging.Warn(_Header + "error applying agent status signal: " + ex.ToString());
+                }
+            });
+        }
+
+        /// <summary>
+        /// Apply an agent-reported mission status when it is an agent-reportable transition from the mission's
+        /// current status. Returns whether the status changed.
+        /// </summary>
+        /// <param name="missionId">Mission ID.</param>
+        /// <param name="requested">Status named by the agent.</param>
+        /// <returns>True when the mission status changed.</returns>
+        public async Task<bool> ApplyAgentReportedStatusAsync(string missionId, MissionStatusEnum requested)
+        {
+            if (String.IsNullOrEmpty(missionId)) throw new ArgumentNullException(nameof(missionId));
+
+            Mission? mission = await _Database.Missions.ReadAsync(missionId).ConfigureAwait(false);
+            if (mission == null) return false;
+
+            if (!MissionStateMachine.IsAgentReportableTransition(mission.Status, requested))
+            {
+                _Logging.Debug(_Header + "ignoring agent status " + requested + " for mission " + mission.Id + " in " + mission.Status);
+                return false;
+            }
+
+            mission.Status = requested;
+            mission.LastUpdateUtc = DateTime.UtcNow;
+            await _Database.Missions.UpdateAsync(mission).ConfigureAwait(false);
+            _Logging.Info(_Header + "mission " + mission.Id + " transitioned to " + requested + " via agent signal");
+            return true;
         }
 
         /// <summary>
@@ -1054,12 +1113,6 @@ namespace Armada.Server
             }
 
             return result;
-        }
-
-        private static bool IsValidTransition(MissionStatusEnum current, MissionStatusEnum target)
-        {
-            // Delegated to the single authoritative table so this handler and the services agree.
-            return MissionStateMachine.IsValidTransition(current, target);
         }
 
         private async Task<string?> ValidateMuxCaptainAsync(Captain captain, CancellationToken token)

@@ -171,6 +171,20 @@ The Architect outputs structured mission definitions using `[ARMADA:MISSION]` ma
 Currently this output is injected as context for the next stage; full automatic parsing
 into new Worker missions is a planned enhancement.
 
+### Captain Status Signals
+
+A captain may print `[ARMADA:STATUS] Testing` on a line of its own while it runs its tests,
+and `[ARMADA:STATUS] InProgress` to switch back. This is informational and is the only status
+change a captain can make:
+
+- Only the captain's own **stdout** counts. Agent CLIs print tool and command output (for
+  example a file the agent printed with `cat`) on stderr in text mode, so a status line inside
+  such output never changes the mission.
+- Only the InProgress/Testing toggle is applied. Review, WorkProduced, Complete, Failed, and
+  Cancelled are decided by the Admiral from the process exit and the completion pipeline
+  (diff capture, boundary scan, Definition-of-Done gate, Judge verdict, landing); a status line
+  naming them is recorded as a progress signal and otherwise ignored.
+
 ---
 
 ## 4. Configuring Pipelines
