@@ -435,6 +435,18 @@ namespace Test.Shared.Suites.Services
 
             // Audit addition: null auth is rejected (confirmed against source).
 
+            cases.Add(CaseAsync("event_severity_from_action_segment", "Event severity comes from the event type's action segment, not a substring", TestTags.Positive, () =>
+            {
+                AssertEqual("error", HistoricalTimelineService.ClassifyEventSeverity("mission.failed"));
+                AssertEqual("error", HistoricalTimelineService.ClassifyEventSeverity("mission.landing_failed"));
+                AssertEqual("info", HistoricalTimelineService.ClassifyEventSeverity("mission.completed"));
+                // The old "fail" substring check marked these as errors.
+                AssertEqual("info", HistoricalTimelineService.ClassifyEventSeverity("captain.failover_completed"));
+                AssertEqual("info", HistoricalTimelineService.ClassifyEventSeverity("failed.notification_sent"));
+                AssertEqual("info", HistoricalTimelineService.ClassifyEventSeverity(null));
+                return Task.CompletedTask;
+            }));
+
             cases.Add(CaseAsync("enumerate_null_auth_throws", "EnumerateAsync NullAuth Throws", TestTags.Negative, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);

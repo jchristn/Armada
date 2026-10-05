@@ -31,6 +31,25 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
+        /// Timeline severity for an Armada event type. Event types are dotted identifiers (entity.action); the event is
+        /// an error when its final segment is the action "failed" or an action ending in "_failed" (for example
+        /// mission.failed, mission.landing_failed). The type is compared segment by segment, never searched for a
+        /// substring, so a type such as "captain.failover_completed" is not an error.
+        /// </summary>
+        /// <param name="eventType">Event type.</param>
+        /// <returns>"error" or "info".</returns>
+        public static string ClassifyEventSeverity(string? eventType)
+        {
+            if (String.IsNullOrWhiteSpace(eventType)) return "info";
+
+            string[] segments = eventType.Trim().Split('.');
+            string action = segments[segments.Length - 1];
+            if (String.Equals(action, "failed", StringComparison.OrdinalIgnoreCase)) return "error";
+            if (action.EndsWith("_failed", StringComparison.OrdinalIgnoreCase)) return "error";
+            return "info";
+        }
+
+        /// <summary>
         /// Enumerate timeline entries across missions, voyages, planning sessions, merge entries, checks, releases, deployments, events, and requests.
         /// </summary>
         public async Task<EnumerationResult<HistoricalTimelineEntry>> EnumerateAsync(
@@ -582,7 +601,7 @@ namespace Armada.Core.Services
                 Title = entry.EventType,
                 Description = entry.Message,
                 Status = entry.EntityType,
-                Severity = entry.EventType.IndexOf("fail", StringComparison.OrdinalIgnoreCase) >= 0 ? "error" : "info",
+                Severity = ClassifyEventSeverity(entry.EventType),
                 Route = "/events/" + entry.Id,
                 OccurredUtc = entry.CreatedUtc,
                 MetadataJson = entry.Payload
