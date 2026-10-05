@@ -3,6 +3,7 @@ namespace Test.Shared.Suites.Services
     using System;
     using System.Collections.Generic;
     using System.IO;
+    using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Core.Enums;
@@ -39,20 +40,26 @@ namespace Test.Shared.Suites.Services
             cases.Add(Case("keyed_config_registers_armada_http", "Keyed config registers the armada HTTP server", TestTags.Positive, () =>
             {
                 string json = ArmadaMcpConfigBuilder.BuildKeyedMcpServersJson(7891);
-                AssertTrue(json.Contains("mcpServers"), "expected mcpServers key");
-                AssertTrue(json.Contains("\"armada\""), "expected armada server key");
-                AssertTrue(json.Contains("http://localhost:7891/mcp"), "expected mcp url");
-                AssertTrue(json.Contains("\"http\""), "expected http transport");
+                McpKeyedConfigFile config = JsonSerializer.Deserialize<McpKeyedConfigFile>(json)!;
+                AssertNotNull(config.McpServers, "expected mcpServers key");
+                AssertTrue(config.McpServers!.ContainsKey("armada"), "expected armada server key");
+                McpKeyedServerEntry armada = config.McpServers["armada"];
+                AssertEqual("http://localhost:7891/mcp", armada.Url, "expected mcp url");
+                AssertEqual("http", armada.Type, "expected http transport");
+                AssertNull(armada.Headers, "no headers without a session token");
             }));
 
             cases.Add(Case("mux_config_uses_servers_array", "Mux config uses a named servers array with mcpPath", TestTags.Positive, () =>
             {
                 string json = ArmadaMcpConfigBuilder.BuildMuxServersJson(7891);
-                AssertTrue(json.Contains("\"servers\""), "expected servers array");
-                AssertTrue(json.Contains("\"name\""), "expected server name");
-                AssertTrue(json.Contains("armada"), "expected armada name");
-                AssertTrue(json.Contains("\"mcpPath\""), "expected mcpPath");
-                AssertTrue(json.Contains("http://localhost:7891"), "expected base url");
+                MuxServersFile config = JsonSerializer.Deserialize<MuxServersFile>(json)!;
+                AssertNotNull(config.Servers, "expected servers array");
+                AssertEqual(1, config.Servers!.Count, "one server");
+                MuxServerEntry server = config.Servers[0];
+                AssertEqual("armada", server.Name, "expected armada name");
+                AssertEqual("/mcp", server.McpPath, "expected mcpPath");
+                AssertEqual("http://localhost:7891", server.Url, "expected base url");
+                AssertEqual("http", server.Transport, "expected http transport");
             }));
 
             // ---- Planner: Claude Code ----

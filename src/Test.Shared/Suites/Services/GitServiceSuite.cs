@@ -4,6 +4,7 @@ namespace Test.Shared.Suites.Services
     using System.Collections.Generic;
     using System.Diagnostics;
     using System.IO;
+    using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Core.Services;
@@ -327,6 +328,8 @@ namespace Test.Shared.Suites.Services
                     }
 
                     AssertTrue(ex != null, "Expected dirty worktree creation to throw");
+                    AssertFalse(ex is GitCommandException, "the dirty checkout is rejected by Armada's check, not by a failed git command");
+                    // TODO(R5): no typed exception exists for a dirty checkout; the Armada-owned message is the only signal.
                     AssertTrue(ex!.Message.Contains("contains tracked modifications", StringComparison.Ordinal), "Exception should explain that the checkout is dirty");
                     AssertTrue(ex.Message.Contains("test/Dirty.csproj", StringComparison.Ordinal), "Exception should list the dirty tracked file");
                     AssertFalse(Directory.Exists(worktreeDir), "Failed worktree creation should clean up the worktree directory");
@@ -451,11 +454,12 @@ namespace Test.Shared.Suites.Services
                     string fileContents = await File.ReadAllTextAsync(Path.Combine(targetDir, "README.md")).ConfigureAwait(false);
 
                     AssertNotNull(mergeEx, "Conflicting landing merge should throw");
-                    AssertTrue(
-                        mergeEx!.Message.Contains("CONFLICT", StringComparison.OrdinalIgnoreCase) ||
-                        mergeEx.Message.Contains("Automatic merge failed", StringComparison.OrdinalIgnoreCase),
-                        "Conflict exception should include git's merge details");
+                    AssertTrue(mergeEx is GitCommandException, "Conflicting merge should surface the failed git command, got " + mergeEx!.GetType().Name);
+                    GitCommandException gitEx = (GitCommandException)mergeEx;
+                    AssertEqual("merge", gitEx.Arguments.FirstOrDefault(), "the failed command is the merge");
+                    AssertEqual(1, gitEx.ExitCode, "git merge exits 1 when it stops on conflicts");
                     AssertEqual(String.Empty, status, "Conflict cleanup should leave no staged or unmerged changes");
+                    AssertEqual(String.Empty, (await RunGitAsync(targetDir, "ls-files", "-u", "-z").ConfigureAwait(false)), "Conflict cleanup should leave no unmerged index entries");
                     AssertEqual("main", currentBranch, "Conflict cleanup should return to the target branch");
                     AssertEqual("target change\n", fileContents, "Conflict cleanup should restore the pre-merge working tree");
                 }
@@ -600,6 +604,7 @@ namespace Test.Shared.Suites.Services
                     string fileContents = await File.ReadAllTextAsync(Path.Combine(targetDir, "README.md")).ConfigureAwait(false);
 
                     AssertNotNull(ex, "Dirty landing checkout should throw");
+                    AssertFalse(ex is GitCommandException, "the dirty landing checkout is rejected by Armada's check, not by a failed git command");
                     AssertTrue(ex!.Message.Contains("contains tracked modifications", StringComparison.Ordinal), "Dirty landing checkout should be rejected with a clear error");
                     AssertEqual("main", currentBranch, "Dirty landing checkout should not switch branches");
                     AssertEqual("dirty landing checkout\n", fileContents, "Dirty landing checkout should remain untouched");
@@ -933,6 +938,7 @@ namespace Test.Shared.Suites.Services
                 RedirectStandardError = true,
                 CreateNoWindow = true
             };
+            startInfo.Environment["LC_ALL"] = "C";
 
             foreach (string arg in args)
             {

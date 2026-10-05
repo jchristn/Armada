@@ -3,6 +3,7 @@ namespace Test.Shared.Suites.Services
     using System;
     using System.Collections.Generic;
     using System.Linq;
+    using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Core;
@@ -149,7 +150,7 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(200, response.StatusCode);
                 AssertTrue(response.Success ?? false, "Matched response should complete successfully");
                 AssertTrue(response.Payload.HasValue, "Matched response should preserve payload");
-                AssertContains("\"ok\":true", response.Payload!.Value.GetRawText(), "Payload should round-trip through the response");
+                AssertEqual((bool?)true, JsonSerializer.Deserialize<TunnelOkPayload>(response.Payload!.Value.GetRawText(), JsonHelper.Options)!.Ok, "Payload should round-trip through the response");
             }));
 
             cases.Add(CaseAsync("send_request_async_includes_requester_ip_when_provided", "SendRequestAsync IncludesRequesterIpWhenProvided", TestTags.Positive, async () =>

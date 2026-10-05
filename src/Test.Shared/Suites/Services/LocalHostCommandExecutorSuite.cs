@@ -28,18 +28,20 @@ namespace Test.Shared.Suites.Services
         {
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
 
-            cases.Add(CaseAsync("git_version_succeeds", "RunAsync captures a successful git command", TestTags.Positive, async () =>
+            cases.Add(CaseAsync("git_command_stdout_captured", "RunAsync captures a successful git command's exit code and stdout", TestTags.Positive, async () =>
             {
+                // A command whose output the test fully controls (a config value set on the command line), so the
+                // check does not depend on git's wording, version, or the host locale.
                 LocalHostCommandExecutor executor = new LocalHostCommandExecutor();
                 HostCommandResult result = await executor.RunAsync(new HostCommandRequest
                 {
                     Executable = "git",
-                    Arguments = new List<string> { "--version" }
+                    Arguments = new List<string> { "-c", "armada.probe=hostcmd-ok", "config", "--get", "armada.probe" }
                 }).ConfigureAwait(false);
 
-                AssertTrue(result.Success, "Expected git --version to succeed.");
+                AssertTrue(result.Success, "Expected git config --get to succeed.");
                 AssertEqual(0, result.ExitCode);
-                AssertContains("git version", result.StandardOutput);
+                AssertEqual("hostcmd-ok", result.StandardOutput.Trim(), "stdout captured verbatim");
             }));
 
             cases.Add(CaseAsync("git_init_in_workdir", "RunAsync runs in the requested working directory", TestTags.Positive, async () =>

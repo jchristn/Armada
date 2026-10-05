@@ -59,7 +59,7 @@ namespace Test.Shared.Suites.Services
                 AssertFalse(CaptainRuntimeOptions.GetAutoApprove(launched), "launched copy has auto-approve off");
                 AssertTrue(CaptainRuntimeOptions.GetAutoApprove(stored), "stored captain unchanged");
                 AssertEqual("{\"approvalPolicy\":\"ask\"}", stored.RuntimeOptionsJson);
-                AssertContains("approvalPolicy", launched.RuntimeOptionsJson!, "other runtime options kept");
+                AssertEqual("ask", JsonHelper.Deserialize<RuntimeOptionsProbe>(launched.RuntimeOptionsJson!).ApprovalPolicy, "other runtime options kept");
                 AssertEqual(stored.Id, launched.Id);
                 AssertEqual(stored.Name, launched.Name);
                 AssertEqual("m1", launched.Model);

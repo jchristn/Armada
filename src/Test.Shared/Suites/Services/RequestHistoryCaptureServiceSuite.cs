@@ -72,17 +72,31 @@ namespace Test.Shared.Suites.Services
 
                 AssertEqual("captain@armada", record.Entry.PrincipalDisplay);
                 AssertEqual("crd_capture", record.Entry.CredentialId);
-                AssertContains("[REDACTED]", record.Detail!.RequestHeadersJson ?? string.Empty);
-                AssertFalse((record.Detail.RequestHeadersJson ?? string.Empty).Contains("raw-token"));
-                AssertFalse((record.Detail.RequestHeadersJson ?? string.Empty).Contains("raw-session-token"));
-                AssertContains("\"token\": \"[REDACTED]\"", record.Detail.QueryParamsJson ?? string.Empty);
-                AssertFalse((record.Detail.QueryParamsJson ?? string.Empty).Contains("secret-token"));
-                AssertContains("[REDACTED]", record.Detail.RequestBodyText ?? string.Empty);
+                Dictionary<string, string?> requestHeaders = Headers(record.Detail!.RequestHeadersJson);
+                AssertEqual("[REDACTED]", requestHeaders["Authorization"], "Authorization redacted");
+                AssertEqual("[REDACTED]", requestHeaders["X-Token"], "X-Token redacted");
+                AssertEqual("corr-123", requestHeaders["X-Correlation-Id"], "non-secret header kept");
+                AssertFalse((record.Detail.RequestHeadersJson ?? string.Empty).Contains("raw-token"), "raw bearer token appears nowhere");
+                AssertFalse((record.Detail.RequestHeadersJson ?? string.Empty).Contains("raw-session-token"), "raw session token appears nowhere");
+                Dictionary<string, string?> query = Headers(record.Detail.QueryParamsJson);
+                AssertEqual("[REDACTED]", query["token"], "token query parameter redacted");
+                AssertEqual("repo", query["scope"], "non-secret query parameter kept");
+                AssertFalse((record.Detail.QueryParamsJson ?? string.Empty).Contains("secret-token"), "raw query token appears nowhere");
+                RequestHistoryRedactedBody body = JsonHelper.Deserialize<RequestHistoryRedactedBody>(record.Detail.RequestBodyText ?? "null");
+                AssertNotNull(body, "body is JSON");
+                AssertEqual("Mission", body.Title, "non-secret body field kept");
+                AssertEqual("[REDACTED]", body.Password, "password redacted");
+                AssertEqual("[REDACTED]", body.GitHubToken, "gitHubToken redacted");
+                AssertNotNull(body.Nested, "nested object kept");
+                AssertEqual("[REDACTED]", body.Nested!.ApiKey, "nested apiKey redacted");
+                AssertEqual("[REDACTED]", body.Nested.GitHubTokenOverride, "nested gitHubTokenOverride redacted");
                 AssertFalse((record.Detail.RequestBodyText ?? string.Empty).Contains("hunter2"));
                 AssertFalse((record.Detail.RequestBodyText ?? string.Empty).Contains("abc123"));
                 AssertFalse((record.Detail.RequestBodyText ?? string.Empty).Contains("ghp_global"));
                 AssertFalse((record.Detail.RequestBodyText ?? string.Empty).Contains("ghp_vessel"));
-                AssertContains("[REDACTED]", record.Detail.ResponseHeadersJson ?? string.Empty);
+                Dictionary<string, string?> responseHeaders = Headers(record.Detail.ResponseHeadersJson);
+                AssertEqual("[REDACTED]", responseHeaders["Set-Cookie"], "Set-Cookie redacted");
+                AssertEqual("application/json", responseHeaders["Content-Type"], "Content-Type kept");
             }));
 
             cases.Add(Case("build_record_omits_binary_bodies_and_truncates_oversized_text", "BuildRecord omits binary bodies and truncates oversized text", TestTags.Positive, () =>
@@ -129,6 +143,14 @@ namespace Test.Shared.Suites.Services
         #endregion
 
         #region Private-Methods
+
+        private static Dictionary<string, string?> Headers(string? json)
+        {
+            AssertNotNull(json, "captured JSON");
+            Dictionary<string, string?>? parsed = JsonHelper.Deserialize<Dictionary<string, string?>>(json!);
+            AssertNotNull(parsed, "captured JSON is an object");
+            return new Dictionary<string, string?>(parsed!, StringComparer.OrdinalIgnoreCase);
+        }
 
         private static TestCaseDescriptor Case(string caseId, string displayName, string tag, Action body)
         {
