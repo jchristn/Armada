@@ -85,9 +85,9 @@ namespace Armada.Server
             if (String.IsNullOrEmpty(captainId)) throw new ArgumentNullException(nameof(captainId));
 
             Vessel vessel = await _Database.Vessels.ReadAsync(vesselId).ConfigureAwait(false)
-                ?? throw new InvalidOperationException("Vessel not found.");
+                ?? throw new KeyNotFoundException("Vessel not found.");
             Captain captain = await _Database.Captains.ReadAsync(captainId).ConfigureAwait(false)
-                ?? throw new InvalidOperationException("Captain not found.");
+                ?? throw new KeyNotFoundException("Captain not found.");
 
             bool refine = !String.IsNullOrWhiteSpace(vessel.ModelContext);
             string prompt = await BuildPromptAsync(vessel, notes, refine, token).ConfigureAwait(false);

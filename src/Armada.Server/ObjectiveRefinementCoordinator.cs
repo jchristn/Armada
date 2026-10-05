@@ -959,7 +959,7 @@ namespace Armada.Server
             {
                 sourceMessage = await _Database.ObjectiveRefinementMessages.ReadAsync(messageId, token).ConfigureAwait(false);
                 if (sourceMessage == null || sourceMessage.ObjectiveRefinementSessionId != session.Id)
-                    throw new InvalidOperationException("Objective refinement message not found: " + messageId);
+                    throw new KeyNotFoundException("Objective refinement message not found: " + messageId);
             }
             else
             {
@@ -1137,28 +1137,28 @@ namespace Armada.Server
         private async Task<ObjectiveRefinementSession> RequireSessionAsync(string sessionId, CancellationToken token)
         {
             ObjectiveRefinementSession? session = await _Database.ObjectiveRefinementSessions.ReadAsync(sessionId, token).ConfigureAwait(false);
-            if (session == null) throw new InvalidOperationException("Objective refinement session not found: " + sessionId);
+            if (session == null) throw new KeyNotFoundException("Objective refinement session not found: " + sessionId);
             return session;
         }
 
         private async Task<ObjectiveRefinementMessage> RequireMessageAsync(string messageId, CancellationToken token)
         {
             ObjectiveRefinementMessage? message = await _Database.ObjectiveRefinementMessages.ReadAsync(messageId, token).ConfigureAwait(false);
-            if (message == null) throw new InvalidOperationException("Objective refinement message not found: " + messageId);
+            if (message == null) throw new KeyNotFoundException("Objective refinement message not found: " + messageId);
             return message;
         }
 
         private async Task<Objective> RequireObjectiveAsync(string objectiveId, CancellationToken token)
         {
             Objective? objective = await _Database.Objectives.ReadAsync(objectiveId, token).ConfigureAwait(false);
-            if (objective == null) throw new InvalidOperationException("Objective not found: " + objectiveId);
+            if (objective == null) throw new KeyNotFoundException("Objective not found: " + objectiveId);
             return objective;
         }
 
         private async Task<Captain> RequireCaptainAsync(string captainId, CancellationToken token)
         {
             Captain? captain = await _Database.Captains.ReadAsync(captainId, token).ConfigureAwait(false);
-            if (captain == null) throw new InvalidOperationException("Captain not found: " + captainId);
+            if (captain == null) throw new KeyNotFoundException("Captain not found: " + captainId);
             return captain;
         }
 

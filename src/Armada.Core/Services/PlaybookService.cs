@@ -56,7 +56,7 @@ namespace Armada.Core.Services
 
                 Playbook? playbook = await _Database.Playbooks.ReadAsync(tenantId, selection.PlaybookId, token).ConfigureAwait(false);
                 if (playbook == null)
-                    throw new InvalidOperationException("Playbook not found: " + selection.PlaybookId);
+                    throw new KeyNotFoundException("Playbook not found: " + selection.PlaybookId);
                 if (!playbook.Active)
                     throw new InvalidOperationException("Playbook is inactive: " + playbook.FileName);
 

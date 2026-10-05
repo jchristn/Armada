@@ -131,7 +131,7 @@ namespace Armada.Core.Services
             if (request == null) throw new ArgumentNullException(nameof(request));
 
             Deployment existing = await ReadAsync(auth, id, token).ConfigureAwait(false)
-                ?? throw new InvalidOperationException("Deployment not found.");
+                ?? throw new KeyNotFoundException("Deployment not found.");
 
             if (existing.Status == DeploymentStatusEnum.Running || existing.Status == DeploymentStatusEnum.RollingBack)
                 throw new InvalidOperationException("Deployments cannot be edited while they are executing.");
@@ -169,7 +169,7 @@ namespace Armada.Core.Services
             if (String.IsNullOrWhiteSpace(id)) throw new ArgumentNullException(nameof(id));
 
             Deployment deployment = await ReadAsync(auth, id, token).ConfigureAwait(false)
-                ?? throw new InvalidOperationException("Deployment not found.");
+                ?? throw new KeyNotFoundException("Deployment not found.");
             if (deployment.Status != DeploymentStatusEnum.PendingApproval)
                 throw new InvalidOperationException("Only pending deployments can be approved.");
 
@@ -177,9 +177,9 @@ namespace Armada.Core.Services
                 throw new InvalidOperationException("Deployment is missing required vessel or environment links.");
 
             Vessel vessel = await ReadAccessibleVesselAsync(auth, deployment.VesselId, token).ConfigureAwait(false)
-                ?? throw new InvalidOperationException("Vessel not found or not accessible.");
+                ?? throw new KeyNotFoundException("Vessel not found or not accessible.");
             DeploymentEnvironment environment = await _Environments.ReadAsync(auth, deployment.EnvironmentId, token).ConfigureAwait(false)
-                ?? throw new InvalidOperationException("Environment not found or not accessible.");
+                ?? throw new KeyNotFoundException("Environment not found or not accessible.");
             WorkflowProfile? profile = await _WorkflowProfiles.ResolveForVesselAsync(auth, vessel, deployment.WorkflowProfileId, token).ConfigureAwait(false);
 
             deployment.ApprovedByUserId = auth.UserId;
@@ -206,7 +206,7 @@ namespace Armada.Core.Services
             if (String.IsNullOrWhiteSpace(id)) throw new ArgumentNullException(nameof(id));
 
             Deployment deployment = await ReadAsync(auth, id, token).ConfigureAwait(false)
-                ?? throw new InvalidOperationException("Deployment not found.");
+                ?? throw new KeyNotFoundException("Deployment not found.");
             if (deployment.Status != DeploymentStatusEnum.PendingApproval)
                 throw new InvalidOperationException("Only pending deployments can be denied.");
 
@@ -233,14 +233,14 @@ namespace Armada.Core.Services
             if (String.IsNullOrWhiteSpace(id)) throw new ArgumentNullException(nameof(id));
 
             Deployment deployment = await ReadAsync(auth, id, token).ConfigureAwait(false)
-                ?? throw new InvalidOperationException("Deployment not found.");
+                ?? throw new KeyNotFoundException("Deployment not found.");
             if (String.IsNullOrWhiteSpace(deployment.VesselId) || String.IsNullOrWhiteSpace(deployment.EnvironmentId))
                 throw new InvalidOperationException("Deployment is missing required vessel or environment links.");
 
             Vessel vessel = await ReadAccessibleVesselAsync(auth, deployment.VesselId, token).ConfigureAwait(false)
-                ?? throw new InvalidOperationException("Vessel not found or not accessible.");
+                ?? throw new KeyNotFoundException("Vessel not found or not accessible.");
             DeploymentEnvironment environment = await _Environments.ReadAsync(auth, deployment.EnvironmentId, token).ConfigureAwait(false)
-                ?? throw new InvalidOperationException("Environment not found or not accessible.");
+                ?? throw new KeyNotFoundException("Environment not found or not accessible.");
             WorkflowProfile? profile = await _WorkflowProfiles.ResolveForVesselAsync(auth, vessel, deployment.WorkflowProfileId, token).ConfigureAwait(false);
 
             deployment.VerificationStatus = DeploymentVerificationStatusEnum.Running;
@@ -263,12 +263,12 @@ namespace Armada.Core.Services
             if (String.IsNullOrWhiteSpace(id)) throw new ArgumentNullException(nameof(id));
 
             Deployment deployment = await ReadAsync(auth, id, token).ConfigureAwait(false)
-                ?? throw new InvalidOperationException("Deployment not found.");
+                ?? throw new KeyNotFoundException("Deployment not found.");
             if (String.IsNullOrWhiteSpace(deployment.VesselId) || String.IsNullOrWhiteSpace(deployment.EnvironmentName))
                 throw new InvalidOperationException("Deployment is missing required vessel or environment links.");
 
             Vessel vessel = await ReadAccessibleVesselAsync(auth, deployment.VesselId, token).ConfigureAwait(false)
-                ?? throw new InvalidOperationException("Vessel not found or not accessible.");
+                ?? throw new KeyNotFoundException("Vessel not found or not accessible.");
             WorkflowProfile? profile = await _WorkflowProfiles.ResolveForVesselAsync(auth, vessel, deployment.WorkflowProfileId, token).ConfigureAwait(false);
             if (profile == null)
                 throw new InvalidOperationException("No active workflow profile could be resolved for rollback.");
@@ -361,7 +361,7 @@ namespace Armada.Core.Services
 
             Deployment? existing = await ReadAsync(auth, id, token).ConfigureAwait(false);
             if (existing == null)
-                throw new InvalidOperationException("Deployment not found.");
+                throw new KeyNotFoundException("Deployment not found.");
 
             await _Database.Deployments.DeleteAsync(id, BuildScopeQuery(auth), token).ConfigureAwait(false);
             _Logging.Info(_Header + "deleted deployment " + id);
@@ -381,7 +381,7 @@ namespace Armada.Core.Services
             if (checkRunIds == null) throw new ArgumentNullException(nameof(checkRunIds));
 
             Deployment deployment = await ReadAsync(auth, deploymentId, token).ConfigureAwait(false)
-                ?? throw new InvalidOperationException("Deployment not found.");
+                ?? throw new KeyNotFoundException("Deployment not found.");
 
             bool changed = false;
             foreach (string checkRunId in checkRunIds)
@@ -414,7 +414,7 @@ namespace Armada.Core.Services
                 throw new InvalidOperationException("Deployment is missing a vessel link.");
 
             Vessel vessel = await ReadAccessibleVesselAsync(auth, deployment.VesselId, token).ConfigureAwait(false)
-                ?? throw new InvalidOperationException("Vessel not found or not accessible.");
+                ?? throw new KeyNotFoundException("Vessel not found or not accessible.");
             WorkflowProfile? resolvedProfile = profile ?? await _WorkflowProfiles.ResolveForVesselAsync(auth, vessel, deployment.WorkflowProfileId, token).ConfigureAwait(false);
             if (resolvedProfile == null)
                 throw new InvalidOperationException("No active workflow profile could be resolved for this deployment.");
@@ -474,7 +474,7 @@ namespace Armada.Core.Services
                 throw new InvalidOperationException("Deployment is missing a vessel link.");
 
             Vessel vessel = await ReadAccessibleVesselAsync(auth, deployment.VesselId, token).ConfigureAwait(false)
-                ?? throw new InvalidOperationException("Vessel not found or not accessible.");
+                ?? throw new KeyNotFoundException("Vessel not found or not accessible.");
             WorkflowProfile? resolvedProfile = profile ?? await _WorkflowProfiles.ResolveForVesselAsync(auth, vessel, deployment.WorkflowProfileId, token).ConfigureAwait(false);
 
             List<CheckRun> verificationRuns = new List<CheckRun>();
@@ -1023,7 +1023,7 @@ namespace Armada.Core.Services
             if (!String.IsNullOrWhiteSpace(explicitReleaseId))
             {
                 release = await ReadAccessibleReleaseAsync(auth, explicitReleaseId, token).ConfigureAwait(false)
-                    ?? throw new InvalidOperationException("Release not found or not accessible.");
+                    ?? throw new KeyNotFoundException("Release not found or not accessible.");
             }
 
             string? explicitMissionId = Normalize(request.MissionId) ?? Normalize(existing?.MissionId);
@@ -1031,7 +1031,7 @@ namespace Armada.Core.Services
             if (!String.IsNullOrWhiteSpace(explicitMissionId))
             {
                 mission = await ReadAccessibleMissionAsync(auth, explicitMissionId, token).ConfigureAwait(false)
-                    ?? throw new InvalidOperationException("Mission not found or not accessible.");
+                    ?? throw new KeyNotFoundException("Mission not found or not accessible.");
             }
 
             string? explicitVoyageId = Normalize(request.VoyageId) ?? Normalize(existing?.VoyageId);
@@ -1039,7 +1039,7 @@ namespace Armada.Core.Services
             if (!String.IsNullOrWhiteSpace(explicitVoyageId))
             {
                 voyage = await ReadAccessibleVoyageAsync(auth, explicitVoyageId, token).ConfigureAwait(false)
-                    ?? throw new InvalidOperationException("Voyage not found or not accessible.");
+                    ?? throw new KeyNotFoundException("Voyage not found or not accessible.");
             }
 
             HashSet<string> candidateVesselIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -1061,14 +1061,14 @@ namespace Armada.Core.Services
 
             string resolvedVesselId = candidateVesselIds.First();
             Vessel vessel = await ReadAccessibleVesselAsync(auth, resolvedVesselId, token).ConfigureAwait(false)
-                ?? throw new InvalidOperationException("Vessel not found or not accessible.");
+                ?? throw new KeyNotFoundException("Vessel not found or not accessible.");
 
             string? explicitWorkflowProfileId = Normalize(request.WorkflowProfileId)
                 ?? Normalize(existing?.WorkflowProfileId)
                 ?? Normalize(release?.WorkflowProfileId);
             WorkflowProfile? workflowProfile = await _WorkflowProfiles.ResolveForVesselAsync(auth, vessel, explicitWorkflowProfileId, token).ConfigureAwait(false);
             if (!String.IsNullOrWhiteSpace(explicitWorkflowProfileId) && workflowProfile == null)
-                throw new InvalidOperationException("Workflow profile not found or not accessible.");
+                throw new KeyNotFoundException("Workflow profile not found or not accessible.");
 
             DeploymentEnvironment environment = await ResolveEnvironmentAsync(
                 auth,
@@ -1117,7 +1117,7 @@ namespace Armada.Core.Services
             {
                 DeploymentEnvironment? byId = await _Environments.ReadAsync(auth, environmentId, token).ConfigureAwait(false);
                 if (byId == null)
-                    throw new InvalidOperationException("Environment not found or not accessible.");
+                    throw new KeyNotFoundException("Environment not found or not accessible.");
                 if (!String.Equals(byId.VesselId, vessel.Id, StringComparison.Ordinal))
                     throw new InvalidOperationException("The selected environment does not belong to the resolved vessel.");
                 return byId;
@@ -1134,7 +1134,7 @@ namespace Armada.Core.Services
                 DeploymentEnvironment? named = matches.FirstOrDefault(item =>
                     String.Equals(item.Name, environmentName, StringComparison.OrdinalIgnoreCase));
                 if (named == null)
-                    throw new InvalidOperationException("Environment " + environmentName + " was not found for vessel " + vessel.Name + ".");
+                    throw new KeyNotFoundException("Environment " + environmentName + " was not found for vessel " + vessel.Name + ".");
                 return named;
             }
 

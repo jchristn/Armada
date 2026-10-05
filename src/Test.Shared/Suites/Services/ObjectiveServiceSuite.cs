@@ -359,7 +359,7 @@ namespace Test.Shared.Suites.Services
                 ObjectiveService objectives = new ObjectiveService(testDb.Driver);
 
                 AuthContext auth = AuthContext.Authenticated("ten_objective_update_missing", "usr_objective_update_missing", false, true, "UnitTest");
-                await AssertThrowsAsync<InvalidOperationException>(() => objectives.UpdateAsync(auth, "obj_missing", new ObjectiveUpsertRequest
+                await AssertThrowsAsync<KeyNotFoundException>(() => objectives.UpdateAsync(auth, "obj_missing", new ObjectiveUpsertRequest
                 {
                     Status = ObjectiveStatusEnum.Completed
                 }));

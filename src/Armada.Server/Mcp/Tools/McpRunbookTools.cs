@@ -95,12 +95,10 @@ namespace Armada.Server.Mcp.Tools
                 },
                 async (args) =>
                 {
-                    JsonElement value = args!.Value;
-                    string runbookId = value.GetProperty("runbookId").GetString() ?? String.Empty;
-                    RunbookExecutionStartRequest request = JsonSerializer.Deserialize<RunbookExecutionStartRequest>(value, _JsonOptions)
-                        ?? new RunbookExecutionStartRequest();
+                    RunbookExecutionStartArgs request = JsonSerializer.Deserialize<RunbookExecutionStartArgs>(args!.Value, _JsonOptions)
+                        ?? new RunbookExecutionStartArgs();
                     AuthContext auth = McpToolHelpers.ResolveCallerContext();
-                    return (object)await runbookService.StartExecutionAsync(auth, runbookId, request).ConfigureAwait(false);
+                    return (object)await runbookService.StartExecutionAsync(auth, request.RunbookId, request).ConfigureAwait(false);
                 });
         }
     }

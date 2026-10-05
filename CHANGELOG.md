@@ -6,6 +6,14 @@ All notable changes to Armada are documented in this file.
 
 ## Unreleased
 
+### Fragility remediation
+
+- Typed not-found (R2): services signal a missing or invisible entity with `KeyNotFoundException` instead of `InvalidOperationException("... not found")` (about 114 sites in Core and Server: objectives, deployments, environments, releases, incidents, runbooks, check runs, docks, captains, playbooks, GitHub integration, planning and refinement coordinators, vessel context). State conflicts keep `InvalidOperationException`.
+- REST routes choose the status by exception type through one shared `RouteErrorMapper` (404 missing, 400 bad input, 403 forbidden, 400 or 409 for state errors as each route documents) instead of searching `ex.Message` for "not found" (13 routes) or answering 404 for every state error on delete. Status changes: a missing entity referenced in a create or update body (for example `VesselId` or `ObjectiveIds` on a deployment) is now 404 instead of 400; planning and refinement session routes answer 404 for a missing captain, vessel, or dock (was 409) and 400 for invalid input (was 500); deletes answer 409 for a blocking state (was 404).
+- MCP: `McpToolRegistrar.MapToolExceptions` maps handler exceptions by type to `McpToolError` (`NotFound`, `InvalidArgument`, `Conflict`, `Forbidden`, `Unavailable`), so 21 tools that used to answer an untyped `isError` for a missing entity (backlog, objective, planning and refinement session, check run, deployment, release, memory, `stop_captain`) now return `ErrorCode` `NotFound`. Other exceptions still surface as `isError`. `approve_deployment` and `start_runbook_execution` read typed argument classes instead of `JsonElement` property access.
+- Tests: the MCP tenant isolation suite no longer allows an untyped `isError` as a denial (`_UntypedNotFoundTools` removed) and its owner control also fails on `InvalidArgument`; McpToolSuite asserts `ErrorCode` `NotFound` instead of "not found" text (19 checks); new `E2E.TypedNotFound` suite covers the route mapper, the MCP wrapper, 22 REST routes (24 requests), and 13 MCP tools.
+- Deferred: `ArgumentException("... not found")` in `FleetCategorizationService.ValidateRequestAsync`, `VesselImportService.ImportAsync` (fleet), and `AskThreadService` (captain) stay `ArgumentException`: they are already typed (400 / `InvalidArgument`), and the vessel import routes and tools map `KeyNotFoundException` to the `BatchNotFound` code, so converting them would mislabel the error.
+
 ### Test runs no longer raise desktop notifications
 
 - `NotificationService` (used by `armada watch`) runs its platform command through `INotificationCommandRunner`; the test suite records the command instead of running it. Before, every full test run sent four real "Test Title" notifications through `osascript`, which macOS shows as coming from Script Editor. The tests now check the exact command and escaping for macOS, Linux, and Windows.

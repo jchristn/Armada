@@ -212,7 +212,7 @@ namespace Test.Shared.Suites.Services
                 await EnsureTenantAndUserAsync(testDb, tenantId, userId).ConfigureAwait(false);
 
                 AuthContext auth = AuthContext.Authenticated(tenantId, userId, false, false, "UnitTest");
-                await AssertThrowsAsync<InvalidOperationException>(() => deployments.ApproveAsync(auth, "dpl_missing", "n/a"));
+                await AssertThrowsAsync<KeyNotFoundException>(() => deployments.ApproveAsync(auth, "dpl_missing", "n/a"));
             }));
 
             return new TestSuiteDescriptor(

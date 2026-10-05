@@ -3567,7 +3567,7 @@ namespace Armada.Core.Services
         private async Task<Mission> RequireReviewMissionAsync(string missionId, CancellationToken token)
         {
             Mission? mission = await _Database.Missions.ReadAsync(missionId, token).ConfigureAwait(false);
-            if (mission == null) throw new InvalidOperationException("Mission not found: " + missionId);
+            if (mission == null) throw new KeyNotFoundException("Mission not found: " + missionId);
             if (mission.Status != MissionStatusEnum.Review || !mission.RequiresReview)
             {
                 throw new InvalidOperationException("Mission " + missionId + " is not waiting for an explicit review decision.");

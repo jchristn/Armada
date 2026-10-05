@@ -129,7 +129,7 @@ namespace Armada.Core.Services
             if (request == null) throw new ArgumentNullException(nameof(request));
 
             DeploymentEnvironment environment = await ReadAsync(auth, id, token).ConfigureAwait(false)
-                ?? throw new InvalidOperationException("Environment not found.");
+                ?? throw new KeyNotFoundException("Environment not found.");
 
             string vesselId = Normalize(request.VesselId) ?? environment.VesselId
                 ?? throw new InvalidOperationException("Environment must belong to a vessel.");
@@ -180,7 +180,7 @@ namespace Armada.Core.Services
 
             DeploymentEnvironment? existing = await ReadAsync(auth, id, token).ConfigureAwait(false);
             if (existing == null)
-                throw new InvalidOperationException("Environment not found.");
+                throw new KeyNotFoundException("Environment not found.");
 
             await _Database.Environments.DeleteAsync(id, BuildScopeQuery(auth), token).ConfigureAwait(false);
             _Logging.Info(_Header + "deleted environment " + id);
@@ -291,7 +291,7 @@ namespace Armada.Core.Services
             else
                 vessel = await _Database.Vessels.ReadAsync(auth.TenantId!, auth.UserId!, normalizedVesselId, token).ConfigureAwait(false);
 
-            return vessel ?? throw new InvalidOperationException("Vessel not found or not accessible.");
+            return vessel ?? throw new KeyNotFoundException("Vessel not found or not accessible.");
         }
 
         private async Task ClearOtherDefaultsAsync(

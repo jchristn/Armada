@@ -1261,7 +1261,7 @@ namespace Armada.Server
             {
                 sourceMessage = await _Database.PlanningSessionMessages.ReadAsync(messageId, token).ConfigureAwait(false);
                 if (sourceMessage == null || sourceMessage.PlanningSessionId != session.Id)
-                    throw new InvalidOperationException("Planning message not found: " + messageId);
+                    throw new KeyNotFoundException("Planning message not found: " + messageId);
             }
             else
             {
@@ -1685,28 +1685,28 @@ namespace Armada.Server
         private async Task<PlanningSession> RequireSessionAsync(string sessionId, CancellationToken token)
         {
             PlanningSession? session = await _Database.PlanningSessions.ReadAsync(sessionId, token).ConfigureAwait(false);
-            if (session == null) throw new InvalidOperationException("Planning session not found: " + sessionId);
+            if (session == null) throw new KeyNotFoundException("Planning session not found: " + sessionId);
             return session;
         }
 
         private async Task<PlanningSessionMessage> RequireMessageAsync(string messageId, CancellationToken token)
         {
             PlanningSessionMessage? message = await _Database.PlanningSessionMessages.ReadAsync(messageId, token).ConfigureAwait(false);
-            if (message == null) throw new InvalidOperationException("Planning session message not found: " + messageId);
+            if (message == null) throw new KeyNotFoundException("Planning session message not found: " + messageId);
             return message;
         }
 
         private async Task<Captain> RequireCaptainAsync(string captainId, CancellationToken token)
         {
             Captain? captain = await _Database.Captains.ReadAsync(captainId, token).ConfigureAwait(false);
-            if (captain == null) throw new InvalidOperationException("Captain not found: " + captainId);
+            if (captain == null) throw new KeyNotFoundException("Captain not found: " + captainId);
             return captain;
         }
 
         private async Task<Vessel> RequireVesselAsync(string vesselId, CancellationToken token)
         {
             Vessel? vessel = await _Database.Vessels.ReadAsync(vesselId, token).ConfigureAwait(false);
-            if (vessel == null) throw new InvalidOperationException("Vessel not found: " + vesselId);
+            if (vessel == null) throw new KeyNotFoundException("Vessel not found: " + vesselId);
             return vessel;
         }
 
@@ -1715,7 +1715,7 @@ namespace Armada.Server
             if (String.IsNullOrWhiteSpace(dockId))
                 throw new InvalidOperationException("Planning session does not have a dock.");
             Dock? dock = await _Database.Docks.ReadAsync(dockId, token).ConfigureAwait(false);
-            if (dock == null) throw new InvalidOperationException("Dock not found: " + dockId);
+            if (dock == null) throw new KeyNotFoundException("Dock not found: " + dockId);
             return dock;
         }
 

@@ -265,9 +265,8 @@ namespace Armada.Server.Mcp.Tools
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     Captain? captain = await McpCallerScope.ReadCaptainAsync(database, caller, captainId).ConfigureAwait(false);
 
-                    // Same failure shape as before scoping (a tool execution error naming the id), for an id that does
-                    // not exist and for one in another tenant alike.
-                    if (captain == null) throw new InvalidOperationException("Captain not found: " + captainId);
+                    // Same typed answer for an id that does not exist and for one in another tenant.
+                    if (captain == null) return (object)McpToolError.NotFound("Captain not found: " + captainId);
                     if (onStopCaptain != null)
                         await onStopCaptain(captainId).ConfigureAwait(false);
                     await admiral.RecallCaptainAsync(captainId).ConfigureAwait(false);

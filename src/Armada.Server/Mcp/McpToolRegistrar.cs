@@ -1,6 +1,7 @@
 namespace Armada.Server.Mcp
 {
     using System;
+    using System.Collections.Generic;
     using System.Text.Json;
     using System.Threading.Tasks;
     using Armada.Server;
@@ -96,7 +97,7 @@ namespace Armada.Server.Mcp
             IFleetCategorizationService? fleetCategorizationService = null)
         {
             if (register == null) throw new ArgumentNullException(nameof(register));
-            register = MarkExperimental(register);
+            register = MapToolExceptions(MarkExperimental(register));
             McpStatusTools.Register(register, admiral, onStop);
             if (logging != null) McpInboxTools.Register(register, database, logging);
             McpEnumerateTools.Register(register, database, mergeQueue);
@@ -213,6 +214,58 @@ namespace Armada.Server.Mcp
             return tools
                 .OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase)
                 .ToList();
+        }
+
+        /// <summary>
+        /// Wrap a registration delegate so a tool handler that throws one of the typed service exceptions returns an
+        /// <see cref="McpToolError"/> (via <see cref="McpToolError.FromException(Exception, string?)"/>, which maps by
+        /// type) instead of an untyped isError result: <see cref="KeyNotFoundException"/> is NotFound,
+        /// <see cref="ArgumentException"/> InvalidArgument, <see cref="UnauthorizedAccessException"/> Forbidden,
+        /// <see cref="NotSupportedException"/> Unavailable, and <see cref="InvalidOperationException"/> Conflict.
+        /// Any other exception propagates unchanged, so the transport still reports it as a tool execution error.
+        /// </summary>
+        /// <param name="register">Inner registration delegate.</param>
+        /// <returns>Wrapping delegate.</returns>
+        public static RegisterToolDelegate MapToolExceptions(RegisterToolDelegate register)
+        {
+            if (register == null) throw new ArgumentNullException(nameof(register));
+            return (name, description, inputSchema, handler) =>
+            {
+                if (handler == null)
+                {
+                    register(name, description, inputSchema, handler!);
+                    return;
+                }
+
+                Func<JsonElement?, Task<object>> mapped = async (JsonElement? args) =>
+                {
+                    try
+                    {
+                        return await handler(args).ConfigureAwait(false);
+                    }
+                    catch (Exception ex) when (IsMappedToolException(ex))
+                    {
+                        return McpToolError.FromException(ex);
+                    }
+                };
+                register(name, description, inputSchema, mapped);
+            };
+        }
+
+        /// <summary>
+        /// True when <see cref="MapToolExceptions"/> turns <paramref name="ex"/> into a typed tool error.
+        /// </summary>
+        /// <param name="ex">Exception.</param>
+        /// <returns>True when mapped.</returns>
+        public static bool IsMappedToolException(Exception? ex)
+        {
+            if (ex == null) return false;
+            if (ex is OperationCanceledException) return false;
+            return ex is KeyNotFoundException
+                || ex is ArgumentException
+                || ex is UnauthorizedAccessException
+                || ex is NotSupportedException
+                || ex is InvalidOperationException;
         }
 
         /// <summary>

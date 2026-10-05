@@ -220,7 +220,7 @@ namespace Test.Shared.Suites.Services
                     StubGitService git = new StubGitService();
                     AdmiralService service = CreateAdmiralService(CreateLogging(), testDb.Driver, CreateSettings(), git);
 
-                    await AssertThrowsAsync<InvalidOperationException>(() =>
+                    await AssertThrowsAsync<KeyNotFoundException>(() =>
                         service.DispatchVoyageAsync("Voyage", "desc", "vsl_nonexistent",
                             new List<MissionDescription> { new MissionDescription("m1", "d1") }));
                 }
@@ -271,7 +271,7 @@ namespace Test.Shared.Suites.Services
                     StubGitService git = new StubGitService();
                     AdmiralService service = CreateAdmiralService(CreateLogging(), testDb.Driver, CreateSettings(), git);
 
-                    await AssertThrowsAsync<InvalidOperationException>(() => service.RecallCaptainAsync("cpt_nonexistent"));
+                    await AssertThrowsAsync<KeyNotFoundException>(() => service.RecallCaptainAsync("cpt_nonexistent"));
                 }
             }));
 

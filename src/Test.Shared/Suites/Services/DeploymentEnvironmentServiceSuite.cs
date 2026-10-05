@@ -140,7 +140,7 @@ namespace Test.Shared.Suites.Services
                         Name = "Nowhere"
                     }).ConfigureAwait(false);
                 }
-                catch (InvalidOperationException)
+                catch (KeyNotFoundException)
                 {
                     threw = true;
                 }
@@ -266,7 +266,7 @@ namespace Test.Shared.Suites.Services
                 await EnsureTenantAndUserAsync(testDb, tenantId, userId).ConfigureAwait(false);
 
                 AuthContext auth = AuthContext.Authenticated(tenantId, userId, false, false, "UnitTest");
-                await AssertThrowsAsync<InvalidOperationException>(() => service.UpdateAsync(auth, "env_missing", new DeploymentEnvironmentUpsertRequest
+                await AssertThrowsAsync<KeyNotFoundException>(() => service.UpdateAsync(auth, "env_missing", new DeploymentEnvironmentUpsertRequest
                 {
                     Name = "Nowhere"
                 }));

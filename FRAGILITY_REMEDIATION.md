@@ -53,7 +53,7 @@ always pass because `DescriptionLength` contains "Description".
   typed `UnsafeListenerConfigurationException`; SQLite/MySQL migrations without message matching; Helm runtime
   parsing to `AgentRuntimeEnum` with errors for unknown values (High: `--runtime opencode` created Claude Code);
   Helm 409 via `HttpRequestException.StatusCode`; service/startup registrar exact checks.
-- [ ] **R2 Typed not-found.** Services throw `KeyNotFoundException` for missing or invisible entities (about 111
+- [x] **R2 Typed not-found.** Services throw `KeyNotFoundException` for missing or invisible entities (about 111
   `InvalidOperationException("... not found")` sites); REST routes map exception types to 404/400/409 (13 routes
   that search `ex.Message`); MCP handler exceptions mapped through `McpToolError.FromException`; typed MCP argument
   classes where `GetProperty` is used; remove `_UntypedNotFoundTools` from the isolation suite.
@@ -78,3 +78,4 @@ always pass because `DescriptionLength` contains "Description".
 | Date | Who | Items | Notes |
 |---|---|---|---|
 | 2026-10-04 | Claude | Scan, R0 | Scan reports from three read-only passes; R0 merged to main. |
+| 2026-10-04 | Claude | R2 | About 114 service throw sites now `KeyNotFoundException`; `RouteErrorMapper` replaces the 13 `ex.Message.Contains("not found")` routes and the IOE catches around converted calls; `McpToolRegistrar.MapToolExceptions` maps handler exceptions by type; typed args for `approve_deployment` and `start_runbook_execution`; `_UntypedNotFoundTools` removed; McpToolSuite asserts ErrorCode NotFound; new E2E.TypedNotFound suite. Deferred: three `ArgumentException("... not found")` sites (see CHANGELOG). |

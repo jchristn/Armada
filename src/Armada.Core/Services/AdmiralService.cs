@@ -164,7 +164,7 @@ namespace Armada.Core.Services
 
             // Verify vessel exists
             Vessel? vessel = await _Database.Vessels.ReadAsync(vesselId, token).ConfigureAwait(false);
-            if (vessel == null) throw new InvalidOperationException("Vessel not found: " + vesselId);
+            if (vessel == null) throw new KeyNotFoundException("Vessel not found: " + vesselId);
             if (selectedPlaybooks != null && selectedPlaybooks.Count > 0 && !String.IsNullOrEmpty(vessel.TenantId))
             {
                 await _Playbooks.ResolveSelectionsAsync(vessel.TenantId, selectedPlaybooks, token).ConfigureAwait(false);
@@ -256,7 +256,7 @@ namespace Armada.Core.Services
 
             // Verify vessel exists
             Vessel? vessel = await _Database.Vessels.ReadAsync(vesselId, token).ConfigureAwait(false);
-            if (vessel == null) throw new InvalidOperationException("Vessel not found: " + vesselId);
+            if (vessel == null) throw new KeyNotFoundException("Vessel not found: " + vesselId);
             if (selectedPlaybooks != null && selectedPlaybooks.Count > 0 && !String.IsNullOrEmpty(vessel.TenantId))
             {
                 await _Playbooks.ResolveSelectionsAsync(vessel.TenantId, selectedPlaybooks, token).ConfigureAwait(false);

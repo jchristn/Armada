@@ -485,15 +485,15 @@ namespace Armada.Server.Mcp.Tools
                             ?? throw new InvalidOperationException("Could not deserialize CreateBacklogRefinementSessionArgs.");
                         AuthContext auth = McpToolHelpers.ResolveCallerContext();
                         Objective objective = await objectiveService.ReadAsync(auth, request.ObjectiveId).ConfigureAwait(false)
-                            ?? throw new InvalidOperationException("Backlog item not found.");
+                            ?? throw new KeyNotFoundException("Backlog item not found.");
                         Captain captain = await ReadCaptainForContextAsync(database, auth, request.CaptainId).ConfigureAwait(false)
-                            ?? throw new InvalidOperationException("Captain not found.");
+                            ?? throw new KeyNotFoundException("Captain not found.");
                         string? vesselId = !String.IsNullOrWhiteSpace(request.VesselId) ? request.VesselId : objective.VesselIds.FirstOrDefault();
                         Vessel? vessel = !String.IsNullOrWhiteSpace(vesselId)
                             ? await ReadVesselForContextAsync(database, auth, vesselId!).ConfigureAwait(false)
                             : null;
                         if (!String.IsNullOrWhiteSpace(vesselId) && vessel == null)
-                            throw new InvalidOperationException("Vessel not found.");
+                            throw new KeyNotFoundException("Vessel not found.");
 
                         ObjectiveRefinementSession session = await objectiveRefinementCoordinator
                             .CreateAsync(auth.TenantId, auth.UserId, objective, captain, vessel, request.ToCreateRequest())
@@ -520,7 +520,7 @@ namespace Armada.Server.Mcp.Tools
                             ?? throw new InvalidOperationException("Could not deserialize ObjectiveRefinementSessionIdArgs.");
                         AuthContext auth = McpToolHelpers.ResolveCallerContext();
                         ObjectiveRefinementSession session = await ReadObjectiveRefinementSessionForContextAsync(database, auth, request.SessionId).ConfigureAwait(false)
-                            ?? throw new InvalidOperationException("Objective refinement session not found.");
+                            ?? throw new KeyNotFoundException("Objective refinement session not found.");
                         return (object)await BuildObjectiveRefinementSessionDetailAsync(database, objectiveService, auth, session).ConfigureAwait(false);
                     });
 
@@ -543,7 +543,7 @@ namespace Armada.Server.Mcp.Tools
                             ?? throw new InvalidOperationException("Could not deserialize SendBacklogRefinementMessageArgs.");
                         AuthContext auth = McpToolHelpers.ResolveCallerContext();
                         ObjectiveRefinementSession session = await ReadObjectiveRefinementSessionForContextAsync(database, auth, request.SessionId).ConfigureAwait(false)
-                            ?? throw new InvalidOperationException("Objective refinement session not found.");
+                            ?? throw new KeyNotFoundException("Objective refinement session not found.");
                         await objectiveRefinementCoordinator.SendMessageAsync(session, request.Content).ConfigureAwait(false);
                         return (object)await BuildObjectiveRefinementSessionDetailAsync(database, objectiveService, auth, session).ConfigureAwait(false);
                     });
@@ -567,7 +567,7 @@ namespace Armada.Server.Mcp.Tools
                             ?? throw new InvalidOperationException("Could not deserialize SummarizeBacklogRefinementArgs.");
                         AuthContext auth = McpToolHelpers.ResolveCallerContext();
                         ObjectiveRefinementSession session = await ReadObjectiveRefinementSessionForContextAsync(database, auth, request.SessionId).ConfigureAwait(false)
-                            ?? throw new InvalidOperationException("Objective refinement session not found.");
+                            ?? throw new KeyNotFoundException("Objective refinement session not found.");
                         return (object)await objectiveRefinementCoordinator.SummarizeAsync(session, request.ToSummaryRequest()).ConfigureAwait(false);
                     });
 
@@ -592,9 +592,9 @@ namespace Armada.Server.Mcp.Tools
                             ?? throw new InvalidOperationException("Could not deserialize ApplyBacklogRefinementArgs.");
                         AuthContext auth = McpToolHelpers.ResolveCallerContext();
                         ObjectiveRefinementSession session = await ReadObjectiveRefinementSessionForContextAsync(database, auth, request.SessionId).ConfigureAwait(false)
-                            ?? throw new InvalidOperationException("Objective refinement session not found.");
+                            ?? throw new KeyNotFoundException("Objective refinement session not found.");
                         Objective objective = await objectiveService.ReadAsync(auth, session.ObjectiveId).ConfigureAwait(false)
-                            ?? throw new InvalidOperationException("Backlog item not found.");
+                            ?? throw new KeyNotFoundException("Backlog item not found.");
                         (ObjectiveRefinementSummaryResponse summary, Objective updated) = await objectiveRefinementCoordinator
                             .ApplyAsync(auth, objective, session, request.ToApplyRequest(), objectiveService)
                             .ConfigureAwait(false);
@@ -623,7 +623,7 @@ namespace Armada.Server.Mcp.Tools
                             ?? throw new InvalidOperationException("Could not deserialize ObjectiveRefinementSessionIdArgs.");
                         AuthContext auth = McpToolHelpers.ResolveCallerContext();
                         ObjectiveRefinementSession session = await ReadObjectiveRefinementSessionForContextAsync(database, auth, request.SessionId).ConfigureAwait(false)
-                            ?? throw new InvalidOperationException("Objective refinement session not found.");
+                            ?? throw new KeyNotFoundException("Objective refinement session not found.");
                         ObjectiveRefinementSession stopping = await objectiveRefinementCoordinator.RequestStopAsync(session).ConfigureAwait(false);
                         return (object)await BuildObjectiveRefinementSessionDetailAsync(database, objectiveService, auth, stopping).ConfigureAwait(false);
                     });
@@ -658,11 +658,11 @@ namespace Armada.Server.Mcp.Tools
                             ? throw new InvalidOperationException("Objective ID is required.")
                             : request.ObjectiveId;
                         Objective objective = await objectiveService.ReadAsync(auth, objectiveId).ConfigureAwait(false)
-                            ?? throw new InvalidOperationException("Backlog item not found.");
+                            ?? throw new KeyNotFoundException("Backlog item not found.");
                         Captain captain = await ReadCaptainForContextAsync(database, auth, request.CaptainId).ConfigureAwait(false)
-                            ?? throw new InvalidOperationException("Captain not found.");
+                            ?? throw new KeyNotFoundException("Captain not found.");
                         Vessel vessel = await ReadVesselForContextAsync(database, auth, request.VesselId).ConfigureAwait(false)
-                            ?? throw new InvalidOperationException("Vessel not found.");
+                            ?? throw new KeyNotFoundException("Vessel not found.");
 
                         PlanningSession session = await planningSessionCoordinator
                             .CreateAsync(auth.TenantId, auth.UserId, captain, vessel, request.ToPlanningSessionCreateRequest())
@@ -689,7 +689,7 @@ namespace Armada.Server.Mcp.Tools
                             ?? throw new InvalidOperationException("Could not deserialize PlanningSessionIdArgs.");
                         AuthContext auth = McpToolHelpers.ResolveCallerContext();
                         PlanningSession session = await ReadPlanningSessionForContextAsync(database, auth, request.SessionId).ConfigureAwait(false)
-                            ?? throw new InvalidOperationException("Planning session not found.");
+                            ?? throw new KeyNotFoundException("Planning session not found.");
                         return (object)await BuildPlanningSessionDetailAsync(database, objectiveService, auth, session).ConfigureAwait(false);
                     });
 
@@ -714,7 +714,7 @@ namespace Armada.Server.Mcp.Tools
                             ?? throw new InvalidOperationException("Could not deserialize DispatchBacklogPlanningSessionArgs.");
                         AuthContext auth = McpToolHelpers.ResolveCallerContext();
                         PlanningSession session = await ReadPlanningSessionForContextAsync(database, auth, request.SessionId).ConfigureAwait(false)
-                            ?? throw new InvalidOperationException("Planning session not found.");
+                            ?? throw new KeyNotFoundException("Planning session not found.");
                         Voyage voyage = await planningSessionCoordinator.DispatchAsync(session, request.ToDispatchRequest()).ConfigureAwait(false);
                         List<Objective> linkedObjectives = await objectiveService.EnumerateByPlanningSessionAsync(auth, session.Id).ConfigureAwait(false);
                         List<Objective> updatedObjectives = new List<Objective>();
@@ -845,7 +845,7 @@ namespace Armada.Server.Mcp.Tools
             PlanningSession session)
         {
             PlanningSession refreshed = await ReadPlanningSessionForContextAsync(database, auth, session.Id).ConfigureAwait(false)
-                ?? throw new InvalidOperationException("Planning session not found: " + session.Id);
+                ?? throw new KeyNotFoundException("Planning session not found: " + session.Id);
             List<PlanningSessionMessage> messages = await database.PlanningSessionMessages
                 .EnumerateBySessionAsync(refreshed.Id)
                 .ConfigureAwait(false);
@@ -871,7 +871,7 @@ namespace Armada.Server.Mcp.Tools
             ObjectiveRefinementSession session)
         {
             ObjectiveRefinementSession refreshed = await ReadObjectiveRefinementSessionForContextAsync(database, auth, session.Id).ConfigureAwait(false)
-                ?? throw new InvalidOperationException("Objective refinement session not found: " + session.Id);
+                ?? throw new KeyNotFoundException("Objective refinement session not found: " + session.Id);
             List<ObjectiveRefinementMessage> messages = await database.ObjectiveRefinementMessages
                 .EnumerateBySessionAsync(refreshed.Id)
                 .ConfigureAwait(false);

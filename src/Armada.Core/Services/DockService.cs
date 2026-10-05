@@ -328,7 +328,7 @@ namespace Armada.Core.Services
             Dock? dock = !String.IsNullOrEmpty(tenantId)
                 ? await _Database.Docks.ReadAsync(tenantId, dockId, token).ConfigureAwait(false)
                 : await _Database.Docks.ReadAsync(dockId, token).ConfigureAwait(false);
-            if (dock == null) throw new InvalidOperationException("Dock not found: " + dockId);
+            if (dock == null) throw new KeyNotFoundException("Dock not found: " + dockId);
 
             if (!String.IsNullOrEmpty(dock.WorktreePath))
             {
@@ -345,7 +345,7 @@ namespace Armada.Core.Services
             Dock? dock = !String.IsNullOrEmpty(tenantId)
                 ? await _Database.Docks.ReadAsync(tenantId, dockId, token).ConfigureAwait(false)
                 : await _Database.Docks.ReadAsync(dockId, token).ConfigureAwait(false);
-            if (dock == null) throw new InvalidOperationException("Dock not found: " + dockId);
+            if (dock == null) throw new KeyNotFoundException("Dock not found: " + dockId);
 
             // Free any captain still holding this dock so it stops counting as "in use".
             if (!String.IsNullOrEmpty(dock.CaptainId))
@@ -375,7 +375,7 @@ namespace Armada.Core.Services
             Dock? dock = !String.IsNullOrEmpty(tenantId)
                 ? await _Database.Docks.ReadAsync(tenantId, dockId, token).ConfigureAwait(false)
                 : await _Database.Docks.ReadAsync(dockId, token).ConfigureAwait(false);
-            if (dock == null) throw new InvalidOperationException("Dock not found: " + dockId);
+            if (dock == null) throw new KeyNotFoundException("Dock not found: " + dockId);
 
             // Block deletion if an active mission is using this dock
             if (dock.Active && !String.IsNullOrEmpty(dock.CaptainId))
@@ -403,7 +403,7 @@ namespace Armada.Core.Services
             Dock? dock = !String.IsNullOrEmpty(tenantId)
                 ? await _Database.Docks.ReadAsync(tenantId, dockId, token).ConfigureAwait(false)
                 : await _Database.Docks.ReadAsync(dockId, token).ConfigureAwait(false);
-            if (dock == null) throw new InvalidOperationException("Dock not found: " + dockId);
+            if (dock == null) throw new KeyNotFoundException("Dock not found: " + dockId);
 
             await CleanupWorktreeAsync(dock, token).ConfigureAwait(false);
 

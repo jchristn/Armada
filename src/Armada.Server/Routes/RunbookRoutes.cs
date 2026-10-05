@@ -118,10 +118,9 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = 403;
                     return new ApiErrorResponse { Error = ApiResultEnum.Forbidden, Message = ex.Message };
                 }
-                catch (InvalidOperationException ex)
+                catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
                 {
-                    req.Http.Response.StatusCode = 400;
-                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = ex.Message };
+                    return RouteErrorMapper.ToResponse(req, ex, 400);
                 }
             },
             api => api
@@ -148,14 +147,9 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = 403;
                     return new ApiErrorResponse { Error = ApiResultEnum.Forbidden, Message = ex.Message };
                 }
-                catch (InvalidOperationException ex)
+                catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
                 {
-                    req.Http.Response.StatusCode = ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase) ? 404 : 400;
-                    return new ApiErrorResponse
-                    {
-                        Error = req.Http.Response.StatusCode == 404 ? ApiResultEnum.NotFound : ApiResultEnum.BadRequest,
-                        Message = ex.Message
-                    };
+                    return RouteErrorMapper.ToResponse(req, ex, 400);
                 }
             },
             api => api
@@ -183,10 +177,9 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = 403;
                     return new ApiErrorResponse { Error = ApiResultEnum.Forbidden, Message = ex.Message };
                 }
-                catch (InvalidOperationException ex)
+                catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
                 {
-                    req.Http.Response.StatusCode = 404;
-                    return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = ex.Message };
+                    return RouteErrorMapper.ToResponse(req, ex, 409);
                 }
             },
             api => api
@@ -270,14 +263,9 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = 201;
                     return execution;
                 }
-                catch (InvalidOperationException ex)
+                catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
                 {
-                    req.Http.Response.StatusCode = ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase) ? 404 : 400;
-                    return new ApiErrorResponse
-                    {
-                        Error = req.Http.Response.StatusCode == 404 ? ApiResultEnum.NotFound : ApiResultEnum.BadRequest,
-                        Message = ex.Message
-                    };
+                    return RouteErrorMapper.ToResponse(req, ex, 400);
                 }
             },
             api => api
@@ -301,14 +289,9 @@ namespace Armada.Server.Routes
                 {
                     return await _Runbooks.UpdateExecutionAsync(ctx, req.Parameters["id"], request).ConfigureAwait(false);
                 }
-                catch (InvalidOperationException ex)
+                catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
                 {
-                    req.Http.Response.StatusCode = ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase) ? 404 : 400;
-                    return new ApiErrorResponse
-                    {
-                        Error = req.Http.Response.StatusCode == 404 ? ApiResultEnum.NotFound : ApiResultEnum.BadRequest,
-                        Message = ex.Message
-                    };
+                    return RouteErrorMapper.ToResponse(req, ex, 400);
                 }
             },
             api => api
@@ -331,10 +314,9 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = 204;
                     return null;
                 }
-                catch (InvalidOperationException ex)
+                catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
                 {
-                    req.Http.Response.StatusCode = 404;
-                    return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = ex.Message };
+                    return RouteErrorMapper.ToResponse(req, ex, 409);
                 }
             },
             api => api

@@ -596,7 +596,7 @@ namespace Test.Shared.Suites.E2E
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
                 string text = GetToolResultText(result);
-                Assert(text.Contains("not found", StringComparison.OrdinalIgnoreCase), "Should contain 'not found'");
+                AssertToolNotFound(text);
             }));
 
             cases.Add(CaseAsync("armada_mission_status_returns_correct_status", "ArmadaMissionStatus_ReturnsCorrectStatus", TestTags.Positive, async () =>
@@ -713,7 +713,7 @@ namespace Test.Shared.Suites.E2E
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
                 string text = GetToolResultText(result);
-                Assert(text.Contains("not found", StringComparison.OrdinalIgnoreCase), "Should contain 'not found'");
+                AssertToolNotFound(text);
             }));
 
             cases.Add(CaseAsync("armada_get_fleet_with_vessels_returns_vessels_array", "ArmadaGetFleet_WithVessels_ReturnsVesselsArray", TestTags.Positive, async () =>
@@ -879,11 +879,10 @@ namespace Test.Shared.Suites.E2E
                     name = "stop_captain",
                     arguments = new { captainId = "cpt_nonexistent" }
                 }).ConfigureAwait(false);
-                // A throwing handler is reported as a tool execution error (isError: true) carrying the
-                // exception message, not as a JSON-RPC protocol error.
+                // A missing captain is a typed tool error (ErrorCode NotFound), not an untyped isError result.
                 JsonElement result = response.GetProperty("result");
-                Assert(result.TryGetProperty("isError", out JsonElement isError) && isError.GetBoolean(), "Should return error for non-existent captain");
-                AssertContains("cpt_nonexistent", GetToolResultText(result));
+                AssertFalse(result.TryGetProperty("isError", out JsonElement isError) && isError.GetBoolean(), "a missing captain should be a typed error, not isError");
+                AssertToolNotFound(GetToolResultText(result));
             }));
 
             cases.Add(CaseAsync("armada_stop_all_with_no_captains_returns_all_stopped", "ArmadaStopAll_WithNoCaptains_ReturnsAllStopped", TestTags.Positive, async () =>
@@ -940,7 +939,7 @@ namespace Test.Shared.Suites.E2E
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
                 string text = GetToolResultText(result);
-                Assert(text.Contains("not found", StringComparison.OrdinalIgnoreCase), "Should contain 'not found'");
+                AssertToolNotFound(text);
             }));
 
             cases.Add(CaseAsync("armada_cancel_mission_verify_status_changed", "ArmadaCancelMission_VerifyStatusChanged", TestTags.Positive, async () =>
@@ -992,7 +991,7 @@ namespace Test.Shared.Suites.E2E
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
                 string text = GetToolResultText(result);
-                Assert(text.Contains("not found", StringComparison.OrdinalIgnoreCase), "Should contain 'not found'");
+                AssertToolNotFound(text);
             }));
 
             cases.Add(CaseAsync("armada_cancel_voyage_cancels_missions", "ArmadaCancelVoyage_CancelsMissions", TestTags.Positive, async () =>
@@ -1330,7 +1329,7 @@ namespace Test.Shared.Suites.E2E
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
                 string text = GetToolResultText(result);
-                Assert(text.Contains("not found", StringComparison.OrdinalIgnoreCase), "Should contain 'not found'");
+                AssertToolNotFound(text);
             }));
 
             cases.Add(CaseAsync("armada_delete_fleet_deletes_fleet", "ArmadaDeleteFleet_DeletesFleet", TestTags.Positive, async () =>
@@ -1361,7 +1360,7 @@ namespace Test.Shared.Suites.E2E
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
                 string text = GetToolResultText(result);
-                Assert(text.Contains("not found", StringComparison.OrdinalIgnoreCase), "Should contain 'not found'");
+                AssertToolNotFound(text);
             }));
 
             cases.Add(CaseAsync("armada_get_vessel_existing_vessel_returns_details", "ArmadaGetVessel_ExistingVessel_ReturnsDetails", TestTags.Positive, async () =>
@@ -1394,7 +1393,7 @@ namespace Test.Shared.Suites.E2E
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
                 string text = GetToolResultText(result);
-                Assert(text.Contains("not found", StringComparison.OrdinalIgnoreCase), "Should contain 'not found'");
+                AssertToolNotFound(text);
             }));
 
             cases.Add(CaseAsync("armada_update_vessel_updates_name", "ArmadaUpdateVessel_UpdatesName", TestTags.Positive, async () =>
@@ -1428,7 +1427,7 @@ namespace Test.Shared.Suites.E2E
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
                 string text = GetToolResultText(result);
-                Assert(text.Contains("not found", StringComparison.OrdinalIgnoreCase), "Should contain 'not found'");
+                AssertToolNotFound(text);
             }));
 
             cases.Add(CaseAsync("armada_delete_vessel_deletes_vessel", "ArmadaDeleteVessel_DeletesVessel", TestTags.Positive, async () =>
@@ -1460,7 +1459,7 @@ namespace Test.Shared.Suites.E2E
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
                 string text = GetToolResultText(result);
-                Assert(text.Contains("not found", StringComparison.OrdinalIgnoreCase), "Should contain 'not found'");
+                AssertToolNotFound(text);
             }));
 
             cases.Add(CaseAsync("armada_create_captain_creates_with_name", "ArmadaCreateCaptain_CreatesWithName", TestTags.Positive, async () =>
@@ -1547,7 +1546,7 @@ namespace Test.Shared.Suites.E2E
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
                 string text = GetToolResultText(result);
-                Assert(text.Contains("not found", StringComparison.OrdinalIgnoreCase), "Should contain 'not found'");
+                AssertToolNotFound(text);
             }));
 
             cases.Add(CaseAsync("armada_update_captain_updates_name", "ArmadaUpdateCaptain_UpdatesName", TestTags.Positive, async () =>
@@ -1580,7 +1579,7 @@ namespace Test.Shared.Suites.E2E
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
                 string text = GetToolResultText(result);
-                Assert(text.Contains("not found", StringComparison.OrdinalIgnoreCase), "Should contain 'not found'");
+                AssertToolNotFound(text);
             }));
 
             cases.Add(CaseAsync("armada_delete_captain_deletes_captain", "ArmadaDeleteCaptain_DeletesCaptain", TestTags.Positive, async () =>
@@ -1611,7 +1610,7 @@ namespace Test.Shared.Suites.E2E
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
                 string text = GetToolResultText(result);
-                Assert(text.Contains("not found", StringComparison.OrdinalIgnoreCase), "Should contain 'not found'");
+                AssertToolNotFound(text);
             }));
 
             cases.Add(CaseAsync("armada_get_captain_log_no_current_returns_empty_log", "ArmadaGetCaptainLog_NoCurrent_ReturnsEmptyLog", TestTags.Positive, async () =>
@@ -1643,7 +1642,7 @@ namespace Test.Shared.Suites.E2E
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
                 string text = GetToolResultText(result);
-                Assert(text.Contains("not found", StringComparison.OrdinalIgnoreCase), "Should contain 'not found'");
+                AssertToolNotFound(text);
             }));
 
             cases.Add(CaseAsync("armada_create_mission_creates_and_dispatches_mission", "ArmadaCreateMission_CreatesAndDispatchesMission", TestTags.Positive, async () =>
@@ -1747,7 +1746,7 @@ namespace Test.Shared.Suites.E2E
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
                 string text = GetToolResultText(result);
-                Assert(text.Contains("not found", StringComparison.OrdinalIgnoreCase), "Should contain 'not found'");
+                AssertToolNotFound(text);
             }));
 
             cases.Add(CaseAsync("armada_transition_mission_status_pending_to_assigned_succeeds", "ArmadaTransitionMissionStatus_PendingToAssigned_Succeeds", TestTags.Positive, async () =>
@@ -1799,7 +1798,7 @@ namespace Test.Shared.Suites.E2E
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
                 string text = GetToolResultText(result);
-                Assert(text.Contains("not found", StringComparison.OrdinalIgnoreCase), "Should contain 'not found'");
+                AssertToolNotFound(text);
             }));
 
             cases.Add(CaseAsync("armada_transition_mission_status_invalid_status_returns_error", "ArmadaTransitionMissionStatus_InvalidStatus_ReturnsError", TestTags.Negative, async () =>
@@ -1871,7 +1870,7 @@ namespace Test.Shared.Suites.E2E
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
                 string text = GetToolResultText(result);
-                Assert(text.Contains("not found", StringComparison.OrdinalIgnoreCase), "Should contain 'not found'");
+                AssertToolNotFound(text);
             }));
 
             cases.Add(CaseAsync("armada_get_mission_log_no_log_returns_valid_response", "ArmadaGetMissionLog_NoLog_ReturnsValidResponse", TestTags.Positive, async () =>
@@ -1916,7 +1915,7 @@ namespace Test.Shared.Suites.E2E
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
                 string text = GetToolResultText(result);
-                Assert(text.Contains("not found", StringComparison.OrdinalIgnoreCase), "Should contain 'not found'");
+                AssertToolNotFound(text);
             }));
 
             cases.Add(CaseAsync("armada_get_mission_log_with_pagination_respects_params", "ArmadaGetMissionLog_WithPagination_RespectsParams", TestTags.Positive, async () =>
@@ -2006,7 +2005,7 @@ namespace Test.Shared.Suites.E2E
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
                 string text = GetToolResultText(result);
-                Assert(text.Contains("not found", StringComparison.OrdinalIgnoreCase), "Should contain 'not found'");
+                AssertToolNotFound(text);
             }));
 
             cases.Add(CaseAsync("armada_get_merge_entry_not_found_returns_error", "ArmadaGetMergeEntry_NotFound_ReturnsError", TestTags.Negative, async () =>
@@ -2021,7 +2020,7 @@ namespace Test.Shared.Suites.E2E
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
                 string text = GetToolResultText(result);
-                Assert(text.Contains("not found", StringComparison.OrdinalIgnoreCase), "Should contain 'not found'");
+                AssertToolNotFound(text);
             }));
 
             cases.Add(CaseAsync("armada_enqueue_merge_creates_entry", "ArmadaEnqueueMerge_CreatesEntry", TestTags.Positive, async () =>
@@ -2564,6 +2563,43 @@ namespace Test.Shared.Suites.E2E
                 AssertContains("deleted", GetToolResultText(delResult));
             }));
 
+            cases.Add(CaseAsync("service_not_found_tools_return_typed_not_found", "Tools whose services throw KeyNotFoundException return ErrorCode NotFound, not isError", TestTags.Negative, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
+                HttpClient mcpClient = fx.McpClient;
+                string sessionId = await InitMcpSessionAsync(mcpClient);
+
+                // Each of these used to surface as an untyped isError result carrying the exception text.
+                Dictionary<string, object> calls = new Dictionary<string, object>(StringComparer.Ordinal)
+                {
+                    ["approve_deployment"] = new { deploymentId = "dpl_missing", comment = "ok" },
+                    ["verify_deployment"] = new { deploymentId = "dpl_missing" },
+                    ["rollback_deployment"] = new { deploymentId = "dpl_missing" },
+                    ["create_deployment"] = new { vesselId = "vsl_missing" },
+                    ["start_runbook_execution"] = new { runbookId = "pbk_missing" },
+                    ["update_objective"] = new { objectiveId = "obj_missing", title = "x" },
+                    ["update_backlog_item"] = new { objectiveId = "obj_missing", title = "x" },
+                    ["delete_objective"] = new { objectiveId = "obj_missing" },
+                    ["delete_backlog_item"] = new { objectiveId = "obj_missing" },
+                    ["get_backlog_refinement_session"] = new { sessionId = "ors_missing" },
+                    ["get_backlog_planning_session"] = new { sessionId = "pls_missing" },
+                    ["retry_check_run"] = new { checkRunId = "chk_missing" },
+                    ["stop_captain"] = new { captainId = "cpt_missing" }
+                };
+
+                foreach (KeyValuePair<string, object> call in calls)
+                {
+                    JsonElement response = await SendRawMcpRequestAsync(mcpClient, sessionId, "tools/call", new
+                    {
+                        name = call.Key,
+                        arguments = call.Value
+                    }).ConfigureAwait(false);
+                    JsonElement result = response.GetProperty("result");
+                    AssertFalse(result.TryGetProperty("isError", out JsonElement isError) && isError.GetBoolean(), call.Key + " returned an untyped isError result: " + GetToolResultText(result));
+                    AssertToolNotFound(GetToolResultText(result));
+                }
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
                 displayName: "MCP Tool Tests",
@@ -2723,6 +2759,16 @@ namespace Test.Shared.Suites.E2E
         private static string GetToolResultText(JsonElement result)
         {
             return result.GetProperty("content")[0].GetProperty("text").GetString()!;
+        }
+
+        /// <summary>
+        /// Assert a tool result's text is a typed error with <see cref="McpToolErrorCodeEnum.NotFound"/>.
+        /// </summary>
+        /// <param name="text">Tool result text.</param>
+        private static void AssertToolNotFound(string text)
+        {
+            McpToolResultProbe probe = McpToolResultProbe.FromText(text);
+            AssertEqual(McpToolErrorCodeEnum.NotFound, probe.ErrorCode, "tool error code (result: " + text + ")");
         }
 
         /// <summary>

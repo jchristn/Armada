@@ -56,37 +56,6 @@ namespace Test.Shared.Suites.E2E
 
         // Tools that take an id only as an optional filter or reference and otherwise act on the caller's own scope:
         // they must not leak tenant A's data, but a successful (empty or caller-owned) answer is correct.
-        /// <summary>
-        /// Tools whose services still signal a missing or foreign entity by throwing an exception without a typed
-        /// code, so the call comes back as an isError result with text only. For these (and only these) an isError
-        /// result counts as the denial. Remove a tool from this list once its service throws KeyNotFoundException
-        /// (mapped to ErrorCode NotFound); the list must only shrink.
-        /// </summary>
-        private static readonly HashSet<string> _UntypedNotFoundTools = new HashSet<string>(StringComparer.Ordinal)
-        {
-            "apply_backlog_refinement_summary",
-            "create_backlog_item",
-            "create_backlog_planning_session",
-            "create_backlog_refinement_session",
-            "create_deployment",
-            "create_objective",
-            "create_release",
-            "delete_backlog_item",
-            "delete_memory",
-            "delete_objective",
-            "dispatch_backlog_planning_session",
-            "get_backlog_planning_session",
-            "get_backlog_refinement_session",
-            "retry_check_run",
-            "run_check",
-            "send_backlog_refinement_message",
-            "stop_backlog_refinement_session",
-            "stop_captain",
-            "summarize_backlog_refinement_session",
-            "update_backlog_item",
-            "update_objective",
-        };
-
         private static readonly HashSet<string> _FilterOnlyTools = new HashSet<string>(StringComparer.Ordinal)
         {
             "enumerate",
@@ -160,10 +129,13 @@ namespace Test.Shared.Suites.E2E
                         }
 
                         McpToolResultProbe probe = McpToolResultProbe.From(result);
-                        // The owner must reach its own entity: NotFound or Forbidden (or a failed call) means it could
-                        // not. Other categories (for example Unavailable from get_mission_diff when the seeded mission has
+                        // The owner must reach its own entity: NotFound, Forbidden, or InvalidArgument (or a failed call)
+                        // means it could not. Other categories (for example Unavailable from get_mission_diff when the seeded mission has
                         // no diff yet) mean the entity was found.
-                        if (result.IsError || probe.ErrorCode == McpToolErrorCodeEnum.NotFound || probe.ErrorCode == McpToolErrorCodeEnum.Forbidden)
+                        if (result.IsError
+                            || probe.ErrorCode == McpToolErrorCodeEnum.NotFound
+                            || probe.ErrorCode == McpToolErrorCodeEnum.Forbidden
+                            || probe.ErrorCode == McpToolErrorCodeEnum.InvalidArgument)
                             failures.Add(tool.Name + ": " + (probe.ErrorCode?.ToString() ?? "isError") + ": " + Truncate(result.Text));
                     }
                 }
@@ -211,7 +183,7 @@ namespace Test.Shared.Suites.E2E
                         }
 
                         if (_FilterOnlyTools.Contains(tool.Name)) continue;
-                        if (!IsDenied(tool.Name, result))
+                        if (!IsDenied(result))
                             failures.Add(tool.Name + " did not answer not-found: " + Truncate(result.Text));
                     }
                 }
@@ -721,12 +693,11 @@ namespace Test.Shared.Suites.E2E
 
         /// <summary>
         /// True when a cross-tenant call was refused: the tool returned the typed NotFound error, or a delete or purge
-        /// tool reported zero rows. A failed call (isError) is not a denial (it could be a crash or a rate limit), except
-        /// for the tools listed in <see cref="_UntypedNotFoundTools"/>.
+        /// tool reported zero rows. A failed call (isError) is never a denial (it could be a crash or a rate limit).
         /// </summary>
-        private static bool IsDenied(string toolName, Armada.Runtimes.Mcp.McpToolCallResult result)
+        private static bool IsDenied(Armada.Runtimes.Mcp.McpToolCallResult result)
         {
-            if (result.IsError) return _UntypedNotFoundTools.Contains(toolName);
+            if (result.IsError) return false;
             McpToolResultProbe probe = McpToolResultProbe.From(result);
             if (probe.ErrorCode == McpToolErrorCodeEnum.NotFound) return true;
             return probe.Deleted == 0 || probe.EntriesPurged == 0;
