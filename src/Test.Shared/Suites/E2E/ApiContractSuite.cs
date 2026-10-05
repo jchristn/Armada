@@ -14,6 +14,7 @@ namespace Test.Shared.Suites.E2E
     using Armada.Core.ApiSurface;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Server;
     using Armada.Server.WebSocket;
     using Test.Shared.Infrastructure;
     using Test.Shared.Infrastructure.ApiSurface;
@@ -176,6 +177,39 @@ namespace Test.Shared.Suites.E2E
 
                 AssertTrue(found > 30, "expected to find the server's event literals, found " + found);
                 AssertTrue(undeclared.Count == 0, "event types broadcast but not declared in WebSocketSurface (declare them, then regenerate the surface): " + String.Join(", ", undeclared));
+            }));
+
+            cases.Add(CaseAsync("openapi_route_parameters_are_consistent", "Every route declares each parameter once and exactly the path parameters in its template", TestTags.Negative, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this).ConfigureAwait(false);
+                List<RestRouteDescriptor> routes = fx.Server.GetRestRouteDescriptors();
+                AssertTrue(routes.Count > 300, "expected the full route table, got " + routes.Count);
+                List<string> failures = new List<string>();
+                foreach (RestRouteDescriptor route in routes)
+                {
+                    string label = route.Method + " " + route.Template;
+                    foreach (IGrouping<string, string> group in route.Parameters.GroupBy(p => p, StringComparer.Ordinal))
+                    {
+                        if (group.Count() > 1) failures.Add(label + ": parameter " + group.Key + " declared " + group.Count() + " times");
+                    }
+
+                    HashSet<string> templateParams = new HashSet<string>(
+                        route.Template.Split('/').Where(s => s.Length > 2 && s[0] == '{' && s[s.Length - 1] == '}').Select(s => "path:" + s.Substring(1, s.Length - 2)),
+                        StringComparer.Ordinal);
+                    HashSet<string> declaredPath = new HashSet<string>(route.Parameters.Where(p => p.StartsWith("path:", StringComparison.Ordinal)), StringComparer.Ordinal);
+                    foreach (string missing in templateParams.Except(declaredPath))
+                        failures.Add(label + ": template parameter " + missing + " is not declared");
+                    foreach (string extra in declaredPath.Except(templateParams))
+                        failures.Add(label + ": declared " + extra + " is not in the template");
+                    if (route.Responses.Count > 0 && !route.Responses.Keys.Any(k => k.Length == 3 && (k[0] == '2' || k[0] == '3')))
+                        failures.Add(label + ": declares only error responses (no 2xx or 3xx)");
+                }
+
+                RestRouteDescriptor history = routes.Single(r => r.Method == "GET" && r.Template == "/api/v1/history");
+                AssertTrue(history.Parameters.Contains("query:excludeReadRequests"), "GET /api/v1/history declares the excludeReadRequests filter it reads");
+                RestRouteDescriptor deleteMemory = routes.Single(r => r.Method == "DELETE" && r.Template == "/api/v1/memories/{id}");
+                AssertTrue(deleteMemory.Responses.ContainsKey("204") && !deleteMemory.Responses.ContainsKey("200"), "DELETE /api/v1/memories/{id} declares 204, which it returns");
+                AssertTrue(failures.Count == 0, "OpenAPI parameter metadata problems:\n" + String.Join("\n", failures));
             }));
 
             cases.Add(CaseAsync("error_codes_match_status", "REST errors are ApiErrorResponse bodies whose Error code matches the status", TestTags.Negative, async () =>

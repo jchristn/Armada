@@ -83,6 +83,7 @@ namespace Armada.Server.Routes
                 return (object)new { Success = true, Objects = jobs, TotalRecords = jobs.Count };
             },
             api => api
+                .WithResponse(200, OpenApiResponseMetadata.Create("Successful response"))
                 .WithTag("Jobs")
                 .WithSummary("List background jobs")
                 .WithDescription("Returns background jobs newest first, scoped to the caller. With any of pageNumber, pageSize "
@@ -113,6 +114,8 @@ namespace Armada.Server.Routes
                 return (object)job;
             },
             api => api
+                .WithResponse(200, OpenApiResponseMetadata.Create("Successful response"))
+                .WithParameter(OpenApiParameterMetadata.Path("id", "Job ID (job_ prefix)"))
                 .WithTag("Jobs")
                 .WithSummary("Get a background job")
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
@@ -146,9 +149,12 @@ namespace Armada.Server.Routes
                 }
             },
             api => api
+                .WithResponse(200, OpenApiResponseMetadata.Create("Successful response"))
+                .WithParameter(OpenApiParameterMetadata.Path("id", "Job ID (job_ prefix)"))
                 .WithTag("Jobs")
                 .WithSummary("Cancel a background job")
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("Conflicts with the current state"))
                 .WithSecurity("ApiKey"));
         }
 

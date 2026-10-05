@@ -393,9 +393,11 @@ namespace Armada.Server.Routes
                 }
             },
             api => api
+                .WithResponse(200, OpenApiResponseMetadata.Create("Successful response"))
                 .WithTag("Status")
                 .WithSummary("Rebuild the Admiral server")
                 .WithDescription("Publishes the Armada source into a new slot from a detached worktree at the chosen ref, backs up the database, flips the slot pointer, and cuts over to the new build. Returns the initial rebuild status; poll GET /api/v1/server/rebuild/status for progress.")
+                .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("Conflicts with the current state"))
                 .WithSecurity("ApiKey"));
 
             app.Get("/api/v1/server/rebuild/status", async (ApiRequest req) =>
@@ -443,9 +445,11 @@ namespace Armada.Server.Routes
                 }
             },
             api => api
+                .WithResponse(200, OpenApiResponseMetadata.Create("Successful response"))
                 .WithTag("Status")
                 .WithSummary("Roll back the last rebuild")
                 .WithDescription("Reverts to the previous slot after a successful rebuild. When the rebuild migrated the database schema, the pre-rebuild backup is restored first (discarding data written since cutover); otherwise the previous slot is relaunched with no restore. Then this instance stops so the previous slot binds.")
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithSecurity("ApiKey"));
 
             // Settings

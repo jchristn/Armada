@@ -209,6 +209,8 @@ namespace Armada.Server.Routes
                 .WithDescription("Creates a new voyage with optional missions. Missions are automatically dispatched to the target vessel.")
                 .WithRequestBody(OpenApiJson.BodyFor<VoyageRequest>("Voyage with missions", true))
                 .WithResponse(201, OpenApiJson.For<Voyage>("Created voyage"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
 
             app.Get("/api/v1/voyages/{id}", async (ApiRequest req) =>
@@ -248,6 +250,7 @@ namespace Armada.Server.Routes
                 return (object)new { Voyage = voyage, Missions = missions };
             },
             api => api
+                .WithResponse(200, OpenApiResponseMetadata.Create("Successful response"))
                 .WithTag("Voyages")
                 .WithSummary("Get a voyage")
                 .WithDescription("Returns a voyage and all its associated missions. Pending missions carry AssignmentBlocker, the server's explanation of why no captain has taken them yet.")
@@ -329,6 +332,7 @@ namespace Armada.Server.Routes
                 return (object)new { Voyage = voyage, CancelledMissions = cancelledCount };
             },
             api => api
+                .WithResponse(200, OpenApiResponseMetadata.Create("Successful response"))
                 .WithTag("Voyages")
                 .WithSummary("Cancel a voyage")
                 .WithDescription("Cancels a voyage and all its pending/assigned missions.")
@@ -463,6 +467,7 @@ namespace Armada.Server.Routes
                 .WithDescription("Permanently deletes multiple voyages and their associated missions from the database by ID. Voyages that are Open/InProgress or have active missions are skipped. Returns a summary of deleted and skipped entries. This cannot be undone.")
                 .WithRequestBody(OpenApiJson.BodyFor<DeleteMultipleRequest>("List of voyage IDs to delete"))
                 .WithResponse(200, OpenApiJson.For<DeleteMultipleResult>("Delete result summary"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithSecurity("ApiKey"));
         }
     }

@@ -79,6 +79,7 @@ namespace Armada.Server.Routes
                 .WithParameter(OpenApiParameterMetadata.Path("vesselId", "Vessel ID (vsl_ prefix)"))
                 .WithParameter(OpenApiParameterMetadata.Query("path", "Optional repository-relative directory path", false))
                 .WithResponse(200, OpenApiJson.For<WorkspaceTreeResult>("Workspace directory listing"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
 
             app.Get("/api/v1/workspace/vessels/{vesselId}/diff", async (ApiRequest req) =>
@@ -110,6 +111,7 @@ namespace Armada.Server.Routes
                 .WithParameter(OpenApiParameterMetadata.Path("vesselId", "Vessel ID (vsl_ prefix)"))
                 .WithParameter(OpenApiParameterMetadata.Query("path", "Optional repository-relative path to scope the diff", false))
                 .WithResponse(200, OpenApiJson.For<WorkspaceDiffResult>("Working-tree diff"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
 
             app.Get("/api/v1/workspace/vessels/{vesselId}/file", async (ApiRequest req) =>
@@ -147,6 +149,8 @@ namespace Armada.Server.Routes
                 .WithParameter(OpenApiParameterMetadata.Path("vesselId", "Vessel ID (vsl_ prefix)"))
                 .WithParameter(OpenApiParameterMetadata.Query("path", "Repository-relative file path", true))
                 .WithResponse(200, OpenApiJson.For<WorkspaceFileResponse>("Workspace file"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
 
             app.Put<WorkspaceSaveRequest>("/api/v1/workspace/vessels/{vesselId}/file", async (ApiRequest req) =>
@@ -180,6 +184,7 @@ namespace Armada.Server.Routes
                 .WithParameter(OpenApiParameterMetadata.Path("vesselId", "Vessel ID (vsl_ prefix)"))
                 .WithRequestBody(OpenApiJson.BodyFor<WorkspaceSaveRequest>("Workspace save request", true))
                 .WithResponse(200, OpenApiJson.For<WorkspaceSaveResult>("Save result"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
 
             app.Post<WorkspaceExecRequest>("/api/v1/workspace/vessels/{vesselId}/exec", async (ApiRequest req) =>
@@ -230,6 +235,7 @@ namespace Armada.Server.Routes
                 .WithParameter(OpenApiParameterMetadata.Path("vesselId", "Vessel ID (vsl_ prefix)"))
                 .WithRequestBody(OpenApiJson.BodyFor<WorkspaceExecRequest>("Command to run", true))
                 .WithResponse(200, OpenApiJson.For<WorkspaceExecResult>("Command result"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
 
             app.Post<WorkspaceCreateDirectoryRequest>("/api/v1/workspace/vessels/{vesselId}/directory", async (ApiRequest req) =>
@@ -264,6 +270,7 @@ namespace Armada.Server.Routes
                 .WithParameter(OpenApiParameterMetadata.Path("vesselId", "Vessel ID (vsl_ prefix)"))
                 .WithRequestBody(OpenApiJson.BodyFor<WorkspaceCreateDirectoryRequest>("Workspace directory request", true))
                 .WithResponse(201, OpenApiJson.For<WorkspaceOperationResult>("Directory created"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
 
             app.Post<WorkspaceRenameRequest>("/api/v1/workspace/vessels/{vesselId}/rename", async (ApiRequest req) =>
@@ -297,6 +304,7 @@ namespace Armada.Server.Routes
                 .WithParameter(OpenApiParameterMetadata.Path("vesselId", "Vessel ID (vsl_ prefix)"))
                 .WithRequestBody(OpenApiJson.BodyFor<WorkspaceRenameRequest>("Workspace rename request", true))
                 .WithResponse(200, OpenApiJson.For<WorkspaceOperationResult>("Rename result"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
 
             app.Delete("/api/v1/workspace/vessels/{vesselId}/entry", async (ApiRequest req) =>
@@ -334,6 +342,8 @@ namespace Armada.Server.Routes
                 .WithParameter(OpenApiParameterMetadata.Path("vesselId", "Vessel ID (vsl_ prefix)"))
                 .WithParameter(OpenApiParameterMetadata.Query("path", "Repository-relative file or directory path", true))
                 .WithResponse(200, OpenApiJson.For<WorkspaceOperationResult>("Delete result"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
 
             app.Get("/api/v1/workspace/vessels/{vesselId}/search", async (ApiRequest req) =>
@@ -379,6 +389,8 @@ namespace Armada.Server.Routes
                 .WithParameter(OpenApiParameterMetadata.Query("q", "Search text query", true))
                 .WithParameter(OpenApiParameterMetadata.Query("maxResults", "Maximum number of matches to return", false))
                 .WithResponse(200, OpenApiJson.For<WorkspaceSearchResult>("Workspace search results"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
 
             app.Get("/api/v1/workspace/vessels/{vesselId}/changes", async (ApiRequest req) =>
@@ -408,6 +420,7 @@ namespace Armada.Server.Routes
                 .WithDescription("Returns branch status and changed files from the vessel working tree.")
                 .WithParameter(OpenApiParameterMetadata.Path("vesselId", "Vessel ID (vsl_ prefix)"))
                 .WithResponse(200, OpenApiJson.For<WorkspaceChangesResult>("Workspace change summary"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
 
             app.Get("/api/v1/workspace/vessels/{vesselId}/status", async (ApiRequest req) =>
@@ -438,6 +451,7 @@ namespace Armada.Server.Routes
                 .WithDescription("Returns high-level workspace status, git branch state, and active mission overlap context.")
                 .WithParameter(OpenApiParameterMetadata.Path("vesselId", "Vessel ID (vsl_ prefix)"))
                 .WithResponse(200, OpenApiJson.For<WorkspaceStatusResult>("Workspace status"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
         }
 

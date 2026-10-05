@@ -185,6 +185,7 @@ namespace Armada.Server.Routes
                 .WithDescription("Permanently deletes a terminal merge entry (Cancelled, Landed, Failed) or cancels an active one.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Merge entry ID (mrg_ prefix)"))
                 .WithResponse(204, OpenApiResponseMetadata.NoContent())
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
 
             app.Post("/api/v1/merge-queue/{id}/process", async (ApiRequest req) =>
@@ -299,6 +300,7 @@ namespace Armada.Server.Routes
                 .WithDescription("Permanently deletes multiple terminal merge queue entries from the database by ID. Returns a summary of purged and skipped entries. This cannot be undone.")
                 .WithRequestBody(OpenApiJson.BodyFor<PurgeMergeEntriesRequest>("List of merge entry IDs to purge"))
                 .WithResponse(200, OpenApiJson.For<MergeQueuePurgeResult>("Purge result summary"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithSecurity("ApiKey"));
         }
     }

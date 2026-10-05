@@ -69,6 +69,7 @@ namespace Armada.Server.Routes
                 .WithParameter(OpenApiParameterMetadata.Query("sourceType", "Optional comma-separated source types", false))
                 .WithParameter(OpenApiParameterMetadata.Query("fromUtc", "Optional lower-bound UTC timestamp", false))
                 .WithParameter(OpenApiParameterMetadata.Query("toUtc", "Optional upper-bound UTC timestamp", false))
+                .WithParameter(OpenApiParameterMetadata.Query("excludeReadRequests", "Optional flag that leaves out request-history entries for read-only (GET) requests", false))
                 .WithResponse(200, OpenApiJson.For<EnumerationResult<HistoricalTimelineEntry>>("Historical timeline entries"))
                 .WithSecurity("ApiKey"));
 

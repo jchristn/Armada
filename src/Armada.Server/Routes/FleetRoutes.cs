@@ -212,6 +212,7 @@ namespace Armada.Server.Routes
                 .WithDescription("Deletes a fleet by ID.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Fleet ID (flt_ prefix)"))
                 .WithResponse(204, OpenApiResponseMetadata.NoContent())
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
 
             app.Post<DeleteMultipleRequest>("/api/v1/fleets/delete/multiple", async (ApiRequest req) =>
@@ -265,6 +266,7 @@ namespace Armada.Server.Routes
                 .WithDescription("Permanently deletes multiple fleets from the database by ID. Returns a summary of deleted and skipped entries. This cannot be undone.")
                 .WithRequestBody(OpenApiJson.BodyFor<DeleteMultipleRequest>("List of fleet IDs to delete"))
                 .WithResponse(200, OpenApiJson.For<DeleteMultipleResult>("Delete result summary"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithSecurity("ApiKey"));
         }
     }

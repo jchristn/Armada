@@ -143,6 +143,7 @@ namespace Armada.Server.Routes
                 .WithDescription("Creates a tenant-scoped markdown playbook.")
                 .WithRequestBody(OpenApiJson.BodyFor<Playbook>("Playbook data", true))
                 .WithResponse(201, OpenApiJson.For<Playbook>("Created playbook"))
+                .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("Conflicts with the current state"))
                 .WithSecurity("ApiKey"));
 
             app.Get("/api/v1/playbooks/{id}", async (ApiRequest req) =>
@@ -240,6 +241,7 @@ namespace Armada.Server.Routes
                 .WithRequestBody(OpenApiJson.BodyFor<Playbook>("Updated playbook data", true))
                 .WithResponse(200, OpenApiJson.For<Playbook>("Updated playbook"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("Conflicts with the current state"))
                 .WithSecurity("ApiKey"));
 
             app.Delete("/api/v1/playbooks/{id}", async (ApiRequest req) =>

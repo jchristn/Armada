@@ -219,6 +219,7 @@ namespace Armada.Server.Routes
                 .WithDescription("Creates a tenant-scoped project profile bundling a project's pipeline, workflow profile, persona overrides, and skills.")
                 .WithRequestBody(OpenApiJson.BodyFor<ProjectProfile>("Project profile", true))
                 .WithResponse(201, OpenApiJson.For<ProjectProfile>("Created project profile"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithSecurity("ApiKey"));
 
             app.Get("/api/v1/project-profiles/{id}", async (ApiRequest req) =>
@@ -301,6 +302,7 @@ namespace Armada.Server.Routes
                 .WithRequestBody(OpenApiJson.BodyFor<ProjectProfile>("Project profile", true))
                 .WithResponse(200, OpenApiJson.For<ProjectProfile>("Updated project profile"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithSecurity("ApiKey"));
 
             app.Delete("/api/v1/project-profiles/{id}", async (ApiRequest req) =>

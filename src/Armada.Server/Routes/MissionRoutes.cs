@@ -935,6 +935,7 @@ namespace Armada.Server.Routes
                 .WithDescription("Permanently deletes multiple missions from the database by ID. Returns a summary of deleted and skipped entries. This cannot be undone.")
                 .WithRequestBody(OpenApiJson.BodyFor<DeleteMultipleRequest>("List of mission IDs to delete"))
                 .WithResponse(200, OpenApiJson.For<DeleteMultipleResult>("Delete result summary"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithSecurity("ApiKey"));
 
             app.Post<MissionRestartRequest>("/api/v1/missions/{id}/restart", async (ApiRequest req) =>
@@ -1082,6 +1083,7 @@ namespace Armada.Server.Routes
                 .WithResponse(200, OpenApiJson.For<object>("Landing result"))
                 .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("Conflicts with the current state"))
                 .WithSecurity("ApiKey"));
 
             app.Get("/api/v1/missions/{id}/diff", async (ApiRequest req) =>
@@ -1164,6 +1166,7 @@ namespace Armada.Server.Routes
                 return (object)new { MissionId = id, Branch = dock.BranchName ?? "", Diff = diff };
             },
             api => api
+                .WithResponse(200, OpenApiResponseMetadata.Create("Successful response"))
                 .WithTag("Missions")
                 .WithSummary("Get diff for a mission")
                 .WithDescription("Returns the git diff of changes made by a captain in the mission's worktree.")
@@ -1222,6 +1225,7 @@ namespace Armada.Server.Routes
                 }
             },
             api => api
+                .WithResponse(200, OpenApiResponseMetadata.Create("Successful response"))
                 .WithTag("Missions")
                 .WithSummary("Get log for a mission")
                 .WithDescription("Returns the session log for a mission. Supports pagination via ?lines=N (default 200) and ?offset=N query parameters.")
@@ -1285,6 +1289,7 @@ namespace Armada.Server.Routes
                 }
             },
             api => api
+                .WithResponse(200, OpenApiResponseMetadata.Create("Successful response"))
                 .WithTag("Missions")
                 .WithSummary("Get mission instructions")
                 .WithDescription("Returns the runtime-specific instruction file generated for a mission, such as CLAUDE.md, CODEX.md, CURSOR.md, AGENTS.md, GEMINI.md, or MUX.md.")

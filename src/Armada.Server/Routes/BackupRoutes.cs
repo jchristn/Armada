@@ -74,9 +74,11 @@ namespace Armada.Server.Routes
                 return null;
             },
             api => api
+                .WithResponse(200, OpenApiResponseMetadata.Create("Successful response"))
                 .WithTag("Backup")
                 .WithSummary("Download backup")
                 .WithDescription("Creates and streams a ZIP backup of the database and settings.")
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithSecurity("ApiKey"));
 
             app.Post("/api/v1/restore", async (ApiRequest req) =>
@@ -120,9 +122,11 @@ namespace Armada.Server.Routes
                 }
             },
             api => api
+                .WithResponse(200, OpenApiResponseMetadata.Create("Successful response"))
                 .WithTag("Backup")
                 .WithSummary("Restore from backup")
                 .WithDescription("Accepts a ZIP backup file in the request body and restores the database and settings. Server restart recommended after restore.")
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithSecurity("ApiKey"));
         }
     }

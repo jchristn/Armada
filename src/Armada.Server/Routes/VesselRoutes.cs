@@ -177,6 +177,7 @@ namespace Armada.Server.Routes
                 .WithDescription("Registers a new vessel (git repository) and returns it with an assigned ID.")
                 .WithRequestBody(OpenApiJson.BodyFor<Vessel>("Vessel data", true))
                 .WithResponse(201, OpenApiJson.For<Vessel>("Created vessel"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithSecurity("ApiKey"));
 
             app.Get("/api/v1/vessels/{id}", async (ApiRequest req) =>
@@ -312,10 +313,12 @@ namespace Armada.Server.Routes
                 }
             },
             api => api
+                .WithResponse(200, OpenApiResponseMetadata.Create("Successful response"))
                 .WithTag("Vessels")
                 .WithSummary("Get vessel git status")
                 .WithDescription("Returns commits ahead/behind the remote default branch for the vessel's working directory.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Vessel ID (vsl_ prefix)"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
 
             app.Get("/api/v1/vessels/{id}/branches", async (ApiRequest req) =>
@@ -356,10 +359,13 @@ namespace Armada.Server.Routes
                 }
             },
             api => api
+                .WithResponse(200, OpenApiResponseMetadata.Create("Successful response"))
                 .WithTag("Vessels")
                 .WithSummary("List vessel branches")
                 .WithDescription("Returns the vessel repository's branches with current flag and ahead/behind counts relative to the default branch.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Vessel ID (vsl_ prefix)"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(503, OpenApiJson.For<ApiErrorResponse>("A required service is unavailable (Error is BadRequest or NotFound; use the HTTP status)"))
                 .WithSecurity("ApiKey"));
 
             app.Post<BranchActionRequest>("/api/v1/vessels/{id}/branches/push", async (ApiRequest req) =>
@@ -396,10 +402,15 @@ namespace Armada.Server.Routes
                 }
             },
             api => api
+                .WithResponse(200, OpenApiResponseMetadata.Create("Successful response"))
                 .WithTag("Vessels")
                 .WithSummary("Push a vessel branch")
                 .WithDescription("Pushes the named local branch to the vessel's remote.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Vessel ID (vsl_ prefix)"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(422, OpenApiJson.For<ApiErrorResponse>("Rejected by the remote (Error is BadRequest; use the HTTP status)"))
+                .WithResponse(503, OpenApiJson.For<ApiErrorResponse>("A required service is unavailable (Error is BadRequest or NotFound; use the HTTP status)"))
                 .WithSecurity("ApiKey"));
 
             app.Post<BranchMergeRequest>("/api/v1/vessels/{id}/branches/merge", async (ApiRequest req) =>
@@ -449,10 +460,15 @@ namespace Armada.Server.Routes
                 }
             },
             api => api
+                .WithResponse(200, OpenApiResponseMetadata.Create("Successful response"))
                 .WithTag("Vessels")
                 .WithSummary("Merge a vessel branch into another")
                 .WithDescription("Merges the source branch into the target branch, optionally pushing the target.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Vessel ID (vsl_ prefix)"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(422, OpenApiJson.For<ApiErrorResponse>("Rejected by the remote (Error is BadRequest; use the HTTP status)"))
+                .WithResponse(503, OpenApiJson.For<ApiErrorResponse>("A required service is unavailable (Error is BadRequest or NotFound; use the HTTP status)"))
                 .WithSecurity("ApiKey"));
 
             app.Get("/api/v1/vessels/{id}/readiness", async (ApiRequest req) =>
@@ -512,6 +528,7 @@ namespace Armada.Server.Routes
                 .WithParameter(OpenApiParameterMetadata.Query("includeWorkflowRequirements", "When false, only vessel and repository basics are evaluated", false, OpenApiSchemaMetadata.Boolean()))
                 .WithResponse(200, OpenApiJson.For<VesselReadinessResult>("Vessel readiness summary"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithSecurity("ApiKey"));
 
             app.Get("/api/v1/vessels/{id}/landing-preview", async (ApiRequest req) =>
@@ -606,6 +623,9 @@ namespace Armada.Server.Routes
                 .WithRequestBody(OpenApiJson.BodyFor<VesselBuildContextRequest>("Build context request", true))
                 .WithResponse(200, OpenApiJson.For<Vessel>("Updated vessel with new Model Context"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithResponse(501, OpenApiJson.For<ApiErrorResponse>("Not supported for the captain's runtime (Error is BadRequest; use the HTTP status)"))
+                .WithResponse(504, OpenApiJson.For<ApiErrorResponse>("Timed out (Error is BadRequest; use the HTTP status)"))
                 .WithSecurity("ApiKey"));
 
             app.Delete("/api/v1/vessels/{id}", async (ApiRequest req) =>
@@ -641,6 +661,7 @@ namespace Armada.Server.Routes
                 .WithDescription("Deletes a vessel by ID.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Vessel ID (vsl_ prefix)"))
                 .WithResponse(204, OpenApiResponseMetadata.NoContent())
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
 
             app.Post<DeleteMultipleRequest>("/api/v1/vessels/delete/multiple", async (ApiRequest req) =>
@@ -697,6 +718,7 @@ namespace Armada.Server.Routes
                 .WithDescription("Permanently deletes multiple vessels from the database by ID. Returns a summary of deleted and skipped entries. This cannot be undone.")
                 .WithRequestBody(OpenApiJson.BodyFor<DeleteMultipleRequest>("List of vessel IDs to delete"))
                 .WithResponse(200, OpenApiJson.For<DeleteMultipleResult>("Delete result summary"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithSecurity("ApiKey"));
         }
 

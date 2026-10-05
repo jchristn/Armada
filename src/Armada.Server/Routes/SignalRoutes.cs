@@ -324,6 +324,7 @@ namespace Armada.Server.Routes
                 .WithDescription("Permanently deletes multiple signals by ID. Returns a summary of deleted and skipped entries.")
                 .WithRequestBody(OpenApiJson.BodyFor<DeleteMultipleRequest>("List of signal IDs to delete"))
                 .WithResponse(200, OpenApiJson.For<DeleteMultipleResult>("Delete result summary"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithSecurity("ApiKey"));
         }
     }

@@ -194,6 +194,7 @@ namespace Armada.Server.Routes
                 .WithDescription("Deletes multiple request-history records by identifier within the caller's scope.")
                 .WithRequestBody(OpenApiJson.BodyFor<DeleteMultipleRequest>("List of request-history IDs to delete"))
                 .WithResponse(200, OpenApiJson.For<DeleteMultipleResult>("Delete summary"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithSecurity("ApiKey"));
 
             app.Post<RequestHistoryQuery>("/api/v1/request-history/delete/by-filter", async (ApiRequest req) =>

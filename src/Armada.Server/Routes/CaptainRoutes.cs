@@ -174,6 +174,7 @@ namespace Armada.Server.Routes
                 .WithDescription("Registers a new captain (AI agent).")
                 .WithRequestBody(OpenApiJson.BodyFor<Captain>("Captain data", true))
                 .WithResponse(201, OpenApiJson.For<Captain>("Created captain"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithSecurity("ApiKey"));
 
             app.Get("/api/v1/captains/{id}", async (ApiRequest req) =>
@@ -263,6 +264,7 @@ namespace Armada.Server.Routes
                 .WithRequestBody(OpenApiJson.BodyFor<Captain>("Updated captain data", true))
                 .WithResponse(200, OpenApiJson.For<Captain>("Updated captain"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithSecurity("ApiKey"));
 
             app.Post("/api/v1/captains/{id}/unquarantine", async (ApiRequest req) =>
@@ -292,6 +294,8 @@ namespace Armada.Server.Routes
                 return (object)uqCaptain;
             },
             api => api
+                .WithResponse(200, OpenApiResponseMetadata.Create("Successful response"))
+                .WithParameter(OpenApiParameterMetadata.Path("id", "Captain ID (cpt_ prefix)"))
                 .WithTag("Captains")
                 .WithSummary("Lift a captain's quarantine")
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
@@ -363,11 +367,13 @@ namespace Armada.Server.Routes
                 return new { Status = "stopped" };
             },
             api => api
+                .WithResponse(200, OpenApiResponseMetadata.Create("Successful response"))
                 .WithTag("Captains")
                 .WithSummary("Stop a captain")
                 .WithDescription("Stops a running captain agent, killing its process and recalling it to idle state.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Captain ID (cpt_ prefix)"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("Conflicts with the current state"))
                 .WithSecurity("ApiKey"));
 
             app.Post("/api/v1/captains/stop-all", async (ApiRequest req) =>
@@ -499,6 +505,7 @@ namespace Armada.Server.Routes
                 }
             },
             api => api
+                .WithResponse(200, OpenApiResponseMetadata.Create("Successful response"))
                 .WithTag("Captains")
                 .WithSummary("Get current log for a captain")
                 .WithDescription("Returns the current session log for a captain, resolved via the .current pointer file. Supports pagination via ?lines=N (default 50) and ?offset=N.")
@@ -628,6 +635,7 @@ namespace Armada.Server.Routes
                 .WithDescription("Permanently deletes multiple captains from the database by ID. Captains that are Working or have active missions are skipped. Returns a summary of deleted and skipped entries. This cannot be undone.")
                 .WithRequestBody(OpenApiJson.BodyFor<DeleteMultipleRequest>("List of captain IDs to delete"))
                 .WithResponse(200, OpenApiJson.For<DeleteMultipleResult>("Delete result summary"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithSecurity("ApiKey"));
         }
 

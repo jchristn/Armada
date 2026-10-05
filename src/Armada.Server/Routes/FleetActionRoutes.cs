@@ -165,6 +165,7 @@ namespace Armada.Server.Routes
                 .WithDescription("Deletes a fleet action. Built-in actions are soft-deleted so they are never re-seeded. Past runs keep their snapshot.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Fleet action ID (fac_ prefix)"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(204, OpenApiResponseMetadata.NoContent())
                 .WithSecurity("ApiKey"));
 
             app.Post<FleetActionRunRequest>("/api/v1/fleet-actions/{id}/run", async (ApiRequest req) =>

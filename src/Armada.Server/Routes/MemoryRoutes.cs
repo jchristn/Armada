@@ -159,6 +159,7 @@ namespace Armada.Server.Routes
                 .WithRequestBody(OpenApiJson.BodyFor<Memory>("Memory update request", true))
                 .WithResponse(200, OpenApiJson.For<Memory>("Updated memory"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithSecurity("ApiKey"));
 
             app.Delete("/api/v1/memories/{id}", async (ApiRequest req) =>

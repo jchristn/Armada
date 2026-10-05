@@ -145,6 +145,7 @@ namespace Armada.Server.Routes
                 .WithDescription("Creates a new persona with a name, description, and prompt template reference.")
                 .WithRequestBody(OpenApiJson.BodyFor<Persona>("Persona data (Name, Description, PromptTemplateName)", true))
                 .WithResponse(201, OpenApiJson.For<Persona>("Created persona"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithSecurity("ApiKey"));
 
             // Update persona by name
@@ -185,6 +186,7 @@ namespace Armada.Server.Routes
                 .WithRequestBody(OpenApiJson.BodyFor<Persona>("Updated persona data", true))
                 .WithResponse(200, OpenApiJson.For<Persona>("Updated persona"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithSecurity("ApiKey"));
 
             // Delete persona by name

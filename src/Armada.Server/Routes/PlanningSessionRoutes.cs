@@ -76,6 +76,7 @@ namespace Armada.Server.Routes
                 .WithSummary("List planning sessions")
                 .WithDescription("Returns planning sessions visible to the authenticated user.")
                 .WithResponse(200, OpenApiJson.For<List<PlanningSession>>("Planning sessions"))
+                .WithResponse(501, OpenApiJson.For<ApiErrorResponse>("Not supported for the captain's runtime (Error is BadRequest; use the HTTP status)"))
                 .WithSecurity("ApiKey"));
 
             app.Post<PlanningSessionCreateRequest>("/api/v1/planning-sessions", async (ApiRequest req) =>
@@ -152,6 +153,10 @@ namespace Armada.Server.Routes
                 .WithSummary("Create a planning session")
                 .WithDescription("Creates a planning session, reserves a captain, and provisions a planning dock.")
                 .WithRequestBody(OpenApiJson.BodyFor<PlanningSessionCreateRequest>("Planning session request", true))
+                .WithResponse(201, OpenApiJson.For<object>("Created planning session detail (Session, Messages, Captain, Vessel)"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(501, OpenApiJson.For<ApiErrorResponse>("Not supported for the captain's runtime (Error is BadRequest; use the HTTP status)"))
                 .WithSecurity("ApiKey"));
 
             app.Get("/api/v1/planning-sessions/{id}", async (ApiRequest req) =>
@@ -189,10 +194,13 @@ namespace Armada.Server.Routes
                 }
             },
             api => api
+                .WithResponse(200, OpenApiResponseMetadata.Create("Successful response"))
                 .WithTag("Planning")
                 .WithSummary("Get a planning session")
                 .WithDescription("Returns a planning session, its transcript, and related captain/vessel context.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Planning session ID (psn_ prefix)"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(501, OpenApiJson.For<ApiErrorResponse>("Not supported for the captain's runtime (Error is BadRequest; use the HTTP status)"))
                 .WithSecurity("ApiKey"));
 
             app.Post<PlanningSessionMessageRequest>("/api/v1/planning-sessions/{id}/messages", async (ApiRequest req) =>
@@ -239,11 +247,15 @@ namespace Armada.Server.Routes
                 }
             },
             api => api
+                .WithResponse(200, OpenApiResponseMetadata.Create("Successful response"))
                 .WithTag("Planning")
                 .WithSummary("Send a planning message")
                 .WithDescription("Appends a user message to the planning transcript and launches the next planning turn.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Planning session ID (psn_ prefix)"))
                 .WithRequestBody(OpenApiJson.BodyFor<PlanningSessionMessageRequest>("Planning message request", true))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(501, OpenApiJson.For<ApiErrorResponse>("Not supported for the captain's runtime (Error is BadRequest; use the HTTP status)"))
                 .WithSecurity("ApiKey"));
 
             app.Post<PlanningSessionDispatchRequest>("/api/v1/planning-sessions/{id}/dispatch", async (ApiRequest req) =>
@@ -290,11 +302,14 @@ namespace Armada.Server.Routes
                 }
             },
             api => api
+                .WithResponse(200, OpenApiResponseMetadata.Create("Successful response"))
                 .WithTag("Planning")
                 .WithSummary("Dispatch from a planning session")
                 .WithDescription("Creates a voyage from selected or inferred planning output.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Planning session ID (psn_ prefix)"))
                 .WithRequestBody(OpenApiJson.BodyFor<PlanningSessionDispatchRequest>("Planning dispatch request", false))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(501, OpenApiJson.For<ApiErrorResponse>("Not supported for the captain's runtime (Error is BadRequest; use the HTTP status)"))
                 .WithSecurity("ApiKey"));
 
             app.Post<PlanningSessionSummaryRequest>("/api/v1/planning-sessions/{id}/summarize", async (ApiRequest req) =>
@@ -336,11 +351,14 @@ namespace Armada.Server.Routes
                 }
             },
             api => api
+                .WithResponse(200, OpenApiResponseMetadata.Create("Successful response"))
                 .WithTag("Planning")
                 .WithSummary("Summarize planning output into a dispatch draft")
                 .WithDescription("Generates a server-owned dispatch draft from selected or inferred planning output without launching the voyage yet.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Planning session ID (psn_ prefix)"))
                 .WithRequestBody(OpenApiJson.BodyFor<PlanningSessionSummaryRequest>("Planning summary request", false))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(501, OpenApiJson.For<ApiErrorResponse>("Not supported for the captain's runtime (Error is BadRequest; use the HTTP status)"))
                 .WithSecurity("ApiKey"));
 
             app.Post("/api/v1/planning-sessions/{id}/stop", async (ApiRequest req) =>
@@ -379,10 +397,13 @@ namespace Armada.Server.Routes
                 }
             },
             api => api
+                .WithResponse(200, OpenApiResponseMetadata.Create("Successful response"))
                 .WithTag("Planning")
                 .WithSummary("Stop a planning session")
                 .WithDescription("Stops an active planning session, releases the captain, and reclaims the planning dock.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Planning session ID (psn_ prefix)"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(501, OpenApiJson.For<ApiErrorResponse>("Not supported for the captain's runtime (Error is BadRequest; use the HTTP status)"))
                 .WithSecurity("ApiKey"));
 
             app.Post("/api/v1/planning-sessions/{id}/stop-turn", async (ApiRequest req) =>
@@ -421,10 +442,13 @@ namespace Armada.Server.Routes
                 }
             },
             api => api
+                .WithResponse(200, OpenApiResponseMetadata.Create("Successful response"))
                 .WithTag("Planning")
                 .WithSummary("Stop the current planning turn")
                 .WithDescription("Aborts the in-flight planning turn (cancelling the captain runtime) while keeping the session active so the user can keep chatting.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Planning session ID (psn_ prefix)"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(501, OpenApiJson.For<ApiErrorResponse>("Not supported for the captain's runtime (Error is BadRequest; use the HTTP status)"))
                 .WithSecurity("ApiKey"));
 
             app.Delete("/api/v1/planning-sessions/{id}", async (ApiRequest req) =>
@@ -468,6 +492,9 @@ namespace Armada.Server.Routes
                 .WithSummary("Delete a planning session")
                 .WithDescription("Deletes a planning session and its transcript. Active sessions are stopped first.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Planning session ID (psn_ prefix)"))
+                .WithResponse(204, OpenApiResponseMetadata.NoContent())
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(501, OpenApiJson.For<ApiErrorResponse>("Not supported for the captain's runtime (Error is BadRequest; use the HTTP status)"))
                 .WithSecurity("ApiKey"));
         }
 

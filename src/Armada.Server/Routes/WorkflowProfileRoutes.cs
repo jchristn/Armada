@@ -224,6 +224,7 @@ namespace Armada.Server.Routes
                 .WithDescription("Creates a tenant-scoped workflow profile used to run builds, tests, release helpers, and deploy checks.")
                 .WithRequestBody(OpenApiJson.BodyFor<WorkflowProfile>("Workflow profile", true))
                 .WithResponse(201, OpenApiJson.For<WorkflowProfile>("Created workflow profile"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithSecurity("ApiKey"));
 
             app.Get("/api/v1/workflow-profiles/{id}", async (ApiRequest req) =>
@@ -324,6 +325,7 @@ namespace Armada.Server.Routes
                 .WithRequestBody(OpenApiJson.BodyFor<WorkflowProfile>("Workflow profile", true))
                 .WithResponse(200, OpenApiJson.For<WorkflowProfile>("Updated workflow profile"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithSecurity("ApiKey"));
 
             app.Delete("/api/v1/workflow-profiles/{id}", async (ApiRequest req) =>

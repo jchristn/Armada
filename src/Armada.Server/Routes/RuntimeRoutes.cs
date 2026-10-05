@@ -77,6 +77,7 @@ namespace Armada.Server.Routes
                 .WithDescription("Returns the endpoints configured in the selected Mux config directory, with secret values redacted.")
                 .WithParameter(OpenApiParameterMetadata.Query("configDirectory", "Optional Mux config directory override", false))
                 .WithResponse(200, OpenApiJson.For<MuxEndpointListResult>("Mux endpoint list"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithSecurity("ApiKey"));
 
             app.Get("/api/v1/runtimes/mux/endpoints/{name}", async (ApiRequest req) =>
@@ -118,6 +119,7 @@ namespace Armada.Server.Routes
                 .WithParameter(OpenApiParameterMetadata.Query("configDirectory", "Optional Mux config directory override", false))
                 .WithResponse(200, OpenApiJson.For<MuxEndpointShowResult>("Mux endpoint details"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithSecurity("ApiKey"));
         }
 

@@ -155,6 +155,8 @@ namespace Armada.Server.Routes
                 .WithDescription("Creates a new prompt template with a unique name, category, and prompt content.")
                 .WithRequestBody(OpenApiJson.BodyFor<PromptTemplate>("Prompt template data (Name, Category, Description, Content)", true))
                 .WithResponse(201, OpenApiJson.For<PromptTemplate>("Created prompt template"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("Conflicts with the current state"))
                 .WithSecurity("ApiKey"));
 
             // Get prompt template by name
