@@ -103,7 +103,8 @@ namespace Armada.Server.Mcp.Tools
                 caller.Claims.TryGetValue("isAdmin", out string? isAdmin);
                 caller.Claims.TryGetValue("isTenantAdmin", out string? isTenantAdmin);
                 caller.Claims.TryGetValue("authMethod", out string? authMethod);
-                return AuthContext.Authenticated(
+                caller.Claims.TryGetValue("missionId", out string? missionId);
+                AuthContext resolved = AuthContext.Authenticated(
                     String.IsNullOrEmpty(tenantId) ? Constants.DefaultTenantId : tenantId,
                     userId,
                     String.Equals(isAdmin, "true", StringComparison.OrdinalIgnoreCase),
@@ -111,6 +112,8 @@ namespace Armada.Server.Mcp.Tools
                     String.IsNullOrEmpty(authMethod) ? "Mcp" : authMethod,
                     null,
                     caller.Principal);
+                if (!String.IsNullOrEmpty(missionId)) resolved.MissionId = missionId;
+                return resolved;
             }
 
             return AuthContext.Authenticated(

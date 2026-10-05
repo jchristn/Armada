@@ -348,6 +348,7 @@ namespace Armada.Server
 
             // Delegate captain launches to a connected Harbor by default; falls back to local when none is eligible.
             _AgentLifecycle.SetHarborConnections(_HarborConnectionManager);
+            _AgentLifecycle.SetSessionTokenService(_SessionTokenService);
             // Enable API-endpoint captains delegated to a Harbor to carry their resolved inference endpoint.
             _AgentLifecycle.SetEndpointResolver(ResolveInferenceEndpoint);
 
@@ -855,8 +856,9 @@ namespace Armada.Server
             if (!result.IsAuthenticated && (!String.IsNullOrEmpty(authHeader) || !String.IsNullOrEmpty(apiKeyHeader)))
                 _LoginRateLimiter?.RecordAddressFailure(AuthRoutes.ClientAddress(ctx));
 
-            // Thread-scoped Ask Armada tokens are minted for a captain's MCP connection only; never accept them on REST.
-            if (!String.IsNullOrEmpty(result.AskThreadId)) result = new AuthContext();
+            // Thread-scoped Ask Armada tokens and mission-scoped captain tokens are minted for a captain's MCP connection
+            // only; never accept them on REST.
+            if (!String.IsNullOrEmpty(result.AskThreadId) || !String.IsNullOrEmpty(result.MissionId)) result = new AuthContext();
             _RequestAuthContexts.Remove(ctx);
             _RequestAuthContexts.Add(ctx, result);
             return result;
@@ -932,6 +934,9 @@ namespace Armada.Server
                 // A thread-scoped token marks every tool call of this request as an Ask Armada thread call, which
                 // the tool gate turns into a proposal unless the tool is read-only or the thread auto-approves.
                 if (!String.IsNullOrEmpty(ctx.AskThreadId)) result.Claims["askThreadId"] = ctx.AskThreadId!;
+
+                // A mission-scoped token marks the caller as that mission's captain (O-20 / O-04).
+                if (!String.IsNullOrEmpty(ctx.MissionId)) result.Claims["missionId"] = ctx.MissionId!;
                 return result;
             }
 
@@ -1566,7 +1571,8 @@ namespace Armada.Server
             return async (System.Text.Json.JsonElement? args) =>
             {
                 AuthContext caller = McpToolHelpers.ResolveCallerContext();
-                if (!_AuthorizationService.IsAuthorized(caller, requirement))
+                if (!_AuthorizationService.IsAuthorized(caller, requirement)
+                    && !await McpMissionScope.AllowsAsync(_Database, caller, name, args).ConfigureAwait(false))
                 {
                     string needed = requirement.Level == PermissionLevel.AdminOnly
                         ? "an admin credential"

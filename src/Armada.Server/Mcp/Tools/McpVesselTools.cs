@@ -287,7 +287,8 @@ namespace Armada.Server.Mcp.Tools
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     VesselContextArgs request = JsonSerializer.Deserialize<VesselContextArgs>(args!.Value, _JsonOptions)!;
                     string vesselId = request.VesselId;
-                    Vessel? vessel = await McpCallerScope.ReadVesselAsync(database, caller, vesselId).ConfigureAwait(false);
+                    Vessel? vessel = await McpCallerScope.ReadVesselAsync(database, caller, vesselId).ConfigureAwait(false)
+                        ?? await McpMissionScope.ReadMissionVesselAsync(database, caller, vesselId).ConfigureAwait(false);
                     if (vessel == null) return (object)McpToolError.NotFound("Vessel not found");
                     if (request.ProjectContext != null)
                         vessel.ProjectContext = request.ProjectContext;

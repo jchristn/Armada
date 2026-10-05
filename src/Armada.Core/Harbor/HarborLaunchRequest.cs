@@ -79,6 +79,12 @@ namespace Armada.Core.Harbor
         /// </summary>
         public bool? AutoApprove { get; set; } = null;
 
+        /// <summary>
+        /// Mission-scoped MCP session token for the captain's Armada MCP connection (sent as X-Token to the MCP URL the
+        /// Admiral advertised in the handshake), or null when none was minted. Valid only while the mission runs.
+        /// </summary>
+        public string? McpSessionToken { get; set; } = null;
+
         #endregion
     }
 }

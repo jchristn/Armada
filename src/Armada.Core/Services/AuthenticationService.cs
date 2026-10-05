@@ -5,6 +5,7 @@ namespace Armada.Core.Services
     using System.Threading.Tasks;
     using SyslogLogging;
     using Armada.Core.Database;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Core.Services.Interfaces;
     using Armada.Core.Settings;
@@ -241,6 +242,17 @@ namespace Armada.Core.Services
                 // Verify tenant is still active
                 TenantMetadata? tenant = await _Database.Tenants.ReadAsync(ctx.TenantId!, token).ConfigureAwait(false);
                 if (tenant == null || !tenant.Active) return null;
+
+                // A mission-scoped token lives only as long as its mission is assigned to or running on the captain it
+                // was minted for; once the mission ends or is reassigned the token stops working, even before it expires.
+                if (!string.IsNullOrEmpty(ctx.MissionId))
+                {
+                    Mission? mission = await _Database.Missions.ReadAsync(ctx.TenantId!, ctx.MissionId!, token).ConfigureAwait(false);
+                    if (mission == null) return null;
+                    if (mission.Status != MissionStatusEnum.Assigned && mission.Status != MissionStatusEnum.InProgress) return null;
+                    if (!string.Equals(mission.CaptainId, ctx.MissionCaptainId, StringComparison.Ordinal)) return null;
+                    if (!string.Equals(mission.UserId, ctx.UserId, StringComparison.Ordinal)) return null;
+                }
 
                 ctx.IsAdmin = user.IsAdmin;
                 ctx.IsTenantAdmin = user.IsAdmin || user.IsTenantAdmin;

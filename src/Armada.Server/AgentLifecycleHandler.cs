@@ -27,6 +27,7 @@ namespace Armada.Server
         private ArmadaSettings _Settings;
         private AgentRuntimeFactory _RuntimeFactory;
         private IHostProcessExecutor _HostProcessExecutor;
+        private ISessionTokenService? _SessionTokens = null;
         private HarborConnectionManager? _HarborConnections;
         private Func<string, ModelEndpoint?>? _EndpointResolver;
         private MuxCliService _MuxCli;
@@ -159,6 +160,35 @@ namespace Armada.Server
         public void SetHarborConnections(HarborConnectionManager? manager)
         {
             _HarborConnections = manager;
+        }
+
+        /// <summary>
+        /// Provide the session token service used to mint mission-scoped MCP tokens for captain launches
+        /// (<c>Mcp.MissionScopedTokens</c>). When null, captains launch without a token, as before.
+        /// </summary>
+        /// <param name="tokens">Session token service, or null.</param>
+        public void SetSessionTokenService(ISessionTokenService? tokens)
+        {
+            _SessionTokens = tokens;
+        }
+
+        /// <summary>
+        /// Mint a mission-scoped MCP session token for a captain launch, or null when tokens are disabled, no token
+        /// service is configured, or the mission has no owner. The token lives at most as long as a mission may run
+        /// (plus slack) and stops working as soon as the mission leaves Assigned / InProgress or changes captain.
+        /// </summary>
+        /// <param name="captain">Captain being launched.</param>
+        /// <param name="mission">Mission the captain runs.</param>
+        /// <returns>Token, or null.</returns>
+        public string? MintMissionToken(Captain captain, Mission mission)
+        {
+            if (captain == null) throw new ArgumentNullException(nameof(captain));
+            if (mission == null) throw new ArgumentNullException(nameof(mission));
+            if (_SessionTokens == null || !_Settings.Mcp.MissionScopedTokens) return null;
+            if (String.IsNullOrEmpty(mission.TenantId) || String.IsNullOrEmpty(mission.UserId)) return null;
+            int runtimeMinutes = _Settings.MaxMissionRuntimeMinutes > 0 ? _Settings.MaxMissionRuntimeMinutes : 24 * 60;
+            TimeSpan lifetime = TimeSpan.FromMinutes(runtimeMinutes + 30);
+            return _SessionTokens.CreateMissionScopedToken(mission.TenantId!, mission.UserId!, mission.Id, captain.Id, lifetime).Token;
         }
 
         /// <summary>
@@ -493,20 +523,50 @@ namespace Armada.Server
             {
                 // A vessel-level auto-approve override wins over the captain's own setting for missions on that vessel.
                 Captain launchCaptain = CaptainRuntimeOptions.WithEffectiveAutoApprove(captain, vessel?.AutoApprove);
+                // O-20 / O-04: a mission-scoped MCP token binds the captain's Armada MCP connection to the mission's
+                // owner, so the captain no longer relies on the unauthenticated loopback identity.
+                string? missionToken = MintMissionToken(captain, mission);
+                bool isolateLaunch = _Settings.IsolateCaptainLaunch;
+                Dictionary<string, string>? environment = null;
+                if (missionToken != null)
+                {
+                    environment = new Dictionary<string, string>
+                    {
+                        ["ARMADA_MCP_URL"] = Armada.Core.Services.ArmadaMcpConfigBuilder.GetMcpUrl(_Settings.McpPort, Armada.Core.Services.ArmadaMcpConfigBuilder.ClientHostFor(_Settings.Rest.Hostname)),
+                        [Armada.Core.Services.CaptainThreadMcpPlanner.TokenEnvironmentVariable] = missionToken
+                    };
+                }
+
                 if (runtime is BaseAgentRuntime hostedRuntime)
                 {
                     // Isolated launches write an Armada MCP URL; it must use the host the MCP listener is bound with.
                     hostedRuntime.McpHost = Armada.Core.Services.ArmadaMcpConfigBuilder.ClientHostFor(_Settings.Rest.Hostname);
+                    if (missionToken != null)
+                    {
+                        // With IsolateCaptainLaunch the existing isolation plan carries the token; otherwise the token is
+                        // bound per invocation (never by writing client files into the repository worktree).
+                        hostedRuntime.McpSessionToken = missionToken;
+                        hostedRuntime.McpTokenWithFullIsolation = _Settings.IsolateCaptainLaunch;
+                        hostedRuntime.McpAllowWorkingDirectoryFiles = false;
+                        isolateLaunch = true;
+                    }
+                }
+                else if (runtime is RemoteAgentRuntime remoteRuntime && missionToken != null)
+                {
+                    // The Harbor binds the token against the MCP URL it was given in the handshake.
+                    remoteRuntime.McpSessionToken = missionToken;
+                    environment = null;
                 }
 
                 processId = await runtime.StartAsync(
                     dock.WorktreePath ?? throw new InvalidOperationException("Dock worktree path is null"),
                     prompt,
+                    environment,
                     logFilePath: logFilePath,
                     finalMessageFilePath: finalMessageFilePath,
                     model: captain.Model,
                     captain: launchCaptain,
-                    isolateLaunch: _Settings.IsolateCaptainLaunch,
+                    isolateLaunch: isolateLaunch,
                     mcpPort: _Settings.McpPort).ConfigureAwait(false);
             }
             catch

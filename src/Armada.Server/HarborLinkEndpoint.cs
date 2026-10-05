@@ -166,7 +166,7 @@ namespace Armada.Server
                 AuthContext auth = !String.IsNullOrWhiteSpace(authorization)
                     ? await _Authenticate(authorization, null, null).ConfigureAwait(false)
                     : await _Authenticate("Bearer " + accessKey!.Trim(), accessKey, accessKey).ConfigureAwait(false);
-                if (!auth.IsAuthenticated || String.IsNullOrEmpty(auth.UserId) || !String.IsNullOrEmpty(auth.AskThreadId))
+                if (!auth.IsAuthenticated || String.IsNullOrEmpty(auth.UserId) || !String.IsNullOrEmpty(auth.AskThreadId) || !String.IsNullOrEmpty(auth.MissionId))
                     return HarborLinkIdentity.Deny("The Harbor credential (x-access-key) is not a valid Armada credential.");
 
                 string? tenantId = auth.IsAdmin && !String.IsNullOrWhiteSpace(requestedTenant) ? requestedTenant : auth.TenantId;

@@ -127,6 +127,7 @@ namespace Armada.Core.Services
                     }
                 case AgentRuntimeEnum.Gemini:
                     {
+                        if (!request.AllowWorkingDirectoryFiles) return plan;
                         JsonObject server = new JsonObject
                         {
                             ["httpUrl"] = url,
@@ -141,6 +142,7 @@ namespace Armada.Core.Services
                     }
                 case AgentRuntimeEnum.Cursor:
                     {
+                        if (!request.AllowWorkingDirectoryFiles) return plan;
                         List<string> names = new List<string> { ServerName };
                         foreach (string alias in FindKeyedArmadaServerNames(request.HostCursorMcpJson, request.McpPort, request.McpHost))
                         {

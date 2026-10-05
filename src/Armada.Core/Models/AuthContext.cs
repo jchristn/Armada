@@ -56,6 +56,18 @@ namespace Armada.Core.Models
         public string? AskThreadId { get; set; } = null;
 
         /// <summary>
+        /// Mission a session token is bound to, or null. A mission-scoped token is minted for a captain's launch on that
+        /// mission and is accepted only by the MCP server, only while the mission is assigned to or running on that
+        /// captain. REST and WebSocket authentication reject mission-scoped tokens.
+        /// </summary>
+        public string? MissionId { get; set; } = null;
+
+        /// <summary>
+        /// Captain a mission-scoped token was minted for, or null.
+        /// </summary>
+        public string? MissionCaptainId { get; set; } = null;
+
+        /// <summary>
         /// True when this caller holds a dashboard session (session token) for a seeded admin user that still uses
         /// the well-known default password. The Admiral then refuses every API call except whoami, status, and the
         /// password change until the password is changed.

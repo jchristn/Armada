@@ -4,9 +4,11 @@ namespace Test.Shared.Suites.Services
     using System.Collections.Generic;
     using System.Diagnostics;
     using System.IO;
+    using System.Linq;
     using System.Reflection;
     using System.Threading;
     using System.Threading.Tasks;
+    using Armada.Core;
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
@@ -173,6 +175,81 @@ namespace Test.Shared.Suites.Services
                         AssertTrue(processId > 0, "Launch should return a process id");
                         AssertContains("--model cursor-model", logContents, "Launch log should include captain model flag");
                         AssertModelArgument(await WaitForRecordedArgsAsync(shim.ArgsFile, "cursor-model").ConfigureAwait(false), "cursor-model", "Launched runtime receives --model cursor-model");
+                    }
+                    finally
+                    {
+                        try { Directory.Delete(worktreePath, true); } catch { }
+                    }
+                }
+            }));
+
+            cases.Add(CaseAsync("handle_launch_agent_async_binds_mission_scoped_mcp_token", "A mission launch carries a mission-scoped MCP token bound to the mission, owner, and captain (O-20)", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                using (CursorShimScope shim = CursorShimScope.Create())
+                {
+                    AgentLifecycleHandler handler = CreateHandler(testDb.Driver, out ArmadaSettings settings, shim.ShimPath);
+                    SessionTokenService tokens = new SessionTokenService();
+                    handler.SetSessionTokenService(tokens);
+                    string worktreePath = Path.Combine(Path.GetTempPath(), "armada_cursor_token_" + Guid.NewGuid().ToString("N"));
+                    Directory.CreateDirectory(worktreePath);
+                    try
+                    {
+                        Captain captain = new Captain("token-captain", AgentRuntimeEnum.Cursor) { Model = "token-model" };
+                        Mission mission = new Mission("Token mission")
+                        {
+                            TenantId = Constants.DefaultTenantId,
+                            UserId = Constants.DefaultUserId,
+                            CaptainId = captain.Id,
+                            BranchName = "feature/token"
+                        };
+                        Dock dock = new Dock { BranchName = "feature/token", WorktreePath = worktreePath };
+
+                        await handler.HandleLaunchAgentAsync(captain, mission, dock).ConfigureAwait(false);
+                        string recorded = await WaitForRecordedArgsAsync(shim.ArgsFile, "token-model").ConfigureAwait(false);
+                        string? tokenLine = recorded.Split('\n').Select(l => l.Trim()).FirstOrDefault(l => l.StartsWith("ARMADA_MCP_TOKEN=", StringComparison.Ordinal));
+                        AssertNotNull(tokenLine, "the captain process receives ARMADA_MCP_TOKEN");
+                        AuthContext? ctx = tokens.ValidateToken(tokenLine!.Substring("ARMADA_MCP_TOKEN=".Length));
+                        AssertNotNull(ctx, "the token is a valid session token");
+                        AssertEqual(mission.Id, ctx!.MissionId, "bound to the mission");
+                        AssertEqual(captain.Id, ctx.MissionCaptainId, "bound to the captain");
+                        AssertEqual(Constants.DefaultUserId, ctx.UserId, "acts as the mission owner");
+                        AssertNull(ctx.AskThreadId, "not an Ask thread token");
+                        AssertFalse(Directory.Exists(Path.Combine(worktreePath, ".cursor")), "no client configuration is written into the worktree");
+                    }
+                    finally
+                    {
+                        try { Directory.Delete(worktreePath, true); } catch { }
+                    }
+                }
+            }));
+
+            cases.Add(CaseAsync("handle_launch_agent_async_no_token_when_disabled", "Mcp.MissionScopedTokens false launches without a token", TestTags.Negative, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                using (CursorShimScope shim = CursorShimScope.Create())
+                {
+                    AgentLifecycleHandler handler = CreateHandler(testDb.Driver, out ArmadaSettings settings, shim.ShimPath);
+                    settings.Mcp.MissionScopedTokens = false;
+                    handler.SetSessionTokenService(new SessionTokenService());
+                    string worktreePath = Path.Combine(Path.GetTempPath(), "armada_cursor_notoken_" + Guid.NewGuid().ToString("N"));
+                    Directory.CreateDirectory(worktreePath);
+                    try
+                    {
+                        Captain captain = new Captain("notoken-captain", AgentRuntimeEnum.Cursor) { Model = "notoken-model" };
+                        Mission mission = new Mission("No token mission")
+                        {
+                            TenantId = Constants.DefaultTenantId,
+                            UserId = Constants.DefaultUserId,
+                            CaptainId = captain.Id,
+                            BranchName = "feature/notoken"
+                        };
+                        Dock dock = new Dock { BranchName = "feature/notoken", WorktreePath = worktreePath };
+
+                        AssertNull(handler.MintMissionToken(captain, mission), "no token is minted when disabled");
+                        await handler.HandleLaunchAgentAsync(captain, mission, dock).ConfigureAwait(false);
+                        string recorded = await WaitForRecordedArgsAsync(shim.ArgsFile, "notoken-model").ConfigureAwait(false);
+                        AssertFalse(recorded.Contains("ARMADA_MCP_TOKEN=", StringComparison.Ordinal), "the captain process gets no token");
                     }
                     finally
                     {
@@ -977,6 +1054,7 @@ namespace Test.Shared.Suites.Services
                     "setlocal EnableExtensions EnableDelayedExpansion\r\n" +
                     "set \"ARGS_FILE=%ARMADA_TEST_CURSOR_ARGS_FILE%\"\r\n" +
                     "set \"ALL_ARGS=%*\"\r\n" +
+                    "if defined ARMADA_MCP_TOKEN >> \"%ARGS_FILE%\" echo ARMADA_MCP_TOKEN=!ARMADA_MCP_TOKEN!\r\n" +
                     ">> \"%ARGS_FILE%\" echo(!ALL_ARGS!\r\n" +
                     "set \"MODEL=\"\r\n" +
                     ":loop\r\n" +
@@ -1002,6 +1080,7 @@ namespace Test.Shared.Suites.Services
             {
                 return "#!/usr/bin/env sh\n" +
                     "args_file=\"$ARMADA_TEST_CURSOR_ARGS_FILE\"\n" +
+                    "if [ -n \"$ARMADA_MCP_TOKEN\" ]; then printf 'ARMADA_MCP_TOKEN=%s\\n' \"$ARMADA_MCP_TOKEN\" >> \"$args_file\"; fi\n" +
                     "printf '%s\\n' \"$*\" >> \"$args_file\"\n" +
                     "prev=\"\"\n" +
                     "model=\"\"\n" +

@@ -89,6 +89,20 @@ namespace Armada.Runtimes
         public string? McpSessionToken { get; set; } = null;
 
         /// <summary>
+        /// When true together with <see cref="McpSessionToken"/>, a token launch uses the full launch isolation plan (the
+        /// same scoped configuration as <c>IsolateCaptainLaunch</c>, with the token as an X-Token header) instead of the
+        /// per-invocation binding used for Ask turns. Default false.
+        /// </summary>
+        public bool McpTokenWithFullIsolation { get; set; } = false;
+
+        /// <summary>
+        /// Whether a per-invocation token binding may write client configuration into the working directory (Gemini,
+        /// Cursor). Default true (Ask turns run in a throwaway directory); mission launches set false because their
+        /// working directory is a repository worktree.
+        /// </summary>
+        public bool McpAllowWorkingDirectoryFiles { get; set; } = true;
+
+        /// <summary>
         /// Host placed in the Armada MCP URLs written for an isolated or thread-scoped launch. The Admiral's MCP listener
         /// only answers requests whose Host matches the name it was bound with, so the caller sets this from
         /// <see cref="Armada.Core.Services.ArmadaMcpConfigBuilder.ClientHostFor"/> of the configured REST hostname.
@@ -177,9 +191,9 @@ namespace Armada.Runtimes
                     perLaunchConfigDirectory = scopedConfigDirectory;
                 }
 
-                if (!String.IsNullOrEmpty(McpSessionToken))
+                if (!String.IsNullOrEmpty(McpSessionToken) && !McpTokenWithFullIsolation)
                 {
-                    // Thread-scoped (Ask) launch: bind the Armada MCP connection to the session token through each CLI's
+                    // Thread-scoped (Ask) or mission-scoped launch: bind the Armada MCP connection to the session token through each CLI's
                     // per-invocation override, never by redirecting HOME / CODEX_HOME / the config directory, so the
                     // CLI's own login stays visible. The working directory here is the turn's throwaway directory.
                     Armada.Core.Services.CaptainThreadMcpPlanRequest planRequest = new Armada.Core.Services.CaptainThreadMcpPlanRequest
@@ -189,7 +203,8 @@ namespace Armada.Runtimes
                         McpHost = McpHost,
                         ScopedConfigDirectory = scopedConfigDirectory,
                         WorkingDirectory = workingDirectory,
-                        SessionToken = McpSessionToken!
+                        SessionToken = McpSessionToken!,
+                        AllowWorkingDirectoryFiles = McpAllowWorkingDirectoryFiles
                     };
                     PopulateHostMcpConfiguration(planRequest);
                     isolationPlan = Armada.Core.Services.CaptainThreadMcpPlanner.Plan(planRequest);

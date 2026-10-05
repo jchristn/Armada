@@ -97,6 +97,34 @@ namespace Armada.Core.Services
         }
 
         /// <inheritdoc />
+        public AuthenticateResult CreateMissionScopedToken(string tenantId, string userId, string missionId, string captainId, TimeSpan lifetime)
+        {
+            if (string.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
+            if (string.IsNullOrEmpty(userId)) throw new ArgumentNullException(nameof(userId));
+            if (string.IsNullOrEmpty(missionId)) throw new ArgumentNullException(nameof(missionId));
+            if (string.IsNullOrEmpty(captainId)) throw new ArgumentNullException(nameof(captainId));
+            if (lifetime < TimeSpan.FromMinutes(1)) lifetime = TimeSpan.FromMinutes(1);
+            if (lifetime > TimeSpan.FromHours(24)) lifetime = TimeSpan.FromHours(24);
+
+            DateTime expiresUtc = DateTime.UtcNow.Add(lifetime);
+            SessionPayload payload = new SessionPayload
+            {
+                TenantId = tenantId,
+                UserId = userId,
+                ExpiresUtc = expiresUtc,
+                MissionId = missionId,
+                CaptainId = captainId
+            };
+
+            return new AuthenticateResult
+            {
+                Success = true,
+                Token = Encrypt(JsonSerializer.Serialize(payload)),
+                ExpiresUtc = expiresUtc
+            };
+        }
+
+        /// <inheritdoc />
         public AuthContext? ValidateToken(string encryptedToken)
         {
             if (string.IsNullOrEmpty(encryptedToken)) return null;
@@ -119,7 +147,9 @@ namespace Armada.Core.Services
                     AuthMethod = "Session",
                     CredentialId = null,
                     PrincipalDisplay = payload.UserId,
-                    AskThreadId = string.IsNullOrEmpty(payload.AskThreadId) ? null : payload.AskThreadId
+                    AskThreadId = string.IsNullOrEmpty(payload.AskThreadId) ? null : payload.AskThreadId,
+                    MissionId = string.IsNullOrEmpty(payload.MissionId) ? null : payload.MissionId,
+                    MissionCaptainId = string.IsNullOrEmpty(payload.CaptainId) ? null : payload.CaptainId
                 };
             }
             catch
@@ -194,6 +224,8 @@ namespace Armada.Core.Services
             public string? UserId { get; set; }
             public DateTime ExpiresUtc { get; set; }
             public string? AskThreadId { get; set; }
+            public string? MissionId { get; set; }
+            public string? CaptainId { get; set; }
         }
 
         #endregion

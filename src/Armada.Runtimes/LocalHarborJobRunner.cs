@@ -32,9 +32,20 @@ namespace Armada.Runtimes
         /// </summary>
         /// <param name="logging">Logging module.</param>
         public LocalHarborJobRunner(LoggingModule logging)
+            : this(logging, new AgentRuntimeFactory(logging ?? throw new ArgumentNullException(nameof(logging))))
+        {
+        }
+
+        /// <summary>
+        /// Instantiate with a specific runtime factory (for example one whose runtimes point at test executables).
+        /// </summary>
+        /// <param name="logging">Logging module.</param>
+        /// <param name="runtimeFactory">Runtime factory used for CLI runtimes.</param>
+        public LocalHarborJobRunner(LoggingModule logging, AgentRuntimeFactory runtimeFactory)
         {
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
-            _Executor = new LocalHostProcessExecutor(new AgentRuntimeFactory(_Logging));
+            if (runtimeFactory == null) throw new ArgumentNullException(nameof(runtimeFactory));
+            _Executor = new LocalHostProcessExecutor(runtimeFactory);
         }
 
         #endregion
@@ -113,12 +124,41 @@ namespace Armada.Runtimes
                 launchCaptain.RuntimeOptionsJson = CaptainRuntimeOptions.WithAutoApprove(null, request.AutoApprove.Value);
             }
 
+            // Bind the captain's Armada MCP connection to the mission-scoped token the Admiral shipped (O-04): the API
+            // endpoint runtime reads ARMADA_MCP_URL / ARMADA_MCP_TOKEN; CLI runtimes get the same per-invocation binding
+            // as a local mission launch, against the MCP URL the Admiral advertised in the handshake.
+            Dictionary<string, string> environment = new Dictionary<string, string>(request.Environment ?? new Dictionary<string, string>());
+            bool bindMcp = false;
+            int mcpPort = 0;
+            if (!String.IsNullOrEmpty(request.McpSessionToken) && !String.IsNullOrWhiteSpace(mcpBaseUrl))
+            {
+                environment[CaptainThreadMcpPlanner.TokenEnvironmentVariable] = request.McpSessionToken!;
+                environment["ARMADA_MCP_URL"] = mcpBaseUrl!;
+                if (runtime is BaseAgentRuntime hosted)
+                {
+                    if (ArmadaMcpConfigBuilder.TryParsePlainMcpUrl(mcpBaseUrl, out string mcpHost, out int parsedPort))
+                    {
+                        hosted.McpSessionToken = request.McpSessionToken;
+                        hosted.McpHost = mcpHost;
+                        hosted.McpAllowWorkingDirectoryFiles = false;
+                        bindMcp = true;
+                        mcpPort = parsedPort;
+                    }
+                    else
+                    {
+                        _Logging.Warn("[LocalHarborJobRunner] advertised MCP URL " + mcpBaseUrl + " is not a plain http://host:port/mcp URL; job " + jobId + " runs without a per-launch MCP binding");
+                    }
+                }
+            }
+
             await runtime.StartAsync(
                 request.WorkingDirectory,
                 request.Prompt ?? string.Empty,
-                request.Environment,
+                environment,
                 model: request.Model,
                 captain: launchCaptain,
+                isolateLaunch: bindMcp,
+                mcpPort: mcpPort,
                 token: token).ConfigureAwait(false);
         }
 

@@ -28,6 +28,18 @@ namespace Armada.Core.Services.Interfaces
         AuthenticateResult CreateThreadScopedToken(string tenantId, string userId, string askThreadId, TimeSpan lifetime);
 
         /// <summary>
+        /// Create a session token bound to one mission and the captain launched for it. The token authenticates as the
+        /// mission's owner on the MCP server only, and only while the mission is assigned to or running on that captain.
+        /// </summary>
+        /// <param name="tenantId">Tenant identifier (the mission's tenant).</param>
+        /// <param name="userId">User identifier (the mission's owner).</param>
+        /// <param name="missionId">Mission identifier (msn_ prefix).</param>
+        /// <param name="captainId">Captain identifier (cpt_ prefix).</param>
+        /// <param name="lifetime">Token lifetime; clamped to 1 minute .. 24 hours.</param>
+        /// <returns>Authentication result with token and expiry.</returns>
+        AuthenticateResult CreateMissionScopedToken(string tenantId, string userId, string missionId, string captainId, TimeSpan lifetime);
+
+        /// <summary>
         /// Validate and decrypt a session token.
         /// </summary>
         /// <param name="encryptedToken">Base64-encoded encrypted token.</param>
