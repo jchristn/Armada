@@ -1,11 +1,12 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { listTenants, createTenant, updateTenant, deleteTenant } from '../../api/client';
-import type { TenantMetadata } from '../../types/models';
+import type { TenantMetadata, TenantCreateRequest } from '../../types/models';
 import Pagination from '../../components/shared/Pagination';
 import ActionMenu from '../../components/shared/ActionMenu';
 import ConfirmDialog from '../../components/shared/ConfirmDialog';
 import JsonViewer from '../../components/shared/JsonViewer';
 import CopyButton from '../../components/shared/CopyButton';
+import GeneratedPasswordDialog from '../../components/shared/GeneratedPasswordDialog';
 import RefreshButton from '../../components/shared/RefreshButton';
 import AutoRefreshSelect from '../../components/shared/AutoRefreshSelect';
 import { useAutoRefresh } from '../../lib/useAutoRefresh';
@@ -18,6 +19,15 @@ import { useProxySessionContext } from '../../lib/useProxySessionContext';
 type SortField = 'name' | 'active' | 'createdUtc';
 type SortDir = 'asc' | 'desc';
 
+/** Minimum length the server accepts for a creator-supplied tenant admin password. */
+const MIN_ADMIN_PASSWORD_LENGTH = 8;
+
+/** A generated tenant admin sign-in, held only while its one-time dialog is open. */
+interface GeneratedAdminSignIn {
+  email: string;
+  password: string;
+}
+
 export default function Tenants() {
   const { user, isAdmin } = useAuth();
   const { t, formatRelativeTime, formatDateTime } = useLocale();
@@ -28,7 +38,9 @@ export default function Tenants() {
   const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<TenantMetadata | null>(null);
-  const [form, setForm] = useState({ name: '', active: true });
+  const [form, setForm] = useState({ name: '', active: true, adminPassword: '' });
+  // The server-generated admin password, shown once; component state only, cleared when the dialog closes.
+  const [generated, setGenerated] = useState<GeneratedAdminSignIn | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
@@ -93,7 +105,7 @@ export default function Tenants() {
 
   function openCreate() {
     if (remoteProxyMode) return;
-    setForm({ name: '', active: true });
+    setForm({ name: '', active: true, adminPassword: '' });
     setEditing(null);
     setShowForm(true);
   }
@@ -102,17 +114,30 @@ export default function Tenants() {
       setJsonData({ open: true, title: `${t('Tenant')}: ${tenant.name}`, data: tenant });
       return;
     }
-    setForm({ name: tenant.name, active: tenant.active });
+    setForm({ name: tenant.name, active: tenant.active, adminPassword: '' });
     setEditing(tenant);
     setShowForm(true);
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!editing && form.adminPassword && form.adminPassword.length < MIN_ADMIN_PASSWORD_LENGTH) {
+      setError(t('Admin password must be at least 8 characters.'));
+      return;
+    }
     try {
-      if (editing) await updateTenant(editing.id, form);
-      else await createTenant(form);
+      if (editing) {
+        await updateTenant(editing.id, { name: form.name, active: form.active });
+      } else {
+        const request: TenantCreateRequest = { name: form.name, active: form.active };
+        if (form.adminPassword) request.adminPassword = form.adminPassword;
+        const created = await createTenant(request);
+        if (created?.adminPassword) {
+          setGenerated({ email: created.adminEmail || 'admin@armada', password: created.adminPassword });
+        }
+      }
       setShowForm(false);
+      setForm(f => ({ ...f, adminPassword: '' }));
       pushToast('success', editing
         ? t('Tenant "{{name}}" saved.', { name: form.name })
         : t('Tenant "{{name}}" created.', { name: form.name }));
@@ -192,6 +217,19 @@ export default function Tenants() {
           <form className="modal" onClick={e => e.stopPropagation()} onSubmit={handleSubmit}>
             <h3>{editing ? t('Edit Tenant') : t('Create Tenant')}</h3>
             <label>{t('Name')}<input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required /></label>
+            {!editing && (
+              <label>
+                {t('Admin Password (optional)')}
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  value={form.adminPassword}
+                  minLength={MIN_ADMIN_PASSWORD_LENGTH}
+                  onChange={e => setForm({ ...form, adminPassword: e.target.value })}
+                  placeholder={t('Leave blank to generate one')}
+                />
+              </label>
+            )}
             {editing && (
               <label className="checkbox-label"><input type="checkbox" checked={form.active} onChange={e => setForm({ ...form, active: e.target.checked })} /> {t('Active')}</label>
             )}
@@ -203,6 +241,14 @@ export default function Tenants() {
         </div>
       )}
 
+      <GeneratedPasswordDialog
+        open={generated !== null}
+        title={t('Tenant admin password (shown once)')}
+        message={t('Copy this password now. It is shown only once and cannot be retrieved later.')}
+        email={generated?.email ?? ''}
+        password={generated?.password ?? ''}
+        onClose={() => setGenerated(null)}
+      />
       <JsonViewer open={jsonData.open} title={jsonData.title} data={jsonData.data} onClose={() => setJsonData({ open: false, title: '', data: null })} />
       <ConfirmDialog open={confirm.open} title={confirm.title} message={confirm.message} resourceName={confirm.resourceName} danger requireDeleteConfirm onConfirm={confirm.onConfirm} onCancel={() => setConfirm(c => ({ ...c, open: false }))} />
 

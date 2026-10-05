@@ -3,6 +3,7 @@ namespace Armada.Tui.Screens.Admin
     using System;
     using System.Collections.Generic;
     using System.Linq;
+    using Armada.Client;
     using Armada.Client.Models;
     using Armada.Core.Models;
     using Armada.Tui.Routing;
@@ -13,7 +14,8 @@ namespace Armada.Tui.Screens.Admin
     /// <summary>
     /// Settings, Users tab (dashboard <c>admin/Users.tsx</c>): users with email, id, name, tenant, global admin, tenant
     /// admin, active, and created; email and name search and a tenant filter; create and edit (email, first and last
-    /// name, password and confirmation where a blank password keeps the current one on edit, tenant, Global Admin for
+    /// name, password and confirmation where a blank password keeps the current one on edit, the current password when
+    /// the signed-in user changes their own password (F-37), tenant, Global Admin for
     /// global admins, Tenant Admin for tenant admins, Active on edit); delete and bulk delete with a typed "delete"
     /// confirmation; View JSON. Writes are blocked behind Armada.Proxy. Not thread-safe.
     /// </summary>
@@ -216,6 +218,11 @@ namespace Armada.Tui.Screens.Admin
             InputField confirm = form.AddField(editing != null ? "Confirm New Password" : "Confirm Password", new InputField());
             confirm.Masked = true;
             confirm.Placeholder = editing != null ? "Repeat new password" : "Repeat password";
+            bool self = IsSignedInUser(editing);
+            InputField current = new InputField();
+            current.Masked = true;
+            current.Placeholder = "Required to change your own password";
+            if (self) form.AddField("Current Password", current);
             SelectField<string> tenant = form.AddField("Tenant", new SelectField<string>());
             tenant.ModalHost = Context.Modals;
             tenant.PickerTitle = "Tenant";
@@ -238,6 +245,7 @@ namespace Armada.Tui.Screens.Admin
             modal.SubmitAsync = async () =>
             {
                 string? error = ValidatePasswords(editing != null, password.Value, confirm.Value);
+                if (error == null && self) error = ValidateCurrentPassword(password.Value, current.Value);
                 if (error != null) return error;
                 UserUpsertRequest body = new UserUpsertRequest();
                 body.Email = email.Value.Trim();
@@ -247,9 +255,29 @@ namespace Armada.Tui.Screens.Admin
                 body.IsAdmin = isAdmin.Value;
                 body.IsTenantAdmin = isTenantAdmin.Value;
                 body.Active = active.Value;
-                if (password.Value.Trim().Length > 0) body.Password = password.Value;
-                if (editing != null) await Context.Client.UpdateUserAsync(editing.Id, body).ConfigureAwait(false);
-                else await Context.Client.CreateUserAsync(body).ConfigureAwait(false);
+                if (password.Value.Trim().Length > 0)
+                {
+                    body.Password = password.Value;
+                    if (self) body.CurrentPassword = current.Value;
+                }
+
+                if (editing != null)
+                {
+                    try
+                    {
+                        await Context.Client.UpdateUserAsync(editing.Id, body).ConfigureAwait(false);
+                    }
+                    catch (ArmadaApiException ex) when (body.CurrentPassword != null && ex.StatusCode == 403)
+                    {
+                        // On a self-update the only 403 is a wrong CurrentPassword (F-37).
+                        return "Current password is incorrect.";
+                    }
+                }
+                else
+                {
+                    await Context.Client.CreateUserAsync(body).ConfigureAwait(false);
+                }
+
                 return null;
             };
             Context.Modals.Show(modal, result =>
@@ -273,6 +301,31 @@ namespace Armada.Tui.Screens.Admin
             if (!editing && String.IsNullOrWhiteSpace(password)) return "Password is required when creating a user.";
             if (!String.Equals(password ?? "", confirm ?? "", StringComparison.Ordinal)) return "Passwords do not match.";
             return null;
+        }
+
+        /// <summary>
+        /// The server's self-service check (F-37): changing your own password through the user edit form needs the
+        /// current password. A blank new password keeps the stored one and needs nothing.
+        /// </summary>
+        /// <param name="password">New password.</param>
+        /// <param name="current">Current password.</param>
+        /// <returns>English error, or null.</returns>
+        public static string? ValidateCurrentPassword(string password, string current)
+        {
+            if (String.IsNullOrWhiteSpace(password)) return null;
+            if (String.IsNullOrEmpty(current)) return "Enter your current password to change your own password.";
+            return null;
+        }
+
+        /// <summary>
+        /// True when <paramref name="user"/> is the signed-in user (whose own password change needs the current one).
+        /// </summary>
+        /// <param name="user">User being edited, or null.</param>
+        /// <returns>True for the signed-in user.</returns>
+        public bool IsSignedInUser(UserMaster? user)
+        {
+            string? me = Context.Session.Identity?.User?.Id;
+            return user != null && !String.IsNullOrEmpty(me) && String.Equals(user.Id, me, StringComparison.Ordinal);
         }
 
         #endregion

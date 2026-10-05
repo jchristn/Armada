@@ -4,6 +4,7 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
     using System.Collections.Generic;
     using System.Linq;
     using System.Net;
+    using Armada.Core.Models;
     using Armada.Tui.Screens;
     using Armada.Tui.Screens.Admin;
     using Armada.Tui.Screens.Kit;
@@ -87,6 +88,95 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                     AssertFalse(JsonShape.HasPropertyAnywhere(put.Body, "Password"), "no password: " + put.Body);
                     AssertNull(UsersScreen.ValidatePasswords(true, "", ""), "blank ok on edit");
                     AssertEqual("Password is required when creating a user.", UsersScreen.ValidatePasswords(false, "", ""), "required on create");
+                }
+            }));
+
+            cases.Add(TuiCase.Sync(Suite, "users_edit_self_current_password", "Changing your own password asks for and sends CurrentPassword (F-37)", () =>
+            {
+                StubHttpHandler stub = Stub();
+                stub.On("PUT", "/api/v1/users/usr_admin", body => StubHttpHandler.Response(HttpStatusCode.OK, "{\"Id\":\"usr_admin\",\"TenantId\":\"ten_default\",\"Email\":\"admin@armada\"}"));
+                using (TuiTestHost host = TuiCase.SignedIn(160, 40, "/server?tab=users", stub))
+                {
+                    AssertTrue(host.WaitForText("ops@armada"), "rows");
+                    UsersScreen screen = Current<UsersScreen>(host);
+                    UserMaster me = screen.Items.First(u => u.Id == "usr_admin");
+                    AssertTrue(screen.IsSignedInUser(me), "signed-in user");
+                    FormModal? modal = screen.OpenForm(me);
+                    AssertNotNull(modal, "modal");
+                    host.Pump();
+                    TuiCase.Contains(host.Screen(), "Current Password", "current password field");
+                    ((InputField)modal!.Form.Rows.First(r => r.Label == "New Password").Field!).Value = "n3w-Passw0rd";
+                    ((InputField)modal.Form.Rows.First(r => r.Label == "Confirm New Password").Field!).Value = "n3w-Passw0rd";
+                    modal.RunSubmit();
+                    AssertTrue(host.PumpUntil(() => modal.Error != null), "validation error");
+                    AssertEqual("Enter your current password to change your own password.", modal.Error, "missing current password");
+                    AssertEqual(0, stub.CountFor("PUT", "/api/v1/users/usr_admin"), "no request without the current password");
+                    ((InputField)modal.Form.Rows.First(r => r.Label == "Current Password").Field!).Value = "old-Passw0rd";
+                    modal.RunSubmit();
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("PUT", "/api/v1/users/usr_admin") == 1), "put");
+                    AdminUserBody body = stub.LastBody<AdminUserBody>("PUT", "/api/v1/users/usr_admin");
+                    AssertEqual("n3w-Passw0rd", body.Password, "new password");
+                    AssertEqual("old-Passw0rd", body.CurrentPassword, "current password");
+                    AssertNull(UsersScreen.ValidateCurrentPassword("", ""), "blank new password needs nothing");
+                }
+            }));
+
+            cases.Add(TuiCase.Sync(Suite, "users_edit_self_blank_password", "Editing yourself without a new password sends no CurrentPassword", () =>
+            {
+                StubHttpHandler stub = Stub();
+                stub.On("PUT", "/api/v1/users/usr_admin", body => StubHttpHandler.Response(HttpStatusCode.OK, "{\"Id\":\"usr_admin\",\"TenantId\":\"ten_default\",\"Email\":\"admin@armada\"}"));
+                using (TuiTestHost host = TuiCase.SignedIn(160, 40, "/server?tab=users", stub))
+                {
+                    AssertTrue(host.WaitForText("ops@armada"), "rows");
+                    UsersScreen screen = Current<UsersScreen>(host);
+                    FormModal? modal = screen.OpenForm(screen.Items.First(u => u.Id == "usr_admin"));
+                    host.Pump();
+                    ((InputField)modal!.Form.Rows.First(r => r.Label == "Current Password").Field!).Value = "typed-but-unused";
+                    modal.RunSubmit();
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("PUT", "/api/v1/users/usr_admin") == 1), "put");
+                    string put = stub.Last("PUT", "/api/v1/users/usr_admin").Body;
+                    AssertFalse(JsonShape.HasPropertyAnywhere(put, "Password"), "no password: " + put);
+                    AssertFalse(JsonShape.HasPropertyAnywhere(put, "CurrentPassword"), "no current password: " + put);
+                }
+            }));
+
+            cases.Add(TuiCase.Sync(Suite, "users_edit_self_wrong_current_password", "A 403 on your own password change reads as a wrong current password", () =>
+            {
+                StubHttpHandler stub = Stub();
+                stub.On("PUT", "/api/v1/users/usr_admin", body => StubHttpHandler.Response(HttpStatusCode.Forbidden, "{\"Error\":\"Forbidden\",\"Message\":\"server text\"}"));
+                using (TuiTestHost host = TuiCase.SignedIn(160, 40, "/server?tab=users", stub))
+                {
+                    AssertTrue(host.WaitForText("ops@armada"), "rows");
+                    UsersScreen screen = Current<UsersScreen>(host);
+                    FormModal? modal = screen.OpenForm(screen.Items.First(u => u.Id == "usr_admin"));
+                    host.Pump();
+                    ((InputField)modal!.Form.Rows.First(r => r.Label == "New Password").Field!).Value = "n3w-Passw0rd";
+                    ((InputField)modal.Form.Rows.First(r => r.Label == "Confirm New Password").Field!).Value = "n3w-Passw0rd";
+                    ((InputField)modal.Form.Rows.First(r => r.Label == "Current Password").Field!).Value = "wrong-one";
+                    modal.RunSubmit();
+                    AssertTrue(host.PumpUntil(() => modal.Error != null), "error");
+                    AssertEqual("Current password is incorrect.", modal.Error, "wrong current password");
+                    AssertTrue(host.App.Modals.IsActive, "form stays open");
+                }
+            }));
+
+            cases.Add(TuiCase.Sync(Suite, "users_edit_other_no_current_password", "Setting another user's password has no Current Password field and sends none", () =>
+            {
+                StubHttpHandler stub = Stub();
+                using (TuiTestHost host = TuiCase.SignedIn(160, 40, "/server?tab=users", stub))
+                {
+                    AssertTrue(host.WaitForText("ops@armada"), "rows");
+                    UsersScreen screen = Current<UsersScreen>(host);
+                    FormModal? modal = screen.OpenForm(screen.Items.First(u => u.Id == "usr_ops"));
+                    host.Pump();
+                    AssertFalse(modal!.Form.Rows.Any(r => r.Label == "Current Password"), "no current password field");
+                    ((InputField)modal.Form.Rows.First(r => r.Label == "New Password").Field!).Value = "0ps-Passw0rd";
+                    ((InputField)modal.Form.Rows.First(r => r.Label == "Confirm New Password").Field!).Value = "0ps-Passw0rd";
+                    modal.RunSubmit();
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("PUT", "/api/v1/users/usr_ops") == 1), "put");
+                    StubRequest put = stub.Last("PUT", "/api/v1/users/usr_ops");
+                    AssertEqual("0ps-Passw0rd", put.BodyAs<AdminUserBody>().Password, "password");
+                    AssertFalse(JsonShape.HasPropertyAnywhere(put.Body, "CurrentPassword"), "no current password: " + put.Body);
                 }
             }));
 
@@ -219,6 +309,74 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                     AssertTrue(host.WaitForText("Delete tenant"), "confirm");
                     host.Type("delete").Press("enter");
                     AssertTrue(host.PumpUntil(() => stub.CountFor("DELETE", "/api/v1/tenants/ten_two") == 1), "deleted");
+                }
+            }));
+
+            cases.Add(TuiCase.Sync(Suite, "tenants_create_generated_password", "A generated tenant admin password is shown once, copyable, and not kept", () =>
+            {
+                StubHttpHandler stub = Stub();
+                stub.On("POST", "/api/v1/tenants", body => StubHttpHandler.Response(HttpStatusCode.Created, "{\"Id\":\"ten_three\",\"Name\":\"Third\",\"Active\":true,\"AdminEmail\":\"admin@armada\",\"AdminPassword\":\"Gen3rated-Secret-42\"}"));
+                using (TuiTestHost host = TuiCase.SignedIn(160, 40, "/server?tab=tenants", stub))
+                {
+                    AssertTrue(host.WaitForText("Second Tenant"), "rows");
+                    TenantsScreen screen = Current<TenantsScreen>(host);
+                    FormModal? create = screen.OpenForm(null);
+                    AssertNotNull(create, "create modal");
+                    host.Pump();
+                    TuiCase.Contains(host.Screen(), "Leave blank to generate one", "admin password hint");
+                    ((InputField)create!.Form.Rows.First(r => r.Label == "Name").Field!).Value = "Third";
+                    create.RunSubmit();
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/tenants") == 1), "created");
+                    string post = stub.Last("POST", "/api/v1/tenants").Body;
+                    AssertFalse(JsonShape.HasPropertyAnywhere(post, "AdminPassword"), "no admin password sent: " + post);
+                    AssertTrue(host.WaitForText("Gen3rated-Secret-42"), "password shown");
+                    string frame = host.Screen();
+                    TuiScreenDump.Write("tenants-generated-password", frame);
+                    TuiCase.Contains(frame, "Tenant admin password (shown once)", "dialog title");
+                    TuiCase.Contains(frame, "It is shown only once", "shown once wording");
+                    TuiCase.Contains(frame, "admin@armada", "admin email");
+                    host.Press("y");
+                    AssertEqual("Gen3rated-Secret-42", host.Tui.Context.Clipboard.LastCopied, "copied");
+                    host.Press("esc");
+                    AssertTrue(host.PumpUntil(() => !host.App.Modals.IsActive), "dialog closed");
+                    AssertFalse(host.Screen().Contains("Gen3rated-Secret-42"), "not shown after close");
+                    foreach (System.Reflection.FieldInfo field in typeof(TenantsScreen).GetFields(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic))
+                    {
+                        if (field.FieldType == typeof(string)) AssertFalse(String.Equals("Gen3rated-Secret-42", (string?)field.GetValue(screen), StringComparison.Ordinal), "screen does not keep it in " + field.Name);
+                    }
+
+                    AssertFalse(System.Text.Json.JsonSerializer.Serialize(host.Tui.Context.Prefs.Current).Contains("Gen3rated-Secret-42"), "not in preferences");
+                }
+            }));
+
+            cases.Add(TuiCase.Sync(Suite, "tenants_create_supplied_password", "A supplied tenant admin password is validated and sent, and no dialog opens", () =>
+            {
+                StubHttpHandler stub = Stub();
+                stub.On("POST", "/api/v1/tenants", body => StubHttpHandler.Response(HttpStatusCode.Created, "{\"Id\":\"ten_three\",\"Name\":\"Third\",\"Active\":true,\"AdminEmail\":\"admin@armada\",\"AdminPassword\":null}"));
+                using (TuiTestHost host = TuiCase.SignedIn(160, 40, "/server?tab=tenants", stub))
+                {
+                    AssertTrue(host.WaitForText("Second Tenant"), "rows");
+                    TenantsScreen screen = Current<TenantsScreen>(host);
+                    FormModal? create = screen.OpenForm(null);
+                    host.Pump();
+                    ((InputField)create!.Form.Rows.First(r => r.Label == "Name").Field!).Value = "Third";
+                    InputField admin = (InputField)create.Form.Rows.First(r => r.Label == "Admin Password (optional)").Field!;
+                    AssertTrue(admin.Masked, "masked");
+                    admin.Value = "short";
+                    create.RunSubmit();
+                    AssertTrue(host.PumpUntil(() => create.Error != null), "validation error");
+                    AssertEqual("Admin password must be at least 8 characters.", create.Error, "too short");
+                    AssertEqual(0, stub.CountFor("POST", "/api/v1/tenants"), "not sent");
+                    admin.Value = "Chosen-Passw0rd";
+                    create.RunSubmit();
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/tenants") == 1), "created");
+                    AdminTenantBody body = stub.LastBody<AdminTenantBody>("POST", "/api/v1/tenants");
+                    AssertEqual("Third", body.Name, "name");
+                    AssertEqual("Chosen-Passw0rd", body.AdminPassword, "admin password sent");
+                    AssertTrue(host.PumpUntil(() => !host.App.Modals.IsActive), "form closed");
+                    host.Pump();
+                    AssertFalse(host.Screen().Contains("shown once"), "no generated-password dialog");
+                    AssertNull(TenantsScreen.ValidateAdminPassword(""), "blank generates");
                 }
             }));
 

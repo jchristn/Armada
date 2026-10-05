@@ -35,6 +35,7 @@ If the selected deployment disconnects or the tunnel drops, the proxy closes the
 - [Server-Pushed Events](#server-pushed-events)
   - [status.snapshot](#statussnapshot)
   - [mission.changed](#missionchanged)
+  - [mission.status_changed](#missionstatus_changed)
   - [voyage.changed](#voyagechanged)
   - [captain.changed](#captainchanged)
   - [objective.changed](#objectivechanged)
@@ -236,8 +237,8 @@ Send a command to the Admiral for execution. The `action` field determines which
 
 **Authorization:** WebSocket commands operate outside tenant scope (they read and write records by id across every
 tenant), so every command, reads included, requires a **global administrator** (the API key identity or an admin user).
-Tenant admins and regular users receive `command.error` with `Forbidden: WebSocket commands require a global
-administrator. Use the REST API, which is tenant-scoped.` and use the REST API instead. `stop_server`, `backup`, and
+Tenant admins and regular users receive `command.error` with `code` `Forbidden` (error text `Forbidden: WebSocket
+commands require a global administrator. Use the REST API, which is tenant-scoped.`) and use the REST API instead. `stop_server`, `backup`, and
 `restore` are therefore admin-only.
 
 See [Command Actions](#command-actions) for the current operational action set. This WebSocket surface focuses on real-time monitoring and core orchestration commands; newer REST-only helpers such as Workspace, planning sessions, request history, GitHub objective import, GitHub Actions sync, GitHub PR evidence, and runtime discovery remain HTTP-only.
@@ -319,6 +320,48 @@ Broadcast when a mission's status changes (e.g., assigned, started, completed, f
 | `data.status` | string | New [MissionStatusEnum](#missionstatusenum) value |
 | `data.title` | string \| null | Mission title |
 | `timestamp` | string | ISO 8601 UTC timestamp |
+
+---
+
+### mission.status_changed
+
+Broadcast (and recorded as an event) when a mission's status changes. It carries the generic event fields plus the new
+and previous status as typed fields, so clients never need to read them from the `message` text (which is not stable).
+The recorded event's `Payload` (REST and MCP events) holds the same two values as `{"Status": ..., "PreviousStatus": ...}`.
+
+```json
+{
+  "type": "mission.status_changed",
+  "message": "Mission msn_abc123def456ghi789jk status changed",
+  "data": {
+    "entityType": "mission",
+    "entityId": "msn_abc123def456ghi789jk",
+    "captainId": "cpt_abc123def456ghi789jk",
+    "missionId": "msn_abc123def456ghi789jk",
+    "vesselId": "vsl_abc123def456ghi789jk",
+    "voyageId": "vyg_abc123def456ghi789jk",
+    "status": "WorkProduced",
+    "previousStatus": "InProgress"
+  },
+  "timestamp": "2026-03-07T12:35:00.000Z"
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `type` | string | Always `"mission.status_changed"` |
+| `message` | string | Human-readable description (not stable; do not parse) |
+| `data.entityType` | string | `"mission"` |
+| `data.entityId` / `data.missionId` | string | Mission ID (prefix `msn_`) |
+| `data.captainId` | string \| null | Assigned captain |
+| `data.vesselId` | string \| null | Mission's vessel |
+| `data.voyageId` | string \| null | Mission's voyage |
+| `data.status` | string | New [MissionStatusEnum](#missionstatusenum) value |
+| `data.previousStatus` | string \| null | Previous [MissionStatusEnum](#missionstatusenum) value, or null when unknown |
+| `timestamp` | string | ISO 8601 UTC timestamp |
+
+The .NET client reads this payload as `Armada.Client.Socket.MissionStatusChangedEvent` (`MissionStatus` and
+`PreviousMissionStatus` are the typed values).
 
 ---
 
@@ -856,7 +899,7 @@ Commands are sent via the `command` route. Each command returns a `command.resul
 | | `restore` | Restore from a backup ZIP | `filePath` |
 | **Status & Control** | `stop_server` | Stop the Admiral | - |
 
-Any other `action` is rejected with `command.error` `Unknown action: <action>`.
+Any other `action` is rejected with `command.error` code `UnknownAction` (`Unknown action: <action>`).
 
 ---
 
@@ -2498,24 +2541,48 @@ Invalid transitions will return a `command.error` response.
 
 ### Command Errors
 
-When a command fails, the server returns a `command.error` message:
+When a command fails, the server returns a `command.error` message. `code` is the machine-readable reason; branch on
+it, never on the English `error` text (which is not stable).
 
 ```json
 {
   "type": "command.error",
   "action": "get_fleet",
-  "error": "Fleet not found"
+  "error": "Fleet not found",
+  "code": "NotFound"
 }
 ```
 
-If the command body cannot be parsed or an exception occurs:
+If the command body cannot be parsed or an exception occurs, `action` is null and `code` comes from the exception type:
 
 ```json
 {
   "type": "command.error",
-  "error": "Unexpected character encountered while parsing value"
+  "action": null,
+  "error": "Unexpected character encountered while parsing value",
+  "code": "InvalidArgument"
 }
 ```
+
+| Field | Type | Description |
+|---|---|---|
+| `type` | string | Always `"command.error"` |
+| `action` | string \| null | The command action that failed, or null when it could not be read |
+| `error` | string | Human-readable message (not stable; do not parse) |
+| `code` | string | One of the codes below (added in 1.0; absent from older servers) |
+
+| `code` | Meaning |
+|---|---|
+| `UnknownAction` | The `action` is not a command the handler accepts |
+| `NotFound` | The entity the command names does not exist |
+| `InvalidArgument` | A required field is missing or a value is invalid (including an unparseable body) |
+| `Conflict` | The entity's current state does not allow the command (for example an invalid status transition) |
+| `Forbidden` | The caller may not run the command (WebSocket commands require a global administrator) |
+| `Unavailable` | A service or data the command needs is not available on this server (for example no saved diff) |
+| `InternalError` | The command failed unexpectedly |
+
+New codes may be added in minor releases; treat an unrecognized code like `InternalError`. The .NET client reads this
+reply with `Armada.Client.Socket.CommandErrorMessage.From(message)` (`ErrorCode` is the typed value).
 
 ### Unknown Actions
 
@@ -2525,7 +2592,8 @@ Sending an unrecognized `action` value returns:
 {
   "type": "command.error",
   "action": "bad_action",
-  "error": "Unknown action: bad_action"
+  "error": "Unknown action: bad_action",
+  "code": "UnknownAction"
 }
 ```
 

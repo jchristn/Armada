@@ -7,6 +7,8 @@ import type {
   TenantMetadata,
   UserMaster,
   UserUpsertRequest,
+  TenantCreateRequest,
+  TenantCreateResult,
   Credential,
   EnumerationResult,
   Job,
@@ -636,7 +638,7 @@ export const lookupTenants = (email: string) =>
 
 // ==================== Tenants (admin) ====================
 export const listTenants = () => get<EnumerationResult<TenantMetadata>>('/api/v1/tenants');
-export const createTenant = (data: Partial<TenantMetadata>) => post<TenantMetadata>('/api/v1/tenants', data);
+export const createTenant = (data: TenantCreateRequest) => post<TenantCreateResult>('/api/v1/tenants', data);
 export const updateTenant = (id: string, data: Partial<TenantMetadata>) => put<TenantMetadata>(`/api/v1/tenants/${id}`, data);
 export const deleteTenant = (id: string) => del<void>(`/api/v1/tenants/${id}`);
 

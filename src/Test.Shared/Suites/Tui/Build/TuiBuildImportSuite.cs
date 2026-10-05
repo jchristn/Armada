@@ -5,6 +5,7 @@ namespace Test.Shared.Suites.Tui.Build
     using System.Linq;
     using System.Net;
     using System.Threading;
+    using Armada.Core.Models;
     using Armada.Tui.Screens.Build;
     using Armada.Tui.Services;
     using Test.Shared.Infrastructure;
@@ -97,6 +98,17 @@ namespace Test.Shared.Suites.Tui.Build
                     AssertTrue(apply.BodyAs<Armada.Core.Models.FleetRecommendationApplyRequest>().Fleets.Any(f => f.Name == "Services" && String.Join("|", f.VesselIds) == "vsl_new"), "apply body: " + apply.Body);
                     AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.ActiveToasts().Any(t => t.Severity == NotificationSeverityEnum.Success && t.Text.Contains("Fleets applied: 1 vessel assigned."))), "applied toast");
                 }
+            }));
+
+            cases.Add(TuiCase.Sync(Suite, "categorization_error_labels", "Every fleet categorization error code has an English label", () =>
+            {
+                List<string> codes = typeof(VesselImportCategorizationCodes).GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+                    .Where(f => f.IsLiteral && f.FieldType == typeof(string))
+                    .Select(f => (string)f.GetRawConstantValue()!)
+                    .ToList();
+                AssertEqual(2, codes.Count, "categorization codes");
+                foreach (string code in codes) AssertFalse(String.IsNullOrEmpty(ImportText.ErrorLabel(code)), "label for " + code);
+                AssertEqual("Choose a captain to recommend fleets, or turn fleet recommendations off.", ImportText.ErrorLabel(VesselImportCategorizationCodes.CategorizationCaptainRequired), "required label");
             }));
 
             cases.Add(TuiCase.Sync(Suite, "browse_history", "Browse marks repositories and worktrees; history lists batches and opens one", () =>

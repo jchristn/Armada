@@ -29,15 +29,18 @@ namespace Armada.Client
         }
 
         /// <summary>
-        /// Dashboard <c>createTenant</c>: POST '/api/v1/tenants'.
+        /// Dashboard <c>createTenant</c>: POST '/api/v1/tenants'. The server generates the seeded tenant admin's
+        /// password and returns it once in <see cref="TenantCreateResult.AdminPassword"/>; pass a
+        /// <see cref="TenantCreateRequest"/> with <see cref="TenantCreateRequest.AdminPassword"/> set to supply it instead
+        /// (the body is serialized by its runtime type).
         /// </summary>
-        /// <param name="data">data.</param>
+        /// <param name="data">Tenant, or a <see cref="TenantCreateRequest"/> carrying an admin password.</param>
         /// <param name="token">Cancellation token.</param>
-        /// <returns>The response.</returns>
+        /// <returns>The created tenant with the seeded admin's email and, when generated, its password (shown once).</returns>
         /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
-        public Task<TenantMetadata?> CreateTenantAsync(TenantMetadata data, CancellationToken token = default)
+        public Task<TenantCreateResult?> CreateTenantAsync(TenantMetadata data, CancellationToken token = default)
         {
-            return PostAsync<TenantMetadata>("/api/v1/tenants", data, null, token);
+            return PostAsync<TenantCreateResult>("/api/v1/tenants", data, null, token);
         }
 
         /// <summary>

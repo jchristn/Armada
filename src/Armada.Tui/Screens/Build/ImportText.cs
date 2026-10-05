@@ -275,6 +275,8 @@ namespace Armada.Tui.Screens.Build
                 case "DirectoryNotFound": return "That directory does not exist on the Admiral host.";
                 case "BatchNotFound": return "This import batch no longer exists. Run discovery again.";
                 case "BatchBusy": return "This batch is already being imported. Wait for it to finish or open it from the import history.";
+                case VesselImportCategorizationCodes.CategorizationCaptainRequired: return "Choose a captain to recommend fleets, or turn fleet recommendations off.";
+                case VesselImportCategorizationCodes.CategorizationCaptainNotFound: return "The selected categorization captain no longer exists. Choose another captain.";
                 default: return null;
             }
         }

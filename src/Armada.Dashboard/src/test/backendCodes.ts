@@ -7,6 +7,7 @@ import backendCodesJson from './fixtures/backendCodes.json?raw';
 export interface BackendCodes {
   FleetActionReasonCodes: string[];
   VesselImportCodes: string[];
+  VesselImportCategorizationCodes: string[];
   VesselHealthDetailCodes: string[];
   FleetActionRunStatusEnum: string[];
   FleetActionTargetStatusEnum: string[];

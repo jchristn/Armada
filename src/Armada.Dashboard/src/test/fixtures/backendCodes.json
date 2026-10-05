@@ -34,6 +34,10 @@
     "PathNotVisibleToAdmiral",
     "VesselAlreadyExists"
   ],
+  "VesselImportCategorizationCodes": [
+    "CategorizationCaptainNotFound",
+    "CategorizationCaptainRequired"
+  ],
   "VesselHealthDetailCodes": [
     "Ahead",
     "ArmadaBranches",

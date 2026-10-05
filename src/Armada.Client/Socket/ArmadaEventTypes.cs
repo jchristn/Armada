@@ -95,6 +95,12 @@ namespace Armada.Client.Socket
         /// <summary>ask.thread: a thread changed (<see cref="AskThreadEvent"/>).</summary>
         public const string AskThread = "ask.thread";
 
+        /// <summary>mission.status_changed: a mission's status changed, with typed <c>status</c> and <c>previousStatus</c> (<see cref="MissionStatusChangedEvent"/>).</summary>
+        public const string MissionStatusChanged = "mission.status_changed";
+
+        /// <summary>command.error: a WebSocket command failed; fields are top level, read with <see cref="CommandErrorMessage.From"/>.</summary>
+        public const string CommandError = "command.error";
+
         /// <summary>status.snapshot: the status the server sends right after subscribe (<see cref="Armada.Core.Models.ArmadaStatus"/>).</summary>
         public const string StatusSnapshot = "status.snapshot";
 
@@ -153,6 +159,7 @@ namespace Armada.Client.Socket
             map[AskWork] = typeof(AskWorkEvent);
             map[AskThread] = typeof(AskThreadEvent);
             map[StatusSnapshot] = typeof(Armada.Core.Models.ArmadaStatus);
+            map[MissionStatusChanged] = typeof(MissionStatusChangedEvent);
             return map;
         }
 

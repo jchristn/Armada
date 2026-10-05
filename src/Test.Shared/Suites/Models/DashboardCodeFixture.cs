@@ -22,6 +22,11 @@ namespace Test.Shared.Suites.Models
         public List<string> VesselImportCodes { get; set; } = new List<string>();
 
         /// <summary>
+        /// Values of the constants in Armada.Core.Models.VesselImportCategorizationCodes.
+        /// </summary>
+        public List<string> VesselImportCategorizationCodes { get; set; } = new List<string>();
+
+        /// <summary>
         /// Values of the constants in Armada.Core.Services.Health.VesselHealthDetailCodes.
         /// </summary>
         public List<string> VesselHealthDetailCodes { get; set; } = new List<string>();

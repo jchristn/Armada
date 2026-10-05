@@ -30,6 +30,12 @@ namespace Armada.Client.Models
         public string? PasswordSha256 { get; set; } = null;
 
         /// <summary>
+        /// The caller's current password, required by the server when the caller changes their own password through
+        /// <c>PUT /api/v1/users/{id}</c> (400 when missing, 403 when wrong); null otherwise (omitted from the body).
+        /// </summary>
+        public string? CurrentPassword { get; set; } = null;
+
+        /// <summary>
         /// First name, or null.
         /// </summary>
         public string? FirstName { get; set; } = null;

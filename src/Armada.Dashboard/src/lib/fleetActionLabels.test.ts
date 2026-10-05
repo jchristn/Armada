@@ -78,6 +78,13 @@ describe('vessel import code labels', () => {
     expect(missing).toEqual([]);
   });
 
+  it('maps every fleet categorization request error code to an error label', () => {
+    const codes = backendCodes.VesselImportCategorizationCodes;
+    expect(codes).toContain('CategorizationCaptainRequired');
+    const missing = codes.filter((code) => !IMPORT_ERROR_LABELS[code]);
+    expect(missing).toEqual([]);
+  });
+
   it('covers every candidate status, outcome, and batch status', () => {
     expect(Object.keys(CANDIDATE_STATUS_META).sort()).toEqual([...backendCodes.VesselImportCandidateStatusEnum].sort());
     expect(Object.keys(OUTCOME_META).sort()).toEqual([...backendCodes.VesselImportOutcomeEnum].sort());

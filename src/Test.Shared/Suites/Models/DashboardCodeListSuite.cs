@@ -44,6 +44,7 @@ namespace Test.Shared.Suites.Models
                 DashboardCodeFixture expected = Expected();
                 AssertTrue(expected.FleetActionReasonCodes.Contains(FleetActionReasonCodes.DirtyTree), "DirtyTree");
                 AssertTrue(expected.VesselImportCodes.Contains(VesselImportCodes.NotSelected), "NotSelected");
+                AssertTrue(expected.VesselImportCategorizationCodes.Contains(VesselImportCategorizationCodes.CategorizationCaptainRequired), "CategorizationCaptainRequired");
                 AssertTrue(expected.VesselHealthDetailCodes.Contains(VesselHealthDetailCodes.EvaluationError), "EvaluationError");
                 AssertEqual(Enum.GetNames(typeof(FleetActionRunStatusEnum)).Length, expected.FleetActionRunStatusEnum.Count, "run status members");
             }));
@@ -86,6 +87,7 @@ namespace Test.Shared.Suites.Models
             DashboardCodeFixture fixture = new DashboardCodeFixture();
             fixture.FleetActionReasonCodes = Constants(typeof(FleetActionReasonCodes));
             fixture.VesselImportCodes = Constants(typeof(VesselImportCodes));
+            fixture.VesselImportCategorizationCodes = Constants(typeof(VesselImportCategorizationCodes));
             fixture.VesselHealthDetailCodes = Constants(typeof(VesselHealthDetailCodes));
             fixture.FleetActionRunStatusEnum = Members(typeof(FleetActionRunStatusEnum));
             fixture.FleetActionTargetStatusEnum = Members(typeof(FleetActionTargetStatusEnum));

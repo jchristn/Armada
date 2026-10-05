@@ -17,6 +17,11 @@ namespace Test.Shared.Suites.Tui.Bodies
         /// </summary>
         public bool? Active { get; set; } = null;
 
+        /// <summary>
+        /// Password for the seeded tenant admin, or null.
+        /// </summary>
+        public string? AdminPassword { get; set; } = null;
+
         #endregion
     }
 }

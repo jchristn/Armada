@@ -7,6 +7,23 @@ export interface TenantMetadata {
   lastUpdateUtc: string;
 }
 
+/** Body of POST /api/v1/tenants: the tenant plus an optional password for its seeded admin. */
+export interface TenantCreateRequest {
+  name: string;
+  active?: boolean;
+  /** Password for the seeded admin@armada account; omit to have the server generate one. */
+  adminPassword?: string;
+}
+
+/**
+ * Response of POST /api/v1/tenants. `adminPassword` is the generated password of the seeded tenant admin, returned
+ * only in this response (null when the creator supplied one). Show it once; never store it.
+ */
+export interface TenantCreateResult extends TenantMetadata {
+  adminEmail: string | null;
+  adminPassword: string | null;
+}
+
 /**
  * Ownership scope for Category B configuration entities. Tenant-wide objects are visible to everyone
  * in the tenant but editable only by tenant/global admins; user-specific objects are owned by a user.
@@ -33,6 +50,8 @@ export interface UserUpsertRequest {
   tenantId?: string;
   email: string;
   password?: string;
+  /** The caller's current password; required by the server only when changing your own password. */
+  currentPassword?: string;
   passwordSha256?: string;
   firstName?: string | null;
   lastName?: string | null;
