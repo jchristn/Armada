@@ -10,10 +10,10 @@
     {
       "kind": "route",
       "key": "/",
-      "status": "planned",
-      "tui": "",
-      "workstream": "",
-      "notes": ""
+      "status": "implemented",
+      "tui": "HomeScreen",
+      "workstream": "W3.1",
+      "notes": "System Status: header actions, Ask band, alert banners, KPIs, admin shortcuts, health tiles, Mission History chart, Voyage Progress, Recent Missions, Recent Signals; reloads on socket messages and every 30 s"
     },
     {
       "kind": "route",
@@ -90,10 +90,10 @@
     {
       "kind": "route",
       "key": "/backlog/:id",
-      "status": "planned",
-      "tui": "",
-      "workstream": "",
-      "notes": ""
+      "status": "implemented",
+      "tui": "BacklogItemScreen",
+      "workstream": "W3.6",
+      "notes": "form, links, GitHub source, refinement panel"
     },
     {
       "kind": "route",
@@ -170,10 +170,10 @@
     {
       "kind": "route",
       "key": "/dispatch",
-      "status": "planned",
-      "tui": "",
-      "workstream": "",
-      "notes": ""
+      "status": "implemented",
+      "tui": "HubScreen",
+      "workstream": "W3.5",
+      "notes": "hub: Dispatch and Backlog tabs"
     },
     {
       "kind": "route",
@@ -234,18 +234,18 @@
     {
       "kind": "route",
       "key": "/fleet-actions",
-      "status": "planned",
-      "tui": "",
-      "workstream": "",
-      "notes": ""
+      "status": "implemented",
+      "tui": "HubScreen",
+      "workstream": "W3.7",
+      "notes": "hub: Actions and Runs tabs; ?run=new opens the run flow"
     },
     {
       "kind": "route",
       "key": "/fleet-actions/runs/:id",
-      "status": "planned",
-      "tui": "",
-      "workstream": "",
-      "notes": ""
+      "status": "implemented",
+      "tui": "FleetActionRunScreen",
+      "workstream": "W3.7",
+      "notes": "live run detail, targets, target drawer"
     },
     {
       "kind": "route",
@@ -274,10 +274,10 @@
     {
       "kind": "route",
       "key": "/inbox",
-      "status": "planned",
-      "tui": "",
-      "workstream": "",
-      "notes": ""
+      "status": "implemented",
+      "tui": "InboxScreen",
+      "workstream": "W3.2",
+      "notes": "KPIs, inbox items, recent alerts with mark all read"
     },
     {
       "kind": "route",
@@ -301,7 +301,7 @@
       "status": "implemented",
       "tui": "JobsScreen",
       "workstream": "W3.11",
-      "notes": ""
+      "notes": "jobs grid with cancel"
     },
     {
       "kind": "route",
@@ -314,26 +314,26 @@
     {
       "kind": "route",
       "key": "/merge-queue/:id",
-      "status": "planned",
-      "tui": "",
-      "workstream": "",
-      "notes": ""
+      "status": "implemented",
+      "tui": "MergeEntryScreen",
+      "workstream": "W3.10",
+      "notes": "fields, landing preview, test output, actions"
     },
     {
       "kind": "route",
       "key": "/missions",
-      "status": "planned",
-      "tui": "",
-      "workstream": "",
-      "notes": ""
+      "status": "implemented",
+      "tui": "HubScreen",
+      "workstream": "W3.8",
+      "notes": "hub: Missions, Voyages, Merge Queue tabs"
     },
     {
       "kind": "route",
       "key": "/missions/:id",
-      "status": "planned",
-      "tui": "",
-      "workstream": "",
-      "notes": ""
+      "status": "implemented",
+      "tui": "MissionScreen",
+      "workstream": "W3.8",
+      "notes": "header actions, menu, review, landing preview, PR panel, fields, linked checks and deployments, description, playbooks"
     },
     {
       "kind": "route",
@@ -346,18 +346,18 @@
     {
       "kind": "route",
       "key": "/objectives",
-      "status": "planned",
-      "tui": "",
-      "workstream": "",
-      "notes": ""
+      "status": "implemented",
+      "tui": "BacklogScreen",
+      "workstream": "W3.6",
+      "notes": "backlog list (standalone route)"
     },
     {
       "kind": "route",
       "key": "/objectives/:id",
-      "status": "planned",
-      "tui": "",
-      "workstream": "",
-      "notes": ""
+      "status": "implemented",
+      "tui": "BacklogItemScreen",
+      "workstream": "W3.6",
+      "notes": "form, links, GitHub source, refinement panel"
     },
     {
       "kind": "route",
@@ -394,18 +394,18 @@
     {
       "kind": "route",
       "key": "/planning",
-      "status": "planned",
-      "tui": "",
-      "workstream": "",
-      "notes": ""
+      "status": "implemented",
+      "tui": "PlanningScreen",
+      "workstream": "W3.4",
+      "notes": "start form with pre-fill, readiness, recent sessions, transcript, dispatch card"
     },
     {
       "kind": "route",
       "key": "/planning/:id",
-      "status": "planned",
-      "tui": "",
-      "workstream": "",
-      "notes": ""
+      "status": "implemented",
+      "tui": "PlanningScreen",
+      "workstream": "W3.4",
+      "notes": "session transcript with live planning-session events"
     },
     {
       "kind": "route",
@@ -626,18 +626,18 @@
     {
       "kind": "route",
       "key": "/voyages/:id",
-      "status": "planned",
-      "tui": "",
-      "workstream": "",
-      "notes": ""
+      "status": "implemented",
+      "tui": "VoyageScreen",
+      "workstream": "W3.9",
+      "notes": "actions, fields, missions grid"
     },
     {
       "kind": "route",
       "key": "/voyages/create",
-      "status": "planned",
-      "tui": "",
-      "workstream": "",
-      "notes": ""
+      "status": "implemented",
+      "tui": "VoyageCreateScreen",
+      "workstream": "W3.9",
+      "notes": "create voyage form with missions list"
     },
     {
       "kind": "route",
@@ -866,57 +866,57 @@
     {
       "kind": "tab",
       "key": "DispatchHub:backlog",
-      "status": "planned",
-      "tui": "/dispatch?tab=backlog",
-      "workstream": "",
+      "status": "implemented",
+      "tui": "BacklogScreen",
+      "workstream": "W3.6",
       "notes": "Backlog"
     },
     {
       "kind": "tab",
       "key": "DispatchHub:dispatch",
-      "status": "planned",
-      "tui": "/dispatch?tab=dispatch",
-      "workstream": "",
+      "status": "implemented",
+      "tui": "DispatchScreen",
+      "workstream": "W3.5",
       "notes": "Dispatch"
     },
     {
       "kind": "tab",
       "key": "FleetActions:actions",
-      "status": "planned",
-      "tui": "/fleet-actions?tab=actions",
-      "workstream": "",
+      "status": "implemented",
+      "tui": "FleetActionsScreen",
+      "workstream": "W3.7",
       "notes": "Actions"
     },
     {
       "kind": "tab",
       "key": "FleetActions:runs",
-      "status": "planned",
-      "tui": "/fleet-actions?tab=runs",
-      "workstream": "",
+      "status": "implemented",
+      "tui": "FleetActionRunsScreen",
+      "workstream": "W3.7",
       "notes": "Runs"
     },
     {
       "kind": "tab",
       "key": "MissionsHub:merge-queue",
-      "status": "planned",
-      "tui": "/missions?tab=merge-queue",
-      "workstream": "",
+      "status": "implemented",
+      "tui": "MergeQueueScreen",
+      "workstream": "W3.10",
       "notes": "Merge Queue"
     },
     {
       "kind": "tab",
       "key": "MissionsHub:missions",
-      "status": "planned",
-      "tui": "/missions?tab=missions",
-      "workstream": "",
+      "status": "implemented",
+      "tui": "MissionsScreen",
+      "workstream": "W3.8",
       "notes": "Missions"
     },
     {
       "kind": "tab",
       "key": "MissionsHub:voyages",
-      "status": "planned",
-      "tui": "/missions?tab=voyages",
-      "workstream": "",
+      "status": "implemented",
+      "tui": "VoyagesScreen",
+      "workstream": "W3.9",
       "notes": "Voyages"
     },
     {
@@ -3650,50 +3650,50 @@
     {
       "kind": "event",
       "key": "objective-refinement-session.applied",
-      "status": "planned",
+      "status": "implemented",
       "tui": "BacklogItemScreen",
       "workstream": "W3.6",
-      "notes": ""
+      "notes": "refinement panel: live transcript, summary, apply, and delete updates"
     },
     {
       "kind": "event",
       "key": "objective-refinement-session.changed",
-      "status": "planned",
+      "status": "implemented",
       "tui": "BacklogItemScreen",
       "workstream": "W3.6",
-      "notes": ""
+      "notes": "refinement panel: live transcript, summary, apply, and delete updates"
     },
     {
       "kind": "event",
       "key": "objective-refinement-session.deleted",
-      "status": "planned",
+      "status": "implemented",
       "tui": "BacklogItemScreen",
       "workstream": "W3.6",
-      "notes": ""
+      "notes": "refinement panel: live transcript, summary, apply, and delete updates"
     },
     {
       "kind": "event",
       "key": "objective-refinement-session.message.created",
-      "status": "planned",
+      "status": "implemented",
       "tui": "BacklogItemScreen",
       "workstream": "W3.6",
-      "notes": ""
+      "notes": "refinement panel: live transcript, summary, apply, and delete updates"
     },
     {
       "kind": "event",
       "key": "objective-refinement-session.message.updated",
-      "status": "planned",
+      "status": "implemented",
       "tui": "BacklogItemScreen",
       "workstream": "W3.6",
-      "notes": ""
+      "notes": "refinement panel: live transcript, summary, apply, and delete updates"
     },
     {
       "kind": "event",
       "key": "objective-refinement-session.summary.created",
-      "status": "planned",
+      "status": "implemented",
       "tui": "BacklogItemScreen",
       "workstream": "W3.6",
-      "notes": ""
+      "notes": "refinement panel: live transcript, summary, apply, and delete updates"
     },
     {
       "kind": "event",
@@ -3706,66 +3706,66 @@
     {
       "kind": "event",
       "key": "planning-session.changed",
-      "status": "planned",
+      "status": "implemented",
       "tui": "PlanningScreen",
       "workstream": "W3.4",
-      "notes": ""
+      "notes": "live transcript, tool, thinking, summary, dispatch, and delete updates"
     },
     {
       "kind": "event",
       "key": "planning-session.deleted",
-      "status": "planned",
+      "status": "implemented",
       "tui": "PlanningScreen",
       "workstream": "W3.4",
-      "notes": ""
+      "notes": "live transcript, tool, thinking, summary, dispatch, and delete updates"
     },
     {
       "kind": "event",
       "key": "planning-session.dispatch.created",
-      "status": "planned",
+      "status": "implemented",
       "tui": "PlanningScreen",
       "workstream": "W3.4",
-      "notes": ""
+      "notes": "live transcript, tool, thinking, summary, dispatch, and delete updates"
     },
     {
       "kind": "event",
       "key": "planning-session.message.created",
-      "status": "planned",
+      "status": "implemented",
       "tui": "PlanningScreen",
       "workstream": "W3.4",
-      "notes": ""
+      "notes": "live transcript, tool, thinking, summary, dispatch, and delete updates"
     },
     {
       "kind": "event",
       "key": "planning-session.message.updated",
-      "status": "planned",
+      "status": "implemented",
       "tui": "PlanningScreen",
       "workstream": "W3.4",
-      "notes": ""
+      "notes": "live transcript, tool, thinking, summary, dispatch, and delete updates"
     },
     {
       "kind": "event",
       "key": "planning-session.summary.created",
-      "status": "planned",
+      "status": "implemented",
       "tui": "PlanningScreen",
       "workstream": "W3.4",
-      "notes": ""
+      "notes": "live transcript, tool, thinking, summary, dispatch, and delete updates"
     },
     {
       "kind": "event",
       "key": "planning-session.thinking",
-      "status": "planned",
+      "status": "implemented",
       "tui": "PlanningScreen",
       "workstream": "W3.4",
-      "notes": ""
+      "notes": "live transcript, tool, thinking, summary, dispatch, and delete updates"
     },
     {
       "kind": "event",
       "key": "planning-session.tool",
-      "status": "planned",
+      "status": "implemented",
       "tui": "PlanningScreen",
       "workstream": "W3.4",
-      "notes": ""
+      "notes": "live transcript, tool, thinking, summary, dispatch, and delete updates"
     },
     {
       "kind": "event",

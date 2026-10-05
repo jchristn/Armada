@@ -91,8 +91,19 @@ namespace Armada.Tui.Approvals
         /// <param name="decision">Decision.</param>
         public void SubmitReview(ApprovalItem item, ReviewDecision decision)
         {
-            string id = item.EntityId;
-            string title = item.EntityName ?? item.Title;
+            SubmitReview(item.EntityId, item.EntityName ?? item.Title, decision, () => Resolved(item));
+        }
+
+        /// <summary>
+        /// Submit a review decision for a mission by id (the dashboard's <c>submitReview</c>, shared by the Approvals
+        /// center and the Mission screen): the same calls, toasts, and error text.
+        /// </summary>
+        /// <param name="id">Mission id.</param>
+        /// <param name="title">Mission title.</param>
+        /// <param name="decision">Decision.</param>
+        /// <param name="onDone">Runs on the UI loop after success, or null.</param>
+        public void SubmitReview(string id, string title, ReviewDecision decision, Action? onDone)
+        {
             ArmadaClient client = _Context.Client;
             _ = Task.Run(async () =>
             {
@@ -140,7 +151,7 @@ namespace Armada.Tui.Approvals
                     _Context.Dispatcher.Post(() =>
                     {
                         _Context.Notifications.Toast(severity, _Context.Loc.T(toast, LocalizationArgs.Of("title", title)));
-                        Resolved(item);
+                        onDone?.Invoke();
                     });
                 }
                 catch (ArmadaApiException ex)

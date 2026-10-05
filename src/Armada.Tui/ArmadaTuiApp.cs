@@ -121,6 +121,7 @@ namespace Armada.Tui
             Screens.Register("AskScreen", (m, c) => new Armada.Tui.Screens.Ask.AskScreen(m, c));
             Screens.Register("ApprovalsScreen", (m, c) => new Armada.Tui.Approvals.ApprovalsScreen(m, c));
             Armada.Tui.Screens.DeliveryConfigScreens.Register(Screens);
+            Armada.Tui.Screens.Operations.OperationsScreens.Register(Screens);
             Shell = new ShellView(Context, Screens);
             GlobalCommands.Register(Context, Shell);
             Wire();

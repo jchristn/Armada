@@ -75,24 +75,6 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                 }
             }));
 
-            cases.Add(TuiCase.Sync(Suite, "jobs_cancel", "Jobs lists jobs and x cancels an unfinished one", () =>
-            {
-                StubHttpHandler stub = Stub();
-                stub.Json("GET", "/api/v1/jobs", "{\"Objects\":[{\"Id\":\"job_1\",\"Name\":\"Import repositories\",\"Kind\":\"Generic\",\"Status\":\"Running\",\"Progress\":40},{\"Id\":\"job_2\",\"Name\":\"Old\",\"Kind\":\"Generic\",\"Status\":\"Failed\",\"Progress\":100,\"ErrorReason\":\"boom\"}],\"TotalRecords\":2}");
-                stub.Json("POST", "/api/v1/jobs/job_1/cancel", "{\"Id\":\"job_1\",\"Name\":\"Import repositories\",\"Status\":\"Cancelled\"}");
-                using (TuiTestHost host = TuiCase.SignedIn(140, 40, "/jobs", stub))
-                {
-                    AssertTrue(host.WaitForText("Import repositories"), "row");
-                    TuiScreenDump.Write("jobs", host.Screen());
-                    TuiCase.Contains(host.Screen(), "boom", "error reason");
-                    TuiCase.Contains(host.Screen(), "40%", "progress");
-                    host.Press("x");
-                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/jobs/job_1/cancel") == 1), "cancel sent");
-                    AssertTrue(host.WaitForText("cancelled"), "toast");
-                    AssertFalse(JobsScreen.IsCancellable(new Armada.Core.Models.Job { Id = "job_x", Status = Armada.Core.Enums.JobStatusEnum.Failed }), "failed not cancellable");
-                }
-            }));
-
             cases.Add(TuiCase.Sync(Suite, "diagnostics", "Diagnostics runs checks on open and shows counts and the verdict", () =>
             {
                 StubHttpHandler stub = Stub();

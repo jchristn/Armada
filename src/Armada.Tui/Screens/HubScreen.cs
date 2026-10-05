@@ -34,6 +34,12 @@ namespace Armada.Tui.Screens
             get { return Route.Route.Title + (Route.Tab != null ? ": " + Route.Tab.Label : ""); }
         }
 
+        /// <inheritdoc />
+        public override IReadOnlyList<KeyValuePair<string, string>> Hints
+        {
+            get { return Content.Hints; }
+        }
+
         #endregion
 
         #region Constructors-and-Factories
@@ -68,12 +74,6 @@ namespace Armada.Tui.Screens
         public IReadOnlyList<HubTab> VisibleTabs()
         {
             return Route.Route.Hub!.Tabs.Where(t => (!t.GlobalAdminOnly || Context.Session.IsGlobalAdmin) && (!t.TenantAdminOnly || Context.Session.IsTenantAdmin)).ToList();
-        }
-
-        /// <inheritdoc />
-        public override IReadOnlyList<KeyValuePair<string, string>> Hints
-        {
-            get { return Content.Hints; }
         }
 
         /// <inheritdoc />
