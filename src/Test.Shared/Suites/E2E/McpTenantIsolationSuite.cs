@@ -51,7 +51,11 @@ namespace Test.Shared.Suites.E2E
             ["import_vessels"] = "vessel import batch (VesselImportService scopes by caller)",
             ["apply_fleet_recommendations"] = "vessel import batch (FleetCategorizationService scopes by caller)",
             ["delete_event"] = "event (covered by E2E.SecretsAndAudit, F-19)",
-            ["delete_events"] = "event (covered by E2E.SecretsAndAudit, F-19)"
+            ["delete_events"] = "event (covered by E2E.SecretsAndAudit, F-19)",
+            ["get_cli_permission_request"] = "CLI permission request (CliPermissionService scopes by caller; covered by Services.CliPermissionService)",
+            ["decide_cli_permission_request"] = "CLI permission request (CliPermissionService scopes by caller; covered by Services.CliPermissionService)",
+            ["update_cli_permission_rule"] = "CLI permission rule (CliPermissionService scopes by caller; covered by Services.CliPermissionService)",
+            ["delete_cli_permission_rule"] = "CLI permission rule (CliPermissionService scopes by caller; covered by Services.CliPermissionService)"
         };
 
         // Tools that take an id only as an optional filter or reference and otherwise act on the caller's own scope:
@@ -66,6 +70,8 @@ namespace Test.Shared.Suites.E2E
             "list_backlog_refinement_sessions",
             "search_memory",
             "inbox",
+            "list_cli_permission_requests",
+            "list_cli_permission_rules",
             "discover_vessels"
         };
 

@@ -69,6 +69,8 @@ namespace Armada.Server.Mcp
         /// <param name="stopServerUnavailableMessage">When <paramref name="onStop"/> is null and this is set, stop_server is
         /// still registered and answers a typed Unavailable error with this message (used by the standalone stdio server,
         /// so its tool list matches the HTTP server's).</param>
+        /// <param name="cliPermissionService">Optional CLI permission service; without it the CLI permission tools are
+        /// registered and answer a typed Unavailable error.</param>
         public static void RegisterAll(
             RegisterToolDelegate register,
             DatabaseDriver database,
@@ -98,7 +100,8 @@ namespace Armada.Server.Mcp
             FleetActionService? fleetActionService = null,
             VesselHealthService? vesselHealthService = null,
             IFleetCategorizationService? fleetCategorizationService = null,
-            string? stopServerUnavailableMessage = null)
+            string? stopServerUnavailableMessage = null,
+            CliPermissionService? cliPermissionService = null)
         {
             if (register == null) throw new ArgumentNullException(nameof(register));
             register = MapToolExceptions(MarkExperimental(register));
@@ -133,6 +136,7 @@ namespace Armada.Server.Mcp
             // Registered even without the service: each fleet action tool then answers a typed Unavailable error.
             McpFleetActionTools.Register(register, fleetActionService);
             if (vesselHealthService != null) McpVesselHealthTools.Register(register, vesselHealthService);
+            McpCliPermissionTools.Register(register, database, cliPermissionService);
         }
 
         /// <summary>
@@ -165,7 +169,8 @@ namespace Armada.Server.Mcp
             IVesselImportService? vesselImportService = null,
             FleetActionService? fleetActionService = null,
             VesselHealthService? vesselHealthService = null,
-            IFleetCategorizationService? fleetCategorizationService = null)
+            IFleetCategorizationService? fleetCategorizationService = null,
+            CliPermissionService? cliPermissionService = null)
         {
             List<CaptainToolSummary> tools = new List<CaptainToolSummary>();
 
@@ -215,6 +220,7 @@ namespace Armada.Server.Mcp
             if (harborService != null) RegisterCatalogGroup("Armada MCP / Harbors", register => McpHarborTools.Register(register, harborService));
             RegisterCatalogGroup("Armada MCP / Fleet Actions", register => McpFleetActionTools.Register(register, fleetActionService));
             if (vesselHealthService != null) RegisterCatalogGroup("Armada MCP / Vessel Health", register => McpVesselHealthTools.Register(register, vesselHealthService));
+            RegisterCatalogGroup("Armada MCP / CLI Permissions", register => McpCliPermissionTools.Register(register, database, cliPermissionService));
 
             return tools
                 .OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase)

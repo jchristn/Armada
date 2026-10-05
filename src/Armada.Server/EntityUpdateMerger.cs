@@ -110,6 +110,8 @@ namespace Armada.Server
             incoming.RecoveryAttempts = existing.RecoveryAttempts;
             incoming.QuarantineUntilUtc = existing.QuarantineUntilUtc;
             incoming.QuarantineReason = existing.QuarantineReason;
+            // The CLI permission policy changes only through its own endpoint (PUT /api/v1/captains/{id}/cli-permission-policy).
+            incoming.CliPermissionPolicy = existing.CliPermissionPolicy;
             incoming.LastHeartbeatUtc = existing.LastHeartbeatUtc;
             incoming.LastProcessAliveUtc = existing.LastProcessAliveUtc;
             incoming.CreatedUtc = existing.CreatedUtc;

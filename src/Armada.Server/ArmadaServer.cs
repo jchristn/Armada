@@ -145,6 +145,7 @@ namespace Armada.Server
         private Armada.Core.Services.Ask.AskThreadService _AskThreads = null!;
         private Armada.Server.Ask.AskActionService _AskActions = null!;
         private Armada.Server.Ask.AskTurnCoordinator _AskTurns = null!;
+        private CliPermissionService _CliPermissions = null!;
         private Armada.Server.Ask.AskWorkTracker _AskTracker = null!;
         private CaptainChatService _CaptainChat = null!;
 
@@ -541,8 +542,24 @@ namespace Armada.Server
             _AskActions.OnWorkLinked = _AskTracker.OnWorkLinkedAsync;
             _AskActions.OnProposalApproved = _AskTurns.StartFollowUpAsync;
             _AskTracker.Narrate = _AskTurns.NarrateAsync;
-            _AskTracker.ExpireProposals = _AskActions.ExpireDueAsync;
             _WebSocketHub.EntityChanged += _AskTracker.OnEntityChanged;
+
+            // CLI tool permissions: captains' permission prompts become requests that approvers decide; events reach the
+            // request's approvers (global admins and the tenant's tenant admins) and its owner.
+            _CliPermissions = new CliPermissionService(_Database, _Settings, _Logging);
+            _CliPermissions.AskThreads = _AskThreads;
+            _CliPermissions.OnRequestEvent = (eventType, request) => _WebSocketHub.BroadcastCliPermission(eventType, request);
+            _AskTurns.CliPermissions = _CliPermissions;
+            _AgentLifecycle.SetCliPermissionService(_CliPermissions);
+            _WebSocketHub.SetCliPermissionService(_CliPermissions);
+            _AskThreads.SessionTokensAvailable = _SessionTokenService != null;
+            _AskTracker.ExpireProposals = async (CancellationToken expireToken) =>
+            {
+                int expired = await _AskActions.ExpireDueAsync(expireToken).ConfigureAwait(false);
+                try { await _CliPermissions.SweepAsync(expireToken).ConfigureAwait(false); }
+                catch (Exception sweepEx) when (!(sweepEx is OperationCanceledException)) { _Logging.Warn(_Header + "CLI permission sweep failed: " + sweepEx.Message); }
+                return expired;
+            };
 
             RegisterRoutes();
             MarkExperimentalRoutes();
@@ -1117,6 +1134,10 @@ namespace Armada.Server
             new InboxRoutes(new InboxService(_Database, _Logging, _Settings), _JsonOptions)
                 .Register(_App, authenticate, _AuthorizationService);
 
+            // CLI tool permissions (requests, decisions, rules, captain and thread policies)
+            new CliPermissionRoutes(_CliPermissions, _JsonOptions)
+                .Register(_App, authenticate, _AuthorizationService);
+
             // Objectives
             new ObjectiveRoutes(_ObjectiveService, _GitHubIntegrationService)
                 .Register(_App, authenticate, _AuthorizationService);
@@ -1642,7 +1663,9 @@ namespace Armada.Server
                 _VesselImportService,
                 _FleetActionService,
                 _VesselHealthService,
-                _FleetCategorizationService);
+                _FleetCategorizationService,
+                null,
+                _CliPermissions);
         }
 
         /// <summary>

@@ -118,5 +118,12 @@ namespace Armada.Server
         /// defaults and out-of-range values are clamped to 0..3650 (0 means never). Applied live.
         /// </summary>
         public RetentionSettings? Retention { get; set; }
+
+        /// <summary>
+        /// Optional CLI tool permission settings update (AskDefaultPolicy, MissionDefaultPolicy, AllowOwnerApproval,
+        /// PromptTimeoutSeconds). When supplied, replaces the full permissions object; omitted fields take their defaults
+        /// and PromptTimeoutSeconds is clamped to 10..3600. Applied live to the next launch.
+        /// </summary>
+        public CliPermissionSettings? Permissions { get; set; }
     }
 }

@@ -70,6 +70,24 @@ namespace Armada.Runtimes
         /// </summary>
         public event Action<int, ApiRuntimeDiagnostic>? OnDiagnostic;
 
+        /// <summary>
+        /// CLI tool permission policy for the built-in shell tool (run_process), or null to run it without a gate (the
+        /// behavior before CLI tool permissions; direct captain chat and planning). Refuse refuses every run_process
+        /// call; ApproveInArmada asks <see cref="PermissionPrompt"/> first; Bypass runs it.
+        /// </summary>
+        public Armada.Core.Enums.CliPermissionPolicyEnum? ShellPolicy { get; set; } = null;
+
+        /// <summary>
+        /// Answers a permission prompt for a run_process call under ApproveInArmada: (tool name, arguments JSON,
+        /// cancellation) to the outcome. Null under ApproveInArmada refuses the call.
+        /// </summary>
+        public Func<string, string, CancellationToken, Task<Armada.Core.Models.CliPermissionPromptOutcome>>? PermissionPrompt { get; set; } = null;
+
+        /// <summary>
+        /// Name of the built-in shell tool gated by <see cref="ShellPolicy"/>.
+        /// </summary>
+        public const string ShellToolName = "run_process";
+
         #endregion
 
         #region Private-Members
@@ -409,6 +427,29 @@ namespace Armada.Runtimes
                     EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.ToolResult, "[tool:result] " + call.Name + " failed " + message);
                     EmitToolEvent(processId, new ApiRuntimeToolEvent { Phase = ApiRuntimeToolPhaseEnum.Completed, Id = call.Id, Name = call.Name, Ok = false, ElapsedMs = elapsed, Result = message });
                     return JsonSerializer.Serialize(new { error = "mcp_tool_failed", message });
+                }
+            }
+
+            // CLI tool permissions for the built-in shell tool (the equivalent of a CLI captain's Bash tool).
+            if (String.Equals(call.Name, ShellToolName, StringComparison.Ordinal) && ShellPolicy.HasValue && ShellPolicy.Value != Armada.Core.Enums.CliPermissionPolicyEnum.Bypass)
+            {
+                string? refusal = null;
+                if (ShellPolicy.Value == Armada.Core.Enums.CliPermissionPolicyEnum.Refuse || PermissionPrompt == null)
+                {
+                    refusal = "This command requires approval: the CLI tool permission policy for this session is Refuse.";
+                }
+                else
+                {
+                    Armada.Core.Models.CliPermissionPromptOutcome outcome = await PermissionPrompt(call.Name, argsJson, token).ConfigureAwait(false);
+                    if (!outcome.Allowed) refusal = String.IsNullOrWhiteSpace(outcome.Message) ? "Denied in Armada." : outcome.Message;
+                }
+
+                if (refusal != null)
+                {
+                    long refusedElapsed = Environment.TickCount64 - startTicks;
+                    EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.ToolResult, "[tool:result] " + call.Name + " refused " + refusal);
+                    EmitToolEvent(processId, new ApiRuntimeToolEvent { Phase = ApiRuntimeToolPhaseEnum.Completed, Id = call.Id, Name = call.Name, Ok = false, ElapsedMs = refusedElapsed, Result = refusal, PermissionDenied = true });
+                    return JsonSerializer.Serialize(new { error = "permission_denied", message = refusal });
                 }
             }
 

@@ -19,7 +19,8 @@ namespace Armada.Server.WebSocket
 
         /// <summary>
         /// Recipients: tenant (sockets of the entity's tenant plus opted-in global admins), user (the owning user's
-        /// sockets only), or connection (the subscribing socket only).
+        /// sockets only), approvers (global admins of the tenant or opted in, the tenant's tenant admins, and the owning
+        /// user), or connection (the subscribing socket only).
         /// </summary>
         public string Scope { get; set; } = "tenant";
 

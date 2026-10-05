@@ -171,7 +171,7 @@ namespace Armada.Server
                 string userId = auth.UserId!;
                 options.OnChunk = delta => SendToCaller(tenantId, userId, "ask.chunk", new { turnId, delta });
                 options.OnThinking = delta => SendToCaller(tenantId, userId, "ask.thinking", new { turnId, delta });
-                options.OnTool = activity => SendToCaller(tenantId, userId, "ask.tool", new { turnId, phase = activity.Phase, id = activity.Id, name = activity.Name, arguments = activity.Arguments, ok = activity.Ok, elapsedMs = activity.ElapsedMs, result = activity.Result });
+                options.OnTool = activity => SendToCaller(tenantId, userId, "ask.tool", new { turnId, phase = activity.Phase, id = activity.Id, name = activity.Name, arguments = activity.Arguments, ok = activity.Ok, elapsedMs = activity.ElapsedMs, result = activity.Result, permissionDenied = activity.PermissionDenied });
             }
 
             CaptainChatTurnResult result = await RunCoreAsync(options, false, token).ConfigureAwait(false);
@@ -264,9 +264,15 @@ namespace Armada.Server
                         Arguments = toolEvent.Arguments,
                         Ok = toolEvent.Ok,
                         ElapsedMs = toolEvent.ElapsedMs,
-                        Result = toolEvent.Result
+                        Result = toolEvent.Result,
+                        PermissionDenied = toolEvent.PermissionDenied
                     });
                 }
+
+                // CLI tool permissions for the in-process (API-endpoint) runtime: its built-in shell tool is gated here,
+                // whether or not the turn has a scoped MCP token.
+                if (runtime is ApiAgentRuntime gatedRuntime && options.CliPermissionPolicy.HasValue)
+                    CliPermissionLaunch.Apply(gatedRuntime, options.CliPermissionPolicy.Value, options.PermissionPromptTimeoutSeconds ?? 600, options.PermissionPrompt);
 
                 runtime.OnStdoutReceived += (pid, line) =>
                 {
@@ -298,6 +304,23 @@ namespace Armada.Server
                         }
                         else if (claudeEvent.Type == ClaudeStreamLine.TypeResult)
                         {
+                            // Typed permission denials: mark the refused calls so the transcript can explain the policy.
+                            if (claudeEvent.PermissionDenials != null)
+                            {
+                                foreach (ClaudePermissionDenial denial in claudeEvent.PermissionDenials)
+                                {
+                                    if (denial == null || String.IsNullOrEmpty(denial.ToolUseId)) continue;
+                                    emitTool(new CaptainToolActivity
+                                    {
+                                        Phase = "completed",
+                                        Id = denial.ToolUseId,
+                                        Name = denial.ToolName ?? toolCalls.NameOf(denial.ToolUseId),
+                                        Ok = false,
+                                        PermissionDenied = true
+                                    });
+                                }
+                            }
+
                             lock (outputLock)
                             {
                                 if (claudeEvent.Result != null) claudeFinalReply = claudeEvent.Result;
@@ -459,6 +482,11 @@ namespace Armada.Server
                         scopedRuntime.McpSessionToken = options.McpSessionToken;
                         scopedRuntime.McpHost = _McpHost;
                         isolateLaunch = true;
+
+                        // ApproveInArmada: Claude Code sends permission prompts to Armada's prompt tool on the scoped
+                        // "armada" server bound to this session's token.
+                        if (options.CliPermissionPolicy.HasValue)
+                            CliPermissionLaunch.Apply(runtime, options.CliPermissionPolicy.Value, options.PermissionPromptTimeoutSeconds ?? 600);
                     }
                 }
 

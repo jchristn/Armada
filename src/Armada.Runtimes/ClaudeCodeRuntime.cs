@@ -49,6 +49,21 @@ namespace Armada.Runtimes
         /// </summary>
         public bool StreamJsonOutput { get; set; } = false;
 
+        /// <summary>
+        /// MCP tool that answers Claude Code's permission prompts (--permission-prompt-tool), for example
+        /// mcp__armada__cli_permission_prompt, or null. Used only when the launch does not bypass permissions: tools that
+        /// would need approval are then routed to that tool instead of being refused. The tool's MCP server must be in the
+        /// launch's MCP configuration (the scoped "armada" server of a token launch).
+        /// </summary>
+        public string? PermissionPromptTool { get; set; } = null;
+
+        /// <summary>
+        /// Seconds the permission prompt tool may wait for a decision, or null. When set with
+        /// <see cref="PermissionPromptTool"/>, MCP_TOOL_TIMEOUT is raised above it (plus two minutes) so Claude Code does
+        /// not abandon the waiting call first.
+        /// </summary>
+        public int? PermissionPromptTimeoutSeconds { get; set; } = null;
+
         #endregion
 
         #region Private-Members
@@ -152,6 +167,14 @@ namespace Armada.Runtimes
                 // the captain can do. Without this, print mode refuses every Armada tool call.
                 args.Add("--allowedTools");
                 args.Add("mcp__armada");
+
+                // ApproveInArmada: a tool that would need approval is sent to Armada's permission prompt tool, which
+                // holds it until an approver (or a CLI permission rule) decides, instead of being refused.
+                if (!String.IsNullOrEmpty(PermissionPromptTool))
+                {
+                    args.Add("--permission-prompt-tool");
+                    args.Add(PermissionPromptTool!);
+                }
             }
 
             // The prompt is delivered on stdin (see UsePromptStdin), not as a CLI argument. On Windows the
@@ -178,6 +201,13 @@ namespace Armada.Runtimes
             // even when the Admiral or CLI was started from within a Claude Code session
             startInfo.Environment.Remove("CLAUDECODE");
             startInfo.Environment.Remove("CLAUDE_CODE_ENTRYPOINT");
+
+            // A permission prompt can wait for an approver; keep Claude Code from timing out the MCP call first.
+            if (!String.IsNullOrEmpty(PermissionPromptTool) && PermissionPromptTimeoutSeconds.HasValue && !(SkipPermissions && CaptainRuntimeOptions.GetAutoApprove(captain)))
+            {
+                long timeoutMs = ((long)PermissionPromptTimeoutSeconds.Value + 120L) * 1000L;
+                startInfo.Environment["MCP_TOOL_TIMEOUT"] = timeoutMs.ToString(CultureInfo.InvariantCulture);
+            }
 
             // Per-captain reasoning effort -> Claude Code extended-thinking budget.
             int? thinkingTokens = ReasoningEffortTranslator.ToClaudeThinkingTokens(captain?.ReasoningEffort);
