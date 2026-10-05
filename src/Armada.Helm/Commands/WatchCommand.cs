@@ -20,6 +20,7 @@ namespace Armada.Helm.Commands
         public override async Task<int> ExecuteAsync(CommandContext context, WatchSettings settings, CancellationToken cancellationToken)
         {
             int intervalMs = (settings.Interval ?? 5) * 1000;
+            NotificationService notifications = new NotificationService();
             ArmadaSettings armadaSettings = GetSettings();
 
             // Track previous state for change detection
@@ -123,7 +124,7 @@ namespace Armada.Helm.Commands
                                             ? string.Join("\n", notifLines.Take(5))
                                             : "";
 
-                                        NotificationService.Send("Armada", notifTitle + (string.IsNullOrEmpty(notifBody) ? "" : "\n" + notifBody));
+                                        notifications.Send("Armada", notifTitle + (string.IsNullOrEmpty(notifBody) ? "" : "\n" + notifBody));
                                     }
                                 }
                             }

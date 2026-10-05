@@ -6,6 +6,10 @@ All notable changes to Armada are documented in this file.
 
 ## Unreleased
 
+### Test runs no longer raise desktop notifications
+
+- `NotificationService` (used by `armada watch`) runs its platform command through `INotificationCommandRunner`; the test suite records the command instead of running it. Before, every full test run sent four real "Test Title" notifications through `osascript`, which macOS shows as coming from Script Editor. The tests now check the exact command and escaping for macOS, Linux, and Windows.
+
 ### Terminal UI: Operations, Delivery, Configuration, Activity, and System screens
 
 - Operations: Home, Needs You, Planning (live streaming transcript, dispatch from a session), Dispatch (pre-fill from Planning, Backlog, Incident, Workspace), Backlog and Backlog item (GitHub import, refinement sessions), Fleet Actions (runs, live run detail, target drawer), Missions and Mission detail (diff, log, review, transition, landing preview, PR panel), Voyages, Voyage detail, Create Voyage, Merge Queue and entry detail, and Jobs.
