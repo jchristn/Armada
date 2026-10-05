@@ -414,8 +414,9 @@ namespace Armada.Tui.Screens.Operations
                 _Busy = false;
                 Composer.Text = "";
                 if (detail == null) return;
-                ShowDetail(detail);
-                UpsertSession(detail.Session);
+                ObjectiveRefinementSessionDetail merged = MergeWithLive(detail);
+                ShowDetail(merged);
+                UpsertSession(merged.Session);
             }, null, ex => { _Busy = false; ShowMessage(String.IsNullOrEmpty(ex.Message) ? Tr("Failed to send refinement message.") : ex.Message); });
         }
 
@@ -999,6 +1000,28 @@ namespace Armada.Tui.Screens.Operations
             else _SessionList.Insert(0, session);
             _SessionList = _SessionList.OrderByDescending(s => s.LastUpdateUtc).ToList();
             Sessions.SetLocalRows(_SessionList);
+        }
+
+        /// <summary>
+        /// Fold a detail from a request response into what live events already delivered for the same session. The
+        /// response can be built before a fast captain reply arrives over the WebSocket, so replacing the transcript
+        /// with it would drop that reply; for each message and for the session, the copy with the later
+        /// <c>LastUpdateUtc</c> wins.
+        /// </summary>
+        private ObjectiveRefinementSessionDetail MergeWithLive(ObjectiveRefinementSessionDetail incoming)
+        {
+            ObjectiveRefinementSessionDetail? current = Detail;
+            if (current == null || current.Session.Id != incoming.Session.Id) return incoming;
+            Dictionary<string, ObjectiveRefinementMessage> byId = new Dictionary<string, ObjectiveRefinementMessage>(StringComparer.Ordinal);
+            foreach (ObjectiveRefinementMessage m in incoming.Messages) byId[m.Id] = m;
+            foreach (ObjectiveRefinementMessage m in current.Messages)
+            {
+                if (!byId.TryGetValue(m.Id, out ObjectiveRefinementMessage? other) || m.LastUpdateUtc > other.LastUpdateUtc) byId[m.Id] = m;
+            }
+
+            incoming.Messages = byId.Values.OrderBy(m => m.Sequence).ToList();
+            if (current.Session.LastUpdateUtc > incoming.Session.LastUpdateUtc) incoming.Session = current.Session;
+            return incoming;
         }
 
         private void ShowDetail(ObjectiveRefinementSessionDetail? detail)

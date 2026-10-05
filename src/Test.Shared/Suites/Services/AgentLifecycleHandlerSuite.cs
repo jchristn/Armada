@@ -174,7 +174,7 @@ namespace Test.Shared.Suites.Services
 
                         AssertTrue(processId > 0, "Launch should return a process id");
                         AssertContains("--model cursor-model", logContents, "Launch log should include captain model flag");
-                        AssertModelArgument(await WaitForRecordedArgsAsync(shim.ArgsFile, "cursor-model").ConfigureAwait(false), "cursor-model", "Launched runtime receives --model cursor-model");
+                        AssertModelArgument(await WaitForModelArgumentAsync(shim.ArgsFile, "cursor-model").ConfigureAwait(false), "cursor-model", "Launched runtime receives --model cursor-model");
                     }
                     finally
                     {
@@ -732,15 +732,39 @@ namespace Test.Shared.Suites.Services
 
         private static void AssertModelArgument(string recordedArgs, string model, string label)
         {
+            AssertTrue(HasModelArgument(recordedArgs, model), label + "; recorded:\n" + recordedArgs);
+        }
+
+        private static bool HasModelArgument(string recordedArgs, string model)
+        {
             // The shim writes "$*" on the first line and then one argument per line; check the argv sequence.
             string[] lines = recordedArgs.Replace("\r", "").Split('\n');
-            bool found = false;
             for (int i = 1; i + 1 < lines.Length; i++)
             {
-                if (lines[i] == "--model" && lines[i + 1] == model) found = true;
+                if (lines[i] == "--model" && lines[i + 1] == model) return true;
             }
 
-            AssertTrue(found, label + "; recorded:\n" + recordedArgs);
+            return false;
+        }
+
+        private static async Task<string> WaitForModelArgumentAsync(string argsFile, string model)
+        {
+            // The first line ("$*") already contains the model while the shim is still writing one argument per line,
+            // so wait for the per-argument sequence itself rather than the substring.
+            MonotonicDeadline deadline = MonotonicDeadline.After(TimeSpan.FromSeconds(10));
+            string contents = "";
+            while (!deadline.Passed)
+            {
+                if (File.Exists(argsFile))
+                {
+                    contents = await File.ReadAllTextAsync(argsFile).ConfigureAwait(false);
+                    if (HasModelArgument(contents, model)) return contents;
+                }
+
+                await Task.Delay(50).ConfigureAwait(false);
+            }
+
+            return contents;
         }
 
         private static async Task<string> WaitForRecordedArgsAsync(string argsFile, string? expectedSubstring = null)

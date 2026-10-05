@@ -4,7 +4,9 @@ namespace Test.Shared.Suites.Tui
     using System.Collections.Generic;
     using System.Linq;
     using System.Net;
+    using System.Net.Http;
     using System.Text.Json;
+    using System.Threading;
     using Armada.Core.Models;
     using Armada.Tui.Screens.Operations;
     using Armada.Tui.Services;
@@ -149,6 +151,44 @@ namespace Test.Shared.Suites.Tui
                     AssertEqual("cpt_1", start.CaptainId, "start captain");
                     AssertEqual("vsl_demo", start.VesselId, "start vessel");
                     AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.ActiveToasts().Any(t => t.Text.Contains("Refinement session started with claude-1."))), "start toast");
+                }
+            }));
+
+            cases.Add(TuiCase.Sync(Suite, "send_response_keeps_live_reply", "A captain reply that arrives live before the send call returns stays in the transcript", () =>
+            {
+                StubHttpHandler stub = Stub();
+                string detailJson;
+                using (HttpClient probe = new HttpClient(stub, false))
+                {
+                    detailJson = probe.GetStringAsync("http://stub/api/v1/objective-refinement-sessions/ors_1").GetAwaiter().GetResult();
+                }
+
+                using (ManualResetEventSlim releaseSend = new ManualResetEventSlim(false))
+                {
+                    stub.On("POST", "/api/v1/objective-refinement-sessions/ors_1/messages", body =>
+                    {
+                        releaseSend.Wait(TimeSpan.FromSeconds(30));
+                        return StubHttpHandler.Response(HttpStatusCode.OK, detailJson);
+                    });
+
+                    using (TuiTestHost host = TuiCase.SignedIn(160, 50, "/backlog/obj_a", stub))
+                    {
+                        BacklogItemScreen screen = (BacklogItemScreen)host.Tui.Shell.Screen!;
+                        AssertTrue(host.PumpUntil(() => screen.Detail != null), "session detail loaded");
+                        screen.SelectPanel("transcript");
+                        screen.Composer.Text = "Add rollout notes";
+                        AssertTrue(screen.RunAction("send-refinement"), "send action");
+                        AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/objective-refinement-sessions/ors_1/messages") == 1), "send call held");
+                        host.Tui.Context.Events.Inject(AskFixtures.EventJson("objective-refinement-session.message.created",
+                            "{\"sessionId\":\"ors_1\",\"objectiveId\":\"obj_a\",\"message\":{\"id\":\"orm_9\",\"objectiveRefinementSessionId\":\"ors_1\",\"objectiveId\":\"obj_a\",\"role\":\"Assistant\",\"sequence\":9,\"content\":\"Fast live reply\",\"createdUtc\":\"2026-10-04T10:00:00Z\",\"lastUpdateUtc\":\"2026-10-04T10:00:00Z\"}}"));
+                        AssertTrue(host.WaitForText("Fast live reply"), "live reply shown\n" + host.Screen());
+
+                        releaseSend.Set();
+                        AssertTrue(host.PumpUntil(() => screen.Composer.Text.Length == 0), "send response applied");
+                        host.Pump();
+                        AssertTrue(screen.Detail!.Messages.Any(m => m.Id == "orm_9"), "live reply kept after the send response");
+                        TuiCase.Contains(host.Screen(), "Fast live reply", "live reply still on screen");
+                    }
                 }
             }));
 
