@@ -1012,6 +1012,11 @@ namespace Test.Shared.Suites.Services
                 throw new NotImplementedException();
             }
 
+            public Task<ArmadaStatus> GetStatusAsync(AuthContext caller, CancellationToken token = default)
+            {
+                throw new NotImplementedException();
+            }
+
             public Task RecallCaptainAsync(string captainId, CancellationToken token = default)
             {
                 throw new NotImplementedException();

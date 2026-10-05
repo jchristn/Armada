@@ -5,6 +5,7 @@ namespace Armada.Server.Mcp.Tools
     using Armada.Core.Database;
     using Armada.Core.Models;
     using Armada.Core.Services;
+    using Armada.Core.Settings;
     using SyslogLogging;
 
     /// <summary>
@@ -20,9 +21,10 @@ namespace Armada.Server.Mcp.Tools
         /// <param name="register">Delegate to register each tool.</param>
         /// <param name="database">Database driver used to build the inbox.</param>
         /// <param name="logging">Logging module.</param>
-        public static void Register(RegisterToolDelegate register, DatabaseDriver database, LoggingModule logging)
+        /// <param name="settings">Admiral settings; supplies the Ask proposal expiry so MCP and REST list the same items.</param>
+        public static void Register(RegisterToolDelegate register, DatabaseDriver database, LoggingModule logging, ArmadaSettings? settings)
         {
-            InboxService inbox = new InboxService(database, logging);
+            InboxService inbox = new InboxService(database, logging, settings);
 
             register(
                 "inbox",

@@ -404,7 +404,9 @@ The stdio transport has no network attack surface -- the only caller is the pare
 
 ### status
 
-Get aggregate status of all active work in Armada.
+Get aggregate status of active work in Armada: captain counts by state, mission counts by status, active voyages with
+progress, and recent signals. A global administrator sees every tenant; any other caller sees only its own tenant (the
+same scoping as `GET /api/v1/status`).
 
 **Input Schema:**
 
@@ -479,7 +481,7 @@ Return the operator's inbox: everything across the fleet that requires a human's
 - **Awaiting your decision (human-in-the-loop):** a mission in `Review` (approve or reject), a deployment in `PendingApproval`, or a pending Ask Armada action proposal in one of your own conversations.
 - **Failed and needs intervention (human-out-of-the-loop):** a failed mission, a mission whose work could not be merged (landing failed), a failed merge, a failed or verification-failed deployment, or a stalled captain.
 
-Purely informational events (completions, normal progress) are deliberately excluded -- the inbox answers *"what needs me?"*, not *"what happened?"* (use `enumerate` or the Activity log for history). An empty `items` list means nothing currently needs the operator. Operational items are scoped like other reads (global admin: everything; tenant admin: the tenant; regular user: own items); Ask proposals are always limited to the caller's own threads. Each category is capped at 100 items, and items are ordered by severity (`Critical` first), then title.
+Purely informational events (completions, normal progress) are deliberately excluded -- the inbox answers *"what needs me?"*, not *"what happened?"* (use `enumerate` or the Activity log for history). An empty `items` list means nothing currently needs the operator. Operational items are scoped like other reads (global admin: everything; tenant admin: the tenant; regular user: own items); Ask proposals are always limited to the caller's own threads, and proposals older than `Ask.ProposalExpiryMinutes` are left out (the same rule as `GET /api/v1/inbox`). Each category is capped at 100 items, and items are ordered by severity (`Critical` first), then title.
 
 **Item kinds and severity:**
 

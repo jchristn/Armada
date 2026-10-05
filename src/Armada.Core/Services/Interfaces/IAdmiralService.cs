@@ -142,6 +142,16 @@ namespace Armada.Core.Services.Interfaces
         Task<ArmadaStatus> GetStatusAsync(CancellationToken token = default);
 
         /// <summary>
+        /// Get aggregate status scoped to a caller: a global administrator sees every tenant (the same as
+        /// <see cref="GetStatusAsync(CancellationToken)"/>); any other caller sees only its own tenant's captains,
+        /// missions, voyages, and signals.
+        /// </summary>
+        /// <param name="caller">Caller identity.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Status summary object.</returns>
+        Task<ArmadaStatus> GetStatusAsync(AuthContext caller, CancellationToken token = default);
+
+        /// <summary>
         /// Stop a specific captain gracefully.
         /// </summary>
         /// <param name="captainId">Captain identifier.</param>

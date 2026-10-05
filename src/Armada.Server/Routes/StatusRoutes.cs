@@ -98,13 +98,13 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
                     return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
                 }
-                ArmadaStatus status = await _admiral.GetStatusAsync().ConfigureAwait(false);
+                ArmadaStatus status = await _admiral.GetStatusAsync(ctx).ConfigureAwait(false);
                 return status;
             },
             api => api
                 .WithTag("Status")
                 .WithSummary("Get Armada status")
-                .WithDescription("Returns aggregate status including captain counts, mission breakdown, active voyages, and recent signals.")
+                .WithDescription("Returns aggregate status including captain counts, mission breakdown, active voyages, and recent signals. A global administrator sees every tenant; any other caller sees only its own tenant.")
                 .WithResponse(200, OpenApiJson.For<ArmadaStatus>("Armada status dashboard"))
                 .WithSecurity("ApiKey"));
 

@@ -999,8 +999,9 @@ If the credential is protected, the server returns `403 Forbidden`.
 
 #### GET /api/v1/status
 
-Returns aggregate status including captain counts, mission breakdown, active voyages, and recent signals. The aggregate
-is server-wide, not scoped to the caller's tenant (open item O-03 in [SECURITY_REVIEW.md](SECURITY_REVIEW.md)).
+Returns aggregate status including captain counts, mission breakdown, active voyages, and recent signals. A global
+administrator sees every tenant; any other caller (tenant admin or user) sees only its own tenant's captains, missions,
+voyages, and signals. The same scoping applies to the MCP `status` tool and the WebSocket `status.snapshot`.
 
 **Permission:** Authenticated
 

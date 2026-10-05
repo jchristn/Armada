@@ -263,7 +263,8 @@ has sent `subscribe`.
 ### status.snapshot
 
 Sent in reply to the `subscribe` route. Contains a snapshot of the current Armada state. The snapshot is the same
-server-wide aggregate that `GET /api/v1/status` returns; it is not filtered by the socket's tenant.
+aggregate that `GET /api/v1/status` returns for the socket's identity: a global administrator sees every tenant (whatever
+`allTenants` is set to); any other identity sees only its own tenant.
 
 ```json
 {

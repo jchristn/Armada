@@ -440,43 +440,24 @@ namespace Armada.Core.Services
         /// <inheritdoc />
         public async Task<ArmadaStatus> GetStatusAsync(CancellationToken token = default)
         {
-            ArmadaStatus status = new ArmadaStatus();
+            return await BuildStatusAsync(null, token).ConfigureAwait(false);
+        }
 
-            // Captain counts
-            List<Captain> allCaptains = await _Database.Captains.EnumerateAsync(token).ConfigureAwait(false);
-            status.TotalCaptains = allCaptains.Count;
-            status.IdleCaptains = allCaptains.Count(c => c.State == CaptainStateEnum.Idle);
-            status.WorkingCaptains = allCaptains.Count(c => c.State == CaptainStateEnum.Working);
-            status.StalledCaptains = allCaptains.Count(c => c.State == CaptainStateEnum.Stalled);
-
-            // Mission counts by status
-            Dictionary<MissionStatusEnum, int> missionCounts = await _Database.Missions.CountByStatusAsync(token).ConfigureAwait(false);
-            foreach (KeyValuePair<MissionStatusEnum, int> kvp in missionCounts)
+        /// <inheritdoc />
+        public async Task<ArmadaStatus> GetStatusAsync(AuthContext caller, CancellationToken token = default)
+        {
+            if (caller == null) throw new ArgumentNullException(nameof(caller));
+            if (caller.IsAdmin) return await BuildStatusAsync(null, token).ConfigureAwait(false);
+            if (String.IsNullOrEmpty(caller.TenantId))
             {
-                if (kvp.Value > 0) status.MissionsByStatus[kvp.Key.ToString()] = kvp.Value;
+                // No tenant means no tenant data; only the server-wide fields are reported.
+                ArmadaStatus empty = new ArmadaStatus();
+                empty.MemoryPressureDeferrals = System.Threading.Interlocked.Read(ref _MemoryPressureDeferrals);
+                if (OnGetRemoteTunnelStatus != null) empty.RemoteTunnel = OnGetRemoteTunnelStatus();
+                return empty;
             }
 
-            // Active voyages
-            List<Voyage> activeVoyages = await _Database.Voyages.EnumerateByStatusAsync(VoyageStatusEnum.InProgress, token).ConfigureAwait(false);
-            List<Voyage> openVoyages = await _Database.Voyages.EnumerateByStatusAsync(VoyageStatusEnum.Open, token).ConfigureAwait(false);
-            status.ActiveVoyages = activeVoyages.Count + openVoyages.Count;
-            status.MemoryPressureDeferrals = System.Threading.Interlocked.Read(ref _MemoryPressureDeferrals);
-
-            foreach (Voyage voyage in activeVoyages.Concat(openVoyages))
-            {
-                VoyageProgress? progress = await _Voyages.GetProgressAsync(voyage.Id, token: token).ConfigureAwait(false);
-                if (progress != null) status.Voyages.Add(progress);
-            }
-
-            // Recent signals
-            status.RecentSignals = await _Database.Signals.EnumerateRecentAsync(10, token).ConfigureAwait(false);
-
-            if (OnGetRemoteTunnelStatus != null)
-            {
-                status.RemoteTunnel = OnGetRemoteTunnelStatus();
-            }
-
-            return status;
+            return await BuildStatusAsync(caller.TenantId, token).ConfigureAwait(false);
         }
 
         /// <inheritdoc />
@@ -1004,6 +985,61 @@ namespace Armada.Core.Services
         #endregion
 
         #region Private-Methods
+
+        /// <summary>
+        /// Build the status summary across every tenant (null) or for one tenant.
+        /// </summary>
+        private async Task<ArmadaStatus> BuildStatusAsync(string? tenantId, CancellationToken token)
+        {
+            ArmadaStatus status = new ArmadaStatus();
+            bool scoped = !String.IsNullOrEmpty(tenantId);
+
+            // Captain counts
+            List<Captain> allCaptains = scoped
+                ? await _Database.Captains.EnumerateAsync(tenantId!, token).ConfigureAwait(false)
+                : await _Database.Captains.EnumerateAsync(token).ConfigureAwait(false);
+            status.TotalCaptains = allCaptains.Count;
+            status.IdleCaptains = allCaptains.Count(c => c.State == CaptainStateEnum.Idle);
+            status.WorkingCaptains = allCaptains.Count(c => c.State == CaptainStateEnum.Working);
+            status.StalledCaptains = allCaptains.Count(c => c.State == CaptainStateEnum.Stalled);
+
+            // Mission counts by status
+            Dictionary<MissionStatusEnum, int> missionCounts = scoped
+                ? await _Database.Missions.CountByStatusAsync(tenantId!, token).ConfigureAwait(false)
+                : await _Database.Missions.CountByStatusAsync(token).ConfigureAwait(false);
+            foreach (KeyValuePair<MissionStatusEnum, int> kvp in missionCounts)
+            {
+                if (kvp.Value > 0) status.MissionsByStatus[kvp.Key.ToString()] = kvp.Value;
+            }
+
+            // Active voyages
+            List<Voyage> activeVoyages = scoped
+                ? await _Database.Voyages.EnumerateByStatusAsync(tenantId!, VoyageStatusEnum.InProgress, token).ConfigureAwait(false)
+                : await _Database.Voyages.EnumerateByStatusAsync(VoyageStatusEnum.InProgress, token).ConfigureAwait(false);
+            List<Voyage> openVoyages = scoped
+                ? await _Database.Voyages.EnumerateByStatusAsync(tenantId!, VoyageStatusEnum.Open, token).ConfigureAwait(false)
+                : await _Database.Voyages.EnumerateByStatusAsync(VoyageStatusEnum.Open, token).ConfigureAwait(false);
+            status.ActiveVoyages = activeVoyages.Count + openVoyages.Count;
+            status.MemoryPressureDeferrals = System.Threading.Interlocked.Read(ref _MemoryPressureDeferrals);
+
+            foreach (Voyage voyage in activeVoyages.Concat(openVoyages))
+            {
+                VoyageProgress? progress = await _Voyages.GetProgressAsync(voyage.Id, tenantId, token).ConfigureAwait(false);
+                if (progress != null) status.Voyages.Add(progress);
+            }
+
+            // Recent signals
+            status.RecentSignals = scoped
+                ? await _Database.Signals.EnumerateRecentAsync(tenantId!, 10, token).ConfigureAwait(false)
+                : await _Database.Signals.EnumerateRecentAsync(10, token).ConfigureAwait(false);
+
+            if (OnGetRemoteTunnelStatus != null)
+            {
+                status.RemoteTunnel = OnGetRemoteTunnelStatus();
+            }
+
+            return status;
+        }
 
         /// <summary>
         /// Resolve which pipeline to use for a dispatch.

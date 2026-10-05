@@ -28,11 +28,11 @@ namespace Armada.Server.Mcp.Tools
         {
             register(
                 "status",
-                "Get aggregate status of all active work in Armada",
+                "Get aggregate status of active work in Armada: captain counts by state, mission counts by status, active voyages with progress, and recent signals. A global administrator sees every tenant; any other caller sees only its own tenant.",
                 new { type = "object", properties = new { } },
                 async (args) =>
                 {
-                    ArmadaStatus status = await admiral.GetStatusAsync().ConfigureAwait(false);
+                    ArmadaStatus status = await admiral.GetStatusAsync(McpToolHelpers.ResolveCallerContext()).ConfigureAwait(false);
                     return (object)status;
                 });
 
