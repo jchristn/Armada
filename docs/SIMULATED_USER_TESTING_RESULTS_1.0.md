@@ -19,10 +19,12 @@ agent acting as the user; the human run with real captains is still required (se
   not run. On the TUI, first-run sign-in, the setup wizard, dispatch, Ask Armada with the Approvals center, mission
   detail and log, and API-key sign-in with revocation were run end to end; the remaining TUI tasks were checked
   only for the screen (list, filters, counts), not as complete flows.
-- Findings: 38 product findings. 3 S2 and 4 S3 were fixed on this branch (each with a regression test). Still open:
-  0 S1, 0 S2, 13 S3, 18 S4, listed below with suggested fixes and owners.
-- Exit criterion (section 7 of the procedure): **not met yet.** No S1 or S2 findings remain open, but the human run
-  with real captains has not been done and the TUI flows were not all run end to end.
+- Findings: 38 product findings. 3 S2 and 4 S3 were fixed on the simulated-testing branch and the other 13 S3 and
+  4 S4 were fixed afterwards, each with a regression test. F36 is by design: the dashboard must probe the proxy
+  session endpoint so it works behind the proxy, and the Admiral answers 404. Still open: 0 S1, 0 S2, 0 S3, 13 S4
+  polish items, none blocking 1.0.
+- Exit criterion (section 7 of the procedure): **not met yet.** No S1, S2, or S3 findings remain open, but the human
+  run with real captains has not been done and the TUI flows were not all run end to end.
 - Times are script times (an agent does not read or hesitate). Budget one to two minutes per task for a person.
   The setup wizard from sign-in to a landed first mission took 6.7 s of clicks plus status polling on the first run
   and 31.8 s on the second, which included an automatic rescue of a failed stub mission (see the harness notes).
@@ -68,7 +70,7 @@ agent acting as the user; the human run with real captains is still required (se
 Severity per the procedure: S1 blocker, S2 major, S3 minor, S4 cosmetic. "Owner" names the area that should take an
 open finding; this branch only changed files outside the areas other workstreams own.
 
-### Fixed on this branch
+### Fixed on the simulated-testing branch
 
 #### F1 (S2, fixed) Six locales blank the whole dashboard on the Settings page
 - Persona / task / surface: P1 T1.6, dashboard.
@@ -129,7 +131,7 @@ open finding; this branch only changed files outside the areas other workstreams
   materializing a missing target branch. Tests: `Services.GitService` merge cases now assert no
   `refs/heads/armada-landing/` remains (both failed on the old code).
 
-### Open
+### Fixed after the simulated run
 
 #### F8 (S3, fixed) Every Admiral restart signs everyone out
 - Owner: server auth. Surfaces: dashboard and TUI ("Your session expired. Sign in again." after every restart).
@@ -267,6 +269,13 @@ open finding; this branch only changed files outside the areas other workstreams
 - Both surfaces; the server's landing preview ignores the mission status.
 - Fix: the landing pill reads "Landed" for Complete and "Not Ready Yet" for Pending missions (with F11).
 
+#### F26 (S4, fixed) Vessel pickers are ordered newest first
+- Create Voyage, Dispatch, Planning, and Backlog list 12 vessels in creation order, not alphabetically.
+- Fix: Create Voyage, Dispatch, Planning, Backlog, the backlog item page, and Deployments sort vessels by name
+  (`lib/sortByName.ts`, test `lib/sortByName.test.ts`).
+
+### Open (S4 polish, not blocking 1.0)
+
 #### F23 (S4) Pluralization
 - "1 branches" (Vessels), "with 1 mission(s)" (Dispatch toast, Ask cards), "Retry N failed mission(s)".
 
@@ -278,11 +287,6 @@ open finding; this branch only changed files outside the areas other workstreams
 #### F25 (S4) Priority direction is unexplained on Dispatch
 - "Higher priority missions are assigned first (default 100)" does not say that a lower number is higher priority
   (the wizard says so).
-
-#### F26 (S4, fixed) Vessel pickers are ordered newest first
-- Create Voyage, Dispatch, Planning, and Backlog list 12 vessels in creation order, not alphabetically.
-- Fix: Create Voyage, Dispatch, Planning, Backlog, the backlog item page, and Deployments sort vessels by name
-  (`lib/sortByName.ts`, test `lib/sortByName.test.ts`).
 
 #### F27 (S4) Credentials: odd defaults
 - Create Credential preselects the first user in the list (here a deactivated user) instead of the signed-in user.
@@ -317,7 +321,7 @@ open finding; this branch only changed files outside the areas other workstreams
 #### F35 (S4) The setup wizard restarts at step 1 when reopened
 - Closing and reopening the wizard mid-way starts again at Objective (dashboard).
 
-#### F36 (S4) Console noise on every page
+#### F36 (S4, by design) Console noise on every page
 - `GET /proxy-api/v1/session/context` returns 404 on every load when the dashboard is served by the Admiral.
 
 #### F38 (S4) Release page requests GitHub pull requests for a non-GitHub vessel
@@ -342,5 +346,4 @@ open finding; this branch only changed files outside the areas other workstreams
 3. TUI flows run only as screen checks here: import, voyage creation, planning, backlog refinement, review and landing,
    merge queue, fleet action run, vessel health evaluation, users, settings, delivery, and backup.
 4. Restore from backup on a throwaway stack (T3.6).
-5. Triage the open S3 findings above, especially F8 (sign-outs on restart), F10 (default-password policy), F11, F12,
-   and F14.
+5. Re-run T1.1, T1.2, T2.3, T2.6 and T3.4 by hand to confirm the S3 fixes (F8 to F19, F37) in real use.
