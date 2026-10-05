@@ -139,7 +139,8 @@ namespace Test.Shared.Suites.Tui
                     AssertTrue(screen.VisibleActions().Contains("Deny"), "deny offered");
                     AssertFalse(screen.VisibleActions().Contains("Rollback"), "rollback hidden while pending");
                     host.Press("a");
-                    TuiCase.Contains(host.Screen(), "Approve and execute \"Deploy web\"?", "confirm text");
+                    // Environment first, then the title: the same label as the Approvals queue, the inbox, and the dashboard.
+                    TuiCase.Contains(host.Screen(), "Approve and execute \"Deploy to staging: Deploy web\"?", "confirm text");
                     host.Press("y");
                     TuiEntityFixtures.WaitFor(host, () => approved, "approve call");
                     host.Press("]");

@@ -2,6 +2,7 @@ namespace Test.Shared.Suites.Tui
 {
     using System;
     using System.Collections.Generic;
+    using System.IO;
     using System.Linq;
     using System.Net;
     using System.Threading;
@@ -13,6 +14,7 @@ namespace Test.Shared.Suites.Tui
     using Armada.Tui.Approvals;
     using Armada.Tui.Services;
     using Test.Shared.Infrastructure;
+    using Test.Shared.Infrastructure.ApiSurface;
     using Touchstone.Core;
     using static Test.Shared.Infrastructure.Asserts;
 
@@ -73,7 +75,7 @@ namespace Test.Shared.Suites.Tui
                         ?? throw new AssertionException("deployment from the event");
                     AssertEqual("Live", live.Source, "item came from the event");
 
-                    InboxItem inbox = new InboxItem { Kind = InboxItemKinds.DeploymentApproval, Title = "Deployment awaiting approval: Staging", EntityName = "Staging", EntityType = "deployment", EntityId = "dpl_1", Href = "/deployments/dpl_1" };
+                    InboxItem inbox = new InboxItem { Kind = InboxItemKinds.DeploymentApproval, Title = "Deploy to Staging: Deploy web v1.2", EntityName = "Staging", EnvironmentName = "Staging", DeploymentTitle = "Deploy web v1.2", EntityType = "deployment", EntityId = "dpl_1", Href = "/deployments/dpl_1" };
                     ApprovalItem polled = ApprovalSources.FromInbox(inbox)!;
                     AssertEqual(polled.EntityName, live.EntityName, "entity name");
                     AssertEqual(polled.Title, live.Title, "row title");
@@ -82,13 +84,64 @@ namespace Test.Shared.Suites.Tui
                     Select(host, ApprovalKindEnum.DeploymentApproval);
                     host.Press("a");
                     AssertTrue(host.PumpUntil(() => host.App.Modals.IsActive), "confirm");
-                    TuiCase.Contains(host.Screen(), "Approve and execute \"Staging\"?", "the confirmation uses the inbox's name");
+                    TuiCase.Contains(host.Screen(), "Approve and execute \"Deploy to Staging: Deploy web v1.2\"?", "the confirmation names the environment, then the title");
                     host.Press("n");
 
                     host.Tui.Context.Events.Inject(AskFixtures.EventJson("deployment.changed", "{\"id\":\"dpl_3\",\"title\":\"No environment\",\"status\":\"PendingApproval\"}"));
                     host.Pump();
-                    AssertEqual("dpl_3", host.Tui.Context.Approvals.Find(ApprovalKindEnum.DeploymentApproval, "dpl_3")?.EntityName, "no environment falls back to the id, like the inbox");
+                    AssertEqual("Deploy: No environment", host.Tui.Context.Approvals.Find(ApprovalKindEnum.DeploymentApproval, "dpl_3")?.EntityName, "no environment leads with the title, like the inbox");
                 }
+            }));
+
+            cases.Add(TuiCase.Sync(Suite, "deployment_label_environment_first", "Deployment approvals read \"Deploy to {environment}: {title}\" in the queue, the Inbox screen, and notifications, with graceful fallbacks", () =>
+            {
+                // Owner decision: every surface labels a deployment approval with the environment first and the
+                // deployment title second. Before, the TUI named it by the environment alone.
+                InboxItem typed = new InboxItem { Kind = InboxItemKinds.DeploymentApproval, Title = "server text", EntityName = "Staging", EnvironmentName = "Staging", DeploymentTitle = "Release 2.3 hotfix", EntityType = "deployment", EntityId = "dpl_1", Href = "/deployments/dpl_1" };
+                ApprovalItem mapped = ApprovalSources.FromInbox(typed)!;
+                AssertEqual("Deploy to Staging: Release 2.3 hotfix", mapped.Title, "row title");
+                AssertEqual("Deploy to Staging: Release 2.3 hotfix", mapped.EntityName, "confirmation name");
+                AssertEqual("Deploy to Staging: Release 2.3 hotfix", Armada.Tui.Screens.Operations.InboxScreen.TitleFor(null, typed), "Inbox screen title");
+
+                InboxItem noEnvironment = new InboxItem { Kind = InboxItemKinds.DeploymentApproval, EntityName = "dpl_2", DeploymentTitle = "Ad hoc", EntityId = "dpl_2" };
+                AssertEqual("Deploy: Ad hoc", ApprovalSources.FromInbox(noEnvironment)!.Title, "no environment leads with the title");
+                InboxItem legacy = new InboxItem { Kind = InboxItemKinds.DeploymentApproval, Title = "Deployment awaiting approval: Staging", EntityName = "Staging", EntityId = "dpl_3" };
+                AssertEqual("Deploy to Staging", ApprovalSources.FromInbox(legacy)!.Title, "an older server's EntityName is the environment");
+                InboxItem legacyId = new InboxItem { Kind = InboxItemKinds.DeploymentApproval, Title = "Deployment awaiting approval: dpl_4", EntityName = "dpl_4", EntityId = "dpl_4" };
+                AssertEqual("Deploy: dpl_4", ApprovalSources.FromInbox(legacyId)!.Title, "never \"Deploy to <id>\"");
+
+                InboxItem review = new InboxItem { Kind = InboxItemKinds.Review, Title = "Review: Fix tables", EntityName = "Fix tables", EntityId = "msn_1" };
+                AssertEqual("Review: Fix tables", Armada.Tui.Screens.Operations.InboxScreen.TitleFor(null, review), "other kinds keep the server title");
+
+                NotificationService notifications = new NotificationService(new SystemClock(), new LocalizationService(), null, null, null);
+                notifications.HandleSocketMessage(ArmadaSocketMessage.Parse("{\"type\":\"deployment.changed\",\"data\":{\"id\":\"dpl_5\",\"title\":\"Release 2.3 hotfix\",\"environmentName\":\"production\",\"status\":\"PendingApproval\"}}")!);
+                AssertEqual("Deploy to production: Release 2.3 hotfix", notifications.History[0].Name, "pending approval notification");
+                notifications.HandleSocketMessage(ArmadaSocketMessage.Parse("{\"type\":\"deployment.changed\",\"data\":{\"id\":\"dpl_5\",\"title\":\"Release 2.3 hotfix\",\"environmentName\":\"production\",\"status\":\"Running\"}}")!);
+                AssertEqual("Release 2.3 hotfix", notifications.History[0].Name, "other statuses keep the deployment title");
+            }));
+
+            cases.Add(TuiCase.Sync(Suite, "deployment_label_localized", "The deployment approval label comes from the shared catalog in every locale, environment before title", () =>
+            {
+                string path = Path.Combine(ApiSurfaceFiles.FindRepositoryRoot(), "src", "Armada.Server", "wwwroot", "i18n", "armada.json");
+                I18nCatalog catalog = ArmadaJson.Deserialize<I18nCatalog>(File.ReadAllText(path)) ?? throw new AssertionException("catalog");
+                AssertTrue(catalog.Locales.Count >= 8, "every maintained locale is present");
+                LocalizationService loc = new LocalizationService();
+                loc.SetCatalog(catalog);
+                foreach (string locale in catalog.Locales.Keys)
+                {
+                    loc.SetLocale(locale);
+                    string label = DeploymentApprovalText.Label(loc, "production", "Release 2.3 hotfix", "dpl_1");
+                    AssertTrue(label != "Deploy to production: Release 2.3 hotfix", locale + " is translated: " + label);
+                    int environment = label.IndexOf("production", StringComparison.Ordinal);
+                    int title = label.IndexOf("Release 2.3 hotfix", StringComparison.Ordinal);
+                    AssertTrue(environment >= 0 && title > environment, locale + " names the environment first: " + label);
+                    AssertTrue(DeploymentApprovalText.Label(loc, "production", null, "dpl_1").Contains("production"), locale + " environment only");
+                    AssertTrue(DeploymentApprovalText.Label(loc, null, "Release 2.3 hotfix", "dpl_1").Contains("Release 2.3 hotfix"), locale + " title only");
+                }
+
+                loc.SetLocale("ja");
+                InboxItem typed = new InboxItem { Kind = InboxItemKinds.DeploymentApproval, EnvironmentName = "Staging", DeploymentTitle = "Release 2.3 hotfix", EntityId = "dpl_1" };
+                AssertEqual("Staging \u3078\u306e\u30c7\u30d7\u30ed\u30a4: Release 2.3 hotfix", ApprovalSources.FromInbox(typed, loc)!.Title, "Japanese queue row");
             }));
 
             cases.Add(TuiCase.Sync(Suite, "review_decisions", "Mission reviews: approve, conditionally approve and more work need feedback, deny", () =>
@@ -135,14 +188,14 @@ namespace Test.Shared.Suites.Tui
                     Select(host, ApprovalKindEnum.DeploymentApproval);
                     host.Press("a");
                     AssertTrue(host.PumpUntil(() => host.App.Modals.IsActive), "confirm");
-                    TuiCase.Contains(host.Screen(), "Approve and execute \"Staging\"?", "dashboard text");
+                    TuiCase.Contains(host.Screen(), "Approve and execute \"Deploy to Staging: Release 2.3 hotfix\"?", "dashboard text: environment first, then title");
                     host.Press("y");
                     AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/deployments/dpl_1/approve") == 1), "approve call");
-                    AssertTrue(host.PumpUntil(() => TuiToasts.Has(host, NotificationSeverityEnum.Success, "Deployment \"Staging\" updated.")), "toast");
+                    AssertTrue(host.PumpUntil(() => TuiToasts.Has(host, NotificationSeverityEnum.Success, "Deployment \"Release 2.3 hotfix\" updated.")), "toast");
                     Load(host);
                     Select(host, ApprovalKindEnum.DeploymentApproval);
                     host.Press("d");
-                    TuiCase.Contains(host.Screen(), "Deny \"Staging\" without executing it?", "deny text");
+                    TuiCase.Contains(host.Screen(), "Deny \"Deploy to Staging: Release 2.3 hotfix\" without executing it?", "deny text");
                     host.Press("n");
                     AssertEqual(0, stub.CountFor("POST", "/api/v1/deployments/dpl_1/deny"), "cancel does nothing");
                     host.Press("d").Press("y");
@@ -290,12 +343,12 @@ namespace Test.Shared.Suites.Tui
                 "{\"Kind\":\"review\",\"Severity\":\"Warning\",\"Title\":\"Review: Fix tables\",\"EntityName\":\"Fix tables\",\"Detail\":\"Waiting 5m\",\"EntityType\":\"mission\",\"EntityId\":\"msn_r\",\"Href\":\"/missions/msn_r\"}," +
                 "{\"Kind\":\"landing_failed\",\"Severity\":\"Critical\",\"Title\":\"Landing failed: Ship it\",\"EntityName\":\"Ship it\",\"Detail\":\"Conflict\",\"EntityType\":\"mission\",\"EntityId\":\"msn_l\",\"Href\":\"/missions/msn_l\"}," +
                 "{\"Kind\":\"stalled_captain\",\"Severity\":\"Warning\",\"Title\":\"Stalled captain: slow\",\"EntityName\":\"slow\",\"Detail\":\"No heartbeat\",\"EntityType\":\"captain\",\"EntityId\":\"cpt_s\",\"Href\":\"/captains/cpt_s\"}," +
-                "{\"Kind\":\"deployment_approval\",\"Severity\":\"Warning\",\"Title\":\"Deployment awaiting approval: Staging\",\"EntityName\":\"Staging\",\"Detail\":\"v1.2\",\"EntityType\":\"deployment\",\"EntityId\":\"dpl_1\",\"Href\":\"/deployments/dpl_1\"}," +
+                "{\"Kind\":\"deployment_approval\",\"Severity\":\"Warning\",\"Title\":\"Deploy to Staging: Release 2.3 hotfix\",\"EntityName\":\"Staging\",\"EnvironmentName\":\"Staging\",\"DeploymentTitle\":\"Release 2.3 hotfix\",\"Detail\":\"v1.2\",\"EntityType\":\"deployment\",\"EntityId\":\"dpl_1\",\"Href\":\"/deployments/dpl_1\"}," +
                 "{\"Kind\":\"failed\",\"Severity\":\"Warning\",\"Title\":\"Failed: Other\",\"EntityName\":\"Other\",\"Detail\":\"\",\"EntityType\":\"mission\",\"EntityId\":\"msn_f\",\"Href\":\"/missions/msn_f\"}]");
             stub.Json("POST", "/api/v1/missions/msn_r/review/approve", "{\"Id\":\"msn_r\",\"Title\":\"Fix tables\"}");
             stub.Json("POST", "/api/v1/missions/msn_r/review/deny", "{\"Id\":\"msn_r\",\"Title\":\"Fix tables\"}");
-            stub.Json("POST", "/api/v1/deployments/dpl_1/approve", "{\"Id\":\"dpl_1\",\"Title\":\"Staging\"}");
-            stub.Json("POST", "/api/v1/deployments/dpl_1/deny", "{\"Id\":\"dpl_1\",\"Title\":\"Staging\"}");
+            stub.Json("POST", "/api/v1/deployments/dpl_1/approve", "{\"Id\":\"dpl_1\",\"Title\":\"Release 2.3 hotfix\",\"EnvironmentName\":\"Staging\"}");
+            stub.Json("POST", "/api/v1/deployments/dpl_1/deny", "{\"Id\":\"dpl_1\",\"Title\":\"Release 2.3 hotfix\",\"EnvironmentName\":\"Staging\"}");
             stub.Json("POST", "/api/v1/missions/msn_l/retry-landing", "{\"Success\":true}");
             stub.Json("POST", "/api/v1/captains/cpt_s/stop", "{}");
             stub.Json("GET", "/api/v1/captains/cpt_s", "{\"Id\":\"cpt_s\",\"Name\":\"slow\",\"Runtime\":\"ClaudeCode\"}");

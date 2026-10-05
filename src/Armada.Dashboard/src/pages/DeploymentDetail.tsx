@@ -35,6 +35,7 @@ import ErrorModal from '../components/shared/ErrorModal';
 import JsonViewer from '../components/shared/JsonViewer';
 import PageHeader from '../components/shared/PageHeader';
 import StatusBadge from '../components/shared/StatusBadge';
+import { deploymentApprovalLabel } from '../lib/deploymentApprovalLabel';
 
 interface DeploymentPrefillState {
   prefill?: DeploymentUpsertRequest;
@@ -279,9 +280,11 @@ export default function DeploymentDetail() {
       rollback: t('Rollback Deployment'),
     };
 
+    // Approvals lead with the environment ("Deploy to production: Release 2.3 hotfix"), like the inbox and the TUI.
+    const approvalLabel = deploymentApprovalLabel(t, currentDeployment.environmentName, currentDeployment.title, currentDeployment.id);
     const messages: Record<typeof action, string> = {
-      approve: t('Approve and execute "{{title}}"?', { title: currentDeployment.title }),
-      deny: t('Deny "{{title}}" without executing it?', { title: currentDeployment.title }),
+      approve: t('Approve and execute "{{title}}"?', { title: approvalLabel }),
+      deny: t('Deny "{{title}}" without executing it?', { title: approvalLabel }),
       verify: t('Re-run post-deploy verification for "{{title}}"?', { title: currentDeployment.title }),
       rollback: t('Run rollback for "{{title}}"?', { title: currentDeployment.title }),
     };

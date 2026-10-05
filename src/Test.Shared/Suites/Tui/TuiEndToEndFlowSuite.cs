@@ -136,15 +136,16 @@ namespace Test.Shared.Suites.Tui
                         AssertFalse(((await admin.ListVoyagesAsync(new ArmadaPageQuery(1, 100)))?.Objects ?? new List<Voyage>()).Any(v => v.Title == rejectTitle), "the rejected dispatch never ran");
 
                         AssertTrue(host.PumpUntil(() => host.Tui.Context.Approvals.Find(ApprovalKindEnum.AskProposal, rejectItem.EntityId) == null, 10000), "rejected proposal left the center");
-                        // The item may come from the deployment.changed event or from an inbox poll; both name it by
-                        // its environment (the inbox's EntityName), so the confirmation text does not depend on which
-                        // source reported it last.
+                        // The item may come from the deployment.changed event or from an inbox poll; both name it
+                        // environment first, then title ("Deploy to production: E2E production deploy"), so the
+                        // confirmation text does not depend on which source reported it last.
                         AssertEqual("production", deployment.EnvironmentName, "deployment targets the production environment");
+                        string deployLabel = "Deploy to production: " + deployment.Title;
                         ApprovalItem deployItem = host.Tui.Context.Approvals.Find(ApprovalKindEnum.DeploymentApproval, deployment.Id)!;
-                        AssertEqual(deployment.EnvironmentName, deployItem.EntityName, "deployment approval is named by its environment");
+                        AssertEqual(deployLabel, deployItem.EntityName, "deployment approval names the environment, then the title");
                         SelectItem(host, deployItem);
                         host.Press("a");
-                        AssertTrue(host.WaitForText("Approve and execute \"production\"?", 5000), "deployment approval asks to confirm\n" + host.Screen());
+                        AssertTrue(host.WaitForText("Approve and execute \"" + deployLabel + "\"?", 5000), "deployment approval asks to confirm\n" + host.Screen());
                         host.Press("y");
                         DeploymentStatusEnum? deployStatus = null;
                         AssertTrue(LiveServerSetup.PumpUntilServer(host, async () =>

@@ -10,6 +10,7 @@ import RefreshButton from '../components/shared/RefreshButton';
 import PageHeader from '../components/shared/PageHeader';
 import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
+import { inboxItemTitle } from '../lib/deploymentApprovalLabel';
 
 /** Inbox kinds that wait on a decision from the user (approve or reject), as opposed to failures to fix. */
 const APPROVAL_KINDS: ReadonlySet<string> = new Set(['review', 'deployment_approval', 'ask_proposal']);
@@ -67,7 +68,7 @@ export default function Inbox() {
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
           <div style={{ minWidth: 0, flex: '1 1 240px' }}>
-            <strong>{item.title}</strong>
+            <strong>{inboxItemTitle(t, item)}</strong>
             <div className="text-dim" style={{ marginTop: '0.2rem' }}>{item.detail}</div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>

@@ -10,6 +10,7 @@ namespace Armada.Tui.Screens.Delivery
     using Armada.Client.Socket;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Tui.Approvals;
     using Armada.Tui.Routing;
     using Armada.Tui.Screens.Entities;
     using Armada.Tui.Services;
@@ -304,11 +305,11 @@ namespace Armada.Tui.Screens.Delivery
             {
                 case "approve":
                     title = "Approve Deployment";
-                    message = EntityUi.T(Context, "Approve and execute \"{{title}}\"?", "title", d.Title);
+                    message = EntityUi.T(Context, "Approve and execute \"{{title}}\"?", "title", DeploymentApprovalText.Label(Context.Loc, d.EnvironmentName, d.Title, d.Id));
                     break;
                 case "deny":
                     title = "Deny Deployment";
-                    message = EntityUi.T(Context, "Deny \"{{title}}\" without executing it?", "title", d.Title);
+                    message = EntityUi.T(Context, "Deny \"{{title}}\" without executing it?", "title", DeploymentApprovalText.Label(Context.Loc, d.EnvironmentName, d.Title, d.Id));
                     break;
                 case "verify":
                     title = "Run Verification";
