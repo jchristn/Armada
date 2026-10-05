@@ -52,6 +52,23 @@ namespace Armada.Tui.Screens.Operations
         /// </summary>
         public int Fetches { get; private set; } = 0;
 
+        /// <summary>
+        /// Toggles the server's readable formatting (resolved tool names, redacted secrets, noise dropped) and
+        /// returns the new state; when set, <c>r</c> calls it and reloads instead of the viewer's local readable
+        /// mode. Null for logs the server cannot format (mission logs).
+        /// </summary>
+        public Func<bool>? ToggleServerReadable { get; set; } = null;
+
+        /// <summary>
+        /// Lines the server returned on the last fetch.
+        /// </summary>
+        public int ReturnedLines { get; private set; } = 0;
+
+        /// <summary>
+        /// Current state of the server's readable formatting (shown in the header when it can be toggled).
+        /// </summary>
+        public bool ServerReadable { get; set; } = true;
+
         #endregion
 
         #region Private-Members
@@ -83,9 +100,11 @@ namespace Armada.Tui.Screens.Operations
         /// <param name="localizer">Localizer.</param>
         /// <param name="theme">Palette.</param>
         /// <param name="onTick">Called every fifth follow refresh (the dashboard reloads the mission), or null.</param>
-        public OpsLogModal(string title, Func<int, CancellationToken, Task<LogResult?>> fetch, Func<bool> completed, IUiDispatcher dispatcher, Action<string> copy, ITextLocalizer? localizer, ArmadaTheme? theme, Action? onTick = null)
+        /// <param name="initialLines">Lines to request first (default 200; the captain log asks for 500).</param>
+        public OpsLogModal(string title, Func<int, CancellationToken, Task<LogResult?>> fetch, Func<bool> completed, IUiDispatcher dispatcher, Action<string> copy, ITextLocalizer? localizer, ArmadaTheme? theme, Action? onTick = null, int initialLines = 200)
             : base(title, localizer, theme)
         {
+            LineCount = Math.Clamp(initialLines, 1, 10000);
             _Fetch = fetch ?? throw new ArgumentNullException(nameof(fetch));
             _Completed = completed ?? (() => true);
             _Dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
@@ -122,7 +141,8 @@ namespace Armada.Tui.Screens.Operations
                     {
                         if (IsClosed) return;
                         TotalLines = result?.TotalLines ?? 0;
-                        string text = result?.Log ?? "";
+                        ReturnedLines = result?.Lines ?? 0;
+                        string text = result?.Entries != null && result.Entries.Count > 0 ? EntriesText(result.Entries) : result?.Log ?? "";
                         Viewer.SetText(text.Length > 0 ? text : T("No log output"));
                         if (Following) Viewer.Follow = true;
                     });
@@ -193,6 +213,11 @@ namespace Armada.Tui.Screens.Operations
                     case 'f':
                         ToggleFollow();
                         return true;
+                    case 'r':
+                        if (ToggleServerReadable == null) break;
+                        ServerReadable = ToggleServerReadable();
+                        Load();
+                        return true;
                     case '+':
                     case '=':
                         SetLineCount(Next(1));
@@ -249,6 +274,7 @@ namespace Armada.Tui.Screens.Operations
             bool done = _Completed();
             string badge = done ? "[" + T("Done") + "]" : Following ? "[" + T("Live") + "]" : "";
             string head = LineCount + " " + T("lines") + "   " + (done ? T("Completed") : Following ? T("Following") : T("Follow") + " (f)");
+            if (ToggleServerReadable != null) head += "   " + T("Readable") + ": " + T(ServerReadable ? "On" : "Off") + " (r)";
             int x = 0;
             if (badge.Length > 0) x += SurfaceText.Draw(content, 0, 0, badge + " ", done ? On(Theme.Success) : On(Theme.Info), width) ;
             SurfaceText.Draw(content, x, 0, head, Dim(), width - x);
@@ -260,6 +286,20 @@ namespace Armada.Tui.Screens.Operations
         #endregion
 
         #region Private-Methods
+
+        private string EntriesText(System.Collections.Generic.List<FormattedLogEntry> entries)
+        {
+            System.Text.StringBuilder sb = new System.Text.StringBuilder();
+            foreach (FormattedLogEntry e in entries)
+            {
+                if (e.IsToolCall && !String.IsNullOrEmpty(e.ToolName)) sb.Append('[').Append(T("tool")).Append(": ").Append(e.ToolName).Append("] ");
+                sb.Append(e.Text ?? "");
+                if (e.Redacted) sb.Append(" [").Append(T("redacted")).Append(']');
+                sb.Append('\n');
+            }
+
+            return sb.ToString().TrimEnd('\n');
+        }
 
         private int Next(int direction)
         {
