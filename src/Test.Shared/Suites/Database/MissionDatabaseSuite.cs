@@ -627,6 +627,74 @@ namespace Test.Shared.Suites.Database
                 }
             }));
 
+            cases.Add(CaseAsync("mission_conditional_status_update", "TryUpdateIfStatusAsync writes a mission only while its stored status is expected", TestTags.Database, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    DatabaseDriver db = testDb.Driver;
+                    MissionTestPrerequisites prereqs = await CreatePrerequisitesAsync(db);
+
+                    Mission mission = new Mission("Conditional");
+                    mission.VesselId = prereqs.Vessel.Id;
+                    mission.VoyageId = prereqs.Voyage.Id;
+                    mission.Status = MissionStatusEnum.InProgress;
+                    mission.ProcessId = 2000000401;
+                    await db.Missions.CreateAsync(mission);
+
+                    Mission requeue = (await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false))!;
+                    requeue.Status = MissionStatusEnum.Pending;
+                    requeue.ProcessId = null;
+                    requeue.RedispatchAttempts = 1;
+                    AssertFalse(await db.Missions.TryUpdateIfStatusAsync(requeue, new MissionStatusEnum[] { MissionStatusEnum.Assigned }).ConfigureAwait(false), "unexpected status refused");
+                    Mission? unchanged = await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
+                    AssertEqual(MissionStatusEnum.InProgress, unchanged!.Status, "row unchanged");
+                    AssertEqual(0, unchanged.RedispatchAttempts, "no field written on a refused update");
+
+                    Mission produced = (await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false))!;
+                    produced.Status = MissionStatusEnum.WorkProduced;
+                    produced.ProcessId = null;
+                    produced.BranchName = "armada/conditional";
+                    AssertTrue(await db.Missions.TryUpdateIfStatusAsync(produced, new MissionStatusEnum[] { MissionStatusEnum.Assigned, MissionStatusEnum.InProgress }).ConfigureAwait(false), "expected status applied");
+                    Mission? stored = await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
+                    AssertEqual(MissionStatusEnum.WorkProduced, stored!.Status);
+                    AssertEqual("armada/conditional", stored.BranchName, "every column is written");
+                    AssertNull(stored.ProcessId);
+
+                    AssertFalse(await db.Missions.TryUpdateIfStatusAsync(requeue, new MissionStatusEnum[] { MissionStatusEnum.InProgress }).ConfigureAwait(false), "a stale copy cannot move the mission back");
+                    AssertEqual(MissionStatusEnum.WorkProduced, (await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false))!.Status);
+
+                    Mission missing = new Mission("Missing");
+                    AssertFalse(await db.Missions.TryUpdateIfStatusAsync(missing, new MissionStatusEnum[] { MissionStatusEnum.Pending }).ConfigureAwait(false), "missing mission");
+                }
+            }));
+
+            cases.Add(CaseAsync("mission_process_exit_claim", "TryClaimProcessExitAsync gives exactly one caller the exit of the recorded process", TestTags.Database, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    DatabaseDriver db = testDb.Driver;
+                    MissionTestPrerequisites prereqs = await CreatePrerequisitesAsync(db);
+
+                    Mission mission = new Mission("Claim");
+                    mission.VesselId = prereqs.Vessel.Id;
+                    mission.VoyageId = prereqs.Voyage.Id;
+                    mission.Status = MissionStatusEnum.InProgress;
+                    mission.ProcessId = 2000000402;
+                    await db.Missions.CreateAsync(mission);
+
+                    AssertFalse(await db.Missions.TryClaimProcessExitAsync(mission.Id, 2000000499).ConfigureAwait(false), "an exit of another process (an earlier attempt) is refused");
+                    AssertEqual(2000000402, (await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false))!.ProcessId ?? 0, "refused claim leaves the process recorded");
+
+                    AssertTrue(await db.Missions.TryClaimProcessExitAsync(mission.Id, 2000000402).ConfigureAwait(false), "first claim wins");
+                    AssertFalse(await db.Missions.TryClaimProcessExitAsync(mission.Id, 2000000402).ConfigureAwait(false), "second claim for the same process loses");
+
+                    Mission? stored = await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
+                    AssertNull(stored!.ProcessId, "the claim clears the recorded process");
+                    AssertEqual(MissionStatusEnum.InProgress, stored.Status, "the claim does not change status");
+                    AssertFalse(await db.Missions.TryClaimProcessExitAsync("msn_missing", 2000000402).ConfigureAwait(false), "missing mission");
+                }
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
                 displayName: "Mission Database",

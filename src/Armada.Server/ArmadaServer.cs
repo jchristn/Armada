@@ -362,6 +362,7 @@ namespace Armada.Server
             _Admiral.OnStopAgent = _AgentLifecycle.HandleStopAgentAsync;
             _Admiral.OnCaptureDiff = _MissionLanding.HandleCaptureDiffAsync;
             _Admiral.OnIsProcessExitHandled = _AgentLifecycle.IsProcessExitHandled;
+            admiralService.OnIsProcessTracked = _AgentLifecycle.IsProcessTracked;
             missionService.OnGetMissionOutput = _AgentLifecycle.GetAndClearMissionOutput;
 
             // When RequireHarborForLaunch is set, defer a mission until an eligible Harbor owned by the

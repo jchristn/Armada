@@ -49,6 +49,12 @@ namespace Test.Shared.Infrastructure
         /// </summary>
         public ConcurrentQueue<string> Errors { get; } = new ConcurrentQueue<string>();
 
+        /// <summary>
+        /// Optional gate a mission launch awaits before it reports its exit, so a test can hold the stub process
+        /// running (its exit callback not yet fired) and observe the server while it is live. Null exits normally.
+        /// </summary>
+        public Task? MissionExitGate { get; set; }
+
         #endregion
     }
 }

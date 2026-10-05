@@ -135,99 +135,37 @@ namespace Armada.Core.Database.Sqlite.Implementations
         public async Task<Mission> UpdateAsync(Mission mission, CancellationToken token = default)
         {
             if (mission == null) throw new ArgumentNullException(nameof(mission));
-            mission.LastUpdateUtc = DateTime.UtcNow;
+            await UpdateWhereAsync(mission, null, token).ConfigureAwait(false);
+            return mission;
+        }
+
+        /// <inheritdoc />
+        public async Task<bool> TryUpdateIfStatusAsync(Mission mission, IReadOnlyCollection<MissionStatusEnum> expectedStatuses, CancellationToken token = default)
+        {
+            if (mission == null) throw new ArgumentNullException(nameof(mission));
+            if (expectedStatuses == null) throw new ArgumentNullException(nameof(expectedStatuses));
+            if (expectedStatuses.Count == 0) throw new ArgumentException("At least one expected status is required.", nameof(expectedStatuses));
+            return await UpdateWhereAsync(mission, expectedStatuses, token).ConfigureAwait(false);
+        }
+
+        /// <inheritdoc />
+        public async Task<bool> TryClaimProcessExitAsync(string missionId, int processId, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(missionId)) throw new ArgumentNullException(nameof(missionId));
 
             using (SqliteConnection conn = new SqliteConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqliteCommand cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = @"UPDATE missions SET
-                            tenant_id = @tenant_id,
-                            user_id = @user_id,
-                            voyage_id = @voyage_id,
-                            vessel_id = @vessel_id,
-                            captain_id = @captain_id,
-                            requested_captain_id = @requested_captain_id,
-                            assigned_harbor_id = @assigned_harbor_id,
-                            title = @title,
-                            description = @description,
-                            status = @status,
-                            mode = @mode,
-                            priority = @priority,
-                            redispatch_attempts = @redispatch_attempts,
-                            tier = @tier,
-                            parent_mission_id = @parent_mission_id,
-                            branch_name = @branch_name,
-                            dock_id = @dock_id,
-                            process_id = @process_id,
-                            pr_url = @pr_url,
-                            commit_hash = @commit_hash,
-                            diff_snapshot = @diff_snapshot,
-                            agent_output = @agent_output,
-                            persona = @persona,
-                            depends_on_mission_id = @depends_on_mission_id,
-                            failure_reason = @failure_reason,
-                            failure_kind = @failure_kind,
-                            wait_for_voyage_workers = @wait_for_voyage_workers,
-                            requires_review = @requires_review,
-                            review_deny_action = @review_deny_action,
-                            review_comment = @review_comment,
-                            reviewed_by_user_id = @reviewed_by_user_id,
-                            review_requested_utc = @review_requested_utc,
-                            reviewed_utc = @reviewed_utc,
-                            review_deadline_utc = @review_deadline_utc,
-                            total_runtime_ms = @total_runtime_ms,
-                            started_utc = @started_utc,
-                            completed_utc = @completed_utc,
-                            last_update_utc = @last_update_utc
-                            WHERE id = @id;";
-                    cmd.Parameters.AddWithValue("@id", mission.Id);
-                    cmd.Parameters.AddWithValue("@tenant_id", (object?)mission.TenantId ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@user_id", (object?)mission.UserId ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@voyage_id", (object?)mission.VoyageId ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@vessel_id", (object?)mission.VesselId ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@captain_id", (object?)mission.CaptainId ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@requested_captain_id", (object?)mission.RequestedCaptainId ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@assigned_harbor_id", (object?)mission.AssignedHarborId ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@title", mission.Title);
-                    cmd.Parameters.AddWithValue("@description", (object?)mission.Description ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@status", mission.Status.ToString());
-                    cmd.Parameters.AddWithValue("@mode", mission.Mode.ToString());
-                    cmd.Parameters.AddWithValue("@priority", mission.Priority);
-                    cmd.Parameters.AddWithValue("@redispatch_attempts", mission.RedispatchAttempts);
-                    cmd.Parameters.AddWithValue("@tier", (object?)mission.Tier?.ToString() ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@parent_mission_id", (object?)mission.ParentMissionId ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@branch_name", (object?)mission.BranchName ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@dock_id", (object?)mission.DockId ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@process_id", mission.ProcessId.HasValue ? (object)mission.ProcessId.Value : DBNull.Value);
-                    cmd.Parameters.AddWithValue("@pr_url", (object?)mission.PrUrl ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@commit_hash", (object?)mission.CommitHash ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@diff_snapshot", (object?)mission.DiffSnapshot ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@agent_output", (object?)mission.AgentOutput ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@persona", (object?)mission.Persona ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@depends_on_mission_id", (object?)mission.DependsOnMissionId ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@failure_reason", (object?)mission.FailureReason ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@failure_kind", MissionFailureKindColumn.ToDbValue(mission.FailureKind));
-                    cmd.Parameters.AddWithValue("@wait_for_voyage_workers", (mission.WaitForVoyageWorkers ? 1 : 0));
-                    cmd.Parameters.AddWithValue("@requires_review", mission.RequiresReview ? 1 : 0);
-                    cmd.Parameters.AddWithValue("@review_deny_action", mission.ReviewDenyAction.ToString());
-                    cmd.Parameters.AddWithValue("@review_comment", (object?)mission.ReviewComment ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@reviewed_by_user_id", (object?)mission.ReviewedByUserId ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@review_requested_utc", mission.ReviewRequestedUtc.HasValue ? (object)SqliteDatabaseDriver.ToIso8601(mission.ReviewRequestedUtc.Value) : DBNull.Value);
-                    cmd.Parameters.AddWithValue("@reviewed_utc", mission.ReviewedUtc.HasValue ? (object)SqliteDatabaseDriver.ToIso8601(mission.ReviewedUtc.Value) : DBNull.Value);
-                    cmd.Parameters.AddWithValue("@review_deadline_utc", mission.ReviewDeadlineUtc.HasValue ? (object)SqliteDatabaseDriver.ToIso8601(mission.ReviewDeadlineUtc.Value) : DBNull.Value);
-                    cmd.Parameters.AddWithValue("@total_runtime_ms", mission.TotalRuntimeMs.HasValue ? (object)mission.TotalRuntimeMs.Value : DBNull.Value);
-                    cmd.Parameters.AddWithValue("@started_utc", mission.StartedUtc.HasValue ? (object)SqliteDatabaseDriver.ToIso8601(mission.StartedUtc.Value) : DBNull.Value);
-                    cmd.Parameters.AddWithValue("@completed_utc", mission.CompletedUtc.HasValue ? (object)SqliteDatabaseDriver.ToIso8601(mission.CompletedUtc.Value) : DBNull.Value);
-                    cmd.Parameters.AddWithValue("@last_update_utc", SqliteDatabaseDriver.ToIso8601(mission.LastUpdateUtc));
-                    await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+                    cmd.CommandText = "UPDATE missions SET process_id = NULL, last_update_utc = @last_update_utc WHERE id = @id AND process_id = @process_id;";
+                    cmd.Parameters.AddWithValue("@id", missionId);
+                    cmd.Parameters.AddWithValue("@process_id", processId);
+                    cmd.Parameters.AddWithValue("@last_update_utc", SqliteDatabaseDriver.ToIso8601(DateTime.UtcNow));
+                    int rows = await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+                    return rows > 0;
                 }
-
-                await TouchVoyageAsync(conn, mission.VoyageId, mission.LastUpdateUtc, token).ConfigureAwait(false);
             }
-
-            return mission;
         }
 
         /// <inheritdoc />
@@ -875,6 +813,125 @@ namespace Armada.Core.Database.Sqlite.Implementations
                 }
                 return EnumerationResult<Mission>.Create(query, results, totalCount);
             }
+        }
+
+        /// <summary>
+        /// Write every mission column. When <paramref name="expectedStatuses"/> is supplied the write applies only
+        /// while the stored status is one of them (a compare-and-set on status).
+        /// </summary>
+        private async Task<bool> UpdateWhereAsync(Mission mission, IReadOnlyCollection<MissionStatusEnum>? expectedStatuses, CancellationToken token)
+        {
+            if (mission == null) throw new ArgumentNullException(nameof(mission));
+            mission.LastUpdateUtc = DateTime.UtcNow;
+            int rows = 0;
+
+            using (SqliteConnection conn = new SqliteConnection(_Driver.ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                using (SqliteCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = @"UPDATE missions SET
+                            tenant_id = @tenant_id,
+                            user_id = @user_id,
+                            voyage_id = @voyage_id,
+                            vessel_id = @vessel_id,
+                            captain_id = @captain_id,
+                            requested_captain_id = @requested_captain_id,
+                            assigned_harbor_id = @assigned_harbor_id,
+                            title = @title,
+                            description = @description,
+                            status = @status,
+                            mode = @mode,
+                            priority = @priority,
+                            redispatch_attempts = @redispatch_attempts,
+                            tier = @tier,
+                            parent_mission_id = @parent_mission_id,
+                            branch_name = @branch_name,
+                            dock_id = @dock_id,
+                            process_id = @process_id,
+                            pr_url = @pr_url,
+                            commit_hash = @commit_hash,
+                            diff_snapshot = @diff_snapshot,
+                            agent_output = @agent_output,
+                            persona = @persona,
+                            depends_on_mission_id = @depends_on_mission_id,
+                            failure_reason = @failure_reason,
+                            failure_kind = @failure_kind,
+                            wait_for_voyage_workers = @wait_for_voyage_workers,
+                            requires_review = @requires_review,
+                            review_deny_action = @review_deny_action,
+                            review_comment = @review_comment,
+                            reviewed_by_user_id = @reviewed_by_user_id,
+                            review_requested_utc = @review_requested_utc,
+                            reviewed_utc = @reviewed_utc,
+                            review_deadline_utc = @review_deadline_utc,
+                            total_runtime_ms = @total_runtime_ms,
+                            started_utc = @started_utc,
+                            completed_utc = @completed_utc,
+                            last_update_utc = @last_update_utc
+                            WHERE id = @id" + ExpectedStatusClause(cmd, expectedStatuses) + ";";
+                    cmd.Parameters.AddWithValue("@id", mission.Id);
+                    cmd.Parameters.AddWithValue("@tenant_id", (object?)mission.TenantId ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@user_id", (object?)mission.UserId ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@voyage_id", (object?)mission.VoyageId ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@vessel_id", (object?)mission.VesselId ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@captain_id", (object?)mission.CaptainId ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@requested_captain_id", (object?)mission.RequestedCaptainId ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@assigned_harbor_id", (object?)mission.AssignedHarborId ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@title", mission.Title);
+                    cmd.Parameters.AddWithValue("@description", (object?)mission.Description ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@status", mission.Status.ToString());
+                    cmd.Parameters.AddWithValue("@mode", mission.Mode.ToString());
+                    cmd.Parameters.AddWithValue("@priority", mission.Priority);
+                    cmd.Parameters.AddWithValue("@redispatch_attempts", mission.RedispatchAttempts);
+                    cmd.Parameters.AddWithValue("@tier", (object?)mission.Tier?.ToString() ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@parent_mission_id", (object?)mission.ParentMissionId ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@branch_name", (object?)mission.BranchName ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@dock_id", (object?)mission.DockId ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@process_id", mission.ProcessId.HasValue ? (object)mission.ProcessId.Value : DBNull.Value);
+                    cmd.Parameters.AddWithValue("@pr_url", (object?)mission.PrUrl ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@commit_hash", (object?)mission.CommitHash ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@diff_snapshot", (object?)mission.DiffSnapshot ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@agent_output", (object?)mission.AgentOutput ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@persona", (object?)mission.Persona ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@depends_on_mission_id", (object?)mission.DependsOnMissionId ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@failure_reason", (object?)mission.FailureReason ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@failure_kind", MissionFailureKindColumn.ToDbValue(mission.FailureKind));
+                    cmd.Parameters.AddWithValue("@wait_for_voyage_workers", (mission.WaitForVoyageWorkers ? 1 : 0));
+                    cmd.Parameters.AddWithValue("@requires_review", mission.RequiresReview ? 1 : 0);
+                    cmd.Parameters.AddWithValue("@review_deny_action", mission.ReviewDenyAction.ToString());
+                    cmd.Parameters.AddWithValue("@review_comment", (object?)mission.ReviewComment ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@reviewed_by_user_id", (object?)mission.ReviewedByUserId ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@review_requested_utc", mission.ReviewRequestedUtc.HasValue ? (object)SqliteDatabaseDriver.ToIso8601(mission.ReviewRequestedUtc.Value) : DBNull.Value);
+                    cmd.Parameters.AddWithValue("@reviewed_utc", mission.ReviewedUtc.HasValue ? (object)SqliteDatabaseDriver.ToIso8601(mission.ReviewedUtc.Value) : DBNull.Value);
+                    cmd.Parameters.AddWithValue("@review_deadline_utc", mission.ReviewDeadlineUtc.HasValue ? (object)SqliteDatabaseDriver.ToIso8601(mission.ReviewDeadlineUtc.Value) : DBNull.Value);
+                    cmd.Parameters.AddWithValue("@total_runtime_ms", mission.TotalRuntimeMs.HasValue ? (object)mission.TotalRuntimeMs.Value : DBNull.Value);
+                    cmd.Parameters.AddWithValue("@started_utc", mission.StartedUtc.HasValue ? (object)SqliteDatabaseDriver.ToIso8601(mission.StartedUtc.Value) : DBNull.Value);
+                    cmd.Parameters.AddWithValue("@completed_utc", mission.CompletedUtc.HasValue ? (object)SqliteDatabaseDriver.ToIso8601(mission.CompletedUtc.Value) : DBNull.Value);
+                    cmd.Parameters.AddWithValue("@last_update_utc", SqliteDatabaseDriver.ToIso8601(mission.LastUpdateUtc));
+                    rows = await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+                }
+
+                if (rows > 0)
+                    await TouchVoyageAsync(conn, mission.VoyageId, mission.LastUpdateUtc, token).ConfigureAwait(false);
+            }
+
+            return rows > 0;
+        }
+
+        private static string ExpectedStatusClause(SqliteCommand cmd, IReadOnlyCollection<MissionStatusEnum>? expectedStatuses)
+        {
+            if (expectedStatuses == null) return String.Empty;
+            List<string> placeholders = new List<string>();
+            int index = 0;
+            foreach (MissionStatusEnum expected in expectedStatuses)
+            {
+                string name = "@expected_status_" + index++;
+                placeholders.Add(name);
+                cmd.Parameters.AddWithValue(name, expected.ToString());
+            }
+
+            return " AND status IN (" + String.Join(", ", placeholders) + ")";
         }
 
         #endregion

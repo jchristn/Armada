@@ -244,6 +244,35 @@ namespace Test.Shared.Suites.Runtimes
                 }
             }));
 
+            cases.Add(CaseAsync("timeout_cancellation_fails_the_run", "An OperationCanceledException that is not a stop (an inference HTTP timeout) fails the run with exit 1; only a stop reports -1", TestTags.Negative, async () =>
+            {
+                string dir = NewTempDir();
+                try
+                {
+                    ModelEndpoint endpoint = new ModelEndpoint { Name = "timeout", Provider = ModelProviderEnum.OpenAICompatible, Kind = ModelEndpointKindEnum.Inference, Model = "m", BaseUrl = "http://localhost:1" };
+                    ApiAgentRuntime runtime = new ApiAgentRuntime(endpoint, CreateLogging(), 20, (ep, log) => new TimeoutClient(log));
+
+                    int? exitCode = null;
+                    List<ApiRuntimeDiagnostic> diagnostics = new List<ApiRuntimeDiagnostic>();
+                    ManualResetEventSlim exited = new ManualResetEventSlim(false);
+                    runtime.OnDiagnostic += (pid, diag) => { lock (diagnostics) diagnostics.Add(diag); };
+                    runtime.OnProcessExited += (pid, code) => { exitCode = code; exited.Set(); };
+
+                    await runtime.StartAsync(dir, "anything").ConfigureAwait(false);
+                    AssertTrue(exited.Wait(TimeSpan.FromSeconds(10)), "Expected the loop to complete.");
+                    AssertEqual(1, exitCode ?? 0, "A timeout is a failed run, not the -1 interruption sentinel");
+                    lock (diagnostics)
+                    {
+                        AssertFalse(diagnostics.Exists(d => d.Kind == ApiRuntimeDiagnosticKindEnum.Cancelled), "No cancelled diagnostic without a stop");
+                        AssertTrue(diagnostics.Exists(d => d.Kind == ApiRuntimeDiagnosticKindEnum.Error), "an Error diagnostic is raised");
+                    }
+                }
+                finally
+                {
+                    Cleanup(dir);
+                }
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: "Runtimes.ApiAgentRuntime",
                 displayName: "API Agent Runtime",
@@ -332,6 +361,28 @@ namespace Test.Shared.Suites.Runtimes
             {
                 await Task.Delay(Timeout.Infinite, token).ConfigureAwait(false);
                 return new ToolChatResponse { Success = true, ToolCalls = new List<ToolCall>() };
+            }
+
+            public override Task<bool> ValidateConnectivityAsync(CancellationToken token = default) => Task.FromResult(true);
+            protected override Task<ChatResponse> ChatCoreAsync(string prompt, ResolvedCompletion settings, CancellationToken token) => throw new NotImplementedException();
+            protected override Task<ChatStreamingResponse> ChatStreamingCoreAsync(string prompt, ResolvedCompletion settings, CancellationToken token) => throw new NotImplementedException();
+            protected override Task<ToolChatStreamingResponse> ToolChatStreamingCoreAsync(ToolChatRequest request, List<ChatMessage> messages, ResolvedCompletion settings, CancellationToken token) => throw new NotImplementedException();
+            protected override Task<GenerationResponse> GenerateCoreAsync(string prompt, ResolvedCompletion settings, CancellationToken token) => throw new NotImplementedException();
+            protected override Task<GenerationStreamingResponse> GenerateStreamingCoreAsync(string prompt, ResolvedCompletion settings, CancellationToken token) => throw new NotImplementedException();
+        }
+
+        private sealed class TimeoutClient : CompletionClientBase
+        {
+            private readonly CompletionOptions _Defaults = new CompletionOptions { Model = "timeout-model" };
+
+            public TimeoutClient(LoggingModule logging) : base("http://localhost:1", null, logging) { }
+
+            public override CompletionOptions Defaults => _Defaults;
+
+            protected override Task<ToolChatResponse> ToolChatCoreAsync(ToolChatRequest request, List<ChatMessage> messages, ResolvedCompletion settings, CancellationToken token)
+            {
+                // What HttpClient throws when its own Timeout elapses: a cancellation the caller never requested.
+                throw new TaskCanceledException("The request was canceled due to the configured HttpClient.Timeout of 100 seconds elapsing.");
             }
 
             public override Task<bool> ValidateConnectivityAsync(CancellationToken token = default) => Task.FromResult(true);

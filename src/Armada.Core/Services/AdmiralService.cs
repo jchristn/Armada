@@ -69,6 +69,15 @@ namespace Armada.Core.Services
         /// </summary>
         public Func<CancellationToken, Task<int>>? OnReconcileManualLandings { get; set; }
 
+        /// <summary>
+        /// Optional hook reporting whether an agent process was launched by this admiral and is still running under
+        /// its runtime's exit callback. Such a process is owned by that callback: the health check and the orphan
+        /// sweep treat it as alive instead of probing the operating system, which cannot see in-process captains
+        /// (an ApiEndpoint loop has a synthetic process id) or Harbor-hosted ones. Concrete hook, like
+        /// <see cref="OnGetRemoteTunnelStatus"/>, so the orchestration interface does not change.
+        /// </summary>
+        public Func<int, bool>? OnIsProcessTracked { get; set; }
+
         #endregion
 
         #region Private-Members
@@ -833,6 +842,16 @@ namespace Armada.Core.Services
                 return;
             }
 
+            // Exactly one handler owns a process exit. The claim is a conditional write on the mission's recorded
+            // process, so a concurrent health check (or an exit from an earlier attempt) cannot also act on it.
+            if (!await _Database.Missions.TryClaimProcessExitAsync(missionId, processId, token).ConfigureAwait(false))
+            {
+                _Logging.Debug(_Header + "exit of agent process " + processId + " for mission " + missionId + " is already handled or belongs to an earlier attempt -- skipping");
+                return;
+            }
+
+            mission.ProcessId = null;
+
             await EmitEventAsync("captain.process_exited",
                 "Agent process " + processId + " exited with code " + (exitCode?.ToString() ?? "unknown") + " for captain " + captain.Name,
                 entityType: "captain", entityId: captain.Id,
@@ -1088,39 +1107,60 @@ namespace Armada.Core.Services
 
             bool isAlive = false;
             int exitCode = -1;
-            try
-            {
-                System.Diagnostics.Process process = System.Diagnostics.Process.GetProcessById(processId.Value);
-                if (process.HasExited)
-                {
-                    isAlive = false;
-                    try { exitCode = process.ExitCode; }
-                    catch { }
-                }
-                else
-                {
-                    isAlive = true;
-                }
-            }
-            catch (ArgumentException)
-            {
-                // Process no longer exists in process table.
-                // Check if the process exit callback already fired — if so, the async
-                // completion handler is in progress and we should not race it with recovery.
-                if (OnIsProcessExitHandled != null && OnIsProcessExitHandled(processId.Value))
-                {
-                    _Logging.Debug(_Header + "captain " + captain.Id + " process " + processId +
-                        " no longer exists but exit callback already fired — skipping health check to avoid race");
-                    return;
-                }
 
-                // A missing PID could mean the agent crashed, was killed externally, or the OS
-                // recycled the PID. Only a confirmed clean exit should be treated as success.
-                isAlive = false;
-                exitCode = -1;
+            // A process this admiral launched and still tracks is owned by its runtime's exit callback, which reports the
+            // real outcome. Probing the OS here would misread an in-process ApiEndpoint loop (synthetic process id) or a
+            // Harbor-hosted process as vanished and race the callback with a second, conflicting exit decision.
+            if (OnIsProcessTracked != null && OnIsProcessTracked(processId.Value))
+            {
+                isAlive = true;
+            }
+            else if (OnIsProcessExitHandled != null && OnIsProcessExitHandled(processId.Value))
+            {
+                // The exit callback already fired for this process: its async handler owns the outcome, so the
+                // health check must not race it with a second, conflicting decision.
+                _Logging.Debug(_Header + "captain " + captain.Id + " process " + processId +
+                    " exit callback already fired -- skipping health check to avoid racing its handler");
+                return;
+            }
+            else
+            {
+                try
+                {
+                    System.Diagnostics.Process process = System.Diagnostics.Process.GetProcessById(processId.Value);
+                    if (process.HasExited)
+                    {
+                        isAlive = false;
+                        try { exitCode = process.ExitCode; }
+                        catch { }
+                    }
+                    else
+                    {
+                        isAlive = true;
+                    }
+                }
+                catch (ArgumentException)
+                {
+                    // A missing PID could mean the agent crashed, was killed externally, or the OS
+                    // recycled the PID. Only a confirmed clean exit should be treated as success.
+                    isAlive = false;
+                    exitCode = -1;
+                }
             }
 
             string missionId = captain.CurrentMissionId ?? "unknown";
+
+            if (!isAlive && mission != null && mission.ProcessId.HasValue)
+            {
+                // Claim the exit so the callback (or a second health check) cannot also handle it.
+                if (!await _Database.Missions.TryClaimProcessExitAsync(mission.Id, processId.Value, token).ConfigureAwait(false))
+                {
+                    _Logging.Debug(_Header + "captain " + captain.Id + " process " + processId + " exit for mission " + mission.Id + " is already handled or belongs to an earlier attempt -- skipping");
+                    return;
+                }
+
+                mission.ProcessId = null;
+            }
 
             if (!isAlive)
             {
@@ -1526,7 +1566,12 @@ namespace Armada.Core.Services
 
                     // Check if the mission's process exited (work may already be done)
                     bool processAlive = false;
-                    if (mission.ProcessId.HasValue)
+                    if (mission.ProcessId.HasValue && OnIsProcessTracked != null && OnIsProcessTracked(mission.ProcessId.Value))
+                    {
+                        // Still running under its runtime's exit callback, which owns its outcome.
+                        processAlive = true;
+                    }
+                    else if (mission.ProcessId.HasValue)
                     {
                         try
                         {
@@ -1546,6 +1591,13 @@ namespace Armada.Core.Services
                         if (!String.IsNullOrEmpty(mission.DockId))
                         {
                             dock = await _Database.Docks.ReadAsync(mission.DockId, token).ConfigureAwait(false);
+                        }
+
+                        if (mission.ProcessId.HasValue &&
+                            !await _Database.Missions.TryClaimProcessExitAsync(mission.Id, mission.ProcessId.Value, token).ConfigureAwait(false))
+                        {
+                            _Logging.Debug(_Header + "orphaned mission " + mission.Id + " exit is already handled -- skipping");
+                            continue;
                         }
 
                         // Complete the mission — the agent finished its work but the status was never updated
@@ -1688,8 +1740,10 @@ namespace Armada.Core.Services
 
             if (mission != null && !String.IsNullOrEmpty(mission.DockId))
             {
+                // Conditional on the status this caller holds: a stale copy must never move the mission back.
                 mission.DockId = null;
-                await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+                if (!await _Database.Missions.TryUpdateIfStatusAsync(mission, new MissionStatusEnum[] { mission.Status }, token).ConfigureAwait(false))
+                    _Logging.Debug(_Header + "mission " + mission.Id + " changed status while its dock was reclaimed -- not overwriting it");
             }
         }
 
@@ -1709,6 +1763,7 @@ namespace Armada.Core.Services
         {
             // Reclaim the dock and release the captain before resetting the mission (ReclaimDockAsync keys off
             // the captain's/mission's current dock, so do it before clearing those references).
+            MissionStatusEnum observedStatus = mission.Status;
             await ReclaimDockAsync(captain, mission, token).ConfigureAwait(false);
             await _Captains.ReleaseAsync(captain, token).ConfigureAwait(false);
 
@@ -1723,7 +1778,11 @@ namespace Armada.Core.Services
             mission.CompletedUtc = null;
             mission.TotalRuntimeMs = null;
             mission.LastUpdateUtc = DateTime.UtcNow;
-            await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+            if (!await _Database.Missions.TryUpdateIfStatusAsync(mission, new MissionStatusEnum[] { observedStatus }, token).ConfigureAwait(false))
+            {
+                _Logging.Warn(_Header + "mission " + missionId + " left " + observedStatus + " while its interrupted exit was handled -- not re-dispatching");
+                return;
+            }
 
             _Logging.Warn(_Header + "mission " + missionId + " interrupted (process exit code " + exitCode +
                 ", treated as a stop/restart cancellation rather than a failure); re-dispatching (attempt " +
@@ -1744,15 +1803,27 @@ namespace Armada.Core.Services
             RuntimeFailureKindEnum runtimeFailureKind,
             CancellationToken token)
         {
+            bool missionFailed = false;
             if (mission != null)
             {
+                MissionStatusEnum observedStatus = mission.Status;
                 mission.Status = MissionStatusEnum.Failed;
                 mission.FailureReason = failureReason;
                 mission.FailureKind = MissionFailureKindEnum.Crash;
                 mission.ProcessId = null;
                 mission.CompletedUtc = DateTime.UtcNow;
                 mission.LastUpdateUtc = DateTime.UtcNow;
-                await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+                missionFailed = await _Database.Missions.TryUpdateIfStatusAsync(mission, new MissionStatusEnum[] { observedStatus }, token).ConfigureAwait(false);
+                if (!missionFailed)
+                {
+                    _Logging.Warn(_Header + "mission " + missionId + " left " + observedStatus + " before its failed process exit was recorded -- keeping the newer state");
+                    Mission? current = await _Database.Missions.ReadAsync(missionId, token).ConfigureAwait(false);
+                    if (current != null) mission = current;
+                }
+            }
+
+            if (mission != null && missionFailed)
+            {
                 _Logging.Warn(_Header + "mission " + missionId + " marked failed after process exit");
 
                 await EmitEventAsync("mission.failed", "Mission failed: " + mission.Title + " (" + failureReason + ")",

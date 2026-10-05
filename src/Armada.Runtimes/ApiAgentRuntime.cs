@@ -343,8 +343,11 @@ namespace Armada.Runtimes
 
                 WriteFinalMessage(finalMessageFilePath, finalText);
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (token.IsCancellationRequested)
             {
+                // -1 is the interruption sentinel: only a real stop (StopAsync or the caller's token) produces it. An
+                // OperationCanceledException without that, such as an HTTP client timeout against the inference
+                // endpoint, is a failed run and falls through to the generic handler below (exit code 1).
                 exitCode = -1;
                 EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.Cancelled, "[cancelled] the captain run was stopped.");
             }
