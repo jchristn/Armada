@@ -26,7 +26,7 @@ namespace Test.Shared.Suites.Tui
                 int h = size[1];
                 cases.Add(TuiCase.Sync(Suite, "renders_" + w + "x" + h, "Shell renders at " + w + "x" + h, () =>
                 {
-                    using (TuiTestHost host = TuiCase.SignedIn(w, h, "/missions"))
+                    using (TuiTestHost host = TuiCase.SignedIn(w, h, "/captains"))
                     {
                         string frame = host.Screen();
                         string[] lines = frame.Split('\n');
@@ -35,10 +35,10 @@ namespace Test.Shared.Suites.Tui
                         TuiCase.Contains(frame, "admin@armada", "user");
                         TuiCase.Contains(frame, "File", "menu bar");
                         TuiCase.Contains(frame, "Help", "menu bar help");
-                        TuiCase.Contains(frame, "Missions", "hub tab");
-                        TuiCase.Contains(frame, "Merge Queue", "hub tab");
+                        TuiCase.Contains(frame, "Captains", "hub tab");
+                        TuiCase.Contains(frame, "Docks", "hub tab");
                         TuiCase.Contains(frame, "Coming in a later milestone", "placeholder");
-                        TuiCase.Contains(frame, "MissionsScreen", "screen name");
+                        TuiCase.Contains(frame, "CaptainsScreen", "screen name");
                         TuiCase.Contains(frame, "Ctrl+K", "status hints");
                         ShellLayout layout = host.Tui.Shell.LastLayout!;
                         LayoutModeEnum expected = w >= 110 ? LayoutModeEnum.Wide : w >= 90 ? LayoutModeEnum.Compact : LayoutModeEnum.Narrow;
@@ -63,7 +63,7 @@ namespace Test.Shared.Suites.Tui
                 {
                     string frame = host.Screen();
                     AssertEqual(LayoutModeEnum.TooSmall, host.Tui.Shell.LastLayout!.Mode, "mode");
-                    TuiCase.NotContains(frame, "Merge Queue", "content hidden");
+                    TuiCase.NotContains(frame, "Docks", "content hidden");
                 }
             }));
 
@@ -150,13 +150,13 @@ namespace Test.Shared.Suites.Tui
 
             cases.Add(TuiCase.Sync(Suite, "hub_tabs_switch", "Hub tabs switch with ] and keep the tab in the route", () =>
             {
-                using (TuiTestHost host = TuiCase.SignedIn(120, 40, "/missions"))
+                using (TuiTestHost host = TuiCase.SignedIn(120, 40, "/captains"))
                 {
                     host.Press("]");
-                    AssertEqual("/missions?tab=voyages", host.Tui.Context.Router.Current!.FullPath, "voyages tab");
-                    TuiCase.Contains(host.Screen(), "VoyagesScreen", "voyages placeholder");
-                    host.Press("alt+3");
-                    AssertEqual("/missions?tab=merge-queue", host.Tui.Context.Router.Current!.FullPath, "alt+3");
+                    AssertEqual("/captains?tab=docks", host.Tui.Context.Router.Current!.FullPath, "docks tab");
+                    TuiCase.Contains(host.Screen(), "DocksScreen", "docks placeholder");
+                    host.Press("alt+1");
+                    AssertEqual("/captains?tab=captains", host.Tui.Context.Router.Current!.FullPath, "alt+1");
                 }
             }));
 

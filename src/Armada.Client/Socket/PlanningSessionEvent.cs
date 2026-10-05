@@ -74,6 +74,11 @@ namespace Armada.Client.Socket
         /// </summary>
         public string? VoyageId { get; set; } = null;
 
+        /// <summary>
+        /// Dispatch draft (planning-session.summary.created).
+        /// </summary>
+        public PlanningSessionDraft? Draft { get; set; } = null;
+
         #endregion
 
         #region Constructors-and-Factories

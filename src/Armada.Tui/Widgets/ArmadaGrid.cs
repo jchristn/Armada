@@ -532,6 +532,7 @@ namespace Armada.Tui.Widgets
         {
             bool shift = (key.Modifiers & KeyModifiers.Shift) != 0;
             bool ctrl = (key.Modifiers & KeyModifiers.Ctrl) != 0;
+            if ((key.Modifiers & KeyModifiers.Alt) != 0 && key.Code != KeyCode.Character) return false;
             switch (key.Code)
             {
                 case KeyCode.Up:

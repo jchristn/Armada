@@ -244,6 +244,7 @@ namespace Armada.Tui.Screens.Operations
             int formRows = 0;
             foreach (FormRow row in Form.Rows)
             {
+                if (FormView.IsHidden(row)) continue;
                 if (row.IsSection) formRows += 2;
                 else formRows += row.Height + ((row.Field as IFormField)?.FieldError != null ? 1 : 0) + (String.IsNullOrEmpty(row.Hint) ? 0 : 1);
             }

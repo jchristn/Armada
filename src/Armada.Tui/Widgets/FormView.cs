@@ -142,6 +142,7 @@ namespace Armada.Tui.Widgets
             IWidget? firstBad = null;
             foreach (FormRow row in _Rows)
             {
+                if (IsHidden(row)) continue;
                 if (row.Field is IFormField field && !field.ValidateField())
                 {
                     ok = false;
@@ -236,6 +237,7 @@ namespace Armada.Tui.Widgets
                 FormRow row = _Rows[i];
                 int ry = tops[i] - _Scroll;
                 int rh = RowHeight(row);
+                if (rh == 0) continue;
                 if (ry + rh <= 0 || ry >= height) continue;
                 if (row.IsSection)
                 {
@@ -280,11 +282,23 @@ namespace Armada.Tui.Widgets
 
         private int RowHeight(FormRow row)
         {
+            if (IsHidden(row)) return 0;
             if (row.IsSection) return 2;
             int h = row.Height;
             if ((row.Field as IFormField)?.FieldError != null) h++;
             if (!String.IsNullOrEmpty(row.Hint)) h++;
             return h;
+        }
+
+        /// <summary>
+        /// True when a row's field is an Armada widget with Visible set to false (the row takes no space and is not
+        /// validated).
+        /// </summary>
+        /// <param name="row">Row.</param>
+        /// <returns>True when hidden.</returns>
+        public static bool IsHidden(FormRow row)
+        {
+            return row != null && row.Field is ArmadaWidget aw && !aw.Visible;
         }
 
         private List<object?> Snapshot()

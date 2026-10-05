@@ -42,6 +42,19 @@ namespace Armada.Client
         }
 
         /// <summary>
+        /// GET `/api/v1/voyages/${id}` read as the server's actual shape, <c>{ Voyage, Missions }</c> (the dashboard's
+        /// <c>getVoyage</c> unwraps it the same way).
+        /// </summary>
+        /// <param name="id">id.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The voyage and its missions.</returns>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        public Task<VoyageDetail?> GetVoyageDetailAsync(string id, CancellationToken token = default)
+        {
+            return GetAsync<VoyageDetail>($"/api/v1/voyages/{E(id)}", null, token);
+        }
+
+        /// <summary>
         /// Dashboard <c>getVoyageStatus</c>: GET `/api/v1/voyages/${id}/status`.
         /// </summary>
         /// <param name="id">id.</param>

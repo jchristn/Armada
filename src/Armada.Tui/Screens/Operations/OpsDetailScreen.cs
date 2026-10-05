@@ -218,7 +218,7 @@ namespace Armada.Tui.Screens.Operations
         public override bool HandleKey(KeyEvent key)
         {
             IWidget? leaf = Scope.FocusedLeaf();
-            bool typing = leaf is TextInput || leaf is OpsTextArea;
+            bool typing = leaf is TextInput || leaf is OpsTextArea || (leaf is ScrollTextView scroll && scroll.Searching);
             if (!typing)
             {
                 if (key.Code == KeyCode.Character && key.Modifiers == KeyModifiers.None && key.Rune == '.')

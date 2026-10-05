@@ -1137,7 +1137,7 @@ namespace Armada.Tui.Ask
                 {
                     if (kind == "vessel") name = (await client.GetVesselAsync(id).ConfigureAwait(false))?.Name;
                     else if (kind == "mission") name = (await client.GetMissionAsync(id).ConfigureAwait(false))?.Title;
-                    else if (kind == "voyage") name = (await client.GetVoyageAsync(id).ConfigureAwait(false))?.Title;
+                    else if (kind == "voyage") name = (await client.GetVoyageDetailAsync(id).ConfigureAwait(false))?.Voyage?.Title;
                     else if (kind == "captain") name = (await client.GetCaptainAsync(id).ConfigureAwait(false))?.Name;
                     else if (kind == "fleet") name = (await client.GetFleetAsync(id).ConfigureAwait(false))?.Fleet?.Name;
                 }
