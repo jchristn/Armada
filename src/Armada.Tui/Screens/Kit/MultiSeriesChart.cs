@@ -57,7 +57,7 @@ namespace Armada.Tui.Screens.Kit
 
         #region Private-Members
 
-        private static readonly string[] _Glyphs = new string[] { "█", "▓", "▒", "░", "#", "+", "=", "%" };
+        private static readonly string[] _Glyphs = new string[] { "\u2588", "\u2593", "\u2592", "\u2591", "#", "+", "=", "%" };
         private static readonly string[] _AsciiGlyphs = new string[] { "#", "=", "+", "*", "o", "%", "x", "@" };
         private static readonly string[] _LineGlyphs = new string[] { "*", "o", "+", "x", "#", "@", "%", "=" };
 
@@ -147,7 +147,7 @@ namespace Armada.Tui.Screens.Kit
             string maxLabel = Format(max);
             int axisWidth = Math.Max(TextCells.Width(maxLabel), 1) + 1;
             int plotWidth = width - axisWidth;
-            int colWidth = Math.Max(1, plotWidth / Math.Max(1, columns.Count));
+            int colWidth = Math.Min(6, Math.Max(1, plotWidth / Math.Max(1, columns.Count)));
             int barWidth = colWidth > 2 ? colWidth - 1 : colWidth;
             SurfaceText.Draw(surface, 0, y, TextCells.PadLeft(maxLabel, axisWidth - 1), Theme.Muted, axisWidth);
             SurfaceText.Draw(surface, 0, y + plotHeight - 1, TextCells.PadLeft("0", axisWidth - 1), Theme.Muted, axisWidth);

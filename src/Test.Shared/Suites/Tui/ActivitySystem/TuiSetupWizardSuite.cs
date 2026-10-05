@@ -1,0 +1,319 @@
+namespace Test.Shared.Suites.Tui.ActivitySystem
+{
+    using System;
+    using System.Collections.Generic;
+    using System.Linq;
+    using System.Net;
+    using Armada.Tui.Screens;
+    using Armada.Tui.Screens.Admin;
+    using Armada.Tui.Widgets;
+    using Test.Shared.Infrastructure;
+    using Touchstone.Core;
+    using static Test.Shared.Infrastructure.Asserts;
+
+    /// <summary>
+    /// Headless keyboard flows for the setup wizard against a stubbed server: every step with its POST body,
+    /// validation, Back, Skip Setup, existing-record reuse, dispatch warnings, and the auto-open rule.
+    /// </summary>
+    public sealed class TuiSetupWizardSuite : IArmadaTestSuite
+    {
+        private const string Suite = "Tui.System.Setup";
+
+        /// <inheritdoc />
+        public TestSuiteDescriptor Build()
+        {
+            List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
+
+            cases.Add(TuiCase.Sync(Suite, "walk_all_steps", "Keyboard walk creates fleet, vessel, captain, dispatches, and hands off", () =>
+            {
+                StubHttpHandler stub = EmptyServer();
+                using (TuiTestHost host = TuiCase.SignedIn(140, 44, "/setup", stub))
+                {
+                    SetupWizardScreen screen = Current(host);
+                    AssertTrue(host.PumpUntil(() => !screen.Loading), "resources loaded");
+                    string frame = host.Screen();
+                    TuiScreenDump.Write("setup-objective", frame);
+                    TuiCase.Contains(frame, "Launch Armada With One Mission", "title");
+                    TuiCase.Contains(frame, "Step 1 of 6", "step count");
+                    TuiCase.Contains(frame, "Pick a fleet", "objective text");
+
+                    host.Press("tab");
+                    AssertTrue(ReferenceEquals(screen.Scope.Focused, screen.Navigation), "navigation focused");
+                    host.Press("right").Press("enter");
+                    AssertEqual(1, screen.Current, "fleet step");
+                    AssertEqual(SetupWizardModeEnum.New, screen.FleetMode, "new fleet on empty server");
+                    TuiScreenDump.Write("setup-fleet", host.Screen());
+
+                    host.Press("ctrl+u").Type("Lab Fleet").Press("tab").Press("ctrl+u").Type("Setup lab");
+                    host.Press("ctrl+s");
+                    AssertTrue(host.PumpUntil(() => screen.Current == 2), "advanced to vessel");
+                    string fleetBody = Body(stub, 0);
+                    AssertTrue(fleetBody.Contains("\"Name\":\"Lab Fleet\"") && fleetBody.Contains("\"Description\":\"Setup lab\""), "fleet body: " + fleetBody);
+                    TuiCase.Contains(host.Screen(), "Created fleet \"Lab Fleet\".", "fleet result");
+                    AssertEqual("flt_new", screen.ActiveFleetId, "active fleet");
+
+                    host.Type("armada").Press("tab").Press("tab").Type("/tmp/repo");
+                    TuiScreenDump.Write("setup-vessel", host.Screen());
+                    host.Press("ctrl+s");
+                    AssertTrue(host.PumpUntil(() => screen.Current == 3), "advanced to captain");
+                    string vesselBody = Body(stub, 1);
+                    AssertTrue(vesselBody.Contains("\"Name\":\"armada\""), "vessel name: " + vesselBody);
+                    AssertTrue(vesselBody.Contains("\"RepoUrl\":\"/tmp/repo\""), "repo url: " + vesselBody);
+                    AssertTrue(vesselBody.Contains("\"FleetId\":\"flt_new\""), "fleet id: " + vesselBody);
+                    AssertTrue(vesselBody.Contains("\"DefaultBranch\":\"main\""), "default branch: " + vesselBody);
+                    AssertTrue(vesselBody.Contains("\"LandingMode\":\"None\""), "landing mode: " + vesselBody);
+                    AssertTrue(vesselBody.Contains("\"EnableModelContext\":true") && vesselBody.Contains("\"AllowConcurrentMissions\":false"), "toggles: " + vesselBody);
+
+                    TuiScreenDump.Write("setup-captain", host.Screen());
+                    host.Press("ctrl+s");
+                    AssertTrue(host.PumpUntil(() => screen.Current == 4), "advanced to dispatch");
+                    string captainBody = Body(stub, 2);
+                    AssertTrue(captainBody.Contains("\"Name\":\"Setup Captain\"") && captainBody.Contains("\"Runtime\":\"ClaudeCode\""), "captain body: " + captainBody);
+                    AssertTrue(captainBody.Contains("\"Tier\":\"Standard\"") && captainBody.Contains("prefer read-only repository inspection"), "captain tier and instructions: " + captainBody);
+                    AssertFalse(captainBody.Contains("RuntimeOptionsJson"), "no mux options: " + captainBody);
+
+                    string dispatchFrame = host.Screen();
+                    TuiScreenDump.Write("setup-dispatch", dispatchFrame);
+                    TuiCase.Contains(dispatchFrame, "Available Captain: Setup Captain", "summary");
+                    host.Press("ctrl+s");
+                    AssertTrue(host.PumpUntil(() => screen.Current == 5), "advanced to handoff");
+                    string dispatchBody = Body(stub, 3);
+                    AssertTrue(dispatchBody.Contains("\"VesselId\":\"vsl_new\"") && dispatchBody.Contains("\"Title\":\"Repository onboarding survey\"") && dispatchBody.Contains("\"Priority\":100"), "dispatch body: " + dispatchBody);
+                    AssertTrue(host.PumpUntil(() => stub.Count("GET /api/v1/vessels/vsl_new/readiness") == 1), "readiness loaded");
+                    AssertTrue(host.WaitForText("Readiness: 1/3"), "readiness shown");
+                    string handoff = host.Screen();
+                    TuiScreenDump.Write("setup-handoff", handoff);
+                    TuiCase.Contains(handoff, "Dispatched mission \"Repository onboarding survey\".", "dispatch result");
+                    TuiCase.Contains(handoff, "msn_setup1", "mission id");
+                    TuiCase.Contains(handoff, "Configure a workflow profile", "next recommended step");
+                    TuiCase.Contains(handoff, "Open Vessel Onboarding", "handoff link");
+                    TuiCase.Contains(handoff, "Create Workflow Profile", "no profiles yet");
+
+                    host.Press("tab");
+                    SetupWizardPanel panel = screen.Panels[5];
+                    AssertTrue(ReferenceEquals(panel.Scope.Focused, panel.Actions), "handoff actions focused");
+                    for (int i = 0; i < 20 && !Focused(panel.Actions, "Finish Setup"); i++) host.Press("right");
+                    AssertTrue(Focused(panel.Actions, "Finish Setup"), "finish focused");
+                    host.Press("enter");
+                    AssertTrue(host.Tui.Context.Prefs.Current.SetupCompleted, "completed flag");
+                    AssertEqual("/missions", host.Tui.Context.Router.Current!.Path, "lands on missions");
+                }
+            }));
+
+            cases.Add(TuiCase.Sync(Suite, "validation_and_back", "Validation blocks the step with the dashboard message and Back keeps entered values", () =>
+            {
+                StubHttpHandler stub = EmptyServer();
+                using (TuiTestHost host = TuiCase.SignedIn(140, 44, "/setup", stub))
+                {
+                    SetupWizardScreen screen = Current(host);
+                    AssertTrue(host.PumpUntil(() => !screen.Loading), "loaded");
+                    screen.GoTo(1);
+                    host.Press("ctrl+u").Press("ctrl+s");
+                    AssertTrue(host.WaitForText("Fleet name is required."), "fleet validation");
+                    AssertFalse(screen.CanAdvance(), "next disabled without a fleet");
+                    host.Type("Fleet A").Press("ctrl+s");
+                    AssertTrue(host.PumpUntil(() => screen.Current == 2), "vessel step");
+
+                    host.Press("ctrl+s");
+                    AssertTrue(host.WaitForText("Vessel name is required."), "vessel name validation");
+                    host.Type("svc");
+                    host.Press("ctrl+s");
+                    AssertTrue(host.WaitForText("Repository URL is required."), "repo validation");
+                    screen.RepoUrl.Value = "/tmp/svc";
+                    screen.LandingMode.SetValue("LocalMerge");
+                    host.Press("ctrl+s");
+                    AssertTrue(host.WaitForText("Local Merge needs a working directory to merge into."), "local merge validation");
+                    AssertEqual(0, stub.Count("POST /api/v1/vessels"), "no vessel post");
+
+                    host.Press("tab");
+                    AssertTrue(ReferenceEquals(screen.Scope.Focused, screen.Panels[2]) || ReferenceEquals(screen.Scope.Focused, screen.Navigation), "focus moves");
+                    screen.Navigation.Buttons.First(b => b.Label == "Back").Press();
+                    host.Pump();
+                    AssertEqual(1, screen.Current, "back to fleet");
+                    TuiCase.Contains(host.Screen(), "Use Fleet", "fleet step shows existing mode");
+                    screen.Navigation.Buttons.First(b => b.Label == "Next").Press();
+                    host.Pump();
+                    AssertEqual(2, screen.Current, "forward again");
+                    AssertEqual("svc", screen.VesselName.Value, "vessel name kept");
+                    AssertEqual("/tmp/svc", screen.RepoUrl.Value, "repo kept");
+                    TuiCase.Contains(host.Screen(), "svc", "value rendered");
+                }
+            }));
+
+            cases.Add(TuiCase.Sync(Suite, "skip_setup", "Skip Setup sets the completed preference and lands on Missions", () =>
+            {
+                using (TuiTestHost host = TuiCase.SignedIn(120, 40, "/setup", EmptyServer()))
+                {
+                    SetupWizardScreen screen = Current(host);
+                    AssertFalse(host.Tui.Context.Prefs.Current.SetupCompleted, "not completed");
+                    host.Press("tab");
+                    AssertTrue(Focused(screen.Navigation, "Skip Setup"), "skip focused");
+                    host.Press("enter");
+                    AssertTrue(host.Tui.Context.Prefs.Current.SetupCompleted, "completed after skip");
+                    AssertEqual("/missions", host.Tui.Context.Router.Current!.Path, "missions");
+                }
+            }));
+
+            cases.Add(TuiCase.Sync(Suite, "existing_records", "Existing fleets, vessels, and idle captains are reused without creating records", () =>
+            {
+                StubHttpHandler stub = PopulatedServer();
+                using (TuiTestHost host = TuiCase.SignedIn(140, 44, "/setup", stub))
+                {
+                    SetupWizardScreen screen = Current(host);
+                    AssertTrue(host.PumpUntil(() => !screen.Loading), "loaded");
+                    AssertEqual(SetupWizardModeEnum.Existing, screen.FleetMode, "fleet existing");
+                    AssertEqual(SetupWizardModeEnum.Existing, screen.VesselMode, "vessel existing");
+                    AssertEqual(SetupWizardModeEnum.Existing, screen.CaptainMode, "captain existing");
+                    AssertEqual(1, screen.IdleCaptains().Count, "only idle captains offered");
+                    screen.GoTo(1);
+                    host.Press("ctrl+s");
+                    AssertTrue(host.PumpUntil(() => screen.Current == 2), "fleet reused");
+                    TuiCase.Contains(host.Screen(), "Using fleet \"Main\".", "using fleet");
+                    host.Press("ctrl+s");
+                    AssertTrue(host.PumpUntil(() => screen.Current == 3), "vessel reused");
+                    AssertEqual("flt_main", screen.ActiveFleetId, "vessel fleet adopted");
+                    TuiScreenDump.Write("setup-captain-existing", host.Screen());
+                    host.Press("ctrl+s");
+                    AssertTrue(host.PumpUntil(() => screen.Current == 4), "captain reused");
+                    AssertEqual("cpt_idle", screen.ActiveCaptainId, "idle captain");
+                    AssertEqual(0, stub.Count("POST /api/v1/fleets") + stub.Count("POST /api/v1/vessels") + stub.Count("POST /api/v1/captains"), "nothing created");
+
+                    host.Press("ctrl+s");
+                    AssertTrue(host.PumpUntil(() => screen.Current == 5), "dispatched");
+                    AssertTrue(host.WaitForText("could not be assigned"), "dispatch warning shown");
+                    AssertEqual(SetupWizardResultKindEnum.Info, screen.ResultKind, "info result");
+                    AssertEqual("msn_wrapped", screen.DispatchedMission!.Id, "wrapped mission parsed");
+                    AssertTrue(host.WaitForText("Open Workflow Profiles"), "profiles exist");
+                    TuiCase.Contains(host.Screen(), "Workflow Profiles: 2", "global and vessel profiles count, other vessel excluded");
+                }
+            }));
+
+            cases.Add(TuiCase.Sync(Suite, "mux_captain", "A Mux captain requires an endpoint and sends the runtime options the dashboard builds", () =>
+            {
+                StubHttpHandler stub = EmptyServer();
+                stub.Json("GET", "/api/v1/runtimes/mux/endpoints", "{\"Success\":true,\"Endpoints\":[{\"Name\":\"local\",\"AdapterType\":\"openai\",\"Model\":\"gpt\"}]}");
+                using (TuiTestHost host = TuiCase.SignedIn(140, 50, "/setup", stub))
+                {
+                    SetupWizardScreen screen = Current(host);
+                    AssertTrue(host.PumpUntil(() => !screen.Loading), "loaded");
+                    screen.GoTo(3);
+                    screen.Runtime.Choose(screen.Runtime.Options.First(o => o.Value == "Mux"));
+                    AssertTrue(host.WaitForText("1 saved Mux endpoint(s) available."), "endpoint hint");
+                    screen.SubmitCaptain();
+                    AssertTrue(host.WaitForText("Mux captains require a named Mux endpoint."), "mux validation");
+                    screen.MuxEndpoint.Value = "local";
+                    screen.MuxTemperature.Value = "0.5";
+                    screen.MuxMaxTokens.Value = "2048x";
+                    screen.SubmitCaptain();
+                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/captains") == 1), "captain posted");
+                    string body = Body(stub, 0);
+                    AssertTrue(body.Contains("\"Runtime\":\"Mux\""), "runtime: " + body);
+                    AssertTrue(body.Contains("\\u0022endpoint\\u0022:\\u0022local\\u0022") || body.Contains("\\\"endpoint\\\":\\\"local\\\""), "runtime options endpoint: " + body);
+                    string json = SetupWizardScreen.BuildMuxRuntimeOptionsJson("Mux", "", "local", "", "", "0.5", "2048x", "", "deny")!;
+                    AssertTrue(json.Contains("\"schemaVersion\":1") && json.Contains("\"temperature\":0.5") && json.Contains("\"maxTokens\":2048") && json.Contains("\"approvalPolicy\":\"deny\""), json);
+                    AssertNull(SetupWizardScreen.BuildMuxRuntimeOptionsJson("ClaudeCode", "", "x", "", "", "", "", "", ""), "not mux");
+                    AssertEqual(100, SetupWizardScreen.ParsePriority("abc"), "invalid priority");
+                    AssertEqual(7, SetupWizardScreen.ParsePriority("7days"), "parseInt prefix");
+                }
+            }));
+
+            cases.Add(TuiCase.Sync(Suite, "dispatch_guards", "Dispatch requires a vessel, a captain, and a title and description", () =>
+            {
+                using (TuiTestHost host = TuiCase.SignedIn(120, 40, "/setup", EmptyServer()))
+                {
+                    SetupWizardScreen screen = Current(host);
+                    AssertTrue(host.PumpUntil(() => !screen.Loading), "loaded");
+                    screen.GoTo(4);
+                    screen.SubmitDispatch();
+                    AssertTrue(host.WaitForText("Choose or create a vessel before dispatching."), "vessel guard");
+                    AssertFalse(screen.CanAdvance(), "next disabled before dispatch");
+                }
+            }));
+
+            cases.Add(TuiCase.Sync(Suite, "auto_open_rule", "The auto-open rule matches the dashboard", () =>
+            {
+                SetupWizardDecision empty = SetupWizardAutoOpen.Decide(false, false, false, true);
+                AssertTrue(empty.Open && empty.ClearCompleted, "empty deployment opens and clears the flag");
+                AssertTrue(SetupWizardAutoOpen.Decide(true, false, true, false).Open, "missing vessel opens");
+                AssertFalse(SetupWizardAutoOpen.Decide(true, false, true, true).Open, "completed suppresses");
+                AssertFalse(SetupWizardAutoOpen.Decide(true, true, true, false).Open, "complete deployment does not open");
+                AssertTrue(SetupWizardAutoOpen.Decide(null, null, null, true).Open, "failed check opens");
+                AssertFalse(SetupWizardAutoOpen.Decide(true, false, true, true).ClearCompleted, "flag kept");
+            }));
+
+            cases.Add(TuiCase.Sync(Suite, "auto_open_host", "After sign-in an empty server opens the wizard and a populated one does not", () =>
+            {
+                using (TuiTestHost host = TuiCase.SignedIn(120, 40, "/missions", EmptyServer()))
+                {
+                    host.Tui.Context.Prefs.Current.SetupCompleted = true;
+                    SetupWizardAutoOpen.CheckAsync(host.Tui.Context);
+                    AssertTrue(host.PumpUntil(() => host.Tui.Shell.Screen is SetupWizardScreen), "wizard opened");
+                    AssertFalse(host.Tui.Context.Prefs.Current.SetupCompleted, "stale flag cleared");
+                    TuiCase.Contains(host.Screen(), "Launch Armada With One Mission", "wizard rendered");
+                }
+
+                using (TuiTestHost host = TuiCase.SignedIn(120, 40, "/missions", PopulatedServer()))
+                {
+                    System.Threading.Tasks.Task check = SetupWizardAutoOpen.CheckAsync(host.Tui.Context);
+                    AssertTrue(host.PumpUntil(() => check.IsCompleted), "check finished");
+                    host.Pump();
+                    AssertFalse(host.Tui.Shell.Screen is SetupWizardScreen, "not opened");
+                    AssertEqual("/missions", host.Tui.Context.Router.Current!.Path, "stays");
+                }
+            }));
+
+            return new TestSuiteDescriptor(suiteId: Suite, displayName: "TUI setup wizard", cases: cases);
+        }
+
+        private static StubHttpHandler EmptyServer()
+        {
+            StubHttpHandler stub = TuiFixtures.SignedInServer();
+            string empty = "{\"Objects\":[],\"TotalRecords\":0}";
+            stub.Json("GET", "/api/v1/fleets", empty);
+            stub.Json("GET", "/api/v1/vessels", empty);
+            stub.Json("GET", "/api/v1/captains", empty);
+            stub.On("POST", "/api/v1/fleets", body => StubHttpHandler.Response(HttpStatusCode.Created, body.Contains("\"Name\":\"Fleet A\"") ? "{\"Id\":\"flt_new\",\"Name\":\"Fleet A\"}" : "{\"Id\":\"flt_new\",\"Name\":\"Lab Fleet\"}"));
+            stub.Json("POST", "/api/v1/vessels", "{\"Id\":\"vsl_new\",\"Name\":\"armada\",\"FleetId\":\"flt_new\",\"RepoUrl\":\"/tmp/repo\",\"DefaultBranch\":\"main\"}");
+            stub.Json("POST", "/api/v1/captains", "{\"Id\":\"cpt_new\",\"Name\":\"Setup Captain\",\"Runtime\":\"ClaudeCode\",\"State\":\"Idle\"}");
+            stub.On("POST", "/api/v1/missions", body => StubHttpHandler.Response(HttpStatusCode.Created, "{\"Id\":\"msn_setup1\",\"Title\":\"Repository onboarding survey\",\"Status\":\"Assigned\",\"VesselId\":\"vsl_new\",\"CaptainId\":\"cpt_new\",\"BranchName\":\"armada/setup\"}"));
+            stub.Json("GET", "/api/v1/missions/msn_setup1", "{\"Id\":\"msn_setup1\",\"Title\":\"Repository onboarding survey\",\"Status\":\"InProgress\",\"VesselId\":\"vsl_new\"}");
+            stub.Json("GET", "/api/v1/vessels/vsl_new/readiness", "{\"VesselId\":\"vsl_new\",\"SetupChecklistSatisfiedCount\":1,\"SetupChecklistTotalCount\":3,\"ErrorCount\":0,\"SetupChecklist\":[{\"Code\":\"a\",\"Title\":\"Working directory\",\"IsSatisfied\":true},{\"Code\":\"b\",\"Title\":\"Configure a workflow profile\",\"Message\":\"Teach Armada how to build.\",\"IsSatisfied\":false}]}");
+            stub.Json("GET", "/api/v1/workflow-profiles", empty);
+            stub.Json("GET", "/api/v1/environments", empty);
+            return stub;
+        }
+
+        private static StubHttpHandler PopulatedServer()
+        {
+            StubHttpHandler stub = TuiFixtures.SignedInServer();
+            stub.Json("GET", "/api/v1/fleets", "{\"Objects\":[{\"Id\":\"flt_main\",\"Name\":\"Main\"}],\"TotalRecords\":1}");
+            stub.Json("GET", "/api/v1/vessels", "{\"Objects\":[{\"Id\":\"vsl_main\",\"Name\":\"armada\",\"FleetId\":\"flt_main\",\"RepoUrl\":\"/tmp/a\",\"DefaultBranch\":\"main\"}],\"TotalRecords\":1}");
+            stub.Json("GET", "/api/v1/captains", "{\"Objects\":[{\"Id\":\"cpt_busy\",\"Name\":\"Busy\",\"State\":\"Working\"},{\"Id\":\"cpt_idle\",\"Name\":\"Idle One\",\"State\":\"Idle\"}],\"TotalRecords\":2}");
+            stub.On("POST", "/api/v1/missions", body => StubHttpHandler.Response(HttpStatusCode.Created, "{\"Mission\":{\"Id\":\"msn_wrapped\",\"Title\":\"Repository onboarding survey\",\"Status\":\"Pending\",\"VesselId\":\"vsl_main\"},\"Warning\":\"Mission created but could not be assigned to any captain. It will be retried on the next health check cycle.\"}"));
+            stub.Json("GET", "/api/v1/missions/msn_wrapped", "{\"Id\":\"msn_wrapped\",\"Title\":\"Repository onboarding survey\",\"Status\":\"Pending\"}");
+            stub.Json("GET", "/api/v1/vessels/vsl_main/readiness", "{\"VesselId\":\"vsl_main\",\"SetupChecklistSatisfiedCount\":3,\"SetupChecklistTotalCount\":3}");
+            stub.Json("GET", "/api/v1/workflow-profiles", "{\"Objects\":[{\"Id\":\"wfp_1\",\"Name\":\"Global\",\"Scope\":\"Global\"},{\"Id\":\"wfp_2\",\"Name\":\"Mine\",\"Scope\":\"Vessel\",\"VesselId\":\"vsl_main\"},{\"Id\":\"wfp_3\",\"Name\":\"Other\",\"Scope\":\"Vessel\",\"VesselId\":\"vsl_other\"}],\"TotalRecords\":3}");
+            stub.Json("GET", "/api/v1/environments", "{\"Objects\":[],\"TotalRecords\":0}");
+            return stub;
+        }
+
+        private static SetupWizardScreen Current(TuiTestHost host)
+        {
+            host.PumpUntil(() => host.Tui.Shell.Screen is SetupWizardScreen);
+            if (host.Tui.Shell.Screen is SetupWizardScreen screen) return screen;
+            throw new AssertionException("current screen is " + (host.Tui.Shell.Screen?.GetType().Name ?? "null"));
+        }
+
+        private static bool Focused(SetupWizardActionBar bar, string label)
+        {
+            return bar.Scope.Focused is Button b && b.Label == label;
+        }
+
+        private static string Body(StubHttpHandler stub, int postIndex)
+        {
+            List<KeyValuePair<string, string>> pairs = stub.Requests.Zip(stub.Bodies, (r, b) => new KeyValuePair<string, string>(r, b)).Where(p => p.Key.StartsWith("POST ", StringComparison.Ordinal) && !p.Key.Contains("/authenticate") && !p.Key.Contains("/tenants/lookup")).ToList();
+            if (postIndex >= pairs.Count) throw new AssertionException("only " + pairs.Count + " POST requests: " + String.Join(", ", pairs.Select(p => p.Key)));
+            return pairs[postIndex].Value;
+        }
+    }
+}

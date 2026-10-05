@@ -49,6 +49,15 @@ namespace Armada.Tui.Screens.Kit
         public IUiDispatcher? Dispatcher { get; set; } = null;
 
         /// <summary>
+        /// Wrap long lines at the field width instead of clipping them. Default false.
+        /// </summary>
+        public bool WordWrap
+        {
+            get { return _Editor.WordWrap; }
+            set { _Editor.WordWrap = value; }
+        }
+
+        /// <summary>
         /// When true the field ignores edits. Default false.
         /// </summary>
         public bool ReadOnly { get; set; } = false;

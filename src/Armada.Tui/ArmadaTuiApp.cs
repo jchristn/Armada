@@ -109,6 +109,7 @@ namespace Armada.Tui
             GlobalCommands.Register(Context, Shell);
             Wire();
             ActivitySystemScreens.Register(Screens);
+            Armada.Tui.Screens.Admin.SetupWizardAutoOpen.Attach(Context, !String.IsNullOrEmpty(Options.StartRoute));
         }
 
         #endregion

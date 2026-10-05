@@ -114,6 +114,11 @@ namespace Armada.Client.Models
         /// </summary>
         public Armada.Core.Settings.RepositoryHealthSettings? RepositoryHealth { get; set; } = null;
 
+        /// <summary>
+        /// Data retention settings (Ask threads, jobs, import batches), or null.
+        /// </summary>
+        public Armada.Core.Settings.RetentionSettings? Retention { get; set; } = null;
+
         #endregion
 
         #region Constructors-and-Factories
