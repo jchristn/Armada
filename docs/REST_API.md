@@ -5487,7 +5487,7 @@ Create a new pipeline with stages.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `PersonaName` | string | yes | Name of the persona for this stage |
-| `IsOptional` | bool | no | Whether this stage can be skipped (default: false) |
+| `IsOptional` | bool | no | Reserved: stored and returned, but dispatch runs every stage regardless (default: false) |
 | `Description` | string | no | Stage description |
 | `Order` | int | no | 1-based execution order (default 1). Set it on every stage of a multi-stage pipeline; the REST API does not number stages for you |
 | `RequiresReview` | bool | no | Park the stage's mission in `Review` until a reviewer approves it (default: false) |

@@ -25,7 +25,7 @@ Cancelled  Failed
 - **Failed** -- merge conflict or test failure.
 - **Cancelled** -- manually removed from the queue.
 
-The `MergeStatusEnum` also defines **Passed**. The queue service lands an entry as soon as its tests pass, so it does not currently leave entries in `Passed`; it is treated as an active (non-terminal) status wherever entries are counted.
+The `MergeStatusEnum` also defines **Passed**, which is reserved. The queue service lands an entry as soon as its tests pass, so it does not currently leave entries in `Passed`; it is treated as an active (non-terminal) status wherever entries are counted.
 
 Terminal states: `Landed`, `Failed`, `Cancelled`.
 

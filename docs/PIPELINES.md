@@ -61,7 +61,7 @@ Key design decisions:
 | `PipelineId` | string | Parent pipeline ID |
 | `Order` | int | Execution order (1-based) |
 | `PersonaName` | string | Persona name for this stage (e.g. "Worker", "Judge") |
-| `IsOptional` | bool | Stored and shown in the UI; dispatch currently runs every stage regardless |
+| `IsOptional` | bool | Reserved: stored and shown in the UI; dispatch currently runs every stage regardless |
 | `Description` | string? | What this stage does |
 | `RequiresReview` | bool | When true, the stage's mission stops in `Review` and waits for an explicit approve/deny before the pipeline continues (default false) |
 | `ReviewDenyAction` | `ReviewDenyActionEnum` | What a denied review does: `RetryStage` (default; send the same stage back for rework) or `FailPipeline` (fail the stage and cancel downstream stages) |

@@ -329,7 +329,8 @@ A pipeline is an ordered list of persona stages that a dispatch goes through.
 - [x] Create `src/Armada.Core/Models/PipelineStage.cs`
   - `Order` (int, 1-based)
   - `PersonaName` (string, references a Persona by name)
-  - `IsOptional` (bool, if true the Admiral may skip this stage)
+  - `IsOptional` (bool, if true the Admiral may skip this stage). Reserved: no skip policy was implemented, so
+    dispatch runs every stage regardless (see [PIPELINES.md](PIPELINES.md))
   - `Description` (string?, e.g. "Plan the voyage", "Execute the mission", "Review the diff")
   - Current: stages also carry `RequiresReview` (bool) and `ReviewDenyAction` (`RetryStage` by default, or
     `FailPipeline`); see [PIPELINES.md](PIPELINES.md)
