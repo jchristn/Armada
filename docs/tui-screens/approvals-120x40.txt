@@ -27,7 +27,7 @@
 |                      ||                                                                                              |
 |                      ||                                                                                              |
 |                      ||----------------------------------------------------------------------------------------------|
-|                      || Failed landing: Broken   (msn_x)                                                             |
+|                      || Failed landing: Landing failed: Broken   (msn_x)                                             |
 |                      || Source: Needs You   Opens: /missions/msn_x                                                   |
 |                      || Merge conflict in src/app.cs                                                                 |
 |                      ||                                                                                              |

@@ -7,7 +7,13 @@ keep their status and notes; new surfaces are added as "planned". Run after dash
 
   python3 scripts/tui/generate-parity-manifest.py
 
-The Tui.Parity test suite parses the same sources and fails when a surface has no entry.
+Release gate (CI runs it on every push; it writes nothing):
+
+  python3 scripts/tui/generate-parity-manifest.py --check
+
+fails when the committed manifest differs from what the generator would write (a dashboard surface was added or
+removed without regenerating), when any entry is still "planned", or when a "not-applicable" or "extension" entry
+has no notes saying why. The Tui.Parity test suite parses the same sources and enforces the same rules.
 """
 import json
 import os
@@ -104,7 +110,28 @@ def settings_fields():
     return sorted(fields)
 
 
+def check(entries, rendered):
+    """Release gate: the committed manifest matches the generator output, nothing is planned, exceptions say why."""
+    problems = []
+    current = read(MANIFEST) if os.path.exists(MANIFEST) else ""
+    if current != rendered:
+        problems.append("src/Armada.Tui/parity.json is out of date with the dashboard source; run python3 scripts/tui/generate-parity-manifest.py and commit it")
+    for e in entries:
+        if e["status"] == "planned":
+            problems.append("planned (not implemented): %s %s" % (e["kind"], e["key"]))
+        elif e["status"] in ("not-applicable", "extension") and not e.get("notes", "").strip():
+            problems.append("%s entry without notes: %s %s" % (e["status"], e["kind"], e["key"]))
+    for p in problems:
+        print("parity: " + p, file=sys.stderr)
+    if problems:
+        print("parity check failed (%d problem(s))" % len(problems), file=sys.stderr)
+        return 1
+    print("parity check passed: %d entries, none planned" % len(entries))
+    return 0
+
+
 def main():
+    check_only = "--check" in sys.argv[1:]
     old = {}
     if os.path.exists(MANIFEST):
         for e in json.loads(read(MANIFEST)).get("entries", []):
@@ -152,9 +179,11 @@ def main():
         "statuses": ["implemented", "planned", "not-applicable", "extension"],
         "entries": entries,
     }
-    with open(MANIFEST, "w", encoding="utf-8") as f:
-        json.dump(doc, f, indent=2, ensure_ascii=True)
-        f.write("\n")
+    rendered = json.dumps(doc, indent=2, ensure_ascii=True) + "\n"
+    if check_only:
+        return check(entries, rendered)
+    with open(MANIFEST, "w", encoding="utf-8", newline="\n") as f:
+        f.write(rendered)
     counts = {}
     for e in entries:
         counts.setdefault(e["kind"], {}).setdefault(e["status"], 0)

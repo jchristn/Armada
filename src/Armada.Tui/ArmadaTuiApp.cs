@@ -142,7 +142,7 @@ namespace Armada.Tui
             Armada.Tui.Screens.Build.BuildScreens.Register(Screens);
             Shell = new ShellView(Context, Screens);
             dispatcher.AfterRun = Shell.Frames.Invalidate;
-            GlobalCommands.Register(Context, Shell);
+            GlobalCommands.Register(Context, Shell, _App);
             Wire();
             ActivitySystemScreens.Register(Screens);
             Armada.Tui.Screens.Admin.SetupWizardAutoOpen.Attach(Context, !String.IsNullOrEmpty(Options.StartRoute));

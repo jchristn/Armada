@@ -5,6 +5,7 @@ namespace Test.Shared.Suites.Tui
     using System.IO;
     using System.Linq;
     using System.Reflection;
+    using System.Text.RegularExpressions;
     using Armada.Client;
     using Armada.Tui.Routing;
     using Test.Shared.Infrastructure;
@@ -14,8 +15,10 @@ namespace Test.Shared.Suites.Tui
     /// <summary>
     /// Parity enforcement (TUI_APP_PLAN.md): every dashboard route, hub tab, API client function, WebSocket event, and
     /// Server settings field has a manifest entry; implemented entries point at something that exists; every client.ts
-    /// export has an ArmadaClient method; every dashboard route resolves in the TUI router. (Release builds will also
-    /// fail on "planned" entries once screens land; not enforced yet.)
+    /// export has an ArmadaClient method; every dashboard route resolves in the TUI router. Release gate (W8.1): no entry
+    /// is "planned", every "not-applicable" or "extension" entry says why in its notes, no entry names a surface the
+    /// dashboard no longer has, and the generator (<c>scripts/tui/generate-parity-manifest.py</c>, also run with
+    /// <c>--check</c> in CI) parses client.ts the same way as this suite.
     /// </summary>
     public sealed class TuiParitySuite : IArmadaTestSuite
     {
@@ -112,6 +115,52 @@ namespace Test.Shared.Suites.Tui
                 }
             }));
 
+            cases.Add(TuiCase.Sync(Suite, "no_planned_entries", "Release gate: no entry is planned; not-applicable and extension entries carry notes", () =>
+            {
+                ParityManifest manifest = Load();
+                List<string> problems = ReleaseProblems(manifest);
+                if (problems.Count > 0) throw new AssertionException("parity.json is not releasable (implement the surface or mark it not-applicable with a note): " + String.Join("; ", problems));
+            }));
+
+            cases.Add(TuiCase.Sync(Suite, "release_gate_rejects", "The release gate reports a planned entry and an exception without notes", () =>
+            {
+                ParityManifest manifest = new ParityManifest();
+                manifest.Entries.Add(new ParityEntry { Kind = "route", Key = "/a", Status = "implemented", Tui = "Router" });
+                manifest.Entries.Add(new ParityEntry { Kind = "route", Key = "/b", Status = "planned" });
+                manifest.Entries.Add(new ParityEntry { Kind = "tab", Key = "X:c", Status = "not-applicable", Notes = " " });
+                manifest.Entries.Add(new ParityEntry { Kind = "api", Key = "d", Status = "not-applicable", Notes = "Browser-only download" });
+                manifest.Entries.Add(new ParityEntry { Kind = "route", Key = "/e", Status = "extension", Notes = "" });
+                List<string> problems = ReleaseProblems(manifest);
+                AssertEqual("planned: route /b|not-applicable without notes: tab X:c|extension without notes: route /e", String.Join("|", problems), "problems");
+            }));
+
+            cases.Add(TuiCase.Sync(Suite, "no_stale_entries", "Every non-extension entry names a surface the dashboard still has", () =>
+            {
+                ParityManifest manifest = Load();
+                Dictionary<string, HashSet<string>> surfaces = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal)
+                {
+                    ["route"] = new HashSet<string>(DashboardSource.Routes(), StringComparer.Ordinal),
+                    ["tab"] = new HashSet<string>(DashboardSource.Tabs(), StringComparer.Ordinal),
+                    ["api"] = new HashSet<string>(DashboardSource.ApiExports(), StringComparer.Ordinal),
+                    ["event"] = new HashSet<string>(DashboardSource.Events(), StringComparer.Ordinal),
+                    ["setting"] = new HashSet<string>(DashboardSource.SettingsFields(), StringComparer.Ordinal),
+                };
+                List<string> stale = manifest.Entries
+                    .Where(e => e.Status != "extension" && (!surfaces.ContainsKey(e.Kind) || !surfaces[e.Kind].Contains(e.Key)))
+                    .Select(e => e.Kind + " " + e.Key).ToList();
+                if (stale.Count > 0) throw new AssertionException("parity.json entries for surfaces the dashboard no longer has (run scripts/tui/generate-parity-manifest.py): " + String.Join(", ", stale));
+            }));
+
+            cases.Add(TuiCase.Sync(Suite, "generator_in_sync", "The manifest generator skips the same non-server client.ts exports as this suite", () =>
+            {
+                string script = File.ReadAllText(Path.Combine(DashboardSource.RepoRoot(), "scripts", "tui", "client_exports.py"));
+                Match block = Regex.Match(script, @"NON_SERVER_EXPORTS = \{([^}]*)\}");
+                AssertTrue(block.Success, "NON_SERVER_EXPORTS in client_exports.py");
+                List<string> python = Regex.Matches(block.Groups[1].Value, "\"([A-Za-z_]+)\"").Select(m => m.Groups[1].Value).OrderBy(n => n, StringComparer.Ordinal).ToList();
+                List<string> csharp = DashboardSource.NonServerExports.OrderBy(n => n, StringComparer.Ordinal).ToList();
+                AssertEqual(String.Join(",", csharp), String.Join(",", python), "non-server exports (DashboardSource.NonServerExports vs scripts/tui/client_exports.py)");
+            }));
+
             cases.Add(TuiCase.Sync(Suite, "manifest_embedded", "The manifest is embedded in Armada.Tui", () =>
             {
                 using (Stream? s = typeof(Armada.Tui.ArmadaTuiApp).Assembly.GetManifestResourceStream("Armada.Tui.parity.json"))
@@ -129,6 +178,23 @@ namespace Test.Shared.Suites.Tui
             ParityManifest? manifest = ArmadaJson.Deserialize<ParityManifest>(File.ReadAllText(path));
             AssertNotNull(manifest, "manifest");
             return manifest!;
+        }
+
+        /// <summary>
+        /// Release-gate problems: planned entries, and not-applicable or extension entries without notes.
+        /// </summary>
+        /// <param name="manifest">Manifest.</param>
+        /// <returns>Problems, empty when releasable.</returns>
+        private static List<string> ReleaseProblems(ParityManifest manifest)
+        {
+            List<string> problems = new List<string>();
+            foreach (ParityEntry e in manifest.Entries)
+            {
+                if (e.Status == "planned") problems.Add("planned: " + e.Kind + " " + e.Key);
+                else if ((e.Status == "not-applicable" || e.Status == "extension") && String.IsNullOrWhiteSpace(e.Notes)) problems.Add(e.Status + " without notes: " + e.Kind + " " + e.Key);
+            }
+
+            return problems;
         }
 
         private static void Missing(ParityManifest manifest, string kind, IEnumerable<string> keys)

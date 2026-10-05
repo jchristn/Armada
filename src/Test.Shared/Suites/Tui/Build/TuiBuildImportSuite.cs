@@ -129,10 +129,50 @@ namespace Test.Shared.Suites.Tui.Build
                 }
             }));
 
+            cases.Add(TuiCase.Sync(Suite, "esc_leaves_fields", "Esc in any text field (last one included) leaves it, and the next Esc closes the wizard", () =>
+            {
+                StubHttpHandler stub = Stub(() => 0);
+                using (TuiTestHost host = TuiCase.SignedIn(170, 50, "/vessels/import", stub))
+                {
+                    AssertTrue(host.WaitForText("Folders on the Admiral host, one per line"), "source");
+                    ImportWizard wizard = (ImportWizard)host.Tui.Shell.Screen!;
+                    wizard.PollMilliseconds = 50;
+                    wizard.Scope.Focus(wizard.MaxDepth);
+                    host.Press("esc");
+                    AssertFalse(wizard.MaxDepth.IsFocused, "Esc leaves the last text field of the source step");
+                    AssertTrue(wizard.SourceMode.IsFocused, "focus moves to the source mode");
+                    wizard.Scope.Focus(wizard.PasteArea);
+                    host.Type("/repos").Press("ctrl+s");
+                    AssertTrue(host.WaitForText("[2 Review]", 8000), "review\n" + host.Screen());
+                    host.Press("/");
+                    AssertTrue(wizard.CandidateSearch.IsFocused, "/ focuses the search");
+                    host.Press("esc");
+                    AssertTrue(wizard.CandidateGrid.IsFocused, "Esc in the search returns to the candidates");
+                    host.Press("]");
+                    AssertTrue(host.WaitForText("Defaults for the new vessels"), "options");
+                    wizard.Categorize.Checked = true;
+                    AssertTrue(host.PumpUntil(() => wizard.CategorizePrompt.Text.Length > 0), "prompt shown");
+                    wizard.Options.Scope.Focus(wizard.CategorizePrompt);
+                    host.Press("esc");
+                    AssertFalse(wizard.CategorizePrompt.IsFocused, "Esc leaves the prompt");
+                    AssertFalse(host.App.Modals.IsActive, "no close confirmation yet");
+                    host.Press("esc");
+                    AssertTrue(host.WaitForText("Leave the import review?"), "the next Esc asks to leave the review\n" + host.Screen());
+                    host.Press("y");
+                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Router.Current!.FullPath == "/vessels"), "closed to Vessels");
+                }
+            }));
+
             return new TestSuiteDescriptor(suiteId: Suite, displayName: "TUI import wizard", cases: cases);
         }
 
-        private static StubHttpHandler Stub(Func<int> nextPoll)
+        /// <summary>
+        /// The import wizard stub: discovery of two candidates (one new, one already a vessel), a background import that
+        /// creates vsl_new, fleet recommendations, browse, and history. Also used by Tui.KeyboardFlows.Build.
+        /// </summary>
+        /// <param name="nextPoll">Called on every batch poll.</param>
+        /// <returns>Stub.</returns>
+        internal static StubHttpHandler Stub(Func<int> nextPoll)
         {
             StubHttpHandler stub = BuildStubs.Server();
             stub.Json("GET", "/api/v1/captains", "{\"Success\":true,\"Objects\":[{\"Id\":\"cpt_1\",\"Name\":\"claude-1\",\"Runtime\":\"ClaudeCode\",\"State\":\"Idle\",\"TenantId\":\"ten_default\"},{\"Id\":\"cpt_2\",\"Name\":\"busy\",\"Runtime\":\"Codex\",\"State\":\"Working\",\"TenantId\":\"ten_default\"}],\"TotalRecords\":2}");

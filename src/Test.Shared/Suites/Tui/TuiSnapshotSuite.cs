@@ -3,8 +3,10 @@ namespace Test.Shared.Suites.Tui
     using System;
     using System.Collections.Generic;
     using System.IO;
+    using System.Linq;
     using Test.Shared.Infrastructure;
     using Touchstone.Core;
+    using static Test.Shared.Infrastructure.Asserts;
 
     /// <summary>
     /// Renders reference frames (login, shell, palette, help, notifications, light and high-contrast themes) and,
@@ -19,6 +21,28 @@ namespace Test.Shared.Suites.Tui
         public TestSuiteDescriptor Build()
         {
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
+            cases.Add(TuiCase.Sync(Suite, "save_snapshot_command", "Help, Save screen snapshot writes the screen as it was (terminal size) to the chosen file", () =>
+            {
+                string dir = TestTemp.NewDirectory("tui-snapshot");
+                string target = Path.Combine(dir, "bug.txt");
+                using (TuiTestHost host = TuiCase.SignedIn(100, 30, "/jobs"))
+                {
+                    string before = host.Screen();
+                    AssertTrue(host.Tui.Context.Commands.Execute("help.snapshot"), "command runs");
+                    AssertTrue(host.WaitForText("Save Screen Snapshot"), "path prompt\n" + host.Screen());
+                    Armada.Tui.Screens.Kit.FormModal modal = (Armada.Tui.Screens.Kit.FormModal)host.App.Modals.Top!;
+                    ((Armada.Tui.Widgets.InputField)modal.Form.Rows[0].Field!).Value = target;
+                    host.Press("ctrl+s");
+                    AssertTrue(host.PumpUntil(() => File.Exists(target)), "file written");
+                    string saved = File.ReadAllText(target);
+                    string[] lines = saved.Replace("\r\n", "\n").TrimEnd('\n').Split('\n');
+                    AssertEqual(30, lines.Length, "one line per terminal row");
+                    AssertEqual(before.Replace("\r\n", "\n").TrimEnd('\n'), saved.Replace("\r\n", "\n").TrimEnd('\n'), "the screen before the prompt opened");
+                    AssertFalse(saved.Contains("Save Screen Snapshot", StringComparison.Ordinal), "the prompt is not in the snapshot");
+                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.ActiveToasts().Any(t => t.Text.Contains(target, StringComparison.Ordinal))), "toast names the file");
+                }
+            }));
+
             cases.Add(TuiCase.Sync(Suite, "reference_frames", "Reference frames render (written to ARMADA_TUI_SNAPSHOT_DIR when set)", () =>
             {
                 Dictionary<string, string> frames = new Dictionary<string, string>();

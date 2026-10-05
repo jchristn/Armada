@@ -126,6 +126,8 @@ namespace Armada.Tui.Screens.Build
         /// <inheritdoc />
         public override bool HandleKey(KeyEvent key)
         {
+            // Alt+arrows are Back and Forward (as in ArmadaGrid); the tree only takes plain arrows.
+            if ((key.Modifiers & KeyModifiers.Alt) != 0 && key.Code != KeyCode.Character) return false;
             List<KeyValuePair<WorkspaceTreeEntry, int>> rows = VisibleRows();
             if (rows.Count == 0) return false;
             Cursor = Math.Clamp(Cursor, 0, rows.Count - 1);

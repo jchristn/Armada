@@ -25,6 +25,11 @@ namespace Armada.Tui.Shell
     {
         #region Public-Members
 
+        /// <summary>
+        /// Size of the last composed frame (the terminal size), or 0x0 before the first frame.
+        /// </summary>
+        public Size LastSize { get; private set; } = new Size(0, 0);
+
         /// <inheritdoc />
         public FocusScope Scope { get; } = new FocusScope();
 
@@ -311,6 +316,7 @@ namespace Armada.Tui.Shell
         {
             Size size = surface.Size;
             _SurfaceWidth = size.Width;
+            LastSize = size;
             SurfaceText.FillRect(surface, new Rect(0, 0, size.Width, size.Height), Theme.Text);
             if (!_Context.Session.IsSignedIn)
             {

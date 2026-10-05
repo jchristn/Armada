@@ -2,7 +2,7 @@
 
 The Armada TUI is the web dashboard in a terminal. It talks to the same Admiral over the same REST API and WebSocket, enforces nothing the server does not, and is meant for people who live in a shell, work over SSH, or are on a machine without a browser. It ships inside the `armada` CLI, so one install gives you both.
 
-This page covers what exists today: installing and starting it, server profiles, signing in, getting around, Ask Armada, the Approvals center, notifications, the Operations screens (Home, Needs You, Planning, Dispatch, Backlog, Fleet Actions, Missions, Voyages, Merge Queue, and Jobs), the Build screens (Vessels, the import wizard, Vessel Health, the vessel page and onboarding, Fleets, the Workspace, Captains, and Docks), the Delivery, Configuration, Activity, and System screens, and the keys. Ask Armada is the screen the TUI opens into. Every dashboard route now opens a real screen; progress on the remaining quality and documentation work is tracked in `TUI_APP_PLAN.md`.
+This page covers what exists today: installing and starting it, server profiles, signing in, getting around, Ask Armada, the Approvals center, notifications, the Operations screens (Home, Needs You, Planning, Dispatch, Backlog, Fleet Actions, Missions, Voyages, Merge Queue, and Jobs), the Build screens (Vessels, the import wizard, Vessel Health, the vessel page and onboarding, Fleets, the Workspace, Captains, and Docks), the Delivery, Configuration, Activity, and System screens, the keys, and troubleshooting. Ask Armada is the screen the TUI opens into. Every dashboard route now opens a real screen; progress on the remaining quality and documentation work is tracked in `TUI_APP_PLAN.md`.
 
 ## Install and start
 
@@ -78,7 +78,7 @@ Two shortcuts reach Ask from anywhere. `Ctrl+J` toggles the Ask dock at the bott
 
 ### Choosing a captain
 
-The `c` key only works while the conversation has focus, not while you are typing in the message box. When Ask opens, the cursor is in the message box at the bottom, so there `c` just types the letter. To change the captain:
+The `c` key only works while the conversation has focus, not while you are typing in the message box. When Ask opens, the cursor is in the message box at the bottom, so there `c` just types the letter; the header shows the captain with `[Esc c]` while you are typing and `[c]` once the conversation has focus. To change the captain:
 
 1. With the cursor in the message box, press `Esc`. Focus moves up to the conversation (the transcript above the message box).
 2. Press `c`. The captain picker opens; it also lists "No captain (quick actions only)".
@@ -385,3 +385,86 @@ Settings are read when `armada tui` starts. The exporter subscribes to two meter
 | `armada_tui_ask_messages_total` | none | Ask Armada messages sent. |
 
 Every command also opens an `armada.tui.command` span with the same labels. Labels never carry entity ids, titles, message text, or server URLs.
+
+## Troubleshooting
+
+Most problems are a wrong server address, a terminal setting, or a stale stored credential. Help, About Armada shows the TUI version, the server URL, the profile, the theme, the language, and which credential store is in use; start there.
+
+### Cannot connect, or the wrong port
+
+The header says `x Unreachable` or `o Offline`, or the login screen says "Failed to look up tenants." right after you enter your email.
+
+- Check the Admiral answers: `curl http://127.0.0.1:7890/api/v1/status/health` (use your server's URL). If that fails, the server is not running or not reachable from this machine.
+- Point the TUI at the REST port (`admiralPort`, 7890 by default), not the MCP port (`mcpPort`, 7891 by default). The MCP port answers MCP clients only, so the TUI fails there.
+- Check the scheme: a server behind TLS needs `https://`. `--server URL` connects and saves a profile; in the login screen's Server picker, `e` edits the highlighted server's name and URL. `ARMADA_URL` overrides the server for one run.
+- `Live` in the header means the WebSocket is connected. `Healthy` with `Offline` means REST works but the WebSocket does not (a proxy that does not pass WebSocket upgrades, for example); lists still load and refresh on their timers, but live updates and toasts wait until it reconnects (the TUI retries with backoff from 1 to 30 seconds).
+- Through Armada.Proxy, use the proxy's URL; File has Switch Deployment and Proxy Logout.
+
+### Ask says the captain is not connected over MCP
+
+Ask shows "This captain is not connected to Armada over MCP, so it can answer but cannot propose actions." The captain can chat, but dispatches and other actions need it to reach the Admiral's MCP endpoint. Common causes:
+
+- The captain's MCP configuration points at a different host or port than the Admiral listens on. The MCP listener only answers requests whose Host matches the Admiral's `rest.hostname`: an Admiral bound to `127.0.0.1` rejects `http://localhost:7891/mcp`, and the reverse. Run `armada mcp install` again after changing the hostname or ports, so the client entries match (the Settings Server tab shows the MCP port).
+- The captain runs on another machine (a Harbor, a container) that cannot reach the Admiral's MCP port.
+- The connection goes through Armada.Proxy, which does not relay MCP.
+
+The note links to the setup instructions for the captain's runtime. Quick actions (`/dispatch`, `/status`, and the rest) work without MCP.
+
+### Login problems
+
+- "No tenants found for this email.": the email has no account on this server; check the server in the Server picker.
+- "Authentication failed.": wrong password, or the account is inactive. A fresh install uses `admin@armada` / `password`.
+- "API key authentication failed.": press `F2` for API Key Login and paste a session token, a credential's bearer token, or the Admiral API key. The TUI tries each form and checks it with `whoami`.
+- "Your session expired. Sign in again.": the stored token is no longer valid (expired, revoked, or the server's data was reset). Sign in again; File, Sign out forgets a stored token without signing in.
+- `ARMADA_TOKEN` skips the login screen only when the server accepts the token; otherwise the login screen opens.
+
+### Terminal too small
+
+The TUI needs at least 80 columns by 24 rows. Below that it shows "Terminal too small" with the size it needs and the size it has, and continues as soon as the window is large enough (`Ctrl+Q` still quits). At 80x24 the sidebar is hidden (`Ctrl+B` shows it over the screen); from 110 columns it is shown in full. Enlarge the window or reduce the font size; in tmux, a small pane or a smaller client attached to the same session limits the size.
+
+### Broken borders, question marks, or boxes instead of lines
+
+The terminal is not drawing the Unicode line and symbol characters. Choose View, Icons: ASCII (saved in `tui.json`), which writes only ASCII for borders, icons, and charts. Auto picks ASCII when the terminal does not look like UTF-8: `TERM=dumb`, a `LC_ALL`, `LC_CTYPE`, or `LANG` value without UTF-8 (such as `C` or `POSIX`), or legacy conhost on Windows. If the terminal does support UTF-8 but your locale says otherwise, set a UTF-8 locale (for example `LANG=en_US.UTF-8`) instead. Over SSH, make sure the locale reaches the server side (`SendEnv LANG LC_*` in the client config and `AcceptEnv` on the server, or export `LANG` in the remote shell); with no locale variables at all the TUI assumes UTF-8.
+
+### Colors
+
+When `NO_COLOR` is set, Theme: Auto picks High contrast, which uses reverse video and underline for selection and focus and ASCII borders, so it reads without color. Pick a theme in View to override Auto; the choice is saved. Auto reads the terminal background from `COLORFGBG` and otherwise assumes a dark background, so on a light terminal that does not set `COLORFGBG`, choose Theme: Light. No state depends on color alone.
+
+### SSH and tmux
+
+- Run the TUI on either side of SSH: locally with `--server` pointing at the remote Admiral (through an SSH tunnel such as `ssh -L 7890:127.0.0.1:7890 host` when the port is not exposed), or on the remote host inside your SSH session.
+- tmux: use a 256-color terminal type (`set -g default-terminal "tmux-256color"` or `"screen-256color"`). tmux waits after Esc to see whether a key sequence follows; set `set -sg escape-time 10` so Esc and Alt+arrow keys respond at once.
+- Copying uses OSC 52. In tmux, `set -g set-clipboard on` lets it reach your local clipboard; terminals without OSC 52 get a dialog with the text to select by hand.
+- `F12` hands the mouse back to the terminal so you can select text with it; press `F12` again to give it back to the TUI.
+- Over SSH the macOS Keychain is often locked; the TUI then falls back to the file credential store (below).
+
+### Keychain and credential store
+
+Tokens are kept in the macOS Keychain, Windows Credential Manager, or libsecret (`secret-tool`), and in `~/.armada/tui-credentials.json` (mode 0600) when none of those works. If the keychain prompts on every start, is locked (SSH, headless sessions), or `secret-tool` is not installed, use the file store: `ARMADA_TUI_CREDENTIAL_STORE=file`. `ARMADA_TUI_CREDENTIALS` moves that file. To forget a stored token, use File, Sign out, or delete the entry for the profile (or the file).
+
+### Where the TUI keeps its files
+
+| File | Contents |
+|---|---|
+| `~/.armada/tui.json` | Preferences: profiles, theme, icons, language, layout, last route, table columns and page sizes, refresh intervals, notification settings, key bindings, telemetry. Never a secret. `ARMADA_TUI_PREFERENCES` moves it. |
+| `~/.armada/tui-credentials.json` | Tokens, only when the file credential store is in use. `ARMADA_TUI_CREDENTIALS` moves it. |
+| `~/.armada/tui-notifications.json` | The last 100 notifications. |
+| `~/.armada/tui-activity-views.json` | Saved views on the All Activity screen. |
+
+`~/.armada` is the Armada data directory; `ARMADA_DATA_DIR` moves it. The TUI writes no log file of its own (it owns the terminal while it runs); the server's logs are in the server's data directory, under `logs`. Exports, backups, and snapshots go to the folder you start the TUI from unless you type another path, or to `ARMADA_TUI_SAVE_DIR` when it is set.
+
+### Resetting preferences
+
+Quit the TUI and delete or rename `tui.json` (or point `ARMADA_TUI_PREFERENCES` at a new file); the next start uses the defaults and recreates the default profile for the local Admiral. Stored tokens are kept separately (per profile name and URL), so you usually stay signed in. A `tui.json` that cannot be read is moved aside to `tui.json.bak` and the defaults are used. To undo only a key rebinding, remove its entry from `KeyBindings`.
+
+### Performance and CPU
+
+An idle TUI uses about 1 percent of one core. If it uses more, check for screens with a short auto-refresh interval (the interval is in the screen's top right; View, Auto-refresh interval... changes it, and Off makes it `manual`), a very long Ask conversation that is streaming, or a slow server (every refresh waits on it). `docs/TUI_PERFORMANCE.md` has the measurements and how to reproduce them.
+
+### Ctrl+Q does not quit
+
+`Ctrl+Q` quits from any screen, but an open dialog or picker takes every key first; press `Esc` to close it, then `Ctrl+Q`. File, Quit does the same from the menu.
+
+### Reporting a bug
+
+Help, Save screen snapshot... writes what the screen shows, as plain text at the terminal's size, to a file you choose (the text is taken before the save prompt opens). Attach it to the report together with Help, About Armada (TUI version, server, theme, credential store), `armada --version`, your terminal and operating system, `TERM`, `LANG`, and the terminal size, and the keys you pressed. A snapshot contains whatever was on screen, such as entity names, emails, and paths, so read it before you share it.

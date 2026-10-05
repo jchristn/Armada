@@ -681,7 +681,7 @@ namespace Armada.Tui.Screens.Build
             bool ctrl = (key.Modifiers & KeyModifiers.Ctrl) != 0;
             if (typing && key.Code == KeyCode.Escape)
             {
-                Scope.Move(true);
+                LeaveTextField();
                 return true;
             }
 
@@ -929,6 +929,19 @@ namespace Armada.Tui.Screens.Build
             if (Step == "review") Panel = Panel == "candidates" ? "options" : "candidates";
             else if (ShowFleets()) Panel = Panel == "items" ? "fleets" : "items";
             ShowStep(Step);
+        }
+
+        /// <summary>
+        /// Esc in a text field leaves it for a widget that is not a text field, so the next Esc closes the wizard: the
+        /// search returns to the candidates, an options field to the first option, a source field to the source mode.
+        /// (Moving to the next widget left Esc stuck in the last text field of a step.)
+        /// </summary>
+        private void LeaveTextField()
+        {
+            if (ReferenceEquals(Scope.Focused, CandidateSearch)) Scope.Focus(CandidateGrid);
+            else if (ReferenceEquals(Scope.Focused, Options)) Options.Scope.FocusFirst();
+            else if (Step == "source") Scope.Focus(SourceMode);
+            else if (!Scope.Move(true)) Scope.Move(false);
         }
 
         private void ShowHistory()

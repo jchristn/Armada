@@ -658,9 +658,12 @@ namespace Test.Shared.Suites.Tui
                     AskController ask = host.Tui.Ask;
                     AskScreen screen = (AskScreen)host.Tui.Shell.Screen!;
                     host.PumpUntil(() => ask.Conversation.Thread != null && ask.Captains.Count == 2);
-                    TuiCase.Contains(host.Screen(), "Captain: claude-1 (ClaudeCode) [c]", "captain in header");
+                    AssertTrue(ReferenceEquals(screen.Scope.Focused, screen.Composer), "the thread opens in the composer");
+                    TuiCase.Contains(host.Screen(), "Captain: claude-1 (ClaudeCode) [Esc c]", "while typing, the header says Esc first");
                     TuiCase.NotContains(host.Screen(), "not connected to Armada over MCP", "Claude Code gets MCP from the server");
-                    host.Press("esc").Press("ctrl+y");
+                    host.Press("esc");
+                    TuiCase.Contains(host.Screen(), "Captain: claude-1 (ClaudeCode) [c]", "in the conversation, c alone");
+                    host.Press("ctrl+y");
                     AssertTrue(host.PumpUntil(() => host.App.Modals.IsActive), "warning confirm");
                     TuiCase.Contains(host.Screen(), "without a confirm card", "dashboard warning text");
                     host.Press("y");
@@ -673,6 +676,7 @@ namespace Test.Shared.Suites.Tui
                     host.Press("c");
                     AssertTrue(host.PumpUntil(() => host.App.Modals.IsActive), "captain picker");
                     TuiCase.Contains(host.Screen(), "No captain (quick actions only)", "no-captain option");
+                    TuiCase.Contains(host.Screen(), "Type to filter  Enter Select  Esc Cancel", "the picker's key hints fit its border");
                     host.Press("esc");
                     ask.SetCaptain("cpt_2");
                     AssertTrue(host.PumpUntil(() => ask.Conversation.Thread!.CaptainId == "cpt_2"), "captain changed");

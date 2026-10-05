@@ -18,12 +18,12 @@ namespace Test.Shared.Infrastructure
         /// <param name="spec">Screen.</param>
         public static void Run(TuiFlowSpec spec)
         {
-            StubHttpHandler stub = TuiEntityFixtures.Server();
+            StubHttpHandler stub = spec.ServerFactory != null ? spec.ServerFactory() : TuiEntityFixtures.Server();
             stub.Json(spec.ListMethod, spec.ListPath, spec.BareArray ? "[" + spec.RowJson + "]" : TuiEntityFixtures.Page(spec.RowJson));
             if (spec.DetailPath != null) stub.Json("GET", spec.DetailPath, spec.DetailJson ?? spec.RowJson);
             foreach (string[] route in spec.ExtraRoutes) stub.Json(route[0], route[1], route[2]);
 
-            using (TuiTestHost host = TuiEntityFixtures.Open(stub, spec.Route))
+            using (TuiTestHost host = TuiEntityFixtures.Open(stub, spec.Route, spec.Width, spec.Height))
             {
                 // Open.
                 TuiEntityFixtures.WaitFor(host, () => host.Screen().Contains(spec.RowText, StringComparison.Ordinal), spec + ": row shown");
@@ -35,8 +35,12 @@ namespace Test.Shared.Infrastructure
                     host.Press(spec.FilterKey);
                     host.Type(spec.RowText.Substring(0, 3));
                     TuiEntityFixtures.WaitFor(host, () => host.Screen().Contains(spec.RowText, StringComparison.Ordinal), spec + ": row matches the filter");
+                    if (spec.ServerFilterSeen != null) TuiEntityFixtures.WaitFor(host, () => spec.ServerFilterSeen(stub), spec + ": the filter reaches the server");
                     host.Press("esc");
                     AssertFalse(host.App.Modals.IsActive, spec + ": no modal after the filter");
+
+                    // Screens that keep their filters in the route (Vessel Health) come back to the filtered list.
+                    listPath = host.Tui.Context.Router.Current!.FullPath;
                 }
 
                 // Select and open the row-action menu.
@@ -101,6 +105,8 @@ namespace Test.Shared.Infrastructure
                 TuiEntityFixtures.WaitFor(host, () => host.Tui.Context.Router.Current!.FullPath == listPath, spec + ": back returns to " + listPath + " (now " + host.Tui.Context.Router.Current!.FullPath + ")");
                 TuiEntityFixtures.WaitFor(host, () => host.Screen().Contains(spec.RowText, StringComparison.Ordinal), spec + ": list shows the row again");
             }
+
+            if (spec.VerifyRequests != null) spec.VerifyRequests(stub);
         }
 
         #endregion

@@ -1,8 +1,9 @@
 name: ci
 
-# Runs on every push and pull request. Three jobs:
+# Runs on every push and pull request. Four jobs:
 #   build-and-test  Windows, macOS, and Linux x net8.0 and net10.0: warning-free build plus Test.Automated.
 #   dashboard       npm ci, build, Vitest, and a check that the committed dist/ matches a fresh build.
+#   tui-parity      The TUI parity manifest is current and has no planned entries.
 #   compose         Validates every Docker compose file parses.
 on:
   push:
@@ -118,6 +119,20 @@ jobs:
             exit 1
           fi
           echo "dist/ matches a fresh build."
+
+  # ------------------------------------------------------------------
+  # TUI parity gate: src/Armada.Tui/parity.json matches the dashboard
+  # source, has no "planned" entries, and every not-applicable or
+  # extension entry has notes (TUI_APP_PLAN.md W8.1). Tui.Parity in
+  # Test.Automated enforces the same rules on every OS.
+  # ------------------------------------------------------------------
+  tui-parity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: TUI parity manifest (no planned entries)
+        run: python3 scripts/tui/generate-parity-manifest.py --check
 
   # ------------------------------------------------------------------
   # Compose files: parse and validate (no images are pulled or built).
