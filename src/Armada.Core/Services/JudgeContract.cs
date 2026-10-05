@@ -37,6 +37,16 @@ namespace Armada.Core.Services
         public const string AffectedCaseSection = "Affected Case";
 
         /// <summary>
+        /// Field label, inside the Affected Case section, that names the affected file (optionally with :line).
+        /// </summary>
+        public const string AffectedCaseFileField = "File";
+
+        /// <summary>
+        /// Field label, inside the Affected Case section, that describes the triggering scenario.
+        /// </summary>
+        public const string AffectedCaseScenarioField = "Scenario";
+
+        /// <summary>
         /// The three required lens section headings, in order.
         /// </summary>
         public static IReadOnlyList<string> RequiredLenses { get; } = new List<string>
@@ -51,6 +61,16 @@ namespace Armada.Core.Services
         #region Private-Members
 
         private const int MinNarrativeChars = 120;
+
+        private const int MinScenarioChars = 20;
+
+        private static readonly Regex _AffectedCaseFieldLine = new Regex(
+            @"^\s*(?:[-*]\s*)?(?:\*\*|__)?(?<label>File|Scenario)(?:\*\*|__)?\s*:\s*(?:\*\*|__)?\s*(?<value>.*?)\s*$",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
+        private static readonly Regex _FileReference = new Regex(
+            @"^`?(?<path>[^\s`]*[/\\.][^\s`]*?)(?::\d+(?::\d+)?)?`?$",
+            RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
         #endregion
 
@@ -93,9 +113,11 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
-        /// Whether a blocking verdict exhibits a concrete affected case: an "Affected Case" section whose
-        /// body cites a real reference (a file path, a file:line, or a described scenario/repro). A block
-        /// that only asserts a vague concern does not satisfy this.
+        /// Whether a blocking verdict exhibits a concrete affected case: an "Affected Case" section that contains a
+        /// labeled field line, either <c>File: path[:line]</c> naming a file (a single path token containing a
+        /// separator or an extension) or <c>Scenario: ...</c> describing the triggering inputs and the wrong result in
+        /// at least a short sentence. The decision reads those labeled fields only; it never searches the prose for
+        /// words such as "when" or "returns".
         /// </summary>
         /// <param name="output">Judge agent output.</param>
         /// <returns>True when a concrete affected case is exhibited.</returns>
@@ -106,11 +128,24 @@ namespace Armada.Core.Services
             string body = ExtractSectionBody(output!, AffectedCaseSection);
             if (String.IsNullOrWhiteSpace(body)) return false;
 
-            // A concrete file reference (path with an extension, optionally :line).
-            if (Regex.IsMatch(body, @"[\w./\\-]+\.[A-Za-z]{1,8}(?::\d+)?")) return true;
+            foreach (string line in body.Split('\n'))
+            {
+                Match field = _AffectedCaseFieldLine.Match(line);
+                if (!field.Success) continue;
 
-            // Or an explicit scenario / reproduction phrasing that names the triggering condition.
-            if (Regex.IsMatch(body, @"(?i)\b(when|given|if the|input|scenario|repro|reproduce|call|invoke|passing|returns|throws)\b")) return true;
+                string label = field.Groups["label"].Value;
+                string value = field.Groups["value"].Value.Trim();
+                if (String.IsNullOrEmpty(value)) continue;
+
+                if (String.Equals(label, AffectedCaseFileField, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (_FileReference.IsMatch(value)) return true;
+                }
+                else if (value.Length >= MinScenarioChars)
+                {
+                    return true;
+                }
+            }
 
             return false;
         }
@@ -160,7 +195,7 @@ namespace Armada.Core.Services
                 "`## Blast Radius` (what else could this change break, and how far do its effects reach?), and " +
                 "`## Source Fidelity` (does it faithfully implement the mission, stay in scope, and match the real codebase without inventing behavior?). " +
                 "End with a `## Verdict` section and exactly one standalone line `[ARMADA:VERDICT] PASS`, `[ARMADA:VERDICT] FAIL`, or `[ARMADA:VERDICT] NEEDS_REVISION`. " +
-                "To block (FAIL or NEEDS_REVISION) you MUST include a `## Affected Case` section that exhibits one concrete affected case -- a specific file, line, or scenario where the change is wrong or unsafe. " +
+                "To block (FAIL or NEEDS_REVISION) you MUST include a `## Affected Case` section that exhibits one concrete affected case with a `File: <path>[:line]` line naming where the change is wrong or unsafe, or a `Scenario: <inputs and the wrong result>` line describing how to trigger it. " +
                 "A blocking verdict without a concrete affected case is not accepted. Do not reply with only a verdict line.";
         }
 
@@ -174,7 +209,7 @@ namespace Armada.Core.Services
                 "You are an Armada judge agent. Review the completed work through three lenses -- correctness, " +
                 "blast radius, and source fidelity -- and assume there may be a hidden defect. " +
                 "Use `## Correctness`, `## Blast Radius`, `## Source Fidelity`, and `## Verdict` sections. " +
-                "To block, add a `## Affected Case` section exhibiting one concrete affected case (a specific file, line, or scenario). " +
+                "To block, add a `## Affected Case` section exhibiting one concrete affected case as a `File: <path>[:line]` or `Scenario: <inputs and wrong result>` line. " +
                 "End with exactly one standalone [ARMADA:VERDICT] PASS, [ARMADA:VERDICT] FAIL, or [ARMADA:VERDICT] NEEDS_REVISION line.";
         }
 
@@ -186,7 +221,7 @@ namespace Armada.Core.Services
         {
             return
                 "You are an Armada judge agent. Review through `## Correctness`, `## Blast Radius`, and `## Source Fidelity` sections, " +
-                "add a `## Affected Case` section with a concrete case if you block, and end with exactly one standalone " +
+                "add a `## Affected Case` section with a `File:` or `Scenario:` line if you block, and end with exactly one standalone " +
                 "[ARMADA:VERDICT] PASS, [ARMADA:VERDICT] FAIL, or [ARMADA:VERDICT] NEEDS_REVISION line.";
         }
 

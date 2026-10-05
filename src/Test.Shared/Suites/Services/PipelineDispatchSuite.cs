@@ -1673,7 +1673,7 @@ namespace Test.Shared.Suites.Services
                     await testDb.Driver.Captains.UpdateAsync(judgeCaptain).ConfigureAwait(false);
 
                     missionService.OnGetMissionOutput = _ =>
-                        "NEEDS_REVISION\n" +
+                        "[ARMADA:VERDICT] NEEDS_REVISION\n" +
                         "Scope violation: test file should be removed.";
 
                     await missionService.HandleCompletionAsync(judgeCaptain, judge.Id).ConfigureAwait(false);
@@ -1744,9 +1744,12 @@ namespace Test.Shared.Suites.Services
                         "Verdict options:\n" +
                         "- **PASS** -- all requirements satisfied.\n" +
                         "- **FAIL** -- the branch is incorrect.\n" +
-                        "- **NEEDS_REVISION** -- scope or quality issues remain.\n\n" +
-                        "`NEEDS_REVISION`\n" +
-                        "Scope violation: this branch contains unrelated files.";
+                        "- **NEEDS_REVISION** -- scope or quality issues remain.\n" +
+                        "- `[ARMADA:VERDICT] PASS` -- judge approves the mission\n" +
+                        "```\n[ARMADA:VERDICT] PASS\n```\n\n" +
+                        "[ARMADA:VERDICT] NEEDS_REVISION\n" +
+                        "Scope violation: this branch contains unrelated files.\n" +
+                        "PASS";
 
                     await missionService.HandleCompletionAsync(judgeCaptain, judge.Id).ConfigureAwait(false);
 
@@ -1837,7 +1840,7 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
-            cases.Add(CaseAsync("judge_parser_accepts_markdown_verdict_heading_emitted_by_claude", "Judge parser accepts markdown verdict heading emitted by Claude", TestTags.Positive, async () =>
+            cases.Add(CaseAsync("judge_parser_rejects_markdown_verdict_heading_without_protocol_line", "Judge parser does not land on a markdown verdict heading without the protocol line", TestTags.Negative, async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
                 {
@@ -1909,12 +1912,14 @@ namespace Test.Shared.Suites.Services
 
                     Mission? reloadedJudge = await testDb.Driver.Missions.ReadAsync(judge.Id).ConfigureAwait(false);
                     AssertNotNull(reloadedJudge, "Judge mission should remain readable");
-                    AssertEqual(MissionStatusEnum.Complete, reloadedJudge!.Status, "Markdown verdict heading should permit landing");
-                    AssertEqual(1, landingCalls, "PASS verdict emitted as a markdown heading should invoke landing");
+                    AssertEqual(MissionStatusEnum.Failed, reloadedJudge!.Status, "A prose verdict heading is not a structured verdict and must not land");
+                    AssertContains("did not emit an explicit PASS verdict", reloadedJudge.FailureReason ?? String.Empty, "Missing structured verdict is reported");
+                    AssertEqual(MissionFailureKindEnum.JudgeRejected, reloadedJudge.FailureKind);
+                    AssertEqual(0, landingCalls, "Only the [ARMADA:VERDICT] line can permit landing");
                 }
             }));
 
-            cases.Add(CaseAsync("judge_parser_accepts_inline_sentence_verdict_emitted_by_claude", "Judge parser accepts inline sentence verdict emitted by Claude", TestTags.Positive, async () =>
+            cases.Add(CaseAsync("judge_parser_rejects_inline_sentence_verdict_without_protocol_line", "Judge parser does not land on an inline sentence verdict without the protocol line", TestTags.Negative, async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
                 {
@@ -1985,8 +1990,9 @@ namespace Test.Shared.Suites.Services
 
                     Mission? reloadedJudge = await testDb.Driver.Missions.ReadAsync(judge.Id).ConfigureAwait(false);
                     AssertNotNull(reloadedJudge, "Judge mission should remain readable");
-                    AssertEqual(MissionStatusEnum.Complete, reloadedJudge!.Status, "Inline sentence verdict should permit landing");
-                    AssertEqual(1, landingCalls, "Sentence-style PASS verdict should invoke landing");
+                    AssertEqual(MissionStatusEnum.Failed, reloadedJudge!.Status, "A sentence verdict is not a structured verdict and must not land");
+                    AssertContains("did not emit an explicit PASS verdict", reloadedJudge.FailureReason ?? String.Empty, "Missing structured verdict is reported");
+                    AssertEqual(0, landingCalls, "Only the [ARMADA:VERDICT] line can permit landing");
                 }
             }));
 
@@ -2052,7 +2058,8 @@ namespace Test.Shared.Suites.Services
                         "Coverage is still missing for the omitted-field preservation path.\n\n" +
                         "## Failure Modes\n" +
                         "This can silently erase stored captain configuration during partial updates.\n\n" +
-                        "Judge review complete. Verdict: NEEDS_REVISION. The REST and MCP update contracts still diverge.";
+                        "Judge review complete. Verdict: NEEDS_REVISION. The REST and MCP update contracts still diverge.\n" +
+                        "[ARMADA:VERDICT] NEEDS_REVISION";
 
                     await missionService.HandleCompletionAsync(judgeCaptain, judge.Id).ConfigureAwait(false);
 

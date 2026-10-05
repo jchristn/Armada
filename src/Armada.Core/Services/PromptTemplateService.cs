@@ -779,11 +779,13 @@ namespace Armada.Core.Services
                     "- **NEEDS_REVISION** -- The change has fixable issues. Provide specific, actionable feedback.\n" +
                     "\n" +
                     "To block (FAIL or NEEDS_REVISION) you MUST add a `## Affected Case` section that exhibits one " +
-                    "concrete affected case: a specific file, line, or scenario where the change is wrong or unsafe, " +
-                    "with enough detail to reproduce or locate it. A blocking verdict without a concrete affected " +
-                    "case is not accepted -- if you cannot exhibit one, you do not have grounds to block.\n" +
+                    "concrete affected case: a `File: <path>[:line]` line naming where the change is wrong or unsafe, " +
+                    "or a `Scenario: <inputs and the wrong result>` line with enough detail to reproduce it. A blocking " +
+                    "verdict without a concrete affected case is not accepted -- if you cannot exhibit one, you do not " +
+                    "have grounds to block.\n" +
                     "\n" +
-                    "End your response with a standalone signal line exactly in one of these forms:\n" +
+                    "End your response with exactly one standalone signal line, outside any code block, in one of these " +
+                    "forms (only this line is read as your verdict):\n" +
                     "- `[ARMADA:VERDICT] PASS`\n" +
                     "- `[ARMADA:VERDICT] FAIL`\n" +
                     "- `[ARMADA:VERDICT] NEEDS_REVISION`\n"

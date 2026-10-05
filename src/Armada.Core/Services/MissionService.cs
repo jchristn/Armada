@@ -133,17 +133,6 @@ namespace Armada.Core.Services
             public string EventMessage { get; set; } = String.Empty;
         }
 
-        /// <summary>
-        /// Verdict extracted from a judge mission's output.
-        /// </summary>
-        private enum JudgeVerdict
-        {
-            None,
-            Pass,
-            Fail,
-            NeedsRevision
-        }
-
         #endregion
 
         #region Constructors-and-Factories
@@ -1097,25 +1086,27 @@ namespace Armada.Core.Services
 
             if (!failedForScopeViolation && String.Equals(mission.Persona, "Judge", StringComparison.OrdinalIgnoreCase))
             {
-                JudgeVerdict verdict = ParseJudgeVerdict(mission.AgentOutput);
+                // Only the structured [ARMADA:VERDICT] protocol line counts; a missing or conflicting verdict is no
+                // verdict, which blocks landing.
+                JudgeVerdictEnum verdict = JudgeVerdictParser.Parse(mission.AgentOutput);
                 string? verdictFailureReason = null;
                 bool rejectedPass = false;
 
                 // A PASS must be substantiated (three lenses + real narrative). A rejected PASS is not
                 // silently re-run: it is downgraded to a blocking verdict and the mission fails terminally
                 // with an explicit reason so an operator sees it rather than a quiet re-dispatch.
-                if (verdict == JudgeVerdict.Pass && !TryValidateJudgePassOutput(mission.AgentOutput, out verdictFailureReason))
+                if (verdict == JudgeVerdictEnum.Pass && !TryValidateJudgePassOutput(mission.AgentOutput, out verdictFailureReason))
                 {
-                    verdict = JudgeVerdict.NeedsRevision;
+                    verdict = JudgeVerdictEnum.NeedsRevision;
                     rejectedPass = true;
                 }
 
-                if (verdict != JudgeVerdict.Pass)
+                if (verdict != JudgeVerdictEnum.Pass)
                 {
                     // To block, the Judge must exhibit a concrete affected case. A block without one is a
                     // contract violation: the mission still fails terminally, but the reason makes clear the
                     // Judge did not substantiate the block rather than the work being definitively wrong.
-                    bool isBlockingVerdict = verdict == JudgeVerdict.Fail || verdict == JudgeVerdict.NeedsRevision;
+                    bool isBlockingVerdict = verdict == JudgeVerdictEnum.Fail || verdict == JudgeVerdictEnum.NeedsRevision;
                     bool exhibitsAffectedCase = JudgeContract.ExhibitsAffectedCase(mission.AgentOutput);
 
                     string blockingReason;
@@ -1125,15 +1116,15 @@ namespace Armada.Core.Services
                     }
                     else if (isBlockingVerdict && !exhibitsAffectedCase)
                     {
-                        blockingReason = "Judge verdict: " + (verdict == JudgeVerdict.Fail ? "FAIL" : "NEEDS_REVISION") +
+                        blockingReason = "Judge verdict: " + (verdict == JudgeVerdictEnum.Fail ? "FAIL" : "NEEDS_REVISION") +
                             " but did not exhibit a concrete affected case; a block must cite a real affected file, line, or scenario";
                     }
                     else
                     {
                         blockingReason = verdict switch
                         {
-                            JudgeVerdict.Fail => "Judge verdict: FAIL",
-                            JudgeVerdict.NeedsRevision => "Judge verdict: NEEDS_REVISION",
+                            JudgeVerdictEnum.Fail => "Judge verdict: FAIL",
+                            JudgeVerdictEnum.NeedsRevision => "Judge verdict: NEEDS_REVISION",
                             _ => "Judge mission did not emit an explicit PASS verdict"
                         };
                     }
@@ -2374,7 +2365,7 @@ namespace Armada.Core.Services
                             "sibling missions in the same voyage. Assume there may be at least one hidden defect. " +
                             "Your response must include `## Correctness`, `## Blast Radius`, `## Source Fidelity`, and " +
                             "`## Verdict` sections. To block (FAIL or NEEDS_REVISION) you MUST add a `## Affected Case` " +
-                            "section exhibiting one concrete affected case (a specific file, line, or scenario); a block " +
+                            "section exhibiting one concrete affected case (a `File: <path>[:line]` or `Scenario: ...` line); a block " +
                             "without a concrete affected case is not accepted. End with a standalone line " +
                             "`[ARMADA:VERDICT] PASS`, `[ARMADA:VERDICT] FAIL`, or `[ARMADA:VERDICT] NEEDS_REVISION`.\n\n";
                         break;
@@ -3333,29 +3324,6 @@ namespace Armada.Core.Services
             _Logging.Warn(_Header + "restored missing mission instructions from snapshot to " + instructionsPath);
         }
 
-        private JudgeVerdict ParseJudgeVerdict(string? agentOutput)
-        {
-            if (String.IsNullOrEmpty(agentOutput)) return JudgeVerdict.None;
-
-            string[] lines = agentOutput.Replace("\r\n", "\n").Split('\n');
-            for (int i = lines.Length - 1; i >= 0; i--)
-            {
-                string line = lines[i].Trim().Trim('\r');
-                if (String.IsNullOrEmpty(line)) continue;
-
-                JudgeVerdict? signalVerdict = ParseStructuredJudgeVerdictSignal(line);
-                if (signalVerdict.HasValue) return signalVerdict.Value;
-
-                if (IsAgentTelemetryLine(line)) continue;
-
-                string normalized = line.Trim().Trim('*', '_', '`', '#', '>', '-', ' ');
-                JudgeVerdict? explicitVerdict = ParseExplicitJudgeVerdictLine(normalized);
-                if (explicitVerdict.HasValue) return explicitVerdict.Value;
-            }
-
-            return JudgeVerdict.None;
-        }
-
         private bool TryValidateJudgePassOutput(string? agentOutput, out string? failureReason)
         {
             // Delegate the bounded three-lens PASS contract to the pure JudgeContract so the prompt builders,
@@ -3381,87 +3349,12 @@ namespace Armada.Core.Services
                 string line = rawLine.Trim();
                 if (String.IsNullOrWhiteSpace(line)) continue;
                 if (IsAgentTelemetryLine(line)) continue;
-                if (ParseStructuredJudgeVerdictSignal(line).HasValue) continue;
-
-                string normalized = line.Trim('*', '_', '`', '#', '>', '-', ' ');
-                if (ParseExplicitJudgeVerdictLine(normalized).HasValue) continue;
+                if (JudgeVerdictParser.ParseLine(line).HasValue) continue;
 
                 lines.Add(line);
             }
 
             return String.Join(" ", lines);
-        }
-
-        private static JudgeVerdict? ParseStructuredJudgeVerdictSignal(string line)
-        {
-            if (String.IsNullOrWhiteSpace(line)) return null;
-
-            System.Text.RegularExpressions.Match signal = System.Text.RegularExpressions.Regex.Match(
-                line.Trim(),
-                @"^\[ARMADA:VERDICT\]\s+(?<verdict>PASS|FAIL|NEEDS_REVISION)\s*$",
-                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            if (!signal.Success) return null;
-
-            return signal.Groups["verdict"].Value.ToUpperInvariant() switch
-            {
-                "PASS" => JudgeVerdict.Pass,
-                "FAIL" => JudgeVerdict.Fail,
-                "NEEDS_REVISION" => JudgeVerdict.NeedsRevision,
-                _ => null
-            };
-        }
-
-        private static JudgeVerdict? ParseExplicitJudgeVerdictLine(string normalizedLine)
-        {
-            if (String.IsNullOrEmpty(normalizedLine)) return null;
-
-            const System.Text.RegularExpressions.RegexOptions options = System.Text.RegularExpressions.RegexOptions.IgnoreCase;
-            string candidate = normalizedLine.Trim();
-            const string verdictSuffixPattern = @"(?:\s*$|\s*[\.,:;!?](?:\s+.+)?$|\s*-(?!-)\s+.+$)";
-
-            System.Text.RegularExpressions.Match labeledVerdict = System.Text.RegularExpressions.Regex.Match(
-                candidate,
-                @"^VERDICT\s*(?::|=|-|IS)?\s*(?:\*\*|__|`)?(?<verdict>PASS|FAIL|NEEDS_REVISION)(?:\*\*|__|`)?"
-                + verdictSuffixPattern,
-                options);
-            if (labeledVerdict.Success)
-                return labeledVerdict.Groups["verdict"].Value.ToUpperInvariant() switch
-                {
-                    "PASS" => JudgeVerdict.Pass,
-                    "FAIL" => JudgeVerdict.Fail,
-                    "NEEDS_REVISION" => JudgeVerdict.NeedsRevision,
-                    _ => null
-                };
-
-            System.Text.RegularExpressions.Match inlineLabeledVerdict = System.Text.RegularExpressions.Regex.Match(
-                candidate,
-                @"\bVERDICT\s*(?::|=|-|IS)?\s*(?:\*\*|__|`)?(?<verdict>PASS|FAIL|NEEDS_REVISION)(?:\*\*|__|`)?"
-                + verdictSuffixPattern,
-                options);
-            if (inlineLabeledVerdict.Success)
-                return inlineLabeledVerdict.Groups["verdict"].Value.ToUpperInvariant() switch
-                {
-                    "PASS" => JudgeVerdict.Pass,
-                    "FAIL" => JudgeVerdict.Fail,
-                    "NEEDS_REVISION" => JudgeVerdict.NeedsRevision,
-                    _ => null
-                };
-
-            System.Text.RegularExpressions.Match bareVerdict = System.Text.RegularExpressions.Regex.Match(
-                candidate,
-                @"^(?:\*\*|__|`)?(?<verdict>PASS|FAIL|NEEDS_REVISION)(?:\*\*|__|`)?"
-                + verdictSuffixPattern,
-                options);
-            if (bareVerdict.Success)
-                return bareVerdict.Groups["verdict"].Value.ToUpperInvariant() switch
-                {
-                    "PASS" => JudgeVerdict.Pass,
-                    "FAIL" => JudgeVerdict.Fail,
-                    "NEEDS_REVISION" => JudgeVerdict.NeedsRevision,
-                    _ => null
-                };
-
-            return null;
         }
 
         private async Task EmitMissionOutcomeTelemetryAsync(Mission mission, Captain captain, CancellationToken token)

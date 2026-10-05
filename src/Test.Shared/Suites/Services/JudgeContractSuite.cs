@@ -67,18 +67,19 @@ namespace Test.Shared.Suites.Services
                 string output =
                     "## Correctness\nThe update drops omitted fields.\n\n" +
                     "## Affected Case\n" +
-                    "In src/Core/Settings.cs the partial update overwrites unspecified keys, wiping stored values.\n\n" +
+                    "- **File:** src/Core/Settings.cs:118\n" +
+                    "The partial update overwrites unspecified keys, wiping stored values.\n\n" +
                     "[ARMADA:VERDICT] NEEDS_REVISION\n";
-                AssertTrue(JudgeContract.ExhibitsAffectedCase(output), "a file-referenced affected case should count");
+                AssertTrue(JudgeContract.ExhibitsAffectedCase(output), "a File: field naming a path should count");
             }));
 
             cases.Add(Case("block_with_scenario_case", "A block that describes a triggering scenario is a valid block", TestTags.Positive, () =>
             {
                 string output =
                     "## Affected Case\n" +
-                    "When the caller passes an empty list, the loop throws instead of returning early.\n\n" +
+                    "Scenario: the caller passes an empty list and the loop throws instead of returning early.\n\n" +
                     "[ARMADA:VERDICT] FAIL\n";
-                AssertTrue(JudgeContract.ExhibitsAffectedCase(output), "a scenario-described affected case should count");
+                AssertTrue(JudgeContract.ExhibitsAffectedCase(output), "a Scenario: field should count");
             }));
 
             cases.Add(Case("missing_lens_is_rejected", "A PASS missing a lens is rejected and names it", TestTags.Negative, () =>
@@ -118,6 +119,38 @@ namespace Test.Shared.Suites.Services
                     "Something feels wrong about the overall approach here.\n\n" +
                     "[ARMADA:VERDICT] FAIL\n";
                 AssertFalse(JudgeContract.ExhibitsAffectedCase(output), "an affected-case section must cite a real reference or scenario");
+            }));
+
+            cases.Add(Case("affected_case_prose_keywords_do_not_count", "Prose that merely contains scenario words or dotted tokens is not an affected case", TestTags.Negative, () =>
+            {
+                // The old check accepted any body containing "when", "if the", "returns", "input", or a dotted token
+                // such as "e.g." as a concrete case.
+                string output =
+                    "## Affected Case\n" +
+                    "When I look at this, e.g. the overall design, it returns a vague feeling that the input is off.\n\n" +
+                    "[ARMADA:VERDICT] FAIL\n";
+                AssertFalse(JudgeContract.ExhibitsAffectedCase(output), "keywords in prose are not a structured affected case");
+            }));
+
+            cases.Add(Case("affected_case_fields_must_have_content", "Empty or trivial File and Scenario fields do not count", TestTags.Negative, () =>
+            {
+                string output =
+                    "## Affected Case\n" +
+                    "File: none\n" +
+                    "Scenario: bad\n\n" +
+                    "[ARMADA:VERDICT] FAIL\n";
+                AssertFalse(JudgeContract.ExhibitsAffectedCase(output), "a File: value must be a path and a Scenario: must describe the trigger");
+            }));
+
+            cases.Add(Case("affected_case_field_outside_section_does_not_count", "A File field outside the Affected Case section does not count", TestTags.Negative, () =>
+            {
+                string output =
+                    "## Correctness\n" +
+                    "File: src/Core/Settings.cs:118\n\n" +
+                    "## Affected Case\n" +
+                    "Something is wrong.\n\n" +
+                    "[ARMADA:VERDICT] FAIL\n";
+                AssertFalse(JudgeContract.ExhibitsAffectedCase(output), "the field must be inside the Affected Case section");
             }));
 
             return new TestSuiteDescriptor(

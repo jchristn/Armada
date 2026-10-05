@@ -82,9 +82,15 @@ Reviews completed work through a bounded three-lens contract.
   mission, stay in scope, and match the real codebase without inventing behavior?).
   Produce a verdict: PASS, FAIL, or NEEDS_REVISION.
 - **Bounded blocking:** To block (FAIL or NEEDS_REVISION) the Judge MUST include a
-  `## Affected Case` section exhibiting one concrete affected case -- a specific
-  file, line, or scenario. A blocking verdict without a concrete affected case is
-  not accepted. A PASS must fill all three lens sections with real reasoning; a
+  `## Affected Case` section exhibiting one concrete affected case as a labeled
+  field line: `File: <path>[:line]` or `Scenario: <inputs and the wrong result>`.
+  Only those labeled lines are read; a blocking verdict without one is not
+  accepted.
+- **Verdict signal:** The verdict is read only from a standalone
+  `[ARMADA:VERDICT] PASS|FAIL|NEEDS_REVISION` line outside any code block. Prose
+  such as "Verdict: PASS", bare PASS/FAIL lines (for example test-runner output),
+  and conflicting verdict lines are not verdicts; a Judge without exactly one
+  structured verdict blocks landing. A PASS must fill all three lens sections with real reasoning; a
   shallow or verdict-only PASS is rejected and the mission fails terminally rather
   than silently re-running.
 - **Prompt template:** `persona.judge`
