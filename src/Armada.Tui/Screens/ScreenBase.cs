@@ -63,6 +63,7 @@ namespace Armada.Tui.Screens
         {
             Route = route ?? throw new ArgumentNullException(nameof(route));
             Context = context ?? throw new ArgumentNullException(nameof(context));
+            Scope.RegionHost = true;
             Localizer = context.Loc;
             ApplyTheme(context.Theme.Current);
         }

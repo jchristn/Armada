@@ -635,43 +635,43 @@ Ask Armada:
 ```
  Armada  [Default Tenant] admin@armada  [Global Admin]                                             o Offline  [bell 0]
  File  Go  View  Actions  Ask  Help                                                                            F10 Menu
-  Dashboard             | Release checklist [e]          Captain: claude-1 (ClaudeCode) [c]   Auto-approve: off [Ctrl...
-> Ask Armada            |-----------------------------------------------------------------------------------------------
-- OPERATIONS            |  You                                                                                    1m ago
-   Needs You            |    What is left before we cut the 1.0 release?
-   Planning             |
-   Dispatch             |  claude-1  3.8s                                                                         1m ago
-   Fleet Actions        |  Two things are open:
-   Missions             |
-- DELIVERY              |  1. Fix column widths is in progress on DemoRepo.
-   Delivery             |  2. Broken failed its tests; I can restart it.
-- BUILD                 |
-   Vessels              |  Want me to dispatch a voyage for the remaining docs work?
-   Captains             |
-- CONFIGURATION         |  You                                                                                    1m ago
-   Configuration        |    Yes, one mission for the README.
-- ACTIVITY              |
-   Activity             |
-   Jobs                 |
-- SYSTEM                |
-   API Explorer         |
-   Settings             |
-                        |
-                        |
-                        |
-                        |
-                        |
-                        |
-                        |
-                        |
-                        |
-                        |
-                        |
-                        |
-                        |
-                        |-----------------------------------------------------------------------------------------------
-                        |>  Message the captain, or type / for quick actions
-                        |[ ] Show thinking (Alt+T)   / Quick actions   Ctrl+E Editor   AI can make mistake... Enter Send
++----------------------++----------------------------------------------------------------------------------------------+
+|  Dashboard           || Release checklist [e]          Captain: claude-1 (ClaudeCode) [c]   Auto-approve: off [Ctr...|
+|> Ask Armada          ||----------------------------------------------------------------------------------------------|
+|- OPERATIONS          ||  You                                                                                   1m ago|
+|   Needs You          ||    What is left before we cut the 1.0 release?                                               |
+|   Planning           ||                                                                                              |
+|   Dispatch           ||  claude-1  3.8s                                                                        1m ago|
+|   Fleet Actions      ||  Two things are open:                                                                        |
+|   Missions           ||                                                                                              |
+|- DELIVERY            ||  1. Fix column widths is in progress on DemoRepo.                                            |
+|   Delivery           ||  2. Broken failed its tests; I can restart it.                                               |
+|- BUILD               ||                                                                                              |
+|   Vessels            ||  Want me to dispatch a voyage for the remaining docs work?                                   |
+|   Captains           ||                                                                                              |
+|- CONFIGURATION       ||  You                                                                                   1m ago|
+|   Configuration      ||    Yes, one mission for the README.                                                          |
+|- ACTIVITY            ||                                                                                              |
+|   Activity           ||                                                                                              |
+|   Jobs               ||                                                                                              |
+|- SYSTEM              ||                                                                                              |
+|   API Explorer       ||                                                                                              |
+|   Settings           ||                                                                                              |
+|                      ||                                                                                              |
+|                      ||                                                                                              |
+|                      ||                                                                                              |
+|                      ||                                                                                              |
+|                      ||                                                                                              |
+|                      ||                                                                                              |
+|                      ||                                                                                              |
+|                      ||                                                                                              |
+|                      ||                                                                                              |
+|                      ||                                                                                              |
+|                      ||                                                                                              |
+|                      ||----------------------------------------------------------------------------------------------|
+|                      ||>  Message the captain, or type / for quick actions                                           |
+|                      ||[ ] Show thinking (Alt+T)   / Quick actions   Ctrl+E Editor   AI can make mistak... Enter Send|
++----------------------++----------------------------------------------------------------------------------------------+
  Enter Send  Ctrl+J Newline  / Quick actions  Esc Messages  ? Help  Ctrl+K Palette  F10 Menu  Tab Next pane      manual
 ```
 

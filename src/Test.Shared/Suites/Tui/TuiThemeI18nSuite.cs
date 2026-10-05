@@ -111,8 +111,11 @@ namespace Test.Shared.Suites.Tui
                         AssertTrue(TextCells.Width(line) <= 120, "row fits the terminal width: " + line);
                     }
 
-                    int bar = frame.Split('\n').Where(l => l.Contains("\u30c0\u30c3\u30b7\u30e5\u30dc\u30fc\u30c9")).Select(l => TextCells.Width(l.Substring(0, l.IndexOf('|')))).First();
-                    int plain = frame.Split('\n').Where(l => l.Contains("|") && !l.Contains("\u30c0\u30c3")).Select(l => TextCells.Width(l.Substring(0, l.IndexOf('|')))).First();
+                    // The sidebar's right border is the first vertical border glyph after its left border in column 0.
+                    char[] verticals = new char[] { '\u2502', '\u2503' };
+                    int bar = frame.Split('\n').Where(l => l.Contains("\u30c0\u30c3\u30b7\u30e5\u30dc\u30fc\u30c9")).Select(l => TextCells.Width(l.Substring(0, l.IndexOfAny(verticals, 1)))).First();
+                    int plain = frame.Split('\n').Where(l => l.IndexOfAny(verticals, 1) > 0 && !l.Contains("\u30c0\u30c3")).Select(l => TextCells.Width(l.Substring(0, l.IndexOfAny(verticals, 1)))).First();
+                    AssertTrue(plain > 1, "sidebar right border found");
                     AssertEqual(plain, bar, "sidebar border aligned on CJK rows");
                 }
             }));
