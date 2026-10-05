@@ -179,6 +179,32 @@ namespace Test.Shared.Suites.Tui
                 }
             }));
 
+            cases.Add(TuiCase.Sync(Suite, "keyboard_flow_back", "Keyboard flow: select a proposal, view its arguments, open its thread, and Alt+Left back to the center with the item kept", () =>
+            {
+                AskFixtures fx = new AskFixtures();
+                fx.AddThread(AskFixtures.Thread("ath_3", "Docs rollout"));
+                AskActionProposal p = AskFixtures.Proposal("aap_k", "ath_3", "dispatch", AskProposalStatusEnum.Pending);
+                fx.Decisions(p);
+                using (TuiTestHost host = TuiCase.SignedIn(140, 45, "/approvals", fx.Stub))
+                {
+                    host.PumpUntil(() => host.Tui.Ask.Threads.Count == 1);
+                    host.Tui.Context.Events.Inject(AskFixtures.Event("ask.proposal", new AskProposalEvent { ThreadId = "ath_3", Proposal = p }));
+                    host.Pump();
+                    ApprovalsScreen screen = Select(host, ApprovalKindEnum.AskProposal);
+                    AssertEqual("aap_k", screen.Current()?.EntityId, "selected");
+                    host.Press("x");
+                    AssertTrue(host.PumpUntil(() => host.App.Modals.IsActive), "arguments modal");
+                    host.Press("esc");
+                    AssertTrue(host.PumpUntil(() => !host.App.Modals.IsActive), "modal closed");
+                    host.Press("enter");
+                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Router.Current!.FullPath == "/ask/ath_3"), "Enter opens the thread");
+                    host.Press("esc");
+                    host.Press("alt+left");
+                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Router.Current!.Path == "/approvals"), "Alt+Left back to the center: " + host.Tui.Context.Router.Current!.FullPath);
+                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Approvals.Find(ApprovalKindEnum.AskProposal, "aap_k") != null), "the item is still queued");
+                }
+            }));
+
             return new TestSuiteDescriptor(suiteId: Suite, displayName: "TUI approvals center", cases: cases);
         }
 
