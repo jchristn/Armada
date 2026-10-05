@@ -75,15 +75,5 @@ namespace Armada.Core.Models
         /// Error: the browsed directory does not exist (HTTP 404).
         /// </summary>
         public const string DirectoryNotFound = "DirectoryNotFound";
-
-        /// <summary>
-        /// Error: categorization was enabled without a categorization captain (HTTP 400).
-        /// </summary>
-        public const string CategorizationCaptainRequired = "CategorizationCaptainRequired";
-
-        /// <summary>
-        /// Error: the categorization captain does not exist in the caller's tenant (HTTP 400).
-        /// </summary>
-        public const string CategorizationCaptainNotFound = "CategorizationCaptainNotFound";
     }
 }

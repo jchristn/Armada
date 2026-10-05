@@ -256,6 +256,10 @@ namespace Armada.Core.Services
 
                 ctx.IsAdmin = user.IsAdmin;
                 ctx.IsTenantAdmin = user.IsAdmin || user.IsTenantAdmin;
+
+                // A mission captain is confined to the mission's tenant: an owner who is a global admin (for example the
+                // API key's system identity) yields a tenant admin of that tenant, never a global admin.
+                if (!string.IsNullOrEmpty(ctx.MissionId)) ctx.IsAdmin = false;
                 ctx.PrincipalDisplay = user.Email;
                 ctx.PasswordChangeRequired = user.UsesDefaultPassword();
                 return ctx;

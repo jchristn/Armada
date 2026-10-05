@@ -7,6 +7,7 @@ namespace Test.Shared.Suites.Services
     using Armada.Core;
     using Armada.Core.Database;
     using Armada.Core.Database.Sqlite;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Core.Services;
     using Armada.Core.Services.Interfaces;
@@ -260,6 +261,51 @@ namespace Test.Shared.Suites.Services
                     AuthContext ctx = await svc.AuthenticateWithCredentialsAsync(entities.TenantId, "test@example.com", password);
 
                     AssertFalse(ctx.IsAuthenticated, "Should not be authenticated when the user is inactive");
+                }
+            }));
+
+            cases.Add(CaseAsync("mission_token_lifecycle_and_scope", "A mission-scoped token works only while its mission runs on its captain and never yields a global admin", TestTags.Negative, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    DatabaseDriver db = testDb.Driver;
+                    AuthFixtureResult entities = await CreateTestEntitiesAsync(db);
+                    UserMaster? owner = await db.Users.ReadByIdAsync(entities.UserId);
+                    owner!.IsAdmin = true;
+                    await db.Users.UpdateAsync(owner);
+
+                    Captain captain = new Captain("mission-token-captain");
+                    captain.TenantId = entities.TenantId;
+                    captain.UserId = entities.UserId;
+                    captain = await db.Captains.CreateAsync(captain);
+                    Mission mission = new Mission("mission-token", "x");
+                    mission.TenantId = entities.TenantId;
+                    mission.UserId = entities.UserId;
+                    mission.CaptainId = captain.Id;
+                    mission.Status = MissionStatusEnum.InProgress;
+                    mission = await db.Missions.CreateAsync(mission);
+
+                    SessionTokenService tokens = new SessionTokenService();
+                    AuthenticationService svc = CreateService(db, tokens);
+                    string token = tokens.CreateMissionScopedToken(entities.TenantId, entities.UserId, mission.Id, captain.Id, TimeSpan.FromMinutes(30)).Token!;
+
+                    AuthContext running = await svc.AuthenticateAsync(null, token, null);
+                    AssertTrue(running.IsAuthenticated, "valid while the mission is in progress");
+                    AssertEqual(mission.Id, running.MissionId, "carries the mission");
+                    AssertFalse(running.IsAdmin, "a global-admin owner does not make the captain a global admin");
+                    AssertTrue(running.IsTenantAdmin, "the captain keeps the owner's tenant role");
+
+                    string otherCaptainToken = tokens.CreateMissionScopedToken(entities.TenantId, entities.UserId, mission.Id, "cpt_other", TimeSpan.FromMinutes(30)).Token!;
+                    AssertFalse((await svc.AuthenticateAsync(null, otherCaptainToken, null)).IsAuthenticated, "another captain's token is refused");
+
+                    mission.Status = MissionStatusEnum.WorkProduced;
+                    await db.Missions.UpdateAsync(mission);
+                    AssertFalse((await svc.AuthenticateAsync(null, token, null)).IsAuthenticated, "refused once the mission leaves InProgress");
+
+                    mission.Status = MissionStatusEnum.InProgress;
+                    await db.Missions.UpdateAsync(mission);
+                    await db.Missions.DeleteAsync(mission.Id);
+                    AssertFalse((await svc.AuthenticateAsync(null, token, null)).IsAuthenticated, "refused once the mission is gone");
                 }
             }));
 

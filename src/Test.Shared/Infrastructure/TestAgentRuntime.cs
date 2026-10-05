@@ -63,5 +63,15 @@ namespace Test.Shared.Infrastructure
             string? model,
             string? finalMessageFilePath,
             Captain? captain) => ArgsOverride;
+
+        /// <summary>
+        /// The stand-in command (for example <c>sleep</c>) takes no agent CLI flags, so the launch plan's MCP binding
+        /// arguments (mission-scoped or isolated launches) are not appended; the planners are covered by their own suites.
+        /// </summary>
+        /// <param name="args">The runtime's arguments.</param>
+        /// <param name="extraArguments">The plan's extra arguments (ignored).</param>
+        protected override void AppendLaunchArguments(List<string> args, List<string> extraArguments)
+        {
+        }
     }
 }

@@ -535,9 +535,9 @@ namespace Test.Shared.Suites.Services
 
                 Dictionary<string, string> expectedCodes = new Dictionary<string, string>(StringComparer.Ordinal)
                 {
-                    [""] = VesselImportCodes.CategorizationCaptainRequired,
-                    ["cpt_missing"] = VesselImportCodes.CategorizationCaptainNotFound,
-                    [foreign.Id] = VesselImportCodes.CategorizationCaptainNotFound
+                    [""] = VesselImportCategorizationCodes.CategorizationCaptainRequired,
+                    ["cpt_missing"] = VesselImportCategorizationCodes.CategorizationCaptainNotFound,
+                    [foreign.Id] = VesselImportCategorizationCodes.CategorizationCaptainNotFound
                 };
                 foreach (KeyValuePair<string, string> expected in expectedCodes)
                 {
