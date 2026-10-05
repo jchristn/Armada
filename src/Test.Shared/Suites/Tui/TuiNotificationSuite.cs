@@ -94,6 +94,35 @@ namespace Test.Shared.Suites.Tui
                 AssertEqual(2, svc.ActiveToasts().Count, "a different severity is its own toast");
             }));
 
+            cases.Add(TuiCase.Sync(Suite, "repeated_action_toast_refreshes", "A repeated toast with an action coalesces in TUIKit's NotificationCenter and Ctrl+O runs the newest action", () =>
+            {
+                ManualClock clock = new ManualClock();
+                NotificationService svc = new NotificationService(clock, new LocalizationService(), null, null, null);
+                int first = 0;
+                int second = 0;
+                svc.Toast(NotificationSeverityEnum.Warning, "Permission needed: Bash", "Open", () => first++);
+                clock.Advance(TimeSpan.FromSeconds(4));
+                svc.Toast(NotificationSeverityEnum.Warning, "Permission needed: Bash", "Open", () => second++);
+                IReadOnlyList<ToastEntry> active = svc.ActiveToasts();
+                AssertEqual(1, active.Count, "one toast, not two");
+                AssertEqual(2, active[0].Repeat, "repeat count");
+                AssertEqual(" (x2)", active[0].RepeatSuffix, "repeat suffix from TUIKit's RepeatSuffixFormat");
+                AssertEqual("Open", active[0].ActionLabel, "action label kept");
+                AssertEqual(2, svc.Toasts.Active((long)(clock.UtcNow - DateTime.UnixEpoch).TotalMilliseconds)[0].RepeatCount, "TUIKit's notification holds the count");
+                clock.Advance(TimeSpan.FromSeconds(4));
+                AssertEqual(1, svc.ActiveToasts().Count, "the repeat restarted its timer");
+                svc.Toast(NotificationSeverityEnum.Warning, "Permission needed: Bash", "Retry", () => first++);
+                AssertEqual(2, svc.ActiveToasts().Count, "a different action label is its own toast");
+                svc.DismissToasts();
+                svc.Toast(NotificationSeverityEnum.Warning, "Permission needed: Bash", "Open", () => first++);
+                svc.Toast(NotificationSeverityEnum.Warning, "Permission needed: Bash", "Open", () => second++);
+                AssertTrue(svc.RunLatestToastAction(), "Ctrl+O ran an action");
+                AssertEqual(0, first, "not the older callback");
+                AssertEqual(1, second, "the newest callback");
+                AssertEqual(0, svc.ActiveToasts().Count, "the toast is dismissed");
+                AssertFalse(svc.RunLatestToastAction(), "nothing left to run");
+            }));
+
             cases.Add(TuiCase.Sync(Suite, "cli_permission_merge_keeps_flags", "A flagless copy of a pending CLI permission request keeps the caller's decision flags", () =>
             {
                 Armada.Core.Models.CliPermissionRequest withFlags = new Armada.Core.Models.CliPermissionRequest { ToolName = "Bash", CanDecide = true, CanRemember = true };

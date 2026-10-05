@@ -3,47 +3,53 @@ namespace Armada.Tui.Services
     using System;
 
     /// <summary>
-    /// A transient toast (5 s by default) with an optional action key (for example <c>[Ctrl+O] Open</c>).
+    /// A toast as Armada draws it (5 s by default, with an optional action key such as <c>[Ctrl+O] Open</c>): a read-only
+    /// view of one active TUIKit <c>Notification</c> in <see cref="NotificationService.Toasts"/>, taken when
+    /// <see cref="NotificationService.ActiveToasts"/> is called.
     /// </summary>
     public class ToastEntry
     {
         #region Public-Members
 
         /// <summary>
-        /// Id.
+        /// Id (the TUIKit notification id).
         /// </summary>
-        public long Id { get; set; }
+        public long Id { get; }
 
         /// <summary>
         /// Severity.
         /// </summary>
-        public NotificationSeverityEnum Severity { get; set; } = NotificationSeverityEnum.Info;
+        public NotificationSeverityEnum Severity { get; }
 
         /// <summary>
         /// Text (already translated).
         /// </summary>
-        public string Text { get; set; } = "";
+        public string Text { get; }
 
         /// <summary>
-        /// Expiry time.
+        /// Expiry time (the last raise plus the timeout).
         /// </summary>
-        public DateTime ExpiresUtc { get; set; } = DateTime.UtcNow.AddSeconds(5);
+        public DateTime ExpiresUtc { get; }
 
         /// <summary>
         /// English label of the action, or null.
         /// </summary>
-        public string? ActionLabel { get; set; } = null;
+        public string? ActionLabel { get; }
 
         /// <summary>
-        /// Action, or null.
+        /// Action (the one passed with the latest raise), or null.
         /// </summary>
-        public Action? Action { get; set; } = null;
+        public Action? Action { get; }
 
         /// <summary>
-        /// How many times this toast was raised while it was still showing (1 for a single raise). A repeat refreshes
-        /// the existing toast instead of stacking a copy.
+        /// How many times the toast was raised while showing (1 for a single raise).
         /// </summary>
-        public int Repeat { get; set; } = 1;
+        public int Repeat { get; }
+
+        /// <summary>
+        /// The suffix shown after the text for a repeated toast (for example <c> (x3)</c>), or empty.
+        /// </summary>
+        public string RepeatSuffix { get; }
 
         #endregion
 
@@ -52,8 +58,24 @@ namespace Armada.Tui.Services
         /// <summary>
         /// Instantiate.
         /// </summary>
-        public ToastEntry()
+        /// <param name="id">Id.</param>
+        /// <param name="severity">Severity.</param>
+        /// <param name="text">Text.</param>
+        /// <param name="expiresUtc">Expiry time.</param>
+        /// <param name="actionLabel">English action label, or null.</param>
+        /// <param name="action">Action, or null.</param>
+        /// <param name="repeat">Raise count (at least 1).</param>
+        /// <param name="repeatSuffix">Repeat suffix, or empty.</param>
+        public ToastEntry(long id, NotificationSeverityEnum severity, string text, DateTime expiresUtc, string? actionLabel, Action? action, int repeat, string repeatSuffix)
         {
+            Id = id;
+            Severity = severity;
+            Text = text ?? "";
+            ExpiresUtc = expiresUtc;
+            ActionLabel = actionLabel;
+            Action = action;
+            Repeat = Math.Max(1, repeat);
+            RepeatSuffix = repeatSuffix ?? "";
         }
 
         #endregion

@@ -2,6 +2,7 @@ namespace Armada.Tui.Services
 {
     using System;
     using System.Collections.Generic;
+    using System.Globalization;
     using System.IO;
     using System.Linq;
     using System.Text.Json;
@@ -10,12 +11,15 @@ namespace Armada.Tui.Services
     using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Tui.Widgets;
+    using TUIKit.Modals;
 
     /// <summary>
     /// Notifications and toasts (W1.10): the dashboard's entity-change notifications with the same text and severity
     /// mapping, a persistent history of the latest 100 (unread state, mark read, mark all read, clear), toasts with
     /// optional action keys (5 s auto-dismiss), the terminal bell, and an OS notification hook used while the terminal
-    /// is unfocused. Persisted to <see cref="TuiPaths.NotificationsFile"/>. Call on the UI loop thread.
+    /// is unfocused. Persisted to <see cref="TuiPaths.NotificationsFile"/>. The active toasts live in a TUIKit
+    /// <see cref="NotificationCenter"/> (<see cref="Toasts"/>: expiry, coalescing of repeats with a count, dismissal);
+    /// Armada draws them itself (<c>ToastLayer</c>). Call on the UI loop thread.
     /// </summary>
     public class NotificationService
     {
@@ -31,9 +35,16 @@ namespace Armada.Tui.Services
         /// </summary>
         public int ToastTimeoutMs
         {
-            get { return _ToastTimeoutMs; }
-            set { _ToastTimeoutMs = Math.Clamp(value, 1000, 60000); }
+            get { return Toasts.DefaultTimeoutMilliseconds; }
+            set { Toasts.DefaultTimeoutMilliseconds = Math.Clamp(value, 1000, 60000); }
         }
+
+        /// <summary>
+        /// The active toasts: a TUIKit <see cref="NotificationCenter"/> that expires them, coalesces a toast raised
+        /// again while it shows (<see cref="NotificationCenter.CoalesceRepeats"/>, with a repeat count), and dismisses
+        /// them. Its own history is off; <see cref="History"/> is the persisted one. Never null.
+        /// </summary>
+        public NotificationCenter Toasts { get; } = CreateToastCenter();
 
         /// <summary>
         /// History, newest first. Never null.
@@ -83,15 +94,13 @@ namespace Armada.Tui.Services
         private static readonly JsonSerializerOptions _Json = CreateJson();
         private static readonly Dictionary<string, NotificationSeverityEnum> _SeverityByName = BuildSeverityMap();
         private readonly List<NotificationEntry> _History = new List<NotificationEntry>();
-        private readonly List<ToastEntry> _Toasts = new List<ToastEntry>();
+        private readonly Dictionary<NotificationAction, Action?> _ToastActions = new Dictionary<NotificationAction, Action?>();
         private readonly Dictionary<string, string> _LastSeen = new Dictionary<string, string>(StringComparer.Ordinal);
         private readonly IClock _Clock;
         private readonly ITextLocalizer _Loc;
         private readonly ITerminalOutput? _Terminal;
         private readonly IOsNotifier? _Os;
         private readonly string? _FilePath;
-        private int _ToastTimeoutMs = 5000;
-        private long _NextToastId = 0;
 
         #endregion
 
@@ -112,6 +121,7 @@ namespace Armada.Tui.Services
             _Terminal = terminal;
             _Os = os;
             _FilePath = filePath;
+            Toasts.Changed += RaiseChanged;
             Load();
         }
 
@@ -282,32 +292,40 @@ namespace Armada.Tui.Services
         /// <returns>The toast.</returns>
         public ToastEntry Toast(NotificationSeverityEnum severity, string text, string? actionLabel = null, Action? action = null)
         {
-            DateTime now = _Clock.UtcNow;
-            ToastEntry? same = _Toasts.LastOrDefault(t => t.ExpiresUtc > now && t.Severity == severity
-                && String.Equals(t.Text, text ?? "", StringComparison.Ordinal)
-                && String.Equals(t.ActionLabel, actionLabel, StringComparison.Ordinal));
-            if (same != null)
+            long now = NowMilliseconds();
+            List<NotificationAction>? actions = null;
+            if (actionLabel != null)
             {
-                // The same message again while it is still showing: refresh it rather than stacking a copy.
-                _Toasts.Remove(same);
-                same.Repeat++;
-                same.ExpiresUtc = now.AddMilliseconds(_ToastTimeoutMs);
-                same.Action = action;
-                _Toasts.Add(same);
-                RaiseChanged();
-                return same;
+                // TUIKit coalesces a repeat only when it carries the same action instances, and every caller builds a
+                // fresh callback, so a repeat of a showing toast with the same action label reuses that toast's action
+                // (whose callback becomes the newest one, as before).
+                NotificationAction? shared = null;
+                foreach (Notification showing in Toasts.Active(now))
+                {
+                    if (showing.Severity == ToTuiKit(severity) && String.Equals(showing.Text, text ?? "", StringComparison.Ordinal)
+                        && showing.Title == null && showing.Actions.Count == 1 && String.Equals(showing.Actions[0].Label, actionLabel, StringComparison.Ordinal))
+                    {
+                        shared = showing.Actions[0];
+                        break;
+                    }
+                }
+
+                if (shared == null)
+                {
+                    NotificationAction? created = null;
+                    created = new NotificationAction(actionLabel, () =>
+                    {
+                        if (created != null && _ToastActions.TryGetValue(created, out Action? callback) && callback != null) callback();
+                    });
+                    shared = created;
+                }
+
+                _ToastActions[shared] = action;
+                actions = new List<NotificationAction> { shared };
             }
 
-            ToastEntry toast = new ToastEntry();
-            toast.Id = ++_NextToastId;
-            toast.Severity = severity;
-            toast.Text = text ?? "";
-            toast.ExpiresUtc = _Clock.UtcNow.AddMilliseconds(_ToastTimeoutMs);
-            toast.ActionLabel = actionLabel;
-            toast.Action = action;
-            _Toasts.Add(toast);
-            RaiseChanged();
-            return toast;
+            Notification toast = Toasts.Add(text ?? "", ToTuiKit(severity), now, null, null, actions);
+            return View(toast);
         }
 
         /// <summary>
@@ -316,9 +334,17 @@ namespace Armada.Tui.Services
         /// <returns>Toasts.</returns>
         public IReadOnlyList<ToastEntry> ActiveToasts()
         {
-            DateTime now = _Clock.UtcNow;
-            _Toasts.RemoveAll(t => t.ExpiresUtc <= now);
-            return _Toasts.ToList();
+            IReadOnlyList<Notification> active = Toasts.Active(NowMilliseconds());
+            List<ToastEntry> toasts = new List<ToastEntry>(active.Count);
+            HashSet<NotificationAction> live = new HashSet<NotificationAction>();
+            for (int i = active.Count - 1; i >= 0; i--)
+            {
+                toasts.Add(View(active[i]));
+                foreach (NotificationAction a in active[i].Actions) live.Add(a);
+            }
+
+            foreach (NotificationAction stale in _ToastActions.Keys.Where(a => !live.Contains(a)).ToList()) _ToastActions.Remove(stale);
+            return toasts;
         }
 
         /// <summary>
@@ -327,12 +353,14 @@ namespace Armada.Tui.Services
         /// <returns>True when an action ran.</returns>
         public bool RunLatestToastAction()
         {
-            ToastEntry? toast = ActiveToasts().LastOrDefault(t => t.Action != null);
-            if (toast == null || toast.Action == null) return false;
-            _Toasts.Remove(toast);
-            toast.Action();
-            RaiseChanged();
-            return true;
+            foreach (Notification toast in Toasts.Active(NowMilliseconds()))
+            {
+                if (toast.Actions.Count == 0 || !_ToastActions.TryGetValue(toast.Actions[0], out Action? callback) || callback == null) continue;
+                Toasts.InvokeAction(toast, 0);
+                return true;
+            }
+
+            return false;
         }
 
         /// <summary>
@@ -340,8 +368,8 @@ namespace Armada.Tui.Services
         /// </summary>
         public void DismissToasts()
         {
-            _Toasts.Clear();
-            RaiseChanged();
+            Toasts.DismissAll();
+            _ToastActions.Clear();
         }
 
         /// <summary>
@@ -416,6 +444,53 @@ namespace Armada.Tui.Services
         #endregion
 
         #region Private-Methods
+
+        private static NotificationCenter CreateToastCenter()
+        {
+            NotificationCenter center = new NotificationCenter();
+            center.DefaultTimeoutMilliseconds = 5000;
+            center.MaxConcurrent = 100;
+            center.HistoryLimit = 0;
+            center.CoalesceRepeats = true;
+            return center;
+        }
+
+        private static NotificationSeverity ToTuiKit(NotificationSeverityEnum severity)
+        {
+            switch (severity)
+            {
+                case NotificationSeverityEnum.Success: return NotificationSeverity.Success;
+                case NotificationSeverityEnum.Warning: return NotificationSeverity.Warning;
+                case NotificationSeverityEnum.Error: return NotificationSeverity.Error;
+                default: return NotificationSeverity.Info;
+            }
+        }
+
+        private static NotificationSeverityEnum FromTuiKit(NotificationSeverity severity)
+        {
+            switch (severity)
+            {
+                case NotificationSeverity.Success: return NotificationSeverityEnum.Success;
+                case NotificationSeverity.Warning: return NotificationSeverityEnum.Warning;
+                case NotificationSeverity.Error: return NotificationSeverityEnum.Error;
+                default: return NotificationSeverityEnum.Info;
+            }
+        }
+
+        private long NowMilliseconds()
+        {
+            return (long)(_Clock.UtcNow - DateTime.UnixEpoch).TotalMilliseconds;
+        }
+
+        private ToastEntry View(Notification toast)
+        {
+            string? label = toast.Actions.Count > 0 ? toast.Actions[0].Label : null;
+            Action? action = null;
+            if (toast.Actions.Count > 0) _ToastActions.TryGetValue(toast.Actions[0], out action);
+            DateTime expires = DateTime.UnixEpoch.AddMilliseconds(toast.LastRaisedAtMilliseconds + toast.TimeoutMilliseconds);
+            string suffix = toast.RepeatCount > 1 ? String.Format(CultureInfo.InvariantCulture, Toasts.RepeatSuffixFormat, toast.RepeatCount) : "";
+            return new ToastEntry(toast.Id, FromTuiKit(toast.Severity), toast.Text, expires, label, action, toast.RepeatCount, suffix);
+        }
 
         private static Dictionary<string, NotificationSeverityEnum> BuildSeverityMap()
         {
