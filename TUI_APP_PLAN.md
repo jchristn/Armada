@@ -525,10 +525,14 @@ REST_API.md.
   grouped by area (Missions, Voyages, Vessels, Ask, ...). Each async method takes a `CancellationToken`.
 - [x] **W0.3** `ArmadaSocket`: `?token=` auth, subscribe, typed events for all 29 types, reconnect with exponential
   backoff (1 s to 30 s, jitter), reconnect counter.
-- [~] **W0.4** Contract tests: every client method exercised against `E2EServerFixture`; a test that compares the method
+- [x] **W0.4** Contract tests: every client method exercised against `E2EServerFixture`; a test that compares the method
   list with `api/client.ts` exports (parity of the client itself).
-  Status: the export-parity test is done (Tui.Parity); the Client.Contract suite covers a representative subset per
-  area (14 cases, 74 distinct methods) against `E2EServerFixture`. Exercising every method is still open.
+  Done: export parity (Tui.Parity); Client.Contract.* (Contract, Config, Delivery, Work, AskPlanning, Vessels) call
+  314 of the 320 methods against live servers, missions and Ask turns through a scripted stub captain
+  (`StubCaptainRuntime`); the six destructive server calls (stop, restart, reset, rebuild, rollback, restore) are
+  checked against a recording stub (Client.Destructive). Client.Coverage fails on a method that is neither exercised
+  nor listed; Client.RouteSurface maps every method to a `docs/api-surface-1.0.json` route and fails on a route
+  without a method (unless listed with a reason) or a method without a route.
 
 ### W1. Shell and foundation
 
@@ -619,10 +623,22 @@ REST_API.md.
 
 - [~] **W8.1** Parity enforcement (below). Manifest generated (`scripts/tui/generate-parity-manifest.py`) and the
   coverage checks run in Tui.Parity; the "no planned entries in release builds" check is not enforced yet.
-- [ ] **W8.2** Headless test suites: one keyboard-flow test per screen (open, filter, select, row action, modal,
+- [~] **W8.2** Headless test suites: one keyboard-flow test per screen (open, filter, select, row action, modal,
   confirm) with `HeadlessBackend` and `WidgetTester`; Ask streaming and approval tests with a scripted event source.
-- [ ] **W8.3** End-to-end suite against `E2EServerFixture`: login, Ask dispatch with approval through landing (stub
+  Done for the built screens: Tui.KeyboardFlows (Delivery and Configuration) and Tui.KeyboardFlows.Ops (Operations,
+  Activity, System lists) run one table-driven flow per screen (open, filter, select, row menu, create form or page,
+  open the row, back); Ask, Approvals, Login, Shell, Setup, Settings, API Explorer, Token Usage, Home, Planning, and
+  Dispatch keep their own suites. Open: the Build screens (Vessels, Import, Health, Workspace, Captains, Docks,
+  Fleets) once they land. Note: on editor pages that open in a text field (Create Voyage, backlog item) Alt+Left
+  moves by word and Esc goes back.
+- [~] **W8.3** End-to-end suite against `E2EServerFixture`: login, Ask dispatch with approval through landing (stub
   captain), Fleet Action run, import, health evaluation, settings save.
+  Done (Tui.EndToEnd, Tui.EndToEnd.Flows): API key and password login; a captain-proposed Ask dispatch approved with
+  `a` that lands on the vessel's bare origin through the real completion and LocalMerge pipeline; Approvals center
+  approve/reject of live Ask proposals and a deployment approval; notifications from live WebSocket events and the
+  notification center; a Fleet Action run followed to completion; a server settings save. Open: import and health
+  evaluation through their TUI screens (Build screens, in progress elsewhere; their API calls are covered live by
+  Client.Contract.Vessels).
 - [ ] **W8.4** Accessibility and display: HighContrast theme, ASCII icon mode, no color-only states, 80x24 minimum,
   tmux/SSH validation, Windows Terminal, iTerm2, Terminal.app, GNOME Terminal, conhost (degraded).
 - [ ] **W8.5** Performance: 10,000-row grids stay responsive (virtualization, server paging), Ask transcripts of 5,000
@@ -724,3 +740,4 @@ before Milestone B; U5, U6 before Milestone E).
 | 2026-10-04 | Claude (tui-delivery-config) | W5, W6 | Delivery (Deployments, Environments, Releases, Incidents, Checks, Runbooks; list and detail each) and Configuration (Workflow Profiles, Project Profiles, Skills, Personas, Pipelines, Prompts, Playbooks, Endpoints, Harbors, Memory) screens on shared `EntityListScreen`/`EntityDetailScreen` bases with `FormDialog`, `FilterBar`, `KpiStrip`, `ActionBar`, `TextAreaField` (inline plus `$EDITOR`), `RecordListField`, `CheckField`, `LinkDetailView`, `StackPanel`; server filters and paging, local sort over all matches where the server cannot sort; scoping per `lib/scoping.ts`; navigation prefill hand-offs; live refresh on `deployment.changed`/`incident.changed`. Parity: 17 routes and 16 tabs flipped to implemented. Deviations: detail editors are panels or dialogs rather than side-by-side forms; FormView cannot hide or disable rows, so scope-dependent fields are always shown with hints. TUIKit gaps: a modal closed from a posted callback stays drawn until the next input (worked around with `Modals.RemoveClosed`); no read-only text input or select. |
 | 2026-10-04 | Claude (tui-activity-system) | W7.1-W7.10, W3.11 Jobs, W8.1 | Activity and System screens on a shared kit (`Armada.Tui.Screens.Kit`: StackScreen/GridScreen, ScreenHeader, FilterStrip, KpiBar, FormModal, PathPrompt, ToggleField, MultilineField, MultiSeriesChart, RecordDetailView, UserScopeField, DataExport, ScreenOps): All Activity, API Requests (+drawer, `/requests/:id`, replay), Events (+detail), Signals (+detail, send), Token Usage, Jobs, API Explorer, Settings Server tab (every section incl. Vessel Import, Fleet Actions, Repository Health, Data Retention, Remote Control, backup/restore to chosen files, restart/stop/reset/rebuild with live log and rollback, proxy restrictions), Diagnostics, Tenants, Users, Credentials, Setup wizard with auto-open. Parity: 8 routes, 10 tabs, 55 settings fields implemented (parser now covers Repository Health fields and thresholds and Data Retention fields). Fixes: modals closed outside key handling are dropped from the stack at once (TUIKit swallowed the next key); ArmadaGrid passes Alt+arrows through for history navigation; HubScreen forwards the tab's status hints. Armada.Client SettingsData gains Retention. |
 | 2026-10-04 | Claude (tui-operations) | W3.1-W3.11, W8.1, W9.1 | OPERATIONS screens: Home, Needs You, Planning (live `planning-session.*`), Dispatch (pre-fill handoffs), Backlog and Backlog item (GitHub import, refinement with live `objective-refinement-session.*`), Fleet Actions (actions, runs, run detail with target drawer, vessel picker and run flow), Missions and Mission detail (diff, log, instructions, review, transition, landing preview, PR panel), Voyages, Voyage detail, Create Voyage, Merge Queue and entry detail, Jobs. Shared bases in `Screens/Operations`. Parity: 16 routes, 7 tabs, and 14 events flipped to implemented. Client: `GetVoyageDetailAsync` (the server returns `{ Voyage, Missions }`), `PlanningSessionEvent.Draft`. Fixes: Alt+arrows pass through `ArmadaGrid` (history navigation), hub screens forward the tab's status hints, `FormView` skips hidden rows. TUIKit gaps worked around: a modal closed without a key stays on the stack and swallows the next key (`RemoveClosed` after programmatic closes); `FormView` has no checkbox field, hidden rows, or a way to turn off dirty tracking. Tests: Tui.Ops.* suites (Home, Jobs, Missions, MissionDetail, Voyages, MergeQueue, Planning, Dispatch, Backlog, BacklogItem, FleetActions). |
+| 2026-10-05 | Claude (tui-e2e) | W0.4, W8.2, W8.3 | Client contract: Client.Contract.Config/Delivery/Work/AskPlanning/Vessels exercise 314 of 320 client methods live; Client.Destructive covers the other six against a recording stub; Client.Coverage and Client.RouteSurface (client vs. `docs/api-surface-1.0.json`) keep it that way. `StubCaptainRuntime` (installed through the new `AgentRuntimeFactory.Override` and `ArmadaServer.RuntimeFactory`; `BaseAgentRuntime` gains protected raise helpers) answers Ask turns through MCP with the turn's session token, commits a file for missions, and replies to planning, refinement, context, chat, and categorization prompts. Client fixes: `DispatchMissionAsync` returns `MissionDispatchResult` (Mission and Warning) and `CreateMissionAsync` unwraps the `{ Mission, Warning }` reply (the setup wizard's raw-call workaround is gone); `ProcessAllMergeQueueAsync`, `CancelMergeEntryAsync`, `RecallCaptainAsync`, and `GetVoyageStatusAsync` called routes the server does not have (copied from api/client.ts) and now call the real ones; `GetVoyageAsync` unwraps `{ Voyage, Missions }`; `UnquarantineCaptainAsync` no longer returns a made-up captain for `{ Status: "not_quarantined" }`. Server: new `GET /api/v1/events/{id}` (the TUI and dashboard event detail pages called it); the vessel landing preview unescapes `sourceBranch`. Tests: Tui.EndToEnd.Flows (5), Tui.KeyboardFlows (16), Tui.KeyboardFlows.Ops (13), Client.* (8 new suites), approvals and setup wizard cases. Not done: TUI flows for the Build screens and the import/health end-to-end flows (Build screens in progress). |
