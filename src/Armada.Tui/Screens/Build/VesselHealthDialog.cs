@@ -14,6 +14,8 @@ namespace Armada.Tui.Screens.Build
     using TUIKit;
     using TUIKit.Input;
     using TUIKit.Widgets;
+    using Button = Armada.Tui.Widgets.Button;
+    using FocusScope = Armada.Tui.Widgets.FocusScope;
 
     /// <summary>
     /// The dashboard's vessel health inspector (VesselHealthDetailModal): the vessel name with its Overall badge, id,

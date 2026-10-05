@@ -11,6 +11,9 @@ namespace Armada.Tui.Shell
     using TUIKit.Input;
     using TUIKit.Layout;
     using TUIKit.Widgets;
+    using FocusFrame = Armada.Tui.Widgets.FocusFrame;
+    using ITextEntry = Armada.Tui.Widgets.ITextEntry;
+    using FocusScope = Armada.Tui.Widgets.FocusScope;
 
     /// <summary>
     /// The root widget (W1.2): header, menu bar, sidebar, main region, Ask dock, status bar, and toasts, laid out by

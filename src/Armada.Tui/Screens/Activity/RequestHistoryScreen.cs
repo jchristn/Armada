@@ -16,6 +16,8 @@ namespace Armada.Tui.Screens.Activity
     using TUIKit;
     using TUIKit.Input;
     using TUIKit.Widgets;
+    using ChartSeries = Armada.Tui.Widgets.ChartSeries;
+    using Button = Armada.Tui.Widgets.Button;
 
     /// <summary>
     /// Activity, API Requests tab (dashboard <c>RequestHistory.tsx</c>; also <c>/requests/:id</c>, which opens the

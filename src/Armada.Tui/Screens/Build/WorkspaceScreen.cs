@@ -17,6 +17,7 @@ namespace Armada.Tui.Screens.Build
     using TUIKit;
     using TUIKit.Input;
     using TUIKit.Widgets;
+    using Button = Armada.Tui.Widgets.Button;
 
     /// <summary>
     /// Workspace (W4.6, <c>/workspace/:vesselId</c>), the dashboard's Workspace page for one vessel: the status line

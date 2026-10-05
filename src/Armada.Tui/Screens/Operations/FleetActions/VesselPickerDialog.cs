@@ -12,6 +12,7 @@ namespace Armada.Tui.Screens.Operations
     using TUIKit;
     using TUIKit.Input;
     using TUIKit.Widgets;
+    using FocusScope = Armada.Tui.Widgets.FocusScope;
 
     /// <summary>
     /// The dashboard's VesselPickerModal: choose the target vessels for a fleet action run. Filters by name or

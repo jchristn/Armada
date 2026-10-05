@@ -11,6 +11,9 @@ namespace Test.Shared.Suites.Tui
     using TUIKit.Input;
     using TUIKit.Testing;
     using TUIKit.Widgets;
+    using Button = Armada.Tui.Widgets.Button;
+    using ChartSeries = Armada.Tui.Widgets.ChartSeries;
+    using FocusScope = Armada.Tui.Widgets.FocusScope;
     using static Test.Shared.Infrastructure.Asserts;
 
     /// <summary>

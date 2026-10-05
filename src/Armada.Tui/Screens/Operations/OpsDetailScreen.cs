@@ -10,6 +10,8 @@ namespace Armada.Tui.Screens.Operations
     using TUIKit;
     using TUIKit.Input;
     using TUIKit.Widgets;
+    using Button = Armada.Tui.Widgets.Button;
+    using ButtonRow = Armada.Tui.Widgets.ButtonRow;
 
     /// <summary>
     /// The standard OPERATIONS detail page: a heading with a status, a subtitle line, header action buttons, and

@@ -11,6 +11,8 @@ namespace Test.Shared.Suites.Tui
     using TUIKit;
     using TUIKit.Testing;
     using TUIKit.Widgets;
+    using FocusFrame = Armada.Tui.Widgets.FocusFrame;
+    using FocusScope = Armada.Tui.Widgets.FocusScope;
 
     /// <summary>
     /// Typed render inspection for the focus treatment (see <see cref="TuiFocusSweepSuite"/>): renders the shell into a

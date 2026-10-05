@@ -19,6 +19,7 @@ namespace Armada.Tui.Screens.Build
     using TUIKit;
     using TUIKit.Input;
     using TUIKit.Widgets;
+    using Button = Armada.Tui.Widgets.Button;
 
     /// <summary>
     /// The vessel import wizard (W4.2, <c>/vessels/import</c>, <c>?batch=ID</c> opens a batch), the dashboard's

@@ -8,6 +8,7 @@ namespace Armada.Tui.Screens.Kit
     using TUIKit;
     using TUIKit.Input;
     using TUIKit.Widgets;
+    using ITextEntry = Armada.Tui.Widgets.ITextEntry;
 
     /// <summary>
     /// A multi-line text field over the TUIKit <see cref="TextEditor"/> for request bodies, payloads, and one-per-line

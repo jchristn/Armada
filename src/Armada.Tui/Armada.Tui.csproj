@@ -10,7 +10,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="TUIKit" Version="1.2.1" />
+    <PackageReference Include="TUIKit" Version="1.4.0" />
   </ItemGroup>
 
   <ItemGroup>
