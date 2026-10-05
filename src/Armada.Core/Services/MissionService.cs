@@ -2546,6 +2546,9 @@ namespace Armada.Core.Services
 
             if (!allDone) return;
 
+            // Not Complete while a WorkProduced mission is still waiting in the merge queue (F14).
+            if (await MergeQueueMissionActivity.AnyAwaitingMergeQueueAsync(_Database, missions, token).ConfigureAwait(false)) return;
+
             bool anyFailed = missions.Any(m =>
                 m.Status == MissionStatusEnum.Failed ||
                 m.Status == MissionStatusEnum.LandingFailed);

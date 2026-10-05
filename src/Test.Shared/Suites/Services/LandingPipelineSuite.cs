@@ -218,6 +218,74 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("voyage_with_merge_queue_mission_does_not_complete", "A voyage stays InProgress while its WorkProduced mission is still queued in the merge queue (F14)", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    LoggingModule logging = CreateLogging();
+                    IVoyageService voyageService = new VoyageService(logging, testDb.Driver);
+
+                    Voyage voyage = new Voyage("merge queue voyage");
+                    voyage.Status = VoyageStatusEnum.InProgress;
+                    await testDb.Driver.Voyages.CreateAsync(voyage);
+
+                    Mission mission = new Mission("queued for merge");
+                    mission.VoyageId = voyage.Id;
+                    mission.Status = MissionStatusEnum.WorkProduced;
+                    mission.BranchName = "armada/queued";
+                    await testDb.Driver.Missions.CreateAsync(mission);
+
+                    MergeEntry entry = new MergeEntry("armada/queued");
+                    entry.MissionId = mission.Id;
+                    entry.Status = MergeStatusEnum.Queued;
+                    await testDb.Driver.MergeEntries.CreateAsync(entry);
+
+                    List<Voyage> completed = await voyageService.CheckCompletionsAsync();
+                    AssertEqual(0, completed.Count, "no completion while the merge entry is Queued");
+                    Voyage? read = await testDb.Driver.Voyages.ReadAsync(voyage.Id);
+                    AssertEqual(VoyageStatusEnum.InProgress, read!.Status, "voyage stays InProgress");
+
+                    entry.Status = MergeStatusEnum.Testing;
+                    await testDb.Driver.MergeEntries.UpdateAsync(entry);
+                    completed = await voyageService.CheckCompletionsAsync();
+                    AssertEqual(0, completed.Count, "no completion while the merge entry is Testing");
+
+                    // The queue lands the entry and completes the mission.
+                    entry.Status = MergeStatusEnum.Landed;
+                    await testDb.Driver.MergeEntries.UpdateAsync(entry);
+                    mission.Status = MissionStatusEnum.Complete;
+                    await testDb.Driver.Missions.UpdateAsync(mission);
+                    completed = await voyageService.CheckCompletionsAsync();
+                    AssertEqual(1, completed.Count, "completes once the entry landed");
+                    read = await testDb.Driver.Voyages.ReadAsync(voyage.Id);
+                    AssertEqual(VoyageStatusEnum.Complete, read!.Status, "voyage Complete after landing");
+                }
+            }));
+
+            cases.Add(CaseAsync("voyage_with_cancelled_merge_entry_completes", "A WorkProduced mission whose merge entry was cancelled no longer holds its voyage open", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    IVoyageService voyageService = new VoyageService(CreateLogging(), testDb.Driver);
+                    Voyage voyage = new Voyage("cancelled entry voyage");
+                    voyage.Status = VoyageStatusEnum.InProgress;
+                    await testDb.Driver.Voyages.CreateAsync(voyage);
+
+                    Mission mission = new Mission("left as work produced");
+                    mission.VoyageId = voyage.Id;
+                    mission.Status = MissionStatusEnum.WorkProduced;
+                    await testDb.Driver.Missions.CreateAsync(mission);
+
+                    MergeEntry entry = new MergeEntry("armada/cancelled");
+                    entry.MissionId = mission.Id;
+                    entry.Status = MergeStatusEnum.Cancelled;
+                    await testDb.Driver.MergeEntries.CreateAsync(entry);
+
+                    List<Voyage> completed = await voyageService.CheckCompletionsAsync();
+                    AssertEqual(1, completed.Count, "a settled (cancelled) entry does not hold the voyage open");
+                }
+            }));
+
             // === Dock Reclaim Idempotency ===
 
             cases.Add(CaseAsync("double_reclaim_async_is_idempotent", "Double ReclaimAsync is safe (idempotent)", TestTags.Positive, async () =>
