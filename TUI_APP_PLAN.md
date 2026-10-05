@@ -710,8 +710,9 @@ REST_API.md.
   Ask Armada with the Approvals center (`a` approve, card tracked to Landed), mission detail and log, API-key sign-in
   with a credential and revocation, and screen checks of Missions, Merge Queue, Vessel Health, Fleet Actions,
   Planning, Needs You, Backlog, Users, Credentials, Diagnostics, and Events. TUI findings: the prefilled masked
-  password makes typing the documented default fail (F9), no forced default-password change (F10), sign-out on every
-  Admiral restart (F8), toasts over the Approvals center (F31). Left for a human: the remaining flows end to end in
+  password makes typing the documented default fail (F9, fixed: the prefill starts selected), no forced
+  default-password change (F10, decided: the TUI warns and does not force a change; the dashboard forces it), sign-out
+  on every Admiral restart (F8, fixed: the session key is persisted), toasts over the Approvals center (F31). Left for a human: the remaining flows end to end in
   the TUI with real captains, and visual checks in real terminals.
 
 ### W9. Docs and distribution
