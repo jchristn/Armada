@@ -181,6 +181,38 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Error thrown when a request exceeds its client-side timeout. Callers detect it with `instanceof TimeoutError`,
+ * never by comparing the message text.
+ */
+export class TimeoutError extends Error {
+  constructor(message = 'Request timed out') {
+    super(message);
+    this.name = 'TimeoutError';
+  }
+}
+
+/**
+ * Error thrown when the caller's own abort signal cancelled the request (for example the chat Stop button).
+ * Its `name` stays 'AbortError' for compatibility with code that checks the conventional abort name.
+ */
+export class RequestCancelledError extends Error {
+  constructor(message = 'Aborted') {
+    super(message);
+    this.name = 'AbortError';
+  }
+}
+
+/** Build the error thrown for an HTTP 401: an ApiError with status 401 (message 'Unauthorized'). */
+function unauthorizedError(): ApiError {
+  return new ApiError('Unauthorized', 401, null);
+}
+
+/** True when the error is an ApiError carrying the given HTTP status. */
+export function isApiStatus(err: unknown, status: number): boolean {
+  return err instanceof ApiError && err.status === status;
+}
+
 /** Read the machine-readable `code` from an API error's data payload, or null. */
 export function apiErrorCode(err: unknown): string | null {
   if (err instanceof ApiError && err.data && typeof err.data === 'object') {
@@ -274,7 +306,7 @@ async function request<T>(method: string, path: string, body?: unknown, opts?: R
 
     if (res.status === 401) {
       onUnauthorized?.();
-      throw new Error('Unauthorized');
+      throw unauthorizedError();
     }
 
     if (!res.ok && !opts?.acceptStatuses?.includes(res.status)) {
@@ -304,12 +336,10 @@ async function request<T>(method: string, path: string, body?: unknown, opts?: R
     // An external abort is a deliberate cancel (Stop), not a timeout — surface it distinctly so callers
     // can treat it as a clean stop instead of an error.
     if (external?.aborted) {
-      const aborted = new Error('Aborted');
-      aborted.name = 'AbortError';
-      throw aborted;
+      throw new RequestCancelledError();
     }
     if (err instanceof DOMException && err.name === 'AbortError') {
-      throw new Error('Request timed out');
+      throw new TimeoutError();
     }
     throw err;
   } finally {
@@ -337,7 +367,7 @@ async function proxyRequest<T>(method: string, path: string, body?: unknown): Pr
   });
 
   if (res.status === 404 || res.status === 401) {
-    throw new Error(`proxy:${res.status}`);
+    throw new ApiError(`proxy:${res.status}`, res.status, null);
   }
 
   if (!res.ok) {
@@ -579,7 +609,7 @@ export async function getProxySessionContext(): Promise<ProxySessionContext | nu
   try {
     return await proxyRequest<ProxySessionContext>('GET', '/proxy-api/v1/session/context');
   } catch (error) {
-    if (error instanceof Error && (error.message === 'proxy:404' || error.message === 'proxy:401')) {
+    if (isApiStatus(error, 404) || isApiStatus(error, 401)) {
       return null;
     }
     throw error;
@@ -594,7 +624,7 @@ export async function logoutProxy(): Promise<void> {
   try {
     await proxyRequest('POST', '/proxy-api/v1/auth/logout');
   } catch (error) {
-    if (error instanceof Error && error.message === 'proxy:404') {
+    if (isApiStatus(error, 404)) {
       return;
     }
     throw error;
@@ -1211,6 +1241,9 @@ export const stopServer = () => post<void>('/api/v1/server/stop');
 export const restartServer = () => post<void>('/api/v1/server/restart');
 export const resetServer = () => post<void>('/api/v1/server/reset');
 
+/** Wire values of the rebuild status. */
+export type RebuildState = 'Building' | 'CuttingOver' | 'Succeeded' | 'Failed' | 'RolledBack';
+
 export interface RebuildStatus {
   rebuildId?: string;
   slot?: string | null;
@@ -1218,7 +1251,8 @@ export interface RebuildStatus {
   sha?: string | null;
   ref?: string | null;
   backupPath?: string | null;
-  status: 'Building' | 'CuttingOver' | 'Succeeded' | 'Failed' | 'RolledBack' | 'none';
+  /** Null (or absent) when no rebuild has run. */
+  status?: RebuildState | null;
   startedUtc?: string;
   completedUtc?: string | null;
   error?: string | null;
@@ -1241,7 +1275,7 @@ export async function downloadBackup(): Promise<void> {
   const headers: Record<string, string> = {};
   if (authToken) headers['X-Token'] = authToken;
   const res = await fetch(`${BASE_URL}/api/v1/backup`, { method: 'GET', headers });
-  if (res.status === 401) { onUnauthorized?.(); throw new Error('Unauthorized'); }
+  if (res.status === 401) { onUnauthorized?.(); throw unauthorizedError(); }
   if (!res.ok) throw new Error(`Backup failed: ${res.status}`);
   const blob = await res.blob();
   const disposition = res.headers.get('Content-Disposition') || '';
@@ -1264,7 +1298,7 @@ export async function restoreBackup(file: File): Promise<Record<string, unknown>
   headers['X-Original-Filename'] = file.name;
   const bytes = await file.arrayBuffer();
   const res = await fetch(`${BASE_URL}/api/v1/restore`, { method: 'POST', headers, body: bytes });
-  if (res.status === 401) { onUnauthorized?.(); throw new Error('Unauthorized'); }
+  if (res.status === 401) { onUnauthorized?.(); throw unauthorizedError(); }
   if (!res.ok) { const text = await res.text(); throw new Error(text || `Restore failed: ${res.status}`); }
   const json = await res.json();
   return camelizeKeys(json) as Record<string, unknown>;

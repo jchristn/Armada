@@ -1,13 +1,18 @@
 import { useState } from 'react';
 import { getWorkspaceDiff } from '../../api/client';
 import { useLocale } from '../../context/LocaleContext';
+import { parseUnifiedDiff, type UnifiedDiffLineKind } from '../../lib/unifiedDiff';
 
-function lineColor(line: string): string | undefined {
-  if (line.startsWith('+') && !line.startsWith('+++')) return 'var(--success, #4caf50)';
-  if (line.startsWith('-') && !line.startsWith('---')) return '#fca5a5';
-  if (line.startsWith('@@')) return '#93c5fd';
-  if (line.startsWith('diff ') || line.startsWith('index ') || line.startsWith('+++') || line.startsWith('---')) return '#94a3b8';
-  return undefined;
+/** Color by the parser's line classification (an added line reading "+++ x" inside a hunk is still an addition). */
+function lineColor(kind: UnifiedDiffLineKind): string | undefined {
+  switch (kind) {
+    case 'add': return 'var(--success, #4caf50)';
+    case 'del': return '#fca5a5';
+    case 'hunkHeader': return '#93c5fd';
+    case 'fileHeader':
+    case 'meta': return '#94a3b8';
+    default: return undefined;
+  }
 }
 
 /**
@@ -40,7 +45,7 @@ export default function WorkspaceDiff({ vesselId }: { vesselId: string }) {
     }
   }
 
-  const lines = (diff ?? '').split('\n');
+  const lines = parseUnifiedDiff(diff).lines;
 
   return (
     <div className="card" style={{ padding: '0.75rem', marginTop: '1rem' }}>
@@ -67,7 +72,7 @@ export default function WorkspaceDiff({ vesselId }: { vesselId: string }) {
           }}
         >
           {lines.map((line, i) => (
-            <pre key={i} style={{ margin: 0, whiteSpace: 'pre-wrap', color: lineColor(line) }}>{line || ' '}</pre>
+            <pre key={i} style={{ margin: 0, whiteSpace: 'pre-wrap', color: lineColor(line.kind) }}>{line.text || ' '}</pre>
           ))}
         </div>
       )}

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useNotifications, type Notification } from '../../context/NotificationContext';
 import { useLocale } from '../../context/LocaleContext';
-import { entityRoute } from '../../lib/routing';
+import { notificationRoute } from '../../lib/routing';
 
 function severityDotClass(severity: Notification['severity']): string {
   switch (severity) {
@@ -50,7 +50,7 @@ export default function NotificationBell() {
 
   const handleClick = useCallback((n: Notification) => {
     markRead(n.id);
-    const route = entityRoute(n.missionId || n.voyageId || n.captainId);
+    const route = notificationRoute(n);
     setOpen(false);
     if (route) navigate(route);
   }, [markRead, navigate]);

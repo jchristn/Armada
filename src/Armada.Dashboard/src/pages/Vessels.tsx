@@ -732,7 +732,7 @@ export default function Vessels() {
                         { label: v.modelContext && v.modelContext.trim().length > 0 ? 'Refine Context' : 'Build Context', onClick: () => setBuildContextVessel(v) },
                         { label: 'Edit', onClick: () => openEdit(v) },
                         { label: 'Duplicate', onClick: () => void handleDuplicate(v) },
-                        { label: 'View JSON', onClick: () => setJsonData({ open: true, title: `Vessel: ${v.name}`, data: v }) },
+                        { label: 'View JSON', onClick: () => setJsonData({ open: true, title: `${t('Vessel')}: ${v.name}`, data: v }) },
                         { label: 'Delete', danger: true, onClick: () => handleDelete(v.id, v.name) },
                       ]} />
                     </td>

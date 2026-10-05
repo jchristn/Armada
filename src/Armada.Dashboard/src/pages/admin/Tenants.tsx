@@ -99,7 +99,7 @@ export default function Tenants() {
   }
   function openEdit(tenant: TenantMetadata) {
     if (remoteProxyMode) {
-      setJsonData({ open: true, title: `Tenant: ${tenant.name}`, data: tenant });
+      setJsonData({ open: true, title: `${t('Tenant')}: ${tenant.name}`, data: tenant });
       return;
     }
     setForm({ name: tenant.name, active: tenant.active });
@@ -238,7 +238,7 @@ export default function Tenants() {
                     className="clickable"
                     onClick={() => isAdmin && !remoteProxyMode
                       ? openEdit(tenant)
-                      : setJsonData({ open: true, title: `Tenant: ${tenant.name}`, data: tenant })}
+                      : setJsonData({ open: true, title: `${t('Tenant')}: ${tenant.name}`, data: tenant })}
                   >
                     <td className="col-checkbox" onClick={e => e.stopPropagation()}><input aria-label={t('Select this tenant')} type="checkbox" checked={selected.includes(tenant.id)} onChange={() => toggleSelect(tenant.id)} title={t('Select this tenant')} /></td>
                     <td><strong>{tenant.name}</strong></td>
@@ -254,7 +254,7 @@ export default function Tenants() {
                     <td className="text-right" onClick={e => e.stopPropagation()}>
                       <ActionMenu id={tenant.id} items={[
                         ...(isAdmin && !remoteProxyMode ? [{ label: 'Edit', onClick: () => openEdit(tenant) }] : []),
-                        { label: 'View JSON', onClick: () => setJsonData({ open: true, title: `Tenant: ${tenant.name}`, data: tenant }) },
+                        { label: 'View JSON', onClick: () => setJsonData({ open: true, title: `${t('Tenant')}: ${tenant.name}`, data: tenant }) },
                         ...(isAdmin && !remoteProxyMode ? [{ label: 'Delete', danger: true as const, onClick: () => handleDelete(tenant.id, tenant.name) }] : []),
                       ]} />
                     </td>

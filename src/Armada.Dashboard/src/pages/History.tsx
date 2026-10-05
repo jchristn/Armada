@@ -12,6 +12,7 @@ import RefreshButton from '../components/shared/RefreshButton';
 import PageHeader from '../components/shared/PageHeader';
 import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
+import { canDeleteHistoryEntry } from '../lib/history';
 
 interface SavedHistoryView {
   id: string;
@@ -281,11 +282,7 @@ export default function History() {
     }
   }
 
-  // Timeline entries are a read-only aggregation; only request-sourced rows (req_ source id)
-  // map to a deletable underlying record (the request-history entry).
-  function canDeleteEntry(entry: HistoricalTimelineEntry): boolean {
-    return !!entry.sourceId && entry.sourceId.startsWith('req_');
-  }
+  const canDeleteEntry = canDeleteHistoryEntry;
 
   async function handleDeleteEntry(entry: HistoricalTimelineEntry) {
     setConfirmDelete(null);

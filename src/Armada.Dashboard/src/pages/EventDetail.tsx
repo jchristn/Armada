@@ -13,20 +13,7 @@ import CopyButton from '../components/shared/CopyButton';
 import ErrorModal from '../components/shared/ErrorModal';
 import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
-
-/** Map entity ID prefix to a route. */
-function entityRoute(entityId: string | null): string | null {
-  if (!entityId) return null;
-  if (entityId.startsWith('flt_')) return `/fleets/${entityId}`;
-  if (entityId.startsWith('vsl_')) return `/vessels/${entityId}`;
-  if (entityId.startsWith('cpt_')) return `/captains/${entityId}`;
-  if (entityId.startsWith('msn_')) return `/missions/${entityId}`;
-  if (entityId.startsWith('vyg_')) return `/voyages/${entityId}`;
-  if (entityId.startsWith('sig_')) return `/signals/${entityId}`;
-  if (entityId.startsWith('evt_')) return `/events/${entityId}`;
-  if (entityId.startsWith('dck_')) return `/docks/${entityId}`;
-  return null;
-}
+import { entityRoute } from '../lib/routing';
 
 export default function EventDetail() {
   const { t, formatDateTime, formatRelativeTime } = useLocale();
@@ -88,7 +75,7 @@ export default function EventDetail() {
 
   if (!event) return <p className="text-muted">{t('Loading...')}</p>;
 
-  const entRoute = entityRoute(event.entityId);
+  const entRoute = entityRoute(event.entityType, event.entityId);
 
   // Format payload
   let payloadDisplay: string | null = null;

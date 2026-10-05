@@ -162,6 +162,26 @@ export interface Vessel {
   lastUpdateUtc: string;
 }
 
+/** Wire values of MissionStatusEnum. */
+export type MissionStatus =
+  | 'Pending'
+  | 'Assigned'
+  | 'InProgress'
+  | 'WorkProduced'
+  | 'PullRequestOpen'
+  | 'Testing'
+  | 'Review'
+  | 'Complete'
+  | 'Failed'
+  | 'LandingFailed'
+  | 'Cancelled';
+
+/** Wire values of VoyageStatusEnum. */
+export type VoyageStatus = 'Open' | 'InProgress' | 'Complete' | 'Failed' | 'Cancelled';
+
+/** Wire values of CaptainStateEnum. */
+export type CaptainState = 'Idle' | 'Working' | 'Planning' | 'Refining' | 'Stalled' | 'Stopping' | 'Quarantined' | 'Analyzing';
+
 export interface Captain {
   id: string;
   tenantId: string | null;
@@ -189,17 +209,20 @@ export interface Captain {
   lastUpdateUtc: string;
 }
 
+/** Wire values of CaptainToolSourceKindEnum. */
+export type CaptainToolSourceKind = 'Internal' | 'McpServer' | 'RuntimeBuiltIn';
+
 export interface CaptainToolSummary {
   name: string;
   description: string;
   inputSchemaJson: string | null;
   registrationSource: string | null;
-  sourceKind: string | null;
+  sourceKind: CaptainToolSourceKind;
 }
 
 export interface CaptainToolServerSummary {
   name: string;
-  sourceKind: string;
+  sourceKind: CaptainToolSourceKind;
   transport: string;
   target: string;
   url: string | null;
@@ -435,6 +458,8 @@ export interface Objective {
   sourceProvider: string | null;
   sourceType: string | null;
   sourceId: string | null;
+  /** GitHub issue or pull request number of the source, when the objective was imported from GitHub. */
+  sourceNumber?: number | null;
   sourceUrl: string | null;
   sourceUpdatedUtc: string | null;
   tags: string[];
@@ -1227,6 +1252,8 @@ export interface InboxItem {
   detail: string;
   entityType: string | null;
   entityId: string | null;
+  /** Display name of the entity (mission title, captain name, deployment environment, merge target branch). */
+  entityName?: string | null;
   href: string;
 }
 
@@ -1794,6 +1821,8 @@ export interface VesselReadinessIssue {
   title: string;
   message: string;
   relatedValue: string | null;
+  /** Provider of the workflow input the issue is about; null (or absent from older servers) otherwise. */
+  inputProvider?: WorkflowInputReferenceProvider | null;
 }
 
 export interface VesselToolchainProbe {
@@ -2214,9 +2243,25 @@ export interface RequestHistoryQuery {
   bucketMinutes?: number;
 }
 
+/** SourceType values written by the server's HistoricalTimelineService. */
+export type HistoricalTimelineSourceType =
+  | 'Objective'
+  | 'ObjectiveRefinementSession'
+  | 'Mission'
+  | 'Voyage'
+  | 'Planning'
+  | 'MergeEntry'
+  | 'CheckRun'
+  | 'Release'
+  | 'Deployment'
+  | 'Incident'
+  | 'RunbookExecution'
+  | 'Event'
+  | 'Request';
+
 export interface HistoricalTimelineEntry {
   id: string;
-  sourceType: string;
+  sourceType: HistoricalTimelineSourceType;
   sourceId: string;
   entityType: string | null;
   entityId: string | null;
@@ -2998,6 +3043,8 @@ export interface AskMessage {
   toolCalls?: AskToolCall[] | null;
   proposal?: AskActionProposal | null;
   trackedWork?: AskTrackedWork | null;
+  /** Client-only: true for an optimistic user message not yet persisted by the server. Never sent by the server. */
+  isLocal?: boolean;
 }
 
 export interface AskThreadDetail {

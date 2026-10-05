@@ -3,6 +3,7 @@ import type {
   AskActionProposal,
   AskMessage,
   AskThread,
+  AskTurnState,
   AskTrackedWork,
   AskWorkSnapshot,
   WebSocketMessage,
@@ -17,13 +18,26 @@ export type AskEvent =
   | { type: 'ask.chunk'; threadId: string; turnId: string; delta: string }
   | { type: 'ask.thinking'; threadId: string; turnId: string; delta: string }
   | { type: 'ask.tool'; threadId: string; turnId: string; tool: ToolEventMessage }
-  | { type: 'ask.turn'; threadId: string; turnId: string; state: string; messageId: string | null; error: string | null }
+  | { type: 'ask.turn'; threadId: string; turnId: string; state: AskTurnState; messageId: string | null; error: string | null }
   | { type: 'ask.message'; threadId: string; message: AskMessage }
   | { type: 'ask.proposal'; threadId: string; proposal: AskActionProposal }
   | { type: 'ask.work'; threadId: string; trackedWorkId: string; snapshot: AskWorkSnapshot | null; trackedWork: AskTrackedWork | null }
   | { type: 'ask.thread'; threadId: string; thread: AskThread };
 
 type Payload = Record<string, unknown>;
+
+const TURN_STATES: readonly AskTurnState[] = ['started', 'completed', 'failed', 'cancelled'];
+
+/**
+ * Parse the wire state of an ask.turn event. A missing state means 'started' (the server's first emit); a value
+ * outside the known set ends the turn without an error, as 'completed' does.
+ */
+export function parseTurnState(value: string | null): AskTurnState {
+  if (value === null) return 'started';
+  const lower = value.toLowerCase();
+  const known = TURN_STATES.find((s) => s === lower);
+  return known ?? 'completed';
+}
 
 function str(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;
@@ -75,7 +89,7 @@ export function parseAskEvent(msg: WebSocketMessage | null | undefined): AskEven
         type: 'ask.turn',
         threadId,
         turnId,
-        state: (str(data.state) ?? 'started').toLowerCase(),
+        state: parseTurnState(str(data.state)),
         messageId: str(data.messageId),
         error: str(data.error) ?? str(data.errorText),
       };

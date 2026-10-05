@@ -2,10 +2,11 @@ import { createContext, useContext, useState, useCallback, useEffect, useRef, ty
 import { useWebSocket } from './WebSocketContext';
 import { useLocale } from './LocaleContext';
 import type { WebSocketMessage } from '../types/models';
+import { entityStatusSeverity, type NotificationEntityKind, type Severity } from '../lib/notificationSeverity';
 
 // ── Types ──
 
-export type Severity = 'info' | 'success' | 'warning' | 'error';
+export type { Severity };
 
 export interface Notification {
   id: string;
@@ -62,17 +63,6 @@ function saveNotifications(notifications: Notification[]) {
   }
 }
 
-// ── Severity mapping (matches legacy _stateToastSeverity) ──
-
-function statusToSeverity(status: string): Severity {
-  if (!status) return 'info';
-  const s = status.toLowerCase();
-  if (s === 'completed' || s === 'complete' || s === 'landed' || s === 'passed' || s.includes('succeeded')) return 'success';
-  if (s === 'failed' || s === 'error' || s.includes('failed')) return 'error';
-  if (s === 'cancelled' || s === 'stalled' || s === 'stopping' || s.includes('rolledback') || s.includes('denied')) return 'warning';
-  return 'info';
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
@@ -101,19 +91,24 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   // ── Push a notification + toast (matches legacy _notifyStateChange) ──
 
   const pushNotification = useCallback((
-    assetType: string,
+    assetType: NotificationEntityKind,
     id: string,
     name: string,
     status: string,
+    verificationStatus: string | null = null,
   ) => {
     const key = `${assetType}:${id}`;
-    if (lastSeenRef.current.get(key) === status) return;
-    lastSeenRef.current.set(key, status);
+    const seen = verificationStatus ? `${status}|${verificationStatus}` : status;
+    if (lastSeenRef.current.get(key) === seen) return;
+    lastSeenRef.current.set(key, seen);
 
+    // Severity comes from the typed status values; the display text below is built only for people to read.
+    const severity = entityStatusSeverity(assetType, status, verificationStatus);
+    const statusText = verificationStatus ? `${t(status)} / ${t(verificationStatus)}` : t(status);
     const truncatedName = name.length > 80 ? name.substring(0, 80) + '...' : name;
-    const title = `${t(assetType)} ${t(status)}`;
-    const message = `${t(assetType)} "${truncatedName}" - ${t(status)}`;
-    const severity = statusToSeverity(status);
+    // Keyed templates: the entity name is a parameter, so it is inserted verbatim and never translated.
+    const title = t('{{entity}} {{status}}', { entity: t(assetType), status: statusText });
+    const message = t('{{entity}} "{{name}}" - {{status}}', { entity: t(assetType), name: truncatedName, status: statusText });
 
     const notification: Notification = {
       id: `ntf_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
@@ -180,12 +175,12 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       }
 
       if (msg.type === 'deployment.changed' && data.status) {
-        const verificationStatus = typeof data.verificationStatus === 'string' ? ` / ${String(data.verificationStatus)}` : '';
         pushNotification(
           'Deployment',
           String(data.id || ''),
           String(data.title || data.id || ''),
-          `${String(data.status)}${verificationStatus}`,
+          String(data.status),
+          typeof data.verificationStatus === 'string' ? data.verificationStatus : null,
         );
       }
 

@@ -357,7 +357,7 @@ export default function Pipelines() {
                         { label: 'View Detail', onClick: () => navigate(`/pipelines/${encodeURIComponent(p.name)}`) },
                         ...(canEditScoped(viewer, p) ? [{ label: 'Edit', onClick: () => openEdit(p) }] : []),
                         { label: 'Duplicate', onClick: () => void handleDuplicate(p) },
-                        { label: 'View JSON', onClick: () => setJsonData({ open: true, title: `Pipeline: ${p.name}`, data: p }) },
+                        { label: 'View JSON', onClick: () => setJsonData({ open: true, title: `${t('Pipeline')}: ${p.name}`, data: p }) },
                         ...(!p.isBuiltIn && canEditScoped(viewer, p) ? [{ label: 'Delete', danger: true as const, onClick: () => handleDelete(p.name) }] : []),
                       ]} />
                     </td>
