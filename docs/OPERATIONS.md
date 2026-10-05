@@ -153,11 +153,10 @@ fills a disk.
 | Inactive Ask threads (pinned threads are kept) | `retention.askThreadArchiveAfterDays`, `retention.askThreadDeleteAfterDays` (0 disables each) | archive after 90 days; never delete |
 | Finished background jobs (the newest of each kind is kept) | `retention.jobRetentionDays` (0 disables) | 30 days |
 | Finished vessel import batches | `retention.importBatchRetentionDays` (0 disables) | 90 days |
+| Decided, expired, or cancelled CLI permission requests (pending ones are kept; a deleted Ask thread takes its requests with it) | `retention.cliPermissionRequestRetentionDays` (0 disables) | 90 days |
 | Pre-migration database backups | `database.migrationBackupRetentionCount` | 5 |
 
-Vessel health findings history is not pruned today and grows with the evaluation schedule. CLI permission requests
-(one row per permission prompt a captain raised, with its redacted input and decision) are not pruned either, and are
-kept when their Ask thread is deleted. Completed voyages,
+Vessel health findings history is not pruned today and grows with the evaluation schedule. Completed voyages,
 missions, signals, and events expire on SQLite only (`dataRetentionDays`); on PostgreSQL, MySQL, and SQL Server prune
 them with your own database jobs. On a busy install, check the size of the database and of `~/.armada/logs` monthly.
 Request history capture can be turned off entirely
