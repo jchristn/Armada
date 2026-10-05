@@ -79,6 +79,73 @@ namespace Armada.Core.Database.Sqlite.Implementations
         }
 
         /// <inheritdoc />
+        public async Task<bool> TryUpdateIfStatusAsync(Job job, IReadOnlyCollection<JobStatusEnum> expectedStatuses, CancellationToken token = default)
+        {
+            if (job == null) throw new ArgumentNullException(nameof(job));
+            if (expectedStatuses == null) throw new ArgumentNullException(nameof(expectedStatuses));
+            if (expectedStatuses.Count == 0) throw new ArgumentException("At least one expected status is required.", nameof(expectedStatuses));
+
+            using (SqliteConnection conn = new SqliteConnection(_Driver.ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                using (SqliteCommand cmd = conn.CreateCommand())
+                {
+                    List<string> placeholders = new List<string>();
+                    int index = 0;
+                    foreach (JobStatusEnum expected in expectedStatuses)
+                    {
+                        string name = "@expected_" + index++;
+                        placeholders.Add(name);
+                        cmd.Parameters.AddWithValue(name, expected.ToString());
+                    }
+
+                    cmd.CommandText = @"UPDATE jobs SET
+                        status = @status,
+                        progress = @progress,
+                        result_json = @result_json,
+                        error_reason = @error_reason,
+                        started_utc = @started_utc,
+                        completed_utc = @completed_utc,
+                        last_update_utc = @last_update_utc
+                        WHERE id = @id AND status IN (" + String.Join(", ", placeholders) + ");";
+                    cmd.Parameters.AddWithValue("@id", job.Id);
+                    cmd.Parameters.AddWithValue("@status", job.Status.ToString());
+                    cmd.Parameters.AddWithValue("@progress", job.Progress);
+                    cmd.Parameters.AddWithValue("@result_json", (object?)job.ResultJson ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@error_reason", (object?)job.ErrorReason ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@started_utc", job.StartedUtc.HasValue ? (object)SqliteDatabaseDriver.ToIso8601(job.StartedUtc.Value) : DBNull.Value);
+                    cmd.Parameters.AddWithValue("@completed_utc", job.CompletedUtc.HasValue ? (object)SqliteDatabaseDriver.ToIso8601(job.CompletedUtc.Value) : DBNull.Value);
+                    cmd.Parameters.AddWithValue("@last_update_utc", SqliteDatabaseDriver.ToIso8601(job.LastUpdateUtc));
+                    int rows = await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+                    return rows > 0;
+                }
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task<bool> TryHeartbeatAsync(string id, int minimumProgress, DateTime lastUpdateUtc, CancellationToken token = default)
+        {
+            if (String.IsNullOrWhiteSpace(id)) throw new ArgumentNullException(nameof(id));
+            using (SqliteConnection conn = new SqliteConnection(_Driver.ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                using (SqliteCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = @"UPDATE jobs SET
+                        progress = CASE WHEN progress < @progress THEN @progress ELSE progress END,
+                        last_update_utc = @last_update_utc
+                        WHERE id = @id AND status = @running;";
+                    cmd.Parameters.AddWithValue("@id", id);
+                    cmd.Parameters.AddWithValue("@progress", Math.Clamp(minimumProgress, 0, 100));
+                    cmd.Parameters.AddWithValue("@last_update_utc", SqliteDatabaseDriver.ToIso8601(lastUpdateUtc));
+                    cmd.Parameters.AddWithValue("@running", JobStatusEnum.Running.ToString());
+                    int rows = await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+                    return rows > 0;
+                }
+            }
+        }
+
+        /// <inheritdoc />
         public async Task<Job?> ReadAsync(string id, CancellationToken token = default)
         {
             if (String.IsNullOrWhiteSpace(id)) throw new ArgumentNullException(nameof(id));

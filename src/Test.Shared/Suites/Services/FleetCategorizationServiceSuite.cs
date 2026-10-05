@@ -339,6 +339,112 @@ namespace Test.Shared.Suites.Services
                 await WaitForCaptainStateAsync(testDb.Driver, captain.Id, CaptainStateEnum.Idle).ConfigureAwait(false);
             }));
 
+            cases.Add(CaseAsync("cancel_during_heartbeat_is_durable", "A cancel that lands inside a job heartbeat stays Cancelled, stops the captain, and fails the categorization", TestTags.Reliability, async () =>
+            {
+                // Regression (CI cancel_via_job timeout): the heartbeat read the Running job and wrote the whole row back,
+                // so a cancel committed between its read and write was overwritten with Running; the worker then never
+                // saw the cancellation and the batch stayed Running. The injector commits the cancel inside that window.
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                JobHookDatabaseDriver hooked = new JobHookDatabaseDriver(testDb.Driver);
+                FleetCategorizationHarness h = NewHarness(hooked);
+                MakeRepo(Path.Combine(h.Root, "a"), "A", "Alpha.");
+                Captain captain = await CreateCaptainAsync(testDb.Driver, Constants.DefaultTenantId).ConfigureAwait(false);
+                bool sawCancellation = false;
+                h.Runner.Behavior = async (string dir, string prompt, TimeSpan timeout, CancellationToken token) =>
+                {
+                    try
+                    {
+                        await Task.Delay(TimeSpan.FromSeconds(60), token).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        sawCancellation = true;
+                        return new CaptainPromptResult { Cancelled = true };
+                    }
+
+                    return new CaptainPromptResult { ExitCode = 0 };
+                };
+                JobCancelInjector injector = new JobCancelInjector(hooked, testDb.Driver, JobWriteMomentEnum.Heartbeat, j => j.Kind == JobKindEnum.FleetCategorization);
+
+                VesselImportResponse response = await ImportAllAsync(h, captain.Id, null, false).ConfigureAwait(false);
+                Job injected = await injector.Injected.WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
+                AssertEqual(JobStatusEnum.Cancelled, injected.Status, "cancel committed inside the heartbeat");
+
+                VesselImportBatch batch = await WaitForCategorizationAsync(testDb.Driver, response.BatchId).ConfigureAwait(false);
+                AssertTrue(sawCancellation, "runner token cancelled");
+                AssertEqual(VesselImportCategorizationStatusEnum.Failed, batch.CategorizationStatus);
+                AssertContains("cancelled", batch.CategorizationError ?? "");
+                Job after = (await testDb.Driver.Jobs.ReadAsync(injected.Id).ConfigureAwait(false))!;
+                AssertEqual(JobStatusEnum.Cancelled, after.Status, "job stays Cancelled");
+                AssertEqual(injected.CompletedUtc, after.CompletedUtc, "the cancel is not rewritten");
+                await WaitForCaptainStateAsync(testDb.Driver, captain.Id, CaptainStateEnum.Idle).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("cancel_before_start_never_runs", "A categorization job cancelled before its worker starts stays Cancelled and never runs the captain", TestTags.Reliability, async () =>
+            {
+                // Regression: the worker's start wrote the whole job row with Running, overwriting a cancel that landed
+                // while the job was Queued, and then ran the captain for a job the user had cancelled.
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                JobHookDatabaseDriver hooked = new JobHookDatabaseDriver(testDb.Driver);
+                FleetCategorizationHarness h = NewHarness(hooked);
+                MakeRepo(Path.Combine(h.Root, "a"), "A", "Alpha.");
+                Captain captain = await CreateCaptainAsync(testDb.Driver, Constants.DefaultTenantId).ConfigureAwait(false);
+                int runs = 0;
+                h.Runner.Behavior = async (string dir, string prompt, TimeSpan timeout, CancellationToken token) =>
+                {
+                    Interlocked.Increment(ref runs);
+                    try
+                    {
+                        await Task.Delay(TimeSpan.FromSeconds(60), token).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        return new CaptainPromptResult { Cancelled = true };
+                    }
+
+                    return new CaptainPromptResult { ExitCode = 0 };
+                };
+                JobCancelInjector injector = new JobCancelInjector(hooked, testDb.Driver, JobWriteMomentEnum.Start, j => j.Kind == JobKindEnum.FleetCategorization);
+
+                VesselImportResponse response = await ImportAllAsync(h, captain.Id, null, false).ConfigureAwait(false);
+                Job injected = await injector.Injected.WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
+
+                VesselImportBatch batch = await WaitForCategorizationAsync(testDb.Driver, response.BatchId).ConfigureAwait(false);
+                AssertEqual(VesselImportCategorizationStatusEnum.Failed, batch.CategorizationStatus);
+                AssertContains("cancelled", batch.CategorizationError ?? "");
+                AssertEqual(JobStatusEnum.Cancelled, (await testDb.Driver.Jobs.ReadAsync(injected.Id).ConfigureAwait(false))!.Status, "job stays Cancelled");
+                AssertEqual(0, Volatile.Read(ref runs), "captain never ran");
+                await WaitForCaptainStateAsync(testDb.Driver, captain.Id, CaptainStateEnum.Idle).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("discovery_cancel_during_heartbeat_is_durable", "A cancel that lands inside a discovery heartbeat stays Cancelled and stops the discovery", TestTags.Reliability, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                JobHookDatabaseDriver hooked = new JobHookDatabaseDriver(testDb.Driver);
+                FleetCategorizationHarness h = NewHarness(hooked);
+                DelayedVesselDiscoveryService discovery = new DelayedVesselDiscoveryService(new VesselDiscoveryService(hooked, h.Settings));
+                discovery.Delay = () => TimeSpan.FromSeconds(60);
+                LoggingModule logging = new LoggingModule();
+                logging.Settings.EnableConsole = false;
+                VesselImportService import = new VesselImportService(hooked, h.Settings, discovery, new VesselService(hooked), h.Jobs, logging, h.Categorization);
+                import.DiscoveryPollIntervalMs = 50;
+                MakeRepo(Path.Combine(h.Root, "one"), "One", "A web API.");
+                JobCancelInjector injector = new JobCancelInjector(hooked, testDb.Driver, JobWriteMomentEnum.Heartbeat, j => j.Kind == JobKindEnum.VesselDiscovery);
+
+                VesselDiscoveryRequest request = new VesselDiscoveryRequest();
+                request.Roots = new List<string> { h.Root };
+                request.RunInBackground = true;
+                VesselImportDiscoverResponse response = await import.DiscoverAsync(Constants.DefaultTenantId, Constants.DefaultUserId, request).ConfigureAwait(false);
+                Job injected = await injector.Injected.WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
+                AssertEqual(response.JobId, injected.Id, "discovery job cancelled");
+
+                VesselImportBatch batch = await WaitForBatchAsync(testDb.Driver, response.BatchId, b => b.Status != VesselImportBatchStatusEnum.Discovering).ConfigureAwait(false);
+                AssertEqual(VesselImportBatchStatusEnum.Failed, batch.Status, "a cancelled discovery ends Failed");
+                AssertContains("cancelled", batch.ErrorMessage ?? "");
+                Job after = await JobWait.ForTerminalAsync(testDb.Driver, response.JobId!, 10).ConfigureAwait(false);
+                AssertEqual(JobStatusEnum.Cancelled, after.Status, "job stays Cancelled");
+            }));
+
             cases.Add(CaseAsync("timeout_fails_with_message", "A run that exceeds the time limit fails with a timeout message", TestTags.Negative, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
@@ -624,6 +730,11 @@ namespace Test.Shared.Suites.Services
 
         private static FleetCategorizationHarness NewHarness(TestDatabase testDb)
         {
+            return NewHarness(testDb.Driver);
+        }
+
+        private static FleetCategorizationHarness NewHarness(DatabaseDriver db)
+        {
             FleetCategorizationHarness h = new FleetCategorizationHarness();
             h.Root = TestTemp.NewDirectory("categorize");
             ArmadaSettings settings = new ArmadaSettings();
@@ -636,7 +747,6 @@ namespace Test.Shared.Suites.Services
 
             LoggingModule logging = new LoggingModule();
             logging.Settings.EnableConsole = false;
-            DatabaseDriver db = testDb.Driver;
             h.Jobs = new JobService(db, logging);
             h.Runner = new StubCaptainPromptRunner();
             h.Categorization = new FleetCategorizationService(db, settings, h.Jobs, h.Runner, new PromptTemplateService(db, logging), logging);

@@ -227,7 +227,7 @@ namespace Armada.Core.Services
                     batch = await _Database.VesselImportBatches.UpdateAsync(batch, token).ConfigureAwait(false);
                     try
                     {
-                        await ExecuteAsync(batch, items, selected, request, userId, null, token).ConfigureAwait(false);
+                        await ExecuteAsync(batch, items, selected, request, userId, null, false, token).ConfigureAwait(false);
                     }
                     catch (Exception ex) when (!(ex is OperationCanceledException))
                     {
@@ -424,11 +424,13 @@ namespace Armada.Core.Services
                 Task? monitor = null;
                 try
                 {
-                    job.Status = JobStatusEnum.Running;
-                    job.StartedUtc = DateTime.UtcNow;
-                    job.LastUpdateUtc = DateTime.UtcNow;
-                    job.Progress = 10;
-                    job = await _Database.Jobs.UpdateAsync(job).ConfigureAwait(false);
+                    // Conditional on Queued: a job cancelled before this worker started stays Cancelled.
+                    if (!await _Jobs.TryStartAsync(job, 10).ConfigureAwait(false))
+                    {
+                        cts.Cancel();
+                        throw new OperationCanceledException(cts.Token);
+                    }
+
                     monitor = MonitorDiscoveryJobAsync(job.Id, cts);
 
                     VesselDiscoveryResult discovered = await _Discovery.DiscoverAsync(batch.TenantId!, request, cts.Token).ConfigureAwait(false);
@@ -471,8 +473,8 @@ namespace Armada.Core.Services
                 }
                 finally
                 {
-                    // Stop the heartbeat before writing the job's terminal state: the heartbeat rewrites the whole job
-                    // row, so one that read the job before the terminal write would put it back to Running for good.
+                    // Stop the heartbeat before writing the job's terminal state. Both are conditional on the stored
+                    // status, so neither can undo a cancel, and the first terminal status wins.
                     cts.Cancel();
                     if (monitor != null)
                     {
@@ -490,14 +492,7 @@ namespace Armada.Core.Services
         {
             try
             {
-                Job? latest = await _Database.Jobs.ReadAsync(jobId).ConfigureAwait(false);
-                if (latest == null || latest.Status != JobStatusEnum.Running) return;
-                latest.Status = JobStatusEnum.Succeeded;
-                latest.Progress = 100;
-                latest.ResultJson = resultJson;
-                latest.CompletedUtc = DateTime.UtcNow;
-                latest.LastUpdateUtc = DateTime.UtcNow;
-                await _Database.Jobs.UpdateAsync(latest).ConfigureAwait(false);
+                await _Jobs.TryFinishAsync(jobId, JobStatusEnum.Succeeded, resultJson, null).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -520,17 +515,11 @@ namespace Armada.Core.Services
 
                 try
                 {
-                    Job? latest = await _Database.Jobs.ReadAsync(jobId).ConfigureAwait(false);
-                    if (latest == null || latest.Status == JobStatusEnum.Cancelled)
+                    // The heartbeat never changes the job's status; false means it is no longer Running (cancelled).
+                    if (!await _Jobs.HeartbeatAsync(jobId).ConfigureAwait(false))
                     {
                         cts.Cancel();
                         return;
-                    }
-
-                    if (latest.Status == JobStatusEnum.Running)
-                    {
-                        latest.LastUpdateUtc = DateTime.UtcNow;
-                        await _Database.Jobs.UpdateAsync(latest).ConfigureAwait(false);
                     }
                 }
                 catch (Exception ex)
@@ -544,13 +533,7 @@ namespace Armada.Core.Services
         {
             try
             {
-                Job? latest = await _Database.Jobs.ReadAsync(jobId).ConfigureAwait(false);
-                if (latest == null || (latest.Status != JobStatusEnum.Running && latest.Status != JobStatusEnum.Queued)) return;
-                latest.Status = JobStatusEnum.Failed;
-                latest.ErrorReason = message;
-                latest.CompletedUtc = DateTime.UtcNow;
-                latest.LastUpdateUtc = DateTime.UtcNow;
-                await _Database.Jobs.UpdateAsync(latest).ConfigureAwait(false);
+                await _Jobs.TryFinishAsync(jobId, JobStatusEnum.Failed, null, message).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -570,29 +553,21 @@ namespace Armada.Core.Services
         {
             try
             {
-                job.Status = JobStatusEnum.Running;
-                job.StartedUtc = DateTime.UtcNow;
-                job.LastUpdateUtc = DateTime.UtcNow;
-                job = await _Database.Jobs.UpdateAsync(job).ConfigureAwait(false);
+                // Conditional on Queued: a job cancelled before this worker started stays Cancelled, and every
+                // selected item is recorded as cancelled instead of imported.
+                bool started = await _Jobs.TryStartAsync(job).ConfigureAwait(false);
 
-                bool completed = await ExecuteAsync(batch, items, selected, request, userId, job, CancellationToken.None).ConfigureAwait(false);
+                bool completed = await ExecuteAsync(batch, items, selected, request, userId, job, !started, CancellationToken.None).ConfigureAwait(false);
 
-                Job? latest = await _Database.Jobs.ReadAsync(job.Id).ConfigureAwait(false);
-                if (latest != null && latest.Status == JobStatusEnum.Running)
+                // First terminal status wins: a job cancelled while the import ran stays Cancelled.
+                string summary = JsonSerializer.Serialize(new VesselImportJobSummary
                 {
-                    latest.Status = completed ? JobStatusEnum.Succeeded : JobStatusEnum.Cancelled;
-                    latest.Progress = 100;
-                    latest.ResultJson = JsonSerializer.Serialize(new VesselImportJobSummary
-                    {
-                        BatchId = batch.Id,
-                        CreatedCount = batch.CreatedCount,
-                        SkippedCount = batch.SkippedCount,
-                        FailedCount = batch.FailedCount
-                    }, _ResultJsonOptions);
-                    latest.CompletedUtc = DateTime.UtcNow;
-                    latest.LastUpdateUtc = DateTime.UtcNow;
-                    await _Database.Jobs.UpdateAsync(latest).ConfigureAwait(false);
-                }
+                    BatchId = batch.Id,
+                    CreatedCount = batch.CreatedCount,
+                    SkippedCount = batch.SkippedCount,
+                    FailedCount = batch.FailedCount
+                }, _ResultJsonOptions);
+                await _Jobs.TryFinishAsync(job.Id, completed ? JobStatusEnum.Succeeded : JobStatusEnum.Cancelled, summary, null).ConfigureAwait(false);
 
                 if (completed && request.Categorization != null && request.Categorization.Enabled)
                 {
@@ -613,15 +588,7 @@ namespace Armada.Core.Services
                 await MarkBatchFailedAsync(batch, ex).ConfigureAwait(false);
                 try
                 {
-                    Job? latest = await _Database.Jobs.ReadAsync(job.Id).ConfigureAwait(false);
-                    if (latest != null && (latest.Status == JobStatusEnum.Running || latest.Status == JobStatusEnum.Queued))
-                    {
-                        latest.Status = JobStatusEnum.Failed;
-                        latest.ErrorReason = ex.Message;
-                        latest.CompletedUtc = DateTime.UtcNow;
-                        latest.LastUpdateUtc = DateTime.UtcNow;
-                        await _Database.Jobs.UpdateAsync(latest).ConfigureAwait(false);
-                    }
+                    await _Jobs.TryFinishAsync(job.Id, JobStatusEnum.Failed, null, ex.Message).ConfigureAwait(false);
                 }
                 catch (Exception jobEx)
                 {
@@ -666,6 +633,7 @@ namespace Armada.Core.Services
             VesselImportRequest request,
             string? userId,
             Job? job,
+            bool cancelledBeforeStart,
             CancellationToken token)
         {
             string tenantId = batch.TenantId!;
@@ -676,22 +644,18 @@ namespace Armada.Core.Services
             int skipped = 0;
             int failed = 0;
             int processed = 0;
-            bool cancelled = false;
+            bool cancelled = cancelledBeforeStart;
 
             foreach (VesselImportItem item in items)
             {
                 token.ThrowIfCancellationRequested();
 
-                if (job != null && processed > 0 && processed % _ProgressInterval == 0)
+                if (job != null && !cancelled && processed > 0 && processed % _ProgressInterval == 0)
                 {
-                    Job? latest = await _Database.Jobs.ReadAsync(job.Id, token).ConfigureAwait(false);
-                    if (latest != null && latest.Status == JobStatusEnum.Cancelled) cancelled = true;
-                    else if (latest != null)
-                    {
-                        latest.Progress = (int)Math.Round(processed * 100.0 / Math.Max(1, items.Count));
-                        latest.LastUpdateUtc = DateTime.UtcNow;
-                        await _Database.Jobs.UpdateAsync(latest, token).ConfigureAwait(false);
-                    }
+                    // The progress heartbeat never changes the job's status; false means the job is no longer Running
+                    // (cancelled), so the remaining items are not imported.
+                    int progress = (int)Math.Round(processed * 100.0 / Math.Max(1, items.Count));
+                    if (!await _Jobs.HeartbeatAsync(job.Id, progress, token).ConfigureAwait(false)) cancelled = true;
                 }
 
                 processed++;

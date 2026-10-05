@@ -420,12 +420,8 @@ namespace Armada.Core.Services.Health
             {
                 if (job.Kind != JobKindEnum.Report || !String.Equals(job.Name, JobName, StringComparison.Ordinal)) continue;
                 if (job.Status != JobStatusEnum.Queued && job.Status != JobStatusEnum.Running) continue;
-                job.Status = JobStatusEnum.Failed;
-                job.ErrorReason = "evaluation was interrupted (the Admiral restarted before it finished)";
-                job.CompletedUtc = DateTime.UtcNow;
-                job.LastUpdateUtc = DateTime.UtcNow;
-                await _Database.Jobs.UpdateAsync(job, token).ConfigureAwait(false);
-                _Logging.Warn(_Header + "failed orphaned evaluation job " + job.Id);
+                if (await _Jobs.TryFinishAsync(job.Id, JobStatusEnum.Failed, null, "evaluation was interrupted (the Admiral restarted before it finished)", token).ConfigureAwait(false))
+                    _Logging.Warn(_Header + "failed orphaned evaluation job " + job.Id);
             }
         }
 
@@ -469,7 +465,6 @@ namespace Armada.Core.Services.Health
             root?.SetTag("armada.health.vessel_count", vessels.Count);
 
             VesselHealthJobResult summary = new VesselHealthJobResult { Requested = vessels.Count, Force = force, Scheduled = scheduled };
-            SemaphoreSlim jobUpdateLock = new SemaphoreSlim(1, 1);
             Task monitor = Task.CompletedTask;
             CancellationTokenSource monitorStop = new CancellationTokenSource();
             int evaluated = 0;
@@ -478,10 +473,13 @@ namespace Armada.Core.Services.Health
 
             try
             {
-                job.Status = JobStatusEnum.Running;
-                job.StartedUtc = DateTime.UtcNow;
-                job.LastUpdateUtc = DateTime.UtcNow;
-                await _Database.Jobs.UpdateAsync(job, CancellationToken.None).ConfigureAwait(false);
+                // Conditional on Queued: a job cancelled before this worker started stays Cancelled and no vessel is
+                // evaluated.
+                if (!await _Jobs.TryStartAsync(job, 0, CancellationToken.None).ConfigureAwait(false))
+                {
+                    _Logging.Info(_Header + "job " + job.Id + " was cancelled before it started");
+                    running.Cancellation.Cancel();
+                }
 
                 monitor = MonitorCancellationAsync(running, monitorStop.Token);
 
@@ -526,7 +524,7 @@ namespace Armada.Core.Services.Health
                             }
 
                             int completed = Interlocked.Increment(ref done);
-                            await ReportProgressAsync(job, jobUpdateLock, completed, vessels.Count).ConfigureAwait(false);
+                            await ReportProgressAsync(job, running, completed, vessels.Count).ConfigureAwait(false);
                         }));
                     }
 
@@ -535,7 +533,7 @@ namespace Armada.Core.Services.Health
 
                 summary.Evaluated = evaluated;
                 summary.Failed = failed;
-                await FinishJobAsync(job, jobUpdateLock, summary, token.IsCancellationRequested).ConfigureAwait(false);
+                await FinishJobAsync(job, summary, token.IsCancellationRequested).ConfigureAwait(false);
                 root?.SetTag("armada.health.evaluated", evaluated);
                 root?.SetTag("armada.health.failed", failed);
             }
@@ -544,15 +542,7 @@ namespace Armada.Core.Services.Health
                 _Logging.Warn(_Header + "evaluation job " + job.Id + " failed: " + ex.Message);
                 try
                 {
-                    Job? current = await _Database.Jobs.ReadAsync(job.Id, CancellationToken.None).ConfigureAwait(false);
-                    if (current != null && current.Status != JobStatusEnum.Cancelled)
-                    {
-                        current.Status = JobStatusEnum.Failed;
-                        current.ErrorReason = ex.Message;
-                        current.CompletedUtc = DateTime.UtcNow;
-                        current.LastUpdateUtc = DateTime.UtcNow;
-                        await _Database.Jobs.UpdateAsync(current, CancellationToken.None).ConfigureAwait(false);
-                    }
+                    await _Jobs.TryFinishAsync(job.Id, JobStatusEnum.Failed, null, ex.Message, CancellationToken.None).ConfigureAwait(false);
                 }
                 catch (Exception updateEx)
                 {
@@ -564,7 +554,6 @@ namespace Armada.Core.Services.Health
                 try { monitorStop.Cancel(); } catch (ObjectDisposedException) { }
                 try { await monitor.ConfigureAwait(false); } catch (OperationCanceledException) { }
                 monitorStop.Dispose();
-                jobUpdateLock.Dispose();
                 _Running.TryRemove(new KeyValuePair<string, VesselHealthRunningEvaluation>(running.TenantId, running));
                 running.Cancellation.Dispose();
             }
@@ -596,22 +585,17 @@ namespace Armada.Core.Services.Health
             }
         }
 
-        private async Task ReportProgressAsync(Job job, SemaphoreSlim jobUpdateLock, int completed, int total)
+        private async Task ReportProgressAsync(Job job, VesselHealthRunningEvaluation running, int completed, int total)
         {
             try
             {
-                await jobUpdateLock.WaitAsync().ConfigureAwait(false);
-                try
+                // The progress heartbeat never changes the job's status, so it cannot undo a cancel. False means the job
+                // is no longer Running (cancelled or failed elsewhere): stop the remaining vessels now rather than at the
+                // next cancellation poll.
+                int progress = total == 0 ? 100 : (int)Math.Floor(completed * 100.0 / total);
+                if (!await _Jobs.HeartbeatAsync(job.Id, progress, CancellationToken.None).ConfigureAwait(false))
                 {
-                    Job? current = await _Database.Jobs.ReadAsync(job.Id, CancellationToken.None).ConfigureAwait(false);
-                    if (current == null || current.Status != JobStatusEnum.Running) return;
-                    current.Progress = total == 0 ? 100 : (int)Math.Floor(completed * 100.0 / total);
-                    current.LastUpdateUtc = DateTime.UtcNow;
-                    await _Database.Jobs.UpdateAsync(current, CancellationToken.None).ConfigureAwait(false);
-                }
-                finally
-                {
-                    jobUpdateLock.Release();
+                    try { running.Cancellation.Cancel(); } catch (ObjectDisposedException) { }
                 }
             }
             catch (Exception ex)
@@ -620,36 +604,25 @@ namespace Armada.Core.Services.Health
             }
         }
 
-        private async Task FinishJobAsync(Job job, SemaphoreSlim jobUpdateLock, VesselHealthJobResult summary, bool cancelled)
+        private async Task FinishJobAsync(Job job, VesselHealthJobResult summary, bool cancelled)
         {
-            await jobUpdateLock.WaitAsync().ConfigureAwait(false);
-            try
+            string resultJson = JsonSerializer.Serialize(summary, _JsonOptions);
+            JobStatusEnum status = cancelled ? JobStatusEnum.Cancelled : JobStatusEnum.Succeeded;
+            bool finished = await _Jobs.TryFinishAsync(job.Id, status, resultJson, null, CancellationToken.None).ConfigureAwait(false);
+            if (!finished)
             {
-                Job current = await _Database.Jobs.ReadAsync(job.Id, CancellationToken.None).ConfigureAwait(false) ?? job;
-                current.ResultJson = JsonSerializer.Serialize(summary, _JsonOptions);
-                current.LastUpdateUtc = DateTime.UtcNow;
-                if (current.Status != JobStatusEnum.Cancelled)
+                // First terminal status wins. A job cancelled through JobService still gets the partial summary, written
+                // conditionally so the cancel itself is left as it is.
+                Job? current = await _Database.Jobs.ReadAsync(job.Id, CancellationToken.None).ConfigureAwait(false);
+                if (current != null && current.Status == JobStatusEnum.Cancelled)
                 {
-                    if (cancelled)
-                    {
-                        current.Status = JobStatusEnum.Cancelled;
-                    }
-                    else
-                    {
-                        current.Status = JobStatusEnum.Succeeded;
-                        current.Progress = 100;
-                    }
-
-                    current.CompletedUtc = DateTime.UtcNow;
+                    current.ResultJson = resultJson;
+                    current.LastUpdateUtc = DateTime.UtcNow;
+                    await _Database.Jobs.TryUpdateIfStatusAsync(current, new JobStatusEnum[] { JobStatusEnum.Cancelled }, CancellationToken.None).ConfigureAwait(false);
                 }
+            }
 
-                await _Database.Jobs.UpdateAsync(current, CancellationToken.None).ConfigureAwait(false);
-                _Logging.Info(_Header + "job " + job.Id + " finished: " + summary.Evaluated + " evaluated, " + summary.Failed + " failed of " + summary.Requested);
-            }
-            finally
-            {
-                jobUpdateLock.Release();
-            }
+            _Logging.Info(_Header + "job " + job.Id + " finished: " + summary.Evaluated + " evaluated, " + summary.Failed + " failed of " + summary.Requested);
         }
 
         #endregion
