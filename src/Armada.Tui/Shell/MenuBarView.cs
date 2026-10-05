@@ -212,7 +212,7 @@ namespace Armada.Tui.Shell
             ArmadaCommand command = items[Highlight];
             if (!command.Enabled) return;
             Close();
-            _Commands.Run(command);
+            _Commands.Run(command, Armada.Tui.Services.TuiTelemetry.SourceMenu);
         }
 
         private void RenderDropdown(ISurface surface, int x)

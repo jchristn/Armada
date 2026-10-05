@@ -1,0 +1,40 @@
+ Armada  [Default Tenant] admin@armada  [Global Admin]                  * Healthy  o Offline  [!4 approvals]  [bell 0]
+ File  Go  View  Actions  Ask  Help                                                                            F10 Menu
+  Dashboard             | Approvals  (4 waiting)                                                 F5 Refresh  Enter Open
+  Ask Armada            |
+- OPERATIONS            | !  Failed landing       Landing failed: Broken                                       just now
+   Needs You         !4 |    Merge conflict in src/app.cs   [l Retry Landing]
+   Planning             |    Mission review       Review: Add retry to webhook sender                          just now
+   Dispatch             |    Waiting 12m   [a Approve  c Conditionally Approve  m More Work Required  d Deny]
+   Fleet Actions        |    Stalled captain      Stalled captain: codex-2                                     just now
+   Missions             |    No heartbeat for 6m   [s Stop  R Recall  t Restart]
+- DELIVERY              |    Deployment approval  Deployment awaiting approval: Staging                        just now
+   Delivery             |    v1.0.0-rc1   [a Approve  d Deny]
+- BUILD                 |
+   Vessels              |
+   Captains             |
+- CONFIGURATION         |
+   Configuration        |
+- ACTIVITY              |
+   Activity             |
+   Jobs                 |
+- SYSTEM                |
+   API Explorer         |
+   Settings             |
+                        |
+                        |
+                        |
+                        |
+                        |
+                        |
+                        |-----------------------------------------------------------------------------------------------
+                        | Failed landing: Broken   (msn_x)
+                        | Source: Needs You   Opens: /missions/msn_x
+                        | Merge conflict in src/app.cs
+                        |
+                        |
+                        |
+                        |
+                        |
+                        |
+ Enter Open  l Retry Landing  ? Help  Ctrl+K Palette  F10 Menu  Tab Next pane  F5 Refresh        manual  [approvals: 4]

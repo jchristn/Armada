@@ -6,7 +6,7 @@ This page covers what exists today: installing and starting it, server profiles,
 
 ## Install and start
 
-Install Helm the way you normally do (`dotnet tool install -g Armada.Helm`, or the installers), then run:
+Install Helm the way you normally do, then run the commands below. `armada tui` is in every Helm package: the .NET tool (`dotnet tool install -g Armada.Helm`, which the `scripts/*/install` scripts also use) and the Linux `.deb` and `.rpm` CLI packages. The macOS `.pkg`, Windows `.msi`, Harbor installers, and the Docker image carry the server or Harbor, not the CLI.
 
 ```
 armada tui
@@ -289,3 +289,44 @@ Copying uses OSC 52, so it works over SSH. Terminals that do not support OSC 52 
 ## Themes and languages
 
 View offers Dark, Light, High contrast, and Auto. Auto reads the terminal background from `COLORFGBG` and picks Dark when it cannot tell. High contrast also switches borders to ASCII. The language picker uses the dashboard's catalog (served at `/dashboard/i18n/armada.json`) and the same nine languages, including Simplified and Traditional Chinese, Cantonese, and Japanese; widths are measured in terminal cells, so CJK text lines up.
+
+## Telemetry
+
+The TUI can export its own metrics and traces with the same pipeline and the same fields as the Admiral's telemetry (see [TELEMETRY.md](TELEMETRY.md)). It is off by default: with telemetry off, no exporter starts, no port opens, and the TUI and TUIKit instruments are switched off. Armada sends nothing to its authors; telemetry here means exporting to your own collector.
+
+Turn it on in the `Telemetry` section of `~/.armada/tui.json` (or the file named by `ARMADA_TUI_PREFERENCES`):
+
+```json
+{
+  "Telemetry": {
+    "Enabled": true,
+    "ServiceName": "armada-tui",
+    "OtlpEndpoint": "http://127.0.0.1:4317",
+    "PrometheusEnabled": false,
+    "PrometheusPort": 9465,
+    "LokiEndpoint": null
+  }
+}
+```
+
+| Field | Default | Description |
+| --- | --- | --- |
+| `Enabled` | `false` | Master switch. |
+| `ServiceName` | `armada-tui` | Service name reported to the backend. Blank falls back to `armada-tui`. |
+| `OtlpEndpoint` | `null` | OTLP collector endpoint. The usual choice, since a TUI session is short-lived. |
+| `PrometheusEnabled` | `false` | Serve a Prometheus scrape endpoint while the TUI runs (`http://localhost:9465/metrics` by default). |
+| `PrometheusPort` | `9465` | Scrape port, clamped to 1-65535. The default stays clear of the Admiral's 9464. |
+| `LokiEndpoint` | `null` | Loki push endpoint. |
+
+Settings are read when `armada tui` starts. The exporter subscribes to two meters and activity sources: `Armada.Tui` (below) and `TUIKit` (frame timing, input, commands, modals, and toasts; see TUIKit's `TELEMETRY.md`). In Prometheus the TUI's series are:
+
+| Prometheus series | Labels | Meaning |
+| --- | --- | --- |
+| `armada_tui_sessions_total` | none | TUI sessions started |
+| `armada_tui_screen_views_total` | `route`, `screen` | Screens shown. `route` is the route pattern (for example `/missions/:id`), never a concrete id. |
+| `armada_tui_commands_total` | `command`, `source`, `outcome` | Commands run. `source` is `key`, `palette`, `menu`, or `direct`; `outcome` is `ok` or `error`. |
+| `armada_tui_approval_decisions_total` | `kind`, `decision` | Approval decisions (`approve`, `reject`, `deny`, `conditional`, `more_work`, `retry`, `stop`, `recall`, `restart`). |
+| `armada_tui_approval_latency_seconds` | `kind`, `decision` | Histogram of the time from an approval reaching the TUI to your decision. |
+| `armada_tui_ask_messages_total` | none | Ask Armada messages sent. |
+
+Every command also opens an `armada.tui.command` span with the same labels. Labels never carry entity ids, titles, message text, or server URLs.

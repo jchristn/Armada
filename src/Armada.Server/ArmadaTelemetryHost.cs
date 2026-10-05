@@ -1,6 +1,7 @@
 namespace Armada.Server
 {
     using System;
+    using System.Collections.Generic;
     using Microsoft.Extensions.Logging;
     using Radiant;
     using SyslogLogging;
@@ -23,6 +24,17 @@ namespace Armada.Server
         /// </summary>
         public bool IsRunning => _Host != null;
 
+        /// <summary>
+        /// Extra meter and activity source names to observe alongside Armada's own (for example the TUI's
+        /// <c>Armada.Tui</c> and TUIKit's <c>TUIKit</c> when Helm hosts <c>armada tui</c>). Set before
+        /// <see cref="Start(TelemetrySettings)"/>. Never null.
+        /// </summary>
+        public List<string> AdditionalSources
+        {
+            get => _AdditionalSources;
+            set => _AdditionalSources = value ?? new List<string>();
+        }
+
         #endregion
 
         #region Private-Members
@@ -30,6 +42,7 @@ namespace Armada.Server
         private readonly LoggingModule _Logging;
         private readonly string _Header = "[ArmadaTelemetryHost] ";
         private RadiantHost? _Host = null;
+        private List<string> _AdditionalSources = new List<string>();
 
         // When log export is active, we forward the SyslogLogging stream into a Radiant ILogger so every
         // _Logging.* line (including full-stack exception logs) is shipped to Loki/OTLP alongside the
@@ -105,6 +118,12 @@ namespace Armada.Server
                 radiant.Sources.AddMeter("Watson");
                 radiant.Sources.AddMeter("Microsoft.AspNetCore.Hosting");
                 radiant.Sources.AddMeter("System.Net.Http");
+                foreach (string source in _AdditionalSources)
+                {
+                    if (String.IsNullOrWhiteSpace(source)) continue;
+                    radiant.Sources.AddMeter(source);
+                    radiant.Sources.AddActivitySource(source);
+                }
 
                 _Host = RadiantHost.Start(radiant);
 

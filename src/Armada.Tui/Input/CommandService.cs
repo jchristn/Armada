@@ -2,8 +2,10 @@ namespace Armada.Tui.Input
 {
     using System;
     using System.Collections.Generic;
+    using System.Diagnostics;
     using System.Linq;
     using TUIKit.Input;
+    using Armada.Tui.Services;
 
     /// <summary>
     /// The single registry of commands. The menu bar, the command palette, and the help overlay are built from it, and
@@ -151,23 +153,36 @@ namespace Armada.Tui.Input
         /// Run a command by id when it is visible and enabled.
         /// </summary>
         /// <param name="id">Id.</param>
+        /// <param name="source">Where the command came from (a <c>TuiTelemetry.Source*</c> value), for telemetry.</param>
         /// <returns>True when it ran.</returns>
-        public bool Execute(string id)
+        public bool Execute(string id, string source = TuiTelemetry.SourceDirect)
         {
             ArmadaCommand? command = Find(id);
             if (command == null) return false;
-            return Run(command);
+            return Run(command, source);
         }
 
         /// <summary>
         /// Run a command when visible and enabled.
         /// </summary>
         /// <param name="command">Command.</param>
+        /// <param name="source">Where the command came from (a <c>TuiTelemetry.Source*</c> value), for telemetry.</param>
         /// <returns>True when it ran.</returns>
-        public bool Run(ArmadaCommand command)
+        public bool Run(ArmadaCommand command, string source = TuiTelemetry.SourceDirect)
         {
             if (command == null || !command.Visible || !command.Enabled) return false;
-            command.Handler();
+            Activity? activity = TuiTelemetry.StartCommand(command.Id, source);
+            bool ok = false;
+            try
+            {
+                command.Handler();
+                ok = true;
+            }
+            finally
+            {
+                TuiTelemetry.RecordCommand(activity, command.Id, source, ok);
+            }
+
             EventHandler<string>? handler = Executed;
             if (handler != null) handler(this, command.Id);
             return true;
@@ -195,7 +210,7 @@ namespace Armada.Tui.Input
                     {
                         if (g.IsSequence && SameStroke(g.Strokes[0], prefix) && g.Strokes[1].Matches(key))
                         {
-                            Run(c);
+                            Run(c, TuiTelemetry.SourceKey);
                             return true;
                         }
                     }
@@ -211,7 +226,7 @@ namespace Armada.Tui.Input
                     if (!g.IsSequence && g.Strokes[0].Matches(key))
                     {
                         if (!c.Enabled) return true;
-                        Run(c);
+                        Run(c, TuiTelemetry.SourceKey);
                         return true;
                     }
                 }

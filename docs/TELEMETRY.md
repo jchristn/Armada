@@ -42,6 +42,9 @@ Add a `telemetry` block to `settings.json`:
 | `prometheusPort`    | `9464`     | Port for the scrape endpoint. Clamped to `[1, 65535]`.                      |
 | `lokiEndpoint`      | `null`     | Loki push endpoint (e.g. `http://loki:3100`). Null disables Loki export.    |
 
+The terminal UI (`armada tui`) has its own, separately configured telemetry with the same fields, set in
+`~/.armada/tui.json` and also off by default; see [TUI.md](TUI.md#telemetry).
+
 ## Metrics
 
 The Admiral exposes reliability counters under the `Armada` meter. Exported to Prometheus they appear

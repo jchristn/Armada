@@ -1,0 +1,40 @@
+
+
+
+
+
+
+
+
+                                                      A R M A D A
+                                           Multi-agent orchestration  v0.9.0
+
+                            Server        127.0.0.1:9                                      v
+                                          http://127.0.0.1:9
+
+                            [Email Login]  API Key Login
+
+
+
+                            Email         admin@armada
+
+
+                                          [ Continue ]
+
+                            Language      English                v  Auto                   v
+
+                                      Default credentials: admin@armada / password
+                                               github.com/jchristn/Armada
+                                  Tab Next field   F2 Switch login mode   Ctrl+Q Quit
+
+
+
+
+
+
+
+
+
+
+
+ Tab Next field  Enter Continue  F2 Switch login mode  Ctrl+Q Quit

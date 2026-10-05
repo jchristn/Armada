@@ -635,6 +635,7 @@ namespace Armada.Tui.Ask
             string trimmed = (text ?? "").Trim();
             if (trimmed.Length == 0 || NoCaptain || Conversation.TurnActive || trimmed.StartsWith("/", StringComparison.Ordinal)) return false;
             SentHistory.Add(trimmed);
+            TuiTelemetry.RecordAskMessage();
             bool showThinking = ShowThinking;
             string? existing = Conversation.ThreadId;
             string localId = AskConversation.LocalPrefix + Guid.NewGuid().ToString("N").Substring(0, 12);
@@ -786,6 +787,8 @@ namespace Armada.Tui.Ask
         {
             if (String.IsNullOrEmpty(threadId) || String.IsNullOrEmpty(proposalId) || BusyProposalId != null) return;
             BusyProposalId = proposalId;
+            ApprovalItem? pending = Context.Approvals.Find(ApprovalKindEnum.AskProposal, proposalId);
+            TuiTelemetry.RecordApproval(ApprovalKindEnum.AskProposal, approve ? "approve" : "reject", pending?.CreatedUtc, Context.Clock.UtcNow);
             ArmadaClient client = Context.Client;
             _ = Task.Run(async () =>
             {

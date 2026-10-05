@@ -536,6 +536,70 @@ If you connect Claude Code to Armada's MCP server, Claude can act as the orchest
 
 See [Claude Code as Orchestrator](docs/CLAUDE_CODE_AS_ORCHESTRATOR.md) for setup.
 
+## Terminal UI
+
+`armada tui` opens the dashboard in a terminal: the same Admiral, REST API, and WebSocket, for people who live in a shell, work over SSH, or have no browser. It ships inside the `armada` CLI, so every way of installing Helm installs it too: the .NET tool (`dotnet tool install -g Armada.Helm`, also what `scripts/*/install` uses) and the Linux `.deb`/`.rpm` CLI packages.
+
+```
+armada tui                                 # last profile, or the local Admiral
+armada tui --server http://127.0.0.1:7890  # a specific server (saved as a profile)
+armada tui --profile work --route /missions
+```
+
+It opens into Ask Armada and covers Home, Needs You, the Approvals center, Planning, Dispatch, Backlog, Fleet Actions, Missions, Voyages, the Merge Queue, Jobs, Delivery, Configuration, Activity, and System screens, with a command palette (`Ctrl+K`), menus (`F10`), key help (`?`), notifications, themes, and the dashboard's languages. Build screens (vessels, health, workspace, captains, docks) are still in progress. See [docs/TUI.md](docs/TUI.md) for profiles, keys, and every screen.
+
+<details>
+<summary>Text captures (120x40)</summary>
+
+Ask Armada:
+
+```
+ Armada  [Default Tenant] admin@armada  [Global Admin]                                             o Offline  [bell 0]
+ File  Go  View  Actions  Ask  Help                                                                            F10 Menu
+  Dashboard             | Release checklist [e]          Captain: claude-1 (ClaudeCode) [c]   Auto-approve: off [Ctrl...
+> Ask Armada            |-----------------------------------------------------------------------------------------------
+- OPERATIONS            |  You                                                                                    1m ago
+   Needs You            |    What is left before we cut the 1.0 release?
+   Planning             |
+   Dispatch             |  claude-1  3.8s                                                                         1m ago
+   Fleet Actions        |  Two things are open:
+   Missions             |
+- DELIVERY              |  1. Fix column widths is in progress on DemoRepo.
+   Delivery             |  2. Broken failed its tests; I can restart it.
+- BUILD                 |
+   Vessels              |  Want me to dispatch a voyage for the remaining docs work?
+   Captains             |
+- CONFIGURATION         |  You                                                                                    1m ago
+   Configuration        |    Yes, one mission for the README.
+- ACTIVITY              |
+   Activity             |
+   Jobs                 |
+- SYSTEM                |
+   API Explorer         |
+   Settings             |
+                        |
+                        |
+                        |
+                        |
+                        |
+                        |
+                        |
+                        |
+                        |
+                        |
+                        |
+                        |
+                        |
+                        |-----------------------------------------------------------------------------------------------
+                        |>  Message the captain, or type / for quick actions
+                        |[ ] Show thinking (Alt+T)   / Quick actions   Ctrl+E Editor   AI can make mistake... Enter Send
+ Enter Send  Ctrl+J Newline  / Quick actions  Esc Messages  ? Help  Ctrl+K Palette  F10 Menu  Tab Next pane      manual
+```
+
+More captures from the headless renderer: [login](docs/tui-screens/login-120x40.txt), [Home](docs/tui-screens/home-120x40.txt), [Missions](docs/tui-screens/missions-120x40.txt), [Approvals](docs/tui-screens/approvals-120x40.txt). They are rendered from stub data by the `Tui.ReadmeFrames` test suite (`ARMADA_TUI_README_DIR=docs/tui-screens`), so the header shows Offline.
+
+</details>
+
 ## Screenshots
 
 <details>
@@ -694,6 +758,7 @@ armada watch                 Live dashboard with notifications
 armada log <captain>         Tail a specific agent's output
 armada log <captain> -f      Follow mode (like tail -f)
 armada doctor                System health check
+armada tui                   Terminal UI (the dashboard in a terminal)
 ```
 
 ### Missions and Voyages

@@ -91,6 +91,7 @@ namespace Armada.Tui.Approvals
         /// <param name="decision">Decision.</param>
         public void SubmitReview(ApprovalItem item, ReviewDecision decision)
         {
+            Record(item, ReviewDecisionName(decision.Verdict));
             SubmitReview(item.EntityId, item.EntityName ?? item.Title, decision, () => Resolved(item));
         }
 
@@ -176,6 +177,7 @@ namespace Armada.Tui.Approvals
                 : _Context.Loc.T("Deny \"{{title}}\" without executing it?", LocalizationArgs.Of("title", title));
             return _Context.Confirm(approve ? "Approve Deployment" : "Deny Deployment", message, () =>
             {
+                Record(item, approve ? "approve" : "deny");
                 ArmadaClient client = _Context.Client;
                 _ = Task.Run(async () =>
                 {
@@ -208,6 +210,7 @@ namespace Armada.Tui.Approvals
         {
             if (item == null || item.Kind != ApprovalKindEnum.FailedLanding) return false;
             string title = item.EntityName ?? item.Title;
+            Record(item, "retry");
             ArmadaClient client = _Context.Client;
             _ = Task.Run(async () =>
             {
@@ -266,6 +269,7 @@ namespace Armada.Tui.Approvals
 
             return _Context.Confirm(title, message, () =>
             {
+                Record(item, action);
                 ArmadaClient client = _Context.Client;
                 _ = Task.Run(async () =>
                 {
@@ -329,6 +333,22 @@ namespace Armada.Tui.Approvals
         #endregion
 
         #region Private-Methods
+
+        private void Record(ApprovalItem item, string decision)
+        {
+            TuiTelemetry.RecordApproval(item.Kind, decision, item.CreatedUtc, _Context.Clock.UtcNow);
+        }
+
+        private static string ReviewDecisionName(ReviewVerdictEnum verdict)
+        {
+            switch (verdict)
+            {
+                case ReviewVerdictEnum.Approve: return "approve";
+                case ReviewVerdictEnum.Conditional: return "conditional";
+                case ReviewVerdictEnum.MoreWork: return "more_work";
+                default: return "deny";
+            }
+        }
 
         private void Resolved(ApprovalItem item)
         {

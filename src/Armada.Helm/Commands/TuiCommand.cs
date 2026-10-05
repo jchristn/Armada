@@ -1,10 +1,15 @@
 namespace Armada.Helm.Commands
 {
     using System;
+    using System.Collections.Generic;
     using System.ComponentModel;
     using System.Threading;
     using System.Threading.Tasks;
     using Spectre.Console.Cli;
+    using SyslogLogging;
+    using TUIKit.Diagnostics;
+    using Armada.Core.Settings;
+    using Armada.Server;
     using Armada.Tui;
     using Armada.Tui.Services;
 
@@ -25,7 +30,26 @@ namespace Armada.Helm.Commands
                 || !String.IsNullOrWhiteSpace(settings.Profile)
                 || !String.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(TuiPaths.ServerUrlEnvironmentVariable));
             if (!explicitServer) options.DefaultServerUrl = GetBaseUrl();
+            options.TelemetryHostFactory = StartTelemetryHost;
             return await ArmadaTuiApp.RunConsoleAsync(options, cancellationToken).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Start the Admiral's telemetry host for the TUI process, observing the TUI's and TUIKit's meters and
+        /// activity sources. Logs go nowhere visible (the TUI owns the terminal).
+        /// </summary>
+        /// <param name="telemetry">Settings from the <c>Telemetry</c> section of <c>tui.json</c>.</param>
+        /// <returns>The running host, or null when it did not start.</returns>
+        public static IDisposable? StartTelemetryHost(TelemetrySettings telemetry)
+        {
+            LoggingModule logging = new LoggingModule();
+            logging.Settings.EnableConsole = false;
+            ArmadaTelemetryHost host = new ArmadaTelemetryHost(logging);
+            host.AdditionalSources = new List<string> { TuiTelemetry.MeterName, TuiKitTelemetryNames.MeterName };
+            host.Start(telemetry);
+            if (host.IsRunning) return host;
+            host.Dispose();
+            return null;
         }
     }
 }
