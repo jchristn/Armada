@@ -1889,7 +1889,7 @@ namespace Armada.Server
                         catch (Exception epEx) { _Logging.Warn(_Header + "model endpoint health sweep error: " + epEx.Message); }
                     }
 
-                    // Run data expiry every 100 health check cycles (~50 min at default interval)
+                    // Run data expiry every 100 health check cycles (100 x HeartbeatIntervalSeconds plus loop time; about 17 minutes at the default 10 s)
                     if (_HealthCheckCycles % 100 == 0)
                     {
                         // DataExpiryService talks to SQLite directly; on server providers it would throw and skip the
