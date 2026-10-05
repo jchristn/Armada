@@ -10,7 +10,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Tunnel protocol version understood by this Armada instance.
         /// </summary>
-        public string ProtocolVersion { get; set; } = "2026-04-03";
+        public string ProtocolVersion { get; set; } = Constants.RemoteTunnelProtocolVersion;
 
         /// <summary>
         /// Armada product version.

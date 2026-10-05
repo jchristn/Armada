@@ -9,7 +9,7 @@ namespace Armada.Core.Authorization
     /// any route handler runs (matching the request to the template Watson routes it to), and route handlers check it
     /// again through <see cref="Services.Interfaces.IAuthorizationService"/>. A route registered without a declaration
     /// here is treated as <see cref="PermissionLevel.AdminOnly"/> (fail closed) and is reported by
-    /// <c>RouteAuthorizationCoverageSuite</c>, which fails when any registered route or MCP tool is undeclared.
+    /// <c>AuthorizationCoverageSuite</c>, which fails when any registered route or MCP tool is undeclared.
     /// When adding a route, add its line here in the same change.
     /// </summary>
     public static class RouteAuthorizationRegistry
