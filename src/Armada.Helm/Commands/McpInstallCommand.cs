@@ -89,7 +89,14 @@ namespace Armada.Helm.Commands
                 }
                 else if (!settings.DryRun)
                 {
-                    WriteResult(await McpConfigHelper.InstallInstructionTargetAsync(target).ConfigureAwait(false));
+                    try
+                    {
+                        WriteResult(await McpConfigHelper.InstallInstructionTargetAsync(target).ConfigureAwait(false));
+                    }
+                    catch (InvalidDataException ex)
+                    {
+                        AnsiConsole.MarkupLine($"[red]{target.ClientName}[/]: not changed: {Markup.Escape(target.FilePath)}: {Markup.Escape(ex.Message)}");
+                    }
                 }
                 else
                 {

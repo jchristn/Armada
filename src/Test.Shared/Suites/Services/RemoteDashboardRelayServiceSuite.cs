@@ -187,6 +187,36 @@ namespace Test.Shared.Suites.Services
                 AssertEqual("relay_body_too_large", responseTooLarge.ErrorCode, "Oversize response should return a clear error code");
             }));
 
+            cases.Add(CaseAsync("handle_async_relays_canonical_path_and_rejects_ambiguous_paths", "HandleAsync RelaysCanonicalPathAndRejectsAmbiguousPaths", TestTags.Negative, async () =>
+            {
+                await using LoopbackRelayHost host = await LoopbackRelayHost.StartAsync().ConfigureAwait(false);
+                await using RemoteDashboardRelayService service = new RemoteDashboardRelayService(
+                    CreateLogging(),
+                    CreateSettings(host.Port),
+                    (_, _, _) => Task.CompletedTask);
+
+                RemoteTunnelRequestResult collapsed = await service.HandleAsync(
+                    RemoteTunnelProtocol.CreateRequest(
+                        "armada.http.request",
+                        new RemoteTunnelHttpRelayRequest { Method = "GET", Path = "/api/v1//%65cho/" }),
+                    CancellationToken.None).ConfigureAwait(false);
+                RemoteTunnelHttpRelayResponse collapsedPayload = RequireRelayResponse(collapsed, "collapsed relay");
+                EchoBody? echo = JsonSerializer.Deserialize<EchoBody>(DecodeBody(collapsedPayload.BodyBase64), new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                AssertEqual(200, collapsedPayload.StatusCode, "canonicalized path should relay");
+                AssertEqual("/api/v1/echo", echo?.Path, "the local request must use the canonical path");
+
+                foreach (string ambiguous in new string[] { "/api/v1/./echo", "/api/v1/%2e%2e/echo", "/api/v1/echo%2fx", "/api/v1/../v1/echo", "/api/v1/echo\\x", "/api/v1" })
+                {
+                    RemoteTunnelRequestResult rejected = await service.HandleAsync(
+                        RemoteTunnelProtocol.CreateRequest(
+                            "armada.http.request",
+                            new RemoteTunnelHttpRelayRequest { Method = "GET", Path = ambiguous }),
+                        CancellationToken.None).ConfigureAwait(false);
+                    AssertEqual(400, rejected.StatusCode, "'" + ambiguous + "' should be rejected");
+                    AssertEqual("invalid_path", rejected.ErrorCode, "'" + ambiguous + "' error code");
+                }
+            }));
+
             cases.Add(CaseAsync("handle_async_relays_web_socket_messages_and_remote_close", "HandleAsync RelaysWebSocketMessagesAndRemoteClose", TestTags.Positive, async () =>
             {
                 await using LoopbackRelayHost host = await LoopbackRelayHost.StartAsync().ConfigureAwait(false);
@@ -349,6 +379,13 @@ namespace Test.Shared.Suites.Services
 
                 throw new TimeoutException("Timed out waiting for relay event " + method + ".");
             }
+        }
+
+        private sealed class EchoBody
+        {
+            public string? Method { get; set; } = null;
+
+            public string? Path { get; set; } = null;
         }
 
         private sealed class LoopbackRelayHost : IAsyncDisposable

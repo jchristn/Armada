@@ -96,6 +96,41 @@ namespace Test.Shared.Suites.Database
                 return Task.CompletedTask;
             }));
 
+            cases.Add(Case("sqlite_add_column_statements_are_prechecked", "Every SQLite ADD COLUMN migration statement is recognized by the schema pre-check", TestTags.Positive, ct =>
+            {
+                List<string> unrecognized = new List<string>();
+                int recognized = 0;
+                foreach (SchemaMigration migration in AllProviderMigrations().Single(p => p.Key == "Sqlite").Value)
+                {
+                    foreach (string statement in migration.Statements)
+                    {
+                        if (statement.IndexOf("ADD COLUMN", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                        if (SqliteDatabaseDriver.TryParseAddColumn(statement, out string _, out string _)) recognized++;
+                        else unrecognized.Add("v" + migration.Version + ": " + FirstLine(statement));
+                    }
+                }
+
+                AssertTrue(recognized > 0, "SQLite migrations add columns");
+                AssertEqual(0, unrecognized.Count, "ADD COLUMN statements the pre-check cannot parse would fail on replay: " + String.Join(" | ", unrecognized));
+                return Task.CompletedTask;
+            }));
+
+            cases.Add(Case("mysql_migrations_use_mysql_dialect", "MySQL migrations do not use ADD COLUMN IF NOT EXISTS (not MySQL syntax)", TestTags.Negative, ct =>
+            {
+                List<string> violations = new List<string>();
+                foreach (SchemaMigration migration in AllProviderMigrations().Single(p => p.Key == "Mysql").Value)
+                {
+                    foreach (string statement in migration.Statements)
+                    {
+                        if (statement.IndexOf("ADD COLUMN IF NOT EXISTS", StringComparison.OrdinalIgnoreCase) >= 0)
+                            violations.Add("v" + migration.Version + ": " + FirstLine(statement));
+                    }
+                }
+
+                AssertEqual(0, violations.Count, "MySQL statements must be written in MySQL dialect: " + String.Join(" | ", violations));
+                return Task.CompletedTask;
+            }));
+
             cases.Add(Case("pending_migration_count_tracks_schema_version", "Pending migration count is all migrations on an empty database and zero after initialization", TestTags.Positive, async ct =>
             {
                 using (IsolatedTestDatabase isolated = await IsolatedTestDatabase.CreateAsync("pending", null, ct).ConfigureAwait(false))

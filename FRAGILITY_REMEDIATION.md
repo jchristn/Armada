@@ -48,7 +48,7 @@ always pass because `DescriptionLength` contains "Description".
   `MissionFailureKindEnum` (migration on all four providers) instead of `FailureReason` prefixes re-parsed by
   `MissionFailureClassifier` (High: wrong auto-rescue); judge verdict from the structured verdict signal only
   (High); provider reset from structured data; mission status changes not driven by stdout text.
-- [ ] **R1c Edge and security gates.** Proxy route policy on canonicalized paths (High); proxy static file and
+- [x] **R1c Edge and security gates.** Proxy route policy on canonicalized paths (High); proxy static file and
   CheckRun/inventory path containment; relay allowlist after normalization; dashboard prefix segment boundary;
   typed `UnsafeListenerConfigurationException`; SQLite/MySQL migrations without message matching; Helm runtime
   parsing to `AgentRuntimeEnum` with errors for unknown values (High: `--runtime opencode` created Claude Code);
@@ -83,3 +83,4 @@ always pass because `DescriptionLength` contains "Description".
 | 2026-10-04 | Claude | R1a | `UnifiedDiffParser` (hunk ranges, C-quoted paths, deletes/renames) drives the boundary scan and auto-land; dock branch facts from `--name-status -z` / `--numstat -z`; `GitCommandException` + exit-code pre-checks; `show-ref --verify`; `symbolic-ref`; porcelain v2 -z; `gh pr view --json`; worktree list -z; iso-strict dates; `LC_ALL=C` on git/gh launches; check-run artifacts preferred and typed JSON. Branch work/fx-git. |
 | 2026-10-04 | Claude | R2 | About 114 service throw sites now `KeyNotFoundException`; `RouteErrorMapper` replaces the 13 `ex.Message.Contains("not found")` routes and the IOE catches around converted calls; `McpToolRegistrar.MapToolExceptions` maps handler exceptions by type; typed args for `approve_deployment` and `start_runbook_execution`; `_UntypedNotFoundTools` removed; McpToolSuite asserts ErrorCode NotFound; new E2E.TypedNotFound suite. Deferred: three `ArgumentException("... not found")` sites (see CHANGELOG). |
 | 2026-10-04 | Claude | R3 | Typed MCP client (envelopes, SSE frame by id, typed exception codes); ApiEndpoint typed tool/diagnostic channels with isError; `Armada.Core.Protocol` stream events replace four parsers; injectable captain tool discovery; shared string-aware JSON extractor; typed Ask outcomes; npm/dotnet restore from codes and files; typed runtime tool arguments; run_process argv. Branch work/fx-protocol. |
+| 2026-10-04 | Claude | R1c | Canonical proxy route policy (bypass reproduced first), PathContainment everywhere, typed proxy bodies/settings/state, UnsafeListenerConfigurationException, SQLite/MySQL migrations, Helm runtime parsing, StatusCode, --task, registrar exit codes. Branch work/fx-edge. |

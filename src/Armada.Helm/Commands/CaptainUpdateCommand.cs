@@ -34,12 +34,18 @@ namespace Armada.Helm.Commands
                 return 1;
             }
 
-            string runtimeValue = ResolveRuntimeValue(settings.Runtime, current.Runtime.ToString());
+            AgentRuntimeEnum runtime = current.Runtime;
+            if (settings.Runtime != null && !AgentRuntimeParser.TryParse(settings.Runtime, out runtime))
+            {
+                AnsiConsole.MarkupLine("[red]" + Markup.Escape(AgentRuntimeParser.DescribeInvalid(settings.Runtime)) + "[/]");
+                return 1;
+            }
+
             MuxCaptainOptions muxOptions = current.Runtime == AgentRuntimeEnum.Mux
                 ? (CaptainRuntimeOptions.GetMuxOptions(current) ?? new MuxCaptainOptions())
                 : new MuxCaptainOptions();
 
-            if (runtimeValue == "Mux")
+            if (runtime == AgentRuntimeEnum.Mux)
             {
                 if (settings.MuxConfigDirectory != null) muxOptions.ConfigDirectory = settings.MuxConfigDirectory;
                 if (settings.MuxEndpoint != null) muxOptions.Endpoint = settings.MuxEndpoint;
@@ -63,12 +69,12 @@ namespace Armada.Helm.Commands
                 TenantId = current.TenantId,
                 UserId = current.UserId,
                 Name = String.IsNullOrWhiteSpace(settings.Name) ? current.Name : settings.Name.Trim(),
-                Runtime = runtimeValue,
+                Runtime = runtime,
                 Model = settings.Model != null ? (String.IsNullOrWhiteSpace(settings.Model) ? null : settings.Model.Trim()) : current.Model,
                 SystemInstructions = current.SystemInstructions,
                 AllowedPersonas = current.AllowedPersonas,
                 PreferredPersona = current.PreferredPersona,
-                RuntimeOptionsJson = runtimeValue == "Mux" ? CaptainRuntimeOptions.Serialize(muxOptions) : null
+                RuntimeOptionsJson = runtime == AgentRuntimeEnum.Mux ? CaptainRuntimeOptions.Serialize(muxOptions) : null
             };
 
             Captain? updated = await PutAsync<Captain>("/api/v1/captains/" + current.Id, body).ConfigureAwait(false);
@@ -80,20 +86,6 @@ namespace Armada.Helm.Commands
 
             AnsiConsole.MarkupLine($"[green]Captain updated:[/] [bold]{Markup.Escape(updated.Name)}[/] [dim]({Markup.Escape(updated.Id)})[/]");
             return 0;
-        }
-
-        private static string ResolveRuntimeValue(string? requestedRuntime, string currentRuntime)
-        {
-            return requestedRuntime?.ToLowerInvariant() switch
-            {
-                "claude" => "ClaudeCode",
-                "codex" => "Codex",
-                "gemini" => "Gemini",
-                "cursor" => "Cursor",
-                "mux" => "Mux",
-                "custom" => "Custom",
-                _ => currentRuntime
-            };
         }
     }
 }

@@ -1,6 +1,7 @@
 namespace Armada.Proxy.Settings
 {
     using System.Text.Json;
+    using System.Text.Json.Serialization;
     using Armada.Core;
     using SyslogLogging;
 
@@ -226,6 +227,8 @@ namespace Armada.Proxy.Settings
         /// </summary>
         /// <param name="explicitConfigPath">Optional explicit JSON configuration path.</param>
         /// <returns>Loaded settings with defaults applied.</returns>
+        /// <exception cref="InvalidDataException">A settings file is not a JSON object or a property has the wrong
+        /// type.</exception>
         public static ProxySettings Load(string? explicitConfigPath = null)
         {
             ProxySettings settings = new ProxySettings();
@@ -237,24 +240,27 @@ namespace Armada.Proxy.Settings
                     continue;
                 }
 
-                using JsonDocument document = JsonDocument.Parse(File.ReadAllText(path));
-                JsonElement root = document.RootElement;
-                if (root.ValueKind != JsonValueKind.Object)
-                {
-                    continue;
-                }
-
-                if (TryGetProperty(root, "ArmadaProxy", out JsonElement proxySection) && proxySection.ValueKind == JsonValueKind.Object)
-                {
-                    settings.Apply(proxySection);
-                }
-                else
-                {
-                    settings.Apply(root);
-                }
+                ProxySettingsFileRoot root = ReadSettingsFile(path);
+                settings.Apply(root.ArmadaProxy ?? root);
             }
 
             settings.ApplyEnvironmentOverrides();
+            return settings;
+        }
+
+        /// <summary>
+        /// Load settings from a single file on top of the defaults, without other candidate files or environment
+        /// overrides.
+        /// </summary>
+        /// <param name="path">JSON settings file.</param>
+        /// <returns>Loaded settings.</returns>
+        /// <exception cref="InvalidDataException">The file is not a JSON object or a property has the wrong type.</exception>
+        public static ProxySettings LoadFromFile(string path)
+        {
+            if (String.IsNullOrWhiteSpace(path)) throw new ArgumentNullException(nameof(path));
+            ProxySettings settings = new ProxySettings();
+            ProxySettingsFileRoot root = ReadSettingsFile(Path.GetFullPath(path));
+            settings.Apply(root.ArmadaProxy ?? root);
             return settings;
         }
 
@@ -328,44 +334,63 @@ namespace Armada.Proxy.Settings
 
         #region Private-Methods
 
-        private void Apply(JsonElement section)
+        private static readonly JsonSerializerOptions _FileJsonOptions = new JsonSerializerOptions
         {
-            if (TryGetProperty(section, nameof(DataDirectory), out JsonElement dataDirectory) && dataDirectory.ValueKind == JsonValueKind.String)
+            PropertyNameCaseInsensitive = true,
+            NumberHandling = JsonNumberHandling.AllowReadingFromString,
+            ReadCommentHandling = JsonCommentHandling.Skip,
+            AllowTrailingCommas = true
+        };
+
+        private static ProxySettingsFileRoot ReadSettingsFile(string path)
+        {
+            try
             {
-                DataDirectory = dataDirectory.GetString() ?? DataDirectory;
+                ProxySettingsFileRoot? root = JsonSerializer.Deserialize<ProxySettingsFileRoot>(File.ReadAllText(path), _FileJsonOptions);
+                if (root == null)
+                {
+                    throw new InvalidDataException("Proxy settings file " + path + " must contain a JSON object.");
+                }
+
+                return root;
+            }
+            catch (JsonException ex)
+            {
+                throw new InvalidDataException("Proxy settings file " + path + " is invalid: " + ex.Message, ex);
+            }
+        }
+
+        private void Apply(ProxySettingsFile section)
+        {
+            if (section.DataDirectory != null) DataDirectory = section.DataDirectory;
+            if (section.LogDirectory != null) LogDirectory = section.LogDirectory;
+            if (section.Hostname != null) Hostname = section.Hostname;
+            if (section.Port.HasValue) Port = section.Port.Value;
+            if (section.RequireEnrollmentToken.HasValue) RequireEnrollmentToken = section.RequireEnrollmentToken.Value;
+            if (section.HandshakeTimeoutSeconds.HasValue) HandshakeTimeoutSeconds = section.HandshakeTimeoutSeconds.Value;
+            if (section.StaleAfterSeconds.HasValue) StaleAfterSeconds = section.StaleAfterSeconds.Value;
+            if (section.RequestTimeoutSeconds.HasValue) RequestTimeoutSeconds = section.RequestTimeoutSeconds.Value;
+            if (section.MaxRecentEvents.HasValue) MaxRecentEvents = section.MaxRecentEvents.Value;
+            if (section.AllowDefaultPassword.HasValue) AllowDefaultPassword = section.AllowDefaultPassword.Value;
+            if (section.TrustForwardedHeaders.HasValue) TrustForwardedHeaders = section.TrustForwardedHeaders.Value;
+            if (section.SecureCookie.HasValue) SecureCookie = section.SecureCookie.Value;
+            if (section.LoginMaxFailures.HasValue) LoginMaxFailures = section.LoginMaxFailures.Value;
+            if (section.LoginFailureWindowSeconds.HasValue) LoginFailureWindowSeconds = section.LoginFailureWindowSeconds.Value;
+            if (section.LoginLockoutSeconds.HasValue) LoginLockoutSeconds = section.LoginLockoutSeconds.Value;
+            if (section.Password != null) Password = section.Password;
+
+            if (section.SyslogServers != null)
+            {
+                SyslogServers = section.SyslogServers
+                    .Where(server => server != null && !String.IsNullOrWhiteSpace(server.Hostname))
+                    .ToList();
             }
 
-            if (TryGetProperty(section, nameof(LogDirectory), out JsonElement logDirectory) && logDirectory.ValueKind == JsonValueKind.String)
+            if (section.EnrollmentTokens != null)
             {
-                LogDirectory = logDirectory.GetString() ?? LogDirectory;
-            }
-
-            if (TryGetProperty(section, nameof(Hostname), out JsonElement hostname) && hostname.ValueKind == JsonValueKind.String)
-            {
-                Hostname = hostname.GetString() ?? Hostname;
-            }
-
-            if (TryGetInt(section, nameof(Port), out int port)) Port = port;
-            if (TryGetBool(section, nameof(RequireEnrollmentToken), out bool requireEnrollmentToken)) RequireEnrollmentToken = requireEnrollmentToken;
-            if (TryGetInt(section, nameof(HandshakeTimeoutSeconds), out int handshakeTimeoutSeconds)) HandshakeTimeoutSeconds = handshakeTimeoutSeconds;
-            if (TryGetInt(section, nameof(StaleAfterSeconds), out int staleAfterSeconds)) StaleAfterSeconds = staleAfterSeconds;
-            if (TryGetInt(section, nameof(RequestTimeoutSeconds), out int requestTimeoutSeconds)) RequestTimeoutSeconds = requestTimeoutSeconds;
-            if (TryGetInt(section, nameof(MaxRecentEvents), out int maxRecentEvents)) MaxRecentEvents = maxRecentEvents;
-            if (TryGetSyslogServers(section, nameof(SyslogServers), out List<SyslogServer> syslogServers)) SyslogServers = syslogServers;
-            if (TryGetBool(section, nameof(AllowDefaultPassword), out bool allowDefaultPassword)) AllowDefaultPassword = allowDefaultPassword;
-            if (TryGetBool(section, nameof(TrustForwardedHeaders), out bool trustForwardedHeaders)) TrustForwardedHeaders = trustForwardedHeaders;
-            if (TryGetBool(section, nameof(SecureCookie), out bool secureCookie)) SecureCookie = secureCookie;
-            if (TryGetInt(section, nameof(LoginMaxFailures), out int loginMaxFailures)) LoginMaxFailures = loginMaxFailures;
-            if (TryGetInt(section, nameof(LoginFailureWindowSeconds), out int loginFailureWindowSeconds)) LoginFailureWindowSeconds = loginFailureWindowSeconds;
-            if (TryGetInt(section, nameof(LoginLockoutSeconds), out int loginLockoutSeconds)) LoginLockoutSeconds = loginLockoutSeconds;
-            if (TryGetProperty(section, nameof(Password), out JsonElement password) && password.ValueKind == JsonValueKind.String) Password = password.GetString();
-
-            if (TryGetProperty(section, nameof(EnrollmentTokens), out JsonElement enrollmentTokens) && enrollmentTokens.ValueKind == JsonValueKind.Array)
-            {
-                EnrollmentTokens = enrollmentTokens
-                    .EnumerateArray()
-                    .Where(item => item.ValueKind == JsonValueKind.String && !String.IsNullOrWhiteSpace(item.GetString()))
-                    .Select(item => item.GetString()!.Trim())
+                EnrollmentTokens = section.EnrollmentTokens
+                    .Where(token => !String.IsNullOrWhiteSpace(token))
+                    .Select(token => token.Trim())
                     .Distinct(StringComparer.Ordinal)
                     .ToList();
             }
@@ -392,98 +417,6 @@ namespace Armada.Proxy.Settings
             yield return Path.Combine(baseDirectory, "appsettings.json");
             yield return Path.Combine(currentDirectory, "appsettings.json");
             yield return Path.Combine(Constants.DefaultDataDirectory, "proxysettings.json");
-        }
-
-        private static bool TryGetProperty(JsonElement root, string propertyName, out JsonElement value)
-        {
-            foreach (JsonProperty property in root.EnumerateObject())
-            {
-                if (String.Equals(property.Name, propertyName, StringComparison.OrdinalIgnoreCase))
-                {
-                    value = property.Value;
-                    return true;
-                }
-            }
-
-            value = default;
-            return false;
-        }
-
-        private static bool TryGetInt(JsonElement root, string propertyName, out int value)
-        {
-            value = 0;
-            if (!TryGetProperty(root, propertyName, out JsonElement property))
-            {
-                return false;
-            }
-
-            if (property.ValueKind == JsonValueKind.Number && property.TryGetInt32(out value))
-            {
-                return true;
-            }
-
-            if (property.ValueKind == JsonValueKind.String && Int32.TryParse(property.GetString(), out value))
-            {
-                return true;
-            }
-
-            return false;
-        }
-
-        private static bool TryGetSyslogServers(JsonElement root, string propertyName, out List<SyslogServer> value)
-        {
-            value = new List<SyslogServer>();
-
-            if (!TryGetProperty(root, propertyName, out JsonElement property) || property.ValueKind != JsonValueKind.Array)
-            {
-                return false;
-            }
-
-            try
-            {
-                List<SyslogServer>? parsed = JsonSerializer.Deserialize<List<SyslogServer>>(
-                    property.GetRawText(),
-                    new JsonSerializerOptions
-                    {
-                        PropertyNameCaseInsensitive = true
-                    });
-
-                if (parsed != null)
-                {
-                    value = parsed
-                        .Where(server => !String.IsNullOrWhiteSpace(server.Hostname))
-                        .ToList();
-                }
-
-                return true;
-            }
-            catch
-            {
-                value = new List<SyslogServer>();
-                return false;
-            }
-        }
-
-        private static bool TryGetBool(JsonElement root, string propertyName, out bool value)
-        {
-            value = false;
-            if (!TryGetProperty(root, propertyName, out JsonElement property))
-            {
-                return false;
-            }
-
-            if (property.ValueKind == JsonValueKind.True || property.ValueKind == JsonValueKind.False)
-            {
-                value = property.GetBoolean();
-                return true;
-            }
-
-            if (property.ValueKind == JsonValueKind.String && Boolean.TryParse(property.GetString(), out value))
-            {
-                return true;
-            }
-
-            return false;
         }
 
         #endregion

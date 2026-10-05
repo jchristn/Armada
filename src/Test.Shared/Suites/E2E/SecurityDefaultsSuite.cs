@@ -115,18 +115,19 @@ namespace Test.Shared.Suites.E2E
             {
                 using (SecurityTestServer server = await SecurityTestServer.PrepareAsync("*", null).ConfigureAwait(false))
                 {
-                    InvalidOperationException? refused = null;
+                    UnsafeListenerConfigurationException? refused = null;
                     try
                     {
                         await server.StartAsync().ConfigureAwait(false);
                     }
-                    catch (InvalidOperationException ex)
+                    catch (UnsafeListenerConfigurationException ex)
                     {
                         refused = ex;
                     }
 
-                    AssertNotNull(refused, "start must be refused");
-                    AssertContains("Refusing to listen", refused!.Message);
+                    AssertNotNull(refused, "start must be refused with the typed exception");
+                    AssertEqual("*", refused!.Hostname, "exception carries the configured hostname");
+                    AssertContains("Refusing to listen", refused.Message);
                 }
             }));
 

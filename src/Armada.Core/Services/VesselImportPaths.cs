@@ -124,10 +124,7 @@ namespace Armada.Core.Services
         {
             if (String.IsNullOrEmpty(path) || String.IsNullOrEmpty(root)) return false;
             if (String.Equals(path, root, PathComparison)) return true;
-            string prefix = root.EndsWith(Path.DirectorySeparatorChar) || root.EndsWith(Path.AltDirectorySeparatorChar)
-                ? root
-                : root + Path.DirectorySeparatorChar;
-            return path.StartsWith(prefix, PathComparison);
+            return PathContainment.IsInside(root, path, allowRoot: true);
         }
 
         /// <summary>

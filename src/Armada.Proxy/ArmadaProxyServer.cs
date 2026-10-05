@@ -5,7 +5,9 @@ namespace Armada.Proxy
     using System.Net.WebSockets;
     using System.Text.Json;
     using Armada.Core;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Proxy.Enums;
     using Armada.Proxy.Models;
     using Armada.Proxy.Services;
     using Armada.Proxy.Settings;
@@ -224,11 +226,18 @@ namespace Armada.Proxy
                     return BuildTooManyAttempts(req, lockedRetryAfter);
                 }
 
-                JsonElement payload = ReadJsonBody(req);
-                string? nonce = GetOptionalProperty(payload, "nonce");
-                string? proofSha256 = GetOptionalProperty(payload, "proofSha256");
+                if (!TryReadJsonBody(req, out ProxyLoginRequest loginRequest, out string? bodyError))
+                {
+                    if (_LoginLimiter.RecordFailure(clientKey, out int malformedLockoutSeconds))
+                    {
+                        _Logging.Warn(_Header + "browser login locked out for " + clientKey + " for " + malformedLockoutSeconds + "s after repeated failures");
+                    }
 
-                if (!_Auth.TryLogin(nonce, proofSha256, out ProxyAuthService.ProxyBrowserSession? session, out string? error))
+                    req.Http.Response.StatusCode = 400;
+                    return new { error = bodyError };
+                }
+
+                if (!_Auth.TryLogin(loginRequest.Nonce, loginRequest.ProofSha256, out ProxyAuthService.ProxyBrowserSession? session, out string? error))
                 {
                     if (_LoginLimiter.RecordFailure(clientKey, out int lockoutSeconds))
                     {
@@ -291,8 +300,13 @@ namespace Armada.Proxy
             MapJsonPost(server, "/proxy-api/v1/session/instance", (req) =>
             {
                 string? sessionToken = GetProxySessionToken(req.Http.Request.Headers);
-                JsonElement payload = ReadJsonBody(req);
-                string? instanceId = GetOptionalProperty(payload, "instanceId");
+                if (!TryReadJsonBody(req, out ProxySelectInstanceRequest selectRequest, out string? bodyError))
+                {
+                    req.Http.Response.StatusCode = 400;
+                    return new { error = bodyError };
+                }
+
+                string? instanceId = selectRequest.InstanceId;
                 if (String.IsNullOrWhiteSpace(instanceId))
                 {
                     req.Http.Response.StatusCode = 400;
@@ -639,7 +653,7 @@ namespace Armada.Proxy
                 handshakeTimeout.CancelAfter(TimeSpan.FromSeconds(_Settings.HandshakeTimeoutSeconds));
                 RemoteTunnelEnvelope firstEnvelope = await ReceiveEnvelopeAsync(session, handshakeTimeout.Token).ConfigureAwait(false);
 
-                if (!String.Equals(firstEnvelope.Type, "request", StringComparison.OrdinalIgnoreCase) ||
+                if (firstEnvelope.Kind != RemoteTunnelEnvelopeTypeEnum.Request ||
                     !String.Equals(firstEnvelope.Method, "armada.tunnel.handshake", StringComparison.OrdinalIgnoreCase))
                 {
                     _Logging.Warn(_Header + "invalid handshake from " + remoteAddress + ": first message was " + (firstEnvelope.Method ?? firstEnvelope.Type ?? "unknown"));
@@ -728,20 +742,20 @@ namespace Armada.Proxy
                     RemoteTunnelEnvelope envelope = DeserializeEnvelope(message.Text);
                     _Registry.MarkSeen(instanceId);
 
-                    if (String.Equals(envelope.Type, "ping", StringComparison.OrdinalIgnoreCase))
+                    if (envelope.Kind == RemoteTunnelEnvelopeTypeEnum.Ping)
                     {
                         await SendEnvelopeAsync(session, RemoteTunnelProtocol.CreatePong(envelope.CorrelationId), ctx.Token).ConfigureAwait(false);
                         continue;
                     }
 
-                    if (String.Equals(envelope.Type, "response", StringComparison.OrdinalIgnoreCase))
+                    if (envelope.Kind == RemoteTunnelEnvelopeTypeEnum.Response)
                     {
                         _Registry.TryCompleteResponse(instanceId, envelope);
                         continue;
                     }
 
-                    if (String.Equals(envelope.Type, "event", StringComparison.OrdinalIgnoreCase) ||
-                        String.Equals(envelope.Type, "error", StringComparison.OrdinalIgnoreCase))
+                    if (envelope.Kind == RemoteTunnelEnvelopeTypeEnum.Event ||
+                        envelope.Kind == RemoteTunnelEnvelopeTypeEnum.Error)
                     {
                         _Registry.RecordEvent(instanceId, envelope);
                     }
@@ -876,7 +890,13 @@ namespace Armada.Proxy
 
         private async Task DefaultRouteAsync(HttpContextBase ctx)
         {
-            string path = NormalizePath(ctx.Request.Url.RawWithoutQuery);
+            UrlPathCanonicalizationResult path = UrlPathCanonicalizer.Canonicalize(ctx.Request.Url.RawWithoutQuery);
+            if (!path.Success)
+            {
+                await SendJsonErrorAsync(ctx, 400, "Request path is not in canonical form (" + path.Rejection + ").").ConfigureAwait(false);
+                return;
+            }
+
             if (IsRelayedApiPath(path))
             {
                 if (!TryGetBrowserSession(ctx, out ProxyAuthService.ProxyBrowserSession? browserSession))
@@ -907,8 +927,7 @@ namespace Armada.Proxy
                 return;
             }
 
-            if (String.Equals(path, "/dashboard", StringComparison.OrdinalIgnoreCase) ||
-                path.StartsWith("/dashboard/", StringComparison.OrdinalIgnoreCase))
+            if (IsDashboardPath(path))
             {
                 if (!TryGetBrowserSession(ctx, out ProxyAuthService.ProxyBrowserSession? browserSession))
                 {
@@ -943,7 +962,7 @@ namespace Armada.Proxy
             await ctx.Response.Send("{\"error\":\"Not found\"}", ctx.Token).ConfigureAwait(false);
         }
 
-        private async Task ServeDashboardAssetAsync(HttpContextBase ctx, string requestPath)
+        private async Task ServeDashboardAssetAsync(HttpContextBase ctx, UrlPathCanonicalizationResult requestPath)
         {
             if (!Directory.Exists(_DashboardDirectory))
             {
@@ -953,16 +972,7 @@ namespace Armada.Proxy
                 return;
             }
 
-            string relativePath = requestPath.Equals("/dashboard", StringComparison.OrdinalIgnoreCase)
-                ? "index.html"
-                : requestPath.Substring("/dashboard/".Length);
-            relativePath = Uri.UnescapeDataString(relativePath.Replace('/', Path.DirectorySeparatorChar));
-            if (String.IsNullOrWhiteSpace(relativePath))
-            {
-                relativePath = "index.html";
-            }
-
-            string? fullPath = TryResolveStaticPath(_DashboardDirectory, relativePath);
+            string? fullPath = DashboardAssetResolver.Resolve(_DashboardDirectory, requestPath);
             if (fullPath != null && File.Exists(fullPath))
             {
                 ctx.Response.StatusCode = 200;
@@ -985,18 +995,6 @@ namespace Armada.Proxy
             ctx.Response.ContentType = "text/html; charset=utf-8";
             byte[] indexBytes = await File.ReadAllBytesAsync(spaIndexPath, ctx.Token).ConfigureAwait(false);
             await ctx.Response.Send(indexBytes, ctx.Token).ConfigureAwait(false);
-        }
-
-        private static string? TryResolveStaticPath(string rootDirectory, string relativePath)
-        {
-            string fullPath = Path.GetFullPath(Path.Combine(rootDirectory, relativePath));
-            string normalizedRoot = Path.GetFullPath(rootDirectory);
-            if (!fullPath.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase))
-            {
-                return null;
-            }
-
-            return fullPath;
         }
 
         private static string GetContentType(string fullPath)
@@ -1024,8 +1022,8 @@ namespace Armada.Proxy
         private object BuildHealthPayload()
         {
             List<RemoteInstanceSummary> instances = _Registry.ListSummaries();
-            int connectedCount = instances.Count(summary => String.Equals(summary.State, "connected", StringComparison.OrdinalIgnoreCase));
-            int staleCount = instances.Count(summary => String.Equals(summary.State, "stale", StringComparison.OrdinalIgnoreCase));
+            int connectedCount = instances.Count(summary => summary.State == RemoteInstanceStateEnum.Connected);
+            int staleCount = instances.Count(summary => summary.State == RemoteInstanceStateEnum.Stale);
 
             return new
             {
@@ -1076,7 +1074,7 @@ namespace Armada.Proxy
             return new
             {
                 instanceId = summary.InstanceId,
-                state = summary.State,
+                state = ToWireState(summary.State),
                 armadaVersion = summary.ArmadaVersion,
                 protocolVersion = summary.ProtocolVersion,
                 capabilities = summary.Capabilities,
@@ -1167,9 +1165,12 @@ namespace Armada.Proxy
 
         private static bool IsInstanceConnectable(RemoteInstanceSummary summary)
         {
-            string state = summary.State?.Trim() ?? String.Empty;
-            return String.Equals(state, "connected", StringComparison.OrdinalIgnoreCase) ||
-                String.Equals(state, "stale", StringComparison.OrdinalIgnoreCase);
+            return summary.State == RemoteInstanceStateEnum.Connected || summary.State == RemoteInstanceStateEnum.Stale;
+        }
+
+        private static string ToWireState(RemoteInstanceStateEnum state)
+        {
+            return state.ToString().ToLowerInvariant();
         }
 
         private static bool SupportsDashboardApiRelay(RemoteInstanceSummary summary)
@@ -1263,15 +1264,19 @@ namespace Armada.Proxy
             return session != null && !String.IsNullOrWhiteSpace(session.SelectedInstanceId);
         }
 
-        private static bool IsRelayedApiPath(string? path)
+        private static bool IsRelayedApiPath(UrlPathCanonicalizationResult path)
         {
-            return !String.IsNullOrWhiteSpace(path) &&
-                path.StartsWith("/api/v1/", StringComparison.OrdinalIgnoreCase);
+            return path.Segments.Count > 2 && path.StartsWithSegments("api", "v1");
         }
 
-        private async Task HandleMissingProxySessionAsync(HttpContextBase ctx, string path)
+        private static bool IsDashboardPath(UrlPathCanonicalizationResult path)
         {
-            if (path.StartsWith("/dashboard", StringComparison.OrdinalIgnoreCase))
+            return path.StartsWithSegments("dashboard");
+        }
+
+        private async Task HandleMissingProxySessionAsync(HttpContextBase ctx, UrlPathCanonicalizationResult path)
+        {
+            if (IsDashboardPath(path))
             {
                 ctx.Response.StatusCode = 302;
                 ctx.Response.Headers.Add("Location", "/");
@@ -1282,9 +1287,9 @@ namespace Armada.Proxy
             await SendJsonErrorAsync(ctx, 401, "Proxy authentication required. Sign in again.").ConfigureAwait(false);
         }
 
-        private async Task HandleMissingSelectedInstanceAsync(HttpContextBase ctx, string path)
+        private async Task HandleMissingSelectedInstanceAsync(HttpContextBase ctx, UrlPathCanonicalizationResult path)
         {
-            if (path.StartsWith("/dashboard", StringComparison.OrdinalIgnoreCase))
+            if (IsDashboardPath(path))
             {
                 ctx.Response.StatusCode = 302;
                 ctx.Response.Headers.Add("Location", "/");
@@ -1303,33 +1308,42 @@ namespace Armada.Proxy
             return ctx.Response.Send(json, ctx.Token);
         }
 
-        private static JsonElement ReadJsonBody(ApiRequest req)
+        private static readonly JsonSerializerOptions _RequestBodyJsonOptions = new JsonSerializerOptions
         {
-            string body = req.Http.Request.DataAsString ?? String.Empty;
-            if (String.IsNullOrWhiteSpace(body))
+            PropertyNameCaseInsensitive = true
+        };
+
+        /// <summary>
+        /// Deserialize a request body into a typed DTO. A blank body yields a default instance; malformed JSON, a
+        /// non-object root, or a property of the wrong type fails with an error message for a 400 response.
+        /// </summary>
+        private static bool TryReadJsonBody<T>(ApiRequest req, out T body, out string? error) where T : class, new()
+        {
+            body = new T();
+            error = null;
+            string text = req.Http.Request.DataAsString ?? String.Empty;
+            if (String.IsNullOrWhiteSpace(text))
             {
-                return JsonDocument.Parse("{}").RootElement.Clone();
+                return true;
             }
 
-            return JsonDocument.Parse(body).RootElement.Clone();
-        }
-
-        private static string? GetOptionalProperty(JsonElement element, string propertyName)
-        {
-            if (element.ValueKind != JsonValueKind.Object)
+            try
             {
-                return null;
-            }
-
-            foreach (JsonProperty property in element.EnumerateObject())
-            {
-                if (String.Equals(property.Name, propertyName, StringComparison.OrdinalIgnoreCase))
+                T? parsed = JsonSerializer.Deserialize<T>(text, _RequestBodyJsonOptions);
+                if (parsed == null)
                 {
-                    return property.Value.ValueKind == JsonValueKind.Null ? null : property.Value.ToString();
+                    error = "Request body must be a JSON object.";
+                    return false;
                 }
-            }
 
-            return null;
+                body = parsed;
+                return true;
+            }
+            catch (JsonException)
+            {
+                error = "Request body must be a JSON object with the documented properties.";
+                return false;
+            }
         }
 
         private static string NormalizePath(string? path)

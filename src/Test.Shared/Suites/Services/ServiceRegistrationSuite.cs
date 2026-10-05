@@ -384,14 +384,18 @@ namespace Test.Shared.Suites.Services
 
             cases.Add(Case("windows_uninstall_stops_then_deletes", "Windows uninstall stops, waits, deletes; absent service is a no-op", TestTags.Positive, () =>
             {
-                int queries = 0;
+                // Exit codes only: stop accepted (0), still stopping (1061 ERROR_SERVICE_CANNOT_ACCEPT_CTRL), then
+                // stopped (1062 ERROR_SERVICE_NOT_ACTIVE). Output text is deliberately not English.
+                int stops = 0;
                 RecordingCommandRunner runner = new RecordingCommandRunner();
                 runner.Responder = (file, args) =>
                 {
-                    if (args[0] == "query")
+                    if (args[0] == "query") return new CommandResult(0, "ETAT : 4 EN COURS", "");
+                    if (args[0] == "stop")
                     {
-                        queries++;
-                        return new CommandResult(0, queries >= 3 ? "STATE : 1 STOPPED" : "STATE : 3 STOP_PENDING", "");
+                        stops++;
+                        if (stops == 1) return new CommandResult(0, "ETAT : 3 ARRET EN ATTENTE", "");
+                        return stops == 2 ? new CommandResult(1061, "", "") : new CommandResult(1062, "", "");
                     }
                     return null;
                 };
@@ -400,7 +404,13 @@ namespace Test.Shared.Suites.Services
                 registrar.PollIntervalMs = 0;
 
                 AssertEqual(RegistrationExitCode.Success, registrar.Uninstall());
-                AssertEqual("sc.exe query armada|sc.exe stop armada|sc.exe query armada|sc.exe query armada|sc.exe delete armada", String.Join("|", runner.Calls));
+                AssertEqual("sc.exe query armada|sc.exe stop armada|sc.exe stop armada|sc.exe stop armada|sc.exe delete armada", String.Join("|", runner.Calls));
+
+                // Already stopped: the first stop reports ERROR_SERVICE_NOT_ACTIVE and there is no wait.
+                RecordingCommandRunner stopped = new RecordingCommandRunner();
+                stopped.Responder = (file, args) => args[0] == "stop" ? new CommandResult(1062, "", "") : null;
+                AssertEqual(RegistrationExitCode.Success, new ServiceRegistrar(context, stopped, new StringWriter()) { PollIntervalMs = 0 }.Uninstall());
+                AssertEqual("sc.exe query armada|sc.exe stop armada|sc.exe delete armada", String.Join("|", stopped.Calls));
 
                 RecordingCommandRunner absent = new RecordingCommandRunner();
                 absent.Responder = (file, args) => new CommandResult(1060, "", "The specified service does not exist as an installed service.");
@@ -488,6 +498,28 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(RegistrationExitCode.Success, registrar.Uninstall());
                 AssertTrue(runner.Ran("reg.exe delete HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run /v Armada Harbor /f"));
                 AssertEqual(String.Empty, value);
+            }));
+
+            cases.Add(Case("startup_windows_run_key_requires_exact_value", "Harbor Windows Run value that merely contains the command line is rewritten", TestTags.Negative, () =>
+            {
+                RegistrationContext context = HarborContext(HostPlatformEnum.Windows, "C:\\Program Files\\Armada Harbor\\Armada.Harbor.exe", true, NewHome());
+                string expected = WindowsCommandBuilder.BuildCommandLine(context);
+                string value = expected + " --stale-extra-flag";
+                RecordingCommandRunner runner = new RecordingCommandRunner();
+                runner.Responder = (file, args) =>
+                {
+                    if (args[0] == "query") return new CommandResult(0, "\r\nHKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\r\n    Armada Harbor    REG_SZ    " + value + "\r\n", "");
+                    if (args[0] == "add") value = args[7];
+                    return null;
+                };
+
+                AssertEqual(RegistrationExitCode.Success, new StartupRegistrar(context, runner, new StringWriter()).Install());
+                AssertTrue(runner.Ran("reg.exe add"), "a value that only contains the command line must be updated");
+                AssertEqual(expected, value);
+
+                AssertTrue(WindowsCommandBuilder.TryGetRegQueryStringValue("    Armada Harbor    REG_SZ    a  b", "Armada Harbor", out string data), "parses the data");
+                AssertEqual("a  b", data);
+                AssertFalse(WindowsCommandBuilder.TryGetRegQueryStringValue("    Armada Harbor Beta    REG_SZ    x", "Armada Harbor", out string _), "name must match exactly");
             }));
 
             // Consistency with the installers and the real binary.

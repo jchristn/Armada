@@ -1,7 +1,8 @@
 namespace Armada.Proxy.Models
 {
-    using Armada.Proxy.Services;
     using Armada.Core.Models;
+    using Armada.Proxy.Enums;
+    using Armada.Proxy.Services;
 
     /// <summary>
     /// In-memory representation of an Armada instance tracked by the proxy.
@@ -176,21 +177,21 @@ namespace Armada.Proxy.Models
         {
             lock (_SyncRoot)
             {
-                string state;
+                RemoteInstanceStateEnum state;
                 if (Session != null)
                 {
                     if (LastSeenUtc.HasValue && (nowUtc - LastSeenUtc.Value).TotalSeconds > staleAfterSeconds)
                     {
-                        state = "stale";
+                        state = RemoteInstanceStateEnum.Stale;
                     }
                     else
                     {
-                        state = "connected";
+                        state = RemoteInstanceStateEnum.Connected;
                     }
                 }
                 else
                 {
-                    state = "offline";
+                    state = RemoteInstanceStateEnum.Offline;
                 }
 
                 return new RemoteInstanceSummary

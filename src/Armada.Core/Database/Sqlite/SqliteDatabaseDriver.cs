@@ -4,6 +4,7 @@ namespace Armada.Core.Database.Sqlite
     using System.Collections.Generic;
     using System.Globalization;
     using System.Text.Json;
+    using System.Text.RegularExpressions;
     using System.Threading;
     using System.Threading.Tasks;
     using Microsoft.Data.Sqlite;
@@ -42,6 +43,14 @@ namespace Armada.Core.Database.Sqlite
         #endregion
 
         #region Private-Members
+
+        /// <summary>
+        /// Shape of the ADD COLUMN statements in this driver's own migrations (Queries/TableQueries.cs): one
+        /// statement, unquoted identifiers. Used only to find the table and column for the schema pre-check.
+        /// </summary>
+        private static readonly Regex _AddColumnStatementRegex = new Regex(
+            @"^\s*ALTER\s+TABLE\s+(?<table>[A-Za-z_][A-Za-z0-9_]*)\s+ADD\s+COLUMN\s+(?<column>[A-Za-z_][A-Za-z0-9_]*)\s",
+            RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 
         private string _Header = "[SqliteDatabaseDriver] ";
         private DatabaseSettings _Settings;
@@ -981,22 +990,53 @@ namespace Armada.Core.Database.Sqlite
 
             foreach (string sql in migration.Statements)
             {
+                // Columns that a migration adds may already exist: later CREATE TABLE definitions include them, and a
+                // migration can be re-run against a schema that already contains it. Check the schema instead of
+                // matching the provider's error text.
+                if (TryParseAddColumn(sql, out string addTable, out string addColumn) &&
+                    await ColumnExistsAsync(conn, tx, addTable, addColumn, token).ConfigureAwait(false))
+                {
+                    _Logging.Debug(_Header + "migration v" + migration.Version + ": column " + addTable + "." + addColumn + " already exists, skipping");
+                    continue;
+                }
+
                 using (SqliteCommand cmd = conn.CreateCommand())
                 {
                     cmd.Transaction = tx;
                     cmd.CommandText = sql;
-                    try
-                    {
-                        await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
-                    }
-                    catch (SqliteException ex) when (ex.SqliteErrorCode == 1 && ex.Message.Contains("duplicate column name"))
-                    {
-                        // Column already exists in the CREATE TABLE definition. This happens when migrations add
-                        // columns that were later incorporated into the initial schema, and when a migration is
-                        // re-run against a schema that already contains it. Safe to skip.
-                        _Logging.Debug(_Header + "migration v" + migration.Version + ": column already exists, skipping");
-                    }
+                    await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 }
+            }
+        }
+
+        /// <summary>
+        /// Table and column of an ALTER TABLE ... ADD COLUMN statement in this driver's migrations.
+        /// </summary>
+        internal static bool TryParseAddColumn(string sql, out string table, out string column)
+        {
+            table = String.Empty;
+            column = String.Empty;
+            if (String.IsNullOrEmpty(sql)) return false;
+            Match match = _AddColumnStatementRegex.Match(sql);
+            if (!match.Success) return false;
+            table = match.Groups["table"].Value;
+            column = match.Groups["column"].Value;
+            return true;
+        }
+
+        /// <summary>
+        /// Whether a table has a column, from pragma_table_info.
+        /// </summary>
+        internal static async Task<bool> ColumnExistsAsync(SqliteConnection conn, SqliteTransaction? tx, string table, string column, CancellationToken token = default)
+        {
+            using (SqliteCommand check = conn.CreateCommand())
+            {
+                check.Transaction = tx;
+                check.CommandText = "SELECT COUNT(*) FROM pragma_table_info(@table) WHERE name = @column COLLATE NOCASE;";
+                check.Parameters.AddWithValue("@table", table);
+                check.Parameters.AddWithValue("@column", column);
+                object? found = await check.ExecuteScalarAsync(token).ConfigureAwait(false);
+                return found != null && found != DBNull.Value && Convert.ToInt64(found, CultureInfo.InvariantCulture) > 0;
             }
         }
 

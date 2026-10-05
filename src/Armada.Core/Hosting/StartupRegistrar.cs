@@ -117,7 +117,9 @@ namespace Armada.Core.Hosting
         {
             string commandLine = WindowsCommandBuilder.BuildCommandLine(Context);
             CommandResult query = Probe("reg.exe", new List<string> { "query", WindowsCommandBuilder.RunKey, "/v", Context.DisplayName });
-            if (query.Succeeded && query.StandardOutput.IndexOf(commandLine, StringComparison.OrdinalIgnoreCase) >= 0)
+            if (query.Succeeded &&
+                WindowsCommandBuilder.TryGetRegQueryStringValue(query.StandardOutput, Context.DisplayName, out string currentValue) &&
+                String.Equals(currentValue, commandLine, StringComparison.Ordinal))
             {
                 Print("already registered: " + WindowsCommandBuilder.RunKey + " \"" + Context.DisplayName + "\" = " + commandLine);
                 return RegistrationExitCode.Success;

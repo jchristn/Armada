@@ -168,7 +168,7 @@ namespace Armada.Core.Services.Health
             try
             {
                 string full = Path.GetFullPath(Path.Combine(RootPath, relativePath.Replace('/', Path.DirectorySeparatorChar)));
-                if (!full.StartsWith(RootPath, StringComparison.Ordinal)) return null;
+                if (!PathContainment.IsInside(RootPath, full)) return null;
                 FileInfo info = new FileInfo(full);
                 if (!info.Exists) return null;
                 using (FileStream stream = new FileStream(full, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))

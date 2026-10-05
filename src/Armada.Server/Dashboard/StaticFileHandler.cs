@@ -78,9 +78,9 @@ namespace Armada.Server.Dashboard
 
             // Strip leading /dashboard/ prefix
             string relativePath = urlPath;
-            if (relativePath.StartsWith("/dashboard/"))
+            if (relativePath.StartsWith("/dashboard/", StringComparison.OrdinalIgnoreCase))
                 relativePath = relativePath.Substring("/dashboard/".Length);
-            else if (relativePath == "/dashboard")
+            else if (String.Equals(relativePath, "/dashboard", StringComparison.OrdinalIgnoreCase))
                 relativePath = "index.html";
 
             if (String.IsNullOrEmpty(relativePath) || relativePath == "/")
@@ -88,7 +88,7 @@ namespace Armada.Server.Dashboard
 
             // Sanitize: prevent directory traversal
             relativePath = relativePath.Replace('\\', '/');
-            if (relativePath.Contains("..")) return false;
+            if (relativePath.Split('/').Any(segment => segment == ".." || segment == ".")) return false;
 
             // Try external directory first
             if (_ExternalDashboardPath != null)
@@ -170,7 +170,7 @@ namespace Armada.Server.Dashboard
             filePath = Path.GetFullPath(filePath);
 
             // Ensure the resolved path is still within the dashboard directory
-            if (!filePath.StartsWith(_ExternalDashboardPath!, StringComparison.OrdinalIgnoreCase))
+            if (!PathContainment.IsInside(_ExternalDashboardPath!, filePath))
                 return false;
 
             if (!File.Exists(filePath))

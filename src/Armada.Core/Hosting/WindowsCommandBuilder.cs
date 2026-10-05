@@ -91,6 +91,38 @@ namespace Armada.Core.Hosting
         }
 
         /// <summary>
+        /// Read one REG_SZ or REG_EXPAND_SZ value's data from <c>reg.exe query &lt;key&gt; /v &lt;name&gt;</c> output. reg.exe
+        /// prints each value as "    &lt;name&gt;    &lt;type&gt;    &lt;data&gt;" with four-space separators; the line whose
+        /// name equals <paramref name="valueName"/> exactly is used and its data is returned verbatim.
+        /// </summary>
+        /// <param name="output">reg.exe standard output.</param>
+        /// <param name="valueName">Value name.</param>
+        /// <param name="data">Value data when found.</param>
+        /// <returns>True when a string value with that exact name is present.</returns>
+        public static bool TryGetRegQueryStringValue(string? output, string valueName, out string data)
+        {
+            data = String.Empty;
+            if (String.IsNullOrEmpty(output) || String.IsNullOrEmpty(valueName)) return false;
+            const string separator = "    ";
+            foreach (string rawLine in output.Split('\n'))
+            {
+                string line = rawLine.TrimEnd('\r');
+                if (!line.StartsWith(separator + valueName + separator, StringComparison.Ordinal)) continue;
+                string rest = line.Substring(separator.Length + valueName.Length + separator.Length);
+                foreach (string type in new string[] { "REG_SZ", "REG_EXPAND_SZ" })
+                {
+                    if (rest.StartsWith(type + separator, StringComparison.Ordinal))
+                    {
+                        data = rest.Substring(type.Length + separator.Length);
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
         /// Quote one argument by the Windows command-line rules (CommandLineToArgvW): wrap in quotes when it contains
         /// whitespace or quotes, doubling backslashes that precede a quote.
         /// </summary>
