@@ -174,6 +174,41 @@ namespace Armada.Tui.Input
         }
 
         /// <summary>
+        /// Complete a pending sequence (for example the <c>s</c> of <c>g s</c>) before the screen sees the key, so a
+        /// screen that binds the second letter itself (a grid's <c>s</c> sort) cannot swallow it. Returns false and
+        /// leaves the key to the screen when nothing is pending or the key completes no sequence (the prefix is
+        /// dropped); <c>Esc</c> cancels a pending prefix and is consumed.
+        /// </summary>
+        /// <param name="key">Key.</param>
+        /// <param name="nowUtc">Current time (for the sequence timeout).</param>
+        /// <returns>True when consumed.</returns>
+        public bool TryCompletePending(KeyEvent key, DateTime nowUtc)
+        {
+            if (_Pending == null) return false;
+            if ((nowUtc - _PendingAt).TotalMilliseconds > _SequenceTimeoutMs)
+            {
+                _Pending = null;
+                return false;
+            }
+
+            KeyStroke prefix = _Pending;
+            _Pending = null;
+            foreach (ArmadaCommand c in All().Where(c => c.Dispatch && c.Visible))
+            {
+                foreach (KeyGesture g in c.Gestures)
+                {
+                    if (g.IsSequence && SameStroke(g.Strokes[0], prefix) && g.Strokes[1].Matches(key))
+                    {
+                        Run(c);
+                        return true;
+                    }
+                }
+            }
+
+            return key.Code == KeyCode.Escape;
+        }
+
+        /// <summary>
         /// Dispatch a key to bindings. Completes a pending sequence, begins one when the key is a sequence prefix, or
         /// runs a single-stroke binding. Screen bindings win over global ones.
         /// </summary>

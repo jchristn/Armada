@@ -98,18 +98,18 @@
     {
       "kind": "route",
       "key": "/captains",
-      "status": "planned",
-      "tui": "",
-      "workstream": "",
-      "notes": ""
+      "status": "implemented",
+      "tui": "HubScreen",
+      "workstream": "W4.7-W4.8",
+      "notes": "Captains hub: Captains and Docks tabs"
     },
     {
       "kind": "route",
       "key": "/captains/:id",
-      "status": "planned",
-      "tui": "",
-      "workstream": "",
-      "notes": ""
+      "status": "implemented",
+      "tui": "CaptainScreen",
+      "workstream": "W4.7",
+      "notes": "fields, Mux settings, quarantine with Lift Quarantine, current mission, captain log (server Readable formatting), recent missions; Edit (allowed and preferred personas), Duplicate, View Tools, Recall, Stop, Remove"
     },
     {
       "kind": "route",
@@ -186,10 +186,10 @@
     {
       "kind": "route",
       "key": "/docks/:id",
-      "status": "planned",
-      "tui": "",
-      "workstream": "",
-      "notes": ""
+      "status": "implemented",
+      "tui": "DockScreen",
+      "workstream": "W4.8",
+      "notes": "fields, vessel and captain links, starting point (git anchors); View JSON, Delete with worktree cleanup"
     },
     {
       "kind": "route",
@@ -258,10 +258,10 @@
     {
       "kind": "route",
       "key": "/fleets/:id",
-      "status": "planned",
-      "tui": "",
-      "workstream": "",
-      "notes": ""
+      "status": "implemented",
+      "tui": "FleetScreen",
+      "workstream": "W4.5",
+      "notes": "fields and the fleet's vessels; Edit, Duplicate, View JSON, Delete"
     },
     {
       "kind": "route",
@@ -578,42 +578,42 @@
     {
       "kind": "route",
       "key": "/vessels",
-      "status": "planned",
-      "tui": "",
-      "workstream": "",
-      "notes": ""
+      "status": "implemented",
+      "tui": "HubScreen",
+      "workstream": "W4.1-W4.6",
+      "notes": "Vessels hub: Vessels, Health, Fleets, Workspace tabs"
     },
     {
       "kind": "route",
       "key": "/vessels/:id",
-      "status": "planned",
-      "tui": "",
-      "workstream": "",
-      "notes": ""
+      "status": "implemented",
+      "tui": "VesselScreen",
+      "workstream": "W4.4",
+      "notes": "Readiness, Landing Preview, every field, context blocks, missions; Manage Objectives, Manage Fleet, Onboarding, Run Check, Open Workspace, Health inspector, Edit (?edit=1 opens it), Duplicate, View JSON, Delete"
     },
     {
       "kind": "route",
       "key": "/vessels/:id/onboarding",
-      "status": "planned",
-      "tui": "",
-      "workstream": "",
-      "notes": ""
+      "status": "implemented",
+      "tui": "VesselOnboardingScreen",
+      "workstream": "W4.4",
+      "notes": "counts, next recommended step, readiness, grouped checklist, open issues; Steps panel follows actions"
     },
     {
       "kind": "route",
       "key": "/vessels/health",
-      "status": "planned",
-      "tui": "",
-      "workstream": "",
-      "notes": ""
+      "status": "implemented",
+      "tui": "HubScreen",
+      "workstream": "W4.3",
+      "notes": "Vessels hub on the Health tab; filters, sort, and page round-trip through the query"
     },
     {
       "kind": "route",
       "key": "/vessels/import",
-      "status": "planned",
-      "tui": "",
-      "workstream": "",
-      "notes": ""
+      "status": "implemented",
+      "tui": "ImportWizard",
+      "workstream": "W4.2",
+      "notes": "Source (paste or browse), background discovery, Review (chips, selection, defaults, fleet recommendations opt-in), background import with progress, fleet recommendations editing and apply, import history; ?batch= opens a batch"
     },
     {
       "kind": "route",
@@ -666,18 +666,18 @@
     {
       "kind": "route",
       "key": "/workspace/:vesselId",
-      "status": "planned",
-      "tui": "",
-      "workstream": "",
-      "notes": ""
+      "status": "implemented",
+      "tui": "WorkspaceScreen",
+      "workstream": "W4.6",
+      "notes": "status, readiness, file tree, tabbed editor with hash-checked save and $EDITOR, previews, new/rename/delete/metadata, context with Append Selection, diff, terminal, search, Plan and Dispatch handoffs"
     },
     {
       "kind": "route",
       "key": "/workspace/:vesselId/:panel",
-      "status": "planned",
-      "tui": "",
-      "workstream": "",
-      "notes": ""
+      "status": "implemented",
+      "tui": "WorkspaceScreen",
+      "workstream": "W4.6",
+      "notes": "same Workspace screen (the panel segment is accepted)"
     },
     {
       "kind": "tab",
@@ -722,17 +722,17 @@
     {
       "kind": "tab",
       "key": "CaptainsHub:captains",
-      "status": "planned",
-      "tui": "/captains?tab=captains",
-      "workstream": "",
+      "status": "implemented",
+      "tui": "CaptainsScreen",
+      "workstream": "W4.7",
       "notes": "Captains"
     },
     {
       "kind": "tab",
       "key": "CaptainsHub:docks",
-      "status": "planned",
-      "tui": "/captains?tab=docks",
-      "workstream": "",
+      "status": "implemented",
+      "tui": "DocksScreen",
+      "workstream": "W4.8",
       "notes": "Docks"
     },
     {
@@ -962,33 +962,33 @@
     {
       "kind": "tab",
       "key": "VesselsHub:fleets",
-      "status": "planned",
-      "tui": "/vessels?tab=fleets",
-      "workstream": "",
+      "status": "implemented",
+      "tui": "FleetsScreen",
+      "workstream": "W4.5",
       "notes": "Fleets"
     },
     {
       "kind": "tab",
       "key": "VesselsHub:health",
-      "status": "planned",
-      "tui": "/vessels?tab=health",
-      "workstream": "",
+      "status": "implemented",
+      "tui": "VesselHealthScreen",
+      "workstream": "W4.3",
       "notes": "Health"
     },
     {
       "kind": "tab",
       "key": "VesselsHub:vessels",
-      "status": "planned",
-      "tui": "/vessels?tab=vessels",
-      "workstream": "",
+      "status": "implemented",
+      "tui": "VesselsScreen",
+      "workstream": "W4.1",
       "notes": "Vessels"
     },
     {
       "kind": "tab",
       "key": "VesselsHub:workspace",
-      "status": "planned",
-      "tui": "/vessels?tab=workspace",
-      "workstream": "",
+      "status": "implemented",
+      "tui": "WorkspaceScreen",
+      "workstream": "W4.6",
       "notes": "Workspace"
     },
     {
@@ -1349,7 +1349,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.CreateVesselAsync",
       "workstream": "W0.2",
-      "notes": "Vessels | used by SetupWizardScreen"
+      "notes": "Vessels | used by SetupWizardScreen | VesselUpsertRequest carries the write-only gitHubTokenOverride"
     },
     {
       "kind": "api",
@@ -1893,7 +1893,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.EvaluateVesselHealthAsync",
       "workstream": "W0.2",
-      "notes": "Vessel Health"
+      "notes": "Vessel Health | a 409 (already running) is returned like a success, as on the dashboard"
     },
     {
       "kind": "api",
@@ -3501,7 +3501,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.UpdateVesselAsync",
       "workstream": "W0.2",
-      "notes": "Vessels"
+      "notes": "Vessels | VesselUpsertRequest carries the write-only gitHubTokenOverride"
     },
     {
       "kind": "api",

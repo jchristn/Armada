@@ -28,6 +28,7 @@ namespace Armada.Tui.Screens.Build
             screens.Register("VesselHealthScreen", (m, c) => new VesselHealthScreen(m, c));
             screens.Register("VesselScreen", (m, c) => new VesselScreen(m, c));
             screens.Register("VesselOnboardingScreen", (m, c) => new VesselOnboardingScreen(m, c));
+            screens.Register("ImportWizard", (m, c) => new ImportWizard(m, c));
             screens.Register("WorkspaceScreen", (m, c) => String.IsNullOrEmpty(m.Param("vesselId")) ? new WorkspacePickerScreen(m, c) : new WorkspaceScreen(m, c));
         }
 
