@@ -534,6 +534,8 @@ namespace Armada.Tui.Screens.Build
                 _SelectedCount = selectedCount;
                 Batch = response.Batch;
                 ResultItems = response.Items ?? new List<VesselImportItem>();
+                OutcomeFilter = null;
+                ApplyOutcomeFilter();
                 Fleets.Load(new List<VesselImportFleetRecommendation>());
                 _JobId = response.JobId;
                 ShowStep("results");

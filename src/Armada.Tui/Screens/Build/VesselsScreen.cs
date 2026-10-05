@@ -110,13 +110,13 @@ namespace Armada.Tui.Screens.Build
             LandingFilter = SelectFilter("Landing Mode", modes, 20, false);
 
             Column("name", "Name", v => v.Name, 3, null, v => v.Name.ToLowerInvariant()).Pinned = true;
-            Column("id", "ID", v => v.Id, 0, 26);
+            Column("id", "ID", v => v.Id, 0, 24);
             Column("fleetId", "Fleet", v => FleetName(v.FleetId), 2, null, v => FleetName(v.FleetId).ToLowerInvariant());
             Column("repoUrl", "Repository", v => String.IsNullOrEmpty(v.RepoUrl) ? "-" : v.RepoUrl!, 5, null, v => (v.RepoUrl ?? "").ToLowerInvariant());
-            Column("defaultBranch", "Default branch", v => String.IsNullOrEmpty(v.DefaultBranch) ? "main" : v.DefaultBranch, 0, 14, v => (String.IsNullOrEmpty(v.DefaultBranch) ? "main" : v.DefaultBranch).ToLowerInvariant());
+            Column("defaultBranch", "Branch", v => String.IsNullOrEmpty(v.DefaultBranch) ? "main" : v.DefaultBranch, 0, 12, v => (String.IsNullOrEmpty(v.DefaultBranch) ? "main" : v.DefaultBranch).ToLowerInvariant());
             Column("landingMode", "Landing Mode", v => (v.LandingMode?.ToString() ?? Tr("Default")) + " (" + Tr(LandingModeInfo.For(v.LandingMode?.ToString()).Short) + ")", 0, 30);
-            Column("sync", "Sync", SyncText, 0, 18, null, SyncStyle);
-            Column("branches", "Branches", v => BranchCounts.TryGetValue(v.Id, out int? n) && n.HasValue ? Tr("{{count}} branches", LocalizationArgs.Of("count", n.Value)) : Tr("Branches"), 0, 13);
+            Column("sync", "Sync", SyncText, 0, 14, null, SyncStyle);
+            Column("branches", "Branches", v => BranchCounts.TryGetValue(v.Id, out int? n) && n.HasValue ? Tr("{{count}} branches", LocalizationArgs.Of("count", n.Value)) : Tr("Branches"), 0, 11);
             GridColumn<Vessel> created = Column("createdUtc", "Created", v => Context.Loc.FormatRelative(v.CreatedUtc, Context.Clock.UtcNow), 0, 14, v => v.CreatedUtc);
             created.DefaultVisible = false;
 

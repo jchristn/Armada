@@ -34,7 +34,7 @@ namespace Test.Shared.Suites.Tui.Build
                     string frame = host.Screen();
                     TuiCase.Contains(frame, "in sync", "in sync");
                     TuiCase.Contains(frame, "LocalMerge (local working dir)", "landing short label");
-                    TuiCase.Contains(frame, "Default branch", "default branch column");
+                    TuiCase.Contains(frame, "Branch ", "default branch column");
                     TuiCase.Contains(frame, "Import repositories", "import button");
                     VesselsScreen screen = (VesselsScreen)((HubScreen)host.Tui.Shell.Screen!).Content;
                     screen.LandingFilter.Choose(screen.LandingFilter.Options.First(o => o.Value == "PullRequest"));

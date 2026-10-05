@@ -3,7 +3,7 @@
 > **Type:** implementation plan (work-tracking). Annotate task status and the progress log as you go; keep this
 > document in sync with what actually shipped.
 >
-> **Status:** In progress (W0, W1, W2 Ask Armada, W3 Operations, W5 Delivery, W6 Configuration, and W7 Activity and System done; Milestones A and B complete; W4 Build screens and W8 finish remain)
+> **Status:** In progress (W0, W1, W2 Ask Armada, W3 Operations, W4 Build, W5 Delivery, W6 Configuration, and W7 Activity and System done; Milestones A, B, and C complete; every dashboard route and tab is implemented; W8 quality and W9 distribution remain)
 > **Built on:** TUIKit 1.2.1 (`TUIKit` on NuGet; source at `~/Code/Tuikit`)
 > **Parity baseline:** the web dashboard at `src/Armada.Dashboard` as of 2026-10-04 (52 page routes, 37 hub tabs,
 > about 45 modals and drawers, 317 server-calling API client functions, 29 WebSocket event types)
@@ -588,10 +588,23 @@ REST_API.md.
 
 ### W4. Build
 
-- [ ] **W4.1** Vessels (grid, form, branches, build context). **W4.2** Import wizard (all steps, recommendations,
+- [x] **W4.1** Vessels (grid, form, branches, build context). **W4.2** Import wizard (all steps, recommendations,
   history). **W4.3** Vessel Health (grid, filters, columns, detail tabs, overrides, evaluation). **W4.4** Vessel detail
   and onboarding. **W4.5** Fleets. **W4.6** Workspace (tree, editor, terminal, context, diff). **W4.7** Captains
   (grid, form incl. Mux, tools, detail, log, quarantine). **W4.8** Docks.
+  Notes: built in `Screens/Build` on the OPERATIONS bases (`OpsListScreen`, `OpsDetailScreen`, `OpsFormDialog`,
+  `OpsTextArea`, `OpsLogModal`); registered by `BuildScreens.Register`. The vessel form is one dialog with every field
+  of both dashboard vessel forms, and vessel, fleet, and captain edits send the full record (the dashboard's partial
+  bodies would clear unshown fields on the server's full-replace PUT). The GitHub token override travels in
+  `VesselUpsertRequest` (`Armada.Client.Models`), because `Vessel` only deserializes that field. The import wizard is
+  the `/vessels/import` screen rather than a modal over Vessels; its Review and Results steps use panels (`[`/`]`)
+  for the candidates and the defaults, and for the items and the fleet recommendations. Vessel Health mirrors its
+  filters, sort, and page into the route query through `Router.ReplaceQuietly` (no screen rebuild). The Workspace is
+  a tree and a tabbed editor side by side, with the terminal, diff, context, metadata, and search as dialogs; the
+  editor is plain text (TUIKit's `TextEditor` has no highlighting), while read-only previews are highlighted. Captain
+  logs use the server's readable formatting (`OpsLogModal` gained a toggle and an initial line count). Fixed on the
+  way: the client's `evaluateVesselHealth` now accepts 409 like the dashboard; a pending `g` prefix completes before
+  the screen sees the key, so `g s` works from a grid.
 
 ### W5. Delivery
 
@@ -618,7 +631,8 @@ REST_API.md.
 ### W8. Quality
 
 - [~] **W8.1** Parity enforcement (below). Manifest generated (`scripts/tui/generate-parity-manifest.py`) and the
-  coverage checks run in Tui.Parity; the "no planned entries in release builds" check is not enforced yet.
+  coverage checks run in Tui.Parity; no entry is planned any more (W4 flipped the last ones), but the "no planned
+  entries in release builds" check is not enforced yet.
 - [ ] **W8.2** Headless test suites: one keyboard-flow test per screen (open, filter, select, row action, modal,
   confirm) with `HeadlessBackend` and `WidgetTester`; Ask streaming and approval tests with a scripted event source.
 - [ ] **W8.3** End-to-end suite against `E2EServerFixture`: login, Ask dispatch with approval through landing (stub
@@ -635,7 +649,8 @@ REST_API.md.
 
 - [~] **W9.1** `docs/TUI.md`: install, start, profiles, key map, screens, approvals, notifications, troubleshooting.
   Install, start, profiles, login (including the forced password change), navigation, notifications, Ask Armada,
-  the Approvals center, and the key map are written; the other screens and troubleshooting follow their waves.
+  the Approvals center, the key map, and every screen section (Operations, Build, Delivery, Configuration, Activity
+  and System) are written; troubleshooting remains.
 - [ ] **W9.2** README section and screenshots (text captures from `Snapshot`).
 - [ ] **W9.3** Ships with Helm (`armada tui`) in every channel Helm ships in; CHANGELOG entry.
 
@@ -724,3 +739,4 @@ before Milestone B; U5, U6 before Milestone E).
 | 2026-10-04 | Claude (tui-delivery-config) | W5, W6 | Delivery (Deployments, Environments, Releases, Incidents, Checks, Runbooks; list and detail each) and Configuration (Workflow Profiles, Project Profiles, Skills, Personas, Pipelines, Prompts, Playbooks, Endpoints, Harbors, Memory) screens on shared `EntityListScreen`/`EntityDetailScreen` bases with `FormDialog`, `FilterBar`, `KpiStrip`, `ActionBar`, `TextAreaField` (inline plus `$EDITOR`), `RecordListField`, `CheckField`, `LinkDetailView`, `StackPanel`; server filters and paging, local sort over all matches where the server cannot sort; scoping per `lib/scoping.ts`; navigation prefill hand-offs; live refresh on `deployment.changed`/`incident.changed`. Parity: 17 routes and 16 tabs flipped to implemented. Deviations: detail editors are panels or dialogs rather than side-by-side forms; FormView cannot hide or disable rows, so scope-dependent fields are always shown with hints. TUIKit gaps: a modal closed from a posted callback stays drawn until the next input (worked around with `Modals.RemoveClosed`); no read-only text input or select. |
 | 2026-10-04 | Claude (tui-activity-system) | W7.1-W7.10, W3.11 Jobs, W8.1 | Activity and System screens on a shared kit (`Armada.Tui.Screens.Kit`: StackScreen/GridScreen, ScreenHeader, FilterStrip, KpiBar, FormModal, PathPrompt, ToggleField, MultilineField, MultiSeriesChart, RecordDetailView, UserScopeField, DataExport, ScreenOps): All Activity, API Requests (+drawer, `/requests/:id`, replay), Events (+detail), Signals (+detail, send), Token Usage, Jobs, API Explorer, Settings Server tab (every section incl. Vessel Import, Fleet Actions, Repository Health, Data Retention, Remote Control, backup/restore to chosen files, restart/stop/reset/rebuild with live log and rollback, proxy restrictions), Diagnostics, Tenants, Users, Credentials, Setup wizard with auto-open. Parity: 8 routes, 10 tabs, 55 settings fields implemented (parser now covers Repository Health fields and thresholds and Data Retention fields). Fixes: modals closed outside key handling are dropped from the stack at once (TUIKit swallowed the next key); ArmadaGrid passes Alt+arrows through for history navigation; HubScreen forwards the tab's status hints. Armada.Client SettingsData gains Retention. |
 | 2026-10-04 | Claude (tui-operations) | W3.1-W3.11, W8.1, W9.1 | OPERATIONS screens: Home, Needs You, Planning (live `planning-session.*`), Dispatch (pre-fill handoffs), Backlog and Backlog item (GitHub import, refinement with live `objective-refinement-session.*`), Fleet Actions (actions, runs, run detail with target drawer, vessel picker and run flow), Missions and Mission detail (diff, log, instructions, review, transition, landing preview, PR panel), Voyages, Voyage detail, Create Voyage, Merge Queue and entry detail, Jobs. Shared bases in `Screens/Operations`. Parity: 16 routes, 7 tabs, and 14 events flipped to implemented. Client: `GetVoyageDetailAsync` (the server returns `{ Voyage, Missions }`), `PlanningSessionEvent.Draft`. Fixes: Alt+arrows pass through `ArmadaGrid` (history navigation), hub screens forward the tab's status hints, `FormView` skips hidden rows. TUIKit gaps worked around: a modal closed without a key stays on the stack and swallows the next key (`RemoveClosed` after programmatic closes); `FormView` has no checkbox field, hidden rows, or a way to turn off dirty tracking. Tests: Tui.Ops.* suites (Home, Jobs, Missions, MissionDetail, Voyages, MergeQueue, Planning, Dispatch, Backlog, BacklogItem, FleetActions). |
+| 2026-10-04 | Claude (tui-build) | W4.1-W4.8, W8.1, W9.1 | BUILD screens in `Screens/Build`: Vessels (grid with background sync and branch counts, the full vessel form, Manage Branches with push and merge, Build/Refine Context, bulk Run action), the import wizard (paste or browse sources, background discovery, review with chips, selection, defaults, and the fleet recommendation opt-in, background import with progress, recommendation editing and apply, import history, `?batch=`), Vessel Health (summary chips, server filters, sort, and paging round-tripping through the route query, column chooser, health inspector with findings, dependencies, and overrides, evaluation tracking), the vessel page and onboarding, Fleets and the fleet page, the Workspace and its vessel picker (tree, tabbed editor with hash-checked save and `$EDITOR`, previews, terminal, diff, context with Append Selection, search, Plan and Dispatch handoffs), Captains and the captain page (Mux fields with discovery, tools viewer, readable captain log, quarantine), Docks and the dock page. Parity: the last 11 routes and 6 tabs flipped to implemented (no planned entries remain). Client: `VesselUpsertRequest` (token override), `evaluateVesselHealth` accepts 409. Shell: `Router.ReplaceQuietly`, pending go-to prefixes complete before the screen. Tests: Tui.Build.* (FleetsDocks, Captains, Vessels, Health, Workspace, Import; 18 cases). Real run against a throwaway Admiral on 33010/33011: vessel create, import of temp git repos (twice, with the leave-review guard), health evaluation and inspector, a Workspace edit with diff and terminal, captain create with the tools viewer, and a dock view. |
