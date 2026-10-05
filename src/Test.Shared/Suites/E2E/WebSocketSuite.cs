@@ -465,7 +465,7 @@ namespace Test.Shared.Suites.E2E
                 AssertEqual("command.result", resp.GetProperty("type").GetString());
                 string raw = resp.GetRawText();
                 AssertFalse(raw.Contains(token, StringComparison.Ordinal));
-                AssertFalse(raw.Contains("\"gitHubTokenOverride\"", StringComparison.Ordinal));
+                AssertFalse(JsonShape.HasPropertyAnywhere(raw, "GitHubTokenOverride"), "no GitHubTokenOverride property in any casing");
                 Vessel data = DeserializeData<Vessel>(resp);
                 AssertTrue(data.HasGitHubTokenOverride);
             }));

@@ -175,9 +175,11 @@ namespace Test.Shared.Suites.E2E
 
                         EnumerationResult<ArmadaEvent> events = JsonHelper.Deserialize<EnumerationResult<ArmadaEvent>>(
                             await (await admin.GetAsync("/api/v1/events?pageSize=200").ConfigureAwait(false)).Content.ReadAsStringAsync().ConfigureAwait(false));
-                        ArmadaEvent? audit = events.Objects.FirstOrDefault(e => e.EventType == CommandAudit.EventType && (e.Payload ?? "").Contains(marker));
+                        ArmadaEvent? audit = events.Objects.FirstOrDefault(e => e.EventType == CommandAudit.EventType
+                            && !String.IsNullOrEmpty(e.Payload)
+                            && JsonHelper.Deserialize<CommandAuditRecord>(e.Payload!).Command == "echo " + marker);
                         AssertNotNull(audit, "audit.command event for the exec");
-                        AssertContains("WorkspaceExec", audit!.Payload!);
+                        AssertEqual("WorkspaceExec", JsonHelper.Deserialize<CommandAuditRecord>(audit!.Payload!).Source, "audit source");
                         AssertEqual(vessel.Id, audit.VesselId);
 
                         // A tenant admin (not a global admin) cannot delete it.

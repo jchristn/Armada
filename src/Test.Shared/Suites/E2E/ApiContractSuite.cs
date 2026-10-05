@@ -118,13 +118,16 @@ namespace Test.Shared.Suites.E2E
                     foreach (string action in WebSocketSurface.CommandActions)
                     {
                         if (_UndispatchedCommands.Contains(action)) continue;
-                        string reply = await SendCommandAsync(ws, action).ConfigureAwait(false);
-                        if (reply.Contains("Unknown action", StringComparison.Ordinal)) unhandled.Add(action);
+                        E2eWebSocketFrame reply = await SendCommandAsync(ws, action).ConfigureAwait(false);
+                        // TODO(R5, production): command.error carries no error code, so "no handler" is recognized by the
+                        // handler's exact fallback text (compared whole, not searched for).
+                        if (reply.Type == "command.error" && reply.Error == "Unknown action: " + action) unhandled.Add(action);
                     }
 
                     AssertTrue(unhandled.Count == 0, "declared WebSocket commands without a handler: " + String.Join(", ", unhandled));
-                    string unknown = await SendCommandAsync(ws, "not_a_real_action").ConfigureAwait(false);
-                    AssertContains("Unknown action: not_a_real_action", unknown, "undeclared action is rejected");
+                    E2eWebSocketFrame unknown = await SendCommandAsync(ws, "not_a_real_action").ConfigureAwait(false);
+                    AssertEqual("command.error", unknown.Type, "undeclared action is rejected");
+                    AssertEqual("Unknown action: not_a_real_action", unknown.Error, "undeclared action is rejected as unknown");
                 }
             }));
 
@@ -279,15 +282,13 @@ namespace Test.Shared.Suites.E2E
         {
             string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
             AssertEqual(status, (int)response.StatusCode, "status for " + response.RequestMessage?.RequestUri + ": " + body);
-            using (JsonDocument document = JsonDocument.Parse(body))
-            {
-                AssertEqual(error, document.RootElement.GetProperty("Error").GetString(), "Error code in " + body);
-                AssertEqual(status, document.RootElement.GetProperty("StatusCode").GetInt32(), "StatusCode in " + body);
-                AssertTrue(document.RootElement.TryGetProperty("Message", out JsonElement _), "Message in " + body);
-            }
+            ApiErrorProbe probe = ApiErrorProbe.From(body);
+            AssertEqual(error, probe.Error?.ToString(), "Error code in " + body);
+            AssertEqual(status, probe.StatusCode, "StatusCode in " + body);
+            AssertNotNull(JsonShape.TopLevelProperty(body, "Message"), "Message in " + body);
         }
 
-        private static async Task<string> SendCommandAsync(ClientWebSocket ws, string action)
+        private static async Task<E2eWebSocketFrame> SendCommandAsync(ClientWebSocket ws, string action)
         {
             string payload = "{\"Route\":\"command\",\"action\":\"" + action + "\"}";
             byte[] bytes = Encoding.UTF8.GetBytes(payload);
@@ -307,9 +308,10 @@ namespace Test.Shared.Suites.E2E
                     }
                     while (!result.EndOfMessage);
 
-                    string json = message.ToString();
-                    if (json.Contains("\"type\":\"command.result\"", StringComparison.Ordinal) || json.Contains("\"type\":\"command.error\"", StringComparison.Ordinal))
-                        return json;
+                    E2eWebSocketFrame? frame = E2eWebSocketFrame.Parse(message.ToString());
+                    // Replies echo the action; the hub's exception reply carries none and belongs to the one command in flight.
+                    if (frame != null && (frame.Type == "command.result" || frame.Type == "command.error") && (frame.Action == action || frame.Action == null))
+                        return frame;
                 }
             }
         }

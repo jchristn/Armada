@@ -72,7 +72,9 @@ namespace Test.Shared.Suites.Models
             {
                 Signal signal = new Signal(SignalTypeEnum.Heartbeat);
                 string json = JsonSerializer.Serialize(signal);
-                AssertContains("\"Heartbeat\"", json);
+                JsonPropertyShape? type = JsonShape.TopLevel(json).Find(p => p.Name == "Type");
+                AssertEqual(JsonTokenType.String, type?.ValueToken, "Type is a JSON string");
+                AssertEqual("Heartbeat", type?.ScalarText, "Type value");
             }));
 
             // Added audit coverage: the Id setter rejects null/empty but the legacy suite never exercised it.

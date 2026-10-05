@@ -293,7 +293,7 @@ namespace Test.Shared.Suites.E2E
                     Dictionary<string, string?> headers =
                         JsonHelper.Deserialize<Dictionary<string, string?>>(record.Detail.RequestHeadersJson!);
                     AssertEqual("[REDACTED]", headers["Authorization"], "Authorization header redaction");
-                    AssertContains(captainId, record.Detail.RequestBodyText!);
+                    AssertEqual(captainId, JsonShape.TopLevelProperty(record.Detail.RequestBodyText!, "CaptainId")?.ScalarText, "captured body keeps the CaptainId");
                 }
                 finally
                 {
@@ -659,8 +659,7 @@ namespace Test.Shared.Suites.E2E
 
                 RequestHistoryEntry? entry = result.Objects.FirstOrDefault(e =>
                     String.Equals(e.Method, method, StringComparison.OrdinalIgnoreCase)
-                    && !string.IsNullOrEmpty(e.QueryString)
-                    && e.QueryString.Contains("trace=" + trace, StringComparison.Ordinal));
+                    && QueryString.Get(e.QueryString, "trace") == trace);
 
                 if (entry != null) return entry;
 

@@ -248,11 +248,7 @@ namespace Test.Shared.Suites.E2E
                 HttpClient authClient = fx.AuthClient;
 
                 HttpResponseMessage response = await authClient.GetAsync("/api/v1/captains/cpt_nonexistent");
-                ArmadaErrorResponse error = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(response);
-                Assert(
-                    !string.IsNullOrEmpty(error.Error)
-                    || !string.IsNullOrEmpty(error.Message),
-                    "Should have Error or Message property");
+                await E2eApiErrorAssert.ExpectAsync(response, HttpStatusCode.NotFound, "Should have Error or Message property");
             }));
 
             cases.Add(CaseAsync("get_captain_not_found_status_code_is_not_200_or_body_has_error", "Get Captain Not Found Status Code Is Not 200 Or Body Has Error", TestTags.Negative, async () =>
@@ -261,11 +257,7 @@ namespace Test.Shared.Suites.E2E
                 HttpClient authClient = fx.AuthClient;
 
                 HttpResponseMessage response = await authClient.GetAsync("/api/v1/captains/cpt_doesnotexist");
-                string body = await response.Content.ReadAsStringAsync();
-                Assert(
-                    response.StatusCode != HttpStatusCode.OK ||
-                    body.Contains("Error") || body.Contains("Message") || body.Contains("not found", StringComparison.OrdinalIgnoreCase),
-                    "Not-found captain should return non-200 status or error in body");
+                await E2eApiErrorAssert.ExpectAsync(response, HttpStatusCode.NotFound, "Not-found captain returns a typed 404");
             }));
 
             cases.Add(CaseAsync("get_captain_with_codex_runtime_returns_correct_runtime", "Get Captain With Codex Runtime Returns Correct Runtime", TestTags.Positive, async () =>
@@ -499,11 +491,7 @@ namespace Test.Shared.Suites.E2E
                 createdCaptainIds.Remove(captainId);
 
                 HttpResponseMessage getResp = await authClient.GetAsync("/api/v1/captains/" + captainId);
-                ArmadaErrorResponse error = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(getResp);
-                Assert(
-                    !string.IsNullOrEmpty(error.Error)
-                    || !string.IsNullOrEmpty(error.Message),
-                    "Should have Error or Message property");
+                await E2eApiErrorAssert.ExpectAsync(getResp, HttpStatusCode.NotFound, "Should have Error or Message property");
             }));
 
             cases.Add(CaseAsync("delete_captain_then_list_does_not_contain_deleted", "Delete Captain Then List Does Not Contain Deleted", TestTags.Positive, async () =>
@@ -553,11 +541,7 @@ namespace Test.Shared.Suites.E2E
                 HttpClient authClient = fx.AuthClient;
 
                 HttpResponseMessage response = await authClient.PostAsync("/api/v1/captains/cpt_nonexistent/stop", null);
-                ArmadaErrorResponse error = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(response);
-                Assert(
-                    !string.IsNullOrEmpty(error.Error)
-                    || !string.IsNullOrEmpty(error.Message),
-                    "Should have Error or Message property");
+                await E2eApiErrorAssert.ExpectAsync(response, HttpStatusCode.NotFound, "Should have Error or Message property");
             }));
 
             cases.Add(CaseAsync("stop_captain_not_found_status_code_is_not_ok_or_body_has_error", "Stop Captain Not Found Status Code Is Not OK Or Body Has Error", TestTags.Negative, async () =>
@@ -566,11 +550,7 @@ namespace Test.Shared.Suites.E2E
                 HttpClient authClient = fx.AuthClient;
 
                 HttpResponseMessage response = await authClient.PostAsync("/api/v1/captains/cpt_doesnotexist/stop", null);
-                string body = await response.Content.ReadAsStringAsync();
-                Assert(
-                    response.StatusCode != HttpStatusCode.OK ||
-                    body.Contains("Error") || body.Contains("Message") || body.Contains("not found", StringComparison.OrdinalIgnoreCase),
-                    "Stop on non-existent captain should return non-200 status or error in body");
+                await E2eApiErrorAssert.ExpectAsync(response, HttpStatusCode.NotFound, "Stop on non-existent captain returns a typed 404");
             }));
 
             cases.Add(CaseAsync("stop_captain_idle_returns_success", "Stop Captain Idle Returns Success", TestTags.Positive, async () =>
