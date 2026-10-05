@@ -76,10 +76,10 @@ with the default when Harbor saves.
 | `DashboardUrl` | Dashboard URL opened by the app's "Open Dashboard" action. Default `http://127.0.0.1:7890/dashboard`. |
 | `HarborId` | Harbor identifier (`hbr_` prefix). Generated on first run when empty. |
 | `Name` | Human-facing Harbor name. Defaults to the machine name. |
-| `UserId` / `TenantId` | Sent at connect as `x-user-guid` and `x-tenant-guid`. The Admiral does not read `x-user-guid`: the owning user always comes from the `AccessKey` credential (none without one). `TenantId` applies only to a credential-less loopback Harbor or when the credential is a global admin; otherwise the credential's tenant applies. |
+| `UserId` / `TenantId` | Sent at connect as `x-user-guid` and `x-tenant-guid`. The Admiral does not read `x-user-guid`: the owning user always comes from the `AccessKey` credential (none without one), so set `AccessKey` to one of your credentials when the Harbor must count as yours for `requireHarborForLaunch`. `TenantId` applies only to a credential-less loopback Harbor or when the credential is a global admin; otherwise the credential's tenant applies. |
 | `Capabilities` | Runtimes and host tools advertised at handshake (e.g. `git`, `claude`). Default `["git"]`. Drives capability-based routing. |
 | `Appearance` | Window color scheme: `System` (default), `Light`, or `Dark`. |
-| `MaxConcurrentJobs` | Maximum concurrent jobs this Harbor will accept. Default 4. |
+| `MaxConcurrentJobs` | Maximum concurrent jobs this Harbor will accept, advertised at handshake. Default 4. |
 | `HeartbeatIntervalMs` | Heartbeat interval in milliseconds; `0` disables heartbeats. Default 15000. |
 | `AccessKey` / `Secret` | `AccessKey` is an Armada credential (a bearer token from Server > Credentials, or the local API key); the Harbor registers under that credential's tenant and user. Leave it empty only for a Harbor on the same machine as a localhost-bound Admiral; a Harbor connecting from another host is refused without one. `Secret` is sent as `x-secret-key` but not used for authentication today, and is never logged. |
 
@@ -98,12 +98,15 @@ that turns split mode on or off. Whenever at least one Harbor is connected, each
 | `harbor.linkPath` | `/v1.0/harbor/connect` | WebSocket path Harbors connect to, on the REST port. Restart required. |
 | `harbor.requireAuth` | `false` | When true, every Harbor must present a credential. When false, a Harbor without a credential is still accepted only if the Admiral listens on a loopback hostname and the Harbor connects from loopback. |
 | `harbor.advertisedMcpBaseUrl` | `null` | MCP URL sent to Harbors in `handshakeAck` so captains can call home. Null advertises the Admiral's own MCP URL, which is right in Local mode; in split mode set a URL the Harbor host can reach. |
-| `requireHarborForLaunch` | `false` | When true, a mission is assigned only while an eligible Harbor owned by the mission's user is connected; it stays Pending otherwise and never runs on the Admiral host or another user's Harbor. |
-| `deploymentMode` | `Local` | `Local` or `Split`. Informational in 1.0: routing does not read it. |
+| `requireHarborForLaunch` | `false` | When true, a mission is assigned only while an eligible Harbor owned by the mission's user is connected; it stays Pending otherwise and never runs on the Admiral host or another user's Harbor. A Harbor's owner comes only from its `AccessKey` credential: a credential-less loopback Harbor has no owner and never counts for a mission that has a user. |
+| `deploymentMode` | `Local` | `Local` or `Split`. Reserved and informational in 1.0: nothing reads it. Routing to a Harbor happens whenever one is connected; `requireHarborForLaunch` is what keeps captains off the Admiral host. |
 
-`harbor.heartbeatIntervalSeconds` (15), `harbor.heartbeatTimeoutSeconds` (45), and `harbor.defaultMaxJobsPerHarbor` (4)
-are accepted and validated but not enforced in 1.0: a Harbor is marked disconnected when its link closes, not on a
-missed heartbeat, and each Harbor's capacity comes from its handshake or its registration.
+`harbor.defaultMaxJobsPerHarbor` (4) is the capacity given to a Harbor that registers through its handshake without
+advertising `maxConcurrentJobs` (omitted, or not positive); an existing registration keeps its capacity in that case.
+The Harbor app always advertises its `MaxConcurrentJobs`, so the default matters only for other link clients.
+`harbor.heartbeatIntervalSeconds` (15) and `harbor.heartbeatTimeoutSeconds` (45) are reserved: accepted and validated
+but not enforced in 1.0. A Harbor is marked `Disconnected` when its link closes, not on a missed heartbeat, and nothing
+marks a Harbor `Degraded`.
 
 ## Managing Harbors
 
@@ -148,7 +151,12 @@ depends on `requireHarborForLaunch`:
 - **Off (default):** the captain runs on the Admiral host, as in Local mode. The same happens when no Harbor is
   connected at all.
 - **On:** the mission is not assigned until an eligible Harbor owned by the mission's user is connected; it stays
-  Pending and is retried on each dispatch pass.
+  Pending and is retried on each dispatch pass. Routing then considers only that user's Harbors, so a launch never
+  lands on a shared Harbor or another user's Harbor, and if none can take it at launch time the launch is refused and
+  the mission returns to Pending.
+
+Either way, a launch for a dock that is already pinned to a Harbor never falls back to the Admiral host: if that Harbor
+is offline or no longer registered, the launch is refused.
 
 ## Harbor disconnects
 
@@ -164,14 +172,15 @@ Otherwise the mission is recovered by stall detection, which is the accepted 1.0
    the mission is not failed the moment the link drops.
 2. Once no output has arrived for `stallThresholdMinutes` (default 10), the health check marks the captain stalled,
    asks the Harbor to stop it (a no-op while the Harbor is disconnected), and runs auto-recovery: it relaunches the
-   captain in the mission's existing dock, up to `maxRecoveryAttempts` (default 3) times. The relaunch goes through
-   normal routing, so it lands on the dock's Harbor if that Harbor has reconnected; if it is still offline, the
-   relaunch falls back to the Admiral host like any other launch with no eligible Harbor.
+   captain in the mission's existing dock, up to `maxRecoveryAttempts` (default 3) times. The dock is pinned to its
+   Harbor, so the relaunch runs only there: if that Harbor has reconnected, the captain restarts on it; if it is still
+   offline, the relaunch is refused (it never falls back to the Admiral host), the attempt is spent, and the mission
+   fails with `StallRecoveryExhausted`.
 3. When recovery is exhausted, the mission fails with `StallRecoveryExhausted`. A recovery that cannot use the dock
    fails the mission as `Infra`. `maxMissionRuntimeMinutes` still applies throughout.
 
 So a short blip costs nothing, while a Harbor that stays away holds its missions for about `stallThresholdMinutes`
-before recovery starts. Lower `stallThresholdMinutes` to recover sooner, at the cost of flagging captains that are
+and then fails them. Lower `stallThresholdMinutes` to recover sooner, at the cost of flagging captains that are
 merely quiet.
 
 ## Status

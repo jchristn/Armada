@@ -275,7 +275,7 @@ namespace Armada.Server
             admiralService.OnReconcileManualLandings = (ct) => _ManualLandingReconciler.ReconcileAsync(null, ct);
             _HistoricalTimelineService = new HistoricalTimelineService(_Database);
             _ModelEndpointService = new ModelEndpointService(_Database, _Logging);
-            _HarborService = new HarborService(_Database, _Logging);
+            _HarborService = new HarborService(_Database, _Logging, _Settings.Harbor);
             string harborMcpUrl = String.IsNullOrWhiteSpace(_Settings.Harbor.AdvertisedMcpBaseUrl)
                 ? ArmadaMcpConfigBuilder.GetMcpUrl(_Settings.McpPort, ArmadaMcpConfigBuilder.ClientHostFor(_Settings.Rest.Hostname))
                 : _Settings.Harbor.AdvertisedMcpBaseUrl!;

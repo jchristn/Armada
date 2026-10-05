@@ -154,7 +154,8 @@ namespace Armada.Server
         /// <summary>
         /// Provide the Harbor connection manager so captain launches are delegated to a connected Harbor by
         /// default. When set and a Harbor is eligible, launches run on the Harbor host; when null or no Harbor
-        /// is eligible, launches fall back to in-process (local) execution.
+        /// is eligible, launches fall back to in-process (local) execution, unless the dock is pinned to a Harbor
+        /// or requireHarborForLaunch is on (then the launch is refused).
         /// </summary>
         /// <param name="manager">Harbor connection manager, or null to force local execution.</param>
         public void SetHarborConnections(HarborConnectionManager? manager)
@@ -1117,22 +1118,31 @@ namespace Armada.Server
         /// <summary>
         /// Resolve the process executor for a launch. Prefers a connected, eligible Harbor (making Harbor the
         /// default execution path); falls back to local in-process execution when no Harbor is connected, no
-        /// Harbor is eligible, or routing fails.
+        /// Harbor is eligible, or routing fails -- except when the dock is pinned to a Harbor (a worktree cannot
+        /// move hosts) or requireHarborForLaunch is on, where the launch is refused with
+        /// <see cref="HarborLaunchUnavailableException"/> instead of running on the Admiral host.
         /// </summary>
         private async Task<IHostProcessExecutor> ResolveLaunchExecutorAsync(Captain captain, Mission mission, Dock dock)
         {
+            string? pinnedHarborId = String.IsNullOrWhiteSpace(dock.HarborId) ? null : dock.HarborId;
+            bool requiredByPolicy = _Settings.RequireHarborForLaunch;
+            bool harborRequired = pinnedHarborId != null || requiredByPolicy;
+
             if (_HarborConnections == null)
             {
+                if (harborRequired) throw HarborUnavailable(mission, pinnedHarborId, requiredByPolicy, "Harbor delegation is not available on this Admiral");
                 _Logging.Debug(_Header + "Harbor delegation disabled (no connection manager wired); running locally");
                 return _HostProcessExecutor;
             }
 
             if (!_HarborConnections.HasConnectedHarbor())
             {
+                if (harborRequired) throw HarborUnavailable(mission, pinnedHarborId, requiredByPolicy, "no Harbor is connected");
                 _Logging.Debug(_Header + "no Harbor connected; running captain locally");
                 return _HostProcessExecutor;
             }
 
+            string reason;
             try
             {
                 Vessel? vessel = !String.IsNullOrEmpty(mission.VesselId)
@@ -1141,10 +1151,12 @@ namespace Armada.Server
 
                 HarborRoutingRequest request = new HarborRoutingRequest
                 {
-                    ExistingHarborId = String.IsNullOrWhiteSpace(dock.HarborId) ? null : dock.HarborId,
+                    ExistingHarborId = pinnedHarborId,
                     PreferredHarborId = vessel?.PreferredHarborId,
                     RequestedRuntime = captain.Runtime.ToString(),
-                    RequiredCapabilities = SplitCapabilities(vessel?.RequiredCapabilities)
+                    RequiredCapabilities = SplitCapabilities(vessel?.RequiredCapabilities),
+                    RestrictToOwner = requiredByPolicy,
+                    OwnerUserId = mission.UserId
                 };
 
                 _Logging.Debug(_Header + "Harbor routing for mission " + mission.Id + ": tenant=" + (mission.TenantId ?? "(none)")
@@ -1159,14 +1171,30 @@ namespace Armada.Server
                     return new Armada.Runtimes.RemoteHostProcessExecutor(_HarborConnections, decision.HarborId!, _EndpointResolver);
                 }
 
-                _Logging.Debug(_Header + "no eligible Harbor for this launch (" + decision.Reason + "); running locally");
+                reason = decision.Reason ?? "no eligible Harbor";
+                _Logging.Debug(_Header + "no eligible Harbor for this launch (" + reason + ")");
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "Harbor routing failed; running locally: " + ex.ToString());
+                reason = "Harbor routing failed: " + ex.Message;
+                _Logging.Warn(_Header + "Harbor routing failed: " + ex.ToString());
             }
 
+            if (harborRequired) throw HarborUnavailable(mission, pinnedHarborId, requiredByPolicy, reason);
+            _Logging.Debug(_Header + "running captain locally");
             return _HostProcessExecutor;
+        }
+
+        /// <summary>
+        /// Build the typed refusal for a launch that must run on a Harbor and has none to run on.
+        /// </summary>
+        private HarborLaunchUnavailableException HarborUnavailable(Mission mission, string? pinnedHarborId, bool requiredByPolicy, string reason)
+        {
+            string message = pinnedHarborId != null
+                ? "Mission " + mission.Id + " cannot launch: its dock is on Harbor " + pinnedHarborId + ", which is unavailable (" + reason + "); it will not run on the Admiral host."
+                : "Mission " + mission.Id + " cannot launch: requireHarborForLaunch is on and no eligible Harbor owned by the mission's user is available (" + reason + ").";
+            _Logging.Warn(_Header + message);
+            return new HarborLaunchUnavailableException(pinnedHarborId, requiredByPolicy, message);
         }
 
         /// <summary>

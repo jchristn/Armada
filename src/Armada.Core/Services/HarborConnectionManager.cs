@@ -401,8 +401,10 @@ namespace Armada.Core.Services
         /// <summary>
         /// Choose a Harbor for a launch by dock affinity, vessel preference, capability match, and load. The
         /// caller supplies the owning tenant so only that tenant's Harbors are considered (an empty tenant
-        /// enumerates all Harbors as an admin). Returns a decision whose <see cref="HarborRoutingDecision.Success"/>
-        /// is false when no eligible Harbor is available, in which case the caller should run locally.
+        /// enumerates all Harbors as an admin); <see cref="HarborRoutingRequest.RestrictToOwner"/> further limits the
+        /// candidates to one user's Harbors. Returns a decision whose <see cref="HarborRoutingDecision.Success"/> is
+        /// false when no eligible Harbor is available; the caller may then run locally only when the dock is not
+        /// pinned to a Harbor and no Harbor is required by policy.
         /// </summary>
         /// <param name="tenantId">Owning tenant identifier, or null/empty to enumerate all Harbors.</param>
         /// <param name="request">Routing inputs.</param>
@@ -425,7 +427,9 @@ namespace Armada.Core.Services
             {
                 bool shared = String.IsNullOrEmpty(harbor.TenantId);
                 bool sameTenant = !String.IsNullOrEmpty(tenantId) && String.Equals(harbor.TenantId, tenantId, StringComparison.Ordinal);
-                if (String.IsNullOrEmpty(tenantId) || shared || sameTenant) candidates.Add(harbor);
+                if (!(String.IsNullOrEmpty(tenantId) || shared || sameTenant)) continue;
+                if (request.RestrictToOwner && !String.Equals(harbor.UserId, request.OwnerUserId, StringComparison.Ordinal)) continue;
+                candidates.Add(harbor);
             }
 
             HarborRouter router = new HarborRouter();

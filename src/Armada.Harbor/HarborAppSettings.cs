@@ -37,9 +37,10 @@ namespace Armada.Harbor
         public string Name { get; set; } = string.Empty;
 
         /// <summary>
-        /// Owning user identifier this Harbor registers under (sent as x-user-guid at connect). Set this to
-        /// your Armada user id so the Admiral treats this as "your" Harbor for user-scoped launch policies.
-        /// Empty registers the Harbor with no owner.
+        /// User identifier sent as x-user-guid at connect. Informational only: the Admiral ignores it and takes
+        /// the Harbor's owning user from the AccessKey credential (a Harbor without one has no owner). To make
+        /// this "your" Harbor for user-scoped launch policies (requireHarborForLaunch), set AccessKey to one of
+        /// your Armada credentials.
         /// </summary>
         public string UserId { get; set; } = string.Empty;
 
