@@ -617,7 +617,7 @@ namespace Armada.Helm.Commands
             string managedContent = WrapManagedBlock(target.Content);
             string filePath = target.FilePath;
             string? existing = File.Exists(filePath) ? await File.ReadAllTextAsync(filePath).ConfigureAwait(false) : null;
-            string updated = UpsertManagedBlock(existing, managedContent);
+            string updated = ManagedBlockEditor.Upsert(existing, managedContent, ManagedBlockStart, ManagedBlockEnd);
             bool changed = !String.Equals(existing ?? String.Empty, updated, StringComparison.Ordinal);
 
             Directory.CreateDirectory(Path.GetDirectoryName(filePath)!);
@@ -654,7 +654,7 @@ namespace Armada.Helm.Commands
             }
 
             string existing = await File.ReadAllTextAsync(filePath).ConfigureAwait(false);
-            string updated = RemoveManagedBlock(existing);
+            string updated = ManagedBlockEditor.Remove(existing, ManagedBlockStart, ManagedBlockEnd);
             if (String.Equals(existing, updated, StringComparison.Ordinal))
             {
                 return new ApplyResult(target.ClientName, filePath, false, "No Armada-managed instructions were present.", target.IsProjectScoped);
@@ -812,52 +812,6 @@ namespace Armada.Helm.Commands
         private static string WrapManagedBlock(string content)
         {
             return $"{ManagedBlockStart}{Environment.NewLine}{content.Trim()}{Environment.NewLine}{ManagedBlockEnd}";
-        }
-
-        private static string UpsertManagedBlock(string? existing, string managedContent)
-        {
-            if (String.IsNullOrWhiteSpace(existing))
-                return managedContent + Environment.NewLine;
-
-            int start = existing.IndexOf(ManagedBlockStart, StringComparison.Ordinal);
-            int end = existing.IndexOf(ManagedBlockEnd, StringComparison.Ordinal);
-            if (start >= 0 && end >= start)
-            {
-                int afterEnd = end + ManagedBlockEnd.Length;
-                string prefix = existing[..start].TrimEnd();
-                string suffix = existing[afterEnd..].TrimStart();
-                return CombineSections(prefix, managedContent, suffix);
-            }
-
-            return CombineSections(existing.TrimEnd(), managedContent, String.Empty);
-        }
-
-        private static string RemoveManagedBlock(string existing)
-        {
-            int start = existing.IndexOf(ManagedBlockStart, StringComparison.Ordinal);
-            int end = existing.IndexOf(ManagedBlockEnd, StringComparison.Ordinal);
-            if (start < 0 || end < start)
-                return existing;
-
-            int afterEnd = end + ManagedBlockEnd.Length;
-            string prefix = existing[..start].TrimEnd();
-            string suffix = existing[afterEnd..].TrimStart();
-            return CombineSections(prefix, String.Empty, suffix);
-        }
-
-        private static string CombineSections(string prefix, string middle, string suffix)
-        {
-            List<string> sections = new List<string>();
-            if (!String.IsNullOrWhiteSpace(prefix))
-                sections.Add(prefix);
-            if (!String.IsNullOrWhiteSpace(middle))
-                sections.Add(middle);
-            if (!String.IsNullOrWhiteSpace(suffix))
-                sections.Add(suffix);
-
-            return sections.Count == 0
-                ? String.Empty
-                : String.Join($"{Environment.NewLine}{Environment.NewLine}", sections) + Environment.NewLine;
         }
 
         private static async Task<JsonObject> ReadOrCreateRootAsync(string path)

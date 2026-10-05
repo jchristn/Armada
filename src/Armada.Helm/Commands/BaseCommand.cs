@@ -222,12 +222,17 @@ namespace Armada.Helm.Commands
 
             // Auto-detect runtime
             ArmadaSettings settings = GetSettings();
-            string runtimeValue = "ClaudeCode";
+            Armada.Core.Enums.AgentRuntimeEnum runtimeValue = Armada.Core.Enums.AgentRuntimeEnum.ClaudeCode;
 
             if (!string.IsNullOrEmpty(settings.DefaultRuntime))
             {
-                runtimeValue = settings.DefaultRuntime;
-                if (String.Equals(runtimeValue, "Mux", StringComparison.OrdinalIgnoreCase))
+                if (!AgentRuntimeParser.TryParse(settings.DefaultRuntime, out runtimeValue))
+                {
+                    AnsiConsole.MarkupLine("[red]DefaultRuntime setting: " + Markup.Escape(AgentRuntimeParser.DescribeInvalid(settings.DefaultRuntime)) + "[/]");
+                    return new List<Captain>();
+                }
+
+                if (runtimeValue == Armada.Core.Enums.AgentRuntimeEnum.Mux)
                 {
                     AnsiConsole.MarkupLine("[yellow]DefaultRuntime is set to Mux, but Armada cannot auto-create a Mux captain without a named endpoint.[/]");
                     AnsiConsole.MarkupLine("[dim]Create one explicitly with: armada captain add <name> --runtime mux --mux-endpoint <endpoint-name>[/]");
@@ -253,7 +258,7 @@ namespace Armada.Helm.Commands
                     return new List<Captain>();
                 }
 
-                runtimeValue = detected.Value.ToString();
+                runtimeValue = detected.Value;
             }
 
             // Create a captain
@@ -350,10 +355,7 @@ namespace Armada.Helm.Commands
             await EnsureServerAsync().ConfigureAwait(false);
             HttpResponseMessage response = await _Client.GetAsync(GetBaseUrl() + path).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
-            {
-                string errorBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                throw new HttpRequestException($"HTTP {(int)response.StatusCode} on GET {path}: {errorBody}");
-            }
+                throw await HelmHttpError.FromResponseAsync(response, "GET " + path).ConfigureAwait(false);
             string json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
             return JsonSerializer.Deserialize<T>(json, _JsonOptions);
         }
@@ -366,10 +368,7 @@ namespace Armada.Helm.Commands
             await EnsureServerAsync().ConfigureAwait(false);
             HttpResponseMessage response = await _Client.PostAsJsonAsync(GetBaseUrl() + path, body, _JsonOptions).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
-            {
-                string errorBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                throw new HttpRequestException($"HTTP {(int)response.StatusCode}: {errorBody}");
-            }
+                throw await HelmHttpError.FromResponseAsync(response, "POST " + path).ConfigureAwait(false);
             string json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
             return JsonSerializer.Deserialize<T>(json, _JsonOptions);
         }
@@ -381,7 +380,8 @@ namespace Armada.Helm.Commands
         {
             await EnsureServerAsync().ConfigureAwait(false);
             HttpResponseMessage response = await _Client.PostAsync(GetBaseUrl() + path, null).ConfigureAwait(false);
-            response.EnsureSuccessStatusCode();
+            if (!response.IsSuccessStatusCode)
+                throw await HelmHttpError.FromResponseAsync(response, "POST " + path).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -391,7 +391,8 @@ namespace Armada.Helm.Commands
         {
             await EnsureServerAsync().ConfigureAwait(false);
             HttpResponseMessage response = await _Client.PutAsJsonAsync(GetBaseUrl() + path, body, _JsonOptions).ConfigureAwait(false);
-            response.EnsureSuccessStatusCode();
+            if (!response.IsSuccessStatusCode)
+                throw await HelmHttpError.FromResponseAsync(response, "PUT " + path).ConfigureAwait(false);
             string json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
             return JsonSerializer.Deserialize<T>(json, _JsonOptions);
         }
@@ -403,7 +404,8 @@ namespace Armada.Helm.Commands
         {
             await EnsureServerAsync().ConfigureAwait(false);
             HttpResponseMessage response = await _Client.DeleteAsync(GetBaseUrl() + path).ConfigureAwait(false);
-            response.EnsureSuccessStatusCode();
+            if (!response.IsSuccessStatusCode)
+                throw await HelmHttpError.FromResponseAsync(response, "DELETE " + path).ConfigureAwait(false);
         }
 
         #endregion

@@ -12864,6 +12864,14 @@
         },
         {
           "kind": "option",
+          "name": "task",
+          "short": "t",
+          "valueKind": "vector",
+          "type": "String[]",
+          "required": false
+        },
+        {
+          "kind": "option",
           "name": "verbose",
           "short": null,
           "valueKind": "flag",

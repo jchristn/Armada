@@ -61,6 +61,8 @@ namespace Armada.Core.Hosting
 
         private int _StopTimeoutSeconds = 30;
         private int _PollIntervalMs = 1000;
+        private const int _ErrorServiceNotActive = 1062;
+        private const int _ErrorServiceDoesNotExist = 1060;
 
         #endregion
 
@@ -370,11 +372,10 @@ namespace Armada.Core.Hosting
             }
 
             if (Context.DryRun) Print("dry run, nothing is changed.");
-            if (!IsStopped(query))
+            CommandResult stop = Execute("sc.exe", new List<string> { "stop", Context.Name }, true);
+            if (stop.ExitCode != _ErrorServiceNotActive)
             {
-                CommandResult stop = Execute("sc.exe", new List<string> { "stop", Context.Name }, true);
-                // 1062: ERROR_SERVICE_NOT_ACTIVE.
-                if (!stop.Succeeded && stop.ExitCode != 1062) Print("warning: sc.exe stop failed (continuing): " + FirstLine(stop));
+                if (!stop.Succeeded) Print("warning: sc.exe stop failed (continuing): " + FirstLine(stop));
                 if (!Context.DryRun) WaitForStopped();
             }
 
@@ -390,16 +391,14 @@ namespace Armada.Core.Hosting
             DateTime deadline = DateTime.UtcNow.AddSeconds(_StopTimeoutSeconds);
             while (DateTime.UtcNow < deadline)
             {
-                CommandResult query = Probe("sc.exe", new List<string> { "query", Context.Name });
-                if (!query.Succeeded || IsStopped(query)) return;
+                // Decide from sc.exe exit codes, not its localized text: a stop control on a stopped service fails
+                // with ERROR_SERVICE_NOT_ACTIVE, on a removed service with ERROR_SERVICE_DOES_NOT_EXIST, and on a
+                // service that is still stopping with ERROR_SERVICE_CANNOT_ACCEPT_CTRL.
+                CommandResult probe = Probe("sc.exe", new List<string> { "stop", Context.Name });
+                if (probe.ExitCode == _ErrorServiceNotActive || probe.ExitCode == _ErrorServiceDoesNotExist) return;
                 if (_PollIntervalMs > 0) Thread.Sleep(_PollIntervalMs);
             }
             Print("warning: service did not report STOPPED within " + _StopTimeoutSeconds + " s; deleting anyway (it is removed once it stops).");
-        }
-
-        private static bool IsStopped(CommandResult query)
-        {
-            return query.StandardOutput.IndexOf("STOPPED", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         #endregion

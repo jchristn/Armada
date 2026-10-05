@@ -19,24 +19,20 @@ namespace Armada.Helm.Commands
         /// <inheritdoc />
         public override async Task<int> ExecuteAsync(CommandContext context, CaptainAddSettings settings, CancellationToken cancellationToken)
         {
-            string runtimeValue = settings.Runtime?.ToLowerInvariant() switch
+            AgentRuntimeEnum runtime = AgentRuntimeEnum.ClaudeCode;
+            if (settings.Runtime != null && !AgentRuntimeParser.TryParse(settings.Runtime, out runtime))
             {
-                "claude" => "ClaudeCode",
-                "codex" => "Codex",
-                "gemini" => "Gemini",
-                "cursor" => "Cursor",
-                "mux" => "Mux",
-                "custom" => "Custom",
-                _ => "ClaudeCode"
-            };
+                AnsiConsole.MarkupLine("[red]" + Markup.Escape(AgentRuntimeParser.DescribeInvalid(settings.Runtime)) + "[/]");
+                return 1;
+            }
 
-            if (runtimeValue == "Mux" && String.IsNullOrWhiteSpace(settings.MuxEndpoint))
+            if (runtime == AgentRuntimeEnum.Mux && String.IsNullOrWhiteSpace(settings.MuxEndpoint))
             {
                 AnsiConsole.MarkupLine("[red]Mux captains require --mux-endpoint <name>.[/]");
                 return 1;
             }
 
-            string? runtimeOptionsJson = runtimeValue == "Mux"
+            string? runtimeOptionsJson = runtime == AgentRuntimeEnum.Mux
                 ? CaptainRuntimeOptions.Serialize(new MuxCaptainOptions
                 {
                     ConfigDirectory = settings.MuxConfigDirectory,
@@ -53,7 +49,7 @@ namespace Armada.Helm.Commands
             object body = new
             {
                 Name = settings.Name,
-                Runtime = runtimeValue,
+                Runtime = runtime,
                 Model = String.IsNullOrWhiteSpace(settings.Model) ? null : settings.Model.Trim(),
                 RuntimeOptionsJson = runtimeOptionsJson
             };

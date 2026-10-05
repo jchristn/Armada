@@ -30,6 +30,14 @@ namespace Armada.Helm.Commands
         public string? Vessel { get; set; }
 
         /// <summary>
+        /// Explicit tasks. Each --task becomes one mission in the voyage and the prompt becomes the voyage title.
+        /// Without --task the prompt is a single mission; it is never split.
+        /// </summary>
+        [Description("Add a task as its own mission (repeatable); the prompt becomes the voyage title")]
+        [CommandOption("--task|-t")]
+        public string[]? Tasks { get; set; }
+
+        /// <summary>
         /// Target repository path or URL.
         /// Infers from current directory if not specified.
         /// </summary>

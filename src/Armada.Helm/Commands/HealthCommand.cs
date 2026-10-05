@@ -31,7 +31,7 @@ namespace Armada.Helm.Commands
                     if (start != null)
                         AnsiConsole.MarkupLine("[green]Evaluation started[/] for " + start.VesselCount + " vessel(s). Job [dim]" + Markup.Escape(start.JobId) + "[/].");
                 }
-                catch (HttpRequestException ex) when (ex.Message.Contains("HTTP 409", StringComparison.Ordinal))
+                catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Conflict)
                 {
                     AnsiConsole.MarkupLine("[gold1]An evaluation is already running.[/] " + Markup.Escape(ex.Message));
                 }

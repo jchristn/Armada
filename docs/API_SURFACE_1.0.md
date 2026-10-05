@@ -669,7 +669,7 @@ Commands of the `armada` CLI (Helm). `*` marks a required argument or option. Gl
 | `armada fleet add` | `<name>*` | `--description\|-d`, `--json`, `--page`, `--page-size`, `--verbose` |
 | `armada fleet list` |  | `--json`, `--page`, `--page-size`, `--verbose` |
 | `armada fleet remove` | `<fleet>*` | `--json`, `--page`, `--page-size`, `--verbose` |
-| `armada go` | `<prompt>*` | `--json`, `--log\|-l`, `--merge`, `--no-merge`, `--no-pr`, `--no-push`, `--page`, `--page-size`, `--pr`, `--push`, `--repo\|-r`, `--verbose`, `--vessel\|-v` |
+| `armada go` | `<prompt>*` | `--json`, `--log\|-l`, `--merge`, `--no-merge`, `--no-pr`, `--no-push`, `--page`, `--page-size`, `--pr`, `--push`, `--repo\|-r`, `--task\|-t`, `--verbose`, `--vessel\|-v` |
 | `armada health` |  | `--evaluate\|-e`, `--fleet\|-f`, `--json`, `--page`, `--page-size`, `--status\|-s`, `--verbose` |
 | `armada inbox` |  | `--critical`, `--json`, `--page`, `--page-size`, `--verbose` |
 | `armada log` | `<identifier>*` | `--follow\|-f`, `--json`, `--lines\|-n`, `--page`, `--page-size`, `--verbose` |

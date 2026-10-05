@@ -164,12 +164,13 @@ Armada also lets each project define its own delivery commands. `Configuration >
 
 ### Parallel Tasks
 
-Semicolons or numbered lists split a prompt into separate missions. Armada can assign those to different agents:
+Each `--task` becomes its own mission, and Armada can assign them to different agents. The prompt becomes the voyage
+title. Without `--task` the whole prompt is one mission; Armada does not split prompts on semicolons or list numbering.
 
 ```bash
-armada go "Add rate limiting; Add request logging; Add input validation"
+armada go "API hardening" --task "Add rate limiting" --task "Add request logging" --task "Add input validation"
 
-armada go "1. Add auth middleware 2. Add login endpoint 3. Add token validation"
+armada go "Auth" -t "Add auth middleware" -t "Add login endpoint" -t "Add token validation"
 ```
 
 ### Auto-Recovery
@@ -472,7 +473,7 @@ The dashboard supports live language selection and locale-aware formatting acros
 If a feature depends on a few independent refactors, you can dispatch them together instead of working through them serially:
 
 ```bash
-armada go "1. Extract UserRepository from UserService 2. Add ILogger to all controllers 3. Migrate config to Options pattern"
+armada go "Refactors" --task "Extract UserRepository from UserService" --task "Add ILogger to all controllers" --task "Migrate config to Options pattern"
 ```
 
 That gives you three parallel branches to review instead of one long queue.
@@ -795,8 +796,8 @@ armada mcp install|remove|stdio
 # Dispatch a single task in your current repo
 armada go "Fix the null reference in UserService.cs"
 
-# Dispatch three tasks in parallel
-armada go "Add rate limiting; Add request logging; Add input validation"
+# Dispatch three tasks in parallel (one mission per --task)
+armada go "API hardening" --task "Add rate limiting" --task "Add request logging" --task "Add input validation"
 
 # Work with a specific repo
 armada go "Fix the login bug" --vessel my-api

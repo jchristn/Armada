@@ -1,7 +1,6 @@
 namespace Armada.Helm.Commands
 {
     using System.ComponentModel;
-    using System.Text.RegularExpressions;
     using System.Threading;
     using Spectre.Console;
     using Spectre.Console.Cli;
@@ -33,8 +32,13 @@ namespace Armada.Helm.Commands
                 return 1;
             }
 
-            // Step 3: Split prompt into tasks
-            List<string> tasks = DetectMultipleTasks(settings.Prompt);
+            // Step 3: One mission per explicit --task, or the prompt as a single mission
+            List<string> tasks = GoTaskList.Build(settings.Prompt, settings.Tasks);
+            if (tasks.Count == 0)
+            {
+                AnsiConsole.MarkupLine("[red]Provide a prompt, or one or more --task values.[/]");
+                return 1;
+            }
 
             // Step 4: Auto-scale captains for multi-task voyages
             if (tasks.Count > 1)
@@ -61,7 +65,7 @@ namespace Armada.Helm.Commands
 
             object body = new
             {
-                Title = tasks.Count > 1 ? settings.Prompt : tasks[0],
+                Title = String.IsNullOrWhiteSpace(settings.Prompt) ? tasks[0] : settings.Prompt.Trim(),
                 VesselId = vesselId,
                 Missions = missions,
                 AutoPush = autoPush,
@@ -143,8 +147,14 @@ namespace Armada.Helm.Commands
             for (int i = 0; i < needed; i++)
             {
                 int captainNumber = currentCaptainCount + i + 1;
-                string runtimeValue = armadaSettings.DefaultRuntime ?? "ClaudeCode";
-                if (String.Equals(runtimeValue, "Mux", StringComparison.OrdinalIgnoreCase))
+                AgentRuntimeEnum runtimeValue = AgentRuntimeEnum.ClaudeCode;
+                if (!String.IsNullOrEmpty(armadaSettings.DefaultRuntime) && !AgentRuntimeParser.TryParse(armadaSettings.DefaultRuntime, out runtimeValue))
+                {
+                    AnsiConsole.MarkupLine("[red]DefaultRuntime setting: " + Markup.Escape(AgentRuntimeParser.DescribeInvalid(armadaSettings.DefaultRuntime)) + "[/]");
+                    break;
+                }
+
+                if (runtimeValue == AgentRuntimeEnum.Mux)
                 {
                     AnsiConsole.MarkupLine("[yellow]Skipping automatic Mux captain creation during auto-scale because a named endpoint is required.[/]");
                     break;
@@ -274,39 +284,6 @@ namespace Armada.Helm.Commands
             }
 
             return 1;
-        }
-
-        private List<string> DetectMultipleTasks(string prompt)
-        {
-            List<string> tasks = new List<string>();
-
-            // Check for numbered list: "1. ... 2. ... 3. ..."
-            MatchCollection numberedMatches = Regex.Matches(prompt, @"(?:^|\s)(\d+)\.\s+(.+?)(?=(?:\s+\d+\.\s)|$)", RegexOptions.Singleline);
-            if (numberedMatches.Count >= 2)
-            {
-                foreach (Match m in numberedMatches)
-                {
-                    string task = m.Groups[2].Value.Trim();
-                    if (!String.IsNullOrEmpty(task)) tasks.Add(task);
-                }
-                if (tasks.Count >= 2) return tasks;
-                tasks.Clear();
-            }
-
-            // Check for semicolon-separated tasks
-            string[] semiParts = prompt.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-            if (semiParts.Length >= 2)
-            {
-                foreach (string part in semiParts)
-                {
-                    if (!String.IsNullOrEmpty(part)) tasks.Add(part);
-                }
-                return tasks;
-            }
-
-            // Single task
-            tasks.Add(prompt);
-            return tasks;
         }
 
         #endregion

@@ -5,6 +5,8 @@ namespace Armada.Helm.Commands
     using System.Threading;
     using Spectre.Console;
     using Spectre.Console.Cli;
+    using Armada.Core.Enums;
+    using Armada.Core.Services;
     using Armada.Core.Settings;
     using Armada.Helm.Infrastructure;
     using Armada.Helm.Rendering;
@@ -84,7 +86,12 @@ namespace Armada.Helm.Commands
                     armadaSettings.ApiKey = value;
                     break;
                 case "defaultruntime":
-                    armadaSettings.DefaultRuntime = value;
+                    if (!AgentRuntimeParser.TryParse(value, out AgentRuntimeEnum defaultRuntime))
+                    {
+                        AnsiConsole.MarkupLine("[red]" + Markup.Escape(AgentRuntimeParser.DescribeInvalid(value)) + "[/]");
+                        return 1;
+                    }
+                    armadaSettings.DefaultRuntime = defaultRuntime.ToString();
                     break;
                 case "notifications":
                     if (!bool.TryParse(value, out bool notif))
