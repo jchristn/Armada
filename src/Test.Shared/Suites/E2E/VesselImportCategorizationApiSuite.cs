@@ -101,9 +101,7 @@ namespace Test.Shared.Suites.E2E
                 AssertEqual(HttpStatusCode.BadRequest, import.StatusCode);
                 E2eCodedErrorBody error = JsonHelper.Deserialize<E2eCodedErrorBody>(await import.Content.ReadAsStringAsync().ConfigureAwait(false));
                 AssertEqual(WatsonWebserver.Core.ApiResultEnum.BadRequest, error.Error, "error");
-                AssertEqual(VesselImportCodes.InvalidRequest, error.Data?.Code, "code");
-                // TODO(R5, production): no code distinguishes a missing captain from other invalid requests; the message is the only signal.
-                AssertStartsWith("Captain not found", error.Message ?? "", "missing captain named in the message");
+                AssertEqual(VesselImportCodes.CategorizationCaptainNotFound, error.Data?.Code, "a missing categorization captain has its own code");
             }));
 
             cases.Add(CaseAsync("apply_reuses_fleet_and_isolates_tenants", "Apply reuses a fleet by name, assigns vessels, and is denied to non-admins and other tenants", TestTags.Positive, async () =>

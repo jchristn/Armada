@@ -213,6 +213,10 @@ namespace Armada.Server.Mcp.Tools
             {
                 return new McpToolError(McpToolErrorCodeEnum.NotFound, e.Message) { StatusCode = 404 };
             }
+            catch (FleetActionTemplateException e)
+            {
+                return new McpToolError(McpToolErrorCodeEnum.InvalidArgument, e.Message, FleetActionTemplateErrorDetail.UnknownTemplateVariableCode) { StatusCode = 400 };
+            }
             catch (ArgumentException e)
             {
                 return new McpToolError(McpToolErrorCodeEnum.InvalidArgument, e.Message) { StatusCode = 400 };

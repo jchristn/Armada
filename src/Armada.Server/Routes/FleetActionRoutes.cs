@@ -325,6 +325,11 @@ namespace Armada.Server.Routes
                 req.Http.Response.StatusCode = 404;
                 return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = e.Message };
             }
+            catch (FleetActionTemplateException e)
+            {
+                req.Http.Response.StatusCode = 400;
+                return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = e.Message, Data = new FleetActionTemplateErrorDetail(e.VariableName) };
+            }
             catch (ArgumentException e)
             {
                 req.Http.Response.StatusCode = 400;

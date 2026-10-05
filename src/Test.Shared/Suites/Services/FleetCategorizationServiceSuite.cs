@@ -533,11 +533,27 @@ namespace Test.Shared.Suites.Services
                 Captain foreign = await CreateCaptainAsync(testDb.Driver, other.Id).ConfigureAwait(false);
                 VesselImportDiscoverResponse discovered = await DiscoverAsync(h).ConfigureAwait(false);
 
-                foreach (string? captainId in new string?[] { null, "cpt_missing", foreign.Id })
+                Dictionary<string, string> expectedCodes = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    [""] = VesselImportCodes.CategorizationCaptainRequired,
+                    ["cpt_missing"] = VesselImportCodes.CategorizationCaptainNotFound,
+                    [foreign.Id] = VesselImportCodes.CategorizationCaptainNotFound
+                };
+                foreach (KeyValuePair<string, string> expected in expectedCodes)
                 {
                     VesselImportRequest request = SelectAll(discovered);
+                    string? captainId = expected.Key.Length == 0 ? null : expected.Key;
                     request.Categorization = new VesselImportCategorizationRequest { Enabled = true, CaptainId = captainId };
-                    await AssertThrowsAsync<ArgumentException>(() => h.Import.ImportAsync(Constants.DefaultTenantId, null, request), "captain " + (captainId ?? "(none)")).ConfigureAwait(false);
+                    string? code = null;
+                    try
+                    {
+                        await h.Import.ImportAsync(Constants.DefaultTenantId, null, request).ConfigureAwait(false);
+                    }
+                    catch (VesselImportRequestException ex)
+                    {
+                        code = ex.Code;
+                    }
+                    AssertEqual(expected.Value, code, "typed VesselImportRequestException code for captain " + (captainId ?? "(none)"));
                 }
 
                 AssertEqual(0, (await testDb.Driver.Vessels.EnumerateAsync(Constants.DefaultTenantId).ConfigureAwait(false)).Count, "validation happens before any vessel is created");

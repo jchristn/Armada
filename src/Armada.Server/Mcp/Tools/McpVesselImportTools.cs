@@ -78,7 +78,7 @@ namespace Armada.Server.Mcp.Tools
                     }
                     catch (ArgumentException ex)
                     {
-                        return (object)McpToolError.FromException(ex, VesselImportCodes.InvalidRequest);
+                        return (object)McpToolError.FromException(ex, VesselImportRequestException.CodeFor(ex));
                     }
                 });
 
@@ -165,7 +165,7 @@ namespace Armada.Server.Mcp.Tools
                     }
                     catch (ArgumentException ex)
                     {
-                        return (object)McpToolError.FromException(ex, VesselImportCodes.InvalidRequest);
+                        return (object)McpToolError.FromException(ex, VesselImportRequestException.CodeFor(ex));
                     }
                 });
 
@@ -223,7 +223,7 @@ namespace Armada.Server.Mcp.Tools
                     }
                     catch (ArgumentException ex)
                     {
-                        return (object)McpToolError.FromException(ex, VesselImportCodes.InvalidRequest);
+                        return (object)McpToolError.FromException(ex, VesselImportRequestException.CodeFor(ex));
                     }
                 });
 
@@ -297,7 +297,7 @@ namespace Armada.Server.Mcp.Tools
                     }
                     catch (ArgumentException ex)
                     {
-                        return (object)McpToolError.FromException(ex, VesselImportCodes.InvalidRequest);
+                        return (object)McpToolError.FromException(ex, VesselImportRequestException.CodeFor(ex));
                     }
                 });
         }

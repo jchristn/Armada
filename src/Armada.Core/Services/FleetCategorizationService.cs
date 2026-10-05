@@ -198,10 +198,10 @@ namespace Armada.Core.Services
             if (String.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
             if (request == null || !request.Enabled) return;
             if (String.IsNullOrWhiteSpace(request.CaptainId))
-                throw new ArgumentException("categorization.captainId is required when categorization is enabled.", nameof(request));
+                throw new VesselImportRequestException(VesselImportCodes.CategorizationCaptainRequired, "categorization.captainId is required when categorization is enabled.", nameof(request));
 
             Captain? captain = await _Database.Captains.ReadAsync(tenantId, request.CaptainId.Trim(), token).ConfigureAwait(false);
-            if (captain == null) throw new ArgumentException("Captain not found: " + request.CaptainId, nameof(request));
+            if (captain == null) throw new VesselImportRequestException(VesselImportCodes.CategorizationCaptainNotFound, "Captain not found: " + request.CaptainId, nameof(request));
         }
 
         /// <inheritdoc />
