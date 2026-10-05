@@ -261,15 +261,15 @@ namespace Armada.Core.Database.Mysql.Queries
             @"INSERT IGNORE INTO tenants (id, name, active, created_utc, last_update_utc)
               VALUES ('default', 'Default Tenant', 1, UTC_TIMESTAMP(6), UTC_TIMESTAMP(6));",
             // Add tenant_id to existing tables
-            @"ALTER TABLE fleets ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(450);",
-            @"ALTER TABLE vessels ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(450);",
-            @"ALTER TABLE captains ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(450);",
-            @"ALTER TABLE voyages ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(450);",
-            @"ALTER TABLE missions ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(450);",
-            @"ALTER TABLE docks ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(450);",
-            @"ALTER TABLE signals ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(450);",
-            @"ALTER TABLE events ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(450);",
-            @"ALTER TABLE merge_entries ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(450);",
+            @"ALTER TABLE fleets ADD COLUMN tenant_id VARCHAR(450);",
+            @"ALTER TABLE vessels ADD COLUMN tenant_id VARCHAR(450);",
+            @"ALTER TABLE captains ADD COLUMN tenant_id VARCHAR(450);",
+            @"ALTER TABLE voyages ADD COLUMN tenant_id VARCHAR(450);",
+            @"ALTER TABLE missions ADD COLUMN tenant_id VARCHAR(450);",
+            @"ALTER TABLE docks ADD COLUMN tenant_id VARCHAR(450);",
+            @"ALTER TABLE signals ADD COLUMN tenant_id VARCHAR(450);",
+            @"ALTER TABLE events ADD COLUMN tenant_id VARCHAR(450);",
+            @"ALTER TABLE merge_entries ADD COLUMN tenant_id VARCHAR(450);",
             // Backfill existing rows with default tenant
             @"UPDATE fleets SET tenant_id = 'default' WHERE tenant_id IS NULL;",
             @"UPDATE vessels SET tenant_id = 'default' WHERE tenant_id IS NULL;",
@@ -333,21 +333,21 @@ namespace Armada.Core.Database.Mysql.Queries
         /// </summary>
         public static readonly string[] MigrationV4Statements = new string[]
         {
-            @"ALTER TABLE tenants ADD COLUMN IF NOT EXISTS is_protected TINYINT(1) NOT NULL DEFAULT 0;",
-            @"ALTER TABLE users ADD COLUMN IF NOT EXISTS is_protected TINYINT(1) NOT NULL DEFAULT 0;",
-            @"ALTER TABLE credentials ADD COLUMN IF NOT EXISTS is_protected TINYINT(1) NOT NULL DEFAULT 0;",
+            @"ALTER TABLE tenants ADD COLUMN is_protected TINYINT(1) NOT NULL DEFAULT 0;",
+            @"ALTER TABLE users ADD COLUMN is_protected TINYINT(1) NOT NULL DEFAULT 0;",
+            @"ALTER TABLE credentials ADD COLUMN is_protected TINYINT(1) NOT NULL DEFAULT 0;",
             @"UPDATE tenants SET is_protected = 1 WHERE id IN ('default', 'ten_system');",
             @"UPDATE users SET is_protected = 1 WHERE id IN ('default', 'usr_system');",
             @"UPDATE credentials SET is_protected = 1 WHERE user_id IN ('default', 'usr_system');",
-            @"ALTER TABLE fleets ADD COLUMN IF NOT EXISTS user_id VARCHAR(450);",
-            @"ALTER TABLE vessels ADD COLUMN IF NOT EXISTS user_id VARCHAR(450);",
-            @"ALTER TABLE captains ADD COLUMN IF NOT EXISTS user_id VARCHAR(450);",
-            @"ALTER TABLE voyages ADD COLUMN IF NOT EXISTS user_id VARCHAR(450);",
-            @"ALTER TABLE missions ADD COLUMN IF NOT EXISTS user_id VARCHAR(450);",
-            @"ALTER TABLE docks ADD COLUMN IF NOT EXISTS user_id VARCHAR(450);",
-            @"ALTER TABLE signals ADD COLUMN IF NOT EXISTS user_id VARCHAR(450);",
-            @"ALTER TABLE events ADD COLUMN IF NOT EXISTS user_id VARCHAR(450);",
-            @"ALTER TABLE merge_entries ADD COLUMN IF NOT EXISTS user_id VARCHAR(450);",
+            @"ALTER TABLE fleets ADD COLUMN user_id VARCHAR(450);",
+            @"ALTER TABLE vessels ADD COLUMN user_id VARCHAR(450);",
+            @"ALTER TABLE captains ADD COLUMN user_id VARCHAR(450);",
+            @"ALTER TABLE voyages ADD COLUMN user_id VARCHAR(450);",
+            @"ALTER TABLE missions ADD COLUMN user_id VARCHAR(450);",
+            @"ALTER TABLE docks ADD COLUMN user_id VARCHAR(450);",
+            @"ALTER TABLE signals ADD COLUMN user_id VARCHAR(450);",
+            @"ALTER TABLE events ADD COLUMN user_id VARCHAR(450);",
+            @"ALTER TABLE merge_entries ADD COLUMN user_id VARCHAR(450);",
             @"UPDATE fleets f SET user_id = COALESCE((SELECT u.id FROM users u WHERE u.tenant_id = f.tenant_id ORDER BY u.created_utc LIMIT 1), 'default') WHERE user_id IS NULL;",
             @"UPDATE vessels v SET user_id = COALESCE((SELECT u.id FROM users u WHERE u.tenant_id = v.tenant_id ORDER BY u.created_utc LIMIT 1), 'default') WHERE user_id IS NULL;",
             @"UPDATE captains c SET user_id = COALESCE((SELECT u.id FROM users u WHERE u.tenant_id = c.tenant_id ORDER BY u.created_utc LIMIT 1), 'default') WHERE user_id IS NULL;",
@@ -407,7 +407,7 @@ namespace Armada.Core.Database.Mysql.Queries
         /// </summary>
         public static readonly string[] MigrationV6Statements = new string[]
         {
-            @"ALTER TABLE users ADD COLUMN IF NOT EXISTS is_tenant_admin TINYINT(1) NOT NULL DEFAULT 0;",
+            @"ALTER TABLE users ADD COLUMN is_tenant_admin TINYINT(1) NOT NULL DEFAULT 0;",
             @"UPDATE users SET is_tenant_admin = 1 WHERE is_admin = 1;"
         };
 
@@ -416,8 +416,8 @@ namespace Armada.Core.Database.Mysql.Queries
         /// </summary>
         public static readonly string[] MigrationV7Statements = new string[]
         {
-            @"ALTER TABLE vessels ADD COLUMN IF NOT EXISTS enable_model_context TINYINT(1) NOT NULL DEFAULT 1;",
-            @"ALTER TABLE vessels ADD COLUMN IF NOT EXISTS model_context LONGTEXT;"
+            @"ALTER TABLE vessels ADD COLUMN enable_model_context TINYINT(1) NOT NULL DEFAULT 1;",
+            @"ALTER TABLE vessels ADD COLUMN model_context LONGTEXT;"
         };
 
         /// <summary>
@@ -425,7 +425,7 @@ namespace Armada.Core.Database.Mysql.Queries
         /// </summary>
         public static readonly string[] MigrationV8Statements = new string[]
         {
-            @"ALTER TABLE captains ADD COLUMN IF NOT EXISTS system_instructions LONGTEXT;"
+            @"ALTER TABLE captains ADD COLUMN system_instructions LONGTEXT;"
         };
 
         /// <summary>
@@ -516,8 +516,8 @@ namespace Armada.Core.Database.Mysql.Queries
         /// </summary>
         public static readonly string[] MigrationV11Statements = new string[]
         {
-            @"ALTER TABLE captains ADD COLUMN IF NOT EXISTS allowed_personas LONGTEXT;",
-            @"ALTER TABLE captains ADD COLUMN IF NOT EXISTS preferred_persona VARCHAR(450);",
+            @"ALTER TABLE captains ADD COLUMN allowed_personas LONGTEXT;",
+            @"ALTER TABLE captains ADD COLUMN preferred_persona VARCHAR(450);",
             @"CREATE INDEX idx_captains_preferred_persona ON captains(preferred_persona);"
         };
 
@@ -526,8 +526,8 @@ namespace Armada.Core.Database.Mysql.Queries
         /// </summary>
         public static readonly string[] MigrationV12Statements = new string[]
         {
-            @"ALTER TABLE missions ADD COLUMN IF NOT EXISTS persona VARCHAR(450);",
-            @"ALTER TABLE missions ADD COLUMN IF NOT EXISTS depends_on_mission_id VARCHAR(450);",
+            @"ALTER TABLE missions ADD COLUMN persona VARCHAR(450);",
+            @"ALTER TABLE missions ADD COLUMN depends_on_mission_id VARCHAR(450);",
             @"CREATE INDEX idx_missions_persona ON missions(persona);",
             @"CREATE INDEX idx_missions_depends_on ON missions(depends_on_mission_id);"
         };
@@ -544,8 +544,8 @@ namespace Armada.Core.Database.Mysql.Queries
             @"CREATE INDEX idx_pipeline_stages_pipeline ON pipeline_stages(pipeline_id);",
             @"CREATE UNIQUE INDEX idx_pipeline_stages_order ON pipeline_stages(pipeline_id, stage_order);",
             @"CREATE INDEX idx_pipeline_stages_persona ON pipeline_stages(persona_name);",
-            @"ALTER TABLE fleets ADD COLUMN IF NOT EXISTS default_pipeline_id VARCHAR(450);",
-            @"ALTER TABLE vessels ADD COLUMN IF NOT EXISTS default_pipeline_id VARCHAR(450);",
+            @"ALTER TABLE fleets ADD COLUMN default_pipeline_id VARCHAR(450);",
+            @"ALTER TABLE vessels ADD COLUMN default_pipeline_id VARCHAR(450);",
             @"CREATE INDEX idx_fleets_default_pipeline ON fleets(default_pipeline_id);",
             @"CREATE INDEX idx_vessels_default_pipeline ON vessels(default_pipeline_id);"
         };
@@ -555,7 +555,7 @@ namespace Armada.Core.Database.Mysql.Queries
         /// </summary>
         public static readonly string[] MigrationV14Statements = new string[]
         {
-            @"ALTER TABLE missions ADD COLUMN IF NOT EXISTS failure_reason LONGTEXT;"
+            @"ALTER TABLE missions ADD COLUMN failure_reason LONGTEXT;"
         };
 
         /// <summary>
@@ -563,7 +563,7 @@ namespace Armada.Core.Database.Mysql.Queries
         /// </summary>
         public static readonly string[] MigrationV15Statements = new string[]
         {
-            @"ALTER TABLE missions ADD COLUMN IF NOT EXISTS agent_output LONGTEXT;"
+            @"ALTER TABLE missions ADD COLUMN agent_output LONGTEXT;"
         };
 
         /// <summary>
@@ -571,7 +571,7 @@ namespace Armada.Core.Database.Mysql.Queries
         /// </summary>
         public static readonly string[] MigrationV26Statements = new string[]
         {
-            @"ALTER TABLE captains ADD COLUMN IF NOT EXISTS model TEXT NULL;"
+            @"ALTER TABLE captains ADD COLUMN model TEXT NULL;"
         };
 
         /// <summary>
@@ -579,7 +579,7 @@ namespace Armada.Core.Database.Mysql.Queries
         /// </summary>
         public static readonly string[] MigrationV27Statements = new string[]
         {
-            @"ALTER TABLE missions ADD COLUMN IF NOT EXISTS total_runtime_ms BIGINT NULL;"
+            @"ALTER TABLE missions ADD COLUMN total_runtime_ms BIGINT NULL;"
         };
 
         /// <summary>
@@ -637,7 +637,7 @@ namespace Armada.Core.Database.Mysql.Queries
         /// </summary>
         public static readonly string[] MigrationV29Statements = new string[]
         {
-            @"ALTER TABLE captains ADD COLUMN IF NOT EXISTS runtime_options_json LONGTEXT NULL;"
+            @"ALTER TABLE captains ADD COLUMN runtime_options_json LONGTEXT NULL;"
         };
 
         /// <summary>
@@ -694,14 +694,14 @@ namespace Armada.Core.Database.Mysql.Queries
         /// </summary>
         public static readonly string[] MigrationV31Statements = new string[]
         {
-            @"ALTER TABLE pipeline_stages ADD COLUMN IF NOT EXISTS requires_review TINYINT(1) NOT NULL DEFAULT 0;",
-            @"ALTER TABLE pipeline_stages ADD COLUMN IF NOT EXISTS review_deny_action VARCHAR(64) NOT NULL DEFAULT 'RetryStage';",
-            @"ALTER TABLE missions ADD COLUMN IF NOT EXISTS requires_review TINYINT(1) NOT NULL DEFAULT 0;",
-            @"ALTER TABLE missions ADD COLUMN IF NOT EXISTS review_deny_action VARCHAR(64) NOT NULL DEFAULT 'RetryStage';",
-            @"ALTER TABLE missions ADD COLUMN IF NOT EXISTS review_comment LONGTEXT NULL;",
-            @"ALTER TABLE missions ADD COLUMN IF NOT EXISTS reviewed_by_user_id VARCHAR(450) NULL;",
-            @"ALTER TABLE missions ADD COLUMN IF NOT EXISTS review_requested_utc DATETIME(6) NULL;",
-            @"ALTER TABLE missions ADD COLUMN IF NOT EXISTS reviewed_utc DATETIME(6) NULL;",
+            @"ALTER TABLE pipeline_stages ADD COLUMN requires_review TINYINT(1) NOT NULL DEFAULT 0;",
+            @"ALTER TABLE pipeline_stages ADD COLUMN review_deny_action VARCHAR(64) NOT NULL DEFAULT 'RetryStage';",
+            @"ALTER TABLE missions ADD COLUMN requires_review TINYINT(1) NOT NULL DEFAULT 0;",
+            @"ALTER TABLE missions ADD COLUMN review_deny_action VARCHAR(64) NOT NULL DEFAULT 'RetryStage';",
+            @"ALTER TABLE missions ADD COLUMN review_comment LONGTEXT NULL;",
+            @"ALTER TABLE missions ADD COLUMN reviewed_by_user_id VARCHAR(450) NULL;",
+            @"ALTER TABLE missions ADD COLUMN review_requested_utc DATETIME(6) NULL;",
+            @"ALTER TABLE missions ADD COLUMN reviewed_utc DATETIME(6) NULL;",
             @"CREATE INDEX idx_missions_requires_review ON missions(requires_review);"
         };
 
@@ -802,8 +802,8 @@ namespace Armada.Core.Database.Mysql.Queries
         public static readonly string[] MigrationV34Statements = new string[]
         {
             @"ALTER TABLE check_runs
-                ADD COLUMN IF NOT EXISTS test_summary_json LONGTEXT NULL,
-                ADD COLUMN IF NOT EXISTS coverage_summary_json LONGTEXT NULL;"
+                ADD COLUMN test_summary_json LONGTEXT NULL,
+                ADD COLUMN coverage_summary_json LONGTEXT NULL;"
         };
 
         /// <summary>
@@ -812,13 +812,13 @@ namespace Armada.Core.Database.Mysql.Queries
         public static readonly string[] MigrationV35Statements = new string[]
         {
             @"ALTER TABLE workflow_profiles
-                ADD COLUMN IF NOT EXISTS migration_command LONGTEXT NULL,
-                ADD COLUMN IF NOT EXISTS security_scan_command LONGTEXT NULL,
-                ADD COLUMN IF NOT EXISTS performance_command LONGTEXT NULL,
-                ADD COLUMN IF NOT EXISTS deployment_verification_command LONGTEXT NULL,
-                ADD COLUMN IF NOT EXISTS rollback_verification_command LONGTEXT NULL;",
+                ADD COLUMN migration_command LONGTEXT NULL,
+                ADD COLUMN security_scan_command LONGTEXT NULL,
+                ADD COLUMN performance_command LONGTEXT NULL,
+                ADD COLUMN deployment_verification_command LONGTEXT NULL,
+                ADD COLUMN rollback_verification_command LONGTEXT NULL;",
             @"ALTER TABLE vessels
-                ADD COLUMN IF NOT EXISTS require_passing_checks_to_land TINYINT(1) NOT NULL DEFAULT 0;"
+                ADD COLUMN require_passing_checks_to_land TINYINT(1) NOT NULL DEFAULT 0;"
         };
 
         /// <summary>
@@ -827,16 +827,16 @@ namespace Armada.Core.Database.Mysql.Queries
         public static readonly string[] MigrationV36Statements = new string[]
         {
             @"ALTER TABLE check_runs
-                ADD COLUMN IF NOT EXISTS source VARCHAR(64) NOT NULL DEFAULT 'Armada',
-                ADD COLUMN IF NOT EXISTS provider_name VARCHAR(450) NULL,
-                ADD COLUMN IF NOT EXISTS external_id VARCHAR(450) NULL,
-                ADD COLUMN IF NOT EXISTS external_url LONGTEXT NULL;",
+                ADD COLUMN source VARCHAR(64) NOT NULL DEFAULT 'Armada',
+                ADD COLUMN provider_name VARCHAR(450) NULL,
+                ADD COLUMN external_id VARCHAR(450) NULL,
+                ADD COLUMN external_url LONGTEXT NULL;",
             @"ALTER TABLE vessels
-                ADD COLUMN IF NOT EXISTS protected_branch_patterns_json LONGTEXT NULL,
-                ADD COLUMN IF NOT EXISTS release_branch_prefix VARCHAR(450) NOT NULL DEFAULT 'release/',
-                ADD COLUMN IF NOT EXISTS hotfix_branch_prefix VARCHAR(450) NOT NULL DEFAULT 'hotfix/',
-                ADD COLUMN IF NOT EXISTS require_pull_request_for_protected_branches TINYINT(1) NOT NULL DEFAULT 0,
-                ADD COLUMN IF NOT EXISTS require_merge_queue_for_release_branches TINYINT(1) NOT NULL DEFAULT 0;"
+                ADD COLUMN protected_branch_patterns_json LONGTEXT NULL,
+                ADD COLUMN release_branch_prefix VARCHAR(450) NOT NULL DEFAULT 'release/',
+                ADD COLUMN hotfix_branch_prefix VARCHAR(450) NOT NULL DEFAULT 'hotfix/',
+                ADD COLUMN require_pull_request_for_protected_branches TINYINT(1) NOT NULL DEFAULT 0,
+                ADD COLUMN require_merge_queue_for_release_branches TINYINT(1) NOT NULL DEFAULT 0;"
         };
 
         /// <summary>
@@ -975,17 +975,17 @@ namespace Armada.Core.Database.Mysql.Queries
         /// </summary>
         public static readonly string[] MigrationV40Statements = new string[]
         {
-            @"ALTER TABLE check_runs ADD COLUMN IF NOT EXISTS deployment_id VARCHAR(450) NULL;",
+            @"ALTER TABLE check_runs ADD COLUMN deployment_id VARCHAR(450) NULL;",
             @"CREATE INDEX idx_check_runs_deployment_created ON check_runs(deployment_id, created_utc DESC);",
-            @"ALTER TABLE environments ADD COLUMN IF NOT EXISTS verification_definitions_json LONGTEXT NULL;",
-            @"ALTER TABLE environments ADD COLUMN IF NOT EXISTS rollout_monitoring_window_minutes INT NOT NULL DEFAULT 0;",
-            @"ALTER TABLE environments ADD COLUMN IF NOT EXISTS rollout_monitoring_interval_seconds INT NOT NULL DEFAULT 300;",
-            @"ALTER TABLE environments ADD COLUMN IF NOT EXISTS alert_on_regression TINYINT(1) NOT NULL DEFAULT 1;",
-            @"ALTER TABLE deployments ADD COLUMN IF NOT EXISTS monitoring_window_ends_utc DATETIME(6) NULL;",
-            @"ALTER TABLE deployments ADD COLUMN IF NOT EXISTS last_monitored_utc DATETIME(6) NULL;",
-            @"ALTER TABLE deployments ADD COLUMN IF NOT EXISTS last_regression_alert_utc DATETIME(6) NULL;",
-            @"ALTER TABLE deployments ADD COLUMN IF NOT EXISTS latest_monitoring_summary LONGTEXT NULL;",
-            @"ALTER TABLE deployments ADD COLUMN IF NOT EXISTS monitoring_failure_count INT NOT NULL DEFAULT 0;"
+            @"ALTER TABLE environments ADD COLUMN verification_definitions_json LONGTEXT NULL;",
+            @"ALTER TABLE environments ADD COLUMN rollout_monitoring_window_minutes INT NOT NULL DEFAULT 0;",
+            @"ALTER TABLE environments ADD COLUMN rollout_monitoring_interval_seconds INT NOT NULL DEFAULT 300;",
+            @"ALTER TABLE environments ADD COLUMN alert_on_regression TINYINT(1) NOT NULL DEFAULT 1;",
+            @"ALTER TABLE deployments ADD COLUMN monitoring_window_ends_utc DATETIME(6) NULL;",
+            @"ALTER TABLE deployments ADD COLUMN last_monitored_utc DATETIME(6) NULL;",
+            @"ALTER TABLE deployments ADD COLUMN last_regression_alert_utc DATETIME(6) NULL;",
+            @"ALTER TABLE deployments ADD COLUMN latest_monitoring_summary LONGTEXT NULL;",
+            @"ALTER TABLE deployments ADD COLUMN monitoring_failure_count INT NOT NULL DEFAULT 0;"
         };
 
         /// <summary>
@@ -993,7 +993,7 @@ namespace Armada.Core.Database.Mysql.Queries
         /// </summary>
         public static readonly string[] MigrationV41Statements = new string[]
         {
-            @"ALTER TABLE vessels ADD COLUMN IF NOT EXISTS github_token_override LONGTEXT NULL;"
+            @"ALTER TABLE vessels ADD COLUMN github_token_override LONGTEXT NULL;"
         };
 
         /// <summary>
@@ -1904,7 +1904,7 @@ namespace Armada.Core.Database.Mysql.Queries
         /// </summary>
         public static readonly string[] MigrationV76Statements = new string[]
         {
-            @"ALTER TABLE vessels ADD COLUMN IF NOT EXISTS auto_approve TINYINT(1) NULL;"
+            @"ALTER TABLE vessels ADD COLUMN auto_approve TINYINT(1) NULL;"
         };
 
         /// <summary>

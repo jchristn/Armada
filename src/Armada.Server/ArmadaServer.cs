@@ -959,7 +959,7 @@ namespace Armada.Server
                 "Set the " + DefaultCredentialService.InitialAdminPasswordEnvironmentVariable + " environment variable (first start), or start on localhost and change the admin password " +
                 "(dashboard or PUT /api/v1/account/password), or set AllowDefaultCredentialsOnNetwork to true to accept the risk.";
             _Logging.Warn(_Header + message);
-            throw new InvalidOperationException(message);
+            throw new UnsafeListenerConfigurationException(message, _Settings.Rest.Hostname);
         }
 
         private async Task EnsureApiKeyAsync()

@@ -4,7 +4,6 @@ namespace Armada.Core.Database.Mysql
     using System.Collections.Generic;
     using System.Data;
     using System.Globalization;
-    using System.Text.RegularExpressions;
     using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
@@ -36,7 +35,6 @@ namespace Armada.Core.Database.Mysql
         private bool _Disposed = false;
 
         private static readonly string _Iso8601Format = "yyyy-MM-dd HH:mm:ss.ffffff";
-        private static readonly Regex _AddColumnIfNotExistsRegex = new Regex(@"\bADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\s+", RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 
         #endregion
 
@@ -980,7 +978,7 @@ namespace Armada.Core.Database.Mysql
             using (MySqlCommand cmd = conn.CreateCommand())
             {
                 cmd.Transaction = tx;
-                cmd.CommandText = NormalizeMigrationStatement(sql);
+                cmd.CommandText = sql;
 
                 try
                 {
@@ -991,12 +989,6 @@ namespace Armada.Core.Database.Mysql
                     _Logging.Debug(_Header + "ignoring duplicate schema artifact while replaying migration: " + ex.Message);
                 }
             }
-        }
-
-        private static string NormalizeMigrationStatement(string sql)
-        {
-            if (string.IsNullOrEmpty(sql)) return sql;
-            return _AddColumnIfNotExistsRegex.Replace(sql, "ADD COLUMN ");
         }
 
         private static bool IsIgnorableReplayError(MySqlException ex)
