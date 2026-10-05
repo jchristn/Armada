@@ -206,8 +206,9 @@ namespace Armada.Server
             _Logging.Debug(_Header + "database initialized");
 
             // Ensure a local API key exists so trusted local clients (the armada CLI) can authenticate
-            // to the REST API. Generated once and persisted to settings.json, which the CLI also reads.
-            await EnsureApiKeyAsync().ConfigureAwait(false);
+            // to the REST API, and a session token encryption key exists so sign-ins survive a restart.
+            // Both are generated once and persisted to settings.json (which the CLI also reads) in one save.
+            await EnsureLocalSecretsAsync().ConfigureAwait(false);
 
             // Safe defaults: apply an initial admin password from the environment (headless installs), retire the
             // seeded "default" bearer token once the default password is gone, and refuse to listen on a non-loopback
@@ -318,12 +319,8 @@ namespace Armada.Server
             }
 
             // Initialize authentication services
+            // The key was generated and persisted by EnsureLocalSecretsAsync, so session tokens stay valid across restarts.
             _SessionTokenService = new SessionTokenService(_Settings.SessionTokenEncryptionKey);
-            if (string.IsNullOrEmpty(_Settings.SessionTokenEncryptionKey))
-            {
-                _Settings.SessionTokenEncryptionKey = ((SessionTokenService)_SessionTokenService).GetKeyBase64();
-                _Logging.Info(_Header + "auto-generated session token encryption key");
-            }
             _AuthenticationService = new AuthenticationService(_Database, _SessionTokenService, _Settings, _Logging);
             _LoginRateLimiter = new LoginRateLimiter(_Settings.LoginRateLimit);
             _AuthorizationService = new AuthorizationService();
@@ -989,20 +986,35 @@ namespace Armada.Server
             throw new UnsafeListenerConfigurationException(message, _Settings.Rest.Hostname);
         }
 
-        private async Task EnsureApiKeyAsync()
+        private async Task EnsureLocalSecretsAsync()
         {
-            if (!String.IsNullOrEmpty(_Settings.ApiKey))
-                return;
+            bool generatedApiKey = false;
+            bool generatedSessionKey = false;
 
-            _Settings.ApiKey = "ak_" + Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N");
+            if (String.IsNullOrEmpty(_Settings.ApiKey))
+            {
+                _Settings.ApiKey = "ak_" + Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N");
+                generatedApiKey = true;
+            }
+
+            if (String.IsNullOrEmpty(_Settings.SessionTokenEncryptionKey))
+            {
+                // A new SessionTokenService with no key generates a random one; persist it so tokens survive restarts.
+                _Settings.SessionTokenEncryptionKey = new SessionTokenService().GetKeyBase64();
+                generatedSessionKey = true;
+            }
+
+            if (!generatedApiKey && !generatedSessionKey) return;
+
             try
             {
                 await _Settings.SaveAsync().ConfigureAwait(false);
-                _Logging.Info(_Header + "generated local API key for CLI authentication and saved to settings");
+                if (generatedApiKey) _Logging.Info(_Header + "generated local API key for CLI authentication and saved to settings");
+                if (generatedSessionKey) _Logging.Info(_Header + "generated session token encryption key and saved to settings");
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "generated API key but could not persist settings: " + ex.ToString());
+                _Logging.Warn(_Header + "generated local secrets but could not persist settings (sign-ins will not survive a restart): " + ex.ToString());
             }
         }
 
