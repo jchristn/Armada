@@ -33,6 +33,15 @@ namespace Armada.Core.Services.Interfaces
         Task<bool> TryAssignAsync(Mission mission, Vessel vessel, CancellationToken token = default);
 
         /// <summary>
+        /// Explain why a Pending mission is still waiting for a captain, using the same gates as
+        /// <see cref="TryAssignAsync"/> without changing anything. Returns null when the mission is not Pending.
+        /// </summary>
+        /// <param name="mission">Mission.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The blocker, or null.</returns>
+        Task<MissionAssignmentBlocker?> GetAssignmentBlockerAsync(Mission mission, CancellationToken token = default);
+
+        /// <summary>
         /// Evaluate the vessel's auto-land predicate against a mission's captured diff without landing it
         /// (a dry run). Returns the decision, or null when the mission or its vessel cannot be found.
         /// </summary>

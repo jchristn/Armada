@@ -108,8 +108,8 @@ When a mission's agent exits successfully, Armada sets the mission to `WorkProdu
 |---|---|
 | `LocalMerge` | Merge the branch into the vessel's configured working directory and optionally push, but only when the vessel has both `WorkingDirectory` and `LocalPath` configured. Mission transitions to `Complete` on success or `LandingFailed` on failure. If those vessel paths are not configured, the mission remains at `WorkProduced`. |
 | `PullRequest` | Create a pull request. Mission transitions to `PullRequestOpen`. Armada polls for merge confirmation; once merged, transitions to `Complete`. |
-| `MergeQueue` | Enqueue the branch into Armada's merge queue for serialized testing and landing. |
-| `None` | No automated landing. The mission stays at `WorkProduced` for manual handling. |
+| `MergeQueue` | Enqueue the branch into Armada's merge queue for serialized testing and landing. The mission's voyage stays `InProgress` until the entry lands (mission `Complete`), fails, or is cancelled. |
+| `None` | No automated landing. The mission stays at `WorkProduced` for manual handling: merge its branch yourself (the dashboard and TUI mission pages offer **Merge in Manage Branches** instead of Land). Once the mission's commit is contained in the vessel's target branch (`git merge-base --is-ancestor`, checked right after a Manage Branches merge and on every health check), Armada moves the mission to `Complete`. |
 
 ---
 

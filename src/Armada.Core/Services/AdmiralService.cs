@@ -62,6 +62,13 @@ namespace Armada.Core.Services
         /// </summary>
         public Func<RemoteTunnelStatus>? OnGetRemoteTunnelStatus { get; set; }
 
+        /// <summary>
+        /// Optional health-check hook that completes WorkProduced manual-landing (Landing Mode None) missions whose branch
+        /// was merged into the target by hand. Returns the number reconciled. Concrete hook, like
+        /// <see cref="OnGetRemoteTunnelStatus"/>, so the orchestration interface does not change.
+        /// </summary>
+        public Func<CancellationToken, Task<int>>? OnReconcileManualLandings { get; set; }
+
         #endregion
 
         #region Private-Members
@@ -575,6 +582,20 @@ namespace Armada.Core.Services
 
             // Reconcile PullRequestOpen missions — check if their PRs have been merged
             await ReconcilePullRequestMissionsAsync(token).ConfigureAwait(false);
+
+            // Reconcile manual-landing (Landing Mode None) missions whose branch was merged by hand.
+            if (OnReconcileManualLandings != null)
+            {
+                try
+                {
+                    int reconciledManual = await OnReconcileManualLandings.Invoke(token).ConfigureAwait(false);
+                    if (reconciledManual > 0) _Logging.Info(_Header + "completed " + reconciledManual + " manually merged mission(s)");
+                }
+                catch (Exception ex)
+                {
+                    _Logging.Warn(_Header + "error reconciling manually merged missions: " + ex.ToString());
+                }
+            }
 
             // Release captains held by missions whose review has gone overdue (dock preserved).
             await RecoverOverdueReviewsAsync(token).ConfigureAwait(false);

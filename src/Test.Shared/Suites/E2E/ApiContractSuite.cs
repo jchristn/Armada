@@ -110,6 +110,13 @@ namespace Test.Shared.Suites.E2E
                 AssertTrue(baseline.WebSocket.Endpoints.Single(e => e.Name == "harbor-link").Experimental, "Harbor link endpoint is experimental");
             }));
 
+            cases.Add(CaseAsync("mcp_schemas_declare_handler_arguments", "update_vessel and create_mission schemas declare every argument their handlers accept", TestTags.Positive, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this).ConfigureAwait(false);
+                AssertSchemaCovers(fx, "update_vessel", typeof(Armada.Server.Mcp.VesselUpdateArgs));
+                AssertSchemaCovers(fx, "create_mission", typeof(Armada.Server.Mcp.MissionCreateArgs));
+            }));
+
             cases.Add(CaseAsync("declared_websocket_commands_dispatch", "Every declared WebSocket command reaches a handler; undeclared ones are rejected", TestTags.Positive, async () =>
             {
                 E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this).ConfigureAwait(false);
@@ -274,6 +281,21 @@ namespace Test.Shared.Suites.E2E
         #endregion
 
         #region Private-Methods
+
+        private static void AssertSchemaCovers(E2EServerFixture fx, string toolName, Type argsType)
+        {
+            CaptainToolSummary? tool = fx.Server.RegisteredMcpToolDescriptors.FirstOrDefault(t => t.Name == toolName);
+            AssertNotNull(tool, toolName + " registered");
+            E2eMcpInputSchema schema = JsonHelper.Deserialize<E2eMcpInputSchema>(tool!.InputSchemaJson ?? "{}");
+            List<string> missing = new List<string>();
+            foreach (System.Reflection.PropertyInfo property in argsType.GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
+            {
+                string name = JsonNamingPolicy.CamelCase.ConvertName(property.Name);
+                if (!schema.Properties.ContainsKey(name)) missing.Add(name);
+            }
+
+            AssertTrue(missing.Count == 0, toolName + " schema omits handler arguments: " + String.Join(", ", missing));
+        }
 
         private static ApiSurfaceDocument Clone(ApiSurfaceDocument document)
         {

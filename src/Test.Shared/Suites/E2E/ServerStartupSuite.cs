@@ -10,6 +10,7 @@ namespace Test.Shared.Suites.E2E
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Core.Enums;
+    using Armada.Core.Models;
     using Armada.Core.Services;
     using Armada.Core.Settings;
     using Armada.Server;
@@ -145,6 +146,56 @@ namespace Test.Shared.Suites.E2E
                 }
             }));
 
+            cases.Add(CaseAsync("session_token_survives_restart", "A session token issued before a restart is still valid after the Admiral restarts on the same data directory (F8)", TestTags.Positive, async () =>
+            {
+                // No preset API key: like a real first start, the Admiral generates its local secrets and writes
+                // settings.json. Before the fix the session key was generated after that save and never persisted.
+                ArmadaServer first = CreateServer(FreePort(), FreePort(), out string tempDir, presetApiKey: false);
+                string settingsPath = Path.Combine(tempDir, "settings.json");
+                ArmadaServer? second = null;
+                try
+                {
+                    await first.StartAsync().ConfigureAwait(false);
+                    ArmadaSettings loadedFirst = await ArmadaSettings.LoadAsync(settingsPath).ConfigureAwait(false);
+                    AssertFalse(String.IsNullOrEmpty(loadedFirst.ApiKey), "the generated API key is persisted");
+                    AssertFalse(String.IsNullOrEmpty(loadedFirst.SessionTokenEncryptionKey), "the session token encryption key is persisted");
+
+                    string token;
+                    using (HttpClient client = new HttpClient())
+                    {
+                        client.Timeout = TimeSpan.FromSeconds(10);
+                        HttpRequestMessage auth = new HttpRequestMessage(HttpMethod.Post, "http://127.0.0.1:" + loadedFirst.AdmiralPort + "/api/v1/authenticate");
+                        auth.Headers.Add("X-Api-Key", loadedFirst.ApiKey);
+                        HttpResponseMessage authResponse = await client.SendAsync(auth).ConfigureAwait(false);
+                        AssertEqual(HttpStatusCode.OK, authResponse.StatusCode, "authenticate before restart");
+                        AuthenticateResult result = JsonHelper.Deserialize<AuthenticateResult>(await authResponse.Content.ReadAsStringAsync().ConfigureAwait(false));
+                        AssertFalse(String.IsNullOrEmpty(result.Token), "a session token is issued");
+                        token = result.Token!;
+                        AssertEqual(HttpStatusCode.OK, await WhoAmIStatusAsync(client, loadedFirst.AdmiralPort, token).ConfigureAwait(false), "whoami before restart");
+                    }
+
+                    first.Stop();
+
+                    // Restart the way Program.cs does: load settings.json from the same data directory.
+                    ArmadaSettings reloaded = await ArmadaSettings.LoadAsync(settingsPath).ConfigureAwait(false);
+                    reloaded.AdmiralPort = FreePort();
+                    reloaded.McpPort = FreePort();
+                    second = CreateServerFromSettings(reloaded);
+                    await second.StartAsync().ConfigureAwait(false);
+                    using (HttpClient client = new HttpClient())
+                    {
+                        client.Timeout = TimeSpan.FromSeconds(10);
+                        AssertEqual(HttpStatusCode.OK, await WhoAmIStatusAsync(client, reloaded.AdmiralPort, token).ConfigureAwait(false), "whoami with the pre-restart session token after restart");
+                    }
+                }
+                finally
+                {
+                    try { first.Stop(); } catch (Exception) { }
+                    if (second != null) { try { second.Stop(); } catch (Exception) { } }
+                    TestTemp.TryDelete(tempDir);
+                }
+            }));
+
             return new TestSuiteDescriptor(suiteId: SuiteId, displayName: "Server Startup", cases: cases);
         }
 
@@ -152,7 +203,25 @@ namespace Test.Shared.Suites.E2E
 
         #region Private-Methods
 
-        private static ArmadaServer CreateServer(int restPort, int mcpPort, out string tempDir)
+        private static async Task<HttpStatusCode> WhoAmIStatusAsync(HttpClient client, int restPort, string token)
+        {
+            HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get, "http://127.0.0.1:" + restPort + "/api/v1/whoami");
+            request.Headers.Add("X-Token", token);
+            HttpResponseMessage response = await client.SendAsync(request).ConfigureAwait(false);
+            return response.StatusCode;
+        }
+
+        private static ArmadaServer CreateServerFromSettings(ArmadaSettings settings)
+        {
+            settings.InitializeDirectories();
+            LoggingModule logging = new LoggingModule();
+            logging.Settings.EnableConsole = false;
+            ArmadaServer server = new ArmadaServer(logging, settings, quiet: true);
+            server.RuntimeToolDiscoverySource = new RecordingRuntimeToolDiscoverySource();
+            return server;
+        }
+
+        private static ArmadaServer CreateServer(int restPort, int mcpPort, out string tempDir, bool presetApiKey = true)
         {
             tempDir = TestTemp.NewDirectory("startup");
             string sqlitePath = Path.Combine(tempDir, "armada.db");
@@ -171,16 +240,12 @@ namespace Test.Shared.Suites.E2E
             settings.ReposDirectory = Path.Combine(tempDir, "repos");
             settings.AdmiralPort = restPort;
             settings.McpPort = mcpPort;
-            settings.ApiKey = "test-key-" + Guid.NewGuid().ToString("N");
+            if (presetApiKey) settings.ApiKey = "test-key-" + Guid.NewGuid().ToString("N");
             settings.HeartbeatIntervalSeconds = 300;
             settings.Rest.Hostname = "127.0.0.1";
-            settings.InitializeDirectories();
-
-            LoggingModule logging = new LoggingModule();
-            logging.Settings.EnableConsole = false;
-            ArmadaServer server = new ArmadaServer(logging, settings, quiet: true);
-            server.RuntimeToolDiscoverySource = new RecordingRuntimeToolDiscoverySource();
-            return server;
+            // Keep any settings save (generated local secrets) inside the temp directory.
+            settings.SettingsFilePath = Path.Combine(tempDir, "settings.json");
+            return CreateServerFromSettings(settings);
         }
 
         private static int FreePort()

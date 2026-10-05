@@ -96,6 +96,7 @@ namespace Armada.Server.Mcp.Tools
                         voyageId = new { type = "string", description = "Optional voyage ID to associate with (vyg_ prefix)" },
                         persona = new { type = "string", description = "Persona for this mission (e.g. Worker, Architect, Judge, Test Engineer)" },
                         mode = new { type = "string", description = "Execution mode: Implementation (default), Audit, or Research. Audit and Research are read-only modes that produce a written report instead of a commit; their empty diff is treated as success." },
+                        tier = new { type = "string", description = "Optional minimum captain tier for this mission (Economy, Standard, or Premium); only captains at or above it are assigned" },
                         selectedPlaybooks = new
                         {
                             type = "array",
@@ -569,7 +570,7 @@ namespace Armada.Server.Mcp.Tools
                         }
 
                         if (dock == null || String.IsNullOrEmpty(dock.WorktreePath) || !Directory.Exists(dock.WorktreePath))
-                            return (object)McpToolError.Unavailable("No diff available — worktree was already reclaimed and no saved diff exists");
+                            return (object)McpToolError.Unavailable("No diff available: the worktree was already reclaimed and no saved diff exists");
 
                         string baseBranch = "main";
                         if (!String.IsNullOrEmpty(mission.VesselId))

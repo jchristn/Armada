@@ -70,6 +70,9 @@ namespace Armada.Tui.Screens.Build
 
         #region Private-Members
 
+        private string? _PreselectSource = null;
+        private string? _PreselectTarget = null;
+
         private readonly OpsScreen _Screen;
         private readonly string _VesselId;
         private readonly FocusScope _Scope = new FocusScope();
@@ -133,6 +136,23 @@ namespace Armada.Tui.Screens.Build
         #region Public-Methods
 
         /// <summary>
+        /// Preselect the merge source and target (for example a mission's branch into the vessel's default branch); they
+        /// apply when the branch list loads.
+        /// </summary>
+        /// <param name="source">Source branch.</param>
+        /// <param name="target">Target branch, or null.</param>
+        public void PreselectMerge(string? source, string? target)
+        {
+            _PreselectSource = String.IsNullOrEmpty(source) ? null : source;
+            _PreselectTarget = String.IsNullOrEmpty(target) ? null : target;
+            if (Branches.Count > 0)
+            {
+                if (_PreselectSource != null) Source.SetValue(_PreselectSource);
+                if (_PreselectTarget != null) Target.SetValue(_PreselectTarget);
+            }
+        }
+
+        /// <summary>
         /// Reload the branches.
         /// </summary>
         public void Load()
@@ -146,8 +166,8 @@ namespace Armada.Tui.Screens.Build
                 if (!String.IsNullOrEmpty(r?.Error)) Error = r!.Error;
                 Grid.SetLocalRows(Branches);
                 List<SelectOption<string>> options = Branches.Select(b => new SelectOption<string>(b.Name, b.Name)).ToList();
-                string? source = Source.Value;
-                string? target = Target.Value;
+                string? source = Source.Value ?? _PreselectSource;
+                string? target = Target.Value ?? _PreselectTarget;
                 Source.Options = options;
                 Target.Options = options;
                 Source.SetValue(source);

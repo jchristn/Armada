@@ -385,7 +385,8 @@ namespace Armada.Server
         }
 
         /// <summary>
-        /// Apply a refinement summary back to the objective.
+        /// Apply a refinement summary back to the objective, then (unless <see cref="ObjectiveRefinementApplyRequest.EndSession"/>
+        /// is false) end the session and release its captain.
         /// </summary>
         public async Task<(ObjectiveRefinementSummaryResponse Summary, Objective Objective)> ApplyAsync(
             AuthContext auth,
@@ -445,6 +446,20 @@ namespace Armada.Server
                 null,
                 session.VesselId,
                 null).ConfigureAwait(false);
+
+            // Applying finishes the refinement: end the session so it stops holding its captain (which otherwise sits in
+            // Refining and leaves new missions Pending). Callers that want to keep refining pass EndSession = false.
+            if (request.EndSession)
+            {
+                try
+                {
+                    await StopAsync(session, token).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    _Logging.Warn(_Header + "applied session " + session.Id + " but could not end it: " + ex.Message);
+                }
+            }
 
             return (summary, updated);
         }

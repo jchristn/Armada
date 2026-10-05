@@ -606,7 +606,7 @@ armada tui --profile work --route /missions
 
 `--server` connects to a URL and saves it as a profile, `--profile` picks a saved one, and `--route` chooses the first screen (otherwise the screen you left, or Ask Armada on a first run). Profiles live in `~/.armada/tui.json`; tokens go to the OS keychain (a 0600 file as fallback).
 
-**Sign in.** For a server on this machine the login screen is prefilled (`admin@armada`, the default password until the profile has signed in once, and the local API key for API Key Login). `F2` switches between email and API key login. The Server picker switches servers, "Add server..." adds one, and `e` edits the highlighted server's name and URL. The TUI does not force a password change: with the default password it signs in and shows a header warning.
+**Sign in.** For a server on this machine the login screen is prefilled (`admin@armada`, the default password until the profile has signed in once, and the local API key for API Key Login; the prefilled password and key start selected, so typing replaces them). `F2` switches between email and API key login. The Server picker switches servers, "Add server..." adds one, and `e` edits the highlighted server's name and URL. The TUI does not force a password change: with the default password it signs in and shows a header warning.
 
 **Coverage.** Every dashboard screen opens a real TUI screen: Ask Armada, Home, Needs You, Planning, Dispatch, Backlog, Fleet Actions, Missions, Voyages, the Merge Queue, Jobs, Vessels (with import, Health, Fleets, and the Workspace), Captains and Docks, Delivery, Configuration, Activity, API Explorer, and Settings, plus an Approvals center the dashboard does not have.
 

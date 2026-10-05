@@ -6,6 +6,7 @@ namespace Armada.Core.Services
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Core.Settings;
     using SyslogLogging;
 
     /// <summary>
@@ -15,14 +16,19 @@ namespace Armada.Core.Services
     {
         private readonly DatabaseDriver _Database;
         private readonly LoggingModule _Logging;
+        private readonly ArmadaSettings? _Settings;
 
         /// <summary>
         /// Instantiate.
         /// </summary>
-        public LandingPreviewService(DatabaseDriver database, LoggingModule logging)
+        /// <param name="database">Database driver.</param>
+        /// <param name="logging">Logging module.</param>
+        /// <param name="settings">Settings, for the Admiral's default landing mode (optional).</param>
+        public LandingPreviewService(DatabaseDriver database, LoggingModule logging, ArmadaSettings? settings = null)
         {
             _Database = database ?? throw new ArgumentNullException(nameof(database));
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
+            _Settings = settings;
         }
 
         /// <summary>
@@ -91,8 +97,17 @@ namespace Armada.Core.Services
             await PopulateCheckSummaryAsync(auth, result, token).ConfigureAwait(false);
             EvaluateCommonIssues(result);
             EvaluateBranchPolicyIssues(result);
-            EvaluateMissionIssues(result, mission);
+            // The mode the landing handler will actually use: voyage, then vessel, then the Admiral default.
+            Voyage? voyage = String.IsNullOrEmpty(mission.VoyageId) ? null : await _Database.Voyages.ReadAsync(mission.VoyageId, token).ConfigureAwait(false);
+            result.EffectiveLandingMode = voyage?.LandingMode ?? vessel.LandingMode ?? _Settings?.LandingMode;
+            result.ManualLandingOnly = result.EffectiveLandingMode == LandingModeEnum.None;
+            result.MissionStatus = mission.Status;
+            bool landable = EvaluateMissionIssues(result, mission);
             FinalizeResult(result);
+
+            // Only a mission that is waiting to land can be ready to land, and never when landing is manual only (Land
+            // would be refused). A Pending mission no longer shows Ready To Land next to "not in a landing state".
+            if (!landable || result.ManualLandingOnly) result.IsReadyToLand = false;
             return result;
         }
 
@@ -248,12 +263,22 @@ namespace Armada.Core.Services
             }
         }
 
-        private static void EvaluateMissionIssues(LandingPreviewResult result, Mission mission)
+        private static bool EvaluateMissionIssues(LandingPreviewResult result, Mission mission)
         {
+            if (mission.Status == MissionStatusEnum.Complete)
+            {
+                AddIssue(
+                    result,
+                    "mission_already_landed",
+                    ReadinessSeverityEnum.Info,
+                    "Mission is already complete",
+                    "This mission is Complete; there is nothing left to land.");
+                return false;
+            }
+
             if (mission.Status != MissionStatusEnum.WorkProduced
                 && mission.Status != MissionStatusEnum.PullRequestOpen
-                && mission.Status != MissionStatusEnum.LandingFailed
-                && mission.Status != MissionStatusEnum.Complete)
+                && mission.Status != MissionStatusEnum.LandingFailed)
             {
                 AddIssue(
                     result,
@@ -261,7 +286,10 @@ namespace Armada.Core.Services
                     ReadinessSeverityEnum.Warning,
                     "Mission is not in a landing state",
                     "This mission is currently '" + mission.Status + "' and may not yet be ready for landing.");
+                return false;
             }
+
+            return true;
         }
 
         private static void FinalizeResult(LandingPreviewResult result)

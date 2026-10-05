@@ -131,7 +131,7 @@ open finding; this branch only changed files outside the areas other workstreams
 
 ### Open
 
-#### F8 (S3) Every Admiral restart signs everyone out
+#### F8 (S3, fixed) Every Admiral restart signs everyone out
 - Owner: server auth. Surfaces: dashboard and TUI ("Your session expired. Sign in again." after every restart).
 - Steps: start a fresh Admiral (real `Armada.Server`, temp data dir), sign in, change the password, restart the
   Admiral, call `whoami` with the old session token: 200 before, 401 after.
@@ -139,23 +139,28 @@ open finding; this branch only changed files outside the areas other workstreams
   `StartAsync` generates the session key, and nothing saves it afterwards, so each start uses a new key.
 - Suggested fix: generate the session key before `EnsureApiKeyAsync` (or save settings after generating it), with a
   restart test.
+- Fix: the API key and session token key are generated before the single settings save, so the key persists. Test:
+  `E2E.ServerStartup` `session_token_survives_restart`.
 
-#### F9 (S3) TUI first sign-in fails when the user types the documented default password
+#### F9 (S3, fixed) TUI first sign-in fails when the user types the documented default password
 - Owner: TUI. Steps: fresh profile against a localhost Admiral, Continue, type `password` (as the screen's "Default
   credentials" line says), Enter.
 - Actual: "Authentication failed." The masked field was already prefilled with `password`, so the typed text was
   appended. Pressing Enter without typing works. Evidence: `s0-02-after-signin.txt`.
 - Suggested fix: select the prefilled value so typing replaces it, or show the prefill as a placeholder.
+- Fix: a prefilled password or API key starts selected; typing or pasting replaces it. Tests: two `Tui.Login` cases.
 
-#### F10 (S3) The TUI works with the default password; the dashboard forces a change
+#### F10 (S3, fixed) The TUI works with the default password; the dashboard forces a change
 - Owner: security / TUI. The TUI signed in with `admin@armada` / `password` on a fresh Admiral and created a fleet,
   vessel, captain, and mission through the wizard; only a header warning is shown. The dashboard blocks everything
   until the password is changed. `docs/TUI.md` says the TUI does not force a change, while the `TUI_APP_PLAN.md`
   progress log mentions a forced default-password change step. Evidence: `s0-05-signed-in.txt`.
 - Suggested fix: decide one policy (the server could refuse non-password calls from a default-password session) and
   align the TUI, the docs, and the plan.
+- Fix (docs): policy decided by the maintainer: the TUI warns and does not force a change; the dashboard forces it.
+  `docs/TUI.md` and `TUI_APP_PLAN.md` W8.7 updated.
 
-#### F11 (S3) Pending missions never say why they are waiting
+#### F11 (S3, fixed) Pending missions never say why they are waiting
 - Owner: dashboard and TUI (mission and voyage pages), server (assignment reason).
 - Case 1 (T2.6, T2.7): after Apply To Backlog Item the refinement session stays Active and keeps the only captain in
   Refining, so new missions sit in Pending with no explanation; the mission page shows "Ready To Land" next to
@@ -164,14 +169,21 @@ open finding; this branch only changed files outside the areas other workstreams
   captain list showed Idle via the API, and the mission waited 17 minutes with no reason on any page.
 - Suggested fix: show the assignment blocker on Pending missions and voyages ("waiting for a captain: Setup Captain
   is Refining backlog item X" / "quarantined until 07:33"), and end or offer to end the refinement session on Apply.
+- Fix: the server computes an `AssignmentBlocker` (typed reason, summary, clear time, captain activity) on
+  `GET /missions/{id}` and Pending missions in `GET /voyages/{id}`; the dashboard mission page and TUI mission screen
+  show it. Apply To Backlog Item ends the refinement session by default (`EndSession: false` keeps it). Tests:
+  `Services.MissionAssignmentBlocker`, `Services.LandingPreviewMission`, refinement apply cases.
 
-#### F12 (S3) Landing Mode None: a Land button that cannot land, and no way back to Complete
+#### F12 (S3, fixed) Landing Mode None: a Land button that cannot land, and no way back to Complete
 - Owner: dashboard, server. Steps: vessel with Landing Mode None, dispatch, open the WorkProduced mission.
 - Actual: a primary Land button and a "Ready To Land" pill; Land returns 409 with a good message (set a landing mode,
   or merge from Manage Branches). After merging and pushing from Manage Branches, the mission stays WorkProduced.
   Evidence: `t27-09-landed.png`, `t27-11-merged.png`.
 - Suggested fix: for None, replace Land with "Merge in Manage Branches"; reconcile WorkProduced missions whose branch
   is merged into the target.
+- Fix: manual-only (Landing Mode None) missions show "Merge in Manage Branches" instead of Land (dashboard and TUI);
+  `ManualLandingReconciler` completes a WorkProduced mission once its commit is in the target (`git merge-base
+  --is-ancestor` exit code). Test: `Services.ManualLandingReconciler`.
 
 #### F13 (S3, fixed) The vessel page's Edit Vessel lacks landing settings
 - Owner: dashboard. Vessels > a vessel > More > Edit has no Landing Mode, Branch Cleanup, Agent Auto-Approve,
@@ -182,11 +194,13 @@ open finding; this branch only changed files outside the areas other workstreams
   vessel page Edit cleared Landing Mode, auto-land, and auto-approve); the payload now starts from the stored vessel.
   Test: `pages/VesselDetail.test.tsx`.
 
-#### F14 (S3) A voyage is Complete before its merge-queue mission lands
+#### F14 (S3, fixed) A voyage is Complete before its merge-queue mission lands
 - Owner: server (voyage completion). T2.4/T2.8: a dispatch to a Merge Queue vessel showed voyage Complete while its
   only mission was WorkProduced and Queued in the merge queue; the Ask card read "Complete, 0 of 1 finished". It
   landed 10 s later here; with a slow or manual queue the voyage would claim completion for much longer.
 - Suggested fix: keep the voyage InProgress (or "Awaiting merge queue") until its entries land or fail.
+- Fix: a voyage stays InProgress while a WorkProduced mission has a Queued, Testing, or Passed merge-queue entry.
+  Tests: two `Services.LandingPipeline` cases.
 
 #### F15 (S3, fixed) The dashboard has no place to see pending Ask approvals
 - Owner: dashboard. Needs You lists failures and alerts but not Ask proposals waiting for approval; the only way is to
@@ -249,8 +263,9 @@ open finding; this branch only changed files outside the areas other workstreams
   copy button (the Open Mission button works).
 - Fix: the dashboard and TUI handoffs show the full mission id (dashboard with a copy button).
 
-#### F22 (S4) "Ready To Land" on a Complete (already landed) mission
+#### F22 (S4, fixed) "Ready To Land" on a Complete (already landed) mission
 - Both surfaces; the server's landing preview ignores the mission status.
+- Fix: the landing pill reads "Landed" for Complete and "Not Ready Yet" for Pending missions (with F11).
 
 #### F23 (S4) Pluralization
 - "1 branches" (Vessels), "with 1 mission(s)" (Dispatch toast, Ask cards), "Retry N failed mission(s)".

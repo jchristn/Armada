@@ -135,7 +135,16 @@ namespace Armada.Server.Mcp.Tools
                         clearAutoApprove = new { type = "boolean", description = "Remove the per-vessel auto-approve override so the captain's own setting applies" },
                         enableModelContext = new { type = "boolean", description = "Enable or disable model context accumulation" },
                         modelContext = new { type = "string", description = "Agent-accumulated context about this repository" },
-                        defaultPipelineId = new { type = "string", description = "Default pipeline ID for dispatches to this vessel (ppl_ prefix)" }
+                        defaultPipelineId = new { type = "string", description = "Default pipeline ID for dispatches to this vessel (ppl_ prefix)" },
+                        autoLandEnabled = new { type = "boolean", description = "Whether the auto-land predicate gates unattended landing on this vessel" },
+                        autoLandMaxFiles = new { type = "integer", description = "Maximum number of changed files that may auto-land unattended (0 = no limit)" },
+                        autoLandMaxLines = new { type = "integer", description = "Maximum number of changed lines that may auto-land unattended (0 = no limit)" },
+                        autoLandPathAllowGlobs = new { type = "array", items = new { type = "string" }, description = "Glob patterns a changed path must match to be auto-landable" },
+                        autoLandPathDenyGlobs = new { type = "array", items = new { type = "string" }, description = "Glob patterns that force a hold: a change touching any matching path never auto-lands" },
+                        definitionOfDoneEnabled = new { type = "boolean", description = "Whether the in-dock Definition-of-Done gate runs build and unit tests before acceptance" },
+                        definitionOfDoneBuildCommand = new { type = "string", description = "Shell command that builds the project inside the mission checkout (for example dotnet build)" },
+                        definitionOfDoneTestCommand = new { type = "string", description = "Shell command that runs unit tests inside the mission checkout (for example dotnet test)" },
+                        definitionOfDoneTimeoutSeconds = new { type = "integer", description = "Per-phase timeout in seconds for each Definition-of-Done command (clamped to 30..7200)" }
                     },
                     required = new[] { "vesselId" }
                 },

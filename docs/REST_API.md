@@ -2620,6 +2620,10 @@ Get a voyage and all its associated missions.
 }
 ```
 
+`Pending` missions in `Missions` carry `AssignmentBlocker` (see `GET /api/v1/missions/{id}`). A voyage stays `InProgress`
+while any of its `WorkProduced` missions still has a merge-queue entry that is `Queued`, `Testing`, or `Passed`; it
+completes once the entry lands (or fails, or is cancelled).
+
 **Error:** `404` - Voyage not found
 
 ---
@@ -2816,6 +2820,29 @@ Get a single mission by ID.
 
 > **Note:** The `DiffSnapshot` field is excluded from responses to keep payloads compact. Use `GET /api/v1/missions/{id}/diff` to retrieve the full diff.
 
+A `Pending` mission also carries `AssignmentBlocker`, computed when it is read (not stored): why no captain has taken it
+yet. `Reason` is one of `AwaitingDispatch`, `VesselMissing`, `VesselMisconfigured`, `DependencyNotFinished`,
+`DependencyHandoffPending`, `WaitingForVoyageWorkers`, `VesselBroadScopeMissionActive`, `BroadScopeWaitingForVessel`,
+`VesselConcurrencyLimit`, `NoCaptains`, `NoIdleCaptain`, or `NoEligibleCaptain`; `Summary` is an English sentence;
+`UntilUtc` is when it clears on its own (for example when the only captain's quarantine ends); `DependsOnMissionId` and
+`BlockingMissionIds` name the missions it waits for; and `Captains` lists what each captain in the tenant is doing
+(`State`, `Detail`, and the `MissionId`, `PlanningSessionId`, `RefinementSessionId`, `ObjectiveId`, or
+`QuarantineUntilUtc` that holds it). The field is absent for other statuses and in list responses.
+
+```json
+"AssignmentBlocker": {
+  "Reason": "NoIdleCaptain",
+  "Summary": "Waiting for a captain: Setup Captain is refining backlog item 'Add retries' (stop the refinement session to free it).",
+  "UntilUtc": null,
+  "DependsOnMissionId": null,
+  "BlockingMissionIds": [],
+  "Captains": [
+    { "CaptainId": "cpt_abc", "CaptainName": "Setup Captain", "State": "Refining", "Detail": "refining backlog item 'Add retries' (stop the refinement session to free it)", "RefinementSessionId": "ors_abc", "ObjectiveId": "obj_abc" }
+  ],
+  "ComputedUtc": "2026-10-05T12:00:00Z"
+}
+```
+
 ---
 
 #### GET /api/v1/missions/{id}/github/pull-request
@@ -2847,6 +2874,12 @@ Predict how Armada would land this mission, including branch policy, check requi
 **Response:** `200 OK` - `LandingPreviewResult`
 **Error:** `400` - Mission does not have an associated vessel
 **Error:** `404` - Mission not found, or mission vessel not found
+
+For a mission, `IsReadyToLand` is true only while the mission is waiting to land (`WorkProduced`, `PullRequestOpen`, or
+`LandingFailed`) and an automatic landing mode applies. The mission preview also returns `EffectiveLandingMode` (voyage,
+then vessel, then the Admiral default), `ManualLandingOnly` (true when that mode is `None`: Land is refused, so merge the
+branch yourself, for example from Manage Branches), and `MissionStatus`. A `Complete` mission reports the
+`mission_already_landed` issue.
 
 ---
 
@@ -5878,9 +5911,14 @@ Summarize and apply a refinement result back to the linked backlog item.
 {
   "MessageId": "orm_abc123",
   "MarkMessageSelected": true,
-  "PromoteBacklogState": true
+  "PromoteBacklogState": true,
+  "EndSession": true
 }
 ```
+
+Applying ends the refinement session by default (`EndSession` true): the session is stopped and its captain returns to
+Idle, so it does not keep holding a captain that missions are waiting for. Pass `EndSession: false` to keep refining in
+the same session. The response includes the session after the apply (`Session`, `Stopped` when it was ended).
 
 - Request body: `ObjectiveRefinementApplyRequest`
 - Response: `200 OK` - `ObjectiveRefinementApplyResponse`

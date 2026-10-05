@@ -1,6 +1,7 @@
 namespace Armada.Core.Services
 {
     using System;
+    using System.Collections.Generic;
     using System.Linq;
     using SyslogLogging;
     using Armada.Core.Database;
@@ -47,6 +48,7 @@ namespace Armada.Core.Services
             List<Voyage> activeVoyages = await _Database.Voyages.EnumerateByStatusAsync(VoyageStatusEnum.InProgress, token).ConfigureAwait(false);
             List<Voyage> openVoyages = await _Database.Voyages.EnumerateByStatusAsync(VoyageStatusEnum.Open, token).ConfigureAwait(false);
             activeVoyages.AddRange(openVoyages);
+            HashSet<string>? missionsInMergeQueue = null;
 
             foreach (Voyage voyage in activeVoyages)
             {
@@ -74,6 +76,17 @@ namespace Armada.Core.Services
                     m.Status == MissionStatusEnum.Cancelled ||
                     m.Status == MissionStatusEnum.LandingFailed ||
                     m.Status == MissionStatusEnum.WorkProduced);
+
+                // A WorkProduced mission still waiting in the merge queue has not landed yet: keep the voyage open
+                // until its entry lands (mission Complete) or fails (mission LandingFailed) or is cancelled.
+                if (allDone && missions.Any(m => m.Status == MissionStatusEnum.WorkProduced))
+                {
+                    missionsInMergeQueue ??= await MergeQueueMissionActivity.GetMissionIdsWithActiveEntriesAsync(_Database, token).ConfigureAwait(false);
+                    if (missions.Any(m => m.Status == MissionStatusEnum.WorkProduced && missionsInMergeQueue.Contains(m.Id)))
+                    {
+                        continue;
+                    }
+                }
 
                 if (allDone)
                 {

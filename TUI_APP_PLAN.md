@@ -710,8 +710,9 @@ REST_API.md.
   Ask Armada with the Approvals center (`a` approve, card tracked to Landed), mission detail and log, API-key sign-in
   with a credential and revocation, and screen checks of Missions, Merge Queue, Vessel Health, Fleet Actions,
   Planning, Needs You, Backlog, Users, Credentials, Diagnostics, and Events. TUI findings: the prefilled masked
-  password makes typing the documented default fail (F9), no forced default-password change (F10), sign-out on every
-  Admiral restart (F8), toasts over the Approvals center (F31). Left for a human: the remaining flows end to end in
+  password makes typing the documented default fail (F9, fixed: the prefill starts selected), no forced
+  default-password change (F10, decided: the TUI warns and does not force a change; the dashboard forces it), sign-out
+  on every Admiral restart (F8, fixed: the session key is persisted), toasts over the Approvals center (F31). Left for a human: the remaining flows end to end in
   the TUI with real captains, and visual checks in real terminals.
 
 ### W9. Docs and distribution
@@ -830,3 +831,4 @@ before Milestone B; U5, U6 before Milestone E).
 | 2026-10-05 | Claude (sim-testing) | W8.7 | First simulated user session with the TUI (Release Helm in a pty with pyte, stub captain, throwaway Admiral): sign-in on a fresh server, setup wizard, Dispatch, Ask proposal approved from the Approvals center and tracked to Landed, mission log, API-key sign-in and revocation, screen checks of eleven screens. Findings F8, F9, F10, F31 recorded in `docs/SIMULATED_USER_TESTING_RESULTS_1.0.md` for the TUI owner (no TUI files changed). Stays open for the full human run. |
 | 2026-10-05 | Claude (sim-dashboard) | W8.7 | Setup wizard handoff for a failed first mission (F37, F21): full mission id, failure reason, rescue missions from the mission's incidents (rechecked on the poll until they settle), and a View Mission Log action (OpsLogModal). Test `Tui.System.Setup/handoff_explains_failed_mission`. |
 | 2026-10-05 | Claude (fx-intermittents) | W8.3 | Approvals center: a deployment approval from a `deployment.changed` event is named like the inbox item (environment, else id), so the row and confirmation no longer change with the source; Tui.EndToEnd.Flows Fleet Actions waits for `LastFlow.SelectedAction()` and `PreviewVessel` before Ctrl+S; new cases Tui.Approvals `deployment_name_agrees_across_sources` and Tui.Ops.FleetActions `run_flow_waits_for_actions`. |
+| 2026-10-05 | Claude (sim-server) | W8.7 | F9: login prefill (password, API key) starts selected so typing replaces it (`TextInput.Prefill`); F10 documented as decided (TUI warns, dashboard forces). Correction to the 2026-10-04 tui-ask row: the forced default-password change step it describes was later removed when the default password became flagged rather than enforced; the TUI does not force a change. Mission screen: Why This Mission Is Waiting for Pending missions (server `AssignmentBlocker`), status-aware landing pill (Not Ready Yet, Merge By Hand, Landed), Merge in Manage Branches (`b`) instead of Land for Landing Mode None with the branch preselected in `VesselBranchesDialog`. Tests: Tui.Login (2 new), Tui.Ops.MissionDetail (2 new). |

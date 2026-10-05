@@ -573,7 +573,7 @@ namespace Armada.Server.Mcp.Tools
 
                 register(
                     "apply_backlog_refinement_summary",
-                    "Apply a refinement summary back to the linked backlog item and optionally promote its backlog state.",
+                    "Apply a refinement summary back to the linked backlog item and optionally promote its backlog state. Ends the session and releases its captain unless endSession is false.",
                     new
                     {
                         type = "object",
@@ -582,7 +582,8 @@ namespace Armada.Server.Mcp.Tools
                             sessionId = new { type = "string", description = "Objective refinement session ID (ors_ prefix)" },
                             messageId = new { type = "string", description = "Optional transcript message ID to summarize and apply" },
                             markMessageSelected = new { type = "boolean", description = "Whether to mark the summarized message as selected (default true)" },
-                            promoteBacklogState = new { type = "boolean", description = "Whether to promote the backlog state based on refinement output (default true)" }
+                            promoteBacklogState = new { type = "boolean", description = "Whether to promote the backlog state based on refinement output (default true)" },
+                            endSession = new { type = "boolean", description = "Whether to end the refinement session after applying, releasing its captain (default true)" }
                         },
                         required = new[] { "sessionId" }
                     },
@@ -601,7 +602,8 @@ namespace Armada.Server.Mcp.Tools
                         return (object)new ObjectiveRefinementApplyResponse
                         {
                             Summary = summary,
-                            Objective = updated
+                            Objective = updated,
+                            Session = await database.ObjectiveRefinementSessions.ReadAsync(session.Id).ConfigureAwait(false)
                         };
                     });
 
@@ -978,7 +980,8 @@ namespace Armada.Server.Mcp.Tools
                 {
                     MessageId = MessageId,
                     MarkMessageSelected = MarkMessageSelected,
-                    PromoteBacklogState = PromoteBacklogState
+                    PromoteBacklogState = PromoteBacklogState,
+                    EndSession = EndSession
                 };
             }
         }

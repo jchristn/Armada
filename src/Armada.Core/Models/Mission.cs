@@ -239,6 +239,13 @@ namespace Armada.Core.Models
         public List<MissionPlaybookSnapshot> PlaybookSnapshots { get; set; } = new List<MissionPlaybookSnapshot>();
 
         /// <summary>
+        /// Why this Pending mission is still waiting for a captain. Computed by the server when a single mission or a
+        /// voyage's missions are read (not stored); null for missions that are not Pending and in list responses.
+        /// </summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public MissionAssignmentBlocker? AssignmentBlocker { get; set; } = null;
+
+        /// <summary>
         /// Creation timestamp in UTC.
         /// </summary>
         public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;

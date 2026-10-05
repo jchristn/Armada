@@ -17,5 +17,10 @@ namespace Armada.Core.Models
         /// Gets or sets a value indicating whether the objective backlog state should be promoted.
         /// </summary>
         public bool PromoteBacklogState { get; set; } = true;
+        /// <summary>
+        /// Gets or sets a value indicating whether the refinement session ends after the summary is applied (default
+        /// true), which releases its captain for missions. Set false to keep refining in the same session.
+        /// </summary>
+        public bool EndSession { get; set; } = true;
     }
 }

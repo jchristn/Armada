@@ -12,6 +12,7 @@ namespace Test.Shared.Suites.Tui
     using Armada.Tui.Widgets;
     using Test.Shared.Infrastructure;
     using Touchstone.Core;
+    using TUIKit.Input;
     using static Test.Shared.Infrastructure.Asserts;
 
     /// <summary>
@@ -54,6 +55,45 @@ namespace Test.Shared.Suites.Tui
                     AssertEqual("tok_session", stored, "token stored");
                     AssertTrue(stub.CountFor("GET", "/api/v1/whoami") >= 1, "whoami called");
                 }
+            }));
+
+            cases.Add(TuiCase.Sync(Suite, "typing_default_replaces_prefill", "Typing the documented default password over the localhost prefill replaces it instead of appending (F9)", () =>
+            {
+                StubHttpHandler stub = TuiFixtures.SignedInServer(1);
+                using (TuiTestHost host = new TuiTestHost(120, 40, stub, "http://127.0.0.1:9", o => o.StartRoute = "/inbox"))
+                {
+                    host.Start();
+                    host.Press("enter");
+                    AssertTrue(host.PumpUntil(() => host.Tui.Shell.Login.Step == LoginStepEnum.Password), "password step");
+                    AssertEqual("password", host.Tui.Shell.Login.Password.Value, "localhost prefill: password");
+                    AssertTrue(host.Tui.Shell.Login.Password.PrefillSelected, "the prefill starts selected");
+                    host.Type("password");
+                    AssertEqual("password", host.Tui.Shell.Login.Password.Value, "typing replaced the prefill");
+                    AssertFalse(host.Tui.Shell.Login.Password.PrefillSelected, "no longer selected after typing");
+                    host.Press("enter");
+                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Session.IsSignedIn && host.Tui.Shell.Screen != null), "signed in with the typed default");
+                }
+            }));
+
+            cases.Add(TuiCase.Sync(Suite, "prefill_edit_keys", "A selected prefill is cleared by Backspace and kept for editing after a caret movement", () =>
+            {
+                InputField field = new InputField();
+                field.Prefill("password");
+                field.HandleKey(KeyEvent.Special(KeyCode.Backspace));
+                AssertEqual("", field.Value, "Backspace clears the selected prefill");
+
+                field.Prefill("password");
+                field.HandleKey(KeyEvent.Special(KeyCode.End));
+                AssertFalse(field.PrefillSelected, "a caret movement deselects");
+                field.HandleKey(KeyEvent.Char('1'));
+                AssertEqual("password1", field.Value, "after a caret movement typing edits the prefill");
+
+                field.Prefill("key");
+                field.HandlePaste("pasted-key");
+                AssertEqual("pasted-key", field.Value, "a paste replaces the selected prefill");
+
+                field.Value = "set";
+                AssertFalse(field.PrefillSelected, "a plain Value set is not a prefill");
             }));
 
             cases.Add(TuiCase.Sync(Suite, "email_tenant_picker", "Several tenants show the tenant picker, Back returns to email", () =>

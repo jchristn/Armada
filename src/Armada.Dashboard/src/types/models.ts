@@ -319,6 +319,45 @@ export interface Mission {
   lastUpdateUtc: string;
   selectedPlaybooks?: SelectedPlaybook[];
   playbookSnapshots?: MissionPlaybookSnapshot[];
+  /** Server-computed: why a Pending mission is still waiting for a captain (single mission and voyage reads only). */
+  assignmentBlocker?: MissionAssignmentBlocker | null;
+}
+
+export type MissionAssignmentBlockerReason =
+  | 'AwaitingDispatch'
+  | 'VesselMissing'
+  | 'VesselMisconfigured'
+  | 'DependencyNotFinished'
+  | 'DependencyHandoffPending'
+  | 'WaitingForVoyageWorkers'
+  | 'VesselBroadScopeMissionActive'
+  | 'BroadScopeWaitingForVessel'
+  | 'VesselConcurrencyLimit'
+  | 'NoCaptains'
+  | 'NoIdleCaptain'
+  | 'NoEligibleCaptain';
+
+export interface MissionAssignmentCaptainStatus {
+  captainId: string;
+  captainName: string | null;
+  state: string;
+  detail: string;
+  missionId: string | null;
+  planningSessionId: string | null;
+  refinementSessionId: string | null;
+  objectiveId: string | null;
+  quarantineUntilUtc: string | null;
+  quarantineReason: string | null;
+}
+
+export interface MissionAssignmentBlocker {
+  reason: MissionAssignmentBlockerReason;
+  summary: string;
+  untilUtc: string | null;
+  dependsOnMissionId: string | null;
+  blockingMissionIds: string[];
+  captains: MissionAssignmentCaptainStatus[];
+  computedUtc: string;
 }
 
 export interface MissionSummary {
@@ -1928,6 +1967,12 @@ export interface LandingPreviewResult {
   latestCheckSummary: string | null;
   isReadyToLand: boolean;
   issues: LandingPreviewIssue[];
+  /** Mission previews: the landing mode that applies (voyage, then vessel, then Admiral default). */
+  effectiveLandingMode?: string | null;
+  /** Mission previews: true when the effective landing mode is None (merge by hand; Land cannot succeed). */
+  manualLandingOnly?: boolean;
+  /** Mission previews: the mission's status when the preview was computed. */
+  missionStatus?: string | null;
 }
 
 export interface ArmadaEvent {

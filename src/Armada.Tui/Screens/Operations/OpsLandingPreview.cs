@@ -26,8 +26,9 @@ namespace Armada.Tui.Screens.Operations
         {
             if (doc == null) throw new ArgumentNullException(nameof(doc));
             bool ready = preview != null && preview.IsReadyToLand;
+            string pill = PillLabel(preview);
             doc.Section("Landing Preview");
-            doc.Add(StyledText.From(meta ?? "", doc.Theme.Muted).Append(StyledText.From("   [" + doc.Loc.T(ready ? "Ready To Land" : "Needs Review") + "]", ready ? doc.Theme.Success : doc.Theme.Warning)));
+            doc.Add(StyledText.From(meta ?? "", doc.Theme.Muted).Append(StyledText.From("   [" + doc.Loc.T(pill) + "]", ready || pill == "Landed" ? doc.Theme.Success : doc.Theme.Warning)));
             if (loading)
             {
                 doc.Note("Calculating landing preview...");
@@ -63,6 +64,29 @@ namespace Armada.Tui.Screens.Operations
             {
                 doc.Text(doc.Loc.T(mission ? "No landing blockers are currently predicted for this mission." : "No landing blockers are currently predicted for this merge entry."), doc.Theme.Success);
             }
+        }
+
+        /// <summary>
+        /// The readiness pill text (English, translated when shown), following the mission's status for mission previews:
+        /// Landed for a Complete mission, Not Ready Yet before the work is produced, Merge By Hand when the landing mode is
+        /// None, else Ready To Land or Needs Review.
+        /// </summary>
+        /// <param name="preview">Preview, or null.</param>
+        /// <returns>The label.</returns>
+        public static string PillLabel(LandingPreviewResult? preview)
+        {
+            if (preview == null) return "Needs Review";
+            if (preview.MissionStatus.HasValue)
+            {
+                MissionStatusEnum status = preview.MissionStatus.Value;
+                if (status == MissionStatusEnum.Complete) return "Landed";
+                bool landable = status == MissionStatusEnum.WorkProduced || status == MissionStatusEnum.LandingFailed
+                    || status == MissionStatusEnum.PullRequestOpen || status == MissionStatusEnum.Review;
+                if (!landable) return "Not Ready Yet";
+                if (preview.ManualLandingOnly) return "Merge By Hand";
+            }
+
+            return preview.IsReadyToLand ? "Ready To Land" : "Needs Review";
         }
 
         #endregion

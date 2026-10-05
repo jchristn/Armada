@@ -30,6 +30,7 @@ namespace Armada.Server.Routes
         private readonly IGitService? _git;
         private readonly ArmadaSettings? _settings;
         private readonly IVesselService _VesselService;
+        private readonly ManualLandingReconciler? _ManualLandingReconciler;
 
         /// <summary>
         /// Instantiate.
@@ -44,6 +45,7 @@ namespace Armada.Server.Routes
         /// <param name="git">Optional git service for branch management operations.</param>
         /// <param name="settings">Optional application settings for repository path resolution.</param>
         /// <param name="vesselService">Optional shared vessel creation service. Defaults to a new <see cref="VesselService"/>.</param>
+        /// <param name="manualLandingReconciler">Optional reconciler that completes manual-landing missions after a branch merge.</param>
         public VesselRoutes(
             DatabaseDriver database,
             VesselReadinessService readiness,
@@ -54,8 +56,10 @@ namespace Armada.Server.Routes
             VesselContextService? contextService = null,
             IGitService? git = null,
             ArmadaSettings? settings = null,
-            IVesselService? vesselService = null)
+            IVesselService? vesselService = null,
+            ManualLandingReconciler? manualLandingReconciler = null)
         {
+            _ManualLandingReconciler = manualLandingReconciler;
             _database = database;
             _readiness = readiness ?? throw new ArgumentNullException(nameof(readiness));
             _landingPreview = landingPreview ?? throw new ArgumentNullException(nameof(landingPreview));
@@ -434,6 +438,18 @@ namespace Armada.Server.Routes
                 try
                 {
                     await _git.MergeBranchesAsync(repoPath, mergeBody.Source!, mergeBody.Target!, mergeBody.Push).ConfigureAwait(false);
+
+                    // A manual-landing mission whose branch was just merged is done: complete it now rather than on the
+                    // next health check, so its page shows Complete when the operator returns to it.
+                    if (_ManualLandingReconciler != null)
+                    {
+                        try { await _ManualLandingReconciler.ReconcileAsync(vessel.Id).ConfigureAwait(false); }
+                        catch (Exception)
+                        {
+                            // The merge itself succeeded; the reconciler logs per-mission problems and the health check retries.
+                        }
+                    }
+
                     return new BranchMergeResponse { VesselId = id, Source = mergeBody.Source!, Target = mergeBody.Target!, Merged = true, Pushed = mergeBody.Push };
                 }
                 catch (Exception ex)

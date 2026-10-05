@@ -192,6 +192,54 @@ namespace Test.Shared.Suites.Services
                 AssertTrue(selected.IsSelected, "Expected source refinement message to be selected.");
             }));
 
+            cases.Add(CaseAsync("apply_async_ends_the_session_and_releases_the_captain", "ApplyAsync ends the refinement session and releases its captain so missions can use it (F11)", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                using CoordinatorFixture fixture = new CoordinatorFixture(testDb.Driver);
+
+                CoordinatorFixture.TenantUserResult tenantUser = await fixture.CreateTenantUserAsync().ConfigureAwait(false);
+                Objective objective = await fixture.CreateObjectiveAsync("Apply and end", tenantUser.TenantId, tenantUser.UserId).ConfigureAwait(false);
+                Captain captain = await fixture.CreateCaptainAsync("apply-end", AgentRuntimeEnum.Custom, tenantUser.TenantId, tenantUser.UserId, CaptainStateEnum.Refining).ConfigureAwait(false);
+                ObjectiveRefinementSession session = await fixture.CreateSessionAsync(objective, captain).ConfigureAwait(false);
+                ObjectiveRefinementMessage assistant = await fixture.CreateMessageAsync(session, "Assistant", 2, "Refined summary.").ConfigureAwait(false);
+
+                await fixture.Coordinator.ApplyAsync(
+                    AuthContext.Authenticated(tenantUser.TenantId, tenantUser.UserId, false, true, "UnitTest"),
+                    objective,
+                    session,
+                    new ObjectiveRefinementApplyRequest { MessageId = assistant.Id },
+                    fixture.Objectives).ConfigureAwait(false);
+
+                ObjectiveRefinementSession? persistedSession = await testDb.Driver.ObjectiveRefinementSessions.ReadAsync(session.Id).ConfigureAwait(false);
+                Captain persistedCaptain = await RequireCaptainAsync(testDb.Driver, captain.Id).ConfigureAwait(false);
+                AssertEqual(ObjectiveRefinementSessionStatusEnum.Stopped, persistedSession!.Status, "the applied session ends");
+                AssertEqual(CaptainStateEnum.Idle, persistedCaptain.State, "the captain is free for missions");
+            }));
+
+            cases.Add(CaseAsync("apply_async_keeps_the_session_when_end_session_is_false", "ApplyAsync with EndSession false keeps the session and its captain", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                using CoordinatorFixture fixture = new CoordinatorFixture(testDb.Driver);
+
+                CoordinatorFixture.TenantUserResult tenantUser = await fixture.CreateTenantUserAsync().ConfigureAwait(false);
+                Objective objective = await fixture.CreateObjectiveAsync("Apply and keep", tenantUser.TenantId, tenantUser.UserId).ConfigureAwait(false);
+                Captain captain = await fixture.CreateCaptainAsync("apply-keep", AgentRuntimeEnum.Custom, tenantUser.TenantId, tenantUser.UserId, CaptainStateEnum.Refining).ConfigureAwait(false);
+                ObjectiveRefinementSession session = await fixture.CreateSessionAsync(objective, captain).ConfigureAwait(false);
+                ObjectiveRefinementMessage assistant = await fixture.CreateMessageAsync(session, "Assistant", 2, "Refined summary.").ConfigureAwait(false);
+
+                await fixture.Coordinator.ApplyAsync(
+                    AuthContext.Authenticated(tenantUser.TenantId, tenantUser.UserId, false, true, "UnitTest"),
+                    objective,
+                    session,
+                    new ObjectiveRefinementApplyRequest { MessageId = assistant.Id, EndSession = false },
+                    fixture.Objectives).ConfigureAwait(false);
+
+                ObjectiveRefinementSession? persistedSession = await testDb.Driver.ObjectiveRefinementSessions.ReadAsync(session.Id).ConfigureAwait(false);
+                Captain persistedCaptain = await RequireCaptainAsync(testDb.Driver, captain.Id).ConfigureAwait(false);
+                AssertEqual(ObjectiveRefinementSessionStatusEnum.Active, persistedSession!.Status, "the session stays active");
+                AssertEqual(CaptainStateEnum.Refining, persistedCaptain.State, "the captain stays reserved");
+            }));
+
             cases.Add(CaseAsync("stop_async_releases_the_captain_and_marks_the_session_stopped_when_no_runtime_process_can_be_created", "StopAsync releases the captain and marks the session stopped when no runtime process can be created", TestTags.Positive, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
