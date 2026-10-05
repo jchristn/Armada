@@ -393,7 +393,11 @@ namespace Armada.Core.Services.Health
         private async Task<DateTime?> GetLastScheduledAsync(string tenantId, CancellationToken token)
         {
             if (_LastScheduledUtc.TryGetValue(tenantId, out DateTime cached)) return cached;
-            List<Job> jobs = await _Database.Jobs.EnumerateAsync(tenantId, token).ConfigureAwait(false);
+            JobQuery query = new JobQuery();
+            query.TenantId = tenantId;
+            query.Kind = JobKindEnum.Report;
+            query.PageSize = 200;
+            List<Job> jobs = (await _Database.Jobs.EnumeratePageAsync(query, token).ConfigureAwait(false)).Objects;
             Job? latest = jobs
                 .Where(j => j.Kind == JobKindEnum.Report && String.Equals(j.Name, JobName, StringComparison.Ordinal))
                 .OrderByDescending(j => j.CreatedUtc)
@@ -405,7 +409,13 @@ namespace Armada.Core.Services.Health
 
         private async Task FailOrphanedJobsAsync(string tenantId, CancellationToken token)
         {
-            List<Job> jobs = await _Database.Jobs.EnumerateAsync(tenantId, token).ConfigureAwait(false);
+            JobQuery query = new JobQuery();
+            query.TenantId = tenantId;
+            query.Kind = JobKindEnum.Report;
+            query.Statuses.Add(JobStatusEnum.Queued);
+            query.Statuses.Add(JobStatusEnum.Running);
+            query.PageSize = 1000;
+            List<Job> jobs = (await _Database.Jobs.EnumeratePageAsync(query, token).ConfigureAwait(false)).Objects;
             foreach (Job job in jobs)
             {
                 if (job.Kind != JobKindEnum.Report || !String.Equals(job.Name, JobName, StringComparison.Ordinal)) continue;

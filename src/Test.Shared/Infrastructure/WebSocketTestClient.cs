@@ -106,8 +106,8 @@ namespace Test.Shared.Infrastructure
         /// <returns>The first matching message, or null on timeout.</returns>
         public async Task<string?> WaitForAsync(Func<string, bool> predicate, int timeoutMs = 10000)
         {
-            DateTime deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
-            while (DateTime.UtcNow < deadline)
+            MonotonicDeadline deadline = MonotonicDeadline.After(TimeSpan.FromMilliseconds(timeoutMs));
+            while (!deadline.Passed)
             {
                 lock (_Lock)
                 {

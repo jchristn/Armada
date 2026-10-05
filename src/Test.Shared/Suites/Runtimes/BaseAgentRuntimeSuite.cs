@@ -179,11 +179,17 @@ namespace Test.Shared.Suites.Runtimes
                         outputLines.Add(line);
                     }
                 };
+                TaskCompletionSource<bool> exited = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                runtime.OnProcessExited += (_, _) => exited.TrySetResult(true);
 
                 await runtime.StartAsync(tempDir, "test prompt");
-                await WaitForConditionAsync(() => { lock (outputLines) { return outputLines.Contains(expected); } }, 2000);
+                // Wait on the exit event, not a fixed delay: the runtime delivers every output line before OnProcessExited.
+                await exited.Task.WaitAsync(TimeSpan.FromSeconds(30));
 
-                AssertTrue(outputLines.Contains(expected), "Expected UTF-8 stderr content to be preserved");
+                lock (outputLines)
+                {
+                    AssertTrue(outputLines.Contains(expected), "Expected UTF-8 stderr content to be preserved, and delivered before the exit event; got: " + String.Join(" | ", outputLines));
+                }
             }));
 
             cases.Add(CaseAsync("on_process_started_fires_with_pid", "OnProcessStarted Fires WithPid", TestTags.Positive, async () =>

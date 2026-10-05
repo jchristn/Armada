@@ -6,6 +6,25 @@ All notable changes to Armada are documented in this file.
 
 ## Unreleased
 
+### Terminal UI: Operations, Delivery, Configuration, Activity, and System screens
+
+- Operations: Home, Needs You, Planning (live streaming transcript, dispatch from a session), Dispatch (pre-fill from Planning, Backlog, Incident, Workspace), Backlog and Backlog item (GitHub import, refinement sessions), Fleet Actions (runs, live run detail, target drawer), Missions and Mission detail (diff, log, review, transition, landing preview, PR panel), Voyages, Voyage detail, Create Voyage, Merge Queue and entry detail, and Jobs.
+- Delivery (Deployments, Environments, Releases, Incidents, Checks, Runbooks) and Configuration (Workflow Profiles, Project Profiles, Skills, Playbooks, Endpoints, Harbors, Memory, Personas, Pipelines, Prompts) with list, detail, and form screens.
+- Activity (All Activity with saved views and JSON/CSV/Markdown export, API Requests with replay, Events, Signals, Token Usage), API Explorer, Settings for every Server section (backup and restore to files, restart, stop, factory reset, rebuild with live log and rollback), Diagnostics, Tenants, Users, Credentials, and the setup wizard.
+- Shared list and detail screens: filters, sorting, paging, bulk actions, typed confirmations, View JSON, `$EDITOR` for long text, live WebSocket updates. Alt+Left/Right history works while a list has focus; the key after a programmatically closed dialog is no longer lost.
+- Client: `GetVoyageDetailAsync` and the Data Retention settings group.
+
+### v1.0 readiness: quality, performance, and service registration
+
+- Added `--install-service`, `--uninstall-service`, and `--run-service` to the Admiral (Windows Service, systemd unit, launchd agent) and `--install-startup`/`--uninstall-startup` to Harbor (Run key, LaunchAgent, XDG autostart; Harbor starts minimized). All support `--dry-run`, are idempotent, and return documented exit codes; installers call them.
+- `GET /api/v1/jobs` accepts `status`, `kind`, `pageNumber`, and `pageSize`; the dashboard header polls active jobs only.
+- Performance harness (`scripts/common/perf-baseline.sh`, `Armada.PerfSeed`) and `docs/PERFORMANCE.md`.
+- Fixed: the Admiral fails startup when the MCP port is taken instead of running without MCP.
+- Fixed: agent output lines at process exit could be dropped.
+- Fixed: MergeQueue and None landing modes were ignored for vessels with a working directory; merge-queue conflicts and test failures now mark the mission LandingFailed.
+- Fixed: an import interrupted by a restart no longer stays Importing; Harbor reconnect races and requests hanging on a disconnected Harbor; the rollback slot deleted at retention 1; a fleet action cancel leaving targets Running; a dashboard relay WebSocket close race; the Deb/Rpm systemd unit and `/usr/bin` link.
+- Tests: E2E fixture reserves ports from 20000-31999 and retries startup; waits use a sleep-proof clock.
+
 ### Terminal UI: Ask Armada and approvals
 - Ask Armada in the TUI: conversation list, conversation header, streaming transcript with confirm cards (approve with `a`, reject with `r`) and live work cards, a composer with `/` quick actions and inline Dispatch and Fleet action forms, the Ask dock (Ctrl+J) on every screen, and "Ask about this" (Alt+A).
 - Approvals center (Ctrl+A): Ask proposals, mission reviews, deployment approvals, failed landings, and stalled captains with single-key decisions using the dashboard's calls and confirmations, a header count, and actionable toasts.

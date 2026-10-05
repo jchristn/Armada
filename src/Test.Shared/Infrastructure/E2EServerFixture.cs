@@ -2,10 +2,12 @@ namespace Test.Shared.Infrastructure
 {
     using System;
     using System.Collections.Generic;
+    using System.Diagnostics;
     using System.IO;
     using System.Net;
     using System.Net.Http;
     using System.Net.Sockets;
+    using System.Text;
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Core.Enums;
@@ -113,6 +115,16 @@ namespace Test.Shared.Infrastructure
         };
 
         private ArmadaServer _Server = null!;
+
+        // Fixture ports come from 20000-31999: below the ephemeral (outbound) port ranges of Linux (32768+),
+        // macOS and Windows (49152+), so client sockets never compete for them. A port is not reused within one
+        // test process, which also rules out a lingering TIME_WAIT from a previous fixture.
+        private const int _PortRangeStart = 20000;
+        private const int _PortRangeEnd = 32000;
+        private const int _MaxStartAttempts = 3;
+        private const int _ReadyTimeoutSeconds = 30;
+        private static readonly Random _PortRandom = new Random();
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, byte> _PortsHandedOut = new System.Collections.Concurrent.ConcurrentDictionary<int, byte>();
 
         #endregion
 
@@ -230,7 +242,32 @@ namespace Test.Shared.Infrastructure
             // the 10s default.
             BaseAgentRuntime.GracefulStopTimeoutMs = 500;
 
+            // The test process hosts the server, the test clients, and sync-over-async waits in one thread pool.
+            // Under machine load the pool's slow thread injection can stall request handling long enough to look
+            // like a server that never became ready, so give it a floor.
+            EnsureThreadPoolFloor();
 
+            List<string> attempts = new List<string>();
+            for (int attempt = 1; attempt <= _MaxStartAttempts; attempt++)
+            {
+                string? failure = await TryStartOnceAsync(attempt).ConfigureAwait(false);
+                if (failure == null)
+                {
+                    AppDomain.CurrentDomain.ProcessExit += (_, _) => Shutdown();
+                    return;
+                }
+
+                attempts.Add(failure);
+                Shutdown();
+                if (attempt < _MaxStartAttempts) await Task.Delay(250 * attempt).ConfigureAwait(false);
+            }
+
+            throw new TimeoutException("E2E server did not become ready after " + _MaxStartAttempts + " attempts:"
+                + Environment.NewLine + String.Join(Environment.NewLine, attempts));
+        }
+
+        private async Task<string?> TryStartOnceAsync(int attempt)
+        {
             TempDir = TestTemp.NewDirectory("e2e");
 
             string sqlitePath = Path.Combine(TempDir, "armada.db");
@@ -238,13 +275,23 @@ namespace Test.Shared.Infrastructure
             dbSettings.Type = DatabaseTypeEnum.Sqlite;
             dbSettings.Filename = sqlitePath;
 
-            RestPort = GetAvailablePort();
-            McpPort = GetAvailablePort();
+            // Reserve both ports at once (so they always differ) from a range below every OS's ephemeral range.
+            // Ports handed out by the OS for port 0 come from the ephemeral range, which outbound connections also
+            // draw from: between releasing the probe listener and the server binding, a client socket of this or
+            // another test process could take the port, and the MCP listener used to fail silently when that
+            // happened, leaving the fixture to time out.
+            int[] ports = ReservePorts(2);
+            RestPort = ports[0];
+            McpPort = ports[1];
             ApiKey = "test-key-" + Guid.NewGuid().ToString("N");
             _ApiKeysByRestPort[RestPort] = ApiKey;
 
+            string logPath = Path.Combine(TempDir, "fixture-warnings.log");
             LoggingModule logging = new LoggingModule();
             logging.Settings.EnableConsole = false;
+            logging.Settings.MinimumSeverity = Severity.Warn;
+            logging.Settings.FileLogging = FileLoggingMode.SingleLogFile;
+            logging.Settings.LogFilename = logPath;
 
             ArmadaSettings settings = new ArmadaSettings();
             settings.DataDirectory = TempDir;
@@ -284,12 +331,7 @@ namespace Test.Shared.Infrastructure
             // byte-identical to letting the server migrate from empty, just without the per-boot cost.
             TestDatabaseHelper.SeedDatabaseFile(sqlitePath);
 
-            _Server = new ArmadaServer(logging, settings, quiet: true);
-            await _Server.StartAsync().ConfigureAwait(false);
-            SessionTokenEncryptionKey = settings.SessionTokenEncryptionKey ?? "";
-
             BaseUrl = "http://127.0.0.1:" + RestPort;
-
             TimeSpan clientTimeout = TimeSpan.FromSeconds(30);
 
             AuthClient = new HttpClient();
@@ -305,39 +347,151 @@ namespace Test.Shared.Infrastructure
             McpClient.BaseAddress = new Uri("http://127.0.0.1:" + McpPort);
             McpClient.Timeout = clientTimeout;
 
-            await WaitForReadyAsync().ConfigureAwait(false);
+            Stopwatch elapsed = Stopwatch.StartNew();
+            _Server = new ArmadaServer(logging, settings, quiet: true);
+            try
+            {
+                await _Server.StartAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                return Describe(attempt, elapsed, "server StartAsync threw " + ex.GetType().Name + ": " + ex.Message, null, null, logPath);
+            }
+            SessionTokenEncryptionKey = settings.SessionTokenEncryptionKey ?? "";
 
-            AppDomain.CurrentDomain.ProcessExit += (_, _) => Shutdown();
+            ReadinessProbe probe = await WaitForReadyAsync(TimeSpan.FromSeconds(_ReadyTimeoutSeconds)).ConfigureAwait(false);
+            if (probe.Ready) return null;
+            return Describe(attempt, elapsed, "listeners not ready within " + _ReadyTimeoutSeconds + " s", probe.Rest, probe.Mcp, logPath);
         }
 
-        private async Task WaitForReadyAsync()
+        private async Task<ReadinessProbe> WaitForReadyAsync(TimeSpan timeout)
         {
-            DateTime deadline = DateTime.UtcNow.AddSeconds(30);
-            Exception? last = null;
-            while (DateTime.UtcNow < deadline)
+            // Bounded retries with exponential backoff; each probe has its own short timeout so one hung request
+            // cannot consume the whole readiness window (the shared clients allow 30 s per request). Readiness needs
+            // both listeners: REST health and the MCP server's unauthenticated health check (GET /), since the MCP
+            // listener starts separately from REST.
+            ReadinessProbe probe = new ReadinessProbe();
+            MonotonicDeadline deadline = MonotonicDeadline.After(timeout);
+            int delayMs = 50;
+            while (!deadline.Passed)
+            {
+                if (!probe.RestOk) probe.Rest = await ProbeAsync(AuthClient, "/api/v1/status/health").ConfigureAwait(false);
+                if (probe.RestOk && !probe.McpOk) probe.Mcp = await ProbeAsync(McpClient, "/").ConfigureAwait(false);
+                if (probe.Ready) return probe;
+
+                await Task.Delay(delayMs).ConfigureAwait(false);
+                delayMs = Math.Min(delayMs * 2, 1000);
+            }
+            return probe;
+        }
+
+        private static async Task<string> ProbeAsync(HttpClient client, string path)
+        {
+            using (CancellationTokenSource cts = new CancellationTokenSource(TimeSpan.FromSeconds(5)))
             {
                 try
                 {
-                    // The MCP listener is started on a background task, so the REST health check alone does
-                    // not prove it is accepting connections; also probe the MCP server's unauthenticated
-                    // health check (GET /) before declaring the fixture ready.
-                    HttpResponseMessage response = await AuthClient.GetAsync("/api/v1/status/health").ConfigureAwait(false);
-                    if (response.StatusCode == HttpStatusCode.OK)
+                    using (HttpResponseMessage response = await client.GetAsync(path, cts.Token).ConfigureAwait(false))
                     {
-                        HttpResponseMessage mcpResponse = await McpClient.GetAsync("/").ConfigureAwait(false);
-                        if (mcpResponse.StatusCode == HttpStatusCode.OK) return;
+                        return response.StatusCode == HttpStatusCode.OK ? ReadinessProbe.Ok : "HTTP " + (int)response.StatusCode;
                     }
                 }
-                catch (Exception ex)
+                catch (OperationCanceledException)
                 {
-                    last = ex;
+                    return "no response within 5 s";
+                }
+                catch (HttpRequestException ex)
+                {
+                    return ex.GetType().Name + ": " + ex.Message;
+                }
+            }
+        }
+
+        private string Describe(int attempt, Stopwatch elapsed, string reason, string? rest, string? mcp, string logPath)
+        {
+            ThreadPool.GetMinThreads(out int minWorkers, out int minIo);
+            StringBuilder sb = new StringBuilder();
+            sb.Append("  attempt ").Append(attempt).Append(" after ").Append(elapsed.ElapsedMilliseconds).Append(" ms: ").Append(reason);
+            sb.Append(Environment.NewLine).Append("    REST 127.0.0.1:").Append(RestPort).Append(" -> ").Append(rest ?? "not probed")
+                .Append(" (port ").Append(DescribePort(RestPort)).Append(')');
+            sb.Append(Environment.NewLine).Append("    MCP  127.0.0.1:").Append(McpPort).Append(" -> ").Append(mcp ?? "not probed")
+                .Append(" (port ").Append(DescribePort(McpPort)).Append(')');
+            sb.Append(Environment.NewLine).Append("    thread pool: threads=").Append(ThreadPool.ThreadCount)
+                .Append(" pending=").Append(ThreadPool.PendingWorkItemCount)
+                .Append(" minWorkers=").Append(minWorkers).Append(" minIo=").Append(minIo);
+            try
+            {
+                if (File.Exists(logPath))
+                {
+                    string[] lines = File.ReadAllLines(logPath);
+                    int from = Math.Max(0, lines.Length - 8);
+                    for (int i = from; i < lines.Length; i++) sb.Append(Environment.NewLine).Append("    log: ").Append(lines[i]);
+                }
+            }
+            catch (IOException)
+            {
+            }
+            return sb.ToString();
+        }
+
+        private static string DescribePort(int port)
+        {
+            try
+            {
+                TcpListener listener = new TcpListener(IPAddress.Loopback, port);
+                listener.Start();
+                listener.Stop();
+                return "nothing listening";
+            }
+            catch (SocketException)
+            {
+                return "bound by a socket";
+            }
+        }
+
+        private static void EnsureThreadPoolFloor()
+        {
+            ThreadPool.GetMinThreads(out int workers, out int io);
+            int floor = Math.Max(32, Environment.ProcessorCount * 2);
+            if (workers < floor || io < floor) ThreadPool.SetMinThreads(Math.Max(workers, floor), Math.Max(io, floor));
+        }
+
+        private static int[] ReservePorts(int count)
+        {
+            List<TcpListener> held = new List<TcpListener>();
+            try
+            {
+                int tries = 0;
+                while (held.Count < count)
+                {
+                    if (++tries > 500) throw new InvalidOperationException("could not reserve " + count + " free loopback ports in " + _PortRangeStart + "-" + _PortRangeEnd);
+                    int candidate = _PortRandom.Next(_PortRangeStart, _PortRangeEnd);
+                    if (candidate >= 25000 && candidate < 25100) continue; // left for manually started local servers
+                    if (_PortsHandedOut.ContainsKey(candidate)) continue;
+                    TcpListener listener = new TcpListener(IPAddress.Loopback, candidate);
+                    try
+                    {
+                        listener.Start();
+                    }
+                    catch (SocketException)
+                    {
+                        continue;
+                    }
+                    held.Add(listener);
                 }
 
-                await Task.Delay(100).ConfigureAwait(false);
+                int[] ports = new int[count];
+                for (int i = 0; i < count; i++)
+                {
+                    ports[i] = ((IPEndPoint)held[i].LocalEndpoint).Port;
+                    _PortsHandedOut[ports[i]] = 0;
+                }
+                return ports;
             }
-
-            throw new TimeoutException("E2E server did not become ready within 30 seconds." +
-                (last != null ? " Last error: " + last.Message : ""));
+            finally
+            {
+                foreach (TcpListener listener in held) listener.Stop();
+            }
         }
 
         private void Shutdown()
@@ -354,15 +508,6 @@ namespace Test.Shared.Infrastructure
             {
                 // Best-effort cleanup; a lingering handle must not crash process exit.
             }
-        }
-
-        private static int GetAvailablePort()
-        {
-            TcpListener listener = new TcpListener(IPAddress.Loopback, 0);
-            listener.Start();
-            int port = ((IPEndPoint)listener.LocalEndpoint).Port;
-            listener.Stop();
-            return port;
         }
 
         #endregion

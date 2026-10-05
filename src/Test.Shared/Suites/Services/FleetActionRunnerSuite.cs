@@ -105,8 +105,8 @@ namespace Test.Shared.Suites.Services
                 FleetActionRun run = await h.StartCommandAsync("sleep 4; echo done > marker.txt", vessels.Select(v => v.Id).ToList(), concurrency: 1, requiresClean: false).ConfigureAwait(false);
 
                 FleetActionRunTarget? running = null;
-                DateTime deadline = DateTime.UtcNow.AddSeconds(30);
-                while (running == null && DateTime.UtcNow < deadline)
+                MonotonicDeadline deadline = MonotonicDeadline.After(TimeSpan.FromSeconds(30));
+                while (running == null && !deadline.Passed)
                 {
                     running = (await h.TargetsAsync(run.Id).ConfigureAwait(false)).FirstOrDefault(t => t.Status == FleetActionTargetStatusEnum.Running);
                     if (running == null) await Task.Delay(50).ConfigureAwait(false);
@@ -221,8 +221,8 @@ namespace Test.Shared.Suites.Services
 
                 FleetActionRun run = await h.StartCommandAsync("sleep 1", vessels.Select(v => v.Id).ToList(), concurrency: 4, requiresClean: false).ConfigureAwait(false);
                 int maxInFlight = 0;
-                DateTime deadline = DateTime.UtcNow.AddSeconds(45);
-                while (DateTime.UtcNow < deadline)
+                MonotonicDeadline deadline = MonotonicDeadline.After(TimeSpan.FromSeconds(45));
+                while (!deadline.Passed)
                 {
                     maxInFlight = Math.Max(maxInFlight, h.Runner.GlobalInFlight);
                     FleetActionRun? current = await h.Db.Driver.FleetActionRuns.ReadAsync(run.Id).ConfigureAwait(false);
@@ -368,6 +368,33 @@ namespace Test.Shared.Suites.Services
 
                 await h.Runner.SyncMissionRunsAsync().ConfigureAwait(false);
                 AssertEqual(1, h.Dispatcher.Dispatched.Count, "nothing dispatched after cancel");
+            }));
+
+            cases.Add(CaseAsync("mission_cancel_survives_dispatcher_failure", "Cancelling a Mission run finishes every target even when a voyage cancel fails", TestTags.Reliability, async () =>
+            {
+                using FleetActionTestHarness h = await FleetActionTestHarness.CreateAsync().ConfigureAwait(false);
+                List<Vessel> vessels = new List<Vessel>();
+                for (int i = 0; i < 3; i++) vessels.Add(await h.CreateVesselAsync("mcf" + i, null).ConfigureAwait(false));
+
+                FleetActionRun run = await h.Service.StartRunAsync(h.Admin, null, new FleetActionRunRequest
+                {
+                    VesselIds = vessels.Select(v => v.Id).ToList(),
+                    Concurrency = 2,
+                    Definition = new FleetActionUpsertRequest { Name = "m", Kind = FleetActionKindEnum.Mission, PromptTemplate = "do it" }
+                }).ConfigureAwait(false);
+                await h.Runner.SyncMissionRunsAsync().ConfigureAwait(false);
+                AssertEqual(2, h.Dispatcher.ActiveCount, "two voyages active");
+
+                h.Dispatcher.ThrowOnCancel = true;
+                FleetActionRun cancelled = await h.Service.CancelRunAsync(h.Admin, run.Id).ConfigureAwait(false);
+                AssertEqual(FleetActionRunStatusEnum.Cancelled, cancelled.Status);
+                AssertNotNull(cancelled.CompletedUtc, "run finished");
+                List<FleetActionRunTarget> targets = await h.TargetsAsync(run.Id).ConfigureAwait(false);
+                AssertFalse(targets.Exists(t => t.Status == FleetActionTargetStatusEnum.Running || t.Status == FleetActionTargetStatusEnum.Pending), "no target left unfinished");
+                AssertEqual(2, targets.Count(t => (t.ErrorText ?? "").Contains("Cancel the voyage directly")), "both running targets explain the failed voyage cancel");
+
+                FleetActionRun again = await h.Service.CancelRunAsync(h.Admin, run.Id).ConfigureAwait(false);
+                AssertEqual(FleetActionRunStatusEnum.Cancelled, again.Status, "cancelling again is a no-op");
             }));
 
             cases.Add(CaseAsync("seeding_idempotent", "Built-ins seed once per tenant and a soft-deleted built-in is not re-seeded", TestTags.Positive, async () =>

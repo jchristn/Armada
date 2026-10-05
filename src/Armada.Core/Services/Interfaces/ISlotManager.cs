@@ -84,5 +84,15 @@ namespace Armada.Core.Services.Interfaces
         /// <param name="token">Cancellation token.</param>
         /// <returns>The number of slots removed.</returns>
         Task<int> PruneAsync(CancellationToken token = default);
+
+        /// <summary>
+        /// Remove slots beyond <see cref="RetentionCount"/>, keeping the newest, the active slot, and every slot named in
+        /// <paramref name="keepSlots"/>. A rebuild passes the slot it replaced so the rollback target survives even when
+        /// the retention count is 1.
+        /// </summary>
+        /// <param name="keepSlots">Additional slot names that must not be removed. Null or empty keeps only the defaults.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The number of slots removed.</returns>
+        Task<int> PruneAsync(IEnumerable<string>? keepSlots, CancellationToken token = default);
     }
 }

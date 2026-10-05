@@ -158,8 +158,8 @@ namespace Test.Shared.Suites.E2E
                 AssertStartsWith("job_", accepted.JobId ?? "");
 
                 VesselImportBatchDetail? detail = null;
-                DateTime deadline = DateTime.UtcNow.AddSeconds(30);
-                while (DateTime.UtcNow < deadline)
+                MonotonicDeadline deadline = MonotonicDeadline.After(TimeSpan.FromSeconds(30));
+                while (!deadline.Passed)
                 {
                     HttpResponseMessage get = await fx.AuthClient.GetAsync("/api/v1/vessels/import/batches/" + discovered.BatchId).ConfigureAwait(false);
                     detail = await JsonHelper.DeserializeAsync<VesselImportBatchDetail>(get).ConfigureAwait(false);

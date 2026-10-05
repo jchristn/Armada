@@ -220,8 +220,8 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(0, response.Items.Count, "no items in 202 response");
 
                 VesselImportBatch? batch = null;
-                DateTime deadline = DateTime.UtcNow.AddSeconds(30);
-                while (DateTime.UtcNow < deadline)
+                MonotonicDeadline deadline = MonotonicDeadline.After(TimeSpan.FromSeconds(30));
+                while (!deadline.Passed)
                 {
                     batch = await testDb.Driver.VesselImportBatches.ReadAsync(discovered.BatchId).ConfigureAwait(false);
                     if (batch != null && batch.Status != VesselImportBatchStatusEnum.Importing) break;
@@ -231,10 +231,79 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(VesselImportBatchStatusEnum.Completed, batch!.Status);
                 AssertEqual(12, batch.CreatedCount);
                 AssertEqual(response.JobId, batch.JobId);
-                Job? job = await testDb.Driver.Jobs.ReadAsync(response.JobId!).ConfigureAwait(false);
+                Job? job = await JobWait.ForTerminalAsync(testDb.Driver, response.JobId!).ConfigureAwait(false);
                 AssertEqual(JobStatusEnum.Succeeded, job!.Status);
                 AssertContains("\"createdCount\":12", job.ResultJson ?? "");
                 AssertEqual(12, (await testDb.Driver.Vessels.EnumerateAsync(Constants.DefaultTenantId).ConfigureAwait(false)).Count);
+            }));
+
+            cases.Add(CaseAsync("cancel_import_job_mid_batch", "Cancelling a background import stops it part way; unprocessed items are marked cancelled", TestTags.Reliability, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                string root = TestTemp.NewDirectory("import");
+                for (int i = 0; i < 25; i++) MakeFakeRepo(Path.Combine(root, "cancel-repo-" + i.ToString("D2")));
+                ArmadaSettings settings = NewSettings(root);
+                settings.Import.InlineBatchLimit = 5;
+                LoggingModule logging = new LoggingModule();
+                logging.Settings.EnableConsole = false;
+                GatedVesselService gated = new GatedVesselService(new VesselService(testDb.Driver), 3);
+                JobService jobs = new JobService(testDb.Driver, logging);
+                VesselImportService service = new VesselImportService(testDb.Driver, settings, new VesselDiscoveryService(testDb.Driver, settings), gated, jobs, logging);
+                VesselImportDiscoverResponse discovered = await DiscoverRoot(service, root).ConfigureAwait(false);
+
+                VesselImportResponse response = await service.ImportAsync(Constants.DefaultTenantId, Constants.DefaultUserId, SelectAll(discovered)).ConfigureAwait(false);
+                AssertTrue(response.RunsInBackground, "background job");
+                await gated.Blocked.WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
+
+                Job? running = await testDb.Driver.Jobs.ReadAsync(response.JobId!).ConfigureAwait(false);
+                await jobs.CancelAsync(running!).ConfigureAwait(false);
+                gated.Release();
+
+                VesselImportBatch? batch = null;
+                MonotonicDeadline deadline = MonotonicDeadline.After(TimeSpan.FromSeconds(30));
+                while (!deadline.Passed)
+                {
+                    batch = await testDb.Driver.VesselImportBatches.ReadAsync(discovered.BatchId).ConfigureAwait(false);
+                    if (batch != null && batch.Status != VesselImportBatchStatusEnum.Importing) break;
+                    await Task.Delay(50).ConfigureAwait(false);
+                }
+
+                AssertEqual(VesselImportBatchStatusEnum.Failed, batch!.Status, "a cancelled import ends Failed");
+                AssertTrue(batch.CreatedCount > 0 && batch.CreatedCount < 25, "stopped part way, created " + batch.CreatedCount);
+                Job? after = await JobWait.ForTerminalAsync(testDb.Driver, response.JobId!).ConfigureAwait(false);
+                AssertEqual(JobStatusEnum.Cancelled, after!.Status);
+                List<VesselImportItem> items = await testDb.Driver.VesselImportItems.EnumerateByBatchAsync(Constants.DefaultTenantId, discovered.BatchId).ConfigureAwait(false);
+                int cancelledItems = items.Count(i => i.OutcomeReason == VesselImportCodes.Cancelled);
+                AssertEqual(25 - batch.CreatedCount, cancelledItems, "every unprocessed selected item says why");
+                AssertEqual(batch.CreatedCount, (await testDb.Driver.Vessels.EnumerateAsync(Constants.DefaultTenantId).ConfigureAwait(false)).Count, "vessels created before the cancel are kept");
+            }));
+
+            cases.Add(CaseAsync("restart_fails_orphaned_import", "An import left Importing by a restart is failed at startup and its job too", TestTags.Reliability, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                string root = TestTemp.NewDirectory("import");
+                for (int i = 0; i < 3; i++) MakeFakeRepo(Path.Combine(root, "orphan-repo-" + i.ToString("D2")));
+                VesselImportService service = NewService(testDb, root);
+                VesselImportDiscoverResponse discovered = await DiscoverRoot(service, root).ConfigureAwait(false);
+
+                // Simulate the state a crash leaves behind: the batch Importing with a Running job.
+                JobService jobs = new JobService(testDb.Driver, new LoggingModule());
+                Job job = await jobs.EnqueueAsync("Vessel import " + discovered.BatchId, JobKindEnum.VesselImport, Constants.DefaultTenantId, Constants.DefaultUserId).ConfigureAwait(false);
+                job.Status = JobStatusEnum.Running;
+                await testDb.Driver.Jobs.UpdateAsync(job).ConfigureAwait(false);
+                VesselImportBatch? batch = await testDb.Driver.VesselImportBatches.ReadAsync(discovered.BatchId).ConfigureAwait(false);
+                batch!.Status = VesselImportBatchStatusEnum.Importing;
+                batch.JobId = job.Id;
+                await testDb.Driver.VesselImportBatches.UpdateAsync(batch).ConfigureAwait(false);
+
+                await NewService(testDb, root).RecoverAsync().ConfigureAwait(false);
+
+                VesselImportBatch? recovered = await testDb.Driver.VesselImportBatches.ReadAsync(discovered.BatchId).ConfigureAwait(false);
+                AssertEqual(VesselImportBatchStatusEnum.Failed, recovered!.Status, "no batch stays Importing forever");
+                AssertContains("restarted", recovered.ErrorMessage ?? "");
+                AssertNotNull(recovered.CompletedUtc);
+                Job? failedJob = await testDb.Driver.Jobs.ReadAsync(job.Id).ConfigureAwait(false);
+                AssertEqual(JobStatusEnum.Failed, failedJob!.Status);
             }));
 
             cases.Add(CaseAsync("vessel_service_validates_and_infers", "VesselService requires RepoUrl, infers WorkingDirectory only when asked, and never sets LocalPath", TestTags.Positive, async () =>

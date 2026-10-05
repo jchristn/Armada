@@ -135,6 +135,7 @@ namespace Armada.Server
 
         private CancellationTokenSource _TokenSource = new CancellationTokenSource();
         private Task _HealthCheckTask = null!;
+        private Task? _McpListenTask = null;
         private int _HealthCheckCycles = 0;
         private DateTime _StartUtc = DateTime.UtcNow;
         private readonly ConditionalWeakTable<HttpContextBase, AuthContext> _RequestAuthContexts = new ConditionalWeakTable<HttpContextBase, AuthContext>();
@@ -545,7 +546,7 @@ namespace Armada.Server
             _McpServer.AuthenticationHandler = AuthenticateMcpRequestAsync;
             RegisterMcpTools();
 
-            Task mcpTask = Task.Run(() => _McpServer.StartAsync(_TokenSource.Token));
+            StartMcpListener();
             _Logging.Info(_Header + "MCP server started on port " + _Settings.McpPort);
 
             _AskTracker.Start(_TokenSource.Token);
@@ -689,6 +690,38 @@ namespace Armada.Server
         #endregion
 
         #region Private-Methods
+
+        private void StartMcpListener()
+        {
+            // McpHttpServer.StartAsync binds its HttpListener synchronously and then loops accepting requests, so the
+            // returned task is already faulted (or completed) when the bind failed, for example because the port is in
+            // use. Running it unobserved on a background task used to swallow that failure: the Admiral logged "MCP
+            // server started" and ran without MCP. Fail startup instead, the same way a REST bind failure does.
+            Task listen;
+            try
+            {
+                listen = _McpServer.StartAsync(_TokenSource.Token);
+            }
+            catch (Exception ex) when (ex is System.Net.HttpListenerException || ex is System.Net.Sockets.SocketException || ex is InvalidOperationException)
+            {
+                throw new InvalidOperationException("MCP server could not listen on " + _Settings.Rest.Hostname + ":" + _Settings.McpPort + ": " + ex.Message, ex);
+            }
+
+            if (listen.IsCompleted)
+            {
+                Exception? cause = listen.Exception?.GetBaseException();
+                throw new InvalidOperationException("MCP server could not listen on " + _Settings.Rest.Hostname + ":" + _Settings.McpPort + ": "
+                    + (cause != null ? cause.Message : "the listener stopped immediately"), cause);
+            }
+
+            _McpListenTask = listen.ContinueWith(t =>
+            {
+                if (t.IsFaulted && !_TokenSource.IsCancellationRequested)
+                {
+                    _Logging.Warn(_Header + "MCP listener on port " + _Settings.McpPort + " stopped: " + t.Exception?.GetBaseException().ToString());
+                }
+            }, TaskScheduler.Default);
+        }
 
         /// <summary>
         /// Mark every route listed in <see cref="Armada.Core.ApiSurface.ExperimentalSurface"/> in the OpenAPI document: the

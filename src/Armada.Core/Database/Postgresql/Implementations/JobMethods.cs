@@ -180,6 +180,33 @@ namespace Armada.Core.Database.Postgresql.Implementations
         }
 
         /// <inheritdoc />
+        public async Task<EnumerationResult<Job>> EnumeratePageAsync(JobQuery query, CancellationToken token = default)
+        {
+            if (query == null) throw new ArgumentNullException(nameof(query));
+            string where = query.BuildWhereClause(out List<KeyValuePair<string, object>> parameters);
+
+            long total;
+            using (NpgsqlConnection conn = _Driver.CreateConnection())
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                using (NpgsqlCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "SELECT COUNT(*) FROM jobs" + where + ";";
+                    foreach (KeyValuePair<string, object> parameter in parameters) cmd.Parameters.AddWithValue(parameter.Key, parameter.Value);
+                    total = Convert.ToInt64(await cmd.ExecuteScalarAsync(token).ConfigureAwait(false) ?? 0L);
+                }
+            }
+
+            List<Job> page = await EnumerateInternalAsync("SELECT * FROM jobs" + where + " ORDER BY created_utc DESC LIMIT @page_size OFFSET @offset;", cmd =>
+            {
+                foreach (KeyValuePair<string, object> parameter in parameters) cmd.Parameters.AddWithValue(parameter.Key, parameter.Value);
+                cmd.Parameters.AddWithValue("@page_size", query.PageSize);
+                cmd.Parameters.AddWithValue("@offset", query.Offset);
+            }, token).ConfigureAwait(false);
+            return query.ToResult(page, total);
+        }
+
+        /// <inheritdoc />
         public async Task<bool> ExistsAnyAsync(CancellationToken token = default)
         {
             using (NpgsqlConnection conn = _Driver.CreateConnection())

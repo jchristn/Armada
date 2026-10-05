@@ -147,12 +147,26 @@ namespace Armada.Core.Services
         }
 
         /// <inheritdoc />
-        public async Task<int> PruneAsync(CancellationToken token = default)
+        public Task<int> PruneAsync(CancellationToken token = default)
+        {
+            return PruneAsync(null, token);
+        }
+
+        /// <inheritdoc />
+        public async Task<int> PruneAsync(IEnumerable<string>? keepSlots, CancellationToken token = default)
         {
             List<string> slots = EnumerateSlots().ToList();
             if (slots.Count <= RetentionCount) return 0;
 
             string? active = await ReadCurrentAsync(token).ConfigureAwait(false);
+            HashSet<string> keep = new HashSet<string>(StringComparer.Ordinal);
+            if (keepSlots != null)
+            {
+                foreach (string name in keepSlots)
+                {
+                    if (!String.IsNullOrWhiteSpace(name)) keep.Add(name.Trim());
+                }
+            }
 
             int removed = 0;
             for (int i = RetentionCount; i < slots.Count; i++)
@@ -162,6 +176,8 @@ namespace Armada.Core.Services
                 string slotName = slots[i];
                 if (!String.IsNullOrEmpty(active) && String.Equals(slotName, active, StringComparison.Ordinal))
                     continue; // never remove the active slot
+                if (keep.Contains(slotName))
+                    continue; // caller-protected, for example the rollback target of the last rebuild
 
                 string dir = GetSlotDirectory(slotName);
                 if (TryDeleteDirectory(dir)) removed++;

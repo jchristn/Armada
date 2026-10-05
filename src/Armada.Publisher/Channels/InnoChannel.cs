@@ -83,25 +83,30 @@ namespace Armada.Publisher.Channels
             script.AppendLine();
             script.AppendLine("[Run]");
 
-            // Reuse the artifact's own registration logic rather than reimplementing Run-key/Service code here.
+            // Reuse the artifact's own registration flags rather than reimplementing service or Run-key code here.
+            // --install-service registers and starts the Windows service and returns; it never runs the server in the
+            // foreground. Inno does not act on [Run] exit codes (the WiX channel does, with Return="check").
+            // --install-startup writes the per-user Run value, so it runs as the user who started Setup rather than
+            // the elevated administrator.
             if (context.Artifact.Service != null && !string.IsNullOrEmpty(context.Artifact.Service.InstallArgs))
             {
-                script.AppendLine("Filename: \"{app}\\" + binaryFile + "\"; Parameters: \"" + context.Artifact.Service.InstallArgs + "\"; Flags: runhidden");
+                script.AppendLine("Filename: \"{app}\\" + binaryFile + "\"; Parameters: \"" + context.Artifact.Service.InstallArgs + "\"; StatusMsg: \"Registering the " + appName + " service...\"; Flags: runhidden waituntilterminated");
             }
             else if (context.Artifact.Startup != null && !string.IsNullOrEmpty(context.Artifact.Startup.InstallArgs))
             {
-                script.AppendLine("Filename: \"{app}\\" + binaryFile + "\"; Parameters: \"" + context.Artifact.Startup.InstallArgs + "\"; Flags: runhidden nowait");
+                script.AppendLine("Filename: \"{app}\\" + binaryFile + "\"; Parameters: \"" + context.Artifact.Startup.InstallArgs + "\"; StatusMsg: \"Registering " + appName + " to start at sign-in...\"; Flags: runhidden waituntilterminated runasoriginaluser");
+                script.AppendLine("Filename: \"{app}\\" + binaryFile + "\"; Description: \"Launch " + appName + "\"; Flags: postinstall nowait skipifsilent runasoriginaluser");
             }
 
             script.AppendLine();
             script.AppendLine("[UninstallRun]");
             if (context.Artifact.Service != null && !string.IsNullOrEmpty(context.Artifact.Service.UninstallArgs))
             {
-                script.AppendLine("Filename: \"{app}\\" + binaryFile + "\"; Parameters: \"" + context.Artifact.Service.UninstallArgs + "\"; Flags: runhidden");
+                script.AppendLine("Filename: \"{app}\\" + binaryFile + "\"; Parameters: \"" + context.Artifact.Service.UninstallArgs + "\"; RunOnceId: \"UnregisterService\"; Flags: runhidden waituntilterminated");
             }
             else if (context.Artifact.Startup != null && !string.IsNullOrEmpty(context.Artifact.Startup.UninstallArgs))
             {
-                script.AppendLine("Filename: \"{app}\\" + binaryFile + "\"; Parameters: \"" + context.Artifact.Startup.UninstallArgs + "\"; Flags: runhidden");
+                script.AppendLine("Filename: \"{app}\\" + binaryFile + "\"; Parameters: \"" + context.Artifact.Startup.UninstallArgs + "\"; RunOnceId: \"UnregisterStartup\"; Flags: runhidden waituntilterminated");
             }
 
             string scriptPath = Path.Combine(context.OutputDirectory, outputBaseName + ".iss");

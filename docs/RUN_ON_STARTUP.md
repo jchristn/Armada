@@ -81,7 +81,7 @@ scripts\windows\remove-windows-task.bat
 
 This installs a current-user startup entry named `ArmadaAdmiral` that launches `%USERPROFILE%\.armada\bin\Armada.Server.exe` at logon in your normal user context. It does not require elevation.
 
-> **Note:** A true Windows Service is not scripted here because `Armada.Server` is currently a long-running console process, not a native Windows Service host. If you need SCM-managed service startup before user logon, use a service wrapper such as NSSM or add Windows Service lifecycle support in code.
+> **Note:** For SCM-managed startup before anyone logs on, register a real Windows Service with `Armada.Server.exe --install-service` from an elevated prompt instead (the WiX installer does this). See "Service and startup registration" in [OPERATIONS.md](OPERATIONS.md).
 
 ## Linux (`systemd --user`)
 

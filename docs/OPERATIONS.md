@@ -226,3 +226,86 @@ path. Pass `--insecure` to the script, as described in the README.
 
 When none of these match, collect `admiral.log`, the relevant `missions/` and `captains/` files, the output of
 `GET /api/v1/status`, and your settings file with secrets removed before filing an issue.
+
+## Service and startup registration
+
+The Admiral and Harbor register themselves with the operating system. The installers call the same flags (the WiX
+and Inno installers on Windows, the `.pkg` on macOS, and the Deb/Rpm package scripts on Linux), so a manual install and
+a packaged one end up with the same definition, and you can repair or remove either by hand. The scripts in
+[RUN_ON_STARTUP.md](RUN_ON_STARTUP.md) predate these flags and still work; do not use both for the same install, or
+two Admirals will race for the same ports. On macOS, `--install-service` warns when it finds the scripts' agent
+(`com.armada.admiral`).
+
+### Admiral: `--install-service`, `--uninstall-service`, `--run-service`
+
+```bash
+armada-server --install-service            # register, enable, and start
+armada-server --install-service --dry-run  # print the definition and the commands, change nothing
+armada-server --install-service --no-start # register and enable, start later
+armada-server --uninstall-service          # stop and remove
+```
+
+`--run-service` is what the service manager passes when it starts the Admiral. It runs the same server as a plain
+launch, without the banner and without console colors, and on Windows it runs under the service control manager.
+You do not normally type it.
+
+What `--install-service` creates depends on the platform and on whether you run it elevated:
+
+| Platform | As a normal user | Elevated (root, or an administrator prompt) |
+|----------|------------------|---------------------------------------------|
+| Linux | `~/.config/systemd/user/armada.service` (`systemd --user`, `WantedBy=default.target`), then `systemctl --user enable` and start | `/etc/systemd/system/armada.service` (`WantedBy=multi-user.target`), then `systemctl enable` and start. Add `--service-user <account>` to set `User=`; without it the service runs as root |
+| macOS | `~/Library/LaunchAgents/com.joelchristner.armada.server.plist`, bootstrapped into your GUI session | `/Library/LaunchAgents/com.joelchristner.armada.server.plist` for every user, bootstrapped into the session of the user at the console (this is what the `.pkg` does) |
+| Windows | Refused with exit code 4: creating a service needs an elevated prompt | Windows Service `armada` ("Armada Admiral"), automatic start, restart on failure (5 s, 5 s, 60 s), then started |
+
+Where the Admiral keeps its data follows the account it runs as, which matters more than it looks. A captain needs the
+code, git credentials, and the agent CLI logins of a real user. A user-scope systemd unit or a LaunchAgent runs as
+you, with `~/.armada` as usual. A Linux system unit without `--service-user` runs as root and uses `/root/.armada`.
+The Windows service runs as LocalSystem by default; with no `ARMADA_DATA_DIR` set it keeps its data in
+`%ProgramData%\Armada`, and captains launched from it do not see your logins. To run it as yourself, set the account
+after installing with `sc.exe config armada obj= .\<you> password= <password>` and restart it; the data then lives in
+that account's `.armada` directory.
+
+Both flags are idempotent. Installing twice leaves one registration: an unchanged definition is left alone (and only
+started if it is not running), a changed one is rewritten and the service restarted (systemd) or reloaded (launchd);
+on Windows the existing service is reconfigured with `sc.exe config`. Uninstalling something that is not installed
+prints "nothing to do" and succeeds. Every step is printed, and the exit code tells an installer what happened:
+
+| Exit code | Meaning |
+|-----------|---------|
+| 0 | Done, nothing to do, or dry run |
+| 1 | A file could not be written or a service-manager command failed (the error is printed) |
+| 2 | Invalid arguments (two actions, a bad `--service-user`, or a Harbor flag passed to the Admiral) |
+| 3 | No implementation for this operating system |
+| 4 | Wrong privileges (a Windows service without elevation, or Harbor's login item as root) |
+
+Check the result with `systemctl [--user] status armada.service`, `launchctl print gui/$(id -u)/com.joelchristner.armada.server`,
+or `sc.exe query armada`. The service writes `admiral.log` in its data directory like any other launch.
+
+The packages wire these flags in as follows. The WiX `.msi` runs `--install-service` as a deferred custom action
+after the files are installed and fails the install when it returns non-zero; uninstall runs `--uninstall-service`.
+The Deb and Rpm packages run `--install-service` from their after-install script (as root, so a system unit) and
+`try-restart` the service on upgrade; removal runs `--uninstall-service`. Both scripts skip registration when systemd
+is not running, for example inside a container, and never fail the package transaction. The `.pkg` postinstall runs
+`--install-service` and `/usr/local/lib/armada-server/uninstall.sh` runs `--uninstall-service`.
+
+### Harbor: `--install-startup`, `--uninstall-startup`
+
+```bash
+armada-harbor --install-startup            # start Harbor in the tray at every login
+armada-harbor --install-startup --dry-run  # print the entry, change nothing
+armada-harbor --uninstall-startup
+```
+
+Harbor's login item belongs to the user who runs Harbor, so the flags refuse to run as root on Linux and macOS. The
+item starts Harbor with `--minimized`: it connects to the Admiral from the tray without opening its window. Nothing is
+launched when you register; the item takes effect at the next login. Removing it does not stop a Harbor that is
+already running.
+
+| Platform | Login item |
+|----------|------------|
+| Windows | Value `Armada Harbor` under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`. The Inno installer runs `--install-startup` as the user who started Setup |
+| macOS | `~/Library/LaunchAgents/com.joelchristner.armada.harbor.plist` with `RunAtLoad` and no `KeepAlive`, so quitting from the tray keeps it closed. The `.dmg` has no installer step; run `"/Applications/Armada Harbor.app/Contents/MacOS/Armada.Harbor" --install-startup` once |
+| Linux | `~/.config/autostart/armada-harbor.desktop` (honors `XDG_CONFIG_HOME`). The Deb/Rpm package does not register it for you; run `armada-harbor --install-startup` as yourself |
+
+The Windows paths of both programs (the service host, `sc.exe`, and `reg.exe`) are covered by tests of the exact
+command lines they run, not by a run on Windows. Treat the first Windows install of a release as the real check.

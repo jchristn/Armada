@@ -61,6 +61,20 @@ namespace Armada.Server.Routes
                     return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
                 }
 
+                // With pageNumber, pageSize, status, or kind: one filtered page (the dashboard header polls
+                // status=Queued,Running). Without any of them: every job in scope, as before.
+                if (JobQuery.TryFromQuerystring(key => req.Query.GetValueOrDefault(key), out JobQuery? query, out string? queryError))
+                {
+                    if (!ctx.IsAdmin) query!.TenantId = ctx.TenantId;
+                    if (!ctx.IsAdmin && !ctx.IsTenantAdmin) query!.UserId = ctx.UserId;
+                    return (object)await _database.Jobs.EnumeratePageAsync(query!).ConfigureAwait(false);
+                }
+                if (queryError != null)
+                {
+                    req.Http.Response.StatusCode = 400;
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = queryError };
+                }
+
                 List<Job> jobs = ctx.IsAdmin
                     ? await _database.Jobs.EnumerateAsync().ConfigureAwait(false)
                     : ctx.IsTenantAdmin
@@ -71,7 +85,14 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Jobs")
                 .WithSummary("List background jobs")
-                .WithDescription("Returns background jobs newest first, scoped to the caller.")
+                .WithDescription("Returns background jobs newest first, scoped to the caller. With any of pageNumber, pageSize "
+                    + "(1-1000, default 100), status (comma-separated: Queued, Running, Succeeded, Failed, Cancelled), or kind, "
+                    + "returns one page as an enumeration result; without them, returns every job in scope.")
+                .WithParameter(OpenApiParameterMetadata.Query("pageNumber", "Page number (1-based)", false, OpenApiSchemaMetadata.Integer()))
+                .WithParameter(OpenApiParameterMetadata.Query("pageSize", "Page size, 1-1000 (default 100)", false, OpenApiSchemaMetadata.Integer()))
+                .WithParameter(OpenApiParameterMetadata.Query("status", "Comma-separated job statuses, e.g. Queued,Running", false))
+                .WithParameter(OpenApiParameterMetadata.Query("kind", "Job kind, e.g. Report", false))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithSecurity("ApiKey"));
 
             app.Get("/api/v1/jobs/{id}", async (ApiRequest req) =>

@@ -482,9 +482,9 @@ namespace Test.Shared.Suites.Services
 
         private static async Task<string> WaitForRecordedArgsAsync(string argsFile, string? expectedSubstring = null)
         {
-            DateTime deadline = DateTime.UtcNow.AddSeconds(5);
+            MonotonicDeadline deadline = MonotonicDeadline.After(TimeSpan.FromSeconds(5));
 
-            while (DateTime.UtcNow < deadline)
+            while (!deadline.Passed)
             {
                 if (File.Exists(argsFile))
                 {
@@ -504,9 +504,9 @@ namespace Test.Shared.Suites.Services
 
         private static async Task<string> WaitForFileContainsAsync(string path, string expectedSubstring)
         {
-            DateTime deadline = DateTime.UtcNow.AddSeconds(5);
+            MonotonicDeadline deadline = MonotonicDeadline.After(TimeSpan.FromSeconds(5));
 
-            while (DateTime.UtcNow < deadline)
+            while (!deadline.Passed)
             {
                 if (File.Exists(path))
                 {
@@ -640,10 +640,10 @@ namespace Test.Shared.Suites.Services
         /// <returns>The papercuts read back from stored events.</returns>
         private static async Task<List<Papercut>> WaitForPapercutEventsAsync(DatabaseDriver database, int expected)
         {
-            DateTime deadline = DateTime.UtcNow.AddSeconds(10);
+            MonotonicDeadline deadline = MonotonicDeadline.After(TimeSpan.FromSeconds(10));
             List<Papercut> stored = new List<Papercut>();
 
-            while (DateTime.UtcNow < deadline)
+            while (!deadline.Passed)
             {
                 stored = await CurrentPapercutEventsAsync(database).ConfigureAwait(false);
                 if (stored.Count >= expected) return stored;
@@ -655,9 +655,9 @@ namespace Test.Shared.Suites.Services
 
         private static async Task WaitForConditionAsync(Func<Task<bool>> predicate, TimeSpan? timeout = null)
         {
-            DateTime deadline = DateTime.UtcNow.Add(timeout ?? TimeSpan.FromSeconds(3));
+            MonotonicDeadline deadline = MonotonicDeadline.After(timeout ?? TimeSpan.FromSeconds(3));
 
-            while (DateTime.UtcNow < deadline)
+            while (!deadline.Passed)
             {
                 if (await predicate().ConfigureAwait(false))
                     return;

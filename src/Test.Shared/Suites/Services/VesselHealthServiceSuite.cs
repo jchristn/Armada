@@ -257,6 +257,31 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(0, await restarted.RunScheduleAsync().ConfigureAwait(false), "last job 10 minutes ago, interval 60");
             }));
 
+            cases.Add(CaseAsync("orphaned_job_failed_on_next_start", "A Running evaluation job left by a restart is failed when the next evaluation starts", TestTags.Reliability, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                await CreateVesselAsync(testDb.Driver, null).ConfigureAwait(false);
+                ArmadaSettings settings = new ArmadaSettings();
+                JobService jobs = new JobService(testDb.Driver, CreateLogging());
+                Job orphan = await jobs.EnqueueAsync(VesselHealthService.JobName, JobKindEnum.Report, Constants.DefaultTenantId, null).ConfigureAwait(false);
+                orphan.Status = JobStatusEnum.Running;
+                orphan.StartedUtc = DateTime.UtcNow.AddMinutes(-5);
+                await testDb.Driver.Jobs.UpdateAsync(orphan).ConfigureAwait(false);
+
+                using VesselHealthService service = CreateService(testDb.Driver, settings, CreateEvaluator(testDb.Driver, settings, new FakeHealthCriterion { Code = VesselHealthCriterionEnum.MissionOutcomes }));
+                VesselHealthEvaluationStart start = await service.StartEvaluationAsync(Constants.DefaultTenantId, null, null, false).ConfigureAwait(false);
+                AssertFalse(start.AlreadyRunning, "the orphan does not block a new evaluation");
+                AssertNotEqual(orphan.Id, start.JobId);
+                await service.WaitForIdleAsync(Constants.DefaultTenantId).WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
+
+                Job? failed = await testDb.Driver.Jobs.ReadAsync(orphan.Id).ConfigureAwait(false);
+                AssertEqual(JobStatusEnum.Failed, failed!.Status, "orphan failed");
+                AssertContains("interrupted", failed.ErrorReason ?? "");
+                AssertNotNull(failed.CompletedUtc);
+                Job? fresh = await testDb.Driver.Jobs.ReadAsync(start.JobId).ConfigureAwait(false);
+                AssertEqual(JobStatusEnum.Succeeded, fresh!.Status, "new evaluation completes");
+            }));
+
             cases.Add(CaseAsync("job_cancellation_stops_remaining", "Cancelling the job through JobService stops remaining vessels", TestTags.Reliability, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);

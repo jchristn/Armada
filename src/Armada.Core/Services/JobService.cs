@@ -110,7 +110,11 @@ namespace Armada.Core.Services
         /// <param name="token">Cancellation token.</param>
         public async Task MaintainAsync(CancellationToken token = default)
         {
-            List<Job> jobs = await _Database.Jobs.EnumerateAsync(token).ConfigureAwait(false);
+            // Only Running jobs can go stale; read just those instead of the whole (unbounded) jobs table.
+            JobQuery query = new JobQuery();
+            query.Statuses.Add(JobStatusEnum.Running);
+            query.PageSize = 1000;
+            List<Job> jobs = (await _Database.Jobs.EnumeratePageAsync(query, token).ConfigureAwait(false)).Objects;
             DateTime cutoff = DateTime.UtcNow.AddMinutes(-_StaleRunningMinutes);
             foreach (Job job in jobs)
             {

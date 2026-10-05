@@ -15,11 +15,13 @@ namespace Armada.Publisher.Channels
     /// <list type="bullet">
     /// <item>/usr/local/lib/&lt;binary&gt;/ - the self-contained publish plus an uninstall.sh helper.</item>
     /// <item>/usr/local/bin/&lt;binary&gt; - symlink to the executable.</item>
-    /// <item>/Library/LaunchAgents/&lt;bundle id&gt;.plist - for service artifacts, so the server runs in each
-    /// user's session (captains need the user's home directory, git credentials, and agent CLI logins).</item>
     /// </list>
-    /// The preinstall script stops a previously loaded agent; the postinstall script loads it for the
-    /// console user. The package is signed and notarized when credentials are present.
+    /// Service artifacts register themselves through their own flags, like the Windows and Linux installers: the
+    /// postinstall script runs "&lt;binary&gt; --install-service" as root, which writes
+    /// /Library/LaunchAgents/&lt;bundle id&gt;.plist (so the server runs in each user's session, where captains have the
+    /// user's home directory, git credentials, and agent CLI logins) and loads it for the console user; uninstall.sh
+    /// runs "--uninstall-service". The preinstall script stops a previously loaded agent so the binary can be replaced.
+    /// The package is signed and notarized when credentials are present.
     /// </summary>
     public class PkgChannel : IChannel
     {
@@ -87,19 +89,16 @@ namespace Armada.Publisher.Channels
                     Directory.CreateDirectory(binDirectory);
                     File.CreateSymbolicLink(Path.Combine(binDirectory, binaryName), installDirectory + "/" + executableName);
 
-                    bool hasAgent = context.Artifact.Service != null;
+                    // The agent plist is not part of the payload: the binary's --install-service writes it (same label and
+                    // content the payload used to carry), so there is one definition for the .pkg and a manual install.
+                    ServiceDefinition? service = context.Artifact.Service;
+                    bool hasAgent = service != null && !string.IsNullOrEmpty(service.InstallArgs);
                     string agentPlistPath = "/Library/LaunchAgents/" + identifier + ".plist";
-                    if (hasAgent)
-                    {
-                        string agentDirectory = Path.Combine(root, "Library", "LaunchAgents");
-                        Directory.CreateDirectory(agentDirectory);
-                        File.WriteAllText(Path.Combine(agentDirectory, identifier + ".plist"),
-                            BuildLaunchAgentPlist(identifier, installDirectory + "/" + executableName, installDirectory, context.Artifact.Service!.RunArgs));
-                    }
+                    string installedExecutable = installDirectory + "/" + executableName;
 
-                    WriteScript(Path.Combine(libDirectory, "uninstall.sh"), BuildUninstallScript(identifier, binaryName, installDirectory, hasAgent ? agentPlistPath : string.Empty));
+                    WriteScript(Path.Combine(libDirectory, "uninstall.sh"), BuildUninstallScript(identifier, binaryName, installDirectory, hasAgent ? agentPlistPath : string.Empty, installedExecutable, hasAgent ? service!.UninstallArgs : string.Empty));
                     WriteScript(Path.Combine(scripts, "preinstall"), BuildPreinstallScript(identifier, hasAgent ? agentPlistPath : string.Empty));
-                    WriteScript(Path.Combine(scripts, "postinstall"), BuildPostinstallScript(identifier, hasAgent ? agentPlistPath : string.Empty));
+                    WriteScript(Path.Combine(scripts, "postinstall"), BuildPostinstallScript(hasAgent ? installedExecutable : string.Empty, hasAgent ? service!.InstallArgs : string.Empty));
 
                     string componentPath = Path.Combine(runtimeWork, binaryName + "-component.pkg");
                     ProcessRunner.Run("pkgbuild", new List<string>
@@ -171,32 +170,6 @@ namespace Armada.Publisher.Channels
             }
         }
 
-        private static string BuildLaunchAgentPlist(string label, string executablePath, string workingDirectory, string runArgs)
-        {
-            StringBuilder plist = new StringBuilder();
-            plist.Append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
-            plist.Append("<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n");
-            plist.Append("<plist version=\"1.0\">\n<dict>\n");
-            plist.Append("    <key>Label</key>\n    <string>").Append(MacBundleBuilder.Escape(label)).Append("</string>\n");
-            plist.Append("    <key>ProgramArguments</key>\n    <array>\n");
-            plist.Append("        <string>").Append(MacBundleBuilder.Escape(executablePath)).Append("</string>\n");
-            if (!string.IsNullOrWhiteSpace(runArgs))
-            {
-                foreach (string argument in runArgs.Split(' ', StringSplitOptions.RemoveEmptyEntries))
-                {
-                    plist.Append("        <string>").Append(MacBundleBuilder.Escape(argument)).Append("</string>\n");
-                }
-            }
-            plist.Append("    </array>\n");
-            plist.Append("    <key>WorkingDirectory</key>\n    <string>").Append(MacBundleBuilder.Escape(workingDirectory)).Append("</string>\n");
-            plist.Append("    <key>RunAtLoad</key>\n    <true/>\n");
-            plist.Append("    <key>KeepAlive</key>\n    <dict>\n        <key>SuccessfulExit</key>\n        <false/>\n    </dict>\n");
-            plist.Append("    <key>ProcessType</key>\n    <string>Background</string>\n");
-            plist.Append("    <key>LimitLoadToSessionType</key>\n    <string>Aqua</string>\n");
-            plist.Append("</dict>\n</plist>\n");
-            return plist.ToString();
-        }
-
         private static string BuildPreinstallScript(string label, string agentPlistPath)
         {
             StringBuilder script = new StringBuilder();
@@ -214,26 +187,22 @@ namespace Armada.Publisher.Channels
             return script.ToString();
         }
 
-        private static string BuildPostinstallScript(string label, string agentPlistPath)
+        private static string BuildPostinstallScript(string executable, string installArgs)
         {
             StringBuilder script = new StringBuilder();
             script.Append("#!/bin/sh\n");
-            if (!string.IsNullOrEmpty(agentPlistPath))
+            if (!string.IsNullOrEmpty(executable))
             {
-                script.Append("# Load the agent for the logged-in user now; launchd loads it for every user at login after this.\n");
-                script.Append("chown root:wheel \"").Append(agentPlistPath).Append("\"\n");
-                script.Append("chmod 644 \"").Append(agentPlistPath).Append("\"\n");
-                script.Append("CONSOLE_USER=$(stat -f%Su /dev/console 2>/dev/null)\n");
-                script.Append("if [ -n \"$CONSOLE_USER\" ] && [ \"$CONSOLE_USER\" != \"root\" ]; then\n");
-                script.Append("  CONSOLE_UID=$(id -u \"$CONSOLE_USER\")\n");
-                script.Append("  launchctl bootstrap \"gui/$CONSOLE_UID\" \"").Append(agentPlistPath).Append("\" >/dev/null 2>&1 || true\n");
-                script.Append("fi\n");
+                script.Append("# Register the launchd agent through the binary's own flag. As root it writes /Library/LaunchAgents and\n");
+                script.Append("# loads the agent for the logged-in user; launchd loads it for every user at login after this.\n");
+                script.Append("\"").Append(executable).Append("\" ").Append(installArgs).Append(" || echo \"service registration failed; run: sudo ")
+                    .Append(executable).Append(' ').Append(installArgs).Append("\" >&2\n");
             }
             script.Append("exit 0\n");
             return script.ToString();
         }
 
-        private static string BuildUninstallScript(string label, string binaryName, string installDirectory, string agentPlistPath)
+        private static string BuildUninstallScript(string label, string binaryName, string installDirectory, string agentPlistPath, string executable, string uninstallArgs)
         {
             StringBuilder script = new StringBuilder();
             script.Append("#!/bin/sh\n");
@@ -243,10 +212,7 @@ namespace Armada.Publisher.Channels
             script.Append("if [ \"$(id -u)\" -ne 0 ]; then echo \"Run with sudo: sudo $0\"; exit 1; fi\n");
             if (!string.IsNullOrEmpty(agentPlistPath))
             {
-                script.Append("CONSOLE_USER=$(stat -f%Su /dev/console 2>/dev/null)\n");
-                script.Append("if [ -n \"$CONSOLE_USER\" ] && [ \"$CONSOLE_USER\" != \"root\" ]; then\n");
-                script.Append("  launchctl bootout \"gui/$(id -u \"$CONSOLE_USER\")/").Append(label).Append("\" >/dev/null 2>&1 || true\n");
-                script.Append("fi\n");
+                script.Append("\"").Append(executable).Append("\" ").Append(uninstallArgs).Append(" || true\n");
                 script.Append("rm -f \"").Append(agentPlistPath).Append("\"\n");
             }
             script.Append("rm -f \"/usr/local/bin/").Append(binaryName).Append("\"\n");

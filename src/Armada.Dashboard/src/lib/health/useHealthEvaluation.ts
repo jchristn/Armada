@@ -68,7 +68,8 @@ export function useHealthEvaluation({ onFinished, pollMs = 2000 }: UseHealthEval
 
   const discover = useCallback(async () => {
     try {
-      const jobs = await listJobs();
+      // Newest Report jobs only; the latest health evaluation is among them.
+      const jobs = await listJobs({ kind: 'Report', pageSize: 25 });
       const match = (jobs.objects ?? []).find((job) => job.name === HEALTH_JOB_NAME);
       if (!match) return;
       if (isJobTerminal(match)) setLastJob(match);

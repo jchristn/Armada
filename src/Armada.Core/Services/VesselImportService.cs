@@ -296,13 +296,32 @@ namespace Armada.Core.Services
             List<VesselImportBatch> batches = await _Database.VesselImportBatches.EnumerateInProgressAsync(token).ConfigureAwait(false);
             foreach (VesselImportBatch batch in batches)
             {
-                if (batch.Status != VesselImportBatchStatusEnum.Discovering) continue;
-                _Logging.Warn(_Header + "failing discovery of batch " + batch.Id + " orphaned by an Admiral restart");
-                batch.Status = VesselImportBatchStatusEnum.Failed;
-                batch.ErrorMessage = "The Admiral restarted while discovery was running. Discover again.";
-                batch.CompletedUtc = DateTime.UtcNow;
-                await _Database.VesselImportBatches.UpdateAsync(batch, token).ConfigureAwait(false);
-                if (!String.IsNullOrEmpty(batch.DiscoveryJobId)) await FailJobAsync(batch.DiscoveryJobId!, "Admiral restarted while the job was running").ConfigureAwait(false);
+                if (batch.Status == VesselImportBatchStatusEnum.Discovering)
+                {
+                    _Logging.Warn(_Header + "failing discovery of batch " + batch.Id + " orphaned by an Admiral restart");
+                    batch.Status = VesselImportBatchStatusEnum.Failed;
+                    batch.ErrorMessage = "The Admiral restarted while discovery was running. Discover again.";
+                    batch.CompletedUtc = DateTime.UtcNow;
+                    await _Database.VesselImportBatches.UpdateAsync(batch, token).ConfigureAwait(false);
+                    if (!String.IsNullOrEmpty(batch.DiscoveryJobId)) await FailJobAsync(batch.DiscoveryJobId!, "Admiral restarted while the job was running").ConfigureAwait(false);
+                }
+                else if (batch.Status == VesselImportBatchStatusEnum.Importing)
+                {
+                    // A background import (large selection) was cut off by a restart. Vessels already created stay;
+                    // importing the batch again is idempotent and finishes the rest.
+                    _Logging.Warn(_Header + "failing import of batch " + batch.Id + " orphaned by an Admiral restart");
+                    batch.Status = VesselImportBatchStatusEnum.Failed;
+                    batch.ErrorMessage = "The Admiral restarted while the import was running. Vessels already created were kept; import again to finish.";
+                    batch.CompletedUtc = DateTime.UtcNow;
+                    if (batch.CategorizationStatus == VesselImportCategorizationStatusEnum.Pending)
+                    {
+                        batch.CategorizationStatus = VesselImportCategorizationStatusEnum.Failed;
+                        batch.CategorizationError = "The import was interrupted, so fleet categorization did not run.";
+                        batch.CategorizationCompletedUtc = DateTime.UtcNow;
+                    }
+                    await _Database.VesselImportBatches.UpdateAsync(batch, token).ConfigureAwait(false);
+                    if (!String.IsNullOrEmpty(batch.JobId)) await FailJobAsync(batch.JobId!, "Admiral restarted while the job was running").ConfigureAwait(false);
+                }
             }
 
             if (_Categorization != null) await _Categorization.RecoverAsync(token).ConfigureAwait(false);

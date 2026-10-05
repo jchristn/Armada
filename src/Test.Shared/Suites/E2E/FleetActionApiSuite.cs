@@ -130,8 +130,8 @@ namespace Test.Shared.Suites.E2E
                 _RunId = start.RunId;
 
                 FleetActionRunDetail? detail = null;
-                DateTime deadline = DateTime.UtcNow.AddSeconds(30);
-                while (DateTime.UtcNow < deadline)
+                MonotonicDeadline deadline = MonotonicDeadline.After(TimeSpan.FromSeconds(30));
+                while (!deadline.Passed)
                 {
                     HttpResponseMessage get = await _AdminA!.GetAsync("/api/v1/fleet-action-runs/" + _RunId).ConfigureAwait(false);
                     AssertStatusCode(HttpStatusCode.OK, get);

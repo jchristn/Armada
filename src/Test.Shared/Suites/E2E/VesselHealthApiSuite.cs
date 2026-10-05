@@ -135,8 +135,8 @@ namespace Test.Shared.Suites.E2E
                 AssertEqual(1, start.VesselCount);
 
                 Job? job = null;
-                DateTime deadline = DateTime.UtcNow.AddSeconds(60);
-                while (DateTime.UtcNow < deadline)
+                MonotonicDeadline deadline = MonotonicDeadline.After(TimeSpan.FromSeconds(60));
+                while (!deadline.Passed)
                 {
                     HttpResponseMessage poll = await fx.AuthClient.GetAsync("/api/v1/jobs/" + start.JobId);
                     job = await JsonHelper.DeserializeAsync<Job>(poll);

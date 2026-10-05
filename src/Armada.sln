@@ -28,6 +28,7 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Armada.Client", "Armada.Client\Armada.Client.csproj", "{52B53BAB-5D6A-4374-ADFA-35ADB2908BA9}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Armada.Tui", "Armada.Tui\Armada.Tui.csproj", "{9BF33629-C591-4755-9FCE-5E3E83DC81B1}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Armada.PerfSeed", "Armada.PerfSeed\Armada.PerfSeed.csproj", "{DF360FD6-5991-46A4-8E85-8F70B1F34821}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -195,6 +196,18 @@ Global
 		{9BF33629-C591-4755-9FCE-5E3E83DC81B1}.Release|x64.Build.0 = Release|Any CPU
 		{9BF33629-C591-4755-9FCE-5E3E83DC81B1}.Release|x86.ActiveCfg = Release|Any CPU
 		{9BF33629-C591-4755-9FCE-5E3E83DC81B1}.Release|x86.Build.0 = Release|Any CPU
+		{DF360FD6-5991-46A4-8E85-8F70B1F34821}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DF360FD6-5991-46A4-8E85-8F70B1F34821}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DF360FD6-5991-46A4-8E85-8F70B1F34821}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{DF360FD6-5991-46A4-8E85-8F70B1F34821}.Debug|x64.Build.0 = Debug|Any CPU
+		{DF360FD6-5991-46A4-8E85-8F70B1F34821}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{DF360FD6-5991-46A4-8E85-8F70B1F34821}.Debug|x86.Build.0 = Debug|Any CPU
+		{DF360FD6-5991-46A4-8E85-8F70B1F34821}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DF360FD6-5991-46A4-8E85-8F70B1F34821}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DF360FD6-5991-46A4-8E85-8F70B1F34821}.Release|x64.ActiveCfg = Release|Any CPU
+		{DF360FD6-5991-46A4-8E85-8F70B1F34821}.Release|x64.Build.0 = Release|Any CPU
+		{DF360FD6-5991-46A4-8E85-8F70B1F34821}.Release|x86.ActiveCfg = Release|Any CPU
+		{DF360FD6-5991-46A4-8E85-8F70B1F34821}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -182,7 +182,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
         public async Task<List<VesselImportBatch>> EnumerateInProgressAsync(CancellationToken token = default)
         {
             return await SqlServerCommandHelper.QueryAsync(_ConnectionString,
-                "SELECT * FROM vessel_import_batches WHERE status = 'Discovering' OR categorization_status IN ('Pending', 'Running') ORDER BY created_utc ASC;",
+                "SELECT * FROM vessel_import_batches WHERE status IN ('Discovering', 'Importing') OR categorization_status IN ('Pending', 'Running') ORDER BY created_utc ASC;",
                 null, FromReader, token).ConfigureAwait(false);
         }
 

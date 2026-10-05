@@ -68,6 +68,7 @@ namespace Armada.Server
         {
             _Logging.Info(_Header + "link opened from " + session.RemoteIp + ":" + session.RemotePort);
             string? harborId = null;
+            HarborSendDelegate? link = null;
 
             try
             {
@@ -103,6 +104,7 @@ namespace Armada.Server
                         }
 
                         HarborSendDelegate send = (outbound, token) => SendAsync(session, outbound);
+                        link = send;
                         HarborHandshakeAck ack = await _Manager.OnHandshakeAsync(handshake, identity.TenantId, identity.UserId, send, ctx.Token).ConfigureAwait(false);
                         await SendAsync(session, ack).ConfigureAwait(false);
 
@@ -126,8 +128,10 @@ namespace Armada.Server
             }
             finally
             {
+                // Pass this socket's link so a close that arrives after the Harbor already reconnected on a new socket
+                // does not tear down the new connection.
                 if (harborId != null)
-                    await _Manager.OnDisconnectedAsync(harborId, CancellationToken.None).ConfigureAwait(false);
+                    await _Manager.OnDisconnectedAsync(harborId, link, CancellationToken.None).ConfigureAwait(false);
                 _Logging.Info(_Header + "link closed from " + session.RemoteIp + ":" + session.RemotePort);
             }
         }

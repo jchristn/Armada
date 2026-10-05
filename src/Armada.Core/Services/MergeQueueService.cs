@@ -463,6 +463,8 @@ namespace Armada.Core.Services
                     entry.LastUpdateUtc = DateTime.UtcNow;
                     await _Database.MergeEntries.UpdateAsync(entry, token).ConfigureAwait(false);
                     await CleanupWorktreeAsync(integrationPath, token).ConfigureAwait(false);
+                    await ReconcileMissionStatusAsync(entry.MissionId, MissionStatusEnum.LandingFailed,
+                        "Merge queue entry " + entry.Id + ": merge conflict with " + entry.TargetBranch, token, entry.TenantId).ConfigureAwait(false);
                     return;
                 }
 
@@ -492,6 +494,8 @@ namespace Armada.Core.Services
                         entry.LastUpdateUtc = DateTime.UtcNow;
                         await _Database.MergeEntries.UpdateAsync(entry, token).ConfigureAwait(false);
                         await CleanupWorktreeAsync(integrationPath, token).ConfigureAwait(false);
+                        await ReconcileMissionStatusAsync(entry.MissionId, MissionStatusEnum.LandingFailed,
+                            "Merge queue entry " + entry.Id + ": tests failed (exit " + testResult.ExitCode + ")", token, entry.TenantId).ConfigureAwait(false);
                         return;
                     }
 
@@ -515,6 +519,8 @@ namespace Armada.Core.Services
 
                 // Best-effort cleanup
                 await CleanupWorktreeAsync(integrationPath, token).ConfigureAwait(false);
+                await ReconcileMissionStatusAsync(entry.MissionId, MissionStatusEnum.LandingFailed,
+                    "Merge queue entry " + entry.Id + ": " + ex.Message, token, entry.TenantId).ConfigureAwait(false);
             }
         }
 
@@ -580,6 +586,8 @@ namespace Armada.Core.Services
                 mission.LastUpdateUtc = DateTime.UtcNow;
                 if (targetStatus == MissionStatusEnum.Complete)
                     mission.CompletedUtc = DateTime.UtcNow;
+                if (targetStatus == MissionStatusEnum.LandingFailed)
+                    mission.FailureReason = reason;
                 await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
                 _Logging.Info(_Header + "reconciled mission " + missionId + " to " + targetStatus + ": " + reason);
             }

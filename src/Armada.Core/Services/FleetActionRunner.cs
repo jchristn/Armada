@@ -915,14 +915,25 @@ namespace Armada.Core.Services
 
         private async Task CancelMissionTargetAsync(FleetActionRun run, FleetActionRunTarget target, CancellationToken token)
         {
+            string? errorText = null;
             if (_MissionDispatcher != null && !String.IsNullOrEmpty(target.VoyageId))
             {
                 bool finished = await ApplyVoyageOutcomeAsync(run, target, token).ConfigureAwait(false);
                 if (finished) return;
-                await _MissionDispatcher.CancelVoyageAsync(target.VoyageId!, token).ConfigureAwait(false);
+                try
+                {
+                    await _MissionDispatcher.CancelVoyageAsync(target.VoyageId!, token).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (!(ex is OperationCanceledException))
+                {
+                    // The run is already Cancelled: record why this voyage may still be running instead of aborting the
+                    // cancel part way, which left the remaining targets Running under a Cancelled run.
+                    _Logging.Warn(_Header + "could not cancel voyage " + target.VoyageId + " of run " + run.Id + ": " + ex.Message);
+                    errorText = "Cancelling voyage " + target.VoyageId + " failed: " + ex.Message + ". Cancel the voyage directly.";
+                }
             }
 
-            await CompleteTargetAsync(run.Kind, target, FleetActionTargetStatusEnum.Cancelled, null, null, null, token).ConfigureAwait(false);
+            await CompleteTargetAsync(run.Kind, target, FleetActionTargetStatusEnum.Cancelled, null, null, errorText, token).ConfigureAwait(false);
         }
 
         private async Task CompleteTargetAsync(

@@ -192,9 +192,9 @@ namespace Test.Shared.Suites.E2E
 
         private static async Task<VesselImportBatchDetail> WaitForAsync(E2EServerFixture fx, string batchId, Func<VesselImportBatchDetail, bool> done)
         {
-            DateTime deadline = DateTime.UtcNow.AddSeconds(30);
+            MonotonicDeadline deadline = MonotonicDeadline.After(TimeSpan.FromSeconds(30));
             VesselImportBatchDetail? detail = null;
-            while (DateTime.UtcNow < deadline)
+            while (!deadline.Passed)
             {
                 HttpResponseMessage get = await fx.AuthClient.GetAsync("/api/v1/vessels/import/batches/" + batchId).ConfigureAwait(false);
                 detail = await JsonHelper.DeserializeAsync<VesselImportBatchDetail>(get).ConfigureAwait(false);
