@@ -233,9 +233,27 @@ namespace Armada.Tui
             }
 
             ServerProfile? active = prefs.FindProfile(prefs.Current.ActiveProfile);
-            if (active != null) return active;
-            if (prefs.Current.Profiles.Count > 0) return Activate(prefs, prefs.Current.Profiles[0]);
-            return Save(prefs, prefs.UpsertProfile("default", options.DefaultServerUrl));
+            if (active != null) return FollowLocalAdmiral(prefs, active, options.DefaultServerUrl);
+            if (prefs.Current.Profiles.Count > 0) return FollowLocalAdmiral(prefs, Activate(prefs, prefs.Current.Profiles[0]), options.DefaultServerUrl);
+            ServerProfile created = prefs.UpsertProfile("default", options.DefaultServerUrl);
+            created.FollowsLocalAdmiral = true;
+            return Save(prefs, created);
+        }
+
+        /// <summary>
+        /// Keep the auto-created local profile on the local Admiral's current port, so a port change in settings.json
+        /// (or a profile created while it held other values) does not leave the TUI pointing at a stale URL.
+        /// </summary>
+        private static ServerProfile FollowLocalAdmiral(PreferencesService prefs, ServerProfile profile, string localUrl)
+        {
+            bool follows = profile.FollowsLocalAdmiral ?? String.Equals(profile.Name, "default", StringComparison.OrdinalIgnoreCase);
+            if (!follows) return profile;
+            if (!LocalAdmiralDefaults.IsLoopback(profile.Url) || !LocalAdmiralDefaults.IsLoopback(localUrl)) return profile;
+            string normalized = localUrl.Trim().TrimEnd('/');
+            if (String.Equals(profile.Url, normalized, StringComparison.OrdinalIgnoreCase) && profile.FollowsLocalAdmiral == true) return profile;
+            profile.Url = normalized;
+            profile.FollowsLocalAdmiral = true;
+            return Save(prefs, profile);
         }
 
         private static ServerProfile Activate(PreferencesService prefs, ServerProfile profile)

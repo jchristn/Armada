@@ -239,6 +239,31 @@ namespace Test.Shared.Suites.Tui
                 }
             }));
 
+            cases.Add(TuiCase.Sync(Suite, "default_profile_follows_local_admiral", "The auto-created default profile follows the local Admiral's port; a hand-edited one keeps its URL", () =>
+            {
+                string Prefs(string url, string follows) => "{\"SchemaVersion\":1,\"Profiles\":[{\"Name\":\"default\",\"Url\":\"" + url + "\"" + follows + "}],\"ActiveProfile\":\"default\"}";
+                using (TuiTestHost host = new TuiTestHost(120, 40, TuiFixtures.SignedInServer(1), "http://127.0.0.1:9", o =>
+                {
+                    o.ServerUrl = null;
+                    o.DefaultServerUrl = "http://127.0.0.1:9";
+                    File.WriteAllText(o.PreferencesPath!, Prefs("http://127.0.0.1:21000", ""));
+                }))
+                {
+                    AssertEqual("http://127.0.0.1:9", host.Tui.Context.Session.Profile.Url, "stale default profile moved to the local port");
+                    AssertEqual(true, host.Tui.Context.Session.Profile.FollowsLocalAdmiral, "marked as following");
+                }
+
+                using (TuiTestHost host = new TuiTestHost(120, 40, TuiFixtures.SignedInServer(1), "http://127.0.0.1:9", o =>
+                {
+                    o.ServerUrl = null;
+                    o.DefaultServerUrl = "http://127.0.0.1:9";
+                    File.WriteAllText(o.PreferencesPath!, Prefs("http://127.0.0.1:8123", ",\"FollowsLocalAdmiral\":false"));
+                }))
+                {
+                    AssertEqual("http://127.0.0.1:8123", host.Tui.Context.Session.Profile.Url, "hand-set URL kept");
+                }
+            }));
+
             cases.Add(TuiCase.Sync(Suite, "localhost_prefill", "A localhost server prefills the seeded admin, the default password, and the local API key; a remote one prefills nothing", () =>
             {
                 string settingsPath = Path.Combine(Armada.Core.Constants.DefaultDataDirectory, "settings.json");

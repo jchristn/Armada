@@ -39,6 +39,13 @@ namespace Armada.Tui.Services
         /// </summary>
         public DateTime? LastUsedUtc { get; set; } = null;
 
+        /// <summary>
+        /// True when the URL follows the local Admiral's port from <c>settings.json</c> (the auto-created profile);
+        /// false once the URL was set by hand. Null (older preference files) means true for the profile named
+        /// <c>default</c> on a loopback URL.
+        /// </summary>
+        public bool? FollowsLocalAdmiral { get; set; } = null;
+
         #endregion
 
         #region Constructors-and-Factories

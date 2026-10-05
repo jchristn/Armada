@@ -526,6 +526,7 @@ namespace Armada.Tui.Screens
                 bool wasActiveName = String.Equals(_Context.Prefs.Current.ActiveProfile, profile.Name, StringComparison.OrdinalIgnoreCase);
                 bool urlChanged = !String.Equals(profile.Url, newUrl, StringComparison.OrdinalIgnoreCase);
                 profile.Name = newName;
+                if (urlChanged) profile.FollowsLocalAdmiral = false;
                 profile.Url = newUrl;
                 if (wasActiveName) _Context.Prefs.Current.ActiveProfile = newName;
                 _Context.Prefs.Save();
