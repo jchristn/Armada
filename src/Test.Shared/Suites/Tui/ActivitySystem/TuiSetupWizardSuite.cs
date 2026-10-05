@@ -8,6 +8,7 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
     using Armada.Tui.Screens.Admin;
     using Armada.Tui.Widgets;
     using Test.Shared.Infrastructure;
+    using Test.Shared.Suites.Tui.Bodies;
     using Touchstone.Core;
     using static Test.Shared.Infrastructure.Asserts;
 
@@ -47,8 +48,10 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                     host.Press("ctrl+u").Type("Lab Fleet").Press("tab").Press("ctrl+u").Type("Setup lab");
                     host.Press("ctrl+s");
                     AssertTrue(host.PumpUntil(() => screen.Current == 2), "advanced to vessel");
-                    string fleetBody = Body(stub, 0);
-                    AssertTrue(fleetBody.Contains("\"Name\":\"Lab Fleet\"") && fleetBody.Contains("\"Description\":\"Setup lab\""), "fleet body: " + fleetBody);
+                    AssertEqual(1, stub.CountFor("POST", "/api/v1/fleets"), "one fleet post");
+                    SetupWizardFleetBody fleetBody = stub.LastBody<SetupWizardFleetBody>("POST", "/api/v1/fleets");
+                    AssertEqual("Lab Fleet", fleetBody.Name, "fleet name");
+                    AssertEqual("Setup lab", fleetBody.Description, "fleet description");
                     TuiCase.Contains(host.Screen(), "Created fleet \"Lab Fleet\".", "fleet result");
                     AssertEqual("flt_new", screen.ActiveFleetId, "active fleet");
 
@@ -56,30 +59,39 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                     TuiScreenDump.Write("setup-vessel", host.Screen());
                     host.Press("ctrl+s");
                     AssertTrue(host.PumpUntil(() => screen.Current == 3), "advanced to captain");
-                    string vesselBody = Body(stub, 1);
-                    AssertTrue(vesselBody.Contains("\"Name\":\"armada\""), "vessel name: " + vesselBody);
-                    AssertTrue(vesselBody.Contains("\"RepoUrl\":\"/tmp/repo\""), "repo url: " + vesselBody);
-                    AssertTrue(vesselBody.Contains("\"FleetId\":\"flt_new\""), "fleet id: " + vesselBody);
-                    AssertTrue(vesselBody.Contains("\"DefaultBranch\":\"main\""), "default branch: " + vesselBody);
-                    AssertTrue(vesselBody.Contains("\"LandingMode\":\"None\""), "landing mode: " + vesselBody);
-                    AssertTrue(vesselBody.Contains("\"EnableModelContext\":true") && vesselBody.Contains("\"AllowConcurrentMissions\":false"), "toggles: " + vesselBody);
+                    AssertEqual(1, stub.CountFor("POST", "/api/v1/vessels"), "one vessel post");
+                    SetupWizardVesselBody vesselBody = stub.LastBody<SetupWizardVesselBody>("POST", "/api/v1/vessels");
+                    AssertEqual("armada", vesselBody.Name, "vessel name");
+                    AssertEqual("/tmp/repo", vesselBody.RepoUrl, "repo url");
+                    AssertEqual("flt_new", vesselBody.FleetId, "fleet id");
+                    AssertEqual("main", vesselBody.DefaultBranch, "default branch");
+                    AssertEqual("None", vesselBody.LandingMode, "landing mode");
+                    AssertEqual(true, vesselBody.EnableModelContext, "model context toggle");
+                    AssertEqual(false, vesselBody.AllowConcurrentMissions, "concurrency toggle");
 
                     TuiScreenDump.Write("setup-captain", host.Screen());
                     host.Press("ctrl+s");
                     AssertTrue(host.PumpUntil(() => screen.Current == 4), "advanced to dispatch");
-                    string captainBody = Body(stub, 2);
-                    AssertTrue(captainBody.Contains("\"Name\":\"Setup Captain\"") && captainBody.Contains("\"Runtime\":\"ClaudeCode\""), "captain body: " + captainBody);
-                    AssertTrue(captainBody.Contains("\"Tier\":\"Standard\"") && captainBody.Contains("prefer read-only repository inspection"), "captain tier and instructions: " + captainBody);
-                    AssertFalse(captainBody.Contains("RuntimeOptionsJson"), "no mux options: " + captainBody);
+                    AssertEqual(1, stub.CountFor("POST", "/api/v1/captains"), "one captain post");
+                    StubRequest captainPost = stub.Last("POST", "/api/v1/captains");
+                    SetupWizardCaptainBody captainBody = captainPost.BodyAs<SetupWizardCaptainBody>();
+                    AssertEqual("Setup Captain", captainBody.Name, "captain name");
+                    AssertEqual("ClaudeCode", captainBody.Runtime, "captain runtime");
+                    AssertEqual("Standard", captainBody.Tier, "captain tier");
+                    AssertEqual("For setup missions, prefer read-only repository inspection unless the mission explicitly asks for code changes.", captainBody.SystemInstructions, "captain instructions");
+                    AssertFalse(JsonShape.HasPropertyAnywhere(captainPost.Body, "RuntimeOptionsJson"), "no mux options: " + captainPost.Body);
 
                     string dispatchFrame = host.Screen();
                     TuiScreenDump.Write("setup-dispatch", dispatchFrame);
                     TuiCase.Contains(dispatchFrame, "Available Captain: Setup Captain", "summary");
                     host.Press("ctrl+s");
                     AssertTrue(host.PumpUntil(() => screen.Current == 5), "advanced to handoff");
-                    string dispatchBody = Body(stub, 3);
-                    AssertTrue(dispatchBody.Contains("\"VesselId\":\"vsl_new\"") && dispatchBody.Contains("\"Title\":\"Repository onboarding survey\"") && dispatchBody.Contains("\"Priority\":100"), "dispatch body: " + dispatchBody);
-                    AssertTrue(host.PumpUntil(() => stub.Count("GET /api/v1/vessels/vsl_new/readiness") == 1), "readiness loaded");
+                    AssertEqual(1, stub.CountFor("POST", "/api/v1/missions"), "one mission post");
+                    SetupWizardDispatchBody dispatchBody = stub.LastBody<SetupWizardDispatchBody>("POST", "/api/v1/missions");
+                    AssertEqual("vsl_new", dispatchBody.VesselId, "dispatch vessel");
+                    AssertEqual("Repository onboarding survey", dispatchBody.Title, "dispatch title");
+                    AssertEqual(100, dispatchBody.Priority, "dispatch priority");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("GET", "/api/v1/vessels/vsl_new/readiness") == 1), "readiness loaded");
                     AssertTrue(host.WaitForText("Readiness: 1/3"), "readiness shown");
                     string handoff = host.Screen();
                     TuiScreenDump.Write("setup-handoff", handoff);
@@ -154,7 +166,7 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                     screen.LandingMode.SetValue("LocalMerge");
                     host.Press("ctrl+s");
                     AssertTrue(host.WaitForText("Local Merge needs a working directory to merge into."), "local merge validation");
-                    AssertEqual(0, stub.Count("POST /api/v1/vessels"), "no vessel post");
+                    AssertEqual(0, stub.CountFor("POST", "/api/v1/vessels"), "no vessel post");
 
                     host.Press("tab");
                     AssertTrue(ReferenceEquals(screen.Scope.Focused, screen.Panels[2]) || ReferenceEquals(screen.Scope.Focused, screen.Navigation), "focus moves");
@@ -207,7 +219,7 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                     host.Press("ctrl+s");
                     AssertTrue(host.PumpUntil(() => screen.Current == 4), "captain reused");
                     AssertEqual("cpt_idle", screen.ActiveCaptainId, "idle captain");
-                    AssertEqual(0, stub.Count("POST /api/v1/fleets") + stub.Count("POST /api/v1/vessels") + stub.Count("POST /api/v1/captains"), "nothing created");
+                    AssertEqual(0, stub.CountFor("POST", "/api/v1/fleets") + stub.CountFor("POST", "/api/v1/vessels") + stub.CountFor("POST", "/api/v1/captains"), "nothing created");
 
                     host.Press("ctrl+s");
                     AssertTrue(host.PumpUntil(() => screen.Current == 5), "dispatched");
@@ -236,12 +248,17 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                     screen.MuxTemperature.Value = "0.5";
                     screen.MuxMaxTokens.Value = "2048x";
                     screen.SubmitCaptain();
-                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/captains") == 1), "captain posted");
-                    string body = Body(stub, 0);
-                    AssertTrue(body.Contains("\"Runtime\":\"Mux\""), "runtime: " + body);
-                    AssertTrue(body.Contains("\\u0022endpoint\\u0022:\\u0022local\\u0022") || body.Contains("\\\"endpoint\\\":\\\"local\\\""), "runtime options endpoint: " + body);
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/captains") == 1), "captain posted");
+                    SetupWizardCaptainBody body = stub.LastBody<SetupWizardCaptainBody>("POST", "/api/v1/captains");
+                    AssertEqual("Mux", body.Runtime, "runtime");
+                    AssertNotNull(body.RuntimeOptionsJson, "runtime options sent");
+                    AssertEqual("local", JsonHelper.Deserialize<SetupWizardMuxOptionsBody>(body.RuntimeOptionsJson!).Endpoint, "runtime options endpoint: " + body.RuntimeOptionsJson);
                     string json = SetupWizardScreen.BuildMuxRuntimeOptionsJson("Mux", "", "local", "", "", "0.5", "2048x", "", "deny")!;
-                    AssertTrue(json.Contains("\"schemaVersion\":1") && json.Contains("\"temperature\":0.5") && json.Contains("\"maxTokens\":2048") && json.Contains("\"approvalPolicy\":\"deny\""), json);
+                    SetupWizardMuxOptionsBody options = JsonHelper.Deserialize<SetupWizardMuxOptionsBody>(json);
+                    AssertEqual(1, options.SchemaVersion, "schema version: " + json);
+                    AssertEqual(0.5, options.Temperature, "temperature: " + json);
+                    AssertEqual(2048, options.MaxTokens, "max tokens: " + json);
+                    AssertEqual("deny", options.ApprovalPolicy, "approval policy: " + json);
                     AssertNull(SetupWizardScreen.BuildMuxRuntimeOptionsJson("ClaudeCode", "", "x", "", "", "", "", "", ""), "not mux");
                     AssertEqual(100, SetupWizardScreen.ParsePriority("abc"), "invalid priority");
                     AssertEqual(7, SetupWizardScreen.ParsePriority("7days"), "parseInt prefix");
@@ -303,7 +320,7 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
             stub.Json("GET", "/api/v1/fleets", empty);
             stub.Json("GET", "/api/v1/vessels", empty);
             stub.Json("GET", "/api/v1/captains", empty);
-            stub.On("POST", "/api/v1/fleets", body => StubHttpHandler.Response(HttpStatusCode.Created, body.Contains("\"Name\":\"Fleet A\"") ? "{\"Id\":\"flt_new\",\"Name\":\"Fleet A\"}" : "{\"Id\":\"flt_new\",\"Name\":\"Lab Fleet\"}"));
+            stub.On("POST", "/api/v1/fleets", body => StubHttpHandler.Response(HttpStatusCode.Created, JsonHelper.Deserialize<SetupWizardFleetBody>(body).Name == "Fleet A" ? "{\"Id\":\"flt_new\",\"Name\":\"Fleet A\"}" : "{\"Id\":\"flt_new\",\"Name\":\"Lab Fleet\"}"));
             stub.Json("POST", "/api/v1/vessels", "{\"Id\":\"vsl_new\",\"Name\":\"armada\",\"FleetId\":\"flt_new\",\"RepoUrl\":\"/tmp/repo\",\"DefaultBranch\":\"main\"}");
             stub.Json("POST", "/api/v1/captains", "{\"Id\":\"cpt_new\",\"Name\":\"Setup Captain\",\"Runtime\":\"ClaudeCode\",\"State\":\"Idle\"}");
             stub.On("POST", "/api/v1/missions", body => StubHttpHandler.Response(HttpStatusCode.Created, "{\"Id\":\"msn_setup1\",\"Title\":\"Repository onboarding survey\",\"Status\":\"Assigned\",\"VesselId\":\"vsl_new\",\"CaptainId\":\"cpt_new\",\"BranchName\":\"armada/setup\"}"));
@@ -338,13 +355,6 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
         private static bool Focused(SetupWizardActionBar bar, string label)
         {
             return bar.Scope.Focused is Button b && b.Label == label;
-        }
-
-        private static string Body(StubHttpHandler stub, int postIndex)
-        {
-            List<KeyValuePair<string, string>> pairs = stub.Requests.Zip(stub.Bodies, (r, b) => new KeyValuePair<string, string>(r, b)).Where(p => p.Key.StartsWith("POST ", StringComparison.Ordinal) && !p.Key.Contains("/authenticate") && !p.Key.Contains("/tenants/lookup") && !p.Value.Contains("\"PageNumber\":")).ToList();
-            if (postIndex >= pairs.Count) throw new AssertionException("only " + pairs.Count + " POST requests: " + String.Join(", ", pairs.Select(p => p.Key)));
-            return pairs[postIndex].Value;
         }
     }
 }

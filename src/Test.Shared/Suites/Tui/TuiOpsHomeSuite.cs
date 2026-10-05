@@ -4,6 +4,8 @@ namespace Test.Shared.Suites.Tui
     using System.Collections.Generic;
     using System.Linq;
     using System.Net;
+    using Armada.Client.Models;
+    using Armada.Core.Enums;
     using Armada.Tui.Screens.Operations;
     using Test.Shared.Infrastructure;
     using Touchstone.Core;
@@ -61,11 +63,11 @@ namespace Test.Shared.Suites.Tui
                     AssertEqual(1, home.Missions.Rows.Count, "status filter");
                     home.Scope.Focus(home.Missions);
                     host.Press("r");
-                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/missions/msn_x/restart") == 1), "restart failed mission");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/missions/msn_x/restart") == 1), "restart failed mission");
                     host.Press("del");
                     TuiCase.Contains(host.Screen(), "Delete this mission?", "delete confirm");
                     host.Press("y");
-                    AssertTrue(host.PumpUntil(() => stub.Count("DELETE /api/v1/missions/msn_x") == 1), "delete");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("DELETE", "/api/v1/missions/msn_x") == 1), "delete");
                     int loads = home.Loads;
                     host.Tui.Context.Events.Inject(AskFixtures.EventJson("mission.changed", "{\"id\":\"msn_x\",\"title\":\"Broken\",\"status\":\"Pending\"}"));
                     AssertTrue(host.PumpUntil(() => home.Loads > loads, 6000), "socket message reloads");
@@ -123,7 +125,7 @@ namespace Test.Shared.Suites.Tui
             stub.Json("GET", "/api/v1/missions/summaries", "{\"Success\":true,\"Objects\":[" +
                 "{\"Id\":\"msn_f\",\"Title\":\"Fix tables\",\"Status\":\"InProgress\",\"Priority\":100,\"VesselId\":\"vsl_demo\",\"CaptainId\":\"cpt_1\",\"CreatedUtc\":\"2026-10-04T10:00:00Z\",\"LastUpdateUtc\":\"2026-10-04T10:00:00Z\"}," +
                 "{\"Id\":\"msn_x\",\"Title\":\"Broken\",\"Status\":\"Failed\",\"Priority\":100,\"VesselId\":\"vsl_demo\",\"CreatedUtc\":\"2026-10-04T09:00:00Z\",\"LastUpdateUtc\":\"2026-10-04T09:00:00Z\"}],\"TotalRecords\":2}");
-            stub.On("POST", "/api/v1/fleet-action-runs/enumerate", body => StubHttpHandler.Response(HttpStatusCode.OK, body.Contains("Running")
+            stub.On("POST", "/api/v1/fleet-action-runs/enumerate", body => StubHttpHandler.Response(HttpStatusCode.OK, JsonHelper.Deserialize<FleetActionRunEnumerateQuery>(body).Status == FleetActionRunStatusEnum.Running
                 ? "{\"Success\":true,\"Objects\":[],\"TotalRecords\":4}"
                 : "{\"Success\":true,\"Objects\":[],\"TotalRecords\":2}"));
             stub.Json("GET", "/api/v1/vessel-health/summary", "{\"TotalVessels\":3,\"Pass\":1,\"Warn\":1,\"Fail\":1,\"NotEvaluated\":0,\"OutdatedMajorVessels\":0,\"HighOrCriticalVulnerabilityVessels\":1}");

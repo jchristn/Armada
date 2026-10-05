@@ -6,6 +6,7 @@ namespace Test.Shared.Infrastructure
     using System.Net;
     using System.Text.Json.Nodes;
     using Armada.Client;
+    using Armada.Client.Models;
     using Armada.Client.Socket;
     using Armada.Core.Enums;
     using Armada.Core.Models;
@@ -115,7 +116,7 @@ namespace Test.Shared.Infrastructure
             });
             Stub.On("POST", "/api/v1/ask/threads/" + id + "/messages/enumerate", body =>
             {
-                bool older = body.Contains("BeforeSequence") && !body.Contains("\"BeforeSequence\":null");
+                bool older = JsonHelper.Deserialize<AskMessageEnumerateQuery>(body).BeforeSequence.HasValue;
                 AskMessagePage page = new AskMessagePage();
                 if (older)
                 {
@@ -137,12 +138,12 @@ namespace Test.Shared.Infrastructure
             Stub.On("PUT", "/api/v1/ask/threads/" + id, body =>
             {
                 AskThread t = Threads.First(x => x.Id == id);
-                JsonObject patch = JsonNode.Parse(body)!.AsObject();
-                if (patch["Title"] != null) t.Title = patch["Title"]!.GetValue<string>();
-                if (patch["Pinned"] != null) t.Pinned = patch["Pinned"]!.GetValue<bool>();
-                if (patch["Archived"] != null) t.Archived = patch["Archived"]!.GetValue<bool>();
-                if (patch["AutoApprove"] != null) t.AutoApprove = patch["AutoApprove"]!.GetValue<bool>();
-                if (patch.ContainsKey("CaptainId")) t.CaptainId = patch["CaptainId"]?.GetValue<string>();
+                AskThreadUpdateRequest patch = JsonHelper.Deserialize<AskThreadUpdateRequest>(body);
+                if (patch.Title != null) t.Title = patch.Title;
+                if (patch.Pinned.HasValue) t.Pinned = patch.Pinned.Value;
+                if (patch.Archived.HasValue) t.Archived = patch.Archived.Value;
+                if (patch.AutoApprove.HasValue) t.AutoApprove = patch.AutoApprove.Value;
+                if (JsonShape.TopLevelProperty(body, "CaptainId") != null) t.CaptainId = patch.CaptainId;
                 return Ok(ArmadaJson.Serialize(t));
             });
             Stub.On("DELETE", "/api/v1/ask/threads/" + id, body =>

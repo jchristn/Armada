@@ -52,7 +52,7 @@ namespace Test.Shared.Suites.Tui
                     TuiCase.Contains(host.Screen(), "admin@armada", "header user");
                     string stored = host.Tui.Context.Credentials.GetAsync(SessionService.CredentialKey(host.Tui.Context.Session.Profile)).GetAwaiter().GetResult() ?? "";
                     AssertEqual("tok_session", stored, "token stored");
-                    AssertTrue(stub.Requests.Any(r => r.StartsWith("GET /api/v1/whoami")), "whoami called");
+                    AssertTrue(stub.CountFor("GET", "/api/v1/whoami") >= 1, "whoami called");
                 }
             }));
 
@@ -354,7 +354,7 @@ namespace Test.Shared.Suites.Tui
                     AssertTrue(host.PumpUntil(() => host.Tui.Context.Session.IsSignedIn && host.Tui.Shell.Screen != null), "signed in without a change");
                     AssertEqual("/inbox", host.Tui.Context.Router.Current!.Path, "continued to the start route");
                     AssertTrue(host.WaitForText("Default credentials are in use."), "header warning");
-                    AssertEqual(0, stub.Count("PUT /api/v1/account/password"), "no password change requested");
+                    AssertEqual(0, stub.CountFor("PUT", "/api/v1/account/password"), "no password change requested");
                 }
             }));
 
