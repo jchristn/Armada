@@ -5045,7 +5045,7 @@ A registered host-side runner. Only `name`, `maxConcurrentJobs`, and `enabled` a
 | Field | Type | Description |
 |---|---|---|
 | `PersonaName` | string | Persona name for this stage |
-| `IsOptional` | bool | Whether this stage is optional |
+| `IsOptional` | bool | Reserved: stored and returned, but dispatch runs every stage regardless |
 | `Description` | string \| null | Stage description |
 | `Id` | string | Unique identifier. |
 | `PipelineId` | string \| null | Pipeline identifier this stage belongs to. |
