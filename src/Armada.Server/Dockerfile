@@ -15,16 +15,20 @@ RUN dotnet restore src/Armada.Server/Armada.Server.csproj
 COPY src/Armada.Core/ src/Armada.Core/
 COPY src/Armada.Runtimes/ src/Armada.Runtimes/
 COPY src/Armada.Server/ src/Armada.Server/
+# The committed React dashboard build; Armada.Server.csproj publishes it to /app/dashboard so the Admiral
+# serves it at /dashboard (without it the Admiral falls back to the legacy embedded pages).
+COPY src/Armada.Dashboard/dist/ src/Armada.Dashboard/dist/
 RUN dotnet publish src/Armada.Server -c Release -f net10.0 -o /app --no-restore
 
 # --- Runtime stage ---
 FROM mcr.microsoft.com/dotnet/aspnet:10.0.12-noble AS runtime
 WORKDIR /app
 
-# curl is required for the container healthcheck (probes 127.0.0.1) and for any git-only
-# operations that stay on the server in local-in-container edge cases.
+# curl is required for the container healthcheck (probes 127.0.0.1). git is required for any mission the
+# Admiral runs itself (vessel bare clones, dock worktrees, landing), for example an ApiEndpoint captain:
+# without it dock provisioning fails and missions stay Pending.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl \
+    && apt-get install -y --no-install-recommends curl git \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /app .

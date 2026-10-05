@@ -1221,9 +1221,13 @@ namespace Armada.Server
                 return;
             }
 
-            // Auto-detect: check next to the server executable
-            string? exeDir = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
-            if (exeDir != null)
+            // Auto-detect: check next to the server executable. Assembly.Location is empty in a single-file publish
+            // (the packaged servers), where the application base directory is the executable's folder.
+            string assemblyLocation = System.Reflection.Assembly.GetExecutingAssembly().Location;
+            string? exeDir = !String.IsNullOrEmpty(assemblyLocation)
+                ? Path.GetDirectoryName(assemblyLocation)
+                : AppContext.BaseDirectory;
+            if (!String.IsNullOrEmpty(exeDir))
             {
                 string dashboardNextToExe = Path.Combine(exeDir, "dashboard");
                 if (Directory.Exists(dashboardNextToExe) && File.Exists(Path.Combine(dashboardNextToExe, "index.html")))

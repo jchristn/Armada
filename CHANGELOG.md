@@ -14,6 +14,16 @@ All notable changes to Armada are documented in this file.
 - Shared list and detail screens: filters, sorting, paging, bulk actions, typed confirmations, View JSON, `$EDITOR` for long text, live WebSocket updates. Alt+Left/Right history works while a list has focus; the key after a programmatically closed dialog is no longer lost.
 - Client: `GetVoyageDetailAsync` and the Data Retention settings group.
 
+### v1.0 readiness: install verification
+
+- Install verification (`scripts/common/install-verify/`, `.github/workflows/install-verify.yml`): Docker compose, the Linux `.deb` (Ubuntu 24.04) and `.rpm` (Fedora 42), the NuGet global tool (Linux, macOS, Windows), and the macOS server `.pkg` are installed on a clean runner or container, log in, load the dashboard, and dispatch one mission on an API-endpoint captain backed by a stub inference server; Windows also runs `--install-service --dry-run`. See "Install verification" in `docs/RELEASING.md`.
+- Fixed: `armada server start` from the NuGet global tool reported "Admiral server executable not found" (it looked next to the tool shim, not in the tool store); it now runs `Armada.Server.dll` through the dotnet host, and also finds `armada-server` from the server packages on the PATH.
+- Fixed: the `.pkg`, `.deb`/`.rpm`, `.msi`, and NuGet tool installs served the legacy embedded pages at `/dashboard` instead of the React dashboard. The server publish now carries the React build in `dashboard/`, and the single-file server finds it (it looked beside an empty assembly location).
+- Fixed: the Linux `.deb`/`.rpm` packages declared no dependencies, so the server aborted on a clean machine ("Couldn't find a valid ICU package") and had no git. They now depend on ICU, OpenSSL, ca-certificates, tzdata, and git; the `.deb` stages subdirectories of the publish.
+- Fixed: the Docker server image had no git, so every mission it ran stayed Pending (dock provisioning failed on each retry); it now includes git and serves the React dashboard at `/dashboard`.
+- Fixed: the standalone dashboard container was always unhealthy (its healthcheck probed port 80; nginx listens on 8080) and could not work: the build's `/dashboard/` asset paths were served at the root, and API and WebSocket calls went to nginx. It now serves the build under `/dashboard/` and proxies everything else to `ARMADA_SERVER_URL`.
+- Fixed: a captain that finished before its launch was recorded (an API-endpoint captain against a fast or failing endpoint) left the mission stuck InProgress. The exit handler now waits for the launch to be recorded, and the launch no longer overwrites a state the exit already reached.
+
 ### v1.0 readiness: quality, performance, and service registration
 
 - Added `--install-service`, `--uninstall-service`, and `--run-service` to the Admiral (Windows Service, systemd unit, launchd agent) and `--install-startup`/`--uninstall-startup` to Harbor (Run key, LaunchAgent, XDG autostart; Harbor starts minimized). All support `--dry-run`, are idempotent, and return documented exit codes; installers call them.

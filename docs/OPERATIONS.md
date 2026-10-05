@@ -33,9 +33,10 @@ nginx on host port 3000), and an observability stack (Prometheus, Loki, Grafana)
 the compose file: `docker/armada/db` for the SQLite database and `docker/armada/logs` for logs. The container
 binds `0.0.0.0`, so the published ports are reachable from other hosts on the network.
 
-Be clear about what the container can do: the server image does not include agent CLIs, so a containerized Admiral
-in Local mode can schedule and track work but has nothing on board to run captains with. For real work from a
-container, use split mode below. [DOCKER.md](DOCKER.md) covers volumes, building images, and factory reset;
+Be clear about what the container can do: the server image includes `git` but no agent CLIs, so a containerized
+Admiral in Local mode can run missions on API-endpoint captains (the tool loop runs inside the Admiral) but not on
+Claude Code, Codex, or the other CLI runtimes. For CLI captains from a container, use split mode below. The
+standalone dashboard on port 3000 proxies the API and WebSocket to the Admiral, so it needs no extra configuration. [DOCKER.md](DOCKER.md) covers volumes, building images, and factory reset;
 `docker/update.sh` (or `docker/update.bat`) pulls the latest images and recreates the stack without touching
 volumes.
 

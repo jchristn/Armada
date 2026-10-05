@@ -9,6 +9,17 @@
     <EmbeddedResource Include="wwwroot\**\*" />
   </ItemGroup>
 
+  <!-- Ship the committed React dashboard build next to the server binary (dashboard/), so packaged installs
+       (NuGet tool, .pkg, .deb/.rpm, .msi) serve it at /dashboard instead of the legacy embedded pages. It stays
+       outside the single-file bundle; the Docker build context has no dist/ and skips it. -->
+  <ItemGroup Condition="Exists('..\Armada.Dashboard\dist\index.html')">
+    <None Include="..\Armada.Dashboard\dist\**\*"
+          Link="dashboard\%(RecursiveDir)%(Filename)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest"
+          CopyToPublishDirectory="PreserveNewest"
+          ExcludeFromSingleFile="true" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="PolyPrompt" Version="3.1.0" />
     <PackageReference Include="System.ServiceProcess.ServiceController" Version="10.0.12" />

@@ -35,7 +35,7 @@ This starts two containers:
 | `loki` | 3100 | Log store |
 | `grafana` | 3001 | Dashboards (login `admin` / `admin`) |
 
-Open the dashboard at **http://localhost:3000** (React SPA) or **http://localhost:7890/dashboard** (built-in).
+Open the dashboard at **http://localhost:3000** (the standalone container, which redirects to `/dashboard/`) or **http://localhost:7890/dashboard** (served by the Admiral). Both serve the same React build.
 
 The stack also brings up a Prometheus / Loki / Grafana observability stack (telemetry is enabled in the
 container config). Open Grafana at **http://localhost:3001** and see [TELEMETRY.md](TELEMETRY.md) for
@@ -85,7 +85,9 @@ The Admiral reads its settings from `/app/data/settings.json` (`ARMADA_DATA_DIR=
                          └─────────────┘
 ```
 
-The dashboard container serves the React SPA and proxies nothing — the browser makes API calls directly to the server on port 7890. The server container runs the .NET application with an embedded SQLite database.
+The dashboard container serves the React build under `/dashboard/` and proxies everything else (the REST API, the WebSocket at `/ws`, images, and translations) to the Admiral at `ARMADA_SERVER_URL` (default `http://armada-server:7890`), so the browser only talks to port 3000. The server container runs the .NET application with an embedded SQLite database; it also serves the same React build at `/dashboard` on port 7890.
+
+The server image includes `git`, which the Admiral needs for every mission it runs itself (vessel clones, dock worktrees, landing), for example missions on an API-endpoint captain. It does not include agent CLIs such as Claude Code or Codex; run those through a Harbor (split mode) or on a host install.
 
 That dashboard includes the planning workflow as well as direct dispatch: you can chat with a captain inside the UI, keep the transcript, and hand the selected reply directly into dispatch without leaving the browser.
 
@@ -371,7 +373,7 @@ chmod 777 docker/armada/db
 ```
 
 **Dashboard can't reach server:**
-The React dashboard makes API calls from the browser, not from the container. Ensure port 7890 is accessible from your machine. If running Docker on a remote host, update the dashboard's `VITE_ARMADA_SERVER_URL` environment variable to point to the server's external address.
+The standalone dashboard proxies API and WebSocket calls to `ARMADA_SERVER_URL` from inside the container. Check that the variable names the Admiral as the dashboard container sees it (the compose default is `http://armada-server:7890`) and that `armada-server` is healthy; `docker compose logs armada-dashboard` shows proxy errors.
 
 **CORS errors:**
 The Armada server enables CORS on all routes by default. If you see CORS errors, verify you're accessing the correct port (7890 for the API).

@@ -458,14 +458,39 @@ namespace Armada.Core.Services
                 try
                 {
                     int processId = await _Captains.OnLaunchAgent.Invoke(captain, mission, dock).ConfigureAwait(false);
-                    captain.ProcessId = processId;
-                    await _Database.Captains.UpdateAsync(captain, token).ConfigureAwait(false);
 
-                    mission.ProcessId = processId;
-                    mission.Status = MissionStatusEnum.InProgress;
-                    mission.StartedUtc = DateTime.UtcNow;
-                    mission.LastUpdateUtc = DateTime.UtcNow;
-                    await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+                    // A fast in-process captain (an ApiEndpoint loop against a quick or failing endpoint) can finish
+                    // before the launch call returns, and its exit handler may already have moved the mission on
+                    // (WorkProduced, Failed) and released the captain. Writing the in-memory copies back here would
+                    // put the mission back to InProgress with no process left to finish it, so re-read both records
+                    // and record the launch only while they still describe it.
+                    Captain? currentCaptain = await _Database.Captains.ReadAsync(captain.Id, token).ConfigureAwait(false);
+                    if (currentCaptain != null
+                        && currentCaptain.State == CaptainStateEnum.Working
+                        && String.Equals(currentCaptain.CurrentMissionId, mission.Id, StringComparison.Ordinal))
+                    {
+                        currentCaptain.ProcessId = processId;
+                        await _Database.Captains.UpdateAsync(currentCaptain, token).ConfigureAwait(false);
+                        captain.ProcessId = processId;
+                    }
+
+                    Mission? currentMission = await _Database.Missions.ReadAsync(mission.Id, token).ConfigureAwait(false);
+                    if (currentMission == null || currentMission.Status == MissionStatusEnum.Assigned)
+                    {
+                        mission.ProcessId = processId;
+                        mission.Status = MissionStatusEnum.InProgress;
+                        mission.StartedUtc = DateTime.UtcNow;
+                        mission.LastUpdateUtc = DateTime.UtcNow;
+                        await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        _Logging.Info(_Header + "mission " + mission.Id + " already moved to " + currentMission.Status + " before its launch was recorded (agent process " + processId + " finished first); keeping that state");
+                        mission.ProcessId = currentMission.ProcessId;
+                        mission.Status = currentMission.Status;
+                        mission.StartedUtc = currentMission.StartedUtc;
+                        mission.LastUpdateUtc = currentMission.LastUpdateUtc;
+                    }
 
                     _Logging.Info(_Header + "launched agent process " + processId + " for captain " + captain.Id);
                 }

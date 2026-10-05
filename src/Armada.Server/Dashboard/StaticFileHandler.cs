@@ -145,8 +145,13 @@ namespace Armada.Server.Dashboard
                 return;
             }
 
-            string? exeDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-            if (exeDir == null)
+            // Assembly.Location is empty in a single-file publish (the .pkg, .deb/.rpm, and .msi servers), so fall
+            // back to the application base directory, which is the folder holding the executable there.
+            string assemblyLocation = Assembly.GetExecutingAssembly().Location;
+            string? exeDir = !String.IsNullOrEmpty(assemblyLocation)
+                ? Path.GetDirectoryName(assemblyLocation)
+                : AppContext.BaseDirectory;
+            if (String.IsNullOrEmpty(exeDir))
                 return;
 
             string dashboardNextToExe = Path.Combine(exeDir, "dashboard");

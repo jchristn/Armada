@@ -754,6 +754,32 @@ namespace Armada.Core.Services
                 return;
             }
 
+            // A fast in-process captain (an ApiEndpoint loop against a quick or failing endpoint) can exit before
+            // the launch path records the mission as InProgress. Assigned cannot move to WorkProduced or Failed, and
+            // the launch would then overwrite the outcome with InProgress, leaving the mission stuck with no process.
+            // Wait briefly for the launch to be recorded before handling the exit.
+            if (mission.Status == MissionStatusEnum.Assigned)
+            {
+                DateTime waitUntilUtc = DateTime.UtcNow.AddSeconds(30);
+                while (mission != null && mission.Status == MissionStatusEnum.Assigned && DateTime.UtcNow < waitUntilUtc)
+                {
+                    await Task.Delay(100, token).ConfigureAwait(false);
+                    mission = await _Database.Missions.ReadAsync(missionId, token).ConfigureAwait(false);
+                }
+
+                if (mission == null)
+                {
+                    _Logging.Warn(_Header + "mission " + missionId + " disappeared while waiting for its launch to be recorded");
+                    return;
+                }
+
+                if (mission.Status == MissionStatusEnum.Assigned)
+                    _Logging.Warn(_Header + "mission " + missionId + " is still Assigned 30s after agent process " + processId + " exited; handling the exit anyway");
+
+                Captain? refreshedCaptain = await _Database.Captains.ReadAsync(captainId, token).ConfigureAwait(false);
+                if (refreshedCaptain != null) captain = refreshedCaptain;
+            }
+
             // If the mission is already in a terminal state, nothing to do — the health check
             // or another handler already processed this completion/failure.
             if (MissionStateMachine.IsTerminalOrPostWork(mission.Status))
