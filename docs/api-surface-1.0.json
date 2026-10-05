@@ -5743,6 +5743,11 @@
       "resource": "ObjectiveRefinementSession:Execute",
       "arguments": [
         {
+          "name": "endSession",
+          "type": "boolean",
+          "required": false
+        },
+        {
           "name": "markMessageSelected",
           "type": "boolean",
           "required": false
@@ -5763,7 +5768,7 @@
           "required": true
         }
       ],
-      "description": "Apply a refinement summary back to the linked backlog item and optionally promote its backlog state.",
+      "description": "Apply a refinement summary back to the linked backlog item and optionally promote its backlog state. Ends the session and releases its captain unless endSession is false.",
       "experimental": false
     },
     {
@@ -6517,6 +6522,11 @@
         {
           "name": "selectedPlaybooks",
           "type": "array<object>",
+          "required": false
+        },
+        {
+          "name": "tier",
+          "type": "string",
           "required": false
         },
         {
@@ -9908,6 +9918,31 @@
           "required": false
         },
         {
+          "name": "autoLandEnabled",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "autoLandMaxFiles",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "autoLandMaxLines",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "autoLandPathAllowGlobs",
+          "type": "array<string>",
+          "required": false
+        },
+        {
+          "name": "autoLandPathDenyGlobs",
+          "type": "array<string>",
+          "required": false
+        },
+        {
           "name": "clearAutoApprove",
           "type": "boolean",
           "required": false
@@ -9920,6 +9955,26 @@
         {
           "name": "defaultPipelineId",
           "type": "string",
+          "required": false
+        },
+        {
+          "name": "definitionOfDoneBuildCommand",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "definitionOfDoneEnabled",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "definitionOfDoneTestCommand",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "definitionOfDoneTimeoutSeconds",
+          "type": "integer",
           "required": false
         },
         {
