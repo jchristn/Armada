@@ -891,7 +891,9 @@ namespace Test.Shared.Suites.Services
                 try
                 {
                     await RunGitAsync(repoDir, "mv", "README.md", "READ ME.md").ConfigureAwait(false);
-                    await File.WriteAllTextAsync(Path.Combine(repoDir, "a -> b.txt"), "x\n").ConfigureAwait(false);
+                    // Windows does not allow ">" in file names; there the unusual untracked name has spaces and non-ASCII instead.
+                    string unusualName = OperatingSystem.IsWindows() ? "caf\u00e9 a - b.txt" : "a -> b.txt";
+                    await File.WriteAllTextAsync(Path.Combine(repoDir, unusualName), "x\n").ConfigureAwait(false);
 
                     Armada.Core.Models.GitWorkingTreeStatus status = await service.GetWorkingTreeStatusAsync(repoDir).ConfigureAwait(false);
                     AssertEqual(1, status.ModifiedCount);

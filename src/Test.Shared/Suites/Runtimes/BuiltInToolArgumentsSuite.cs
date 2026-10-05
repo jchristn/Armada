@@ -137,7 +137,8 @@ namespace Test.Shared.Suites.Runtimes
 
                     ToolResult write = await Run(registry, "write_file", "{\"file_path\":\"src/notes.txt\",\"content\":\"one\\ntwo\\nthree\\n\"}", dir).ConfigureAwait(false);
                     AssertTrue(write.Success, "write_file: " + write.Content);
-                    AssertEqual("one\ntwo\nthree\n", File.ReadAllText(Path.Combine(dir, "src", "notes.txt")), "written content");
+                    // A new file gets the platform line ending (an existing file keeps its own).
+                    AssertEqual("one\ntwo\nthree\n".Replace("\n", Environment.NewLine), File.ReadAllText(Path.Combine(dir, "src", "notes.txt")), "written content");
 
                     ToolResult readAll = await Run(registry, "read_file", "{\"file_path\":\"src/notes.txt\"}", dir).ConfigureAwait(false);
                     AssertTrue(readAll.Success, "read_file: " + readAll.Content);

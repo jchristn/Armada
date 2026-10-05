@@ -187,7 +187,9 @@ namespace Test.Shared.Suites.Services
 
                     RunGit(cloneDir, "mv", "README.md", "READ ME.md");
                     // Porcelain v1 prints this untracked name unquoted, and its " -> " was read as a rename.
-                    await File.WriteAllTextAsync(Path.Combine(cloneDir, "a -> b.txt"), "x\n").ConfigureAwait(false);
+                    // Windows does not allow ">" in file names; there the unusual untracked name has spaces and non-ASCII instead.
+                    string unusualName = OperatingSystem.IsWindows() ? "caf\u00e9 a - b.txt" : "a -> b.txt";
+                    await File.WriteAllTextAsync(Path.Combine(cloneDir, unusualName), "x\n").ConfigureAwait(false);
 
                     WorkspaceService service = new WorkspaceService();
                     WorkspaceChangesResult result = await service.GetChangesAsync(CreateVessel(cloneDir)).ConfigureAwait(false);
@@ -204,7 +206,7 @@ namespace Test.Shared.Suites.Services
                     AssertEqual("R", rename!.Status);
                     AssertEqual("README.md", rename.OriginalPath);
 
-                    WorkspaceChangeEntry? arrow = result.Changes.Find(c => c.Path == "a -> b.txt");
+                    WorkspaceChangeEntry? arrow = result.Changes.Find(c => c.Path == unusualName);
                     AssertNotNull(arrow, "arrow-named untracked file reported under its full name");
                     AssertEqual("??", arrow!.Status);
                     AssertNull(arrow.OriginalPath);
