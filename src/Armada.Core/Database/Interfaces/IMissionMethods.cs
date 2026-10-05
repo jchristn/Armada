@@ -29,6 +29,29 @@ namespace Armada.Core.Database.Interfaces
         Task<Mission> UpdateAsync(Mission mission, CancellationToken token = default);
 
         /// <summary>
+        /// Write every column of the mission only while its stored status is one of <paramref name="expectedStatuses"/>
+        /// (a compare-and-set on status). Use it for a transition another party may race, such as a process exit
+        /// handler and a completion handler both moving the same mission.
+        /// </summary>
+        /// <param name="mission">Mission carrying the values to write.</param>
+        /// <param name="expectedStatuses">Statuses the stored row must still have for the write to apply.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>True when the row was written; false when its status had already moved on or the mission is missing.</returns>
+        Task<bool> TryUpdateIfStatusAsync(Mission mission, IReadOnlyCollection<MissionStatusEnum> expectedStatuses, CancellationToken token = default);
+
+        /// <summary>
+        /// Claim ownership of one agent process exit for a mission: clears the recorded process id only while it is still
+        /// <paramref name="processId"/>. Exactly one caller wins for a given process, so a process exit is handled once
+        /// even when the exit callback and the health check observe it together, and an exit from an earlier attempt can
+        /// never act on a later attempt that recorded a different process.
+        /// </summary>
+        /// <param name="missionId">Mission identifier.</param>
+        /// <param name="processId">Process id whose exit the caller wants to handle.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>True when the caller now owns the exit; false when another handler owns it or the mission moved to another process.</returns>
+        Task<bool> TryClaimProcessExitAsync(string missionId, int processId, CancellationToken token = default);
+
+        /// <summary>
         /// Update the mission heartbeat timestamp without rewriting the full record.
         /// Implementations should also advance the parent voyage LastUpdateUtc when applicable.
         /// </summary>

@@ -122,6 +122,9 @@ namespace Test.Shared.Infrastructure
                         // ignored as belonging to no mission. Keep a minimum lifetime like any real process has.
                         int remaining = MinimumMissionLifetimeMs - (int)lifetime.ElapsedMilliseconds;
                         if (remaining > 0) await Task.Delay(remaining).ConfigureAwait(false);
+
+                        Task? exitGate = _Behavior.MissionExitGate;
+                        if (exitGate != null) await exitGate.ConfigureAwait(false);
                     }
                     else
                     {

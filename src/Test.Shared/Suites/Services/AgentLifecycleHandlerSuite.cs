@@ -183,6 +183,49 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("launched_process_is_tracked_until_its_exit_is_received", "A launched process (synthetic id) is tracked while running and handed to the exit callback, so the health check never probes it", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    LoggingModule logging = CreateLogging();
+                    ArmadaSettings settings = CreateSettings();
+                    AgentRuntimeFactory runtimeFactory = new AgentRuntimeFactory(logging);
+                    TaskCompletionSource<bool> release = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                    StubCaptainBehavior behavior = new StubCaptainBehavior { MissionExitGate = release.Task };
+                    runtimeFactory.Override(AgentRuntimeEnum.ClaudeCode, () => new StubCaptainRuntime(logging, behavior));
+                    StubAdmiralService admiral = new StubAdmiralService();
+                    AgentLifecycleHandler handler = new AgentLifecycleHandler(
+                        logging, testDb.Driver, settings, runtimeFactory, admiral, new MessageTemplateService(logging), null, null,
+                        (eventType, message, entityType, entityId, captainId, missionId, vesselId, voyageId) => Task.CompletedTask);
+
+                    string worktreePath = Path.Combine(Path.GetTempPath(), "armada_tracked_launch_" + Guid.NewGuid().ToString("N"));
+                    Directory.CreateDirectory(worktreePath);
+                    try
+                    {
+                        Captain captain = new Captain("tracked-launch-captain", AgentRuntimeEnum.ClaudeCode);
+                        Mission mission = new Mission("Tracked launch mission") { BranchName = "feature/tracked" };
+                        Dock dock = new Dock { BranchName = "feature/tracked", WorktreePath = worktreePath };
+
+                        int processId = await handler.HandleLaunchAgentAsync(captain, mission, dock).ConfigureAwait(false);
+                        AssertTrue(handler.IsProcessTracked(processId), "A running launched process is tracked");
+                        AssertFalse(handler.IsProcessExitHandled(processId), "Its exit has not been received");
+
+                        release.TrySetResult(true);
+                        DateTime deadline = DateTime.UtcNow.AddSeconds(30);
+                        while (!handler.IsProcessExitHandled(processId) && DateTime.UtcNow < deadline)
+                            await Task.Delay(20).ConfigureAwait(false);
+
+                        AssertTrue(handler.IsProcessExitHandled(processId), "The exit callback received the exit");
+                        AssertFalse(handler.IsProcessTracked(processId), "An exited process is no longer tracked");
+                    }
+                    finally
+                    {
+                        release.TrySetResult(true);
+                        try { Directory.Delete(worktreePath, true); } catch { }
+                    }
+                }
+            }));
+
             cases.Add(CaseAsync("handle_launch_agent_async_binds_mission_scoped_mcp_token", "A mission launch carries a mission-scoped MCP token bound to the mission, owner, and captain (O-20)", TestTags.Positive, async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))

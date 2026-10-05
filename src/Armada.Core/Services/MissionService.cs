@@ -80,11 +80,6 @@ namespace Armada.Core.Services
             new System.Collections.Concurrent.ConcurrentDictionary<string, byte>(StringComparer.Ordinal);
 
         /// <summary>
-        /// Tracks in-flight mission complete handler operations by mission ID.
-        /// </summary>
-        private System.Collections.Concurrent.ConcurrentDictionary<string, Task> _InFlightCompletions = new System.Collections.Concurrent.ConcurrentDictionary<string, Task>();
-
-        /// <summary>
         /// Parsed mission definition extracted from an architect's output.
         /// </summary>
         private class ParsedArchitectMission
@@ -620,16 +615,15 @@ namespace Armada.Core.Services
                         captain.ProcessId = processId;
                     }
 
-                    Mission? currentMission = await _Database.Missions.ReadAsync(mission.Id, token).ConfigureAwait(false);
-                    if (currentMission == null || currentMission.Status == MissionStatusEnum.Assigned)
-                    {
-                        mission.ProcessId = processId;
-                        mission.Status = MissionStatusEnum.InProgress;
-                        mission.StartedUtc = DateTime.UtcNow;
-                        mission.LastUpdateUtc = DateTime.UtcNow;
-                        await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
-                    }
-                    else
+                    // Record the launch only while the mission is still Assigned (a compare-and-set, so an exit handler
+                    // that moved it on in between is never overwritten).
+                    mission.ProcessId = processId;
+                    mission.Status = MissionStatusEnum.InProgress;
+                    mission.StartedUtc = DateTime.UtcNow;
+                    mission.LastUpdateUtc = DateTime.UtcNow;
+                    bool launchRecorded = await _Database.Missions.TryUpdateIfStatusAsync(mission, new MissionStatusEnum[] { MissionStatusEnum.Assigned }, token).ConfigureAwait(false);
+                    Mission? currentMission = launchRecorded ? null : await _Database.Missions.ReadAsync(mission.Id, token).ConfigureAwait(false);
+                    if (currentMission != null)
                     {
                         _Logging.Info(_Header + "mission " + mission.Id + " already moved to " + currentMission.Status + " before its launch was recorded (agent process " + processId + " finished first); keeping that state");
                         mission.ProcessId = currentMission.ProcessId;
@@ -730,31 +724,11 @@ namespace Armada.Core.Services
             if (captain == null) throw new ArgumentNullException(nameof(captain));
             if (String.IsNullOrEmpty(missionId)) return;
 
-            // In-flight deduplication: ensure only one completion handler runs per mission.
-            // Both the process exit callback and the health check can trigger completion
-            // concurrently for the same mission. TryAdd returns false if another caller
-            // is already processing this mission.
-            TaskCompletionSource<bool> gate = new TaskCompletionSource<bool>();
-            if (!_InFlightCompletions.TryAdd(missionId, gate.Task))
-            {
-                _Logging.Debug(_Header + "mission " + missionId + " completion already in flight -- skipping duplicate");
-                return;
-            }
-
-            try
-            {
-                await HandleCompletionCoreAsync(captain, missionId, token).ConfigureAwait(false);
-            }
-            finally
-            {
-                gate.TrySetResult(true);
-                // Remove after a delay so late-arriving duplicate calls still see the entry
-                _ = Task.Run(async () =>
-                {
-                    await Task.Delay(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
-                    _InFlightCompletions.TryRemove(missionId, out _);
-                });
-            }
+            // Deduplication is not keyed by mission id here: a mission-id gate (held past the handler) also swallowed
+            // the completion of a later attempt of the same mission. Each process exit is claimed once by its caller
+            // (IMissionMethods.TryClaimProcessExitAsync), and the core's first write is a compare-and-set on the status
+            // it read, so a duplicate for the same attempt loses that write and stops.
+            await HandleCompletionCoreAsync(captain, missionId, token).ConfigureAwait(false);
         }
 
         /// <inheritdoc />
@@ -1163,11 +1137,19 @@ namespace Armada.Core.Services
             // successful outcome, so they skip no-op rejection and never attempt landing.
             bool isReadOnlyMission = MissionModeContract.IsReadOnly(mission.Mode);
 
-            // Mark mission as work produced (agent finished, landing not yet attempted)
+            // Mark mission as work produced (agent finished, landing not yet attempted). Conditional on the status read
+            // above, so exactly one completion wins and a concurrent handler that moved the mission (an interruption
+            // re-dispatch, a cancel, a second completion) is never overwritten by this one.
+            MissionStatusEnum observedStatus = mission.Status;
             mission.Status = MissionStatusEnum.WorkProduced;
             mission.ProcessId = null;
             mission.LastUpdateUtc = DateTime.UtcNow;
-            await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+            if (!await _Database.Missions.TryUpdateIfStatusAsync(mission, new MissionStatusEnum[] { observedStatus }, token).ConfigureAwait(false))
+            {
+                _Logging.Debug(_Header + "mission " + missionId + " left " + observedStatus + " before its completion was recorded -- skipping completion handler");
+                return;
+            }
+
             _Logging.Info(_Header + "mission " + mission.Id + " work produced by captain " + captain.Id);
 
             // Get dock for diff capture (prefer mission-level DockId, fall back to captain-level)

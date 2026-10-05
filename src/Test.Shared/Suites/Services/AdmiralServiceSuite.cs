@@ -1005,6 +1005,160 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("process_exit_has_one_owner_when_health_check_races_exit_callback", "A process exit the health check read as vanished while the exit callback handled it has one owner: completed, not also re-dispatched", TestTags.Negative, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                using (ManualResetEventSlim healthPaused = new ManualResetEventSlim(false))
+                using (ManualResetEventSlim resumeHealth = new ManualResetEventSlim(false))
+                {
+                    DatabaseDriver db = testDb.Driver;
+                    ArmadaSettings settings = CreateSettings();
+                    settings.MaxNoOpRedispatchAttempts = 1;
+                    settings.LogDirectory = Path.Combine(Path.GetTempPath(), "armada_test_logs_" + Guid.NewGuid().ToString("N"));
+                    AdmiralService service = CreateAdmiralService(CreateLogging(), db, settings, new StubGitService());
+
+                    // A synthetic process id, as an in-process ApiEndpoint captain reports: no OS process has it, so an
+                    // OS probe always reads it as vanished (exit -1, an interruption) even while the loop is running.
+                    const int processId = 2000000201;
+
+                    Voyage voyage = new Voyage("Exit Race Voyage");
+                    voyage.Status = VoyageStatusEnum.InProgress;
+                    await db.Voyages.CreateAsync(voyage);
+
+                    Mission mission = new Mission("Exit Race Mission");
+                    mission.VoyageId = voyage.Id;
+                    mission.Status = MissionStatusEnum.InProgress;
+                    mission.ProcessId = processId;
+                    await db.Missions.CreateAsync(mission);
+
+                    Captain captain = new Captain("exit-race-captain");
+                    captain.State = CaptainStateEnum.Working;
+                    captain.CurrentMissionId = mission.Id;
+                    captain.ProcessId = processId;
+                    await db.Captains.CreateAsync(captain);
+                    mission.CaptainId = captain.Id;
+                    await db.Missions.UpdateAsync(mission);
+
+                    // Hold the health check at its exit-handled consult: it has already read the mission as InProgress
+                    // and has not yet recorded an exit decision. The run finishes (exit 0) in exactly that window, as it
+                    // did in the docker install verification, and its exit callback runs to completion.
+                    service.OnIsProcessExitHandled = pid =>
+                    {
+                        if (pid == processId)
+                        {
+                            healthPaused.Set();
+                            resumeHealth.Wait(TimeSpan.FromSeconds(30));
+                        }
+
+                        return false;
+                    };
+
+                    Task health = service.HealthCheckAsync();
+                    AssertTrue(healthPaused.Wait(TimeSpan.FromSeconds(30)), "The health check should reach its exit decision for the running process");
+
+                    await service.HandleProcessExitAsync(processId, 0, captain.Id, mission.Id).ConfigureAwait(false);
+                    resumeHealth.Set();
+                    await health.ConfigureAwait(false);
+
+                    Mission? updated = await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
+                    List<ArmadaEvent> events = await db.Events.EnumerateByMissionAsync(mission.Id, 100).ConfigureAwait(false);
+                    AssertNotNull(updated, "Mission should still exist");
+                    AssertEqual(MissionStatusEnum.WorkProduced, updated!.Status, "The clean exit owns the outcome; a stale health-check verdict must not move the mission back");
+                    AssertEqual(0, updated.RedispatchAttempts, "The mission must not also be re-dispatched as interrupted");
+                    AssertFalse(events.Exists(e => e.EventType == "mission.redispatched"), "No interruption re-dispatch may be recorded for an exit the callback handled");
+                }
+            }));
+
+            cases.Add(CaseAsync("health_check_leaves_tracked_process_to_its_exit_callback", "The health check treats a process its runtime still tracks as alive instead of probing the OS for a synthetic id", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    DatabaseDriver db = testDb.Driver;
+                    ArmadaSettings settings = CreateSettings();
+                    settings.MaxNoOpRedispatchAttempts = 1;
+                    settings.LogDirectory = Path.Combine(Path.GetTempPath(), "armada_test_logs_" + Guid.NewGuid().ToString("N"));
+                    AdmiralService service = CreateAdmiralService(CreateLogging(), db, settings, new StubGitService());
+
+                    const int processId = 2000000501;
+                    bool running = true;
+                    service.OnIsProcessTracked = pid => pid == processId && running;
+
+                    Mission mission = new Mission("Tracked Mission");
+                    mission.Status = MissionStatusEnum.InProgress;
+                    mission.ProcessId = processId;
+                    await db.Missions.CreateAsync(mission);
+
+                    Captain captain = new Captain("tracked-captain");
+                    captain.State = CaptainStateEnum.Working;
+                    captain.CurrentMissionId = mission.Id;
+                    captain.ProcessId = processId;
+                    await db.Captains.CreateAsync(captain);
+                    mission.CaptainId = captain.Id;
+                    await db.Missions.UpdateAsync(mission);
+
+                    await service.HealthCheckAsync().ConfigureAwait(false);
+
+                    Mission? whileRunning = await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
+                    Captain? captainWhileRunning = await db.Captains.ReadAsync(captain.Id).ConfigureAwait(false);
+                    AssertEqual(MissionStatusEnum.InProgress, whileRunning!.Status, "A running in-process captain is not an interruption");
+                    AssertEqual(processId, whileRunning.ProcessId ?? 0, "The exit stays unclaimed for the callback");
+                    AssertEqual(0, whileRunning.RedispatchAttempts);
+                    AssertEqual(CaptainStateEnum.Working, captainWhileRunning!.State);
+
+                    running = false;
+                    await service.HandleProcessExitAsync(processId, 0, captain.Id, mission.Id).ConfigureAwait(false);
+                    Mission? finished = await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
+                    AssertEqual(MissionStatusEnum.WorkProduced, finished!.Status, "The exit callback completes the mission");
+                }
+            }));
+
+            cases.Add(CaseAsync("later_attempt_completion_is_not_swallowed", "The clean exit of a later attempt of the same mission is completed, not skipped as a duplicate of the earlier attempt", TestTags.Negative, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    DatabaseDriver db = testDb.Driver;
+                    ArmadaSettings settings = CreateSettings();
+                    settings.LogDirectory = Path.Combine(Path.GetTempPath(), "armada_test_logs_" + Guid.NewGuid().ToString("N"));
+                    AdmiralService service = CreateAdmiralService(CreateLogging(), db, settings, new StubGitService());
+
+                    const int firstProcessId = 2000000301;
+                    const int secondProcessId = 2000000302;
+
+                    Mission mission = new Mission("Two Attempt Mission");
+                    mission.Status = MissionStatusEnum.InProgress;
+                    mission.ProcessId = firstProcessId;
+                    await db.Missions.CreateAsync(mission);
+
+                    Captain captain = new Captain("two-attempt-captain");
+                    captain.State = CaptainStateEnum.Working;
+                    captain.CurrentMissionId = mission.Id;
+                    captain.ProcessId = firstProcessId;
+                    await db.Captains.CreateAsync(captain);
+
+                    await service.HandleProcessExitAsync(firstProcessId, 0, captain.Id, mission.Id).ConfigureAwait(false);
+                    Mission? afterFirst = await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
+                    AssertEqual(MissionStatusEnum.WorkProduced, afterFirst!.Status, "The first attempt completes");
+
+                    // The mission runs again on a new process (an interruption re-dispatch or a review sending it back
+                    // does this), and that attempt also exits cleanly within seconds of the first.
+                    afterFirst.Status = MissionStatusEnum.InProgress;
+                    afterFirst.ProcessId = secondProcessId;
+                    afterFirst.CaptainId = captain.Id;
+                    afterFirst.CompletedUtc = null;
+                    await db.Missions.UpdateAsync(afterFirst).ConfigureAwait(false);
+                    Captain? rerun = await db.Captains.ReadAsync(captain.Id).ConfigureAwait(false);
+                    rerun!.State = CaptainStateEnum.Working;
+                    rerun.CurrentMissionId = mission.Id;
+                    rerun.ProcessId = secondProcessId;
+                    await db.Captains.UpdateAsync(rerun).ConfigureAwait(false);
+
+                    await service.HandleProcessExitAsync(secondProcessId, 0, captain.Id, mission.Id).ConfigureAwait(false);
+
+                    Mission? afterSecond = await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
+                    AssertEqual(MissionStatusEnum.WorkProduced, afterSecond!.Status, "The second attempt's completion must be handled, not skipped as already in flight");
+                }
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
                 displayName: "Admiral Service",

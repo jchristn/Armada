@@ -260,6 +260,22 @@ namespace Armada.Server
         }
 
         /// <summary>
+        /// Check whether a process was launched by this handler and is still awaiting its runtime's exit callback.
+        /// Such a process is owned by that callback; the health check treats it as alive instead of probing the
+        /// operating system, which cannot see an in-process ApiEndpoint loop (synthetic process id) or a Harbor-hosted
+        /// process and would misreport either as vanished.
+        /// </summary>
+        /// <param name="processId">Process ID (OS, synthetic, or Harbor-mapped) returned by the runtime at launch.</param>
+        /// <returns>True while the process is mapped to a captain and its exit has not been received.</returns>
+        public bool IsProcessTracked(int processId)
+        {
+            lock (_ProcessToCaptain)
+            {
+                return _ProcessToCaptain.ContainsKey(processId);
+            }
+        }
+
+        /// <summary>
         /// Set or update the WebSocket hub reference (created after this handler).
         /// </summary>
         /// <param name="hub">WebSocket hub instance, or null.</param>
