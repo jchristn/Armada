@@ -183,8 +183,13 @@ The goal is a written threat model and a closed list of findings, not just fixes
 
 ### W6. Product completeness and usability
 
-- [ ] **W6.1 Simulated user testing.** Run a full session per `SIMULATED_USER_TESTING.md` against each release
+- [~] **W6.1 Simulated user testing.** Run a full session per `SIMULATED_USER_TESTING.md` against each release
   candidate in an isolated `armada-usertest` stack; triage S1/S2 findings before release.
+  `SIMULATED_USER_TESTING.md` written; the first unattended run (agent, stub captain, dashboard in headless Chrome,
+  TUI in a pty) is in `docs/SIMULATED_USER_TESTING_RESULTS_1.0.md`: every P1/P2 task and P3 except restore passed on
+  the dashboard after fixes; 3 S2 and 4 S3 fixed, 0 S1/S2 and 13 S3 open. Left for a human: the same session with
+  real captains (reply quality, streaming, gating, the W6.7 ten-minute path), visual judgement, the TUI flows that
+  were only screen-checked, a restore, and triage of the open S3 findings.
 - [x] **W6.2 Captain support matrix.** `docs/CAPTAINS.md`: supported versions of Claude Code, Codex, Gemini, Cursor,
   Mux, OpenCode, and API endpoints, and which features each supports (missions, planning, Ask threads, Ask approval
   gating -- today only Claude Code and ApiEndpoint are gated -- streaming, thinking, tool display).
@@ -197,7 +202,8 @@ The goal is a written threat model and a closed list of findings, not just fixes
 - [x] **W6.6 Localization.** Native-speaker review of all eight non-English locales, or ship them labeled "beta" in
   the language picker.
 - [~] **W6.7 Onboarding.** First-run path from install to first landed mission in under ten minutes, verified in
-  W6.1.
+  W6.1. The unattended W6.1 run took 7 to 32 s from sign-in to a landed mission (stub captain); the timed human run
+  with a real captain is still open.
 
 ### W7. Documentation
 
@@ -255,3 +261,4 @@ history), captain-suggested Ask thread titles, commit-message enforcement at lan
 | 2026-10-04 | security agent | W1.9, W1.5 | Closed O-01, O-02, O-05, per-vessel auto-approve (migration 76), thread-token precedence; O-04 and O-11 partly closed; new O-20. API surface +11 additive. Merged; full suite 3133 (3124 passed, 9 skipped, 0 failed); four-provider parity green on the branch. Note: a helper agent briefly ran a throwaway server on ports 7890/7891 with a scratch data dir (no impact; ports confirmed free). |
 | 2026-10-04 | quality agent | W4.2, W4.4, W4.5, W5.6 | E2E startup timeouts root-caused (OS ephemeral port reuse plus a silent MCP bind failure; the Admiral now fails startup when the MCP port is taken), 3 more flakes and a sleep-sensitive clock fixed, 20 consecutive green full runs; risky-path suites with 9 defects fixed (landing modes, LandingFailed on merge-queue conflicts, import restart recovery, Harbor reconnect, rollback slot pruning, fleet action cancel); perf harness and docs/PERFORMANCE.md, paged GET /api/v1/jobs; --install-service/--uninstall-service/--run-service and Harbor --install-startup with installers calling them (Windows unverified). Open: consolidate the four voyage-cancel copies; creation-time indexes. |
 | 2026-10-04 | install agent | W5.5 | Install verification scripts (scripts/common/install-verify/) and install-verify.yml: Docker compose, .deb (ubuntu:24.04), .rpm (fedora:42), NuGet tool, macOS server .pkg, Windows tool path plus --install-service --dry-run; each logs in, loads the React dashboard, and lands one mission on a stub-inference ApiEndpoint captain. Verified locally on macOS for every path except Windows (unverified) and the workflow (not yet run on Actions). Fixed: `armada server start` from the NuGet tool; packaged servers served the legacy dashboard; .deb/.rpm had no dependencies (ICU crash on a clean machine, no git); Docker server image had no git (missions stuck Pending); standalone dashboard container unhealthy and non-functional; fast-exiting captains left missions stuck InProgress. Full suite 3425 (3413 passed, 9 skipped, 3 failed under load, all 24 in those suites pass on rerun). |
+| 2026-10-05 | sim-testing agent | W6.1, W6.7 | `SIMULATED_USER_TESTING.md` (personas, task scripts, recording, S1-S4, exit criterion) and the first unattended run in `docs/SIMULATED_USER_TESTING_RESULTS_1.0.md` (throwaway Admiral with the stub captain, 13 temp repos with bare origins, dashboard via Playwright, TUI via pty and pyte). Fixed: six locales blanked the dashboard on Settings (i18n template recursion), Draft Release stuck on Loading, backlog refinement Summarize crash, voyage and mission pages not live, jobs `status` filter 400 (header activity indicator), stale translated tooltips and aria-labels, `armada-landing/*` branches left in checkouts. 31 findings recorded with suggested fixes (13 S3, 18 S4), among them sign-outs on every Admiral restart (session key not persisted). W6.1 stays open for the human run with real captains. |

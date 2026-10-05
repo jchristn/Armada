@@ -80,7 +80,8 @@ namespace Armada.Core.Models
         /// Read a query from querystring parameters: pageNumber, pageSize, status (comma-separated JobStatusEnum names,
         /// case-insensitive), and kind (a JobKindEnum name).
         /// </summary>
-        /// <param name="getter">Returns a querystring value by name, or null.</param>
+        /// <param name="getter">Returns a querystring value by name, or null. Values may be percent-encoded as they arrive
+        /// on the wire (browsers send <c>status=Queued%2CRunning</c>); they are decoded before parsing.</param>
         /// <param name="query">The query, or null when no paging or filter parameter was given (callers keep the legacy
         /// unpaged list) or when a value is invalid.</param>
         /// <param name="error">Why a value was rejected, or null.</param>
@@ -92,10 +93,10 @@ namespace Armada.Core.Models
             query = null;
             error = null;
 
-            string? pageNumber = getter("pageNumber");
-            string? pageSize = getter("pageSize");
-            string? status = getter("status");
-            string? kind = getter("kind");
+            string? pageNumber = Unescape(getter("pageNumber"));
+            string? pageSize = Unescape(getter("pageSize"));
+            string? status = Unescape(getter("status"));
+            string? kind = Unescape(getter("kind"));
             if (String.IsNullOrWhiteSpace(pageNumber) && String.IsNullOrWhiteSpace(pageSize) && String.IsNullOrWhiteSpace(status) && String.IsNullOrWhiteSpace(kind))
                 return false;
 
@@ -190,6 +191,23 @@ namespace Armada.Core.Models
             result.TotalPages = (int)Math.Ceiling((double)total / _PageSize);
             result.Objects = page ?? new List<Job>();
             return result;
+        }
+
+        #endregion
+
+        #region Private-Methods
+
+        private static string? Unescape(string? value)
+        {
+            if (String.IsNullOrEmpty(value)) return value;
+            try
+            {
+                return Uri.UnescapeDataString(value.Replace('+', ' '));
+            }
+            catch (UriFormatException)
+            {
+                return value;
+            }
         }
 
         #endregion

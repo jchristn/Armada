@@ -462,6 +462,7 @@ namespace Test.Shared.Suites.Services
                     AssertEqual(String.Empty, (await RunGitAsync(targetDir, "ls-files", "-u", "-z").ConfigureAwait(false)), "Conflict cleanup should leave no unmerged index entries");
                     AssertEqual("main", currentBranch, "Conflict cleanup should return to the target branch");
                     AssertEqual("target change\n", fileContents, "Conflict cleanup should restore the pre-merge working tree");
+                    AssertEqual(String.Empty, (await RunGitAsync(targetDir, "for-each-ref", "refs/heads/armada-landing/").ConfigureAwait(false)).Trim(), "A failed landing must not leave armada-landing/* branches either");
                 }
                 finally
                 {
@@ -556,6 +557,9 @@ namespace Test.Shared.Suites.Services
                     AssertTrue(!String.IsNullOrWhiteSpace(localBranch), "Landing checkout should create a local target branch when it is missing");
                     AssertEqual("base\nworker change\n", mergedReadme, "Landing merge should include worker changes");
                     AssertEqual("target branch content\n", targetBranchFile, "Landing merge should preserve target branch files");
+
+                    string landingRefs = (await RunGitAsync(targetDir, "for-each-ref", "refs/heads/armada-landing/").ConfigureAwait(false)).Trim();
+                    AssertEqual(String.Empty, landingRefs, "Landing must not leave armada-landing/* branches in the user's checkout");
                 }
                 finally
                 {

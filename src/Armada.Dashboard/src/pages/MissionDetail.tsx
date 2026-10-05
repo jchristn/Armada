@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useNotifications } from '../context/NotificationContext';
+import { useLiveRefresh } from '../lib/useLiveRefresh';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   getMission,
@@ -131,6 +132,9 @@ export default function MissionDetail() {
   useEffect(() => {
     loadMission();
   }, [loadMission]);
+
+  // Follow the mission's status, review, and landing as they change on the server.
+  useLiveRefresh(['mission.'], loadMission);
 
   useEffect(() => {
     listVessels({ pageSize: 1000 }).then(r => setVessels(r.objects || [])).catch(() => {});

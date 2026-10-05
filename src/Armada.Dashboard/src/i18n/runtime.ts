@@ -67,24 +67,36 @@ function getOriginalText(node: Text): string {
   return textNode.__armadaI18nOriginal;
 }
 
+// Attributes and button values cache the source text the first time they are translated. React may later reuse the
+// same element for different content (a wizard step swapping fields, a form re-rendering with new labels), so a value
+// that is no longer the translation we last wrote was changed externally: adopt it as the new source text instead of
+// writing the stale first-seen original back (the same rule translateTextNode applies to text nodes).
 function getOriginalAttribute(element: HTMLElement, attr: string): string | null {
   const dataAttr = `data-armada-i18n-orig-${attr}`;
-  if (element.hasAttribute(dataAttr)) {
-    return element.getAttribute(dataAttr);
+  const appliedAttr = `data-armada-i18n-applied-${attr}`;
+  const current = element.getAttribute(attr);
+  if (current === null) {
+    element.removeAttribute(dataAttr);
+    element.removeAttribute(appliedAttr);
+    return null;
   }
 
-  const original = element.getAttribute(attr);
-  if (original !== null) {
-    element.setAttribute(dataAttr, original);
-  }
-  return original;
+  const cached = element.getAttribute(dataAttr);
+  if (cached !== null && element.getAttribute(appliedAttr) === current) return cached;
+  element.setAttribute(dataAttr, current);
+  return current;
+}
+
+function markAppliedAttribute(element: HTMLElement, attr: string, applied: string) {
+  element.setAttribute(`data-armada-i18n-applied-${attr}`, applied);
 }
 
 function getOriginalButtonValue(element: HTMLInputElement): string {
   const dataAttr = 'data-armada-i18n-orig-value';
-  const existing = element.getAttribute(dataAttr);
-  if (existing !== null) return existing;
+  const appliedAttr = 'data-armada-i18n-applied-value';
   const current = element.value;
+  const existing = element.getAttribute(dataAttr);
+  if (existing !== null && element.getAttribute(appliedAttr) === current) return existing;
   element.setAttribute(dataAttr, current);
   return current;
 }
@@ -103,6 +115,16 @@ function translateSingleToken(locale: string, value: string, catalog: I18nCatalo
 function translateExactPhrase(locale: string, value: string, catalog: I18nCatalog | null | undefined): string | null {
   const pack = getPack(locale, catalog);
   return pack.phrases?.[value] ?? pack.sections?.[value] ?? null;
+}
+
+/**
+ * Look up a message template (a catalog key with {{placeholders}}) by exact phrase only. The rendered-text patterns
+ * below translate a matched message through its template; passing the template to translateText would run the same
+ * patterns on the template itself (for example "Delete failed: {{message}}" matches /^Delete failed: (.+)$/) and
+ * recurse until the stack overflows whenever the locale's catalog has no entry for that template.
+ */
+function translateTemplateKey(locale: string, key: string, catalog: I18nCatalog | null | undefined): string {
+  return translateExactPhrase(locale, key, catalog) ?? key;
 }
 
 function formatNumber(locale: string, value: number): string {
@@ -270,19 +292,19 @@ function applyDynamicPatterns(locale: string, text: string, catalog: I18nCatalog
 
   match = text.match(/^Copy (.+) HTTP config to clipboard$/);
   if (match) {
-    const template = translateText(locale, 'Copy {{title}} HTTP config to clipboard', catalog);
+    const template = translateTemplateKey(locale, 'Copy {{title}} HTTP config to clipboard', catalog);
     return interpolate(template, { title: match[1] });
   }
 
   match = text.match(/^Copy (.+) STDIO config to clipboard$/);
   if (match) {
-    const template = translateText(locale, 'Copy {{title}} STDIO config to clipboard', catalog);
+    const template = translateTemplateKey(locale, 'Copy {{title}} STDIO config to clipboard', catalog);
     return interpolate(template, { title: match[1] });
   }
 
   match = text.match(/^Delete ([A-Za-z ]+) "(.+)"\? This cannot be undone\.$/);
   if (match) {
-    return interpolate(translateText(locale, 'Delete {{entity}} "{{name}}"? This cannot be undone.', catalog), {
+    return interpolate(translateTemplateKey(locale, 'Delete {{entity}} "{{name}}"? This cannot be undone.', catalog), {
       entity: translateText(locale, match[1], catalog).toLowerCase(),
       name: match[2],
     });
@@ -290,7 +312,7 @@ function applyDynamicPatterns(locale: string, text: string, catalog: I18nCatalog
 
   match = text.match(/^Delete ([A-Za-z ]+) (.+)\? This cannot be undone\.$/);
   if (match) {
-    return interpolate(translateText(locale, 'Delete {{entity}} {{name}}? This cannot be undone.', catalog), {
+    return interpolate(translateTemplateKey(locale, 'Delete {{entity}} {{name}}? This cannot be undone.', catalog), {
       entity: translateText(locale, match[1], catalog).toLowerCase(),
       name: match[2],
     });
@@ -298,14 +320,14 @@ function applyDynamicPatterns(locale: string, text: string, catalog: I18nCatalog
 
   match = text.match(/^Delete dock (.+)\? This will clean up the git worktree and cannot be undone\.$/);
   if (match) {
-    return interpolate(translateText(locale, 'Delete dock {{name}}? This will clean up the git worktree and cannot be undone.', catalog), {
+    return interpolate(translateTemplateKey(locale, 'Delete dock {{name}}? This will clean up the git worktree and cannot be undone.', catalog), {
       name: match[1],
     });
   }
 
   match = text.match(/^Delete (event|signal) (.+)\?$/);
   if (match) {
-    return interpolate(translateText(locale, 'Delete {{entity}} {{name}}?', catalog), {
+    return interpolate(translateTemplateKey(locale, 'Delete {{entity}} {{name}}?', catalog), {
       entity: translateText(locale, match[1], catalog).toLowerCase(),
       name: match[2],
     });
@@ -313,48 +335,48 @@ function applyDynamicPatterns(locale: string, text: string, catalog: I18nCatalog
 
   match = text.match(/^Stop captain "(.+)"\? This will halt the current mission\.$/);
   if (match) {
-    return interpolate(translateText(locale, 'Stop captain "{{name}}"? This will halt the current mission.', catalog), {
+    return interpolate(translateTemplateKey(locale, 'Stop captain "{{name}}"? This will halt the current mission.', catalog), {
       name: match[1],
     });
   }
 
   match = text.match(/^Recall captain "(.+)"\? The captain will finish current work and return to idle\.$/);
   if (match) {
-    return interpolate(translateText(locale, 'Recall captain "{{name}}"? The captain will finish current work and return to idle.', catalog), {
+    return interpolate(translateTemplateKey(locale, 'Recall captain "{{name}}"? The captain will finish current work and return to idle.', catalog), {
       name: match[1],
     });
   }
 
   match = text.match(/^Remove captain "(.+)"\? This cannot be undone\.$/);
   if (match) {
-    return interpolate(translateText(locale, 'Remove captain "{{name}}"? This cannot be undone.', catalog), {
+    return interpolate(translateTemplateKey(locale, 'Remove captain "{{name}}"? This cannot be undone.', catalog), {
       name: match[1],
     });
   }
 
   match = text.match(/^Delete failed: (.+)$/);
   if (match) {
-    return interpolate(translateText(locale, 'Delete failed: {{message}}', catalog), { message: match[1] });
+    return interpolate(translateTemplateKey(locale, 'Delete failed: {{message}}', catalog), { message: match[1] });
   }
 
   match = text.match(/^Save failed: (.+)$/);
   if (match) {
-    return interpolate(translateText(locale, 'Save failed: {{message}}', catalog), { message: match[1] });
+    return interpolate(translateTemplateKey(locale, 'Save failed: {{message}}', catalog), { message: match[1] });
   }
 
   match = text.match(/^Failed to save settings: (.+)$/);
   if (match) {
-    return interpolate(translateText(locale, 'Failed to save settings: {{message}}', catalog), { message: match[1] });
+    return interpolate(translateTemplateKey(locale, 'Failed to save settings: {{message}}', catalog), { message: match[1] });
   }
 
   match = text.match(/^Unable to load existing Armada resources: (.+)$/);
   if (match) {
-    return interpolate(translateText(locale, 'Unable to load existing Armada resources: {{message}}', catalog), { message: match[1] });
+    return interpolate(translateTemplateKey(locale, 'Unable to load existing Armada resources: {{message}}', catalog), { message: match[1] });
   }
 
   match = text.match(/^(Fleet|Vessel|Captain) creation failed: (.+)$/);
   if (match) {
-    return interpolate(translateText(locale, '{{entity}} creation failed: {{message}}', catalog), {
+    return interpolate(translateTemplateKey(locale, '{{entity}} creation failed: {{message}}', catalog), {
       entity: translateText(locale, match[1], catalog),
       message: match[2],
     });
@@ -362,12 +384,12 @@ function applyDynamicPatterns(locale: string, text: string, catalog: I18nCatalog
 
   match = text.match(/^Dispatch failed: (.+)$/);
   if (match) {
-    return interpolate(translateText(locale, 'Dispatch failed: {{message}}', catalog), { message: match[1] });
+    return interpolate(translateTemplateKey(locale, 'Dispatch failed: {{message}}', catalog), { message: match[1] });
   }
 
   match = text.match(/^Created (fleet|vessel|captain) "(.+)"\.$/i);
   if (match) {
-    return interpolate(translateText(locale, 'Created {{entity}} "{{name}}".', catalog), {
+    return interpolate(translateTemplateKey(locale, 'Created {{entity}} "{{name}}".', catalog), {
       entity: translateText(locale, match[1], catalog).toLowerCase(),
       name: match[2],
     });
@@ -375,7 +397,7 @@ function applyDynamicPatterns(locale: string, text: string, catalog: I18nCatalog
 
   match = text.match(/^Using (fleet|vessel|captain) "(.+)"\.$/i);
   if (match) {
-    return interpolate(translateText(locale, 'Using {{entity}} "{{name}}".', catalog), {
+    return interpolate(translateTemplateKey(locale, 'Using {{entity}} "{{name}}".', catalog), {
       entity: translateText(locale, match[1], catalog).toLowerCase(),
       name: match[2],
     });
@@ -383,7 +405,7 @@ function applyDynamicPatterns(locale: string, text: string, catalog: I18nCatalog
 
   match = text.match(/^Mission status refreshed: (.+)\.$/);
   if (match) {
-    return interpolate(translateText(locale, 'Mission status refreshed: {{status}}.', catalog), {
+    return interpolate(translateTemplateKey(locale, 'Mission status refreshed: {{status}}.', catalog), {
       status: translateLabel(locale, match[1], catalog),
     });
   }
@@ -400,7 +422,7 @@ function applyDynamicPatterns(locale: string, text: string, catalog: I18nCatalog
 
   match = text.match(/^Signing in as (.+) to (.+)$/);
   if (match) {
-    return interpolate(translateText(locale, 'Signing in as {{email}} to {{tenant}}', catalog), {
+    return interpolate(translateTemplateKey(locale, 'Signing in as {{email}} to {{tenant}}', catalog), {
       email: match[1],
       tenant: match[2],
     });
@@ -652,6 +674,7 @@ function translateElementAttributes(element: HTMLElement, locale: string, catalo
       if (translated !== original || element.getAttribute(attr) !== translated) {
         element.setAttribute(attr, translated);
       }
+      markAppliedAttribute(element, attr, translated);
     }
   }
 
@@ -661,6 +684,7 @@ function translateElementAttributes(element: HTMLElement, locale: string, catalo
     if (translated !== element.value) {
       element.value = translated;
     }
+    element.setAttribute('data-armada-i18n-applied-value', translated);
   }
 }
 

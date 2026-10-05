@@ -70,6 +70,7 @@ import JsonViewer from '../components/shared/JsonViewer';
 import PageHeader from '../components/shared/PageHeader';
 import StatusBadge from '../components/shared/StatusBadge';
 import { buildObjectiveDuplicatePayload } from '../lib/duplicates';
+import { refinementSummaryFromEvent } from '../lib/refinementSummary';
 
 function toDateTimeLocalValue(value: string | null | undefined): string {
   if (!value) return '';
@@ -621,10 +622,10 @@ export default function ObjectiveDetail() {
       }
 
       if (msg.type === 'objective-refinement-session.summary.created') {
-        const payload = msg.data as ObjectiveRefinementSummaryResponse | undefined;
-        if (!payload || payload.sessionId !== selectedRefinementSessionId) return;
-        setRefinementSummaryDraft(payload);
-        if (payload.messageId) setSelectedRefinementMessageId(payload.messageId);
+        const draft = refinementSummaryFromEvent(msg.data);
+        if (!draft || draft.sessionId !== selectedRefinementSessionId) return;
+        setRefinementSummaryDraft(draft);
+        if (draft.messageId) setSelectedRefinementMessageId(draft.messageId);
         return;
       }
 

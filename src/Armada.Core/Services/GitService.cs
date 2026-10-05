@@ -347,6 +347,23 @@ namespace Armada.Core.Services
             string message = commitMessage ?? ("Merge armada mission: " + branchName);
             try
             {
+                await MergeFetchedBranchAsync(targetWorkDir, sourceRepoPath, branchName, targetBranch, fetchedBranchRef, message, token).ConfigureAwait(false);
+            }
+            finally
+            {
+                // The armada-landing/* ref only carries the fetched branch into the merge; leaving it would add one
+                // branch to the user's checkout for every landed mission.
+                // Not cancellable: it must not replace the merge's own exception or leave the ref behind on cancel.
+                await DeleteLocalRefQuietlyAsync(targetWorkDir, fetchedBranchRef, CancellationToken.None).ConfigureAwait(false);
+            }
+
+            _Logging.Debug(_Header + "merged " + branchName + " into " + targetWorkDir + (String.IsNullOrEmpty(targetBranch) ? "" : " (target: " + targetBranch + ")"));
+        }
+
+        private async Task MergeFetchedBranchAsync(string targetWorkDir, string sourceRepoPath, string branchName, string? targetBranch, string fetchedBranchRef, string message, CancellationToken token)
+        {
+            try
+            {
                 // Decide up front from git merge-base's exit code (1 = no common ancestor) instead of
                 // retrying after matching git's error wording.
                 GitProcessResult mergeBase = await ExecuteProcessAsync(targetWorkDir, "git", token, "merge-base", "HEAD", fetchedBranchRef).ConfigureAwait(false);
@@ -365,8 +382,6 @@ namespace Armada.Core.Services
                 await RestoreAfterFailedMergeAsync(targetWorkDir, sourceRepoPath, targetBranch, token).ConfigureAwait(false);
                 throw;
             }
-
-            _Logging.Debug(_Header + "merged " + branchName + " into " + targetWorkDir + (String.IsNullOrEmpty(targetBranch) ? "" : " (target: " + targetBranch + ")"));
         }
 
         /// <summary>
@@ -1277,6 +1292,7 @@ namespace Armada.Core.Services
             {
                 string fetchedTargetBranchRef = await FetchBranchIntoLocalRefAsync(targetWorkDir, sourceRepoPath, targetBranch, token).ConfigureAwait(false);
                 await RunGitAsync(targetWorkDir, token, "checkout", "-B", targetBranch, fetchedTargetBranchRef).ConfigureAwait(false);
+                await DeleteLocalRefQuietlyAsync(targetWorkDir, fetchedTargetBranchRef, token).ConfigureAwait(false);
                 return;
             }
             catch (Exception ex)
@@ -1300,6 +1316,12 @@ namespace Armada.Core.Services
 
             await RunGitAsync(targetWorkDir, token, "fetch", sourceRepoPath, refspec).ConfigureAwait(false);
             return localRef;
+        }
+
+        private async Task DeleteLocalRefQuietlyAsync(string repoPath, string localRef, CancellationToken token)
+        {
+            GitProcessResult result = await ExecuteProcessAsync(repoPath, "git", token, "update-ref", "-d", localRef).ConfigureAwait(false);
+            if (!result.Succeeded) _Logging.Debug(_Header + "could not delete " + localRef + " in " + repoPath + ": " + result.StandardError.Trim());
         }
 
         private async Task<bool> TryEnsureLocalBranchAsync(string repoPath, string branchName, CancellationToken token)

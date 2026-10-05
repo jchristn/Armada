@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   getVoyage,
@@ -22,6 +22,7 @@ import LogViewer from '../components/shared/LogViewer';
 import CopyButton from '../components/shared/CopyButton';
 import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
+import { useLiveRefresh } from '../lib/useLiveRefresh';
 
 // ── Helper utilities ──
 
@@ -84,9 +85,11 @@ export default function VoyageDetail() {
   const vesselName = useCallback((vid: string | null | undefined) => vid ? vesselMap.get(vid) || vid.slice(0, 8) : '-', [vesselMap]);
   const captainName = useCallback((cid: string | null | undefined) => cid ? captainMap.get(cid) || cid.slice(0, 8) : '-', [captainMap]);
 
+  const loadedVoyageIdRef = useRef<string | null>(null);
   const loadVoyage = useCallback(async () => {
     if (!id) return;
-    setLoading(true);
+    // Show the loading state only on a voyage's first load; live refreshes update the page in place.
+    if (loadedVoyageIdRef.current !== id) setLoading(true);
     try {
       const v = await getVoyage(id);
       // The API may return { voyage, missions } or just the voyage object
@@ -105,12 +108,16 @@ export default function VoyageDetail() {
           setMissions([]);
         }
       }
+      loadedVoyageIdRef.current = id;
     } catch (e: unknown) {
       setError(t('Failed to load voyage: {{message}}', { message: e instanceof Error ? e.message : String(e) }));
     } finally {
       setLoading(false);
     }
   }, [id, t]);
+
+  // Follow the voyage and its missions as they run and land.
+  useLiveRefresh(['mission.', 'voyage.'], loadVoyage);
 
   useEffect(() => {
     loadVoyage();
