@@ -4,6 +4,7 @@ namespace Test.Shared.Suites.Tui
     using System.Collections.Generic;
     using System.Linq;
     using System.Net;
+    using System.Threading;
     using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Tui.Screens;
@@ -88,6 +89,8 @@ namespace Test.Shared.Suites.Tui
                     AssertTrue(host.WaitForText("2 vessels selected"), "select all");
                     host.Press("ctrl+s");
                     AssertTrue(host.WaitForText("Run fleet action"), "run dialog\n" + host.Screen());
+                    FleetActionRunFlow flow = screen.LastFlow ?? throw new AssertionException("run flow started");
+                    AssertTrue(host.PumpUntil(() => flow.SelectedAction()?.Id == "fa_echo" && flow.PreviewVessel != null), "configure step loaded the action and the preview vessel\n" + host.Screen());
                     AssertTrue(host.WaitForText("Preview for alpha-repo"), "preview vessel\n" + host.Screen());
                     TuiCase.Contains(host.Screen(), "echo alpha-repo", "rendered preview");
                     TuiCase.Contains(host.Screen(), "(and 1 more vessel)", "more vessels");
@@ -102,6 +105,48 @@ namespace Test.Shared.Suites.Tui
                     AssertEqual(2, started.Concurrency, "run concurrency: " + run.Body);
                     AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.ActiveToasts().Any(t => t.Severity == NotificationSeverityEnum.Success && t.Text.Contains("Fleet action started on 2 vessels."))), "started toast");
                     AssertTrue(host.PumpUntil(() => host.Tui.Context.Router.Current!.FullPath == "/fleet-actions/runs/far_1"), "navigated to the run");
+                }
+            }));
+
+            cases.Add(TuiCase.Sync(Suite, "run_flow_waits_for_actions", "Run configure step: the preview vessel can arrive before the action list; Ctrl+S is refused until the action is chosen", () =>
+            {
+                // The configure step loads the saved actions and the preview vessel with independent calls, so
+                // "Preview for <vessel>" on screen does not mean the action is selected. The end-to-end flow test used
+                // that text as its precondition for Ctrl+S and failed on slow runners when the vessel won the race.
+                // Hold the flow's action list (the second enumerate; the first fills the grid) to force that order.
+                StubHttpHandler stub = Stub();
+                int enumerateCalls = 0;
+                using (ManualResetEventSlim release = new ManualResetEventSlim(false))
+                {
+                    stub.On("POST", "/api/v1/fleet-actions/enumerate", body =>
+                    {
+                        if (Interlocked.Increment(ref enumerateCalls) > 1) release.Wait(TimeSpan.FromSeconds(30));
+                        return StubHttpHandler.Response(HttpStatusCode.OK, _ActionsJson);
+                    });
+                    using (TuiTestHost host = TuiCase.SignedIn(150, 45, "/fleet-actions", stub))
+                    {
+                        AssertTrue(host.WaitForText("Echo name"), "rows");
+                        FleetActionsScreen screen = Content<FleetActionsScreen>(host);
+                        host.Press("home").Press("down");
+                        AssertEqual("fa_echo", screen.Grid.Current?.Id, "echo selected");
+                        host.Press("r");
+                        AssertTrue(host.WaitForText("beta-repo"), "vessels listed\n" + host.Screen());
+                        host.Press("ctrl+a");
+                        AssertTrue(host.WaitForText("2 vessels selected"), "select all");
+                        host.Press("ctrl+s");
+                        AssertTrue(host.WaitForText("Preview for alpha-repo"), "preview vessel arrives first\n" + host.Screen());
+                        FleetActionRunFlow flow = screen.LastFlow ?? throw new AssertionException("run flow started");
+                        AssertNull(flow.SelectedAction(), "the action list is still loading");
+
+                        host.Press("ctrl+s");
+                        AssertTrue(host.WaitForText("A selection is required."), "Ctrl+S before the action arrives is refused\n" + host.Screen());
+                        AssertTrue(host.App.Modals.Top == flow.Dialog, "still on the configure step");
+
+                        release.Set();
+                        AssertTrue(host.PumpUntil(() => flow.SelectedAction()?.Id == "fa_echo"), "the action arrives and is preselected");
+                        host.Press("ctrl+s");
+                        AssertTrue(host.WaitForText("Run on 2 vessels"), "review step\n" + host.Screen());
+                    }
                 }
             }));
 
@@ -167,6 +212,10 @@ namespace Test.Shared.Suites.Tui
             return new TestSuiteDescriptor(suiteId: Suite, displayName: "TUI fleet actions", cases: cases);
         }
 
+        private static readonly string _ActionsJson = "{\"Success\":true,\"PageNumber\":1,\"PageSize\":25,\"TotalPages\":1,\"TotalRecords\":2,\"Objects\":[" +
+                "{\"Id\":\"fa_builtin\",\"Name\":\"Fast-forward default branch\",\"Kind\":\"Command\",\"CommandText\":\"git pull --ff-only\",\"TimeoutSeconds\":300,\"DefaultConcurrency\":4,\"RequiresCleanWorkingTree\":true,\"IsBuiltIn\":true,\"Active\":true,\"CreatedUtc\":\"2026-10-04T10:00:00Z\",\"LastUpdateUtc\":\"2026-10-04T10:00:00Z\"}," +
+                "{\"Id\":\"fa_echo\",\"Name\":\"Echo name\",\"Description\":\"Prints the vessel name\",\"Kind\":\"Command\",\"CommandText\":\"echo {{vessel.name}}\",\"TimeoutSeconds\":60,\"DefaultConcurrency\":2,\"RequiresCleanWorkingTree\":true,\"IsBuiltIn\":false,\"Active\":true,\"CreatedUtc\":\"2026-10-04T09:00:00Z\",\"LastUpdateUtc\":\"2026-10-04T09:00:00Z\"}]}";
+
         private static T Content<T>(TuiTestHost host) where T : class
         {
             HubScreen hub = (HubScreen)host.Tui.Shell.Screen!;
@@ -177,9 +226,7 @@ namespace Test.Shared.Suites.Tui
         {
             StubHttpHandler stub = TuiFixtures.SignedInServer();
             stub.Json("GET", "/api/v1/settings", "{\"FleetActions\":{\"DefaultTimeoutSeconds\":120}}");
-            stub.Json("POST", "/api/v1/fleet-actions/enumerate", "{\"Success\":true,\"PageNumber\":1,\"PageSize\":25,\"TotalPages\":1,\"TotalRecords\":2,\"Objects\":[" +
-                "{\"Id\":\"fa_builtin\",\"Name\":\"Fast-forward default branch\",\"Kind\":\"Command\",\"CommandText\":\"git pull --ff-only\",\"TimeoutSeconds\":300,\"DefaultConcurrency\":4,\"RequiresCleanWorkingTree\":true,\"IsBuiltIn\":true,\"Active\":true,\"CreatedUtc\":\"2026-10-04T10:00:00Z\",\"LastUpdateUtc\":\"2026-10-04T10:00:00Z\"}," +
-                "{\"Id\":\"fa_echo\",\"Name\":\"Echo name\",\"Description\":\"Prints the vessel name\",\"Kind\":\"Command\",\"CommandText\":\"echo {{vessel.name}}\",\"TimeoutSeconds\":60,\"DefaultConcurrency\":2,\"RequiresCleanWorkingTree\":true,\"IsBuiltIn\":false,\"Active\":true,\"CreatedUtc\":\"2026-10-04T09:00:00Z\",\"LastUpdateUtc\":\"2026-10-04T09:00:00Z\"}]}");
+            stub.Json("POST", "/api/v1/fleet-actions/enumerate", _ActionsJson);
             stub.Json("POST", "/api/v1/fleet-actions", "{\"Id\":\"fa_new\",\"Name\":\"Show status\",\"Kind\":\"Command\",\"CommandText\":\"git status\",\"TimeoutSeconds\":120,\"DefaultConcurrency\":4,\"Active\":true}");
             stub.On("DELETE", "/api/v1/fleet-actions/fa_builtin", b => StubHttpHandler.Response(HttpStatusCode.NoContent, ""));
             stub.Json("GET", "/api/v1/vessels", "{\"Success\":true,\"Objects\":[{\"Id\":\"vsl_a\",\"Name\":\"alpha-repo\",\"WorkingDirectory\":\"/src/alpha\",\"DefaultBranch\":\"main\",\"FleetId\":\"flt_1\"},{\"Id\":\"vsl_b\",\"Name\":\"beta-repo\",\"WorkingDirectory\":\"/src/beta\",\"DefaultBranch\":\"main\"}],\"TotalRecords\":2}");

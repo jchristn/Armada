@@ -76,6 +76,54 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(ObjectiveRefinementSessionStatusEnum.Active, persistedSession.Status);
             }));
 
+            cases.Add(CaseAsync("send_message_async_releases_the_turn_before_the_session_is_reported_active", "SendMessageAsync releases the turn and settles the captain before the session is reported Active again", TestTags.Negative, async () =>
+            {
+                // Regression: the turn used to write the session back to Active and only then update the captain
+                // and drop its in-memory turn reservation. A client that saw Active and immediately summarized or
+                // applied got "already generating a response" (HTTP 409). The hook runs at the instant the Active
+                // write is durable, before the coordinator continues, which is exactly what a polling client sees.
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                using RefinementSessionHookDatabaseDriver hooked = new RefinementSessionHookDatabaseDriver(testDb.Driver);
+                using CoordinatorFixture fixture = new CoordinatorFixture(hooked);
+
+                CoordinatorFixture.TenantUserResult tenantUser = await fixture.CreateTenantUserAsync().ConfigureAwait(false);
+                Objective objective = await fixture.CreateObjectiveAsync("Active means ready", tenantUser.TenantId, tenantUser.UserId).ConfigureAwait(false);
+                Captain captain = await fixture.CreateCaptainAsync("active-ready-custom", AgentRuntimeEnum.Custom, tenantUser.TenantId, tenantUser.UserId, CaptainStateEnum.Refining).ConfigureAwait(false);
+                ObjectiveRefinementSession session = await fixture.CreateSessionAsync(objective, captain).ConfigureAwait(false);
+
+                TaskCompletionSource<Exception?> summarizeAtActive = new TaskCompletionSource<Exception?>(TaskCreationOptions.RunContinuationsAsynchronously);
+                bool sawResponding = false;
+                hooked.HookedSessions.AfterUpdateAsync = async (ObjectiveRefinementSession updated) =>
+                {
+                    if (updated.Id != session.Id) return;
+                    if (updated.Status == ObjectiveRefinementSessionStatusEnum.Responding)
+                    {
+                        sawResponding = true;
+                        return;
+                    }
+
+                    if (!sawResponding || updated.Status != ObjectiveRefinementSessionStatusEnum.Active || summarizeAtActive.Task.IsCompleted)
+                        return;
+
+                    try
+                    {
+                        await fixture.Coordinator.SummarizeAsync(updated, new ObjectiveRefinementSummaryRequest()).ConfigureAwait(false);
+                        summarizeAtActive.TrySetResult(null);
+                    }
+                    catch (Exception ex)
+                    {
+                        summarizeAtActive.TrySetResult(ex);
+                    }
+                };
+
+                await fixture.Coordinator.SendMessageAsync(session, "Clarify API retry behavior.").ConfigureAwait(false);
+
+                Task finished = await Task.WhenAny(summarizeAtActive.Task, Task.Delay(TimeSpan.FromSeconds(30))).ConfigureAwait(false);
+                AssertTrue(finished == summarizeAtActive.Task, "Expected the turn to return the session to Active.");
+                Exception? summarizeError = await summarizeAtActive.Task.ConfigureAwait(false);
+                AssertNull(summarizeError, "summarize at the moment the session became Active");
+            }));
+
             cases.Add(CaseAsync("summarize_async_falls_back_to_transcript_parsing_when_runtime_prompt_execution_is_unavailable", "SummarizeAsync falls back to transcript parsing when runtime prompt execution is unavailable", TestTags.Positive, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);

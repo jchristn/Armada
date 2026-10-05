@@ -48,6 +48,11 @@ namespace Armada.Client.Socket
         public string? VerificationStatus { get; set; } = null;
 
         /// <summary>
+        /// Target environment name (deployments), or null when the deployment has none.
+        /// </summary>
+        public string? EnvironmentName { get; set; } = null;
+
+        /// <summary>
         /// <see cref="Status"/> as a mission status (mission.changed), or null when absent or not a defined name.
         /// </summary>
         [JsonIgnore]

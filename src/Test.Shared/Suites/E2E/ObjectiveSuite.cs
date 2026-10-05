@@ -204,7 +204,7 @@ namespace Test.Shared.Suites.E2E
                         Kind = ObjectiveKindEnum.Feature,
                         BacklogState = ObjectiveBacklogStateEnum.Inbox
                     })).ConfigureAwait(false);
-                AssertEqual(HttpStatusCode.Created, createResponse.StatusCode);
+                AssertEqual(HttpStatusCode.Created, createResponse.StatusCode, "create backlog item");
                 Objective created = await JsonHelper.DeserializeAsync<Objective>(createResponse).ConfigureAwait(false);
                 _ObjectiveId = created.Id;
 
@@ -218,7 +218,7 @@ namespace Test.Shared.Suites.E2E
                         CaptainId = _CaptainId,
                         Title = "Backlog refinement REST coverage session"
                     })).ConfigureAwait(false);
-                AssertEqual(HttpStatusCode.Created, createSessionResponse.StatusCode);
+                AssertEqual(HttpStatusCode.Created, createSessionResponse.StatusCode, "create refinement session");
                 ObjectiveRefinementSessionDetail createdSession = await JsonHelper.DeserializeAsync<ObjectiveRefinementSessionDetail>(createSessionResponse).ConfigureAwait(false);
                 _RefinementSessionId = createdSession.Session.Id;
                 AssertEqual(_ObjectiveId, createdSession.Session.ObjectiveId);
@@ -233,7 +233,7 @@ namespace Test.Shared.Suites.E2E
                     {
                         Content = "Clarify rollout constraints and acceptance criteria for the backlog item."
                     })).ConfigureAwait(false);
-                AssertEqual(HttpStatusCode.OK, sendResponse.StatusCode);
+                AssertEqual(HttpStatusCode.OK, sendResponse.StatusCode, "send refinement message");
 
                 ObjectiveRefinementSessionDetail activeDetail = await WaitForSessionDetailAsync(
                     authClient,
@@ -252,7 +252,7 @@ namespace Test.Shared.Suites.E2E
                     {
                         MessageId = assistantMessage.Id
                     })).ConfigureAwait(false);
-                AssertEqual(HttpStatusCode.OK, summarizeResponse.StatusCode);
+                AssertEqual(HttpStatusCode.OK, summarizeResponse.StatusCode, "summarize refinement session");
                 ObjectiveRefinementSummaryResponse summary = await JsonHelper.DeserializeAsync<ObjectiveRefinementSummaryResponse>(summarizeResponse).ConfigureAwait(false);
                 AssertEqual("assistant-fallback", summary.Method);
                 AssertEqual(_RefinementSessionId, summary.SessionId);
@@ -266,7 +266,7 @@ namespace Test.Shared.Suites.E2E
                         MarkMessageSelected = true,
                         PromoteBacklogState = true
                     })).ConfigureAwait(false);
-                AssertEqual(HttpStatusCode.OK, applyResponse.StatusCode);
+                AssertEqual(HttpStatusCode.OK, applyResponse.StatusCode, "apply refinement summary");
                 ObjectiveRefinementApplyResponse applied = await JsonHelper.DeserializeAsync<ObjectiveRefinementApplyResponse>(applyResponse).ConfigureAwait(false);
                 AssertEqual(ObjectiveStatusEnum.Scoped, applied.Objective.Status);
                 AssertEqual(ObjectiveBacklogStateEnum.Triaged, applied.Objective.BacklogState);
@@ -280,23 +280,23 @@ namespace Test.Shared.Suites.E2E
                 AssertTrue(selectedDetail.Messages.Exists(message => message.Id == assistantMessage.Id && message.IsSelected), "Expected selected refinement message.");
 
                 HttpResponseMessage deleteSessionResponse = await authClient.DeleteAsync("/api/v1/objective-refinement-sessions/" + _RefinementSessionId).ConfigureAwait(false);
-                AssertEqual(HttpStatusCode.NoContent, deleteSessionResponse.StatusCode);
+                AssertEqual(HttpStatusCode.NoContent, deleteSessionResponse.StatusCode, "delete refinement session");
                 _RefinementSessionId = String.Empty;
 
                 HttpResponseMessage deletedSessionResponse = await authClient.GetAsync("/api/v1/objective-refinement-sessions/" + createdSession.Session.Id).ConfigureAwait(false);
-                AssertEqual(HttpStatusCode.NotFound, deletedSessionResponse.StatusCode);
+                AssertEqual(HttpStatusCode.NotFound, deletedSessionResponse.StatusCode, "read deleted refinement session");
 
                 HttpResponseMessage objectiveResponse = await authClient.GetAsync("/api/v1/backlog/" + _ObjectiveId).ConfigureAwait(false);
-                AssertEqual(HttpStatusCode.OK, objectiveResponse.StatusCode);
+                AssertEqual(HttpStatusCode.OK, objectiveResponse.StatusCode, "read backlog item after session delete");
                 Objective updatedObjective = await JsonHelper.DeserializeAsync<Objective>(objectiveResponse).ConfigureAwait(false);
                 AssertFalse(updatedObjective.RefinementSessionIds.Contains(createdSession.Session.Id), "Expected refinement session unlink after delete.");
 
                 HttpResponseMessage deleteObjectiveResponse = await authClient.DeleteAsync("/api/v1/backlog/" + _ObjectiveId).ConfigureAwait(false);
-                AssertEqual(HttpStatusCode.NoContent, deleteObjectiveResponse.StatusCode);
+                AssertEqual(HttpStatusCode.NoContent, deleteObjectiveResponse.StatusCode, "delete backlog item");
                 _ObjectiveId = String.Empty;
 
                 HttpResponseMessage deleteCaptainResponse = await authClient.DeleteAsync("/api/v1/captains/" + _CaptainId).ConfigureAwait(false);
-                AssertEqual(HttpStatusCode.NoContent, deleteCaptainResponse.StatusCode);
+                AssertEqual(HttpStatusCode.NoContent, deleteCaptainResponse.StatusCode, "delete captain");
                 _CaptainId = String.Empty;
             }));
 
@@ -427,14 +427,14 @@ namespace Test.Shared.Suites.E2E
                     Name = prefix + "-" + Guid.NewGuid().ToString("N").Substring(0, 8),
                     Runtime = runtime
                 })).ConfigureAwait(false);
-            AssertEqual(HttpStatusCode.Created, response.StatusCode);
+            AssertEqual(HttpStatusCode.Created, response.StatusCode, "create captain");
             return await JsonHelper.DeserializeAsync<Captain>(response).ConfigureAwait(false);
         }
 
         private static async Task SetCaptainRuntimeAsync(HttpClient authClient, string captainId, string runtime)
         {
             HttpResponseMessage getResponse = await authClient.GetAsync("/api/v1/captains/" + captainId).ConfigureAwait(false);
-            AssertEqual(HttpStatusCode.OK, getResponse.StatusCode);
+            AssertEqual(HttpStatusCode.OK, getResponse.StatusCode, "read captain before runtime update");
             Captain captain = await JsonHelper.DeserializeAsync<Captain>(getResponse).ConfigureAwait(false);
 
             HttpResponseMessage updateResponse = await authClient.PutAsync(
@@ -444,7 +444,7 @@ namespace Test.Shared.Suites.E2E
                     Name = captain.Name,
                     Runtime = runtime
                 })).ConfigureAwait(false);
-            AssertEqual(HttpStatusCode.OK, updateResponse.StatusCode);
+            AssertEqual(HttpStatusCode.OK, updateResponse.StatusCode, "update captain runtime");
         }
 
         private static async Task<ObjectiveRefinementSessionDetail> WaitForSessionDetailAsync(
@@ -457,7 +457,7 @@ namespace Test.Shared.Suites.E2E
             while (!deadline.Passed)
             {
                 HttpResponseMessage response = await authClient.GetAsync("/api/v1/objective-refinement-sessions/" + sessionId).ConfigureAwait(false);
-                AssertEqual(HttpStatusCode.OK, response.StatusCode);
+                AssertEqual(HttpStatusCode.OK, response.StatusCode, "poll refinement session " + sessionId);
                 ObjectiveRefinementSessionDetail detail = await JsonHelper.DeserializeAsync<ObjectiveRefinementSessionDetail>(response).ConfigureAwait(false);
                 if (predicate(detail))
                     return detail;

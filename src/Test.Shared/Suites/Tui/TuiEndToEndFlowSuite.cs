@@ -136,10 +136,15 @@ namespace Test.Shared.Suites.Tui
                         AssertFalse(((await admin.ListVoyagesAsync(new ArmadaPageQuery(1, 100)))?.Objects ?? new List<Voyage>()).Any(v => v.Title == rejectTitle), "the rejected dispatch never ran");
 
                         AssertTrue(host.PumpUntil(() => host.Tui.Context.Approvals.Find(ApprovalKindEnum.AskProposal, rejectItem.EntityId) == null, 10000), "rejected proposal left the center");
+                        // The item may come from the deployment.changed event or from an inbox poll; both name it by
+                        // its environment (the inbox's EntityName), so the confirmation text does not depend on which
+                        // source reported it last.
+                        AssertEqual("production", deployment.EnvironmentName, "deployment targets the production environment");
                         ApprovalItem deployItem = host.Tui.Context.Approvals.Find(ApprovalKindEnum.DeploymentApproval, deployment.Id)!;
+                        AssertEqual(deployment.EnvironmentName, deployItem.EntityName, "deployment approval is named by its environment");
                         SelectItem(host, deployItem);
                         host.Press("a");
-                        AssertTrue(host.WaitForText("Approve and execute \"E2E production deploy\"?", 5000), "deployment approval asks to confirm\n" + host.Screen());
+                        AssertTrue(host.WaitForText("Approve and execute \"production\"?", 5000), "deployment approval asks to confirm\n" + host.Screen());
                         host.Press("y");
                         DeploymentStatusEnum? deployStatus = null;
                         AssertTrue(LiveServerSetup.PumpUntilServer(host, async () =>
@@ -218,6 +223,11 @@ namespace Test.Shared.Suites.Tui
                         AssertTrue(host.WaitForText("1 vessel", 5000), "only our vessel selected\n" + host.Screen());
                         host.Press("ctrl+s");
                         AssertTrue(host.WaitForText("Run fleet action", 10000), "run dialog\n" + host.Screen());
+                        // The configure step loads the saved actions and the preview vessel with two independent calls.
+                        // "Preview for <vessel>" only proves the vessel arrived; Ctrl+S before the action list arrives is
+                        // (correctly) refused ("A selection is required."), so wait for both before submitting.
+                        FleetActionRunFlow flow = screen.LastFlow ?? throw new AssertionException("run flow started");
+                        AssertTrue(host.PumpUntil(() => flow.SelectedAction()?.Id == created.Id && flow.PreviewVessel != null && host.App.Modals.Top == flow.Dialog, 10000), "configure step loaded the action and the preview vessel\n" + host.Screen());
                         AssertTrue(host.WaitForText("Preview for " + setup.Vessel.Name, 10000), "preview\n" + host.Screen());
                         host.Press("ctrl+s");
                         AssertTrue(host.WaitForText("Run on 1 vessel", 10000), "review step\n" + host.Screen());
