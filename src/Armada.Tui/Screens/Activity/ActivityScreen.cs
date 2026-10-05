@@ -343,13 +343,13 @@ namespace Armada.Tui.Screens.Activity
         }
 
         /// <summary>
-        /// True when a timeline entry maps to a deletable request-history record (<c>req_</c> source id).
+        /// True when a timeline entry maps to a deletable request-history record (source type Request).
         /// </summary>
         /// <param name="entry">Entry.</param>
         /// <returns>True when deletable.</returns>
         public static bool CanDeleteEntry(HistoricalTimelineEntry entry)
         {
-            return entry != null && !String.IsNullOrEmpty(entry.SourceId) && entry.SourceId.StartsWith("req_", StringComparison.Ordinal);
+            return entry != null && !String.IsNullOrEmpty(entry.SourceId) && String.Equals(entry.SourceType, HistoricalTimelineSourceTypes.Request, StringComparison.OrdinalIgnoreCase);
         }
 
         /// <summary>

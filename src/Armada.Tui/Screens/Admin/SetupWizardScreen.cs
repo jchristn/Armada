@@ -193,7 +193,7 @@ namespace Armada.Tui.Screens.Admin
         /// <summary>
         /// Runtime ("" when not chosen).
         /// </summary>
-        public SelectField<string> Runtime { get; } = new SelectField<string>();
+        public SelectField<AgentRuntimeEnum?> Runtime { get; } = new SelectField<AgentRuntimeEnum?>();
 
         /// <summary>
         /// Model override.
@@ -448,9 +448,9 @@ namespace Armada.Tui.Screens.Admin
         /// <param name="systemPromptPath">System prompt path.</param>
         /// <param name="approvalPolicy">Approval policy.</param>
         /// <returns>JSON or null.</returns>
-        public static string? BuildMuxRuntimeOptionsJson(string runtime, string configDirectory, string endpoint, string baseUrl, string adapterType, string temperature, string maxTokens, string systemPromptPath, string approvalPolicy)
+        public static string? BuildMuxRuntimeOptionsJson(AgentRuntimeEnum? runtime, string configDirectory, string endpoint, string baseUrl, string adapterType, string temperature, string maxTokens, string systemPromptPath, string approvalPolicy)
         {
-            if (!String.Equals((runtime ?? "").Trim(), "Mux", StringComparison.Ordinal)) return null;
+            if (runtime != AgentRuntimeEnum.Mux) return null;
             MuxCaptainOptions options = new MuxCaptainOptions();
             options.SchemaVersion = 1;
             options.ConfigDirectory = Normalize(configDirectory);
@@ -689,14 +689,15 @@ namespace Armada.Tui.Screens.Admin
                 return;
             }
 
-            string runtime = Runtime.Value ?? "";
-            if (runtime.Length == 0 || !Enum.TryParse<AgentRuntimeEnum>(runtime, out AgentRuntimeEnum runtimeEnum))
+            AgentRuntimeEnum? runtime = Runtime.Value;
+            if (runtime == null)
             {
                 SetResult(SetupWizardResultKindEnum.Error, L("Choose a captain runtime."));
                 return;
             }
 
-            if (runtime == "Mux" && MuxEndpoint.Value.Trim().Length == 0)
+            AgentRuntimeEnum runtimeEnum = runtime.Value;
+            if (runtimeEnum == AgentRuntimeEnum.Mux && MuxEndpoint.Value.Trim().Length == 0)
             {
                 SetResult(SetupWizardResultKindEnum.Error, L("Mux captains require a named Mux endpoint."));
                 return;
@@ -811,7 +812,7 @@ namespace Armada.Tui.Screens.Admin
         /// </summary>
         public void LoadMuxEndpoints()
         {
-            if ((Runtime.Value ?? "") != "Mux") return;
+            if (Runtime.Value != AgentRuntimeEnum.Mux) return;
             _MuxLoading = true;
             string dir = MuxConfigDirectory.Value.Trim();
             Task.Run(async () =>
@@ -851,7 +852,7 @@ namespace Armada.Tui.Screens.Admin
         /// <returns>Translated hint, or empty for other runtimes.</returns>
         public string MuxEndpointHint()
         {
-            if ((Runtime.Value ?? "") != "Mux") return "";
+            if (Runtime.Value != AgentRuntimeEnum.Mux) return "";
             if (_MuxLoading) return L("Loading saved Mux endpoints...");
             if (_MuxError.Length > 0) return _MuxError;
             if (MuxEndpoints.Count == 0) return L("No saved Mux endpoints were found for this config directory.");
@@ -1055,7 +1056,8 @@ namespace Armada.Tui.Screens.Admin
         private void InitializeFields()
         {
             IModalHost modals = Context.Modals;
-            foreach (SelectField<string> select in new SelectField<string>[] { FleetSelect, VesselSelect, LandingMode, CaptainSelect, Runtime, Tier, MuxApprovalPolicy }) select.ModalHost = modals;
+            foreach (SelectField<string> select in new SelectField<string>[] { FleetSelect, VesselSelect, LandingMode, CaptainSelect, Tier, MuxApprovalPolicy }) select.ModalHost = modals;
+            Runtime.ModalHost = modals;
             FleetSelect.PickerTitle = "Fleet";
             VesselSelect.PickerTitle = "Vessel";
             CaptainSelect.PickerTitle = "Captain";
@@ -1092,16 +1094,16 @@ namespace Armada.Tui.Screens.Admin
             StyleGuide.Dispatcher = Context.Dispatcher;
 
             CaptainName.Value = L("Setup Captain");
-            Runtime.Options = new List<SelectOption<string>>
+            Runtime.Options = new List<SelectOption<AgentRuntimeEnum?>>
             {
-                new SelectOption<string>("", L("Select runtime...")),
-                new SelectOption<string>("ClaudeCode", "Claude Code"),
-                new SelectOption<string>("Codex", "Codex"),
-                new SelectOption<string>("Gemini", "Gemini"),
-                new SelectOption<string>("Cursor", "Cursor"),
-                new SelectOption<string>("Mux", "Mux"),
+                new SelectOption<AgentRuntimeEnum?>(null, L("Select runtime...")),
+                new SelectOption<AgentRuntimeEnum?>(AgentRuntimeEnum.ClaudeCode, "Claude Code"),
+                new SelectOption<AgentRuntimeEnum?>(AgentRuntimeEnum.Codex, "Codex"),
+                new SelectOption<AgentRuntimeEnum?>(AgentRuntimeEnum.Gemini, "Gemini"),
+                new SelectOption<AgentRuntimeEnum?>(AgentRuntimeEnum.Cursor, "Cursor"),
+                new SelectOption<AgentRuntimeEnum?>(AgentRuntimeEnum.Mux, "Mux"),
             };
-            Runtime.SetValue("ClaudeCode");
+            Runtime.SetValue(AgentRuntimeEnum.ClaudeCode);
             Runtime.ValueChanged += (s, e) =>
             {
                 RebuildCaptainBody();
@@ -1344,7 +1346,7 @@ namespace Armada.Tui.Screens.Admin
         {
             FormView form = new FormView();
             form.ShowButtons = false;
-            bool mux = (Runtime.Value ?? "") == "Mux";
+            bool mux = Runtime.Value == AgentRuntimeEnum.Mux;
             if (CaptainMode == SetupWizardModeEnum.Existing)
             {
                 form.AddField("Captain", CaptainSelect);

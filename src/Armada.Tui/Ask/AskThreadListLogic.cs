@@ -3,6 +3,7 @@ namespace Armada.Tui.Ask
     using System;
     using System.Collections.Generic;
     using System.Linq;
+    using Armada.Client.Socket;
     using Armada.Core.Models;
 
     /// <summary>
@@ -105,7 +106,7 @@ namespace Armada.Tui.Ask
 
             if (e.Type == "ask.turn")
             {
-                bool replying = e.State == "started";
+                bool replying = e.State == AskTurnStateEnum.Started;
                 if (current.Replying == replying) return false;
                 current.Replying = replying;
                 return true;

@@ -232,16 +232,8 @@ namespace Armada.Client
         /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
         public async Task<List<AskQuickAction>> GetAskQuickActionsAsync(CancellationToken token = default)
         {
-            ArmadaRawJson? raw = await GetAsync<ArmadaRawJson>("/api/v1/ask/quick-actions", null, token).ConfigureAwait(false);
-            string json = raw?.Json?.Trim() ?? "";
-            if (json.StartsWith("[")) return ArmadaJson.Deserialize<List<AskQuickAction>>(json) ?? new List<AskQuickAction>();
-            if (json.StartsWith("{"))
-            {
-                AskQuickActionEnvelope? envelope = ArmadaJson.Deserialize<AskQuickActionEnvelope>(json);
-                if (envelope != null) return envelope.QuickActions ?? envelope.Actions ?? envelope.Objects ?? new List<AskQuickAction>();
-            }
-
-            return new List<AskQuickAction>();
+            AskQuickActionList? list = await GetAsync<AskQuickActionList>("/api/v1/ask/quick-actions", null, token).ConfigureAwait(false);
+            return list?.Actions ?? new List<AskQuickAction>();
         }
 
         #endregion

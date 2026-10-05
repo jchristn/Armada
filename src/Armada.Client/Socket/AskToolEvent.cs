@@ -20,9 +20,9 @@ namespace Armada.Client.Socket
         public string? TurnId { get; set; } = null;
 
         /// <summary>
-        /// started or completed.
+        /// Tool call phase, or null when absent.
         /// </summary>
-        public string? Phase { get; set; } = null;
+        public ToolCallPhaseEnum? Phase { get; set; } = null;
 
         /// <summary>
         /// Tool call id.

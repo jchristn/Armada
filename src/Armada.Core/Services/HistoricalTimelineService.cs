@@ -623,7 +623,7 @@ namespace Armada.Core.Services
             return entries.Select(entry => new HistoricalTimelineEntry
             {
                 Id = "timeline-request-" + entry.Id,
-                SourceType = "Request",
+                SourceType = HistoricalTimelineSourceTypes.Request,
                 SourceId = entry.Id,
                 EntityType = "request-history",
                 EntityId = entry.Id,

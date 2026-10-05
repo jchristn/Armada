@@ -168,7 +168,7 @@ namespace Armada.Tui.Screens.Configuration
         protected override List<ActionMenuItem> RowActions(WorkflowProfile row)
         {
             List<ActionMenuItem> items = base.RowActions(row);
-            int json = items.FindIndex(i => i.Label == "View JSON");
+            int json = items.FindIndex(i => i.Key == ActionMenuItem.JsonKey);
             items.Insert(Math.Max(0, json), new ActionMenuItem("Duplicate", () => WorkflowProfileForms.Duplicate(Context, row)));
             return items;
         }

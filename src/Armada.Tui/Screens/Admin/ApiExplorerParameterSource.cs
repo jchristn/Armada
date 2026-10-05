@@ -33,7 +33,7 @@ namespace Armada.Tui.Screens.Admin
         /// <summary>
         /// Example (raw), or null.
         /// </summary>
-        public object? Example { get; set; } = null;
+        public ApiExplorerJsonValue? Example { get; set; } = null;
 
         /// <summary>
         /// Schema, or null.

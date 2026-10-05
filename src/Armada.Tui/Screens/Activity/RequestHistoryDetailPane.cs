@@ -115,11 +115,11 @@ namespace Armada.Tui.Screens.Activity
             View.AddPair(T("Status"), e.StatusCode.ToString(System.Globalization.CultureInfo.InvariantCulture) + (e.IsSuccess ? "" : "  (" + T("Failure") + ")"));
             View.AddPair(T("Duration"), RequestHistoryFormat.Ms(e.DurationMs));
             View.AddPair(T("Captured"), localizer.FormatDateTime(e.CreatedUtc));
-            foreach (KeyValuePair<string, string> block in Blocks())
+            foreach (RequestHistoryBlock block in Blocks())
             {
-                if (block.Key == "Request Body" || block.Key == "Response Body") continue;
-                View.AddHeading(T(block.Key));
-                View.AddCode(block.Value, "json");
+                if (block.Kind == RequestHistoryBlockEnum.RequestBody || block.Kind == RequestHistoryBlockEnum.ResponseBody) continue;
+                View.AddHeading(T(block.Title));
+                View.AddCode(block.Text, "json");
             }
 
             View.AddHeading(T("Request Body"), d != null && d.RequestBodyTruncated ? T("Stored body was truncated") : RequestHistoryFormat.Bytes(e.RequestSizeBytes));
@@ -129,20 +129,20 @@ namespace Armada.Tui.Screens.Activity
         }
 
         /// <summary>
-        /// The copyable blocks (English title to text) of the current record, in display order.
+        /// The copyable blocks of the current record, in display order.
         /// </summary>
         /// <returns>Blocks.</returns>
-        public List<KeyValuePair<string, string>> Blocks()
+        public List<RequestHistoryBlock> Blocks()
         {
-            List<KeyValuePair<string, string>> blocks = new List<KeyValuePair<string, string>>();
+            List<RequestHistoryBlock> blocks = new List<RequestHistoryBlock>();
             if (Record == null) return blocks;
             RequestHistoryDetail? d = Record.Detail;
-            blocks.Add(new KeyValuePair<string, string>("Path Parameters", RequestHistoryFormat.PairsJson(RequestHistoryFormat.ParseDictionary(d?.PathParamsJson))));
-            blocks.Add(new KeyValuePair<string, string>("Query Parameters", RequestHistoryFormat.PairsJson(RequestHistoryFormat.ParseDictionary(d?.QueryParamsJson))));
-            blocks.Add(new KeyValuePair<string, string>("Request Headers", RequestHistoryFormat.PairsJson(RequestHistoryFormat.ParseDictionary(d?.RequestHeadersJson))));
-            blocks.Add(new KeyValuePair<string, string>("Response Headers", RequestHistoryFormat.PairsJson(RequestHistoryFormat.ParseDictionary(d?.ResponseHeadersJson))));
-            blocks.Add(new KeyValuePair<string, string>("Request Body", String.IsNullOrEmpty(d?.RequestBodyText) ? "(empty)" : d!.RequestBodyText!));
-            blocks.Add(new KeyValuePair<string, string>("Response Body", String.IsNullOrEmpty(d?.ResponseBodyText) ? "(empty)" : d!.ResponseBodyText!));
+            blocks.Add(new RequestHistoryBlock(RequestHistoryBlockEnum.PathParameters, "Path Parameters", RequestHistoryFormat.PairsJson(RequestHistoryFormat.ParseDictionary(d?.PathParamsJson))));
+            blocks.Add(new RequestHistoryBlock(RequestHistoryBlockEnum.QueryParameters, "Query Parameters", RequestHistoryFormat.PairsJson(RequestHistoryFormat.ParseDictionary(d?.QueryParamsJson))));
+            blocks.Add(new RequestHistoryBlock(RequestHistoryBlockEnum.RequestHeaders, "Request Headers", RequestHistoryFormat.PairsJson(RequestHistoryFormat.ParseDictionary(d?.RequestHeadersJson))));
+            blocks.Add(new RequestHistoryBlock(RequestHistoryBlockEnum.ResponseHeaders, "Response Headers", RequestHistoryFormat.PairsJson(RequestHistoryFormat.ParseDictionary(d?.ResponseHeadersJson))));
+            blocks.Add(new RequestHistoryBlock(RequestHistoryBlockEnum.RequestBody, "Request Body", String.IsNullOrEmpty(d?.RequestBodyText) ? "(empty)" : d!.RequestBodyText!));
+            blocks.Add(new RequestHistoryBlock(RequestHistoryBlockEnum.ResponseBody, "Response Body", String.IsNullOrEmpty(d?.ResponseBodyText) ? "(empty)" : d!.ResponseBodyText!));
             return blocks;
         }
 

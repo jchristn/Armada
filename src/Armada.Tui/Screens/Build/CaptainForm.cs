@@ -27,7 +27,7 @@ namespace Armada.Tui.Screens.Build
         /// <summary>
         /// Runtimes offered by the create and list edit form, in the dashboard's order.
         /// </summary>
-        public static readonly string[] Runtimes = new string[] { "ClaudeCode", "Codex", "Gemini", "Cursor", "Mux", "OpenCode", "ApiEndpoint" };
+        public static readonly AgentRuntimeEnum[] Runtimes = new AgentRuntimeEnum[] { AgentRuntimeEnum.ClaudeCode, AgentRuntimeEnum.Codex, AgentRuntimeEnum.Gemini, AgentRuntimeEnum.Cursor, AgentRuntimeEnum.Mux, AgentRuntimeEnum.OpenCode, AgentRuntimeEnum.ApiEndpoint };
 
         #endregion
 
@@ -36,37 +36,47 @@ namespace Armada.Tui.Screens.Build
         /// <summary>
         /// True for runtimes launched as a CLI with an auto-approve flag (<c>supportsAutoApproveSwitch</c>).
         /// </summary>
-        /// <param name="runtime">Runtime name.</param>
+        /// <param name="runtime">Runtime, or null.</param>
         /// <returns>True when supported.</returns>
-        public static bool SupportsAutoApprove(string? runtime)
+        public static bool SupportsAutoApprove(AgentRuntimeEnum? runtime)
         {
-            string r = (runtime ?? "").Trim();
-            return r == "ClaudeCode" || r == "Codex" || r == "Gemini" || r == "Cursor" || r == "Mux" || r == "OpenCode";
+            switch (runtime)
+            {
+                case AgentRuntimeEnum.ClaudeCode:
+                case AgentRuntimeEnum.Codex:
+                case AgentRuntimeEnum.Gemini:
+                case AgentRuntimeEnum.Cursor:
+                case AgentRuntimeEnum.Mux:
+                case AgentRuntimeEnum.OpenCode:
+                    return true;
+                default:
+                    return false;
+            }
         }
 
         /// <summary>
         /// The dashboard's runtime option label.
         /// </summary>
-        /// <param name="runtime">Runtime name.</param>
+        /// <param name="runtime">Runtime.</param>
         /// <returns>Label.</returns>
-        public static string RuntimeLabel(string runtime)
+        public static string RuntimeLabel(AgentRuntimeEnum runtime)
         {
-            if (runtime == "ClaudeCode") return "Claude Code";
-            if (runtime == "ApiEndpoint") return "API Endpoint";
-            return runtime;
+            if (runtime == AgentRuntimeEnum.ClaudeCode) return "Claude Code";
+            if (runtime == AgentRuntimeEnum.ApiEndpoint) return "API Endpoint";
+            return runtime.ToString();
         }
 
         /// <summary>
         /// Build runtime options JSON from the Mux fields and the auto-approve switch (<c>buildMuxRuntimeOptionsJson</c>
         /// then <c>applyAutoApprove</c>).
         /// </summary>
-        /// <param name="runtime">Runtime name.</param>
+        /// <param name="runtime">Runtime, or null.</param>
         /// <param name="mux">Mux options (used only for the Mux runtime).</param>
         /// <param name="autoApprove">Auto-approve switch.</param>
         /// <returns>JSON or null.</returns>
-        public static string? RuntimeOptionsJson(string runtime, MuxCaptainOptions mux, bool autoApprove)
+        public static string? RuntimeOptionsJson(AgentRuntimeEnum? runtime, MuxCaptainOptions mux, bool autoApprove)
         {
-            string? json = runtime == "Mux" ? CaptainRuntimeOptions.Serialize(mux) : null;
+            string? json = runtime == AgentRuntimeEnum.Mux ? CaptainRuntimeOptions.Serialize(mux) : null;
             bool effective = autoApprove || !SupportsAutoApprove(runtime);
             return CaptainRuntimeOptions.WithAutoApprove(json, effective ? (bool?)null : false);
         }
@@ -108,13 +118,13 @@ namespace Armada.Tui.Screens.Build
             name.Value = editing?.Name ?? "";
             name.Validator = v => String.IsNullOrWhiteSpace(v) ? "Name is required." : null;
 
-            List<string> runtimes = Runtimes.ToList();
-            if (detail) runtimes.Add("Custom");
-            string currentRuntime = editing?.Runtime.ToString() ?? "";
-            if (currentRuntime.Length > 0 && !runtimes.Contains(currentRuntime)) runtimes.Add(currentRuntime);
-            SelectField<string> runtime = screen.NewSelect("Runtime", runtimes.Select(r => new SelectOption<string>(r, RuntimeLabel(r))).ToList(), "Select runtime...");
+            List<AgentRuntimeEnum> runtimes = Runtimes.ToList();
+            if (detail) runtimes.Add(AgentRuntimeEnum.Custom);
+            AgentRuntimeEnum? currentRuntime = editing?.Runtime;
+            if (currentRuntime != null && !runtimes.Contains(currentRuntime.Value)) runtimes.Add(currentRuntime.Value);
+            SelectField<AgentRuntimeEnum?> runtime = screen.NewSelect("Runtime", runtimes.Select(r => new SelectOption<AgentRuntimeEnum?>(r, RuntimeLabel(r))).ToList(), "Select runtime...");
             runtime.Required = true;
-            if (currentRuntime.Length > 0) runtime.SetValue(currentRuntime);
+            if (currentRuntime != null) runtime.SetValue(currentRuntime);
 
             InputField model = new InputField();
             model.Value = editing?.Model ?? "";
@@ -223,9 +233,9 @@ namespace Armada.Tui.Screens.Build
 
             Action applyRuntime = () =>
             {
-                string r = runtime.Value ?? "";
-                bool isMux = r == "Mux";
-                bool isApi = r == "ApiEndpoint";
+                AgentRuntimeEnum? r = runtime.Value;
+                bool isMux = r == AgentRuntimeEnum.Mux;
+                bool isApi = r == AgentRuntimeEnum.ApiEndpoint;
                 model.Placeholder = isApi ? "Optional; overrides the endpoint model" : "e.g., gpt-5.4-mini";
                 endpoint.Visible = isApi;
                 endpointRow.Hint = isApi && inference.Count == 0 ? "No inference endpoints configured. Add one under Configuration > Endpoints first." : null;
@@ -245,7 +255,7 @@ namespace Armada.Tui.Screens.Build
 
             Action loadMux = () =>
             {
-                if ((runtime.Value ?? "") != "Mux" || muxLoading) return;
+                if (runtime.Value != AgentRuntimeEnum.Mux || muxLoading) return;
                 muxLoading = true;
                 muxRefresh.Label = loc.T("Refreshing...");
                 muxHint = loc.T("Loading saved Mux endpoints...");
@@ -296,7 +306,7 @@ namespace Armada.Tui.Screens.Build
             runtime.ValueChanged += (s, e) =>
             {
                 applyRuntime();
-                if ((runtime.Value ?? "") == "Mux" && discovered.Count == 0) loadMux();
+                if (runtime.Value == AgentRuntimeEnum.Mux && discovered.Count == 0) loadMux();
             };
 
             screen.Call((c, t) => c.ListModelEndpointsAsync(t), list =>
@@ -313,26 +323,26 @@ namespace Armada.Tui.Screens.Build
             });
 
             applyRuntime();
-            if ((runtime.Value ?? "") == "Mux") loadMux();
+            if (runtime.Value == AgentRuntimeEnum.Mux) loadMux();
 
             dialog.Validate = () =>
             {
-                string r = runtime.Value ?? "";
-                if (r.Length == 0) return loc.T("Select a runtime.");
-                if (r == "Mux" && String.IsNullOrWhiteSpace(muxEndpoint.Value)) return loc.T("Mux captains require a named Mux endpoint.");
-                if (r == "ApiEndpoint" && String.IsNullOrEmpty(endpoint.Value)) return loc.T("API-endpoint captains require an inference endpoint. Select one, or add it under Configuration > Endpoints.");
+                AgentRuntimeEnum? r = runtime.Value;
+                if (r == null) return loc.T("Select a runtime.");
+                if (r == AgentRuntimeEnum.Mux && String.IsNullOrWhiteSpace(muxEndpoint.Value)) return loc.T("Mux captains require a named Mux endpoint.");
+                if (r == AgentRuntimeEnum.ApiEndpoint && String.IsNullOrEmpty(endpoint.Value)) return loc.T("API-endpoint captains require an inference endpoint. Select one, or add it under Configuration > Endpoints.");
                 return null;
             };
 
             dialog.Submit = d =>
             {
-                string r = runtime.Value ?? "ClaudeCode";
+                AgentRuntimeEnum r = runtime.Value ?? AgentRuntimeEnum.ClaudeCode;
                 Captain body = editing != null ? CopyOf(editing) : new Captain(name.Value.Trim());
                 body.Name = name.Value.Trim();
-                if (Enum.TryParse<AgentRuntimeEnum>(r, out AgentRuntimeEnum rt)) body.Runtime = rt;
+                body.Runtime = r;
                 body.SystemInstructions = String.IsNullOrEmpty(instructions.Text) ? null : instructions.Text;
                 body.Model = String.IsNullOrWhiteSpace(model.Value) ? null : model.Value.Trim();
-                body.ModelEndpointId = r == "ApiEndpoint" && !String.IsNullOrEmpty(endpoint.Value) ? endpoint.Value : null;
+                body.ModelEndpointId = r == AgentRuntimeEnum.ApiEndpoint && !String.IsNullOrEmpty(endpoint.Value) ? endpoint.Value : null;
                 body.ReasoningEffort = Enum.TryParse<ReasoningEffortEnum>(effort.Value ?? "", out ReasoningEffortEnum re) ? re : (ReasoningEffortEnum?)null;
                 body.Tier = Enum.TryParse<CaptainTierEnum>(tier.Value ?? "", out CaptainTierEnum ct) ? ct : (CaptainTierEnum?)null;
                 if (detail)

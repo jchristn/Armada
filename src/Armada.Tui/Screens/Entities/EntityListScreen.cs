@@ -524,7 +524,7 @@ namespace Armada.Tui.Screens.Entities
             List<ActionMenuItem> items = new List<ActionMenuItem>();
             if (DetailPath(row) != null) items.Add(new ActionMenuItem("Open", () => Open(row), "Enter"));
             if (HasEdit && CanEdit(row)) items.Add(new ActionMenuItem("Edit", () => OpenEdit(row), "e"));
-            items.Add(new ActionMenuItem("View JSON", () => EntityUi.ShowJson(Context, NameOf(row), row), "j"));
+            items.Add(new ActionMenuItem("View JSON", () => EntityUi.ShowJson(Context, NameOf(row), row), "j") { Key = ActionMenuItem.JsonKey });
             items.Add(new ActionMenuItem("Copy ID", () => Context.Clipboard.Copy(IdOf(row), "ID"), "y"));
             if (HasDelete && CanDelete(row))
             {

@@ -198,22 +198,48 @@ namespace Armada.Tui.Screens.Kit
         }
 
         /// <summary>
-        /// Route for an entity id by prefix (the dashboard's <c>entityRoute</c>), or null.
+        /// Route for an event's entity, chosen by its <c>EntityType</c> (the dashboard's <c>entityRoute</c>), or null when
+        /// the type is missing or has no detail page. Entity type spellings vary across producers ("merge_entry",
+        /// "merge-entry", "MergeEntry"), so the type is compared without case, dashes, or underscores; the id is never
+        /// inspected.
         /// </summary>
+        /// <param name="entityType">Entity type.</param>
         /// <param name="entityId">Entity id.</param>
         /// <returns>Route or null.</returns>
-        public static string? EntityRoute(string? entityId)
+        public static string? EntityRoute(string? entityType, string? entityId)
         {
-            if (String.IsNullOrEmpty(entityId)) return null;
-            if (entityId.StartsWith("flt_", StringComparison.Ordinal)) return "/fleets/" + entityId;
-            if (entityId.StartsWith("vsl_", StringComparison.Ordinal)) return "/vessels/" + entityId;
-            if (entityId.StartsWith("cpt_", StringComparison.Ordinal)) return "/captains/" + entityId;
-            if (entityId.StartsWith("msn_", StringComparison.Ordinal)) return "/missions/" + entityId;
-            if (entityId.StartsWith("vyg_", StringComparison.Ordinal)) return "/voyages/" + entityId;
-            if (entityId.StartsWith("sig_", StringComparison.Ordinal)) return "/signals/" + entityId;
-            if (entityId.StartsWith("evt_", StringComparison.Ordinal)) return "/events/" + entityId;
-            if (entityId.StartsWith("dck_", StringComparison.Ordinal)) return "/docks/" + entityId;
-            return null;
+            if (String.IsNullOrEmpty(entityType) || String.IsNullOrEmpty(entityId)) return null;
+            string id = Uri.EscapeDataString(entityId);
+            switch (NormalizeEntityType(entityType!))
+            {
+                case "fleet": return "/fleets/" + id;
+                case "vessel": return "/vessels/" + id;
+                case "captain": return "/captains/" + id;
+                case "mission": return "/missions/" + id;
+                case "voyage": return "/voyages/" + id;
+                case "signal": return "/signals/" + id;
+                case "event": return "/events/" + id;
+                case "dock": return "/docks/" + id;
+                case "deployment": return "/deployments/" + id;
+                case "mergeentry": return "/merge-queue/" + id;
+                default: return null;
+            }
+        }
+
+        #endregion
+
+        #region Private-Methods
+
+        private static string NormalizeEntityType(string entityType)
+        {
+            System.Text.StringBuilder sb = new System.Text.StringBuilder(entityType.Length);
+            foreach (char c in entityType)
+            {
+                if (c == '-' || c == '_' || c == ' ') continue;
+                sb.Append(Char.ToLowerInvariant(c));
+            }
+
+            return sb.ToString();
         }
 
         #endregion

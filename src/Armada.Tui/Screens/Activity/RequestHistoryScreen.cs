@@ -660,9 +660,9 @@ namespace Armada.Tui.Screens.Activity
 
         private void CopyBlock()
         {
-            List<KeyValuePair<string, string>> blocks = Detail.Blocks();
+            List<RequestHistoryBlock> blocks = Detail.Blocks();
             if (blocks.Count == 0) return;
-            List<ActionMenuItem> items = blocks.Select(b => new ActionMenuItem(Context.Loc.T("Copy") + " " + Context.Loc.T(b.Key), () => Context.Clipboard.Copy(b.Value, b.Key))).ToList();
+            List<ActionMenuItem> items = blocks.Select(b => new ActionMenuItem(Context.Loc.T("Copy") + " " + Context.Loc.T(b.Title), () => Context.Clipboard.Copy(b.Text, b.Title)) { Key = b.Kind.ToString() }).ToList();
             items.Add(new ActionMenuItem("Copy all", () => Context.Clipboard.Copy(Detail.View.PlainText, "Request Detail")));
             ActionMenu.Show(Context.Modals, "Copy", items, Context.Loc, Context.Theme.Current);
         }

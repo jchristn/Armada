@@ -99,9 +99,9 @@ namespace Armada.Tui.Ask
             e.Type = message.Type;
             e.ThreadId = data.ThreadId!;
             e.TurnId = data.TurnId!;
-            e.State = String.IsNullOrEmpty(data.State) ? "started" : data.State!.ToLowerInvariant();
+            e.State = data.State ?? AskTurnStateEnum.Started;
             e.MessageId = String.IsNullOrEmpty(data.MessageId) ? null : data.MessageId;
-            e.Error = String.IsNullOrEmpty(data.Error) ? ReadString(message.Data, "errorText") : data.Error;
+            e.Error = !String.IsNullOrEmpty(data.Error) ? data.Error : (String.IsNullOrEmpty(data.ErrorText) ? null : data.ErrorText);
             return e;
         }
 
@@ -170,17 +170,6 @@ namespace Armada.Tui.Ask
             if (!String.IsNullOrEmpty(a)) return a!;
             if (!String.IsNullOrEmpty(b)) return b!;
             return "";
-        }
-
-        private static string? ReadString(JsonNode? data, string name)
-        {
-            if (!(data is JsonObject obj)) return null;
-            foreach (System.Collections.Generic.KeyValuePair<string, JsonNode?> pair in obj)
-            {
-                if (String.Equals(pair.Key, name, StringComparison.OrdinalIgnoreCase)) return NodeText(pair.Value);
-            }
-
-            return null;
         }
 
         #endregion

@@ -142,7 +142,7 @@ namespace Armada.Helm.Commands
             {
                 Console.WriteLine(McpConfigHelper.BuildManualSnippet(target));
             }
-            if (target.ClientName == "Claude Code")
+            if (target.Kind == McpClientKindEnum.ClaudeCode)
             {
                 AnsiConsole.MarkupLine("[dim]Claude CLI helper:[/]");
                 AnsiConsole.MarkupLine($"[green]  {Markup.Escape(McpConfigHelper.BuildClaudeCliCommand(mcpPort))}[/]");
@@ -150,7 +150,7 @@ namespace Armada.Helm.Commands
                 AnsiConsole.MarkupLine($"[green]  {Markup.Escape(McpConfigHelper.BuildClaudeStdioCommand())}[/]");
                 AnsiConsole.MarkupLine($"[dim]Claude agent file:[/] [green]{Markup.Escape(McpConfigHelper.GetClaudeAgentPath())}[/]");
             }
-            if (target.ClientName == "Mux")
+            if (target.Kind == McpClientKindEnum.Mux)
             {
                 AnsiConsole.MarkupLine("[dim]Or add it interactively:[/] start [green]mux[/], run [green]/mcp[/], choose [green]+ Add MCP server[/], then set transport [green]http[/], url [green]http://localhost:" + mcpPort + "[/], mcp path [green]/mcp[/], auth [green]none[/].");
             }

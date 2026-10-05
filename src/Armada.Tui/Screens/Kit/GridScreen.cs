@@ -172,7 +172,7 @@ namespace Armada.Tui.Screens.Kit
         {
             return new List<ActionMenuItem>
             {
-                new ActionMenuItem("View JSON", () => ScreenOps.ShowJson(Context, JsonTitle(row), JsonFor(row)), "j"),
+                new ActionMenuItem("View JSON", () => ScreenOps.ShowJson(Context, JsonTitle(row), JsonFor(row)), "j") { Key = ActionMenuItem.JsonKey },
             };
         }
 

@@ -10,6 +10,17 @@ namespace Armada.Tui.Widgets
         #region Public-Members
 
         /// <summary>
+        /// <see cref="Key"/> of the standard "View JSON" item.
+        /// </summary>
+        public const string JsonKey = "json";
+
+        /// <summary>
+        /// Stable identifier for locating an item in a menu (for example <see cref="JsonKey"/>), or null. Never derived
+        /// from or compared with <see cref="Label"/>, which is display text.
+        /// </summary>
+        public string? Key { get; set; } = null;
+
+        /// <summary>
         /// English label.
         /// </summary>
         public string Label { get; }

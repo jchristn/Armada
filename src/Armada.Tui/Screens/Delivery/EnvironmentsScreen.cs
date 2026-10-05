@@ -177,7 +177,7 @@ namespace Armada.Tui.Screens.Delivery
             List<ActionMenuItem> items = base.RowActions(row);
             if (CanEdit(row))
             {
-                int idx = Math.Max(0, items.FindIndex(i => i.Label == "View JSON"));
+                int idx = Math.Max(0, items.FindIndex(i => i.Key == ActionMenuItem.JsonKey));
                 items.Insert(idx, new ActionMenuItem("Duplicate", () => EnvironmentForms.Duplicate(Context, row)));
             }
 

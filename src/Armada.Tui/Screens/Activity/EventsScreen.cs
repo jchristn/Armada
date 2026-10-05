@@ -162,7 +162,7 @@ namespace Armada.Tui.Screens.Activity
             List<ActionMenuItem> items = new List<ActionMenuItem>();
             items.Add(new ActionMenuItem("View Detail", () => Context.Navigate("/events/" + row.Id), "Enter"));
             items.Add(new ActionMenuItem("View JSON", () => ScreenOps.ShowJson(Context, JsonTitle(row), row), "j"));
-            string? entityRoute = ScreenOps.EntityRoute(row.EntityId);
+            string? entityRoute = ScreenOps.EntityRoute(row.EntityType, row.EntityId);
             if (entityRoute != null) items.Add(new ActionMenuItem("Open Entity", () => Context.Navigate(entityRoute)));
             if (!String.IsNullOrEmpty(row.CaptainId)) items.Add(new ActionMenuItem("Open Captain", () => Context.Navigate("/captains/" + row.CaptainId)));
             if (!String.IsNullOrEmpty(row.MissionId)) items.Add(new ActionMenuItem("Open Mission", () => Context.Navigate("/missions/" + row.MissionId)));

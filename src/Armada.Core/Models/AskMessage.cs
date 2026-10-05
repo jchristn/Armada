@@ -2,6 +2,7 @@ namespace Armada.Core.Models
 {
     using System;
     using System.Collections.Generic;
+    using System.Text.Json.Serialization;
     using Armada.Core.Enums;
 
     /// <summary>
@@ -11,6 +12,13 @@ namespace Armada.Core.Models
     public class AskMessage
     {
         #region Public-Members
+
+        /// <summary>
+        /// Client-side flag for an optimistic message a client shows before the server has persisted it. Never
+        /// serialized and never set by the server; clients use it instead of inspecting the id.
+        /// </summary>
+        [JsonIgnore]
+        public bool IsLocal { get; set; } = false;
 
         /// <summary>
         /// Unique identifier (amg_ prefix).

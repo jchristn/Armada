@@ -211,7 +211,7 @@ namespace Armada.Tui.Screens.Ask
             list.Add(Cmd("ask.screen.thinking", "Toggle show thinking", () => Ask.ToggleShowThinking(), null, "alt+t", "ctrl+shift+t"));
             list.Add(Cmd("ask.screen.quick", "Quick actions...", () => { Scope.Focus(Composer); Composer.Text = "/"; }, null));
             list.Add(Cmd("ask.screen.copy", "Copy conversation as Markdown", () => Context.Clipboard.Copy(Transcript.ConversationMarkdown(), "Conversation"), hasThread));
-            list.Add(Cmd("ask.screen.mcp-help", "How to connect a captain over MCP", () => Context.External.OpenUrl(AskController.InstructionsUrl(Ask.ActiveCaptain?.Runtime.ToString())), null));
+            list.Add(Cmd("ask.screen.mcp-help", "How to connect a captain over MCP", () => Context.External.OpenUrl(AskController.InstructionsUrl(Ask.ActiveCaptain?.Runtime)), null));
             foreach (AskQuickAction action in Ask.QuickActions)
             {
                 AskQuickAction a = action;
@@ -471,7 +471,7 @@ namespace Armada.Tui.Screens.Ask
             {
                 string note = T("This captain is not connected to Armada over MCP, so it can answer but cannot propose actions. Quick actions still work.");
                 foreach (string line in TextCells.Wrap(note, cw - 2).Take(2)) SurfaceText.Draw(surface, x0 + 1, y++, line, Theme.Info, cw - 2);
-                foreach (string line in TextCells.Wrap(T("How to connect") + ": " + AskController.InstructionsUrl(Ask.ActiveCaptain?.Runtime.ToString()), cw - 2).Take(2))
+                foreach (string line in TextCells.Wrap(T("How to connect") + ": " + AskController.InstructionsUrl(Ask.ActiveCaptain?.Runtime), cw - 2).Take(2))
                     SurfaceText.Draw(surface, x0 + 1, y++, line, Theme.Link, cw - 2);
             }
 

@@ -86,8 +86,8 @@ namespace Test.Shared.Suites.Tui.Build
                     host.Press("ctrl+s");
                     AssertTrue(host.WaitForText("A selection is required."), "runtime required\n" + host.Screen());
                     OpsFormDialog dialog = (OpsFormDialog)host.App.Modals.Top!;
-                    Armada.Tui.Widgets.SelectField<string> runtime = (Armada.Tui.Widgets.SelectField<string>)dialog.Form.Rows.First(r => r.Label == "Runtime").Field!;
-                    runtime.Choose(runtime.Options.First(o => o.Value == "Mux"));
+                    Armada.Tui.Widgets.SelectField<Armada.Core.Enums.AgentRuntimeEnum?> runtime = (Armada.Tui.Widgets.SelectField<Armada.Core.Enums.AgentRuntimeEnum?>)dialog.Form.Rows.First(r => r.Label == "Runtime").Field!;
+                    runtime.Choose(runtime.Options.First(o => o.Value == Armada.Core.Enums.AgentRuntimeEnum.Mux));
                     AssertTrue(host.WaitForText("Mux Config Directory"), "mux fields shown\n" + host.Screen());
                     AssertTrue(host.WaitForText("1 saved Mux endpoint(s) available."), "discovery\n" + host.Screen());
                     host.Press("ctrl+s");

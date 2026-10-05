@@ -162,7 +162,7 @@ namespace Armada.Tui.Screens.Configuration
         protected override List<ActionMenuItem> RowActions(Playbook row)
         {
             List<ActionMenuItem> items = base.RowActions(row);
-            int json = items.FindIndex(i => i.Label == "View JSON");
+            int json = items.FindIndex(i => i.Key == ActionMenuItem.JsonKey);
             items.Insert(json < 0 ? items.Count : json, new ActionMenuItem("Duplicate", () => PlaybookForms.Duplicate(Context, row, true)));
             return items;
         }

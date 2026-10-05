@@ -17,9 +17,9 @@ namespace Armada.Tui.Screens.Admin
         public string? Ref { get; set; } = null;
 
         /// <summary>
-        /// Type: a string, or an array of strings in OpenAPI 3.1 (kept raw).
+        /// Type: a string, or an array of strings in OpenAPI 3.1.
         /// </summary>
-        public object? Type { get; set; } = null;
+        public ApiExplorerSchemaTypes? Type { get; set; } = null;
 
         /// <summary>
         /// Format, or null.
@@ -29,17 +29,17 @@ namespace Armada.Tui.Screens.Admin
         /// <summary>
         /// Example value (raw), or null.
         /// </summary>
-        public object? Example { get; set; } = null;
+        public ApiExplorerJsonValue? Example { get; set; } = null;
 
         /// <summary>
         /// Default value (raw), or null.
         /// </summary>
-        public object? Default { get; set; } = null;
+        public ApiExplorerJsonValue? Default { get; set; } = null;
 
         /// <summary>
         /// Enumerated values (raw), or null.
         /// </summary>
-        public List<object?>? Enum { get; set; } = null;
+        public List<ApiExplorerJsonValue?>? Enum { get; set; } = null;
 
         /// <summary>
         /// Object properties, or null.

@@ -235,9 +235,9 @@ namespace Armada.Tui.Screens.Operations
         /// <summary>
         /// Captain runtime of the open session.
         /// </summary>
-        public string CaptainRuntime
+        public AgentRuntimeEnum? CaptainRuntime
         {
-            get { return Detail?.Captain != null ? Detail.Captain.Runtime.ToString() : ""; }
+            get { return Detail?.Captain?.Runtime; }
         }
 
         #endregion
@@ -1080,8 +1080,9 @@ namespace Armada.Tui.Screens.Operations
         private void OnCaptainChanged(ArmadaSocketMessage message)
         {
             EntityChangedEvent? e = message.GetData<EntityChangedEvent>();
-            if (e == null || String.IsNullOrEmpty(e.Id) || String.IsNullOrEmpty(e.State)) return;
-            if (!Enum.TryParse(e.State, true, out CaptainStateEnum state)) return;
+            CaptainStateEnum? typed = e?.CaptainState;
+            if (e == null || String.IsNullOrEmpty(e.Id) || String.IsNullOrEmpty(e.State) || typed == null) return;
+            CaptainStateEnum state = typed.Value;
             foreach (Captain c in Reference.Captains.Where(c => c.Id == e.Id))
             {
                 c.State = state;
