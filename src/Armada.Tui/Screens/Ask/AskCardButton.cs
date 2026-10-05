@@ -33,6 +33,11 @@ namespace Armada.Tui.Screens.Ask
         /// </summary>
         public string ProposalId { get; set; } = "";
 
+        /// <summary>
+        /// CLI permission request the button acts on (CLI permission cards), or empty.
+        /// </summary>
+        public string RequestId { get; set; } = "";
+
         #endregion
 
         #region Constructors-and-Factories

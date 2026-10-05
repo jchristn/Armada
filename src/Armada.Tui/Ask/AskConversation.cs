@@ -60,6 +60,12 @@ namespace Armada.Tui.Ask
         public Dictionary<string, AskActionProposal> Proposals { get; } = new Dictionary<string, AskActionProposal>(StringComparer.Ordinal);
 
         /// <summary>
+        /// Latest known copy of every CLI permission request of this conversation, by id (from cards, the thread detail,
+        /// cli_permission events, and decisions). A decided copy never goes back to Pending.
+        /// </summary>
+        public Dictionary<string, CliPermissionRequest> CliPermissions { get; } = new Dictionary<string, CliPermissionRequest>(StringComparer.Ordinal);
+
+        /// <summary>
         /// The reply being streamed, or null.
         /// </summary>
         public AskStreamingTurn? Streaming { get; private set; } = null;
@@ -263,6 +269,70 @@ namespace Armada.Tui.Ask
         }
 
         /// <summary>
+        /// Pending CLI permission requests of the conversation, oldest first.
+        /// </summary>
+        /// <returns>Requests.</returns>
+        public List<CliPermissionRequest> PendingCliPermissions()
+        {
+            return CliPermissions.Values.Where(r => r.Status == CliPermissionRequestStatusEnum.Pending).OrderBy(r => r.CreatedUtc).ToList();
+        }
+
+        /// <summary>
+        /// The CLI permission request a CliPermission card renders: the latest copy merged over the embedded one, or the
+        /// request that points at the card message when the card was not hydrated (the dashboard's
+        /// <c>cliRequestForMessage</c>).
+        /// </summary>
+        /// <param name="message">Card message.</param>
+        /// <returns>Request, or null.</returns>
+        public CliPermissionRequest? CliPermissionFor(AskMessage message)
+        {
+            if (message == null || message.Kind != AskMessageKindEnum.CliPermission) return null;
+            CliPermissionRequest? embedded = message.CliPermissionRequest;
+            if (embedded != null && !String.IsNullOrEmpty(embedded.Id) && CliPermissions.TryGetValue(embedded.Id, out CliPermissionRequest? known))
+                return MergeCliPermission(embedded, known);
+            if (embedded != null) return embedded;
+            return CliPermissions.Values.FirstOrDefault(r => String.Equals(r.MessageId, message.Id, StringComparison.Ordinal));
+        }
+
+        /// <summary>
+        /// Merge two copies of a request: a decided copy never goes back to Pending, otherwise the newer copy wins; names
+        /// and caller flags missing from the newer copy (socket events carry none) are kept.
+        /// </summary>
+        /// <param name="previous">Previous copy, or null.</param>
+        /// <param name="next">Incoming copy.</param>
+        /// <returns>Merged copy.</returns>
+        public static CliPermissionRequest MergeCliPermission(CliPermissionRequest? previous, CliPermissionRequest next)
+        {
+            if (next == null) throw new ArgumentNullException(nameof(next));
+            if (previous == null) return next;
+            bool prevPending = previous.Status == CliPermissionRequestStatusEnum.Pending;
+            bool nextPending = next.Status == CliPermissionRequestStatusEnum.Pending;
+            CliPermissionRequest winner = !prevPending && nextPending ? previous : (prevPending && !nextPending ? next : (next.LastUpdateUtc >= previous.LastUpdateUtc ? next : previous));
+            CliPermissionRequest other = ReferenceEquals(winner, next) ? previous : next;
+            if (String.IsNullOrEmpty(winner.CaptainName)) winner.CaptainName = other.CaptainName;
+            if (String.IsNullOrEmpty(winner.VesselName)) winner.VesselName = other.VesselName;
+            if (String.IsNullOrEmpty(winner.MissionTitle)) winner.MissionTitle = other.MissionTitle;
+            if (String.IsNullOrEmpty(winner.ThreadTitle)) winner.ThreadTitle = other.ThreadTitle;
+            if (String.IsNullOrEmpty(winner.MessageId)) winner.MessageId = other.MessageId;
+            return winner;
+        }
+
+        /// <summary>
+        /// Record a CLI permission request copy (a cli_permission event or a decision) for this conversation.
+        /// </summary>
+        /// <param name="request">Request.</param>
+        /// <returns>True when it belongs to this conversation.</returns>
+        public bool ApplyCliPermission(CliPermissionRequest request)
+        {
+            if (request == null || String.IsNullOrEmpty(request.Id)) return false;
+            if (ThreadId == null || !String.Equals(request.ThreadId, ThreadId, StringComparison.Ordinal)) return false;
+            CliPermissions.TryGetValue(request.Id, out CliPermissionRequest? previous);
+            CliPermissions[request.Id] = MergeCliPermission(previous, request);
+            Changed();
+            return true;
+        }
+
+        /// <summary>
         /// Start over for another thread (or a new conversation).
         /// </summary>
         /// <param name="threadId">Thread id, or null.</param>
@@ -275,6 +345,7 @@ namespace Armada.Tui.Ask
             TrackedWork = new List<AskTrackedWork>();
             Snapshots.Clear();
             Proposals.Clear();
+            CliPermissions.Clear();
             Streaming = null;
             TurnActive = false;
             TurnError = null;
@@ -312,6 +383,7 @@ namespace Armada.Tui.Ask
 
             HasMore = hasMore;
             IndexProposals(Messages, detail?.PendingProposals);
+            IndexCliPermissions(Messages, detail?.PendingCliPermissions);
             Changed();
             return true;
         }
@@ -330,6 +402,7 @@ namespace Armada.Tui.Ask
             Messages = MergeMessages(Messages, incoming);
             IndexWork(incoming);
             IndexProposals(incoming, null);
+            IndexCliPermissions(incoming, null);
             HasMore = hasMore;
             Changed();
             return true;
@@ -349,6 +422,7 @@ namespace Armada.Tui.Ask
             TrimOldest();
             IndexWork(incoming);
             IndexProposals(incoming, null);
+            IndexCliPermissions(incoming, null);
             if (Streaming != null && Streaming.Finished) Streaming = null;
             Changed();
             return true;
@@ -371,6 +445,7 @@ namespace Armada.Tui.Ask
 
             if (detail.Thread != null) Thread = detail.Thread;
             IndexProposals(new List<AskMessage>(), detail.PendingProposals);
+            IndexCliPermissions(new List<AskMessage>(), detail.PendingCliPermissions);
             Changed();
             return true;
         }
@@ -586,7 +661,7 @@ namespace Armada.Tui.Ask
                 AskToolChip done = new AskToolChip();
                 done.Id = e.ToolId!;
                 done.Name = !String.IsNullOrEmpty(e.ToolName) ? e.ToolName! : prior?.Name ?? "tool";
-                done.Status = e.ToolOk == false ? AskToolChipStatusEnum.Failed : AskToolChipStatusEnum.Success;
+                done.Status = e.ToolOk == false || e.ToolPermissionDenied == true ? AskToolChipStatusEnum.Failed : AskToolChipStatusEnum.Success;
                 done.Arguments = prior?.Arguments;
                 done.Result = e.ToolResult;
                 done.ElapsedMs = e.ToolElapsedMs;
@@ -636,6 +711,7 @@ namespace Armada.Tui.Ask
             TrimOldest();
             IndexWork(one);
             IndexProposals(one, null);
+            IndexCliPermissions(one, null);
             if (ClosesStream(e.Message)) Streaming = null;
             Changed();
             return true;
@@ -701,6 +777,24 @@ namespace Armada.Tui.Ask
             foreach (AskTrackedWork w in TrackedWork)
             {
                 if (w.Snapshot != null && !Snapshots.ContainsKey(w.Id)) Snapshots[w.Id] = w.Snapshot;
+            }
+        }
+
+        private void IndexCliPermissions(IEnumerable<AskMessage> messages, IEnumerable<CliPermissionRequest>? extra)
+        {
+            foreach (AskMessage m in messages)
+            {
+                CliPermissionRequest? r = m.CliPermissionRequest;
+                if (r == null || String.IsNullOrEmpty(r.Id)) continue;
+                CliPermissions.TryGetValue(r.Id, out CliPermissionRequest? previous);
+                CliPermissions[r.Id] = MergeCliPermission(previous, r);
+            }
+
+            foreach (CliPermissionRequest r in extra ?? Enumerable.Empty<CliPermissionRequest>())
+            {
+                if (r == null || String.IsNullOrEmpty(r.Id)) continue;
+                CliPermissions.TryGetValue(r.Id, out CliPermissionRequest? previous);
+                CliPermissions[r.Id] = MergeCliPermission(previous, r);
             }
         }
 

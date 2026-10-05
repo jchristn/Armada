@@ -30,6 +30,7 @@ HUB_PAGES = {
     "CaptainsHub": ("/captains", "tab"), "DeliveryHub": ("/delivery", "tab"), "DispatchHub": ("/dispatch", "tab"),
     "MissionsHub": ("/missions", "tab"), "ServerHub": ("/server", "tab"), "VesselsHub": ("/vessels", "tab"),
     "Configuration": ("/configuration", "tab"), "Activity": ("/activity", "source"), "FleetActions": ("/fleet-actions", "tab"),
+    "CliPermissions": ("/cli-permissions", "tab"),
 }
 
 EVENT_RE = re.compile(r"'((?:mission|voyage|captain|deployment|objective|incident|planning-session|objective-refinement-session|ask)\.[a-z][a-z.\-]*)'")
@@ -102,6 +103,11 @@ def settings_fields():
         key = m.group(1)
         prefix = "settings.repositoryHealth.thresholds." if key.endswith("Warn") or key.endswith("Fail") else "settings.repositoryHealth."
         fields.add(prefix + key)
+    perm = read(os.path.join(DASH, "components", "settings", "CliPermissionSettings.tsx"))
+    m = re.search(r"interface Draft \{([^}]*)\}", perm)
+    if m:
+        for f in re.findall(r"^\s*([a-zA-Z]+):", m.group(1), re.M):
+            fields.add("settings.permissions." + f)
     ret = read(os.path.join(DASH, "components", "settings", "RetentionSettings.tsx"))
     m = re.search(r"const FIELDS: RetentionField\[\] = \[([^\]]*)\]", ret)
     if m:

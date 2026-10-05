@@ -144,8 +144,10 @@ syntax).
   `Kind` `CliPermission`, `Role` `System`, `ContentText` `<Tool>: <summary>`, and `CliPermissionRequest` attached), the
   request appears in `AskThreadDetail.PendingCliPermissions`, the inbox (`cli_permission`), and the Approvals centers,
   and `cli_permission.requested` goes to the approvers. The turn waits until someone decides, the request expires
-  (`Permissions.PromptTimeoutSeconds`, default 600), or the turn ends (pending requests of the thread are cancelled).
-  The card is re-sent through `ask.message` when the request is decided.
+  (`Permissions.PromptTimeoutSeconds`, default 600), the turn ends (pending requests of the thread are cancelled), or
+  the captain cancels the prompt call (the request is cancelled at once). The card is re-sent through `ask.message` when
+  the request is decided. Deleting the thread deletes its requests; decided ones are otherwise kept for
+  `Retention.CliPermissionRequestRetentionDays` (default 90).
 - **The card** shows the tool, the command or input, the captain, an expiry countdown, and the status. A viewer who
   may decide gets **Allow once**, **Allow and remember** (admins only: a dialog with an editable rule pattern that
   defaults to the suggested rule, and a scope of Captain or Global; Vessel only for mission requests), and **Deny**
@@ -259,6 +261,14 @@ header with the Auto-approve toggle, streaming transcript with confirm cards (`a
 live work cards, and a composer with `/` quick actions and inline Dispatch and Fleet action forms. The Ask
 dock (`Ctrl+J`) follows the active thread from any screen, and the Approvals center (`Ctrl+A`) lists pending
 proposals next to mission reviews and deployment approvals. See `docs/TUI.md`.
+
+CLI tool permissions in the TUI: the header's CLI tools line shows the thread policy and the effective one (`p`
+changes it; Bypass only for admins, after the warning). Permission cards have clickable **[Allow once]**, **[Allow and
+remember]**, and **[Deny]** buttons, and `a` / `A` / `d` decide the card or the captain reply of the turn that raised
+it; `a` / `r` likewise decide a proposal from the reply of the turn that proposed it, a chooser asks when there are
+several, and a key on a block with nothing to decide shows a hint instead of doing nothing. The pending strip above
+the composer counts permission requests on their own line, cards follow `cli_permission.*` events live, and a new
+request in a conversation you are not looking at toasts and rings.
 
 ## Tasks
 

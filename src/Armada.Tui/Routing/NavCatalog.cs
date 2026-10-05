@@ -121,9 +121,10 @@ namespace Armada.Tui.Routing
                     new NavItem("/jobs", "Jobs", "Background jobs and their status", "J", "j"),
                 }));
             sections.Add(new NavSection("system", "SYSTEM",
-                new[] { "/server", "/doctor", "/settings", "/admin", "/api-explorer" },
+                new[] { "/server", "/doctor", "/settings", "/admin", "/api-explorer", "/cli-permissions" },
                 new[]
                 {
+                    new NavItem("/cli-permissions", "CLI Tool Permissions", "Approve CLI tool requests from captains and manage allow and deny rules", "K", "k"),
                     new NavItem("/api-explorer", "API Explorer", "Browse the live OpenAPI document, execute requests, and inspect responses", "A", "x"),
                     new NavItem("/server", "Settings", "Server settings, diagnostics, and tenant/user/credential administration", "S", "s"),
                 }));

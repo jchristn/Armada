@@ -27,7 +27,8 @@ namespace Test.Shared.Infrastructure
         {
             ["CaptainsHub"] = "/captains?tab=", ["DeliveryHub"] = "/delivery?tab=", ["DispatchHub"] = "/dispatch?tab=",
             ["MissionsHub"] = "/missions?tab=", ["ServerHub"] = "/server?tab=", ["VesselsHub"] = "/vessels?tab=",
-            ["Configuration"] = "/configuration?tab=", ["Activity"] = "/activity?source=", ["FleetActions"] = "/fleet-actions?tab="
+            ["Configuration"] = "/configuration?tab=", ["Activity"] = "/activity?source=", ["FleetActions"] = "/fleet-actions?tab=",
+            ["CliPermissions"] = "/cli-permissions?tab="
         };
 
         /// <summary>
@@ -142,6 +143,13 @@ namespace Test.Shared.Infrastructure
                 string key = m.Groups[1].Value;
                 bool threshold = key.EndsWith("Warn", StringComparison.Ordinal) || key.EndsWith("Fail", StringComparison.Ordinal);
                 fields.Add((threshold ? "settings.repositoryHealth.thresholds." : "settings.repositoryHealth.") + key);
+            }
+
+            string perm = File.ReadAllText(Path.Combine(Src(), "components", "settings", "CliPermissionSettings.tsx"));
+            Match draft = Regex.Match(perm, "interface Draft \\{([^}]*)\\}");
+            if (draft.Success)
+            {
+                foreach (Match f in Regex.Matches(draft.Groups[1].Value, "^\\s*([a-zA-Z]+):", RegexOptions.Multiline)) fields.Add("settings.permissions." + f.Groups[1].Value);
             }
 
             string ret = File.ReadAllText(Path.Combine(Src(), "components", "settings", "RetentionSettings.tsx"));

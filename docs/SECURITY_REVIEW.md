@@ -300,8 +300,18 @@ Recommendations:
   settings still apply.
 - **ApiEndpoint captains are only partly governed.** The policy covers their `run_process` tool; their in-process file
   tools (read, write, edit, delete) are not governed by any policy and work wherever the Admiral account can write.
-  Their requests can only be matched by a bare `run_process` rule, so remembering one of their requests allows every
-  command that captain runs (scope it to the captain).
+  Their `run_process` requests are matched like Bash commands (`run_process(git status:*)`; a shell command line is
+  split and every part must be allowed; an `args` vector is one command run without a shell), and "Allow and remember"
+  suggests a rule for that command, never the bare tool. A bare `run_process` rule (or `run_process(*)`) still allows
+  every command that captain runs; the TUI rule dialog warns before remembering one, and such a rule should be scoped to
+  the captain.
+- **Abandoned prompts.** A prompt call the captain cancels (`notifications/cancelled`) resolves its request as
+  `Cancelled` at once, and pending requests are cancelled when the turn or mission ends, so an approver cannot allow a
+  call nobody is waiting for. A connection that drops silently keeps the request pending until the turn or mission ends
+  or the prompt timeout passes; deciding it then has no effect on any running tool.
+- **Retention.** Decided, expired, and cancelled requests (redacted inputs) are deleted after
+  `Retention.CliPermissionRequestRetentionDays` (default 90; 0 keeps them, for example for audits), and with their Ask
+  thread.
 - **Inputs at rest.** Request inputs are redacted before they are stored and the original input is never persisted,
   but redaction is pattern-based: a secret that does not look like one can still appear in `InputText` or
   `SummaryText`, visible to the request's approvers and owner.

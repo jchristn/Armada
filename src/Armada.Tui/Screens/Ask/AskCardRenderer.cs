@@ -57,6 +57,26 @@ namespace Armada.Tui.Screens.Ask
         /// <returns>Lines.</returns>
         public static List<StyledText> ConfirmCard(AskActionProposal proposal, bool compact, bool expanded, bool busy, ArmadaTheme theme, LocalizationService loc, DateTime nowUtc, int width, List<AskCardButton>? buttons)
         {
+            return ConfirmCard(proposal, compact, expanded, busy, false, theme, loc, nowUtc, width, buttons);
+        }
+
+        /// <summary>
+        /// Lines of a confirm card; a pending card the focused transcript has selected also spells out its keys under the
+        /// buttons ("&gt; a Approve   r Reject   x Arguments").
+        /// </summary>
+        /// <param name="proposal">Proposal.</param>
+        /// <param name="compact">Compact (on an ActionResult): "Action" label only.</param>
+        /// <param name="expanded">Arguments and result expanded.</param>
+        /// <param name="busy">An approve or reject call is in flight.</param>
+        /// <param name="focused">The card is selected in the focused transcript.</param>
+        /// <param name="theme">Theme.</param>
+        /// <param name="loc">Localization.</param>
+        /// <param name="nowUtc">Now.</param>
+        /// <param name="width">Width in cells.</param>
+        /// <param name="buttons">Receives the buttons, or null.</param>
+        /// <returns>Lines.</returns>
+        public static List<StyledText> ConfirmCard(AskActionProposal proposal, bool compact, bool expanded, bool busy, bool focused, ArmadaTheme theme, LocalizationService loc, DateTime nowUtc, int width, List<AskCardButton>? buttons)
+        {
             bool pending = proposal.Status == AskProposalStatusEnum.Pending;
             int inner = Math.Max(10, width - 4);
             CellStyle statusStyle = ProposalStyle(proposal.Status, theme);
@@ -103,6 +123,7 @@ namespace Armada.Tui.Screens.Ask
                     decisionStarts = new int[] { 0, TextCells.Width(approve) + 7, TextCells.Width(approve) + 7 + TextCells.Width(reject) + 7 };
                     decisionWidths = new int[] { TextCells.Width(approve), TextCells.Width(reject), TextCells.Width(arguments) };
                     body.Add(line);
+                    if (focused) body.Add(StyledText.From("> a " + loc.T("Approve") + "   r " + loc.T("Reject") + "   x " + loc.T("Arguments"), theme.Accent.WithAttribute(CellAttributes.Bold, true)));
                 }
             }
             else if (proposal.Status == AskProposalStatusEnum.Approved)

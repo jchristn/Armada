@@ -361,7 +361,17 @@ namespace Armada.Tui
             {
                 if (Context.Session.IsSignedIn) Context.Navigate(route);
             };
-            Context.Approvals.Arrived += (s, item) => Context.Notifications.Attention(Context.Loc.T("Approval needed") + ": " + item.Title);
+            Context.Approvals.Arrived += (s, item) =>
+            {
+                Context.Notifications.Attention(Context.Loc.T("Approval needed") + ": " + item.Title);
+                // A new CLI tool permission request also toasts (Ask proposals toast from the Ask controller); Ctrl+O or
+                // the toast's Open goes to its mission, conversation, or captain.
+                if (item.Kind == ApprovalKindEnum.CliPermission)
+                {
+                    string route = item.Route ?? "/approvals";
+                    Context.Notifications.Toast(NotificationSeverityEnum.Warning, Context.Loc.T("Permission needed") + ": " + item.Title + (String.IsNullOrEmpty(item.Detail) ? "" : " - " + item.Detail), "Open", () => Context.Navigate(route));
+                }
+            };
 
             Context.Session.SignedIn += (s, e) =>
             {

@@ -257,7 +257,9 @@ namespace Armada.Tui.Approvals
             bool isNew = _Context.Approvals.Find(ApprovalKindEnum.CliPermission, id!) == null;
             item.Source = "Live";
             _Live[key] = new KeyValuePair<DateTime, ApprovalItem>(_Context.Clock.UtcNow, item);
-            _Context.Approvals.Upsert(item, isNew);
+            // Like Ask proposals: no bell, OS notification, or toast for a prompt in the conversation the user is watching.
+            bool watching = _Context.Ask != null && _Context.Ask.IsWatchingThread(data.Request!.ThreadId);
+            _Context.Approvals.Upsert(item, isNew && !watching);
         }
 
         #endregion

@@ -270,6 +270,7 @@ namespace Armada.Tui.Ask
         private readonly Dictionary<string, CaptainToolAccessResult> _ToolsCache = new Dictionary<string, CaptainToolAccessResult>(StringComparer.Ordinal);
         private string? _ToolsRequestedFor = null;
         private readonly HashSet<string> _BusyProposals = new HashSet<string>(StringComparer.Ordinal);
+        private readonly HashSet<string> _BusyCliPermissions = new HashSet<string>(StringComparer.Ordinal);
         private bool _Stopping = false;
         private int _ForceEndMs = 8000;
         private int _SearchDebounceMs = 300;
@@ -296,6 +297,8 @@ namespace Armada.Tui.Ask
                 AskEvent? e = AskEventParser.Parse(message);
                 if (e != null) HandleEvent(e);
             });
+            context.Events.Subscribe(ArmadaEventTypes.CliPermissionRequested, OnCliPermissionEvent);
+            context.Events.Subscribe(ArmadaEventTypes.CliPermissionResolved, OnCliPermissionEvent);
             context.Events.Reconnected += (s, e) => HandleReconnect();
             context.Events.SubscribeCoalesced(ArmadaSocketEventsCaptain, () => { if (_Started) LoadCaptains(); });
             context.Session.SignedIn += (s, e) => Start();
@@ -838,6 +841,98 @@ namespace Armada.Tui.Ask
         }
 
         /// <summary>
+        /// Whether a decision on this CLI permission request is in flight.
+        /// </summary>
+        /// <param name="requestId">Request id.</param>
+        /// <returns>True while the call is in flight.</returns>
+        public bool IsCliPermissionBusy(string requestId)
+        {
+            return !String.IsNullOrEmpty(requestId) && _BusyCliPermissions.Contains(requestId);
+        }
+
+        /// <summary>
+        /// Decide a CLI permission request from its Ask card with the Approvals center's flow: allow once at once, allow
+        /// and remember through the rule dialog (admins), deny through the optional message dialog. The card shows the
+        /// outcome as soon as the call returns.
+        /// </summary>
+        /// <param name="request">Pending request.</param>
+        /// <param name="decision">AllowOnce, AllowAndRemember, or Deny.</param>
+        /// <returns>True when the decision (or its dialog) started.</returns>
+        public bool DecideCliPermission(CliPermissionRequest request, CliPermissionDecisionEnum decision)
+        {
+            if (request == null || request.Status != CliPermissionRequestStatusEnum.Pending || IsCliPermissionBusy(request.Id)) return false;
+            ApprovalItem? item = Armada.Tui.Approvals.ApprovalSources.FromCliPermission(request, Context.Loc, Context.Session.Identity?.User?.Id);
+            if (item == null) return false;
+            Armada.Tui.Approvals.ApprovalActions actions = new Armada.Tui.Approvals.ApprovalActions(Context);
+            string id = request.Id;
+            Action<CliPermissionRequest?> finished = updated =>
+            {
+                if (_BusyCliPermissions.Remove(id)) BusyProposalsVersion++;
+                if (updated != null) Conversation.ApplyCliPermission(updated);
+                else if (Conversation.ThreadId != null) _ = RefreshDetailAsync(Conversation.ThreadId);
+            };
+            if (decision == CliPermissionDecisionEnum.AllowOnce)
+            {
+                if (!actions.AllowCliPermissionOnce(item, finished)) return false;
+                _BusyCliPermissions.Add(id);
+                BusyProposalsVersion++;
+                return true;
+            }
+
+            if (decision == CliPermissionDecisionEnum.AllowAndRemember) return actions.RememberCliPermission(item, finished) != null;
+            return actions.DenyCliPermission(item, finished) != null;
+        }
+
+        /// <summary>
+        /// Set or clear (null) the open conversation's CLI tool permission policy. Bypass needs an admin and the strong
+        /// warning first (see <see cref="Armada.Tui.Approvals.CliPermissionPolicyChoice"/>); this call sends the change.
+        /// </summary>
+        /// <param name="target">Thread.</param>
+        /// <param name="policy">Policy, or null to inherit.</param>
+        /// <param name="done">Called on the UI loop with the updated thread (null on failure), or null.</param>
+        public void SetCliPermissionPolicy(AskThread target, CliPermissionPolicyEnum? policy, Action<AskThread?>? done = null)
+        {
+            if (target == null) return;
+            ArmadaClient client = Context.Client;
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    AskThread? updated = await client.SetAskThreadCliPermissionPolicyAsync(target.Id, policy).ConfigureAwait(false);
+                    Context.Dispatcher.Post(() =>
+                    {
+                        AskThread merged = updated ?? target;
+                        merged.CliPermissionPolicy = updated?.CliPermissionPolicy ?? policy;
+                        Threads = AskThreadListLogic.ApplyUpdate(Threads, merged, Query, IncludeArchived, Conversation.ThreadId);
+                        Conversation.ApplyThread(merged);
+                        if (policy == CliPermissionPolicyEnum.Bypass)
+                            Context.Notifications.Toast(NotificationSeverityEnum.Warning, Context.Loc.T("CLI tools bypass is on: the captain runs any command in this conversation without asking."));
+                        done?.Invoke(merged);
+                    });
+                }
+                catch (ArmadaApiException ex)
+                {
+                    Context.Dispatcher.Post(() =>
+                    {
+                        Fail("The CLI tools policy could not be changed.", ex);
+                        done?.Invoke(null);
+                    });
+                }
+            });
+        }
+
+        /// <summary>
+        /// Whether the user is looking at this thread right now (Ask open on it and the terminal focused); new prompts
+        /// there do not ring or toast.
+        /// </summary>
+        /// <param name="threadId">Thread id, or null.</param>
+        /// <returns>True when watching.</returns>
+        public bool IsWatchingThread(string? threadId)
+        {
+            return !String.IsNullOrEmpty(threadId) && IsWatching(threadId!);
+        }
+
+        /// <summary>
         /// Whether an approve or reject call for this proposal is in flight. Decisions on other proposals are not
         /// blocked by it.
         /// </summary>
@@ -1266,6 +1361,16 @@ namespace Armada.Tui.Ask
             if (p.StartsWith("/fleet-actions/runs/:id", StringComparison.Ordinal)) return "fleet action run";
             if (p.StartsWith("/runbooks/:id", StringComparison.Ordinal)) return "runbook";
             return "";
+        }
+
+        private void OnCliPermissionEvent(ArmadaSocketMessage message)
+        {
+            CliPermissionEvent? data = message?.GetData<CliPermissionEvent>();
+            CliPermissionRequest? request = data?.Request;
+            if (request == null) return;
+            if (String.IsNullOrEmpty(request.Id) && !String.IsNullOrEmpty(data!.RequestId)) request.Id = data.RequestId!;
+            if (data!.Status.HasValue) request.Status = data.Status.Value;
+            Conversation.ApplyCliPermission(request);
         }
 
         private bool IsWatching(string threadId)

@@ -8,6 +8,7 @@ namespace Armada.Tui.Screens.Operations
     using Armada.Core;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Core.Services;
     using Armada.Tui.Routing;
     using Armada.Tui.Services;
     using Armada.Tui.Widgets;
@@ -18,7 +19,9 @@ namespace Armada.Tui.Screens.Operations
     /// Mark Complete, Diff, Log, Instructions, Run Check, Land or Retry Landing), the More menu (Edit, Transition
     /// Status, View JSON, Restart, Purge, Delete, and the rest), and panels for the overview (Landing Preview, GitHub
     /// Pull Request with refresh and open, every field, failure reason, review comment), the description (Markdown, copy
-    /// raw), linked checks and deployments, and playbook snapshots. Reloads on <c>mission.changed</c>. Not thread-safe.
+    /// raw), linked checks and deployments, and playbook snapshots; the overview also shows the CLI tool permission
+    /// policy the captain launched with (the note the Admiral writes at the top of the mission log). Reloads on
+    /// <c>mission.changed</c>. Not thread-safe.
     /// </summary>
     public class MissionScreen : OpsDetailScreen
     {
@@ -55,6 +58,16 @@ namespace Armada.Tui.Screens.Operations
         public List<Deployment> LinkedDeployments { get; private set; } = new List<Deployment>();
 
         /// <summary>
+        /// Lines read from the top of the mission log for the policy note.
+        /// </summary>
+        public const int NoteLogLines = 60;
+
+        /// <summary>
+        /// The CLI tool permission note of the captain's launch (from the mission log), or null.
+        /// </summary>
+        public string? CliPermissionNote { get; private set; } = null;
+
+        /// <summary>
         /// Mission actions.
         /// </summary>
         public MissionOps Ops { get; }
@@ -86,6 +99,7 @@ namespace Armada.Tui.Screens.Operations
         private bool _LoadingPreview = false;
         private bool _LoadingPullRequest = false;
         private string? _PullRequestFor = null;
+        private bool _LoadingNote = false;
 
         #endregion
 
@@ -225,6 +239,7 @@ namespace Armada.Tui.Screens.Operations
                 SubtitleText = Tr("Missions") + " > " + m.Title + "   " + m.Id;
                 Invalidate();
                 LoadPreview();
+                LoadPolicyNote();
                 if (!String.IsNullOrEmpty(m.PrUrl) && _PullRequestFor != m.Id + m.PrUrl) LoadPullRequest(false);
                 if (String.IsNullOrEmpty(m.PrUrl)) PullRequest = null;
             }, null, ex =>
@@ -259,6 +274,21 @@ namespace Armada.Tui.Screens.Operations
                 _LoadingPreview = false;
                 Invalidate();
             });
+        }
+
+        private void LoadPolicyNote()
+        {
+            // The note is written once per launch, before the captain starts; read it until it is there.
+            if (CliPermissionNote != null || _LoadingNote) return;
+            _LoadingNote = true;
+            Call((c, t) => c.GetMissionLogAsync(MissionId, NoteLogLines, t), log =>
+            {
+                _LoadingNote = false;
+                string? note = CliPermissionPolicyResolver.FindMissionLogNote(log?.Log);
+                if (note == null) return;
+                CliPermissionNote = note;
+                Invalidate();
+            }, null, ex => _LoadingNote = false);
         }
 
         private void LoadPullRequest(bool force)
@@ -404,6 +434,12 @@ namespace Armada.Tui.Screens.Operations
             doc.Time("Last Updated", m.LastUpdateUtc, now);
             doc.Field("Linked Checks", LinkedChecks.Count.ToString(CultureInfo.InvariantCulture));
             doc.Field("Linked Deployments", LinkedDeployments.Count.ToString(CultureInfo.InvariantCulture));
+
+            if (CliPermissionNote != null)
+            {
+                doc.Section("CLI Tool Permissions");
+                doc.Text(CliPermissionNote, doc.Theme.Muted);
+            }
 
             if (!String.IsNullOrEmpty(m.FailureReason))
             {

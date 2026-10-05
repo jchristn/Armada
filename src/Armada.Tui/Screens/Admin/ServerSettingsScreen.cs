@@ -11,6 +11,7 @@ namespace Armada.Tui.Screens.Admin
     using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Core.Settings;
+    using Armada.Tui.Approvals;
     using Armada.Tui.Input;
     using Armada.Tui.Modals;
     using Armada.Tui.Routing;
@@ -22,7 +23,8 @@ namespace Armada.Tui.Screens.Admin
 
     /// <summary>
     /// Settings, Server tab (dashboard <c>Server.tsx</c> with <c>RepositoryHealthSettingsSection</c>,
-    /// <c>ImportFleetActionSettings</c>, and <c>RetentionSettings</c>): health, uptime, connection, and tunnel
+    /// <c>ImportFleetActionSettings</c>, <c>CliPermissionSettings</c>, and <c>RetentionSettings</c>): health, uptime,
+    /// connection, and tunnel
     /// cards; server detail fields; every settings group with its own Save (and Discard where the dashboard has it),
     /// the dashboard's validation messages, and <c>Ctrl+S</c> saving the group that holds focus; MCP snippets and
     /// system paths to copy; database backup to a chosen path and restore from a chosen file; and the server actions
@@ -84,7 +86,7 @@ namespace Armada.Tui.Screens.Admin
 
         /// <summary>
         /// Settings groups by key (server, rebuild, agent, planning, repositoryHealth, import, fleetActions,
-        /// retention, remoteControl).
+        /// permissions, retention, remoteControl).
         /// </summary>
         public IReadOnlyDictionary<string, ServerSettingsGroup> Groups
         {
@@ -191,6 +193,21 @@ namespace Armada.Tui.Screens.Admin
         /// <summary>Retention: import batches.</summary>
         public InputField RetentionImports { get; } = new InputField();
 
+        /// <summary>Retention: decided CLI tool permission requests.</summary>
+        public InputField RetentionCliPermissions { get; } = new InputField();
+
+        /// <summary>CLI tool permissions: Ask conversation default policy.</summary>
+        public SelectField<string> PermissionsAskDefault { get; } = new SelectField<string>();
+
+        /// <summary>CLI tool permissions: mission default policy.</summary>
+        public SelectField<string> PermissionsMissionDefault { get; } = new SelectField<string>();
+
+        /// <summary>CLI tool permissions: owners may approve their own requests.</summary>
+        public ToggleField PermissionsOwnerApproval { get; } = new ToggleField();
+
+        /// <summary>CLI tool permissions: prompt timeout in seconds.</summary>
+        public InputField PermissionsTimeout { get; } = new InputField();
+
         /// <summary>Remote tunnel enabled.</summary>
         public ToggleField RemoteEnabled { get; } = new ToggleField();
 
@@ -253,6 +270,7 @@ namespace Armada.Tui.Screens.Admin
         private readonly List<KeyValuePair<FormRow, TextBlock>> _Notes = new List<KeyValuePair<FormRow, TextBlock>>();
         private readonly List<IWidget> _LockableFields = new List<IWidget>();
         private readonly List<IWidget> _HealthEditable = new List<IWidget>();
+        private readonly List<IWidget> _AdminOnlyEditable = new List<IWidget>();
         private readonly TextBlock _HealthCross = new TextBlock("", t => t.Error);
         private readonly TextBlock _HealthNoCriteria = new TextBlock("", t => t.Warning);
         private readonly TextBlock _ProxyNote = new TextBlock("", t => t.Warning);
@@ -549,6 +567,7 @@ namespace Armada.Tui.Screens.Admin
 
             BuildRepositoryHealth();
             BuildImportAndFleet();
+            BuildCliPermissions();
             BuildRetention();
             BuildRemoteControl();
             BuildMcp();
@@ -668,6 +687,34 @@ namespace Armada.Tui.Screens.Admin
             AddButtons(fleet);
         }
 
+        private void BuildCliPermissions()
+        {
+            Form.AddSection("CLI Tool Permissions");
+            AddNote("How CLI captains handle shell commands, file edits, and fetches that need permission when neither the conversation nor the captain sets a policy. Refuse lets the CLI refuse them; Approve in Armada asks an approver here (Claude Code only; other runtimes fall back to Refuse); Bypass runs them without asking.");
+            if (!IsAdmin) AddNote("Only administrators can change these settings.");
+            ServerSettingsGroup g = Group("permissions", "Save CLI Tool Permissions", SavePermissions, () => DiscardGroup("permissions"));
+            g.RequireDirty = true;
+            foreach (SelectField<string> field in new[] { PermissionsAskDefault, PermissionsMissionDefault })
+            {
+                field.ModalHost = Context.Modals;
+                // Bypass is always listed so a stored Bypass shows; only admins may choose it.
+                field.Options = CliPermissionPolicyChoice.Options(Context.Loc, false, null, IsAdmin, CliPermissionPolicyEnum.Bypass);
+                CliPermissionPolicyChoice.GuardBypass(Context, field, () => IsAdmin);
+            }
+
+            PermissionsAskDefault.PickerTitle = "Ask conversation default";
+            PermissionsMissionDefault.PickerTitle = "Mission default";
+            PermissionsAskDefault.SetValue(CliPermissionPolicyChoice.ValueOf(new CliPermissionSettings().AskDefaultPolicy));
+            PermissionsMissionDefault.SetValue(CliPermissionPolicyChoice.ValueOf(new CliPermissionSettings().MissionDefaultPolicy));
+            AddTracked(g, "Ask conversation default", PermissionsAskDefault, "Used by Ask conversation turns (default Approve in Armada). Narrations and summaries never ask; they refuse instead.");
+            AddTracked(g, "Mission default", PermissionsMissionDefault, "Used by missions (default Bypass, the previous behavior). A vessel with auto-approve off caps missions at Refuse.");
+            AddNumber(g, "Prompt timeout (seconds)", PermissionsTimeout, "How long a request waits for a decision before it expires and is denied (10-3600, default 600).", v => ServerSettingsRules.WholeNumberRange(Context.Loc, v, 10, 3600));
+            PermissionsOwnerApproval.Caption = "Let owners approve their own requests";
+            AddTracked(g, "Owner approval", PermissionsOwnerApproval, "When on, the owner of a conversation or mission may allow or deny its requests. Admins and tenant admins can always decide; only they can create rules.");
+            foreach (IWidget w in new IWidget[] { PermissionsAskDefault, PermissionsMissionDefault, PermissionsTimeout, PermissionsOwnerApproval }) _AdminOnlyEditable.Add(w);
+            AddButtons(g);
+        }
+
         private void BuildRetention()
         {
             Form.AddSection("Data Retention");
@@ -679,6 +726,7 @@ namespace Armada.Tui.Screens.Admin
             AddNumber(g, "Delete Ask threads after (days)", RetentionAskDelete, "Threads with no activity for this long are deleted with their messages; pinned threads never are (0-3650, default 0).", range);
             AddNumber(g, "Job retention (days)", RetentionJobs, "Finished background jobs older than this are deleted; the latest of each kind is kept (0-3650, default 30).", range);
             AddNumber(g, "Import history retention (days)", RetentionImports, "Finished vessel import batches older than this are deleted; imported vessels are not affected (0-3650, default 90).", range);
+            AddNumber(g, "CLI permission request retention (days)", RetentionCliPermissions, "Decided, expired, and cancelled CLI tool permission requests older than this are deleted; pending ones are kept (0-3650, default 90).", range);
             AddButtons(g);
         }
 
@@ -842,13 +890,15 @@ namespace Armada.Tui.Screens.Admin
                 if (w is ArmadaWidget aw) aw.CanFocus = !locked;
             }
 
-            foreach (IWidget w in _HealthEditable)
+            foreach (IWidget w in _HealthEditable.Concat(_AdminOnlyEditable))
             {
                 if (w is ArmadaWidget aw) aw.CanFocus = !locked && IsAdmin;
             }
 
             foreach (ServerSettingsGroup g in _Groups.Values) g.Editable = !locked && Settings != null;
             _Groups["repositoryHealth"].Editable = !locked && IsAdmin && Settings != null;
+            // CLI tool permissions are global-admin settings; everyone else sees them read-only.
+            _Groups["permissions"].Editable = !locked && IsAdmin && Settings != null;
             if (Form.Scope.Focused is ArmadaWidget focused && !focused.CanFocus) Form.Scope.FocusFirst();
         }
 
@@ -929,6 +979,15 @@ namespace Armada.Tui.Screens.Admin
                 RetentionAskDelete.Value = Num(r.AskThreadDeleteAfterDays);
                 RetentionJobs.Value = Num(r.JobRetentionDays);
                 RetentionImports.Value = Num(r.ImportBatchRetentionDays);
+                RetentionCliPermissions.Value = Num(r.CliPermissionRequestRetentionDays);
+            });
+            Apply("permissions", force, () =>
+            {
+                CliPermissionSettings p = s.Permissions ?? new CliPermissionSettings();
+                PermissionsAskDefault.SetValue(CliPermissionPolicyChoice.ValueOf(p.AskDefaultPolicy));
+                PermissionsMissionDefault.SetValue(CliPermissionPolicyChoice.ValueOf(p.MissionDefaultPolicy));
+                PermissionsTimeout.Value = Num(p.PromptTimeoutSeconds);
+                PermissionsOwnerApproval.SetValue(p.AllowOwnerApproval, false);
             });
             Apply("remoteControl", force, () =>
             {
@@ -1151,6 +1210,7 @@ namespace Armada.Tui.Screens.Admin
                 case "import": return "Save Import Settings";
                 case "fleetActions": return "Save Fleet Action Settings";
                 case "retention": return "Save Retention Settings";
+                case "permissions": return "Save CLI Tool Permissions";
                 default: return "Save Remote Control Settings";
             }
         }
@@ -1280,10 +1340,26 @@ namespace Armada.Tui.Screens.Admin
                 r.AskThreadDeleteAfterDays = IntOf(RetentionAskDelete);
                 r.JobRetentionDays = IntOf(RetentionJobs);
                 r.ImportBatchRetentionDays = IntOf(RetentionImports);
+                r.CliPermissionRequestRetentionDays = IntOf(RetentionCliPermissions);
                 SettingsData d = new SettingsData();
                 d.Retention = r;
                 return d;
             }, "Retention settings saved and applied.");
+        }
+
+        private void SavePermissions()
+        {
+            SaveWith(_Groups["permissions"], () =>
+            {
+                CliPermissionSettings p = new CliPermissionSettings();
+                p.AskDefaultPolicy = CliPermissionPolicyChoice.Parse(PermissionsAskDefault.Value) ?? p.AskDefaultPolicy;
+                p.MissionDefaultPolicy = CliPermissionPolicyChoice.Parse(PermissionsMissionDefault.Value) ?? p.MissionDefaultPolicy;
+                p.AllowOwnerApproval = PermissionsOwnerApproval.Value;
+                p.PromptTimeoutSeconds = IntOf(PermissionsTimeout);
+                SettingsData d = new SettingsData();
+                d.Permissions = p;
+                return d;
+            }, "CLI tool permission settings saved.");
         }
 
         private void SaveRemoteControl()

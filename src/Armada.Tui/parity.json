@@ -131,9 +131,9 @@
       "kind": "route",
       "key": "/cli-permissions",
       "status": "implemented",
-      "tui": "Router",
+      "tui": "HubScreen",
       "workstream": "W3.3",
-      "notes": "redirect to /approvals: pending CLI permission requests are decided in the Approvals center (a allow once, A allow and remember, d deny); the rules list and editor are not in the TUI yet (follow-up)"
+      "notes": "CLI Tool Permissions hub: Requests (status filter, decide with a / A / d and header buttons, ?request= deep link) and Rules (scope filter, create, edit, delete)"
     },
     {
       "kind": "route",
@@ -742,6 +742,22 @@
       "tui": "DocksScreen",
       "workstream": "W4.8",
       "notes": "Docks"
+    },
+    {
+      "kind": "tab",
+      "key": "CliPermissions:requests",
+      "status": "implemented",
+      "tui": "CliPermissionRequestsScreen",
+      "workstream": "W3.3",
+      "notes": "Requests"
+    },
+    {
+      "kind": "tab",
+      "key": "CliPermissions:rules",
+      "status": "implemented",
+      "tui": "CliPermissionRulesScreen",
+      "workstream": "W3.3",
+      "notes": "Rules"
     },
     {
       "kind": "tab",
@@ -4018,10 +4034,42 @@
     {
       "kind": "setting",
       "key": "settings.permissions",
-      "status": "not-applicable",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
-      "notes": "Server settings Permissions section (Ask and mission default policies, owner approval, prompt timeout) is not in the TUI Server settings screen yet; edit it in the dashboard or with PUT /api/v1/settings (follow-up)"
+      "notes": "CLI Tool Permissions section (read-only for non-global-admins)"
+    },
+    {
+      "kind": "setting",
+      "key": "settings.permissions.allowOwnerApproval",
+      "status": "implemented",
+      "tui": "ServerSettingsScreen",
+      "workstream": "W7.7",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.permissions.askDefaultPolicy",
+      "status": "implemented",
+      "tui": "ServerSettingsScreen",
+      "workstream": "W7.7",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.permissions.missionDefaultPolicy",
+      "status": "implemented",
+      "tui": "ServerSettingsScreen",
+      "workstream": "W7.7",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.permissions.promptTimeoutSeconds",
+      "status": "implemented",
+      "tui": "ServerSettingsScreen",
+      "workstream": "W7.7",
+      "notes": ""
     },
     {
       "kind": "setting",
@@ -4274,6 +4322,14 @@
     {
       "kind": "setting",
       "key": "settings.retention.askThreadDeleteAfterDays",
+      "status": "implemented",
+      "tui": "ServerSettingsScreen",
+      "workstream": "W7.7",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.retention.cliPermissionRequestRetentionDays",
       "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",

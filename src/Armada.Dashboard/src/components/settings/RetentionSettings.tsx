@@ -22,12 +22,13 @@ export const RETENTION_DEFAULTS: RetentionSettingsData = {
   askThreadDeleteAfterDays: 0,
   jobRetentionDays: 30,
   importBatchRetentionDays: 90,
+  cliPermissionRequestRetentionDays: 90,
 };
 
 type RetentionField = keyof RetentionSettingsData;
 type RetentionDraft = Record<RetentionField, string>;
 
-const FIELDS: RetentionField[] = ['askThreadArchiveAfterDays', 'askThreadDeleteAfterDays', 'jobRetentionDays', 'importBatchRetentionDays'];
+const FIELDS: RetentionField[] = ['askThreadArchiveAfterDays', 'askThreadDeleteAfterDays', 'jobRetentionDays', 'importBatchRetentionDays', 'cliPermissionRequestRetentionDays'];
 
 function toDraft(s: RetentionSettingsData | null | undefined): RetentionDraft {
   const v = { ...RETENTION_DEFAULTS, ...(s ?? {}) };
@@ -36,6 +37,7 @@ function toDraft(s: RetentionSettingsData | null | undefined): RetentionDraft {
     askThreadDeleteAfterDays: String(v.askThreadDeleteAfterDays),
     jobRetentionDays: String(v.jobRetentionDays),
     importBatchRetentionDays: String(v.importBatchRetentionDays),
+    cliPermissionRequestRetentionDays: String(v.cliPermissionRequestRetentionDays),
   };
 }
 
@@ -50,8 +52,8 @@ export function validateRetentionDraft(draft: RetentionDraft): Partial<Record<Re
 }
 
 /**
- * Settings page section for data retention (`Retention`): how long Ask threads, finished background jobs, and finished
- * vessel import batches are kept. Keeps a local draft so the page's auto-refresh never overwrites unsaved edits,
+ * Settings page section for data retention (`Retention`): how long Ask threads, finished background jobs, finished
+ * vessel import batches, and decided CLI tool permission requests are kept. Keeps a local draft so the page's auto-refresh never overwrites unsaved edits,
  * validates each field, and saves the whole group, which the server replaces and applies live.
  */
 export default function RetentionSettings({ retention, locked, onSaved, notify }: RetentionSettingsProps) {
@@ -76,6 +78,7 @@ export default function RetentionSettings({ retention, locked, onSaved, notify }
           askThreadDeleteAfterDays: Number(draft.askThreadDeleteAfterDays),
           jobRetentionDays: Number(draft.jobRetentionDays),
           importBatchRetentionDays: Number(draft.importBatchRetentionDays),
+          cliPermissionRequestRetentionDays: Number(draft.cliPermissionRequestRetentionDays),
         },
       });
       setDirty(false);
@@ -116,6 +119,7 @@ export default function RetentionSettings({ retention, locked, onSaved, notify }
           {numberInput('retention-ask-delete', 'askThreadDeleteAfterDays', t('Delete Ask threads after (days)'), t('Threads with no activity for this long are deleted with their messages; pinned threads never are (0-3650, default 0).'))}
           {numberInput('retention-jobs', 'jobRetentionDays', t('Job retention (days)'), t('Finished background jobs older than this are deleted; the latest of each kind is kept (0-3650, default 30).'))}
           {numberInput('retention-imports', 'importBatchRetentionDays', t('Import history retention (days)'), t('Finished vessel import batches older than this are deleted; imported vessels are not affected (0-3650, default 90).'))}
+          {numberInput('retention-cli-permissions', 'cliPermissionRequestRetentionDays', t('CLI permission request retention (days)'), t('Decided, expired, and cancelled CLI tool permission requests older than this are deleted; pending ones are kept (0-3650, default 90).'))}
         </div>
         <div className="settings-actions">
           <button type="button" className="btn-primary btn-sm" onClick={() => void save()} disabled={!valid || saving || !dirty}>

@@ -363,18 +363,27 @@ the permission prompt tool yet.
 
 ApiEndpoint captains have no CLI: the policy applies only to their built-in shell tool, `run_process`. Their other
 built-in tools (read, write, edit, multi-edit, delete, directory and task-plan tools) run without asking under every
-policy, and direct captain chat and planning sessions do not apply a policy at all. Rules match `run_process` only by
-its bare name (a specifier on a tool other than Bash, WebFetch, Read, and Edit never matches), so an allow rule for it,
-including the one "Allow and remember" suggests, allows every command that captain runs.
+policy, and direct captain chat and planning sessions do not apply a policy at all. Rules for `run_process` take the
+same specifiers as `Bash` rules, matched against its command line: `run_process(git status:*)`, `run_process(npm run *)`,
+or an exact command. A command run through the shell is split like a Bash command line (every part must be allowed, and
+substitution is never allowed); a call with an `args` vector runs without a shell, so it is one command: the command
+followed by its arguments joined with spaces (operators and `$(...)` in an argument are literal text). The suggested rule,
+which "Allow and remember" uses by default, names the command (`run_process(git status:*)`, or the exact command when the
+program is not a plain word) and never the bare `run_process`, which would allow every command the captain runs. A bare
+`run_process` (or `run_process(*)`) rule still allows everything, and the TUI rule dialog warns before remembering one.
+`Bash` rules do not cover `run_process` and `run_process` rules do not cover `Bash`.
 
 **How a request flows (Claude Code).** Claude Code calls `cli_permission_prompt` on the scoped `armada` MCP server with
 the tool name and input. Armada checks the applicable rules: a matching deny rule denies, a matching allow rule allows,
 and either way the request is recorded with `DecisionSource` `DenyRule` or `AllowRule`. Otherwise it stores a `Pending`
 request (input redacted; the original stays only in memory), posts a permission card when the request comes from an Ask
 thread, announces `cli_permission.requested`, and holds the call until an approver decides, the request expires, or the
-turn or mission ends (`Cancelled`). An allowed call runs with its original input; a denied one returns a message that
-tells the model not to retry. Requests are listed at `/cli-permissions` in the dashboard and in the TUI Approvals
-center.
+turn or mission ends, or the captain cancels the call (`Cancelled`; Claude Code sends `notifications/cancelled` when a tool
+call is interrupted, and the request is resolved at once). An allowed call runs with its original input; a denied one
+returns a message that tells the model not to retry. Requests are listed at `/cli-permissions` in the dashboard and the
+TUI (also in the TUI Approvals center). Decided, expired, and cancelled requests are deleted after
+`Retention.CliPermissionRequestRetentionDays` (default 90; 0 keeps them), and a thread's requests are deleted with the
+thread.
 
 **Who decides.** Global admins and tenant admins of the request's tenant. The owner of the thread or mission can decide
 too when `Permissions.AllowOwnerApproval` is `true` (default `false`). "Allow and remember" also stores an allow rule
@@ -391,6 +400,7 @@ tenant empty for every tenant).
 | `Bash(git status:*)` | `git status` and `git status <anything>` |
 | `Bash(npm run *)` | Glob: `*` matches any characters |
 | `Bash(make test)` | Exactly `make test` |
+| `run_process(git status:*)`, `run_process(npm run *)` | The ApiEndpoint shell tool's command line, with the same prefix, glob, and exact forms as `Bash` |
 | `WebFetch(domain:example.com)` | URLs on that host; `domain:*.example.com` matches subdomains |
 | `Edit(src/**)`, `Read(~/notes/*)`, `Edit(//srv/repo/**)` | Gitignore-style paths: relative to the mission's dock, under the home directory, or absolute (`//`). `*` stays within a path segment, `**` crosses segments. `Edit` covers Edit, Write, MultiEdit, NotebookEdit; `Read` covers Read, Glob, Grep, LS |
 | `mcp__server`, `mcp__server__*`, `mcp__server__tool` | Every tool of an MCP server, or one tool |
@@ -399,4 +409,5 @@ Deny rules win over allow rules. A shell command line is split at `&&`, `||`, `;
 quotes, the way Claude Code applies Bash rules: it is allowed only when every subcommand matches an allow rule, and
 denied when any subcommand matches a deny rule (deny rules also match the whole line and a prefix without a following
 space). A command with command or process substitution (`$(...)`, backticks, `<(...)`, `>(...)`) or unbalanced quotes is never allowed by a
-`Bash(...)` rule, so it goes to an approver. A specifier on any other tool is not interpreted and never matches.
+`Bash(...)` or shell `run_process(...)` rule, so it goes to an approver. A specifier on any other tool is not interpreted
+and never matches.

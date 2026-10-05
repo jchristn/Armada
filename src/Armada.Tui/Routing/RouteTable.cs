@@ -93,6 +93,9 @@ namespace Armada.Tui.Routing
                 new HubTab("tenants", "Tenants", "TenantsScreen", "W7.9", true, false),
                 new HubTab("users", "Users", "UsersScreen", "W7.9", false, true),
                 new HubTab("credentials", "Credentials", "CredentialsScreen", "W7.9", false, true));
+            HubDefinition cliPermissions = new HubDefinition("tab",
+                new HubTab("requests", "Requests", "CliPermissionRequestsScreen", "W3.3"),
+                new HubTab("rules", "Rules", "CliPermissionRulesScreen", "W3.3"));
 
             r.Add(Screen("/", "Dashboard", "HomeScreen", "W3.1"));
             r.Add(Redirect("/dashboard", "/"));
@@ -170,7 +173,7 @@ namespace Armada.Tui.Routing
             r.Add(Screen("/api-explorer", "API Explorer", "ApiExplorerScreen", "W7.6"));
             r.Add(Screen("/api-explorer/:operationId", "API Explorer", "ApiExplorerScreen", "W7.6"));
             r.Add(Redirect("/notifications", "/inbox"));
-            r.Add(Redirect("/cli-permissions", "/approvals"));
+            r.Add(Hub("/cli-permissions", "CLI Tool Permissions", cliPermissions));
             r.Add(Redirect("/admin/tenants", "/server?tab=tenants"));
             r.Add(Redirect("/admin/users", "/server?tab=users"));
             r.Add(Redirect("/admin/credentials", "/server?tab=credentials"));

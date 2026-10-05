@@ -5,6 +5,7 @@ namespace Armada.Tui.Screens.Ask
     using System.Linq;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Tui.Approvals;
     using Armada.Tui.Ask;
     using Armada.Tui.Input;
     using Armada.Tui.Modals;
@@ -22,9 +23,12 @@ namespace Armada.Tui.Screens.Ask
     /// lives in <see cref="AskController"/>, so leaving and returning keeps the conversation, its live turn, and the
     /// draft. Below 100 columns the list becomes an overlay toggled with <c>Ctrl+T</c>. <c>Esc</c> in the composer moves
     /// to the transcript (focusing the newest pending card); pressed twice while a turn runs it stops the turn.
-    /// <c>Alt+Down</c> from anywhere on the screen focuses the oldest pending card. While a proposal in the open
-    /// conversation awaits approval, a strip above the composer says how many and how to decide, worded for where focus
-    /// is, and the status bar hints follow the focused control (<see cref="ResolveHints"/>).
+    /// <c>Alt+Down</c> from anywhere on the screen focuses the oldest pending card. While a proposal or a CLI tool
+    /// permission request in the open conversation awaits a decision, a strip above the composer says how many and how
+    /// to decide (one line per kind), worded for where focus is, and the status bar hints follow the focused control
+    /// (<see cref="ResolveHints"/>). The header's CLI tools line shows the conversation's CLI tool permission policy and
+    /// its effective value; <c>p</c> (or a click on it) changes it, with Bypass offered only to admins and only after
+    /// the strong warning.
     /// Not thread-safe.
     /// </summary>
     public class AskScreen : ScreenBase
@@ -99,6 +103,15 @@ namespace Armada.Tui.Screens.Ask
             get { return Ask.Conversation.PendingProposals().Count(p => !Ask.IsProposalBusy(p.Id)); }
         }
 
+        /// <summary>
+        /// CLI tool permission requests in the open conversation the user may decide (not counting one whose decision is
+        /// already in flight).
+        /// </summary>
+        public int PendingPermissionRequests
+        {
+            get { return Ask.Conversation.PendingCliPermissions().Count(r => r.CanDecide && !Ask.IsCliPermissionBusy(r.Id)); }
+        }
+
         /// <inheritdoc />
         public override IReadOnlyList<KeyValuePair<string, string>> Hints
         {
@@ -110,6 +123,8 @@ namespace Armada.Tui.Screens.Ask
         #region Private-Members
 
         private DateTime _LastEscapeUtc = DateTime.MinValue;
+        private int _CliPolicyRow = -1;
+        private int _CliPolicyX = 0;
         private bool _Narrow = false;
         private string? _EscapeHint = null;
 
@@ -180,6 +195,7 @@ namespace Armada.Tui.Screens.Ask
             list.Add(Cmd("ask.screen.rename", "Rename conversation", () => BeginTitleEdit(), hasThread, "e"));
             list.Add(Cmd("ask.screen.captain", "Choose captain...", () => PickCaptain(), () => !Ask.Conversation.TurnActive, "c"));
             list.Add(Cmd("ask.screen.auto-approve", "Toggle auto-approve", () => Ask.ToggleAutoApprove(), hasThread, "ctrl+y"));
+            list.Add(Cmd("ask.screen.cli-policy", "CLI tools permission policy...", () => PickCliPolicy(), hasThread, "p"));
             list.Add(Cmd("ask.screen.summarize", "Summarize conversation", () => { if (Ask.Conversation.Thread != null) Ask.Summarize(Ask.Conversation.Thread); }, hasThread, "s"));
             list.Add(Cmd("ask.screen.more", "More conversation actions...", () => ShowMoreMenu(), hasThread, "."));
             list.Add(Cmd("ask.screen.pin", "Pin or unpin conversation", () => { if (Ask.Conversation.Thread != null) Ask.TogglePin(Ask.Conversation.Thread); }, hasThread));
@@ -187,7 +203,7 @@ namespace Armada.Tui.Screens.Ask
             list.Add(Cmd("ask.screen.delete", "Delete conversation", () => { if (Ask.Conversation.Thread != null) Ask.Delete(Ask.Conversation.Thread); }, hasThread));
             list.Add(Cmd("ask.screen.work", "Next tracked work", () => NextWork(), () => Ask.Conversation.TrackedWork.Count > 0, "w"));
             list.Add(Cmd("ask.screen.threads", "Toggle conversation list", () => ToggleList(), null, "ctrl+t"));
-            list.Add(Cmd("ask.screen.review-approval", "Go to the oldest action waiting for approval", () => FocusOldestPending(), () => PendingApprovals > 0, "alt+down"));
+            list.Add(Cmd("ask.screen.review-approval", "Go to the oldest action waiting for approval", () => FocusOldestPending(), () => PendingApprovals + PendingPermissionRequests > 0, "alt+down"));
             list.Add(Cmd("ask.screen.stop", "Stop the captain", () => Ask.StopTurn(), () => Ask.Conversation.TurnActive, "ctrl+c"));
             list.Add(Cmd("ask.screen.thinking", "Toggle show thinking", () => Ask.ToggleShowThinking(), null, "alt+t", "ctrl+shift+t"));
             list.Add(Cmd("ask.screen.quick", "Quick actions...", () => { Scope.Focus(Composer); Composer.Text = "/"; }, null));
@@ -239,6 +255,7 @@ namespace Armada.Tui.Screens.Ask
         {
             IWidget? focused = Scope.Focused;
             int pending = PendingApprovals;
+            int requests = PendingPermissionRequests;
             if (EditingTitle)
             {
                 return FocusHints.Typing("Esc", "Cancel rename").Add("Enter", "Save");
@@ -246,8 +263,11 @@ namespace Armada.Tui.Screens.Ask
 
             if (ReferenceEquals(focused, Composer))
             {
-                FocusHints hints = FocusHints.Typing("Esc", pending > 0 ? "Leave the message box (then a approve, r reject)" : "Leave the message box");
-                if (pending > 0) hints.Add("Alt+Down", "Go to approval");
+                string leave = pending > 0 && requests == 0 ? "Leave the message box (then a approve, r reject)"
+                    : requests > 0 && pending == 0 ? "Leave the message box (then a allow, d deny)"
+                    : "Leave the message box";
+                FocusHints hints = FocusHints.Typing("Esc", leave);
+                if (pending + requests > 0) hints.Add("Alt+Down", "Go to approval");
                 hints.Add("Enter", "Send");
                 hints.Add("Ctrl+J", "Newline");
                 hints.Add("/", "Quick actions");
@@ -261,9 +281,17 @@ namespace Armada.Tui.Screens.Ask
                 FocusHints hints = new FocusHints();
                 AskBlock? block = Transcript.Selected();
                 AskActionProposal? proposal = block?.Proposal;
-                if (proposal != null && proposal.Status == AskProposalStatusEnum.Pending && !Ask.IsProposalBusy(proposal.Id))
+                List<AskPendingDecision> decisions = Transcript.SelectedDecisions();
+                if (decisions.Count > 0)
                 {
-                    hints.Add("a", "Approve").Add("r", "Reject").Add("x", "Arguments").Add("y", "Copy");
+                    bool onlyCli = decisions.All(d => d.Kind == AskPendingDecisionKindEnum.CliPermission);
+                    bool anyCli = decisions.Any(d => d.Kind == AskPendingDecisionKindEnum.CliPermission);
+                    bool remember = decisions.Any(d => d.CliRequest != null && d.CliRequest.CanRemember);
+                    if (onlyCli) hints.Add("a", "Allow once");
+                    else hints.Add("a", "Approve").Add("r", "Reject");
+                    if (anyCli && remember) hints.Add("A", "Allow and remember");
+                    if (anyCli) hints.Add("d", "Deny");
+                    if (proposal != null) hints.Add("x", "Arguments").Add("y", "Copy");
                 }
                 else if (proposal != null)
                 {
@@ -275,7 +303,7 @@ namespace Armada.Tui.Screens.Ask
                 }
                 else
                 {
-                    if (pending > 0) hints.Add("Alt+Down", "Go to approval");
+                    if (pending + requests > 0) hints.Add("Alt+Down", "Go to approval");
                     hints.Add("Enter", "Open");
                 }
 
@@ -324,17 +352,49 @@ namespace Armada.Tui.Screens.Ask
         /// <returns>Localized text or null.</returns>
         public string? PendingStripText()
         {
-            int pending = PendingApprovals;
-            if (pending == 0) return null;
+            List<string> lines = PendingStripLines();
+            return lines.Count > 0 ? lines[0] : null;
+        }
+
+        /// <summary>
+        /// The pending strip's lines: one for proposals and one for CLI tool permission requests, each worded for where
+        /// focus is (when both kinds wait, the message box wording points at Alt+Down, which reaches the oldest of
+        /// either). Empty when nothing waits.
+        /// </summary>
+        /// <returns>Localized lines.</returns>
+        public List<string> PendingStripLines()
+        {
+            List<string> lines = new List<string>();
+            int proposals = PendingApprovals;
+            int requests = PendingPermissionRequests;
+            bool both = proposals > 0 && requests > 0;
+            List<AskPendingDecision> selected = ReferenceEquals(Scope.Focused, Transcript) && !Transcript.Searching ? Transcript.SelectedDecisions() : new List<AskPendingDecision>();
+            if (proposals > 0) lines.Add(ProposalStripText(proposals, both, selected.Any(d => d.Kind == AskPendingDecisionKindEnum.Proposal)));
+            if (requests > 0)
+            {
+                Dictionary<string, object?> args = Services.LocalizationArgs.Of("count", requests);
+                bool selectedRequest = selected.Any(d => d.Kind == AskPendingDecisionKindEnum.CliPermission);
+                if (ReferenceEquals(Scope.Focused, Composer) && !EditingTitle && !both)
+                    lines.Add(Context.Loc.T("{count, plural, one {# CLI tool request waiting for permission: Esc, then a to allow once, A to allow and remember, or d to deny (Ctrl+A for all)} other {# CLI tool requests waiting for permission: Esc, then a to allow once, A to allow and remember, or d to deny (Ctrl+A for all)}}", args));
+                else if (selectedRequest)
+                    lines.Add(Context.Loc.T("{count, plural, one {# CLI tool request waiting for permission: a to allow once, A to allow and remember, or d to deny (Ctrl+A for all)} other {# CLI tool requests waiting for permission: a to allow once, A to allow and remember, or d to deny (Ctrl+A for all)}}", args));
+                else
+                    lines.Add(Context.Loc.T("{count, plural, one {# CLI tool request waiting for permission: Alt+Down to review it (Ctrl+A for all)} other {# CLI tool requests waiting for permission: Alt+Down to review the oldest (Ctrl+A for all)}}", args));
+            }
+
+            return lines;
+        }
+
+        private string ProposalStripText(int pending, bool both, bool selectedProposal)
+        {
             Dictionary<string, object?> args = Services.LocalizationArgs.Of("count", pending);
             IWidget? focused = Scope.Focused;
-            if (ReferenceEquals(focused, Composer) && !EditingTitle)
+            if (ReferenceEquals(focused, Composer) && !EditingTitle && !both)
             {
                 return Context.Loc.T("{count, plural, one {# action waiting for approval: Esc, then a to approve or r to reject (Ctrl+A for all)} other {# actions waiting for approval: Esc, then a to approve or r to reject (Ctrl+A for all)}}", args);
             }
 
-            AskActionProposal? selected = Transcript.Selected()?.Proposal;
-            if (ReferenceEquals(focused, Transcript) && !Transcript.Searching && selected != null && selected.Status == AskProposalStatusEnum.Pending)
+            if (selectedProposal)
             {
                 return Context.Loc.T("{count, plural, one {# action waiting for approval: a to approve or r to reject (Ctrl+A for all)} other {# actions waiting for approval: a to approve or r to reject (Ctrl+A for all)}}", args);
             }
@@ -385,6 +445,48 @@ namespace Armada.Tui.Screens.Ask
                 if (result is SelectOption<string> chosen) Ask.SetCaptain(chosen.Value);
             });
             return picker;
+        }
+
+        /// <summary>
+        /// Change the conversation's CLI tool permission policy (<c>p</c>, or a click on the header's CLI tools line):
+        /// Inherit, Refuse, Approve in Armada, or Bypass, which only admins may choose and only after the strong warning.
+        /// </summary>
+        /// <returns>The picker, or null without a conversation.</returns>
+        public PickerModal<string>? PickCliPolicy()
+        {
+            AskThread? thread = Ask.Conversation.Thread;
+            if (thread == null) return null;
+            bool allowBypass = Context.Session.IsGlobalAdmin || Context.Session.IsTenantAdmin;
+            CliPermissionPolicyEnum? current = thread.CliPermissionPolicy;
+            List<SelectOption<string>> options = CliPermissionPolicyChoice.Options(Context.Loc, true, null, allowBypass, current);
+            PickerModal<string> picker = new PickerModal<string>("CLI tools", options, Context.Loc, Context.Theme.Current);
+            picker.List.SelectValue(CliPermissionPolicyChoice.ValueOf(current));
+            Context.Modals.Show(picker, result =>
+            {
+                if (!(result is SelectOption<string> chosen)) return;
+                CliPermissionPolicyEnum? next = CliPermissionPolicyChoice.Parse(chosen.Value);
+                if (next == current) return;
+                if (next == CliPermissionPolicyEnum.Bypass)
+                {
+                    CliPermissionPolicyChoice.ConfirmBypass(Context, () => Ask.SetCliPermissionPolicy(thread, next));
+                    return;
+                }
+
+                Ask.SetCliPermissionPolicy(thread, next);
+            });
+            return picker;
+        }
+
+        /// <inheritdoc />
+        public override bool HandleMouse(MouseEvent mouse)
+        {
+            if (mouse.Kind == MouseEventKind.Press && mouse.Button == MouseButton.Left && _CliPolicyRow >= 0 && mouse.Y == _CliPolicyRow && mouse.X >= _CliPolicyX)
+            {
+                PickCliPolicy();
+                return true;
+            }
+
+            return base.HandleMouse(mouse);
         }
 
         /// <inheritdoc />
@@ -451,9 +553,9 @@ namespace Armada.Tui.Screens.Ask
             int top = RenderHeader(surface, x0, cw);
             int composerHeight = Math.Min(Composer.PreferredHeight(cw), Math.Max(3, height / 3));
             int formHeight = Form != null ? Math.Min(Form.PreferredHeight, Math.Max(6, (height - top - composerHeight) * 2 / 3)) : 0;
-            string? strip = PendingStripText();
-            // Wraps to a second row in narrow terminals so the keys at its end are never cut off.
-            List<string> stripLines = strip != null ? TextCells.Wrap("! " + strip, Math.Max(10, cw - 2)).Take(2).ToList() : new List<string>();
+            // Each line wraps to a second row in narrow terminals so the keys at its end are never cut off.
+            List<string> stripLines = new List<string>();
+            foreach (string strip in PendingStripLines()) stripLines.AddRange(TextCells.Wrap("! " + strip, Math.Max(10, cw - 2)).Take(2));
             int stripHeight = stripLines.Count;
             int transcriptHeight = Math.Max(1, height - top - composerHeight - formHeight - stripHeight - 1);
             if (Ask.ConvError != null)
@@ -565,6 +667,29 @@ namespace Armada.Tui.Screens.Ask
             {
                 SurfaceText.FillRow(surface, x0, y, cw, Theme.Warning.WithAttribute(CellAttributes.Reverse, true));
                 SurfaceText.Draw(surface, x0 + 1, y++, "! " + T("Auto-approve is on: actions the captain proposes run immediately. Every action is still recorded below."), Theme.Warning.WithAttribute(CellAttributes.Reverse, true), cw - 2);
+            }
+
+            _CliPolicyRow = -1;
+            if (thread != null)
+            {
+                // The conversation's CLI tool permission policy (the dashboard header's CLI tools select) and where its
+                // effective value comes from; p (Esc first while typing) or a click changes it.
+                CliPermissionResolution? resolution = thread.CliPermission;
+                string current = thread.CliPermissionPolicy.HasValue ? CliPermissionText.Policy(Context.Loc, thread.CliPermissionPolicy) : CliPermissionText.Policy(Context.Loc, null);
+                string key = ReferenceEquals(Scope.Focused, Composer) ? "Esc p" : "p";
+                string line = T("CLI tools") + ": " + current + " [" + key + "]";
+                string effective = CliPermissionText.Effective(Context.Loc, resolution, false);
+                if (effective.Length > 0) line += "   " + effective;
+                bool bypass = resolution != null ? resolution.Effective == CliPermissionPolicyEnum.Bypass : thread.CliPermissionPolicy == CliPermissionPolicyEnum.Bypass;
+                _CliPolicyRow = y;
+                _CliPolicyX = x0;
+                SurfaceText.FillRow(surface, x0, y, cw, Theme.Text);
+                SurfaceText.Draw(surface, x0 + 1, y++, line, bypass ? Theme.Warning : Theme.Muted, cw - 2);
+                if (resolution?.FallbackReason != null)
+                {
+                    foreach (string note in TextCells.Wrap(CliPermissionText.Fallback(Context.Loc, resolution.FallbackReason.Value), cw - 2).Take(2))
+                        SurfaceText.Draw(surface, x0 + 1, y++, note, Theme.Info, cw - 2);
+                }
             }
 
             Ask.EnsureTools();

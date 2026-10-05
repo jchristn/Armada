@@ -33,6 +33,11 @@ namespace Armada.Tui.Screens.Ask
         public AskActionProposal? Proposal { get; set; } = null;
 
         /// <summary>
+        /// CLI permission request shown as a card in this block, or null.
+        /// </summary>
+        public CliPermissionRequest? CliRequest { get; set; } = null;
+
+        /// <summary>
         /// Tracked work whose live card this block hosts, or null.
         /// </summary>
         public string? WorkId { get; set; } = null;

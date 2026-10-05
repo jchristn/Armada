@@ -11,6 +11,7 @@ namespace Armada.Tui.Screens.Ask
     using Armada.Core.Models;
     using Armada.Tui.Ask;
     using Armada.Tui.Modals;
+    using Armada.Tui.Services;
     using Armada.Tui.Text;
     using Armada.Tui.Widgets;
     using TUIKit;
@@ -24,9 +25,14 @@ namespace Armada.Tui.Screens.Ask
     /// does not detach, only scrolling the viewport up does (PgUp, Home, the wheel, search, or a selection that moves
     /// the viewport); while detached it shows "N new below"; End, a decision on a card, and a sent message return to
     /// the tail (keeping the selection only while it is still on screen). Confirm cards carry clickable [Approve],
-    /// [Reject], and [Arguments] buttons that work whatever has keyboard focus. Keys: <c>Up</c>/<c>Down</c> focus messages and card rows, <c>PgUp</c>/<c>PgDn</c> scroll,
+    /// [Reject], and [Arguments] buttons and CLI permission cards [Allow once], [Allow and remember], and [Deny], which
+    /// work whatever has keyboard focus; a selected pending card also spells out its keys. Keys: <c>Up</c>/<c>Down</c>
+    /// focus messages and card rows (every pending card is its own stop), <c>PgUp</c>/<c>PgDn</c> scroll,
     /// <c>Home</c> top (loads earlier messages), <c>End</c> live tail, <c>Enter</c> acts on the focused item,
-    /// <c>a</c>/<c>r</c> approve or reject the focused confirm card, <c>x</c> arguments, <c>t</c> thinking,
+    /// <c>a</c>/<c>r</c> approve or reject the pending decision the highlighted block belongs to (its confirm card, the
+    /// captain reply of the turn that proposed it, a CLI permission card, or a work card row of a mission waiting on a
+    /// permission or a review; a chooser opens when there are several), <c>A</c> allow and remember and <c>d</c> deny a
+    /// CLI permission request, and on anything else a hint says nothing waits there, <c>x</c> arguments, <c>t</c> thinking,
     /// <c>y</c> copy (arguments on a card, otherwise the message as Markdown), <c>Y</c> copy the conversation,
     /// <c>o</c> open the row's pull request, <c>l</c> mission log, <c>d</c> mission diff, <c>Ctrl+F</c> or <c>/</c> search
     /// with <c>n</c>/<c>N</c>. Not thread-safe.
@@ -155,6 +161,8 @@ namespace Armada.Tui.Screens.Ask
         /// <param name="width">Total width including the gutter.</param>
         public void Layout(int width)
         {
+            // A selected pending card in the focused transcript spells out its keys.
+            ViewState.Focus(IsFocused ? SelectedKey : null);
             int contentWidth = Math.Max(20, width - 2);
             DateTime now = _Context.Clock.UtcNow;
             string key = _Ask.Conversation.Version + "|" + contentWidth + "|" + ViewState.Version + "|" + _Ask.BusyProposalsVersion + "|" + _Ask.LoadingOlder
@@ -252,8 +260,8 @@ namespace Armada.Tui.Screens.Ask
         public bool SelectOldestPending()
         {
             Layout(LastWidth());
-            AskBlock? block = _Blocks.FirstOrDefault(b => b.Proposal != null && b.Proposal.Status == AskProposalStatusEnum.Pending && b.Buttons.Count > 0);
-            if (block == null) block = _Blocks.FirstOrDefault(b => b.Proposal != null && b.Proposal.Status == AskProposalStatusEnum.Pending);
+            AskBlock? block = _Blocks.FirstOrDefault(b => IsPendingCard(b) && b.Buttons.Count > 0);
+            if (block == null) block = _Blocks.FirstOrDefault(b => IsPendingCard(b));
             if (block == null) return false;
             Select(block.Key, -1);
             return true;
@@ -266,9 +274,132 @@ namespace Armada.Tui.Screens.Ask
         public bool SelectNewestPending()
         {
             Layout(LastWidth());
-            AskBlock? block = _Blocks.LastOrDefault(b => b.Proposal != null && b.Proposal.Status == AskProposalStatusEnum.Pending);
+            AskBlock? block = _Blocks.LastOrDefault(b => IsPendingCard(b));
             if (block == null) return false;
             Select(block.Key, -1);
+            return true;
+        }
+
+        /// <summary>
+        /// Whether a block is a card waiting on the user: a pending confirm card, or a pending CLI permission card the
+        /// user may decide.
+        /// </summary>
+        /// <param name="block">Block, or null.</param>
+        /// <returns>True for a pending card.</returns>
+        public static bool IsPendingCard(AskBlock? block)
+        {
+            if (block == null) return false;
+            if (block.Proposal != null && block.Proposal.Status == AskProposalStatusEnum.Pending) return true;
+            return block.CliRequest != null && block.CliRequest.Status == CliPermissionRequestStatusEnum.Pending && block.CliRequest.CanDecide;
+        }
+
+        /// <summary>
+        /// The pending decisions the selected part of the transcript belongs to (see <see cref="DecisionsFor"/>).
+        /// </summary>
+        /// <returns>Decisions, oldest first; empty when nothing waits there.</returns>
+        public List<AskPendingDecision> SelectedDecisions()
+        {
+            return DecisionsFor(Selected(), SelectedRow);
+        }
+
+        /// <summary>
+        /// The pending decisions a block (and work card row) belongs to: the proposal of a confirm card; the request of a
+        /// CLI permission card; for a captain reply (or the streaming reply), the proposals and requests of the same turn
+        /// (the messages between the user message before it and the next one, linked by the conversation's typed message
+        /// order, never by text); for a work card row, the CLI permission requests and the review of its mission.
+        /// Decisions with a call in flight, and requests the user may not decide, are left out.
+        /// </summary>
+        /// <param name="block">Block, or null.</param>
+        /// <param name="row">Selected work card row, or -1.</param>
+        /// <returns>Decisions, oldest first.</returns>
+        public List<AskPendingDecision> DecisionsFor(AskBlock? block, int row)
+        {
+            List<AskPendingDecision> decisions = new List<AskPendingDecision>();
+            if (block == null) return decisions;
+            AskConversation conv = _Ask.Conversation;
+            if (block.Proposal != null)
+            {
+                if (block.Proposal.Status == AskProposalStatusEnum.Pending && !_Ask.IsProposalBusy(block.Proposal.Id)) decisions.Add(new AskPendingDecision(block.Proposal));
+                return decisions;
+            }
+
+            if (block.CliRequest != null)
+            {
+                if (Decidable(block.CliRequest)) decisions.Add(new AskPendingDecision(block.CliRequest));
+                return decisions;
+            }
+
+            if (block.WorkId != null)
+            {
+                string? missionId = row >= 0 && row < block.RowMissionIds.Count ? block.RowMissionIds[row] : (block.RowMissionIds.Count == 1 ? block.RowMissionIds[0] : null);
+                if (missionId == null) return decisions;
+                foreach (CliPermissionRequest request in conv.PendingCliPermissions().Where(r => r.MissionId == missionId && Decidable(r))) decisions.Add(new AskPendingDecision(request));
+                foreach (ApprovalItem item in _Context.Approvals.Items.Where(i => i.Kind == ApprovalKindEnum.CliPermission && i.CliPermission != null && i.CliPermission.MissionId == missionId))
+                {
+                    if (!decisions.Any(d => d.Id == item.EntityId) && Decidable(item.CliPermission!)) decisions.Add(new AskPendingDecision(item.CliPermission!));
+                }
+
+                ApprovalItem? review = _Context.Approvals.Find(ApprovalKindEnum.MissionReview, missionId);
+                if (review != null) decisions.Add(new AskPendingDecision(review));
+                return decisions;
+            }
+
+            bool reply = block.Kind == AskBlockKindEnum.Stream
+                || (block.Message != null && block.Message.Role == AskMessageRoleEnum.Assistant && block.Message.Kind == AskMessageKindEnum.Text);
+            if (!reply) return decisions;
+            List<AskMessage> messages = conv.Messages;
+            int index = block.Message != null ? messages.FindIndex(m => m.Id == block.Message.Id) : messages.Count;
+            int start = index;
+            while (start > 0 && messages[start - 1].Role != AskMessageRoleEnum.User) start--;
+            int end = index;
+            while (end + 1 < messages.Count && messages[end + 1].Role != AskMessageRoleEnum.User) end++;
+            for (int i = start; i <= end && i < messages.Count; i++)
+            {
+                if (i == index) continue;
+                AskMessage m = messages[i];
+                if (m.Kind == AskMessageKindEnum.ActionProposal)
+                {
+                    AskActionProposal? proposal = conv.ProposalFor(m);
+                    if (proposal != null && proposal.Status == AskProposalStatusEnum.Pending && !_Ask.IsProposalBusy(proposal.Id)) decisions.Add(new AskPendingDecision(proposal));
+                }
+                else if (m.Kind == AskMessageKindEnum.CliPermission)
+                {
+                    CliPermissionRequest? request = conv.CliPermissionFor(m);
+                    if (request != null && Decidable(request)) decisions.Add(new AskPendingDecision(request));
+                }
+            }
+
+            return decisions;
+        }
+
+        /// <summary>
+        /// Act on the pending decision the selection belongs to: approve (<c>a</c>; allow once for a CLI permission
+        /// request), reject (<c>r</c>; deny), remember (<c>A</c>, CLI permission requests only), or deny (<c>d</c>, CLI
+        /// permission requests only). Several decisions open a chooser; none shows a hint and leaves the selection as is.
+        /// </summary>
+        /// <param name="key">a, r, A, or d.</param>
+        /// <returns>True when the key was handled (acted, chose, or hinted).</returns>
+        public bool DecideSelected(char key)
+        {
+            List<AskPendingDecision> all = SelectedDecisions();
+            List<AskPendingDecision> candidates = key == 'A' || key == 'd'
+                ? all.Where(d => d.Kind == AskPendingDecisionKindEnum.CliPermission).ToList()
+                : all;
+            if (candidates.Count == 0)
+            {
+                ShowNothingHint(key);
+                return true;
+            }
+
+            if (candidates.Count == 1) return Act(candidates[0], key);
+            List<ActionMenuItem> items = new List<ActionMenuItem>();
+            foreach (AskPendingDecision decision in candidates)
+            {
+                AskPendingDecision d = decision;
+                items.Add(new ActionMenuItem(VerbLabel(d, key) + ": " + DecisionLabel(d), () => Act(d, key)));
+            }
+
+            ActionMenu.Show(_Context.Modals, "Choose what to decide", items, _Context.Loc, _Context.Theme.Current);
             return true;
         }
 
@@ -525,6 +656,15 @@ namespace Armada.Tui.Screens.Ask
 
         private bool Press(AskBlock block, AskCardButton button)
         {
+            if (!String.IsNullOrEmpty(button.RequestId))
+            {
+                CliPermissionRequest? request = block.CliRequest;
+                if (request == null || request.Id != button.RequestId || !Decidable(request)) return false;
+                if (button.Action == AskCardActionEnum.AllowOnce) return Act(new AskPendingDecision(request), 'a');
+                if (button.Action == AskCardActionEnum.AllowAndRemember) return Act(new AskPendingDecision(request), 'A');
+                return Act(new AskPendingDecision(request), 'd');
+            }
+
             AskActionProposal? proposal = block.Proposal;
             if (proposal == null || proposal.Id != button.ProposalId) return false;
             if (button.Action == AskCardActionEnum.Arguments)
@@ -695,8 +835,8 @@ namespace Armada.Tui.Screens.Ask
                     return true;
                 case 'a':
                 case 'r':
-                    if (block?.Proposal == null) return false;
-                    return Decide(block.Proposal, c == 'a');
+                case 'A':
+                    return DecideSelected(c);
                 case 'x':
                     if (block?.Proposal == null) return false;
                     ViewState.Toggle(ViewState.ExpandedArguments, block.Proposal.Id);
@@ -731,8 +871,10 @@ namespace Armada.Tui.Screens.Ask
 
                 case 'd':
                     {
+                        // A CLI permission card (or the reply of its turn) denies; a work card row opens the diff.
+                        if (block != null && block.WorkId == null) return DecideSelected('d');
                         string? missionId = RowValue(block, b => b.RowMissionIds);
-                        if (missionId == null) return false;
+                        if (missionId == null) return DecideSelected('d');
                         ShowDiff(missionId);
                         return true;
                     }
@@ -740,6 +882,59 @@ namespace Armada.Tui.Screens.Ask
                 default:
                     return false;
             }
+        }
+
+        private bool Decidable(CliPermissionRequest request)
+        {
+            return request.Status == CliPermissionRequestStatusEnum.Pending && request.CanDecide && !_Ask.IsCliPermissionBusy(request.Id);
+        }
+
+        private bool Act(AskPendingDecision decision, char key)
+        {
+            bool positive = key == 'a';
+            if (decision.Kind == AskPendingDecisionKindEnum.Proposal) return key == 'a' || key == 'r' ? Decide(decision.Proposal!, positive) : false;
+            if (decision.Kind == AskPendingDecisionKindEnum.CliPermission)
+            {
+                CliPermissionDecisionEnum kind = key == 'a' ? CliPermissionDecisionEnum.AllowOnce : key == 'A' ? CliPermissionDecisionEnum.AllowAndRemember : CliPermissionDecisionEnum.Deny;
+                if (kind == CliPermissionDecisionEnum.AllowAndRemember && !decision.CliRequest!.CanRemember)
+                {
+                    _Context.Notifications.Toast(Services.NotificationSeverityEnum.Warning, _Context.Loc.T("Only an admin can save a permission rule. Allow once or deny instead."));
+                    return true;
+                }
+
+                bool started = _Ask.DecideCliPermission(decision.CliRequest!, kind);
+                if (started && kind == CliPermissionDecisionEnum.AllowOnce) ReturnToTail();
+                return started;
+            }
+
+            if (key != 'a' && key != 'r') return false;
+            new Approvals.ApprovalActions(_Context).ResolveReview(decision.Review!, positive ? Approvals.ReviewVerdictEnum.Approve : Approvals.ReviewVerdictEnum.Deny);
+            return true;
+        }
+
+        private string VerbLabel(AskPendingDecision decision, char key)
+        {
+            if (decision.Kind == AskPendingDecisionKindEnum.CliPermission)
+                return T(key == 'a' ? "Allow once" : key == 'A' ? "Allow and remember" : "Deny");
+            return T(key == 'a' ? "Approve" : decision.Kind == AskPendingDecisionKindEnum.MissionReview ? "Deny" : "Reject");
+        }
+
+        private string DecisionLabel(AskPendingDecision decision)
+        {
+            if (decision.Kind == AskPendingDecisionKindEnum.Proposal)
+                return decision.Proposal!.ToolName + (String.IsNullOrWhiteSpace(decision.Proposal.SummaryText) ? "" : " - " + decision.Proposal.SummaryText);
+            if (decision.Kind == AskPendingDecisionKindEnum.CliPermission) return Approvals.CliPermissionText.Title(decision.CliRequest!);
+            return decision.Review!.Title;
+        }
+
+        private void ShowNothingHint(char key)
+        {
+            int pending = _Ask.Conversation.PendingProposals().Count(p => !_Ask.IsProposalBusy(p.Id))
+                + _Ask.Conversation.PendingCliPermissions().Count(r => Decidable(r));
+            string text = key == 'A' || key == 'd'
+                ? (pending > 0 ? "No CLI permission request here. Pending: Alt+Down jumps to it" : "No CLI permission request here.")
+                : (pending > 0 ? "Nothing to approve here. Pending: Alt+Down jumps to it" : "Nothing to approve here.");
+            _Context.Notifications.Toast(Services.NotificationSeverityEnum.Info, _Context.Loc.T(text));
         }
 
         private string? RowValue(AskBlock? block, Func<AskBlock, List<string?>> pick)

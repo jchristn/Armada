@@ -2963,6 +2963,7 @@ export interface RetentionSettingsData {
   askThreadDeleteAfterDays: number;
   jobRetentionDays: number;
   importBatchRetentionDays: number;
+  cliPermissionRequestRetentionDays: number;
 }
 
 // ---------------------------------------------------------------------------
