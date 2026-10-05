@@ -3,7 +3,9 @@ namespace Armada.Tui.Screens.Admin
     using System;
     using System.Collections.Generic;
     using System.Linq;
+    using Armada.Client.Models;
     using Armada.Core.Models;
+    using Armada.Tui.Modals;
     using Armada.Tui.Routing;
     using Armada.Tui.Screens.Kit;
     using Armada.Tui.Services;
@@ -11,7 +13,8 @@ namespace Armada.Tui.Screens.Admin
 
     /// <summary>
     /// Settings, Tenants tab (dashboard <c>admin/Tenants.tsx</c>). Global admins list every tenant (select, name, id,
-    /// active, created, last updated) with name search, create (name), edit (name, active), delete and bulk delete
+    /// active, created, last updated) with name search, create (name and an optional admin password; a server-generated
+    /// password is shown once), edit (name, active), delete and bulk delete
     /// with a typed "delete" confirmation, and View JSON. Other users see their own tenant read-only. Writes are
     /// blocked behind Armada.Proxy. Not thread-safe.
     /// </summary>
@@ -132,23 +135,71 @@ namespace Armada.Tui.Screens.Admin
             name.Validator = v => String.IsNullOrWhiteSpace(v) ? "Name is required." : null;
             ToggleField active = new ToggleField(editing?.Active ?? true);
             if (editing != null) form.AddField("Active", active);
+            InputField adminPassword = new InputField();
+            adminPassword.Masked = true;
+            adminPassword.Placeholder = "Leave blank to generate one";
+            adminPassword.Validator = v => ValidateAdminPassword(v);
+            if (editing == null) form.AddField("Admin Password (optional)", adminPassword);
             form.MarkClean();
             FormModal modal = new FormModal(editing != null ? "Edit Tenant" : "Create Tenant", form, Context, "Save");
+            TenantCreateResult? created = null;
             modal.SubmitAsync = async () =>
             {
-                TenantMetadata body = new TenantMetadata(name.Value.Trim());
-                body.Active = active.Value;
-                if (editing != null) await Context.Client.UpdateTenantAsync(editing.Id, body).ConfigureAwait(false);
-                else await Context.Client.CreateTenantAsync(body).ConfigureAwait(false);
+                if (editing != null)
+                {
+                    TenantMetadata body = new TenantMetadata(name.Value.Trim());
+                    body.Active = active.Value;
+                    await Context.Client.UpdateTenantAsync(editing.Id, body).ConfigureAwait(false);
+                    return null;
+                }
+
+                string? error = ValidateAdminPassword(adminPassword.Value);
+                if (error != null) return error;
+                TenantCreateRequest request = new TenantCreateRequest(name.Value.Trim());
+                request.Active = active.Value;
+                if (adminPassword.Value.Length > 0) request.AdminPassword = adminPassword.Value;
+                created = await Context.Client.CreateTenantAsync(request).ConfigureAwait(false);
                 return null;
             };
             Context.Modals.Show(modal, result =>
             {
+                adminPassword.Value = "";
                 if (!(result is bool ok) || !ok) return;
                 ScreenOps.Toast(Context, NotificationSeverityEnum.Success, editing != null ? "Tenant \"{{name}}\" saved." : "Tenant \"{{name}}\" created.", LocalizationArgs.Of("name", name.Value.Trim()));
+                if (created != null && !String.IsNullOrEmpty(created.AdminPassword)) ShowGeneratedPassword(created.AdminEmail, created.AdminPassword!);
+                created = null;
                 Load();
             });
             return modal;
+        }
+
+        /// <summary>
+        /// The server's rule for a supplied tenant admin password: blank (generate one) or at least
+        /// <see cref="PasswordChangeRequest.MinimumLength"/> characters.
+        /// </summary>
+        /// <param name="password">Password.</param>
+        /// <returns>English error, or null.</returns>
+        public static string? ValidateAdminPassword(string? password)
+        {
+            if (String.IsNullOrEmpty(password)) return null;
+            if (password.Length < PasswordChangeRequest.MinimumLength) return "Admin password must be at least 8 characters.";
+            return null;
+        }
+
+        /// <summary>
+        /// Show the server-generated tenant admin password once (y copies it). It is held only by the dialog, never
+        /// stored on the screen or in preferences.
+        /// </summary>
+        /// <param name="email">Seeded admin email, or null.</param>
+        /// <param name="password">Generated password.</param>
+        /// <returns>The dialog.</returns>
+        public ViewerModal ShowGeneratedPassword(string? email, string password)
+        {
+            if (String.IsNullOrEmpty(password)) throw new ArgumentNullException(nameof(password));
+            string text = Context.Loc.T("Copy this password now. It is shown only once and cannot be retrieved later.") + "\n\n"
+                + Context.Loc.T("Admin email") + ": " + (String.IsNullOrEmpty(email) ? "admin@armada" : email) + "\n"
+                + password + "\n\n" + Context.Loc.T("Copy password") + ": y";
+            return ScreenOps.ShowViewer(Context, "Tenant admin password (shown once)", new JsonOrTextViewer(text), password, "Password");
         }
 
         #endregion

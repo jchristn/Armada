@@ -18,6 +18,11 @@ namespace Test.Shared.Suites.Tui.Bodies
         public string? Password { get; set; } = null;
 
         /// <summary>
+        /// Current password (self-service password change only).
+        /// </summary>
+        public string? CurrentPassword { get; set; } = null;
+
+        /// <summary>
         /// First name.
         /// </summary>
         public string? FirstName { get; set; } = null;

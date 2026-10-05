@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
-import { listUsers, createUser, updateUser, deleteUser, listTenants } from '../../api/client';
+import { listUsers, createUser, updateUser, deleteUser, listTenants, isApiStatus } from '../../api/client';
 import type { UserMaster, TenantMetadata, UserUpsertRequest } from '../../types/models';
 import Pagination from '../../components/shared/Pagination';
 import ActionMenu from '../../components/shared/ActionMenu';
@@ -35,6 +35,7 @@ export default function Users() {
     lastName: '',
     password: '',
     confirmPassword: '',
+    currentPassword: '',
     isAdmin: false,
     isTenantAdmin: false,
     tenantId: '',
@@ -121,6 +122,7 @@ export default function Users() {
       lastName: '',
       password: '',
       confirmPassword: '',
+      currentPassword: '',
       isAdmin: false,
       isTenantAdmin: false,
       tenantId: tenants[0]?.id ?? user?.tenant?.id ?? '',
@@ -140,6 +142,7 @@ export default function Users() {
       lastName: u.lastName ?? '',
       password: '',
       confirmPassword: '',
+      currentPassword: '',
       isAdmin: u.isAdmin,
       isTenantAdmin: u.isTenantAdmin,
       tenantId: u.tenantId,
@@ -149,8 +152,13 @@ export default function Users() {
     setShowForm(true);
   }
 
+  // Editing the signed-in user's own record: the server requires the current password to change it (O-17).
+  const editingSelf = !!editing && !!user?.user?.id && editing.id === user.user.id;
+  const changingOwnPassword = editingSelf && !!form.password.trim();
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    const sendsCurrentPassword = changingOwnPassword;
     try {
       if (!editing && !form.password.trim()) {
         setError(t('Password is required when creating a user.'));
@@ -158,6 +166,10 @@ export default function Users() {
       }
       if (form.password !== form.confirmPassword) {
         setError(t('Passwords do not match.'));
+        return;
+      }
+      if (sendsCurrentPassword && !form.currentPassword) {
+        setError(t('Enter your current password to change your own password.'));
         return;
       }
 
@@ -170,18 +182,21 @@ export default function Users() {
         isTenantAdmin: form.isTenantAdmin,
         active: form.active,
         ...(form.password.trim() ? { password: form.password } : {}),
+        ...(sendsCurrentPassword ? { currentPassword: form.currentPassword } : {}),
       };
 
       if (editing) await updateUser(editing.id, payload);
       else await createUser(payload);
       setShowForm(false);
+      setForm(f => ({ ...f, password: '', confirmPassword: '', currentPassword: '' }));
       setError('');
       pushToast('success', editing
         ? t('User "{{email}}" saved.', { email: form.email })
         : t('User "{{email}}" created.', { email: form.email }));
       load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('Save failed.'));
+      if (sendsCurrentPassword && isApiStatus(err, 403)) setError(t('Current password is incorrect.'));
+      else setError(err instanceof Error ? err.message : t('Save failed.'));
     }
   }
 
@@ -281,6 +296,19 @@ export default function Users() {
                 placeholder={editing ? t('Repeat new password') : t('Repeat password')}
               />
             </label>
+            {editingSelf && (
+              <label>
+                {t('Current Password')}
+                <input
+                  type="password"
+                  autoComplete="current-password"
+                  value={form.currentPassword}
+                  onChange={e => setForm({ ...form, currentPassword: e.target.value })}
+                  required={changingOwnPassword}
+                  placeholder={t('Required to change your own password')}
+                />
+              </label>
+            )}
             <label>{t('Tenant')}
               <select
                 value={form.tenantId}

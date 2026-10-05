@@ -288,6 +288,38 @@ namespace Test.Shared.Suites.Tui
                 foreach (string type in ArmadaEventTypes.Parity) AssertNotNull(ArmadaEventTypes.PayloadTypeFor(type), type);
             }));
 
+            cases.Add(TuiCase.Sync(Suite, "socket_typed_status_and_command_error", "mission.status_changed status fields and the command.error code parse into typed values", () =>
+            {
+                ArmadaSocketMessage? changed = ArmadaSocketMessage.Parse("{\"type\":\"mission.status_changed\",\"message\":\"Mission msn_1 moved\",\"data\":{\"entityType\":\"mission\",\"entityId\":\"msn_1\",\"captainId\":\"cpt_1\",\"missionId\":\"msn_1\",\"vesselId\":\"vsl_1\",\"voyageId\":\"vyg_1\",\"status\":\"WorkProduced\",\"previousStatus\":\"InProgress\"},\"timestamp\":\"2026-10-05T00:00:00Z\"}");
+                AssertNotNull(changed, "parsed");
+                AssertEqual(ArmadaEventTypes.MissionStatusChanged, changed!.Type, "type");
+                MissionStatusChangedEvent? payload = changed.GetTypedData() as MissionStatusChangedEvent;
+                AssertNotNull(payload, "typed payload");
+                AssertEqual("msn_1", payload!.MissionId, "mission id");
+                AssertEqual("vyg_1", payload.VoyageId, "voyage id");
+                AssertEqual(Armada.Core.Enums.MissionStatusEnum.WorkProduced, payload.MissionStatus, "status");
+                AssertEqual(Armada.Core.Enums.MissionStatusEnum.InProgress, payload.PreviousMissionStatus, "previous status");
+                MissionStatusChangedEvent? first = ArmadaSocketMessage.Parse("{\"type\":\"mission.status_changed\",\"data\":{\"missionId\":\"msn_2\",\"status\":\"Pending\",\"previousStatus\":null}}")!.GetData<MissionStatusChangedEvent>();
+                AssertEqual(Armada.Core.Enums.MissionStatusEnum.Pending, first!.MissionStatus, "first status");
+                AssertNull(first.PreviousMissionStatus, "no previous status");
+
+                // The server's own reply type, serialized as the WebSocket hub does (camelCase, string enums).
+                System.Text.Json.JsonSerializerOptions hub = new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase };
+                hub.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+                foreach (Armada.Core.Enums.WebSocketCommandErrorCodeEnum code in Enum.GetValues(typeof(Armada.Core.Enums.WebSocketCommandErrorCodeEnum)))
+                {
+                    string json = System.Text.Json.JsonSerializer.Serialize(Armada.Server.WebSocket.WebSocketCommandError.Create("get_mission", code, "English text"), hub);
+                    CommandErrorMessage? error = CommandErrorMessage.From(ArmadaSocketMessage.Parse(json));
+                    AssertNotNull(error, "command.error parsed: " + json);
+                    AssertEqual(code, error!.ErrorCode, "code " + code);
+                    AssertEqual("get_mission", error.Action, "action");
+                    AssertEqual("English text", error.Error, "error text");
+                }
+
+                AssertNull(CommandErrorMessage.From(changed), "other message types are not command errors");
+                AssertNull(CommandErrorMessage.From(ArmadaSocketMessage.Parse("{\"type\":\"command.error\",\"error\":\"old server\"}"))!.ErrorCode, "no code from an older server");
+            }));
+
             cases.Add(TuiCase.Async(Suite, "socket_reconnects", "The socket subscribes, dispatches typed events, and reconnects with a counter", async () =>
             {
                 int attempt = 0;

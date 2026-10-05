@@ -80,6 +80,8 @@ export const IMPORT_ERROR_LABELS: Record<string, string> = {
   DirectoryNotFound: 'That directory does not exist on the Admiral host.',
   BatchNotFound: 'This import batch no longer exists. Run discovery again.',
   BatchBusy: 'This batch is already being imported. Wait for it to finish or open it from the import history.',
+  CategorizationCaptainRequired: 'Choose a captain to recommend fleets, or turn fleet recommendations off.',
+  CategorizationCaptainNotFound: 'The selected categorization captain no longer exists. Choose another captain.',
 };
 
 function badge(t: Translate, meta: StatusMeta | undefined, fallback: string) {
