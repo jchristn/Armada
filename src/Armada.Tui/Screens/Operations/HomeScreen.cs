@@ -292,6 +292,7 @@ namespace Armada.Tui.Screens.Operations
             Missions.Activated += (s, m) => Context.Navigate("/missions/" + Uri.EscapeDataString(m.Id));
             Missions.MenuRequested += (s, m) => MissionMenu(m);
 
+            Health.TileHeight = 4;
             Chart.Buckets = new List<OpsChartBucket>();
             Chart.EmptyText = "Loading mission history...";
 
@@ -789,8 +790,8 @@ namespace Armada.Tui.Screens.Operations
             if (Health.Visible)
             {
                 blocks.Add(HomeBlock.Drawn(y, 1, s => SurfaceText.Draw(s, 0, 0, Tr("Vessel health"), Theme.Accent, width)));
-                blocks.Add(HomeBlock.For(Health, y + 1, 3, 0, 0, y));
-                y += 5;
+                blocks.Add(HomeBlock.For(Health, y + 1, 4, 0, 0, y));
+                y += 6;
             }
 
             MissionHistorySummaryResult? h = History;
@@ -830,9 +831,9 @@ namespace Armada.Tui.Screens.Operations
             int mt = y;
             blocks.Add(HomeBlock.Drawn(y, 1, s => SurfaceText.Draw(s, 0, 0, Tr("Recent Missions"), Theme.Accent, width)));
             y++;
-            int mfh = MissionFilters.PreferredHeight(Math.Max(10, width - 16));
-            blocks.Add(HomeBlock.For(MissionFilters, y, mfh, 0, Math.Max(10, width - 16), mt));
-            blocks.Add(HomeBlock.For(_ViewAll, y, 1, Math.Max(0, width - 15), width, mt));
+            int mfh = MissionFilters.PreferredHeight(Math.Max(10, width - 20));
+            blocks.Add(HomeBlock.For(MissionFilters, y, mfh, 0, Math.Max(10, width - 20), mt));
+            blocks.Add(HomeBlock.For(_ViewAll, y, 1, Math.Max(0, width - 18), width, mt));
             y += mfh;
             int mrows = Math.Max(2, Math.Min(Missions.Rows.Count, 10) + 1);
             blocks.Add(HomeBlock.For(Missions, y, mrows, 0, 0, mt));

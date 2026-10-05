@@ -80,6 +80,7 @@ namespace Armada.Tui.Screens.Operations
 
         private readonly string _SubmitLabel;
         private double _WidthRatio = 0.7;
+        private bool _CleanMarked = false;
         private int _ScreenWidth = 100;
         private int _ScreenHeight = 30;
 
@@ -225,6 +226,12 @@ namespace Armada.Tui.Screens.Operations
             _ScreenWidth = surface.Size.Width;
             _ScreenHeight = surface.Size.Height;
             Form.SaveButton.Label = Busy ? "Working..." : _SubmitLabel;
+            if (!_CleanMarked)
+            {
+                Form.MarkClean();
+                _CleanMarked = true;
+            }
+
             base.Render(surface);
         }
 

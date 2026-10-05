@@ -121,12 +121,13 @@ namespace Armada.Tui.Screens.Operations
                     SurfaceText.Draw(surface, x + 2, 1, tile.Value, valueStyle.WithAttribute(CellAttributes.Bold, true).WithBackground(box.Background), Math.Max(0, Math.Min(_TileWidth - 2, width - x - 2)));
                 }
 
-                if (height > 2 && tile.Detail.Length > 0)
+                int detailTop = tile.Value.Length > 0 ? 2 : 1;
+                if (height > detailTop && tile.Detail.Length > 0)
                 {
                     List<string> lines = TextCells.Wrap(tile.Detail, Math.Max(4, _TileWidth - 2));
-                    for (int l = 0; l < lines.Count && 2 + l < Math.Min(height, TileHeight); l++)
+                    for (int l = 0; l < lines.Count && detailTop + l < Math.Min(height, TileHeight); l++)
                     {
-                        SurfaceText.Draw(surface, x + 2, 2 + l, lines[l], Theme.Muted.WithBackground(box.Background), Math.Max(0, Math.Min(_TileWidth - 2, width - x - 2)));
+                        SurfaceText.Draw(surface, x + 2, detailTop + l, lines[l], Theme.Muted.WithBackground(box.Background), Math.Max(0, Math.Min(_TileWidth - 2, width - x - 2)));
                     }
                 }
 
