@@ -86,6 +86,13 @@ services:
       - ${IV_WORK}/data/db:/app/data/db
       - ${IV_WORK}/logs:/app/data/logs
       - ${IV_WORK}/origin.git:/iv/origin.git
+    environment:
+      # The test origin is bind-mounted from the host, so it is owned by the host user (for example the CI runner,
+      # UID 1001), not the container's user (UID 1654). git refuses to clone a repository owned by another user
+      # ("dubious ownership", exit 128) unless that path is trusted; trust only this test path, only in this test.
+      GIT_CONFIG_COUNT: "1"
+      GIT_CONFIG_KEY_0: "safe.directory"
+      GIT_CONFIG_VALUE_0: "/iv/origin.git"
     depends_on:
       stub:
         condition: service_healthy
