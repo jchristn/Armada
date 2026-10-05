@@ -13,6 +13,7 @@ namespace Test.Shared.Suites.Tui
     using Armada.Core.Models;
     using Armada.Tui.Approvals;
     using Armada.Tui.Services;
+    using TUIKit.Widgets;
     using Test.Shared.Infrastructure;
     using Test.Shared.Infrastructure.ApiSurface;
     using Touchstone.Core;
@@ -354,6 +355,14 @@ namespace Test.Shared.Suites.Tui
                     TuiCase.Contains(frame, "[Approve] a  [Reject] r  [Arguments] x", "proposal row buttons with their keys");
                     TuiCase.Contains(frame, "[Approve] a  [Deny] d", "deployment row buttons with their keys");
 
+                    // Each button is a TUIKit click region over "[Label] key"; the gap after it is not a button.
+                    ApprovalItem deploymentRow = host.Tui.Context.Approvals.Items.First(i => i.Kind == ApprovalKindEnum.DeploymentApproval);
+                    ClickRegion<ApprovalButton> deny = screen.Buttons().First(b => b.Action.ItemKey == deploymentRow.Key && b.Action.DecisionKey == 'd');
+                    Rect inner = host.Tui.Shell.LastLayout!.MainInner;
+                    AssertEqual("[Deny] d", frame.Split('\n')[inner.Y + deny.Area.Y].Substring(inner.X + deny.Area.X, deny.Area.Width), "the region covers the button and its key");
+                    host.Click(inner.X + deny.Area.Right, inner.Y + deny.Area.Y);
+                    AssertFalse(host.App.Modals.IsActive, "a click in the gap after a button decides nothing");
+
                     // Keyboard focus is in the sidebar and the cursor is on the other row: the click still acts on the
                     // button's own row.
                     host.Tui.Shell.FocusPane("sidebar");
@@ -378,7 +387,7 @@ namespace Test.Shared.Suites.Tui
         private static void ClickButton(TuiTestHost host, ApprovalsScreen screen, string itemKey, char decision)
         {
             host.Screen();
-            ApprovalButton? button = screen.Buttons().FirstOrDefault(b => b.ItemKey == itemKey && b.DecisionKey == decision);
+            ClickRegion<ApprovalButton>? button = screen.Buttons().FirstOrDefault(b => b.Action.ItemKey == itemKey && b.Action.DecisionKey == decision);
             if (button == null) throw new AssertionException("no '" + decision + "' button for " + itemKey + "\n" + host.Screen());
             Rect main = host.Tui.Shell.LastLayout!.MainInner;
             host.Click(main.X + button.Area.X + 1, main.Y + button.Area.Y);

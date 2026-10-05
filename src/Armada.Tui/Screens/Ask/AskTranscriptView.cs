@@ -125,6 +125,7 @@ namespace Armada.Tui.Screens.Ask
         private readonly TuiContext _Context;
         private readonly AskController _Ask;
         private readonly AskTranscriptBuilder _Builder = new AskTranscriptBuilder();
+        private readonly ClickRegionMap<AskCardButton> _CardButtons = new ClickRegionMap<AskCardButton>();
         private List<AskBlock> _Blocks = new List<AskBlock>();
         private List<StyledText> _Flat = new List<StyledText>();
         private List<int> _FlatBlock = new List<int>();
@@ -524,13 +525,14 @@ namespace Armada.Tui.Screens.Ask
                 if (line >= 0 && line < _FlatBlock.Count)
                 {
                     AskBlock block = _Blocks[_FlatBlock[line]];
-                    AskCardButton? button = mouse.Button == MouseButton.Left ? ButtonAt(block, line - block.Top, mouse.X - 2) : null;
-                    if (button != null)
+                    // Card buttons were recorded where the last frame drew them (TUIKit click regions in view coordinates).
+                    ClickRegion<AskCardButton>? hit = mouse.Button == MouseButton.Left ? _CardButtons.HitTest(mouse.X, mouse.Y) : null;
+                    if (hit != null)
                     {
                         // A click on a card button selects the card and acts at once, whatever had keyboard focus.
                         SelectedKey = block.Key;
                         SelectedRow = -1;
-                        Press(block, button);
+                        Press(block, hit.Action);
                         return true;
                     }
 
@@ -567,6 +569,7 @@ namespace Armada.Tui.Screens.Ask
             if (!Following && _Scroll >= max) Following = true;
 
             AskBlock? selected = Selected();
+            _CardButtons.Clear();
             for (int row = 0; row < _Height; row++)
             {
                 int idx = _Scroll + row;
@@ -585,6 +588,10 @@ namespace Armada.Tui.Screens.Ask
                 }
 
                 surface.DrawStyledText(2, row, _Flat[idx], baseStyle);
+                foreach (AskCardButton button in block.Buttons)
+                {
+                    if (button.Line == within) _CardButtons.Add(new Rect(2 + button.X, row, button.Width, 1), button);
+                }
             }
 
             int y = _Height;
@@ -651,16 +658,6 @@ namespace Armada.Tui.Screens.Ask
             int top = block.Top;
             int bottom = block.Top + block.Lines.Count;
             return bottom > scroll && top < scroll + _Height;
-        }
-
-        private static AskCardButton? ButtonAt(AskBlock block, int within, int x)
-        {
-            foreach (AskCardButton b in block.Buttons)
-            {
-                if (b.Line == within && x >= b.X && x < b.X + b.Width) return b;
-            }
-
-            return null;
         }
 
         private bool Press(AskBlock block, AskCardButton button)

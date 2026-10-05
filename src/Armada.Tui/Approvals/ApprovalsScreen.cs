@@ -12,6 +12,7 @@ namespace Armada.Tui.Approvals
     using Armada.Tui.Widgets;
     using TUIKit;
     using TUIKit.Input;
+    using TUIKit.Widgets;
 
     /// <summary>
     /// The Approvals center (W3.3, route <c>/approvals</c>, <c>Ctrl+A</c>): one queue of everything waiting on the user,
@@ -71,7 +72,8 @@ namespace Armada.Tui.Approvals
 
         private string? _CursorKey = null;
         private int _Top = 0;
-        private List<ApprovalButton> _Buttons = new List<ApprovalButton>();
+        private readonly ClickRegionMap<ApprovalButton> _Buttons = new ClickRegionMap<ApprovalButton>();
+        private readonly InlineButtonStyle _ButtonStyle = new InlineButtonStyle();
 
         #endregion
 
@@ -86,6 +88,7 @@ namespace Armada.Tui.Approvals
             : base(route, context)
         {
             Actions = new ApprovalActions(context);
+            _Buttons.Invoked += OnButton;
         }
 
         #endregion
@@ -155,12 +158,13 @@ namespace Armada.Tui.Approvals
         }
 
         /// <summary>
-        /// Decision buttons drawn in the last frame (screen coordinates). Never null.
+        /// Decision buttons drawn in the last frame (TUIKit click regions in the screen's coordinates, each covering
+        /// <c>[Label] key</c>). Never null.
         /// </summary>
         /// <returns>Buttons.</returns>
-        public IReadOnlyList<ApprovalButton> Buttons()
+        public IReadOnlyList<ClickRegion<ApprovalButton>> Buttons()
         {
-            return _Buttons;
+            return _Buttons.Regions;
         }
 
         /// <summary>
@@ -293,23 +297,8 @@ namespace Armada.Tui.Approvals
         public override bool HandleMouse(MouseEvent mouse)
         {
             if (mouse.Kind != MouseEventKind.Press || mouse.Y < 2) return mouse.Kind == MouseEventKind.Press;
+            if (_Buttons.HandleMouse(mouse)) return true;
             IReadOnlyList<ApprovalItem> items = Context.Approvals.Items;
-            if (mouse.Button == MouseButton.Left)
-            {
-                foreach (ApprovalButton button in _Buttons)
-                {
-                    if (!button.Area.Contains(new Point(mouse.X, mouse.Y))) continue;
-                    // A button acts on its own row: select it, then run the same decision (and confirmation) as the key.
-                    for (int i = 0; i < items.Count; i++)
-                    {
-                        if (items[i].Key != button.ItemKey) continue;
-                        Move(items, i);
-                        Decide(button.DecisionKey);
-                        return true;
-                    }
-                }
-            }
-
             Move(items, _Top + (mouse.Y - 2) / 2);
             if (mouse.ClickCount >= 2) OpenCurrent();
             return true;
@@ -323,7 +312,7 @@ namespace Armada.Tui.Approvals
             SurfaceText.FillRect(surface, new Rect(0, 0, width, height), Theme.Text);
             IReadOnlyList<ApprovalItem> items = Context.Approvals.Items;
             SyncCursor(items);
-            _Buttons = new List<ApprovalButton>();
+            _Buttons.Clear();
             SurfaceText.FillRow(surface, 0, 0, width, Theme.Header);
             string head = T("Approvals") + "  (" + Context.Loc.T("{{count}} waiting", LocalizationArgs.Of("count", items.Count)) + ")";
             SurfaceText.Draw(surface, 1, 0, head, Theme.HeaderAccent, width - 2);
@@ -354,6 +343,19 @@ namespace Armada.Tui.Approvals
         #endregion
 
         #region Private-Methods
+
+        private void OnButton(ClickRegion<ApprovalButton> region)
+        {
+            // A button acts on its own row: select it, then run the same decision (and confirmation) as the key.
+            IReadOnlyList<ApprovalItem> items = Context.Approvals.Items;
+            for (int i = 0; i < items.Count; i++)
+            {
+                if (items[i].Key != region.Action.ItemKey) continue;
+                Move(items, i);
+                Decide(region.Action.DecisionKey);
+                return;
+            }
+        }
 
         private ArmadaCommand Cmd(string id, string title, Action handler)
         {
@@ -413,15 +415,16 @@ namespace Armada.Tui.Approvals
             // each works on the selected row.
             int bx = 4;
             if (!String.IsNullOrEmpty(item.Detail)) bx += SurfaceText.Draw(surface, bx, y + 1, item.Detail + "   ", row.WithForeground(Theme.Muted.Foreground), width - 1 - bx);
+            _ButtonStyle.Label = row.WithForeground(Theme.Accent.Foreground).WithAttribute(CellAttributes.Bold, true);
+            _ButtonStyle.Hover = _ButtonStyle.Label;
+            _ButtonStyle.Key = row.WithForeground(Theme.Muted.Foreground);
             foreach (KeyValuePair<string, string> k in KeysFor(item))
             {
-                string label = "[" + T(k.Value) + "]";
-                int lw = TextCells.Width(label);
-                if (bx + lw + 1 + TextCells.Width(k.Key) > width - 1) break;
-                SurfaceText.Draw(surface, bx, y + 1, label, row.WithForeground(Theme.Accent.Foreground).WithAttribute(CellAttributes.Bold, true), lw);
-                _Buttons.Add(new ApprovalButton { Area = new Rect(bx, y + 1, lw, 1), ItemKey = item.Key, DecisionKey = k.Key[0] });
-                bx += lw;
-                bx += SurfaceText.Draw(surface, bx, y + 1, " " + k.Key + "  ", row.WithForeground(Theme.Muted.Foreground), width - 1 - bx);
+                // TUIKit's inline button draws "[Label] k" whole (never half a button) and records its click region.
+                string label = T(k.Value);
+                if (bx + InlineButton.Measure(label, k.Key) > width - 1) break;
+                bx += InlineButton.Draw(surface, bx, y + 1, label, k.Key, new ApprovalButton { ItemKey = item.Key, DecisionKey = k.Key[0] }, _Buttons, _ButtonStyle);
+                bx += SurfaceText.Draw(surface, bx, y + 1, "  ", _ButtonStyle.Key, width - 1 - bx);
             }
         }
 

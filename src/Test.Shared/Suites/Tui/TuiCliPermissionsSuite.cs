@@ -193,7 +193,7 @@ namespace Test.Shared.Suites.Tui
                 {
                     ApprovalsScreen screen = Load(host);
                     TuiCase.Contains(host.Screen(), "[Allow once] a  [Deny] d", "decision buttons without remember");
-                    AssertFalse(screen.Buttons().Any(b => b.DecisionKey == 'A'), "no Allow and remember button");
+                    AssertFalse(screen.Buttons().Any(b => b.Action.DecisionKey == 'A'), "no Allow and remember button");
                     host.Press("A");
                     host.Pump();
                     AssertFalse(host.App.Modals.IsActive, "no rule dialog");
