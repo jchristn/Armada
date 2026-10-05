@@ -83,6 +83,24 @@ namespace Armada.Tui.Screens
         }
 
         /// <inheritdoc />
+        public override IReadOnlyList<KeyValuePair<string, string>> Hints
+        {
+            get { return Content.Hints; }
+        }
+
+        /// <inheritdoc />
+        public override void OnActivated()
+        {
+            Content.OnActivated();
+        }
+
+        /// <inheritdoc />
+        public override void OnDeactivated()
+        {
+            Content.OnDeactivated();
+        }
+
+        /// <inheritdoc />
         public override bool HandleKey(KeyEvent key)
         {
             if (Scope.HandleKey(key)) return true;

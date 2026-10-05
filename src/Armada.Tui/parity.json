@@ -122,18 +122,18 @@
     {
       "kind": "route",
       "key": "/checks/:id",
-      "status": "planned",
-      "tui": "",
-      "workstream": "",
-      "notes": ""
+      "status": "implemented",
+      "tui": "CheckRunScreen",
+      "workstream": "W5.5",
+      "notes": "detail with comparison and output"
     },
     {
       "kind": "route",
       "key": "/configuration",
-      "status": "planned",
-      "tui": "",
-      "workstream": "",
-      "notes": ""
+      "status": "implemented",
+      "tui": "HubScreen",
+      "workstream": "W6",
+      "notes": "Configuration hub: ten tabs"
     },
     {
       "kind": "route",
@@ -146,10 +146,10 @@
     {
       "kind": "route",
       "key": "/delivery",
-      "status": "planned",
-      "tui": "",
-      "workstream": "",
-      "notes": ""
+      "status": "implemented",
+      "tui": "HubScreen",
+      "workstream": "W5",
+      "notes": "Delivery hub: Deployments, Environments, Releases, Incidents, Checks, Runbooks"
     },
     {
       "kind": "route",
@@ -162,10 +162,10 @@
     {
       "kind": "route",
       "key": "/deployments/:id",
-      "status": "planned",
-      "tui": "",
-      "workstream": "",
-      "notes": ""
+      "status": "implemented",
+      "tui": "DeploymentScreen",
+      "workstream": "W5.1",
+      "notes": "detail; /deployments/new creates"
     },
     {
       "kind": "route",
@@ -210,10 +210,10 @@
     {
       "kind": "route",
       "key": "/environments/:id",
-      "status": "planned",
-      "tui": "",
-      "workstream": "",
-      "notes": ""
+      "status": "implemented",
+      "tui": "EnvironmentScreen",
+      "workstream": "W5.2",
+      "notes": "detail with verification definitions"
     },
     {
       "kind": "route",
@@ -290,10 +290,10 @@
     {
       "kind": "route",
       "key": "/incidents/:id",
-      "status": "planned",
-      "tui": "",
-      "workstream": "",
-      "notes": ""
+      "status": "implemented",
+      "tui": "IncidentScreen",
+      "workstream": "W5.4",
+      "notes": "detail; /incidents/new creates"
     },
     {
       "kind": "route",
@@ -370,10 +370,10 @@
     {
       "kind": "route",
       "key": "/personas/:name",
-      "status": "planned",
-      "tui": "",
-      "workstream": "",
-      "notes": ""
+      "status": "implemented",
+      "tui": "PersonaScreen",
+      "workstream": "W6.4",
+      "notes": "detail with backing prompt editor"
     },
     {
       "kind": "route",
@@ -386,10 +386,10 @@
     {
       "kind": "route",
       "key": "/pipelines/:name",
-      "status": "planned",
-      "tui": "",
-      "workstream": "",
-      "notes": ""
+      "status": "implemented",
+      "tui": "PipelineScreen",
+      "workstream": "W6.5",
+      "notes": "detail with Run Pipeline"
     },
     {
       "kind": "route",
@@ -418,10 +418,10 @@
     {
       "kind": "route",
       "key": "/playbooks/:id",
-      "status": "planned",
-      "tui": "",
-      "workstream": "",
-      "notes": ""
+      "status": "implemented",
+      "tui": "PlaybookScreen",
+      "workstream": "W6.7",
+      "notes": "detail with Markdown preview"
     },
     {
       "kind": "route",
@@ -434,10 +434,10 @@
     {
       "kind": "route",
       "key": "/project-profiles/:id",
-      "status": "planned",
-      "tui": "",
-      "workstream": "",
-      "notes": ""
+      "status": "implemented",
+      "tui": "ProjectProfileScreen",
+      "workstream": "W6.2",
+      "notes": "detail with persona prompt diff"
     },
     {
       "kind": "route",
@@ -450,18 +450,18 @@
     {
       "kind": "route",
       "key": "/prompt-templates/:name",
-      "status": "planned",
-      "tui": "",
-      "workstream": "",
-      "notes": ""
+      "status": "implemented",
+      "tui": "PromptTemplateScreen",
+      "workstream": "W6.6",
+      "notes": "detail with parameter palette"
     },
     {
       "kind": "route",
       "key": "/prompt-templates/create",
-      "status": "planned",
-      "tui": "",
-      "workstream": "",
-      "notes": ""
+      "status": "implemented",
+      "tui": "PromptTemplateScreen",
+      "workstream": "W6.6",
+      "notes": "create mode"
     },
     {
       "kind": "route",
@@ -474,18 +474,18 @@
     {
       "kind": "route",
       "key": "/releases/:id",
-      "status": "planned",
-      "tui": "",
-      "workstream": "",
-      "notes": ""
+      "status": "implemented",
+      "tui": "ReleaseScreen",
+      "workstream": "W5.3",
+      "notes": "detail"
     },
     {
       "kind": "route",
       "key": "/releases/new",
-      "status": "planned",
-      "tui": "",
-      "workstream": "",
-      "notes": ""
+      "status": "implemented",
+      "tui": "ReleaseScreen",
+      "workstream": "W5.3",
+      "notes": "create mode with prefill"
     },
     {
       "kind": "route",
@@ -514,10 +514,10 @@
     {
       "kind": "route",
       "key": "/runbooks/:id",
-      "status": "planned",
-      "tui": "",
-      "workstream": "",
-      "notes": ""
+      "status": "implemented",
+      "tui": "RunbookScreen",
+      "workstream": "W5.6",
+      "notes": "detail with executions (?executionId=)"
     },
     {
       "kind": "route",
@@ -570,10 +570,10 @@
     {
       "kind": "route",
       "key": "/skills/:id",
-      "status": "planned",
-      "tui": "",
-      "workstream": "",
-      "notes": ""
+      "status": "implemented",
+      "tui": "SkillScreen",
+      "workstream": "W6.3",
+      "notes": "detail"
     },
     {
       "kind": "route",
@@ -650,10 +650,10 @@
     {
       "kind": "route",
       "key": "/workflow-profiles/:id",
-      "status": "planned",
-      "tui": "",
-      "workstream": "",
-      "notes": ""
+      "status": "implemented",
+      "tui": "WorkflowProfileScreen",
+      "workstream": "W6.1",
+      "notes": "detail with validate and preview"
     },
     {
       "kind": "route",
@@ -738,130 +738,130 @@
     {
       "kind": "tab",
       "key": "Configuration:endpoints",
-      "status": "planned",
-      "tui": "/configuration?tab=endpoints",
-      "workstream": "",
-      "notes": "Endpoints"
+      "status": "implemented",
+      "tui": "EndpointsScreen",
+      "workstream": "W6.8",
+      "notes": "Endpoints tab at /configuration?tab=endpoints"
     },
     {
       "kind": "tab",
       "key": "Configuration:harbors",
-      "status": "planned",
-      "tui": "/configuration?tab=harbors",
-      "workstream": "",
-      "notes": "Harbors"
+      "status": "implemented",
+      "tui": "HarborsScreen",
+      "workstream": "W6.9",
+      "notes": "Harbors tab at /configuration?tab=harbors"
     },
     {
       "kind": "tab",
       "key": "Configuration:memory",
-      "status": "planned",
-      "tui": "/configuration?tab=memory",
-      "workstream": "",
-      "notes": "Memory"
+      "status": "implemented",
+      "tui": "MemoryScreen",
+      "workstream": "W6.10",
+      "notes": "Memory tab at /configuration?tab=memory"
     },
     {
       "kind": "tab",
       "key": "Configuration:personas",
-      "status": "planned",
-      "tui": "/configuration?tab=personas",
-      "workstream": "",
-      "notes": "Personas"
+      "status": "implemented",
+      "tui": "PersonasScreen",
+      "workstream": "W6.4",
+      "notes": "Personas tab at /configuration?tab=personas"
     },
     {
       "kind": "tab",
       "key": "Configuration:pipelines",
-      "status": "planned",
-      "tui": "/configuration?tab=pipelines",
-      "workstream": "",
-      "notes": "Pipelines"
+      "status": "implemented",
+      "tui": "PipelinesScreen",
+      "workstream": "W6.5",
+      "notes": "Pipelines tab at /configuration?tab=pipelines"
     },
     {
       "kind": "tab",
       "key": "Configuration:playbooks",
-      "status": "planned",
-      "tui": "/configuration?tab=playbooks",
-      "workstream": "",
-      "notes": "Playbooks"
+      "status": "implemented",
+      "tui": "PlaybooksScreen",
+      "workstream": "W6.7",
+      "notes": "Playbooks tab at /configuration?tab=playbooks"
     },
     {
       "kind": "tab",
       "key": "Configuration:project-profiles",
-      "status": "planned",
-      "tui": "/configuration?tab=project-profiles",
-      "workstream": "",
-      "notes": "Project Profiles"
+      "status": "implemented",
+      "tui": "ProjectProfilesScreen",
+      "workstream": "W6.2",
+      "notes": "Project Profiles tab at /configuration?tab=project-profiles"
     },
     {
       "kind": "tab",
       "key": "Configuration:prompts",
-      "status": "planned",
-      "tui": "/configuration?tab=prompts",
-      "workstream": "",
-      "notes": "Prompts"
+      "status": "implemented",
+      "tui": "PromptTemplatesScreen",
+      "workstream": "W6.6",
+      "notes": "Prompts tab at /configuration?tab=prompts"
     },
     {
       "kind": "tab",
       "key": "Configuration:skills",
-      "status": "planned",
-      "tui": "/configuration?tab=skills",
-      "workstream": "",
-      "notes": "Skills"
+      "status": "implemented",
+      "tui": "SkillsScreen",
+      "workstream": "W6.3",
+      "notes": "Skills tab at /configuration?tab=skills"
     },
     {
       "kind": "tab",
       "key": "Configuration:workflow-profiles",
-      "status": "planned",
-      "tui": "/configuration?tab=workflow-profiles",
-      "workstream": "",
-      "notes": "Workflow Profiles"
+      "status": "implemented",
+      "tui": "WorkflowProfilesScreen",
+      "workstream": "W6.1",
+      "notes": "Workflow Profiles tab at /configuration?tab=workflow-profiles"
     },
     {
       "kind": "tab",
       "key": "DeliveryHub:checks",
-      "status": "planned",
-      "tui": "/delivery?tab=checks",
-      "workstream": "",
-      "notes": "Checks"
+      "status": "implemented",
+      "tui": "ChecksScreen",
+      "workstream": "W5.5",
+      "notes": "Checks tab at /delivery?tab=checks"
     },
     {
       "kind": "tab",
       "key": "DeliveryHub:deployments",
-      "status": "planned",
-      "tui": "/delivery?tab=deployments",
-      "workstream": "",
-      "notes": "Deployments"
+      "status": "implemented",
+      "tui": "DeploymentsScreen",
+      "workstream": "W5.1",
+      "notes": "Deployments tab at /delivery?tab=deployments"
     },
     {
       "kind": "tab",
       "key": "DeliveryHub:environments",
-      "status": "planned",
-      "tui": "/delivery?tab=environments",
-      "workstream": "",
-      "notes": "Environments"
+      "status": "implemented",
+      "tui": "EnvironmentsScreen",
+      "workstream": "W5.2",
+      "notes": "Environments tab at /delivery?tab=environments"
     },
     {
       "kind": "tab",
       "key": "DeliveryHub:incidents",
-      "status": "planned",
-      "tui": "/delivery?tab=incidents",
-      "workstream": "",
-      "notes": "Incidents"
+      "status": "implemented",
+      "tui": "IncidentsScreen",
+      "workstream": "W5.4",
+      "notes": "Incidents tab at /delivery?tab=incidents"
     },
     {
       "kind": "tab",
       "key": "DeliveryHub:releases",
-      "status": "planned",
-      "tui": "/delivery?tab=releases",
-      "workstream": "",
-      "notes": "Releases"
+      "status": "implemented",
+      "tui": "ReleasesScreen",
+      "workstream": "W5.3",
+      "notes": "Releases tab at /delivery?tab=releases"
     },
     {
       "kind": "tab",
       "key": "DeliveryHub:runbooks",
-      "status": "planned",
-      "tui": "/delivery?tab=runbooks",
-      "workstream": "",
-      "notes": "Runbooks"
+      "status": "implemented",
+      "tui": "RunbooksScreen",
+      "workstream": "W5.6",
+      "notes": "Runbooks tab at /delivery?tab=runbooks"
     },
     {
       "kind": "tab",
