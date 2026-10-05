@@ -48,7 +48,7 @@ namespace Armada.Server.Mcp.Tools
                     string message = request.Message;
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     if (await McpCallerScope.ReadCaptainAsync(database, caller, captainId).ConfigureAwait(false) == null)
-                        return (object)new { Error = "Captain not found" };
+                        return (object)McpToolError.NotFound("Captain not found");
                     Signal signal = new Signal(SignalTypeEnum.Mail, message);
                     signal.TenantId = String.IsNullOrEmpty(caller.TenantId) ? ArmadaConstants.DefaultTenantId : caller.TenantId;
                     signal.UserId = caller.UserId;
@@ -74,7 +74,7 @@ namespace Armada.Server.Mcp.Tools
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     DeleteMultipleArgs request = JsonSerializer.Deserialize<DeleteMultipleArgs>(args!.Value, _JsonOptions)!;
                     if (request.Ids == null || request.Ids.Count == 0)
-                        return (object)new { Error = "ids is required and must not be empty" };
+                        return (object)McpToolError.InvalidArgument("ids is required and must not be empty");
 
                     DeleteMultipleResult result = new DeleteMultipleResult();
                     foreach (string id in request.Ids)

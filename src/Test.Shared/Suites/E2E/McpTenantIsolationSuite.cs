@@ -33,7 +33,6 @@ namespace Test.Shared.Suites.E2E
 
         private const string SuiteId = "E2E.McpTenantIsolation";
 
-        private static readonly Regex _NotFoundPattern = new Regex("not found|not visible|\"Deleted\"\\s*:\\s*0|\"EntriesPurged\"\\s*:\\s*0", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
         // Tools whose id arguments refer to entities this suite does not seed. Each is scoped through its service
         // (caller tenant/user) and covered by its own suite; listing them keeps the generic coverage explicit.
@@ -57,6 +56,37 @@ namespace Test.Shared.Suites.E2E
 
         // Tools that take an id only as an optional filter or reference and otherwise act on the caller's own scope:
         // they must not leak tenant A's data, but a successful (empty or caller-owned) answer is correct.
+        /// <summary>
+        /// Tools whose services still signal a missing or foreign entity by throwing an exception without a typed
+        /// code, so the call comes back as an isError result with text only. For these (and only these) an isError
+        /// result counts as the denial. Remove a tool from this list once its service throws KeyNotFoundException
+        /// (mapped to ErrorCode NotFound); the list must only shrink.
+        /// </summary>
+        private static readonly HashSet<string> _UntypedNotFoundTools = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "apply_backlog_refinement_summary",
+            "create_backlog_item",
+            "create_backlog_planning_session",
+            "create_backlog_refinement_session",
+            "create_deployment",
+            "create_objective",
+            "create_release",
+            "delete_backlog_item",
+            "delete_memory",
+            "delete_objective",
+            "dispatch_backlog_planning_session",
+            "get_backlog_planning_session",
+            "get_backlog_refinement_session",
+            "retry_check_run",
+            "run_check",
+            "send_backlog_refinement_message",
+            "stop_backlog_refinement_session",
+            "stop_captain",
+            "summarize_backlog_refinement_session",
+            "update_backlog_item",
+            "update_objective",
+        };
+
         private static readonly HashSet<string> _FilterOnlyTools = new HashSet<string>(StringComparer.Ordinal)
         {
             "enumerate",
@@ -92,6 +122,9 @@ namespace Test.Shared.Suites.E2E
             cases.Add(CaseAsync("setup_two_tenants_and_seed_tenant_a", "Two tenants with tenant admins; tenant A's entities seeded", TestTags.Positive, async () =>
             {
                 _Server = await SecurityTestServer.PrepareAsync("127.0.0.1", null).ConfigureAwait(false);
+                // This suite makes well over a hundred tool calls in a burst; lift the per-client limit instead of
+                // retrying when the limiter refuses.
+                _Server.Settings.Mcp.ToolCallsPerSecond = 0;
                 await _Server.StartAsync().ConfigureAwait(false);
                 using (HttpClient admin = _Server.CreateRestClient(true))
                 {
@@ -115,9 +148,23 @@ namespace Test.Shared.Suites.E2E
                     {
                         string? args = BuildArguments(tool, out List<string> unmapped, out bool usesId);
                         if (args == null || !usesId) continue;
-                        string text = await CallAsync(client, tool.Name, args).ConfigureAwait(false);
-                        if (IsOwnReadFailure(tool.Name, text))
-                            failures.Add(tool.Name + ": " + Truncate(text));
+                        Armada.Runtimes.Mcp.McpToolCallResult result;
+                        try
+                        {
+                            result = await client.CallToolResultAsync(tool.Name, args).ConfigureAwait(false);
+                        }
+                        catch (McpClientException ex)
+                        {
+                            failures.Add(tool.Name + ": protocol error: " + ex.Message);
+                            continue;
+                        }
+
+                        McpToolResultProbe probe = McpToolResultProbe.From(result);
+                        // The owner must reach its own entity: NotFound or Forbidden (or a failed call) means it could
+                        // not. Other categories (for example Unavailable from get_mission_diff when the seeded mission has
+                        // no diff yet) mean the entity was found.
+                        if (result.IsError || probe.ErrorCode == McpToolErrorCodeEnum.NotFound || probe.ErrorCode == McpToolErrorCodeEnum.Forbidden)
+                            failures.Add(tool.Name + ": " + (probe.ErrorCode?.ToString() ?? "isError") + ": " + Truncate(result.Text));
                     }
                 }
 
@@ -144,17 +191,28 @@ namespace Test.Shared.Suites.E2E
                         if (args == null || !usesId || _UnseededIdTools.ContainsKey(tool.Name)) continue;
 
                         checkedTools++;
-                        string text = await CallAsync(client, tool.Name, args).ConfigureAwait(false);
-                        if (text.IndexOf(_Marker, StringComparison.Ordinal) >= 0)
+                        Armada.Runtimes.Mcp.McpToolCallResult result;
+                        try
                         {
-                            failures.Add(tool.Name + " LEAKED tenant A data: " + Truncate(text));
+                            result = await client.CallToolResultAsync(tool.Name, args).ConfigureAwait(false);
+                        }
+                        catch (McpClientException ex)
+                        {
+                            failures.Add(tool.Name + " could not be checked (protocol error): " + ex.Message);
+                            continue;
+                        }
+
+                        // The marker is a unique string seeded into tenant A's data; finding it anywhere in the reply
+                        // is the leak this suite exists to catch, whatever the reply's shape.
+                        if (result.Text.IndexOf(_Marker, StringComparison.Ordinal) >= 0)
+                        {
+                            failures.Add(tool.Name + " LEAKED tenant A data: " + Truncate(result.Text));
                             continue;
                         }
 
                         if (_FilterOnlyTools.Contains(tool.Name)) continue;
-                        if (text.StartsWith("EXCEPTION", StringComparison.Ordinal)) continue;
-                        if (!_NotFoundPattern.IsMatch(text))
-                            failures.Add(tool.Name + " did not answer not-found: " + Truncate(text));
+                        if (!IsDenied(tool.Name, result))
+                            failures.Add(tool.Name + " did not answer not-found: " + Truncate(result.Text));
                     }
                 }
 
@@ -169,8 +227,9 @@ namespace Test.Shared.Suites.E2E
                 using (McpToolClient client = CreateClient(_TenantB!))
                 {
                     await client.InitializeAsync().ConfigureAwait(false);
-                    string text = await CallAsync(client, "stop_all", "{}").ConfigureAwait(false);
-                    AssertContains("all_stopped", text);
+                    Armada.Runtimes.Mcp.McpToolCallResult result = await client.CallToolResultAsync("stop_all", "{}").ConfigureAwait(false);
+                    AssertFalse(result.IsError, "stop_all failed: " + result.Text);
+                    AssertEqual("all_stopped", McpToolResultProbe.From(result).Status, "stop_all status");
                 }
 
                 using (DatabaseDriver db = await OpenDatabaseAsync().ConfigureAwait(false))
@@ -254,27 +313,6 @@ namespace Test.Shared.Suites.E2E
                 ["Authorization"] = "Bearer " + user.BearerToken
             };
             return new McpToolClient(_Server!.McpUrl + "/mcp", null, headers, null, 60);
-        }
-
-        private static async Task<string> CallAsync(McpToolClient client, string tool, string args)
-        {
-            // The MCP server limits tool calls per second; this suite issues well over a hundred, so back off and
-            // retry when the limiter answers.
-            for (int attempt = 0; ; attempt++)
-            {
-                string text;
-                try
-                {
-                    text = await client.CallToolAsync(tool, args).ConfigureAwait(false);
-                }
-                catch (Exception ex)
-                {
-                    text = "EXCEPTION " + ex.Message;
-                }
-
-                if (attempt >= 5 || text.IndexOf("rate limit", StringComparison.OrdinalIgnoreCase) < 0) return text;
-                await Task.Delay(1100).ConfigureAwait(false);
-            }
         }
 
         private async Task<DatabaseDriver> OpenDatabaseAsync()
@@ -682,16 +720,16 @@ namespace Test.Shared.Suites.E2E
         #endregion
 
         /// <summary>
-        /// True when an owner's by-id read failed. get_captain_tools reports the host's own runtime tool sources (for
-        /// example the local Claude Code MCP servers), whose status text can legitimately say "not found", so for it
-        /// only the tool's own not-found error counts.
+        /// True when a cross-tenant call was refused: the tool returned the typed NotFound error, or a delete or purge
+        /// tool reported zero rows. A failed call (isError) is not a denial (it could be a crash or a rate limit), except
+        /// for the tools listed in <see cref="_UntypedNotFoundTools"/>.
         /// </summary>
-        private static bool IsOwnReadFailure(string toolName, string text)
+        private static bool IsDenied(string toolName, Armada.Runtimes.Mcp.McpToolCallResult result)
         {
-            if (text.StartsWith("EXCEPTION", StringComparison.Ordinal)) return true;
-            if (String.Equals(toolName, "get_captain_tools", StringComparison.Ordinal))
-                return Regex.IsMatch(text, "\"Error\"\\s*:\\s*\"Captain not found\"", RegexOptions.IgnoreCase);
-            return _NotFoundPattern.IsMatch(text);
+            if (result.IsError) return _UntypedNotFoundTools.Contains(toolName);
+            McpToolResultProbe probe = McpToolResultProbe.From(result);
+            if (probe.ErrorCode == McpToolErrorCodeEnum.NotFound) return true;
+            return probe.Deleted == 0 || probe.EntriesPurged == 0;
         }
     }
 }

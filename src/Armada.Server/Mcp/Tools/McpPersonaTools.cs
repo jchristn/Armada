@@ -44,12 +44,12 @@ namespace Armada.Server.Mcp.Tools
                 async (args) =>
                 {
                     PersonaArgs request = JsonSerializer.Deserialize<PersonaArgs>(args!.Value, _JsonOptions)!;
-                    if (String.IsNullOrEmpty(request.Name)) return (object)new { Error = "name is required" };
-                    if (String.IsNullOrEmpty(request.PromptTemplateName)) return (object)new { Error = "promptTemplateName is required" };
+                    if (String.IsNullOrEmpty(request.Name)) return (object)McpToolError.InvalidArgument("name is required");
+                    if (String.IsNullOrEmpty(request.PromptTemplateName)) return (object)McpToolError.InvalidArgument("promptTemplateName is required");
 
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     if (!String.IsNullOrEmpty(request.DefaultCaptainId) && await McpCallerScope.ReadCaptainAsync(database, caller, request.DefaultCaptainId).ConfigureAwait(false) == null)
-                        return (object)new { Error = "Default captain not found: " + request.DefaultCaptainId };
+                        return (object)McpToolError.NotFound("Default captain not found: " + request.DefaultCaptainId);
 
                     Persona persona = new Persona(request.Name, request.PromptTemplateName);
                     persona.TenantId = String.IsNullOrEmpty(caller.TenantId) ? ArmadaConstants.DefaultTenantId : caller.TenantId;
@@ -77,10 +77,10 @@ namespace Armada.Server.Mcp.Tools
                 {
                     PersonaArgs request = JsonSerializer.Deserialize<PersonaArgs>(args!.Value, _JsonOptions)!;
                     string name = request.Name;
-                    if (String.IsNullOrEmpty(name)) return (object)new { Error = "name is required" };
+                    if (String.IsNullOrEmpty(name)) return (object)McpToolError.InvalidArgument("name is required");
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     Persona? persona = await McpCallerScope.ReadPersonaAsync(database, caller, name).ConfigureAwait(false);
-                    if (persona == null) return (object)new { Error = "Persona not found: " + name };
+                    if (persona == null) return (object)McpToolError.NotFound("Persona not found: " + name);
                     return (object)persona;
                 });
 
@@ -103,16 +103,16 @@ namespace Armada.Server.Mcp.Tools
                 {
                     PersonaArgs request = JsonSerializer.Deserialize<PersonaArgs>(args!.Value, _JsonOptions)!;
                     string name = request.Name;
-                    if (String.IsNullOrEmpty(name)) return (object)new { Error = "name is required" };
+                    if (String.IsNullOrEmpty(name)) return (object)McpToolError.InvalidArgument("name is required");
 
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     Persona? persona = await McpCallerScope.ReadPersonaAsync(database, caller, name).ConfigureAwait(false);
-                    if (persona == null) return (object)new { Error = "Persona not found: " + name };
+                    if (persona == null) return (object)McpToolError.NotFound("Persona not found: " + name);
                     if (!ScopedVisibility.CanEdit(caller, persona.Scope, persona.TenantId, persona.UserId))
-                        return (object)new { Error = "You may only modify your own personas; a tenant-wide persona requires a tenant admin." };
+                        return (object)McpToolError.Forbidden("You may only modify your own personas; a tenant-wide persona requires a tenant admin.");
 
                     if (!String.IsNullOrEmpty(request.DefaultCaptainId) && await McpCallerScope.ReadCaptainAsync(database, caller, request.DefaultCaptainId).ConfigureAwait(false) == null)
-                        return (object)new { Error = "Default captain not found: " + request.DefaultCaptainId };
+                        return (object)McpToolError.NotFound("Default captain not found: " + request.DefaultCaptainId);
 
                     if (request.Description != null)
                         persona.Description = request.Description;
@@ -141,14 +141,14 @@ namespace Armada.Server.Mcp.Tools
                 {
                     PersonaArgs request = JsonSerializer.Deserialize<PersonaArgs>(args!.Value, _JsonOptions)!;
                     string name = request.Name;
-                    if (String.IsNullOrEmpty(name)) return (object)new { Error = "name is required" };
+                    if (String.IsNullOrEmpty(name)) return (object)McpToolError.InvalidArgument("name is required");
 
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     Persona? persona = await McpCallerScope.ReadPersonaAsync(database, caller, name).ConfigureAwait(false);
-                    if (persona == null) return (object)new { Error = "Persona not found: " + name };
+                    if (persona == null) return (object)McpToolError.NotFound("Persona not found: " + name);
                     if (!ScopedVisibility.CanEdit(caller, persona.Scope, persona.TenantId, persona.UserId))
-                        return (object)new { Error = "You may only delete your own personas; a tenant-wide persona requires a tenant admin." };
-                    if (persona.IsBuiltIn) return (object)new { Error = "Cannot delete built-in persona: " + name };
+                        return (object)McpToolError.Forbidden("You may only delete your own personas; a tenant-wide persona requires a tenant admin.");
+                    if (persona.IsBuiltIn) return (object)McpToolError.Conflict("Cannot delete built-in persona: " + name);
 
                     await database.Personas.DeleteAsync(persona.Id).ConfigureAwait(false);
                     return (object)new { Status = "deleted", Name = name };

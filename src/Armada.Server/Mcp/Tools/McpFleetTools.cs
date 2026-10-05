@@ -45,7 +45,7 @@ namespace Armada.Server.Mcp.Tools
                     string fleetId = request.FleetId;
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     Fleet? fleet = await database.Fleets.ReadAsync(fleetId).ConfigureAwait(false);
-                    if (fleet == null || !CallerCanAccess(fleet, caller)) return (object)new { Error = "Fleet not found" };
+                    if (fleet == null || !CallerCanAccess(fleet, caller)) return (object)McpToolError.NotFound("Fleet not found");
                     List<Vessel> vessels = await database.Vessels.EnumerateByFleetAsync(fleetId).ConfigureAwait(false);
                     return (object)new { Fleet = fleet, Vessels = vessels };
                 });
@@ -99,7 +99,7 @@ namespace Armada.Server.Mcp.Tools
                     string fleetId = request.FleetId;
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     Fleet? fleet = await database.Fleets.ReadAsync(fleetId).ConfigureAwait(false);
-                    if (fleet == null || !CallerCanAccess(fleet, caller)) return (object)new { Error = "Fleet not found" };
+                    if (fleet == null || !CallerCanAccess(fleet, caller)) return (object)McpToolError.NotFound("Fleet not found");
                     if (request.Name != null)
                         fleet.Name = request.Name;
                     if (request.Description != null)
@@ -128,7 +128,7 @@ namespace Armada.Server.Mcp.Tools
                     string fleetId = request.FleetId;
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     Fleet? fleet = await database.Fleets.ReadAsync(fleetId).ConfigureAwait(false);
-                    if (fleet == null || !CallerCanAccess(fleet, caller)) return (object)new { Error = "Fleet not found" };
+                    if (fleet == null || !CallerCanAccess(fleet, caller)) return (object)McpToolError.NotFound("Fleet not found");
                     await database.Fleets.DeleteAsync(fleetId).ConfigureAwait(false);
                     return (object)new { Status = "deleted", FleetId = fleetId };
                 });
@@ -149,7 +149,7 @@ namespace Armada.Server.Mcp.Tools
                 {
                     DeleteMultipleArgs request = JsonSerializer.Deserialize<DeleteMultipleArgs>(args!.Value, _JsonOptions)!;
                     if (request.Ids == null || request.Ids.Count == 0)
-                        return (object)new { Error = "ids is required and must not be empty" };
+                        return (object)McpToolError.InvalidArgument("ids is required and must not be empty");
 
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     DeleteMultipleResult result = new DeleteMultipleResult();

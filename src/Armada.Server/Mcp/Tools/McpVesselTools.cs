@@ -53,7 +53,7 @@ namespace Armada.Server.Mcp.Tools
                     VesselIdArgs request = JsonSerializer.Deserialize<VesselIdArgs>(args!.Value, _JsonOptions)!;
                     string vesselId = request.VesselId;
                     Vessel? vessel = await McpCallerScope.ReadVesselAsync(database, caller, vesselId).ConfigureAwait(false);
-                    if (vessel == null) return (object)new { Error = "Vessel not found" };
+                    if (vessel == null) return (object)McpToolError.NotFound("Vessel not found");
                     return (object)vessel;
                 });
 
@@ -85,7 +85,7 @@ namespace Armada.Server.Mcp.Tools
                     VesselAddArgs request = JsonSerializer.Deserialize<VesselAddArgs>(args!.Value, _JsonOptions)!;
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     if (!String.IsNullOrEmpty(request.FleetId) && await McpCallerScope.ReadFleetAsync(database, caller, request.FleetId).ConfigureAwait(false) == null)
-                        return (object)new { Error = "Fleet not found" };
+                        return (object)McpToolError.NotFound("Fleet not found");
                     Vessel vessel = new Vessel();
                     vessel.TenantId = String.IsNullOrEmpty(caller.TenantId) ? ArmadaConstants.DefaultTenantId : caller.TenantId;
                     vessel.UserId = caller.UserId;
@@ -109,7 +109,7 @@ namespace Armada.Server.Mcp.Tools
                     }
                     catch (ArgumentException ex)
                     {
-                        return (object)new { Error = ex.Message };
+                        return (object)McpToolError.FromException(ex);
                     }
                     return (object)vessel;
                 });
@@ -145,7 +145,7 @@ namespace Armada.Server.Mcp.Tools
                     VesselUpdateArgs request = JsonSerializer.Deserialize<VesselUpdateArgs>(args!.Value, _JsonOptions)!;
                     string vesselId = request.VesselId;
                     Vessel? vessel = await McpCallerScope.ReadVesselAsync(database, caller, vesselId).ConfigureAwait(false);
-                    if (vessel == null) return (object)new { Error = "Vessel not found" };
+                    if (vessel == null) return (object)McpToolError.NotFound("Vessel not found");
                     if (request.Name != null)
                         vessel.Name = request.Name;
                     if (request.RepoUrl != null)
@@ -215,7 +215,7 @@ namespace Armada.Server.Mcp.Tools
                     VesselIdArgs request = JsonSerializer.Deserialize<VesselIdArgs>(args!.Value, _JsonOptions)!;
                     string vesselId = request.VesselId;
                     Vessel? vessel = await McpCallerScope.ReadVesselAsync(database, caller, vesselId).ConfigureAwait(false);
-                    if (vessel == null) return (object)new { Error = "Vessel not found" };
+                    if (vessel == null) return (object)McpToolError.NotFound("Vessel not found");
 
                     List<string> warnings = await CleanupVesselResourcesAsync(vessel, database, dockService, settings).ConfigureAwait(false);
 
@@ -242,7 +242,7 @@ namespace Armada.Server.Mcp.Tools
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     DeleteMultipleArgs request = JsonSerializer.Deserialize<DeleteMultipleArgs>(args!.Value, _JsonOptions)!;
                     if (request.Ids == null || request.Ids.Count == 0)
-                        return (object)new { Error = "ids is required and must not be empty" };
+                        return (object)McpToolError.InvalidArgument("ids is required and must not be empty");
 
                     DeleteMultipleResult result = new DeleteMultipleResult();
                     foreach (string id in request.Ids)
@@ -288,7 +288,7 @@ namespace Armada.Server.Mcp.Tools
                     VesselContextArgs request = JsonSerializer.Deserialize<VesselContextArgs>(args!.Value, _JsonOptions)!;
                     string vesselId = request.VesselId;
                     Vessel? vessel = await McpCallerScope.ReadVesselAsync(database, caller, vesselId).ConfigureAwait(false);
-                    if (vessel == null) return (object)new { Error = "Vessel not found" };
+                    if (vessel == null) return (object)McpToolError.NotFound("Vessel not found");
                     if (request.ProjectContext != null)
                         vessel.ProjectContext = request.ProjectContext;
                     if (request.StyleGuide != null)

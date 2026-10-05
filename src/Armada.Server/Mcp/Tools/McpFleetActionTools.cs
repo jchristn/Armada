@@ -196,7 +196,7 @@ namespace Armada.Server.Mcp.Tools
 
         private static object Unavailable()
         {
-            return new { Error = "Fleet actions are not available on this server." };
+            return McpToolError.Unavailable("Fleet actions are not available on this server.");
         }
 
         private static async Task<object> InvokeAsync(Func<Task<object>> action)
@@ -207,19 +207,19 @@ namespace Armada.Server.Mcp.Tools
             }
             catch (UnauthorizedAccessException e)
             {
-                return new { Error = e.Message, StatusCode = 403 };
+                return new McpToolError(McpToolErrorCodeEnum.Forbidden, e.Message) { StatusCode = 403 };
             }
             catch (KeyNotFoundException e)
             {
-                return new { Error = e.Message, StatusCode = 404 };
+                return new McpToolError(McpToolErrorCodeEnum.NotFound, e.Message) { StatusCode = 404 };
             }
             catch (ArgumentException e)
             {
-                return new { Error = e.Message, StatusCode = 400 };
+                return new McpToolError(McpToolErrorCodeEnum.InvalidArgument, e.Message) { StatusCode = 400 };
             }
             catch (InvalidOperationException e)
             {
-                return new { Error = e.Message, StatusCode = 409 };
+                return new McpToolError(McpToolErrorCodeEnum.Conflict, e.Message) { StatusCode = 409 };
             }
         }
 

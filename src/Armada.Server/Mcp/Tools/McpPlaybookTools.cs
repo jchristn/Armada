@@ -44,11 +44,11 @@ namespace Armada.Server.Mcp.Tools
                 {
                     PlaybookArgs request = JsonSerializer.Deserialize<PlaybookArgs>(args!.Value, _JsonOptions)!;
                     string id = request.Id?.Trim() ?? String.Empty;
-                    if (String.IsNullOrWhiteSpace(id)) return (object)new { Error = "id is required" };
+                    if (String.IsNullOrWhiteSpace(id)) return (object)McpToolError.InvalidArgument("id is required");
 
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     Playbook? playbook = await McpCallerScope.ReadPlaybookAsync(database, caller, id).ConfigureAwait(false);
-                    if (playbook == null) return (object)new { Error = "Playbook not found: " + id };
+                    if (playbook == null) return (object)McpToolError.NotFound("Playbook not found: " + id);
                     return (object)playbook;
                 });
 
@@ -70,8 +70,8 @@ namespace Armada.Server.Mcp.Tools
                 async (args) =>
                 {
                     PlaybookArgs request = JsonSerializer.Deserialize<PlaybookArgs>(args!.Value, _JsonOptions)!;
-                    if (String.IsNullOrWhiteSpace(request.FileName)) return (object)new { Error = "fileName is required" };
-                    if (String.IsNullOrWhiteSpace(request.Content)) return (object)new { Error = "content is required" };
+                    if (String.IsNullOrWhiteSpace(request.FileName)) return (object)McpToolError.InvalidArgument("fileName is required");
+                    if (String.IsNullOrWhiteSpace(request.Content)) return (object)McpToolError.InvalidArgument("content is required");
 
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     Playbook playbook = new Playbook(request.FileName!, request.Content!)
@@ -87,7 +87,7 @@ namespace Armada.Server.Mcp.Tools
 
                     if (await database.Playbooks.ExistsByFileNameAsync(playbook.TenantId, playbook.FileName).ConfigureAwait(false))
                     {
-                        return (object)new { Error = "A playbook with that file name already exists." };
+                        return (object)McpToolError.Conflict("A playbook with that file name already exists.");
                     }
 
                     Playbook created = await database.Playbooks.CreateAsync(playbook).ConfigureAwait(false);
@@ -114,13 +114,13 @@ namespace Armada.Server.Mcp.Tools
                 {
                     PlaybookArgs request = JsonSerializer.Deserialize<PlaybookArgs>(args!.Value, _JsonOptions)!;
                     string id = request.Id?.Trim() ?? String.Empty;
-                    if (String.IsNullOrWhiteSpace(id)) return (object)new { Error = "id is required" };
+                    if (String.IsNullOrWhiteSpace(id)) return (object)McpToolError.InvalidArgument("id is required");
 
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     Playbook? playbook = await McpCallerScope.ReadPlaybookAsync(database, caller, id).ConfigureAwait(false);
-                    if (playbook == null) return (object)new { Error = "Playbook not found: " + id };
+                    if (playbook == null) return (object)McpToolError.NotFound("Playbook not found: " + id);
                     if (!ScopedVisibility.CanEdit(caller, playbook.Scope, playbook.TenantId, playbook.UserId))
-                        return (object)new { Error = "You may only modify your own playbooks; a tenant-wide playbook requires a tenant admin." };
+                        return (object)McpToolError.Forbidden("You may only modify your own playbooks; a tenant-wide playbook requires a tenant admin.");
                     playbook.TenantId ??= Constants.DefaultTenantId;
                     playbook.UserId ??= Constants.DefaultUserId;
 
@@ -135,7 +135,7 @@ namespace Armada.Server.Mcp.Tools
                     Playbook? duplicate = await database.Playbooks.ReadByFileNameAsync(playbook.TenantId ?? Constants.DefaultTenantId, playbook.FileName).ConfigureAwait(false);
                     if (duplicate != null && !String.Equals(duplicate.Id, playbook.Id, StringComparison.Ordinal))
                     {
-                        return (object)new { Error = "A playbook with that file name already exists." };
+                        return (object)McpToolError.Conflict("A playbook with that file name already exists.");
                     }
 
                     Playbook updated = await database.Playbooks.UpdateAsync(playbook).ConfigureAwait(false);
@@ -158,13 +158,13 @@ namespace Armada.Server.Mcp.Tools
                 {
                     PlaybookArgs request = JsonSerializer.Deserialize<PlaybookArgs>(args!.Value, _JsonOptions)!;
                     string id = request.Id?.Trim() ?? String.Empty;
-                    if (String.IsNullOrWhiteSpace(id)) return (object)new { Error = "id is required" };
+                    if (String.IsNullOrWhiteSpace(id)) return (object)McpToolError.InvalidArgument("id is required");
 
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     Playbook? playbook = await McpCallerScope.ReadPlaybookAsync(database, caller, id).ConfigureAwait(false);
-                    if (playbook == null) return (object)new { Error = "Playbook not found: " + id };
+                    if (playbook == null) return (object)McpToolError.NotFound("Playbook not found: " + id);
                     if (!ScopedVisibility.CanEdit(caller, playbook.Scope, playbook.TenantId, playbook.UserId))
-                        return (object)new { Error = "You may only delete your own playbooks; a tenant-wide playbook requires a tenant admin." };
+                        return (object)McpToolError.Forbidden("You may only delete your own playbooks; a tenant-wide playbook requires a tenant admin.");
 
                     await database.Playbooks.DeleteAsync(id).ConfigureAwait(false);
                     return (object)new { Status = "deleted", PlaybookId = id };

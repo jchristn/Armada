@@ -30,7 +30,7 @@ administrator).
 | WebSocket commands | 59 | 0 |
 | WebSocket event types | 65 | 0 |
 | CLI commands | 58 | 0 |
-| Settings keys | 174 | 12 |
+| Settings keys | 175 | 12 |
 
 ## REST API
 
@@ -157,7 +157,7 @@ Base path `/api/v1`. Request and response bodies are PascalCase JSON; errors are
 | DELETE | `/api/v1/incidents/{id}` | TenantAdmin |  | 204, 404 |  |
 | GET | `/api/v1/incidents/{id}` | Authenticated |  | 200 `Incident`, 404 |  |
 | PUT | `/api/v1/incidents/{id}` | TenantAdmin | `IncidentUpsertRequest` | 200 `Incident`, 404 |  |
-| GET | `/api/v1/jobs` | Authenticated |  |  |  |
+| GET | `/api/v1/jobs` | Authenticated |  | 400 |  |
 | GET | `/api/v1/jobs/{id}` | Authenticated |  | 404 |  |
 | POST | `/api/v1/jobs/{id}/cancel` | Authenticated |  | 404 |  |
 | GET | `/api/v1/memories` | Authenticated |  | 200 `EnumerationResult<Memory>` |  |
@@ -811,6 +811,7 @@ install with the home directory written as `~`; defaults are not frozen (see COM
 | `maxRecoveryAttempts` | int | `3` |  |
 | `mcp` | object |  |  |
 | `mcp.allowUnauthenticatedLoopback` | bool | `true` |  |
+| `mcp.toolCallsPerSecond` | int | `100` |  |
 | `mcpPort` | int | `7891` |  |
 | `mergeQueueTestCommand` | string | `null` |  |
 | `messageTemplates` | object |  |  |

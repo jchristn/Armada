@@ -164,6 +164,41 @@ namespace Armada.Runtimes.Mcp
         public async Task<string> CallToolAsync(string name, string? argumentsJson, CancellationToken token = default)
         {
             if (String.IsNullOrWhiteSpace(name)) throw new ArgumentNullException(nameof(name));
+            JsonElement result = await CallToolRawAsync(name, argumentsJson, token).ConfigureAwait(false);
+            return ExtractResultText(result);
+        }
+
+        /// <summary>
+        /// Invoke a tool and return the deserialized result, including the server's <c>isError</c> flag, so callers
+        /// decide success from the protocol rather than from the result text.
+        /// </summary>
+        /// <param name="name">Tool name as advertised by the server.</param>
+        /// <param name="argumentsJson">Arguments as a serialized JSON object.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The tool call result.</returns>
+        /// <exception cref="McpClientException">Thrown on a transport or JSON-RPC protocol error.</exception>
+        public async Task<McpToolCallResult> CallToolResultAsync(string name, string? argumentsJson, CancellationToken token = default)
+        {
+            if (String.IsNullOrWhiteSpace(name)) throw new ArgumentNullException(nameof(name));
+            JsonElement result = await CallToolRawAsync(name, argumentsJson, token).ConfigureAwait(false);
+            if (result.ValueKind == JsonValueKind.Undefined) return new McpToolCallResult();
+            return JsonSerializer.Deserialize<McpToolCallResult>(result.GetRawText()) ?? new McpToolCallResult();
+        }
+
+        /// <inheritdoc />
+        public void Dispose()
+        {
+            if (_Disposed) return;
+            _Disposed = true;
+            try { _Http.Dispose(); } catch { }
+        }
+
+        #endregion
+
+        #region Private-Methods
+
+        private async Task<JsonElement> CallToolRawAsync(string name, string? argumentsJson, CancellationToken token)
+        {
 
             JsonElement arguments;
             try
@@ -178,26 +213,12 @@ namespace Armada.Runtimes.Mcp
                 arguments = doc.RootElement.Clone();
             }
 
-            JsonElement result = await SendAsync("tools/call", NextId(), new
+            return await SendAsync("tools/call", NextId(), new
             {
                 name = name,
                 arguments = arguments
             }, token).ConfigureAwait(false);
-
-            return ExtractResultText(result);
         }
-
-        /// <inheritdoc />
-        public void Dispose()
-        {
-            if (_Disposed) return;
-            _Disposed = true;
-            try { _Http.Dispose(); } catch { }
-        }
-
-        #endregion
-
-        #region Private-Methods
 
         private int NextId()
         {

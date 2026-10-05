@@ -113,7 +113,7 @@ namespace Armada.Server.Mcp.Tools
                         ?? throw new InvalidOperationException("Could not deserialize ObjectiveIdArgs.");
                     AuthContext auth = McpToolHelpers.ResolveCallerContext();
                     Objective? objective = await objectiveService.ReadAsync(auth, request.ObjectiveId).ConfigureAwait(false);
-                    if (objective == null) return (object)new { Error = "Objective not found" };
+                    if (objective == null) return (object)McpToolError.NotFound("Objective not found");
                     return (object)objective;
                 });
 
@@ -135,7 +135,7 @@ namespace Armada.Server.Mcp.Tools
                         ?? throw new InvalidOperationException("Could not deserialize ObjectiveIdArgs.");
                     AuthContext auth = McpToolHelpers.ResolveCallerContext();
                     Objective? objective = await objectiveService.ReadAsync(auth, request.ObjectiveId).ConfigureAwait(false);
-                    if (objective == null) return (object)new { Error = "Backlog item not found" };
+                    if (objective == null) return (object)McpToolError.NotFound("Backlog item not found");
                     return (object)objective;
                 });
 
@@ -431,7 +431,7 @@ namespace Armada.Server.Mcp.Tools
                             ?? throw new InvalidOperationException("Could not deserialize ObjectiveIdArgs.");
                         AuthContext auth = McpToolHelpers.ResolveCallerContext();
                         Objective? objective = await objectiveService.ReadAsync(auth, request.ObjectiveId).ConfigureAwait(false);
-                        if (objective == null) return (object)new { Error = "Backlog item not found" };
+                        if (objective == null) return (object)McpToolError.NotFound("Backlog item not found");
 
                         int pageNumber = request.PageNumber.HasValue ? request.PageNumber.Value : 1;
                         if (pageNumber < 1) pageNumber = 1;

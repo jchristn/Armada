@@ -16,6 +16,22 @@ namespace Armada.Core.Settings
         /// </summary>
         public bool AllowUnauthenticatedLoopback { get; set; } = true;
 
+        /// <summary>
+        /// Tool calls one MCP client may make per second (MCP requires servers to rate-limit tool calls). Default 100;
+        /// 0 disables the limit. Clamped to 0-1000000. A call over the limit gets a tool result with isError true.
+        /// </summary>
+        public int ToolCallsPerSecond
+        {
+            get { return _ToolCallsPerSecond; }
+            set { _ToolCallsPerSecond = value < 0 ? 0 : (value > 1000000 ? 1000000 : value); }
+        }
+
+        #endregion
+
+        #region Private-Members
+
+        private int _ToolCallsPerSecond = 100;
+
         #endregion
 
         #region Constructors-and-Factories

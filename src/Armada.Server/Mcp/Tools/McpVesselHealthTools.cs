@@ -46,7 +46,7 @@ namespace Armada.Server.Mcp.Tools
                         ?? throw new InvalidOperationException("Could not deserialize VesselHealthArgs.");
                     AuthContext auth = McpToolHelpers.ResolveCallerContext();
                     VesselHealthDetail? detail = await health.GetDetailAsync(auth.TenantId!, request.VesselId).ConfigureAwait(false);
-                    if (detail == null) return (object)new { Error = "Vessel not found" };
+                    if (detail == null) return (object)McpToolError.NotFound("Vessel not found");
                     return (object)new
                     {
                         Health = detail.Health,
@@ -76,7 +76,7 @@ namespace Armada.Server.Mcp.Tools
                         ? (JsonSerializer.Deserialize<EvaluateVesselHealthArgs>(args.Value, _JsonOptions) ?? new EvaluateVesselHealthArgs())
                         : new EvaluateVesselHealthArgs();
                     AuthContext auth = McpToolHelpers.ResolveCallerContext();
-                    if (!auth.IsAdmin && !auth.IsTenantAdmin) return (object)new { Error = "Tenant admin permission is required to evaluate vessel health" };
+                    if (!auth.IsAdmin && !auth.IsTenantAdmin) return (object)McpToolError.Forbidden("Tenant admin permission is required to evaluate vessel health");
                     VesselHealthEvaluateRequest evaluate = new VesselHealthEvaluateRequest
                     {
                         VesselIds = request.VesselIds,
@@ -89,7 +89,7 @@ namespace Armada.Server.Mcp.Tools
                     }
                     catch (System.Collections.Generic.KeyNotFoundException ex)
                     {
-                        return (object)new { Error = ex.Message };
+                        return (object)McpToolError.FromException(ex);
                     }
                 });
 
@@ -114,9 +114,9 @@ namespace Armada.Server.Mcp.Tools
                     VesselHealthOverrideArgs request = JsonSerializer.Deserialize<VesselHealthOverrideArgs>(args!.Value, _JsonOptions)
                         ?? throw new InvalidOperationException("Could not deserialize VesselHealthOverrideArgs.");
                     AuthContext auth = McpToolHelpers.ResolveCallerContext();
-                    if (!auth.IsAdmin && !auth.IsTenantAdmin) return (object)new { Error = "Tenant admin permission is required to change vessel health overrides" };
+                    if (!auth.IsAdmin && !auth.IsTenantAdmin) return (object)McpToolError.Forbidden("Tenant admin permission is required to change vessel health overrides");
                     if (!TryParseName(request.Criterion, out VesselHealthCriterionEnum criterion))
-                        return (object)new { Error = "Unknown criterion '" + request.Criterion + "'" };
+                        return (object)McpToolError.InvalidArgument("Unknown criterion '" + request.Criterion + "'");
 
                     VesselHealthDetail? detail;
                     if (request.Remove)
@@ -126,12 +126,12 @@ namespace Armada.Server.Mcp.Tools
                     else
                     {
                         if (!TryParseName(request.Status, out VesselHealthStatusEnum status))
-                            return (object)new { Error = "status must be Pass, Warn, Fail, NotApplicable, or Unknown" };
+                            return (object)McpToolError.InvalidArgument("status must be Pass, Warn, Fail, NotApplicable, or Unknown");
                         VesselHealthOverrideRequest normalized = new VesselHealthOverrideRequest { Status = status, Note = request.Note };
                         detail = await health.SetOverrideAsync(auth.TenantId!, request.VesselId, criterion, status, normalized.Note, auth.UserId).ConfigureAwait(false);
                     }
 
-                    if (detail == null) return (object)new { Error = "Vessel not found" };
+                    if (detail == null) return (object)McpToolError.NotFound("Vessel not found");
                     return (object)new { Health = detail.Health, Overrides = detail.Overrides };
                 });
         }

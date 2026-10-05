@@ -57,7 +57,7 @@ namespace Armada.Server.Mcp.Tools
                     CaptainIdArgs request = JsonSerializer.Deserialize<CaptainIdArgs>(args!.Value, _JsonOptions)!;
                     string captainId = request.CaptainId;
                     Captain? captain = await McpCallerScope.ReadCaptainAsync(database, caller, captainId).ConfigureAwait(false);
-                    if (captain == null) return (object)new { Error = "Captain not found" };
+                    if (captain == null) return (object)McpToolError.NotFound("Captain not found");
                     return (object)captain;
                 });
 
@@ -78,7 +78,7 @@ namespace Armada.Server.Mcp.Tools
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     CaptainIdArgs request = JsonSerializer.Deserialize<CaptainIdArgs>(args!.Value, _JsonOptions)!;
                     Captain? captain = await McpCallerScope.ReadCaptainAsync(database, caller, request.CaptainId).ConfigureAwait(false);
-                    if (captain == null) return (object)new { Error = "Captain not found" };
+                    if (captain == null) return (object)McpToolError.NotFound("Captain not found");
                     if (captain.State != CaptainStateEnum.Quarantined)
                         return (object)new { Status = "not_quarantined", CaptainId = captain.Id };
 
@@ -110,7 +110,7 @@ namespace Armada.Server.Mcp.Tools
                         CaptainIdArgs request = JsonSerializer.Deserialize<CaptainIdArgs>(args!.Value, _JsonOptions)!;
                         string captainId = request.CaptainId;
                         Captain? captain = await McpCallerScope.ReadCaptainAsync(database, caller, captainId).ConfigureAwait(false);
-                        if (captain == null) return (object)new { Error = "Captain not found" };
+                        if (captain == null) return (object)McpToolError.NotFound("Captain not found");
                         return await captainToolService.DescribeAsync(captain).ConfigureAwait(false);
                     });
             }
@@ -207,7 +207,7 @@ namespace Armada.Server.Mcp.Tools
                     CaptainUpdateArgs request = JsonSerializer.Deserialize<CaptainUpdateArgs>(args!.Value, _JsonOptions)!;
                     string captainId = request.CaptainId;
                     Captain? captain = await McpCallerScope.ReadCaptainAsync(database, caller, captainId).ConfigureAwait(false);
-                    if (captain == null) return (object)new { Error = "Captain not found" };
+                    if (captain == null) return (object)McpToolError.NotFound("Captain not found");
                     if (request.Name != null)
                         captain.Name = request.Name;
                     if (!String.IsNullOrEmpty(request.Runtime) && Enum.TryParse<AgentRuntimeEnum>(request.Runtime, true, out AgentRuntimeEnum rt))
@@ -317,17 +317,17 @@ namespace Armada.Server.Mcp.Tools
                     CaptainIdArgs request = JsonSerializer.Deserialize<CaptainIdArgs>(args!.Value, _JsonOptions)!;
                     string captainId = request.CaptainId;
                     Captain? captain = await McpCallerScope.ReadCaptainAsync(database, caller, captainId).ConfigureAwait(false);
-                    if (captain == null) return (object)new { Error = "Captain not found" };
+                    if (captain == null) return (object)McpToolError.NotFound("Captain not found");
 
                     // Block deletion of working captains
                     if (captain.State == CaptainStateEnum.Working)
-                        return (object)new { Error = "Cannot delete captain while state is Working. Stop the captain first." };
+                        return (object)McpToolError.Conflict("Cannot delete captain while state is Working. Stop the captain first.");
 
                     // Block deletion if captain has active missions
                     List<Mission> captainMissions = await database.Missions.EnumerateByCaptainAsync(captainId).ConfigureAwait(false);
                     int activeMissionCount = captainMissions.Count(m => m.Status == MissionStatusEnum.Assigned || m.Status == MissionStatusEnum.InProgress);
                     if (activeMissionCount > 0)
-                        return (object)new { Error = "Cannot delete captain with " + activeMissionCount + " active mission(s) in Assigned or InProgress status. Cancel or complete them first." };
+                        return (object)McpToolError.Conflict("Cannot delete captain with " + activeMissionCount + " active mission(s) in Assigned or InProgress status. Cancel or complete them first.");
 
                     await database.Captains.DeleteAsync(captainId).ConfigureAwait(false);
                     return (object)new { Status = "deleted", CaptainId = captainId };
@@ -350,7 +350,7 @@ namespace Armada.Server.Mcp.Tools
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     DeleteMultipleArgs request = JsonSerializer.Deserialize<DeleteMultipleArgs>(args!.Value, _JsonOptions)!;
                     if (request.Ids == null || request.Ids.Count == 0)
-                        return (object)new { Error = "ids is required and must not be empty" };
+                        return (object)McpToolError.InvalidArgument("ids is required and must not be empty");
 
                     DeleteMultipleResult result = new DeleteMultipleResult();
                     foreach (string id in request.Ids)
@@ -408,7 +408,7 @@ namespace Armada.Server.Mcp.Tools
                         CaptainLogArgs request = JsonSerializer.Deserialize<CaptainLogArgs>(args!.Value, _JsonOptions)!;
                         string captainId = request.CaptainId;
                         Captain? captain = await McpCallerScope.ReadCaptainAsync(database, caller, captainId).ConfigureAwait(false);
-                        if (captain == null) return (object)new { Error = "Captain not found" };
+                        if (captain == null) return (object)McpToolError.NotFound("Captain not found");
 
                         string pointerPath = Path.Combine(settings.LogDirectory, "captains", captainId + ".current");
                         string? logPath = null;

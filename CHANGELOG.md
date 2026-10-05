@@ -6,6 +6,13 @@ All notable changes to Armada are documented in this file.
 
 ## Unreleased
 
+### Structured MCP tool errors
+
+- Every MCP tool error now carries a machine-readable `ErrorCode` (`NotFound`, `InvalidArgument`, `Conflict`, `Forbidden`, `Unavailable`, `Failed`) next to the English `Error`; existing `Code` and `StatusCode` fields are kept. Exceptions map to codes by type, never by message.
+- `Mcp.ToolCallsPerSecond` setting (default 100, 0 disables) for the per-client MCP tool call limit.
+- `McpToolClient.CallToolResultAsync` returns the deserialized tool result with its `isError` flag.
+- Tests: the MCP tenant isolation suite decides from `ErrorCode`, `isError`, and typed counts instead of matching reply text, no longer converts exceptions into sentinel strings, and lifts the rate limit instead of retrying on the words "rate limit". The API surface generator documents data-directory defaults as `~/.armada` wherever it runs.
+
 ### Terminal UI: Operations, Delivery, Configuration, Activity, and System screens
 
 - Operations: Home, Needs You, Planning (live streaming transcript, dispatch from a session), Dispatch (pre-fill from Planning, Backlog, Incident, Workspace), Backlog and Backlog item (GitHub import, refinement sessions), Fleet Actions (runs, live run detail, target drawer), Missions and Mission detail (diff, log, review, transition, landing preview, PR panel), Voyages, Voyage detail, Create Voyage, Merge Queue and entry detail, and Jobs.

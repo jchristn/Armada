@@ -44,8 +44,8 @@ namespace Armada.Server.Mcp.Tools
                     string eventId = request.EventId;
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     ArmadaEvent? evt = await database.Events.ReadAsync(eventId).ConfigureAwait(false);
-                    if (evt == null || !CanSeeEvent(caller, evt)) return (object)new { Error = "Event not found" };
-                    if (!caller.IsAdmin && Armada.Core.Services.CommandAudit.IsAuditEvent(evt.EventType)) return (object)new { Error = "Audit events can be deleted only by a global admin" };
+                    if (evt == null || !CanSeeEvent(caller, evt)) return (object)McpToolError.NotFound("Event not found");
+                    if (!caller.IsAdmin && Armada.Core.Services.CommandAudit.IsAuditEvent(evt.EventType)) return (object)McpToolError.Forbidden("Audit events can be deleted only by a global admin");
                     await database.Events.DeleteAsync(eventId).ConfigureAwait(false);
                     return (object)new { Status = "deleted", EventId = eventId };
                 });
@@ -66,7 +66,7 @@ namespace Armada.Server.Mcp.Tools
                 {
                     DeleteMultipleArgs request = JsonSerializer.Deserialize<DeleteMultipleArgs>(args!.Value, _JsonOptions)!;
                     if (request.Ids == null || request.Ids.Count == 0)
-                        return (object)new { Error = "ids is required and must not be empty" };
+                        return (object)McpToolError.InvalidArgument("ids is required and must not be empty");
 
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     DeleteMultipleResult result = new DeleteMultipleResult();

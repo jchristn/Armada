@@ -347,26 +347,29 @@ refused by the REST API and `/ws`. Calls without the claim (normal MCP clients, 
 
 ## Error Responses
 
-When an MCP tool encounters an error, it returns a JSON object with `Error` and optionally `Message` fields:
+When an MCP tool encounters an error, it returns a JSON object with a machine-readable `ErrorCode` and an English `Error` message. Branch on `ErrorCode`; the message is for people and models and may change.
 
 ```json
 {
-  "Error": "Vessel not found"
+  "Error": "Vessel not found",
+  "ErrorCode": "NotFound",
+  "Code": null,
+  "StatusCode": null
 }
 ```
 
-Common error responses across tools:
-
-| Error | When |
+| `ErrorCode` | Meaning |
 |---|---|
-| `"Vessel not found"` | Invalid or nonexistent vessel ID |
-| `"Captain not found"` | Invalid or nonexistent captain ID |
-| `"Mission not found"` | Invalid or nonexistent mission ID |
-| `"Dock not found"` | Invalid or nonexistent dock ID |
-| `"Merge entry not found"` | Invalid or nonexistent merge queue entry ID |
-| `"ids is required and must not be empty"` | Bulk delete called with empty ID list |
+| `NotFound` | The referenced entity does not exist or is not visible to the caller (including another tenant's entities) |
+| `InvalidArgument` | An argument is missing, malformed, or out of range |
+| `Conflict` | The entity's state does not allow the operation (for example deleting a working captain), or it already exists |
+| `Forbidden` | The caller lacks the permission the operation needs |
+| `Unavailable` | A service the operation needs is not configured or not available (for example no saved diff) |
+| `Failed` | Any other failure |
 
-MCP tools do not return HTTP status codes (MCP uses JSON-RPC, not HTTP). The presence of an `Error` field in the response indicates failure. On success, the response contains the requested data (entity object, status, list, etc.) without an `Error` field.
+`Code` carries a feature-specific detail code where a tool has one (for example the vessel import codes such as `BatchNotFound` or `PathNotAllowed`), and `StatusCode` keeps the HTTP-equivalent status the fleet action tools have always returned. Errors raised by a tool's handler, and calls refused by the per-client rate limit (`Mcp.ToolCallsPerSecond`, default 100 per second, 0 for no limit), come back as MCP tool results with `isError: true` instead.
+
+MCP tools do not return HTTP status codes (MCP uses JSON-RPC, not HTTP). The presence of an `ErrorCode` field (or a result with `isError: true`) indicates failure. On success, the response contains the requested data (entity object, status, list, etc.) without an `Error` field.
 
 The stdio transport has no network attack surface -- the only caller is the parent process that spawned Armada -- so it runs anonymously under the default tenant-admin context. The HTTP MCP transport requires a credential except for loopback callers of a loopback-bound listener (see [Authentication](#authentication)).
 

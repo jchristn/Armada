@@ -41,7 +41,7 @@ namespace Armada.Server.Mcp.Tools
                         ?? throw new InvalidOperationException("Could not deserialize RunbookIdArgs.");
                     AuthContext auth = McpToolHelpers.ResolveCallerContext();
                     Runbook? runbook = await runbookService.ReadAsync(auth, request.RunbookId).ConfigureAwait(false);
-                    if (runbook == null) return (object)new { Error = "Runbook not found" };
+                    if (runbook == null) return (object)McpToolError.NotFound("Runbook not found");
                     return (object)runbook;
                 });
 
@@ -63,7 +63,7 @@ namespace Armada.Server.Mcp.Tools
                         ?? throw new InvalidOperationException("Could not deserialize RunbookExecutionIdArgs.");
                     AuthContext auth = McpToolHelpers.ResolveCallerContext();
                     RunbookExecution? execution = await runbookService.ReadExecutionAsync(auth, request.RunbookExecutionId).ConfigureAwait(false);
-                    if (execution == null) return (object)new { Error = "Runbook execution not found" };
+                    if (execution == null) return (object)McpToolError.NotFound("Runbook execution not found");
                     return (object)execution;
                 });
 

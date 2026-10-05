@@ -50,7 +50,7 @@ namespace Armada.Server.Mcp.Tools
                     string entryId = request.EntryId;
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     MergeEntry? entry = await McpCallerScope.ReadMergeEntryAsync(database, caller, entryId).ConfigureAwait(false);
-                    if (entry == null) return (object)new { Error = "Merge entry not found" };
+                    if (entry == null) return (object)McpToolError.NotFound("Merge entry not found");
                     return (object)entry;
                 });
 
@@ -76,9 +76,9 @@ namespace Armada.Server.Mcp.Tools
                     MergeEnqueueArgs request = JsonSerializer.Deserialize<MergeEnqueueArgs>(args!.Value, _JsonOptions)!;
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     if (await McpCallerScope.ReadVesselAsync(database, caller, request.VesselId).ConfigureAwait(false) == null)
-                        return (object)new { Error = "Vessel not found" };
+                        return (object)McpToolError.NotFound("Vessel not found");
                     if (!String.IsNullOrEmpty(request.MissionId) && await McpCallerScope.ReadMissionAsync(database, caller, request.MissionId).ConfigureAwait(false) == null)
-                        return (object)new { Error = "Mission not found" };
+                        return (object)McpToolError.NotFound("Mission not found");
                     MergeEntry entry = new MergeEntry();
                     entry.TenantId = String.IsNullOrEmpty(caller.TenantId) ? Constants.DefaultTenantId : caller.TenantId;
                     entry.UserId = caller.UserId;
@@ -113,7 +113,7 @@ namespace Armada.Server.Mcp.Tools
                     string entryId = request.EntryId;
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     MergeEntry? entry = await McpCallerScope.ReadMergeEntryAsync(database, caller, entryId).ConfigureAwait(false);
-                    if (entry == null) return (object)new { Error = "Merge entry not found" };
+                    if (entry == null) return (object)McpToolError.NotFound("Merge entry not found");
                     await mergeQueue.CancelAsync(entryId, TenantFilter(caller)).ConfigureAwait(false);
                     return (object)new { Status = "cancelled", EntryId = entryId };
                 });
@@ -136,9 +136,9 @@ namespace Armada.Server.Mcp.Tools
                     string entryId = request.EntryId;
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     if (await McpCallerScope.ReadMergeEntryAsync(database, caller, entryId).ConfigureAwait(false) == null)
-                        return (object)new { Error = "Merge entry not found" };
+                        return (object)McpToolError.NotFound("Merge entry not found");
                     MergeEntry? entry = await mergeQueue.ProcessSingleAsync(entryId, TenantFilter(caller)).ConfigureAwait(false);
-                    if (entry == null) return (object)new { Error = "Merge entry not found or not in Queued status" };
+                    if (entry == null) return (object)McpToolError.NotFound("Merge entry not found or not in Queued status");
                     return (object)entry;
                 });
 
@@ -170,10 +170,10 @@ namespace Armada.Server.Mcp.Tools
                     string entryId = request.EntryId;
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     MergeEntry? entry = await McpCallerScope.ReadMergeEntryAsync(database, caller, entryId).ConfigureAwait(false);
-                    if (entry == null) return (object)new { Error = "Merge entry not found" };
+                    if (entry == null) return (object)McpToolError.NotFound("Merge entry not found");
 
                     bool deleted = await mergeQueue.DeleteAsync(entryId, TenantFilter(caller)).ConfigureAwait(false);
-                    if (!deleted) return (object)new { Error = "Cannot delete merge entry in non-terminal status " + entry.Status + ". Only Landed, Failed, or Cancelled entries can be deleted." };
+                    if (!deleted) return (object)McpToolError.Conflict("Cannot delete merge entry in non-terminal status " + entry.Status + ". Only Landed, Failed, or Cancelled entries can be deleted.");
 
                     return (object)new { Status = "deleted", EntryId = entryId };
                 });
@@ -200,13 +200,13 @@ namespace Armada.Server.Mcp.Tools
                     if (!String.IsNullOrEmpty(request.Status))
                     {
                         if (!Enum.TryParse<MergeStatusEnum>(request.Status, true, out MergeStatusEnum parsed))
-                            return (object)new { Error = "Invalid status. Must be one of: Landed, Failed, Cancelled" };
+                            return (object)McpToolError.InvalidArgument("Invalid status. Must be one of: Landed, Failed, Cancelled");
                         statusFilter = parsed;
                     }
 
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     if (!String.IsNullOrEmpty(request.VesselId) && await McpCallerScope.ReadVesselAsync(database, caller, request.VesselId).ConfigureAwait(false) == null)
-                        return (object)new { Error = "Vessel not found" };
+                        return (object)McpToolError.NotFound("Vessel not found");
                     int deleted = await mergeQueue.PurgeTerminalAsync(request.VesselId, statusFilter, TenantFilter(caller)).ConfigureAwait(false);
                     return (object)new { Status = "purged", EntriesDeleted = deleted };
                 });
@@ -229,10 +229,10 @@ namespace Armada.Server.Mcp.Tools
                     string entryId = request.EntryId;
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     MergeEntry? entry = await McpCallerScope.ReadMergeEntryAsync(database, caller, entryId).ConfigureAwait(false);
-                    if (entry == null) return (object)new { Error = "Merge entry not found" };
+                    if (entry == null) return (object)McpToolError.NotFound("Merge entry not found");
 
                     bool deleted = await mergeQueue.DeleteAsync(entryId, TenantFilter(caller)).ConfigureAwait(false);
-                    if (!deleted) return (object)new { Error = "Cannot purge merge entry in non-terminal status " + entry.Status + ". Only Landed, Failed, or Cancelled entries can be purged." };
+                    if (!deleted) return (object)McpToolError.Conflict("Cannot purge merge entry in non-terminal status " + entry.Status + ". Only Landed, Failed, or Cancelled entries can be purged.");
 
                     return (object)new { Status = "purged", EntryId = entryId };
                 });
@@ -253,7 +253,7 @@ namespace Armada.Server.Mcp.Tools
                 {
                     PurgeMergeEntriesArgs request = JsonSerializer.Deserialize<PurgeMergeEntriesArgs>(args!.Value, _JsonOptions)!;
                     if (request.EntryIds == null || request.EntryIds.Count == 0)
-                        return (object)new { Error = "entryIds is required and must not be empty" };
+                        return (object)McpToolError.InvalidArgument("entryIds is required and must not be empty");
 
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     MergeQueuePurgeResult result = await mergeQueue.DeleteMultipleAsync(request.EntryIds, TenantFilter(caller)).ConfigureAwait(false);

@@ -521,7 +521,7 @@ namespace Armada.Server.Mcp.Tools
                             if (!String.IsNullOrWhiteSpace(query.Status))
                             {
                                 if (!Enum.TryParse(query.Status, true, out FleetActionRunStatusEnum runStatus))
-                                    return (object)new { Error = "Unknown fleet action run status: " + query.Status };
+                                    return (object)McpToolError.InvalidArgument("Unknown fleet action run status: " + query.Status);
                                 query.Status = runStatus.ToString();
                             }
                             EnumerationResult<FleetActionRun> fleetActionRuns = await database.FleetActionRuns.EnumerateAsync(
@@ -532,15 +532,15 @@ namespace Armada.Server.Mcp.Tools
                         case "fleet-action-run-target":
                         case "fleet-action-run-targets":
                             if (String.IsNullOrWhiteSpace(request.RunId))
-                                return (object)new { Error = "runId is required for entityType fleet_action_run_target" };
+                                return (object)McpToolError.InvalidArgument("runId is required for entityType fleet_action_run_target");
                             string targetTenantId = callerCtx.TenantId ?? Constants.DefaultTenantId;
                             FleetActionRun? targetRun = await database.FleetActionRuns.ReadAsync(targetTenantId, request.RunId!).ConfigureAwait(false);
-                            if (targetRun == null) return (object)new { Error = "Fleet action run not found: " + request.RunId };
+                            if (targetRun == null) return (object)McpToolError.NotFound("Fleet action run not found: " + request.RunId);
                             FleetActionTargetStatusEnum? targetStatus = null;
                             if (!String.IsNullOrWhiteSpace(query.Status))
                             {
                                 if (!Enum.TryParse(query.Status, true, out FleetActionTargetStatusEnum parsedTargetStatus))
-                                    return (object)new { Error = "Unknown fleet action target status: " + query.Status };
+                                    return (object)McpToolError.InvalidArgument("Unknown fleet action target status: " + query.Status);
                                 targetStatus = parsedTargetStatus;
                             }
                             EnumerationResult<FleetActionRunTarget> targets = await database.FleetActionRunTargets.EnumerateByRunAsync(
@@ -557,7 +557,7 @@ namespace Armada.Server.Mcp.Tools
                                 TotalMs = targets.TotalMs
                             };
                         default:
-                            return (object)new { Error = "Unknown entity type: " + entityType + ". Valid types: fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines, playbooks, workflow_profiles, project_profiles, skills, check_runs, releases, jobs, model_endpoints, vessel_import_batch, fleet_action, fleet_action_run, fleet_action_run_target, vessel_health" };
+                            return (object)McpToolError.InvalidArgument("Unknown entity type: " + entityType + ". Valid types: fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines, playbooks, workflow_profiles, project_profiles, skills, check_runs, releases, jobs, model_endpoints, vessel_import_batch, fleet_action, fleet_action_run, fleet_action_run_target, vessel_health");
                     }
                 });
         }

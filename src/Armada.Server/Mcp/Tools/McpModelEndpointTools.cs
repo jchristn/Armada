@@ -44,7 +44,7 @@ namespace Armada.Server.Mcp.Tools
                         ?? throw new InvalidOperationException("Could not deserialize ModelEndpointIdArgs.");
                     AuthContext auth = McpToolHelpers.ResolveCallerContext();
                     ModelEndpoint? endpoint = await endpoints.ReadAsync(auth, request.EndpointId).ConfigureAwait(false);
-                    if (endpoint == null) return (object)new { Error = "Model endpoint not found" };
+                    if (endpoint == null) return (object)McpToolError.NotFound("Model endpoint not found");
                     return (object)endpoint;
                 });
 
@@ -91,7 +91,7 @@ namespace Armada.Server.Mcp.Tools
                     }
                     catch (Exception ex) when (ex is ArgumentException || ex is InvalidOperationException)
                     {
-                        return (object)new { Error = ex.Message };
+                        return (object)McpToolError.FromException(ex);
                     }
                 });
 
@@ -122,10 +122,10 @@ namespace Armada.Server.Mcp.Tools
                         ?? throw new InvalidOperationException("Could not deserialize ModelEndpointUpsertArgs.");
                     AuthContext auth = McpToolHelpers.ResolveCallerContext();
 
-                    if (String.IsNullOrWhiteSpace(request.EndpointId)) return (object)new { Error = "endpointId is required." };
+                    if (String.IsNullOrWhiteSpace(request.EndpointId)) return (object)McpToolError.InvalidArgument("endpointId is required.");
 
                     ModelEndpoint? existing = await endpoints.ReadAsync(auth, request.EndpointId).ConfigureAwait(false);
-                    if (existing == null) return (object)new { Error = "Model endpoint not found" };
+                    if (existing == null) return (object)McpToolError.NotFound("Model endpoint not found");
 
                     if (!String.IsNullOrWhiteSpace(request.Name)) existing.Name = request.Name;
                     if (request.Kind.HasValue) existing.Kind = request.Kind.Value;
@@ -143,7 +143,7 @@ namespace Armada.Server.Mcp.Tools
                     }
                     catch (Exception ex) when (ex is ArgumentException || ex is InvalidOperationException)
                     {
-                        return (object)new { Error = ex.Message };
+                        return (object)McpToolError.FromException(ex);
                     }
                 });
 
@@ -171,7 +171,7 @@ namespace Armada.Server.Mcp.Tools
                     }
                     catch (Exception ex)
                     {
-                        return (object)new { Error = ex.Message };
+                        return (object)McpToolError.FromException(ex);
                     }
                 });
 
@@ -198,7 +198,7 @@ namespace Armada.Server.Mcp.Tools
                     }
                     catch (Exception ex)
                     {
-                        return (object)new { Error = ex.Message };
+                        return (object)McpToolError.FromException(ex);
                     }
                 });
 

@@ -78,10 +78,10 @@ namespace Armada.Server.Mcp.Tools
                 async (args) =>
                 {
                     MemoryIdArgs request = JsonSerializer.Deserialize<MemoryIdArgs>(args!.Value, _JsonOptions)!;
-                    if (String.IsNullOrWhiteSpace(request.MemoryId)) return (object)new { Error = "memoryId is required" };
+                    if (String.IsNullOrWhiteSpace(request.MemoryId)) return (object)McpToolError.InvalidArgument("memoryId is required");
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     Memory? memory = await service.ReadAsync(caller, request.MemoryId).ConfigureAwait(false);
-                    if (memory == null) return (object)new { Error = "Memory not found" };
+                    if (memory == null) return (object)McpToolError.NotFound("Memory not found");
                     return (object)memory;
                 });
 
@@ -113,7 +113,7 @@ namespace Armada.Server.Mcp.Tools
                 async (args) =>
                 {
                     MemoryUpsertArgs request = JsonSerializer.Deserialize<MemoryUpsertArgs>(args!.Value, _JsonOptions)!;
-                    if (String.IsNullOrWhiteSpace(request.Content)) return (object)new { Error = "content is required" };
+                    if (String.IsNullOrWhiteSpace(request.Content)) return (object)McpToolError.InvalidArgument("content is required");
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
 
                     Memory memory = new Memory();
@@ -126,13 +126,13 @@ namespace Armada.Server.Mcp.Tools
                     memory.Tags = request.Tags ?? new List<string>();
                     memory.SourceKind = ParseSourceKind(request.SourceKind) ?? MemorySourceKindEnum.Manual;
                     if (!String.IsNullOrEmpty(request.SourceVoyageId) && await McpCallerScope.ReadVoyageAsync(database, caller, request.SourceVoyageId).ConfigureAwait(false) == null)
-                        return (object)new { Error = "Voyage not found" };
+                        return (object)McpToolError.NotFound("Voyage not found");
                     if (!String.IsNullOrEmpty(request.SourceMissionId) && await McpCallerScope.ReadMissionAsync(database, caller, request.SourceMissionId).ConfigureAwait(false) == null)
-                        return (object)new { Error = "Mission not found" };
+                        return (object)McpToolError.NotFound("Mission not found");
                     if (!String.IsNullOrEmpty(request.SourceVesselId) && await McpCallerScope.ReadVesselAsync(database, caller, request.SourceVesselId).ConfigureAwait(false) == null)
-                        return (object)new { Error = "Vessel not found" };
+                        return (object)McpToolError.NotFound("Vessel not found");
                     if (!String.IsNullOrEmpty(request.VesselId) && await McpCallerScope.ReadVesselAsync(database, caller, request.VesselId).ConfigureAwait(false) == null)
-                        return (object)new { Error = "Vessel not found" };
+                        return (object)McpToolError.NotFound("Vessel not found");
                     memory.SourceVoyageId = request.SourceVoyageId;
                     memory.SourceMissionId = request.SourceMissionId;
                     memory.SourceVesselId = request.SourceVesselId;
@@ -169,11 +169,11 @@ namespace Armada.Server.Mcp.Tools
                 async (args) =>
                 {
                     MemoryUpdateArgs request = JsonSerializer.Deserialize<MemoryUpdateArgs>(args!.Value, _JsonOptions)!;
-                    if (String.IsNullOrWhiteSpace(request.MemoryId)) return (object)new { Error = "memoryId is required" };
+                    if (String.IsNullOrWhiteSpace(request.MemoryId)) return (object)McpToolError.InvalidArgument("memoryId is required");
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
 
                     Memory? existing = await service.ReadAsync(caller, request.MemoryId).ConfigureAwait(false);
-                    if (existing == null) return (object)new { Error = "Memory not found" };
+                    if (existing == null) return (object)McpToolError.NotFound("Memory not found");
 
                     if (ParseType(request.Type) is MemoryTypeEnum type) existing.Type = type;
                     if (request.Topic != null) existing.Topic = request.Topic;
@@ -183,7 +183,7 @@ namespace Armada.Server.Mcp.Tools
                     if (request.Salience.HasValue) existing.Salience = request.Salience.Value;
                     if (request.Tags != null) existing.Tags = request.Tags;
                     if (!String.IsNullOrEmpty(request.VesselId) && await McpCallerScope.ReadVesselAsync(database, caller, request.VesselId).ConfigureAwait(false) == null)
-                        return (object)new { Error = "Vessel not found" };
+                        return (object)McpToolError.NotFound("Vessel not found");
                     if (request.VesselId != null) existing.VesselId = request.VesselId;
                     if (request.SourceDetail != null) existing.SourceDetail = request.SourceDetail;
                     if (ParseScope(request.Scope) is ScopeEnum scope) existing.Scope = scope;
@@ -207,7 +207,7 @@ namespace Armada.Server.Mcp.Tools
                 async (args) =>
                 {
                     MemoryIdArgs request = JsonSerializer.Deserialize<MemoryIdArgs>(args!.Value, _JsonOptions)!;
-                    if (String.IsNullOrWhiteSpace(request.MemoryId)) return (object)new { Error = "memoryId is required" };
+                    if (String.IsNullOrWhiteSpace(request.MemoryId)) return (object)McpToolError.InvalidArgument("memoryId is required");
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     await service.DeleteAsync(caller, request.MemoryId).ConfigureAwait(false);
                     return (object)new { Status = "deleted", MemoryId = request.MemoryId };

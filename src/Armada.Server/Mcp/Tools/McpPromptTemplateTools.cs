@@ -110,12 +110,12 @@ namespace Armada.Server.Mcp.Tools
                 async (args) =>
                 {
                     PromptTemplateArgs request = JsonSerializer.Deserialize<PromptTemplateArgs>(args!.Value, _JsonOptions)!;
-                    if (String.IsNullOrEmpty(request.Name)) return (object)new { Error = "name is required" };
-                    if (String.IsNullOrEmpty(request.Category)) return (object)new { Error = "category is required" };
-                    if (String.IsNullOrEmpty(request.Content)) return (object)new { Error = "content is required" };
+                    if (String.IsNullOrEmpty(request.Name)) return (object)McpToolError.InvalidArgument("name is required");
+                    if (String.IsNullOrEmpty(request.Category)) return (object)McpToolError.InvalidArgument("category is required");
+                    if (String.IsNullOrEmpty(request.Content)) return (object)McpToolError.InvalidArgument("content is required");
 
                     PromptTemplate? existing = await database.PromptTemplates.ReadByNameAsync(request.Name).ConfigureAwait(false);
-                    if (existing != null) return (object)new { Error = "Template already exists: " + request.Name };
+                    if (existing != null) return (object)McpToolError.Conflict("Template already exists: " + request.Name);
 
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     PromptTemplate template = new PromptTemplate(request.Name, request.Content);
@@ -146,7 +146,7 @@ namespace Armada.Server.Mcp.Tools
                 {
                     PromptTemplateArgs request = JsonSerializer.Deserialize<PromptTemplateArgs>(args!.Value, _JsonOptions)!;
                     string name = request.Name;
-                    if (String.IsNullOrEmpty(name)) return (object)new { Error = "name is required" };
+                    if (String.IsNullOrEmpty(name)) return (object)McpToolError.InvalidArgument("name is required");
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     PromptTemplate? scoped = await McpCallerScope.ReadPromptTemplateAsync(database, caller, name).ConfigureAwait(false);
                     if (scoped != null) return (object)scoped;
@@ -154,9 +154,9 @@ namespace Armada.Server.Mcp.Tools
                     // A stored template outside the caller's scope is reported exactly like a missing one; a name with
                     // no stored copy falls back to the embedded default, which carries no tenant data.
                     PromptTemplate? stored = await database.PromptTemplates.ReadByNameAsync(name).ConfigureAwait(false);
-                    if (stored != null) return (object)new { Error = "Template not found: " + name };
+                    if (stored != null) return (object)McpToolError.NotFound("Template not found: " + name);
                     PromptTemplate? template = await templateService.ResolveAsync(name).ConfigureAwait(false);
-                    if (template == null) return (object)new { Error = "Template not found: " + name };
+                    if (template == null) return (object)McpToolError.NotFound("Template not found: " + name);
                     return (object)template;
                 });
 
@@ -178,22 +178,22 @@ namespace Armada.Server.Mcp.Tools
                 {
                     PromptTemplateArgs request = JsonSerializer.Deserialize<PromptTemplateArgs>(args!.Value, _JsonOptions)!;
                     string name = request.Name;
-                    if (String.IsNullOrEmpty(name)) return (object)new { Error = "name is required" };
-                    if (String.IsNullOrEmpty(request.Content)) return (object)new { Error = "content is required" };
+                    if (String.IsNullOrEmpty(name)) return (object)McpToolError.InvalidArgument("name is required");
+                    if (String.IsNullOrEmpty(request.Content)) return (object)McpToolError.InvalidArgument("content is required");
 
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     PromptTemplate? existing = await database.PromptTemplates.ReadByNameAsync(name).ConfigureAwait(false);
                     if (existing != null && !IsVisible(caller, existing))
                     {
                         PromptTemplate? own = await McpCallerScope.ReadPromptTemplateAsync(database, caller, name).ConfigureAwait(false);
-                        if (own == null) return (object)new { Error = "Template not found: " + name };
+                        if (own == null) return (object)McpToolError.NotFound("Template not found: " + name);
                         existing = own;
                     }
 
                     if (existing != null)
                     {
                         if (!ScopedVisibility.CanEdit(caller, existing.Scope, existing.TenantId, existing.UserId))
-                            return (object)new { Error = "You may only modify your own prompt templates; a tenant-wide template requires a tenant admin." };
+                            return (object)McpToolError.Forbidden("You may only modify your own prompt templates; a tenant-wide template requires a tenant admin.");
                         existing.Content = request.Content;
                         if (request.Description != null)
                             existing.Description = request.Description;
@@ -230,14 +230,14 @@ namespace Armada.Server.Mcp.Tools
                 {
                     PromptTemplateArgs request = JsonSerializer.Deserialize<PromptTemplateArgs>(args!.Value, _JsonOptions)!;
                     string name = request.Name;
-                    if (String.IsNullOrEmpty(name)) return (object)new { Error = "name is required" };
+                    if (String.IsNullOrEmpty(name)) return (object)McpToolError.InvalidArgument("name is required");
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     PromptTemplate? current = await database.PromptTemplates.ReadByNameAsync(name).ConfigureAwait(false);
-                    if (current != null && !IsVisible(caller, current)) return (object)new { Error = "Template not found: " + name };
+                    if (current != null && !IsVisible(caller, current)) return (object)McpToolError.NotFound("Template not found: " + name);
                     if (current != null && !ScopedVisibility.CanEdit(caller, current.Scope, current.TenantId, current.UserId))
-                        return (object)new { Error = "You may only reset your own prompt templates; a tenant-wide template requires a tenant admin." };
+                        return (object)McpToolError.Forbidden("You may only reset your own prompt templates; a tenant-wide template requires a tenant admin.");
                     PromptTemplate? template = await templateService.ResetToDefaultAsync(name).ConfigureAwait(false);
-                    if (template == null) return (object)new { Error = "No embedded default exists for template: " + name };
+                    if (template == null) return (object)McpToolError.NotFound("No embedded default exists for template: " + name);
                     return (object)template;
                 });
         }

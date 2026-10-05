@@ -432,6 +432,10 @@ namespace Test.Shared.Infrastructure.ApiSurface
         private static string? DefaultJson(object? value)
         {
             if (value == null) return "null";
+            // Paths under the data directory are documented as ~/.armada, whatever the data directory is where the
+            // generator runs (tests point ARMADA_DATA_DIR at a sandbox).
+            if (value is string path && path.StartsWith(Armada.Core.Constants.DefaultDataDirectory, StringComparison.Ordinal))
+                value = "~/.armada" + path.Substring(Armada.Core.Constants.DefaultDataDirectory.Length).Replace('\\', '/');
             string json;
             try
             {

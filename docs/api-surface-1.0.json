@@ -1922,7 +1922,9 @@
       "resource": "Job:Read",
       "requestType": null,
       "requestRequired": false,
-      "responses": {},
+      "responses": {
+        "400": ""
+      },
       "tags": [
         "Jobs"
       ],
@@ -15179,6 +15181,12 @@
       "key": "mcp.allowUnauthenticatedLoopback",
       "type": "bool",
       "default": "true",
+      "experimental": false
+    },
+    {
+      "key": "mcp.toolCallsPerSecond",
+      "type": "int",
+      "default": "100",
       "experimental": false
     },
     {

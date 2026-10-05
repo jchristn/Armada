@@ -52,7 +52,7 @@ namespace Armada.Server.Mcp.Tools
                 async (args) =>
                 {
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
-                    if (!caller.IsAdmin && !caller.IsTenantAdmin) return (object)new { Error = "discover_vessels requires a tenant admin" };
+                    if (!caller.IsAdmin && !caller.IsTenantAdmin) return (object)McpToolError.Forbidden("discover_vessels requires a tenant admin");
 
                     DiscoverVesselsArgs request = args.HasValue
                         ? JsonSerializer.Deserialize<DiscoverVesselsArgs>(args.Value, _JsonOptions) ?? new DiscoverVesselsArgs()
@@ -70,15 +70,15 @@ namespace Armada.Server.Mcp.Tools
                     }
                     catch (VesselImportPathNotAllowedException ex)
                     {
-                        return (object)new { Error = ex.Message, Code = VesselImportCodes.PathNotAllowed };
+                        return (object)McpToolError.Forbidden(ex.Message, VesselImportCodes.PathNotAllowed);
                     }
                     catch (NotSupportedException ex)
                     {
-                        return (object)new { Error = ex.Message, Code = VesselImportCodes.HarborNotSupported };
+                        return (object)McpToolError.FromException(ex, VesselImportCodes.HarborNotSupported);
                     }
                     catch (ArgumentException ex)
                     {
-                        return (object)new { Error = ex.Message, Code = VesselImportCodes.InvalidRequest };
+                        return (object)McpToolError.FromException(ex, VesselImportCodes.InvalidRequest);
                     }
                 });
 
@@ -106,7 +106,7 @@ namespace Armada.Server.Mcp.Tools
                 async (args) =>
                 {
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
-                    if (!caller.IsAdmin && !caller.IsTenantAdmin) return (object)new { Error = "import_vessels requires a tenant admin" };
+                    if (!caller.IsAdmin && !caller.IsTenantAdmin) return (object)McpToolError.Forbidden("import_vessels requires a tenant admin");
 
                     ImportVesselsArgs request = JsonSerializer.Deserialize<ImportVesselsArgs>(args!.Value, _JsonOptions)!;
                     string tenantId = ResolveTenant(caller);
@@ -127,9 +127,9 @@ namespace Armada.Server.Mcp.Tools
                     if (request.AllNew == true)
                     {
                         VesselImportBatchDetail? detail = await importService.ReadBatchAsync(tenantId, request.BatchId).ConfigureAwait(false);
-                        if (detail == null) return (object)new { Error = "Import batch not found", Code = VesselImportCodes.BatchNotFound };
+                        if (detail == null) return (object)McpToolError.NotFound("Import batch not found", VesselImportCodes.BatchNotFound);
                         import.Paths = detail.Items.Where(i => i.CandidateStatus == VesselImportCandidateStatusEnum.New).Select(i => i.Path).ToList();
-                        if (import.Paths.Count == 0) return (object)new { Error = "Batch has no candidates with status New", Code = VesselImportCodes.InvalidRequest };
+                        if (import.Paths.Count == 0) return (object)McpToolError.Conflict("Batch has no candidates with status New", VesselImportCodes.InvalidRequest);
                     }
                     else
                     {
@@ -143,7 +143,7 @@ namespace Armada.Server.Mcp.Tools
                         if (!String.IsNullOrWhiteSpace(request.LandingMode))
                         {
                             if (!Enum.TryParse(request.LandingMode, true, out LandingModeEnum landingMode))
-                                return (object)new { Error = "Unknown landingMode: " + request.LandingMode, Code = VesselImportCodes.InvalidRequest };
+                                return (object)McpToolError.InvalidArgument("Unknown landingMode: " + request.LandingMode, VesselImportCodes.InvalidRequest);
                             defaults.LandingMode = landingMode;
                         }
 
@@ -157,15 +157,15 @@ namespace Armada.Server.Mcp.Tools
                     }
                     catch (KeyNotFoundException ex)
                     {
-                        return (object)new { Error = ex.Message, Code = VesselImportCodes.BatchNotFound };
+                        return (object)McpToolError.FromException(ex, VesselImportCodes.BatchNotFound);
                     }
                     catch (InvalidOperationException ex)
                     {
-                        return (object)new { Error = ex.Message, Code = VesselImportCodes.BatchBusy };
+                        return (object)McpToolError.FromException(ex, VesselImportCodes.BatchBusy);
                     }
                     catch (ArgumentException ex)
                     {
-                        return (object)new { Error = ex.Message, Code = VesselImportCodes.InvalidRequest };
+                        return (object)McpToolError.FromException(ex, VesselImportCodes.InvalidRequest);
                     }
                 });
 
@@ -192,7 +192,7 @@ namespace Armada.Server.Mcp.Tools
                 async (args) =>
                 {
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
-                    if (!caller.IsAdmin && !caller.IsTenantAdmin) return (object)new { Error = "categorize_vessel_import requires a tenant admin" };
+                    if (!caller.IsAdmin && !caller.IsTenantAdmin) return (object)McpToolError.Forbidden("categorize_vessel_import requires a tenant admin");
 
                     CategorizeVesselImportArgs request = JsonSerializer.Deserialize<CategorizeVesselImportArgs>(args!.Value, _JsonOptions)!;
                     VesselImportCategorizationRequest overrides = new VesselImportCategorizationRequest();
@@ -206,7 +206,7 @@ namespace Armada.Server.Mcp.Tools
                         else
                         {
                             VesselImportBatchDetail? existing = await importService.ReadBatchAsync(tenantId, request.BatchId).ConfigureAwait(false);
-                            if (existing == null) return (object)new { Error = "Import batch not found", Code = VesselImportCodes.BatchNotFound };
+                            if (existing == null) return (object)McpToolError.NotFound("Import batch not found", VesselImportCodes.BatchNotFound);
                             overrides.ApplyAutomatically = existing.Batch.CategorizationApplyAutomatically;
                         }
 
@@ -215,15 +215,15 @@ namespace Armada.Server.Mcp.Tools
                     }
                     catch (KeyNotFoundException ex)
                     {
-                        return (object)new { Error = ex.Message, Code = VesselImportCodes.BatchNotFound };
+                        return (object)McpToolError.FromException(ex, VesselImportCodes.BatchNotFound);
                     }
                     catch (InvalidOperationException ex)
                     {
-                        return (object)new { Error = ex.Message, Code = VesselImportCodes.BatchBusy };
+                        return (object)McpToolError.FromException(ex, VesselImportCodes.BatchBusy);
                     }
                     catch (ArgumentException ex)
                     {
-                        return (object)new { Error = ex.Message, Code = VesselImportCodes.InvalidRequest };
+                        return (object)McpToolError.FromException(ex, VesselImportCodes.InvalidRequest);
                     }
                 });
 
@@ -258,7 +258,7 @@ namespace Armada.Server.Mcp.Tools
                 async (args) =>
                 {
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
-                    if (!caller.IsAdmin && !caller.IsTenantAdmin) return (object)new { Error = "apply_fleet_recommendations requires a tenant admin" };
+                    if (!caller.IsAdmin && !caller.IsTenantAdmin) return (object)McpToolError.Forbidden("apply_fleet_recommendations requires a tenant admin");
 
                     ApplyFleetRecommendationsArgs request = JsonSerializer.Deserialize<ApplyFleetRecommendationsArgs>(args!.Value, _JsonOptions)!;
                     string tenantId = ResolveTenant(caller);
@@ -270,8 +270,8 @@ namespace Armada.Server.Mcp.Tools
                     else
                     {
                         VesselImportBatchDetail? detail = await importService.ReadBatchAsync(tenantId, request.BatchId).ConfigureAwait(false);
-                        if (detail == null) return (object)new { Error = "Import batch not found", Code = VesselImportCodes.BatchNotFound };
-                        if (detail.FleetRecommendations.Count == 0) return (object)new { Error = "Batch has no fleet recommendations to apply", Code = VesselImportCodes.InvalidRequest };
+                        if (detail == null) return (object)McpToolError.NotFound("Import batch not found", VesselImportCodes.BatchNotFound);
+                        if (detail.FleetRecommendations.Count == 0) return (object)McpToolError.Conflict("Batch has no fleet recommendations to apply", VesselImportCodes.InvalidRequest);
                         foreach (VesselImportFleetRecommendation recommendation in detail.FleetRecommendations)
                         {
                             FleetRecommendationApplyFleet fleet = new FleetRecommendationApplyFleet();
@@ -289,15 +289,15 @@ namespace Armada.Server.Mcp.Tools
                     }
                     catch (KeyNotFoundException ex)
                     {
-                        return (object)new { Error = ex.Message, Code = VesselImportCodes.BatchNotFound };
+                        return (object)McpToolError.FromException(ex, VesselImportCodes.BatchNotFound);
                     }
                     catch (InvalidOperationException ex)
                     {
-                        return (object)new { Error = ex.Message, Code = VesselImportCodes.BatchBusy };
+                        return (object)McpToolError.FromException(ex, VesselImportCodes.BatchBusy);
                     }
                     catch (ArgumentException ex)
                     {
-                        return (object)new { Error = ex.Message, Code = VesselImportCodes.InvalidRequest };
+                        return (object)McpToolError.FromException(ex, VesselImportCodes.InvalidRequest);
                     }
                 });
         }

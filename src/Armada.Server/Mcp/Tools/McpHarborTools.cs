@@ -43,7 +43,7 @@ namespace Armada.Server.Mcp.Tools
                         ?? throw new InvalidOperationException("Could not deserialize HarborIdArgs.");
                     AuthContext auth = McpToolHelpers.ResolveCallerContext();
                     Harbor? harbor = await harbors.ReadAsync(auth, request.HarborId).ConfigureAwait(false);
-                    if (harbor == null) return (object)new { Error = "Harbor not found" };
+                    if (harbor == null) return (object)McpToolError.NotFound("Harbor not found");
                     return (object)harbor;
                 });
 
@@ -78,7 +78,7 @@ namespace Armada.Server.Mcp.Tools
                     }
                     catch (Exception ex) when (ex is ArgumentException || ex is InvalidOperationException)
                     {
-                        return (object)new { Error = ex.Message };
+                        return (object)McpToolError.FromException(ex);
                     }
                 });
 
@@ -103,9 +103,9 @@ namespace Armada.Server.Mcp.Tools
                         ?? throw new InvalidOperationException("Could not deserialize HarborUpsertArgs.");
                     AuthContext auth = McpToolHelpers.ResolveCallerContext();
 
-                    if (String.IsNullOrWhiteSpace(request.HarborId)) return (object)new { Error = "harborId is required." };
+                    if (String.IsNullOrWhiteSpace(request.HarborId)) return (object)McpToolError.InvalidArgument("harborId is required.");
                     Harbor? existing = await harbors.ReadAsync(auth, request.HarborId).ConfigureAwait(false);
-                    if (existing == null) return (object)new { Error = "Harbor not found" };
+                    if (existing == null) return (object)McpToolError.NotFound("Harbor not found");
 
                     if (!String.IsNullOrWhiteSpace(request.Name)) existing.Name = request.Name;
                     if (request.MaxConcurrentJobs.HasValue) existing.MaxConcurrentJobs = request.MaxConcurrentJobs.Value;
@@ -117,7 +117,7 @@ namespace Armada.Server.Mcp.Tools
                     }
                     catch (Exception ex) when (ex is ArgumentException || ex is InvalidOperationException)
                     {
-                        return (object)new { Error = ex.Message };
+                        return (object)McpToolError.FromException(ex);
                     }
                 });
 
@@ -145,7 +145,7 @@ namespace Armada.Server.Mcp.Tools
                     }
                     catch (Exception ex)
                     {
-                        return (object)new { Error = ex.Message };
+                        return (object)McpToolError.FromException(ex);
                     }
                 });
 
@@ -167,14 +167,14 @@ namespace Armada.Server.Mcp.Tools
                     HarborUpsertArgs request = JsonSerializer.Deserialize<HarborUpsertArgs>(args!.Value, _JsonOptions)
                         ?? throw new InvalidOperationException("Could not deserialize HarborUpsertArgs.");
                     AuthContext auth = McpToolHelpers.ResolveCallerContext();
-                    if (String.IsNullOrWhiteSpace(request.HarborId)) return (object)new { Error = "harborId is required." };
+                    if (String.IsNullOrWhiteSpace(request.HarborId)) return (object)McpToolError.InvalidArgument("harborId is required.");
                     try
                     {
                         return (object)await harbors.SetEnabledAsync(auth, request.HarborId, request.Enabled ?? true).ConfigureAwait(false);
                     }
                     catch (Exception ex)
                     {
-                        return (object)new { Error = ex.Message };
+                        return (object)McpToolError.FromException(ex);
                     }
                 });
         }

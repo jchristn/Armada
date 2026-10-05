@@ -41,7 +41,7 @@ namespace Armada.Server.Mcp.Tools
                         ?? throw new InvalidOperationException("Could not deserialize DeploymentIdArgs.");
                     AuthContext auth = McpToolHelpers.ResolveCallerContext();
                     Deployment? deployment = await deploymentService.ReadAsync(auth, request.DeploymentId).ConfigureAwait(false);
-                    if (deployment == null) return (object)new { Error = "Deployment not found" };
+                    if (deployment == null) return (object)McpToolError.NotFound("Deployment not found");
                     return (object)deployment;
                 });
 

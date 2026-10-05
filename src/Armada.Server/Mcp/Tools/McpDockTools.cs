@@ -45,7 +45,7 @@ namespace Armada.Server.Mcp.Tools
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     DockIdArgs request = JsonSerializer.Deserialize<DockIdArgs>(args!.Value, _JsonOptions)!;
                     Dock? dock = await McpCallerScope.ReadDockAsync(database, caller, request.DockId).ConfigureAwait(false);
-                    if (dock == null) return (object)new { Error = "Dock not found" };
+                    if (dock == null) return (object)McpToolError.NotFound("Dock not found");
                     return (object)dock;
                 });
 
@@ -64,13 +64,13 @@ namespace Armada.Server.Mcp.Tools
                 async (args) =>
                 {
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
-                    if (dockService == null) return (object)new { Error = "Dock service not available" };
+                    if (dockService == null) return (object)McpToolError.Unavailable("Dock service not available");
                     DockIdArgs request = JsonSerializer.Deserialize<DockIdArgs>(args!.Value, _JsonOptions)!;
                     Dock? dock = await McpCallerScope.ReadDockAsync(database, caller, request.DockId).ConfigureAwait(false);
-                    if (dock == null) return (object)new { Error = "Dock not found" };
+                    if (dock == null) return (object)McpToolError.NotFound("Dock not found");
 
                     bool deleted = await dockService.DeleteAsync(request.DockId).ConfigureAwait(false);
-                    if (!deleted) return (object)new { Error = "Cannot delete dock while it is actively in use by a captain" };
+                    if (!deleted) return (object)McpToolError.Conflict("Cannot delete dock while it is actively in use by a captain");
                     return (object)new { Status = "deleted", DockId = request.DockId };
                 });
 
@@ -89,10 +89,10 @@ namespace Armada.Server.Mcp.Tools
                 async (args) =>
                 {
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
-                    if (dockService == null) return (object)new { Error = "Dock service not available" };
+                    if (dockService == null) return (object)McpToolError.Unavailable("Dock service not available");
                     DockIdArgs request = JsonSerializer.Deserialize<DockIdArgs>(args!.Value, _JsonOptions)!;
                     Dock? dock = await McpCallerScope.ReadDockAsync(database, caller, request.DockId).ConfigureAwait(false);
-                    if (dock == null) return (object)new { Error = "Dock not found" };
+                    if (dock == null) return (object)McpToolError.NotFound("Dock not found");
 
                     await dockService.PurgeAsync(request.DockId).ConfigureAwait(false);
                     return (object)new { Status = "purged", DockId = request.DockId };
@@ -113,10 +113,10 @@ namespace Armada.Server.Mcp.Tools
                 async (args) =>
                 {
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
-                    if (dockService == null) return (object)new { Error = "Dock service not available" };
+                    if (dockService == null) return (object)McpToolError.Unavailable("Dock service not available");
                     DockIdArgs request = JsonSerializer.Deserialize<DockIdArgs>(args!.Value, _JsonOptions)!;
                     Dock? dock = await McpCallerScope.ReadDockAsync(database, caller, request.DockId).ConfigureAwait(false);
-                    if (dock == null) return (object)new { Error = "Dock not found" };
+                    if (dock == null) return (object)McpToolError.NotFound("Dock not found");
 
                     await dockService.RepairAsync(request.DockId).ConfigureAwait(false);
                     return (object)new { Status = "repaired", DockId = request.DockId };
@@ -137,10 +137,10 @@ namespace Armada.Server.Mcp.Tools
                 async (args) =>
                 {
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
-                    if (dockService == null) return (object)new { Error = "Dock service not available" };
+                    if (dockService == null) return (object)McpToolError.Unavailable("Dock service not available");
                     DockIdArgs request = JsonSerializer.Deserialize<DockIdArgs>(args!.Value, _JsonOptions)!;
                     Dock? dock = await McpCallerScope.ReadDockAsync(database, caller, request.DockId).ConfigureAwait(false);
-                    if (dock == null) return (object)new { Error = "Dock not found" };
+                    if (dock == null) return (object)McpToolError.NotFound("Dock not found");
 
                     await dockService.UnstickAsync(request.DockId).ConfigureAwait(false);
                     return (object)new { Status = "unstuck", DockId = request.DockId };
@@ -161,10 +161,10 @@ namespace Armada.Server.Mcp.Tools
                 async (args) =>
                 {
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
-                    if (dockService == null) return (object)new { Error = "Dock service not available" };
+                    if (dockService == null) return (object)McpToolError.Unavailable("Dock service not available");
                     DeleteMultipleArgs request = JsonSerializer.Deserialize<DeleteMultipleArgs>(args!.Value, _JsonOptions)!;
                     if (request.Ids == null || request.Ids.Count == 0)
-                        return (object)new { Error = "ids is required and must not be empty" };
+                        return (object)McpToolError.InvalidArgument("ids is required and must not be empty");
 
                     DeleteMultipleResult result = new DeleteMultipleResult();
                     foreach (string id in request.Ids)

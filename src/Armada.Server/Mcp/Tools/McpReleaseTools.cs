@@ -41,7 +41,7 @@ namespace Armada.Server.Mcp.Tools
                         ?? throw new InvalidOperationException("Could not deserialize ReleaseIdArgs.");
                     AuthContext auth = McpToolHelpers.ResolveCallerContext();
                     Release? release = await releaseService.ReadAsync(auth, request.ReleaseId).ConfigureAwait(false);
-                    if (release == null) return (object)new { Error = "Release not found" };
+                    if (release == null) return (object)McpToolError.NotFound("Release not found");
                     return (object)release;
                 });
 

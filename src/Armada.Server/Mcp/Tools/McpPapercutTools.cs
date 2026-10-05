@@ -70,7 +70,7 @@ namespace Armada.Server.Mcp.Tools
                         if (resolved == PapercutCategoryEnum.Other &&
                             !String.Equals(request.Category!.Trim(), "Other", StringComparison.OrdinalIgnoreCase))
                         {
-                            return (object)new { Error = "Unknown category: " + request.Category };
+                            return (object)McpToolError.InvalidArgument("Unknown category: " + request.Category);
                         }
 
                         categoryFilter = resolved;
@@ -81,7 +81,7 @@ namespace Armada.Server.Mcp.Tools
                     {
                         PapercutSeverityEnum resolvedSeverity;
                         if (!Enum.TryParse<PapercutSeverityEnum>(request.MinSeverity!.Trim(), true, out resolvedSeverity))
-                            return (object)new { Error = "Unknown severity: " + request.MinSeverity };
+                            return (object)McpToolError.InvalidArgument("Unknown severity: " + request.MinSeverity);
 
                         severityFilter = resolvedSeverity;
                     }
