@@ -538,7 +538,7 @@ See [Claude Code as Orchestrator](docs/CLAUDE_CODE_AS_ORCHESTRATOR.md) for setup
 
 ## Terminal UI
 
-`armada tui` opens the dashboard in a terminal: the same Admiral, REST API, and WebSocket, for people who live in a shell, work over SSH, or have no browser. It ships inside the `armada` CLI, so installing Helm (`dotnet tool install -g Armada.Helm`, or the installers) installs it too.
+`armada tui` opens the dashboard in a terminal: the same Admiral, REST API, and WebSocket, for people who live in a shell, work over SSH, or have no browser. It ships inside the `armada` CLI, so every way of installing Helm installs it too: the .NET tool (`dotnet tool install -g Armada.Helm`, also what `scripts/*/install` uses) and the Linux `.deb`/`.rpm` CLI packages.
 
 ```
 armada tui                                 # last profile, or the local Admiral

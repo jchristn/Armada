@@ -5,6 +5,8 @@ namespace Test.Shared.Suites.Tui
     using System.Diagnostics;
     using System.IO;
     using System.Linq;
+    using System.Net.Http;
+    using System.Threading.Tasks;
     using Armada.Core.Settings;
     using Armada.Tui;
     using Armada.Tui.Approvals;
@@ -230,6 +232,38 @@ namespace Test.Shared.Suites.Tui
                 finally
                 {
                     TuiTelemetry.Configure(true);
+                }
+            }));
+
+            cases.Add(TuiCase.Async(Suite, "helm_host_scrape", "Helm's telemetry host exports armada_tui_* series on its Prometheus endpoint", async () =>
+            {
+                TelemetrySettings settings = new TelemetrySettings();
+                settings.Enabled = true;
+                settings.ServiceName = "armada-tui";
+                settings.PrometheusEnabled = true;
+                settings.PrometheusPort = 37061;
+                IDisposable? host = Armada.Helm.Commands.TuiCommand.StartTelemetryHost(settings);
+                AssertNotNull(host, "host started");
+                try
+                {
+                    TuiTelemetry.RecordScreenView("/telemetry-scrape", "ScrapeScreen");
+                    string body = "";
+                    using (HttpClient http = new HttpClient())
+                    {
+                        for (int attempt = 0; attempt < 20; attempt++)
+                        {
+                            body = await http.GetStringAsync("http://localhost:37061/metrics").ConfigureAwait(false);
+                            if (body.Contains("armada_tui_screen_views_total", StringComparison.Ordinal)) break;
+                            await Task.Delay(250).ConfigureAwait(false);
+                        }
+                    }
+
+                    TuiCase.Contains(body, "armada_tui_screen_views_total", "screen views series");
+                    TuiCase.Contains(body, "route=\"/telemetry-scrape\"", "route label");
+                }
+                finally
+                {
+                    host!.Dispose();
                 }
             }));
 

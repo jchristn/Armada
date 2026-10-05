@@ -40,7 +40,7 @@ namespace Armada.Helm.Commands
         /// </summary>
         /// <param name="telemetry">Settings from the <c>Telemetry</c> section of <c>tui.json</c>.</param>
         /// <returns>The running host, or null when it did not start.</returns>
-        internal static IDisposable? StartTelemetryHost(TelemetrySettings telemetry)
+        public static IDisposable? StartTelemetryHost(TelemetrySettings telemetry)
         {
             LoggingModule logging = new LoggingModule();
             logging.Settings.EnableConsole = false;

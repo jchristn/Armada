@@ -13,6 +13,9 @@ All notable changes to Armada are documented in this file.
 - Activity (All Activity with saved views and JSON/CSV/Markdown export, API Requests with replay, Events, Signals, Token Usage), API Explorer, Settings for every Server section (backup and restore to files, restart, stop, factory reset, rebuild with live log and rollback), Diagnostics, Tenants, Users, Credentials, and the setup wizard.
 - Shared list and detail screens: filters, sorting, paging, bulk actions, typed confirmations, View JSON, `$EDITOR` for long text, live WebSocket updates. Alt+Left/Right history works while a list has focus; the key after a programmatically closed dialog is no longer lost.
 - Client: `GetVoyageDetailAsync` and the Data Retention settings group.
+- TUI telemetry, off by default: a `Telemetry` section in `tui.json` (the server's fields; defaults `armada-tui`, no scrape endpoint) exports the TUI's `armada_tui_*` metrics (sessions, screen views by route pattern, commands by id/source/outcome, approval decisions and latency, Ask messages), `armada.tui.command` spans, and TUIKit's meter and activity source through the Admiral's telemetry host. See `docs/TUI.md`.
+- README: a Terminal UI section with 120x40 text captures (login, Ask Armada, Home, Missions, Approvals) in `docs/tui-screens`, rendered by the `Tui.ReadmeFrames` suite.
+- Verified `armada tui` ships in every channel that ships Helm: the `Armada.Helm` .NET tool (also used by the install scripts) and the Linux `.deb`/`.rpm` CLI packages carry `Armada.Tui`, `TUIKit`, and `Armada.Client`. The macOS `.pkg`, Windows `.msi`, Harbor installers, and Docker image do not include the CLI.
 
 ### v1.0 readiness: quality, performance, and service registration
 

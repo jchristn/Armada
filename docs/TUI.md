@@ -6,7 +6,7 @@ This page covers what exists today: installing and starting it, server profiles,
 
 ## Install and start
 
-Install Helm the way you normally do (`dotnet tool install -g Armada.Helm`, or the installers), then run:
+Install Helm the way you normally do, then run the commands below. `armada tui` is in every Helm package: the .NET tool (`dotnet tool install -g Armada.Helm`, which the `scripts/*/install` scripts also use) and the Linux `.deb` and `.rpm` CLI packages. The macOS `.pkg`, Windows `.msi`, Harbor installers, and the Docker image carry the server or Harbor, not the CLI.
 
 ```
 armada tui
@@ -314,7 +314,7 @@ Turn it on in the `Telemetry` section of `~/.armada/tui.json` (or the file named
 | `Enabled` | `false` | Master switch. |
 | `ServiceName` | `armada-tui` | Service name reported to the backend. Blank falls back to `armada-tui`. |
 | `OtlpEndpoint` | `null` | OTLP collector endpoint. The usual choice, since a TUI session is short-lived. |
-| `PrometheusEnabled` | `false` | Serve a Prometheus scrape endpoint (`/metrics`) while the TUI runs. |
+| `PrometheusEnabled` | `false` | Serve a Prometheus scrape endpoint while the TUI runs (`http://localhost:9465/metrics` by default). |
 | `PrometheusPort` | `9465` | Scrape port, clamped to 1-65535. The default stays clear of the Admiral's 9464. |
 | `LokiEndpoint` | `null` | Loki push endpoint. |
 
