@@ -96,6 +96,12 @@ namespace Armada.Server
         private System.Collections.Concurrent.ConcurrentDictionary<int, DateTime> _HandledProcessExits = new System.Collections.Concurrent.ConcurrentDictionary<int, DateTime>();
 
         /// <summary>
+        /// The last structured provider error each running process reported (see IAgentRuntime.OnProviderError).
+        /// Consumed when the process exits to decide its typed exit outcome.
+        /// </summary>
+        private System.Collections.Concurrent.ConcurrentDictionary<int, RuntimeProviderError> _ProcessProviderErrors = new System.Collections.Concurrent.ConcurrentDictionary<int, RuntimeProviderError>();
+
+        /// <summary>
         /// Tracks per-process liveness heartbeat loops so silent-but-busy runtimes still refresh telemetry.
         /// </summary>
         private System.Collections.Concurrent.ConcurrentDictionary<int, CancellationTokenSource> _ProcessHeartbeatLoops = new System.Collections.Concurrent.ConcurrentDictionary<int, CancellationTokenSource>();
@@ -412,6 +418,7 @@ namespace Armada.Server
             runtime.OnProcessStarted += processId => HandleProcessStarted(processId, launchKey);
             runtime.OnOutputReceived += HandleAgentOutput;
             runtime.OnOutputReceived += HandleAgentHeartbeat;
+            runtime.OnProviderError += HandleAgentProviderError;
             runtime.OnProcessExited += HandleAgentProcessExited;
 
             Vessel? vessel = null;
@@ -824,6 +831,19 @@ namespace Armada.Server
         }
 
         /// <summary>
+        /// Record a structured provider error reported by a running agent process. The last error wins; it is
+        /// combined with the exit code when the process exits.
+        /// </summary>
+        /// <param name="processId">Process ID.</param>
+        /// <param name="error">Structured provider error.</param>
+        public void HandleAgentProviderError(int processId, RuntimeProviderError error)
+        {
+            if (error == null) return;
+            _ProcessProviderErrors[processId] = error;
+            _Logging.Debug(_Header + "process " + processId + " reported " + error.ToString());
+        }
+
+        /// <summary>
         /// Handle agent process exit event.
         /// </summary>
         public void HandleAgentProcessExited(int processId, int? exitCode)
@@ -862,6 +882,7 @@ namespace Armada.Server
             if (String.IsNullOrEmpty(captainId) || String.IsNullOrEmpty(missionId))
             {
                 _Logging.Warn(_Header + "process " + processId + " exited (code " + (exitCode?.ToString() ?? "unknown") + ") but no captain/mission mapping found after retries -- exit may be lost");
+                _ProcessProviderErrors.TryRemove(processId, out _);
                 return;
             }
 
@@ -900,7 +921,9 @@ namespace Armada.Server
         /// </summary>
         public async Task HandleAgentProcessExitedAsync(int processId, int? exitCode, string captainId, string missionId)
         {
-            await _Admiral.HandleProcessExitAsync(processId, exitCode, captainId, missionId).ConfigureAwait(false);
+            _ProcessProviderErrors.TryRemove(processId, out RuntimeProviderError? providerError);
+            RuntimeExitInfo exitInfo = RuntimeFailureClassifier.Decide(exitCode, providerError);
+            await _Admiral.HandleProcessExitAsync(processId, exitInfo, captainId, missionId).ConfigureAwait(false);
         }
 
         /// <summary>

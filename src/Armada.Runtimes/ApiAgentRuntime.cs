@@ -52,6 +52,9 @@ namespace Armada.Runtimes
         /// <inheritdoc />
         public event Action<int, int?>? OnProcessExited;
 
+        /// <inheritdoc />
+        public event Action<int, RuntimeProviderError>? OnProviderError;
+
         /// <summary>
         /// Sentinel prefix for structured tool-activity lines emitted on the stdout channel. Consumers that
         /// render chat tool cards recognize a line beginning with this marker as a JSON tool event rather
@@ -288,6 +291,7 @@ namespace Armada.Runtimes
                     if (!response.Success && !String.IsNullOrEmpty(response.Error))
                     {
                         Emit(processId, "[error] inference call failed: " + response.Error);
+                        if (response.StatusCode.HasValue) RaiseProviderError(processId, RuntimeProviderErrorParser.FromHttpStatus(response.StatusCode.Value, response.Error));
                         exitCode = 1;
                         break;
                     }
@@ -325,6 +329,13 @@ namespace Armada.Runtimes
             {
                 exitCode = -1;
                 Emit(processId, "[cancelled] the captain run was stopped.");
+            }
+            catch (System.Net.Http.HttpRequestException e)
+            {
+                exitCode = 1;
+                _Logging.Warn(_Header + "loop error for process " + processId + ": " + e.ToString());
+                Emit(processId, "[error] " + e.Message);
+                if (e.StatusCode.HasValue) RaiseProviderError(processId, RuntimeProviderErrorParser.FromHttpStatus((int)e.StatusCode.Value, e.Message));
             }
             catch (Exception e)
             {
@@ -445,6 +456,13 @@ namespace Armada.Runtimes
                 "commands in order to complete the mission described by the user. Make focused changes, verify your " +
                 "work, and when the mission is complete stop calling tools and reply with a concise summary of what " +
                 "you changed. If the mission instructions define [ARMADA:...] signals, emit them as plain text lines.";
+        }
+
+        private void RaiseProviderError(int processId, RuntimeProviderError? error)
+        {
+            if (error == null) return;
+            try { OnProviderError?.Invoke(processId, error); }
+            catch (Exception ex) { _Logging.Warn(_Header + "error in OnProviderError handler for process " + processId + ": " + ex.Message); }
         }
 
         private void Emit(int processId, string line)

@@ -51,6 +51,14 @@ namespace Armada.Runtimes.Interfaces
         event Action<int, int?>? OnProcessExited;
 
         /// <summary>
+        /// Event raised when the runtime reports a structured provider error (an HTTP error status from the model
+        /// API, or the agent CLI's own protocol error line or error event). Raised before
+        /// <see cref="OnProcessExited"/>; consumers combine the last error with the exit code to decide the typed
+        /// exit outcome. Parameters: processId, error. Never raised for ordinary output text.
+        /// </summary>
+        event Action<int, RuntimeProviderError>? OnProviderError;
+
+        /// <summary>
         /// Start an agent process with the given prompt in the specified working directory.
         /// Returns the process ID.
         /// </summary>

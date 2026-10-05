@@ -52,6 +52,12 @@ namespace Armada.Runtimes
         public event Action<int, int?>? OnProcessExited;
 
         /// <summary>
+        /// Event raised when the runtime reports a structured provider error. Base runtimes raise it for output lines
+        /// that <see cref="TryParseProviderError"/> recognizes as the CLI's own protocol error.
+        /// </summary>
+        public event Action<int, RuntimeProviderError>? OnProviderError;
+
+        /// <summary>
         /// Milliseconds to wait for an agent process to exit gracefully (after closing stdin) before it
         /// is force-killed during <see cref="StopAsync"/>. Defaults to 10000 (10s) for production. Test
         /// harnesses lower this so recalling agents does not block on the full graceful window. Clamped to
@@ -285,6 +291,8 @@ namespace Armada.Runtimes
                     // stdout-only consumers (chat, planning) rely on this to exclude stderr banners.
                     try { OnStdoutReceived?.Invoke(launchedPid, e.Data); }
                     catch { }
+
+                    RaiseProviderErrorIfAny(launchedPid, e.Data, true);
                 }
             };
 
@@ -300,6 +308,8 @@ namespace Armada.Runtimes
                     // Some agent CLIs emit useful diagnostics or status lines on stderr.
                     try { OnOutputReceived?.Invoke(launchedPid, e.Data); }
                     catch { }
+
+                    RaiseProviderErrorIfAny(launchedPid, e.Data, false);
                 }
             };
 
@@ -489,6 +499,19 @@ namespace Armada.Runtimes
         protected abstract string GetCommand();
 
         /// <summary>
+        /// Recognize a structured provider error in one line of the agent's output. The default recognizes nothing;
+        /// a runtime overrides this only for its CLI's own machine-readable error channel (a protocol error line or
+        /// a JSON error event), never for keyword matches over free-form output.
+        /// </summary>
+        /// <param name="line">One output line.</param>
+        /// <param name="fromStdout">True for a stdout line, false for stderr.</param>
+        /// <returns>The provider error, or null.</returns>
+        protected virtual RuntimeProviderError? TryParseProviderError(string line, bool fromStdout)
+        {
+            return null;
+        }
+
+        /// <summary>
         /// Whether the runtime expects the prompt to be written to stdin instead of passed as a CLI argument.
         /// </summary>
         protected virtual bool UsePromptStdin => false;
@@ -542,6 +565,17 @@ namespace Armada.Runtimes
             {
                 return null;
             }
+        }
+
+        private void RaiseProviderErrorIfAny(int processId, string line, bool fromStdout)
+        {
+            RuntimeProviderError? error = null;
+            try { error = TryParseProviderError(line, fromStdout); }
+            catch (Exception ex) { _Logging.Debug(_Header + "provider error parse failed for process " + processId + ": " + ex.Message); }
+            if (error == null) return;
+
+            try { OnProviderError?.Invoke(processId, error); }
+            catch (Exception ex) { _Logging.Warn(_Header + "error in OnProviderError handler for process " + processId + ": " + ex.ToString()); }
         }
 
         /// <summary>

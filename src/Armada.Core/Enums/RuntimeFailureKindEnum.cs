@@ -4,9 +4,9 @@ namespace Armada.Core.Enums
     using System.Text.Json.Serialization;
 
     /// <summary>
-    /// Classification of why a captain runtime process ended, derived from its exit code and the tail of
-    /// its output. Distinguishes a genuine crash from a recoverable provider condition so downstream
-    /// policy (quarantine, redispatch) can react appropriately.
+    /// Classification of why a captain runtime process ended, derived from its exit code and the structured
+    /// provider error (HTTP status, provider error type) the runtime reported. Distinguishes a genuine crash from a
+    /// provider condition so downstream policy (quarantine, stall, redispatch) can react appropriately.
     /// </summary>
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum RuntimeFailureKindEnum
@@ -32,9 +32,16 @@ namespace Armada.Core.Enums
         AuthFailure,
 
         /// <summary>
-        /// A non-zero exit with no recognized provider signature: treat as a real crash.
+        /// A non-zero exit with no structured provider error: treat as a real crash.
         /// </summary>
         [EnumMember(Value = "Crash")]
-        Crash
+        Crash,
+
+        /// <summary>
+        /// The provider reported that the requested model does not exist or is not available to these
+        /// credentials. The captain cannot make progress until its model configuration is fixed.
+        /// </summary>
+        [EnumMember(Value = "ModelUnavailable")]
+        ModelUnavailable
     }
 }

@@ -189,6 +189,17 @@ namespace Armada.Core.Services.Interfaces
         Task HandleProcessExitAsync(int processId, int? exitCode, string captainId, string missionId, CancellationToken token = default);
 
         /// <summary>
+        /// Handle an agent process exit with its typed exit outcome (exit code plus the structured provider error the
+        /// runtime reported). Quarantine, stall, and crash-loop policy read <see cref="RuntimeExitInfo.FailureKind"/>.
+        /// </summary>
+        /// <param name="processId">OS process ID that exited.</param>
+        /// <param name="exitInfo">Typed exit outcome.</param>
+        /// <param name="captainId">Captain identifier.</param>
+        /// <param name="missionId">Mission identifier.</param>
+        /// <param name="token">Cancellation token.</param>
+        Task HandleProcessExitAsync(int processId, RuntimeExitInfo exitInfo, string captainId, string missionId, CancellationToken token = default);
+
+        /// <summary>
         /// Dry-run the vessel's auto-land predicate against a mission's captured diff without landing it.
         /// </summary>
         /// <param name="missionId">Mission identifier.</param>
