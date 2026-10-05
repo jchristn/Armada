@@ -15,6 +15,7 @@ namespace Armada.Tui.Screens.Ask
     using Armada.Tui.Text;
     using Armada.Tui.Widgets;
     using TUIKit;
+    using TUIKit.Content;
     using TUIKit.Input;
     using TUIKit.Widgets;
 
@@ -82,9 +83,22 @@ namespace Armada.Tui.Screens.Ask
         public int SelectedRow { get; private set; } = -1;
 
         /// <summary>
-        /// True while the view follows the live tail.
+        /// True while the view follows the live tail (<see cref="Tail"/>).
         /// </summary>
-        public bool Following { get; private set; } = true;
+        public bool Following
+        {
+            get { return _Tail.IsFollowing; }
+        }
+
+        /// <summary>
+        /// The follow state (TUIKit's <see cref="TailFollow"/>): only a viewport move away from the bottom stops
+        /// following, never a selection; reaching the bottom, <c>End</c>, a decision, or a send resumes it; while
+        /// detached it counts the lines added below. Never null.
+        /// </summary>
+        public TailFollow Tail
+        {
+            get { return _Tail; }
+        }
 
         /// <summary>
         /// First visible line.
@@ -99,7 +113,7 @@ namespace Armada.Tui.Screens.Ask
         /// </summary>
         public int NewBelow
         {
-            get { return Following ? 0 : Math.Max(0, _Flat.Count - _DetachedTotal); }
+            get { return _Tail.NewItemsBelow; }
         }
 
         /// <summary>
@@ -132,7 +146,7 @@ namespace Armada.Tui.Screens.Ask
         private string _LayoutKey = "";
         private int _Scroll = 0;
         private int _Height = 10;
-        private int _DetachedTotal = 0;
+        private readonly TailFollow _Tail = new TailFollow();
         private string _Search = "";
         private bool _Searching = false;
         private int _Match = -1;
@@ -190,6 +204,7 @@ namespace Armada.Tui.Screens.Ask
                 anchorOffset = _Scroll - anchor.Top;
             }
 
+            int before = _Flat.Count;
             _Blocks = _Builder.Build(_Ask, ViewState, Theme, _Context.Loc, now, contentWidth);
             _Flat = new List<StyledText>();
             _FlatBlock = new List<int>();
@@ -209,16 +224,20 @@ namespace Armada.Tui.Screens.Ask
                 SelectedRow = -1;
             }
 
+            int moved = 0;
             if (anchorKey != null)
             {
                 AskBlock? again = _Blocks.FirstOrDefault(b => b.Key == anchorKey);
                 if (again != null)
                 {
-                    int moved = again.Top + anchorOffset - _Scroll;
+                    moved = again.Top + anchorOffset - _Scroll;
                     _Scroll = again.Top + anchorOffset;
-                    _DetachedTotal += moved;
                 }
             }
+
+            // Lines added below the reader's place (not those loaded or grown above it) count as new below.
+            int added = _Flat.Count - before - moved;
+            if (added > 0) _Tail.OnContentAppended(added);
         }
 
         /// <summary>
@@ -226,7 +245,7 @@ namespace Armada.Tui.Screens.Ask
         /// </summary>
         public void FollowTail()
         {
-            Following = true;
+            _Tail.ReturnToTail();
             SelectedKey = null;
             SelectedRow = -1;
             _Scroll = Math.Max(0, _Flat.Count - _Height);
@@ -238,7 +257,7 @@ namespace Armada.Tui.Screens.Ask
         /// </summary>
         public void ReturnToTail()
         {
-            Following = true;
+            _Tail.ReturnToTail();
             _Scroll = MaxScroll();
             AskBlock? block = Selected();
             if (block != null && !VisibleAt(block, _Scroll))
@@ -484,8 +503,8 @@ namespace Armada.Tui.Screens.Ask
                     ScrollBy(Math.Max(1, _Height - 1));
                     return true;
                 case KeyCode.Home:
-                    Detach();
                     _Scroll = 0;
+                    SyncFollow();
                     if (_Ask.Conversation.HasMore) _Ask.LoadOlder();
                     return true;
                 case KeyCode.End:
@@ -566,7 +585,7 @@ namespace Armada.Tui.Screens.Ask
             int max = Math.Max(0, _Flat.Count - _Height);
             if (Following) _Scroll = max;
             _Scroll = Math.Clamp(_Scroll, 0, max);
-            if (!Following && _Scroll >= max) Following = true;
+            if (!Following) _Tail.OnViewportMoved(_Scroll, max);
 
             AskBlock? selected = Selected();
             _CardButtons.Clear();
@@ -637,15 +656,7 @@ namespace Armada.Tui.Screens.Ask
         /// </summary>
         private void SyncFollow()
         {
-            if (_Scroll >= MaxScroll()) Following = true;
-            else Detach();
-        }
-
-        private void Detach()
-        {
-            if (!Following) return;
-            Following = false;
-            _DetachedTotal = _Flat.Count;
+            _Tail.OnViewportMoved(_Scroll, MaxScroll());
         }
 
         private int MaxScroll()
@@ -751,11 +762,8 @@ namespace Armada.Tui.Screens.Ask
 
         private void ScrollBy(int delta)
         {
-            if (Following && delta < 0) _DetachedTotal = _Flat.Count;
             _Scroll = Math.Max(0, _Scroll + delta);
-            int max = Math.Max(0, _Flat.Count - _Height);
-            if (delta < 0) Following = false;
-            if (_Scroll >= max && delta > 0) Following = true;
+            _Tail.OnViewportMoved(_Scroll, MaxScroll());
             if (_Scroll == 0 && delta < 0 && _Ask.Conversation.HasMore) _Ask.LoadOlder();
         }
 
@@ -1039,8 +1047,8 @@ namespace Armada.Tui.Screens.Ask
                 if (_Flat[idx].ToPlainString().IndexOf(_Search, StringComparison.OrdinalIgnoreCase) >= 0)
                 {
                     _Match = idx;
-                    Detach();
                     _Scroll = Math.Max(0, idx - _Height / 2);
+                    SyncFollow();
                     return;
                 }
             }
