@@ -17,7 +17,9 @@ dotnet publish "${REPO_ROOT}/src/Armada.Server" -c Release -f "$ARMADA_TARGET_FR
 echo
 echo "[publish-server] Deploying dashboard assets..."
 if ! "${SCRIPT_DIR}/deploy-dashboard.sh"; then
-    echo "[publish-server] WARNING: Dashboard deploy failed. Armada will fall back to the embedded dashboard if available."
+    echo "ERROR: Dashboard deploy failed. The server was published, but ~/.armada/dashboard was not updated." >&2
+    echo "       Fix the dashboard build (or install Node.js, or rely on the committed dist/) and re-run." >&2
+    exit 1
 fi
 
 if [ ! -f "${SERVER_EXE}" ]; then

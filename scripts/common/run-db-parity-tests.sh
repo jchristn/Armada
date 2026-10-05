@@ -74,11 +74,32 @@ run_suite() {
   return $code
 }
 
+# start_container <label> <docker run args...> -- starts a detached container and fails fast (non-zero, with
+# docker's own error) when docker cannot start it, so a missing image, port clash, or stopped docker daemon is
+# reported at once instead of after the readiness wait.
+start_container() {
+  local label="$1"; shift
+  local err
+  if ! err="$(docker run -d "$@" 2>&1 >/dev/null)"; then
+    echo "  ${label}: docker run failed: ${err}"
+    SUMMARY+=("${label} :: CONTAINER FAILED TO START")
+    return 1
+  fi
+  return 0
+}
+
+# wait_ready <container> <probe command...> -- polls the probe for up to ~180 s, but gives up at once when the
+# container is no longer running (for example it exited on a bad configuration).
 wait_ready() {
   local name="$1"; shift
   local i
   for i in $(seq 1 90); do
     if docker exec "$name" "$@" >/dev/null 2>&1; then return 0; fi
+    if [ "$(docker inspect -f '{{.State.Running}}' "$name" 2>/dev/null)" != "true" ]; then
+      echo "  ${name}: container stopped before it became ready; last log lines:"
+      docker logs --tail 20 "$name" 2>&1 | sed 's/^/    /'
+      return 1
+    fi
     sleep 2
   done
   return 1
@@ -106,8 +127,9 @@ for provider in "${PROVIDER_LIST[@]}"; do
       echo "==> PostgreSQL (${POSTGRES_IMAGE})"
       port="$(rand_port)"; name="armada_parity_pg_$$"
       CONTAINERS+=("$name")
-      docker run -d --name "$name" --shm-size=256m -e POSTGRES_PASSWORD=testpass -p "${port}:5432" "$POSTGRES_IMAGE" >/dev/null
-      if wait_ready "$name" pg_isready -U postgres -q; then
+      if ! start_container "postgresql" --name "$name" --shm-size=256m -e POSTGRES_PASSWORD=testpass -p "${port}:5432" "$POSTGRES_IMAGE"; then
+        FAIL=1
+      elif wait_ready "$name" pg_isready -U postgres -q; then
         run_suite "postgresql" --db-type postgresql --db-host 127.0.0.1 --db-port "$port" --db-user postgres --db-pass testpass --db-name armada_test || FAIL=1
       else echo "  postgresql: container not ready"; FAIL=1; fi
       docker rm -f "$name" >/dev/null 2>&1 || true
@@ -118,9 +140,10 @@ for provider in "${PROVIDER_LIST[@]}"; do
       CONTAINERS+=("$name")
       # skip-name-resolve avoids a slow reverse-DNS on every connect; durability
       # is disabled because the container is a throwaway.
-      docker run -d --name "$name" -e MYSQL_ROOT_PASSWORD=testpass -p "${port}:3306" "$MYSQL_IMAGE" \
-        --skip-name-resolve --innodb-flush-log-at-trx-commit=0 --sync-binlog=0 >/dev/null
-      if wait_ready "$name" mysqladmin ping -uroot -ptestpass --silent; then
+      if ! start_container "mysql" --name "$name" -e MYSQL_ROOT_PASSWORD=testpass -p "${port}:3306" "$MYSQL_IMAGE" \
+        --skip-name-resolve --innodb-flush-log-at-trx-commit=0 --sync-binlog=0; then
+        FAIL=1
+      elif wait_ready "$name" mysqladmin ping -uroot -ptestpass --silent; then
         sleep 3
         run_suite "mysql" --db-type mysql --db-host 127.0.0.1 --db-port "$port" --db-user root --db-pass testpass --db-name armada_test || FAIL=1
       else echo "  mysql: container not ready"; FAIL=1; fi
@@ -130,8 +153,9 @@ for provider in "${PROVIDER_LIST[@]}"; do
       echo "==> SQL Server (${SQLSERVER_IMAGE})"
       port="$(rand_port)"; name="armada_parity_ss_$$"
       CONTAINERS+=("$name")
-      docker run -d --name "$name" -e "ACCEPT_EULA=Y" -e "MSSQL_SA_PASSWORD=${SA_PASSWORD}" -p "${port}:1433" "$SQLSERVER_IMAGE" >/dev/null
-      if wait_ready "$name" /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -Q "SELECT 1" -b; then
+      if ! start_container "sqlserver" --name "$name" -e "ACCEPT_EULA=Y" -e "MSSQL_SA_PASSWORD=${SA_PASSWORD}" -p "${port}:1433" "$SQLSERVER_IMAGE"; then
+        FAIL=1
+      elif wait_ready "$name" /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -Q "SELECT 1" -b; then
         run_suite "sqlserver" --db-type sqlserver --db-host 127.0.0.1 --db-port "$port" --db-user sa --db-pass "$SA_PASSWORD" --db-name armada_test || FAIL=1
       else echo "  sqlserver: container not ready"; FAIL=1; fi
       docker rm -f "$name" >/dev/null 2>&1 || true

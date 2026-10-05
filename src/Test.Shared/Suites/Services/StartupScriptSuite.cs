@@ -114,6 +114,65 @@ namespace Test.Shared.Suites.Services
                 AssertContains("does not require elevation", startupDocContents, "Startup guide should document the non-elevated Windows task flow");
             }));
 
+            cases.Add(Case("unix_factory_reset_stops_the_server_by_pid", "Linux and macOS factory-reset stop the Admiral by PID, never by a command-line pattern", TestTags.Negative, () =>
+            {
+                string root = FindRepositoryRoot();
+                AssertTrue(File.Exists(Path.Combine(root, "scripts", "common", "stop-armada-server.sh")), "the shared PID-based stop helper exists");
+                foreach (string platform in new string[] { "linux", "macos" })
+                {
+                    string contents = File.ReadAllText(Path.Combine(root, "scripts", platform, "factory-reset.sh"));
+                    AssertFalse(contents.Contains("pkill"), platform + " factory-reset must not use pkill");
+                    AssertFalse(contents.Contains("pgrep"), platform + " factory-reset must not use pgrep");
+                    AssertContains("common/stop-armada-server.sh", contents, platform + " factory-reset stops the server through the PID helper");
+                }
+
+                string helper = File.ReadAllText(Path.Combine(root, "scripts", "common", "stop-armada-server.sh"));
+                AssertFalse(helper.Contains("pkill") || helper.Contains("pgrep"), "the stop helper must not match processes by pattern");
+            }));
+
+            cases.Add(Case("publish_server_fails_when_dashboard_deploy_fails", "publish-server.sh and publish-server.bat both fail when the dashboard deploy fails", TestTags.Negative, () =>
+            {
+                string root = FindRepositoryRoot();
+                string shell = File.ReadAllText(Path.Combine(root, "scripts", "common", "publish-server.sh"));
+                string batch = File.ReadAllText(Path.Combine(root, "scripts", "windows", "publish-server.bat"));
+                AssertFalse(shell.Contains("WARNING: Dashboard deploy failed"), "the shell script must not continue after a failed dashboard deploy");
+                AssertFalse(batch.Contains("WARNING: Dashboard deploy failed"), "the batch script must not continue after a failed dashboard deploy");
+                AssertContains("ERROR: Dashboard deploy failed", shell);
+                AssertContains("ERROR: Dashboard deploy failed", batch);
+            }));
+
+            cases.Add(Case("update_scripts_try_helm_fallbacks_in_the_same_order", "update.sh and update.bat try the installed armada tool, then the built Helm dll, then dotnet run", TestTags.Positive, () =>
+            {
+                string root = FindRepositoryRoot();
+                string shell = File.ReadAllText(Path.Combine(root, "scripts", "common", "update.sh"));
+                string batch = File.ReadAllText(Path.Combine(root, "scripts", "windows", "update.bat"));
+                string shellHelm = shell.Substring(shell.IndexOf("run_helm() {", StringComparison.Ordinal));
+                string batchHelm = batch.Substring(batch.IndexOf(":run_helm", StringComparison.Ordinal));
+
+                AssertTrue(IsInOrder(shellHelm, "command -v armada", "HELM_DLL", "dotnet run"), "update.sh order");
+                AssertTrue(IsInOrder(batchHelm, "where armada", "HELM_DLL", "dotnet run"), "update.bat order matches update.sh");
+            }));
+
+            cases.Add(Case("windows_scripts_reject_unknown_arguments", "factory-reset.bat and generate-api-surface.bat reject unknown arguments like their shell versions", TestTags.Negative, () =>
+            {
+                string root = FindRepositoryRoot();
+                string reset = File.ReadAllText(Path.Combine(root, "scripts", "windows", "factory-reset.bat"));
+                string surface = File.ReadAllText(Path.Combine(root, "scripts", "windows", "generate-api-surface.bat"));
+                AssertContains("Unknown argument", reset);
+                AssertContains("exit /b 2", reset, "factory-reset.bat exits 2 on an unknown argument, as factory-reset.sh does");
+                AssertContains("unknown argument", surface);
+                AssertFalse(surface.Contains("set \"FRAMEWORK=%~1\""), "generate-api-surface.bat must not take any unknown token as the framework");
+            }));
+
+            cases.Add(Case("db_parity_script_fails_fast_when_a_container_cannot_start", "run-db-parity-tests.sh fails a provider at once when docker run fails", TestTags.Negative, () =>
+            {
+                string root = FindRepositoryRoot();
+                string contents = File.ReadAllText(Path.Combine(root, "scripts", "common", "run-db-parity-tests.sh"));
+                AssertContains("start_container", contents);
+                AssertContains("CONTAINER FAILED TO START", contents);
+                AssertFalse(contents.Contains("\"$POSTGRES_IMAGE\" >/dev/null"), "docker run for a provider must be checked, not discarded");
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: "Services.StartupScript",
                 displayName: "Startup Scripts",
@@ -123,6 +182,19 @@ namespace Test.Shared.Suites.Services
         #endregion
 
         #region Private-Methods
+
+        private static bool IsInOrder(string text, params string[] markers)
+        {
+            int position = 0;
+            foreach (string marker in markers)
+            {
+                int index = text.IndexOf(marker, position, StringComparison.Ordinal);
+                if (index < 0) return false;
+                position = index + marker.Length;
+            }
+
+            return true;
+        }
 
         private static string FindRepositoryRoot()
         {

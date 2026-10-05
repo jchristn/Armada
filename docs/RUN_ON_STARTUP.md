@@ -26,7 +26,7 @@ Canonical helpers:
 
 `publish-server` publishes `src/Armada.Server` in `Release` mode for `net10.0` by default to `~/.armada/bin` and then attempts to deploy the React dashboard. Override the framework with a leading argument (`net8.0`, `-f net8.0`, or `--framework net8.0`), for example `scripts\windows\publish-server.bat net8.0` or `./scripts/linux/publish-server.sh --framework net8.0`, or with the `ARMADA_TARGET_FRAMEWORK` environment variable. The install and update scripts on every platform (`install-windows-task.bat`, `update-windows-task.bat`, `install-systemd-user.sh`, `update-systemd-user.sh`, `install-launchd-agent.sh`, `update-launchd-agent.sh`) forward their arguments to `publish-server`, so a framework argument or `--insecure` works with them too.
 
-If the dashboard deploy fails, the shell `publish-server.sh` prints a warning and continues; `publish-server.bat` continues only when a previously deployed dashboard exists in `~/.armada/dashboard` and fails otherwise.
+If the dashboard deploy fails, `publish-server` (shell and `.bat`) stops with an error and a non-zero exit, so the install or update script that called it stops too; the server binary has already been published by then, but `~/.armada/dashboard` was not updated. Fix the dashboard build and re-run (without Node.js the committed `dist/` is deployed, so this is rare).
 
 Behind an enterprise proxy that performs TLS inspection, the dashboard deploy step can fail with `npm error code SELF_SIGNED_CERT_IN_CHAIN`. Append `--insecure` (or `-k`) to disable strict TLS validation for npm/Node for that run, for example `scripts\windows\publish-server.bat net8.0 --insecure` (framework first, then the flag). If Node.js is not installed at all, `publish-server` deploys the pre-built dashboard bundle that ships in the repository instead of building it. See the README's "Behind an enterprise proxy or firewall" section for details.
 
@@ -153,7 +153,7 @@ Remove the agent:
 
 The installer writes `~/Library/LaunchAgents/com.armada.admiral.plist` (label `com.armada.admiral`, `RunAtLoad` and `KeepAlive`, running `~/.armada/bin/Armada.Server` with stdout and stderr in `~/.armada/logs/launchd-stdout.log` and `launchd-stderr.log`) and loads it with `launchctl bootstrap gui/<uid>`. The update script unloads the agent and re-runs the installer; the remove script unloads it and deletes the plist.
 
-The Linux and macOS definitions always start `~/.armada/bin/Armada.Server`; unlike the Windows start script they do not follow the self-rebuild slot pointer.
+The Linux and macOS definitions always start `~/.armada/bin/Armada.Server`; unlike the Windows start script they do not follow the self-rebuild slot pointer. (In 1.0 the self-rebuild resolves a slot's executable as `Armada.Server.exe` on every platform, so slots are Windows-only for now.)
 
 > **Note:** `LaunchAgent` runs in your user session. If you need machine-level startup before user login, you would need a separate `LaunchDaemon` flow and a service-compatible runtime context for Armada's repos, agent binaries, and credentials.
 
