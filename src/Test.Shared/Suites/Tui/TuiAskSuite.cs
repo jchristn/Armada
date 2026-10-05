@@ -534,6 +534,25 @@ namespace Test.Shared.Suites.Tui
                 }
             }));
 
+            cases.Add(TuiCase.Sync(Suite, "captain_key_from_composer", "From the composer, Esc then c opens the captain picker; c typed in the composer is text", () =>
+            {
+                AskFixtures fx = new AskFixtures();
+                fx.AddThread(AskFixtures.Thread("ath_1", "TUIKit fixes"));
+                using (TuiTestHost host = TuiCase.SignedIn(140, 50, "/ask/ath_1", fx.Stub))
+                {
+                    AskController ask = host.Tui.Ask;
+                    AskScreen screen = (AskScreen)host.Tui.Shell.Screen!;
+                    host.PumpUntil(() => ask.Conversation.Thread != null && ask.Captains.Count > 0);
+                    host.Press("c");
+                    AssertEqual("c", screen.Composer.Text, "c in the composer is text");
+                    host.Press("backspace");
+                    host.Press("esc");
+                    AssertTrue(ReferenceEquals(screen.Scope.Focused, screen.Transcript), "Esc moves focus to the conversation");
+                    host.Press("c");
+                    AssertTrue(host.WaitForText("No captain (quick actions only)"), "captain picker opened");
+                }
+            }));
+
             cases.Add(TuiCase.Sync(Suite, "composer", "Optimistic send, newline, history recall, and stop with the local force-end", () =>
             {
                 AskFixtures fx = new AskFixtures();

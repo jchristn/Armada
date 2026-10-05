@@ -65,7 +65,7 @@ Ask Armada is where the TUI starts and where most of the work happens. It is the
 
 The conversation list searches on the server as you type (after a short pause), keeps pinned conversations on top and the rest by their latest message, and marks each row with its unread count, `* Working` while work it started is still running, `Replying...` while the captain is answering, and an `[Archived]` tag when archived ones are shown (`A` toggles them). `Enter` opens a conversation, `n` starts a new one, `/` searches, `e` renames in place, `p` pins, `s` asks for a summary, `Del` deletes after the dashboard's confirmation, and `.` opens the row menu with all of those. The list pages 50 at a time and loads the next page when the cursor reaches "Load more". Below 100 columns the list folds away and `Ctrl+T` brings it back as an overlay. Opening a conversation marks it read, and so does returning focus to the terminal while it is open; nothing is marked read while the terminal is in the background.
 
-The header shows the title (`e` to rename), the captain (`c` picks one, including "No captain (quick actions only)"; the composer has focus when the screen opens and takes `c` as text, so press `Esc` first, or use `Ctrl+K` and "Choose captain..."), auto-approve (`Ctrl+Y`), Summarize (`s`), and More (`.`). Turning auto-approve on asks first, with the dashboard's warning, and a banner stays across the top of the conversation while it is on. When the captain cannot reach Armada over MCP (its runtime is neither Claude Code nor an API endpoint and it reports no Armada tools) a note says so and links the setup instructions for that runtime. A strip under the header lists the work the conversation is tracking with "N active of M"; `w` jumps to the next item's live card.
+The header shows the title (`e` to rename), the captain (`c`, see "Choosing a captain" below), auto-approve (`Ctrl+Y`), Summarize (`s`), and More (`.`). Turning auto-approve on asks first, with the dashboard's warning, and a banner stays across the top of the conversation while it is on. When the captain cannot reach Armada over MCP (its runtime is neither Claude Code nor an API endpoint and it reports no Armada tools) a note says so and links the setup instructions for that runtime. A strip under the header lists the work the conversation is tracking with "N active of M"; `w` jumps to the next item's live card.
 
 The transcript renders every message kind the server writes: your messages, captain replies in Markdown with tool chips (`[ok]`, `[..]` while running, `[x!]` on failure), a collapsed thinking section, the turn's duration, and a metrics line the TUI measures itself (time to first token, approximate tokens and tokens per second, total time). Confirm cards show the tool, who proposed it, the one-line summary, the exact arguments, the expiry, and the outcome once decided. Action results carry the live work card for what they started, progress updates link back to that card, and summaries, errors, and system notes have their own styles. While a reply streams, the Markdown is re-rendered on every chunk, so lists, headings, and code blocks read correctly before the turn ends instead of collapsing onto one line.
 
@@ -74,6 +74,18 @@ The transcript renders every message kind the server writes: your messages, capt
 The composer sends with `Enter` and adds a line with `Shift+Enter` or `Ctrl+J`. `Ctrl+E` opens the draft in `$EDITOR`, `Up` on an empty composer recalls what you sent earlier, and `Esc` moves to the transcript and focuses the newest card waiting for a decision. Your message appears at once and is confirmed or removed when the server answers. Typing `/` opens the quick actions: Dispatch and Fleet action open inline forms with the dashboard's fields and checks (submitting the form is the confirmation), Status and Health run immediately, and Import opens the import screen. While a turn runs, `Ctrl+C` or `Esc` twice stops it; the TUI shows "Stopping..." and settles the turn itself if the server has not confirmed within 8 seconds.
 
 Two shortcuts reach Ask from anywhere. `Ctrl+J` toggles the Ask dock at the bottom of any screen, which shows the tail of the open conversation (streaming included), the pending approval count, and a one-line composer that sends to that conversation. `Alt+A` (Ask about this) opens a new conversation with the current screen's subject already typed, for example `On vessel DemoRepo (vsl_...): `.
+
+
+### Choosing a captain
+
+The `c` key only works while the conversation has focus, not while you are typing in the message box. When Ask opens, the cursor is in the message box at the bottom, so there `c` just types the letter. To change the captain:
+
+1. With the cursor in the message box, press `Esc`. Focus moves up to the conversation (the transcript above the message box).
+2. Press `c`. The captain picker opens; it also lists "No captain (quick actions only)".
+3. Pick a captain with the arrow keys (or type to filter) and press `Enter`.
+4. Press `Esc` to go back to the message box.
+
+Or, from anywhere: press `Ctrl+K`, type `captain`, and run "Choose captain...". Neither way works while a captain reply is in progress; stop it first (`Ctrl+C`, or `Esc` twice).
 
 ## Approvals
 
