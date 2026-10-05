@@ -436,7 +436,10 @@ namespace Armada.Tui.Screens.Ask
             if (captain != null) captainLabel = captain.Name + " (" + (!String.IsNullOrEmpty(captain.Model) ? captain.Model : captain.Runtime.ToString()) + ")";
             else if (Ask.NoCaptain) captainLabel = T("No captain (quick actions only)");
             else captainLabel = Ask.ActiveCaptainId;
-            string right = T("Captain") + ": " + captainLabel + " [c]";
+            // c works in the conversation, not while typing (it would type the letter); in the composer the hint says
+            // Esc first. (s and . behave the same but are often cut off, so only the captain hint grows.)
+            string prefix = ReferenceEquals(Scope.Focused, Composer) ? "Esc " : "";
+            string right = T("Captain") + ": " + captainLabel + " [" + prefix + "c]";
             if (thread != null)
             {
                 right += "   " + T("Auto-approve") + ": " + (thread.AutoApprove ? T("on") + " !" : T("off")) + " [Ctrl+Y]";

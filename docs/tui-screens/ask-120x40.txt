@@ -1,7 +1,7 @@
  Armada  [Default Tenant] admin@armada  [Global Admin]                                             o Offline  [bell 0]
  File  Go  View  Actions  Ask  Help                                                                            F10 Menu
 +----------------------++----------------------------------------------------------------------------------------------+
-|  Dashboard           || Release checklist [e]          Captain: claude-1 (ClaudeCode) [c]   Auto-approve: off [Ctr...|
+|  Dashboard           || Release checklist [e]          Captain: claude-1 (ClaudeCode) [Esc c]   Auto-approve: off ...|
 |> Ask Armada          ||----------------------------------------------------------------------------------------------|
 |- OPERATIONS          ||  You                                                                                   1m ago|
 |   Needs You          ||    What is left before we cut the 1.0 release?                                               |

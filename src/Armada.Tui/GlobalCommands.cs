@@ -26,7 +26,8 @@ namespace Armada.Tui
         /// </summary>
         /// <param name="context">Context.</param>
         /// <param name="shell">Shell.</param>
-        public static void Register(TuiContext context, ShellView shell)
+        /// <param name="app">Application (lets the screen snapshot include open dialogs), or null.</param>
+        public static void Register(TuiContext context, ShellView shell, TuiApplication? app = null)
         {
             if (context == null) throw new ArgumentNullException(nameof(context));
             if (shell == null) throw new ArgumentNullException(nameof(shell));
@@ -81,6 +82,7 @@ namespace Armada.Tui
             c.Register(Cmd("help.keys", "Keyboard shortcuts", CommandMenuEnum.Help, () => ShowHelp(context, shell), null, "?", "f1"));
             c.Register(Cmd("help.palette", "Command palette", CommandMenuEnum.Help, () => ShowPalette(context, shell), signedIn, "ctrl+k"));
             c.Register(Cmd("help.about", "About Armada", CommandMenuEnum.Help, () => ShowAbout(context)));
+            c.Register(Cmd("help.snapshot", "Save screen snapshot...", CommandMenuEnum.Help, () => SaveSnapshot(context, shell, app)));
             c.Register(Cmd("help.docs", "Documentation (opens a browser)", CommandMenuEnum.Help, () => context.External.OpenUrl("https://github.com/jchristn/Armada/blob/main/docs/TUI.md")));
             c.SetOverrides(context.Prefs.Current.KeyBindings);
         }
@@ -132,6 +134,35 @@ namespace Armada.Tui
         #endregion
 
         #region Private-Methods
+
+        /// <summary>
+        /// Save the screen as plain text (what the terminal shows, without colors, ASCII-transliterated in ASCII icon
+        /// mode) to a file the user picks, for bug reports. The text is captured before the path prompt opens.
+        /// </summary>
+        /// <param name="context">Context.</param>
+        /// <param name="shell">Shell.</param>
+        /// <param name="app">Application (for open modals), or null.</param>
+        public static void SaveSnapshot(TuiContext context, ShellView shell, TuiApplication? app)
+        {
+            if (context == null) throw new ArgumentNullException(nameof(context));
+            if (shell == null) throw new ArgumentNullException(nameof(shell));
+            int width = shell.LastSize.Width > 0 ? shell.LastSize.Width : 120;
+            int height = shell.LastSize.Height > 0 ? shell.LastSize.Height : 40;
+            string text = TuiSnapshot.Render(shell, app, width, height);
+            string name = "armada-tui-" + context.Clock.UtcNow.ToString("yyyyMMdd-HHmmss", System.Globalization.CultureInfo.InvariantCulture) + ".txt";
+            Screens.Kit.PathPrompt.AskSave(context, "Save Screen Snapshot", name, path =>
+            {
+                try
+                {
+                    string saved = context.External.SaveText(path, text);
+                    Screens.Kit.ScreenOps.Toast(context, NotificationSeverityEnum.Success, "Snapshot saved to {{path}}.", LocalizationArgs.Of("path", saved));
+                }
+                catch (Exception ex) when (ex is System.IO.IOException || ex is UnauthorizedAccessException || ex is ArgumentException || ex is NotSupportedException)
+                {
+                    Screens.Kit.ScreenOps.Toast(context, NotificationSeverityEnum.Error, "Failed to save file: {{message}}", LocalizationArgs.Of("message", ex.Message));
+                }
+            });
+        }
 
         private static ArmadaCommand Cmd(string id, string title, CommandMenuEnum menu, Action handler, Func<bool>? enabled = null, params string?[] gestures)
         {

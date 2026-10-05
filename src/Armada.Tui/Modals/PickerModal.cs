@@ -131,7 +131,10 @@ namespace Armada.Tui.Modals
         protected override int MeasureContentWidth(int availableWidth)
         {
             int widest = List.Visible.Select(o => TextCells.Width(o.Label) + TextCells.Width(o.Detail) + 6).DefaultIfEmpty(30).Max();
-            return Math.Min(availableWidth, (int)Math.Round(Math.Max(40, widest) * _WidthScale));
+
+            // The key hints sit in the bottom border; keep the box wide enough that they are not cut off.
+            int footer = TextCells.Width(FooterHint ?? "") + 2;
+            return Math.Min(availableWidth, (int)Math.Round(Math.Max(Math.Max(40, footer), widest) * _WidthScale));
         }
 
         /// <inheritdoc />
