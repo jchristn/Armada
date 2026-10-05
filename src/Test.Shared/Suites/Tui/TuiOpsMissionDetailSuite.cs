@@ -122,6 +122,53 @@ namespace Test.Shared.Suites.Tui
                 }
             }));
 
+            cases.Add(TuiCase.Sync(Suite, "pending_blocker", "A Pending mission shows why it waits and is not Ready To Land (F11)", () =>
+            {
+                StubHttpHandler stub = Stub();
+                stub.Json("GET", "/api/v1/missions/msn_p", "{\"Id\":\"msn_p\",\"Title\":\"Queued work\",\"Status\":\"Pending\",\"VesselId\":\"vsl_demo\",\"Priority\":100,\"CreatedUtc\":\"2026-10-04T08:00:00Z\",\"LastUpdateUtc\":\"2026-10-04T08:00:00Z\"," +
+                    "\"AssignmentBlocker\":{\"Reason\":\"NoIdleCaptain\",\"Summary\":\"Waiting for a captain: claude-1 is refining backlog item 'Add retries'.\",\"BlockingMissionIds\":[],\"Captains\":[{\"CaptainId\":\"cpt_1\",\"CaptainName\":\"claude-1\",\"State\":\"Refining\",\"Detail\":\"refining backlog item 'Add retries'\",\"RefinementSessionId\":\"ors_1\",\"ObjectiveId\":\"obj_1\"}],\"ComputedUtc\":\"2026-10-04T08:00:00Z\"}}");
+                stub.Json("GET", "/api/v1/missions/msn_p/landing-preview", "{\"VesselId\":\"vsl_demo\",\"TargetBranch\":\"main\",\"BranchCategory\":\"Unknown\",\"IsReadyToLand\":false,\"MissionStatus\":\"Pending\",\"Issues\":[{\"Code\":\"mission_not_landable\",\"Severity\":\"Warning\",\"Title\":\"Mission is not in a landing state\",\"Message\":\"Pending\"}]}");
+                using (TuiTestHost host = TuiCase.SignedIn(150, 50, "/missions/msn_p", stub))
+                {
+                    AssertTrue(host.WaitForText("Why This Mission Is Waiting"), "blocker section\n" + host.Screen());
+                    string frame = host.Screen();
+                    TuiCase.Contains(frame, "Waiting for a captain: claude-1 is refining backlog item 'Add retries'.", "summary");
+                    TuiCase.Contains(frame, "claude-1: refining backlog item 'Add retries'", "captain line");
+                    AssertTrue(host.WaitForText("Not Ready Yet"), "status-aware pill\n" + host.Screen());
+                    TuiCase.NotContains(host.Screen(), "Ready To Land", "never Ready To Land while Pending");
+                    TuiCase.NotContains(host.Screen(), "[ Land L ]", "no Land for Pending");
+                }
+            }));
+
+            cases.Add(TuiCase.Sync(Suite, "manual_landing_merge", "Landing Mode None offers Merge in Manage Branches with the mission branch preselected, not Land (F12)", () =>
+            {
+                StubHttpHandler stub = Stub();
+                stub.Json("GET", "/api/v1/missions/msn_m", "{\"Id\":\"msn_m\",\"Title\":\"Manual work\",\"Status\":\"WorkProduced\",\"VesselId\":\"vsl_demo\",\"BranchName\":\"armada/manual\",\"Priority\":100,\"CreatedUtc\":\"2026-10-04T08:00:00Z\",\"LastUpdateUtc\":\"2026-10-04T08:00:00Z\"}");
+                stub.Json("GET", "/api/v1/missions/msn_m/landing-preview", "{\"VesselId\":\"vsl_demo\",\"SourceBranch\":\"armada/manual\",\"TargetBranch\":\"main\",\"BranchCategory\":\"Feature\",\"LandingMode\":\"None\",\"EffectiveLandingMode\":\"None\",\"ManualLandingOnly\":true,\"MissionStatus\":\"WorkProduced\",\"IsReadyToLand\":false,\"Issues\":[]}");
+                stub.Json("GET", "/api/v1/vessels/vsl_demo/branches", "{\"VesselId\":\"vsl_demo\",\"DefaultBranch\":\"main\",\"BranchCount\":2,\"Branches\":[{\"Name\":\"main\",\"IsDefault\":true},{\"Name\":\"armada/manual\",\"Ahead\":1}]}");
+                stub.Json("POST", "/api/v1/vessels/vsl_demo/branches/merge", "{\"VesselId\":\"vsl_demo\",\"Merged\":true,\"Pushed\":true}");
+                using (TuiTestHost host = TuiCase.SignedIn(150, 50, "/missions/msn_m", stub))
+                {
+                    AssertTrue(host.WaitForText("Merge in Manage Branches"), "manual merge action\n" + host.Screen());
+                    AssertTrue(host.WaitForText("Merge By Hand"), "pill\n" + host.Screen());
+                    TuiCase.NotContains(host.Screen(), "[ Land L ]", "no Land when landing is manual only");
+                    host.Press("b");
+                    AssertTrue(host.PumpUntil(() => host.App.Modals.IsActive), "branches dialog");
+                    Armada.Tui.Screens.Build.VesselBranchesDialog branches = (Armada.Tui.Screens.Build.VesselBranchesDialog)host.App.Modals.Top!;
+                    AssertTrue(host.PumpUntil(() => branches.Branches.Count == 2), "branches loaded");
+                    AssertEqual("armada/manual", branches.Source.Value, "mission branch preselected");
+                    AssertEqual("main", branches.Target.Value, "target preselected");
+                    branches.Merge();
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/vessels/vsl_demo/branches/merge") == 1), "merge call");
+                    Armada.Core.Models.BranchMergeRequest merge = stub.LastBody<Armada.Core.Models.BranchMergeRequest>("POST", "/api/v1/vessels/vsl_demo/branches/merge");
+                    AssertEqual("armada/manual", merge.Source, "merge source");
+                    AssertEqual("main", merge.Target, "merge target");
+                    int missionReads = stub.CountFor("GET", "/api/v1/missions/msn_m");
+                    host.Press("esc");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("GET", "/api/v1/missions/msn_m") > missionReads), "mission reloads after the dialog closes");
+                }
+            }));
+
             return new TestSuiteDescriptor(suiteId: Suite, displayName: "TUI mission detail", cases: cases);
         }
 

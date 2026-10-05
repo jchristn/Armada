@@ -110,8 +110,9 @@ namespace Armada.Tui.Screens.Operations
             Action("log", "Log", ViewLog, "l", () => Mission != null, true);
             Action("instructions", "Instructions", () => Ops.ViewInstructions(MissionId), "i", () => Mission != null, true);
             Action("run-check", "Run Check", RunCheck, "k", () => Mission != null && !String.IsNullOrEmpty(Mission.VesselId), true);
-            OpsScreenAction land = Action("land", "Land", () => Ops.RetryLanding(MissionId, Mission!.Title, true, Load), "L", () => CanLand, true);
+            OpsScreenAction land = Action("land", "Land", () => Ops.RetryLanding(MissionId, Mission!.Title, true, Load), "L", () => CanLand && !ManualLandingOnly, true);
             land.DynamicLabel = () => Mission != null && Mission.Status == MissionStatusEnum.LandingFailed ? "Retry Landing" : "Land";
+            Action("merge-branches", "Merge in Manage Branches", () => OpenManualMerge(), "b", () => CanLand && ManualLandingOnly && !String.IsNullOrEmpty(Mission!.VesselId) && !String.IsNullOrEmpty(Mission.BranchName), true);
             Action("edit", "Edit", () => Ops.Edit(Mission!, Load), "e", () => Mission != null);
             Action("transition", "Transition Status", () => Ops.Transition(MissionId, Mission!.Title, Mission.Status.ToString(), true, Load), "t", () => Mission != null);
             Action("json", "View JSON", () => ShowJson(Tr("Mission: {{title}}", LocalizationArgs.Of("title", Mission!.Title)), Mission), "j", () => Mission != null);
@@ -177,9 +178,32 @@ namespace Armada.Tui.Screens.Operations
             }
         }
 
+        /// <summary>
+        /// Landing Mode None for this mission (from the landing preview): Armada will not land the branch, so the screen
+        /// offers Merge in Manage Branches instead of Land.
+        /// </summary>
+        public bool ManualLandingOnly
+        {
+            get { return LandingPreview != null && LandingPreview.ManualLandingOnly; }
+        }
+
         #endregion
 
         #region Public-Methods
+
+        /// <summary>
+        /// Open the vessel's Manage Branches dialog with this mission's branch preselected to merge into the target branch.
+        /// The mission reloads when the dialog closes (the server completes it once the branch is merged).
+        /// </summary>
+        /// <returns>The dialog, or null when the mission has no vessel or branch.</returns>
+        public Armada.Tui.Screens.Build.VesselBranchesDialog? OpenManualMerge()
+        {
+            if (Mission == null || String.IsNullOrEmpty(Mission.VesselId) || String.IsNullOrEmpty(Mission.BranchName)) return null;
+            Armada.Tui.Screens.Build.VesselBranchesDialog dialog = new Armada.Tui.Screens.Build.VesselBranchesDialog(this, Mission.VesselId!, Reference.VesselName(Mission.VesselId));
+            dialog.PreselectMerge(Mission.BranchName, LandingPreview?.TargetBranch);
+            Context.Modals.Show(dialog, r => Load());
+            return dialog;
+        }
 
         /// <inheritdoc />
         public override void Load()
@@ -320,6 +344,7 @@ namespace Armada.Tui.Screens.Operations
             string meta = LandingPreview?.SourceBranch != null
                 ? LandingPreview.SourceBranch + " -> " + LandingPreview.TargetBranch
                 : (m.BranchName ?? Tr("No branch selected"));
+            if (m.Status == MissionStatusEnum.Pending && m.AssignmentBlocker != null) RenderBlocker(doc, m.AssignmentBlocker);
             OpsLandingPreview.Render(doc, LandingPreview, _LoadingPreview, meta, true);
 
             if (!String.IsNullOrEmpty(m.PrUrl))
@@ -393,6 +418,19 @@ namespace Armada.Tui.Screens.Operations
             }
 
             return doc;
+        }
+
+        private void RenderBlocker(OpsDocument doc, MissionAssignmentBlocker blocker)
+        {
+            doc.Section("Why This Mission Is Waiting");
+            doc.Text(blocker.Summary, blocker.Reason == MissionAssignmentBlockerReasonEnum.AwaitingDispatch ? doc.Theme.Text : doc.Theme.Warning);
+            if (blocker.UntilUtc.HasValue) doc.Field("Expected to clear", Context.Loc.FormatDateTime(blocker.UntilUtc.Value));
+            if (!String.IsNullOrEmpty(blocker.DependsOnMissionId)) doc.Field("Depends On", blocker.DependsOnMissionId);
+            if (blocker.BlockingMissionIds.Count > 0) doc.Field("Held by", String.Join(", ", blocker.BlockingMissionIds));
+            foreach (MissionAssignmentCaptainStatus captain in blocker.Captains)
+            {
+                doc.Text("  " + (captain.CaptainName ?? captain.CaptainId) + ": " + captain.Detail, doc.Theme.Muted);
+            }
         }
 
         private OpsDocument BuildDescription(OpsDocument doc)
