@@ -223,11 +223,10 @@ namespace Test.Shared.Suites.E2E
                     using (HttpClient anonymous = server.CreateMcpClient(false))
                     {
                         E2eMcpToolResult refused = await CallToolAsync(anonymous, "backup", new { outputPath = target }).ConfigureAwait(false);
-                        AssertTrue(refused.IsError, "backup refused (isError) for the loopback default caller");
-                        // TODO(R5, production): the authorization wrapper throws outside McpToolRegistrar's exception mapping, so the
-                        // refusal reaches the client as plain text without McpToolError.ErrorCode=Forbidden; the text is the only signal.
-                        AssertEqual(McpToolErrorCodeEnum.Forbidden, McpToolResultProbe.FromText(refused.Content[0].Text).ErrorCode ?? McpToolErrorCodeEnum.Forbidden, "typed code when present");
-                        AssertContains("Tool backup requires an admin credential.", refused.Content[0].Text ?? "", "refused by the admin requirement, not some other failure");
+                        // The authorization gate answers with a typed McpToolError (ErrorCode Forbidden), not untyped text.
+                        McpToolResultProbe refusedProbe = McpToolResultProbe.FromText(refused.Content[0].Text);
+                        AssertEqual(McpToolErrorCodeEnum.Forbidden, refusedProbe.ErrorCode, "typed Forbidden from the authorization gate");
+                        AssertFalse(String.IsNullOrWhiteSpace(refusedProbe.Error), "the refusal keeps a human-readable message");
                         AssertFalse(File.Exists(target), "no backup written for the loopback default caller");
                     }
 

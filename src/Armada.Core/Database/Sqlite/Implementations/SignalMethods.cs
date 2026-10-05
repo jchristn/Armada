@@ -350,6 +350,20 @@ namespace Armada.Core.Database.Sqlite.Implementations
                     conditions.Add("created_utc < @created_before");
                     parameters.Add(new SqliteParameter("@created_before", SqliteDatabaseDriver.ToIso8601(query.CreatedBefore.Value)));
                 }
+                if (!string.IsNullOrEmpty(query.ToCaptainId))
+                {
+                    conditions.Add("to_captain_id = @to_captain_id");
+                    parameters.Add(new SqliteParameter("@to_captain_id", query.ToCaptainId));
+                }
+                if (!string.IsNullOrEmpty(query.SignalType))
+                {
+                    conditions.Add("type = @type");
+                    parameters.Add(new SqliteParameter("@type", query.SignalType));
+                }
+                if (query.UnreadOnly.HasValue && query.UnreadOnly.Value)
+                {
+                    conditions.Add("read = 0");
+                }
                 string whereClause = " WHERE " + string.Join(" AND ", conditions);
                 string orderDirection = query.Order == EnumerationOrderEnum.CreatedAscending ? "ASC" : "DESC";
                 long totalCount = 0;
@@ -512,6 +526,20 @@ namespace Armada.Core.Database.Sqlite.Implementations
                 {
                     conditions.Add("created_utc < @created_before");
                     parameters.Add(new SqliteParameter("@created_before", SqliteDatabaseDriver.ToIso8601(query.CreatedBefore.Value)));
+                }
+                if (!string.IsNullOrEmpty(query.ToCaptainId))
+                {
+                    conditions.Add("to_captain_id = @to_captain_id");
+                    parameters.Add(new SqliteParameter("@to_captain_id", query.ToCaptainId));
+                }
+                if (!string.IsNullOrEmpty(query.SignalType))
+                {
+                    conditions.Add("type = @type");
+                    parameters.Add(new SqliteParameter("@type", query.SignalType));
+                }
+                if (query.UnreadOnly.HasValue && query.UnreadOnly.Value)
+                {
+                    conditions.Add("read = 0");
                 }
                 string whereClause = " WHERE " + string.Join(" AND ", conditions);
                 string orderDirection = query.Order == EnumerationOrderEnum.CreatedAscending ? "ASC" : "DESC";

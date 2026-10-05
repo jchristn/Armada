@@ -329,9 +329,9 @@ namespace Test.Shared.Suites.Services
 
                     AssertTrue(ex != null, "Expected dirty worktree creation to throw");
                     AssertFalse(ex is GitCommandException, "the dirty checkout is rejected by Armada's check, not by a failed git command");
-                    // TODO(R5): no typed exception exists for a dirty checkout; the Armada-owned message is the only signal.
-                    AssertTrue(ex!.Message.Contains("contains tracked modifications", StringComparison.Ordinal), "Exception should explain that the checkout is dirty");
-                    AssertTrue(ex.Message.Contains("test/Dirty.csproj", StringComparison.Ordinal), "Exception should list the dirty tracked file");
+                    GitDirtyCheckoutException? dirty = ex as GitDirtyCheckoutException;
+                    AssertNotNull(dirty, "a dirty checkout is reported as GitDirtyCheckoutException, got " + ex!.GetType().Name);
+                    AssertTrue(dirty!.ModifiedPaths.Contains("test/Dirty.csproj"), "the exception lists the dirty tracked file: " + String.Join(", ", dirty.ModifiedPaths));
                     AssertFalse(Directory.Exists(worktreeDir), "Failed worktree creation should clean up the worktree directory");
 
                     string branchList = await RunGitAsync(bareDir, "branch", "--list", branchName).ConfigureAwait(false);
@@ -605,7 +605,8 @@ namespace Test.Shared.Suites.Services
 
                     AssertNotNull(ex, "Dirty landing checkout should throw");
                     AssertFalse(ex is GitCommandException, "the dirty landing checkout is rejected by Armada's check, not by a failed git command");
-                    AssertTrue(ex!.Message.Contains("contains tracked modifications", StringComparison.Ordinal), "Dirty landing checkout should be rejected with a clear error");
+                    AssertTrue(ex is GitDirtyCheckoutException, "Dirty landing checkout is rejected with GitDirtyCheckoutException, got " + ex!.GetType().Name);
+                    AssertEqual(targetDir, ((GitDirtyCheckoutException)ex).CheckoutPath, "the exception names the dirty checkout");
                     AssertEqual("main", currentBranch, "Dirty landing checkout should not switch branches");
                     AssertEqual("dirty landing checkout\n", fileContents, "Dirty landing checkout should remain untouched");
                 }

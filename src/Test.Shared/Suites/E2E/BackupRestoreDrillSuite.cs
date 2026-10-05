@@ -8,12 +8,14 @@ namespace Test.Shared.Suites.E2E
     using System.Net;
     using System.Net.Http;
     using System.Net.Http.Headers;
+    using System.Text;
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Core.Settings;
     using Test.Shared.Infrastructure;
+    using WatsonWebserver.Core;
     using Touchstone.Core;
     using static Test.Shared.Infrastructure.Asserts;
 
@@ -119,13 +121,17 @@ namespace Test.Shared.Suites.E2E
                     upload.Headers.ContentType = new MediaTypeHeaderValue("application/zip");
                     HttpResponseMessage restore = await server.Client.PostAsync("/api/v1/restore", upload, ct).ConfigureAwait(false);
                     string restoreBody = await restore.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-                    AssertFalse(restore.IsSuccessStatusCode, "invalid backup rejected");
-                    // TODO(R5, production): the validation failure is an InvalidOperationException the route does not map,
-                    // so it arrives as 500 InternalError instead of 400. Until then, prove the refusal is the backup
-                    // validation (exact message) rather than an unrelated crash.
+                    AssertEqual(400, (int)restore.StatusCode, "a ZIP that is not a backup is a bad request: " + restoreBody);
                     ApiErrorProbe restoreError = ApiErrorProbe.From(restoreBody);
-                    AssertNotNull(restoreError.Error, "typed error body: " + restoreBody);
-                    AssertEqual("ZIP does not contain armada.db entry", restoreError.Message, "rejected by backup validation");
+                    AssertEqual(ApiResultEnum.BadRequest, restoreError.Error, "typed BadRequest: " + restoreBody);
+
+                    // A body that is not a ZIP at all is rejected the same way (it used to escape as 500 InternalError).
+                    ByteArrayContent garbage = new ByteArrayContent(Encoding.UTF8.GetBytes("this is not a zip archive"));
+                    garbage.Headers.ContentType = new MediaTypeHeaderValue("application/zip");
+                    HttpResponseMessage garbageRestore = await server.Client.PostAsync("/api/v1/restore", garbage, ct).ConfigureAwait(false);
+                    string garbageBody = await garbageRestore.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                    AssertEqual(400, (int)garbageRestore.StatusCode, "a non-ZIP body is a bad request: " + garbageBody);
+                    AssertEqual(ApiResultEnum.BadRequest, ApiErrorProbe.From(garbageBody).Error, "typed BadRequest for a non-ZIP body");
 
                     List<Fleet> fleets = await ListFleetsAsync(server.Client).ConfigureAwait(false);
                     AssertNotNull(fleets.FirstOrDefault(f => f.Id == fleet.Id), "data untouched");

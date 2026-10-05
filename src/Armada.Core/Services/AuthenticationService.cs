@@ -5,6 +5,7 @@ namespace Armada.Core.Services
     using System.Threading.Tasks;
     using SyslogLogging;
     using Armada.Core.Database;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Core.Services.Interfaces;
     using Armada.Core.Settings;
@@ -242,8 +243,23 @@ namespace Armada.Core.Services
                 TenantMetadata? tenant = await _Database.Tenants.ReadAsync(ctx.TenantId!, token).ConfigureAwait(false);
                 if (tenant == null || !tenant.Active) return null;
 
+                // A mission-scoped token lives only as long as its mission is assigned to or running on the captain it
+                // was minted for; once the mission ends or is reassigned the token stops working, even before it expires.
+                if (!string.IsNullOrEmpty(ctx.MissionId))
+                {
+                    Mission? mission = await _Database.Missions.ReadAsync(ctx.TenantId!, ctx.MissionId!, token).ConfigureAwait(false);
+                    if (mission == null) return null;
+                    if (mission.Status != MissionStatusEnum.Assigned && mission.Status != MissionStatusEnum.InProgress) return null;
+                    if (!string.Equals(mission.CaptainId, ctx.MissionCaptainId, StringComparison.Ordinal)) return null;
+                    if (!string.Equals(mission.UserId, ctx.UserId, StringComparison.Ordinal)) return null;
+                }
+
                 ctx.IsAdmin = user.IsAdmin;
                 ctx.IsTenantAdmin = user.IsAdmin || user.IsTenantAdmin;
+
+                // A mission captain is confined to the mission's tenant: an owner who is a global admin (for example the
+                // API key's system identity) yields a tenant admin of that tenant, never a global admin.
+                if (!string.IsNullOrEmpty(ctx.MissionId)) ctx.IsAdmin = false;
                 ctx.PrincipalDisplay = user.Email;
                 ctx.PasswordChangeRequired = user.UsesDefaultPassword();
                 return ctx;

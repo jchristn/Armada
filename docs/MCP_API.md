@@ -298,12 +298,32 @@ call against the caller (including Ask Armada proposals executed after approval)
 | TenantAdmin | Every other write or execution (dispatch, captains, missions, voyages, docks, merge queue, signals, events, objectives, backlog, personas, pipelines, prompt templates, playbooks, releases, deployments, runbooks, check runs, fleet actions, vessel import, vessel health) |
 | AdminOnly | `backup`, `restore`, `stop_server` (a credential is required even on loopback; use `X-Api-Key` from `settings.json`) |
 
-A denied call returns a tool error whose message names the required level. The full per-tool list is in
+A denied call returns an `McpToolError` with `ErrorCode` `Forbidden` whose message names the required level. The full per-tool list is in
 [SECURITY_REVIEW.md](SECURITY_REVIEW.md#mcp-tools); a test fails when a registered tool has no declaration.
 
 ### MCP Authentication Scope
 
-Owned (Category A) entities - fleets, vessels, captains, missions, voyages, docks, signals, events, merge queue, objectives/backlog - are scoped to the authenticated caller across `enumerate` and the entity tools. Configuration (Category B) entities remain tenant-visible through MCP; per-object ownership editing is enforced by their services. If you need strict multi-tenant isolation for untrusted MCP clients, bind the MCP port to localhost or a firewalled interface and require a credential at the network layer.
+Owned (Category A) entities - fleets, vessels, captains, missions, voyages, docks, signals, events, merge queue, objectives/backlog - are scoped to the authenticated caller across `enumerate` and the entity tools. Every other `enumerate` entity type uses the same scope as its REST list: jobs, releases, deployments and check runs by tenant and owner; model endpoints, harbors, personas, prompt templates, pipelines, playbooks, workflow profiles, project profiles and skills by tenant plus their per-object visibility (`Scope`); vessel import batches, fleet actions and vessel health by tenant. Only a global admin enumerates across tenants. Per-object ownership editing of configuration entities is enforced by their services.
+
+### Mission-Scoped Captain Calls
+
+When the Admiral launches a captain for a mission it mints a **mission-scoped session token** (setting
+`Mcp.MissionScopedTokens`, default true) and binds the captain's Armada MCP connection to it, sent as `X-Token`:
+
+- Claude Code, Codex, OpenCode and Mux captains get the same per-invocation binding as Ask turns (see below); no client
+  file is written into the repository worktree. With `IsolateCaptainLaunch` on, the isolation plan carries the token
+  for every CLI runtime (Gemini and Cursor included).
+- API-endpoint captains receive `ARMADA_MCP_URL` / `ARMADA_MCP_TOKEN`.
+- Harbor launches carry the token in `HarborLaunchRequest.McpSessionToken`; the Harbor binds it against the MCP URL the
+  Admiral advertised in the handshake (a plain `http://host:port/mcp` URL; other forms get the token in the environment
+  only).
+
+The token authenticates as the mission's owner (tenant and user, with that user's role), only while the mission is
+`Assigned` or `InProgress` on the captain it was minted for; after that, or when another captain takes the mission, the
+MCP server answers `401`. Its one addition to the owner's permissions is `update_vessel_context` for the mission's own
+vessel. Mission tokens are refused by the REST API, `/ws`, and the Harbor link. Gemini and Cursor mission captains
+without `IsolateCaptainLaunch`, and every captain when `Mcp.MissionScopedTokens` is false, keep using their host MCP
+configuration (the loopback identity above when it is allowed).
 
 ---
 
@@ -367,7 +387,7 @@ When an MCP tool encounters an error, it returns a JSON object with a machine-re
 | `Unavailable` | A service the operation needs is not configured or not available (for example no saved diff) |
 | `Failed` | Any other failure |
 
-`Code` carries a feature-specific detail code where a tool has one (for example the vessel import codes such as `BatchNotFound` or `PathNotAllowed`), and `StatusCode` keeps the HTTP-equivalent status the fleet action tools have always returned. When a tool's service signals a missing entity, bad input, a state conflict, a missing permission, or an unavailable feature, the server maps the exception by type to the same JSON object (`NotFound`, `InvalidArgument`, `Conflict`, `Forbidden`, `Unavailable`). Any other unexpected handler error, a call the tool authorization gate refuses, and calls refused by the per-client rate limit (`mcp.toolCallsPerSecond`, default 100 per second, 0 for no limit) come back as MCP tool results with `isError: true` instead.
+`Code` carries a feature-specific detail code where a tool has one (for example the vessel import codes such as `BatchNotFound` or `PathNotAllowed`), and `StatusCode` keeps the HTTP-equivalent status the fleet action tools have always returned. When a tool's service signals a missing entity, bad input, a state conflict, a missing permission, or an unavailable feature, the server maps the exception by type to the same JSON object (`NotFound`, `InvalidArgument`, `Conflict`, `Forbidden`, `Unavailable`). A call the tool authorization gate refuses (the caller lacks the tool's declared permission level) returns the same object with `ErrorCode` `Forbidden`. Any other unexpected handler error and calls refused by the per-client rate limit (`mcp.toolCallsPerSecond`, default 100 per second, 0 for no limit) come back as MCP tool results with `isError: true` instead.
 
 MCP tools do not return HTTP status codes (MCP uses JSON-RPC, not HTTP). The presence of an `ErrorCode` field (or a result with `isError: true`) indicates failure. On success, the response contains the requested data (entity object, status, list, etc.) without an `Error` field.
 
@@ -693,7 +713,7 @@ Paginated enumeration of any entity type with filtering and sorting. This is the
 | `signals` | `signalType`, `captainId`, `toCaptainId`, `unreadOnly`, `createdAfter`, `createdBefore` |
 | `events` | `eventType`, `captainId`, `missionId`, `vesselId`, `voyageId`, `createdAfter`, `createdBefore` |
 | `merge_queue` | `status` (Queued/Testing/Passed/Failed/Landed/Cancelled), `createdAfter`, `createdBefore` |
-| `harbors` | `createdAfter`, `createdBefore` (current MCP enumeration is primarily paginated browse) |
+| `harbors` | paginated browse only (no filters) |
 | `personas` | `createdAfter`, `createdBefore` |
 | `playbooks` | `createdAfter`, `createdBefore` |
 | `prompt_templates` | `createdAfter`, `createdBefore` |

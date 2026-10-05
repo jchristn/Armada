@@ -44,6 +44,12 @@ namespace Armada.Runtimes
         /// <inheritdoc />
         public event Action<int, RuntimeProviderError>? OnProviderError;
 
+        /// <summary>
+        /// Mission-scoped MCP session token to ship with the launch so the Harbor binds the captain's Armada MCP
+        /// connection to it, or null.
+        /// </summary>
+        public string? McpSessionToken { get; set; } = null;
+
         #endregion
 
         #region Private-Members
@@ -116,7 +122,8 @@ namespace Armada.Runtimes
                 PromptViaStdin = true,
                 Arguments = new List<string>(),
                 Environment = environment ?? new Dictionary<string, string>(),
-                AutoApprove = captain != null ? CaptainRuntimeOptions.GetAutoApprove(captain) : (bool?)null
+                AutoApprove = captain != null ? CaptainRuntimeOptions.GetAutoApprove(captain) : (bool?)null,
+                McpSessionToken = String.IsNullOrEmpty(McpSessionToken) ? null : McpSessionToken
             };
 
             // API-endpoint captains have no CLI on the Harbor; ship the resolved endpoint so the Harbor can

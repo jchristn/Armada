@@ -2,6 +2,7 @@ namespace Test.Shared.Infrastructure
 {
     using System;
     using System.Text.Json;
+    using Armada.Core.Enums;
 
     /// <summary>
     /// The routing fields of a frame the Admiral sends on /ws (events and command replies): its type, the command
@@ -26,6 +27,11 @@ namespace Test.Shared.Infrastructure
         /// Command error text for command.error frames, or null.
         /// </summary>
         public string? Error { get; set; } = null;
+
+        /// <summary>
+        /// Machine-readable reason for command.error frames, or null.
+        /// </summary>
+        public WebSocketCommandErrorCodeEnum? Code { get; set; } = null;
 
         #endregion
 

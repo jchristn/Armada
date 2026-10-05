@@ -27,6 +27,7 @@ namespace Armada.Server
         private ArmadaSettings _Settings;
         private AgentRuntimeFactory _RuntimeFactory;
         private IHostProcessExecutor _HostProcessExecutor;
+        private ISessionTokenService? _SessionTokens = null;
         private HarborConnectionManager? _HarborConnections;
         private Func<string, ModelEndpoint?>? _EndpointResolver;
         private MuxCliService _MuxCli;
@@ -162,6 +163,35 @@ namespace Armada.Server
         }
 
         /// <summary>
+        /// Provide the session token service used to mint mission-scoped MCP tokens for captain launches
+        /// (<c>Mcp.MissionScopedTokens</c>). When null, captains launch without a token, as before.
+        /// </summary>
+        /// <param name="tokens">Session token service, or null.</param>
+        public void SetSessionTokenService(ISessionTokenService? tokens)
+        {
+            _SessionTokens = tokens;
+        }
+
+        /// <summary>
+        /// Mint a mission-scoped MCP session token for a captain launch, or null when tokens are disabled, no token
+        /// service is configured, or the mission has no owner. The token lives at most as long as a mission may run
+        /// (plus slack) and stops working as soon as the mission leaves Assigned / InProgress or changes captain.
+        /// </summary>
+        /// <param name="captain">Captain being launched.</param>
+        /// <param name="mission">Mission the captain runs.</param>
+        /// <returns>Token, or null.</returns>
+        public string? MintMissionToken(Captain captain, Mission mission)
+        {
+            if (captain == null) throw new ArgumentNullException(nameof(captain));
+            if (mission == null) throw new ArgumentNullException(nameof(mission));
+            if (_SessionTokens == null || !_Settings.Mcp.MissionScopedTokens) return null;
+            if (String.IsNullOrEmpty(mission.TenantId) || String.IsNullOrEmpty(mission.UserId)) return null;
+            int runtimeMinutes = _Settings.MaxMissionRuntimeMinutes > 0 ? _Settings.MaxMissionRuntimeMinutes : 24 * 60;
+            TimeSpan lifetime = TimeSpan.FromMinutes(runtimeMinutes + 30);
+            return _SessionTokens.CreateMissionScopedToken(mission.TenantId!, mission.UserId!, mission.Id, captain.Id, lifetime).Token;
+        }
+
+        /// <summary>
         /// Provide the model-endpoint resolver so an API-endpoint captain delegated to a Harbor can have its
         /// inference endpoint shipped in the launch (the Harbor has no database to resolve it).
         /// </summary>
@@ -245,14 +275,27 @@ namespace Armada.Server
         /// <param name="captain">Captain to validate.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>Null if valid, otherwise an error message.</returns>
-        public Task<string?> ValidateCaptainModelAsync(Captain captain, CancellationToken token = default)
+        public async Task<string?> ValidateCaptainModelAsync(Captain captain, CancellationToken token = default)
+        {
+            CaptainModelValidationFailure? failure = await ValidateCaptainModelDetailedAsync(captain, token).ConfigureAwait(false);
+            return failure?.Message;
+        }
+
+        /// <summary>
+        /// Validate that the captain's configured model can be launched by its runtime, returning a typed failure
+        /// (machine-readable reason plus message) or null when valid.
+        /// </summary>
+        /// <param name="captain">Captain to validate.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Null if valid, otherwise the failure.</returns>
+        public Task<CaptainModelValidationFailure?> ValidateCaptainModelDetailedAsync(Captain captain, CancellationToken token = default)
         {
             if (captain == null) throw new ArgumentNullException(nameof(captain));
             if (captain.Runtime == AgentRuntimeEnum.ApiEndpoint)
                 return ValidateApiEndpointCaptainAsync(captain, token);
             if (captain.Runtime == AgentRuntimeEnum.Mux)
                 return ValidateMuxCaptainAsync(captain, token);
-            return ValidateModelAsync(captain.Runtime, captain.Model, token);
+            return ValidateModelDetailedAsync(captain.Runtime, captain.Model, token);
         }
 
         /// <summary>
@@ -262,18 +305,18 @@ namespace Armada.Server
         /// <param name="captain">Captain to validate.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>Null when valid, otherwise an error message.</returns>
-        private async Task<string?> ValidateApiEndpointCaptainAsync(Captain captain, CancellationToken token = default)
+        private async Task<CaptainModelValidationFailure?> ValidateApiEndpointCaptainAsync(Captain captain, CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(captain.ModelEndpointId))
-                return "An API-endpoint captain must reference an inference model endpoint. Choose one under Configuration > Endpoints.";
+                return CaptainModelValidationFailure.Create(CaptainModelValidationFailureEnum.EndpointRequired, "An API-endpoint captain must reference an inference model endpoint. Choose one under Configuration > Endpoints.");
 
             ModelEndpoint? endpoint = await _Database.ModelEndpoints.ReadAsync(captain.ModelEndpointId, token).ConfigureAwait(false);
             if (endpoint == null)
-                return "The referenced model endpoint (" + captain.ModelEndpointId + ") does not exist.";
+                return CaptainModelValidationFailure.Create(CaptainModelValidationFailureEnum.EndpointNotFound, "The referenced model endpoint (" + captain.ModelEndpointId + ") does not exist.");
             if (endpoint.Kind != ModelEndpointKindEnum.Inference)
-                return "The referenced model endpoint '" + endpoint.Name + "' is an " + endpoint.Kind + " endpoint; an API-endpoint captain requires an Inference endpoint.";
+                return CaptainModelValidationFailure.Create(CaptainModelValidationFailureEnum.EndpointNotInference, "The referenced model endpoint '" + endpoint.Name + "' is an " + endpoint.Kind + " endpoint; an API-endpoint captain requires an Inference endpoint.");
             if (!endpoint.Enabled)
-                return "The referenced model endpoint '" + endpoint.Name + "' is disabled. Enable it or choose another.";
+                return CaptainModelValidationFailure.Create(CaptainModelValidationFailureEnum.EndpointDisabled, "The referenced model endpoint '" + endpoint.Name + "' is disabled. Enable it or choose another.");
 
             return null;
         }
@@ -287,6 +330,19 @@ namespace Armada.Server
         /// <param name="token">Cancellation token.</param>
         /// <returns>Null if valid, otherwise an error message.</returns>
         public async Task<string?> ValidateModelAsync(AgentRuntimeEnum runtimeType, string? model, CancellationToken token = default)
+        {
+            CaptainModelValidationFailure? failure = await ValidateModelDetailedAsync(runtimeType, model, token).ConfigureAwait(false);
+            return failure?.Message;
+        }
+
+        /// <summary>
+        /// Validate that the given runtime can start with the requested model, returning a typed failure or null.
+        /// </summary>
+        /// <param name="runtimeType">Runtime to validate.</param>
+        /// <param name="model">Model to validate.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Null if valid, otherwise the failure.</returns>
+        public async Task<CaptainModelValidationFailure?> ValidateModelDetailedAsync(AgentRuntimeEnum runtimeType, string? model, CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(model))
                 return null;
@@ -302,7 +358,7 @@ namespace Armada.Server
             catch (Exception ex)
             {
                 try { Directory.Delete(validationDirectory, true); } catch { }
-                return "Unable to create runtime " + runtimeType + " for model validation: " + ex.Message;
+                return CaptainModelValidationFailure.Create(CaptainModelValidationFailureEnum.RuntimeUnavailable, "Unable to create runtime " + runtimeType + " for model validation: " + ex.Message);
             }
 
             object outputLock = new object();
@@ -353,10 +409,10 @@ namespace Armada.Server
 
                     if (!String.IsNullOrEmpty(details))
                     {
-                        return "Model '" + model + "' failed validation for runtime " + runtimeType + ": " + details;
+                        return CaptainModelValidationFailure.Create(CaptainModelValidationFailureEnum.ModelRejected, "Model '" + model + "' failed validation for runtime " + runtimeType + ": " + details);
                     }
 
-                    return "Model '" + model + "' failed validation for runtime " + runtimeType + " with exit code " + exitCode.Value + ".";
+                    return CaptainModelValidationFailure.Create(CaptainModelValidationFailureEnum.ModelRejected, "Model '" + model + "' failed validation for runtime " + runtimeType + " with exit code " + exitCode.Value + ".");
                 }
 
                 token.ThrowIfCancellationRequested();
@@ -376,7 +432,7 @@ namespace Armada.Server
                     timeoutMessage += " " + timeoutDetails;
                 }
 
-                return timeoutMessage;
+                return CaptainModelValidationFailure.Create(CaptainModelValidationFailureEnum.TimedOut, timeoutMessage);
             }
             catch (OperationCanceledException)
             {
@@ -384,7 +440,7 @@ namespace Armada.Server
             }
             catch (Exception ex)
             {
-                return "Model '" + model + "' failed validation for runtime " + runtimeType + ": " + ex.Message;
+                return CaptainModelValidationFailure.Create(CaptainModelValidationFailureEnum.ModelRejected, "Model '" + model + "' failed validation for runtime " + runtimeType + ": " + ex.Message);
             }
             finally
             {
@@ -467,20 +523,50 @@ namespace Armada.Server
             {
                 // A vessel-level auto-approve override wins over the captain's own setting for missions on that vessel.
                 Captain launchCaptain = CaptainRuntimeOptions.WithEffectiveAutoApprove(captain, vessel?.AutoApprove);
+                // O-20 / O-04: a mission-scoped MCP token binds the captain's Armada MCP connection to the mission's
+                // owner, so the captain no longer relies on the unauthenticated loopback identity.
+                string? missionToken = MintMissionToken(captain, mission);
+                bool isolateLaunch = _Settings.IsolateCaptainLaunch;
+                Dictionary<string, string>? environment = null;
+                if (missionToken != null)
+                {
+                    environment = new Dictionary<string, string>
+                    {
+                        ["ARMADA_MCP_URL"] = Armada.Core.Services.ArmadaMcpConfigBuilder.GetMcpUrl(_Settings.McpPort, Armada.Core.Services.ArmadaMcpConfigBuilder.ClientHostFor(_Settings.Rest.Hostname)),
+                        [Armada.Core.Services.CaptainThreadMcpPlanner.TokenEnvironmentVariable] = missionToken
+                    };
+                }
+
                 if (runtime is BaseAgentRuntime hostedRuntime)
                 {
                     // Isolated launches write an Armada MCP URL; it must use the host the MCP listener is bound with.
                     hostedRuntime.McpHost = Armada.Core.Services.ArmadaMcpConfigBuilder.ClientHostFor(_Settings.Rest.Hostname);
+                    if (missionToken != null)
+                    {
+                        // With IsolateCaptainLaunch the existing isolation plan carries the token; otherwise the token is
+                        // bound per invocation (never by writing client files into the repository worktree).
+                        hostedRuntime.McpSessionToken = missionToken;
+                        hostedRuntime.McpTokenWithFullIsolation = _Settings.IsolateCaptainLaunch;
+                        hostedRuntime.McpAllowWorkingDirectoryFiles = false;
+                        isolateLaunch = true;
+                    }
+                }
+                else if (runtime is RemoteAgentRuntime remoteRuntime && missionToken != null)
+                {
+                    // The Harbor binds the token against the MCP URL it was given in the handshake.
+                    remoteRuntime.McpSessionToken = missionToken;
+                    environment = null;
                 }
 
                 processId = await runtime.StartAsync(
                     dock.WorktreePath ?? throw new InvalidOperationException("Dock worktree path is null"),
                     prompt,
+                    environment,
                     logFilePath: logFilePath,
                     finalMessageFilePath: finalMessageFilePath,
                     model: captain.Model,
                     captain: launchCaptain,
-                    isolateLaunch: _Settings.IsolateCaptainLaunch,
+                    isolateLaunch: isolateLaunch,
                     mcpPort: _Settings.McpPort).ConfigureAwait(false);
             }
             catch
@@ -1121,7 +1207,7 @@ namespace Armada.Server
             return result;
         }
 
-        private async Task<string?> ValidateMuxCaptainAsync(Captain captain, CancellationToken token)
+        private async Task<CaptainModelValidationFailure?> ValidateMuxCaptainAsync(Captain captain, CancellationToken token)
         {
             MuxCaptainOptions? options;
             try
@@ -1130,17 +1216,17 @@ namespace Armada.Server
             }
             catch (Exception ex)
             {
-                return "Mux runtime options are invalid JSON: " + ex.Message;
+                return CaptainModelValidationFailure.Create(CaptainModelValidationFailureEnum.InvalidRuntimeOptions, "Mux runtime options are invalid JSON: " + ex.Message);
             }
 
             if (options == null)
             {
-                return "Mux captains require runtime options containing at least a named endpoint.";
+                return CaptainModelValidationFailure.Create(CaptainModelValidationFailureEnum.NamedEndpointRequired, "Mux captains require runtime options containing at least a named endpoint.");
             }
 
             if (String.IsNullOrWhiteSpace(options.Endpoint))
             {
-                return "Mux captains require a named endpoint.";
+                return CaptainModelValidationFailure.Create(CaptainModelValidationFailureEnum.NamedEndpointRequired, "Mux captains require a named endpoint.");
             }
 
             try
@@ -1148,8 +1234,8 @@ namespace Armada.Server
                 MuxProbeResult probe = await _MuxCli.ProbeAsync(captain, token).ConfigureAwait(false);
                 if (probe.ContractVersion != 1)
                 {
-                    return "Mux returned structured output contract version " + probe.ContractVersion +
-                        ", but Armada currently supports version 1.";
+                    return CaptainModelValidationFailure.Create(CaptainModelValidationFailureEnum.UnsupportedContractVersion, "Mux returned structured output contract version " + probe.ContractVersion +
+                        ", but Armada currently supports version 1.");
                 }
 
                 if (!probe.Success)
@@ -1157,12 +1243,12 @@ namespace Armada.Server
                     string error = !String.IsNullOrWhiteSpace(probe.ErrorMessage)
                         ? probe.ErrorMessage
                         : "Mux probe failed with error code " + (String.IsNullOrWhiteSpace(probe.ErrorCode) ? "unknown" : probe.ErrorCode) + ".";
-                    return "Mux endpoint '" + options.Endpoint + "' failed validation: " + error;
+                    return CaptainModelValidationFailure.Create(CaptainModelValidationFailureEnum.EndpointProbeFailed, "Mux endpoint '" + options.Endpoint + "' failed validation: " + error);
                 }
 
                 if (!probe.ToolsEnabled || probe.EffectiveToolCount <= 0)
                 {
-                    return "Mux endpoint '" + options.Endpoint + "' is not tool-enabled for Armada missions.";
+                    return CaptainModelValidationFailure.Create(CaptainModelValidationFailureEnum.EndpointNotToolEnabled, "Mux endpoint '" + options.Endpoint + "' is not tool-enabled for Armada missions.");
                 }
 
                 return null;
@@ -1173,7 +1259,7 @@ namespace Armada.Server
             }
             catch (Exception ex)
             {
-                return "Mux endpoint '" + options.Endpoint + "' failed validation: " + ex.Message;
+                return CaptainModelValidationFailure.Create(CaptainModelValidationFailureEnum.EndpointProbeFailed, "Mux endpoint '" + options.Endpoint + "' failed validation: " + ex.Message);
             }
         }
 

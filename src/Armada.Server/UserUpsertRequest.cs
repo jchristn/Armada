@@ -49,5 +49,11 @@ namespace Armada.Server
         /// Whether the user is active.
         /// </summary>
         public bool Active { get; set; } = true;
+
+        /// <summary>
+        /// The caller's current password. Required (and verified) when a user changes their own password through
+        /// <c>PUT /api/v1/users/{id}</c>; ignored when an administrator sets another user's password.
+        /// </summary>
+        public string? CurrentPassword { get; set; }
     }
 }

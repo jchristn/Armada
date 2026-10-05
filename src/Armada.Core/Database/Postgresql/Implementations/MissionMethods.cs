@@ -487,6 +487,26 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     conditions.Add("created_utc < @created_before");
                     parameters.Add(new NpgsqlParameter("@created_before", query.CreatedBefore.Value));
                 }
+                if (!string.IsNullOrEmpty(query.Status))
+                {
+                    conditions.Add("status = @status");
+                    parameters.Add(new NpgsqlParameter("@status", query.Status));
+                }
+                if (!string.IsNullOrEmpty(query.VoyageId))
+                {
+                    conditions.Add("voyage_id = @voyage_id");
+                    parameters.Add(new NpgsqlParameter("@voyage_id", query.VoyageId));
+                }
+                if (!string.IsNullOrEmpty(query.VesselId))
+                {
+                    conditions.Add("vessel_id = @vessel_id");
+                    parameters.Add(new NpgsqlParameter("@vessel_id", query.VesselId));
+                }
+                if (!string.IsNullOrEmpty(query.CaptainId))
+                {
+                    conditions.Add("captain_id = @captain_id");
+                    parameters.Add(new NpgsqlParameter("@captain_id", query.CaptainId));
+                }
                 string whereClause = " WHERE " + string.Join(" AND ", conditions);
                 string orderDirection = query.Order == EnumerationOrderEnum.CreatedAscending ? "ASC" : "DESC";
                 long totalCount = 0;
@@ -656,6 +676,26 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 {
                     conditions.Add("created_utc < @created_before");
                     parameters.Add(new NpgsqlParameter("@created_before", query.CreatedBefore.Value));
+                }
+                if (!string.IsNullOrEmpty(query.Status))
+                {
+                    conditions.Add("status = @status");
+                    parameters.Add(new NpgsqlParameter("@status", query.Status));
+                }
+                if (!string.IsNullOrEmpty(query.VoyageId))
+                {
+                    conditions.Add("voyage_id = @voyage_id");
+                    parameters.Add(new NpgsqlParameter("@voyage_id", query.VoyageId));
+                }
+                if (!string.IsNullOrEmpty(query.VesselId))
+                {
+                    conditions.Add("vessel_id = @vessel_id");
+                    parameters.Add(new NpgsqlParameter("@vessel_id", query.VesselId));
+                }
+                if (!string.IsNullOrEmpty(query.CaptainId))
+                {
+                    conditions.Add("captain_id = @captain_id");
+                    parameters.Add(new NpgsqlParameter("@captain_id", query.CaptainId));
                 }
                 string whereClause = " WHERE " + string.Join(" AND ", conditions);
                 string orderDirection = query.Order == EnumerationOrderEnum.CreatedAscending ? "ASC" : "DESC";

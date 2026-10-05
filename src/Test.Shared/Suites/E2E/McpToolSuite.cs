@@ -2411,24 +2411,20 @@ namespace Test.Shared.Suites.E2E
                 string sessionId = await InitMcpSessionAsync(mcpClient);
 
                 // A voyage of its own makes the page hold exactly the one mission this case created ("Desc1").
-                // TODO(R5, production): with includeDescription=true the tenant-scoped mission enumeration ignores the
-                // voyageId/vesselId/status filters, so this case narrows by createdAfter (honored) and selects by voyage.
                 string vesselId = await EnsureMissionVesselAsync(mcpClient, sessionId).ConfigureAwait(false);
-                string createdAfter = DateTime.UtcNow.AddSeconds(-5).ToString("o");
                 string voyageId = await RestCreateVoyageAsync(mcpClient, sessionId, vesselId).ConfigureAwait(false);
                 JsonElement result = await CallToolAsync(mcpClient, sessionId, "enumerate", new
                 {
                     entityType = "missions",
-                    createdAfter = createdAfter,
-                    pageSize = 1000,
+                    voyageId = voyageId,
                     includeDescription = true
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
                 string text = GetToolResultText(result);
                 EnumerationResult<Mission> missions = JsonHelper.Deserialize<EnumerationResult<Mission>>(text);
-                List<Mission> ours = missions.Objects.Where(m => m.VoyageId == voyageId).ToList();
-                AssertEqual(1, ours.Count, "the voyage's one mission is listed");
-                AssertEqual("Desc1", ours[0].Description, "the full Description is returned");
+                AssertEqual(1, missions.Objects.Count, "the voyageId filter leaves only the voyage's one mission");
+                AssertEqual(voyageId, missions.Objects[0].VoyageId, "the listed mission belongs to the voyage");
+                AssertEqual("Desc1", missions.Objects[0].Description, "the full Description is returned");
             }));
 
             cases.Add(CaseAsync("armada_enumerate_include_context_true_returns_vessel_context", "ArmadaEnumerate_IncludeContextTrue_ReturnsVesselContext", TestTags.Positive, async () =>

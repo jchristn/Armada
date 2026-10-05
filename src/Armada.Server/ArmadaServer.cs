@@ -348,6 +348,7 @@ namespace Armada.Server
 
             // Delegate captain launches to a connected Harbor by default; falls back to local when none is eligible.
             _AgentLifecycle.SetHarborConnections(_HarborConnectionManager);
+            _AgentLifecycle.SetSessionTokenService(_SessionTokenService);
             // Enable API-endpoint captains delegated to a Harbor to carry their resolved inference endpoint.
             _AgentLifecycle.SetEndpointResolver(ResolveInferenceEndpoint);
 
@@ -727,13 +728,13 @@ namespace Armada.Server
             }
             catch (Exception ex) when (ex is System.Net.HttpListenerException || ex is System.Net.Sockets.SocketException || ex is InvalidOperationException)
             {
-                throw new InvalidOperationException("MCP server could not listen on " + _Settings.Rest.Hostname + ":" + _Settings.McpPort + ": " + ex.Message, ex);
+                throw new ListenerBindException("MCP", _Settings.Rest.Hostname, _Settings.McpPort, "MCP server could not listen on " + _Settings.Rest.Hostname + ":" + _Settings.McpPort + ": " + ex.Message, ex);
             }
 
             if (listen.IsCompleted)
             {
                 Exception? cause = listen.Exception?.GetBaseException();
-                throw new InvalidOperationException("MCP server could not listen on " + _Settings.Rest.Hostname + ":" + _Settings.McpPort + ": "
+                throw new ListenerBindException("MCP", _Settings.Rest.Hostname, _Settings.McpPort, "MCP server could not listen on " + _Settings.Rest.Hostname + ":" + _Settings.McpPort + ": "
                     + (cause != null ? cause.Message : "the listener stopped immediately"), cause);
             }
 
@@ -855,8 +856,9 @@ namespace Armada.Server
             if (!result.IsAuthenticated && (!String.IsNullOrEmpty(authHeader) || !String.IsNullOrEmpty(apiKeyHeader)))
                 _LoginRateLimiter?.RecordAddressFailure(AuthRoutes.ClientAddress(ctx));
 
-            // Thread-scoped Ask Armada tokens are minted for a captain's MCP connection only; never accept them on REST.
-            if (!String.IsNullOrEmpty(result.AskThreadId)) result = new AuthContext();
+            // Thread-scoped Ask Armada tokens and mission-scoped captain tokens are minted for a captain's MCP connection
+            // only; never accept them on REST.
+            if (!String.IsNullOrEmpty(result.AskThreadId) || !String.IsNullOrEmpty(result.MissionId)) result = new AuthContext();
             _RequestAuthContexts.Remove(ctx);
             _RequestAuthContexts.Add(ctx, result);
             return result;
@@ -932,6 +934,9 @@ namespace Armada.Server
                 // A thread-scoped token marks every tool call of this request as an Ask Armada thread call, which
                 // the tool gate turns into a proposal unless the tool is read-only or the thread auto-approves.
                 if (!String.IsNullOrEmpty(ctx.AskThreadId)) result.Claims["askThreadId"] = ctx.AskThreadId!;
+
+                // A mission-scoped token marks the caller as that mission's captain (O-20 / O-04).
+                if (!String.IsNullOrEmpty(ctx.MissionId)) result.Claims["missionId"] = ctx.MissionId!;
                 return result;
             }
 
@@ -1150,7 +1155,7 @@ namespace Armada.Server
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Missions
-            new MissionRoutes(_Database, _Admiral, _MissionService, _Settings, _Git, _LandingService, _LandingPreviewService, _GitHubIntegrationService, EmitEventAsync, _MissionLanding.HandleMissionCompleteAsync, _WebSocketHub, _Logging, _JsonOptions)
+            new MissionRoutes(_Database, _Admiral, _MissionService, _Settings, _Git, _LandingService, _LandingPreviewService, _GitHubIntegrationService, EmitEventAsync, EmitMissionStatusChangedAsync, _MissionLanding.HandleMissionCompleteAsync, _WebSocketHub, _Logging, _JsonOptions)
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Captains
@@ -1554,7 +1559,8 @@ namespace Armada.Server
         /// <summary>
         /// Wrap a tool handler with its declared requirement from <see cref="McpToolAuthorizationRegistry"/>, checked
         /// against the caller of each call (the MCP request's credential, the loopback default context, or the Ask
-        /// Armada caller an approved proposal runs as). Undeclared tools fail closed to AdminOnly.
+        /// Armada caller an approved proposal runs as). Undeclared tools fail closed to AdminOnly. A refused call returns
+        /// <see cref="McpToolError"/> with <see cref="McpToolErrorCodeEnum.Forbidden"/>.
         /// </summary>
         private Func<System.Text.Json.JsonElement?, Task<object>> AuthorizeMcpTool(string name, Func<System.Text.Json.JsonElement?, Task<object>> handler)
         {
@@ -1565,12 +1571,15 @@ namespace Armada.Server
             return async (System.Text.Json.JsonElement? args) =>
             {
                 AuthContext caller = McpToolHelpers.ResolveCallerContext();
-                if (!_AuthorizationService.IsAuthorized(caller, requirement))
+                if (!_AuthorizationService.IsAuthorized(caller, requirement)
+                    && !await McpMissionScope.AllowsAsync(_Database, caller, name, args).ConfigureAwait(false))
                 {
                     string needed = requirement.Level == PermissionLevel.AdminOnly
                         ? "an admin credential"
                         : requirement.Level == PermissionLevel.TenantAdmin ? "a tenant admin or admin credential" : "an authenticated caller";
-                    throw new UnauthorizedAccessException("Tool " + name + " requires " + needed + ".");
+                    // A typed refusal (ErrorCode Forbidden), like every other tool error, so clients and the Ask
+                    // Armada executor branch on the code rather than the message text.
+                    return McpToolError.Forbidden("Tool " + name + " requires " + needed + ".");
                 }
 
                 return await handler(args).ConfigureAwait(false);
@@ -1637,10 +1646,31 @@ namespace Armada.Server
             }
         }
 
-        private async Task EmitEventAsync(string eventType, string message,
+        private Task EmitEventAsync(string eventType, string message,
             string? entityType = null, string? entityId = null,
             string? captainId = null, string? missionId = null,
             string? vesselId = null, string? voyageId = null)
+        {
+            return EmitEventCoreAsync(eventType, message, entityType, entityId, captainId, missionId, vesselId, voyageId, null);
+        }
+
+        /// <summary>
+        /// Record and broadcast <c>mission.status_changed</c> with the new and previous status as typed fields (event
+        /// Payload JSON and WebSocket <c>status</c> / <c>previousStatus</c>), not only in the message text.
+        /// </summary>
+        private Task EmitMissionStatusChangedAsync(Mission mission, MissionStatusEnum? previousStatus, string message)
+        {
+            MissionStatusChangedPayload payload = new MissionStatusChangedPayload();
+            payload.Status = mission.Status;
+            payload.PreviousStatus = previousStatus;
+            return EmitEventCoreAsync("mission.status_changed", message, "mission", mission.Id, mission.CaptainId, mission.Id, mission.VesselId, mission.VoyageId, payload);
+        }
+
+        private async Task EmitEventCoreAsync(string eventType, string message,
+            string? entityType, string? entityId,
+            string? captainId, string? missionId,
+            string? vesselId, string? voyageId,
+            MissionStatusChangedPayload? statusPayload)
         {
             try
             {
@@ -1651,21 +1681,35 @@ namespace Armada.Server
                 evt.MissionId = missionId;
                 evt.VesselId = vesselId;
                 evt.VoyageId = voyageId;
+                if (statusPayload != null) evt.Payload = System.Text.Json.JsonSerializer.Serialize(statusPayload, _JsonOptions);
                 await _Database.Events.CreateAsync(evt).ConfigureAwait(false);
 
                 // Broadcast to the WebSocket clients of the entity's tenant
                 if (_WebSocketHub != null)
                 {
                     string? tenantId = await ResolveEventTenantAsync(entityType, entityId, captainId, missionId, vesselId, voyageId).ConfigureAwait(false);
-                    _WebSocketHub.BroadcastToTenant(tenantId, eventType, message, new
-                    {
-                        entityType = entityType,
-                        entityId = entityId,
-                        captainId = captainId,
-                        missionId = missionId,
-                        vesselId = vesselId,
-                        voyageId = voyageId
-                    });
+                    object data = statusPayload == null
+                        ? (object)new
+                        {
+                            entityType = entityType,
+                            entityId = entityId,
+                            captainId = captainId,
+                            missionId = missionId,
+                            vesselId = vesselId,
+                            voyageId = voyageId
+                        }
+                        : new
+                        {
+                            entityType = entityType,
+                            entityId = entityId,
+                            captainId = captainId,
+                            missionId = missionId,
+                            vesselId = vesselId,
+                            voyageId = voyageId,
+                            status = statusPayload.Status.ToString(),
+                            previousStatus = statusPayload.PreviousStatus?.ToString()
+                        };
+                    _WebSocketHub.BroadcastToTenant(tenantId, eventType, message, data);
                 }
 
                 await _RemoteTunnel.PublishEventAsync(eventType, new

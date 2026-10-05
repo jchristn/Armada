@@ -173,6 +173,37 @@ namespace Test.Shared.Suites.Services
                 AssertFalse(limiter.IsLockedOut("10.0.0.1", out int _), "lockout expired");
             }));
 
+            cases.Add(Case("rate_limiter_lockouts_survive_restart", "Active lockouts are persisted to the state file and restored by a new limiter; expired ones are not", TestTags.Negative, () =>
+            {
+                DateTime now = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+                ProxySettings settings = CreateSettings(TestPassword);
+                settings.LoginMaxFailures = 2;
+                settings.LoginFailureWindowSeconds = 60;
+                settings.LoginLockoutSeconds = 120;
+                string statePath = ProxyLoginRateLimiter.DefaultStatePath(settings.DataDirectory);
+                try
+                {
+                    ProxyLoginRateLimiter first = new ProxyLoginRateLimiter(settings, statePath, () => now);
+                    AssertFalse(first.RecordFailure("10.0.0.9", out int _), "first failure");
+                    AssertTrue(first.RecordFailure("10.0.0.9", out int _), "second failure locks out");
+                    AssertTrue(File.Exists(statePath), "the lockout is written to the state file");
+
+                    now = now.AddSeconds(30);
+                    ProxyLoginRateLimiter restarted = new ProxyLoginRateLimiter(settings, statePath, () => now);
+                    AssertTrue(restarted.IsLockedOut("10.0.0.9", out int retry), "the lockout survives a restart");
+                    AssertEqual(90, retry, "remaining lockout time");
+                    AssertFalse(restarted.IsLockedOut("10.0.0.10", out int _), "other clients unaffected");
+
+                    now = now.AddSeconds(91);
+                    ProxyLoginRateLimiter later = new ProxyLoginRateLimiter(settings, statePath, () => now);
+                    AssertFalse(later.IsLockedOut("10.0.0.9", out int _), "an expired lockout is not restored");
+                }
+                finally
+                {
+                    try { Directory.Delete(settings.DataDirectory, true); } catch (IOException) { }
+                }
+            }));
+
             cases.Add(CaseAsync("secure_cookie_setting_marks_session_cookie_secure", "SecureCookie adds the Secure attribute to the session cookie", TestTags.Positive, async () =>
             {
                 ProxySettings settings = CreateSettings(TestPassword);

@@ -36,7 +36,7 @@ namespace Armada.Server.WebSocket
         /// </summary>
         public static readonly IReadOnlyList<string> CommandReplyFields = new List<string>
         {
-            "type", "action", "data", "error"
+            "type", "action", "data", "error", "code"
         };
 
         /// <summary>
@@ -183,7 +183,7 @@ namespace Armada.Server.WebSocket
                 "fleet.batch_deleted",
                 "merge.batch_purged", "merge.purged",
                 "mission.batch_deleted", "mission.completed", "mission.deleted", "mission.landing_failed", "mission.manual_complete_no_dock",
-                "mission.pull_request_open", "mission.restarted", "mission.review_approved", "mission.review_denied", "mission.status_changed",
+                "mission.pull_request_open", "mission.restarted", "mission.review_approved", "mission.review_denied",
                 "mission.work_produced",
                 "objective-refinement-session.created", "objective-refinement-session.stopped",
                 "planning-session.created", "planning-session.stopped",
@@ -194,6 +194,9 @@ namespace Armada.Server.WebSocket
 
             foreach (string type in generic)
                 events.Add(new WebSocketEventDescriptor(type, "tenant", true, null, GenericEventFields, true));
+
+            // mission.status_changed is generic plus the new and previous status as fields.
+            events.Add(new WebSocketEventDescriptor("mission.status_changed", "tenant", true, null, GenericEventFields.Concat(new[] { "status", "previousStatus" }), true));
 
             return events;
         }

@@ -164,8 +164,8 @@ namespace Armada.Server.Mcp.Tools
 
                     if (agentLifecycle != null)
                     {
-                        string? validationError = await agentLifecycle.ValidateCaptainModelAsync(captain).ConfigureAwait(false);
-                        if (validationError != null) return CreateToolErrorResponse(validationError);
+                        CaptainModelValidationFailure? validationFailure = await agentLifecycle.ValidateCaptainModelDetailedAsync(captain).ConfigureAwait(false);
+                        if (validationFailure != null) return (object)McpToolError.InvalidArgument(validationFailure.Message, validationFailure.Reason.ToString());
                     }
 
                     captain = await database.Captains.CreateAsync(captain).ConfigureAwait(false);
@@ -232,13 +232,13 @@ namespace Armada.Server.Mcp.Tools
                     }
                     catch (Exception ex)
                     {
-                        return CreateToolErrorResponse(ex.Message);
+                        return (object)McpToolError.InvalidArgument(ex.Message, CaptainModelValidationFailureEnum.InvalidRuntimeOptions.ToString());
                     }
 
                     if (agentLifecycle != null)
                     {
-                        string? validationError = await agentLifecycle.ValidateCaptainModelAsync(captain).ConfigureAwait(false);
-                        if (validationError != null) return CreateToolErrorResponse(validationError);
+                        CaptainModelValidationFailure? validationFailure = await agentLifecycle.ValidateCaptainModelDetailedAsync(captain).ConfigureAwait(false);
+                        if (validationFailure != null) return (object)McpToolError.InvalidArgument(validationFailure.Message, validationFailure.Reason.ToString());
                     }
 
                     captain.LastUpdateUtc = DateTime.UtcNow;
@@ -433,22 +433,6 @@ namespace Armada.Server.Mcp.Tools
                         return (object)new { CaptainId = captainId, Log = log, Lines = slice.Length, TotalLines = totalLines };
                     });
             }
-        }
-
-        private static object CreateToolErrorResponse(string error)
-        {
-            return new
-            {
-                content = new[]
-                {
-                    new
-                    {
-                        type = "text",
-                        text = error
-                    }
-                },
-                isError = true
-            };
         }
 
         private static ReasoningEffortEnum? ParseReasoningEffort(string? value)

@@ -75,7 +75,7 @@ namespace Armada.Server
             if (!captain.SupportsPlanningSessions)
                 throw new InvalidOperationException(captain.PlanningSessionSupportReason ?? "This captain runtime is not supported for refinement sessions.");
             if (captain.State != CaptainStateEnum.Idle)
-                throw new InvalidOperationException("Captain " + captain.Name + " is not idle.");
+                throw new CaptainNotIdleException(captain.Id, captain.State, "Captain " + captain.Name + " is not idle.");
 
             List<ObjectiveRefinementSession> captainSessions = await _Database.ObjectiveRefinementSessions
                 .EnumerateByCaptainAsync(captain.Id, token)

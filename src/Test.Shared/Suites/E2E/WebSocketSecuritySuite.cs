@@ -132,6 +132,7 @@ namespace Test.Shared.Suites.E2E
                     E2eWebSocketFrame frame = E2eWebSocketFrame.Parse(reply)!;
                     AssertEqual("command.error", frame.Type, "the command should be refused");
                     AssertEqual("create_fleet", frame.Action, "the refusal answers the create_fleet command");
+                    AssertEqual(Armada.Core.Enums.WebSocketCommandErrorCodeEnum.Forbidden, frame.Code, "the refusal carries code Forbidden");
                 }
 
                 bool exists = await FleetExistsAsync(fx.AuthClient, fleetName).ConfigureAwait(false);

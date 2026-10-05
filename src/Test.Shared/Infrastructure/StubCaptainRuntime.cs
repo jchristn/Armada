@@ -100,7 +100,9 @@ namespace Test.Shared.Infrastructure
                 int code;
                 try
                 {
-                    if (!String.IsNullOrEmpty(sessionToken) && mcpPort > 0)
+                    // A mission launch (it has a log file) may also carry a mission-scoped token; only a token launch
+                    // without a mission log is an Ask turn.
+                    if (!String.IsNullOrEmpty(sessionToken) && mcpPort > 0 && String.IsNullOrEmpty(logFilePath))
                     {
                         _Behavior.TurnPrompts.Enqueue(prompt);
                         StubCaptainTurn turn = new StubCaptainTurn(prompt, workingDirectory, "http://127.0.0.1:" + mcpPort + "/mcp", sessionToken!);

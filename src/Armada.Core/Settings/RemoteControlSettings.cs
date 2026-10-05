@@ -98,8 +98,9 @@ namespace Armada.Core.Settings
         }
 
         /// <summary>
-        /// Whether to allow invalid TLS certificates for the tunnel endpoint.
-        /// Intended only for development environments.
+        /// Whether to allow invalid TLS certificates for the tunnel endpoint. Default false. Intended only for local
+        /// development with a self-signed proxy: when true, the Admiral logs a security warning at startup because anyone
+        /// on the network path could impersonate the proxy.
         /// </summary>
         public bool AllowInvalidCertificates { get; set; } = false;
 

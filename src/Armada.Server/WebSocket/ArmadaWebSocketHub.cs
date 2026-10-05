@@ -13,6 +13,7 @@ namespace Armada.Server.WebSocket
     using WatsonWebserver.Core;
     using WatsonWebserver.Core.WebSockets;
     using Armada.Core.Database;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Core.Services.Interfaces;
     using Armada.Core.Settings;
@@ -431,7 +432,7 @@ namespace Armada.Server.WebSocket
 
         private static bool IsUsable(AuthContext? auth)
         {
-            return auth != null && auth.IsAuthenticated && !String.IsNullOrEmpty(auth.UserId) && String.IsNullOrEmpty(auth.AskThreadId);
+            return auth != null && auth.IsAuthenticated && !String.IsNullOrEmpty(auth.UserId) && String.IsNullOrEmpty(auth.AskThreadId) && String.IsNullOrEmpty(auth.MissionId);
         }
 
         private static WebSocketCredentials ExtractCredentials(HttpContextBase ctx)
@@ -484,7 +485,7 @@ namespace Armada.Server.WebSocket
                     object result;
                     if (!WebSocketCommandHandler.IsAuthorized(client.Auth, command.Action))
                     {
-                        result = new { type = "command.error", action = command.Action, error = "Forbidden: WebSocket commands require a global administrator. Use the REST API, which is tenant-scoped." };
+                        result = WebSocketCommandError.Create(command.Action, WebSocketCommandErrorCodeEnum.Forbidden, "Forbidden: WebSocket commands require a global administrator. Use the REST API, which is tenant-scoped.");
                     }
                     else
                     {
@@ -505,7 +506,7 @@ namespace Armada.Server.WebSocket
                 _Logging.Warn(_Header + "error handling message: " + ex.ToString());
                 try
                 {
-                    string errorJson = JsonSerializer.Serialize(new { type = "command.error", error = ex.Message }, _JsonOptions);
+                    string errorJson = JsonSerializer.Serialize(WebSocketCommandError.FromException(null, ex), _JsonOptions);
                     await session.SendTextAsync(errorJson).ConfigureAwait(false);
                 }
                 catch

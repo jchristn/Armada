@@ -111,7 +111,7 @@ namespace Test.Shared.Suites.Services
                     Vessel vessel = await fixture.CreateVesselAsync().ConfigureAwait(false);
                     Captain captain = await fixture.CreateCaptainAsync("planner-failure").ConfigureAwait(false);
 
-                    InvalidOperationException ex = await CaptureExceptionAsync<InvalidOperationException>(() =>
+                    DockProvisioningException ex = await CaptureExceptionAsync<DockProvisioningException>(() =>
                         fixture.Coordinator.CreateAsync(
                             null,
                             null,
@@ -122,7 +122,7 @@ namespace Test.Shared.Suites.Services
                                 Title = "Broken session"
                             })).ConfigureAwait(false);
 
-                    AssertContains("Dock provisioning failed", ex.Message);
+                    AssertEqual(vessel.Id, ex.VesselId, "the provisioning failure names the vessel");
 
                     Captain? updatedCaptain = await testDb.Driver.Captains.ReadAsync(captain.Id).ConfigureAwait(false);
                     AssertNotNull(updatedCaptain);
@@ -132,7 +132,7 @@ namespace Test.Shared.Suites.Services
                     List<PlanningSession> sessions = await testDb.Driver.PlanningSessions.EnumerateByCaptainAsync(captain.Id).ConfigureAwait(false);
                     AssertEqual(1, sessions.Count);
                     AssertEqual(PlanningSessionStatusEnum.Failed, sessions[0].Status);
-                    AssertContains("Dock provisioning failed", sessions[0].FailureReason ?? String.Empty);
+                    AssertEqual(ex.Message, sessions[0].FailureReason, "the session records the provisioning failure");
                 }
             }));
 
@@ -155,7 +155,7 @@ namespace Test.Shared.Suites.Services
                             Title = "First plan"
                         }).ConfigureAwait(false);
 
-                    InvalidOperationException ex = await CaptureExceptionAsync<InvalidOperationException>(() =>
+                    CaptainNotIdleException ex = await CaptureExceptionAsync<CaptainNotIdleException>(() =>
                         fixture.Coordinator.CreateAsync(
                             null,
                             null,
@@ -166,7 +166,8 @@ namespace Test.Shared.Suites.Services
                                 Title = "Second plan"
                             })).ConfigureAwait(false);
 
-                    AssertContains("is not idle", ex.Message);
+                    AssertEqual(captain.Id, ex.CaptainId, "the refusal names the busy captain");
+                    AssertTrue(ex.State.HasValue && ex.State.Value != CaptainStateEnum.Idle, "the refusal carries the captain's non-idle state");
                 }
             }));
 

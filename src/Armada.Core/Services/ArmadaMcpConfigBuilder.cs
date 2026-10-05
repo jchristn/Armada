@@ -165,6 +165,30 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
+        /// Split an MCP URL of the form this builder produces (<c>http://host:port/mcp</c>) into its client host and port,
+        /// so a per-launch MCP configuration can be generated for it. Returns false for any other form (https, another
+        /// path, missing port), which the per-launch planners cannot express.
+        /// </summary>
+        /// <param name="mcpUrl">MCP URL, for example the one a Harbor receives in its handshake.</param>
+        /// <param name="host">Client host when the URL is plain.</param>
+        /// <param name="port">Port when the URL is plain.</param>
+        /// <returns>True when the URL is a plain http://host:port/mcp URL.</returns>
+        public static bool TryParsePlainMcpUrl(string? mcpUrl, out string host, out int port)
+        {
+            host = String.Empty;
+            port = 0;
+            if (String.IsNullOrWhiteSpace(mcpUrl)) return false;
+            if (!Uri.TryCreate(mcpUrl.Trim(), UriKind.Absolute, out Uri? uri)) return false;
+            if (!String.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)) return false;
+            if (!String.Equals(uri.AbsolutePath.TrimEnd('/'), "/mcp", StringComparison.Ordinal)) return false;
+            if (uri.Port <= 0 || uri.Port > 65535) return false;
+            if (!String.IsNullOrEmpty(uri.Query) || !String.IsNullOrEmpty(uri.UserInfo)) return false;
+            host = uri.Host;
+            port = uri.Port;
+            return true;
+        }
+
+        /// <summary>
         /// Build the keyed "mcpServers" document used by Claude Code, Gemini, and Cursor. The Armada
         /// server is registered under the "armada" key with the modern HTTP transport.
         /// </summary>

@@ -9,6 +9,7 @@ namespace Armada.Server.Routes
     using Armada.Core;
     using Armada.Core.Database;
     using Armada.Core.Models;
+    using Armada.Core.Services;
     using Armada.Core.Services.Interfaces;
     using Armada.Core.Settings;
     using Armada.Server.Mcp.Tools;
@@ -102,6 +103,12 @@ namespace Armada.Server.Routes
                     string? originalFilename = req.Http.Request.Headers.Get("X-Original-Filename");
                     object result = await McpToolHelpers.PerformRestoreAsync(_database, _settings, tempZipPath, originalFilename).ConfigureAwait(false);
                     return result;
+                }
+                catch (BackupValidationException ex)
+                {
+                    // Not an Armada backup: the request is at fault and nothing was changed.
+                    req.Http.Response.StatusCode = 400;
+                    return (object)new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = ex.Message };
                 }
                 finally
                 {

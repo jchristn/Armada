@@ -26,6 +26,7 @@ namespace Armada.Server
         private readonly ConcurrentDictionary<string, DateTime> _OutstandingPings = new ConcurrentDictionary<string, DateTime>();
         private readonly SemaphoreSlim _SendLock = new SemaphoreSlim(1, 1);
         private bool _WarnedDefaultPassword = false;
+        private bool _WarnedInsecureCertificates = false;
 
         private RemoteTunnelStatus _Status = new RemoteTunnelStatus();
         private ClientWebSocket? _Socket;
@@ -169,18 +170,34 @@ namespace Armada.Server
         /// <returns>True if normalization succeeded.</returns>
         public static bool TryNormalizeTunnelUrl(string? tunnelUrl, out Uri? normalizedUri, out string? error)
         {
+            return TryNormalizeTunnelUrl(tunnelUrl, out normalizedUri, out error, out string? _);
+        }
+
+        /// <summary>
+        /// Normalize a configured tunnel URL to a websocket URI, reporting a machine-readable code with the error.
+        /// </summary>
+        /// <param name="tunnelUrl">Configured tunnel URL.</param>
+        /// <param name="normalizedUri">Normalized websocket URI when valid.</param>
+        /// <param name="error">Validation error when invalid.</param>
+        /// <param name="errorCode">A <see cref="RemoteTunnelErrorCodes"/> value when invalid.</param>
+        /// <returns>True if normalization succeeded.</returns>
+        public static bool TryNormalizeTunnelUrl(string? tunnelUrl, out Uri? normalizedUri, out string? error, out string? errorCode)
+        {
             normalizedUri = null;
             error = null;
+            errorCode = null;
 
             if (String.IsNullOrWhiteSpace(tunnelUrl))
             {
                 error = "Remote control is enabled, but no tunnel URL is configured.";
+                errorCode = RemoteTunnelErrorCodes.MissingTunnelUrl;
                 return false;
             }
 
             if (!Uri.TryCreate(tunnelUrl, UriKind.Absolute, out Uri? parsed))
             {
                 error = "Tunnel URL must be an absolute URI.";
+                errorCode = RemoteTunnelErrorCodes.InvalidTunnelUrl;
                 return false;
             }
 
@@ -210,6 +227,7 @@ namespace Armada.Server
             }
 
             error = "Tunnel URL must use ws, wss, http, or https.";
+            errorCode = RemoteTunnelErrorCodes.UnsupportedScheme;
             return false;
         }
 
@@ -290,6 +308,7 @@ namespace Armada.Server
                         status.InstanceId = instanceId;
                         status.CapabilityManifest = capabilityManifest;
                         status.LastError = null;
+                        status.LastErrorCode = null;
                         return status;
                     });
 
@@ -303,7 +322,14 @@ namespace Armada.Server
                     _Logging.Warn(_Header + "RemoteControl.Password is the built-in default; Armada.Proxy refuses to start with the default password unless AllowDefaultPassword is set, so set the same strong value here and on the proxy");
                 }
 
-                if (!TryNormalizeTunnelUrl(remoteControl.TunnelUrl, out Uri? tunnelUri, out string? normalizationError))
+                string? insecureWarning = InsecureCertificateWarning(remoteControl);
+                if (insecureWarning != null && !_WarnedInsecureCertificates)
+                {
+                    _WarnedInsecureCertificates = true;
+                    _Logging.Warn(_Header + insecureWarning);
+                }
+
+                if (!TryNormalizeTunnelUrl(remoteControl.TunnelUrl, out Uri? tunnelUri, out string? normalizationError, out string? normalizationErrorCode))
                 {
                     UpdateStatus(status =>
                     {
@@ -313,6 +339,7 @@ namespace Armada.Server
                         status.InstanceId = instanceId;
                         status.CapabilityManifest = capabilityManifest;
                         status.LastError = normalizationError;
+                        status.LastErrorCode = normalizationErrorCode;
                         return status;
                     });
 
@@ -334,6 +361,7 @@ namespace Armada.Server
                     status.CapabilityManifest = capabilityManifest;
                     status.LastConnectAttemptUtc = attemptUtc;
                     status.LastError = null;
+                    status.LastErrorCode = null;
                     return status;
                 });
 
@@ -350,6 +378,7 @@ namespace Armada.Server
                         status.ConnectedUtc = connectedUtc;
                         status.LastHeartbeatUtc = connectedUtc;
                         status.LastError = null;
+                        status.LastErrorCode = null;
                         status.ReconnectAttempts = 0;
                         return status;
                     });
@@ -367,15 +396,15 @@ namespace Armada.Server
                 }
                 catch (OperationCanceledException) when (!token.IsCancellationRequested)
                 {
-                    MarkFailure("Remote tunnel connection timed out.");
+                    MarkFailure(RemoteTunnelErrorCodes.ConnectTimeout, "Remote tunnel connection timed out.");
                 }
                 catch (WebSocketException ex)
                 {
-                    MarkFailure("Remote tunnel websocket error: " + ex.Message);
+                    MarkFailure(RemoteTunnelErrorCodes.WebSocketError, "Remote tunnel websocket error: " + ex.Message);
                 }
                 catch (Exception ex)
                 {
-                    MarkFailure("Remote tunnel failure: " + ex.Message);
+                    MarkFailure(RemoteTunnelErrorCodes.TunnelFailure, "Remote tunnel failure: " + ex.Message);
                 }
                 finally
                 {
@@ -525,6 +554,7 @@ namespace Armada.Server
                     UpdateStatus(status =>
                     {
                         status.LastError = envelope.Message;
+                        status.LastErrorCode = String.IsNullOrWhiteSpace(envelope.ErrorCode) ? RemoteTunnelErrorCodes.Rejected : envelope.ErrorCode;
                         return status;
                     });
                 }
@@ -539,6 +569,7 @@ namespace Armada.Server
                 UpdateStatus(status =>
                 {
                     status.LastError = envelope.Message;
+                    status.LastErrorCode = String.IsNullOrWhiteSpace(envelope.ErrorCode) ? RemoteTunnelErrorCodes.Rejected : envelope.ErrorCode;
                     return status;
                 });
             }
@@ -583,6 +614,21 @@ namespace Armada.Server
             }
         }
 
+        /// <summary>
+        /// The startup warning for <see cref="RemoteControlSettings.AllowInvalidCertificates"/>, or null when remote
+        /// control is off or certificate validation is on. Turning validation off lets anyone on the network path
+        /// impersonate the proxy and receive the tunnel password proof and every relayed request.
+        /// </summary>
+        /// <param name="settings">Remote control settings.</param>
+        /// <returns>Warning text, or null.</returns>
+        public static string? InsecureCertificateWarning(RemoteControlSettings settings)
+        {
+            if (settings == null) throw new ArgumentNullException(nameof(settings));
+            if (!settings.Enabled || !settings.AllowInvalidCertificates) return null;
+            return "SECURITY WARNING: RemoteControl.AllowInvalidCertificates is true, so the tunnel does not validate the proxy's TLS certificate. "
+                + "Anyone on the network path can impersonate the proxy and relay or read every remote request. Use it only for local development with a self-signed proxy, and set it back to false.";
+        }
+
         private ClientWebSocket CreateSocket(RemoteControlSettings settings)
         {
             ClientWebSocket socket = new ClientWebSocket();
@@ -617,7 +663,7 @@ namespace Armada.Server
             }
         }
 
-        private void MarkFailure(string error)
+        private void MarkFailure(string errorCode, string error)
         {
             _Logging.Warn(_Header + error);
             UpdateStatus(status =>
@@ -625,6 +671,7 @@ namespace Armada.Server
                 status.State = RemoteTunnelStateEnum.Error;
                 status.LastDisconnectUtc = DateTime.UtcNow;
                 status.LastError = error;
+                status.LastErrorCode = errorCode;
                 status.ReconnectAttempts = status.ReconnectAttempts + 1;
                 return status;
             });
@@ -664,6 +711,7 @@ namespace Armada.Server
                 LastHeartbeatUtc = source.LastHeartbeatUtc,
                 LastDisconnectUtc = source.LastDisconnectUtc,
                 LastError = source.LastError,
+                LastErrorCode = source.LastErrorCode,
                 ReconnectAttempts = source.ReconnectAttempts,
                 LatencyMs = source.LatencyMs,
                 CapabilityManifest = new RemoteTunnelCapabilityManifest

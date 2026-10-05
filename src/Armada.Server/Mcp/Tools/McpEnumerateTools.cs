@@ -108,19 +108,19 @@ namespace Armada.Server.Mcp.Tools
                             return (object)objectiveResult;
                         case "jobs":
                         case "job":
-                            System.Collections.Generic.List<Job> allJobs = await database.Jobs.EnumerateAsync().ConfigureAwait(false);
-                            int jobPageSize = query.PageSize > 0 ? query.PageSize : 25;
-                            int jobPageNumber = query.PageNumber > 0 ? query.PageNumber : 1;
-                            System.Collections.Generic.List<Job> jobPage = allJobs
-                                .Skip((jobPageNumber - 1) * jobPageSize)
-                                .Take(jobPageSize)
-                                .ToList();
-                            return (object)new { Success = true, PageNumber = jobPageNumber, PageSize = jobPageSize, TotalRecords = allJobs.Count, Objects = jobPage };
+                            // Same scope as GET /api/v1/jobs: a regular user sees their own jobs, a tenant admin the
+                            // tenant's, and only a global admin sees every tenant.
+                            JobQuery jobQuery = new JobQuery();
+                            jobQuery.PageNumber = query.PageNumber > 0 ? query.PageNumber : 1;
+                            jobQuery.PageSize = query.PageSize > 0 ? query.PageSize : 25;
+                            if (!callerCtx.IsAdmin) jobQuery.TenantId = callerCtx.TenantId ?? Constants.DefaultTenantId;
+                            if (!callerCtx.IsAdmin && !callerCtx.IsTenantAdmin) jobQuery.UserId = callerCtx.UserId;
+                            return (object)await database.Jobs.EnumeratePageAsync(jobQuery).ConfigureAwait(false);
                         case "model_endpoints":
                         case "model-endpoints":
                         case "model_endpoint":
                         case "endpoints":
-                            System.Collections.Generic.List<ModelEndpoint> allEndpoints = await database.ModelEndpoints.EnumerateAsync().ConfigureAwait(false);
+                            System.Collections.Generic.List<ModelEndpoint> allEndpoints = await new ModelEndpointService(database, new SyslogLogging.LoggingModule()).EnumerateAsync(callerCtx).ConfigureAwait(false);
                             int mepPageSize = query.PageSize > 0 ? query.PageSize : 25;
                             int mepPageNumber = query.PageNumber > 0 ? query.PageNumber : 1;
                             System.Collections.Generic.List<ModelEndpoint> mepPage = allEndpoints
@@ -130,7 +130,7 @@ namespace Armada.Server.Mcp.Tools
                             return (object)new { Success = true, PageNumber = mepPageNumber, PageSize = mepPageSize, TotalRecords = allEndpoints.Count, Objects = mepPage };
                         case "harbors":
                         case "harbor":
-                            System.Collections.Generic.List<Harbor> allHarbors = await database.Harbors.EnumerateAsync().ConfigureAwait(false);
+                            System.Collections.Generic.List<Harbor> allHarbors = await new HarborService(database, new SyslogLogging.LoggingModule()).EnumerateAsync(callerCtx).ConfigureAwait(false);
                             int hbrPageSize = query.PageSize > 0 ? query.PageSize : 25;
                             int hbrPageNumber = query.PageNumber > 0 ? query.PageNumber : 1;
                             System.Collections.Generic.List<Harbor> hbrPage = allHarbors
@@ -208,7 +208,7 @@ namespace Armada.Server.Mcp.Tools
                         case "mission":
                             if (request.IncludeDescription != true)
                             {
-                                EnumerationResult<MissionSummary> missionSummaries = await database.Missions.EnumerateSummariesAsync(query).ConfigureAwait(false);
+                                EnumerationResult<MissionSummary> missionSummaries = await Armada.Core.Models.EnumerationScope.EnumerateScopedAsync(callerCtx, query, q => database.Missions.EnumerateSummariesAsync(q), (t, q) => database.Missions.EnumerateSummariesAsync(t, q), (t, u, q) => database.Missions.EnumerateSummariesAsync(t, u, q)).ConfigureAwait(false);
                                 object projectedMissions = new
                                 {
                                     missionSummaries.Success,
@@ -314,6 +314,9 @@ namespace Armada.Server.Mcp.Tools
                                 ToUtc = query.CreatedBefore,
                                 Search = request.Search
                             };
+                            ApplyOwnerScope(callerCtx, out string? releaseTenant, out string? releaseUser);
+                            releaseQuery.TenantId = releaseTenant;
+                            releaseQuery.UserId = releaseUser;
                             if (!String.IsNullOrWhiteSpace(query.VesselId))
                                 releaseQuery.VesselId = query.VesselId;
                             if (!String.IsNullOrWhiteSpace(query.Status) && Enum.TryParse(query.Status, true, out ReleaseStatusEnum releaseStatus))
@@ -333,6 +336,9 @@ namespace Armada.Server.Mcp.Tools
                                 ToUtc = query.CreatedBefore,
                                 Search = request.Search
                             };
+                            ApplyOwnerScope(callerCtx, out string? deploymentTenant, out string? deploymentUser);
+                            deploymentQuery.TenantId = deploymentTenant;
+                            deploymentQuery.UserId = deploymentUser;
                             if (!String.IsNullOrWhiteSpace(query.Status) && Enum.TryParse(query.Status, true, out DeploymentStatusEnum deploymentStatus))
                                 deploymentQuery.Status = deploymentStatus;
                             EnumerationResult<Deployment> deployments = await database.Deployments.EnumerateAsync(deploymentQuery).ConfigureAwait(false);
@@ -406,6 +412,7 @@ namespace Armada.Server.Mcp.Tools
                         case "personas":
                         case "persona":
                             EnumerationResult<Persona> personas = await database.Personas.EnumerateAsync(query).ConfigureAwait(false);
+                            if (!callerCtx.IsAdmin) personas.Objects = personas.Objects.Where(p => ScopedVisibility.CanView(callerCtx, p.Scope, p.TenantId, p.UserId)).ToList();
                             return (object)personas;
                         case "memories":
                         case "memory":
@@ -417,6 +424,7 @@ namespace Armada.Server.Mcp.Tools
                         case "templates":
                         case "template":
                             EnumerationResult<PromptTemplate> templates = await database.PromptTemplates.EnumerateAsync(query).ConfigureAwait(false);
+                            if (!callerCtx.IsAdmin) templates.Objects = templates.Objects.Where(t => ScopedVisibility.CanView(callerCtx, t.Scope, t.TenantId, t.UserId)).ToList();
                             if (request.IncludeDescription != true)
                             {
                                 object projectedTemplates = new
@@ -440,10 +448,15 @@ namespace Armada.Server.Mcp.Tools
                         case "pipelines":
                         case "pipeline":
                             EnumerationResult<Pipeline> pipelines = await database.Pipelines.EnumerateAsync(query).ConfigureAwait(false);
+                            if (!callerCtx.IsAdmin) pipelines.Objects = pipelines.Objects.Where(p => ScopedVisibility.CanView(callerCtx, p.Scope, p.TenantId, p.UserId)).ToList();
                             return (object)pipelines;
                         case "playbooks":
                         case "playbook":
-                            EnumerationResult<Playbook> playbooks = await database.Playbooks.EnumerateAsync(query).ConfigureAwait(false);
+                            EnumerationResult<Playbook> playbooks = callerCtx.IsAdmin
+                                ? await database.Playbooks.EnumerateAsync(query).ConfigureAwait(false)
+                                : await database.Playbooks.EnumerateAsync(callerCtx.TenantId ?? Constants.DefaultTenantId, query).ConfigureAwait(false);
+                            if (!callerCtx.IsAdmin && !callerCtx.IsTenantAdmin)
+                                playbooks.Objects = playbooks.Objects.Where(p => ScopedVisibility.CanView(callerCtx, p.Scope, p.TenantId, p.UserId)).ToList();
                             if (request.IncludeDescription != true)
                             {
                                 object projectedPlaybooks = new
@@ -470,8 +483,10 @@ namespace Armada.Server.Mcp.Tools
                             EnumerationResult<WorkflowProfile> workflowProfiles = await database.WorkflowProfiles.EnumerateAsync(new WorkflowProfileQuery
                             {
                                 PageNumber = query.PageNumber,
-                                PageSize = query.PageSize
+                                PageSize = query.PageSize,
+                                TenantId = callerCtx.IsAdmin ? null : callerCtx.TenantId
                             }).ConfigureAwait(false);
+                            if (!callerCtx.IsAdmin) workflowProfiles.Objects = workflowProfiles.Objects.Where(p => ScopedVisibility.CanView(callerCtx, p.OwnershipScope, p.TenantId, p.UserId)).ToList();
                             return (object)workflowProfiles;
                         case "project_profiles":
                         case "project_profile":
@@ -479,24 +494,32 @@ namespace Armada.Server.Mcp.Tools
                             EnumerationResult<ProjectProfile> projectProfiles = await database.ProjectProfiles.EnumerateAsync(new ProjectProfileQuery
                             {
                                 PageNumber = query.PageNumber,
-                                PageSize = query.PageSize
+                                PageSize = query.PageSize,
+                                TenantId = callerCtx.IsAdmin ? null : callerCtx.TenantId
                             }).ConfigureAwait(false);
+                            if (!callerCtx.IsAdmin) projectProfiles.Objects = projectProfiles.Objects.Where(p => ScopedVisibility.CanView(callerCtx, p.OwnershipScope, p.TenantId, p.UserId)).ToList();
                             return (object)projectProfiles;
                         case "skills":
                         case "skill":
                             EnumerationResult<Skill> skills = await database.Skills.EnumerateAsync(new SkillQuery
                             {
                                 PageNumber = query.PageNumber,
-                                PageSize = query.PageSize
+                                PageSize = query.PageSize,
+                                TenantId = callerCtx.IsAdmin ? null : callerCtx.TenantId
                             }).ConfigureAwait(false);
+                            if (!callerCtx.IsAdmin && !callerCtx.IsTenantAdmin)
+                                skills.Objects = skills.Objects.Where(sk => ScopedVisibility.CanView(callerCtx, sk.Scope, sk.TenantId, sk.UserId)).ToList();
                             return (object)skills;
                         case "check_runs":
                         case "check_run":
                         case "checkruns":
+                            ApplyOwnerScope(callerCtx, out string? checkTenant, out string? checkUser);
                             EnumerationResult<CheckRun> checkRuns = await database.CheckRuns.EnumerateAsync(new CheckRunQuery
                             {
                                 PageNumber = query.PageNumber,
-                                PageSize = query.PageSize
+                                PageSize = query.PageSize,
+                                TenantId = checkTenant,
+                                UserId = checkUser
                             }).ConfigureAwait(false);
                             return (object)checkRuns;
                         case "vessel_import_batch":
@@ -560,6 +583,19 @@ namespace Armada.Server.Mcp.Tools
                             return (object)McpToolError.InvalidArgument("Unknown entity type: " + entityType + ". Valid types: fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines, playbooks, workflow_profiles, project_profiles, skills, check_runs, releases, jobs, model_endpoints, vessel_import_batch, fleet_action, fleet_action_run, fleet_action_run_target, vessel_health");
                     }
                 });
+        }
+
+        /// <summary>
+        /// Owner scope for owned entities whose query carries TenantId/UserId (the same rule REST applies): a global
+        /// admin is unscoped, a tenant admin is scoped to the tenant, and a regular user to their own records.
+        /// </summary>
+        private static void ApplyOwnerScope(AuthContext ctx, out string? tenantId, out string? userId)
+        {
+            tenantId = null;
+            userId = null;
+            if (ctx.IsAdmin) return;
+            tenantId = ctx.TenantId ?? Constants.DefaultTenantId;
+            if (!ctx.IsTenantAdmin) userId = ctx.UserId;
         }
     }
 }

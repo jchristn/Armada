@@ -198,10 +198,10 @@ namespace Armada.Core.Services
             if (String.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
             if (request == null || !request.Enabled) return;
             if (String.IsNullOrWhiteSpace(request.CaptainId))
-                throw new ArgumentException("categorization.captainId is required when categorization is enabled.", nameof(request));
+                throw new VesselImportRequestException(VesselImportCategorizationCodes.CategorizationCaptainRequired, "categorization.captainId is required when categorization is enabled.", nameof(request));
 
             Captain? captain = await _Database.Captains.ReadAsync(tenantId, request.CaptainId.Trim(), token).ConfigureAwait(false);
-            if (captain == null) throw new ArgumentException("Captain not found: " + request.CaptainId, nameof(request));
+            if (captain == null) throw new VesselImportRequestException(VesselImportCategorizationCodes.CategorizationCaptainNotFound, "Captain not found: " + request.CaptainId, nameof(request));
         }
 
         /// <inheritdoc />
@@ -675,7 +675,7 @@ namespace Armada.Core.Services
                     if (!reserved)
                     {
                         Captain? current = await _Database.Captains.ReadAsync(tenantId, captain.Id).ConfigureAwait(false);
-                        throw new InvalidOperationException("Captain " + captain.Name + " is not idle (state " + (current?.State.ToString() ?? "unknown")
+                        throw new CaptainNotIdleException(captain.Id, current?.State, "Captain " + captain.Name + " is not idle (state " + (current?.State.ToString() ?? "unknown")
                             + "). Choose an idle captain or retry when it is free.");
                     }
 

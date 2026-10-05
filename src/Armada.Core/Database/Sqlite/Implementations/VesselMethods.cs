@@ -479,6 +479,11 @@ namespace Armada.Core.Database.Sqlite.Implementations
                     conditions.Add("created_utc < @created_before");
                     parameters.Add(new SqliteParameter("@created_before", SqliteDatabaseDriver.ToIso8601(query.CreatedBefore.Value)));
                 }
+                if (!string.IsNullOrEmpty(query.FleetId))
+                {
+                    conditions.Add("fleet_id = @fleet_id");
+                    parameters.Add(new SqliteParameter("@fleet_id", query.FleetId));
+                }
                 string whereClause = " WHERE " + string.Join(" AND ", conditions);
                 string orderDirection = query.Order == EnumerationOrderEnum.CreatedAscending ? "ASC" : "DESC";
                 long totalCount = 0;
@@ -658,6 +663,11 @@ namespace Armada.Core.Database.Sqlite.Implementations
                 {
                     conditions.Add("created_utc < @created_before");
                     parameters.Add(new SqliteParameter("@created_before", SqliteDatabaseDriver.ToIso8601(query.CreatedBefore.Value)));
+                }
+                if (!string.IsNullOrEmpty(query.FleetId))
+                {
+                    conditions.Add("fleet_id = @fleet_id");
+                    parameters.Add(new SqliteParameter("@fleet_id", query.FleetId));
                 }
                 string whereClause = " WHERE " + string.Join(" AND ", conditions);
                 string orderDirection = query.Order == EnumerationOrderEnum.CreatedAscending ? "ASC" : "DESC";

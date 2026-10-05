@@ -420,6 +420,11 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     conditions.Add("created_utc < @created_before");
                     parameters.Add(new NpgsqlParameter("@created_before", query.CreatedBefore.Value));
                 }
+                if (!string.IsNullOrEmpty(query.Status))
+                {
+                    conditions.Add("status = @status");
+                    parameters.Add(new NpgsqlParameter("@status", query.Status));
+                }
                 string whereClause = " WHERE " + string.Join(" AND ", conditions);
                 string orderDirection = query.Order == EnumerationOrderEnum.CreatedAscending ? "ASC" : "DESC";
                 long totalCount = 0;
@@ -582,6 +587,11 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 {
                     conditions.Add("created_utc < @created_before");
                     parameters.Add(new NpgsqlParameter("@created_before", query.CreatedBefore.Value));
+                }
+                if (!string.IsNullOrEmpty(query.Status))
+                {
+                    conditions.Add("status = @status");
+                    parameters.Add(new NpgsqlParameter("@status", query.Status));
                 }
                 string whereClause = " WHERE " + string.Join(" AND ", conditions);
                 string orderDirection = query.Order == EnumerationOrderEnum.CreatedAscending ? "ASC" : "DESC";

@@ -4522,7 +4522,9 @@
       "resource": "Tenant:Create",
       "requestType": null,
       "requestRequired": false,
-      "responses": {},
+      "responses": {
+        "201": "TenantCreateResult"
+      },
       "tags": [
         "Tenants"
       ],
@@ -10127,7 +10129,8 @@
       "type",
       "action",
       "data",
-      "error"
+      "error",
+      "code"
     ],
     "commands": [
       "backup",
@@ -10722,7 +10725,9 @@
           "captainId",
           "missionId",
           "vesselId",
-          "voyageId"
+          "voyageId",
+          "status",
+          "previousStatus"
         ],
         "generic": true
       },
@@ -15253,6 +15258,12 @@
     },
     {
       "key": "mcp.allowUnauthenticatedLoopback",
+      "type": "bool",
+      "default": "true",
+      "experimental": false
+    },
+    {
+      "key": "mcp.missionScopedTokens",
       "type": "bool",
       "default": "true",
       "experimental": false

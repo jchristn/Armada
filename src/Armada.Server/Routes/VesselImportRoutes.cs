@@ -95,7 +95,7 @@ namespace Armada.Server.Routes
                 }
                 catch (ArgumentException ex)
                 {
-                    return Error(req, 400, ApiResultEnum.BadRequest, ex.Message, VesselImportCodes.InvalidRequest, path);
+                    return Error(req, 400, ApiResultEnum.BadRequest, ex.Message, VesselImportRequestException.CodeFor(ex), path);
                 }
             },
             api => api
@@ -134,7 +134,7 @@ namespace Armada.Server.Routes
                 }
                 catch (ArgumentException ex)
                 {
-                    return Error(req, 400, ApiResultEnum.BadRequest, ex.Message, VesselImportCodes.InvalidRequest, null);
+                    return Error(req, 400, ApiResultEnum.BadRequest, ex.Message, VesselImportRequestException.CodeFor(ex), null);
                 }
             },
             api => api
@@ -173,7 +173,7 @@ namespace Armada.Server.Routes
                 }
                 catch (ArgumentException ex)
                 {
-                    return Error(req, 400, ApiResultEnum.BadRequest, ex.Message, VesselImportCodes.InvalidRequest, null);
+                    return Error(req, 400, ApiResultEnum.BadRequest, ex.Message, VesselImportRequestException.CodeFor(ex), null);
                 }
             },
             api => api
@@ -276,7 +276,7 @@ namespace Armada.Server.Routes
                 }
                 catch (ArgumentException ex)
                 {
-                    return Error(req, 400, ApiResultEnum.BadRequest, ex.Message, VesselImportCodes.InvalidRequest, null);
+                    return Error(req, 400, ApiResultEnum.BadRequest, ex.Message, VesselImportRequestException.CodeFor(ex), null);
                 }
             },
             api => api
@@ -318,7 +318,7 @@ namespace Armada.Server.Routes
                 }
                 catch (ArgumentException ex)
                 {
-                    return Error(req, 400, ApiResultEnum.BadRequest, ex.Message, VesselImportCodes.InvalidRequest, null);
+                    return Error(req, 400, ApiResultEnum.BadRequest, ex.Message, VesselImportRequestException.CodeFor(ex), null);
                 }
             },
             api => api

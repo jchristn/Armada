@@ -12,6 +12,7 @@ namespace Test.Shared.Suites.E2E
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Core.ApiSurface;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Server.WebSocket;
     using Test.Shared.Infrastructure;
@@ -119,15 +120,23 @@ namespace Test.Shared.Suites.E2E
                     {
                         if (_UndispatchedCommands.Contains(action)) continue;
                         E2eWebSocketFrame reply = await SendCommandAsync(ws, action).ConfigureAwait(false);
-                        // TODO(R5, production): command.error carries no error code, so "no handler" is recognized by the
-                        // handler's exact fallback text (compared whole, not searched for).
-                        if (reply.Type == "command.error" && reply.Error == "Unknown action: " + action) unhandled.Add(action);
+                        if (reply.Type == "command.error" && reply.Code == WebSocketCommandErrorCodeEnum.UnknownAction) unhandled.Add(action);
                     }
 
                     AssertTrue(unhandled.Count == 0, "declared WebSocket commands without a handler: " + String.Join(", ", unhandled));
                     E2eWebSocketFrame unknown = await SendCommandAsync(ws, "not_a_real_action").ConfigureAwait(false);
                     AssertEqual("command.error", unknown.Type, "undeclared action is rejected");
-                    AssertEqual("Unknown action: not_a_real_action", unknown.Error, "undeclared action is rejected as unknown");
+                    AssertEqual(WebSocketCommandErrorCodeEnum.UnknownAction, unknown.Code, "undeclared action is rejected with code UnknownAction");
+                    AssertEqual("not_a_real_action", unknown.Action, "the reply names the rejected action");
+
+                    // A declared command that fails carries its reason as a code too: NotFound for a missing entity, and
+                    // the exception-mapped code (InvalidArgument) when the handler throws on a missing id.
+                    E2eWebSocketFrame missing = await SendCommandAsync(ws, "get_fleet", "flt_does_not_exist").ConfigureAwait(false);
+                    AssertEqual("command.error", missing.Type, "get_fleet for an unknown id fails");
+                    AssertEqual(WebSocketCommandErrorCodeEnum.NotFound, missing.Code, "missing fleet is NotFound");
+                    E2eWebSocketFrame noId = await SendCommandAsync(ws, "get_fleet").ConfigureAwait(false);
+                    AssertEqual("command.error", noId.Type, "get_fleet without an id fails");
+                    AssertEqual(WebSocketCommandErrorCodeEnum.InvalidArgument, noId.Code, "missing id is InvalidArgument");
                 }
             }));
 
@@ -288,9 +297,11 @@ namespace Test.Shared.Suites.E2E
             AssertNotNull(JsonShape.TopLevelProperty(body, "Message"), "Message in " + body);
         }
 
-        private static async Task<E2eWebSocketFrame> SendCommandAsync(ClientWebSocket ws, string action)
+        private static async Task<E2eWebSocketFrame> SendCommandAsync(ClientWebSocket ws, string action, string? id = null)
         {
-            string payload = "{\"Route\":\"command\",\"action\":\"" + action + "\"}";
+            string payload = id == null
+                ? "{\"Route\":\"command\",\"action\":\"" + action + "\"}"
+                : "{\"Route\":\"command\",\"action\":\"" + action + "\",\"id\":\"" + id + "\"}";
             byte[] bytes = Encoding.UTF8.GetBytes(payload);
             await ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, CancellationToken.None).ConfigureAwait(false);
 

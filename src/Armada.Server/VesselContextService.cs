@@ -8,6 +8,7 @@ namespace Armada.Server
     using Armada.Core.Database;
     using Armada.Core.Models;
     using Armada.Core.Services.Interfaces;
+    using Armada.Core.Services;
     using Armada.Runtimes;
     using Armada.Runtimes.Interfaces;
     using SyslogLogging;
@@ -96,7 +97,7 @@ namespace Armada.Server
             // this analysis isolated from any real work; the dock is always reclaimed in the finally block.
             string branchName = "armada/context/" + Guid.NewGuid().ToString("N").Substring(0, 12);
             Dock dock = await _Docks.ProvisionAsync(vessel, captain, branchName, null, token).ConfigureAwait(false)
-                ?? throw new InvalidOperationException("Could not provision a worktree for this vessel.");
+                ?? throw new DockProvisioningException(vessel.Id, branchName, "Could not provision a worktree for this vessel.");
 
             if (String.IsNullOrWhiteSpace(dock.WorktreePath) || !Directory.Exists(dock.WorktreePath))
             {
