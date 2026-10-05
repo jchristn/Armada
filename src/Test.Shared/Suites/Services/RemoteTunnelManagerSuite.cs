@@ -139,6 +139,18 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(Case("allow_invalid_certificates_is_off_by_default_and_warned", "AllowInvalidCertificates defaults off and produces a security warning when on", TestTags.Negative, () =>
+            {
+                RemoteControlSettings settings = new RemoteControlSettings();
+                AssertFalse(settings.AllowInvalidCertificates, "certificate validation is on by default");
+                settings.Enabled = true;
+                AssertNull(RemoteTunnelManager.InsecureCertificateWarning(settings), "no warning while validation is on");
+                settings.AllowInvalidCertificates = true;
+                AssertNotNull(RemoteTunnelManager.InsecureCertificateWarning(settings), "a warning when validation is off");
+                settings.Enabled = false;
+                AssertNull(RemoteTunnelManager.InsecureCertificateWarning(settings), "no warning while remote control is off");
+            }));
+
             cases.Add(Case("compute_reconnect_delay_honors_configured_bounds", "ComputeReconnectDelay HonorsConfiguredBounds", TestTags.Positive, () =>
             {
                 RemoteControlSettings settings = new RemoteControlSettings

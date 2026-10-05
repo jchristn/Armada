@@ -57,7 +57,7 @@ namespace Armada.Proxy
             _Registry = new InstanceRegistry(_Settings);
             _Auth = new ProxyAuthService(_Settings);
             _RoutePolicy = new ProxyRoutePolicyService();
-            _LoginLimiter = new ProxyLoginRateLimiter(_Settings);
+            _LoginLimiter = new ProxyLoginRateLimiter(_Settings, ProxyLoginRateLimiter.DefaultStatePath(_Settings.DataDirectory));
             _WwwrootDirectory = Path.Combine(AppContext.BaseDirectory, "wwwroot");
             _DashboardDirectory = Path.Combine(AppContext.BaseDirectory, "dashboard");
             _Registry.EventReceived += HandleInstanceEvent;

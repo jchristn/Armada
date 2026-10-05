@@ -26,6 +26,7 @@ namespace Armada.Server
         private readonly ConcurrentDictionary<string, DateTime> _OutstandingPings = new ConcurrentDictionary<string, DateTime>();
         private readonly SemaphoreSlim _SendLock = new SemaphoreSlim(1, 1);
         private bool _WarnedDefaultPassword = false;
+        private bool _WarnedInsecureCertificates = false;
 
         private RemoteTunnelStatus _Status = new RemoteTunnelStatus();
         private ClientWebSocket? _Socket;
@@ -321,6 +322,13 @@ namespace Armada.Server
                     _Logging.Warn(_Header + "RemoteControl.Password is the built-in default; Armada.Proxy refuses to start with the default password unless AllowDefaultPassword is set, so set the same strong value here and on the proxy");
                 }
 
+                string? insecureWarning = InsecureCertificateWarning(remoteControl);
+                if (insecureWarning != null && !_WarnedInsecureCertificates)
+                {
+                    _WarnedInsecureCertificates = true;
+                    _Logging.Warn(_Header + insecureWarning);
+                }
+
                 if (!TryNormalizeTunnelUrl(remoteControl.TunnelUrl, out Uri? tunnelUri, out string? normalizationError, out string? normalizationErrorCode))
                 {
                     UpdateStatus(status =>
@@ -604,6 +612,21 @@ namespace Armada.Server
             {
                 _SendLock.Release();
             }
+        }
+
+        /// <summary>
+        /// The startup warning for <see cref="RemoteControlSettings.AllowInvalidCertificates"/>, or null when remote
+        /// control is off or certificate validation is on. Turning validation off lets anyone on the network path
+        /// impersonate the proxy and receive the tunnel password proof and every relayed request.
+        /// </summary>
+        /// <param name="settings">Remote control settings.</param>
+        /// <returns>Warning text, or null.</returns>
+        public static string? InsecureCertificateWarning(RemoteControlSettings settings)
+        {
+            if (settings == null) throw new ArgumentNullException(nameof(settings));
+            if (!settings.Enabled || !settings.AllowInvalidCertificates) return null;
+            return "SECURITY WARNING: RemoteControl.AllowInvalidCertificates is true, so the tunnel does not validate the proxy's TLS certificate. "
+                + "Anyone on the network path can impersonate the proxy and relay or read every remote request. Use it only for local development with a self-signed proxy, and set it back to false.";
         }
 
         private ClientWebSocket CreateSocket(RemoteControlSettings settings)
