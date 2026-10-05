@@ -2,9 +2,10 @@
 
 **Version:** 1.0.0
 
-`Armada.Proxy` is now a portal and relay for the real Armada dashboard. It no longer ships a second long-lived remote operations UI with its own feature-by-feature API family.
+`Armada.Proxy` is a portal and relay for the real Armada dashboard. It has no remote operations UI or feature API of its
+own: the browser uses the normal Armada dashboard, and the proxy relays its traffic to a connected Armada instance.
 
-The shipped proxy responsibilities are:
+The proxy's responsibilities are:
 
 - browser authentication to the proxy
 - connected-instance discovery and selection
@@ -25,7 +26,9 @@ By default, the proxy binds to:
 - health: `http://localhost:7893/proxy-api/v1/status/health`
 - tunnel: `ws://localhost:7893/tunnel`
 
-Configuration is loaded from the `ArmadaProxy` section:
+Configuration is read from the first file found among: the path passed on the command line, `ARMADA_PROXY_SETTINGS_FILE`,
+`proxysettings.json` then `appsettings.json` next to the executable and in the current directory, and
+`~/.armada/proxysettings.json`. Keys may sit at the root of the file or under an `ArmadaProxy` section:
 
 ```json
 {
@@ -44,6 +47,19 @@ Configuration is loaded from the `ArmadaProxy` section:
   }
 }
 ```
+
+| Setting | Default | Range |
+| --- | --- | --- |
+| `dataDirectory` | `~/.armada` | |
+| `logDirectory` | `<dataDirectory>/logs` | |
+| `hostname` | `localhost` | |
+| `port` | `7893` | 1-65535 |
+| `requireEnrollmentToken` | `false` | When true, a tunnel handshake must present one of `enrollmentTokens` |
+| `handshakeTimeoutSeconds` | `15` | 1-300 (browser login challenges live at least 30 seconds) |
+| `staleAfterSeconds` | `90` | 5-86400; a connected instance with no traffic for this long is reported `stale` |
+| `requestTimeoutSeconds` | `20` | 1-300; relayed request timeout |
+| `maxRecentEvents` | `50` | 1-500; recent tunnel events kept per instance |
+| `syslogServers` | none | Optional syslog targets for proxy logging |
 
 Security settings (security review O-11):
 
@@ -79,12 +95,14 @@ The proxy session is separate from the Armada application session. After opening
 The proxy browser session is primarily cookie-backed:
 
 - cookie name: `armada_proxy_session`
-- attributes: `Path=/; HttpOnly; SameSite=Lax`, plus `Secure` when `secureCookie` is on or when `trustForwardedHeaders`
+- attributes: `Path=/; HttpOnly; SameSite=Lax; Max-Age=<session lifetime>`, plus `Secure` when `secureCookie` is on or when `trustForwardedHeaders`
   is on and the request arrived with `X-Forwarded-Proto: https`
 
 For non-browser callers, the proxy still accepts `X-Armada-Proxy-Session`.
 
-The browser never sends the raw shared password. It first requests a nonce and then submits a derived proof:
+The browser never sends the raw shared password. It first requests a nonce and then submits a derived proof, the
+lowercase hex SHA-256 of `proxy-browser-login:proxy:<nonce>:<sha256hex(password)>` (the password is trimmed and
+`sha256hex` is lowercase hex). A challenge can be used once. Proxy browser sessions last 24 hours.
 
 ### `GET /proxy-api/v1/auth/challenge`
 
@@ -125,9 +143,62 @@ A wrong proof returns `401`. After `loginMaxFailures` failures from one client a
 `Retry-After` header (seconds) until `loginLockoutSeconds` pass. Failed tunnel handshakes count against the same limit;
 a locked-out tunnel client receives a handshake response with status `429` and error code `too_many_attempts`.
 
+A missing nonce or proof, an unknown, used, or expired challenge, or a wrong proof returns `401` with `{ "error": "..." }`;
+a body that is not a JSON object returns `400`.
+
 ### `POST /proxy-api/v1/auth/logout`
 
-Invalidates the current proxy browser session and clears the session cookie.
+Invalidates the current proxy browser session, if any, and clears the session cookie. Returns `{ "success": true }`.
+
+### `GET /proxy-api/v1/status/health`
+
+```json
+{
+  "product": "Armada.Proxy",
+  "version": "1.0.0",
+  "status": "ok",
+  "startUtc": "2026-05-16T18:00:00Z",
+  "uptimeSeconds": 1800,
+  "connectedInstances": 1,
+  "staleInstances": 0,
+  "instanceCount": 1
+}
+```
+
+### `GET /proxy-api/v1/instances`
+
+Requires a proxy session (`401` otherwise). Returns `{ "count": 1, "instances": [ ... ] }`, where each instance is:
+
+```json
+{
+  "instanceId": "armada-1f2e3d4c5b6a",
+  "state": "connected",
+  "armadaVersion": "1.0.0",
+  "protocolVersion": "2026-04-04",
+  "capabilities": ["dashboard.http.relay", "dashboard.websocket.relay"],
+  "remoteAddress": "203.0.113.10",
+  "firstSeenUtc": "2026-05-16T18:00:00Z",
+  "connectedUtc": "2026-05-16T18:00:00Z",
+  "lastSeenUtc": "2026-05-16T18:29:50Z",
+  "lastEventUtc": "2026-05-16T18:29:50Z",
+  "lastDisconnectUtc": null,
+  "lastError": null,
+  "recentEventCount": 12,
+  "pendingRequestCount": 0
+}
+```
+
+`state` is `connected`, `stale`, or `offline`.
+
+### `POST /proxy-api/v1/session/instance`
+
+Request: `{ "instanceId": "armada-1f2e3d4c5b6a" }`. Returns the session context (below). Errors: `400` when the body is
+not a JSON object or `instanceId` is missing, `404` for an unknown instance, `409` when the instance cannot be selected
+(not connected, or it does not advertise the dashboard relay capabilities), `401` without a proxy session.
+
+### `POST /proxy-api/v1/session/logout-instance`
+
+Clears the selected deployment and returns the session context. `401` without a proxy session.
 
 ## Proxy-Local Routes
 
@@ -136,10 +207,11 @@ These routes belong to the proxy itself and are never relayed to Armada:
 | Route | Auth | Purpose |
 | --- | --- | --- |
 | `GET /` | no | Minimal login-and-selection portal |
+| `GET /app.css`, `GET /app.js`, `GET /img/logo-dark-grey.png`, `GET /img/logo-light-grey.png`, `GET /img/logo.ico` | no | Portal assets |
 | `GET /proxy-api/v1/status/health` | no | Proxy process health and instance counts |
 | `GET /proxy-api/v1/auth/challenge` | no | Browser login challenge |
 | `POST /proxy-api/v1/auth/login` | no | Browser login |
-| `POST /proxy-api/v1/auth/logout` | yes | Proxy logout |
+| `POST /proxy-api/v1/auth/logout` | no (clears the session when present) | Proxy logout |
 | `GET /proxy-api/v1/instances` | yes (`401` without a proxy session) | Connected deployment summaries |
 | `GET /proxy-api/v1/session/context` | yes | Current proxy session and selected deployment metadata |
 | `POST /proxy-api/v1/session/instance` | yes | Set selected deployment |
@@ -147,7 +219,9 @@ These routes belong to the proxy itself and are never relayed to Armada:
 | `GET /dashboard` and `GET /dashboard/*` | yes + selected instance | Shared React dashboard bundle |
 | `WS /tunnel` | instance auth | Armada outbound tunnel |
 
-`GET /proxy-api/v1/session/context` returns the selected deployment summary plus relay capability flags:
+`GET /proxy-api/v1/session/context` (`401` without a proxy session) returns the selected deployment summary (the same
+shape as an `instances` entry, abbreviated below) plus relay capability flags. `relay.dashboard` and `relay.api` are true
+when the instance advertises `dashboard.http.relay`, and `relay.websocket` when it advertises `dashboard.websocket.relay`:
 
 ```json
 {
@@ -180,7 +254,13 @@ Behavior when session state is missing:
 - `/dashboard*` without a proxy session or selected deployment redirects to `/`
 - `/api/v1/*` without a proxy session returns `401`
 - `/api/v1/*` without a selected deployment returns `409`
+- `/api/v1/*` when the selected deployment is no longer connected, or does not advertise `dashboard.http.relay`,
+  returns `409`
 - `/ws` requires both an authenticated proxy session and a selected deployment
+- a request path that is not in canonical form returns `400`
+- a relayed request body larger than 8 MiB returns `413`
+- a relay that times out (`requestTimeoutSeconds`) returns `504`; an instance that disconnected returns `503`
+- any other path returns `404` with `{ "error": "Not found" }`
 
 The dashboard bundle served from `/dashboard` is the same built output from `src/Armada.Dashboard/dist`, plus the shared `i18n/armada.json` catalog.
 
@@ -190,11 +270,13 @@ The relay transport is generic, but remote policy is still explicit.
 
 ### Always blocked
 
-- `POST /api/v1/server/stop`
-- `POST /api/v1/server/reset`
-- `POST /api/v1/status/shutdown`
-- `POST /api/v1/status/factory-reset`
-- `POST /api/v1/restore`
+These paths are blocked for every method:
+
+- `/api/v1/server/stop`
+- `/api/v1/server/reset`
+- `/api/v1/restore`
+- `/api/v1/status/shutdown` and `/api/v1/status/factory-reset` (legacy paths the Admiral no longer serves; still
+  blocked defensively)
 
 ### Write-blocked administrative families
 
@@ -204,6 +286,9 @@ Non-`GET` and non-`HEAD` requests are blocked for:
 - `/api/v1/tenants*`
 - `/api/v1/users*`
 - `/api/v1/credentials*`
+
+`POST /api/v1/tenants/lookup` (and `POST /api/v1/authenticate`) stay allowed so users can sign in to the selected
+deployment through the proxy.
 
 Blocked requests return `403` with an explicit policy message. The transport does not silently fall back to a proxy-specific workaround.
 
