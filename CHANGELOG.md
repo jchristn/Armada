@@ -344,6 +344,9 @@ Focus: the first stable release -- security hardening, a frozen and documented A
 
 - Fixed: an import batch showed the fleet categorization's recommendations while the run was still Running (they are stored just before the run records Completed), and applying them in that window was refused. Batch detail now shows recommendations only once the run has finished.
 
+- Fixed: a CLI permission card in an Ask conversation said "Waiting for an admin to decide" and `a` reported "Nothing to approve here" even for an admin, because thread detail and message pages returned pending requests without the caller's decision flags. They are now set there as on the request routes, the inbox, and WebSocket events, and the TUI keeps the flags when a flagless copy of the same pending request arrives.
+- TUI: a toast raised again while it is still showing refreshes the existing toast with a count ("(x3)") instead of stacking copies, and toasts no longer leave a blank line between them.
+
 ### CI and test fixes
 - Fixed: fleet categorization finished its job before it released the captain and the re-run guard, and its heartbeat could write a finished job back to Running. A caller acting on the finished job saw the captain still Analyzing, got "Fleet categorization ... is already running" on a re-run, or waited for a job that never left Running. The captain is now released as soon as its process returns, the heartbeat is stopped first, and the job's terminal state is written last.
 - Fixed: background vessel discovery had the same heartbeat race, so a discovery job could stay Running after the batch reached Discovered.

@@ -162,6 +162,7 @@ namespace Armada.Core.Services.Ask
             detail.PendingProposals = await _Database.AskActionProposals.EnumerateByThreadAsync(thread.TenantId!, thread.Id, AskProposalStatusEnum.Pending, token).ConfigureAwait(false);
             detail.PendingCliPermissions = await _Database.CliPermissionRequests.EnumerateAsync(new CliPermissionRequestQuery { TenantId = thread.TenantId, ThreadId = thread.Id, Status = CliPermissionRequestStatusEnum.Pending }, token).ConfigureAwait(false);
             foreach (AskActionProposal proposal in detail.PendingProposals) Decorate(proposal);
+            foreach (CliPermissionRequest request in detail.PendingCliPermissions) AnnotateCliPermission(auth, request);
 
             thread.ActiveWorkCount = detail.TrackedWork.Count(w => w.State == AskTrackedWorkStateEnum.Active);
             thread.ActiveTurnId = ActiveTurnResolver?.Invoke(thread.Id);
@@ -273,7 +274,7 @@ namespace Armada.Core.Services.Ask
             request ??= new AskMessageEnumerateRequest();
 
             AskMessagePage page = await _Database.AskMessages.EnumerateAsync(thread.TenantId!, thread.Id, request.BeforeSequence, request.PageSize, token).ConfigureAwait(false);
-            await PopulateAsync(thread, page.Messages, token).ConfigureAwait(false);
+            await PopulateAsync(thread, page.Messages, token, auth).ConfigureAwait(false);
             return page;
         }
 
@@ -705,7 +706,18 @@ namespace Armada.Core.Services.Ask
             }
         }
 
-        private async Task PopulateAsync(AskThread thread, List<AskMessage> messages, CancellationToken token)
+        /// <summary>
+        /// Set the caller's decision flags on a CLI permission request (false without a caller), the same way the
+        /// request routes, the inbox, and the WebSocket events do.
+        /// </summary>
+        private void AnnotateCliPermission(AuthContext? caller, CliPermissionRequest request)
+        {
+            request.CanDecide = caller != null && request.Status == CliPermissionRequestStatusEnum.Pending
+                && CliPermissionAccess.CanDecide(caller, request, _Settings.Permissions);
+            request.CanRemember = request.CanDecide && caller != null && CliPermissionAccess.CanRemember(caller, request);
+        }
+
+        private async Task PopulateAsync(AskThread thread, List<AskMessage> messages, CancellationToken token, AuthContext? caller = null)
         {
             if (messages.Count == 0) return;
             List<AskMessageToolCall> calls = await _Database.AskMessageToolCalls.EnumerateByMessagesAsync(thread.TenantId!, thread.Id, messages.Select(m => m.Id).ToList(), token).ConfigureAwait(false);
@@ -737,6 +749,7 @@ namespace Armada.Core.Services.Ask
                     }
 
                     message.CliPermissionRequest = cliRequests.FirstOrDefault(r => String.Equals(r.MessageId, message.Id, StringComparison.Ordinal));
+                    if (message.CliPermissionRequest != null) AnnotateCliPermission(caller, message.CliPermissionRequest);
                 }
 
                 if (!String.IsNullOrEmpty(message.TrackedWorkId))

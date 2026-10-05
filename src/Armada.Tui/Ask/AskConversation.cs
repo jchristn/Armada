@@ -314,6 +314,14 @@ namespace Armada.Tui.Ask
             if (String.IsNullOrEmpty(winner.MissionTitle)) winner.MissionTitle = other.MissionTitle;
             if (String.IsNullOrEmpty(winner.ThreadTitle)) winner.ThreadTitle = other.ThreadTitle;
             if (String.IsNullOrEmpty(winner.MessageId)) winner.MessageId = other.MessageId;
+            // Message events and older payloads carry no caller flags; while both copies are still pending, the flags
+            // from the copy that had them (thread detail, the request routes, or a cli_permission event) are kept.
+            if (winner.Status == CliPermissionRequestStatusEnum.Pending && other.Status == CliPermissionRequestStatusEnum.Pending)
+            {
+                winner.CanDecide = winner.CanDecide || other.CanDecide;
+                winner.CanRemember = winner.CanRemember || other.CanRemember;
+            }
+
             return winner;
         }
 

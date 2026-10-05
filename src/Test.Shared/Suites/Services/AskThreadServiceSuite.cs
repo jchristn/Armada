@@ -62,6 +62,32 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(1L, (await h.Threads.EnumerateThreadsAsync(owner, null).ConfigureAwait(false)).TotalRecords, "owner enumerate");
             }));
 
+            cases.Add(CaseAsync("detail_sets_cli_permission_decision_flags", "Thread detail sets the caller's decision flags on pending CLI permission requests", TestTags.Positive, async () =>
+            {
+                using AskTestHarness h = await AskTestHarness.CreateAsync().ConfigureAwait(false);
+                AuthContext admin = AuthContext.Authenticated(Constants.DefaultTenantId, "usr_admin_owner", true, true, "Test");
+                AuthContext user = AskTestHarness.User("usr_plain_owner", false);
+
+                foreach (AuthContext owner in new[] { admin, user })
+                {
+                    AskThread thread = await h.Threads.CreateThreadAsync(owner, new AskThreadCreateRequest { Title = "Permissions" }).ConfigureAwait(false);
+                    CliPermissionRequest request = new CliPermissionRequest();
+                    request.TenantId = Constants.DefaultTenantId;
+                    request.UserId = owner.UserId;
+                    request.ThreadId = thread.Id;
+                    request.ToolName = "Bash";
+                    request.InputText = "git status";
+                    request.SummaryText = "git status";
+                    await h.Db.Driver.CliPermissionRequests.CreateAsync(request).ConfigureAwait(false);
+
+                    AskThreadDetail? detail = await h.Threads.GetThreadDetailAsync(owner, thread.Id).ConfigureAwait(false);
+                    CliPermissionRequest pending = detail!.PendingCliPermissions.Single();
+                    bool expected = owner.IsAdmin || owner.IsTenantAdmin;
+                    AssertEqual(expected, pending.CanDecide, (expected ? "an admin owner can decide" : "a regular owner cannot decide by default") + " from thread detail");
+                    AssertEqual(expected, pending.CanRemember, "remember follows decide for " + owner.UserId);
+                }
+            }));
+
             cases.Add(CaseAsync("auto_title_from_first_message", "The first message names a default-titled thread", TestTags.Positive, async () =>
             {
                 using AskTestHarness h = await AskTestHarness.CreateAsync().ConfigureAwait(false);

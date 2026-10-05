@@ -77,6 +77,32 @@ namespace Test.Shared.Suites.Tui
                 AssertEqual(0, svc.ActiveToasts().Count, "expired");
             }));
 
+            cases.Add(TuiCase.Sync(Suite, "repeated_toast_refreshes", "The same toast raised again while showing refreshes it with a count instead of stacking", () =>
+            {
+                ManualClock clock = new ManualClock();
+                NotificationService svc = new NotificationService(clock, new LocalizationService(), null, null, null);
+                svc.Toast(NotificationSeverityEnum.Info, "Nothing to approve here.");
+                clock.Advance(TimeSpan.FromSeconds(3));
+                svc.Toast(NotificationSeverityEnum.Info, "Nothing to approve here.");
+                svc.Toast(NotificationSeverityEnum.Info, "Nothing to approve here.");
+                IReadOnlyList<ToastEntry> active = svc.ActiveToasts();
+                AssertEqual(1, active.Count, "one toast, not three");
+                AssertEqual(3, active[0].Repeat, "repeat count");
+                clock.Advance(TimeSpan.FromSeconds(3));
+                AssertEqual(1, svc.ActiveToasts().Count, "the repeat restarted its timer");
+                svc.Toast(NotificationSeverityEnum.Warning, "Nothing to approve here.");
+                AssertEqual(2, svc.ActiveToasts().Count, "a different severity is its own toast");
+            }));
+
+            cases.Add(TuiCase.Sync(Suite, "cli_permission_merge_keeps_flags", "A flagless copy of a pending CLI permission request keeps the caller's decision flags", () =>
+            {
+                Armada.Core.Models.CliPermissionRequest withFlags = new Armada.Core.Models.CliPermissionRequest { ToolName = "Bash", CanDecide = true, CanRemember = true };
+                Armada.Core.Models.CliPermissionRequest flagless = new Armada.Core.Models.CliPermissionRequest { Id = withFlags.Id, ToolName = "Bash", LastUpdateUtc = withFlags.LastUpdateUtc.AddSeconds(1) };
+                Armada.Core.Models.CliPermissionRequest merged = Armada.Tui.Ask.AskConversation.MergeCliPermission(withFlags, flagless);
+                AssertTrue(merged.CanDecide, "can decide kept");
+                AssertTrue(merged.CanRemember, "can remember kept");
+            }));
+
             cases.Add(TuiCase.Sync(Suite, "socket_event_to_toast", "mission.changed over the socket raises a toast and bell count", () =>
             {
                 using (TuiTestHost host = TuiCase.SignedIn(120, 40, "/jobs"))

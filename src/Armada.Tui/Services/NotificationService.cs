@@ -282,6 +282,22 @@ namespace Armada.Tui.Services
         /// <returns>The toast.</returns>
         public ToastEntry Toast(NotificationSeverityEnum severity, string text, string? actionLabel = null, Action? action = null)
         {
+            DateTime now = _Clock.UtcNow;
+            ToastEntry? same = _Toasts.LastOrDefault(t => t.ExpiresUtc > now && t.Severity == severity
+                && String.Equals(t.Text, text ?? "", StringComparison.Ordinal)
+                && String.Equals(t.ActionLabel, actionLabel, StringComparison.Ordinal));
+            if (same != null)
+            {
+                // The same message again while it is still showing: refresh it rather than stacking a copy.
+                _Toasts.Remove(same);
+                same.Repeat++;
+                same.ExpiresUtc = now.AddMilliseconds(_ToastTimeoutMs);
+                same.Action = action;
+                _Toasts.Add(same);
+                RaiseChanged();
+                return same;
+            }
+
             ToastEntry toast = new ToastEntry();
             toast.Id = ++_NextToastId;
             toast.Severity = severity;

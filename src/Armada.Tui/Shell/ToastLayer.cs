@@ -2,6 +2,7 @@ namespace Armada.Tui.Shell
 {
     using System;
     using System.Collections.Generic;
+    using System.Globalization;
     using System.Linq;
     using Armada.Tui.Services;
     using Armada.Tui.Text;
@@ -56,7 +57,8 @@ namespace Armada.Tui.Shell
                     NotificationSeverityEnum.Error => "[x] ",
                     _ => "[i] "
                 };
-                List<string> lines = TextCells.Wrap(label + toast.Text, boxWidth - 2).Take(2).ToList();
+                string repeat = toast.Repeat > 1 ? " (x" + toast.Repeat.ToString(CultureInfo.InvariantCulture) + ")" : "";
+                List<string> lines = TextCells.Wrap(label + toast.Text.Trim() + repeat, boxWidth - 2).Take(2).ToList();
                 if (toast.ActionLabel != null) lines.Add("[" + ActionKey + "] " + loc.T(toast.ActionLabel));
                 int x = Math.Max(0, width - boxWidth - 1);
                 for (int i = 0; i < lines.Count && y < surface.Size.Height; i++)
@@ -66,7 +68,6 @@ namespace Armada.Tui.Shell
                     y++;
                 }
 
-                y++;
                 if (y >= surface.Size.Height - 2) break;
             }
         }

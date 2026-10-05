@@ -39,6 +39,12 @@ namespace Armada.Tui.Services
         /// </summary>
         public Action? Action { get; set; } = null;
 
+        /// <summary>
+        /// How many times this toast was raised while it was still showing (1 for a single raise). A repeat refreshes
+        /// the existing toast instead of stacking a copy.
+        /// </summary>
+        public int Repeat { get; set; } = 1;
+
         #endregion
 
         #region Constructors-and-Factories
