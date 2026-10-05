@@ -183,6 +183,148 @@ namespace Armada.Core.Services
         #region Public-Methods
 
         /// <inheritdoc />
+        public async Task<MissionAssignmentBlocker?> GetAssignmentBlockerAsync(Mission mission, CancellationToken token = default)
+        {
+            if (mission == null) throw new ArgumentNullException(nameof(mission));
+            if (mission.Status != MissionStatusEnum.Pending) return null;
+
+            MissionAssignmentBlocker blocker = new MissionAssignmentBlocker();
+
+            Vessel? vessel = String.IsNullOrEmpty(mission.VesselId) ? null : await _Database.Vessels.ReadAsync(mission.VesselId, token).ConfigureAwait(false);
+            if (vessel == null)
+            {
+                blocker.Reason = MissionAssignmentBlockerReasonEnum.VesselMissing;
+                blocker.Summary = String.IsNullOrEmpty(mission.VesselId)
+                    ? "This mission has no vessel, so it cannot be assigned."
+                    : "This mission's vessel no longer exists, so it cannot be assigned.";
+                return blocker;
+            }
+
+            if (UsesSharedLocalAndWorkingDirectory(vessel))
+            {
+                blocker.Reason = MissionAssignmentBlockerReasonEnum.VesselMisconfigured;
+                blocker.Summary = "Vessel " + vessel.Name + " uses the same directory for its local repository and working directory, so a dock cannot be provisioned. Change the vessel's working directory.";
+                return blocker;
+            }
+
+            if (!String.IsNullOrEmpty(mission.DependsOnMissionId))
+            {
+                Mission? dependency = await _Database.Missions.ReadAsync(mission.DependsOnMissionId, token).ConfigureAwait(false);
+                blocker.DependsOnMissionId = mission.DependsOnMissionId;
+                if (dependency == null)
+                {
+                    blocker.Reason = MissionAssignmentBlockerReasonEnum.DependencyNotFinished;
+                    blocker.Summary = "Waiting for mission " + mission.DependsOnMissionId + ", which no longer exists.";
+                    return blocker;
+                }
+
+                if (dependency.Status != MissionStatusEnum.Complete && dependency.Status != MissionStatusEnum.WorkProduced)
+                {
+                    blocker.Reason = MissionAssignmentBlockerReasonEnum.DependencyNotFinished;
+                    blocker.Summary = "Waiting for mission '" + dependency.Title + "' (" + dependency.Status + ") to finish.";
+                    return blocker;
+                }
+
+                if (dependency.Status == MissionStatusEnum.WorkProduced && !IsPipelineHandoffPrepared(mission, dependency))
+                {
+                    blocker.Reason = MissionAssignmentBlockerReasonEnum.DependencyHandoffPending;
+                    blocker.Summary = "Mission '" + dependency.Title + "' finished; Armada is preparing the handoff to this stage.";
+                    return blocker;
+                }
+
+                blocker.DependsOnMissionId = null;
+            }
+
+            if (await ShouldDeferArchitectSequencedMissionAsync(mission, token).ConfigureAwait(false))
+            {
+                blocker.Reason = MissionAssignmentBlockerReasonEnum.WaitingForVoyageWorkers;
+                blocker.Summary = "The architect sequenced this mission after the voyage's other implementation missions, which are still running.";
+                return blocker;
+            }
+
+            List<Mission> vesselMissions = await _Database.Missions.EnumerateByVesselAsync(vessel.Id, token).ConfigureAwait(false);
+            List<Mission> activeMissions = vesselMissions
+                .Where(m => m.Id != mission.Id && (m.Status == MissionStatusEnum.Assigned || m.Status == MissionStatusEnum.InProgress))
+                .ToList();
+            List<Mission> broadMissions = activeMissions.Where(m => IsBroadScope(m)).ToList();
+            if (broadMissions.Count > 0)
+            {
+                blocker.Reason = MissionAssignmentBlockerReasonEnum.VesselBroadScopeMissionActive;
+                blocker.BlockingMissionIds = broadMissions.Select(m => m.Id).ToList();
+                blocker.Summary = "Broad-scope mission '" + broadMissions[0].Title + "' holds vessel " + vessel.Name + " until it finishes.";
+                return blocker;
+            }
+
+            if (activeMissions.Count > 0 && IsBroadScope(mission))
+            {
+                blocker.Reason = MissionAssignmentBlockerReasonEnum.BroadScopeWaitingForVessel;
+                blocker.BlockingMissionIds = activeMissions.Select(m => m.Id).ToList();
+                blocker.Summary = "This is a broad-scope mission; it waits until vessel " + vessel.Name + " has no active missions (" + activeMissions.Count + " running).";
+                return blocker;
+            }
+
+            if (activeMissions.Count > 0 && !vessel.AllowConcurrentMissions)
+            {
+                blocker.Reason = MissionAssignmentBlockerReasonEnum.VesselConcurrencyLimit;
+                blocker.BlockingMissionIds = activeMissions.Select(m => m.Id).ToList();
+                blocker.Summary = "Vessel " + vessel.Name + " runs one mission at a time and is busy with '" + activeMissions[0].Title + "'. Turn on Allow Concurrent Missions on the vessel to run more at once.";
+                return blocker;
+            }
+
+            // Captain availability: the same pool FindAvailableCaptainAsync draws from (idle captains), checked
+            // without resolving or persisting a preferred captain.
+            List<Captain> allCaptains = await _Database.Captains.EnumerateAsync(token).ConfigureAwait(false);
+            if (allCaptains.Count == 0)
+            {
+                blocker.Reason = MissionAssignmentBlockerReasonEnum.NoCaptains;
+                blocker.Summary = "Waiting for a captain: there are no captains. Create one to run missions.";
+                return blocker;
+            }
+
+            List<Captain> idleCaptains = allCaptains.Where(c => c.State == CaptainStateEnum.Idle).ToList();
+            if (idleCaptains.Count > 0)
+            {
+                bool eligible = IsAnyCaptainEligible(idleCaptains, mission);
+                if (eligible)
+                {
+                    blocker.Reason = MissionAssignmentBlockerReasonEnum.AwaitingDispatch;
+                    blocker.Summary = "A captain is free; the mission is assigned on the next dispatch cycle.";
+                    return blocker;
+                }
+
+                blocker.Reason = MissionAssignmentBlockerReasonEnum.NoEligibleCaptain;
+                blocker.Summary = "Waiting for a captain: no idle captain may take this mission"
+                    + (!String.IsNullOrEmpty(mission.Persona) ? " (persona " + mission.Persona + ")" : "")
+                    + (mission.Tier.HasValue ? " (tier " + mission.Tier.Value + " or higher)" : "")
+                    + ". Check the captains' allowed personas and tiers.";
+                await DescribeCaptainsAsync(blocker, allCaptains, mission.TenantId, token).ConfigureAwait(false);
+                return blocker;
+            }
+
+            blocker.Reason = MissionAssignmentBlockerReasonEnum.NoIdleCaptain;
+            await DescribeCaptainsAsync(blocker, allCaptains, mission.TenantId, token).ConfigureAwait(false);
+            List<DateTime> quarantineEnds = blocker.Captains
+                .Where(c => c.QuarantineUntilUtc.HasValue)
+                .Select(c => c.QuarantineUntilUtc!.Value)
+                .ToList();
+            if (allCaptains.All(c => c.State == CaptainStateEnum.Quarantined) && quarantineEnds.Count > 0)
+            {
+                blocker.UntilUtc = quarantineEnds.Min();
+            }
+
+            if (blocker.Captains.Count == 1)
+            {
+                blocker.Summary = "Waiting for a captain: " + (blocker.Captains[0].CaptainName ?? blocker.Captains[0].CaptainId) + " is " + blocker.Captains[0].Detail + ".";
+            }
+            else
+            {
+                blocker.Summary = "Waiting for a captain: every captain is busy.";
+            }
+
+            return blocker;
+        }
+
+        /// <inheritdoc />
         public async Task<bool> TryAssignAsync(Mission mission, Vessel vessel, CancellationToken token = default)
         {
             if (mission == null) throw new ArgumentNullException(nameof(mission));
@@ -3670,6 +3812,92 @@ namespace Armada.Core.Services
                 next.Description = ApplyReviewerGuidance(next.Description, reviewComment);
                 next.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.Missions.UpdateAsync(next, token).ConfigureAwait(false);
+            }
+        }
+
+        private bool IsAnyCaptainEligible(List<Captain> idleCaptains, Mission mission)
+        {
+            // Mirrors FindAvailableCaptainAsync: a requested (dictated) captain that is idle is always eligible;
+            // otherwise the persona fence and the tier floor apply.
+            if (!String.IsNullOrEmpty(mission.RequestedCaptainId) && idleCaptains.Any(c => c.Id == mission.RequestedCaptainId))
+                return true;
+
+            IEnumerable<Captain> eligible = idleCaptains;
+            if (!String.IsNullOrEmpty(mission.Persona))
+                eligible = eligible.Where(c => String.IsNullOrEmpty(c.AllowedPersonas) || CaptainAllowsPersona(c, mission.Persona));
+            if (mission.Tier.HasValue)
+                eligible = eligible.Where(c => CaptainTierSelector.EffectiveTier(c) >= mission.Tier.Value);
+            return eligible.Any();
+        }
+
+        private async Task DescribeCaptainsAsync(MissionAssignmentBlocker blocker, List<Captain> captains, string? tenantId, CancellationToken token)
+        {
+            // Only captains in the mission's tenant are described, so the explanation never names another tenant's work.
+            IEnumerable<Captain> visible = String.IsNullOrEmpty(tenantId)
+                ? captains
+                : captains.Where(c => String.Equals(c.TenantId, tenantId, StringComparison.Ordinal));
+            foreach (Captain captain in visible.OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase))
+            {
+                MissionAssignmentCaptainStatus status = new MissionAssignmentCaptainStatus
+                {
+                    CaptainId = captain.Id,
+                    CaptainName = captain.Name,
+                    State = captain.State
+                };
+
+                switch (captain.State)
+                {
+                    case CaptainStateEnum.Idle:
+                        status.Detail = "idle";
+                        break;
+                    case CaptainStateEnum.Working:
+                        status.MissionId = captain.CurrentMissionId;
+                        Mission? current = String.IsNullOrEmpty(captain.CurrentMissionId) ? null : await _Database.Missions.ReadAsync(captain.CurrentMissionId, token).ConfigureAwait(false);
+                        status.Detail = current != null ? "working on mission '" + current.Title + "'" : "working on another mission";
+                        break;
+                    case CaptainStateEnum.Planning:
+                        PlanningSession? planning = (await _Database.PlanningSessions.EnumerateByCaptainAsync(captain.Id, token).ConfigureAwait(false))
+                            .Where(p => p.Status == PlanningSessionStatusEnum.Created || p.Status == PlanningSessionStatusEnum.Active || p.Status == PlanningSessionStatusEnum.Responding || p.Status == PlanningSessionStatusEnum.Stopping)
+                            .OrderByDescending(p => p.LastUpdateUtc)
+                            .FirstOrDefault();
+                        status.PlanningSessionId = planning?.Id;
+                        status.Detail = planning != null ? "in planning session '" + planning.Title + "'" : "reserved by a planning session";
+                        break;
+                    case CaptainStateEnum.Refining:
+                        ObjectiveRefinementSession? refinement = (await _Database.ObjectiveRefinementSessions.EnumerateByCaptainAsync(captain.Id, token).ConfigureAwait(false))
+                            .Where(r => r.Status == ObjectiveRefinementSessionStatusEnum.Created || r.Status == ObjectiveRefinementSessionStatusEnum.Active || r.Status == ObjectiveRefinementSessionStatusEnum.Responding || r.Status == ObjectiveRefinementSessionStatusEnum.Stopping)
+                            .OrderByDescending(r => r.LastUpdateUtc)
+                            .FirstOrDefault();
+                        status.RefinementSessionId = refinement?.Id;
+                        status.ObjectiveId = refinement?.ObjectiveId;
+                        Objective? objective = refinement == null || String.IsNullOrEmpty(refinement.ObjectiveId) ? null : await _Database.Objectives.ReadAsync(refinement.ObjectiveId, token).ConfigureAwait(false);
+                        status.Detail = objective != null
+                            ? "refining backlog item '" + objective.Title + "' (stop the refinement session to free it)"
+                            : "reserved by a backlog refinement session (stop the session to free it)";
+                        break;
+                    case CaptainStateEnum.Quarantined:
+                        status.QuarantineUntilUtc = captain.QuarantineUntilUtc;
+                        status.QuarantineReason = captain.QuarantineReason;
+                        status.Detail = "quarantined"
+                            + (!String.IsNullOrEmpty(captain.QuarantineReason) ? " (" + captain.QuarantineReason + ")" : "")
+                            + (captain.QuarantineUntilUtc.HasValue ? " until " + captain.QuarantineUntilUtc.Value.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture) + " UTC" : "")
+                            + "; release it from the captain page to use it sooner";
+                        break;
+                    case CaptainStateEnum.Stalled:
+                        status.Detail = "stalled and awaiting recovery";
+                        break;
+                    case CaptainStateEnum.Stopping:
+                        status.Detail = "stopping";
+                        break;
+                    case CaptainStateEnum.Analyzing:
+                        status.Detail = "analyzing a vessel";
+                        break;
+                    default:
+                        status.Detail = captain.State.ToString();
+                        break;
+                }
+
+                blocker.Captains.Add(status);
             }
         }
 

@@ -26,6 +26,7 @@ namespace Armada.Server.Routes
         private readonly ArmadaWebSocketHub? _webSocketHub;
         private readonly LoggingModule _logging;
         private readonly ObjectiveService _objectives;
+        private readonly IMissionService? _missionService;
         private readonly JsonSerializerOptions _jsonOptions;
 
         /// <summary>
@@ -38,6 +39,7 @@ namespace Armada.Server.Routes
         /// <param name="logging">Logging module.</param>
         /// <param name="objectives">Objective linkage service.</param>
         /// <param name="jsonOptions">JSON serializer options.</param>
+        /// <param name="missionService">Mission service, used to explain why Pending missions wait (optional).</param>
         public VoyageRoutes(
             DatabaseDriver database,
             IAdmiralService admiral,
@@ -45,8 +47,10 @@ namespace Armada.Server.Routes
             ArmadaWebSocketHub? webSocketHub,
             LoggingModule logging,
             ObjectiveService objectives,
-            JsonSerializerOptions jsonOptions)
+            JsonSerializerOptions jsonOptions,
+            IMissionService? missionService = null)
         {
+            _missionService = missionService;
             _database = database;
             _admiral = admiral;
             _emitEvent = emitEvent;
@@ -229,13 +233,24 @@ namespace Armada.Server.Routes
                 foreach (Mission mission in missions)
                 {
                     mission.PlaybookSnapshots = await _database.Playbooks.GetMissionSnapshotsAsync(mission.Id).ConfigureAwait(false);
+                    if (mission.Status == MissionStatusEnum.Pending && _missionService != null)
+                    {
+                        try
+                        {
+                            mission.AssignmentBlocker = await _missionService.GetAssignmentBlockerAsync(mission).ConfigureAwait(false);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logging.Warn("[VoyageRoutes] could not compute the assignment blocker for mission " + mission.Id + ": " + ex.Message);
+                        }
+                    }
                 }
                 return (object)new { Voyage = voyage, Missions = missions };
             },
             api => api
                 .WithTag("Voyages")
                 .WithSummary("Get a voyage")
-                .WithDescription("Returns a voyage and all its associated missions.")
+                .WithDescription("Returns a voyage and all its associated missions. Pending missions carry AssignmentBlocker, the server's explanation of why no captain has taken them yet.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Voyage ID (vyg_ prefix)"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));

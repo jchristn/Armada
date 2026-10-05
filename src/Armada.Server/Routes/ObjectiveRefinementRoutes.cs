@@ -437,7 +437,8 @@ namespace Armada.Server.Routes
                     return new ObjectiveRefinementApplyResponse
                     {
                         Summary = result.Summary,
-                        Objective = result.Objective
+                        Objective = result.Objective,
+                        Session = await _database.ObjectiveRefinementSessions.ReadAsync(session.Id).ConfigureAwait(false)
                     };
                 }
                 catch (NotSupportedException ex)

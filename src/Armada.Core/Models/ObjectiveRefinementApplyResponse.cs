@@ -13,5 +13,9 @@ namespace Armada.Core.Models
         /// Gets or sets the objective.
         /// </summary>
         public Objective Objective { get; set; } = new Objective();
+        /// <summary>
+        /// Gets or sets the refinement session after the apply (Stopped when the apply ended it), or null.
+        /// </summary>
+        public ObjectiveRefinementSession? Session { get; set; } = null;
     }
 }

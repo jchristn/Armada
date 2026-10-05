@@ -264,7 +264,7 @@ namespace Armada.Server
             _IncidentService = new IncidentService(_Database);
             _RunbookService = new RunbookService(_Database, _Logging);
             _GitHubIntegrationService = new GitHubIntegrationService(_Database, _ObjectiveService, _CheckRunService, _DeploymentService, _Settings, _Logging);
-            _LandingPreviewService = new LandingPreviewService(_Database, _Logging);
+            _LandingPreviewService = new LandingPreviewService(_Database, _Logging, _Settings);
             _HistoricalTimelineService = new HistoricalTimelineService(_Database);
             _ModelEndpointService = new ModelEndpointService(_Database, _Logging);
             _HarborService = new HarborService(_Database, _Logging);
@@ -1163,7 +1163,7 @@ namespace Armada.Server
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Voyages
-            new VoyageRoutes(_Database, _Admiral, EmitEventAsync, _WebSocketHub, _Logging, _ObjectiveService, _JsonOptions)
+            new VoyageRoutes(_Database, _Admiral, EmitEventAsync, _WebSocketHub, _Logging, _ObjectiveService, _JsonOptions, _MissionService)
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Missions

@@ -442,12 +442,13 @@ namespace Armada.Server.Routes
                 if (mission == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Mission not found" }; }
                 mission.DiffSnapshot = null;
                 mission.PlaybookSnapshots = await _database.Playbooks.GetMissionSnapshotsAsync(id).ConfigureAwait(false);
+                mission.AssignmentBlocker = await ComputeAssignmentBlockerAsync(mission).ConfigureAwait(false);
                 return (object)mission;
             },
             api => api
                 .WithTag("Missions")
                 .WithSummary("Get a mission")
-                .WithDescription("Returns a single mission by ID.")
+                .WithDescription("Returns a single mission by ID. A Pending mission carries AssignmentBlocker, the server's explanation of why no captain has taken it yet.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Mission ID (msn_ prefix)"))
                 .WithResponse(200, OpenApiJson.For<Mission>("Mission details"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
@@ -1338,6 +1339,19 @@ namespace Armada.Server.Routes
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Mission ID (msn_ prefix)"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
+        }
+
+        private async Task<MissionAssignmentBlocker?> ComputeAssignmentBlockerAsync(Mission mission)
+        {
+            try
+            {
+                return await _missionService.GetAssignmentBlockerAsync(mission).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logging.Warn("[MissionRoutes] could not compute the assignment blocker for mission " + mission.Id + ": " + ex.Message);
+                return null;
+            }
         }
 
         /// <summary>

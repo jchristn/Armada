@@ -283,6 +283,29 @@ namespace Test.Shared.Suites.E2E
                 AssertEqual(MissionStatusEnum.Pending, fetched.Status);
             }));
 
+            cases.Add(CaseAsync("get_pending_mission_has_assignment_blocker", "GetMission_Pending_IncludesAssignmentBlocker (F11)", TestTags.Positive, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
+                HttpClient authClient = fx.AuthClient;
+                List<string> createdFleetIds = new List<string>();
+                List<string> createdVesselIds = new List<string>();
+                List<string> createdMissionIds = new List<string>();
+
+                string vesselId = await SetupVesselAsync(authClient, createdFleetIds, createdVesselIds);
+                Mission created = await CreateMissionAsync(authClient, createdMissionIds, vesselId, "Blocker Read");
+
+                HttpResponseMessage response = await authClient.GetAsync("/api/v1/missions/" + created.Id);
+                Mission fetched = await JsonHelper.DeserializeAsync<Mission>(response);
+                AssertEqual(MissionStatusEnum.Pending, fetched.Status);
+                AssertNotNull(fetched.AssignmentBlocker, "a Pending mission explains why it waits");
+                AssertFalse(String.IsNullOrEmpty(fetched.AssignmentBlocker!.Summary), "blocker summary");
+
+                HttpResponseMessage list = await authClient.GetAsync("/api/v1/missions?vesselId=" + vesselId);
+                AssertEqual(HttpStatusCode.OK, list.StatusCode);
+                EnumerationResult<Mission> listed = await JsonHelper.DeserializeAsync<EnumerationResult<Mission>>(list);
+                AssertTrue(listed.Objects.All(m => m.AssignmentBlocker == null), "list responses stay lean (no blocker)");
+            }));
+
             #endregion
 
             #region CRUD-Update

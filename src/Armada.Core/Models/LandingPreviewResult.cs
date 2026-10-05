@@ -99,6 +99,23 @@ namespace Armada.Core.Models
         public bool IsReadyToLand { get; set; } = false;
 
         /// <summary>
+        /// Mission previews only: the landing mode that actually applies to the mission (voyage, then vessel, then the
+        /// Admiral default), or null when none is set anywhere.
+        /// </summary>
+        public LandingModeEnum? EffectiveLandingMode { get; set; } = null;
+
+        /// <summary>
+        /// Mission previews only: true when the effective landing mode is None, so Armada will not land the branch and the
+        /// work must be merged by hand (for example from the vessel's Manage Branches). Land cannot succeed.
+        /// </summary>
+        public bool ManualLandingOnly { get; set; } = false;
+
+        /// <summary>
+        /// Mission previews only: the mission's status when the preview was computed.
+        /// </summary>
+        public MissionStatusEnum? MissionStatus { get; set; } = null;
+
+        /// <summary>
         /// Landing preview issues and warnings.
         /// </summary>
         public List<LandingPreviewIssue> Issues { get; set; } = new List<LandingPreviewIssue>();
