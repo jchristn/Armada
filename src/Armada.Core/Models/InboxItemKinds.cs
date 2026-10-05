@@ -29,6 +29,9 @@ namespace Armada.Core.Models
         /// <summary>A deployment failed.</summary>
         public const string DeploymentFailed = "deployment_failed";
 
+        /// <summary>An Ask Armada action proposal is waiting for approval.</summary>
+        public const string AskProposal = "ask_proposal";
+
         #endregion
     }
 }

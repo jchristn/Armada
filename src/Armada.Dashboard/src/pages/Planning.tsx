@@ -42,6 +42,7 @@ import ReadinessPanel from '../components/shared/ReadinessPanel';
 import { applyToolEvent, type ToolEvent } from '../components/shared/ChatToolChips';
 import { randomThinkingMessage } from '../components/askThinkingMessages';
 import { canCaptainStartPlanning } from '../lib/captains';
+import { mergeSessionDetail, newerOf } from '../lib/liveMerge';
 import {
   type DispatchSeedState,
   getLatestAssistantMessage,
@@ -51,6 +52,7 @@ import {
   upsertMessage,
   upsertSession,
 } from './planning/planningUtils';
+import { sortByName } from '../lib/sortByName';
 
 interface PlanningSummaryEventPayload {
   sessionId?: string;
@@ -145,7 +147,7 @@ export default function Planning() {
       setSessions(sessionItems);
       setCaptains(captainResult?.objects || []);
       setFleets(fleetResult?.objects || []);
-      setVessels(vesselResult?.objects || []);
+      setVessels(sortByName(vesselResult?.objects));
       setPipelines(pipelineResult?.objects || []);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : t('Failed to load planning data.'));
@@ -499,8 +501,12 @@ export default function Planning() {
       setError('');
       const result = await sendPlanningSessionMessage(currentSession.id, { content: composer.trim(), showThinking, stream: streamingEnabled });
       setComposer('');
-      setDetail(result);
-      setSessions((current) => upsertSession(current, result.session));
+      // A fast captain can finish the turn (over the WebSocket) before this response arrives; keep the newer state.
+      setDetail((current) => mergeSessionDetail(current, result));
+      setSessions((current) => {
+        const existing = current.find((item) => item.id === result.session.id);
+        return upsertSession(current, existing ? newerOf(existing, result.session) : result.session);
+      });
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : t('Failed to send message.'));
     } finally {

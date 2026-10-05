@@ -74,6 +74,7 @@ namespace Armada.Server.Ask
         #region Private-Members
 
         private readonly string _Header = "[AskActionService] ";
+        private static readonly JsonSerializerOptions _DescribeJsonOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
         private readonly DatabaseDriver _Database;
         private readonly AskThreadService _Threads;
         private readonly ArmadaSettings _Settings;
@@ -192,7 +193,7 @@ namespace Armada.Server.Ask
             AskActionProposal proposal = new AskActionProposal();
             proposal.ToolName = tool;
             proposal.ArgumentsText = argumentsText;
-            proposal.SummaryText = Describe(tool, argumentsText);
+            proposal.SummaryText = await DescribeAsync(thread, tool, argumentsText, token).ConfigureAwait(false);
             proposal.Source = AskProposalSourceEnum.QuickAction;
             proposal.Status = AskProposalStatusEnum.Approved;
             proposal.DecidedByUserId = auth.UserId;
@@ -300,6 +301,19 @@ namespace Armada.Server.Ask
         /// <returns>The description.</returns>
         public static string Describe(string toolName, string? argumentsJson)
         {
+            return Describe(toolName, argumentsJson, null);
+        }
+
+        /// <summary>
+        /// One-line human description of a tool call, used as the proposal summary, with vessel ids shown as vessel
+        /// names where the lookup knows them.
+        /// </summary>
+        /// <param name="toolName">Tool name.</param>
+        /// <param name="argumentsJson">Arguments JSON text.</param>
+        /// <param name="vesselNames">Vessel id to name lookup, or null to show ids.</param>
+        /// <returns>The description.</returns>
+        public static string Describe(string toolName, string? argumentsJson, IReadOnlyDictionary<string, string>? vesselNames)
+        {
             JsonObject? args = null;
             try { args = String.IsNullOrWhiteSpace(argumentsJson) ? null : JsonNode.Parse(argumentsJson) as JsonObject; }
             catch (JsonException) { args = null; }
@@ -318,11 +332,18 @@ namespace Armada.Server.Ask
                 return node is JsonArray array ? array.Count : 0;
             }
 
+            string Vessel(string key)
+            {
+                string id = Str(key);
+                if (id.Length > 0 && vesselNames != null && vesselNames.TryGetValue(id, out string? name) && !String.IsNullOrWhiteSpace(name)) return name;
+                return id;
+            }
+
             string tool = AskToolPolicy.NormalizeToolName(toolName);
             switch (tool)
             {
                 case "dispatch":
-                    return "Dispatch voyage \"" + Str("title") + "\"" + (Str("vesselId").Length > 0 ? " to vessel " + Str("vesselId") : String.Empty) + " with " + Count("missions") + " mission(s)";
+                    return "Dispatch voyage \"" + Str("title") + "\"" + (Str("vesselId").Length > 0 ? " to vessel " + Vessel("vesselId") : String.Empty) + " with " + Count("missions") + " mission(s)";
                 case "cancel_voyage":
                     return "Cancel voyage " + Str("voyageId");
                 case "cancel_mission":
@@ -330,7 +351,7 @@ namespace Armada.Server.Ask
                 case "restart_mission":
                     return "Restart mission " + Str("missionId");
                 case "create_mission":
-                    return "Create mission \"" + Str("title") + "\"" + (Str("vesselId").Length > 0 ? " on vessel " + Str("vesselId") : String.Empty);
+                    return "Create mission \"" + Str("title") + "\"" + (Str("vesselId").Length > 0 ? " on vessel " + Vessel("vesselId") : String.Empty);
                 case "run_fleet_action":
                     return "Run fleet action " + (Str("actionId").Length > 0 ? Str("actionId") : "\"" + Str("name") + "\"") + " on " + Count("vesselIds") + " vessel(s)";
                 case "cancel_fleet_action_run":
@@ -367,6 +388,30 @@ namespace Armada.Server.Ask
 
         #region Private-Methods
 
+        /// <summary>
+        /// Describe a tool call with the vessel it targets shown by name (looked up in the thread's tenant).
+        /// </summary>
+        private async Task<string> DescribeAsync(AskThread thread, string toolName, string argumentsText, CancellationToken token = default)
+        {
+            Dictionary<string, string> vesselNames = new Dictionary<string, string>(StringComparer.Ordinal);
+            try
+            {
+                VesselReferenceArgs? reference = JsonSerializer.Deserialize<VesselReferenceArgs>(argumentsText, _DescribeJsonOptions);
+                string? vesselId = reference?.VesselId;
+                if (!String.IsNullOrWhiteSpace(vesselId) && !String.IsNullOrEmpty(thread.TenantId))
+                {
+                    Vessel? vessel = await _Database.Vessels.ReadAsync(thread.TenantId!, vesselId!, token).ConfigureAwait(false);
+                    if (vessel != null) vesselNames[vesselId!] = vessel.Name;
+                }
+            }
+            catch (JsonException)
+            {
+                // Unparseable arguments: describe with ids.
+            }
+
+            return Describe(toolName, argumentsText, vesselNames);
+        }
+
         private async Task<object> HandleCallAsync(string name, JsonElement? args, Func<JsonElement?, Task<object>> handler)
         {
             RpcCallContext? context = RpcCallContext.Current;
@@ -391,7 +436,7 @@ namespace Armada.Server.Ask
             AskActionProposal proposal = new AskActionProposal();
             proposal.ToolName = name;
             proposal.ArgumentsText = argumentsText;
-            proposal.SummaryText = Describe(name, argumentsText);
+            proposal.SummaryText = await DescribeAsync(thread, name, argumentsText).ConfigureAwait(false);
             proposal.Source = AskProposalSourceEnum.Captain;
 
             if (!thread.AutoApprove)

@@ -63,6 +63,23 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(0, (await h.Db.Driver.AskActionProposals.EnumerateByThreadAsync(Constants.DefaultTenantId, thread.Id, null).ConfigureAwait(false)).Count, "no proposal");
             }));
 
+            cases.Add(CaseAsync("proposal_summary_names_the_vessel", "A dispatch proposal summary shows the vessel name, not its id", TestTags.Positive, async () =>
+            {
+                using AskTestHarness h = await AskTestHarness.CreateAsync().ConfigureAwait(false);
+                AuthContext owner = AskTestHarness.User("usr_named");
+                AskThread thread = await h.Threads.CreateThreadAsync(owner, null).ConfigureAwait(false);
+                Vessel vessel = new Vessel { TenantId = thread.TenantId, Name = "gateway", RepoUrl = "https://example.com/gateway.git" };
+                vessel = await h.Db.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
+
+                string args = "{\"title\":\"Fix login\",\"vesselId\":\"" + vessel.Id + "\",\"missions\":[{\"title\":\"Fix it\",\"description\":\"d\"}]}";
+                await h.CallAsync("dispatch", args, owner, thread.Id).ConfigureAwait(false);
+
+                List<AskActionProposal> proposals = await h.Db.Driver.AskActionProposals.EnumerateByThreadAsync(Constants.DefaultTenantId, thread.Id, null).ConfigureAwait(false);
+                AssertEqual(1, proposals.Count, "one proposal");
+                AssertContains("Dispatch voyage \"Fix login\" to vessel gateway with 1 mission(s)", proposals[0].SummaryText);
+                AssertFalse(proposals[0].SummaryText.Contains(vessel.Id, StringComparison.Ordinal), "no vessel id in the summary");
+            }));
+
             cases.Add(CaseAsync("mutating_tool_becomes_proposal", "A state-changing tool becomes a pending proposal and is not executed", TestTags.Positive, async () =>
             {
                 using AskTestHarness h = await AskTestHarness.CreateAsync().ConfigureAwait(false);

@@ -11,6 +11,9 @@ import PageHeader from '../components/shared/PageHeader';
 import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 
+/** Inbox kinds that wait on a decision from the user (approve or reject), as opposed to failures to fix. */
+const APPROVAL_KINDS: ReadonlySet<string> = new Set(['review', 'deployment_approval', 'ask_proposal']);
+
 function severityColor(severity: InboxSeverity): string {
   if (severity === 'Critical') return 'var(--red)';
   if (severity === 'Warning') return 'var(--yellow)';
@@ -43,6 +46,51 @@ export default function Inbox() {
   useEffect(() => { load(); }, []);
 
   const { seconds: refreshSeconds, setSeconds: setRefreshSeconds } = useAutoRefresh('inbox', load);
+
+  const approvals = useMemo(() => items.filter((i) => APPROVAL_KINDS.has(i.kind)), [items]);
+  const interventions = useMemo(() => items.filter((i) => !APPROVAL_KINDS.has(i.kind)), [items]);
+
+  function actionLabel(item: InboxItem): string {
+    if (item.kind === 'ask_proposal') return t('Open conversation');
+    if (item.kind === 'deployment_approval') return t('Open deployment');
+    if (item.kind === 'review') return t('Review mission');
+    return t('Open');
+  }
+
+  function renderItem(item: InboxItem, i: number) {
+    return (
+      <div
+        key={`${item.kind}:${item.entityId ?? i}`}
+        className="card clickable"
+        style={{ padding: '0.75rem 1rem', borderLeft: `3px solid ${severityColor(item.severity)}`, cursor: 'pointer' }}
+        onClick={() => navigate(item.href)}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+          <div style={{ minWidth: 0, flex: '1 1 240px' }}>
+            <strong>{item.title}</strong>
+            <div className="text-dim" style={{ marginTop: '0.2rem' }}>{item.detail}</div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span
+              className="badge"
+              style={{ color: severityColor(item.severity), borderColor: severityColor(item.severity), whiteSpace: 'nowrap' }}
+            >
+              {t(item.severity)}
+            </span>
+            {APPROVAL_KINDS.has(item.kind) && (
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={(e) => { e.stopPropagation(); navigate(item.href); }}
+              >
+                {actionLabel(item)}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const counts = useMemo(() => ({
     critical: items.filter((i) => i.severity === 'Critical').length,
@@ -91,29 +139,24 @@ export default function Inbox() {
           <span>{t('Nothing needs your attention right now.')}</span>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-          {items.map((item, i) => (
-            <div
-              key={i}
-              className="card clickable"
-              style={{ padding: '0.75rem 1rem', borderLeft: `3px solid ${severityColor(item.severity)}`, cursor: 'pointer' }}
-              onClick={() => navigate(item.href)}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem' }}>
-                <div>
-                  <strong>{item.title}</strong>
-                  <div className="text-dim" style={{ marginTop: '0.2rem' }}>{item.detail}</div>
-                </div>
-                <span
-                  className="badge"
-                  style={{ color: severityColor(item.severity), borderColor: severityColor(item.severity), whiteSpace: 'nowrap' }}
-                >
-                  {t(item.severity)}
-                </span>
+        <>
+          {approvals.length > 0 && (
+            <section aria-label={t('Waiting for your approval')} style={{ marginBottom: '1rem' }}>
+              <h2 style={{ fontSize: '1rem', margin: '0 0 0.5rem' }}>{t('Waiting for your approval')} ({approvals.length})</h2>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                {approvals.map(renderItem)}
               </div>
-            </div>
-          ))}
-        </div>
+            </section>
+          )}
+          {interventions.length > 0 && (
+            <section aria-label={t('Needs intervention')}>
+              <h2 style={{ fontSize: '1rem', margin: '0 0 0.5rem' }}>{t('Needs intervention')} ({interventions.length})</h2>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                {interventions.map(renderItem)}
+              </div>
+            </section>
+          )}
+        </>
       )}
 
       {unreadAlerts.length > 0 && (

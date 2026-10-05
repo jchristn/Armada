@@ -50,6 +50,12 @@ namespace Armada.Core.Models
         public bool PostmortemOnly { get; set; } = false;
 
         /// <summary>
+        /// When true, request-history entries for read-only HTTP methods (GET, HEAD, OPTIONS) are left out,
+        /// so the timeline is not dominated by dashboard and client polling. Defaults to false.
+        /// </summary>
+        public bool ExcludeReadRequests { get; set; } = false;
+
+        /// <summary>
         /// Optional mission filter.
         /// </summary>
         public string? MissionId { get; set; } = null;

@@ -111,6 +111,8 @@ namespace Armada.Server.Routes
                 query.ToUtc = toUtc.ToUniversalTime();
             if (Boolean.TryParse(req.Query.GetValueOrDefault("postmortemOnly"), out bool postmortemOnly))
                 query.PostmortemOnly = postmortemOnly;
+            if (Boolean.TryParse(req.Query.GetValueOrDefault("excludeReadRequests"), out bool excludeReadRequests))
+                query.ExcludeReadRequests = excludeReadRequests;
 
             query.ObjectiveId = NormalizeEmpty(req.Query.GetValueOrDefault("objectiveId")) ?? query.ObjectiveId;
             query.VesselId = NormalizeEmpty(req.Query.GetValueOrDefault("vesselId")) ?? query.VesselId;

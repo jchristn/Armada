@@ -43,6 +43,7 @@ import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
 import UserScopeFilter from '../components/shared/UserScopeFilter';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import { buildObjectiveDuplicatePayload } from '../lib/duplicates';
+import { sortByName } from '../lib/sortByName';
 
 export default function Objectives() {
   const navigate = useNavigate();
@@ -98,7 +99,7 @@ export default function Objectives() {
       const loadedObjectives = objectiveResult.objects || [];
       setObjectives(loadedObjectives);
       setFleets(fleetResult.objects || []);
-      setVessels(vesselResult.objects || []);
+      setVessels(sortByName(vesselResult.objects));
       setError('');
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : t('Failed to load backlog.'));

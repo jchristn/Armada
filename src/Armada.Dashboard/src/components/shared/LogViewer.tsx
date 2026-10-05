@@ -184,7 +184,7 @@ export default function LogViewer({
             {loading
               ? t('Loading...')
               : markdown && content
-                ? <Markdown>{content}</Markdown>
+                ? <Markdown preserveLineBreaks>{content}</Markdown>
                 : (content || t('No log output'))}
           </div>
         </div>

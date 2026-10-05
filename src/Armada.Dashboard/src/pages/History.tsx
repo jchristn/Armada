@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { enumerateHistoryTimeline, listObjectives, listVessels, deleteRequestHistoryEntry } from '../api/client';
 import type { HistoricalTimelineEntry, HistoricalTimelineQuery, Objective, Vessel } from '../types/models';
@@ -116,6 +116,7 @@ function buildMarkdown(query: HistoricalTimelineQuery, entries: HistoricalTimeli
   if (query.actor) activeFilters.push(`actor=\`${query.actor}\``);
   if (query.vesselId) activeFilters.push(`vessel=\`${query.vesselId}\``);
   if (query.postmortemOnly) activeFilters.push('postmortemOnly=`true`');
+  if (query.excludeReadRequests) activeFilters.push('excludeReadRequests=`true`');
   if (query.sourceTypes && query.sourceTypes.length > 0) activeFilters.push(`sourceTypes=\`${query.sourceTypes.join(', ')}\``);
 
   const lines: string[] = [
@@ -167,6 +168,9 @@ export default function History() {
   const [vesselFilter, setVesselFilter] = useState(initialQuery.get('vesselId') || 'all');
   const [sourceTypeFilter, setSourceTypeFilter] = useState(initialQuery.get('sourceType') || 'all');
   const [postmortemOnly, setPostmortemOnly] = useState(initialQuery.get('postmortemOnly') === 'true');
+  // GET/HEAD/OPTIONS request entries are mostly the dashboard's own polling; hidden unless asked for.
+  const [showReadRequests, setShowReadRequests] = useState(initialQuery.get('showReadRequests') === 'true');
+  const showReadRequestsInitialized = useRef(false);
   const [savedViews, setSavedViews] = useState<SavedHistoryView[]>(() => loadSavedViews());
   const [saveViewOpen, setSaveViewOpen] = useState(false);
   const [saveViewName, setSaveViewName] = useState('');
@@ -187,6 +191,7 @@ export default function History() {
       vesselId: vesselFilter === 'all' ? null : vesselFilter,
       sourceTypes: sourceTypeFilter === 'all' ? [] : [sourceTypeFilter],
       postmortemOnly: postmortemOnly || undefined,
+      excludeReadRequests: !showReadRequests,
     };
   }
 
@@ -232,6 +237,14 @@ export default function History() {
   useEffect(() => {
     void load();
   }, []);
+
+  useEffect(() => {
+    if (!showReadRequestsInitialized.current) {
+      showReadRequestsInitialized.current = true;
+      return;
+    }
+    void load();
+  }, [showReadRequests]);
 
   const { seconds: refreshSeconds, setSeconds: setRefreshSeconds } = useAutoRefresh('history', load);
 
@@ -321,6 +334,7 @@ export default function History() {
     setVesselFilter(view.query.vesselId || 'all');
     setSourceTypeFilter(view.query.sourceTypes && view.query.sourceTypes.length > 0 ? view.query.sourceTypes[0] : 'all');
     setPostmortemOnly(view.query.postmortemOnly === true);
+    setShowReadRequests(view.query.excludeReadRequests === false);
   }
 
   function deleteSavedView(id: string) {
@@ -467,6 +481,14 @@ export default function History() {
               onChange={(event) => setPostmortemOnly(event.target.checked)}
             />
             {t('Postmortem context only')}
+          </label>
+          <label className="checkbox-label" style={{ marginBottom: 0, whiteSpace: 'nowrap' }} title={t('GET requests are mostly dashboard and client polling, so they are hidden by default.')}>
+            <input
+              type="checkbox"
+              checked={showReadRequests}
+              onChange={(event) => setShowReadRequests(event.target.checked)}
+            />
+            {t('Show GET requests')}
           </label>
           <button className="btn btn-primary" onClick={load}>{t('Apply')}</button>
         </div>

@@ -2311,6 +2311,8 @@ export interface HistoricalTimelineQuery {
   deploymentId?: string | null;
   incidentId?: string | null;
   postmortemOnly?: boolean;
+  /** When true, GET/HEAD/OPTIONS request-history entries are left out (dashboard polling). */
+  excludeReadRequests?: boolean;
   missionId?: string | null;
   voyageId?: string | null;
   actor?: string | null;

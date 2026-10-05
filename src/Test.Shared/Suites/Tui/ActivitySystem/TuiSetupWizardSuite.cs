@@ -144,6 +144,50 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                 }
             }));
 
+            cases.Add(TuiCase.Sync(Suite, "handoff_explains_failed_mission", "A failed first mission: the handoff shows the full id, the failure reason, the rescue missions, and a View Mission Log action", () =>
+            {
+                StubHttpHandler stub = EmptyServer();
+                string failed = "{\"Id\":\"msn_setupfail1\",\"Title\":\"Repository onboarding survey\",\"Status\":\"Failed\",\"VesselId\":\"vsl_new\",\"FailureReason\":\"Agent exited with code 1: nothing to commit\"}";
+                stub.On("POST", "/api/v1/missions", body => StubHttpHandler.Response(HttpStatusCode.Created, failed));
+                stub.Json("GET", "/api/v1/missions/msn_setupfail1", failed);
+                stub.Json("GET", "/api/v1/incidents", "{\"Objects\":[{\"Id\":\"inc_1\",\"Title\":\"Mission failed\",\"MissionId\":\"msn_setupfail1\",\"RescueMissionIds\":[\"msn_rescue1\"]}],\"TotalRecords\":1}");
+                stub.Json("GET", "/api/v1/missions/msn_rescue1", "{\"Id\":\"msn_rescue1\",\"Title\":\"[Rescue] Repository onboarding survey\",\"Status\":\"InProgress\",\"VesselId\":\"vsl_new\"}");
+                stub.Json("GET", "/api/v1/missions/msn_setupfail1/log", "{\"Log\":\"cloning\\nnothing to commit, working tree clean\",\"Lines\":2,\"TotalLines\":2}");
+                using (TuiTestHost host = TuiCase.SignedIn(140, 60, "/setup", stub))
+                {
+                    SetupWizardScreen screen = Current(host);
+                    AssertTrue(host.PumpUntil(() => !screen.Loading), "resources loaded");
+                    TuiCase.Contains(host.Screen(), "Step 1 of 6", "objective step drawn");
+                    host.Press("tab");
+                    host.Press("right").Press("enter");
+                    AssertEqual(1, screen.Current, "fleet step");
+                    host.Press("ctrl+u").Type("Lab Fleet").Press("tab").Press("ctrl+u").Type("Setup lab");
+                    host.Press("ctrl+s");
+                    AssertTrue(host.PumpUntil(() => screen.Current == 2), "vessel step");
+                    host.Type("armada").Press("tab").Press("tab").Type("/tmp/repo").Press("ctrl+s");
+                    AssertTrue(host.PumpUntil(() => screen.Current == 3), "captain step");
+                    host.Press("ctrl+s");
+                    AssertTrue(host.PumpUntil(() => screen.Current == 4), "dispatch step");
+                    host.Press("ctrl+s");
+                    AssertTrue(host.PumpUntil(() => screen.Current == 5), "handoff");
+
+                    AssertTrue(host.PumpUntil(() => screen.RescueMissions.Count == 1), "rescue missions loaded");
+                    AssertTrue(host.WaitForText("[Rescue] Repository onboarding survey"), "rescue shown\n" + host.Screen());
+                    string handoff = host.Screen();
+                    TuiScreenDump.Write("setup-handoff-failed", handoff);
+                    TuiCase.Contains(handoff, "msn_setupfail1", "full mission id");
+                    TuiCase.Contains(handoff, "The mission failed.", "failure headline");
+                    TuiCase.Contains(handoff, "Agent exited with code 1: nothing to commit", "failure reason");
+                    TuiCase.Contains(handoff, "Armada started a rescue mission to retry this work:", "rescue mentioned");
+                    TuiCase.Contains(handoff, "View Mission Log", "log action");
+                    AssertTrue(stub.Saw("GET", "/api/v1/incidents", r => r.Query.Contains("missionId=msn_setupfail1", StringComparison.Ordinal)), "incidents queried by mission");
+
+                    SetupWizardPanel panel = screen.Panels[5];
+                    panel.Actions.Buttons.First(b => b.Label == "View Mission Log").Press();
+                    AssertTrue(host.WaitForText("nothing to commit, working tree clean"), "log shown\n" + host.Screen());
+                }
+            }));
+
             cases.Add(TuiCase.Sync(Suite, "validation_and_back", "Validation blocks the step with the dashboard message and Back keeps entered values", () =>
             {
                 StubHttpHandler stub = EmptyServer();
