@@ -561,7 +561,7 @@ Server-to-client messages are camelCase JSON; client field names are matched cas
 - Client routes: `command`, `subscribe`
 - Client message fields: `action`, `allTenants`, `captainId`, `data`, `entityType`, `filePath`, `id`, `lines`, `offset`, `outputPath`, `query`, `route`, `status`
 - Event envelope fields: `type`, `message`, `data`, `timestamp`
-- Command reply fields (`command.result`, `command.error`): `type`, `action`, `data`, `error`
+- Command reply fields (`command.result`, `command.error`): `type`, `action`, `data`, `error`, `code`
 
 ### Commands
 

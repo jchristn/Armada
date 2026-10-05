@@ -10127,7 +10127,8 @@
       "type",
       "action",
       "data",
-      "error"
+      "error",
+      "code"
     ],
     "commands": [
       "backup",

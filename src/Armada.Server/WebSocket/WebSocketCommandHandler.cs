@@ -116,7 +116,7 @@ namespace Armada.Server.WebSocket
             // Only the declared surface is dispatched; an action handled below but missing from WebSocketSurface is a bug
             // that the API contract test catches.
             if (!WebSocketSurface.IsCommandAction(action))
-                return new { type = "command.error", action = action, error = "Unknown action: " + action };
+                return WebSocketCommandError.Create(action, WebSocketCommandErrorCodeEnum.UnknownAction, "Unknown action: " + action);
 
             switch (action)
             {
@@ -159,7 +159,7 @@ namespace Armada.Server.WebSocket
                     string getFleetId = command.Id ?? "";
                     Fleet? foundFleet = await _Database.Fleets.ReadAsync(getFleetId).ConfigureAwait(false);
                     if (foundFleet == null)
-                        return new { type = "command.error", action = "get_fleet", error = "Fleet not found" };
+                        return WebSocketCommandError.Create("get_fleet", WebSocketCommandErrorCodeEnum.NotFound, "Fleet not found");
                     else
                     {
                         List<Vessel> fleetVessels = await _Database.Vessels.EnumerateByFleetAsync(getFleetId).ConfigureAwait(false);
@@ -175,7 +175,7 @@ namespace Armada.Server.WebSocket
                     string updFleetId = command.Id ?? "";
                     Fleet? existFleet = await _Database.Fleets.ReadAsync(updFleetId).ConfigureAwait(false);
                     if (existFleet == null)
-                        return new { type = "command.error", action = "update_fleet", error = "Fleet not found" };
+                        return WebSocketCommandError.Create("update_fleet", WebSocketCommandErrorCodeEnum.NotFound, "Fleet not found");
                     else
                     {
                         Fleet updFleet = JsonSerializer.Deserialize<WebSocketDataCommand<Fleet>>(rawBody, _JsonOptions)?.Data!;
@@ -202,14 +202,14 @@ namespace Armada.Server.WebSocket
                     string getVesselId = command.Id ?? "";
                     Vessel? foundVessel = await _Database.Vessels.ReadAsync(getVesselId).ConfigureAwait(false);
                     if (foundVessel == null)
-                        return new { type = "command.error", action = "get_vessel", error = "Vessel not found" };
+                        return WebSocketCommandError.Create("get_vessel", WebSocketCommandErrorCodeEnum.NotFound, "Vessel not found");
                     else
                         return new { type = "command.result", action = "get_vessel", data = (object)foundVessel };
 
                 case "create_vessel":
                     Vessel newVessel = JsonSerializer.Deserialize<WebSocketDataCommand<Vessel>>(rawBody, _JsonOptions)?.Data!;
                     if (String.IsNullOrEmpty(newVessel.RepoUrl))
-                        return new { type = "command.error", action = "create_vessel", error = "repoUrl is required when creating a vessel" };
+                        return WebSocketCommandError.Create("create_vessel", WebSocketCommandErrorCodeEnum.InvalidArgument, "repoUrl is required when creating a vessel");
                     newVessel.NormalizeGitHubTokenOverride();
                     newVessel = await _Database.Vessels.CreateAsync(newVessel).ConfigureAwait(false);
                     return new { type = "command.result", action = "create_vessel", data = (object)newVessel };
@@ -218,7 +218,7 @@ namespace Armada.Server.WebSocket
                     string updVesselId = command.Id ?? "";
                     Vessel? existVessel = await _Database.Vessels.ReadAsync(updVesselId).ConfigureAwait(false);
                     if (existVessel == null)
-                        return new { type = "command.error", action = "update_vessel", error = "Vessel not found" };
+                        return WebSocketCommandError.Create("update_vessel", WebSocketCommandErrorCodeEnum.NotFound, "Vessel not found");
                     else
                     {
                         Vessel updVessel = JsonSerializer.Deserialize<WebSocketDataCommand<Vessel>>(rawBody, _JsonOptions)?.Data!;
@@ -241,7 +241,7 @@ namespace Armada.Server.WebSocket
                     string ctxVesselId = command.Id ?? "";
                     Vessel? ctxVessel = await _Database.Vessels.ReadAsync(ctxVesselId).ConfigureAwait(false);
                     if (ctxVessel == null)
-                        return new { type = "command.error", action = "update_vessel_context", error = "Vessel not found" };
+                        return WebSocketCommandError.Create("update_vessel_context", WebSocketCommandErrorCodeEnum.NotFound, "Vessel not found");
                     else
                     {
                         Vessel ctxPatch = JsonSerializer.Deserialize<WebSocketDataCommand<Vessel>>(rawBody, _JsonOptions)?.Data!;
@@ -258,7 +258,7 @@ namespace Armada.Server.WebSocket
                     string delVesselId = command.Id ?? "";
                     Vessel? delVessel = await _Database.Vessels.ReadAsync(delVesselId).ConfigureAwait(false);
                     if (delVessel == null)
-                        return new { type = "command.error", action = "delete_vessel", error = "Vessel not found" };
+                        return WebSocketCommandError.Create("delete_vessel", WebSocketCommandErrorCodeEnum.NotFound, "Vessel not found");
 
                     // Cancel active missions on this vessel
                     try
@@ -318,7 +318,7 @@ namespace Armada.Server.WebSocket
                     string getVoyageId = command.Id ?? "";
                     Voyage? foundVoyage = await _Database.Voyages.ReadAsync(getVoyageId).ConfigureAwait(false);
                     if (foundVoyage == null)
-                        return new { type = "command.error", action = "get_voyage", error = "Voyage not found" };
+                        return WebSocketCommandError.Create("get_voyage", WebSocketCommandErrorCodeEnum.NotFound, "Voyage not found");
                     else
                     {
                         List<Mission> voyageMissions = await _Database.Missions.EnumerateByVoyageAsync(getVoyageId).ConfigureAwait(false);
@@ -350,7 +350,7 @@ namespace Armada.Server.WebSocket
                     string cvId = command.Id ?? "";
                     Voyage? cvVoyage = await _Database.Voyages.ReadAsync(cvId).ConfigureAwait(false);
                     if (cvVoyage == null)
-                        return new { type = "command.error", action = "cancel_voyage", error = "Voyage not found" };
+                        return WebSocketCommandError.Create("cancel_voyage", WebSocketCommandErrorCodeEnum.NotFound, "Voyage not found");
                     else
                     {
                         cvVoyage.Status = VoyageStatusEnum.Cancelled;
@@ -406,15 +406,15 @@ namespace Armada.Server.WebSocket
                     string pvId = command.Id ?? "";
                     Voyage? pvVoyage = await _Database.Voyages.ReadAsync(pvId).ConfigureAwait(false);
                     if (pvVoyage == null)
-                        return new { type = "command.error", action = "purge_voyage", error = "Voyage not found" };
+                        return WebSocketCommandError.Create("purge_voyage", WebSocketCommandErrorCodeEnum.NotFound, "Voyage not found");
                     else if (pvVoyage.Status == VoyageStatusEnum.Open || pvVoyage.Status == VoyageStatusEnum.InProgress)
-                        return new { type = "command.error", action = "purge_voyage", error = "Cannot delete voyage while status is " + pvVoyage.Status + ". Cancel the voyage first." };
+                        return WebSocketCommandError.Create("purge_voyage", WebSocketCommandErrorCodeEnum.Conflict, "Cannot delete voyage while status is " + pvVoyage.Status + ". Cancel the voyage first.");
                     else
                     {
                         List<Mission> pvMissions = await _Database.Missions.EnumerateByVoyageAsync(pvId).ConfigureAwait(false);
                         int pvActiveCount = pvMissions.Count(m => m.Status == MissionStatusEnum.Assigned || m.Status == MissionStatusEnum.InProgress);
                         if (pvActiveCount > 0)
-                            return new { type = "command.error", action = "purge_voyage", error = "Cannot delete voyage with " + pvActiveCount + " active mission(s) in Assigned or InProgress status. Cancel or complete them first." };
+                            return WebSocketCommandError.Create("purge_voyage", WebSocketCommandErrorCodeEnum.Conflict, "Cannot delete voyage with " + pvActiveCount + " active mission(s) in Assigned or InProgress status. Cancel or complete them first.");
                         else
                         {
                             foreach (Mission m in pvMissions)
@@ -483,7 +483,7 @@ namespace Armada.Server.WebSocket
                     string getMissionId = command.Id ?? "";
                     Mission? foundMission = await _Database.Missions.ReadAsync(getMissionId).ConfigureAwait(false);
                     if (foundMission == null)
-                        return new { type = "command.error", action = "get_mission", error = "Mission not found" };
+                        return WebSocketCommandError.Create("get_mission", WebSocketCommandErrorCodeEnum.NotFound, "Mission not found");
                     else
                         return new { type = "command.result", action = "get_mission", data = (object)foundMission };
 
@@ -506,7 +506,7 @@ namespace Armada.Server.WebSocket
                     string updMissionId = command.Id ?? "";
                     Mission? existMission = await _Database.Missions.ReadAsync(updMissionId).ConfigureAwait(false);
                     if (existMission == null)
-                        return new { type = "command.error", action = "update_mission", error = "Mission not found" };
+                        return WebSocketCommandError.Create("update_mission", WebSocketCommandErrorCodeEnum.NotFound, "Mission not found");
                     else
                     {
                         Mission updMission = JsonSerializer.Deserialize<WebSocketDataCommand<Mission>>(rawBody, _JsonOptions)?.Data!;
@@ -523,15 +523,15 @@ namespace Armada.Server.WebSocket
                     Mission? tmMission = await _Database.Missions.ReadAsync(tmId).ConfigureAwait(false);
                     if (tmMission == null)
                     {
-                        return new { type = "command.error", action = "transition_mission_status", error = "Mission not found" };
+                        return WebSocketCommandError.Create("transition_mission_status", WebSocketCommandErrorCodeEnum.NotFound, "Mission not found");
                     }
                     else if (!Enum.TryParse<MissionStatusEnum>(tmStatus, true, out MissionStatusEnum tmNewStatus))
                     {
-                        return new { type = "command.error", action = "transition_mission_status", error = "Invalid status: " + tmStatus };
+                        return WebSocketCommandError.Create("transition_mission_status", WebSocketCommandErrorCodeEnum.InvalidArgument, "Invalid status: " + tmStatus);
                     }
                     else if (!IsValidTransition(tmMission.Status, tmNewStatus))
                     {
-                        return new { type = "command.error", action = "transition_mission_status", error = "Invalid transition from " + tmMission.Status + " to " + tmNewStatus };
+                        return WebSocketCommandError.Create("transition_mission_status", WebSocketCommandErrorCodeEnum.Conflict, "Invalid transition from " + tmMission.Status + " to " + tmNewStatus);
                     }
                     else
                     {
@@ -553,7 +553,7 @@ namespace Armada.Server.WebSocket
                     string cmId = command.Id ?? "";
                     Mission? cmMission = await _Database.Missions.ReadAsync(cmId).ConfigureAwait(false);
                     if (cmMission == null)
-                        return new { type = "command.error", action = "cancel_mission", error = "Mission not found" };
+                        return WebSocketCommandError.Create("cancel_mission", WebSocketCommandErrorCodeEnum.NotFound, "Mission not found");
                     else
                     {
                         if (!String.IsNullOrEmpty(cmMission.CaptainId))
@@ -590,7 +590,7 @@ namespace Armada.Server.WebSocket
                     string pmId = command.Id ?? "";
                     Mission? pmMission = await _Database.Missions.ReadAsync(pmId).ConfigureAwait(false);
                     if (pmMission == null)
-                        return new { type = "command.error", action = "purge_mission", error = "Mission not found" };
+                        return WebSocketCommandError.Create("purge_mission", WebSocketCommandErrorCodeEnum.NotFound, "Mission not found");
                     else
                     {
                         // Clean up associated dock/worktree
@@ -639,9 +639,9 @@ namespace Armada.Server.WebSocket
                     string rmId = command.Id ?? "";
                     Mission? rmMission = await _Database.Missions.ReadAsync(rmId).ConfigureAwait(false);
                     if (rmMission == null)
-                        return new { type = "command.error", action = "restart_mission", error = "Mission not found" };
+                        return WebSocketCommandError.Create("restart_mission", WebSocketCommandErrorCodeEnum.NotFound, "Mission not found");
                     else if (rmMission.Status != MissionStatusEnum.Failed && rmMission.Status != MissionStatusEnum.Cancelled && rmMission.Status != MissionStatusEnum.LandingFailed)
-                        return new { type = "command.error", action = "restart_mission", error = "Only Failed, LandingFailed, or Cancelled missions can be restarted" };
+                        return WebSocketCommandError.Create("restart_mission", WebSocketCommandErrorCodeEnum.Conflict, "Only Failed, LandingFailed, or Cancelled missions can be restarted");
                     else
                     {
                         WebSocketDataCommand<MissionRestartData>? rmData = null;
@@ -674,9 +674,9 @@ namespace Armada.Server.WebSocket
                     string mdId = command.Id ?? "";
                     Mission? mdMission = await _Database.Missions.ReadAsync(mdId).ConfigureAwait(false);
                     if (mdMission == null)
-                        return new { type = "command.error", action = "get_mission_diff", error = "Mission not found" };
+                        return WebSocketCommandError.Create("get_mission_diff", WebSocketCommandErrorCodeEnum.NotFound, "Mission not found");
                     else if (_Settings == null)
-                        return new { type = "command.error", action = "get_mission_diff", error = "Diff not available — settings not configured" };
+                        return WebSocketCommandError.Create("get_mission_diff", WebSocketCommandErrorCodeEnum.Unavailable, "Diff not available - settings not configured");
                     else
                     {
                         string savedDiffPath = System.IO.Path.Combine(_Settings.LogDirectory, "diffs", mdId + ".diff");
@@ -708,9 +708,9 @@ namespace Armada.Server.WebSocket
                                 mdDock = mdDocks.FirstOrDefault(d => d.BranchName == mdMission.BranchName && d.Active);
                             }
                             if (mdDock == null || String.IsNullOrEmpty(mdDock.WorktreePath) || !System.IO.Directory.Exists(mdDock.WorktreePath))
-                                return new { type = "command.error", action = "get_mission_diff", error = "No diff available — worktree was already reclaimed and no saved diff exists" };
+                                return WebSocketCommandError.Create("get_mission_diff", WebSocketCommandErrorCodeEnum.Unavailable, "No diff available - worktree was already reclaimed and no saved diff exists");
                             else if (_Git == null)
-                                return new { type = "command.error", action = "get_mission_diff", error = "Git service not available" };
+                                return WebSocketCommandError.Create("get_mission_diff", WebSocketCommandErrorCodeEnum.Unavailable, "Git service not available");
                             else
                             {
                                 string baseBranch = "main";
@@ -731,9 +731,9 @@ namespace Armada.Server.WebSocket
                     string mlId = command.Id ?? "";
                     Mission? mlMission = await _Database.Missions.ReadAsync(mlId).ConfigureAwait(false);
                     if (mlMission == null)
-                        return new { type = "command.error", action = "get_mission_log", error = "Mission not found" };
+                        return WebSocketCommandError.Create("get_mission_log", WebSocketCommandErrorCodeEnum.NotFound, "Mission not found");
                     else if (_Settings == null)
-                        return new { type = "command.error", action = "get_mission_log", error = "Logs not available — settings not configured" };
+                        return WebSocketCommandError.Create("get_mission_log", WebSocketCommandErrorCodeEnum.Unavailable, "Logs not available - settings not configured");
                     else
                     {
                         string mlLogPath = System.IO.Path.Combine(_Settings.LogDirectory, "missions", mlId + ".log");
@@ -765,7 +765,7 @@ namespace Armada.Server.WebSocket
                     string getCaptainId = command.Id ?? "";
                     Captain? foundCaptain = await _Database.Captains.ReadAsync(getCaptainId).ConfigureAwait(false);
                     if (foundCaptain == null)
-                        return new { type = "command.error", action = "get_captain", error = "Captain not found" };
+                        return WebSocketCommandError.Create("get_captain", WebSocketCommandErrorCodeEnum.NotFound, "Captain not found");
                     else
                         return new { type = "command.result", action = "get_captain", data = (object)foundCaptain };
 
@@ -779,7 +779,7 @@ namespace Armada.Server.WebSocket
                     string updCptId = command.Id ?? "";
                     Captain? existCpt = await _Database.Captains.ReadAsync(updCptId).ConfigureAwait(false);
                     if (existCpt == null)
-                        return new { type = "command.error", action = "update_captain", error = "Captain not found" };
+                        return WebSocketCommandError.Create("update_captain", WebSocketCommandErrorCodeEnum.NotFound, "Captain not found");
                     else
                     {
                         Captain updCpt = JsonSerializer.Deserialize<WebSocketDataCommand<Captain>>(rawBody, _JsonOptions)?.Data!;
@@ -802,15 +802,15 @@ namespace Armada.Server.WebSocket
                     string delCptId = command.Id ?? "";
                     Captain? delCpt = await _Database.Captains.ReadAsync(delCptId).ConfigureAwait(false);
                     if (delCpt == null)
-                        return new { type = "command.error", action = "delete_captain", error = "Captain not found" };
+                        return WebSocketCommandError.Create("delete_captain", WebSocketCommandErrorCodeEnum.NotFound, "Captain not found");
                     else if (delCpt.State == CaptainStateEnum.Working)
-                        return new { type = "command.error", action = "delete_captain", error = "Cannot delete captain while state is Working. Stop the captain first." };
+                        return WebSocketCommandError.Create("delete_captain", WebSocketCommandErrorCodeEnum.Conflict, "Cannot delete captain while state is Working. Stop the captain first.");
                     else
                     {
                         List<Mission> delCptMissions = await _Database.Missions.EnumerateByCaptainAsync(delCptId).ConfigureAwait(false);
                         int delCptActiveCount = delCptMissions.Count(m => m.Status == MissionStatusEnum.Assigned || m.Status == MissionStatusEnum.InProgress);
                         if (delCptActiveCount > 0)
-                            return new { type = "command.error", action = "delete_captain", error = "Cannot delete captain with " + delCptActiveCount + " active mission(s) in Assigned or InProgress status. Cancel or complete them first." };
+                            return WebSocketCommandError.Create("delete_captain", WebSocketCommandErrorCodeEnum.Conflict, "Cannot delete captain with " + delCptActiveCount + " active mission(s) in Assigned or InProgress status. Cancel or complete them first.");
                         else
                         {
                             await _Database.Captains.DeleteAsync(delCptId).ConfigureAwait(false);
@@ -824,9 +824,9 @@ namespace Armada.Server.WebSocket
                     string clId = command.Id ?? "";
                     Captain? clCaptain = await _Database.Captains.ReadAsync(clId).ConfigureAwait(false);
                     if (clCaptain == null)
-                        return new { type = "command.error", action = "get_captain_log", error = "Captain not found" };
+                        return WebSocketCommandError.Create("get_captain_log", WebSocketCommandErrorCodeEnum.NotFound, "Captain not found");
                     else if (_Settings == null)
-                        return new { type = "command.error", action = "get_captain_log", error = "Logs not available — settings not configured" };
+                        return WebSocketCommandError.Create("get_captain_log", WebSocketCommandErrorCodeEnum.Unavailable, "Logs not available - settings not configured");
                     else
                     {
                         string clPointerPath = System.IO.Path.Combine(_Settings.LogDirectory, "captains", clId + ".current");
@@ -902,7 +902,7 @@ namespace Armada.Server.WebSocket
                     string meId = command.Id ?? "";
                     MergeEntry? foundEntry = await _MergeQueue.GetAsync(meId).ConfigureAwait(false);
                     if (foundEntry == null)
-                        return new { type = "command.error", action = "get_merge_entry", error = "Merge entry not found" };
+                        return WebSocketCommandError.Create("get_merge_entry", WebSocketCommandErrorCodeEnum.NotFound, "Merge entry not found");
                     else
                         return new { type = "command.result", action = "get_merge_entry", data = (object)foundEntry };
 
@@ -992,7 +992,7 @@ namespace Armada.Server.WebSocket
                     }
 
                     if (enumData == null)
-                        return new { type = "command.error", action = "enumerate", error = "Unknown entity type: " + entityType + ". Valid types: fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue" };
+                        return WebSocketCommandError.Create("enumerate", WebSocketCommandErrorCodeEnum.InvalidArgument, "Unknown entity type: " + entityType + ". Valid types: fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue");
                     else
                         return new { type = "command.result", action = "enumerate", data = enumData };
                 }
@@ -1008,7 +1008,7 @@ namespace Armada.Server.WebSocket
                     string restoreFilePath = command.FilePath ?? "";
                     if (String.IsNullOrEmpty(restoreFilePath))
                     {
-                        return new { type = "command.error", action = "restore", error = "filePath is required" };
+                        return WebSocketCommandError.Create("restore", WebSocketCommandErrorCodeEnum.InvalidArgument, "filePath is required");
                     }
                     object restoreData = await Mcp.Tools.McpToolHelpers.PerformRestoreAsync(_Database, _Settings!, restoreFilePath).ConfigureAwait(false);
                     return new { type = "command.result", action = "restore", data = restoreData };
@@ -1020,7 +1020,7 @@ namespace Armada.Server.WebSocket
                     string getPersonaName = command.Id ?? "";
                     Persona? foundPersona = await _Database.Personas.ReadByNameAsync(getPersonaName).ConfigureAwait(false);
                     if (foundPersona == null)
-                        return new { type = "command.error", action = "get_persona", error = "Persona not found" };
+                        return WebSocketCommandError.Create("get_persona", WebSocketCommandErrorCodeEnum.NotFound, "Persona not found");
                     return new { type = "command.result", action = "get_persona", data = (object)foundPersona };
 
                 case "create_persona":
@@ -1032,7 +1032,7 @@ namespace Armada.Server.WebSocket
                     string updPersonaName = command.Id ?? "";
                     Persona? existPersona = await _Database.Personas.ReadByNameAsync(updPersonaName).ConfigureAwait(false);
                     if (existPersona == null)
-                        return new { type = "command.error", action = "update_persona", error = "Persona not found" };
+                        return WebSocketCommandError.Create("update_persona", WebSocketCommandErrorCodeEnum.NotFound, "Persona not found");
                     else
                     {
                         Persona patchPersona = JsonSerializer.Deserialize<WebSocketDataCommand<Persona>>(rawBody, _JsonOptions)?.Data!;
@@ -1046,9 +1046,9 @@ namespace Armada.Server.WebSocket
                     string delPersonaName = command.Id ?? "";
                     Persona? delPersona = await _Database.Personas.ReadByNameAsync(delPersonaName).ConfigureAwait(false);
                     if (delPersona == null)
-                        return new { type = "command.error", action = "delete_persona", error = "Persona not found" };
+                        return WebSocketCommandError.Create("delete_persona", WebSocketCommandErrorCodeEnum.NotFound, "Persona not found");
                     if (delPersona.IsBuiltIn)
-                        return new { type = "command.error", action = "delete_persona", error = "Cannot delete built-in persona" };
+                        return WebSocketCommandError.Create("delete_persona", WebSocketCommandErrorCodeEnum.Conflict, "Cannot delete built-in persona");
                     await _Database.Personas.DeleteAsync(delPersona.Id).ConfigureAwait(false);
                     return new { type = "command.result", action = "delete_persona", data = (object)new { Status = "deleted", Name = delPersonaName } };
 
@@ -1058,14 +1058,14 @@ namespace Armada.Server.WebSocket
                     string getTemplateName = command.Id ?? "";
                     PromptTemplate? foundTemplate = await _Database.PromptTemplates.ReadByNameAsync(getTemplateName).ConfigureAwait(false);
                     if (foundTemplate == null)
-                        return new { type = "command.error", action = "get_prompt_template", error = "Prompt template not found" };
+                        return WebSocketCommandError.Create("get_prompt_template", WebSocketCommandErrorCodeEnum.NotFound, "Prompt template not found");
                     return new { type = "command.result", action = "get_prompt_template", data = (object)foundTemplate };
 
                 case "update_prompt_template":
                     string updTemplateName = command.Id ?? "";
                     PromptTemplate? existTemplate = await _Database.PromptTemplates.ReadByNameAsync(updTemplateName).ConfigureAwait(false);
                     if (existTemplate == null)
-                        return new { type = "command.error", action = "update_prompt_template", error = "Prompt template not found" };
+                        return WebSocketCommandError.Create("update_prompt_template", WebSocketCommandErrorCodeEnum.NotFound, "Prompt template not found");
                     else
                     {
                         PromptTemplate patchTemplate = JsonSerializer.Deserialize<WebSocketDataCommand<PromptTemplate>>(rawBody, _JsonOptions)?.Data!;
@@ -1081,7 +1081,7 @@ namespace Armada.Server.WebSocket
                     string getPipelineName = command.Id ?? "";
                     Pipeline? foundPipeline = await _Database.Pipelines.ReadByNameAsync(getPipelineName).ConfigureAwait(false);
                     if (foundPipeline == null)
-                        return new { type = "command.error", action = "get_pipeline", error = "Pipeline not found" };
+                        return WebSocketCommandError.Create("get_pipeline", WebSocketCommandErrorCodeEnum.NotFound, "Pipeline not found");
                     return new { type = "command.result", action = "get_pipeline", data = (object)foundPipeline };
 
                 case "create_pipeline":
@@ -1093,7 +1093,7 @@ namespace Armada.Server.WebSocket
                     string updPipelineName = command.Id ?? "";
                     Pipeline? existPipeline = await _Database.Pipelines.ReadByNameAsync(updPipelineName).ConfigureAwait(false);
                     if (existPipeline == null)
-                        return new { type = "command.error", action = "update_pipeline", error = "Pipeline not found" };
+                        return WebSocketCommandError.Create("update_pipeline", WebSocketCommandErrorCodeEnum.NotFound, "Pipeline not found");
                     else
                     {
                         Pipeline patchPipeline = JsonSerializer.Deserialize<WebSocketDataCommand<Pipeline>>(rawBody, _JsonOptions)?.Data!;
@@ -1112,16 +1112,16 @@ namespace Armada.Server.WebSocket
                     string delPipelineName = command.Id ?? "";
                     Pipeline? delPipeline = await _Database.Pipelines.ReadByNameAsync(delPipelineName).ConfigureAwait(false);
                     if (delPipeline == null)
-                        return new { type = "command.error", action = "delete_pipeline", error = "Pipeline not found" };
+                        return WebSocketCommandError.Create("delete_pipeline", WebSocketCommandErrorCodeEnum.NotFound, "Pipeline not found");
                     if (delPipeline.IsBuiltIn)
-                        return new { type = "command.error", action = "delete_pipeline", error = "Cannot delete built-in pipeline" };
+                        return WebSocketCommandError.Create("delete_pipeline", WebSocketCommandErrorCodeEnum.Conflict, "Cannot delete built-in pipeline");
                     await _Database.Pipelines.DeleteAsync(delPipeline.Id).ConfigureAwait(false);
                     return new { type = "command.result", action = "delete_pipeline", data = (object)new { Status = "deleted", Name = delPipelineName } };
 
                 // ── Default ────────────────────────────────────────────────
 
                 default:
-                    return new { type = "command.error", action = action, error = "Unknown action: " + action };
+                    return WebSocketCommandError.Create(action, WebSocketCommandErrorCodeEnum.UnknownAction, "Unknown action: " + action);
             }
         }
 

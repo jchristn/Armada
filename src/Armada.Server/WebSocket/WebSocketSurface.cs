@@ -36,7 +36,7 @@ namespace Armada.Server.WebSocket
         /// </summary>
         public static readonly IReadOnlyList<string> CommandReplyFields = new List<string>
         {
-            "type", "action", "data", "error"
+            "type", "action", "data", "error", "code"
         };
 
         /// <summary>
