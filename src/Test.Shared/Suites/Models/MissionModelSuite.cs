@@ -114,7 +114,9 @@ namespace Test.Shared.Suites.Models
                 mission.Status = MissionStatusEnum.Testing;
 
                 string json = JsonSerializer.Serialize(mission);
-                AssertContains("\"Testing\"", json);
+                JsonPropertyShape? status = JsonShape.TopLevel(json).Find(p => p.Name == "Status");
+                AssertEqual(JsonTokenType.String, status?.ValueToken, "Status is a JSON string");
+                AssertEqual("Testing", status?.ScalarText, "Status value");
             }));
 
             cases.Add(Case("unique_ids_across_instances", "Mission unique ids across instances", TestTags.Positive, () =>

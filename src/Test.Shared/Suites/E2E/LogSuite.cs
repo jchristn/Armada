@@ -10,6 +10,7 @@ namespace Test.Shared.Suites.E2E
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Core.Models;
+    using WatsonWebserver.Core;
     using Test.Shared.Infrastructure;
     using Touchstone.Core;
     using static Test.Shared.Infrastructure.Asserts;
@@ -39,11 +40,9 @@ namespace Test.Shared.Suites.E2E
                 HttpClient authClient = fx.AuthClient;
 
                 HttpResponseMessage response = await authClient.GetAsync("/api/v1/missions/msn_nonexistent/log").ConfigureAwait(false);
-                ArmadaErrorResponse errorResp = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(response).ConfigureAwait(false);
-                Assert(
-                    errorResp.Error != null ||
-                    errorResp.Message != null,
-                    "Not found should return error or message");
+                AssertEqual(HttpStatusCode.NotFound, response.StatusCode, "missing mission");
+                ApiErrorProbe errorResp = ApiErrorProbe.From(await response.Content.ReadAsStringAsync().ConfigureAwait(false));
+                AssertEqual(ApiResultEnum.NotFound, errorResp.Error, "typed error code");
             }));
 
             cases.Add(CaseAsync("mission_log_not_found_returns_not_found_status", "MissionLog_NotFound_ReturnsNotFoundStatus", TestTags.Negative, async () =>
@@ -52,14 +51,11 @@ namespace Test.Shared.Suites.E2E
                 HttpClient authClient = fx.AuthClient;
 
                 HttpResponseMessage response = await authClient.GetAsync("/api/v1/missions/msn_doesnotexist/log").ConfigureAwait(false);
-                ArmadaErrorResponse errorResp = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(response).ConfigureAwait(false);
-
-                if (errorResp.Message != null)
-                {
-                    string msgStr = errorResp.Message;
-                    Assert(msgStr.Contains("not found", StringComparison.OrdinalIgnoreCase),
-                        "Expected message to contain 'not found'");
-                }
+                AssertEqual(HttpStatusCode.NotFound, response.StatusCode, "not found status");
+                ApiErrorProbe errorResp = ApiErrorProbe.From(await response.Content.ReadAsStringAsync().ConfigureAwait(false));
+                AssertEqual(ApiResultEnum.NotFound, errorResp.Error, "typed error code");
+                AssertEqual(404, errorResp.StatusCode, "status in the body");
+                AssertFalse(String.IsNullOrEmpty(errorResp.Message), "a message accompanies the error");
             }));
 
             cases.Add(CaseAsync("mission_log_no_file_returns_empty", "MissionLog_NoFile_ReturnsEmpty", TestTags.Positive, async () =>
@@ -107,9 +103,7 @@ namespace Test.Shared.Suites.E2E
                 MissionLogResponse logResp = await JsonHelper.DeserializeAsync<MissionLogResponse>(response).ConfigureAwait(false);
                 AssertEqual(3, logResp.TotalLines);
                 AssertEqual(3, logResp.Lines);
-                AssertContains("line one", logResp.Log!);
-                AssertContains("line two", logResp.Log!);
-                AssertContains("line three", logResp.Log!);
+                AssertLines(new List<string> { "line one", "line two", "line three" }, logResp.Log, "whole log");
             }));
 
             cases.Add(CaseAsync("mission_log_with_file_returns_mission_id", "MissionLog_WithFile_ReturnsMissionId", TestTags.Positive, async () =>
@@ -156,9 +150,7 @@ namespace Test.Shared.Suites.E2E
                 MissionLogResponse logResp = await JsonHelper.DeserializeAsync<MissionLogResponse>(response).ConfigureAwait(false);
                 string log = logResp.Log!;
 
-                AssertContains("log line 1", log);
-                AssertContains("log line 10", log);
-                AssertFalse(log.Contains("log line 11"), "Should not contain log line 11");
+                AssertLines(Numbered("log line ", 1, 10), log, "first 10 lines exactly");
             }));
 
             cases.Add(CaseAsync("mission_log_offset_param_skips_lines", "MissionLog_OffsetParam_SkipsLines", TestTags.Positive, async () =>
@@ -176,10 +168,7 @@ namespace Test.Shared.Suites.E2E
                 MissionLogResponse logResp = await JsonHelper.DeserializeAsync<MissionLogResponse>(response).ConfigureAwait(false);
                 string log = logResp.Log!;
 
-                AssertContains("log line 41", log);
-                AssertContains("log line 50", log);
-                AssertFalse(log.Contains("log line 40\n"), "Should not contain log line 40");
-                AssertFalse(log.Contains("log line 1\n"), "Should not contain log line 1");
+                AssertLines(Numbered("log line ", 41, 50), log, "lines 41-50 exactly");
             }));
 
             cases.Add(CaseAsync("mission_log_offset_param_total_lines_unchanged", "MissionLog_OffsetParam_TotalLinesUnchanged", TestTags.Positive, async () =>
@@ -214,10 +203,7 @@ namespace Test.Shared.Suites.E2E
                 AssertEqual(50, logResp.TotalLines);
 
                 string log = logResp.Log!;
-                AssertContains("log line 11", log);
-                AssertContains("log line 15", log);
-                AssertFalse(log.Contains("log line 10\n"), "Should not contain log line 10");
-                AssertFalse(log.Contains("log line 16"), "Should not contain log line 16");
+                AssertLines(Numbered("log line ", 11, 15), log, "lines 11-15 exactly");
             }));
 
             cases.Add(CaseAsync("mission_log_default_lines_returns_200", "MissionLog_DefaultLines_Returns200", TestTags.Positive, async () =>
@@ -250,9 +236,7 @@ namespace Test.Shared.Suites.E2E
                 MissionLogResponse logResp = await JsonHelper.DeserializeAsync<MissionLogResponse>(response).ConfigureAwait(false);
                 string log = logResp.Log!;
 
-                AssertContains("log line 1", log);
-                AssertContains("log line 200", log);
-                AssertFalse(log.Contains("log line 201"), "Should not contain log line 201");
+                AssertLines(Numbered("log line ", 1, 200), log, "first 200 lines exactly");
             }));
 
             cases.Add(CaseAsync("mission_log_very_large_offset_returns_empty", "MissionLog_VeryLargeOffset_ReturnsEmpty", TestTags.Positive, async () =>
@@ -287,9 +271,7 @@ namespace Test.Shared.Suites.E2E
                 MissionLogResponse logResp = await JsonHelper.DeserializeAsync<MissionLogResponse>(response).ConfigureAwait(false);
                 string log = logResp.Log!;
 
-                AssertContains("first line with special chars: <>&\"", log);
-                AssertContains("second line with tabs:", log);
-                AssertContains("third line", log);
+                AssertLines(new List<string> { "first line with special chars: <>&\"", "second line with tabs:\t\there", "third line" }, log, "lines preserved exactly");
             }));
 
             cases.Add(CaseAsync("mission_log_total_lines_reflects_file_size_regardless_of_lines_param", "MissionLog_TotalLines_ReflectsFileSize_RegardlessOfLinesParam", TestTags.Positive, async () =>
@@ -373,8 +355,7 @@ namespace Test.Shared.Suites.E2E
                 AssertEqual(2, logResp.Lines);
                 AssertEqual(10, logResp.TotalLines);
                 string log = logResp.Log!;
-                AssertContains("log line 9", log);
-                AssertContains("log line 10", log);
+                AssertLines(Numbered("log line ", 9, 10), log, "lines 9-10 exactly");
             }));
 
             cases.Add(CaseAsync("mission_log_response_is_json", "MissionLog_ResponseIsJson", TestTags.Positive, async () =>
@@ -401,11 +382,9 @@ namespace Test.Shared.Suites.E2E
                 HttpClient authClient = fx.AuthClient;
 
                 HttpResponseMessage response = await authClient.GetAsync("/api/v1/captains/cpt_nonexistent/log").ConfigureAwait(false);
-                ArmadaErrorResponse errorResp = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(response).ConfigureAwait(false);
-                Assert(
-                    errorResp.Error != null ||
-                    errorResp.Message != null,
-                    "Not found should return error or message");
+                AssertEqual(HttpStatusCode.NotFound, response.StatusCode, "missing captain");
+                ApiErrorProbe errorResp = ApiErrorProbe.From(await response.Content.ReadAsStringAsync().ConfigureAwait(false));
+                AssertEqual(ApiResultEnum.NotFound, errorResp.Error, "typed error code");
             }));
 
             cases.Add(CaseAsync("captain_log_not_found_message_indicates_not_found", "CaptainLog_NotFound_MessageIndicatesNotFound", TestTags.Negative, async () =>
@@ -414,14 +393,11 @@ namespace Test.Shared.Suites.E2E
                 HttpClient authClient = fx.AuthClient;
 
                 HttpResponseMessage response = await authClient.GetAsync("/api/v1/captains/cpt_doesnotexist/log").ConfigureAwait(false);
-                ArmadaErrorResponse errorResp = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(response).ConfigureAwait(false);
-
-                if (errorResp.Message != null)
-                {
-                    string msgStr = errorResp.Message;
-                    Assert(msgStr.Contains("not found", StringComparison.OrdinalIgnoreCase),
-                        "Expected message to contain 'not found'");
-                }
+                AssertEqual(HttpStatusCode.NotFound, response.StatusCode, "not found status");
+                ApiErrorProbe errorResp = ApiErrorProbe.From(await response.Content.ReadAsStringAsync().ConfigureAwait(false));
+                AssertEqual(ApiResultEnum.NotFound, errorResp.Error, "typed error code");
+                AssertEqual(404, errorResp.StatusCode, "status in the body");
+                AssertFalse(String.IsNullOrEmpty(errorResp.Message), "a message accompanies the error");
             }));
 
             cases.Add(CaseAsync("captain_log_no_pointer_or_file_returns_empty", "CaptainLog_NoPointerOrFile_ReturnsEmpty", TestTags.Positive, async () =>
@@ -491,8 +467,7 @@ namespace Test.Shared.Suites.E2E
                 CaptainLogResponse logResp = await JsonHelper.DeserializeAsync<CaptainLogResponse>(response).ConfigureAwait(false);
                 AssertEqual(2, logResp.TotalLines);
                 AssertEqual(2, logResp.Lines);
-                AssertContains("captain output line 1", logResp.Log!);
-                AssertContains("captain output line 2", logResp.Log!);
+                AssertLines(new List<string> { "captain output line 1", "captain output line 2" }, logResp.Log, "whole log");
             }));
 
             cases.Add(CaseAsync("captain_log_with_pointer_and_file_returns_captain_id", "CaptainLog_WithPointerAndFile_ReturnsCaptainId", TestTags.Positive, async () =>
@@ -536,9 +511,7 @@ namespace Test.Shared.Suites.E2E
                 AssertEqual(5, logResp.Lines);
                 AssertEqual(30, logResp.TotalLines);
                 string log = logResp.Log!;
-                AssertContains("captain line 1", log);
-                AssertContains("captain line 5", log);
-                AssertFalse(log.Contains("captain line 6"), "Should not contain captain line 6");
+                AssertLines(Numbered("captain line ", 1, 5), log, "first 5 lines exactly");
             }));
 
             cases.Add(CaseAsync("captain_log_offset_param_works", "CaptainLog_OffsetParam_Works", TestTags.Positive, async () =>
@@ -563,9 +536,7 @@ namespace Test.Shared.Suites.E2E
                 AssertEqual(5, logResp.Lines);
                 AssertEqual(20, logResp.TotalLines);
                 string log = logResp.Log!;
-                AssertContains("captain line 16", log);
-                AssertContains("captain line 20", log);
-                AssertFalse(log.Contains("captain line 15\n"), "Should not contain captain line 15");
+                AssertLines(Numbered("captain line ", 16, 20), log, "lines 16-20 exactly");
             }));
 
             cases.Add(CaseAsync("captain_log_lines_and_offset_combined", "CaptainLog_LinesAndOffset_Combined", TestTags.Positive, async () =>
@@ -591,10 +562,7 @@ namespace Test.Shared.Suites.E2E
                 AssertEqual(30, logResp.TotalLines);
 
                 string log = logResp.Log!;
-                AssertContains("captain line 11", log);
-                AssertContains("captain line 15", log);
-                AssertFalse(log.Contains("captain line 10\n"), "Should not contain captain line 10");
-                AssertFalse(log.Contains("captain line 16"), "Should not contain captain line 16");
+                AssertLines(Numbered("captain line ", 11, 15), log, "lines 11-15 exactly");
             }));
 
             cases.Add(CaseAsync("captain_log_pointer_with_trailing_whitespace_still_resolves", "CaptainLog_PointerWithTrailingWhitespace_StillResolves", TestTags.Positive, async () =>
@@ -618,7 +586,7 @@ namespace Test.Shared.Suites.E2E
 
                 CaptainLogResponse logResp = await JsonHelper.DeserializeAsync<CaptainLogResponse>(response).ConfigureAwait(false);
                 AssertEqual(2, logResp.TotalLines);
-                AssertContains("whitespace test line 1", logResp.Log!);
+                AssertLines(new List<string> { "whitespace test line 1", "whitespace test line 2" }, logResp.Log, "whole log");
             }));
 
             cases.Add(CaseAsync("captain_log_default_lines_returns_50", "CaptainLog_DefaultLines_Returns50", TestTags.Positive, async () =>
@@ -641,6 +609,7 @@ namespace Test.Shared.Suites.E2E
 
                 AssertEqual(50, logResp.Lines);
                 AssertEqual(150, logResp.TotalLines);
+                AssertLines(Numbered("captain line ", 1, 50), logResp.Log, "first 50 lines exactly");
             }));
 
             cases.Add(CaseAsync("captain_log_large_offset_returns_empty", "CaptainLog_LargeOffset_ReturnsEmpty", TestTags.Positive, async () =>
@@ -688,7 +657,9 @@ namespace Test.Shared.Suites.E2E
                 HttpClient unauthClient = fx.UnauthClient;
 
                 HttpResponseMessage response = await unauthClient.GetAsync("/api/v1/missions/msn_any/log").ConfigureAwait(false);
-                AssertNotNull(response);
+                AssertEqual(HttpStatusCode.Unauthorized, response.StatusCode, "unauthenticated log read is refused");
+                ApiErrorProbe errorResp = ApiErrorProbe.From(await response.Content.ReadAsStringAsync().ConfigureAwait(false));
+                AssertEqual(ApiResultEnum.NotAuthorized, errorResp.Error, "typed error code");
             }));
 
             cases.Add(CaseAsync("captain_log_without_auth_returns_response", "CaptainLog_WithoutAuth_ReturnsResponse", TestTags.Negative, async () =>
@@ -697,7 +668,9 @@ namespace Test.Shared.Suites.E2E
                 HttpClient unauthClient = fx.UnauthClient;
 
                 HttpResponseMessage response = await unauthClient.GetAsync("/api/v1/captains/cpt_any/log").ConfigureAwait(false);
-                AssertNotNull(response);
+                AssertEqual(HttpStatusCode.Unauthorized, response.StatusCode, "unauthenticated log read is refused");
+                ApiErrorProbe errorResp = ApiErrorProbe.From(await response.Content.ReadAsStringAsync().ConfigureAwait(false));
+                AssertEqual(ApiResultEnum.NotAuthorized, errorResp.Error, "typed error code");
             }));
 
             #endregion
@@ -789,6 +762,33 @@ namespace Test.Shared.Suites.E2E
         {
             string dir = EnsureCaptainLogDir(tempDir);
             File.WriteAllText(Path.Combine(dir, captainId + ".current"), targetPath);
+        }
+
+        /// <summary>
+        /// Split a returned log into its lines (the server joins with '\n').
+        /// </summary>
+        private static List<string> LogLines(string? log)
+        {
+            if (String.IsNullOrEmpty(log)) return new List<string>();
+            return log.Split('\n').Select(l => l.TrimEnd('\r')).ToList();
+        }
+
+        /// <summary>
+        /// The numbered lines first..last written by the helpers.
+        /// </summary>
+        private static List<string> Numbered(string prefix, int first, int last)
+        {
+            return Enumerable.Range(first, last - first + 1).Select(i => prefix + i).ToList();
+        }
+
+        /// <summary>
+        /// Assert the log is exactly these lines in order.
+        /// </summary>
+        private static void AssertLines(List<string> expected, string? log, string label)
+        {
+            List<string> actual = LogLines(log);
+            if (!expected.SequenceEqual(actual))
+                throw new AssertionException(label + ": expected " + expected.Count + " lines [" + String.Join(" | ", expected.Take(5)) + (expected.Count > 5 ? " ..." : "") + "] but got " + actual.Count + " [" + String.Join(" | ", actual.Take(5)) + (actual.Count > 5 ? " ..." : "") + "]");
         }
 
         private static TestCaseDescriptor CaseAsync(string caseId, string displayName, string tag, Func<Task> body)

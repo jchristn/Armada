@@ -71,7 +71,7 @@ namespace Test.Shared.Suites.E2E
                     using (client)
                     {
                         await client.SendAsync(new Dictionary<string, object> { ["Route"] = "command", ["action"] = "create_fleet", ["data"] = new { Name = fleetName } }).ConfigureAwait(false);
-                        await client.WaitForAsync(m => m.Contains("command."), 3000).ConfigureAwait(false);
+                        await client.WaitForAsync(E2eWebSocketFrame.IsCommandReply, 3000).ConfigureAwait(false);
                     }
                 }
 
@@ -86,7 +86,7 @@ namespace Test.Shared.Suites.E2E
                 using (WebSocketTestClient client = await WebSocketTestClient.ConnectAsync(fx.RestPort, user.BearerToken).ConfigureAwait(false))
                 {
                     await client.SendAsync(new Dictionary<string, object> { ["Route"] = "subscribe" }).ConfigureAwait(false);
-                    string? snapshot = await client.WaitForAsync(m => m.Contains("status.snapshot")).ConfigureAwait(false);
+                    string? snapshot = await client.WaitForAsync(m => E2eWebSocketFrame.IsType(m, "status.snapshot")).ConfigureAwait(false);
                     AssertNotNull(snapshot, "subscribe should return a status snapshot");
                 }
             }));
@@ -127,9 +127,11 @@ namespace Test.Shared.Suites.E2E
                 using (WebSocketTestClient client = await WebSocketTestClient.ConnectAsync(fx.RestPort, user.BearerToken).ConfigureAwait(false))
                 {
                     await client.SendAsync(new Dictionary<string, object> { ["Route"] = "command", ["action"] = "create_fleet", ["data"] = new { Name = fleetName } }).ConfigureAwait(false);
-                    string? reply = await client.WaitForAsync(m => m.Contains("command.")).ConfigureAwait(false);
+                    string? reply = await client.WaitForAsync(E2eWebSocketFrame.IsCommandReply).ConfigureAwait(false);
                     AssertNotNull(reply, "the command should be answered");
-                    AssertContains("command.error", reply!, "the command should be refused");
+                    E2eWebSocketFrame frame = E2eWebSocketFrame.Parse(reply)!;
+                    AssertEqual("command.error", frame.Type, "the command should be refused");
+                    AssertEqual("create_fleet", frame.Action, "the refusal answers the create_fleet command");
                 }
 
                 bool exists = await FleetExistsAsync(fx.AuthClient, fleetName).ConfigureAwait(false);
@@ -143,9 +145,11 @@ namespace Test.Shared.Suites.E2E
                 using (WebSocketTestClient client = await WebSocketTestClient.ConnectAsync(fx.RestPort, null, ApiKeyHeaders(fx)).ConfigureAwait(false))
                 {
                     await client.SendAsync(new Dictionary<string, object> { ["Route"] = "command", ["action"] = "create_fleet", ["data"] = new { Name = fleetName } }).ConfigureAwait(false);
-                    string? reply = await client.WaitForAsync(m => m.Contains("command.")).ConfigureAwait(false);
+                    string? reply = await client.WaitForAsync(E2eWebSocketFrame.IsCommandReply).ConfigureAwait(false);
                     AssertNotNull(reply, "the command should be answered");
-                    AssertContains("command.result", reply!, "the command should succeed");
+                    E2eWebSocketFrame frame = E2eWebSocketFrame.Parse(reply)!;
+                    AssertEqual("command.result", frame.Type, "the command should succeed: " + reply);
+                    AssertEqual("create_fleet", frame.Action, "the result answers the create_fleet command");
                 }
 
                 bool exists = await FleetExistsAsync(fx.AuthClient, fleetName).ConfigureAwait(false);
@@ -167,10 +171,11 @@ namespace Test.Shared.Suites.E2E
 
                     string voyageId = await CreateAndCancelVoyageAsync(ownerClient).ConfigureAwait(false);
 
-                    string? ownerEvent = await ownerSocket.WaitForAsync(m => m.Contains("voyage.changed") && m.Contains(voyageId)).ConfigureAwait(false);
+                    string? ownerEvent = await ownerSocket.WaitForAsync(m => E2eWebSocketEventFrame.ParseOfType(m, "voyage.changed")?.Data?.Id == voyageId).ConfigureAwait(false);
                     AssertNotNull(ownerEvent, "the owning tenant should receive voyage.changed");
 
-                    string? leaked = await otherSocket.WaitForAsync(m => m.Contains(voyageId), 2000).ConfigureAwait(false);
+                    // Deliberately broad: a frame of any type that carries the id anywhere is a leak.
+                    string? leaked = await otherSocket.WaitForAsync(m => m.Contains(voyageId, StringComparison.Ordinal), 2000).ConfigureAwait(false);
                     AssertNull(leaked, "another tenant must not receive the voyage's events");
                 }
             }));
@@ -186,14 +191,15 @@ namespace Test.Shared.Suites.E2E
                 {
                     await SubscribeAsync(plainAdmin).ConfigureAwait(false);
                     await allTenantsAdmin.SendAsync(new Dictionary<string, object> { ["Route"] = "subscribe", ["AllTenants"] = true }).ConfigureAwait(false);
-                    AssertNotNull(await allTenantsAdmin.WaitForAsync(m => m.Contains("status.snapshot")).ConfigureAwait(false), "snapshot");
+                    AssertNotNull(await allTenantsAdmin.WaitForAsync(m => E2eWebSocketFrame.IsType(m, "status.snapshot")).ConfigureAwait(false), "snapshot");
 
                     string voyageId = await CreateAndCancelVoyageAsync(ownerClient).ConfigureAwait(false);
 
-                    string? seen = await allTenantsAdmin.WaitForAsync(m => m.Contains("voyage.changed") && m.Contains(voyageId)).ConfigureAwait(false);
+                    string? seen = await allTenantsAdmin.WaitForAsync(m => E2eWebSocketEventFrame.ParseOfType(m, "voyage.changed")?.Data?.Id == voyageId).ConfigureAwait(false);
                     AssertNotNull(seen, "an admin that opted in to all tenants should receive the event");
 
-                    string? notSeen = await plainAdmin.WaitForAsync(m => m.Contains(voyageId), 1500).ConfigureAwait(false);
+                    // Deliberately broad: a frame of any type that carries the id anywhere counts as delivered.
+                    string? notSeen = await plainAdmin.WaitForAsync(m => m.Contains(voyageId, StringComparison.Ordinal), 1500).ConfigureAwait(false);
                     AssertNull(notSeen, "an admin that did not opt in should only receive its own tenant's events");
                 }
             }));
@@ -208,10 +214,11 @@ namespace Test.Shared.Suites.E2E
                 using (WebSocketTestClient snoopSocket = await WebSocketTestClient.ConnectAsync(fx.RestPort, snoop.BearerToken).ConfigureAwait(false))
                 {
                     await snoopSocket.SendAsync(new Dictionary<string, object> { ["Route"] = "subscribe", ["AllTenants"] = true }).ConfigureAwait(false);
-                    AssertNotNull(await snoopSocket.WaitForAsync(m => m.Contains("status.snapshot")).ConfigureAwait(false), "snapshot");
+                    AssertNotNull(await snoopSocket.WaitForAsync(m => E2eWebSocketFrame.IsType(m, "status.snapshot")).ConfigureAwait(false), "snapshot");
 
                     string voyageId = await CreateAndCancelVoyageAsync(ownerClient).ConfigureAwait(false);
-                    string? leaked = await snoopSocket.WaitForAsync(m => m.Contains(voyageId), 2000).ConfigureAwait(false);
+                    // Deliberately broad: a frame of any type that carries the id anywhere is a leak.
+                    string? leaked = await snoopSocket.WaitForAsync(m => m.Contains(voyageId, StringComparison.Ordinal), 2000).ConfigureAwait(false);
                     AssertNull(leaked, "the AllTenants flag must be ignored for non-admins");
                 }
             }));
@@ -238,7 +245,7 @@ namespace Test.Shared.Suites.E2E
                 using (WebSocketTestClient client = await WebSocketTestClient.ConnectAsync(restPort, queryToken, headers, subprotocols).ConfigureAwait(false))
                 {
                     await client.SendAsync(new Dictionary<string, object> { ["Route"] = "subscribe" }).ConfigureAwait(false);
-                    string? snapshot = await client.WaitForAsync(m => m.Contains("status.snapshot"), 3000).ConfigureAwait(false);
+                    string? snapshot = await client.WaitForAsync(m => E2eWebSocketFrame.IsType(m, "status.snapshot"), 3000).ConfigureAwait(false);
                     return snapshot != null;
                 }
             }
@@ -255,7 +262,7 @@ namespace Test.Shared.Suites.E2E
         private static async Task SubscribeAsync(WebSocketTestClient client)
         {
             await client.SendAsync(new Dictionary<string, object> { ["Route"] = "subscribe" }).ConfigureAwait(false);
-            string? snapshot = await client.WaitForAsync(m => m.Contains("status.snapshot")).ConfigureAwait(false);
+            string? snapshot = await client.WaitForAsync(m => E2eWebSocketFrame.IsType(m, "status.snapshot")).ConfigureAwait(false);
             AssertNotNull(snapshot, "subscribe should return a status snapshot");
         }
 
@@ -272,9 +279,18 @@ namespace Test.Shared.Suites.E2E
 
         private static async Task<bool> FleetExistsAsync(HttpClient adminClient, string name)
         {
-            HttpResponseMessage response = await adminClient.GetAsync("/api/v1/fleets?pageSize=1000").ConfigureAwait(false);
-            string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-            return body.Contains(name, StringComparison.Ordinal);
+            // A failed listing must fail the test, never read as "the fleet does not exist".
+            int page = 1;
+            while (true)
+            {
+                HttpResponseMessage response = await adminClient.GetAsync("/api/v1/fleets?pageSize=1000&pageNumber=" + page).ConfigureAwait(false);
+                AssertStatusCode(System.Net.HttpStatusCode.OK, response, "admin fleet listing");
+                EnumerationResult<Fleet> result = await JsonHelper.DeserializeAsync<EnumerationResult<Fleet>>(response).ConfigureAwait(false);
+                AssertNotNull(result, "fleet listing body");
+                if (result.Objects.Any(f => String.Equals(f.Name, name, StringComparison.Ordinal))) return true;
+                if (page >= result.TotalPages || result.Objects.Count == 0) return false;
+                page++;
+            }
         }
 
         private static TestCaseDescriptor CaseAsync(string caseId, string displayName, string tag, Func<Task> body)

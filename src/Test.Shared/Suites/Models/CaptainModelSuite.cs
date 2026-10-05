@@ -129,7 +129,9 @@ namespace Test.Shared.Suites.Models
                 captain.State = CaptainStateEnum.Working;
 
                 string json = JsonSerializer.Serialize(captain);
-                AssertContains("\"Working\"", json);
+                JsonPropertyShape? state = JsonShape.TopLevel(json).Find(p => p.Name == "State");
+                AssertEqual(JsonTokenType.String, state?.ValueToken, "State is a JSON string");
+                AssertEqual("Working", state?.ScalarText, "State value");
             }));
 
             return new TestSuiteDescriptor(

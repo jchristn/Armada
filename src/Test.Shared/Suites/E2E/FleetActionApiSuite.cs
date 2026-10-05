@@ -94,8 +94,10 @@ namespace Test.Shared.Suites.E2E
                 HttpResponseMessage response = await _AdminA!.PostAsync("/api/v1/fleet-actions",
                     JsonHelper.ToJsonContent(new { name = "bad", kind = "Command", commandText = "echo {{vessel.secret}}" })).ConfigureAwait(false);
                 AssertStatusCode(HttpStatusCode.BadRequest, response);
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                AssertContains("vessel.secret", body);
+                ApiErrorProbe error = ApiErrorProbe.From(await response.Content.ReadAsStringAsync().ConfigureAwait(false));
+                AssertEqual(WatsonWebserver.Core.ApiResultEnum.BadRequest, error.Error, "error");
+                // TODO(R5, production): the unknown variable name is only in the message (FleetActionTemplateException.VariableName is not on the wire).
+                AssertContains("{{vessel.secret}}", error.Message ?? "", "names the unknown variable");
             }));
 
             cases.Add(CaseAsync("cross_tenant_vessel_rejected", "A cross-tenant vessel rejects the whole run with 404", TestTags.Negative, async () =>

@@ -58,8 +58,9 @@ namespace Test.Shared.Suites.E2E
                 HttpResponseMessage response = await fx.AuthClient.GetAsync("/api/v1/jobs").ConfigureAwait(false);
                 AssertStatusCode(HttpStatusCode.OK, response);
                 string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                AssertContains("\"Objects\"", body);
-                AssertContains("\"TotalRecords\"", body);
+                List<JsonPropertyShape> top = JsonShape.TopLevel(body);
+                AssertEqual(System.Text.Json.JsonTokenType.StartArray, top.Find(p => p.Name == "Objects")?.ValueToken, "Objects array (PascalCase)");
+                AssertEqual(System.Text.Json.JsonTokenType.Number, top.Find(p => p.Name == "TotalRecords")?.ValueToken, "TotalRecords number (PascalCase)");
             }));
 
             return new TestSuiteDescriptor(suiteId: SuiteId, displayName: "Job API", cases: cases);

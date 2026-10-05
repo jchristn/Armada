@@ -10,6 +10,7 @@ namespace Test.Shared.Suites.E2E
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Core;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Core.Services;
     using Test.Shared.Infrastructure;
@@ -221,15 +222,22 @@ namespace Test.Shared.Suites.E2E
 
                     using (HttpClient anonymous = server.CreateMcpClient(false))
                     {
-                        string text = await CallToolTextAsync(anonymous, "backup", new { outputPath = target }).ConfigureAwait(false);
-                        AssertContains("requires", text);
+                        E2eMcpToolResult refused = await CallToolAsync(anonymous, "backup", new { outputPath = target }).ConfigureAwait(false);
+                        AssertTrue(refused.IsError, "backup refused (isError) for the loopback default caller");
+                        // TODO(R5, production): the authorization wrapper throws outside McpToolRegistrar's exception mapping, so the
+                        // refusal reaches the client as plain text without McpToolError.ErrorCode=Forbidden; the text is the only signal.
+                        AssertEqual(McpToolErrorCodeEnum.Forbidden, McpToolResultProbe.FromText(refused.Content[0].Text).ErrorCode ?? McpToolErrorCodeEnum.Forbidden, "typed code when present");
+                        AssertContains("Tool backup requires an admin credential.", refused.Content[0].Text ?? "", "refused by the admin requirement, not some other failure");
                         AssertFalse(File.Exists(target), "no backup written for the loopback default caller");
                     }
 
                     using (HttpClient keyed = server.CreateMcpClient(true))
                     {
-                        string text = await CallToolTextAsync(keyed, "status", new { }).ConfigureAwait(false);
-                        AssertFalse(text.Contains("requires an admin"), "status works with the API key");
+                        E2eMcpToolResult status = await CallToolAsync(keyed, "status", new { }).ConfigureAwait(false);
+                        AssertFalse(status.IsError, "status works with the API key (no tool error of any kind)");
+                        McpToolResultProbe probe = McpToolResultProbe.FromText(status.Content[0].Text);
+                        AssertNull(probe.ErrorCode, "status returns no typed error");
+                        AssertNull(probe.Error, "status returns no error text");
                     }
                 }
             }));
@@ -260,6 +268,20 @@ namespace Test.Shared.Suites.E2E
             return await mcp.SendAsync(message).ConfigureAwait(false);
         }
 
+        /// <summary>
+        /// Call a tool and return its typed result. A JSON-RPC error, a non-2xx status, or a result without text
+        /// content fails the test (none of them is a tool-level refusal).
+        /// </summary>
+        private static async Task<E2eMcpToolResult> CallToolAsync(HttpClient mcp, string tool, object arguments)
+        {
+            string body = await CallToolTextAsync(mcp, tool, arguments).ConfigureAwait(false);
+            E2eMcpToolEnvelope envelope = JsonHelper.Deserialize<E2eMcpToolEnvelope>(body);
+            if (envelope.Error != null) throw new AssertionException("MCP " + tool + " returned a JSON-RPC error " + envelope.Error.Code + ": " + body);
+            if (envelope.Result == null || envelope.Result.Content.Count == 0 || String.IsNullOrEmpty(envelope.Result.Content[0].Text))
+                throw new AssertionException("MCP " + tool + " returned no text content: " + body);
+            return envelope.Result;
+        }
+
         private static async Task<string> CallToolTextAsync(HttpClient mcp, string tool, object arguments)
         {
             HttpResponseMessage init = await InitializeMcpAsync(mcp, null).ConfigureAwait(false);
@@ -269,7 +291,9 @@ namespace Test.Shared.Suites.E2E
             message.Content = JsonHelper.ToJsonContent(new { jsonrpc = "2.0", id = 2, method = "tools/call", @params = new { name = tool, arguments = arguments } });
             if (!String.IsNullOrEmpty(sessionId)) message.Headers.Add("Mcp-Session-Id", sessionId);
             HttpResponseMessage response = await mcp.SendAsync(message).ConfigureAwait(false);
-            return await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode) throw new AssertionException("MCP " + tool + " failed with HTTP " + (int)response.StatusCode + ": " + body);
+            return body;
         }
 
         private static async Task<AuthenticateResult> LoginAsync(HttpClient rest, string password)

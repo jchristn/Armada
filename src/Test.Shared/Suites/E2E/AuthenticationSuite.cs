@@ -410,7 +410,7 @@ namespace Test.Shared.Suites.E2E
 
                 AssertNotNull(allowHeaders);
                 Assert(
-                    allowHeaders == "*" || allowHeaders!.Contains("X-Api-Key", StringComparison.OrdinalIgnoreCase),
+                    allowHeaders == "*" || allowHeaders!.Split(',').Select(h => h.Trim()).Contains("X-Api-Key", StringComparer.OrdinalIgnoreCase),
                     "Expected Allow-Headers to be wildcard '*' or include 'X-Api-Key', but got: " + allowHeaders);
             }));
 
@@ -446,10 +446,7 @@ namespace Test.Shared.Suites.E2E
 
                 // Verify deleted
                 HttpResponseMessage verifyResp = await authClient.GetAsync("/api/v1/fleets/" + fleetId).ConfigureAwait(false);
-                ArmadaErrorResponse verifyError = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(verifyResp).ConfigureAwait(false);
-                Assert(
-                    verifyError.Error != null || verifyError.Message != null,
-                    "Deleted fleet should return error on read");
+                await E2eApiErrorAssert.ExpectAsync(verifyResp, HttpStatusCode.NotFound, "Deleted fleet should return error on read").ConfigureAwait(false);
             }));
 
             cases.Add(CaseAsync("authenticated_client_can_perform_full_crud_cycle_captain", "AuthenticatedClient_CanPerformFullCrudCycle_Captain", TestTags.Positive, async () =>
@@ -482,10 +479,7 @@ namespace Test.Shared.Suites.E2E
 
                 // Verify deleted
                 HttpResponseMessage verifyResp = await authClient.GetAsync("/api/v1/captains/" + captainId).ConfigureAwait(false);
-                ArmadaErrorResponse verifyError = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(verifyResp).ConfigureAwait(false);
-                Assert(
-                    verifyError.Error != null || verifyError.Message != null,
-                    "Deleted captain should return error on read");
+                await E2eApiErrorAssert.ExpectAsync(verifyResp, HttpStatusCode.NotFound, "Deleted captain should return error on read").ConfigureAwait(false);
             }));
 
             cases.Add(CaseAsync("empty_api_key_on_get_endpoint_returns_response", "EmptyApiKey_OnGetEndpoint_ReturnsResponse", TestTags.Negative, async () =>

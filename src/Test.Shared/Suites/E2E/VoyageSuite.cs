@@ -171,9 +171,7 @@ namespace Test.Shared.Suites.E2E
 
                 List<string> titles = detail.Missions!.Select(m => m.Title).ToList();
 
-                AssertContains("Mission 1", string.Join(",", titles));
-                AssertContains("Mission 2", string.Join(",", titles));
-                AssertContains("Mission 3", string.Join(",", titles));
+                AssertEqual("Mission 1,Mission 2,Mission 3", string.Join(",", titles.OrderBy(t => t, StringComparer.Ordinal)), "exactly the three mission titles");
             }));
 
             cases.Add(CaseAsync("create_voyage_missions_have_msn_prefix", "Create Voyage Missions Have Msn Prefix", TestTags.Positive, async () =>
@@ -389,8 +387,7 @@ namespace Test.Shared.Suites.E2E
                 HttpClient authClient = fx.AuthClient;
 
                 HttpResponseMessage response = await authClient.GetAsync("/api/v1/voyages/vyg_nonexistent");
-                ArmadaErrorResponse error = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(response);
-                AssertTrue(error.Error != null || error.Message != null);
+                await E2eApiErrorAssert.ExpectAsync(response, HttpStatusCode.NotFound, "expected NotFound");
             }));
 
             cases.Add(CaseAsync("get_voyage_not_found_contains_not_found_message", "Get Voyage Not Found Contains Not Found Message", TestTags.Negative, async () =>
@@ -399,12 +396,8 @@ namespace Test.Shared.Suites.E2E
                 HttpClient authClient = fx.AuthClient;
 
                 HttpResponseMessage response = await authClient.GetAsync("/api/v1/voyages/vyg_doesnotexist");
-                ArmadaErrorResponse error = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(response);
-
-                if (error.Message != null)
-                {
-                    AssertContains("not found", error.Message.ToLowerInvariant());
-                }
+                ApiErrorProbe error = await E2eApiErrorAssert.ExpectAsync(response, HttpStatusCode.NotFound, "Not-found voyage returns a typed 404");
+                AssertFalse(String.IsNullOrEmpty(error.Message), "a message accompanies the error");
             }));
 
             cases.Add(CaseAsync("get_voyage_missions_include_mission_details", "Get Voyage Missions Include Mission Details", TestTags.Positive, async () =>
@@ -531,8 +524,7 @@ namespace Test.Shared.Suites.E2E
                 HttpClient authClient = fx.AuthClient;
 
                 HttpResponseMessage response = await authClient.DeleteAsync("/api/v1/voyages/vyg_nonexistent");
-                ArmadaErrorResponse error = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(response);
-                AssertTrue(error.Error != null || error.Message != null);
+                await E2eApiErrorAssert.ExpectAsync(response, HttpStatusCode.NotFound, "expected NotFound");
             }));
 
             cases.Add(CaseAsync("cancel_voyage_voyage_still_retrievable_after_cancel", "Cancel Voyage Voyage Still Retrievable After Cancel", TestTags.Positive, async () =>
@@ -634,8 +626,7 @@ namespace Test.Shared.Suites.E2E
                 createdVoyageIds.Remove(voyageId);
 
                 HttpResponseMessage getResp = await authClient.GetAsync("/api/v1/voyages/" + voyageId);
-                ArmadaErrorResponse error = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(getResp);
-                AssertTrue(error.Error != null || error.Message != null);
+                await E2eApiErrorAssert.ExpectAsync(getResp, HttpStatusCode.NotFound, "expected NotFound");
             }));
 
             cases.Add(CaseAsync("purge_voyage_missions_also_deleted", "Purge Voyage Missions Also Deleted", TestTags.Negative, async () =>
@@ -667,8 +658,7 @@ namespace Test.Shared.Suites.E2E
                 foreach (string missionId in missionIds)
                 {
                     HttpResponseMessage missionResp = await authClient.GetAsync("/api/v1/missions/" + missionId);
-                    ArmadaErrorResponse error = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(missionResp);
-                    AssertTrue(error.Error != null || error.Message != null);
+                    await E2eApiErrorAssert.ExpectAsync(missionResp, HttpStatusCode.NotFound, "expected NotFound");
                 }
             }));
 
@@ -678,8 +668,7 @@ namespace Test.Shared.Suites.E2E
                 HttpClient authClient = fx.AuthClient;
 
                 HttpResponseMessage response = await authClient.DeleteAsync("/api/v1/voyages/vyg_nonexistent/purge");
-                ArmadaErrorResponse error = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(response);
-                AssertTrue(error.Error != null || error.Message != null);
+                await E2eApiErrorAssert.ExpectAsync(response, HttpStatusCode.NotFound, "expected NotFound");
             }));
 
             cases.Add(CaseAsync("purge_voyage_with_zero_missions_returns_zero_missions_deleted", "Purge Voyage With Zero Missions Returns Zero Missions Deleted", TestTags.Positive, async () =>
@@ -1394,8 +1383,7 @@ namespace Test.Shared.Suites.E2E
                 createdVoyageIds.Remove(voyageId);
 
                 HttpResponseMessage getResp = await authClient.GetAsync("/api/v1/voyages/" + voyageId);
-                ArmadaErrorResponse error = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(getResp);
-                AssertTrue(error.Error != null || error.Message != null);
+                await E2eApiErrorAssert.ExpectAsync(getResp, HttpStatusCode.NotFound, "expected NotFound");
             }));
 
             cases.Add(CaseAsync("create_multiple_voyages_same_vessel_all_succeed", "Create Multiple Voyages Same Vessel All Succeed", TestTags.Positive, async () =>
@@ -1598,8 +1586,7 @@ namespace Test.Shared.Suites.E2E
                 createdVoyageIds.Remove(voyageId);
 
                 HttpResponseMessage resp2 = await authClient.DeleteAsync("/api/v1/voyages/" + voyageId + "/purge");
-                ArmadaErrorResponse error = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(resp2);
-                AssertTrue(error.Error != null || error.Message != null);
+                await E2eApiErrorAssert.ExpectAsync(resp2, HttpStatusCode.NotFound, "expected NotFound");
             }));
 
             cases.Add(CaseAsync("cancel_voyage_double_cancel_second_still_succeeds", "Cancel Voyage Double Cancel Second Still Succeeds", TestTags.Positive, async () =>

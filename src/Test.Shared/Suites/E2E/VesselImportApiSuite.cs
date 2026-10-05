@@ -94,8 +94,9 @@ namespace Test.Shared.Suites.E2E
                 string outside = Path.GetPathRoot(Path.GetTempPath()) ?? "/";
                 HttpResponseMessage response = await fx.AuthClient.PostAsync("/api/v1/vessels/import/discover", JsonHelper.ToJsonContent(new { directories = new[] { outside } })).ConfigureAwait(false);
                 AssertEqual(HttpStatusCode.Forbidden, response.StatusCode);
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                AssertContains("PathNotAllowed", body);
+                E2eCodedErrorBody error = JsonHelper.Deserialize<E2eCodedErrorBody>(await response.Content.ReadAsStringAsync().ConfigureAwait(false));
+                AssertEqual(WatsonWebserver.Core.ApiResultEnum.Forbidden, error.Error, "error");
+                AssertEqual(VesselImportCodes.PathNotAllowed, error.Data?.Code, "code");
             }));
 
             cases.Add(CaseAsync("browse_base64url_and_plain", "Browse accepts base64url and plain paths and flags repositories", TestTags.Positive, async () =>
@@ -128,8 +129,11 @@ namespace Test.Shared.Suites.E2E
                 HttpResponseMessage response = await fx.AuthClient.PostAsync("/api/v1/vessels/import/discover", JsonHelper.ToJsonContent(new { roots = new[] { Path.Combine(_Root, "small") } })).ConfigureAwait(false);
                 AssertEqual(HttpStatusCode.OK, response.StatusCode, "discover");
                 string raw = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                AssertContains("\"BatchId\"", raw, "PascalCase wire format (the dashboard client camel-cases keys)");
-                AssertContains("\"CandidateStatus\":\"New\"", raw, "string enums");
+                List<JsonPropertyShape> shape = JsonShape.Properties(raw);
+                AssertTrue(shape.Any(p => p.Depth == 1 && p.Name == "BatchId"), "PascalCase wire format (the dashboard client camel-cases keys)");
+                List<JsonPropertyShape> statuses = shape.Where(p => p.Name == "CandidateStatus").ToList();
+                AssertTrue(statuses.Count > 0 && statuses.All(p => p.ValueToken == System.Text.Json.JsonTokenType.String), "string enums");
+                AssertTrue(statuses.Any(p => p.ScalarText == "New"), "a New candidate");
                 VesselImportDiscoverResponse discovered = JsonHelper.Deserialize<VesselImportDiscoverResponse>(raw);
                 AssertEqual(2, discovered.Candidates.Count);
                 _BatchId = discovered.BatchId;
@@ -214,7 +218,8 @@ namespace Test.Shared.Suites.E2E
                 AssertTrue(page.Objects.Any(b => b.Id == discovered.BatchId), "enumerate contains MCP batch");
 
                 string errorText = await CallToolTextAsync(fx.McpClient, sessionId, "discover_vessels", new { roots = new string[0] }).ConfigureAwait(false);
-                AssertContains("InvalidRequest", errorText);
+                McpToolError toolError = JsonHelper.Deserialize<McpToolError>(errorText);
+                AssertEqual(VesselImportCodes.InvalidRequest, toolError.Code, "tool error code: " + errorText);
             }));
 
             return new TestSuiteDescriptor(

@@ -113,8 +113,8 @@ namespace Test.Shared.Suites.E2E
                         AssertEqual(429, (int)locked.StatusCode, "right password while locked");
                         int retryAfter = RetryAfterSeconds(locked);
                         AssertTrue(retryAfter >= 1 && retryAfter <= 60, "Retry-After " + retryAfter);
-                        string body = await locked.Content.ReadAsStringAsync().ConfigureAwait(false);
-                        AssertContains("SlowDown", body);
+                        ApiErrorProbe lockedError = ApiErrorProbe.From(await locked.Content.ReadAsStringAsync().ConfigureAwait(false));
+                        AssertEqual(WatsonWebserver.Core.ApiResultEnum.SlowDown, lockedError.Error, "SlowDown error code");
 
                         HttpResponseMessage other = await LoginAsync(rest, "bystander@login.armada", "bystander-password").ConfigureAwait(false);
                         AssertEqual(200, (int)other.StatusCode, "another account is not locked");

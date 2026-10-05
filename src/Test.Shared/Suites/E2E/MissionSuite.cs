@@ -259,8 +259,7 @@ namespace Test.Shared.Suites.E2E
                 HttpClient authClient = fx.AuthClient;
 
                 HttpResponseMessage response = await authClient.GetAsync("/api/v1/missions/msn_nonexistent");
-                ArmadaErrorResponse error = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(response);
-                AssertTrue(error.Error != null || error.Message != null);
+                await E2eApiErrorAssert.ExpectAsync(response, HttpStatusCode.NotFound, "expected NotFound");
             }));
 
             cases.Add(CaseAsync("get_mission_returns_all_properties", "GetMission_ReturnsAllProperties", TestTags.Positive, async () =>
@@ -377,8 +376,7 @@ namespace Test.Shared.Suites.E2E
 
                 StringContent updateContent = JsonHelper.ToJsonContent(new { Title = "Ghost" });
                 HttpResponseMessage response = await authClient.PutAsync("/api/v1/missions/msn_nonexistent", updateContent);
-                ArmadaErrorResponse error = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(response);
-                AssertTrue(error.Error != null || error.Message != null);
+                await E2eApiErrorAssert.ExpectAsync(response, HttpStatusCode.NotFound, "expected NotFound");
             }));
 
             cases.Add(CaseAsync("update_mission_preserves_id", "UpdateMission_PreservesId", TestTags.Positive, async () =>
@@ -467,8 +465,7 @@ namespace Test.Shared.Suites.E2E
                 HttpClient authClient = fx.AuthClient;
 
                 HttpResponseMessage response = await authClient.DeleteAsync("/api/v1/missions/msn_nonexistent");
-                ArmadaErrorResponse error = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(response);
-                AssertTrue(error.Error != null || error.Message != null);
+                await E2eApiErrorAssert.ExpectAsync(response, HttpStatusCode.NotFound, "expected NotFound");
             }));
 
             #endregion
@@ -935,8 +932,7 @@ namespace Test.Shared.Suites.E2E
                 string missionId = created.Id;
 
                 HttpResponseMessage response = await TransitionAsync(authClient, missionId, "Complete");
-                ArmadaErrorResponse error = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(response);
-                AssertTrue(error.Error != null || error.Message != null);
+                await E2eApiErrorAssert.ExpectAsync(response, HttpStatusCode.BadRequest, "expected BadRequest");
             }));
 
             cases.Add(CaseAsync("status_transition_pending_to_in_progress_fails", "StatusTransition_PendingToInProgress_Fails", TestTags.Negative, async () =>
@@ -952,8 +948,7 @@ namespace Test.Shared.Suites.E2E
                 string missionId = created.Id;
 
                 HttpResponseMessage response = await TransitionAsync(authClient, missionId, "InProgress");
-                ArmadaErrorResponse error = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(response);
-                AssertTrue(error.Error != null || error.Message != null);
+                await E2eApiErrorAssert.ExpectAsync(response, HttpStatusCode.BadRequest, "expected BadRequest");
             }));
 
             cases.Add(CaseAsync("status_transition_pending_to_testing_fails", "StatusTransition_PendingToTesting_Fails", TestTags.Negative, async () =>
@@ -969,8 +964,7 @@ namespace Test.Shared.Suites.E2E
                 string missionId = created.Id;
 
                 HttpResponseMessage response = await TransitionAsync(authClient, missionId, "Testing");
-                ArmadaErrorResponse error = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(response);
-                AssertTrue(error.Error != null || error.Message != null);
+                await E2eApiErrorAssert.ExpectAsync(response, HttpStatusCode.BadRequest, "expected BadRequest");
             }));
 
             cases.Add(CaseAsync("status_transition_pending_to_review_fails", "StatusTransition_PendingToReview_Fails", TestTags.Negative, async () =>
@@ -986,8 +980,7 @@ namespace Test.Shared.Suites.E2E
                 string missionId = created.Id;
 
                 HttpResponseMessage response = await TransitionAsync(authClient, missionId, "Review");
-                ArmadaErrorResponse error = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(response);
-                AssertTrue(error.Error != null || error.Message != null);
+                await E2eApiErrorAssert.ExpectAsync(response, HttpStatusCode.BadRequest, "expected BadRequest");
             }));
 
             cases.Add(CaseAsync("status_transition_pending_to_failed_fails", "StatusTransition_PendingToFailed_Fails", TestTags.Negative, async () =>
@@ -1003,8 +996,7 @@ namespace Test.Shared.Suites.E2E
                 string missionId = created.Id;
 
                 HttpResponseMessage response = await TransitionAsync(authClient, missionId, "Failed");
-                ArmadaErrorResponse error = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(response);
-                AssertTrue(error.Error != null || error.Message != null);
+                await E2eApiErrorAssert.ExpectAsync(response, HttpStatusCode.BadRequest, "expected BadRequest");
             }));
 
             cases.Add(CaseAsync("status_transition_assigned_to_complete_fails", "StatusTransition_AssignedToComplete_Fails", TestTags.Negative, async () =>
@@ -1021,8 +1013,7 @@ namespace Test.Shared.Suites.E2E
 
                 await TransitionAndAssertAsync(authClient, missionId, "Assigned");
                 HttpResponseMessage response = await TransitionAsync(authClient, missionId, "Complete");
-                ArmadaErrorResponse error = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(response);
-                AssertTrue(error.Error != null || error.Message != null);
+                await E2eApiErrorAssert.ExpectAsync(response, HttpStatusCode.BadRequest, "expected BadRequest");
             }));
 
             cases.Add(CaseAsync("status_transition_assigned_to_testing_fails", "StatusTransition_AssignedToTesting_Fails", TestTags.Negative, async () =>
@@ -1039,8 +1030,7 @@ namespace Test.Shared.Suites.E2E
 
                 await TransitionAndAssertAsync(authClient, missionId, "Assigned");
                 HttpResponseMessage response = await TransitionAsync(authClient, missionId, "Testing");
-                ArmadaErrorResponse error = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(response);
-                AssertTrue(error.Error != null || error.Message != null);
+                await E2eApiErrorAssert.ExpectAsync(response, HttpStatusCode.BadRequest, "expected BadRequest");
             }));
 
             cases.Add(CaseAsync("status_transition_assigned_to_review_fails", "StatusTransition_AssignedToReview_Fails", TestTags.Negative, async () =>
@@ -1057,8 +1047,7 @@ namespace Test.Shared.Suites.E2E
 
                 await TransitionAndAssertAsync(authClient, missionId, "Assigned");
                 HttpResponseMessage response = await TransitionAsync(authClient, missionId, "Review");
-                ArmadaErrorResponse error = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(response);
-                AssertTrue(error.Error != null || error.Message != null);
+                await E2eApiErrorAssert.ExpectAsync(response, HttpStatusCode.BadRequest, "expected BadRequest");
             }));
 
             cases.Add(CaseAsync("status_transition_assigned_to_failed_fails", "StatusTransition_AssignedToFailed_Fails", TestTags.Negative, async () =>
@@ -1075,8 +1064,7 @@ namespace Test.Shared.Suites.E2E
 
                 await TransitionAndAssertAsync(authClient, missionId, "Assigned");
                 HttpResponseMessage response = await TransitionAsync(authClient, missionId, "Failed");
-                ArmadaErrorResponse error = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(response);
-                AssertTrue(error.Error != null || error.Message != null);
+                await E2eApiErrorAssert.ExpectAsync(response, HttpStatusCode.BadRequest, "expected BadRequest");
             }));
 
             cases.Add(CaseAsync("status_transition_complete_to_anything_fails", "StatusTransition_CompleteToAnything_Fails", TestTags.Negative, async () =>
@@ -1099,11 +1087,7 @@ namespace Test.Shared.Suites.E2E
                 foreach (string target in targets)
                 {
                     HttpResponseMessage response = await TransitionAsync(authClient, missionId, target);
-                    string body = await response.Content.ReadAsStringAsync();
-                    ArmadaErrorResponse error = JsonHelper.Deserialize<ArmadaErrorResponse>(body);
-                    Assert(
-                        error.Error != null || error.Message != null,
-                        "Expected error for Complete->" + target + " but got: " + body);
+                    await E2eApiErrorAssert.ExpectAsync(response, HttpStatusCode.BadRequest, "Complete->" + target + " is refused");
                 }
             }));
 
@@ -1125,11 +1109,7 @@ namespace Test.Shared.Suites.E2E
                 foreach (string target in targets)
                 {
                     HttpResponseMessage response = await TransitionAsync(authClient, missionId, target);
-                    string body = await response.Content.ReadAsStringAsync();
-                    ArmadaErrorResponse error = JsonHelper.Deserialize<ArmadaErrorResponse>(body);
-                    Assert(
-                        error.Error != null || error.Message != null,
-                        "Expected error for Cancelled->" + target + " but got: " + body);
+                    await E2eApiErrorAssert.ExpectAsync(response, HttpStatusCode.BadRequest, "Cancelled->" + target + " is refused");
                 }
             }));
 
@@ -1153,11 +1133,7 @@ namespace Test.Shared.Suites.E2E
                 foreach (string target in targets)
                 {
                     HttpResponseMessage response = await TransitionAsync(authClient, missionId, target);
-                    string body = await response.Content.ReadAsStringAsync();
-                    ArmadaErrorResponse error = JsonHelper.Deserialize<ArmadaErrorResponse>(body);
-                    Assert(
-                        error.Error != null || error.Message != null,
-                        "Expected error for Failed->" + target + " but got: " + body);
+                    await E2eApiErrorAssert.ExpectAsync(response, HttpStatusCode.BadRequest, "Failed->" + target + " is refused");
                 }
             }));
 
@@ -1174,8 +1150,7 @@ namespace Test.Shared.Suites.E2E
                 string missionId = created.Id;
 
                 HttpResponseMessage response = await TransitionAsync(authClient, missionId, "Pending");
-                ArmadaErrorResponse error = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(response);
-                AssertTrue(error.Error != null || error.Message != null);
+                await E2eApiErrorAssert.ExpectAsync(response, HttpStatusCode.BadRequest, "expected BadRequest");
             }));
 
             cases.Add(CaseAsync("status_transition_assigned_to_pending_fails", "StatusTransition_AssignedToPending_Fails", TestTags.Negative, async () =>
@@ -1192,8 +1167,7 @@ namespace Test.Shared.Suites.E2E
 
                 await TransitionAndAssertAsync(authClient, missionId, "Assigned");
                 HttpResponseMessage response = await TransitionAsync(authClient, missionId, "Pending");
-                ArmadaErrorResponse error = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(response);
-                AssertTrue(error.Error != null || error.Message != null);
+                await E2eApiErrorAssert.ExpectAsync(response, HttpStatusCode.BadRequest, "expected BadRequest");
             }));
 
             cases.Add(CaseAsync("status_transition_in_progress_to_pending_fails", "StatusTransition_InProgressToPending_Fails", TestTags.Negative, async () =>
@@ -1211,8 +1185,7 @@ namespace Test.Shared.Suites.E2E
                 await TransitionAndAssertAsync(authClient, missionId, "Assigned");
                 await TransitionAndAssertAsync(authClient, missionId, "InProgress");
                 HttpResponseMessage response = await TransitionAsync(authClient, missionId, "Pending");
-                ArmadaErrorResponse error = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(response);
-                AssertTrue(error.Error != null || error.Message != null);
+                await E2eApiErrorAssert.ExpectAsync(response, HttpStatusCode.BadRequest, "expected BadRequest");
             }));
 
             cases.Add(CaseAsync("status_transition_in_progress_to_assigned_fails", "StatusTransition_InProgressToAssigned_Fails", TestTags.Negative, async () =>
@@ -1230,8 +1203,7 @@ namespace Test.Shared.Suites.E2E
                 await TransitionAndAssertAsync(authClient, missionId, "Assigned");
                 await TransitionAndAssertAsync(authClient, missionId, "InProgress");
                 HttpResponseMessage response = await TransitionAsync(authClient, missionId, "Assigned");
-                ArmadaErrorResponse error = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(response);
-                AssertTrue(error.Error != null || error.Message != null);
+                await E2eApiErrorAssert.ExpectAsync(response, HttpStatusCode.BadRequest, "expected BadRequest");
             }));
 
             #endregion
@@ -1253,8 +1225,7 @@ namespace Test.Shared.Suites.E2E
                 StringContent content = JsonHelper.ToJsonContent(new { Status = "" });
                 HttpResponseMessage response = await authClient.PutAsync("/api/v1/missions/" + missionId + "/status", content);
 
-                ArmadaErrorResponse error = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(response);
-                AssertTrue(error.Error != null || error.Message != null);
+                await E2eApiErrorAssert.ExpectAsync(response, HttpStatusCode.BadRequest, "an empty status is a typed 400");
             }));
 
             cases.Add(CaseAsync("status_transition_invalid_status_name_returns_error", "StatusTransition_InvalidStatusName_ReturnsError", TestTags.Negative, async () =>
@@ -1270,8 +1241,7 @@ namespace Test.Shared.Suites.E2E
                 string missionId = created.Id;
 
                 HttpResponseMessage response = await TransitionAsync(authClient, missionId, "NotAStatus");
-                ArmadaErrorResponse error = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(response);
-                AssertTrue(error.Error != null || error.Message != null);
+                await E2eApiErrorAssert.ExpectAsync(response, HttpStatusCode.BadRequest, "expected BadRequest");
             }));
 
             cases.Add(CaseAsync("status_transition_garbage_status_name_returns_error", "StatusTransition_GarbageStatusName_ReturnsError", TestTags.Negative, async () =>
@@ -1287,8 +1257,7 @@ namespace Test.Shared.Suites.E2E
                 string missionId = created.Id;
 
                 HttpResponseMessage response = await TransitionAsync(authClient, missionId, "!@#$%^&*()");
-                ArmadaErrorResponse error = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(response);
-                AssertTrue(error.Error != null || error.Message != null);
+                await E2eApiErrorAssert.ExpectAsync(response, HttpStatusCode.BadRequest, "expected BadRequest");
             }));
 
             cases.Add(CaseAsync("status_transition_not_found_returns_error", "StatusTransition_NotFound_ReturnsError", TestTags.Negative, async () =>
@@ -1297,8 +1266,7 @@ namespace Test.Shared.Suites.E2E
                 HttpClient authClient = fx.AuthClient;
 
                 HttpResponseMessage response = await TransitionAsync(authClient, "msn_nonexistent", "Assigned");
-                ArmadaErrorResponse error = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(response);
-                AssertTrue(error.Error != null || error.Message != null);
+                await E2eApiErrorAssert.ExpectAsync(response, HttpStatusCode.NotFound, "transition on a missing mission is a typed 404");
             }));
 
             cases.Add(CaseAsync("status_transition_updates_last_update_utc", "StatusTransition_UpdatesLastUpdateUtc", TestTags.Positive, async () =>
@@ -1333,8 +1301,7 @@ namespace Test.Shared.Suites.E2E
                 HttpClient authClient = fx.AuthClient;
 
                 HttpResponseMessage response = await authClient.GetAsync("/api/v1/missions/msn_nonexistent/diff");
-                ArmadaErrorResponse error = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(response);
-                AssertTrue(error.Error != null || error.Message != null);
+                await E2eApiErrorAssert.ExpectAsync(response, HttpStatusCode.NotFound, "expected NotFound");
             }));
 
             cases.Add(CaseAsync("diff_no_diff_file_returns_error_or_empty", "Diff_NoDiffFile_ReturnsErrorOrEmpty", TestTags.Negative, async () =>
@@ -2010,8 +1977,7 @@ namespace Test.Shared.Suites.E2E
                 await authClient.DeleteAsync("/api/v1/missions/" + missionId);
 
                 HttpResponseMessage response = await TransitionAsync(authClient, missionId, "Pending");
-                ArmadaErrorResponse error = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(response);
-                AssertTrue(error.Error != null || error.Message != null);
+                await E2eApiErrorAssert.ExpectAsync(response, HttpStatusCode.BadRequest, "expected BadRequest");
             }));
 
             cases.Add(CaseAsync("update_mission_after_status_transition_preserves_status", "UpdateMission_AfterStatusTransition_PreservesStatus", TestTags.Positive, async () =>

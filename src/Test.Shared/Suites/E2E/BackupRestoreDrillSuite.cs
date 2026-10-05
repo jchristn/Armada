@@ -80,7 +80,9 @@ namespace Test.Shared.Suites.E2E
                     HttpResponseMessage restore = await server.Client.PostAsync("/api/v1/restore", upload, ct).ConfigureAwait(false);
                     string restoreBody = await restore.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
                     AssertStatusCode(HttpStatusCode.OK, restore, "restore: " + restoreBody);
-                    AssertContains("restored", restoreBody, "restore status");
+                    E2eRestoreResult restored = JsonHelper.Deserialize<E2eRestoreResult>(restoreBody);
+                    AssertEqual("restored", restored.Status, "restore status");
+                    AssertFalse(String.IsNullOrEmpty(restored.BackupPath), "restore reports the safety backup path");
                     AssertTrue(Directory.GetFiles(Path.Combine(dataDir, "backups"), "pre-restore-*.zip").Length == 1, "safety backup of the replaced state under the data directory");
 
                     server.Stop();
@@ -116,7 +118,14 @@ namespace Test.Shared.Suites.E2E
                     ByteArrayContent upload = new ByteArrayContent(bogus.ToArray());
                     upload.Headers.ContentType = new MediaTypeHeaderValue("application/zip");
                     HttpResponseMessage restore = await server.Client.PostAsync("/api/v1/restore", upload, ct).ConfigureAwait(false);
+                    string restoreBody = await restore.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
                     AssertFalse(restore.IsSuccessStatusCode, "invalid backup rejected");
+                    // TODO(R5, production): the validation failure is an InvalidOperationException the route does not map,
+                    // so it arrives as 500 InternalError instead of 400. Until then, prove the refusal is the backup
+                    // validation (exact message) rather than an unrelated crash.
+                    ApiErrorProbe restoreError = ApiErrorProbe.From(restoreBody);
+                    AssertNotNull(restoreError.Error, "typed error body: " + restoreBody);
+                    AssertEqual("ZIP does not contain armada.db entry", restoreError.Message, "rejected by backup validation");
 
                     List<Fleet> fleets = await ListFleetsAsync(server.Client).ConfigureAwait(false);
                     AssertNotNull(fleets.FirstOrDefault(f => f.Id == fleet.Id), "data untouched");
@@ -131,11 +140,14 @@ namespace Test.Shared.Suites.E2E
                 {
                     HttpResponseMessage backup = await server.Client.GetAsync("/api/v1/backup", ct).ConfigureAwait(false);
                     AssertStatusCode(HttpStatusCode.BadRequest, backup, "backup refused");
-                    AssertContains("UPGRADING.md", await backup.Content.ReadAsStringAsync(ct).ConfigureAwait(false), "points at the procedure");
+                    ApiErrorProbe backupError = ApiErrorProbe.From(await backup.Content.ReadAsStringAsync(ct).ConfigureAwait(false));
+                    AssertEqual(WatsonWebserver.Core.ApiResultEnum.BadRequest, backupError.Error, "backup refused with a typed error");
+                    AssertContains("docs/UPGRADING.md", backupError.Message ?? "", "the message points at the procedure");
 
                     ByteArrayContent upload = new ByteArrayContent(new byte[] { 1, 2, 3 });
                     HttpResponseMessage restore = await server.Client.PostAsync("/api/v1/restore", upload, ct).ConfigureAwait(false);
                     AssertStatusCode(HttpStatusCode.BadRequest, restore, "restore refused");
+                    AssertEqual(WatsonWebserver.Core.ApiResultEnum.BadRequest, ApiErrorProbe.From(await restore.Content.ReadAsStringAsync(ct).ConfigureAwait(false)).Error, "restore refused with a typed error");
                     AssertFalse(Directory.Exists(Path.Combine(dataDir, "backups")) && Directory.GetFiles(Path.Combine(dataDir, "backups")).Length > 0, "nothing written");
                 }
             }, serverOnly: true));
