@@ -34,6 +34,12 @@ namespace Armada.Tui.Screens
             get { return Route.Route.Title + (Route.Tab != null ? ": " + Route.Tab.Label : ""); }
         }
 
+        /// <inheritdoc />
+        public override IReadOnlyList<KeyValuePair<string, string>> Hints
+        {
+            get { return Content.Hints; }
+        }
+
         #endregion
 
         #region Constructors-and-Factories
