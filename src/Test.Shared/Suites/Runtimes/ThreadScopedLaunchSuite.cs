@@ -4,6 +4,7 @@ namespace Test.Shared.Suites.Runtimes
     using System.Collections.Generic;
     using System.IO;
     using System.Linq;
+    using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Core.Services;
@@ -53,7 +54,9 @@ namespace Test.Shared.Suites.Runtimes
             {
                 LaunchRecord? record = await LaunchAsync((LoggingModule logging, string stub) => new GeminiRuntime(logging) { ExecutablePath = stub }).ConfigureAwait(false);
                 if (record == null) return;
-                AssertTrue(record.GeminiSettings.Contains("$ARMADA_MCP_TOKEN"), "expected workspace settings with env header");
+                McpKeyedConfigFile gemini = JsonSerializer.Deserialize<McpKeyedConfigFile>(record.GeminiSettings)!;
+                AssertTrue(gemini.McpServers != null && gemini.McpServers.ContainsKey(CaptainThreadMcpPlanner.ServerName), "expected the armada server in workspace settings");
+                AssertEqual("$" + CaptainThreadMcpPlanner.TokenEnvironmentVariable, gemini.McpServers![CaptainThreadMcpPlanner.ServerName].Headers?["X-Token"], "expected workspace settings with env header");
                 AssertEqual("true", record.TrustWorkspace);
                 AssertTrue(record.Arguments.Contains("--allowed-mcp-server-names"), "expected allowed server names");
                 AssertEqual(Environment.GetEnvironmentVariable("HOME") ?? String.Empty, record.Home);
@@ -63,7 +66,9 @@ namespace Test.Shared.Suites.Runtimes
             {
                 LaunchRecord? record = await LaunchAsync((LoggingModule logging, string stub) => new CursorRuntime(logging) { ExecutablePath = stub }).ConfigureAwait(false);
                 if (record == null) return;
-                AssertTrue(record.CursorMcp.Contains("${env:ARMADA_MCP_TOKEN}"), "expected project mcp.json with env header");
+                McpKeyedConfigFile cursor = JsonSerializer.Deserialize<McpKeyedConfigFile>(record.CursorMcp)!;
+                AssertTrue(cursor.McpServers != null && cursor.McpServers.ContainsKey(CaptainThreadMcpPlanner.ServerName), "expected the armada server in project mcp.json");
+                AssertEqual("${env:" + CaptainThreadMcpPlanner.TokenEnvironmentVariable + "}", cursor.McpServers![CaptainThreadMcpPlanner.ServerName].Headers?["X-Token"], "expected project mcp.json with env header");
                 AssertEqual(Token, record.Token);
                 AssertEqual(Environment.GetEnvironmentVariable("HOME") ?? String.Empty, record.Home);
             }));
@@ -72,7 +77,9 @@ namespace Test.Shared.Suites.Runtimes
             {
                 LaunchRecord? record = await LaunchAsync((LoggingModule logging, string stub) => new OpenCodeRuntime(logging) { ExecutablePath = stub }).ConfigureAwait(false);
                 if (record == null) return;
-                AssertTrue(record.OpenCodeContent.Contains("{env:ARMADA_MCP_TOKEN}"), "expected inline config with env header");
+                OpenCodeConfigFile openCode = JsonSerializer.Deserialize<OpenCodeConfigFile>(record.OpenCodeContent)!;
+                AssertNotNull(openCode.Mcp, "expected an mcp section in the inline config");
+                AssertEqual(1, openCode.Mcp!.Values.Count(e => e.Enabled == true && e.Headers != null && e.Headers.TryGetValue("X-Token", out string? header) && header == "{env:" + CaptainThreadMcpPlanner.TokenEnvironmentVariable + "}"), "expected one enabled inline server with env header");
                 AssertEqual(Token, record.Token);
             }));
 
@@ -84,7 +91,10 @@ namespace Test.Shared.Suites.Runtimes
                 AssertEqual(1, record.Arguments.Count(a => a == "--mcp-config"));
                 int idx = record.Arguments.IndexOf("--mcp-config");
                 AssertTrue(record.Arguments[idx + 1].EndsWith("mcp-servers.json", StringComparison.Ordinal), "expected scoped server document");
-                AssertTrue(record.MuxConfig.Contains("${ARMADA_MCP_TOKEN}"), "expected the scoped document to exist at launch");
+                MuxServersFile mux = JsonSerializer.Deserialize<MuxServersFile>(record.MuxConfig)!;
+                AssertTrue(mux.Servers != null && mux.Servers.Count == 1, "expected the scoped document to exist at launch with one server");
+                AssertEqual("X-Token", mux.Servers![0].Auth?.ApiKeyHeader, "expected the X-Token header");
+                AssertEqual("${" + CaptainThreadMcpPlanner.TokenEnvironmentVariable + "}", mux.Servers[0].Auth?.ApiKeyValue, "expected the env token reference");
                 AssertTrue(record.Arguments.Contains("--strict-mcp-config"), "expected strict");
                 AssertEqual(Token, record.Token);
                 AssertFalse(record.MuxConfigDirOverridden, "MUX_CONFIG_DIR must not be redirected");

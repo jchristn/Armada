@@ -2281,6 +2281,7 @@ namespace Test.Shared.Suites.Services
                     AssertNotNull(reloadedJudge, "Judge mission should remain readable");
                     AssertEqual(MissionStatusEnum.Failed, reloadedJudge!.Status, "A sentence verdict is not a structured verdict and must not land");
                     AssertContains("did not emit an explicit PASS verdict", reloadedJudge.FailureReason ?? String.Empty, "Missing structured verdict is reported");
+                    AssertEqual(MissionFailureKindEnum.JudgeRejected, reloadedJudge.FailureKind);
                     AssertEqual(0, landingCalls, "Only the [ARMADA:VERDICT] line can permit landing");
                 }
             }));

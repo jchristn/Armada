@@ -196,7 +196,9 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(JobStatusEnum.Succeeded, job!.Status);
                 AssertEqual(JobKindEnum.Report, job.Kind);
                 AssertEqual(100, job.Progress);
-                AssertContains("\"evaluated\":1", job.ResultJson ?? "");
+                VesselHealthJobResult healthResult = JsonHelper.Deserialize<VesselHealthJobResult>(job.ResultJson ?? "null");
+                AssertNotNull(healthResult, "health job result");
+                AssertEqual(1, healthResult.Evaluated, "evaluated count in the job result");
 
                 VesselHealthEvaluationStart third = await service.StartEvaluationAsync(Constants.DefaultTenantId, null, null, false).ConfigureAwait(false);
                 AssertFalse(third.AlreadyRunning, "a new job can start after the first finishes");

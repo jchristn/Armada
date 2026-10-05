@@ -11,6 +11,7 @@ namespace Test.Shared.Suites.Runtimes
     using Armada.Runtimes.Interfaces;
     using Armada.Runtimes.Mcp;
     using Armada.Runtimes.Tools;
+    using Armada.Runtimes.Tools.Arguments;
     using PolyPrompt.Clients;
     using PolyPrompt.Models;
     using SyslogLogging;
@@ -66,7 +67,9 @@ namespace Test.Shared.Suites.Runtimes
                     BuiltInToolRegistry registry = new BuiltInToolRegistry(null);
                     ToolResult result = await registry.ExecuteAsync("x1", "does_not_exist", ParseArgs("{}"), dir, CancellationToken.None).ConfigureAwait(false);
                     AssertTrue(!result.Success, "Expected an unknown tool to fail.");
-                    AssertTrue(result.Content.Contains("unknown_tool"), "Expected an unknown_tool error payload.");
+                    ToolErrorContent? error = System.Text.Json.JsonSerializer.Deserialize<ToolErrorContent>(result.Content);
+                    AssertNotNull(error, "Expected a JSON error payload: " + result.Content);
+                    AssertEqual("unknown_tool", error!.Error, "Expected an unknown_tool error code.");
                 }
                 finally
                 {

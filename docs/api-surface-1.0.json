@@ -14648,7 +14648,18 @@
       "key": "agents[].runtime",
       "type": "enum AgentRuntimeEnum (ClaudeCode|Codex|Gemini|Cursor|Mux|OpenCode|ApiEndpoint|Custom)",
       "default": "\"ClaudeCode\"",
-      "experimental": false
+      "experimental": false,
+      "enumName": "AgentRuntimeEnum",
+      "enumValues": [
+        "ClaudeCode",
+        "Codex",
+        "Gemini",
+        "Cursor",
+        "Mux",
+        "OpenCode",
+        "ApiEndpoint",
+        "Custom"
+      ]
     },
     {
       "key": "agents[].supportsResume",
@@ -14744,7 +14755,13 @@
       "key": "branchCleanupPolicy",
       "type": "enum BranchCleanupPolicyEnum (LocalOnly|LocalAndRemote|None)",
       "default": "\"LocalOnly\"",
-      "experimental": false
+      "experimental": false,
+      "enumName": "BranchCleanupPolicyEnum",
+      "enumValues": [
+        "LocalOnly",
+        "LocalAndRemote",
+        "None"
+      ]
     },
     {
       "key": "captainCrashLoopThreshold",
@@ -14882,7 +14899,14 @@
       "key": "database.type",
       "type": "enum DatabaseTypeEnum (Sqlite|Postgresql|SqlServer|Mysql)",
       "default": "\"Sqlite\"",
-      "experimental": false
+      "experimental": false,
+      "enumName": "DatabaseTypeEnum",
+      "enumValues": [
+        "Sqlite",
+        "Postgresql",
+        "SqlServer",
+        "Mysql"
+      ]
     },
     {
       "key": "database.username",
@@ -14906,7 +14930,12 @@
       "key": "deploymentMode",
       "type": "enum DeploymentModeEnum (Local|Split)",
       "default": "\"Local\"",
-      "experimental": true
+      "experimental": true,
+      "enumName": "DeploymentModeEnum",
+      "enumValues": [
+        "Local",
+        "Split"
+      ]
     },
     {
       "key": "docksDirectory",
@@ -14924,7 +14953,12 @@
       "key": "escalationRules[].action",
       "type": "enum EscalationActionEnum (Log|Webhook)",
       "default": "\"Log\"",
-      "experimental": false
+      "experimental": false,
+      "enumName": "EscalationActionEnum",
+      "enumValues": [
+        "Log",
+        "Webhook"
+      ]
     },
     {
       "key": "escalationRules[].cooldownMinutes",
@@ -14948,7 +14982,15 @@
       "key": "escalationRules[].trigger",
       "type": "enum EscalationTriggerEnum (CaptainStalled|MissionOverdue|MissionFailed|RecoveryExhausted|PoolExhausted)",
       "default": "\"CaptainStalled\"",
-      "experimental": false
+      "experimental": false,
+      "enumName": "EscalationTriggerEnum",
+      "enumValues": [
+        "CaptainStalled",
+        "MissionOverdue",
+        "MissionFailed",
+        "RecoveryExhausted",
+        "PoolExhausted"
+      ]
     },
     {
       "key": "escalationRules[].webhookUrl",
@@ -15092,7 +15134,14 @@
       "key": "landingMode",
       "type": "enum LandingModeEnum (LocalMerge|PullRequest|MergeQueue|None)?",
       "default": "null",
-      "experimental": false
+      "experimental": false,
+      "enumName": "LandingModeEnum",
+      "enumValues": [
+        "LocalMerge",
+        "PullRequest",
+        "MergeQueue",
+        "None"
+      ]
     },
     {
       "key": "logDirectory",

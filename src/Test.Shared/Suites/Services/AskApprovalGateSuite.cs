@@ -10,6 +10,7 @@ namespace Test.Shared.Suites.Services
     using Armada.Core.Models;
     using Armada.Core.Services.Ask;
     using Armada.Server.Ask;
+    using Armada.Server.Mcp;
     using Test.Shared.Infrastructure;
     using Touchstone.Core;
     using static Test.Shared.Infrastructure.Asserts;
@@ -81,7 +82,10 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(AskProposalStatusEnum.Pending, proposal.Status);
                 AssertEqual(AskProposalSourceEnum.Captain, proposal.Source);
                 AssertEqual("dispatch", proposal.ToolName);
-                AssertContains("Fix flaky test", proposal.ArgumentsText);
+                VoyageDispatchArgs proposedArgs = JsonHelper.Deserialize<VoyageDispatchArgs>(proposal.ArgumentsText);
+                AssertEqual("Fix flaky test", proposedArgs.Title, "proposed title");
+                AssertEqual("vsl_demo", proposedArgs.VesselId, "proposed vessel");
+                AssertEqual(1, proposedArgs.Missions.Count, "proposed missions");
                 AssertContains("Dispatch voyage \"Fix flaky test\" to vessel vsl_demo with 1 mission(s)", proposal.SummaryText);
                 AssertContains(proposal.Id, text);
                 AssertNotNull(proposal.MessageId, "confirm card message");
@@ -108,7 +112,9 @@ namespace Test.Shared.Suites.Services
                 AskActionProposal proposal = (await h.Db.Driver.AskActionProposals.EnumerateByThreadAsync(Constants.DefaultTenantId, thread.Id, null).ConfigureAwait(false)).Single();
                 AssertEqual(AskProposalStatusEnum.Executed, proposal.Status);
                 AssertEqual("usr_auto", proposal.DecidedByUserId);
-                AssertContains("vyg_stub", proposal.ResultText ?? "");
+                AskStubVoyageResult executedResult = JsonHelper.Deserialize<AskStubVoyageResult>(proposal.ResultText ?? "null");
+                AssertNotNull(executedResult, "result recorded");
+                AssertStartsWith("vyg_stub", executedResult.Id ?? "", "recorded result is the dispatch result");
 
                 AskMessagePage page = (await h.Threads.EnumerateMessagesAsync(owner, thread.Id, null).ConfigureAwait(false))!;
                 AskMessage resultMessage = page.Messages.Single(m => m.Kind == AskMessageKindEnum.ActionResult);
@@ -257,7 +263,8 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(1, h.Invocations.Count, "executed");
 
                 object foreign = await h.CallAsync("dispatch", DispatchArgs, AskTestHarness.User("usr_mallory"), thread.Id).ConfigureAwait(false);
-                AssertContains("no longer exists", System.Text.Json.JsonSerializer.Serialize(foreign));
+                AssertTrue(foreign is McpToolError, "foreign-thread call returns a typed tool error, got " + foreign.GetType().Name);
+                AssertEqual(McpToolErrorCodeEnum.NotFound, ((McpToolError)foreign).ErrorCode, "foreign thread is reported as not found");
                 AssertEqual(1, h.Invocations.Count, "foreign-thread call not executed");
                 AssertEqual(0, (await h.Db.Driver.AskActionProposals.EnumerateByThreadAsync(Constants.DefaultTenantId, thread.Id, null).ConfigureAwait(false)).Count, "and not proposed");
             }));

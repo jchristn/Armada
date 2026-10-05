@@ -67,9 +67,12 @@ namespace Test.Shared.Suites.Services
 
                 List<AskRecordedEvent> turnEvents = h.EventsFor("usr_turn", "ask.turn");
                 AssertEqual(2, turnEvents.Count, "started and completed");
-                AssertContains("completed", System.Text.Json.JsonSerializer.Serialize(turnEvents[1].Payload));
+                AssertEqual("started", AskTurnEventPayload.From(turnEvents[0].Payload).State, "first ask.turn state");
+                AskTurnEventPayload completed = AskTurnEventPayload.From(turnEvents[1].Payload);
+                AssertEqual("completed", completed.State, "second ask.turn state");
+                AssertEqual(thread.Id, completed.ThreadId, "ask.turn carries threadId");
                 AssertTrue(h.EventsFor("usr_turn", "ask.chunk").Count > 0, "chunks streamed");
-                AssertContains(thread.Id, System.Text.Json.JsonSerializer.Serialize(h.EventsFor("usr_turn", "ask.tool")[0].Payload), "ask.tool carries threadId");
+                AssertEqual(thread.Id, AskToolEventPayload.From(h.EventsFor("usr_turn", "ask.tool")[0].Payload).ThreadId, "ask.tool carries threadId");
             }));
 
             cases.Add(CaseAsync("reply_sorts_before_messages_posted_mid_turn", "A confirm card or work update posted while the captain is still writing sorts after the captain's reply", async () =>
@@ -170,7 +173,7 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(404, await h.Turns.CancelAsync(AskTestHarness.User("usr_else"), thread.Id).ConfigureAwait(false), "another user cannot cancel");
                 AssertEqual(200, await h.Turns.CancelAsync(owner, thread.Id).ConfigureAwait(false), "owner cancels");
                 await WaitForTurnEndAsync(h, thread.Id).ConfigureAwait(false);
-                AssertContains("cancelled", System.Text.Json.JsonSerializer.Serialize(h.EventsFor("usr_busy", "ask.turn").Last().Payload));
+                AssertEqual("cancelled", AskTurnEventPayload.From(h.EventsFor("usr_busy", "ask.turn").Last().Payload).State, "last ask.turn state");
                 AssertEqual(409, await h.Turns.CancelAsync(owner, thread.Id).ConfigureAwait(false), "nothing to cancel");
 
                 h.Runner.Gate = null;
@@ -230,7 +233,10 @@ namespace Test.Shared.Suites.Services
                 AskMessage last = (await h.Threads.EnumerateMessagesAsync(owner, thread.Id, null).ConfigureAwait(false))!.Messages.Last();
                 AssertEqual(AskMessageKindEnum.Error, last.Kind);
                 AssertContains("time limit", last.ContentText);
-                AssertContains("failed", System.Text.Json.JsonSerializer.Serialize(h.EventsFor("usr_err", "ask.turn").Last().Payload));
+                AskTurnEventPayload failedTurn = AskTurnEventPayload.From(h.EventsFor("usr_err", "ask.turn").Last().Payload);
+                AssertEqual("failed", failedTurn.State, "last ask.turn state");
+                AssertEqual("The captain did not respond within the time limit.", failedTurn.Error, "ask.turn error");
+                AssertEqual(last.Id, failedTurn.MessageId, "ask.turn names the error message");
                 AssertEqual(400, (await h.Turns.SendMessageAsync(owner, thread.Id, new AskMessageSendRequest { Content = "   " }).ConfigureAwait(false)).StatusCode, "empty message");
             }));
 
