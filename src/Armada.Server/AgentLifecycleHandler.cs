@@ -467,6 +467,12 @@ namespace Armada.Server
             {
                 // A vessel-level auto-approve override wins over the captain's own setting for missions on that vessel.
                 Captain launchCaptain = CaptainRuntimeOptions.WithEffectiveAutoApprove(captain, vessel?.AutoApprove);
+                if (runtime is BaseAgentRuntime hostedRuntime)
+                {
+                    // Isolated launches write an Armada MCP URL; it must use the host the MCP listener is bound with.
+                    hostedRuntime.McpHost = Armada.Core.Services.ArmadaMcpConfigBuilder.ClientHostFor(_Settings.Rest.Hostname);
+                }
+
                 processId = await runtime.StartAsync(
                     dock.WorktreePath ?? throw new InvalidOperationException("Dock worktree path is null"),
                     prompt,

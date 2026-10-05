@@ -25,6 +25,16 @@ namespace Armada.Core.Services
         public int McpPort { get; set; } = 0;
 
         /// <summary>
+        /// The host MCP clients must use to reach the Admiral's MCP listener (see
+        /// <see cref="ArmadaMcpConfigBuilder.ClientHostFor"/>). Defaults to localhost; null or empty also means localhost.
+        /// </summary>
+        public string McpHost
+        {
+            get => _McpHost;
+            set => _McpHost = String.IsNullOrWhiteSpace(value) ? ArmadaMcpConfigBuilder.DefaultHost : value;
+        }
+
+        /// <summary>
         /// Absolute path to a per-launch directory the caller deletes when the process exits. Files that hold no
         /// project context (for example the Claude Code and Mux server documents) are written here.
         /// </summary>
@@ -85,6 +95,7 @@ namespace Armada.Core.Services
 
         #region Private-Members
 
+        private string _McpHost = ArmadaMcpConfigBuilder.DefaultHost;
         private string _ScopedConfigDirectory = String.Empty;
         private string _WorkingDirectory = String.Empty;
         private string _SessionToken = String.Empty;

@@ -24,17 +24,23 @@ namespace Armada.Server
         /// <param name="discoverySource">Source for every host touch point of runtime tool discovery (config files, runtime
         /// CLIs, installed-package inventories, MCP server connections). Null uses
         /// <see cref="HostRuntimeToolDiscoverySource"/>; tests pass a fake so the host user's tools are never touched.</param>
+        /// <param name="mcpPort">The Admiral MCP port, used to recognize configured MCP entries that point at Armada; 0
+        /// recognizes only entries named "armada".</param>
+        /// <param name="mcpHost">The host MCP clients must use to reach the Admiral (see
+        /// <see cref="Armada.Core.Services.ArmadaMcpConfigBuilder.ClientHostFor"/>); null or empty means localhost.</param>
         public CaptainToolService(
             LoggingModule logging,
             DatabaseDriver database,
             HarborConnectionManager? harborConnections = null,
-            IRuntimeToolDiscoverySource? discoverySource = null)
+            IRuntimeToolDiscoverySource? discoverySource = null,
+            int mcpPort = 0,
+            string? mcpHost = null)
         {
             if (logging == null) throw new ArgumentNullException(nameof(logging));
             if (database == null) throw new ArgumentNullException(nameof(database));
 
             _database = database;
-            _runtimeCatalog = new CaptainRuntimeToolCatalogService(logging, harborConnections, discoverySource);
+            _runtimeCatalog = new CaptainRuntimeToolCatalogService(logging, harborConnections, discoverySource, mcpPort, mcpHost);
         }
 
         /// <summary>

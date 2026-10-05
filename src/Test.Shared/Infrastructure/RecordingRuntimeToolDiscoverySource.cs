@@ -53,6 +53,11 @@ namespace Test.Shared.Infrastructure
         public ConcurrentQueue<string> ServerProbes { get; } = new ConcurrentQueue<string>();
 
         /// <summary>
+        /// Server URLs passed to <see cref="ListServerToolsAsync"/> (empty string for a server without a URL).
+        /// </summary>
+        public ConcurrentQueue<string> ServerProbeUrls { get; } = new ConcurrentQueue<string>();
+
+        /// <summary>
         /// Number of Codex CLI runs.
         /// </summary>
         public int CodexRuns
@@ -118,6 +123,7 @@ namespace Test.Shared.Infrastructure
         public Task<List<McpRemoteTool>> ListServerToolsAsync(RuntimeMcpServerDefinition server, CancellationToken token = default)
         {
             ServerProbes.Enqueue(server.Name);
+            ServerProbeUrls.Enqueue(server.Url ?? String.Empty);
             if (ServerTools.TryGetValue(server.Name, out List<McpRemoteTool>? tools))
             {
                 return Task.FromResult(new List<McpRemoteTool>(tools));

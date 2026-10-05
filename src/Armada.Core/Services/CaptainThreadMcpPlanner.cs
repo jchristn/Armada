@@ -102,17 +102,17 @@ namespace Armada.Core.Services
             if (String.IsNullOrWhiteSpace(request.ScopedConfigDirectory)) return plan;
             if (String.IsNullOrWhiteSpace(request.WorkingDirectory)) return plan;
 
-            string url = ArmadaMcpConfigBuilder.GetMcpUrl(request.McpPort);
+            string url = ArmadaMcpConfigBuilder.GetMcpUrl(request.McpPort, request.McpHost);
 
             switch (request.Runtime)
             {
                 case AgentRuntimeEnum.ClaudeCode:
                     {
-                        return CaptainLaunchIsolationPlanner.Plan(AgentRuntimeEnum.ClaudeCode, request.McpPort, request.ScopedConfigDirectory, request.SessionToken);
+                        return CaptainLaunchIsolationPlanner.Plan(AgentRuntimeEnum.ClaudeCode, request.McpPort, request.ScopedConfigDirectory, request.SessionToken, request.McpHost);
                     }
                 case AgentRuntimeEnum.Codex:
                     {
-                        List<string> aliases = FindCodexArmadaServerNames(request.HostCodexConfigToml, request.McpPort);
+                        List<string> aliases = FindCodexArmadaServerNames(request.HostCodexConfigToml, request.McpPort, request.McpHost);
                         foreach (string alias in aliases)
                         {
                             if (!_TomlBareKey.IsMatch(alias)) continue;
@@ -142,7 +142,7 @@ namespace Armada.Core.Services
                 case AgentRuntimeEnum.Cursor:
                     {
                         List<string> names = new List<string> { ServerName };
-                        foreach (string alias in FindKeyedArmadaServerNames(request.HostCursorMcpJson, request.McpPort))
+                        foreach (string alias in FindKeyedArmadaServerNames(request.HostCursorMcpJson, request.McpPort, request.McpHost))
                         {
                             if (!names.Contains(alias)) names.Add(alias);
                         }
@@ -167,7 +167,7 @@ namespace Armada.Core.Services
                         {
                             ["name"] = ServerName,
                             ["transport"] = "http",
-                            ["url"] = "http://localhost:" + request.McpPort.ToString(CultureInfo.InvariantCulture),
+                            ["url"] = ArmadaMcpConfigBuilder.GetMcpBaseUrl(request.McpPort, request.McpHost),
                             ["mcpPath"] = "/mcp",
                             ["auth"] = new JsonObject
                             {
@@ -190,7 +190,7 @@ namespace Armada.Core.Services
                         if (!String.IsNullOrWhiteSpace(request.ExistingOpenCodeConfigContent)) documents.Add(request.ExistingOpenCodeConfigContent!);
                         foreach (string document in documents)
                         {
-                            foreach (string alias in FindKeyedArmadaServerNames(document, request.McpPort))
+                            foreach (string alias in FindKeyedArmadaServerNames(document, request.McpPort, request.McpHost))
                             {
                                 if (!aliases.Contains(alias)) aliases.Add(alias);
                             }
@@ -235,6 +235,19 @@ namespace Armada.Core.Services
         /// <param name="mcpPort">The Admiral MCP port.</param>
         /// <returns>Distinct server names in file order.</returns>
         public static List<string> FindCodexArmadaServerNames(string? toml, int mcpPort)
+        {
+            return FindCodexArmadaServerNames(toml, mcpPort, ArmadaMcpConfigBuilder.DefaultHost);
+        }
+
+        /// <summary>
+        /// Find the names of the MCP servers in a Codex <c>config.toml</c> that point at Armada, recognizing URLs on the
+        /// MCP port at any loopback host (localhost, 127.0.0.1, ::1) or at the configured client host as the same server.
+        /// </summary>
+        /// <param name="toml">The configuration text, or null.</param>
+        /// <param name="mcpPort">The Admiral MCP port.</param>
+        /// <param name="mcpHost">The configured client host (see <see cref="ArmadaMcpConfigBuilder.ClientHostFor"/>).</param>
+        /// <returns>Distinct server names in file order.</returns>
+        public static List<string> FindCodexArmadaServerNames(string? toml, int mcpPort, string mcpHost)
         {
             List<string> names = new List<string>();
             if (String.IsNullOrWhiteSpace(toml)) return names;
@@ -285,7 +298,7 @@ namespace Armada.Core.Services
 
             foreach (string name in order)
             {
-                if (IsArmadaServer(name, bodies[name], mcpPort)) names.Add(name);
+                if (IsArmadaServer(name, bodies[name], mcpPort, mcpHost)) names.Add(name);
             }
 
             return names;
@@ -294,12 +307,25 @@ namespace Armada.Core.Services
         /// <summary>
         /// Find the names of the MCP servers in a keyed JSON or JSONC client configuration (OpenCode <c>mcp</c>, or
         /// <c>mcpServers</c> for Cursor, Gemini, and Claude Code) that point at Armada, using the same rules as
-        /// <see cref="FindCodexArmadaServerNames"/>. Unparseable input yields an empty list.
+        /// <see cref="FindCodexArmadaServerNames(string, int)"/>. Unparseable input yields an empty list.
         /// </summary>
         /// <param name="json">The configuration text, or null.</param>
         /// <param name="mcpPort">The Admiral MCP port.</param>
         /// <returns>Distinct server names.</returns>
         public static List<string> FindKeyedArmadaServerNames(string? json, int mcpPort)
+        {
+            return FindKeyedArmadaServerNames(json, mcpPort, ArmadaMcpConfigBuilder.DefaultHost);
+        }
+
+        /// <summary>
+        /// Find the names of the MCP servers in a keyed JSON or JSONC client configuration that point at Armada,
+        /// recognizing URLs on the MCP port at any loopback host or at the configured client host as the same server.
+        /// </summary>
+        /// <param name="json">The configuration text, or null.</param>
+        /// <param name="mcpPort">The Admiral MCP port.</param>
+        /// <param name="mcpHost">The configured client host (see <see cref="ArmadaMcpConfigBuilder.ClientHostFor"/>).</param>
+        /// <returns>Distinct server names.</returns>
+        public static List<string> FindKeyedArmadaServerNames(string? json, int mcpPort, string mcpHost)
         {
             List<string> names = new List<string>();
             if (String.IsNullOrWhiteSpace(json)) return names;
@@ -323,7 +349,7 @@ namespace Armada.Core.Services
                 foreach (KeyValuePair<string, object?> entry in map)
                 {
                     string body = entry.Value?.ToString() ?? String.Empty;
-                    if (IsArmadaServer(entry.Key, body, mcpPort) && !names.Contains(entry.Key)) names.Add(entry.Key);
+                    if (IsArmadaServer(entry.Key, body, mcpPort, mcpHost) && !names.Contains(entry.Key)) names.Add(entry.Key);
                 }
             }
 
@@ -355,6 +381,8 @@ namespace Armada.Core.Services
             "^(?:\"(?<quoted>[^\"]+)\"|(?<bare>[A-Za-z0-9_-]+))\\s*=\\s*(?<rest>\\{.*)$",
             RegexOptions.Compiled);
 
+        private static readonly Regex _HttpUrl = new Regex("https?://[^\\s\"'<>{},]+", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
         private static readonly Regex _ArmadaCommand = new Regex(
             "(?:^|[\"'\\s/\\\\])armada(?:\\.exe|\\.cmd)?[\"']",
             RegexOptions.Compiled | RegexOptions.IgnoreCase);
@@ -374,13 +402,30 @@ namespace Armada.Core.Services
             bodies[name] = bodies[name] + "\n" + text;
         }
 
-        private static bool IsArmadaServer(string name, string body, int mcpPort)
+        private static bool IsArmadaServer(string name, string body, int mcpPort, string mcpHost)
         {
             if (name.IndexOf("armada", StringComparison.OrdinalIgnoreCase) >= 0) return true;
             if (String.IsNullOrEmpty(body)) return false;
-            if (mcpPort > 0 && body.IndexOf(":" + mcpPort.ToString(CultureInfo.InvariantCulture) + "/mcp", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (mcpPort > 0)
+            {
+                foreach (Match urlMatch in _HttpUrl.Matches(body))
+                {
+                    string candidate = urlMatch.Value;
+                    if (ArmadaMcpConfigBuilder.IsArmadaMcpUrl(candidate, mcpPort, mcpHost)) return true;
+                    if (IsMcpPathOnPort(candidate, mcpPort)) return true;
+                }
+            }
+
             if (body.IndexOf("Armada.Helm", StringComparison.OrdinalIgnoreCase) >= 0) return true;
             return _ArmadaCommand.IsMatch(body);
+        }
+
+        private static bool IsMcpPathOnPort(string url, int mcpPort)
+        {
+            // Any host serving /mcp on the Admiral MCP port (the rule before loopback aliases were recognized).
+            if (!Uri.TryCreate(url, UriKind.Absolute, out Uri? uri)) return false;
+            if (uri.Port != mcpPort) return false;
+            return String.Equals(uri.AbsolutePath.TrimEnd('/'), "/mcp", StringComparison.OrdinalIgnoreCase);
         }
 
         private static string ChooseFreshName(List<string> taken)
