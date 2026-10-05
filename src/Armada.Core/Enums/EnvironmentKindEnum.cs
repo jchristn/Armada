@@ -1,8 +1,11 @@
 namespace Armada.Core.Enums
 {
+    using System.Text.Json.Serialization;
+
     /// <summary>
     /// High-level classification for a deployment environment.
     /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum EnvironmentKindEnum
     {
         /// <summary>

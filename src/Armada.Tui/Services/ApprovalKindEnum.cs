@@ -1,8 +1,11 @@
 namespace Armada.Tui.Services
 {
+    using System.Text.Json.Serialization;
+
     /// <summary>
     /// Kind of item waiting on the user in the Approvals center.
     /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum ApprovalKindEnum
     {
         /// <summary>

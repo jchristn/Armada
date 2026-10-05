@@ -1,8 +1,11 @@
 namespace Armada.Core.Enums
 {
+    using System.Text.Json.Serialization;
+
     /// <summary>
     /// Severity of a "needs you" inbox item.
     /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum InboxSeverityEnum
     {
         /// <summary>

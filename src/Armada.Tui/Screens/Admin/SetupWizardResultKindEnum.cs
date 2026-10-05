@@ -1,8 +1,11 @@
 namespace Armada.Tui.Screens.Admin
 {
+    using System.Text.Json.Serialization;
+
     /// <summary>
     /// Kind of the result message shown under a setup wizard step.
     /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum SetupWizardResultKindEnum
     {
         /// <summary>

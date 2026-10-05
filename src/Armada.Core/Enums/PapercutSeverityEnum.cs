@@ -1,8 +1,11 @@
 namespace Armada.Core.Enums
 {
+    using System.Text.Json.Serialization;
+
     /// <summary>
     /// How much a papercut cost the captain that reported it.
     /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum PapercutSeverityEnum
     {
         /// <summary>

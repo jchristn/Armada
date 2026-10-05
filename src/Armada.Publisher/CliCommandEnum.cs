@@ -1,8 +1,11 @@
 namespace Armada.Publisher
 {
+    using System.Text.Json.Serialization;
+
     /// <summary>
     /// The top-level command the Publisher was invoked to run.
     /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum CliCommandEnum
     {
         /// <summary>

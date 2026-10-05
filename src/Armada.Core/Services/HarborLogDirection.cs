@@ -1,8 +1,11 @@
 namespace Armada.Core.Services
 {
+    using System.Text.Json.Serialization;
+
     /// <summary>
     /// The direction of a Harbor link log entry relative to the Harbor.
     /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum HarborLogDirection
     {
         /// <summary>

@@ -1,8 +1,11 @@
 namespace Armada.Core.Enums
 {
+    using System.Text.Json.Serialization;
+
     /// <summary>
     /// Scope at which a project profile applies.
     /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum ProjectProfileScopeEnum
     {
         /// <summary>

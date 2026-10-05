@@ -1,8 +1,11 @@
 namespace Armada.Core.Enums
 {
+    using System.Text.Json.Serialization;
+
     /// <summary>
     /// Severity levels for vessel-readiness issues.
     /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum ReadinessSeverityEnum
     {
         /// <summary>

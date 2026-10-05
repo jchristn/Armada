@@ -1,8 +1,11 @@
 namespace Armada.Core.Enums
 {
+    using System.Text.Json.Serialization;
+
     /// <summary>
     /// Describes how a project profile was selected for a vessel.
     /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum ProjectProfileResolutionModeEnum
     {
         /// <summary>

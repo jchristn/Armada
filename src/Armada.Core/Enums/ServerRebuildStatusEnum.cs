@@ -1,8 +1,11 @@
 namespace Armada.Core.Enums
 {
+    using System.Text.Json.Serialization;
+
     /// <summary>
     /// Lifecycle state for a self-rebuild of the Admiral server.
     /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum ServerRebuildStatusEnum
     {
         /// <summary>

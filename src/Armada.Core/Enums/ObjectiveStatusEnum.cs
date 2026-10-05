@@ -1,8 +1,11 @@
 namespace Armada.Core.Enums
 {
+    using System.Text.Json.Serialization;
+
     /// <summary>
     /// Objective lifecycle state.
     /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum ObjectiveStatusEnum
     {
         /// <summary>

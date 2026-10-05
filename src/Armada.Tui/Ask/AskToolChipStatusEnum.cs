@@ -1,8 +1,11 @@
 namespace Armada.Tui.Ask
 {
+    using System.Text.Json.Serialization;
+
     /// <summary>
     /// State of one tool call chip in an Ask transcript (the dashboard's <c>ToolEvent.status</c>).
     /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum AskToolChipStatusEnum
     {
         /// <summary>

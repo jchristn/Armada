@@ -1,8 +1,11 @@
 namespace Armada.Tui.Widgets
 {
+    using System.Text.Json.Serialization;
+
     /// <summary>
     /// Chart rendering style.
     /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum ChartKindEnum
     {
         /// <summary>

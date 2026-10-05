@@ -1,8 +1,11 @@
 namespace Armada.Core.Enums
 {
+    using System.Text.Json.Serialization;
+
     /// <summary>
     /// Describes how a workflow profile was selected for a vessel preview.
     /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum WorkflowProfileResolutionModeEnum
     {
         /// <summary>

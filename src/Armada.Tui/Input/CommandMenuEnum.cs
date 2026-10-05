@@ -1,8 +1,11 @@
 namespace Armada.Tui.Input
 {
+    using System.Text.Json.Serialization;
+
     /// <summary>
     /// Menu bar menu a command appears under.
     /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum CommandMenuEnum
     {
         /// <summary>

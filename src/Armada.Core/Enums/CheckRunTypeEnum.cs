@@ -1,8 +1,11 @@
 namespace Armada.Core.Enums
 {
+    using System.Text.Json.Serialization;
+
     /// <summary>
     /// Structured check-run types supported by Armada.
     /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum CheckRunTypeEnum
     {
         /// <summary>

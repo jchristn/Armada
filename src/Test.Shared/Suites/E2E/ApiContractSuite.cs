@@ -245,6 +245,39 @@ namespace Test.Shared.Suites.E2E
                 AssertEqual(504, ApiStatusErrorResponse.StatusCodeFor(ApiStatusErrorCodeEnum.GatewayTimeout));
             }));
 
+            cases.Add(Case("enums_serialize_as_strings", "Every Armada enum declares JsonStringEnumConverter, so MCP, REST, and WebSocket output names instead of numbers", TestTags.Positive, () =>
+            {
+                System.Reflection.Assembly[] assemblies = new System.Reflection.Assembly[]
+                {
+                    typeof(MissionStatusEnum).Assembly,
+                    typeof(Armada.Server.ArmadaServer).Assembly,
+                    typeof(Armada.Runtimes.AgentRuntimeFactory).Assembly,
+                    typeof(Armada.Helm.Commands.McpStdioToolSet).Assembly,
+                    typeof(Armada.Client.ArmadaApiException).Assembly,
+                    typeof(Armada.Tui.Widgets.TriStateEnum).Assembly
+                };
+                List<string> missing = new List<string>();
+                int checkedEnums = 0;
+                foreach (System.Reflection.Assembly assembly in assemblies)
+                {
+                    foreach (Type type in assembly.GetTypes().Where(t => t.IsEnum && t.Namespace != null && t.Namespace.StartsWith("Armada", StringComparison.Ordinal)))
+                    {
+                        if (type.IsDefined(typeof(System.Runtime.CompilerServices.CompilerGeneratedAttribute), false)) continue;
+                        checkedEnums++;
+                        System.Text.Json.Serialization.JsonConverterAttribute? converter = (System.Text.Json.Serialization.JsonConverterAttribute?)Attribute.GetCustomAttribute(type, typeof(System.Text.Json.Serialization.JsonConverterAttribute));
+                        if (converter == null || converter.ConverterType != typeof(System.Text.Json.Serialization.JsonStringEnumConverter))
+                            missing.Add(type.FullName!);
+                    }
+                }
+
+                AssertTrue(checkedEnums > 100, "expected the Armada enums, found " + checkedEnums);
+                AssertTrue(missing.Count == 0, "enums without [JsonConverter(typeof(JsonStringEnumConverter))]:\n" + String.Join("\n", missing.OrderBy(m => m, StringComparer.Ordinal)));
+
+                // Values persisted or sent as numbers before the attribute still read back.
+                AssertEqual(CheckRunStatusEnum.Passed, JsonSerializer.Deserialize<CheckRunStatusEnum>(((int)CheckRunStatusEnum.Passed).ToString()));
+                AssertEqual("\"Passed\"", JsonSerializer.Serialize(CheckRunStatusEnum.Passed));
+            }));
+
             cases.Add(CaseAsync("error_codes_match_status", "REST errors are ApiErrorResponse bodies whose Error code matches the status", TestTags.Negative, async () =>
             {
                 E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this).ConfigureAwait(false);

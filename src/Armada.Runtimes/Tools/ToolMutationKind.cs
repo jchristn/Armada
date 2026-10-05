@@ -1,10 +1,13 @@
 namespace Armada.Runtimes.Tools
 {
+    using System.Text.Json.Serialization;
+
     /// <summary>
     /// Classifies whether a tool mutates the workspace, which determines whether it must acquire the
     /// single-writer workspace lease before running. Used to allow read-only tools to run in parallel
     /// across concurrent jobs while serializing mutating tools.
     /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum ToolMutationKind
     {
         /// <summary>
