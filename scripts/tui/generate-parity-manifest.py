@@ -92,6 +92,15 @@ def settings_fields():
     rh = read(os.path.join(DASH, "components", "vessels", "health", "RepositoryHealthSettingsSection.tsx"))
     for m in re.finditer(r"settings\??\.([a-zA-Z]+)", rh):
         fields.add("settings.repositoryHealth." + m.group(1))
+    for m in re.finditer(r"\{ key: '([a-zA-Z]+)', label: msg\(", rh):
+        key = m.group(1)
+        prefix = "settings.repositoryHealth.thresholds." if key.endswith("Warn") or key.endswith("Fail") else "settings.repositoryHealth."
+        fields.add(prefix + key)
+    ret = read(os.path.join(DASH, "components", "settings", "RetentionSettings.tsx"))
+    m = re.search(r"const FIELDS: RetentionField\[\] = \[([^\]]*)\]", ret)
+    if m:
+        for f in re.findall(r"'([a-zA-Z]+)'", m.group(1)):
+            fields.add("settings.retention." + f)
     return sorted(fields)
 
 

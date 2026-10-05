@@ -71,6 +71,12 @@ namespace Armada.Tui.Screens
         }
 
         /// <inheritdoc />
+        public override IReadOnlyList<KeyValuePair<string, string>> Hints
+        {
+            get { return Content.Hints; }
+        }
+
+        /// <inheritdoc />
         public override IEnumerable<Armada.Tui.Input.ArmadaCommand> Commands()
         {
             return Content.Commands();
@@ -80,12 +86,6 @@ namespace Armada.Tui.Screens
         public override Action? RefreshAction()
         {
             return Content.RefreshAction();
-        }
-
-        /// <inheritdoc />
-        public override IReadOnlyList<KeyValuePair<string, string>> Hints
-        {
-            get { return Content.Hints; }
         }
 
         /// <inheritdoc />
