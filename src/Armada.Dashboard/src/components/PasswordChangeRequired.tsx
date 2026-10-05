@@ -5,7 +5,8 @@ import { useLocale } from '../context/LocaleContext';
 
 /**
  * Shown instead of the dashboard while the signed-in account (the seeded admin@armada) still uses the default
- * password. The Admiral refuses every other API call for this session until the password is changed.
+ * password. The Admiral reports this through PasswordChangeRequired; the dashboard and TUI hold the session here until
+ * the password is changed (the flag is advisory on the server; see docs/SECURITY_REVIEW.md).
  */
 export default function PasswordChangeRequired() {
   const { refresh, logout } = useAuth();

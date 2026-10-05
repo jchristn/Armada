@@ -4079,7 +4079,7 @@ List all docks with optional filtering.
 |---|---|---|
 | `vesselId` | string | Filter by vessel ID |
 | `pageNumber` | integer | Page number (1-based, default 1) |
-| `pageSize` | integer | Results per page (default 100) |
+| `pageSize` | integer | Results per page (default 10, 1-1000) |
 | `order` | string | Sort order: `CreatedAscending`, `CreatedDescending` |
 
 **Response:** `200 OK`
@@ -4088,7 +4088,7 @@ List all docks with optional filtering.
 {
   "Objects": [],
   "TotalRecords": 0,
-  "PageSize": 100,
+  "PageSize": 10,
   "PageNumber": 1,
   "TotalPages": 0,
   "Success": true,

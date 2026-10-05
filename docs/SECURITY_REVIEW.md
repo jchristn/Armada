@@ -148,9 +148,9 @@ and the server log for them.
 
 | Id | Severity | Surface | Finding | Owner |
 |----|----------|---------|---------|-------|
-| O-01 | High (multi-tenant only) | MCP | 62 non-admin MCP tools read or changed entities by id without a caller tenant check. | Closed in W1.9 (F-25). `status` stays server-wide like `GET /api/v1/status` (O-03). |
+| O-01 | High (multi-tenant only) | MCP | 62 non-admin MCP tools read or changed entities by id without a caller tenant check. | Closed in W1.9 (F-25). `status` is tenant-scoped like `GET /api/v1/status` (O-03, closed). |
 | O-02 | High | REST (Ask, chat, planning) | Any authenticated user could start an Ask thread turn, which ran a CLI captain on the Admiral host with that captain's auto-approve flags. | Closed in W1.9 (F-27) for Ask turns. Direct captain chat and planning (`TenantAdmin`) still use the captain's own setting. Residual: in `acceptEdits` mode Claude Code may still edit files and run file-system commands inside the turn's temporary working directory; other runtimes keep their documented auto-approve-off behavior (Codex `--sandbox workspace-write`, Gemini `auto_edit`, Mux `deny`). Owner: W6.3. |
-| O-03 | Medium | REST, WebSocket | `GET /api/v1/status` and the WebSocket `subscribe` snapshot are server-wide: captain and mission counts, active voyage titles, and the last signals of every tenant reach any authenticated user. | W2.3 (scope the status shape per caller). |
+| O-03 | Medium | REST, WebSocket | `GET /api/v1/status` and the WebSocket `subscribe` snapshot are server-wide: captain and mission counts, active voyage titles, and the last signals of every tenant reach any authenticated user. | Closed: status is scoped to the caller's tenant on REST, the MCP `status` tool, and the WebSocket snapshot; global admins still see every tenant (`E2E.SurfaceScoping`). Server-wide `RemoteTunnel` and `MemoryPressureDeferrals` fields remain visible. |
 | O-04 | Medium | Harbor | Split-mode captains (experimental, D3) receive no MCP credential, so with authenticated MCP on a non-loopback Admiral their call-home tool calls are refused. | Closed (F-29 id takeover, F-36 credential). Decision: the token acts as the mission's owner and is visible to the Harbor host while the mission runs (a Harbor operated by another user of the tenant, or a shared Harbor, can use it over MCP until the mission leaves `InProgress`); it is never valid on REST, WebSocket or the Harbor link. Residual (post-1.0): an advertised MCP URL that is not plain `http://host:port/mcp` (https, path prefix) gets the token in the environment only, not a per-launch binding; Gemini and Cursor bind only with `IsolateCaptainLaunch`. |
 | O-05 | Medium | Authentication | Passwords used unsalted SHA-256; no rate limiting or lockout. | Closed in W1.9 (F-26). Residual: lockouts are in memory (reset on restart); the WebSocket upgrade and Harbor link are not limited; behind a reverse proxy every client shares one address (raise `maxFailuresPerAddress`); an upgraded database cannot be used for password login by an older Admiral (UPGRADING.md). Owner: W1 follow-up. |
 | O-06 | Medium | REST | Creating a tenant seeds `admin@armada` with the default password in that tenant. It is caught by the banner and the forced password change, but not by the startup bind guard once the server is running. | Closed (F-37). The dashboard and TUI tenant forms take an optional admin password and show a generated one once, in a copyable dialog. |
@@ -507,7 +507,7 @@ only within the caller's tenant (tenant admins) or the caller's own records (reg
 | GET | `/api/v1/skills/{id}` | SkillRoutes | Skill:Read | Authenticated | caller tenant/user (handler) | path + query | - |
 | PUT | `/api/v1/skills/{id}` | SkillRoutes | Skill:Update | Authenticated | caller tenant/user (handler) | typed JSON body | - |
 | DELETE | `/api/v1/skills/{id}` | SkillRoutes | Skill:Delete | Authenticated | caller tenant/user (handler) | path + query | - |
-| GET | `/api/v1/status` | StatusRoutes | Status:Read | Authenticated | server-wide | path | O-03 Open |
+| GET | `/api/v1/status` | StatusRoutes | Status:Read | Authenticated | tenant | path | O-03 Closed |
 | GET | `/api/v1/status/health` | StatusRoutes | Status:Read | None (public) | none | path | - |
 | GET | `/api/v1/doctor` | StatusRoutes | Status:Read | Authenticated | server-wide | path | - |
 | POST | `/api/v1/server/stop` | StatusRoutes | Server:Admin | AdminOnly | server-wide (admin) | no body / path | F-01 Fixed |
@@ -598,12 +598,12 @@ Generated from `McpToolAuthorizationRegistry` (146 tools). Authentication: crede
 `X-Token`, `X-Api-Key`) or, on a loopback-bound listener with `Mcp.AllowUnauthenticatedLoopback`, no credential
 (acts as the default tenant's tenant admin). Input: every tool deserializes its arguments into a typed `*Args` class.
 "Caller scoping": every tool that takes an entity id resolves it through `McpCallerScope` (F-25, W1.9), proven for every
-advertised tool by `E2E.McpTenantIsolation`; `status` stays server-wide like `GET /api/v1/status` (O-03).
+advertised tool by `E2E.McpTenantIsolation`; `status` is tenant-scoped like `GET /api/v1/status` (O-03, closed).
 
 | Tool | Requirement | Level | Caller scoping | Findings |
 |------|-------------|-------|----------------|----------|
 | `enumerate` | All:Read | Authenticated | caller tenant/user | - |
-| `status` | Status:Read | Authenticated | server-wide | O-03 Open |
+| `status` | Status:Read | Authenticated | tenant | O-03 Closed |
 | `get_backlog_item` | Objective:Read | Authenticated | caller tenant/user | - |
 | `get_backlog_planning_session` | PlanningSession:Read | Authenticated | caller tenant/user | - |
 | `get_backlog_refinement_session` | ObjectiveRefinementSession:Read | Authenticated | caller tenant/user | - |
@@ -758,7 +758,7 @@ request logs (F-15).
 | Route / command | Requirement | Tenant scoping | Input | Findings |
 |-----------------|-------------|----------------|-------|----------|
 | upgrade `/ws` | Authenticated | n/a | token in query, subprotocol, or headers | F-15 Fixed |
-| route `subscribe` (optional `allTenants`) | Authenticated; `allTenants` honored for global admins only | Events: entity's tenant only; status snapshot is server-wide | typed message | O-03 Open |
+| route `subscribe` (optional `allTenants`) | Authenticated; `allTenants` honored for global admins only | Events: entity's tenant only; status snapshot is tenant-scoped | typed message | O-03 Closed |
 | route `command` | Global admin (every command) | None (global admin acts on any tenant by id) | typed message, `action` + `data` | - |
 | commands `status`, `stop_captain`, `stop_all`, `stop_server` | Global admin | server-wide | typed | - |
 | commands `list_fleets`, `get_fleet`, `create_fleet`, `update_fleet`, `delete_fleet` | Global admin | any tenant by id | typed | - |

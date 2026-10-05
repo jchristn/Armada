@@ -190,9 +190,8 @@ If/when MCP-over-tunnel is added, this document will gain explicit routed-tool s
 [API_SURFACE_1.0.md](API_SURFACE_1.0.md) (rules: [COMPATIBILITY.md](COMPATIBILITY.md)). Arguments are camelCase (matched
 case-insensitively); tool results carry the same entity shapes as the REST API, with PascalCase property names (the
 camelCase exceptions are the `inbox` envelope, `count`, `criticalCount`, `warningCount`, and `items`, and the
-`list_prompt_templates` envelope and rows). Unlike REST, MCP results keep null-valued properties, and an enum whose type
-is not declared with a string converter is emitted as its number (for example `InboxItem.Severity`, and the status enums
-of check runs, deployments, releases, incidents, runbook executions, and objectives). New tools, new optional arguments,
+`list_prompt_templates` envelope and rows). Unlike REST, MCP results keep null-valued properties. Enums are emitted as their
+names, as on REST. New tools, new optional arguments,
 and new result fields may be added in minor releases. Tools whose description starts with `[Experimental]` (the Harbor
 tools `get_harbor`, `create_harbor`, `update_harbor`, `delete_harbor`, `set_harbor_enabled`) are excluded from the
 promise.
@@ -511,7 +510,7 @@ No parameters required.
 `warningCount`, `items`); each item is an `InboxItem` with `Kind`, `Severity`, `Title`, `Detail`, `EntityType`,
 `EntityName` (display name of the referenced entity; use it instead of parsing `Title`), `EntityId`, and a dashboard
 `Href`. Deployment items also carry `EnvironmentName` and `DeploymentTitle`, and their `Title` reads
-"Deploy to <environment>: <title>". `Severity` is emitted as its numeric value over MCP: `2` (Critical), `1` (Warning), or `0` (Info).
+"Deploy to <environment>: <title>". `Severity` is `Critical`, `Warning`, or `Info`.
 
 ```json
 {
@@ -521,7 +520,7 @@ No parameters required.
   "items": [
     {
       "Kind": "landing_failed",
-      "Severity": 2,
+      "Severity": "Critical",
       "Title": "Landing failed: Add JWT validation",
       "Detail": "The work could not be landed.",
       "EntityType": "mission",
@@ -531,7 +530,7 @@ No parameters required.
     },
     {
       "Kind": "review",
-      "Severity": 1,
+      "Severity": "Warning",
       "Title": "Review: Refactor auth service",
       "Detail": "Awaiting your review.",
       "EntityType": "mission",
