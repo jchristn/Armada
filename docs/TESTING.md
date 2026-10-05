@@ -150,6 +150,13 @@ Each test suite creates its own data, asserts only on that data, and cleans up a
 - Suites can run in any order without affecting each other
 - Use `--no-cleanup` to preserve test data after a run for debugging
 
+## Host Independence
+
+Results must not depend on the machine running the tests:
+- The in-process test servers (`E2EServerFixture`, `SecurityTestServer`, `InProcessArmadaServer`) replace every CLI agent runtime (Claude Code, Codex, Gemini, Cursor, Mux, OpenCode) with `StubAgentProcesses`, which launches a long-running `sleep` (`ping` on Windows) the test owns. Dispatch behaves the same whether or not an agent CLI is installed, and tests never start a real agent.
+- Every git process the run starts (test helpers and product code) gets `core.autocrlf=false` and `core.eol=lf` through `GIT_CONFIG_COUNT` (`TestGitEnvironment`), so a host or runner setting such as `core.autocrlf=true` cannot change checked-out file contents.
+- Wait for conditions, not durations: poll for the state the test needs (a job finished, a request recorded) with a deadline, or wait on a signal from the stub (for example `FakeHealthCriterion.FirstEvaluationStarted`).
+
 ## API Contract Test
 
 `E2E.ApiContract` compares the live public surface (REST, MCP, WebSocket, CLI, settings) to the frozen baseline in

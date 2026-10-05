@@ -127,11 +127,31 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+      # The compose files require secrets with ${VAR:?message} so a real deployment cannot start without them.
+      # Validation supplies placeholder values for those variables only, in this step's commands only, and then
+      # proves the requirement still holds: each file must still refuse to render when its secret is unset.
       - name: Validate compose files
         shell: bash
         run: |
-          set -e
+          set -euo pipefail
+          placeholder="ci-validation-placeholder"
           for f in docker/armada/compose.yaml docker/armada/compose.split.yaml docker/proxy/compose.yaml; do
             echo "== $f"
-            docker compose -f "$f" config --quiet
+            ARMADA_INITIAL_ADMIN_PASSWORD="$placeholder" ARMADA_PROXY_PASSWORD="$placeholder" \
+              docker compose -f "$f" config --quiet
           done
+
+          # Each file rendered above with every placeholder set, so a failure with only one variable unset can
+          # only come from that variable: no need to read docker's error text.
+          check_required() {
+            local file="$1" var="$2"
+            if ARMADA_INITIAL_ADMIN_PASSWORD="$placeholder" ARMADA_PROXY_PASSWORD="$placeholder" \
+              env -u "$var" docker compose -f "$file" config --quiet >/dev/null 2>&1; then
+              echo "::error::$file renders without $var; the secret must stay required."
+              exit 1
+            fi
+            echo "$file still requires $var"
+          }
+          check_required docker/armada/compose.yaml ARMADA_INITIAL_ADMIN_PASSWORD
+          check_required docker/armada/compose.split.yaml ARMADA_INITIAL_ADMIN_PASSWORD
+          check_required docker/proxy/compose.yaml ARMADA_PROXY_PASSWORD

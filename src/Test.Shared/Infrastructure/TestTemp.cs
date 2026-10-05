@@ -50,7 +50,8 @@ namespace Test.Shared.Infrastructure
         #region Public-Methods
 
         /// <summary>
-        /// Module initializer: sweep stale artifacts from prior runs and arm the process-exit cleanup.
+        /// Module initializer: sweep stale artifacts from prior runs, arm the process-exit cleanup, sandbox the user
+        /// profile, and pin the git line-ending settings for every git process the run starts.
         /// Runs exactly once when the test assembly is loaded.
         /// </summary>
         // CA2255: a module initializer is exactly the right tool here -- this is a test-support assembly,
@@ -63,6 +64,7 @@ namespace Test.Shared.Infrastructure
             Sweep();
             EnsureExitHook();
             IsolateUserProfile();
+            TestGitEnvironment.Pin();
         }
 #pragma warning restore CA2255
 

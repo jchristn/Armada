@@ -295,15 +295,15 @@ namespace Test.Shared.Suites.Services
                 VesselHealthEvaluationStart start = await service.StartEvaluationAsync(Constants.DefaultTenantId, null, null, false).ConfigureAwait(false);
 
                 JobService jobs = new JobService(testDb.Driver, CreateLogging());
-                Job? job = null;
-                for (int i = 0; i < 100; i++)
-                {
-                    job = await testDb.Driver.Jobs.ReadAsync(start.JobId).ConfigureAwait(false);
-                    if (job != null && job.Status == JobStatusEnum.Running) break;
-                    await Task.Delay(20).ConfigureAwait(false);
-                }
 
-                await jobs.CancelAsync(job!).ConfigureAwait(false);
+                // Cancel only once the first vessel is known to be evaluating. Waiting for the job to read Running was
+                // not enough: the job is marked Running before the first vessel starts, so a cancel that landed in
+                // between stopped the run with no vessel started (0 evaluations instead of 1).
+                await blocker.FirstEvaluationStarted.Task.WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
+                Job? job = await testDb.Driver.Jobs.ReadAsync(start.JobId).ConfigureAwait(false);
+                AssertEqual(JobStatusEnum.Running, job!.Status, "job running while the first vessel evaluates");
+
+                await jobs.CancelAsync(job).ConfigureAwait(false);
                 await service.WaitForIdleAsync(Constants.DefaultTenantId).WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
                 AssertEqual(1, blocker.Evaluations, "only the first vessel started");
                 Job? after = await testDb.Driver.Jobs.ReadAsync(start.JobId).ConfigureAwait(false);

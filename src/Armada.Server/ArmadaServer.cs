@@ -57,6 +57,16 @@ namespace Armada.Server
             get { lock (_RegisteredMcpToolsLock) { return new List<CaptainToolSummary>(_RegisteredMcpToolDescriptors); } }
         }
 
+        /// <summary>
+        /// The agent runtime factory every captain launch, stop, and one-off prompt goes through (available after
+        /// <see cref="StartAsync"/>). A host or test can register runtime overrides on it, for example a stub runtime
+        /// whose process it controls, so dispatch does not depend on which agent CLIs the machine has installed.
+        /// </summary>
+        public AgentRuntimeFactory RuntimeFactory
+        {
+            get { return _RuntimeFactory ?? throw new InvalidOperationException("The runtime factory is created by StartAsync."); }
+        }
+
         #endregion
 
         #region Private-Members

@@ -76,6 +76,35 @@ namespace Test.Shared.Suites.Services
                 AssertContains("\"candidateCount\":2", job.ResultJson ?? "");
             }));
 
+            cases.Add(CaseAsync("background_discovery_job_always_finishes", "Every background discovery job finishes once its batch is Discovered", TestTags.Reliability, async () =>
+            {
+                // Regression: the discovery heartbeat rewrote the whole job row, so one that read the job just before the
+                // worker marked it Succeeded put it back to Running for good ("Timed out waiting for job ... (status
+                // Running)"). Discoveries here last from half to one and a half heartbeat intervals, so across the runs the
+                // heartbeat fires around the moment the worker finishes. The window is narrow, so the old code fails this
+                // case often but not on every run.
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                FleetCategorizationHarness h = NewHarness(testDb);
+                DelayedVesselDiscoveryService discovery = new DelayedVesselDiscoveryService(new VesselDiscoveryService(testDb.Driver, h.Settings));
+                LoggingModule logging = new LoggingModule();
+                logging.Settings.EnableConsole = false;
+                VesselImportService import = new VesselImportService(testDb.Driver, h.Settings, discovery, new VesselService(testDb.Driver), h.Jobs, logging, h.Categorization);
+                import.DiscoveryPollIntervalMs = 50;
+                int run = 0;
+                discovery.Delay = () => TimeSpan.FromMilliseconds(25 + (run++ % 50));
+                MakeRepo(Path.Combine(h.Root, "one"), "One", "A web API.");
+                for (int i = 0; i < 40; i++)
+                {
+                    VesselDiscoveryRequest request = new VesselDiscoveryRequest();
+                    request.Roots = new List<string> { h.Root };
+                    request.RunInBackground = true;
+                    VesselImportDiscoverResponse response = await import.DiscoverAsync(Constants.DefaultTenantId, Constants.DefaultUserId, request).ConfigureAwait(false);
+                    await WaitForBatchAsync(testDb.Driver, response.BatchId, b => b.Status != VesselImportBatchStatusEnum.Discovering).ConfigureAwait(false);
+                    Job job = await JobWait.ForTerminalAsync(testDb.Driver, response.JobId!, 10).ConfigureAwait(false);
+                    AssertEqual(JobStatusEnum.Succeeded, job.Status, "run " + i + " discovery job");
+                }
+            }));
+
             cases.Add(CaseAsync("background_discovery_validates_synchronously", "Background discovery rejects bad input before creating a batch", TestTags.Negative, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
@@ -482,6 +511,45 @@ namespace Test.Shared.Suites.Services
                 await AssertThrowsAsync<InvalidOperationException>(() => h.Categorization.CategorizeAsync(Constants.DefaultTenantId, fresh.BatchId, null,
                     new VesselImportCategorizationRequest { Enabled = true, CaptainId = captain.Id }), "import not finished").ConfigureAwait(false);
                 await AssertThrowsAsync<KeyNotFoundException>(() => h.Categorization.CategorizeAsync(Constants.DefaultTenantId, "vib_missing", null, null), "missing batch").ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("finished_job_means_released", "When the job finishes the captain is Idle and the batch can be categorized again at once, run after run", TestTags.Reliability, async () =>
+            {
+                // Regression: the worker used to finish the job before it released the captain and the re-run guard, and
+                // its heartbeat could rewrite a finished job back to Running. Callers that act on the finished job saw
+                // "captain released: expected Idle but got Analyzing", "Fleet categorization ... is already running.",
+                // or a job that never left Running. Each run here lasts about one heartbeat interval so the heartbeat
+                // fires around completion, and every check happens the moment the job is seen finished, without waiting.
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                FleetCategorizationHarness h = NewHarness(testDb);
+                MakeRepo(Path.Combine(h.Root, "a"), "A", "Alpha.");
+                Captain captain = await CreateCaptainAsync(testDb.Driver, Constants.DefaultTenantId).ConfigureAwait(false);
+                Func<string, string, TimeSpan, CancellationToken, Task<CaptainPromptResult>> writeFleet = WriteSingleFleet("Everything");
+                int run = 0;
+                h.Runner.Behavior = async (string dir, string prompt, TimeSpan timeout, CancellationToken token) =>
+                {
+                    run++;
+                    await Task.Delay(h.Categorization.JobPollIntervalMs - 10 + (run % 3) * 10, token).ConfigureAwait(false);
+                    return await writeFleet(dir, prompt, timeout, token).ConfigureAwait(false);
+                };
+
+                VesselImportResponse response = await ImportAllAsync(h, captain.Id, null, false).ConfigureAwait(false);
+                string? jobId = (await testDb.Driver.VesselImportBatches.ReadAsync(response.BatchId).ConfigureAwait(false))!.CategorizationJobId;
+                for (int i = 0; i < 12; i++)
+                {
+                    Job job = await JobWait.ForTerminalAsync(testDb.Driver, jobId!, 15).ConfigureAwait(false);
+                    AssertEqual(JobStatusEnum.Succeeded, job.Status, "run " + i + " job (error: " + job.ErrorReason + ")");
+                    AssertEqual(CaptainStateEnum.Idle, (await testDb.Driver.Captains.ReadAsync(captain.Id).ConfigureAwait(false))!.State, "run " + i + ": captain released when the job finished");
+                    VesselImportBatch finished = (await testDb.Driver.VesselImportBatches.ReadAsync(response.BatchId).ConfigureAwait(false))!;
+                    AssertEqual(VesselImportCategorizationStatusEnum.Completed, finished.CategorizationStatus, "run " + i + ": batch final when the job finished");
+
+                    VesselImportBatch next = await h.Categorization.CategorizeAsync(Constants.DefaultTenantId, response.BatchId, null, null).ConfigureAwait(false);
+                    AssertNotEqual(jobId, next.CategorizationJobId, "run " + i + ": re-run accepted with a new job");
+                    jobId = next.CategorizationJobId;
+                }
+
+                Job last = await JobWait.ForTerminalAsync(testDb.Driver, jobId!, 15).ConfigureAwait(false);
+                AssertEqual(JobStatusEnum.Succeeded, last.Status, "last job");
             }));
 
             cases.Add(CaseAsync("reply_fallback", "When the file is missing but the captain's reply contains the JSON, the reply is used with a warning", TestTags.Positive, async () =>

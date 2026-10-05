@@ -14,7 +14,7 @@ namespace Test.Shared.Infrastructure
     using SyslogLogging;
 
     /// <summary>
-    /// An in-process Admiral bound to 127.0.0.1 on ports from <see cref="PortRangeStart"/>..<see cref="PortRangeEnd"/>,
+    /// An in-process Admiral bound to 127.0.0.1 on ports from <see cref="TestPorts"/>,
     /// against a caller-owned data directory and database, that can be stopped and started again on the same data.
     /// Used by suites that need a restart (restore drill, upgrade verification) or a private server whose settings
     /// they change (retention). The settings file is kept inside the data directory, never ~/.armada.
@@ -22,16 +22,6 @@ namespace Test.Shared.Infrastructure
     public sealed class InProcessArmadaServer : IDisposable
     {
         #region Public-Members
-
-        /// <summary>
-        /// First port tried for the REST and MCP listeners.
-        /// </summary>
-        public const int PortRangeStart = 22000;
-
-        /// <summary>
-        /// Last port tried for the REST and MCP listeners.
-        /// </summary>
-        public const int PortRangeEnd = 22099;
 
         /// <summary>
         /// Settings the server runs with.
@@ -60,9 +50,8 @@ namespace Test.Shared.Infrastructure
 
         #region Private-Members
 
-        private static readonly SemaphoreSlim _PortGate = new SemaphoreSlim(1, 1);
-        private static int _NextPort = PortRangeStart;
         private ArmadaServer? _Server;
+        private readonly StubAgentProcesses _StubAgents = new StubAgentProcesses(new LoggingModule { Settings = { EnableConsole = false } });
 
         #endregion
 
@@ -132,6 +121,7 @@ namespace Test.Shared.Infrastructure
 
             ArmadaServer server = new ArmadaServer(logging, Settings, quiet: true);
             await server.StartAsync().ConfigureAwait(false);
+            _StubAgents.InstallOn(server);
             _Server = server;
 
             BaseUrl = "http://127.0.0.1:" + Settings.AdmiralPort;
@@ -167,6 +157,7 @@ namespace Test.Shared.Infrastructure
             ArmadaServer? server = _Server;
             _Server = null;
             try { server?.Stop(); } catch { }
+            _StubAgents.StopAll();
             Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
         }
 
@@ -180,49 +171,15 @@ namespace Test.Shared.Infrastructure
         }
 
         /// <summary>
-        /// Reserve a free loopback port in <see cref="PortRangeStart"/>..<see cref="PortRangeEnd"/> (round robin, so
-        /// back-to-back reservations differ even before the caller binds).
+        /// Reserve a free loopback port (see <see cref="TestPorts"/>); back-to-back reservations always differ.
         /// </summary>
         /// <returns>A port that was free when checked.</returns>
-        public static async Task<int> ReservePortAsync()
+        public static Task<int> ReservePortAsync()
         {
-            await _PortGate.WaitAsync().ConfigureAwait(false);
-            try
-            {
-                for (int attempt = 0; attempt <= PortRangeEnd - PortRangeStart; attempt++)
-                {
-                    int port = _NextPort;
-                    _NextPort = _NextPort >= PortRangeEnd ? PortRangeStart : _NextPort + 1;
-                    if (IsFree(port)) return port;
-                }
-            }
-            finally
-            {
-                _PortGate.Release();
-            }
-
-            throw new InvalidOperationException("No free port in " + PortRangeStart + "-" + PortRangeEnd + ".");
+            return Task.FromResult(TestPorts.Reserve(1)[0]);
         }
 
         #endregion
 
-        #region Private-Methods
-
-        private static bool IsFree(int port)
-        {
-            try
-            {
-                TcpListener listener = new TcpListener(IPAddress.Loopback, port);
-                listener.Start();
-                listener.Stop();
-                return true;
-            }
-            catch (SocketException)
-            {
-                return false;
-            }
-        }
-
-        #endregion
     }
 }

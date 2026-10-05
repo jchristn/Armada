@@ -6,6 +6,18 @@ All notable changes to Armada are documented in this file.
 
 ## Unreleased
 
+### CI fixes
+
+- Fixed: fleet categorization finished its job before it released the captain and the re-run guard, and its heartbeat could write a finished job back to Running. A caller acting on the finished job saw the captain still Analyzing, got "Fleet categorization ... is already running" on a re-run, or waited for a job that never left Running. The captain is now released as soon as its process returns, the heartbeat is stopped first, and the job's terminal state is written last.
+- Fixed: background vessel discovery had the same heartbeat race, so a discovery job could stay Running after the batch reached Discovered.
+- Fixed: on Windows, generated systemd units and launchd plists used the host's path rules for Linux and macOS paths (`WorkingDirectory=\opt\My Apps`). Registration now splits paths with the target platform's rules (`Armada.Core.Hosting.TargetPath`).
+- `AgentRuntimeFactory.Override` and `ClearOverride` replace the adapter for a runtime type, and `ArmadaServer.RuntimeFactory` exposes the factory after start.
+- Tests: the in-process test servers launch a stub agent process for every CLI runtime, so dispatch tests no longer depend on (or start) a locally installed Claude Code or Codex. `VoyageWorkflow_CreateAndCancel` failed on every CI runner because no agent CLI was installed and the voyage stayed Open; it now asserts the voyage is Cancelled.
+- Tests: the in-process test servers pick random loopback ports (`TestPorts`) instead of scanning from a fixed start, so test processes running side by side no longer race for the same port or talk to each other's server.
+- Tests: git processes started by the test run pin `core.autocrlf=false` and `core.eol=lf`, so the Windows runner's `core.autocrlf=true` no longer checks test files out with CRLF (three `MergeBranchLocalAsync` cases failed on Windows only).
+- Tests: the secrets leak case waits until the server has recorded every request (request history is written after the response is sent); the vessel health cancel case cancels once the first vessel is evaluating instead of when the job reads Running; new regression cases cover categorization completion order, target-platform paths, and git line endings.
+- CI: compose validation supplies placeholder secrets to `docker compose config` and checks that each compose file still refuses to render without its required secret.
+
 ### Test runs no longer raise desktop notifications
 
 - `NotificationService` (used by `armada watch`) runs its platform command through `INotificationCommandRunner`; the test suite records the command instead of running it. Before, every full test run sent four real "Test Title" notifications through `osascript`, which macOS shows as coming from Script Editor. The tests now check the exact command and escaping for macOS, Linux, and Windows.

@@ -41,6 +41,12 @@ namespace Test.Shared.Infrastructure
         public TaskCompletionSource<bool>? Gate { get; set; } = null;
 
         /// <summary>
+        /// Completes when the first evaluation has started (before it waits on <see cref="Gate"/>), so a test can act
+        /// once the criterion is known to be running instead of polling for a proxy such as the job status.
+        /// </summary>
+        public TaskCompletionSource<bool> FirstEvaluationStarted { get; } = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        /// <summary>
         /// Number of evaluations performed.
         /// </summary>
         public int Evaluations => _Evaluations;
@@ -65,6 +71,7 @@ namespace Test.Shared.Infrastructure
         public async Task<VesselHealthCriterionResult> EvaluateAsync(VesselHealthContext context, CancellationToken token = default)
         {
             Interlocked.Increment(ref _Evaluations);
+            FirstEvaluationStarted.TrySetResult(true);
             if (Gate != null) await Gate.Task.WaitAsync(token).ConfigureAwait(false);
             if (Throw) throw new InvalidOperationException("simulated criterion failure");
             return new VesselHealthCriterionResult(Status, DetailCode, 1, 2);

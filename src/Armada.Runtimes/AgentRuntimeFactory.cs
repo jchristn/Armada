@@ -20,6 +20,7 @@ namespace Armada.Runtimes
         private LoggingModule _Logging;
         private Func<string, ModelEndpoint?>? _EndpointResolver;
         private Dictionary<string, Func<IAgentRuntime>> _CustomRuntimes = new Dictionary<string, Func<IAgentRuntime>>();
+        private System.Collections.Concurrent.ConcurrentDictionary<AgentRuntimeEnum, Func<IAgentRuntime>> _Overrides = new System.Collections.Concurrent.ConcurrentDictionary<AgentRuntimeEnum, Func<IAgentRuntime>>();
 
         #endregion
 
@@ -42,12 +43,14 @@ namespace Armada.Runtimes
         #region Public-Methods
 
         /// <summary>
-        /// Create an agent runtime by type.
+        /// Create an agent runtime by type. An override registered with <see cref="Override"/> wins over the built-in adapter.
         /// </summary>
         /// <param name="runtimeType">Runtime type.</param>
         /// <returns>Agent runtime instance.</returns>
         public IAgentRuntime Create(AgentRuntimeEnum runtimeType)
         {
+            if (_Overrides.TryGetValue(runtimeType, out Func<IAgentRuntime>? overrideFactory)) return overrideFactory();
+
             switch (runtimeType)
             {
                 case AgentRuntimeEnum.ClaudeCode:
@@ -88,6 +91,30 @@ namespace Armada.Runtimes
             }
 
             throw new InvalidOperationException("No custom runtime registered with name: " + name);
+        }
+
+        /// <summary>
+        /// Create every runtime of the given type with the supplied factory instead of the built-in adapter, until
+        /// <see cref="ClearOverride"/> is called. Used by hosts and tests that supply their own runtime (for example a
+        /// stub whose process the test controls) for captains of an existing type.
+        /// </summary>
+        /// <param name="runtimeType">Runtime type to override.</param>
+        /// <param name="factory">Factory creating the runtime used in its place.</param>
+        public void Override(AgentRuntimeEnum runtimeType, Func<IAgentRuntime> factory)
+        {
+            if (factory == null) throw new ArgumentNullException(nameof(factory));
+            _Overrides[runtimeType] = factory;
+            _Logging.Debug(_Header + "overrode runtime: " + runtimeType);
+        }
+
+        /// <summary>
+        /// Remove an override registered with <see cref="Override"/>, restoring the built-in adapter.
+        /// </summary>
+        /// <param name="runtimeType">Runtime type.</param>
+        /// <returns>True when an override was removed.</returns>
+        public bool ClearOverride(AgentRuntimeEnum runtimeType)
+        {
+            return _Overrides.TryRemove(runtimeType, out _);
         }
 
         /// <summary>

@@ -42,15 +42,16 @@ namespace Armada.Core.Hosting
         }
 
         /// <summary>
-        /// Working directory for the service. Defaults to the directory holding the executable.
+        /// Working directory for the service. Defaults to the directory holding the executable, computed with the
+        /// target platform's path rules (<see cref="Platform"/>), not the host's.
         /// </summary>
         public string WorkingDirectory
         {
             get
             {
                 if (!String.IsNullOrEmpty(_WorkingDirectory)) return _WorkingDirectory;
-                string? dir = Path.GetDirectoryName(_LeadingArguments.Count > 0 ? _LeadingArguments[0] : _ExecutablePath);
-                return String.IsNullOrEmpty(dir) ? "/" : dir;
+                string? dir = TargetPath.GetDirectoryName(_LeadingArguments.Count > 0 ? _LeadingArguments[0] : _ExecutablePath, Platform);
+                return String.IsNullOrEmpty(dir) ? TargetPath.DefaultRoot(Platform) : dir;
             }
             set { _WorkingDirectory = value ?? String.Empty; }
         }
