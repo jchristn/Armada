@@ -8,6 +8,7 @@ namespace Armada.Tui.Widgets
     using Armada.Tui.Text;
     using TUIKit;
     using TUIKit.Input;
+    using TUIKit.Widgets;
 
     /// <summary>
     /// Multi-choice field (status filters, vessel selections): shows the chosen labels (or "N selected"); Enter or

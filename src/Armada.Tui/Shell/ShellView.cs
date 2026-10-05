@@ -12,7 +12,6 @@ namespace Armada.Tui.Shell
     using TUIKit.Layout;
     using TUIKit.Widgets;
     using FocusFrame = Armada.Tui.Widgets.FocusFrame;
-    using ITextEntry = Armada.Tui.Widgets.ITextEntry;
     using FocusScope = Armada.Tui.Widgets.FocusScope;
 
     /// <summary>

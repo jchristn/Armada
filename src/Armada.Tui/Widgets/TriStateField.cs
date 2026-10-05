@@ -4,6 +4,7 @@ namespace Armada.Tui.Widgets
     using Armada.Tui.Text;
     using TUIKit;
     using TUIKit.Input;
+    using TUIKit.Widgets;
 
     /// <summary>
     /// Any / Yes / No filter field. Space, Enter, Left, and Right cycle the value; the label is always shown so the

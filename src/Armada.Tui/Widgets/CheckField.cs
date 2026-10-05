@@ -4,6 +4,7 @@ namespace Armada.Tui.Widgets
     using Armada.Tui.Text;
     using TUIKit;
     using TUIKit.Input;
+    using TUIKit.Widgets;
 
     /// <summary>
     /// A checkbox for <see cref="FormView"/> (dashboard <c>input type="checkbox"</c>): <c>Space</c> or <c>Enter</c>

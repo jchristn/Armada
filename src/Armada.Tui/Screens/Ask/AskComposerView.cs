@@ -12,7 +12,6 @@ namespace Armada.Tui.Screens.Ask
     using TUIKit;
     using TUIKit.Input;
     using TUIKit.Widgets;
-    using ITextEntry = Armada.Tui.Widgets.ITextEntry;
 
     /// <summary>
     /// The Ask composer (W2.6, the dashboard's <c>AskComposer</c>): a multi-line TUIKit <see cref="TextEditor"/> where

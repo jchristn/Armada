@@ -12,6 +12,7 @@ namespace Armada.Tui.Shell
     using Armada.Tui.Widgets;
     using TUIKit;
     using TUIKit.Input;
+    using TUIKit.Widgets;
 
     /// <summary>
     /// The Ask dock (W2.7, <c>Ctrl+J</c>): a bottom panel that shows the active Ask conversation's live tail (the same

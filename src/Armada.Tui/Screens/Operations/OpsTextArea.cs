@@ -6,7 +6,6 @@ namespace Armada.Tui.Screens.Operations
     using TUIKit;
     using TUIKit.Input;
     using TUIKit.Widgets;
-    using ITextEntry = Armada.Tui.Widgets.ITextEntry;
 
     /// <summary>
     /// A multi-line form field (the dashboard's textarea) over TUIKit's <see cref="TextEditor"/>: <c>Enter</c> adds a
