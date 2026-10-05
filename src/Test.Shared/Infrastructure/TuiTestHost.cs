@@ -180,6 +180,18 @@ namespace Test.Shared.Infrastructure
         }
 
         /// <summary>
+        /// Start the TUIKit application on the headless backend (once), so it composes real frames through
+        /// <see cref="TuiApplication.RenderOnce"/>, keeps a hit map, and can be audited (<c>FocusAudit</c>). Only one
+        /// started application may exist at a time; <see cref="Dispose"/> stops it.
+        /// </summary>
+        public void StartApp()
+        {
+            if (_Started) return;
+            App.Start();
+            _Started = true;
+        }
+
+        /// <summary>
         /// Click the left mouse button at a cell (zero-based) through TUIKit's real input path: the headless backend
         /// receives the SGR press and release (<see cref="HeadlessBackend.FeedClick"/>), and the application parses
         /// them, hit-tests its last frame, focuses the region, synthesizes the click, and routes it to the widget
@@ -194,12 +206,7 @@ namespace Test.Shared.Infrastructure
         public TuiTestHost Click(int x, int y)
         {
             Pump();
-            if (!_Started)
-            {
-                App.Start();
-                _Started = true;
-            }
-
+            StartApp();
             App.RenderOnce();
             Backend.FeedClick(x, y);
             Pump();

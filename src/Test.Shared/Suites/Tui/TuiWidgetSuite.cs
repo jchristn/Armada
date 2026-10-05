@@ -237,16 +237,20 @@ namespace Test.Shared.Suites.Tui
                 AssertTrue(form.IsVisible, "the form still has a field to focus");
             }));
 
-            cases.Add(TuiCase.Sync(Suite, "binding_adapter", "ObservedWidget raises change events for TUIKit widgets", () =>
+            cases.Add(TuiCase.Sync(Suite, "binding_adapter", "TUIKit widgets raise their own change events (the binding layer needs no adapter)", () =>
             {
                 TUIKit.Widgets.Checkbox box = new TUIKit.Widgets.Checkbox("Active");
-                ObservedWidget<bool> observed = new ObservedWidget<bool>(box, () => box.Checked);
                 int changes = 0;
-                observed.Changed += (s, e) => changes++;
-                observed.HandleKey(KeyEvent.Char(' '));
-                AssertTrue(box.Checked, "toggled");
+                bool last = false;
+                box.CheckedChanged += (s, e) =>
+                {
+                    changes++;
+                    last = e.NewValue;
+                };
+                box.HandleKey(KeyEvent.Char(' '));
+                AssertTrue(box.Checked && last, "toggled, and the event carries the new value");
                 AssertEqual(1, changes, "change raised");
-                observed.HandleKey(KeyEvent.Special(KeyCode.Up));
+                box.HandleKey(KeyEvent.Special(KeyCode.Up));
                 AssertEqual(1, changes, "no change no event");
             }));
 
