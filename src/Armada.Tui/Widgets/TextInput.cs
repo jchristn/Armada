@@ -13,7 +13,8 @@ namespace Armada.Tui.Widgets
     /// Single-line text field with grapheme-aware editing and cell-width scrolling (CJK-safe, TUIKit gap U9), optional
     /// masking for passwords and tokens (<c>Ctrl+R</c> toggles reveal), a placeholder, inline validation, and change
     /// and submit events. Keys: Left/Right, Home/End (Ctrl+A/Ctrl+E), Backspace/Delete, Ctrl+U clear, Ctrl+W delete
-    /// word, Enter submits. Not thread-safe.
+    /// word, Enter submits. A value set with <see cref="Prefill"/> is shown selected: the first typed character or paste
+    /// replaces it, Backspace/Delete/Ctrl+U clear it, and a caret movement keeps it for editing. Not thread-safe.
     /// </summary>
     public class TextInput : ArmadaWidget, IPasteTarget
     {
@@ -31,8 +32,18 @@ namespace Armada.Tui.Widgets
                 _Graphemes = Split(value ?? "");
                 if (_MaxLength > 0 && _Graphemes.Count > _MaxLength) _Graphemes = _Graphemes.Take(_MaxLength).ToList();
                 _Caret = _Graphemes.Count;
+                _PrefillSelected = false;
                 RaiseIfChanged(old);
             }
+        }
+
+        /// <summary>
+        /// True while a value set with <see cref="Prefill"/> is still selected (untouched by the user), so the next typed
+        /// character or paste replaces it instead of appending to it.
+        /// </summary>
+        public bool PrefillSelected
+        {
+            get { return _PrefillSelected && _Graphemes.Count > 0; }
         }
 
         /// <summary>
@@ -95,6 +106,7 @@ namespace Armada.Tui.Widgets
         private int _Caret = 0;
         private int _Scroll = 0;
         private int _MaxLength = 0;
+        private bool _PrefillSelected = false;
 
         #endregion
 
@@ -111,6 +123,17 @@ namespace Armada.Tui.Widgets
         }
 
         /// <summary>
+        /// Set a suggested value (for example a documented default password) that the user can accept with Enter or
+        /// replace by typing: it starts selected, so typing does not append to it.
+        /// </summary>
+        /// <param name="value">Suggested value.</param>
+        public void Prefill(string? value)
+        {
+            Value = value ?? "";
+            _PrefillSelected = _Graphemes.Count > 0;
+        }
+
+        /// <summary>
         /// Insert text at the caret (newlines become spaces).
         /// </summary>
         /// <param name="text">Text.</param>
@@ -118,6 +141,7 @@ namespace Armada.Tui.Widgets
         {
             if (String.IsNullOrEmpty(text)) return;
             string old = Value;
+            ReplaceSelectedPrefill();
             List<string> parts = Split(text.Replace("\r\n", " ").Replace('\n', ' ').Replace('\r', ' ').Replace('\t', ' '));
             foreach (string g in parts)
             {
@@ -142,6 +166,22 @@ namespace Armada.Tui.Widgets
             string old = Value;
             bool ctrl = (key.Modifiers & KeyModifiers.Ctrl) != 0;
             bool alt = (key.Modifiers & KeyModifiers.Alt) != 0;
+            if (PrefillSelected)
+            {
+                bool clears = key.Code == KeyCode.Backspace || key.Code == KeyCode.Delete
+                    || (key.Code == KeyCode.Character && ctrl && Char.ToLowerInvariant((char)key.Rune) == 'u');
+                if (clears)
+                {
+                    ReplaceSelectedPrefill();
+                    RaiseIfChanged(old);
+                    return true;
+                }
+
+                bool movesCaret = key.Code == KeyCode.Left || key.Code == KeyCode.Right || key.Code == KeyCode.Home || key.Code == KeyCode.End
+                    || (key.Code == KeyCode.Character && ctrl && (Char.ToLowerInvariant((char)key.Rune) == 'a' || Char.ToLowerInvariant((char)key.Rune) == 'e'));
+                if (movesCaret) _PrefillSelected = false;
+            }
+
             switch (key.Code)
             {
                 case KeyCode.Left:
@@ -215,6 +255,7 @@ namespace Armada.Tui.Widgets
         public override bool HandleMouse(MouseEvent mouse)
         {
             if (mouse.Kind != MouseEventKind.Press) return false;
+            _PrefillSelected = false;
             int cells = 0;
             int target = _Graphemes.Count;
             for (int i = _Scroll; i < _Graphemes.Count; i++)
@@ -265,7 +306,8 @@ namespace Armada.Tui.Widgets
                 string shown = Display(_Graphemes[i]);
                 int w = TextCells.Width(shown);
                 if (x + w > width) break;
-                CellStyle cellStyle = IsFocused && i == _Caret ? style.WithAttribute(CellAttributes.Reverse, true) : style;
+                bool selected = IsFocused && (i == _Caret || PrefillSelected);
+                CellStyle cellStyle = selected ? style.WithAttribute(CellAttributes.Reverse, true) : style;
                 surface.DrawText(x, 0, shown, cellStyle);
                 x += w;
             }
@@ -295,6 +337,15 @@ namespace Armada.Tui.Widgets
                 if (cells <= width || _Scroll >= _Caret) break;
                 _Scroll++;
             }
+        }
+
+        private void ReplaceSelectedPrefill()
+        {
+            if (!_PrefillSelected) return;
+            _PrefillSelected = false;
+            _Graphemes.Clear();
+            _Caret = 0;
+            _Scroll = 0;
         }
 
         private void DeleteWord()

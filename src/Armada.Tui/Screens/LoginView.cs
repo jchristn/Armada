@@ -564,7 +564,8 @@ namespace Armada.Tui.Screens
 
         /// <summary>
         /// Prefill the fields for a profile: its last user, or for a server on this machine the seeded admin (and,
-        /// until the profile has signed in once, the default password) plus the local settings' API key.
+        /// until the profile has signed in once, the default password) plus the local settings' API key. The password and
+        /// key are prefilled selected, so typing the documented default replaces the prefill instead of appending to it.
         /// </summary>
         /// <param name="profile">Profile.</param>
         private void ApplyLocalDefaults(ServerProfile profile)
@@ -575,8 +576,8 @@ namespace Armada.Tui.Screens
             if (!LocalAdmiralDefaults.IsLoopback(profile.Url)) return;
             LocalAdmiralDefaults local = LocalAdmiralDefaults.Load();
             if (String.IsNullOrEmpty(profile.LastUser)) Email.Value = local.Email;
-            if (profile.LastUsedUtc == null && String.Equals(Email.Value, local.Email, StringComparison.OrdinalIgnoreCase)) Password.Value = local.Password;
-            if (local.ApiKey != null && local.Targets(profile.Url)) ApiKey.Value = local.ApiKey;
+            if (profile.LastUsedUtc == null && String.Equals(Email.Value, local.Email, StringComparison.OrdinalIgnoreCase)) Password.Prefill(local.Password);
+            if (local.ApiKey != null && local.Targets(profile.Url)) ApiKey.Prefill(local.ApiKey);
         }
 
         private void SwitchTo(ServerProfile profile)
