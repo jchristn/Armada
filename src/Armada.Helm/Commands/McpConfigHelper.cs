@@ -898,7 +898,7 @@ namespace Armada.Helm.Commands
                 name: armada
                 description: Armada orchestrator - manage fleets, vessels, captains, missions, and voyages via MCP
                 model: inherit
-                allowedTools: mcp__armada__*
+                tools: mcp__armada
                 ---
 
                 You are an Armada orchestrator. Your sole purpose is to control and monitor the Armada multi-agent system through its MCP tools. You are NOT tied to any project - you operate purely as a proxy.

@@ -159,6 +159,24 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(Case("claude_agent_definition_uses_subagent_tools_field", "The generated Claude Code agent restricts tools with the subagent 'tools' field", TestTags.Positive, () =>
+            {
+                // McpConfigHelper is internal to Helm; read the generated definition through reflection.
+                Type? helper = typeof(McpStdioToolSet).Assembly.GetType("Armada.Helm.Commands.McpConfigHelper");
+                AssertNotNull(helper, "McpConfigHelper type");
+                System.Reflection.MethodInfo? generate = helper!.GetMethod("GenerateAgentDefinition", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public);
+                AssertNotNull(generate, "GenerateAgentDefinition method");
+                string definition = (string)generate!.Invoke(null, null)!;
+
+                Dictionary<string, string> frontmatter = ParseFrontmatter(definition);
+                HashSet<string> supported = new HashSet<string>(StringComparer.Ordinal) { "name", "description", "tools", "disallowedTools", "model", "permissionMode", "maxTurns", "skills", "mcpServers", "hooks", "memory", "background", "effort", "isolation", "color" };
+                foreach (string key in frontmatter.Keys)
+                    AssertTrue(supported.Contains(key), "unsupported Claude Code subagent frontmatter field: " + key);
+                AssertEqual("armada", frontmatter["name"]);
+                AssertTrue(frontmatter.ContainsKey("tools"), "the agent must restrict its tools with 'tools'");
+                AssertEqual("mcp__armada", frontmatter["tools"], "server-level MCP entry grants every Armada tool");
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
                 displayName: "Helm Input",
@@ -168,6 +186,23 @@ namespace Test.Shared.Suites.Services
         #endregion
 
         #region Private-Methods
+
+        private static Dictionary<string, string> ParseFrontmatter(string markdown)
+        {
+            Dictionary<string, string> fields = new Dictionary<string, string>(StringComparer.Ordinal);
+            string[] lines = markdown.Replace("\r\n", "\n").Split('\n');
+            AssertTrue(lines.Length > 0 && lines[0].Trim() == "---", "definition starts with a frontmatter fence");
+            for (int i = 1; i < lines.Length; i++)
+            {
+                string line = lines[i];
+                if (line.Trim() == "---") return fields;
+                int colon = line.IndexOf(':');
+                if (colon <= 0) continue;
+                fields[line.Substring(0, colon).Trim()] = line.Substring(colon + 1).Trim();
+            }
+
+            throw new AssertionException("frontmatter is not closed");
+        }
 
         private static TestCaseDescriptor Case(string caseId, string displayName, string tag, Action body)
         {
