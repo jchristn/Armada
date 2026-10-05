@@ -600,20 +600,9 @@ namespace Armada.Server.Routes
                 Mission incoming = JsonSerializer.Deserialize<Mission>(req.Http.Request.DataAsString, _jsonOptions)
                     ?? throw new InvalidOperationException("Request body could not be deserialized as Mission.");
 
-                // Merge only metadata fields onto the existing record
-                existing.Title = incoming.Title;
-                existing.Description = incoming.Description;
-                existing.Priority = incoming.Priority;
-                existing.VesselId = incoming.VesselId;
-                existing.VoyageId = incoming.VoyageId;
-                existing.BranchName = incoming.BranchName;
-                existing.PrUrl = incoming.PrUrl;
-                existing.ParentMissionId = incoming.ParentMissionId;
-                existing.LastUpdateUtc = DateTime.UtcNow;
-
-                // Preserve operational/timestamp fields: CreatedUtc, StartedUtc, CompletedUtc,
-                // Status, CaptainId, DockId, ProcessId, CommitHash, DiffSnapshot
-
+                // Merge only metadata fields onto the existing record; operational, ownership, and timestamp fields
+                // are preserved (shared with the WebSocket update_mission command).
+                existing = EntityUpdateMerger.MergeMission(existing, incoming);
                 existing = await _database.Missions.UpdateAsync(existing).ConfigureAwait(false);
                 return (object)existing;
             },

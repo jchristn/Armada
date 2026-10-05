@@ -178,8 +178,10 @@ namespace Armada.Server.WebSocket
                         return WebSocketCommandError.Create("update_fleet", WebSocketCommandErrorCodeEnum.NotFound, "Fleet not found");
                     else
                     {
-                        Fleet updFleet = JsonSerializer.Deserialize<WebSocketDataCommand<Fleet>>(rawBody, _JsonOptions)?.Data!;
-                        updFleet.Id = updFleetId;
+                        Fleet? updFleetBody = JsonSerializer.Deserialize<WebSocketDataCommand<Fleet>>(rawBody, _JsonOptions)?.Data;
+                        if (updFleetBody == null)
+                            return WebSocketCommandError.Create("update_fleet", WebSocketCommandErrorCodeEnum.InvalidArgument, "data is required");
+                        Fleet updFleet = EntityUpdateMerger.MergeFleet(existFleet, updFleetBody);
                         updFleet = await _Database.Fleets.UpdateAsync(updFleet).ConfigureAwait(false);
                         return new { type = "command.result", action = "update_fleet", data = (object)updFleet };
                     }
@@ -221,18 +223,10 @@ namespace Armada.Server.WebSocket
                         return WebSocketCommandError.Create("update_vessel", WebSocketCommandErrorCodeEnum.NotFound, "Vessel not found");
                     else
                     {
-                        Vessel updVessel = JsonSerializer.Deserialize<WebSocketDataCommand<Vessel>>(rawBody, _JsonOptions)?.Data!;
-                        updVessel.Id = updVesselId;
-                        updVessel.TenantId = existVessel.TenantId;
-                        updVessel.UserId = existVessel.UserId;
-                        if (updVessel.GitHubTokenOverrideSpecified)
-                        {
-                            updVessel.NormalizeGitHubTokenOverride();
-                        }
-                        else
-                        {
-                            updVessel.GitHubTokenOverride = existVessel.GitHubTokenOverride;
-                        }
+                        Vessel? updVesselBody = JsonSerializer.Deserialize<WebSocketDataCommand<Vessel>>(rawBody, _JsonOptions)?.Data;
+                        if (updVesselBody == null)
+                            return WebSocketCommandError.Create("update_vessel", WebSocketCommandErrorCodeEnum.InvalidArgument, "data is required");
+                        Vessel updVessel = EntityUpdateMerger.MergeVessel(existVessel, updVesselBody);
                         updVessel = await _Database.Vessels.UpdateAsync(updVessel).ConfigureAwait(false);
                         return new { type = "command.result", action = "update_vessel", data = (object)updVessel };
                     }
@@ -509,8 +503,10 @@ namespace Armada.Server.WebSocket
                         return WebSocketCommandError.Create("update_mission", WebSocketCommandErrorCodeEnum.NotFound, "Mission not found");
                     else
                     {
-                        Mission updMission = JsonSerializer.Deserialize<WebSocketDataCommand<Mission>>(rawBody, _JsonOptions)?.Data!;
-                        updMission.Id = updMissionId;
+                        Mission? updMissionBody = JsonSerializer.Deserialize<WebSocketDataCommand<Mission>>(rawBody, _JsonOptions)?.Data;
+                        if (updMissionBody == null)
+                            return WebSocketCommandError.Create("update_mission", WebSocketCommandErrorCodeEnum.InvalidArgument, "data is required");
+                        Mission updMission = EntityUpdateMerger.MergeMission(existMission, updMissionBody);
                         updMission = await _Database.Missions.UpdateAsync(updMission).ConfigureAwait(false);
                         return new { type = "command.result", action = "update_mission", data = (object)updMission };
                     }
@@ -782,16 +778,10 @@ namespace Armada.Server.WebSocket
                         return WebSocketCommandError.Create("update_captain", WebSocketCommandErrorCodeEnum.NotFound, "Captain not found");
                     else
                     {
-                        Captain updCpt = JsonSerializer.Deserialize<WebSocketDataCommand<Captain>>(rawBody, _JsonOptions)?.Data!;
-                        updCpt.Id = updCptId;
-                        updCpt.State = existCpt.State;
-                        updCpt.CurrentMissionId = existCpt.CurrentMissionId;
-                        updCpt.CurrentDockId = existCpt.CurrentDockId;
-                        updCpt.ProcessId = existCpt.ProcessId;
-                        updCpt.RecoveryAttempts = existCpt.RecoveryAttempts;
-                        updCpt.LastHeartbeatUtc = existCpt.LastHeartbeatUtc;
-                        updCpt.CreatedUtc = existCpt.CreatedUtc;
-                        updCpt.LastUpdateUtc = DateTime.UtcNow;
+                        Captain? updCptBody = JsonSerializer.Deserialize<WebSocketDataCommand<Captain>>(rawBody, _JsonOptions)?.Data;
+                        if (updCptBody == null)
+                            return WebSocketCommandError.Create("update_captain", WebSocketCommandErrorCodeEnum.InvalidArgument, "data is required");
+                        Captain updCpt = EntityUpdateMerger.MergeCaptain(existCpt, updCptBody);
                         updCpt = await _Database.Captains.UpdateAsync(updCpt).ConfigureAwait(false);
                         return new { type = "command.result", action = "update_captain", data = (object)updCpt };
                     }

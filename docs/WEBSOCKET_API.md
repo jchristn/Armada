@@ -1281,7 +1281,7 @@ Update an existing fleet.
 |---|---|---|---|
 | `action` | string | Yes | `"update_fleet"` |
 | `id` | string | Yes | Fleet ID (prefix `flt_`) |
-| `data` | object | Yes | The full fleet: the stored record is replaced, so send the object as returned by `get_fleet` (including `tenantId` and `userId`) with your changes |
+| `data` | object | Yes | The full fleet: the editable fields (`name`, `description`, `defaultPipelineId`, `active`) are replaced, so send every field you want to keep. `id`, `tenantId`, `userId`, and `createdUtc` are server-owned and always kept from the stored record (same rules as `PUT /api/v1/fleets/{id}`) |
 
 **Response:**
 
@@ -1446,7 +1446,7 @@ Update an existing vessel.
 |---|---|---|---|
 | `action` | string | Yes | `"update_vessel"` |
 | `id` | string | Yes | Vessel ID (prefix `vsl_`) |
-| `data` | object | Yes | The full vessel: the record is replaced (send every field you want to keep). `TenantId`, `UserId`, and the stored GitHub token override are preserved unless `GitHubTokenOverride` is sent |
+| `data` | object | Yes | The full vessel: the record is replaced (send every field you want to keep). `id`, `tenantId`, and `userId` are always kept from the stored record, and the stored GitHub token override is preserved unless `GitHubTokenOverride` is sent (same rules as `PUT /api/v1/vessels/{id}`) |
 
 ---
 
@@ -1843,7 +1843,7 @@ Update an existing mission.
 |---|---|---|---|
 | `action` | string | Yes | `"update_mission"` |
 | `id` | string | Yes | Mission ID (prefix `msn_`) |
-| `data` | object | Yes | The full mission: the stored record is replaced, so send the object as returned by `get_mission` (including `tenantId` and `userId`) with your changes |
+| `data` | object | Yes | Mission metadata. Only `title`, `description`, `priority`, `vesselId`, `voyageId`, `branchName`, `prUrl`, and `parentMissionId` are applied (each is set to the value sent, so omitting one clears it); status, captain, dock, process, commit, diff, tenant, owner, and timestamps are kept (same rules as `PUT /api/v1/missions/{id}`). Use `transition_mission_status` to change status |
 
 ---
 
@@ -2139,9 +2139,11 @@ Create a new captain.
 
 #### update_captain
 
-Update an existing captain. The stored record is replaced by `data`, except that the operational fields (`state`,
-`currentMissionId`, `currentDockId`, `processId`, `recoveryAttempts`, `lastHeartbeatUtc`) and `createdUtc` are kept;
-send the object as returned by `get_captain` (including `tenantId` and `userId`) with your changes.
+Update an existing captain. The configuration fields are replaced by `data` (send every field you want to keep);
+`tenantId`, `userId`, the operational fields (`state`, `currentMissionId`, `currentDockId`, `processId`,
+`recoveryAttempts`, `quarantineUntilUtc`, `quarantineReason`, `lastHeartbeatUtc`, `lastProcessAliveUtc`), and
+`createdUtc` are always kept from the stored record, and runtime options are normalized for the runtime (same rules as
+`PUT /api/v1/captains/{id}`).
 
 **Request:**
 

@@ -157,7 +157,7 @@ namespace Armada.Server.Routes
                     ?? throw new InvalidOperationException("Request body could not be deserialized as Captain.");
                 captain.TenantId = ctx.TenantId;
                 captain.UserId = ctx.UserId;
-                NormalizeCaptainRuntimeOptions(captain);
+                EntityUpdateMerger.NormalizeCaptainRuntimeOptions(captain);
                 CaptainModelValidationFailure? createValidationError = await _agentLifecycle.ValidateCaptainModelDetailedAsync(captain).ConfigureAwait(false);
                 if (createValidationError != null)
                 {
@@ -245,18 +245,7 @@ namespace Armada.Server.Routes
                 if (existing == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Captain not found" }; }
                 Captain updated = JsonSerializer.Deserialize<Captain>(req.Http.Request.DataAsString, _jsonOptions)
                     ?? throw new InvalidOperationException("Request body could not be deserialized as Captain.");
-                updated.Id = id;
-                updated.TenantId = existing.TenantId;
-                updated.UserId = existing.UserId;
-                updated.State = existing.State;
-                updated.CurrentMissionId = existing.CurrentMissionId;
-                updated.CurrentDockId = existing.CurrentDockId;
-                updated.ProcessId = existing.ProcessId;
-                updated.RecoveryAttempts = existing.RecoveryAttempts;
-                updated.LastHeartbeatUtc = existing.LastHeartbeatUtc;
-                updated.CreatedUtc = existing.CreatedUtc;
-                updated.LastUpdateUtc = DateTime.UtcNow;
-                NormalizeCaptainRuntimeOptions(updated, existing);
+                updated = EntityUpdateMerger.MergeCaptain(existing, updated);
                 CaptainModelValidationFailure? updateValidationError = await _agentLifecycle.ValidateCaptainModelDetailedAsync(updated).ConfigureAwait(false);
                 if (updateValidationError != null)
                 {
@@ -642,33 +631,5 @@ namespace Armada.Server.Routes
                 .WithSecurity("ApiKey"));
         }
 
-        private static void NormalizeCaptainRuntimeOptions(Captain captain, Captain? existing = null)
-        {
-            if (captain == null) throw new ArgumentNullException(nameof(captain));
-
-            if (captain.Runtime != AgentRuntimeEnum.Mux)
-            {
-                // Non-Mux captains keep only the runtime-independent autoApprove switch.
-                bool? autoApprove = CaptainRuntimeOptions.GetExplicitAutoApprove(captain.RuntimeOptionsJson);
-                if (autoApprove == null && String.IsNullOrWhiteSpace(captain.RuntimeOptionsJson) && existing != null)
-                    autoApprove = CaptainRuntimeOptions.GetExplicitAutoApprove(existing.RuntimeOptionsJson);
-                captain.RuntimeOptionsJson = CaptainRuntimeOptions.WithAutoApprove(null, autoApprove);
-                return;
-            }
-
-            if (String.IsNullOrWhiteSpace(captain.RuntimeOptionsJson) &&
-                existing != null &&
-                existing.Runtime == AgentRuntimeEnum.Mux &&
-                !String.IsNullOrWhiteSpace(existing.RuntimeOptionsJson))
-            {
-                captain.RuntimeOptionsJson = existing.RuntimeOptionsJson;
-                return;
-            }
-
-            if (String.IsNullOrWhiteSpace(captain.RuntimeOptionsJson))
-            {
-                captain.RuntimeOptionsJson = null;
-            }
-        }
     }
 }

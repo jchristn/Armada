@@ -385,6 +385,26 @@ namespace Test.Shared.Suites.E2E
                 AssertEqual("Fleet not found", resp.GetProperty("error").GetString());
             }));
 
+            cases.Add(CaseAsync("update_fleet_preserves_tenant_and_owner", "UpdateFleet_PreservesTenantAndOwner", TestTags.Positive, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
+                HttpClient authClient = fx.AuthClient;
+                int restPort = fx.RestPort;
+
+                string fleetId = await CreateFleetViaRestAsync(authClient, "ws-owner-fleet").ConfigureAwait(false);
+                Fleet before = (await GetViaRestAsync<FleetDetailResponse>(authClient, "/api/v1/fleets/" + fleetId).ConfigureAwait(false)).Fleet!;
+                AssertFalse(String.IsNullOrEmpty(before.TenantId), "precondition: fleet has a tenant");
+                AssertFalse(String.IsNullOrEmpty(before.UserId), "precondition: fleet has an owner");
+
+                JsonElement resp = await WsCommandAsync(restPort, "update_fleet", new { id = fleetId, data = new { Name = "ws-owner-fleet-renamed", TenantId = "ten_spoofed" } }).ConfigureAwait(false);
+                AssertEqual("command.result", resp.GetProperty("type").GetString());
+
+                Fleet after = (await GetViaRestAsync<FleetDetailResponse>(authClient, "/api/v1/fleets/" + fleetId).ConfigureAwait(false)).Fleet!;
+                AssertEqual("ws-owner-fleet-renamed", after.Name);
+                AssertEqual(before.TenantId, after.TenantId);
+                AssertEqual(before.UserId, after.UserId);
+            }));
+
             cases.Add(CaseAsync("delete_fleet_existing_fleet_returns_deleted", "DeleteFleet_ExistingFleet_ReturnsDeleted", TestTags.Positive, async () =>
             {
                 E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
@@ -740,6 +760,29 @@ namespace Test.Shared.Suites.E2E
                 AssertEqual(missionId, data.Id);
             }));
 
+            cases.Add(CaseAsync("update_mission_preserves_server_owned_fields", "UpdateMission_PreservesServerOwnedFields", TestTags.Positive, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
+                HttpClient authClient = fx.AuthClient;
+                int restPort = fx.RestPort;
+
+                string missionId = await CreateMissionViaRestAsync(authClient, "ws-owner-mission").ConfigureAwait(false);
+                Mission before = await GetViaRestAsync<Mission>(authClient, "/api/v1/missions/" + missionId).ConfigureAwait(false);
+                AssertFalse(String.IsNullOrEmpty(before.TenantId), "precondition: mission has a tenant");
+                AssertFalse(String.IsNullOrEmpty(before.UserId), "precondition: mission has an owner");
+
+                // Only metadata is applied: status, tenant, and owner in the body are ignored, as on REST PUT.
+                JsonElement resp = await WsCommandAsync(restPort, "update_mission", new { id = missionId, data = new { Title = "ws-owner-mission-renamed", Status = "Cancelled", TenantId = "ten_spoofed" } }).ConfigureAwait(false);
+                AssertEqual("command.result", resp.GetProperty("type").GetString());
+
+                Mission after = await GetViaRestAsync<Mission>(authClient, "/api/v1/missions/" + missionId).ConfigureAwait(false);
+                AssertEqual("ws-owner-mission-renamed", after.Title);
+                AssertEqual(before.Status, after.Status);
+                AssertEqual(before.TenantId, after.TenantId);
+                AssertEqual(before.UserId, after.UserId);
+                AssertEqual(before.CaptainId, after.CaptainId);
+            }));
+
             cases.Add(CaseAsync("update_mission_non_existent_returns_error", "UpdateMission_NonExistent_ReturnsError", TestTags.Negative, async () =>
             {
                 E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
@@ -947,6 +990,25 @@ namespace Test.Shared.Suites.E2E
                 AssertEqual("command.result", resp.GetProperty("type").GetString());
                 Captain data = DeserializeData<Captain>(resp);
                 AssertEqual("Idle", data.State.ToString());
+            }));
+
+            cases.Add(CaseAsync("update_captain_preserves_tenant_and_owner", "UpdateCaptain_PreservesTenantAndOwner", TestTags.Positive, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
+                HttpClient authClient = fx.AuthClient;
+                int restPort = fx.RestPort;
+
+                Captain before = await CreateCaptainRecordViaRestAsync(authClient, "ws-owner-captain").ConfigureAwait(false);
+                AssertFalse(String.IsNullOrEmpty(before.TenantId), "precondition: captain has a tenant");
+                AssertFalse(String.IsNullOrEmpty(before.UserId), "precondition: captain has an owner");
+
+                JsonElement resp = await WsCommandAsync(restPort, "update_captain", new { id = before.Id, data = new { Name = "ws-owner-captain-renamed", Runtime = "ClaudeCode", TenantId = "ten_spoofed" } }).ConfigureAwait(false);
+                AssertEqual("command.result", resp.GetProperty("type").GetString());
+
+                Captain after = await GetViaRestAsync<Captain>(authClient, "/api/v1/captains/" + before.Id).ConfigureAwait(false);
+                AssertEqual("ws-owner-captain-renamed", after.Name);
+                AssertEqual(before.TenantId, after.TenantId);
+                AssertEqual(before.UserId, after.UserId);
             }));
 
             cases.Add(CaseAsync("update_captain_non_existent_returns_error", "UpdateCaptain_NonExistent_ReturnsError", TestTags.Negative, async () =>
@@ -1596,6 +1658,13 @@ namespace Test.Shared.Suites.E2E
 
                 // Not a command response — skip and read next message
             }
+        }
+
+        private static async Task<T> GetViaRestAsync<T>(HttpClient authClient, string path)
+        {
+            HttpResponseMessage resp = await authClient.GetAsync(path).ConfigureAwait(false);
+            resp.EnsureSuccessStatusCode();
+            return await JsonHelper.DeserializeAsync<T>(resp).ConfigureAwait(false);
         }
 
         private static async Task<string> CreateFleetViaRestAsync(HttpClient authClient, string name)

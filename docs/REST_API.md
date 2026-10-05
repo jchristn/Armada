@@ -1433,7 +1433,9 @@ Update an existing fleet.
 |---|---|
 | `id` | Fleet ID (`flt_` prefix) |
 
-**Request Body:** [Fleet](#fleet) (fields to update)
+**Request Body:** [Fleet](#fleet). The editable fields (`name`, `description`, `defaultPipelineId`, `active`) are
+replaced, so send every field you want to keep. `id`, `tenantId`, `userId`, and `createdUtc` are server-owned and always
+kept from the stored record (values in the body are ignored).
 
 **Response:** `200 OK` - [Fleet](#fleet)
 **Error:** `404` - Fleet not found
@@ -3446,7 +3448,8 @@ Describe the Armada MCP tools available through a specific captain, including ru
 
 #### PUT /api/v1/captains/{id}
 
-Update a captain's name, runtime, or model. Operational fields (state, process, mission) are preserved.
+Update a captain's name, runtime, or model. `tenantId`, `userId`, `createdUtc`, and the operational fields (state,
+current mission and dock, process, recovery attempts, quarantine, heartbeats) are preserved.
 
 **Permission:** TenantAdmin
 
