@@ -28,10 +28,18 @@ The dashboard's `dist/` is committed on purpose (deploy scripts fall back to it 
 installed). Rebuild and commit it whenever dashboard source changes.
 
 ## Architecture
-- `Armada.Core` - Domain models, database interfaces, service interfaces, settings
-- `Armada.Runtimes` - Agent runtime adapters (Claude Code, Codex, extensible via IAgentRuntime)
-- `Armada.Server` - Admiral process: REST API (Watson), MCP server (Voltaic), WebSocket, web dashboard
-- `Armada.Helm` - CLI (Spectre.Console), thin HTTP client to Admiral
+- `Armada.Core` - Domain models, database interfaces and providers, service interfaces, settings
+- `Armada.Runtimes` - Agent runtime adapters (Claude Code, Codex, Gemini, Cursor, Mux, OpenCode, ApiEndpoint; extensible via IAgentRuntime)
+- `Armada.Server` - Admiral process: REST API (Watson), MCP server (Voltaic), WebSocket, Harbor link, serves the dashboard
+- `Armada.Helm` - CLI (Spectre.Console), thin HTTP client to Admiral; hosts `armada tui`
+- `Armada.Tui` - Terminal UI (TUIKit), the dashboard in a terminal
+- `Armada.Client` - Typed .NET client for the REST API and WebSocket (used by the TUI)
+- `Armada.Dashboard` - React dashboard (Vite); `dist/` is committed and served by the Admiral at `/dashboard`
+- `Armada.Harbor` - Avalonia tray app that runs captains, git, and worktrees on the developer's machine (split mode)
+- `Armada.Proxy` - Remote-access portal and tunnel relay
+- `Armada.Publisher` - Packaging orchestrator for installers (reads `publisher.json`)
+- `Armada.PerfSeed` - Seeds a throwaway data directory for the performance baseline
+- `Test.Shared` (suites), `Test.Automated` (console runner), `Test.Xunit` / `Test.Nunit` (adapters)
 
 ## Coding Standards
 
@@ -41,7 +49,8 @@ installed). Rebuild and commit it whenever dashboard source changes.
 - Async methods: suffix with `Async`, include `CancellationToken token = default`
 - Use `.ConfigureAwait(false)` in library code (Core, Runtimes)
 - Enums: PascalCase with `Enum` suffix, decorated with `[JsonConverter(typeof(JsonStringEnumConverter))]`
-- ID prefixes: flt_, vsl_, cpt_, msn_, vyg_, dck_, sig_, art_
+- ID prefixes: flt_, vsl_, cpt_, msn_, vyg_, dck_, sig_, mrg_, evt_, usr_, ten_, crd_, hbr_, ath_, and more;
+  every prefix is defined in `src/Armada.Core/Constants.cs` (`*IdPrefix`) or on the model's `_Id` initializer
 
 ### Language Restrictions
 - **No `var`** - always use explicit types (e.g., `List<Fleet> fleets = ...` not `var fleets = ...`)
@@ -76,3 +85,4 @@ installed). Rebuild and commit it whenever dashboard source changes.
 - Voyage = batch of related missions
 - Dock = git worktree for a captain
 - Signal = message between admiral and captains
+- Harbor = host-side runner that executes captains on a developer machine (split mode)

@@ -37,9 +37,12 @@ and a **dock** is the worktree a captain works in.
 
 | Image | What it runs | Port |
 |-------|--------------|------|
-| [`jchristn77/armada-server`](https://hub.docker.com/r/jchristn77/armada-server) | The Admiral: REST API, built-in dashboard, WebSocket (`/ws`), MCP server, Prometheus metrics | 7890, 7891, 9464 |
+| [`jchristn77/armada-server`](https://hub.docker.com/r/jchristn77/armada-server) | The Admiral: REST API, built-in dashboard, WebSocket (`/ws`), MCP server, Prometheus metrics | 7890, 7891, 9464 (metrics, when telemetry is enabled as in the compose configuration) |
 | [`jchristn77/armada-dashboard`](https://hub.docker.com/r/jchristn77/armada-dashboard) | Standalone React dashboard served by nginx (unprivileged) | 8080 |
 | [`jchristn77/armada-proxy`](https://hub.docker.com/r/jchristn77/armada-proxy) | Armada.Proxy, a relay for reaching an Admiral that is not directly exposed | 7893 |
+
+Tags: `v1.0.0` and `latest`, multi-arch (`linux/amd64`, `linux/arm64/v8`). All three images run as non-root users
+(UID 1654 for the Admiral and proxy, 101 for the dashboard).
 
 Every image that serves HTTP includes `curl`, and the compose files define healthchecks that probe
 `http://127.0.0.1:<port>/...` every 5 seconds.
@@ -78,7 +81,8 @@ logs to Loki, and Grafana comes with provisioned dashboards.
 
 ## Getting started
 
-Clone the repository for the compose files and default configuration:
+Clone the repository for the compose files and default configuration. The compose files build the Armada images
+from the checkout (the same Dockerfiles the published images come from) and pull the observability images:
 
 ```bash
 git clone https://github.com/jchristn/armada.git
@@ -92,7 +96,7 @@ docker compose up -d
 | `armada-server` | 7890 | REST API, built-in dashboard at `/dashboard`, WebSocket at `/ws` |
 | `armada-server` | 7891 | MCP endpoint for agents |
 | `armada-server` | 9464 | Prometheus metrics |
-| `armada-dashboard` | 3000 | Standalone dashboard |
+| `armada-dashboard` | 3000 | Standalone dashboard at `/dashboard/` (proxies the API to `armada-server`) |
 | `prometheus` / `loki` / `grafana` | 9090 / 3100 / 3001 | Observability (Grafana login `admin` / `admin`) |
 
 Open `http://localhost:7890/dashboard` and sign in as `admin@armada` with the password you set. The Admiral listens
@@ -104,15 +108,20 @@ The SQLite database and logs are bind-mounted from `docker/armada/db` and `docke
 `/app/data/settings.json`. To use a repository checked out on the host as a vessel, mount it and trust its path for
 git as described in the Docker guide.
 
-To pull newer images and recreate the stack without touching your data:
+To update, pull the repository, then refresh the stack (pull the observability images, rebuild the Armada images,
+and recreate the containers) without touching your data:
 
 ```bash
-cd armada/docker
+git pull
+cd docker
 ./update.sh                       # or update.bat on Windows
 ./update.sh armada/compose.split.yaml
 ```
 
-To wipe the local database and logs and start over, use `docker/armada/factory/reset.sh` (or `reset.bat`).
+To wipe the local database and logs and start over, run `./reset.sh` (or `reset.bat`) from `docker/armada/factory`.
+
+The proxy runs from `docker/proxy/compose.yaml` on port 7893 and refuses to start until `ARMADA_PROXY_PASSWORD` is
+set (use the same value as `RemoteControl.Password` on each Armada instance that connects to it).
 
 For split mode, the proxy, TLS, backups, and troubleshooting, see the
 [Docker guide](https://github.com/jchristn/armada/blob/main/docs/DOCKER.md) and the

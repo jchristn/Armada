@@ -7,7 +7,7 @@ Go from zero to three AI agents working in parallel in under five minutes.
 ## Install
 
 ```bash
-# Requires: .NET 10 SDK (https://dot.net/download)
+# Requires: .NET 8.0 or 10.0 SDK (https://dot.net/download)
 # Requires: Claude Code on your PATH (https://docs.anthropic.com/en/docs/claude-code)
 
 dotnet tool install -g Armada.Helm
@@ -45,7 +45,8 @@ This configures Armada MCP for Claude Code, Codex, Gemini, and Cursor (plus Mux 
 armada server start
 ```
 
-Leave this running. Open a new terminal for everything else.
+This launches the Admiral in the background and returns once it answers its health check. `armada server status`
+shows it and `armada server stop` stops it.
 
 If you want Armada managed as a local deployment on your machine instead of a foreground terminal process, use the source-deployment scripts:
 
@@ -74,7 +75,8 @@ Repo-relative deployment script paths:
 The fastest way to see Armada land real work is the setup wizard in the dashboard. It opens on its own the first
 time you sign in to an empty Armada (and later from Dashboard, Setup Wizard).
 
-1. Open `http://localhost:7890/dashboard` and sign in with `admin@armada` / `password`.
+1. Open `http://localhost:7890/dashboard` and sign in with `admin@armada` / `password`. The first sign-in with the
+   default password asks you to choose a new one (8+ characters); doing so also disables the `default` bearer token.
 2. **Objective:** select Start Setup.
 3. **Fleet:** keep "Armada Starter Fleet" and select Create Fleet.
 4. **Vessel:** enter a name, the repository (a clone URL or a local path such as `~/code/hello`), and, to have
@@ -343,14 +345,7 @@ ARMADA_INITIAL_ADMIN_PASSWORD='choose-a-password' docker compose up -d
 
 This starts the Armada server on port 7890 (REST and the built-in dashboard; MCP on 7891), a standalone React dashboard container on port 3000, and the bundled observability stack. Open `http://localhost:7890/dashboard` or `http://localhost:3000` in your browser.
 
-Log in with the default credentials:
-
-| Field | Value |
-|-------|-------|
-| Email | `admin@armada` |
-| Password | `password` |
-
-Set `ARMADA_INITIAL_ADMIN_PASSWORD` (8+ characters) before `docker compose up`: the Admiral listens on all interfaces in the container and refuses to start while the default password is in use. Sign in with `admin@armada` and that password; the `default` bearer token is disabled. Create a credential for scripts under Server > Credentials (the token is shown once).
+Set `ARMADA_INITIAL_ADMIN_PASSWORD` (8+ characters, not `password`) before `docker compose up`, in your shell or in a `.env` file next to `compose.yaml`: the Admiral listens on all interfaces in the container and refuses to start while the default password is in use. Sign in with `admin@armada` and that password; the `default` bearer token is disabled. Create a credential for scripts under Server > Credentials (the token is shown once).
 
 Data is persisted in `docker/armada/db/`. To stop: `docker compose down`. To reset all data: run `docker/armada/factory/reset.sh` (or `reset.bat` on Windows).
 
@@ -358,9 +353,9 @@ See the [README](README.md#running-locally-with-docker) for full Docker details 
 
 ---
 
-## Authentication (v0.3.0)
+## Authentication
 
-As of v0.3.0, all REST API endpoints require authentication. Until the default admin password is changed, the default bearer token (`default`) provides backward-compatible access:
+All REST API endpoints except the health check (`GET /api/v1/status/health`) require authentication. Until the default admin password is changed, the default bearer token (`default`) provides backward-compatible access:
 
 ```bash
 curl -H "Authorization: Bearer default" http://localhost:7890/api/v1/status
