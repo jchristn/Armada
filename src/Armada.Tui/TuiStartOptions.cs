@@ -46,6 +46,12 @@ namespace Armada.Tui
         /// </summary>
         public bool Live { get; set; } = true;
 
+        /// <summary>
+        /// Starts a telemetry exporter when the <c>tui.json</c> telemetry settings enable it, or null for none. Helm
+        /// supplies one backed by the Admiral's telemetry host; the returned object is disposed when the TUI exits.
+        /// </summary>
+        public Func<Armada.Core.Settings.TelemetrySettings, IDisposable?>? TelemetryHostFactory { get; set; } = null;
+
         #endregion
 
         #region Constructors-and-Factories

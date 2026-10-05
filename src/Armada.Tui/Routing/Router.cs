@@ -191,6 +191,7 @@ namespace Armada.Tui.Routing
         private void SetCurrent(RouteMatch match)
         {
             Current = match;
+            Services.TuiTelemetry.RecordScreenView(match.Route.Pattern, match.Route.ScreenName);
             EventHandler<RouteMatch>? handler = Navigated;
             if (handler != null) handler(this, match);
         }

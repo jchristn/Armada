@@ -70,7 +70,7 @@ namespace Armada.Tui.Modals
             foreach (ArmadaCommand c in commands.All().Where(c => c.Visible && c.InPalette && c.Menu != CommandMenuEnum.Go))
             {
                 ArmadaCommand captured = c;
-                PaletteEntry entry = new PaletteEntry("command", T(c.Title), c.KeyLabel, () => commands.Run(captured));
+                PaletteEntry entry = new PaletteEntry("command", T(c.Title), c.KeyLabel, () => commands.Run(captured, Armada.Tui.Services.TuiTelemetry.SourcePalette));
                 SelectOption<PaletteEntry> option = new SelectOption<PaletteEntry>(entry, entry.Title, String.IsNullOrEmpty(c.KeyLabel) ? T(c.Menu.ToString()) : c.KeyLabel);
                 option.Enabled = c.Enabled;
                 options.Add(option);

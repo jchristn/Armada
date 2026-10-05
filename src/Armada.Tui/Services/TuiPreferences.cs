@@ -101,6 +101,21 @@ namespace Armada.Tui.Services
         /// </summary>
         public Dictionary<string, string> KeyBindings { get; set; } = new Dictionary<string, string>();
 
+        /// <summary>
+        /// Telemetry export (the server's <c>Telemetry</c> fields with TUI defaults). Off by default. Never null.
+        /// </summary>
+        public TuiTelemetrySettings Telemetry
+        {
+            get { return _Telemetry; }
+            set { _Telemetry = value ?? new TuiTelemetrySettings(); }
+        }
+
+        #endregion
+
+        #region Private-Members
+
+        private TuiTelemetrySettings _Telemetry = new TuiTelemetrySettings();
+
         #endregion
 
         #region Constructors-and-Factories

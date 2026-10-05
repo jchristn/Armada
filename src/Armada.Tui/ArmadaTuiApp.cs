@@ -145,10 +145,42 @@ namespace Armada.Tui
             using (TuiApplication app = new TuiApplication(backend))
             using (ArmadaTuiApp tui = new ArmadaTuiApp(app, backend, options))
             {
-                tui.Start();
-                await app.RunAsync(token).ConfigureAwait(false);
-                app.Stop();
-                return 0;
+                IDisposable? telemetryHost = StartTelemetry(tui.Context.Prefs.Current.Telemetry, options);
+                try
+                {
+                    tui.Start();
+                    await app.RunAsync(token).ConfigureAwait(false);
+                    app.Stop();
+                    return 0;
+                }
+                finally
+                {
+                    telemetryHost?.Dispose();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Apply the <c>tui.json</c> telemetry settings: switch the TUI and TUIKit instruments on or off and, when
+        /// enabled, start the exporter from <see cref="TuiStartOptions.TelemetryHostFactory"/>. Never throws.
+        /// </summary>
+        /// <param name="settings">Telemetry settings, or null for defaults (off).</param>
+        /// <param name="options">Start options.</param>
+        /// <returns>The exporter to dispose at exit, or null.</returns>
+        public static IDisposable? StartTelemetry(TuiTelemetrySettings? settings, TuiStartOptions options)
+        {
+            if (options == null) throw new ArgumentNullException(nameof(options));
+            bool enabled = settings != null && settings.Enabled;
+            TuiTelemetry.Configure(enabled);
+            if (!enabled || options.TelemetryHostFactory == null) return null;
+            try
+            {
+                return options.TelemetryHostFactory(settings!.ToTelemetrySettings());
+            }
+            catch (Exception)
+            {
+                // Telemetry never blocks the TUI.
+                return null;
             }
         }
 
@@ -160,6 +192,7 @@ namespace Armada.Tui
         {
             string? envToken = Options.Token ?? Environment.GetEnvironmentVariable(TuiPaths.TokenEnvironmentVariable);
             if (Options.Live) Context.Refresh.Start();
+            TuiTelemetry.RecordSession();
             StartupTask = Task.Run(async () =>
             {
                 if (await Context.Loc.LoadAsync(Context.Client).ConfigureAwait(false))
