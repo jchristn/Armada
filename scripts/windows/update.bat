@@ -46,18 +46,18 @@ call :run_helm server start
 exit /b %ERRORLEVEL%
 
 :run_helm
-rem Same order as update.sh: the installed armada tool, then the repo's built Armada.Helm.dll, then dotnet run.
-rem Each command runs exactly once; a failure is returned, not retried through another fallback.
-where armada >nul 2>nul
-if not errorlevel 1 (
-  call armada %*
-  exit /b %ERRORLEVEL%
-)
-
 if exist "%HELM_DLL%" (
   call dotnet "%HELM_DLL%" %*
   exit /b %ERRORLEVEL%
 )
 
 call dotnet run --project "%REPO_ROOT%\src\Armada.Helm" %ARMADA_DOTNET_FRAMEWORK_ARGS% -- %*
-exit /b %ERRORLEVEL%
+if not errorlevel 1 exit /b 0
+
+where armada >nul 2>nul
+if not errorlevel 1 (
+  armada %*
+  exit /b %ERRORLEVEL%
+)
+
+exit /b 1

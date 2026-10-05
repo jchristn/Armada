@@ -130,18 +130,18 @@ namespace Test.Shared.Suites.Services
                 AssertFalse(helper.Contains("pkill") || helper.Contains("pgrep"), "the stop helper must not match processes by pattern");
             }));
 
-            cases.Add(Case("publish_server_fails_when_dashboard_deploy_fails", "publish-server.sh and publish-server.bat both fail when the dashboard deploy fails", TestTags.Negative, () =>
+            cases.Add(Case("publish_server_dashboard_failure_rule_matches_on_every_platform", "publish-server.sh, like publish-server.bat, fails a dashboard deploy unless a deployed dashboard already exists", TestTags.Negative, () =>
             {
                 string root = FindRepositoryRoot();
                 string shell = File.ReadAllText(Path.Combine(root, "scripts", "common", "publish-server.sh"));
                 string batch = File.ReadAllText(Path.Combine(root, "scripts", "windows", "publish-server.bat"));
-                AssertFalse(shell.Contains("WARNING: Dashboard deploy failed"), "the shell script must not continue after a failed dashboard deploy");
-                AssertFalse(batch.Contains("WARNING: Dashboard deploy failed"), "the batch script must not continue after a failed dashboard deploy");
-                AssertContains("ERROR: Dashboard deploy failed", shell);
-                AssertContains("ERROR: Dashboard deploy failed", batch);
+                AssertContains("ERROR: Dashboard deploy failed and no deployed React dashboard is available.", batch);
+                AssertContains("ERROR: Dashboard deploy failed and no deployed React dashboard is available.", shell, "the shell script fails when no dashboard is deployed");
+                AssertContains(".armada/dashboard/index.html", shell, "the shell script keeps going only over an existing deployed dashboard");
+                AssertFalse(shell.Contains("fall back to the embedded dashboard"), "there is no embedded dashboard to fall back to");
             }));
 
-            cases.Add(Case("update_scripts_try_helm_fallbacks_in_the_same_order", "update.sh and update.bat try the installed armada tool, then the built Helm dll, then dotnet run", TestTags.Positive, () =>
+            cases.Add(Case("update_scripts_try_helm_fallbacks_in_the_same_order", "update.sh and update.bat try the built Helm dll, then dotnet run, then the installed armada tool", TestTags.Positive, () =>
             {
                 string root = FindRepositoryRoot();
                 string shell = File.ReadAllText(Path.Combine(root, "scripts", "common", "update.sh"));
@@ -149,8 +149,8 @@ namespace Test.Shared.Suites.Services
                 string shellHelm = shell.Substring(shell.IndexOf("run_helm() {", StringComparison.Ordinal));
                 string batchHelm = batch.Substring(batch.IndexOf(":run_helm", StringComparison.Ordinal));
 
-                AssertTrue(IsInOrder(shellHelm, "command -v armada", "HELM_DLL", "dotnet run"), "update.sh order");
-                AssertTrue(IsInOrder(batchHelm, "where armada", "HELM_DLL", "dotnet run"), "update.bat order matches update.sh");
+                AssertTrue(IsInOrder(shellHelm, "HELM_DLL", "dotnet run", "command -v armada"), "update.sh prefers the repo-targeted Helm, like update.bat");
+                AssertTrue(IsInOrder(batchHelm, "HELM_DLL", "dotnet run", "where armada"), "update.bat order");
             }));
 
             cases.Add(Case("windows_scripts_reject_unknown_arguments", "factory-reset.bat and generate-api-surface.bat reject unknown arguments like their shell versions", TestTags.Negative, () =>

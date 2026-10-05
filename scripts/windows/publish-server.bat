@@ -18,9 +18,12 @@ echo.
 echo [publish-server] Deploying dashboard assets...
 call "%SCRIPT_DIR%\deploy-dashboard.bat"
 if errorlevel 1 (
-    echo ERROR: Dashboard deploy failed. The server was published, but %USERPROFILE%\.armada\dashboard was not updated.
-    echo        Fix the dashboard build ^(or install Node.js, or rely on the committed dist^) and re-run.
-    exit /b 1
+    if exist "%USERPROFILE%\.armada\dashboard\index.html" (
+        echo [publish-server] WARNING: Dashboard deploy failed. Keeping the previously deployed React dashboard.
+    ) else (
+        echo ERROR: Dashboard deploy failed and no deployed React dashboard is available.
+        exit /b 1
+    )
 )
 
 if not exist "%SERVER_EXE%" (

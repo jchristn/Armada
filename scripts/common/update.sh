@@ -10,18 +10,24 @@ armada_resolve_framework "$@"
 
 HELM_DLL="$REPO_ROOT/src/Armada.Helm/bin/Debug/${ARMADA_TARGET_FRAMEWORK}/Armada.Helm.dll"
 
+# Same order as update.bat: prefer the repo-targeted Helm (the build for the resolved framework, then dotnet run),
+# and fall back to the installed armada tool only when dotnet run fails.
 run_helm() {
-  if command -v armada >/dev/null 2>&1; then
-    armada "$@"
-    return
-  fi
-
   if [ -f "$HELM_DLL" ]; then
     dotnet "$HELM_DLL" "$@"
     return
   fi
 
-  dotnet run --project "$REPO_ROOT/src/Armada.Helm" -f "$ARMADA_TARGET_FRAMEWORK" -- "$@"
+  if dotnet run --project "$REPO_ROOT/src/Armada.Helm" -f "$ARMADA_TARGET_FRAMEWORK" -- "$@"; then
+    return 0
+  fi
+
+  if command -v armada >/dev/null 2>&1; then
+    armada "$@"
+    return
+  fi
+
+  return 1
 }
 
 echo

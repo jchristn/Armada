@@ -16,10 +16,14 @@ dotnet publish "${REPO_ROOT}/src/Armada.Server" -c Release -f "$ARMADA_TARGET_FR
 
 echo
 echo "[publish-server] Deploying dashboard assets..."
+# Same rule as publish-server.bat: keep going only when a previously deployed dashboard is there to serve.
 if ! "${SCRIPT_DIR}/deploy-dashboard.sh"; then
-    echo "ERROR: Dashboard deploy failed. The server was published, but ~/.armada/dashboard was not updated." >&2
-    echo "       Fix the dashboard build (or install Node.js, or rely on the committed dist/) and re-run." >&2
-    exit 1
+    if [ -f "${HOME}/.armada/dashboard/index.html" ]; then
+        echo "[publish-server] WARNING: Dashboard deploy failed. Keeping the previously deployed React dashboard."
+    else
+        echo "ERROR: Dashboard deploy failed and no deployed React dashboard is available." >&2
+        exit 1
+    fi
 fi
 
 if [ ! -f "${SERVER_EXE}" ]; then
