@@ -151,7 +151,9 @@ namespace Armada.Server
         /// then registers under that credential's tenant and user (a global admin may name a tenant with
         /// x-tenant-guid). Without a credential the link is accepted only when Harbor.RequireAuth is off, the Admiral
         /// listens on a loopback hostname, and the Harbor connects from loopback (the local Harbor app); it then keeps
-        /// the tenant it names.
+        /// the tenant it names and has no owning user. The client-supplied x-user-guid header is never read: a user
+        /// identity is only ever taken from a validated credential, so a credential-less Harbor cannot satisfy the
+        /// user-scoped requireHarborForLaunch policy for a mission that has a user.
         /// </summary>
         private async Task<HarborLinkIdentity> AuthorizeAsync(HttpContextBase ctx, string? remoteIp)
         {

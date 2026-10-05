@@ -1124,19 +1124,29 @@ namespace Armada.Core.Services
 
             // Determine the process ID to check
             int? processId = captain.ProcessId ?? mission?.ProcessId;
-            if (processId == null) return;
+
+            // A stall-recovery relaunch that was refused (requireHarborForLaunch with the user's Harbor offline) leaves
+            // the captain Working on its active mission with no process and a spent recovery attempt. Treat it as a
+            // live but silent process so the stall check below retries recovery (the Harbor may have reconnected) or
+            // fails the mission once the attempts run out.
+            bool awaitingRecoveryRelaunch = processId == null && isActive && captain.RecoveryAttempts > 0;
+            if (processId == null && !awaitingRecoveryRelaunch) return;
 
             bool isAlive = false;
             int exitCode = -1;
 
-            // A process this admiral launched and still tracks is owned by its runtime's exit callback, which reports the
-            // real outcome. Probing the OS here would misread an in-process ApiEndpoint loop (synthetic process id) or a
-            // Harbor-hosted process as vanished and race the callback with a second, conflicting exit decision.
-            if (OnIsProcessTracked != null && OnIsProcessTracked(processId.Value))
+            if (awaitingRecoveryRelaunch)
             {
                 isAlive = true;
             }
-            else if (OnIsProcessExitHandled != null && OnIsProcessExitHandled(processId.Value))
+            // A process this admiral launched and still tracks is owned by its runtime's exit callback, which reports the
+            // real outcome. Probing the OS here would misread an in-process ApiEndpoint loop (synthetic process id) or a
+            // Harbor-hosted process as vanished and race the callback with a second, conflicting exit decision.
+            else if (OnIsProcessTracked != null && OnIsProcessTracked(processId!.Value))
+            {
+                isAlive = true;
+            }
+            else if (OnIsProcessExitHandled != null && OnIsProcessExitHandled(processId!.Value))
             {
                 // The exit callback already fired for this process: its async handler owns the outcome, so the
                 // health check must not race it with a second, conflicting decision.
@@ -1148,7 +1158,7 @@ namespace Armada.Core.Services
             {
                 try
                 {
-                    System.Diagnostics.Process process = System.Diagnostics.Process.GetProcessById(processId.Value);
+                    System.Diagnostics.Process process = System.Diagnostics.Process.GetProcessById(processId!.Value);
                     if (process.HasExited)
                     {
                         isAlive = false;
@@ -1174,7 +1184,7 @@ namespace Armada.Core.Services
             if (!isAlive && mission != null && mission.ProcessId.HasValue)
             {
                 // Claim the exit so the callback (or a second health check) cannot also handle it.
-                if (!await _Database.Missions.TryClaimProcessExitAsync(mission.Id, processId.Value, token).ConfigureAwait(false))
+                if (!await _Database.Missions.TryClaimProcessExitAsync(mission.Id, processId!.Value, token).ConfigureAwait(false))
                 {
                     _Logging.Debug(_Header + "captain " + captain.Id + " process " + processId + " exit for mission " + mission.Id + " is already handled or belongs to an earlier attempt -- skipping");
                     return;

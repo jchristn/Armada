@@ -4,8 +4,9 @@ namespace Armada.Core.Settings
 
     /// <summary>
     /// Server-side settings for the Harbor subsystem: the link endpoint, authentication requirement,
-    /// heartbeat/liveness windows, default per-Harbor job capacity, and the MCP base URL advertised to
-    /// Harbors. Only relevant when the deployment mode is Split, but safe to leave populated in Local mode.
+    /// heartbeat/liveness windows (reserved in 1.0), default per-Harbor job capacity, and the MCP base URL
+    /// advertised to Harbors. The Harbor link endpoint is always registered, whatever the deployment mode; these
+    /// settings are safe to leave populated in Local mode.
     /// </summary>
     public class HarborServerSettings
     {
@@ -22,15 +23,20 @@ namespace Armada.Core.Settings
         }
 
         /// <summary>
-        /// Whether a Harbor link must present a credential on the upgrade. Defaults to false so a local,
-        /// loopback Harbor connects with no setup; enable it for any non-loopback or multi-tenant deployment.
-        /// Full signed-request credential validation is a follow-up; when enabled today the endpoint requires
-        /// the presence of an access-key header.
+        /// Whether every Harbor link must present a credential on the upgrade. A presented credential
+        /// (x-access-key, or an Authorization header) is always validated as an Armada credential (bearer token,
+        /// session token, or the local API key) and decides the Harbor's tenant and user, whatever this setting.
+        /// When false (the default), a Harbor without a credential is still accepted, with no owning user, but only
+        /// when the Admiral listens on a loopback hostname and the Harbor connects from loopback; a Harbor connecting
+        /// from another host is always refused without a credential. When true, a Harbor without a credential is
+        /// refused in every case.
         /// </summary>
         public bool RequireAuth { get; set; } = false;
 
         /// <summary>
-        /// Expected heartbeat interval from a Harbor, in seconds. Clamped to [5, 3600]; defaults to 15.
+        /// Reserved: expected heartbeat interval from a Harbor, in seconds. Clamped to [5, 3600]; defaults to 15.
+        /// Accepted and validated but not read in 1.0: the Harbor chooses its own heartbeat interval
+        /// (HeartbeatIntervalMs in the Harbor app settings, where 0 disables heartbeats).
         /// </summary>
         public int HeartbeatIntervalSeconds
         {
@@ -39,8 +45,11 @@ namespace Armada.Core.Settings
         }
 
         /// <summary>
-        /// How long without a heartbeat before a Harbor is marked Degraded then Disconnected, in seconds.
-        /// Clamped to a minimum of the heartbeat interval; defaults to 45.
+        /// Reserved: how long without a heartbeat before a Harbor would be marked Degraded, in seconds. Clamped to
+        /// [5, 7200]; defaults to 45. Accepted and validated but not enforced in 1.0: a Harbor is marked
+        /// Disconnected when its link closes, never on a missed heartbeat, and nothing sets Degraded (a Harbor may
+        /// legitimately run with heartbeats disabled). Missions on a Harbor that stops responding are recovered by
+        /// stall detection.
         /// </summary>
         public int HeartbeatTimeoutSeconds
         {
@@ -49,8 +58,9 @@ namespace Armada.Core.Settings
         }
 
         /// <summary>
-        /// Default maximum concurrent jobs applied to a Harbor that does not advertise its own capacity.
-        /// Clamped to a minimum of 1; defaults to 4.
+        /// Default maximum concurrent jobs for a Harbor that registers through its handshake without advertising a
+        /// capacity (maxConcurrentJobs omitted or not positive). An existing registration keeps its capacity in that
+        /// case. Clamped to a minimum of 1; defaults to 4.
         /// </summary>
         public int DefaultMaxJobsPerHarbor
         {

@@ -2,10 +2,10 @@
 # =====================================================================
 # factory-reset.sh -- wipe Armada back to a factory-fresh state (Linux).
 #
-# Stops the Armada Admiral (systemd --user unit armada.service, plus any
-# stray Armada.Server process), then deletes the database and all runtime
-# state under ~/.armada so the next start comes up empty as if freshly
-# deployed. By default it KEEPS the deployed server bin and dashboard so
+# Stops the Armada Admiral (systemd --user unit armada.service, then any
+# other Armada.Server by PID via scripts/common/stop-armada-server.sh),
+# then deletes the database and all runtime state under ~/.armada so the
+# next start comes up empty as if freshly deployed. By default it KEEPS the deployed server bin and dashboard so
 # the deployment still runs; pass --all to remove those too.
 #
 # Flags:
@@ -17,6 +17,7 @@
 # =====================================================================
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ARMADA_DIR="${HOME}/.armada"
 UNIT_NAME="armada.service"
 FORCE=0
@@ -26,7 +27,9 @@ for arg in "$@"; do
     case "$arg" in
         -y|--yes|--force) FORCE=1 ;;
         --all) WIPE_ALL=1 ;;
-        *) echo "[factory-reset] Unknown argument: $arg" >&2; exit 2 ;;
+        *) echo "[factory-reset] Unknown argument: $arg" >&2
+           echo "Usage: scripts/linux/factory-reset.sh [-y|--yes|--force] [--all]" >&2
+           exit 2 ;;
     esac
 done
 
@@ -58,16 +61,11 @@ echo "[factory-reset] Stopping the Armada Admiral..."
 if command -v systemctl >/dev/null 2>&1; then
     systemctl --user stop "$UNIT_NAME" 2>/dev/null || true
 fi
-pkill -f 'Armada\.Server' 2>/dev/null || true
-
-# Wait for the server to actually exit before deleting anything. A still-running server can keep writing to
-# (or recreate) the database, leaving the reset incomplete; escalate to SIGKILL and abort if it will not die.
-for _ in $(seq 1 20); do
-    pgrep -f 'Armada\.Server' >/dev/null 2>&1 || break
-    pkill -9 -f 'Armada\.Server' 2>/dev/null || true
-    sleep 0.5
-done
-if pgrep -f 'Armada\.Server' >/dev/null 2>&1; then
+# Then stop any other Admiral by PID (the published Armada.Server, or a dotnet host of Armada.Server.dll), waiting
+# for it to exit. Matching is by executable, never a loose command-line pattern, so unrelated processes that merely
+# mention Armada.Server are not touched. A still-running server can keep writing to (or recreate) the database,
+# leaving the reset incomplete, so abort if one will not stop.
+if ! "${SCRIPT_DIR}/../common/stop-armada-server.sh"; then
     echo "ERROR: Armada.Server is still running and could not be stopped. Aborting before deleting state so" >&2
     echo "       the database is not left intact. Stop it manually (systemctl --user stop $UNIT_NAME) and" >&2
     echo "       re-run factory-reset." >&2

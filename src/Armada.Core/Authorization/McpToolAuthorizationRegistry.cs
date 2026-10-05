@@ -7,7 +7,7 @@ namespace Armada.Core.Authorization
     /// The single source of truth for what every MCP tool requires: one explicit <see cref="AuthorizationRequirement"/>
     /// per tool name. The Admiral checks it on every tool call (including Ask Armada proposals executed after approval)
     /// against the caller resolved for the MCP request. A tool registered without a declaration here is treated as
-    /// <see cref="PermissionLevel.AdminOnly"/> (fail closed) and is reported by <c>RouteAuthorizationCoverageSuite</c>.
+    /// <see cref="PermissionLevel.AdminOnly"/> (fail closed) and is reported by <c>AuthorizationCoverageSuite</c>.
     /// When adding a tool, add its line here in the same change.
     /// </summary>
     public static class McpToolAuthorizationRegistry

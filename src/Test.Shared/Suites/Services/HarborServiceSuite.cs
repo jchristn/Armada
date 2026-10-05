@@ -6,7 +6,9 @@ namespace Test.Shared.Suites.Services
     using System.Threading.Tasks;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Core.Harbor;
     using Armada.Core.Services;
+    using Armada.Core.Settings;
     using SyslogLogging;
     using Test.Shared.Infrastructure;
     using Touchstone.Core;
@@ -110,6 +112,32 @@ namespace Test.Shared.Suites.Services
 
                 List<Harbor> all = await testDb.Driver.Harbors.EnumerateAsync().ConfigureAwait(false);
                 AssertEqual(1, all.Count);
+            }));
+
+            cases.Add(CaseAsync("handshake_without_capacity_uses_default_max_jobs_per_harbor", "A handshake that does not advertise a capacity registers with harbor.defaultMaxJobsPerHarbor; an existing registration keeps its capacity", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                HarborServerSettings serverSettings = new HarborServerSettings { DefaultMaxJobsPerHarbor = 7 };
+                HarborService service = new HarborService(testDb.Driver, CreateLogging(), serverSettings);
+                List<HarborCapability> caps = new List<HarborCapability> { new HarborCapability { Name = "claude" } };
+
+                Harbor created = await service.UpsertFromHandshakeAsync("hbr_default_cap", "ten_d", "usr_d", "Rig", "1.0", "Linux", "X64", 0, caps).ConfigureAwait(false);
+                AssertEqual(7, created.MaxConcurrentJobs, "new registration without a capacity gets the configured default");
+
+                Harbor advertised = await service.UpsertFromHandshakeAsync("hbr_default_cap", "ten_d", "usr_d", "Rig", "1.0", "Linux", "X64", 9, caps).ConfigureAwait(false);
+                AssertEqual(9, advertised.MaxConcurrentJobs, "an advertised capacity wins");
+
+                Harbor kept = await service.UpsertFromHandshakeAsync("hbr_default_cap", "ten_d", "usr_d", "Rig", "1.0", "Linux", "X64", 0, caps).ConfigureAwait(false);
+                AssertEqual(9, kept.MaxConcurrentJobs, "an existing registration keeps its capacity when none is advertised");
+
+                // Through the link: a handshake that omits maxConcurrentJobs registers with the configured default.
+                HarborConnectionManager manager = new HarborConnectionManager(service, CreateLogging(), null);
+                HarborHandshake handshake = HarborProtocol.Deserialize("{\"type\":\"handshake\",\"harborId\":\"hbr_default_cap_link\",\"name\":\"Rig\",\"protocolVersion\":\"" + HarborProtocol.Version + "\"}") as HarborHandshake
+                    ?? throw new InvalidOperationException("Expected a handshake.");
+                HarborHandshakeAck ack = await manager.OnHandshakeAsync(handshake, "ten_d", "usr_d", (message, token) => Task.CompletedTask).ConfigureAwait(false);
+                AssertTrue(ack.Accepted, "linked");
+                Harbor? linked = await testDb.Driver.Harbors.ReadAsync("hbr_default_cap_link").ConfigureAwait(false);
+                AssertEqual(7, linked!.MaxConcurrentJobs, "omitted capacity takes the configured default");
             }));
 
             cases.Add(CaseAsync("update_other_tenant_forbidden", "UpdateAsync rejects a cross-tenant edit", TestTags.Negative, async () =>

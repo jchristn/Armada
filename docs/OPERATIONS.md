@@ -208,10 +208,13 @@ single box, `~/.armada/dashboard`). Re-run `scripts/common/deploy-dashboard.sh`,
 `src/Armada.Dashboard/dist`.
 
 **Missions sit in Pending forever in split mode.** With `requireHarborForLaunch: true`, a mission waits for a
-connected Harbor owned by the same user that advertises the requested runtime. Check the Harbors page; if the Harbor
-shows Degraded or Disconnected, its heartbeats stopped arriving within `harbor.heartbeatTimeoutSeconds` (45 seconds by
-default). Missions that were already running on a Harbor when it disconnected are not moved immediately; the stall
-watchdog (`stallThresholdMinutes`) recovers them like any other stalled captain.
+connected Harbor owned by the same user that advertises the requested runtime. A Harbor's owner comes only from the
+credential it presents (`AccessKey` in the Harbor app): a credential-less loopback Harbor has no owner and never counts,
+so give the Harbor one of the mission user's credentials. Check the Harbors page; a Harbor shows Disconnected once its
+link closes (the Admiral does not time out heartbeats). Missions that were already running on a Harbor when it
+disconnected are not moved to another Harbor: the stall watchdog (`stallThresholdMinutes`) relaunches them on that Harbor
+once it is back; while it is still offline and the policy is on, each recovery attempt waits another stall interval, and
+the mission fails with `StallRecoveryExhausted` when `maxRecoveryAttempts` run out.
 
 **A captain launched from a Harbor cannot reach MCP.** The Harbor hands captains the URL in
 `harbor.advertisedMcpBaseUrl`. From the Harbor host, `curl` that URL. In the split compose file it is

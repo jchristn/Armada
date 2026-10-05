@@ -268,6 +268,21 @@ namespace Armada.Core.Services
 
                         _Logging.Info(_Header + "recovered captain " + captain.Id + " with process " + processId);
                     }
+                    catch (HarborLaunchUnavailableException refused) when (captain.RecoveryAttempts < _Settings.MaxRecoveryAttempts)
+                    {
+                        // requireHarborForLaunch refused the relaunch because the user's Harbor is unavailable. Spend
+                        // this attempt and wait: the captain stays Working with no process, and the next stall check
+                        // retries recovery, so a Harbor that reconnects within the remaining attempts gets the mission back.
+                        _Logging.Warn(_Header + "recovery relaunch for captain " + captain.Id + " refused (attempt " + captain.RecoveryAttempts + "/" + _Settings.MaxRecoveryAttempts + "); retrying at the next stall check: " + refused.Message);
+                        captain.ProcessId = null;
+                        captain.LastHeartbeatUtc = DateTime.UtcNow;
+                        captain.LastUpdateUtc = DateTime.UtcNow;
+                        await _Database.Captains.UpdateAsync(captain, token).ConfigureAwait(false);
+
+                        mission.ProcessId = null;
+                        mission.LastUpdateUtc = DateTime.UtcNow;
+                        await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+                    }
                     catch (Exception ex)
                     {
                         _Logging.Warn(_Header + "recovery launch failed for captain " + captain.Id + ": " + ex.ToString());

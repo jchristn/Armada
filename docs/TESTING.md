@@ -118,7 +118,10 @@ scripts/common/run-db-parity-tests.sh --framework net8.0 --no-build
 The container images can be overridden with `ARMADA_POSTGRES_IMAGE` (default `postgres:17-alpine`),
 `ARMADA_MYSQL_IMAGE` (default `mysql:8.4`), and `ARMADA_SQLSERVER_IMAGE` (default
 `mcr.microsoft.com/mssql/server:2022-latest`); `ARMADA_SQLSERVER_SA_PASSWORD` sets the SQL Server SA password. The
-script requires Docker and exits non-zero if any provider has a failing test. On Windows,
+script requires Docker and exits non-zero if any provider has a failing test. A provider whose container cannot start
+(`docker run` fails, for example a missing image or a stopped Docker daemon) or exits before it is ready is reported
+as failed at once, with Docker's error or the container's last log lines, instead of after the readiness wait (about
+180 seconds). On Windows,
 `scripts\windows\run-db-parity-tests.bat` forwards to the same script (it needs `bash` from Git for Windows or WSL on `PATH`).
 
 Run the full suite at least against SQLite, and run the parity script for any change that touches the schema or a

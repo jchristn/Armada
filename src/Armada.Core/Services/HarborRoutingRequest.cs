@@ -32,6 +32,18 @@ namespace Armada.Core.Services
         /// </summary>
         public List<string> RequiredCapabilities { get; set; } = new List<string>();
 
+        /// <summary>
+        /// When true, only Harbors whose owning user equals <see cref="OwnerUserId"/> are candidates (shared and other
+        /// users' Harbors are excluded). Set for launches under <c>requireHarborForLaunch</c>. Defaults to false.
+        /// </summary>
+        public bool RestrictToOwner { get; set; } = false;
+
+        /// <summary>
+        /// The owning user a Harbor must belong to when <see cref="RestrictToOwner"/> is true (null matches only
+        /// Harbors with no owner).
+        /// </summary>
+        public string? OwnerUserId { get; set; } = null;
+
         #endregion
 
         #region Constructors-and-Factories

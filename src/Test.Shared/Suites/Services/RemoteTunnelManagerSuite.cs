@@ -95,6 +95,12 @@ namespace Test.Shared.Suites.Services
                 AssertFalse(manifest.Features.Contains("objective.create"), "Legacy objective tunnel methods should no longer be advertised");
             }));
 
+            cases.Add(Case("capability_manifest_default_protocol_version_matches_constant", "A new RemoteTunnelCapabilityManifest defaults to the current tunnel protocol version", TestTags.Positive, () =>
+            {
+                RemoteTunnelCapabilityManifest manifest = new RemoteTunnelCapabilityManifest();
+                AssertEqual(Constants.RemoteTunnelProtocolVersion, manifest.ProtocolVersion);
+            }));
+
             cases.Add(Case("get_status_defaults_to_disabled_when_feature_disabled", "GetStatus DefaultsToDisabledWhenFeatureDisabled", TestTags.Positive, () =>
             {
                 LoggingModule logging = new LoggingModule();

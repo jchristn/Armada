@@ -36,7 +36,8 @@ message arrives. That first message must be a `handshake`; anything else gets an
   under that credential's tenant and user; a global admin may name a tenant with `x-tenant-guid`.
 - Without a credential the link is accepted only when `harbor.requireAuth` is false, the Admiral listens on a loopback
   hostname, and the Harbor connects from loopback. The Harbor then registers with no owning user, in the tenant named
-  by `x-tenant-guid` (if any).
+  by `x-tenant-guid` (if any). The `x-user-guid` header is never read: a user comes only from a validated credential,
+  so a credential-less Harbor does not count as any user's Harbor for `requireHarborForLaunch`.
 - A refused Harbor receives `handshakeAck { accepted: false, reason }` and the link closes. A Harbor id already
   registered to a different tenant or user is refused the same way.
 
@@ -97,7 +98,10 @@ Admiral -> kill    { jobId, gracefulTimeoutMs }         (optional)
 Harbor  -> exited  { jobId, exitCode, durationMs, timeToFirstTokenMs }
 ```
 
-`capabilities` is a list of `{ name, available, detail }` objects. `kill.gracefulTimeoutMs` defaults to 10000. A
+`capabilities` is a list of `{ name, available, detail }` objects. A `handshake.maxConcurrentJobs` that is omitted or
+not positive means the Harbor advertises no capacity: a new registration gets `harbor.defaultMaxJobsPerHarbor` and an
+existing one keeps its capacity. The Admiral does not watch heartbeat timing: a Harbor is marked disconnected when its
+link closes. `kill.gracefulTimeoutMs` defaults to 10000. A
 Harbor that cannot launch (for example a build without a job runner) answers with `error { jobId, message }`.
 
 Delegate a git operation:

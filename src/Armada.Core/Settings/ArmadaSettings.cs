@@ -548,8 +548,11 @@ namespace Armada.Core.Settings
         /// When true, a mission is only assigned when an eligible Harbor owned by the requesting user (the
         /// mission's user) is connected; the Admiral never falls back to running the captain in-process or on
         /// another user's Harbor. Missions wait (stay Pending and are retried) until that user's Harbor
-        /// connects. When false (default), the Admiral delegates to a connected Harbor when one is available
-        /// and otherwise runs the captain locally.
+        /// connects. A Harbor's owning user comes only from the Armada credential it presents (its AccessKey);
+        /// a credential-less loopback Harbor has no owner, so it satisfies this only for missions with no user.
+        /// When false (default), the Admiral delegates to a connected Harbor when one is available and otherwise
+        /// runs the captain locally. Either way, a mission whose dock is already on a Harbor is never relaunched
+        /// on another Harbor; with this off it falls back to the Admiral host when that Harbor is unavailable.
         /// </summary>
         public bool RequireHarborForLaunch { get; set; } = false;
 
@@ -683,8 +686,10 @@ namespace Armada.Core.Settings
         }
 
         /// <summary>
-        /// How the Admiral executes host operations: Local (in-process, standalone) or Split (delegated to
-        /// attached Harbor runners). Defaults to Local.
+        /// Reserved: the intended deployment shape, Local (standalone, captains in-process) or Split (captains on
+        /// attached Harbor runners). Defaults to Local. Informational in 1.0: nothing reads it. Routing to Harbors
+        /// happens whenever a Harbor is connected, whatever this value, and <see cref="RequireHarborForLaunch"/> is
+        /// the setting that keeps captains off the Admiral host.
         /// </summary>
         public DeploymentModeEnum DeploymentMode { get; set; } = DeploymentModeEnum.Local;
 

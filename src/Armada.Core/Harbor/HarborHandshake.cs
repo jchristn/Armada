@@ -37,9 +37,11 @@ namespace Armada.Core.Harbor
         public string? Architecture { get; set; } = null;
 
         /// <summary>
-        /// Maximum concurrent jobs the Harbor will accept.
+        /// Maximum concurrent jobs the Harbor will accept. Zero or less (including an omitted field) means the Harbor
+        /// does not advertise a capacity: the Admiral then applies harbor.defaultMaxJobsPerHarbor to a new
+        /// registration and keeps the capacity of an existing one.
         /// </summary>
-        public int MaxConcurrentJobs { get; set; } = 4;
+        public int MaxConcurrentJobs { get; set; } = 0;
 
         /// <summary>
         /// Advertised capabilities (available runtimes and host tools).

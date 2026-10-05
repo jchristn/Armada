@@ -26,10 +26,16 @@ set "STOP_SCRIPT=%SCRIPT_DIR%\stop-armada-server.ps1"
 set "FORCE="
 set "WIPE_ALL="
 for %%A in (%*) do (
-    if /I "%%~A"=="-y" set "FORCE=1"
-    if /I "%%~A"=="--yes" set "FORCE=1"
-    if /I "%%~A"=="--force" set "FORCE=1"
-    if /I "%%~A"=="--all" set "WIPE_ALL=1"
+    set "KNOWN_ARG="
+    if /I "%%~A"=="-y" (set "FORCE=1" & set "KNOWN_ARG=1")
+    if /I "%%~A"=="--yes" (set "FORCE=1" & set "KNOWN_ARG=1")
+    if /I "%%~A"=="--force" (set "FORCE=1" & set "KNOWN_ARG=1")
+    if /I "%%~A"=="--all" (set "WIPE_ALL=1" & set "KNOWN_ARG=1")
+    if not defined KNOWN_ARG (
+        echo [factory-reset] Unknown argument: %%~A 1>&2
+        echo Usage: scripts\windows\factory-reset.bat [-y^|--yes^|--force] [--all] 1>&2
+        exit /b 2
+    )
 )
 
 if not exist "%ARMADA_DIR%" (

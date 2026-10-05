@@ -5,6 +5,7 @@ namespace Armada.Core.Services
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Core.Settings;
     using SyslogLogging;
 
     /// <summary>
@@ -20,6 +21,7 @@ namespace Armada.Core.Services
         private readonly string _Header = "[HarborService] ";
         private readonly DatabaseDriver _Database;
         private readonly LoggingModule _Logging;
+        private readonly HarborServerSettings? _ServerSettings;
 
         #endregion
 
@@ -31,9 +33,22 @@ namespace Armada.Core.Services
         /// <param name="database">Database driver.</param>
         /// <param name="logging">Logging module.</param>
         public HarborService(DatabaseDriver database, LoggingModule logging)
+            : this(database, logging, null)
+        {
+        }
+
+        /// <summary>
+        /// Instantiate with the Admiral's Harbor settings, read live: a Harbor that registers through its handshake
+        /// without advertising a capacity gets <see cref="HarborServerSettings.DefaultMaxJobsPerHarbor"/>.
+        /// </summary>
+        /// <param name="database">Database driver.</param>
+        /// <param name="logging">Logging module.</param>
+        /// <param name="serverSettings">Harbor server settings, or null to use the built-in default capacity (4).</param>
+        public HarborService(DatabaseDriver database, LoggingModule logging, HarborServerSettings? serverSettings)
         {
             _Database = database ?? throw new ArgumentNullException(nameof(database));
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
+            _ServerSettings = serverSettings;
         }
 
         #endregion
@@ -176,7 +191,9 @@ namespace Armada.Core.Services
         /// <param name="protocolVersion">Advertised protocol version.</param>
         /// <param name="osPlatform">Advertised OS platform.</param>
         /// <param name="architecture">Advertised architecture.</param>
-        /// <param name="maxConcurrentJobs">Advertised capacity.</param>
+        /// <param name="maxConcurrentJobs">Advertised capacity. Zero or less means the Harbor did not advertise one: a new
+        /// registration gets <see cref="HarborServerSettings.DefaultMaxJobsPerHarbor"/> and an existing one keeps its
+        /// capacity.</param>
         /// <param name="capabilities">Advertised capabilities.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The registered Harbor.</returns>
@@ -209,7 +226,7 @@ namespace Armada.Core.Services
                     ProtocolVersion = protocolVersion,
                     OsPlatform = osPlatform,
                     Architecture = architecture,
-                    MaxConcurrentJobs = maxConcurrentJobs,
+                    MaxConcurrentJobs = maxConcurrentJobs > 0 ? maxConcurrentJobs : (_ServerSettings?.DefaultMaxJobsPerHarbor ?? 4),
                     Capabilities = capabilities ?? new List<HarborCapability>(),
                     ConnectionStatus = HarborConnectionStatusEnum.Connected,
                     LastSeenUtc = now,
@@ -233,7 +250,7 @@ namespace Armada.Core.Services
             existing.ProtocolVersion = protocolVersion;
             existing.OsPlatform = osPlatform;
             existing.Architecture = architecture;
-            existing.MaxConcurrentJobs = maxConcurrentJobs;
+            if (maxConcurrentJobs > 0) existing.MaxConcurrentJobs = maxConcurrentJobs;
             existing.Capabilities = capabilities ?? new List<HarborCapability>();
             existing.ConnectionStatus = HarborConnectionStatusEnum.Connected;
             existing.LastSeenUtc = now;
