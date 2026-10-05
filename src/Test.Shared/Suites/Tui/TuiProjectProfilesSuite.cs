@@ -49,14 +49,14 @@ namespace Test.Shared.Suites.Tui
                 using (TuiTestHost host = TuiEntityFixtures.Open(stub, "/configuration?tab=project-profiles&status=active"))
                 {
                     ProjectProfilesScreen screen = TuiEntityFixtures.Screen<ProjectProfilesScreen>(host);
-                    TuiEntityFixtures.WaitForRequest(host, stub, "active=true");
+                    TuiEntityFixtures.WaitForQuery(host, stub, "GET", "/api/v1/project-profiles", "active", "true");
                     host.Press("/");
                     host.Type("web");
-                    TuiEntityFixtures.WaitForRequest(host, stub, "search=web");
+                    TuiEntityFixtures.WaitForQuery(host, stub, "GET", "/api/v1/project-profiles", "search", "web");
                     host.Press("esc");
                     TuiEntityFixtures.WaitFor(host, () => screen.Grid.Rows.Count == 25, "first page");
                     host.Press(">");
-                    TuiEntityFixtures.WaitForRequest(host, stub, "pageNumber=2");
+                    TuiEntityFixtures.WaitForQuery(host, stub, "GET", "/api/v1/project-profiles", "pageNumber", "2");
                     host.Press("<");
                     screen.Grid.SortBy("name", true);
                     TuiEntityFixtures.WaitFor(host, () => screen.Grid.Rows.Count > 0 && screen.Grid.Rows[0].Name == "Project 25", "sorted descending");
@@ -93,8 +93,9 @@ namespace Test.Shared.Suites.Tui
                     skills.Value = "dotnet\ntdd";
                     host.Press("ctrl+s");
                     TuiEntityFixtures.WaitFor(host, () => posted != null && !host.App.Modals.IsActive, "posted and closed");
-                    AssertTrue(posted!.Contains("\"Name\":\"Api project\""), "name: " + posted);
-                    AssertTrue(posted.Contains("\"Skills\":[\"dotnet\",\"tdd\"]"), "skills split");
+                    Armada.Core.Models.ProjectProfile sent = JsonHelper.Deserialize<Armada.Core.Models.ProjectProfile>(posted!);
+                    AssertEqual("Api project", sent.Name, "name: " + posted);
+                    AssertEqual("dotnet,tdd", String.Join(",", sent.Skills), "skills split: " + posted);
                 }
             }));
 
@@ -121,7 +122,7 @@ namespace Test.Shared.Suites.Tui
                     AssertTrue(overrides.ToggleCurrent(), "toggled");
                     host.Press("ctrl+s");
                     TuiEntityFixtures.WaitFor(host, () => put != null, "saved");
-                    AssertTrue(put!.Contains("\"Enabled\":false"), "override disabled: " + put);
+                    AssertTrue(JsonHelper.Deserialize<Armada.Core.Models.ProjectProfile>(put!).PersonaOverrides.Any(o => o.PersonaName == "Architect" && !o.Enabled), "override disabled: " + put);
                     screen.RunAction("preview");
                     TuiEntityFixtures.WaitFor(host, () => screen.Preview != null, "previewed");
                     AssertEqual("diff", screen.ActivePanel, "diff panel shown");

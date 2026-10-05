@@ -4,6 +4,7 @@ namespace Test.Shared.Suites.Tui
     using System.Collections.Generic;
     using System.Linq;
     using System.Net;
+    using Armada.Core.Models;
     using Armada.Tui.Modals;
     using Armada.Tui.Screens.Delivery;
     using Test.Shared.Infrastructure;
@@ -46,11 +47,11 @@ namespace Test.Shared.Suites.Tui
                 using (TuiTestHost host = TuiEntityFixtures.Open(stub, "/delivery?tab=deployments&status=PendingApproval"))
                 {
                     DeploymentsScreen screen = TuiEntityFixtures.Screen<DeploymentsScreen>(host);
-                    TuiEntityFixtures.WaitForRequest(host, stub, "GET /api/v1/deployments?status=PendingApproval");
+                    TuiEntityFixtures.WaitForQuery(host, stub, "GET", "/api/v1/deployments", "status", "PendingApproval");
                     AssertEqual("PendingApproval", screen.Filters.Value("status"), "deep-linked filter");
                     host.Press("/");
                     host.Type("web");
-                    TuiEntityFixtures.WaitForRequest(host, stub, "search=web");
+                    TuiEntityFixtures.WaitForQuery(host, stub, "GET", "/api/v1/deployments", "search", "web");
                     host.Press("esc");
                     AssertTrue(ReferenceEquals(screen.Scope.Focused, screen.Grid), "esc returns to the grid");
                 }
@@ -66,7 +67,7 @@ namespace Test.Shared.Suites.Tui
                     DeploymentsScreen screen = TuiEntityFixtures.Screen<DeploymentsScreen>(host);
                     TuiEntityFixtures.WaitFor(host, () => screen.Grid.Rows.Count == 25, "first page");
                     host.Press(">");
-                    TuiEntityFixtures.WaitForRequest(host, stub, "GET /api/v1/deployments?pageNumber=2");
+                    TuiEntityFixtures.WaitForQuery(host, stub, "GET", "/api/v1/deployments", "pageNumber", "2");
                     host.Press("<");
                     screen.Grid.SortBy("title", true);
                     TuiEntityFixtures.WaitFor(host, () => screen.Grid.Rows.Count > 0 && screen.Grid.Rows[0].Title == "Deploy 25", "sorted descending");
@@ -111,8 +112,9 @@ namespace Test.Shared.Suites.Tui
                     title.Value = "Hotfix";
                     host.Press("ctrl+s");
                     TuiEntityFixtures.WaitFor(host, () => posted != null && !host.App.Modals.IsActive, "posted and closed");
-                    AssertTrue(posted!.Contains("\"Title\":\"Hotfix\""), "title in payload: " + posted);
-                    AssertTrue(posted.Contains("\"AutoExecute\":true"), "auto execute in payload");
+                    DeploymentUpsertRequest sent = JsonHelper.Deserialize<DeploymentUpsertRequest>(posted!);
+                    AssertEqual("Hotfix", sent.Title, "title in payload: " + posted);
+                    AssertEqual(true, sent.AutoExecute, "auto execute in payload");
                 }
             }));
 

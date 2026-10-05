@@ -5,6 +5,7 @@ namespace Test.Shared.Suites.Tui
     using System.Linq;
     using Armada.Tui.Screens;
     using Armada.Tui.Screens.Operations;
+    using Armada.Tui.Services;
     using Test.Shared.Infrastructure;
     using Touchstone.Core;
     using static Test.Shared.Infrastructure.Asserts;
@@ -39,10 +40,15 @@ namespace Test.Shared.Suites.Tui
                     TuiCase.Contains(host.Screen(), "style.md (Attach Into Worktree)", "playbooks pre-filled");
                     TuiCase.Contains(host.Screen(), "Vessel Readiness", "readiness");
                     host.Press("ctrl+s");
-                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/voyages") == 1), "create voyage");
-                    string body = stub.Bodies.Last(b => b.Contains("Fix it"));
-                    AssertTrue(body.Contains("\"Title\":\"My voyage\"") && body.Contains("\"Pipeline\":\"Reviewed\"") && body.Contains("\"Priority\":100") && body.Contains("\"Persona\":\"Worker\"") && body.Contains("pbk_1"), "voyage body: " + body);
-                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.ActiveToasts().Any(t => t.Text.Contains("Dispatched voyage with 2 pipeline stages"))), "toast");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/voyages") == 1), "create voyage");
+                    StubRequest create = stub.Last("POST", "/api/v1/voyages");
+                    Armada.Client.Models.VoyageCreateRequest voyage = create.BodyAs<Armada.Client.Models.VoyageCreateRequest>();
+                    AssertEqual("My voyage", voyage.Title, "voyage title: " + create.Body);
+                    AssertEqual("Reviewed", voyage.Pipeline, "voyage pipeline: " + create.Body);
+                    AssertTrue(voyage.Missions.Any(m => (m.Title == "Fix it" || m.Description == "Fix it") && m.Priority == 100), "mission from the prompt at priority 100: " + create.Body);
+                    AssertTrue(voyage.CaptainAssignments != null && voyage.CaptainAssignments.Any(a => a.Persona == "Worker"), "worker step captain: " + create.Body);
+                    AssertTrue(voyage.SelectedPlaybooks != null && voyage.SelectedPlaybooks.Any(p => p.PlaybookId == "pbk_1"), "playbook: " + create.Body);
+                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.ActiveToasts().Any(t => t.Severity == NotificationSeverityEnum.Success && t.Text.Contains("Dispatched voyage with 2 pipeline stages"))), "toast");
                     AssertTrue(host.PumpUntil(() => host.Tui.Context.Router.Current!.Path == "/voyages/vyg_9", 4000), "navigates to the voyage");
                 }
             }));
@@ -65,8 +71,9 @@ namespace Test.Shared.Suites.Tui
                     screen.Vessel.Choose(screen.Vessel.Options.First(o => o.Value == "vsl_demo"));
                     screen.StepTiers["*"].Choose(screen.StepTiers["*"].Options.First(o => o.Value == "Premium"));
                     host.Press("ctrl+s");
-                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/voyages") == 1), "create voyage");
-                    AssertTrue(stub.Bodies.Any(b => b.Contains("\"Persona\":\"*\"") && b.Contains("Premium")), "wildcard assignment with fallback tier");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/voyages") == 1), "create voyage");
+                    Armada.Client.Models.VoyageCreateRequest failed = stub.Last("POST", "/api/v1/voyages").BodyAs<Armada.Client.Models.VoyageCreateRequest>();
+                    AssertTrue(failed.CaptainAssignments != null && failed.CaptainAssignments.Any(a => a.Persona == "*" && a.FallbackTier == Armada.Core.Enums.CaptainTierEnum.Premium), "wildcard assignment with fallback tier");
                     AssertTrue(host.WaitForText("Failed: Vessel is busy"), "failure message\n" + host.Screen());
                 }
             }));

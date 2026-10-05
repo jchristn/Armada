@@ -53,12 +53,12 @@ namespace Test.Shared.Suites.Tui
                 using (TuiTestHost host = TuiEntityFixtures.Open(stub, "/delivery?tab=checks&source=External&type=UnitTest"))
                 {
                     ChecksScreen screen = TuiEntityFixtures.Screen<ChecksScreen>(host);
-                    TuiEntityFixtures.WaitForRequest(host, stub, "source=External");
-                    TuiEntityFixtures.WaitForRequest(host, stub, "type=UnitTest");
+                    TuiEntityFixtures.WaitForQuery(host, stub, "GET", "/api/v1/check-runs", "source", "External");
+                    TuiEntityFixtures.WaitForRequest(host, stub, "GET", "/api/v1/check-runs", r => r.QueryValue("source") == "External" && r.QueryValue("type") == "UnitTest", "source and type");
                     AssertEqual("External", screen.Filters.Value("source"), "deep-linked source");
                     SelectField<string> status = (SelectField<string>)screen.Filters.Field("status")!;
                     status.Choose(status.Options.First(o => o.Value == "Failed"));
-                    TuiEntityFixtures.WaitForRequest(host, stub, "status=Failed");
+                    TuiEntityFixtures.WaitForQuery(host, stub, "GET", "/api/v1/check-runs", "status", "Failed");
                 }
             }));
 
@@ -72,7 +72,7 @@ namespace Test.Shared.Suites.Tui
                     ChecksScreen screen = TuiEntityFixtures.Screen<ChecksScreen>(host);
                     TuiEntityFixtures.WaitFor(host, () => screen.Grid.Rows.Count == 25, "first page");
                     host.Press(">");
-                    TuiEntityFixtures.WaitForRequest(host, stub, "GET /api/v1/check-runs?pageNumber=2");
+                    TuiEntityFixtures.WaitForQuery(host, stub, "GET", "/api/v1/check-runs", "pageNumber", "2");
                     host.Press("<");
                     screen.Grid.SortBy("created", true);
                     TuiEntityFixtures.WaitFor(host, () => screen.Grid.Rows.Count > 0 && screen.Grid.Rows[0].Id == "chk_25", "sorted by created descending");
@@ -117,8 +117,8 @@ namespace Test.Shared.Suites.Tui
                     AssertTrue(host.App.Modals.Top is FormDialog, "dialog stays open");
                     SelectField<string> vessel = (SelectField<string>)dialog.Form.Rows.First(r => r.Label == "Vessel").Field!;
                     vessel.Choose(vessel.Options.First(o => o.Value == "vsl_1"));
-                    TuiEntityFixtures.WaitForRequest(host, stub, "GET /api/v1/workflow-profiles/preview/vessels/vsl_1");
-                    TuiEntityFixtures.WaitForRequest(host, stub, "GET /api/v1/vessels/vsl_1/readiness");
+                    TuiEntityFixtures.WaitForRequest(host, stub, "GET", "/api/v1/workflow-profiles/preview/vessels/vsl_1");
+                    TuiEntityFixtures.WaitForRequest(host, stub, "GET", "/api/v1/vessels/vsl_1/readiness");
                     TuiEntityFixtures.WaitFor(host, () => host.Screen().Contains("Default profile (Global)"), "resolved profile shown");
                     TuiEntityFixtures.WaitFor(host, () => host.Screen().Contains("Ready"), "preflight shown");
                     SelectField<string> type = (SelectField<string>)dialog.Form.Rows.First(r => r.Label == "Check Type").Field!;
@@ -126,8 +126,9 @@ namespace Test.Shared.Suites.Tui
                     ((InputField)dialog.Form.Rows.First(r => r.Label == "Label").Field!).Value = "Smoke";
                     host.Press("ctrl+s");
                     TuiEntityFixtures.WaitFor(host, () => posted != null && !host.App.Modals.IsActive, "posted and closed");
-                    AssertTrue(posted!.Contains("\"VesselId\":\"vsl_1\""), "vessel in payload: " + posted);
-                    AssertTrue(posted.Contains("\"Label\":\"Smoke\""), "label in payload");
+                    CheckRunRequest sent = JsonHelper.Deserialize<CheckRunRequest>(posted!);
+                    AssertEqual("vsl_1", sent.VesselId, "vessel in payload: " + posted);
+                    AssertEqual("Smoke", sent.Label, "label in payload");
                     TuiEntityFixtures.WaitFor(host, () => host.Tui.Context.Router.Current!.Path == "/checks/chk_new", "navigated to the run");
                 }
             }));

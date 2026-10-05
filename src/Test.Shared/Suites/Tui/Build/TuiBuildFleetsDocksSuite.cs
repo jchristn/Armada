@@ -5,6 +5,7 @@ namespace Test.Shared.Suites.Tui.Build
     using System.Linq;
     using Armada.Tui.Screens;
     using Armada.Tui.Screens.Build;
+    using Armada.Tui.Services;
     using Test.Shared.Infrastructure;
     using Touchstone.Core;
     using static Test.Shared.Infrastructure.Asserts;
@@ -48,25 +49,28 @@ namespace Test.Shared.Suites.Tui.Build
                     AssertTrue(host.WaitForText("Name is required."), "name required");
                     host.Type("Data");
                     host.Press("ctrl+s");
-                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/fleets") == 1), "create call");
-                    AssertTrue(stub.Bodies.Any(b => b.Contains("\"Name\":\"Data\"")), "create body");
-                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.ActiveToasts().Any(t => t.Text.Contains("Fleet \"Data\" created."))), "create toast");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/fleets") == 1), "create call");
+                    AssertEqual("Data", stub.LastBody<Armada.Core.Models.Fleet>("POST", "/api/v1/fleets").Name, "create body");
+                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.ActiveToasts().Any(t => t.Severity == NotificationSeverityEnum.Success && t.Text.Contains("Fleet \"Data\" created."))), "create toast");
                     host.Press("down");
                     AssertEqual("flt_web", screen.Grid.Current!.Id, "web row");
                     host.Press("e");
                     AssertTrue(host.WaitForText("Edit Fleet"), "edit form");
                     host.Type("2");
                     host.Press("ctrl+s");
-                    AssertTrue(host.PumpUntil(() => stub.Count("PUT /api/v1/fleets/flt_web") == 1), "update call");
-                    string body = stub.Bodies.Last(b => b.Contains("Web2"));
-                    AssertTrue(body.Contains("\"DefaultPipelineId\":\"ppl_std\"") && body.Contains("\"Description\":\"Frontend repos\""), "full record: " + body);
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("PUT", "/api/v1/fleets/flt_web") == 1), "update call");
+                    StubRequest update = stub.Last("PUT", "/api/v1/fleets/flt_web");
+                    Armada.Core.Models.Fleet updated = update.BodyAs<Armada.Core.Models.Fleet>();
+                    AssertEqual("Web2", updated.Name, "edited name: " + update.Body);
+                    AssertEqual("ppl_std", updated.DefaultPipelineId, "full record keeps the pipeline: " + update.Body);
+                    AssertEqual("Frontend repos", updated.Description, "full record keeps the description: " + update.Body);
                     host.Press("home");
                     host.Press("del");
                     TuiCase.Contains(host.Screen(), "Delete fleet \"Ops\"? This cannot be undone.", "delete text");
                     host.Press("y");
-                    AssertTrue(host.PumpUntil(() => stub.Count("DELETE /api/v1/fleets/flt_ops") == 1), "delete call");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("DELETE", "/api/v1/fleets/flt_ops") == 1), "delete call");
                     host.Press("u");
-                    AssertTrue(host.PumpUntil(() => stub.Bodies.Any(b => b.Contains("\"Name\":\"Ops (Copy)\""))), "duplicate body");
+                    AssertTrue(host.PumpUntil(() => stub.BodiesFor<Armada.Core.Models.Fleet>("POST", "/api/v1/fleets").Any(f => f.Name == "Ops (Copy)")), "duplicate body");
                     AssertTrue(host.PumpUntil(() => host.Tui.Context.Router.Current!.Path == "/fleets/flt_new"), "duplicate opens the copy");
                 }
             }));
@@ -111,7 +115,7 @@ namespace Test.Shared.Suites.Tui.Build
                     host.Press("del");
                     TuiCase.Contains(host.Screen(), "This will clean up the git worktree", "delete text");
                     host.Press("y");
-                    AssertTrue(host.PumpUntil(() => stub.Count("DELETE /api/v1/docks/dck_2") == 1), "delete call");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("DELETE", "/api/v1/docks/dck_2") == 1), "delete call");
                     host.Tui.Context.Navigate("/docks/dck_1");
                     AssertTrue(host.WaitForText("Starting Point"), "anchors\n" + host.Screen());
                     string frame = host.Screen();
@@ -122,7 +126,7 @@ namespace Test.Shared.Suites.Tui.Build
                     host.Press("del");
                     TuiCase.Contains(host.Screen(), "Delete dock dck_1?", "detail delete text");
                     host.Press("y");
-                    AssertTrue(host.PumpUntil(() => stub.Count("DELETE /api/v1/docks/dck_1") == 1), "detail delete");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("DELETE", "/api/v1/docks/dck_1") == 1), "detail delete");
                     AssertTrue(host.PumpUntil(() => host.Tui.Context.Router.Current!.Path == "/captains"), "back to docks");
                 }
             }));

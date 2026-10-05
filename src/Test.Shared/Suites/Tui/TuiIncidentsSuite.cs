@@ -51,11 +51,11 @@ namespace Test.Shared.Suites.Tui
                 using (TuiTestHost host = TuiEntityFixtures.Open(stub, "/delivery?tab=incidents&severity=Critical"))
                 {
                     IncidentsScreen screen = TuiEntityFixtures.Screen<IncidentsScreen>(host);
-                    TuiEntityFixtures.WaitForRequest(host, stub, "severity=Critical");
+                    TuiEntityFixtures.WaitForQuery(host, stub, "GET", "/api/v1/incidents", "severity", "Critical");
                     AssertEqual("Critical", screen.Filters.Value("severity"), "deep-linked filter");
                     host.Press("/");
                     host.Type("outage");
-                    TuiEntityFixtures.WaitForRequest(host, stub, "search=outage");
+                    TuiEntityFixtures.WaitForQuery(host, stub, "GET", "/api/v1/incidents", "search", "outage");
                     host.Press("esc");
                     AssertTrue(ReferenceEquals(screen.Scope.Focused, screen.Grid), "esc returns to the grid");
                 }
@@ -71,7 +71,7 @@ namespace Test.Shared.Suites.Tui
                     IncidentsScreen screen = TuiEntityFixtures.Screen<IncidentsScreen>(host);
                     TuiEntityFixtures.WaitFor(host, () => screen.Grid.Rows.Count == 25, "first page");
                     host.Press(">");
-                    TuiEntityFixtures.WaitForRequest(host, stub, "GET /api/v1/incidents?pageNumber=2");
+                    TuiEntityFixtures.WaitForQuery(host, stub, "GET", "/api/v1/incidents", "pageNumber", "2");
                     host.Press("<");
                     screen.Grid.SortBy("title", true);
                     TuiEntityFixtures.WaitFor(host, () => screen.Grid.Rows.Count > 0 && screen.Grid.Rows[0].Title == "Incident 25", "sorted descending");
@@ -125,9 +125,10 @@ namespace Test.Shared.Suites.Tui
                     title.Value = "DB failover";
                     host.Press("ctrl+s");
                     TuiEntityFixtures.WaitFor(host, () => posted != null && !host.App.Modals.IsActive, "posted and closed");
-                    AssertTrue(posted!.Contains("\"Title\":\"DB failover\""), "title in payload: " + posted);
-                    AssertTrue(posted.Contains("\"Severity\":\"High\""), "default severity in payload: " + posted);
-                    AssertTrue(posted.Contains("\"Status\":\"Open\""), "default status in payload");
+                    IncidentUpsertRequest sent = JsonHelper.Deserialize<IncidentUpsertRequest>(posted!);
+                    AssertEqual("DB failover", sent.Title, "title in payload: " + posted);
+                    AssertEqual(IncidentSeverityEnum.High, sent.Severity, "default severity in payload: " + posted);
+                    AssertEqual(IncidentStatusEnum.Open, sent.Status, "default status in payload");
                 }
             }));
 
@@ -174,7 +175,9 @@ namespace Test.Shared.Suites.Tui
                     TuiCase.Contains(host.Screen(), "Rollback deployment \"dpl_1\" and attach the result to this incident?", "confirm text");
                     host.Press("y");
                     TuiEntityFixtures.WaitFor(host, () => rolledBack && update != null, "rollback and update");
-                    AssertTrue(update!.Contains("\"Status\":\"RolledBack\"") && update.Contains("\"RollbackDeploymentId\":\"dpl_1\""), "update payload: " + update);
+                    IncidentUpsertRequest updated = JsonHelper.Deserialize<IncidentUpsertRequest>(update!);
+                    AssertEqual(IncidentStatusEnum.RolledBack, updated.Status, "update status: " + update);
+                    AssertEqual("dpl_1", updated.RollbackDeploymentId, "update rollback deployment: " + update);
                     host.Press("]");
                     AssertEqual("runbooks", screen.ActivePanel, "next panel");
                 }

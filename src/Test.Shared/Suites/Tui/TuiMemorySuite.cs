@@ -41,11 +41,11 @@ namespace Test.Shared.Suites.Tui
                 using (TuiTestHost host = TuiEntityFixtures.Open(stub, "/configuration?tab=memory&type=Procedural"))
                 {
                     MemoryScreen screen = TuiEntityFixtures.Screen<MemoryScreen>(host);
-                    TuiEntityFixtures.WaitForRequest(host, stub, "type=Procedural");
+                    TuiEntityFixtures.WaitForQuery(host, stub, "GET", "/api/v1/memories", "type", "Procedural");
                     host.Press("/");
                     host.Press("tab");
                     host.Type("fri");
-                    TuiEntityFixtures.WaitForRequest(host, stub, "search=fri");
+                    TuiEntityFixtures.WaitForQuery(host, stub, "GET", "/api/v1/memories", "search", "fri");
                 }
             }));
 
@@ -59,7 +59,7 @@ namespace Test.Shared.Suites.Tui
                     MemoryScreen screen = TuiEntityFixtures.Screen<MemoryScreen>(host);
                     TuiEntityFixtures.WaitFor(host, () => screen.Grid.Rows.Count == 25, "first page");
                     host.Press(">");
-                    TuiEntityFixtures.WaitForRequest(host, stub, "GET /api/v1/memories?pageNumber=2");
+                    TuiEntityFixtures.WaitForQuery(host, stub, "GET", "/api/v1/memories", "pageNumber", "2");
                     host.Press("<");
                     screen.Grid.SortBy("salience", true);
                     TuiEntityFixtures.WaitFor(host, () => screen.Grid.Rows.Count > 0 && screen.Grid.Rows[0].Id == "mem_25", "sorted by salience");
@@ -110,7 +110,9 @@ namespace Test.Shared.Suites.Tui
                     TuiConfigTestHelpers.Input(dialog, "Tags").Value = "ops, upgrades";
                     host.Press("ctrl+s");
                     TuiEntityFixtures.WaitFor(host, () => box.Body != null && !host.App.Modals.IsActive, "posted");
-                    AssertTrue(box.Body!.Contains("Restart the agent after upgrades.") && box.Body.Contains("\"upgrades\""), "payload: " + box.Body);
+                    Armada.Core.Models.Memory sent = box.As<Armada.Core.Models.Memory>();
+                    AssertEqual("Restart the agent after upgrades.", sent.Content, "content: " + box.Body);
+                    AssertTrue(sent.Tags.Contains("upgrades") && sent.Tags.Contains("ops"), "tags split: " + box.Body);
                 }
             }));
 

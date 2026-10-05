@@ -93,7 +93,9 @@ namespace Test.Shared.Suites.Tui
                     TuiConfigTestHelpers.Input(dialog, "Name").Value = "laptop";
                     host.Press("ctrl+s");
                     TuiEntityFixtures.WaitFor(host, () => box.Body != null && !host.App.Modals.IsActive, "posted");
-                    AssertTrue(box.Body!.Contains("\"MaxConcurrentJobs\":8") && box.Body.Contains("\"Name\":\"laptop\""), "payload: " + box.Body);
+                    Armada.Core.Models.Harbor sent = box.As<Armada.Core.Models.Harbor>();
+                    AssertEqual(8, sent.MaxConcurrentJobs, "max concurrent jobs: " + box.Body);
+                    AssertEqual("laptop", sent.Name, "name: " + box.Body);
                 }
             }));
 

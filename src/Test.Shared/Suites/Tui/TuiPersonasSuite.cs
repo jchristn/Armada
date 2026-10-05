@@ -114,9 +114,10 @@ namespace Test.Shared.Suites.Tui
                     template.Choose(template.Options.First(o => o.Value == "persona.worker"));
                     host.Press("ctrl+s");
                     TuiEntityFixtures.WaitFor(host, () => posted != null && !host.App.Modals.IsActive, "posted");
-                    AssertTrue(posted!.Contains("\"Name\":\"Reviewer\""), "name: " + posted);
-                    AssertTrue(posted.Contains("\"PromptTemplateName\":\"persona.worker\""), "template: " + posted);
-                    AssertTrue(posted.Contains("\"Scope\":\"TenantWide\""), "scope: " + posted);
+                    Armada.Core.Models.Persona sent = JsonHelper.Deserialize<Armada.Core.Models.Persona>(posted!);
+                    AssertEqual("Reviewer", sent.Name, "name: " + posted);
+                    AssertEqual("persona.worker", sent.PromptTemplateName, "template: " + posted);
+                    AssertEqual("TenantWide", JsonShape.TopLevelProperty(posted!, "Scope")?.ScalarText, "scope sent explicitly (TenantWide is also the model default): " + posted);
                 }
             }));
 
@@ -149,7 +150,7 @@ namespace Test.Shared.Suites.Tui
                     AssertTrue(screen.VisibleActions().Contains("Save Prompt"), "save offered when dirty");
                     screen.RunAction("save-prompt");
                     TuiEntityFixtures.WaitFor(host, () => saved != null, "saved");
-                    AssertTrue(saved!.Contains("\"Content\":\"Edited content\""), "content: " + saved);
+                    AssertEqual("Edited content", JsonHelper.Deserialize<Armada.Client.Models.PromptTemplateUpdateRequest>(saved!).Content, "content: " + saved);
                     screen.RunAction("reset-prompt");
                     TuiCase.Contains(host.Screen(), "Your customizations will be lost.", "confirm");
                     host.Press("y");

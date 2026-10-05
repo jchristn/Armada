@@ -114,10 +114,12 @@ namespace Test.Shared.Suites.Tui
                     TuiEntityFixtures.WaitFor(host, () => stages.Items.Count == 1 && ReferenceEquals(host.App.Modals.Top, dialog), "stage added");
                     host.Press("ctrl+s");
                     TuiEntityFixtures.WaitFor(host, () => posted != null && !host.App.Modals.IsActive, "posted");
-                    AssertTrue(posted!.Contains("\"Name\":\"Mine\""), "name: " + posted);
-                    AssertTrue(posted.Contains("\"PersonaName\":\"Worker\""), "stage persona: " + posted);
-                    AssertTrue(posted.Contains("\"RequiresReview\":true"), "review gate: " + posted);
-                    AssertTrue(posted.Contains("\"Order\":1"), "order: " + posted);
+                    Pipeline sent = JsonHelper.Deserialize<Pipeline>(posted!);
+                    AssertEqual("Mine", sent.Name, "name: " + posted);
+                    AssertEqual(1, sent.Stages.Count, "one stage: " + posted);
+                    AssertEqual("Worker", sent.Stages[0].PersonaName, "stage persona: " + posted);
+                    AssertTrue(sent.Stages[0].RequiresReview, "review gate: " + posted);
+                    AssertEqual(1, sent.Stages[0].Order, "order: " + posted);
                 }
             }));
 
@@ -141,8 +143,9 @@ namespace Test.Shared.Suites.Tui
                     TuiCase.Contains(host.Screen(), "Run: Reviewed", "default title");
                     host.Press("ctrl+s");
                     TuiEntityFixtures.WaitFor(host, () => posted != null && host.Tui.Context.Router.Current!.Path == "/voyages/vyg_run", "voyage opened");
-                    AssertTrue(posted!.Contains("\"Pipeline\":\"Reviewed\""), "pipeline: " + posted);
-                    AssertTrue(posted.Contains("\"VesselId\":\"vsl_1\""), "vessel: " + posted);
+                    Armada.Client.Models.VoyageCreateRequest voyage = JsonHelper.Deserialize<Armada.Client.Models.VoyageCreateRequest>(posted!);
+                    AssertEqual("Reviewed", voyage.Pipeline, "pipeline: " + posted);
+                    AssertEqual("vsl_1", voyage.VesselId, "vessel: " + posted);
                 }
             }));
 
