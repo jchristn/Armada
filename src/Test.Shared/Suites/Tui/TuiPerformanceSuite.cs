@@ -191,16 +191,22 @@ namespace Test.Shared.Suites.Tui
                     TuiPerfProbe.Report("idle.cpu.ask5000.governed", on, "percent of one core");
                     TuiPerfProbe.Report("idle.redraws.ask5000.governed_per_2_5s", redraws, "redraws");
                     AssertTrue(redraws <= 40, "idle redraws limited to the idle tick (measured " + redraws + " in 2.5 s)");
-                    AssertTrue(on < 10, "governed idle CPU under 10 percent of a core even on a busy test machine (measured " + on + ")");
+                    // CPU percentages depend on the machine and its load (a shared CI runner measured 10 percent where a
+                    // workstation measures 1), so compare against the ungoverned loop measured here, in this run. The
+                    // redraw count above is the deterministic check.
+                    AssertTrue(on <= off * 0.5 + 1.0, "governed idle CPU at most half the ungoverned loop (governed " + on + ", ungoverned " + off + ")");
                 }
 
                 using (TuiTestHost host = TuiCase.SignedIn(120, 40, "/jobs"))
                 {
                     double off = IdleCpu(host, false, 2000);
                     TuiPerfProbe.Report("idle.cpu.jobs.ungoverned", off, "percent of one core");
+                    long before = host.Tui.Frames.Composed;
                     double on = IdleCpu(host, true, 2000);
+                    long redraws = host.Tui.Frames.Composed - before;
                     TuiPerfProbe.Report("idle.cpu.jobs.governed", on, "percent of one core");
-                    AssertTrue(on < 10, "governed idle CPU under 10 percent of a core (measured " + on + ")");
+                    AssertTrue(redraws <= 40, "idle redraws limited to the idle tick (measured " + redraws + " in 2.5 s)");
+                    AssertTrue(on <= off * 0.5 + 1.0, "governed idle CPU at most half the ungoverned loop (governed " + on + ", ungoverned " + off + ")");
                 }
             }));
 

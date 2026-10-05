@@ -35,7 +35,7 @@ namespace Test.Shared.Suites.Tui
                     TuiCase.Contains(frame, "armada/fix-tables -> main", "preview branches");
                     TuiCase.Contains(frame, "No landing blockers are currently predicted for this mission.", "no blockers");
                     AssertTrue(host.WaitForText("acme/demo"), "pull request repository\n" + host.Screen());
-                    TuiCase.Contains(host.Screen(), "build  completed / success", "pr check");
+                    AssertTrue(host.WaitForText("build  completed / success"), "pr check (loads after the pull request)\n" + host.Screen());
                     host.Press("/").Type("Waiting").Press("enter");
                     TuiCase.Contains(host.Screen(), "Waiting Review", "review gate field");
                     host.Press("]");
