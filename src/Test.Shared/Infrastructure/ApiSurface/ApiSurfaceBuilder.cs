@@ -369,12 +369,15 @@ namespace Test.Shared.Infrastructure.ApiSurface
                     continue;
                 }
 
+                Type enumType = Nullable.GetUnderlyingType(propertyType) ?? propertyType;
                 result.Add(new ApiSettingKey
                 {
                     Key = key,
                     Type = TypeLabel(propertyType),
                     Default = DefaultJson(value),
-                    Experimental = ExperimentalSurface.IsExperimentalSetting(key)
+                    Experimental = ExperimentalSurface.IsExperimentalSetting(key),
+                    EnumName = enumType.IsEnum ? enumType.Name : null,
+                    EnumValues = enumType.IsEnum ? new List<string>(Enum.GetNames(enumType)) : null
                 });
             }
         }

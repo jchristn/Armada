@@ -14,6 +14,7 @@ namespace Test.Shared.Suites.Tui
     using Armada.Tui.Services;
     using Armada.Tui.Services.Credentials;
     using Test.Shared.Infrastructure;
+    using Test.Shared.Suites.Tui.Bodies;
     using Touchstone.Core;
     using static Test.Shared.Infrastructure.Asserts;
 
@@ -206,13 +207,14 @@ namespace Test.Shared.Suites.Tui
                 history.PageNumber = 1;
                 string hq = ArmadaQueryString.FromObject(history);
                 AssertStartsWith("?sourceType=request%2Cevent&pageNumber=1", hq, "sourceType first, then paging");
-                AssertFalse(hq.Contains("postmortemOnly"), "false booleans skipped");
+                AssertFalse(QueryString.Parse(hq).ContainsKey("postmortemOnly"), "false booleans skipped");
                 RequestHistoryQuery req = new RequestHistoryQuery();
                 req.Route = "/api/v1/missions";
                 req.IsSuccess = false;
                 string q = ArmadaQueryString.FromObject(req);
-                AssertTrue(q.Contains("route=/api/v1/missions"), "route keeps slashes");
-                AssertTrue(q.Contains("isSuccess=false"), "nullable false sent");
+                AssertEqual("/api/v1/missions", QueryString.Get(q, "route"), "route value");
+                AssertTrue(q.TrimStart('?').Split('&').Contains("route=/api/v1/missions"), "route keeps slashes (not percent-encoded): " + q);
+                AssertEqual("false", QueryString.Get(q, "isSuccess"), "nullable false sent");
                 AssertEqual("L3RtcD_CvA", ArmadaQueryString.Base64Url("/tmp?\u00bc"), "base64url without padding");
             }));
 
@@ -308,8 +310,8 @@ namespace Test.Shared.Suites.Tui
                     await socket.StopAsync();
                     AssertTrue(reconnected >= 2, "event");
                     lock (deltas) AssertTrue(deltas.Count >= 2 && deltas.All(d => d == "Hi"), "typed payloads");
-                    AssertTrue(FakeSocketTransport.Sent.Any(t => t.Contains("\"Route\":\"subscribe\"")), "subscribe sent");
-                    AssertTrue(FakeSocketTransport.Connected.Any(u => u.Query.Contains("token=tok_1")), "token in url");
+                    AssertTrue(FakeSocketTransport.Sent.Any(t => JsonHelper.Deserialize<SocketRouteFrame>(t).Route == "subscribe"), "subscribe sent");
+                    AssertTrue(FakeSocketTransport.Connected.Any(u => QueryString.Get(u.Query, "token") == "tok_1"), "token in url");
                     AssertFalse(socket.IsConnected, "stopped");
                 }
             }));

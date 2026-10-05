@@ -182,12 +182,7 @@ namespace Test.Shared.Suites.E2E
                 HttpClient authClient = fx.AuthClient;
 
                 HttpResponseMessage response = await authClient.GetAsync("/api/v1/fleets/flt_nonexistent");
-                ArmadaErrorResponse error = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(response);
-
-                Assert(
-                    !string.IsNullOrEmpty(error.Error) ||
-                    !string.IsNullOrEmpty(error.Message),
-                    "Response should contain an Error or Message property");
+                await E2eApiErrorAssert.ExpectAsync(response, HttpStatusCode.NotFound, "Response should contain an Error or Message property");
             }));
 
             cases.Add(CaseAsync("get_fleet_not_found_status_code_is_not_200_or_body_has_error", "Get Fleet Not Found Status Code Is Not 200 Or Body Has Error", TestTags.Negative, async () =>
@@ -196,11 +191,7 @@ namespace Test.Shared.Suites.E2E
                 HttpClient authClient = fx.AuthClient;
 
                 HttpResponseMessage response = await authClient.GetAsync("/api/v1/fleets/flt_doesnotexist");
-                string body = await response.Content.ReadAsStringAsync();
-                Assert(
-                    response.StatusCode != HttpStatusCode.OK ||
-                    body.Contains("Error") || body.Contains("Message") || body.Contains("not found", StringComparison.OrdinalIgnoreCase),
-                    "Not-found fleet should return non-200 status or error in body");
+                await E2eApiErrorAssert.ExpectAsync(response, HttpStatusCode.NotFound, "Not-found fleet returns a typed 404");
             }));
 
             cases.Add(CaseAsync("get_fleet_returns_all_expected_properties", "Get Fleet Returns All Expected Properties", TestTags.Positive, async () =>
@@ -346,23 +337,7 @@ namespace Test.Shared.Suites.E2E
                 HttpClient authClient = fx.AuthClient;
 
                 HttpResponseMessage response = await authClient.DeleteAsync("/api/v1/fleets/flt_nonexistent_delete");
-                string body = await response.Content.ReadAsStringAsync();
-
-                if (!string.IsNullOrWhiteSpace(body))
-                {
-                    ArmadaErrorResponse error = JsonHelper.Deserialize<ArmadaErrorResponse>(body);
-                    Assert(
-                        !string.IsNullOrEmpty(error.Error) ||
-                        !string.IsNullOrEmpty(error.Message),
-                        "Deleting nonexistent fleet should return an error response when body is present");
-                }
-                else
-                {
-                    Assert(
-                        response.StatusCode == HttpStatusCode.NoContent ||
-                        response.StatusCode != HttpStatusCode.OK,
-                        "Deleting nonexistent fleet with empty body should return 204 or a non-200 status");
-                }
+                await E2eApiErrorAssert.ExpectAsync(response, HttpStatusCode.NotFound, "Deleting nonexistent fleet returns a typed 404");
             }));
 
             cases.Add(CaseAsync("delete_fleet_get_deleted_fleet_returns_not_found", "Delete Fleet Get Deleted Fleet Returns Not Found", TestTags.Negative, async () =>
@@ -379,12 +354,7 @@ namespace Test.Shared.Suites.E2E
                 createdFleetIds.Remove(fleetId);
 
                 HttpResponseMessage getResp = await authClient.GetAsync("/api/v1/fleets/" + fleetId);
-                ArmadaErrorResponse error = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(getResp);
-
-                Assert(
-                    !string.IsNullOrEmpty(error.Error) ||
-                    !string.IsNullOrEmpty(error.Message),
-                    "Getting deleted fleet should return an error response");
+                await E2eApiErrorAssert.ExpectAsync(getResp, HttpStatusCode.NotFound, "Getting deleted fleet should return an error response");
             }));
 
             cases.Add(CaseAsync("delete_fleet_removed_from_list", "Delete Fleet Removed From List", TestTags.Positive, async () =>
@@ -1385,11 +1355,7 @@ namespace Test.Shared.Suites.E2E
 
                 // Verify deleted
                 HttpResponseMessage getResp3 = await authClient.GetAsync("/api/v1/fleets/" + fleetId);
-                ArmadaErrorResponse errorResp = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(getResp3);
-                Assert(
-                    !string.IsNullOrEmpty(errorResp.Error) ||
-                    !string.IsNullOrEmpty(errorResp.Message),
-                    "Getting deleted fleet should return error");
+                await E2eApiErrorAssert.ExpectAsync(getResp3, HttpStatusCode.NotFound, "Getting deleted fleet should return error");
             }));
 
             #endregion

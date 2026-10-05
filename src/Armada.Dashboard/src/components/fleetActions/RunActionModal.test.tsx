@@ -4,6 +4,7 @@ import RunActionModal, { validateRunInputs } from './RunActionModal';
 import { enumerateFleetActions, getVessel, listPipelines, runAdHocFleetAction, runFleetAction } from '../../api/client';
 import { translateTemplate } from '../../i18n/runtime';
 import type { FleetAction } from '../../types/models';
+import { onlyCallArgs } from '../../test/mockCalls';
 
 vi.mock('../../api/client', () => ({
   enumerateFleetActions: vi.fn(),
@@ -134,7 +135,7 @@ describe('RunActionModal', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Run on 2 vessels' }));
 
     await waitFor(() => expect(runAdHocFleetAction).toHaveBeenCalledTimes(1));
-    const body = vi.mocked(runAdHocFleetAction).mock.calls[0][0];
+    const body = onlyCallArgs(vi.mocked(runAdHocFleetAction))[0];
     expect(body.VesselIds).toEqual(['vsl_1', 'vsl_2']);
     expect(body.Concurrency).toBe(2);
     expect(body.Definition?.Name).toBe('Status');

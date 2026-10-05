@@ -234,7 +234,8 @@ namespace Test.Shared.Suites.E2E
                     name = "getSessions",
                     arguments = new { }
                 }).ConfigureAwait(false);
-                Assert(viaToolsCall.TryGetProperty("error", out JsonElement _), "getSessions should not be callable through tools/call");
+                Assert(viaToolsCall.TryGetProperty("error", out JsonElement toolsCallError), "getSessions should not be callable through tools/call");
+                AssertEqual(-32602, toolsCallError.GetProperty("code").GetInt32(), "unknown tool error code: " + toolsCallError.GetRawText());
             }));
 
             cases.Add(CaseAsync("runbook_parameter_values_rejects_non_string_value", "RunbookParameterValues_RejectsNonStringValue", TestTags.Negative, async () =>
@@ -258,6 +259,8 @@ namespace Test.Shared.Suites.E2E
                 AssertFalse(response.TryGetProperty("error", out _), "Schema violations should be tool results, not protocol errors");
                 JsonElement result = response.GetProperty("result");
                 Assert(result.TryGetProperty("isError", out JsonElement isError) && isError.GetBoolean(), "Non-string parameter value should be rejected");
+                // isError above is the decision. Voltaic reports schema violations as plain text only (no code or
+                // argument path field), so naming the offending argument can only be checked in the text.
                 AssertContains("parameterValues", GetToolResultText(result));
             }));
 
@@ -277,10 +280,11 @@ namespace Test.Shared.Suites.E2E
                         parameterValues = new { count = "5" }
                     }
                 }).ConfigureAwait(false);
-                if (response.TryGetProperty("error", out JsonElement error))
-                {
-                    AssertFalse(error.GetProperty("code").GetInt32() == -32602, "String parameter values should pass schema validation: " + error.GetRawText());
-                }
+                AssertFalse(response.TryGetProperty("error", out JsonElement error), "String parameter values should not produce a protocol error: " + (error.ValueKind == JsonValueKind.Undefined ? "" : error.GetRawText()));
+                JsonElement result = response.GetProperty("result");
+                AssertFalse(result.TryGetProperty("isError", out JsonElement isError) && isError.GetBoolean(), "String parameter values should pass schema validation: " + GetToolResultText(result));
+                // Validation passed, so the handler ran and reported the missing runbook as a typed error.
+                AssertToolNotFound(GetToolResultText(result));
             }));
 
             cases.Add(CaseAsync("check_run_tools_run_inspect_and_retry", "CheckRunTools_RunInspectAndRetry", TestTags.Positive, async () =>
@@ -371,8 +375,8 @@ namespace Test.Shared.Suites.E2E
                     search = "MCP Draft Release"
                 }).ConfigureAwait(false);
                 AssertToolResultValid(enumerateResult);
-                string enumerateText = GetToolResultText(enumerateResult);
-                AssertContains(release.Id, enumerateText);
+                EnumerationResult<Release> releases = JsonHelper.Deserialize<EnumerationResult<Release>>(GetToolResultText(enumerateResult));
+                AssertTrue(releases.Objects.Any(r => r.Id == release.Id), "enumerate lists the created release");
             }));
 
             cases.Add(CaseAsync("backlog_tools_create_list_update_reorder_and_delete", "BacklogTools_CreateListUpdateReorderAndDelete", TestTags.Positive, async () =>
@@ -404,7 +408,8 @@ namespace Test.Shared.Suites.E2E
                     pageSize = 25
                 }).ConfigureAwait(false);
                 AssertToolResultValid(listResult);
-                AssertContains(created.Id, GetToolResultText(listResult));
+                EnumerationResult<Objective> backlog = JsonHelper.Deserialize<EnumerationResult<Objective>>(GetToolResultText(listResult));
+                AssertTrue(backlog.Objects.Any(o => o.Id == created.Id), "list_backlog returns the created item");
 
                 JsonElement updateResult = await CallToolAsync(mcpClient, sessionId, "update_objective", new
                 {
@@ -450,8 +455,9 @@ namespace Test.Shared.Suites.E2E
                     objectiveId = created.Id
                 }).ConfigureAwait(false);
                 AssertToolResultValid(deleteResult);
-                string deleteText = GetToolResultText(deleteResult);
-                AssertContains(created.Id, deleteText);
+                McpStatusResult deleted = JsonHelper.Deserialize<McpStatusResult>(GetToolResultText(deleteResult));
+                AssertEqual(true, deleted.Success, "delete_backlog_item success");
+                AssertEqual(created.Id, deleted.ObjectiveId, "deleted objective id");
             }));
 
             cases.Add(CaseAsync("armada_status_executes_successfully", "ArmadaStatus_ExecutesSuccessfully", TestTags.Positive, async () =>
@@ -540,8 +546,10 @@ namespace Test.Shared.Suites.E2E
                     message = "Hello from MCP test"
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
-                string text = GetToolResultText(result);
-                AssertContains("sig_", text);
+                Signal signal = JsonHelper.Deserialize<Signal>(GetToolResultText(result));
+                AssertStartsWith("sig_", signal.Id);
+                AssertEqual(captainId, signal.ToCaptainId, "signal recipient");
+                AssertEqual("Hello from MCP test", signal.Payload, "signal message");
             }));
 
             cases.Add(CaseAsync("armada_send_signal_signal_visible_via_enumerate", "ArmadaSendSignal_SignalVisibleViaEnumerate", TestTags.Positive, async () =>
@@ -563,8 +571,8 @@ namespace Test.Shared.Suites.E2E
                     pageSize = 50,
                     includeMessage = true
                 }).ConfigureAwait(false);
-                string listText = GetToolResultText(listResult);
-                AssertContains("Signal visibility test", listText);
+                EnumerationResult<Signal> signals = JsonHelper.Deserialize<EnumerationResult<Signal>>(GetToolResultText(listResult));
+                AssertTrue(signals.Objects.Any(s => s.ToCaptainId == captainId && s.Payload == "Signal visibility test"), "enumerate lists the sent signal with its message");
             }));
 
             cases.Add(CaseAsync("armada_mission_status_existing_mission_returns_mission", "ArmadaMissionStatus_ExistingMission_ReturnsMission", TestTags.Positive, async () =>
@@ -579,9 +587,9 @@ namespace Test.Shared.Suites.E2E
                     missionId = missionId
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
-                string text = GetToolResultText(result);
-                AssertContains(missionId, text);
-                AssertContains("MissionStatusTest", text);
+                Mission mission = JsonHelper.Deserialize<Mission>(GetToolResultText(result));
+                AssertEqual(missionId, mission.Id, "mission id");
+                AssertEqual("MissionStatusTest", mission.Title, "mission title");
             }));
 
             cases.Add(CaseAsync("armada_mission_status_not_found_returns_error_message", "ArmadaMissionStatus_NotFound_ReturnsErrorMessage", TestTags.Negative, async () =>
@@ -611,8 +619,10 @@ namespace Test.Shared.Suites.E2E
                     missionId = missionId
                 }).ConfigureAwait(false);
                 string text = GetToolResultText(result);
-                Assert(text.Contains("Pending") || text.Contains("Assigned") || text.Contains("InProgress"),
-                    "Expected mission to have a valid status but got: " + text.Substring(0, Math.Min(200, text.Length)));
+                Mission mission = JsonHelper.Deserialize<Mission>(text);
+                AssertEqual(missionId, mission.Id, "mission id");
+                Assert(mission.Status == MissionStatusEnum.Pending || mission.Status == MissionStatusEnum.Assigned || mission.Status == MissionStatusEnum.InProgress,
+                    "Expected a new mission to be Pending, Assigned, or InProgress but got " + mission.Status);
             }));
 
             cases.Add(CaseAsync("armada_mission_status_diff_snapshot_is_null", "ArmadaMissionStatus_DiffSnapshotIsNull", TestTags.Positive, async () =>
@@ -646,8 +656,8 @@ namespace Test.Shared.Suites.E2E
                     voyageId = voyageId
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
-                string text = GetToolResultText(result);
-                AssertContains(voyageId, text);
+                McpVoyageStatusResult status = JsonHelper.Deserialize<McpVoyageStatusResult>(GetToolResultText(result));
+                AssertEqual(voyageId, status.Voyage?.Id, "voyage id");
             }));
 
             cases.Add(CaseAsync("armada_voyage_status_not_found_returns_null_voyage", "ArmadaVoyageStatus_NotFound_ReturnsNullVoyage", TestTags.Negative, async () =>
@@ -679,9 +689,12 @@ namespace Test.Shared.Suites.E2E
                     voyageId = voyageId
                 }).ConfigureAwait(false);
                 string text = GetToolResultText(result);
-                AssertContains("TotalMissions", text);
-                AssertContains("MissionCountsByStatus", text);
-                AssertFalse(text.Contains("\"Missions\""), "Default summary mode should not contain Missions array");
+                McpVoyageStatusResult status = JsonHelper.Deserialize<McpVoyageStatusResult>(text);
+                AssertEqual(voyageId, status.Voyage?.Id, "voyage id");
+                AssertEqual(1, status.TotalMissions, "TotalMissions (one mission dispatched)");
+                AssertNotNull(status.MissionCountsByStatus, "MissionCountsByStatus");
+                AssertEqual(1, status.MissionCountsByStatus!.Values.Sum(), "counts by status add up to the mission total");
+                AssertNull(JsonShape.TopLevelProperty(text, "Missions"), "Default summary mode should not contain a Missions property");
             }));
 
             cases.Add(CaseAsync("armada_get_fleet_existing_fleet_returns_fleet_details", "ArmadaGetFleet_ExistingFleet_ReturnsFleetDetails", TestTags.Positive, async () =>
@@ -696,9 +709,9 @@ namespace Test.Shared.Suites.E2E
                     fleetId = fleetId
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
-                string text = GetToolResultText(result);
-                AssertContains(fleetId, text);
-                AssertContains("GetFleetTest", text);
+                FleetDetailResponse detail = JsonHelper.Deserialize<FleetDetailResponse>(GetToolResultText(result));
+                AssertEqual(fleetId, detail.Fleet?.Id, "fleet id");
+                AssertStartsWith("GetFleetTest-", detail.Fleet?.Name ?? "", "fleet name");
             }));
 
             cases.Add(CaseAsync("armada_get_fleet_not_found_returns_error_message", "ArmadaGetFleet_NotFound_ReturnsErrorMessage", TestTags.Negative, async () =>
@@ -750,9 +763,10 @@ namespace Test.Shared.Suites.E2E
                     fleetId = fleetId
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
-                string text = GetToolResultText(result);
-                AssertContains("vsl_", text);
-                AssertContains("MCP Added Vessel", text);
+                Vessel added = JsonHelper.Deserialize<Vessel>(GetToolResultText(result));
+                AssertStartsWith("vsl_", added.Id);
+                AssertEqual("MCP Added Vessel", added.Name, "vessel name");
+                AssertEqual(fleetId, added.FleetId, "vessel fleet");
             }));
 
             cases.Add(CaseAsync("armada_add_vessel_with_default_branch_sets_correct_branch", "ArmadaAddVessel_WithDefaultBranch_SetsCorrectBranch", TestTags.Positive, async () =>
@@ -770,8 +784,8 @@ namespace Test.Shared.Suites.E2E
                     defaultBranch = "develop"
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
-                string text = GetToolResultText(result);
-                AssertContains("develop", text);
+                Vessel added = JsonHelper.Deserialize<Vessel>(GetToolResultText(result));
+                AssertEqual("develop", added.DefaultBranch, "default branch");
             }));
 
             cases.Add(CaseAsync("armada_add_vessel_visible_via_enumerate", "ArmadaAddVessel_VisibleViaEnumerate", TestTags.Positive, async () =>
@@ -796,8 +810,8 @@ namespace Test.Shared.Suites.E2E
                     entityType = "vessels",
                     fleetId = fleetId
                 }).ConfigureAwait(false);
-                string listText = GetToolResultText(listResult);
-                AssertContains(vesselId, listText);
+                EnumerationResult<Vessel> vessels = JsonHelper.Deserialize<EnumerationResult<Vessel>>(GetToolResultText(listResult));
+                AssertTrue(vessels.Objects.Any(v => v.Id == vesselId), "enumerate lists the added vessel");
             }));
 
             cases.Add(CaseAsync("armada_add_vessel_git_hub_token_override_does_not_leak", "ArmadaAddVessel_GitHubTokenOverrideDoesNotLeak", TestTags.Positive, async () =>
@@ -817,9 +831,11 @@ namespace Test.Shared.Suites.E2E
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
                 string text = GetToolResultText(result);
-                AssertFalse(text.Contains(token, StringComparison.Ordinal));
-                AssertFalse(text.Contains("\"gitHubTokenOverride\"", StringComparison.Ordinal));
-                AssertContains("HasGitHubTokenOverride", text);
+                AssertFalse(text.Contains(token, StringComparison.Ordinal), "the token value appears nowhere in the result");
+                AssertFalse(JsonShape.HasPropertyAnywhere(text, "GitHubTokenOverride"), "no GitHubTokenOverride property in any casing");
+                JsonPropertyShape? hasOverride = JsonShape.TopLevelProperty(text, "HasGitHubTokenOverride");
+                AssertNotNull(hasOverride, "HasGitHubTokenOverride is reported");
+                AssertEqual(System.Text.Json.JsonTokenType.True, hasOverride!.ValueToken, "HasGitHubTokenOverride is true");
                 Vessel vessel = JsonHelper.Deserialize<Vessel>(text);
                 AssertTrue(vessel.HasGitHubTokenOverride);
             }));
@@ -863,9 +879,9 @@ namespace Test.Shared.Suites.E2E
                     captainId = captainId
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
-                string text = GetToolResultText(result);
-                AssertContains("stopped", text);
-                AssertContains(captainId, text);
+                McpStatusResult stopped = JsonHelper.Deserialize<McpStatusResult>(GetToolResultText(result));
+                AssertEqual("stopped", stopped.Status, "status");
+                AssertEqual(captainId, stopped.CaptainId, "captain id");
             }));
 
             cases.Add(CaseAsync("armada_stop_captain_not_found_returns_error", "ArmadaStopCaptain_NotFound_ReturnsError", TestTags.Negative, async () =>
@@ -893,8 +909,7 @@ namespace Test.Shared.Suites.E2E
 
                 JsonElement result = await CallToolAsync(mcpClient, sessionId, "stop_all", new { }).ConfigureAwait(false);
                 AssertToolResultValid(result);
-                string text = GetToolResultText(result);
-                AssertContains("all_stopped", text);
+                AssertEqual("all_stopped", JsonHelper.Deserialize<McpStatusResult>(GetToolResultText(result)).Status, "status");
             }));
 
             cases.Add(CaseAsync("armada_stop_all_with_captains_succeeds", "ArmadaStopAll_WithCaptains_Succeeds", TestTags.Positive, async () =>
@@ -907,8 +922,7 @@ namespace Test.Shared.Suites.E2E
                 await RestCreateCaptainAsync(mcpClient, sessionId, "stop-all-captain-2").ConfigureAwait(false);
                 JsonElement result = await CallToolAsync(mcpClient, sessionId, "stop_all", new { }).ConfigureAwait(false);
                 AssertToolResultValid(result);
-                string text = GetToolResultText(result);
-                AssertContains("all_stopped", text);
+                AssertEqual("all_stopped", JsonHelper.Deserialize<McpStatusResult>(GetToolResultText(result)).Status, "status");
             }));
 
             cases.Add(CaseAsync("armada_cancel_mission_existing_mission_cancels_mission", "ArmadaCancelMission_ExistingMission_CancelsMission", TestTags.Positive, async () =>
@@ -923,8 +937,9 @@ namespace Test.Shared.Suites.E2E
                     missionId = missionId
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
-                string text = GetToolResultText(result);
-                AssertContains("Cancelled", text);
+                Mission cancelled = JsonHelper.Deserialize<Mission>(GetToolResultText(result));
+                AssertEqual(missionId, cancelled.Id, "mission id");
+                AssertEqual(MissionStatusEnum.Cancelled, cancelled.Status, "mission status");
             }));
 
             cases.Add(CaseAsync("armada_cancel_mission_not_found_returns_error_message", "ArmadaCancelMission_NotFound_ReturnsErrorMessage", TestTags.Negative, async () =>
@@ -975,8 +990,9 @@ namespace Test.Shared.Suites.E2E
                     voyageId = voyageId
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
-                string text = GetToolResultText(result);
-                AssertContains("Cancelled", text);
+                CancelVoyageResponse cancelled = JsonHelper.Deserialize<CancelVoyageResponse>(GetToolResultText(result));
+                AssertEqual(voyageId, cancelled.Voyage?.Id, "voyage id");
+                AssertEqual(VoyageStatusEnum.Cancelled, cancelled.Voyage?.Status, "voyage status");
             }));
 
             cases.Add(CaseAsync("armada_cancel_voyage_not_found_returns_error_message", "ArmadaCancelVoyage_NotFound_ReturnsErrorMessage", TestTags.Negative, async () =>
@@ -1009,7 +1025,8 @@ namespace Test.Shared.Suites.E2E
                 }).ConfigureAwait(false);
                 string text = GetToolResultText(result);
                 CancelVoyageResponse data = JsonHelper.Deserialize<CancelVoyageResponse>(text);
-                AssertTrue(data.CancelledMissions >= 0, "CancelledMissions should be non-negative");
+                AssertEqual(voyageId, data.Voyage?.Id, "voyage id");
+                AssertTrue(data.CancelledMissions >= 0 && data.CancelledMissions <= 1, "CancelledMissions counts at most the voyage's one mission: " + data.CancelledMissions);
             }));
 
             cases.Add(CaseAsync("armada_cancel_voyage_verify_status_via_rest", "ArmadaCancelVoyage_VerifyStatusViaRest", TestTags.Positive, async () =>
@@ -1187,8 +1204,8 @@ namespace Test.Shared.Suites.E2E
                     entityType = "widgets"
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
-                string text = GetToolResultText(result);
-                AssertContains("Unknown entity type", text);
+                McpToolResultProbe probe = McpToolResultProbe.FromText(GetToolResultText(result));
+                AssertEqual(McpToolErrorCodeEnum.InvalidArgument, probe.ErrorCode, "unknown entity type is an InvalidArgument error");
             }));
 
             cases.Add(CaseAsync("armada_enumerate_with_pagination_respects_page_size", "ArmadaEnumerate_WithPagination_RespectsPageSize", TestTags.Positive, async () =>
@@ -1256,7 +1273,11 @@ namespace Test.Shared.Suites.E2E
                     entityType = "merge_queue"
                 }).ConfigureAwait(false);
                 string text = GetToolResultText(result);
-                Assert(text.Contains("TotalRecords") || text.Contains("totalRecords"), "Should contain TotalRecords field");
+                JsonPropertyShape? totalRecords = JsonShape.TopLevelProperty(text, "TotalRecords");
+                AssertNotNull(totalRecords, "Should contain a TotalRecords field");
+                AssertEqual(System.Text.Json.JsonTokenType.Number, totalRecords!.ValueToken, "TotalRecords is a number");
+                EnumerationResult<MergeEntry> data = JsonHelper.Deserialize<EnumerationResult<MergeEntry>>(text);
+                AssertTrue(data.TotalRecords >= data.Objects.Count, "TotalRecords covers the page");
             }));
 
             cases.Add(CaseAsync("armada_create_fleet_creates_fleet", "ArmadaCreateFleet_CreatesFleet", TestTags.Positive, async () =>
@@ -1271,9 +1292,10 @@ namespace Test.Shared.Suites.E2E
                     description = "Created via MCP tool"
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
-                string text = GetToolResultText(result);
-                AssertContains("flt_", text);
-                AssertContains("MCP Created Fleet", text);
+                Fleet created = JsonHelper.Deserialize<Fleet>(GetToolResultText(result));
+                AssertStartsWith("flt_", created.Id);
+                AssertEqual("MCP Created Fleet", created.Name, "fleet name");
+                AssertEqual("Created via MCP tool", created.Description, "fleet description");
             }));
 
             cases.Add(CaseAsync("armada_create_fleet_visible_via_enumerate", "ArmadaCreateFleet_VisibleViaEnumerate", TestTags.Positive, async () =>
@@ -1295,8 +1317,8 @@ namespace Test.Shared.Suites.E2E
                     entityType = "fleets",
                     pageSize = 50
                 }).ConfigureAwait(false);
-                string listText = GetToolResultText(listResult);
-                AssertContains(fleetId, listText);
+                EnumerationResult<Fleet> fleets = JsonHelper.Deserialize<EnumerationResult<Fleet>>(GetToolResultText(listResult));
+                AssertTrue(fleets.Objects.Any(f => f.Id == fleetId), "enumerate lists the created fleet");
             }));
 
             cases.Add(CaseAsync("armada_update_fleet_updates_name", "ArmadaUpdateFleet_UpdatesName", TestTags.Positive, async () =>
@@ -1312,8 +1334,9 @@ namespace Test.Shared.Suites.E2E
                     name = "UpdatedName"
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
-                string text = GetToolResultText(result);
-                AssertContains("UpdatedName", text);
+                Fleet updated = JsonHelper.Deserialize<Fleet>(GetToolResultText(result));
+                AssertEqual(fleetId, updated.Id, "fleet id");
+                AssertEqual("UpdatedName", updated.Name, "fleet name");
             }));
 
             cases.Add(CaseAsync("armada_update_fleet_not_found_returns_error", "ArmadaUpdateFleet_NotFound_ReturnsError", TestTags.Negative, async () =>
@@ -1344,8 +1367,9 @@ namespace Test.Shared.Suites.E2E
                     fleetId = fleetId
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
-                string text = GetToolResultText(result);
-                AssertContains("deleted", text);
+                McpStatusResult deleted = JsonHelper.Deserialize<McpStatusResult>(GetToolResultText(result));
+                AssertEqual("deleted", deleted.Status, "status");
+                AssertEqual(fleetId, deleted.FleetId, "fleet id");
             }));
 
             cases.Add(CaseAsync("armada_delete_fleet_not_found_returns_error", "ArmadaDeleteFleet_NotFound_ReturnsError", TestTags.Negative, async () =>
@@ -1376,9 +1400,9 @@ namespace Test.Shared.Suites.E2E
                     vesselId = vesselId
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
-                string text = GetToolResultText(result);
-                AssertContains(vesselId, text);
-                AssertContains("GetVesselTest", text);
+                Vessel vessel = JsonHelper.Deserialize<Vessel>(GetToolResultText(result));
+                AssertEqual(vesselId, vessel.Id, "vessel id");
+                AssertStartsWith("GetVesselTest-", vessel.Name, "vessel name");
             }));
 
             cases.Add(CaseAsync("armada_get_vessel_not_found_returns_error", "ArmadaGetVessel_NotFound_ReturnsError", TestTags.Negative, async () =>
@@ -1410,8 +1434,9 @@ namespace Test.Shared.Suites.E2E
                     name = "UpdatedVessel"
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
-                string text = GetToolResultText(result);
-                AssertContains("UpdatedVessel", text);
+                Vessel updated = JsonHelper.Deserialize<Vessel>(GetToolResultText(result));
+                AssertEqual(vesselId, updated.Id, "vessel id");
+                AssertEqual("UpdatedVessel", updated.Name, "vessel name");
             }));
 
             cases.Add(CaseAsync("armada_update_vessel_not_found_returns_error", "ArmadaUpdateVessel_NotFound_ReturnsError", TestTags.Negative, async () =>
@@ -1443,8 +1468,9 @@ namespace Test.Shared.Suites.E2E
                     vesselId = vesselId
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
-                string text = GetToolResultText(result);
-                AssertContains("deleted", text);
+                McpStatusResult deleted = JsonHelper.Deserialize<McpStatusResult>(GetToolResultText(result));
+                AssertEqual("deleted", deleted.Status, "status");
+                AssertEqual(vesselId, deleted.VesselId, "vessel id");
             }));
 
             cases.Add(CaseAsync("armada_delete_vessel_not_found_returns_error", "ArmadaDeleteVessel_NotFound_ReturnsError", TestTags.Negative, async () =>
@@ -1473,9 +1499,9 @@ namespace Test.Shared.Suites.E2E
                     name = "mcp-created-captain"
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
-                string text = GetToolResultText(result);
-                AssertContains("cpt_", text);
-                AssertContains("mcp-created-captain", text);
+                Captain created = JsonHelper.Deserialize<Captain>(GetToolResultText(result));
+                AssertStartsWith("cpt_", created.Id);
+                AssertEqual("mcp-created-captain", created.Name, "captain name");
             }));
 
             cases.Add(CaseAsync("armada_create_captain_with_runtime_sets_runtime", "ArmadaCreateCaptain_WithRuntime_SetsRuntime", TestTags.Positive, async () =>
@@ -1490,8 +1516,8 @@ namespace Test.Shared.Suites.E2E
                     runtime = "ClaudeCode"
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
-                string text = GetToolResultText(result);
-                AssertContains("ClaudeCode", text);
+                Captain created = JsonHelper.Deserialize<Captain>(GetToolResultText(result));
+                AssertEqual(AgentRuntimeEnum.ClaudeCode, created.Runtime, "captain runtime");
             }));
 
             cases.Add(CaseAsync("armada_create_captain_visible_via_enumerate", "ArmadaCreateCaptain_VisibleViaEnumerate", TestTags.Positive, async () =>
@@ -1513,8 +1539,8 @@ namespace Test.Shared.Suites.E2E
                     entityType = "captains",
                     pageSize = 50
                 }).ConfigureAwait(false);
-                string listText = GetToolResultText(listResult);
-                AssertContains(captainId, listText);
+                EnumerationResult<Captain> captains = JsonHelper.Deserialize<EnumerationResult<Captain>>(GetToolResultText(listResult));
+                AssertTrue(captains.Objects.Any(c => c.Id == captainId), "enumerate lists the created captain");
             }));
 
             cases.Add(CaseAsync("armada_get_captain_existing_captain_returns_details", "ArmadaGetCaptain_ExistingCaptain_ReturnsDetails", TestTags.Positive, async () =>
@@ -1529,9 +1555,9 @@ namespace Test.Shared.Suites.E2E
                     captainId = captainId
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
-                string text = GetToolResultText(result);
-                AssertContains(captainId, text);
-                AssertContains("get-captain-test", text);
+                Captain captain = JsonHelper.Deserialize<Captain>(GetToolResultText(result));
+                AssertEqual(captainId, captain.Id, "captain id");
+                AssertStartsWith("get-captain-test-", captain.Name, "captain name");
             }));
 
             cases.Add(CaseAsync("armada_get_captain_not_found_returns_error", "ArmadaGetCaptain_NotFound_ReturnsError", TestTags.Negative, async () =>
@@ -1562,8 +1588,9 @@ namespace Test.Shared.Suites.E2E
                     name = "updated-captain"
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
-                string text = GetToolResultText(result);
-                AssertContains("updated-captain", text);
+                Captain updated = JsonHelper.Deserialize<Captain>(GetToolResultText(result));
+                AssertEqual(captainId, updated.Id, "captain id");
+                AssertEqual("updated-captain", updated.Name, "captain name");
             }));
 
             cases.Add(CaseAsync("armada_update_captain_not_found_returns_error", "ArmadaUpdateCaptain_NotFound_ReturnsError", TestTags.Negative, async () =>
@@ -1594,8 +1621,9 @@ namespace Test.Shared.Suites.E2E
                     captainId = captainId
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
-                string text = GetToolResultText(result);
-                AssertContains("deleted", text);
+                McpStatusResult deleted = JsonHelper.Deserialize<McpStatusResult>(GetToolResultText(result));
+                AssertEqual("deleted", deleted.Status, "status");
+                AssertEqual(captainId, deleted.CaptainId, "captain id");
             }));
 
             cases.Add(CaseAsync("armada_delete_captain_not_found_returns_error", "ArmadaDeleteCaptain_NotFound_ReturnsError", TestTags.Negative, async () =>
@@ -1660,9 +1688,10 @@ namespace Test.Shared.Suites.E2E
                     vesselId = vesselId
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
-                string text = GetToolResultText(result);
-                AssertContains("msn_", text);
-                AssertContains("MCP Created Mission", text);
+                Mission created = ReadCreatedMission(GetToolResultText(result));
+                AssertStartsWith("msn_", created.Id);
+                AssertEqual("MCP Created Mission", created.Title, "mission title");
+                AssertEqual(vesselId, created.VesselId, "mission vessel");
             }));
 
             cases.Add(CaseAsync("armada_create_mission_visible_via_mission_status", "ArmadaCreateMission_VisibleViaMissionStatus", TestTags.Positive, async () =>
@@ -1687,8 +1716,9 @@ namespace Test.Shared.Suites.E2E
                 {
                     missionId = missionId
                 }).ConfigureAwait(false);
-                string statusText = GetToolResultText(statusResult);
-                AssertContains(missionId, statusText);
+                Mission status = JsonHelper.Deserialize<Mission>(GetToolResultText(statusResult));
+                AssertEqual(missionId, status.Id, "mission id");
+                AssertEqual("VisibleMission", status.Title, "mission title");
             }));
 
             cases.Add(CaseAsync("armada_update_mission_updates_title", "ArmadaUpdateMission_UpdatesTitle", TestTags.Positive, async () =>
@@ -1704,8 +1734,9 @@ namespace Test.Shared.Suites.E2E
                     title = "Updated Title"
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
-                string text = GetToolResultText(result);
-                AssertContains("Updated Title", text);
+                Mission updated = JsonHelper.Deserialize<Mission>(GetToolResultText(result));
+                AssertEqual(missionId, updated.Id, "mission id");
+                AssertEqual("Updated Title", updated.Title, "mission title");
             }));
 
             cases.Add(CaseAsync("armada_update_mission_updates_multiple_fields", "ArmadaUpdateMission_UpdatesMultipleFields", TestTags.Positive, async () =>
@@ -1725,12 +1756,13 @@ namespace Test.Shared.Suites.E2E
                     prUrl = "https://github.com/test/pr/1"
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
-                string text = GetToolResultText(result);
-                AssertContains("Multi Update", text);
-                AssertContains("New description", text);
-                AssertContains("50", text);
-                AssertContains("feature/updated", text);
-                AssertContains("https://github.com/test/pr/1", text);
+                Mission updated = JsonHelper.Deserialize<Mission>(GetToolResultText(result));
+                AssertEqual(missionId, updated.Id, "mission id");
+                AssertEqual("Multi Update", updated.Title, "title");
+                AssertEqual("New description", updated.Description, "description");
+                AssertEqual(50, updated.Priority, "priority");
+                AssertEqual("feature/updated", updated.BranchName, "branch name");
+                AssertEqual("https://github.com/test/pr/1", updated.PrUrl, "PR URL");
             }));
 
             cases.Add(CaseAsync("armada_update_mission_not_found_returns_error", "ArmadaUpdateMission_NotFound_ReturnsError", TestTags.Negative, async () =>
@@ -1763,7 +1795,10 @@ namespace Test.Shared.Suites.E2E
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
                 string text = GetToolResultText(result);
-                AssertContains("Assigned", text);
+                AssertNull(McpToolResultProbe.FromText(text).ErrorCode, "transition succeeded: " + text);
+                Mission transitioned = JsonHelper.Deserialize<Mission>(text);
+                AssertEqual(missionId, transitioned.Id, "mission id");
+                AssertEqual(MissionStatusEnum.Assigned, transitioned.Status, "mission status");
             }));
 
             cases.Add(CaseAsync("armada_transition_mission_status_invalid_transition_returns_error", "ArmadaTransitionMissionStatus_InvalidTransition_ReturnsError", TestTags.Negative, async () =>
@@ -1781,8 +1816,7 @@ namespace Test.Shared.Suites.E2E
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
                 string text = GetToolResultText(result);
-                Assert(text.Contains("Invalid transition") || text.Contains("Invalid status") || text.Contains("invalid", StringComparison.OrdinalIgnoreCase),
-                    "Expected an invalid transition/status error but got: " + text.Substring(0, Math.Min(200, text.Length)));
+                AssertEqual(McpToolErrorCodeEnum.Conflict, McpToolResultProbe.FromText(text).ErrorCode, "a transition to Pending is refused as a Conflict (result: " + text + ")");
             }));
 
             cases.Add(CaseAsync("armada_transition_mission_status_not_found_returns_error", "ArmadaTransitionMissionStatus_NotFound_ReturnsError", TestTags.Negative, async () =>
@@ -1815,7 +1849,7 @@ namespace Test.Shared.Suites.E2E
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
                 string text = GetToolResultText(result);
-                AssertContains("Invalid status", text);
+                AssertEqual(McpToolErrorCodeEnum.InvalidArgument, McpToolResultProbe.FromText(text).ErrorCode, "an unknown status is an InvalidArgument error (result: " + text + ")");
             }));
 
             cases.Add(CaseAsync("armada_transition_mission_status_verify_via_rest", "ArmadaTransitionMissionStatus_VerifyViaRest", TestTags.Positive, async () =>
@@ -1854,8 +1888,19 @@ namespace Test.Shared.Suites.E2E
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
                 string text = GetToolResultText(result);
-                Assert(text.Contains("diff", StringComparison.OrdinalIgnoreCase) || text.Contains("error", StringComparison.OrdinalIgnoreCase) || text.Contains("no", StringComparison.OrdinalIgnoreCase),
-                    "Expected error/diff-related response but got: " + text.Substring(0, Math.Min(200, text.Length)));
+                McpToolResultProbe probe = McpToolResultProbe.FromText(text);
+                if (probe.ErrorCode != null)
+                {
+                    // No worktree and no saved diff: the tool reports the diff as unavailable.
+                    AssertEqual(McpToolErrorCodeEnum.Unavailable, probe.ErrorCode, "no-diff error code (result: " + text + ")");
+                }
+                else
+                {
+                    // A captain picked the mission up and produced a worktree: a real diff result for this mission.
+                    McpMissionDiffResult diff = JsonHelper.Deserialize<McpMissionDiffResult>(text);
+                    AssertEqual(missionId, diff.MissionId, "diff mission id (result: " + text + ")");
+                    AssertNotNull(diff.Diff, "diff text");
+                }
             }));
 
             cases.Add(CaseAsync("armada_get_mission_diff_not_found_returns_error", "ArmadaGetMissionDiff_NotFound_ReturnsError", TestTags.Negative, async () =>
@@ -1880,27 +1925,16 @@ namespace Test.Shared.Suites.E2E
                 string sessionId = await InitMcpSessionAsync(mcpClient);
 
                 string missionId = await RestCreateMissionAsync(mcpClient, sessionId, "LogMission").ConfigureAwait(false);
-                JsonElement rawResult = await SendRawMcpRequestAsync(mcpClient, sessionId, "tools/call", new
-                {
-                    name = "get_mission_log",
-                    arguments = new { missionId = missionId }
-                }).ConfigureAwait(false);
-
-                if (rawResult.TryGetProperty("error", out JsonElement error))
-                {
-                    // Known issue: mission log MCP tool may throw Internal error
-                    string errorMsg = error.GetProperty("message").GetString() ?? "";
-                    Assert(errorMsg.Contains("Internal error") || errorMsg.Contains("error", StringComparison.OrdinalIgnoreCase),
-                        "Unexpected MCP error: " + errorMsg);
-                    return;
-                }
-
-                JsonElement result = rawResult.GetProperty("result");
+                // A JSON-RPC protocol error fails here (CallToolAsync throws); it is not a pass.
+                JsonElement result = await CallToolAsync(mcpClient, sessionId, "get_mission_log", new { missionId = missionId }).ConfigureAwait(false);
                 AssertToolResultValid(result);
                 string text = GetToolResultText(result);
+                AssertNull(McpToolResultProbe.FromText(text).ErrorCode, "get_mission_log succeeded: " + text);
                 MissionLogResponse data = JsonHelper.Deserialize<MissionLogResponse>(text);
+                AssertEqual(missionId, data.MissionId, "log mission id");
                 // Mission may have a small log from dispatch signals
                 AssertTrue(data.TotalLines >= 0, "TotalLines should be non-negative");
+                AssertEqual(Math.Min(100, data.TotalLines), data.Lines, "default page is up to 100 lines");
             }));
 
             cases.Add(CaseAsync("armada_get_mission_log_not_found_returns_error", "ArmadaGetMissionLog_NotFound_ReturnsError", TestTags.Negative, async () =>
@@ -1926,23 +1960,14 @@ namespace Test.Shared.Suites.E2E
 
                 string missionId = await RestCreateMissionAsync(mcpClient, sessionId, "PaginatedLogMission").ConfigureAwait(false);
 
-                JsonElement rawResult = await SendRawMcpRequestAsync(mcpClient, sessionId, "tools/call", new
-                {
-                    name = "get_mission_log",
-                    arguments = new { missionId = missionId, lines = 10, offset = 5 }
-                }).ConfigureAwait(false);
-
-                if (rawResult.TryGetProperty("error", out JsonElement error))
-                {
-                    // Known issue: mission log MCP tool may throw Internal error
-                    string errorMsg = error.GetProperty("message").GetString() ?? "";
-                    Assert(errorMsg.Contains("Internal error") || errorMsg.Contains("error", StringComparison.OrdinalIgnoreCase),
-                        "Unexpected MCP error: " + errorMsg);
-                    return;
-                }
-
-                JsonElement result = rawResult.GetProperty("result");
+                // A JSON-RPC protocol error fails here (CallToolAsync throws); it is not a pass.
+                JsonElement result = await CallToolAsync(mcpClient, sessionId, "get_mission_log", new { missionId = missionId, lines = 10, offset = 5 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
+                string text = GetToolResultText(result);
+                AssertNull(McpToolResultProbe.FromText(text).ErrorCode, "get_mission_log succeeded: " + text);
+                MissionLogResponse data = JsonHelper.Deserialize<MissionLogResponse>(text);
+                AssertEqual(missionId, data.MissionId, "log mission id");
+                AssertEqual(Math.Max(0, Math.Min(10, data.TotalLines - 5)), data.Lines, "lines=10 offset=5 returns the requested window");
             }));
 
             cases.Add(CaseAsync("armada_purge_voyage_deletes_voyage_and_missions", "ArmadaPurgeVoyage_DeletesVoyageAndMissions", TestTags.Positive, async () =>
@@ -2037,9 +2062,10 @@ namespace Test.Shared.Suites.E2E
                     branchName = "feature/test-merge"
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
-                string text = GetToolResultText(result);
-                AssertContains("mrg_", text);
-                AssertContains("feature/test-merge", text);
+                MergeEntry created = JsonHelper.Deserialize<MergeEntry>(GetToolResultText(result));
+                AssertStartsWith("mrg_", created.Id);
+                AssertEqual("feature/test-merge", created.BranchName, "branch name");
+                AssertEqual(vesselId, created.VesselId, "vessel id");
             }));
 
             cases.Add(CaseAsync("armada_enqueue_merge_visible_via_enumerate", "ArmadaEnqueueMerge_VisibleViaEnumerate", TestTags.Positive, async () =>
@@ -2064,8 +2090,8 @@ namespace Test.Shared.Suites.E2E
                     entityType = "merge_queue",
                     vesselId = vesselId
                 }).ConfigureAwait(false);
-                string listText = GetToolResultText(listResult);
-                AssertContains(entryId, listText);
+                EnumerationResult<MergeEntry> entries = JsonHelper.Deserialize<EnumerationResult<MergeEntry>>(GetToolResultText(listResult));
+                AssertTrue(entries.Objects.Any(e => e.Id == entryId), "enumerate lists the queued entry");
             }));
 
             cases.Add(CaseAsync("armada_get_merge_entry_existing_entry_returns_details", "ArmadaGetMergeEntry_ExistingEntry_ReturnsDetails", TestTags.Positive, async () =>
@@ -2090,9 +2116,9 @@ namespace Test.Shared.Suites.E2E
                     entryId = entryId
                 }).ConfigureAwait(false);
                 AssertToolResultValid(getResult);
-                string getText = GetToolResultText(getResult);
-                AssertContains(entryId, getText);
-                AssertContains("feature/get-merge", getText);
+                MergeEntry fetched = JsonHelper.Deserialize<MergeEntry>(GetToolResultText(getResult));
+                AssertEqual(entryId, fetched.Id, "entry id");
+                AssertEqual("feature/get-merge", fetched.BranchName, "branch name");
             }));
 
             cases.Add(CaseAsync("armada_cancel_merge_cancels_entry", "ArmadaCancelMerge_CancelsEntry", TestTags.Positive, async () =>
@@ -2117,8 +2143,9 @@ namespace Test.Shared.Suites.E2E
                     entryId = entryId
                 }).ConfigureAwait(false);
                 AssertToolResultValid(cancelResult);
-                string cancelText = GetToolResultText(cancelResult);
-                AssertContains("cancelled", cancelText);
+                McpStatusResult cancelled = JsonHelper.Deserialize<McpStatusResult>(GetToolResultText(cancelResult));
+                AssertEqual("cancelled", cancelled.Status, "status");
+                AssertEqual(entryId, cancelled.EntryId, "entry id");
             }));
 
             cases.Add(CaseAsync("armada_process_merge_queue_executes", "ArmadaProcessMergeQueue_Executes", TestTags.Positive, async () =>
@@ -2129,8 +2156,7 @@ namespace Test.Shared.Suites.E2E
 
                 JsonElement result = await CallToolAsync(mcpClient, sessionId, "process_merge_queue", new { }).ConfigureAwait(false);
                 AssertToolResultValid(result);
-                string text = GetToolResultText(result);
-                AssertContains("processed", text);
+                AssertEqual("processed", JsonHelper.Deserialize<McpStatusResult>(GetToolResultText(result)).Status, "status");
             }));
 
             cases.Add(CaseAsync("nonexistent_tool_returns_error", "NonexistentTool_ReturnsError", TestTags.Negative, async () =>
@@ -2144,7 +2170,8 @@ namespace Test.Shared.Suites.E2E
                     name = "nonexistent_tool",
                     arguments = new { }
                 }).ConfigureAwait(false);
-                Assert(response.TryGetProperty("error", out _), "Should return error for nonexistent tool");
+                Assert(response.TryGetProperty("error", out JsonElement error), "Should return error for nonexistent tool");
+                AssertEqual(-32602, error.GetProperty("code").GetInt32(), "unknown tool error code: " + error.GetRawText());
             }));
 
             cases.Add(CaseAsync("nonexistent_tool_error_has_message", "NonexistentTool_ErrorHasMessage", TestTags.Negative, async () =>
@@ -2159,6 +2186,7 @@ namespace Test.Shared.Suites.E2E
                     arguments = new { }
                 }).ConfigureAwait(false);
                 Assert(response.TryGetProperty("error", out JsonElement error), "Should have error property");
+                AssertEqual(-32602, error.GetProperty("code").GetInt32(), "unknown tool error code: " + error.GetRawText());
                 Assert(error.TryGetProperty("message", out JsonElement message), "Error should have message property");
                 AssertFalse(string.IsNullOrEmpty(message.GetString()));
             }));
@@ -2175,8 +2203,8 @@ namespace Test.Shared.Suites.E2E
                     entityType = "fleets",
                     pageSize = 50
                 }).ConfigureAwait(false);
-                string text = GetToolResultText(result);
-                AssertContains(fleetId, text);
+                EnumerationResult<Fleet> fleets = JsonHelper.Deserialize<EnumerationResult<Fleet>>(GetToolResultText(result));
+                AssertTrue(fleets.Objects.Any(f => f.Id == fleetId), "enumerate lists the fleet");
             }));
 
             cases.Add(CaseAsync("cross_interface_fleet_created_via_rest_get_fleet_via_mcp", "CrossInterface_FleetCreatedViaRest_GetFleetViaMcp", TestTags.Positive, async () =>
@@ -2190,9 +2218,9 @@ namespace Test.Shared.Suites.E2E
                 {
                     fleetId = fleetId
                 }).ConfigureAwait(false);
-                string text = GetToolResultText(result);
-                AssertContains(fleetId, text);
-                AssertContains("CrossGetFleet", text);
+                FleetDetailResponse detail = JsonHelper.Deserialize<FleetDetailResponse>(GetToolResultText(result));
+                AssertEqual(fleetId, detail.Fleet?.Id, "fleet id");
+                AssertStartsWith("CrossGetFleet-", detail.Fleet?.Name ?? "", "fleet name");
             }));
 
             cases.Add(CaseAsync("cross_interface_captain_created_via_rest_visible_via_mcp", "CrossInterface_CaptainCreatedViaRest_VisibleViaMcp", TestTags.Positive, async () =>
@@ -2207,8 +2235,8 @@ namespace Test.Shared.Suites.E2E
                     entityType = "captains",
                     pageSize = 50
                 }).ConfigureAwait(false);
-                string text = GetToolResultText(result);
-                AssertContains(captainId, text);
+                EnumerationResult<Captain> captains = JsonHelper.Deserialize<EnumerationResult<Captain>>(GetToolResultText(result));
+                AssertTrue(captains.Objects.Any(c => c.Id == captainId), "enumerate lists the captain");
             }));
 
             cases.Add(CaseAsync("cross_interface_dispatch_via_mcp_mission_visible_via_rest", "CrossInterface_DispatchViaMcp_MissionVisibleViaRest", TestTags.Positive, async () =>
@@ -2263,8 +2291,10 @@ namespace Test.Shared.Suites.E2E
                     entityType = "vessels",
                     fleetId = fleetId
                 }).ConfigureAwait(false);
-                string getBody = GetToolResultText(getResult);
-                AssertContains(vesselId, getBody);
+                EnumerationResult<Vessel> vessels = JsonHelper.Deserialize<EnumerationResult<Vessel>>(GetToolResultText(getResult));
+                Vessel? listed = vessels.Objects.FirstOrDefault(v => v.Id == vesselId);
+                AssertNotNull(listed, "enumerate lists the added vessel");
+                AssertEqual(vesselName, listed!.Name, "vessel name");
             }));
 
             cases.Add(CaseAsync("cross_interface_mission_cancelled_via_mcp_status_changed_via_rest", "CrossInterface_MissionCancelledViaMcp_StatusChangedViaRest", TestTags.Positive, async () =>
@@ -2305,8 +2335,8 @@ namespace Test.Shared.Suites.E2E
                     includeMessage = true,
                     pageSize = 50
                 }).ConfigureAwait(false);
-                string listBody = GetToolResultText(listResult);
-                AssertContains("Cross-interface signal", listBody);
+                EnumerationResult<Signal> signals = JsonHelper.Deserialize<EnumerationResult<Signal>>(GetToolResultText(listResult));
+                AssertTrue(signals.Objects.Any(s => s.ToCaptainId == captainId && s.Payload == "Cross-interface signal"), "enumerate lists the sent signal with its message");
             }));
 
             cases.Add(CaseAsync("all_tools_armada_status_executes", "AllTools_ArmadaStatus_Executes", TestTags.Positive, async () =>
@@ -2357,16 +2387,21 @@ namespace Test.Shared.Suites.E2E
                 HttpClient mcpClient = fx.McpClient;
                 string sessionId = await InitMcpSessionAsync(mcpClient);
 
-                await RestCreateMissionAsync(mcpClient, sessionId, "EnumFlagsMission").ConfigureAwait(false);
+                // A voyage of its own makes the page hold exactly the one mission this case created ("Desc1").
+                string vesselId = await EnsureMissionVesselAsync(mcpClient, sessionId).ConfigureAwait(false);
+                string voyageId = await RestCreateVoyageAsync(mcpClient, sessionId, vesselId).ConfigureAwait(false);
                 JsonElement result = await CallToolAsync(mcpClient, sessionId, "enumerate", new
                 {
-                    entityType = "missions"
+                    entityType = "missions",
+                    voyageId = voyageId
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
                 string text = GetToolResultText(result);
                 // Default should omit Description and include length hints instead
-                AssertFalse(text.Contains("\"Description\""), "Default enumerate should not include Description field");
-                AssertContains("DescriptionLength", text);
+                AssertFalse(JsonShape.HasPropertyAnywhere(text, "Description"), "Default enumerate should not include a Description property");
+                EnumerationResult<McpLengthHints> hints = JsonHelper.Deserialize<EnumerationResult<McpLengthHints>>(text);
+                AssertEqual(1, hints.Objects.Count, "the voyage's one mission");
+                AssertEqual("Desc1".Length, hints.Objects[0].DescriptionLength, "DescriptionLength hint is the description's length");
             }));
 
             cases.Add(CaseAsync("armada_enumerate_include_description_true_returns_mission_description", "ArmadaEnumerate_IncludeDescriptionTrue_ReturnsMissionDescription", TestTags.Positive, async () =>
@@ -2375,15 +2410,25 @@ namespace Test.Shared.Suites.E2E
                 HttpClient mcpClient = fx.McpClient;
                 string sessionId = await InitMcpSessionAsync(mcpClient);
 
-                await RestCreateMissionAsync(mcpClient, sessionId, "EnumDescMission").ConfigureAwait(false);
+                // A voyage of its own makes the page hold exactly the one mission this case created ("Desc1").
+                // TODO(R5, production): with includeDescription=true the tenant-scoped mission enumeration ignores the
+                // voyageId/vesselId/status filters, so this case narrows by createdAfter (honored) and selects by voyage.
+                string vesselId = await EnsureMissionVesselAsync(mcpClient, sessionId).ConfigureAwait(false);
+                string createdAfter = DateTime.UtcNow.AddSeconds(-5).ToString("o");
+                string voyageId = await RestCreateVoyageAsync(mcpClient, sessionId, vesselId).ConfigureAwait(false);
                 JsonElement result = await CallToolAsync(mcpClient, sessionId, "enumerate", new
                 {
                     entityType = "missions",
+                    createdAfter = createdAfter,
+                    pageSize = 1000,
                     includeDescription = true
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
                 string text = GetToolResultText(result);
-                AssertContains("Description", text);
+                EnumerationResult<Mission> missions = JsonHelper.Deserialize<EnumerationResult<Mission>>(text);
+                List<Mission> ours = missions.Objects.Where(m => m.VoyageId == voyageId).ToList();
+                AssertEqual(1, ours.Count, "the voyage's one mission is listed");
+                AssertEqual("Desc1", ours[0].Description, "the full Description is returned");
             }));
 
             cases.Add(CaseAsync("armada_enumerate_include_context_true_returns_vessel_context", "ArmadaEnumerate_IncludeContextTrue_ReturnsVesselContext", TestTags.Positive, async () =>
@@ -2393,17 +2438,21 @@ namespace Test.Shared.Suites.E2E
                 string sessionId = await InitMcpSessionAsync(mcpClient);
 
                 string fleetId = await RestCreateFleetAsync(mcpClient, sessionId, "EnumCtxFleet").ConfigureAwait(false);
-                await RestCreateVesselAsync(mcpClient, sessionId, fleetId, "EnumCtxVessel").ConfigureAwait(false);
+                string vesselId = await AddVesselWithContextAsync(mcpClient, sessionId, fleetId, "EnumCtxVessel", "ctx for EnumCtxVessel", "style for EnumCtxVessel").ConfigureAwait(false);
                 JsonElement result = await CallToolAsync(mcpClient, sessionId, "enumerate", new
                 {
                     entityType = "vessels",
+                    fleetId = fleetId,
                     includeContext = true
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
                 string text = GetToolResultText(result);
-                // With includeContext=true, ProjectContext and StyleGuide fields should be present
-                AssertContains("ProjectContext", text);
-                AssertContains("StyleGuide", text);
+                // With includeContext=true, ProjectContext and StyleGuide carry their values
+                EnumerationResult<Vessel> vessels = JsonHelper.Deserialize<EnumerationResult<Vessel>>(text);
+                Vessel? listed = vessels.Objects.FirstOrDefault(v => v.Id == vesselId);
+                AssertNotNull(listed, "the fleet's vessel is listed");
+                AssertEqual("ctx for EnumCtxVessel", listed!.ProjectContext, "ProjectContext");
+                AssertEqual("style for EnumCtxVessel", listed.StyleGuide, "StyleGuide");
             }));
 
             cases.Add(CaseAsync("armada_enumerate_default_no_context_omits_vessel_context", "ArmadaEnumerate_DefaultNoContext_OmitsVesselContext", TestTags.Positive, async () =>
@@ -2413,15 +2462,21 @@ namespace Test.Shared.Suites.E2E
                 string sessionId = await InitMcpSessionAsync(mcpClient);
 
                 string fleetId = await RestCreateFleetAsync(mcpClient, sessionId, "EnumNoCtxFleet").ConfigureAwait(false);
-                await RestCreateVesselAsync(mcpClient, sessionId, fleetId, "EnumNoCtxVessel").ConfigureAwait(false);
+                string vesselId = await AddVesselWithContextAsync(mcpClient, sessionId, fleetId, "EnumNoCtxVessel", "ctx for EnumNoCtxVessel", "style for EnumNoCtxVessel").ConfigureAwait(false);
                 JsonElement result = await CallToolAsync(mcpClient, sessionId, "enumerate", new
                 {
-                    entityType = "vessels"
+                    entityType = "vessels",
+                    fleetId = fleetId
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
                 string text = GetToolResultText(result);
-                AssertFalse(text.Contains("\"ProjectContext\""), "Default enumerate should not include ProjectContext");
-                AssertFalse(text.Contains("\"StyleGuide\""), "Default enumerate should not include StyleGuide");
+                AssertFalse(JsonShape.HasPropertyAnywhere(text, "ProjectContext"), "Default enumerate should not include a ProjectContext property");
+                AssertFalse(JsonShape.HasPropertyAnywhere(text, "StyleGuide"), "Default enumerate should not include a StyleGuide property");
+                EnumerationResult<McpLengthHints> hints = JsonHelper.Deserialize<EnumerationResult<McpLengthHints>>(text);
+                McpLengthHints? listed = hints.Objects.FirstOrDefault(h => h.Id == vesselId);
+                AssertNotNull(listed, "the fleet's vessel is listed");
+                AssertEqual("ctx for EnumNoCtxVessel".Length, listed!.ProjectContextLength, "ProjectContextLength hint");
+                AssertEqual("style for EnumNoCtxVessel".Length, listed.StyleGuideLength, "StyleGuideLength hint");
             }));
 
             cases.Add(CaseAsync("armada_enumerate_default_page_size_is_ten", "ArmadaEnumerate_DefaultPageSizeIsTen", TestTags.Positive, async () =>
@@ -2455,9 +2510,12 @@ namespace Test.Shared.Suites.E2E
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
                 string text = GetToolResultText(result);
-                AssertContains("MissionCountsByStatus", text);
-                AssertContains("TotalMissions", text);
-                AssertFalse(text.Contains("\"Missions\""), "Summary mode should not include Missions array");
+                McpVoyageStatusResult status = JsonHelper.Deserialize<McpVoyageStatusResult>(text);
+                AssertEqual(voyageId, status.Voyage?.Id, "voyage id");
+                AssertEqual(1, status.TotalMissions, "TotalMissions (one mission dispatched)");
+                AssertNotNull(status.MissionCountsByStatus, "MissionCountsByStatus");
+                AssertEqual(1, status.MissionCountsByStatus!.Values.Sum(), "counts by status add up to the mission total");
+                AssertNull(JsonShape.TopLevelProperty(text, "Missions"), "Summary mode should not include a Missions property");
             }));
 
             cases.Add(CaseAsync("armada_voyage_status_non_summary_with_missions_returns_missions_array", "ArmadaVoyageStatus_NonSummaryWithMissions_ReturnsMissionsArray", TestTags.Positive, async () =>
@@ -2477,10 +2535,11 @@ namespace Test.Shared.Suites.E2E
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
                 string text = GetToolResultText(result);
-                AssertContains("Missions", text);
-                JsonElement parsed = JsonSerializer.Deserialize<JsonElement>(text);
-                Assert(parsed.TryGetProperty("Missions", out JsonElement missionsArr), "Non-summary with includeMissions should have Missions array");
-                AssertTrue(missionsArr.GetArrayLength() >= 1, "Missions array should contain at least one mission");
+                McpVoyageStatusResult status = JsonHelper.Deserialize<McpVoyageStatusResult>(text);
+                AssertNotNull(status.Missions, "Non-summary with includeMissions should have a Missions array");
+                AssertEqual(1, status.Missions!.Count, "the voyage's one mission");
+                AssertEqual(voyageId, status.Missions[0].VoyageId, "mission belongs to the voyage");
+                AssertEqual("VoyageMission1", status.Missions[0].Title, "mission title");
             }));
 
             cases.Add(CaseAsync("armada_voyage_status_non_summary_with_description_returns_mission_description", "ArmadaVoyageStatus_NonSummaryWithDescription_ReturnsMissionDescription", TestTags.Positive, async () =>
@@ -2501,11 +2560,10 @@ namespace Test.Shared.Suites.E2E
                 }).ConfigureAwait(false);
                 AssertToolResultValid(result);
                 string text = GetToolResultText(result);
-                JsonElement parsed = JsonSerializer.Deserialize<JsonElement>(text);
-                Assert(parsed.TryGetProperty("Missions", out JsonElement missionsArr), "Should have Missions array");
-                AssertTrue(missionsArr.GetArrayLength() >= 1, "Missions array should not be empty");
-                JsonElement firstMission = missionsArr[0];
-                Assert(firstMission.TryGetProperty("Description", out _), "Missions should include Description when includeDescription=true");
+                McpVoyageStatusResult status = JsonHelper.Deserialize<McpVoyageStatusResult>(text);
+                AssertNotNull(status.Missions, "Should have a Missions array");
+                AssertEqual(1, status.Missions!.Count, "the voyage's one mission");
+                AssertEqual("Desc1", status.Missions[0].Description, "Missions include the Description when includeDescription=true");
             }));
 
             cases.Add(CaseAsync("all_tools_armada_process_merge_queue_executes", "AllTools_ArmadaProcessMergeQueue_Executes", TestTags.Positive, async () =>
@@ -2552,15 +2610,20 @@ namespace Test.Shared.Suites.E2E
 
                 JsonElement searchResult = await CallToolAsync(mcpClient, sessionId, "search_memory", new { search = uniq }).ConfigureAwait(false);
                 AssertToolResultValid(searchResult);
-                AssertContains(created.Id, GetToolResultText(searchResult));
+                EnumerationResult<Memory> found = JsonHelper.Deserialize<EnumerationResult<Memory>>(GetToolResultText(searchResult));
+                AssertTrue(found.Objects.Any(m => m.Id == created.Id), "search_memory finds the memory");
 
                 JsonElement getResult = await CallToolAsync(mcpClient, sessionId, "get_memory", new { memoryId = created.Id }).ConfigureAwait(false);
                 AssertToolResultValid(getResult);
-                AssertContains("(revised)", GetToolResultText(getResult));
+                Memory fetched = JsonHelper.Deserialize<Memory>(GetToolResultText(getResult));
+                AssertEqual(created.Id, fetched.Id, "memory id");
+                AssertEqual("Memory content " + uniq + " (revised)", fetched.Content, "upserted content");
 
                 JsonElement delResult = await CallToolAsync(mcpClient, sessionId, "delete_memory", new { memoryId = created.Id }).ConfigureAwait(false);
                 AssertToolResultValid(delResult);
-                AssertContains("deleted", GetToolResultText(delResult));
+                McpStatusResult deleted = JsonHelper.Deserialize<McpStatusResult>(GetToolResultText(delResult));
+                AssertEqual("deleted", deleted.Status, "status");
+                AssertEqual(created.Id, deleted.MemoryId, "memory id");
             }));
 
             cases.Add(CaseAsync("service_not_found_tools_return_typed_not_found", "Tools whose services throw KeyNotFoundException return ErrorCode NotFound, not isError", TestTags.Negative, async () =>
@@ -2911,6 +2974,42 @@ namespace Test.Shared.Suites.E2E
             string text = GetToolResultText(result);
             Voyage voyage = JsonHelper.Deserialize<Voyage>(text);
             return voyage.Id;
+        }
+
+        /// <summary>
+        /// Add a vessel with a project context and style guide through add_vessel and return its id.
+        /// </summary>
+        /// <param name="mcpClient">HTTP client targeting the MCP port.</param>
+        /// <param name="sessionId">MCP session id.</param>
+        /// <param name="fleetId">Owning fleet id.</param>
+        /// <param name="name">Vessel name seed.</param>
+        /// <param name="projectContext">Project context.</param>
+        /// <param name="styleGuide">Style guide.</param>
+        /// <returns>The vessel id.</returns>
+        private static async Task<string> AddVesselWithContextAsync(HttpClient mcpClient, string sessionId, string fleetId, string name, string projectContext, string styleGuide)
+        {
+            JsonElement result = await CallToolAsync(mcpClient, sessionId, "add_vessel", new
+            {
+                name = name + "-" + Guid.NewGuid().ToString("N").Substring(0, 8),
+                repoUrl = TestRepoHelper.GetLocalBareRepoUrl(),
+                fleetId = fleetId,
+                projectContext = projectContext,
+                styleGuide = styleGuide
+            }).ConfigureAwait(false);
+            return JsonHelper.Deserialize<Vessel>(GetToolResultText(result)).Id;
+        }
+
+        /// <summary>
+        /// Read the mission a create_mission result describes: either the mission itself or, when it stays Pending,
+        /// the { Mission, Warning } wrapper.
+        /// </summary>
+        /// <param name="text">Tool result text.</param>
+        /// <returns>The mission.</returns>
+        private static Mission ReadCreatedMission(string text)
+        {
+            MissionCreateResponse wrapped = JsonHelper.Deserialize<MissionCreateResponse>(text);
+            if (wrapped.Mission != null) return wrapped.Mission;
+            return JsonHelper.Deserialize<Mission>(text);
         }
 
         private static TestCaseDescriptor CaseAsync(string caseId, string displayName, string tag, Func<Task> body)

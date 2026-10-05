@@ -3,7 +3,9 @@ namespace Test.Shared.Suites.Tui
     using System;
     using System.Collections.Generic;
     using System.Linq;
+    using System.Text.Json;
     using System.Text.Json.Nodes;
+    using Armada.Client.Models;
     using Armada.Client.Socket;
     using Armada.Core.Enums;
     using Armada.Core.Models;
@@ -11,6 +13,7 @@ namespace Test.Shared.Suites.Tui
     using Armada.Tui.Screens.Ask;
     using Armada.Tui.Services;
     using Test.Shared.Infrastructure;
+    using Test.Shared.Suites.Tui.Bodies;
     using Touchstone.Core;
     using static Test.Shared.Infrastructure.Asserts;
 
@@ -70,9 +73,9 @@ namespace Test.Shared.Suites.Tui
                     AskScreen screen = (AskScreen)host.Tui.Shell.Screen!;
                     screen.Scope.Focus(screen.ThreadList);
                     host.Press("/").Type("tui");
-                    AssertTrue(host.PumpUntil(() => fx.Stub.Bodies.Any(b => b.Contains("\"Search\":\"tui\""))), "server-side search");
+                    AssertTrue(host.PumpUntil(() => fx.Stub.BodiesFor<AskThreadEnumerateQuery>("POST", "/api/v1/ask/threads/enumerate").Any(q => q.Search == "tui")), "server-side search");
                     host.Press("enter").Press("A");
-                    AssertTrue(host.PumpUntil(() => fx.Stub.Bodies.Any(b => b.Contains("\"IncludeArchived\":true"))), "archived toggle reloads");
+                    AssertTrue(host.PumpUntil(() => fx.Stub.BodiesFor<AskThreadEnumerateQuery>("POST", "/api/v1/ask/threads/enumerate").Any(q => q.IncludeArchived)), "archived toggle reloads");
                     AssertTrue(ask.IncludeArchived, "archived shown");
                     ask.SetSearch("");
                     host.PumpUntil(() => ask.Query.Length == 0);
@@ -87,7 +90,7 @@ namespace Test.Shared.Suites.Tui
                     TuiCase.Contains(host.Screen(), "Its messages and action history are removed", "dashboard delete text");
                     host.Press("y");
                     AssertTrue(host.PumpUntil(() => ask.Threads.Count == 1), "deleted");
-                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.ActiveToasts().Any(t => t.Text.Contains("Conversation deleted."))), "toast");
+                    AssertTrue(host.PumpUntil(() => TuiToasts.Has(host, NotificationSeverityEnum.Success, "Conversation deleted.") && fx.Stub.CountFor("DELETE", "/api/v1/ask/threads/ath_1") + fx.Stub.CountFor("DELETE", "/api/v1/ask/threads/ath_2") == 1), "toast");
                     screen = (AskScreen)host.Tui.Shell.Screen!;
                     screen.Scope.Focus(screen.ThreadList);
                     host.Press("n");
@@ -99,7 +102,7 @@ namespace Test.Shared.Suites.Tui
             {
                 AskFixtures fx = new AskFixtures();
                 fx.AddThread(AskFixtures.Thread("ath_1", "First"));
-                fx.Stub.On("POST", "/api/v1/ask/threads/enumerate", body => body.Contains("\"PageNumber\":2")
+                fx.Stub.On("POST", "/api/v1/ask/threads/enumerate", body => JsonHelper.Deserialize<AskThreadEnumerateQuery>(body).PageNumber == 2
                     ? StubHttpHandler.Response(System.Net.HttpStatusCode.OK, "{\"Success\":true,\"PageNumber\":2,\"PageSize\":50,\"TotalPages\":2,\"TotalRecords\":2,\"Objects\":[{\"Id\":\"ath_2\",\"Title\":\"Second\"}]}")
                     : StubHttpHandler.Response(System.Net.HttpStatusCode.OK, "{\"Success\":true,\"PageNumber\":1,\"PageSize\":50,\"TotalPages\":2,\"TotalRecords\":2,\"Objects\":[{\"Id\":\"ath_1\",\"Title\":\"First\"}]}"));
                 using (TuiTestHost host = TuiCase.SignedIn(140, 45, "/ask", fx.Stub))
@@ -124,8 +127,8 @@ namespace Test.Shared.Suites.Tui
                 fx.AddThread(AskFixtures.Thread("ath_2", "Other"));
                 using (TuiTestHost host = TuiCase.SignedIn(140, 45, "/ask/ath_1", fx.Stub))
                 {
-                    AssertTrue(host.PumpUntil(() => fx.Stub.Count("POST /api/v1/ask/threads/ath_1/read") >= 1), "read on open");
-                    int before = fx.Stub.Count("POST /api/v1/ask/threads/ath_1/read");
+                    AssertTrue(host.PumpUntil(() => fx.Stub.CountFor("POST", "/api/v1/ask/threads/ath_1/read") >= 1), "read on open");
+                    int before = fx.Stub.CountFor("POST", "/api/v1/ask/threads/ath_1/read");
                     host.Tui.Context.Notifications.TerminalFocused = false;
                     AskThread bumped = AskFixtures.Thread("ath_1", "TUIKit fixes");
                     bumped.UnreadCount = 1;
@@ -133,13 +136,13 @@ namespace Test.Shared.Suites.Tui
                     host.Pump();
                     System.Threading.Thread.Sleep(100);
                     host.Pump();
-                    AssertEqual(before, fx.Stub.Count("POST /api/v1/ask/threads/ath_1/read"), "not while unfocused");
+                    AssertEqual(before, fx.Stub.CountFor("POST", "/api/v1/ask/threads/ath_1/read"), "not while unfocused");
                     host.Tui.Ask.OnTerminalFocusChanged(true);
                     host.Tui.Context.Notifications.TerminalFocused = true;
                     host.Tui.Ask.OnTerminalFocusChanged(true);
-                    AssertTrue(host.PumpUntil(() => fx.Stub.Count("POST /api/v1/ask/threads/ath_1/read") > before), "read when focus returns");
+                    AssertTrue(host.PumpUntil(() => fx.Stub.CountFor("POST", "/api/v1/ask/threads/ath_1/read") > before), "read when focus returns");
                     host.Tui.Context.Events.Inject(AskFixtures.Event("ask.thread", new AskThreadEvent { ThreadId = "ath_1", Thread = bumped }));
-                    AssertTrue(host.PumpUntil(() => fx.Stub.Count("POST /api/v1/ask/threads/ath_1/read") > before + 1), "read on ask.thread with unread");
+                    AssertTrue(host.PumpUntil(() => fx.Stub.CountFor("POST", "/api/v1/ask/threads/ath_1/read") > before + 1), "read on ask.thread with unread");
                     AssertEqual(0, host.Tui.Ask.Threads.First(x => x.Id == "ath_1").UnreadCount, "open thread unread stays zero");
                 }
             }));
@@ -255,7 +258,7 @@ namespace Test.Shared.Suites.Tui
                     AssertFalse(ask.Conversation.TurnActive, "turn finished");
                     AssertNull(ask.Conversation.Streaming, "stream replaced by the persisted reply");
                     AssertTrue(ask.Conversation.Metrics.ContainsKey("amg_2"), "metrics kept for the reply");
-                    AssertTrue(host.PumpUntil(() => fx.Stub.Count("POST /api/v1/ask/threads/ath_1/messages/enumerate") >= 2), "newest page refetched after the turn");
+                    AssertTrue(host.PumpUntil(() => fx.Stub.CountFor("POST", "/api/v1/ask/threads/ath_1/messages/enumerate") >= 2), "newest page refetched after the turn");
                     events.Inject(AskFixtures.EventJson("ask.chunk", "{\"threadId\":\"ath_1\",\"turnId\":\"atn_1\",\"delta\":\"late\"}"));
                     host.Pump();
                     TuiCase.NotContains(host.Screen(), "late", "late chunk for a closed turn ignored");
@@ -290,7 +293,7 @@ namespace Test.Shared.Suites.Tui
                     host.Press("x");
                     TuiCase.Contains(host.Screen(), "\"missions\": [", "arguments expanded");
                     host.Press("a");
-                    AssertTrue(host.PumpUntil(() => fx.Stub.Count("POST /api/v1/ask/threads/ath_1/proposals/aap_1/approve") == 1), "approve call");
+                    AssertTrue(host.PumpUntil(() => fx.Stub.CountFor("POST", "/api/v1/ask/threads/ath_1/proposals/aap_1/approve") == 1), "approve call");
                     AssertTrue(host.PumpUntil(() => ask.Conversation.Proposals["aap_1"].Status == AskProposalStatusEnum.Executed), "executed");
                     AssertTrue(host.WaitForText("Ran "), "outcome shown");
                     AssertEqual(0, host.Tui.Context.Approvals.Count, "left the queue");
@@ -493,15 +496,17 @@ namespace Test.Shared.Suites.Tui
                     dispatch.MissionTitles[1].Value = "Add tests";
                     dispatch.VoyageTitle.Value = "";
                     AssertTrue(dispatch.SubmitForm(), "submitted");
-                    AssertTrue(host.PumpUntil(() => fx.Stub.Count("POST /api/v1/ask/threads/ath_1/actions") == 1), "actions call");
-                    string body = fx.Stub.Bodies.Last(b => b.Contains("\"ToolName\":\"dispatch\""));
-                    JsonObject args = JsonNode.Parse(body)!["Arguments"]!.AsObject();
-                    AssertEqual("Fix column widths", args["title"]!.GetValue<string>(), "voyage title defaults to the first mission");
-                    AssertEqual("vsl_a", args["vesselId"]!.GetValue<string>(), "vessel");
-                    AssertEqual(2, args["missions"]!.AsArray().Count, "two missions");
-                    AssertEqual("Fix column widths", args["missions"]![0]!["description"]!.GetValue<string>(), "description defaults to the title");
-                    AssertEqual("no title", args["missions"]![1]!["description"]!.GetValue<string>(), "description kept");
-                    AssertFalse(args.ContainsKey("pipelineId"), "no pipeline when vessel default");
+                    AssertTrue(host.PumpUntil(() => fx.Stub.CountFor("POST", "/api/v1/ask/threads/ath_1/actions") == 1), "actions call");
+                    AskQuickActionRunBody run = fx.Stub.Last("POST", "/api/v1/ask/threads/ath_1/actions").BodyAs<AskQuickActionRunBody>();
+                    AssertEqual("dispatch", run.ToolName, "dispatch tool");
+                    string argsJson = run.Arguments!.Json;
+                    AskDispatchArgumentsBody args = JsonHelper.Deserialize<AskDispatchArgumentsBody>(argsJson);
+                    AssertEqual("Fix column widths", args.Title, "voyage title defaults to the first mission");
+                    AssertEqual("vsl_a", args.VesselId, "vessel");
+                    AssertEqual(2, args.Missions!.Count, "two missions");
+                    AssertEqual("Fix column widths", args.Missions[0].Description, "description defaults to the title");
+                    AssertEqual("no title", args.Missions[1].Description, "description kept");
+                    AssertNull(JsonShape.TopLevelProperty(argsJson, "pipelineId"), "no pipeline when vessel default");
                     AssertTrue(host.PumpUntil(() => screen.Form == null), "form closes on success");
 
                     AskQuickAction fleet = ask.QuickActions.First(a => a.Name == "fleet-action");
@@ -514,14 +519,17 @@ namespace Test.Shared.Suites.Tui
                     form.Vessels.SetFilter("");
                     form.Vessels.Toggle("vsl_b");
                     AskFleetActionDraft draft = form.Draft();
-                    JsonObject fargs = AskQuickActions.BuildFleetActionArguments(draft);
-                    AssertEqual("{\"actionId\":\"fa_1\",\"vesselIds\":[\"vsl_a\",\"vsl_b\"]}", fargs.ToJsonString(), "run_fleet_action arguments");
+                    string fargsJson = AskQuickActions.BuildFleetActionArguments(draft).ToJsonString();
+                    AskFleetActionArgumentsBody fargs = JsonHelper.Deserialize<AskFleetActionArgumentsBody>(fargsJson);
+                    AssertEqual("fa_1", fargs.ActionId, "run_fleet_action action id");
+                    AssertEqual("vsl_a,vsl_b", String.Join(",", fargs.VesselIds!), "run_fleet_action vessel ids");
+                    AssertEqual("actionId,vesselIds", String.Join(",", JsonShape.TopLevel(fargsJson).Select(p => p.Name)), "run_fleet_action argument names");
                     AssertTrue(form.SubmitForm(), "fleet submitted");
-                    AssertTrue(host.PumpUntil(() => fx.Stub.Bodies.Any(b => b.Contains("\"ToolName\":\"run_fleet_action\""))), "fleet action call");
+                    AssertTrue(host.PumpUntil(() => fx.Stub.BodiesFor<AskQuickActionRunBody>("POST", "/api/v1/ask/threads/ath_1/actions").Any(b => b.ToolName == "run_fleet_action" && b.Arguments != null && JsonHelper.Deserialize<AskFleetActionArgumentsBody>(b.Arguments.Json).ActionId == "fa_1" && String.Join(",", JsonHelper.Deserialize<AskFleetActionArgumentsBody>(b.Arguments.Json).VesselIds ?? new List<string>()) == "vsl_a,vsl_b")), "fleet action call");
                     host.PumpUntil(() => screen.Form == null);
 
                     screen.Composer.Choose(ask.QuickActions.First(a => a.Name == "status"));
-                    AssertTrue(host.PumpUntil(() => fx.Stub.Bodies.Any(b => b.Contains("\"ToolName\":\"status\"") && b.Contains("\"Arguments\":{}"))), "status runs with no form");
+                    AssertTrue(host.PumpUntil(() => fx.Stub.RequestsFor("POST", "/api/v1/ask/threads/ath_1/actions").Any(r => r.TryBodyAs<AskQuickActionRunBody>()?.ToolName == "status" && r.BodyProperty("Arguments")?.ValueToken == JsonTokenType.StartObject && JsonShape.TopLevel(r.BodyAs<AskQuickActionRunBody>().Arguments!.Json).Count == 0)), "status runs with no form");
                     AssertNull(screen.Form, "no form for status");
                     screen.Composer.Choose(ask.QuickActions.First(a => a.Name == "import"));
                     AssertEqual("/vessels/import", host.Tui.Context.Router.Current!.Path, "import opens its screen");
@@ -530,7 +538,15 @@ namespace Test.Shared.Suites.Tui
                     empty.PipelineId = "ppl_1";
                     empty.Title = "Voyage";
                     empty.Missions = new List<AskDispatchMissionDraft> { new AskDispatchMissionDraft("One", "Do one") };
-                    AssertEqual("{\"title\":\"Voyage\",\"vesselId\":\"vsl_a\",\"missions\":[{\"title\":\"One\",\"description\":\"Do one\"}],\"pipelineId\":\"ppl_1\"}", AskQuickActions.BuildDispatchArguments(empty).ToJsonString(), "dispatch arguments with pipeline");
+                    string withPipelineJson = AskQuickActions.BuildDispatchArguments(empty).ToJsonString();
+                    AskDispatchArgumentsBody withPipeline = JsonHelper.Deserialize<AskDispatchArgumentsBody>(withPipelineJson);
+                    AssertEqual("Voyage", withPipeline.Title, "dispatch title");
+                    AssertEqual("vsl_a", withPipeline.VesselId, "dispatch vessel");
+                    AssertEqual("ppl_1", withPipeline.PipelineId, "dispatch pipeline");
+                    AssertEqual(1, withPipeline.Missions!.Count, "one mission");
+                    AssertEqual("One", withPipeline.Missions[0].Title, "mission title");
+                    AssertEqual("Do one", withPipeline.Missions[0].Description, "mission description");
+                    AssertEqual("title,vesselId,missions,pipelineId", String.Join(",", JsonShape.TopLevel(withPipelineJson).Select(p => p.Name)), "dispatch argument names");
                 }
             }));
 
@@ -570,12 +586,12 @@ namespace Test.Shared.Suites.Tui
                     AssertTrue(ask.Conversation.TurnActive, "turn active");
                     AssertEqual("", screen.Composer.Text, "composer cleared");
                     AssertTrue(host.PumpUntil(() => ask.Conversation.Messages.Any(m => m.Id == "amg_sent")), "confirmed with the server id");
-                    AssertTrue(fx.Stub.Bodies.Any(b => b.Contains("line one\\nline two")), "sent text");
+                    AssertTrue(fx.Stub.BodiesFor<AskSendMessageRequest>("POST", "/api/v1/ask/threads/ath_1/messages").Any(m => m.Content == "line one\nline two"), "sent text");
                     AssertEqual("atn_1", ask.Conversation.Streaming!.TurnId, "following the turn");
                     host.Press("ctrl+c");
                     AssertTrue(ask.Stopping, "stopping");
                     TuiCase.Contains(host.Screen(), "Stopping...", "stopping shown");
-                    AssertTrue(host.PumpUntil(() => fx.Stub.Count("POST /api/v1/ask/threads/ath_1/cancel") == 1), "cancel call");
+                    AssertTrue(host.PumpUntil(() => fx.Stub.CountFor("POST", "/api/v1/ask/threads/ath_1/cancel") == 1), "cancel call");
                     AssertTrue(host.PumpUntil(() => !ask.Conversation.TurnActive, 3000), "force-ended locally");
                     host.Press("up");
                     AssertEqual("line one\nline two", screen.Composer.Text, "history recall");
@@ -600,8 +616,8 @@ namespace Test.Shared.Suites.Tui
                     TuiCase.Contains(host.Screen(), "Ask claude-1 anything about your fleet", "greeting sub text");
                     host.Type("hello").Press("enter");
                     AssertTrue(host.PumpUntil(() => host.Tui.Context.Router.Current!.FullPath == "/ask/ath_new"), "navigated to the new thread");
-                    AssertTrue(fx.Stub.Bodies.Any(b => b.Contains("\"CaptainId\":\"cpt_1\"")), "created with the draft captain");
-                    AssertTrue(host.PumpUntil(() => fx.Stub.Count("POST /api/v1/ask/threads/ath_new/messages") >= 1 && fx.Stub.Requests.Any(r => r == "POST /api/v1/ask/threads/ath_new/messages")), "message sent to it");
+                    AssertTrue(fx.Stub.BodiesFor<AskThreadCreateRequest>("POST", "/api/v1/ask/threads").Any(c => c.CaptainId == "cpt_1"), "created with the draft captain");
+                    AssertTrue(host.PumpUntil(() => fx.Stub.Saw("POST", "/api/v1/ask/threads/ath_new/messages", r => r.Query.Length == 0 && r.BodyAs<AskSendMessageRequest>().Content == "hello")), "message sent to it");
                 }
             }));
 
@@ -618,12 +634,12 @@ namespace Test.Shared.Suites.Tui
                     TuiCase.Contains(host.Screen(), "[Load earlier messages]", "load earlier row");
                     host.Press("esc").Press("home");
                     AssertTrue(host.PumpUntil(() => ask.Conversation.Messages.Count == 2), "older page merged");
-                    AssertTrue(fx.Stub.Bodies.Any(b => b.Contains("\"BeforeSequence\":40")), "before the oldest sequence");
+                    AssertTrue(fx.Stub.BodiesFor<AskMessageEnumerateQuery>("POST", "/api/v1/ask/threads/ath_1/messages/enumerate").Any(q => q.BeforeSequence == 40), "before the oldest sequence");
                     AssertEqual("amg_10", ask.Conversation.Messages[0].Id, "sorted by sequence");
-                    int lists = fx.Stub.Count("POST /api/v1/ask/threads/enumerate");
-                    int details = fx.Stub.Count("GET /api/v1/ask/threads/ath_1");
+                    int lists = fx.Stub.CountFor("POST", "/api/v1/ask/threads/enumerate");
+                    int details = fx.Stub.CountFor("GET", "/api/v1/ask/threads/ath_1");
                     ask.HandleReconnect();
-                    AssertTrue(host.PumpUntil(() => fx.Stub.Count("POST /api/v1/ask/threads/enumerate") > lists && fx.Stub.Count("GET /api/v1/ask/threads/ath_1") > details), "refetched after reconnect");
+                    AssertTrue(host.PumpUntil(() => fx.Stub.CountFor("POST", "/api/v1/ask/threads/enumerate") > lists && fx.Stub.CountFor("GET", "/api/v1/ask/threads/ath_1") > details), "refetched after reconnect");
                 }
             }));
 
@@ -664,10 +680,10 @@ namespace Test.Shared.Suites.Tui
                     TuiCase.Contains(host.Screen(), "INSTRUCTIONS_FOR_CODEX.md", "per-runtime instructions");
                     ask.SetCaptain("");
                     AssertTrue(host.PumpUntil(() => ask.Conversation.Thread!.CaptainId == null), "captain cleared");
-                    AssertTrue(fx.Stub.Bodies.Any(b => b.Contains("\"CaptainId\":null")), "explicit null clears the captain");
+                    AssertTrue(fx.Stub.RequestsFor("PUT", "/api/v1/ask/threads/ath_1").Any(r => r.BodyProperty("CaptainId")?.ValueToken == JsonTokenType.Null), "explicit null clears the captain");
                     host.Press("s");
-                    AssertTrue(host.PumpUntil(() => fx.Stub.Count("POST /api/v1/ask/threads/ath_1/summarize") == 1), "summarize call");
-                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.ActiveToasts().Any(t => t.Text.Contains("Summarizing \"TUIKit fixes\""))), "summarize toast");
+                    AssertTrue(host.PumpUntil(() => fx.Stub.CountFor("POST", "/api/v1/ask/threads/ath_1/summarize") == 1), "summarize call");
+                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.ActiveToasts().Any(t => t.Text.Contains("Summarizing \"TUIKit fixes\"") && t.Severity == NotificationSeverityEnum.Info)), "summarize toast");
                     host.Press("e").Press("ctrl+u").Type("Renamed in header").Press("enter");
                     AssertTrue(host.PumpUntil(() => ask.Conversation.Thread!.Title == "Renamed in header"), "header rename");
                 }
@@ -689,7 +705,7 @@ namespace Test.Shared.Suites.Tui
                     TuiCase.Contains(frame, "what is running?", "conversation tail");
                     host.Tui.Shell.FocusPane("dock");
                     host.Type("from the dock").Press("enter");
-                    AssertTrue(host.PumpUntil(() => fx.Stub.Bodies.Any(b => b.Contains("from the dock"))), "dock sends to the open thread");
+                    AssertTrue(host.PumpUntil(() => fx.Stub.BodiesFor<AskSendMessageRequest>("POST", "/api/v1/ask/threads/ath_1/messages").Any(m => m.Content == "from the dock")), "dock sends to the open thread");
                     host.Tui.Context.Events.Inject(AskFixtures.EventJson("ask.chunk", "{\"threadId\":\"ath_1\",\"turnId\":\"atn_1\",\"delta\":\"Two voyages.\"}"));
                     AssertTrue(host.WaitForText("Two voyages."), "dock streams the reply");
                     host.Tui.Context.Navigate("/vessels/vsl_a");

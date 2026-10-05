@@ -4,6 +4,8 @@ namespace Test.Shared.Suites.Tui
     using System.Collections.Generic;
     using System.Linq;
     using System.Net;
+    using Armada.Client.Models;
+    using Armada.Core.Models;
     using Armada.Tui.Screens;
     using Armada.Tui.Screens.Operations;
     using Test.Shared.Infrastructure;
@@ -36,7 +38,7 @@ namespace Test.Shared.Suites.Tui
                     TuiCase.Contains(frame, "x LandingFailed", "status badge");
                     MissionsScreen screen = Screen(host);
                     screen.StatusFilter.Choose(screen.StatusFilter.Options.First(o => o.Value == "Review"));
-                    AssertTrue(host.PumpUntil(() => stub.Requests.Any(r => r.Contains("/api/v1/missions/summaries") && r.Contains("status=Review"))), "server status filter: " + String.Join(" | ", stub.Requests));
+                    AssertTrue(host.PumpUntil(() => stub.Saw("GET", "/api/v1/missions/summaries", r => r.QueryValue("status") == "Review")), "server status filter: " + String.Join(" | ", stub.Requests));
                     host.Press("/");
                     host.Press("tab").Press("tab");
                     host.Type("Add");
@@ -60,7 +62,7 @@ namespace Test.Shared.Suites.Tui
                     TuiCase.Contains(menu, "Purge (permanent)", "purge");
                     host.Press("esc");
                     host.Press("L");
-                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/missions/msn_l/retry-landing") == 1), "retry landing");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/missions/msn_l/retry-landing") == 1), "retry landing");
                     AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.ActiveToasts().Any(t => t.Text.Contains("Landing succeeded for \"Ship it\""))), "landing toast");
                     host.Press("t");
                     AssertTrue(host.PumpUntil(() => host.App.Modals.IsActive), "transition dialog");
@@ -70,17 +72,17 @@ namespace Test.Shared.Suites.Tui
                     host.Type("Complete").Press("enter");
                     Settle(host);
                     host.Press("ctrl+s");
-                    AssertTrue(host.PumpUntil(() => stub.Count("PUT /api/v1/missions/msn_l/status") == 1), "transition call\n" + host.Screen());
-                    AssertTrue(stub.Bodies.Any(b => b.Contains("\"Status\":\"Complete\"")), "transition body");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("PUT", "/api/v1/missions/msn_l/status") == 1), "transition call\n" + host.Screen());
+                    AssertEqual("Complete", stub.LastBody<TransitionRequest>("PUT", "/api/v1/missions/msn_l/status").Status, "transition body");
                     AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.ActiveToasts().Any(t => t.Text.Contains("Mission \"Ship it\" moved to Complete."))), "transition toast");
                     host.Press("x");
                     TuiCase.Contains(host.Screen(), "Use Purge to permanently remove it.", "cancel text");
                     host.Press("y");
-                    AssertTrue(host.PumpUntil(() => stub.Count("DELETE /api/v1/missions/msn_l") == 1), "cancel = delete");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("DELETE", "/api/v1/missions/msn_l") == 1), "cancel = delete");
                     host.Press("del");
                     TuiCase.Contains(host.Screen(), "This will permanently remove it", "purge text");
                     host.Press("y");
-                    AssertTrue(host.PumpUntil(() => stub.Count("DELETE /api/v1/missions/msn_l/purge") == 1), "purge");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("DELETE", "/api/v1/missions/msn_l/purge") == 1), "purge");
                     host.Press("d");
                     AssertTrue(host.PumpUntil(() => host.Screen().Contains("+added line")), "diff viewer");
                     host.Press("esc");
@@ -88,7 +90,7 @@ namespace Test.Shared.Suites.Tui
                     AssertTrue(host.PumpUntil(() => host.Screen().Contains("captain output line")), "log viewer\n" + host.Screen());
                     TuiCase.Contains(host.Screen(), "Total lines: 42", "total lines");
                     host.Press("+");
-                    AssertTrue(host.PumpUntil(() => stub.Requests.Any(r => r.Contains("/log") && r.Contains("lines=500"))), "line count change");
+                    AssertTrue(host.PumpUntil(() => stub.Saw("GET", "/api/v1/missions/msn_l/log", r => r.QueryValue("lines") == "500")), "line count change: " + String.Join("\n", stub.RequestsFor("GET", "/api/v1/missions/msn_l/log")));
                     host.Press("esc");
                     host.Press("enter");
                     AssertEqual("/missions/msn_l", host.Tui.Context.Router.Current!.FullPath, "Enter opens the mission");
@@ -111,9 +113,13 @@ namespace Test.Shared.Suites.Tui
                     host.Press("tab").Press("enter").Type("Demo").Press("enter");
                     Settle(host);
                     host.Press("ctrl+s");
-                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/missions") == 1), "create call");
-                    string body = stub.Bodies.Last(b => b.Contains("Write docs"));
-                    AssertTrue(body.Contains("\"VesselId\":\"vsl_demo\"") && body.Contains("\"Priority\":100") && body.Contains("Explain the TUI"), "create body: " + body);
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/missions") == 1), "create call");
+                    StubRequest create = stub.Last("POST", "/api/v1/missions");
+                    Mission body = create.BodyAs<Mission>();
+                    AssertEqual("Write docs", body.Title, "title");
+                    AssertEqual("vsl_demo", body.VesselId, "vessel");
+                    AssertEqual("100", create.BodyProperty("Priority")?.ScalarText, "priority 100 sent (not the model default)");
+                    AssertEqual("Explain the TUI", body.Description, "description");
                     AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.ActiveToasts().Any(t => t.Text.Contains("Mission \"Write docs\" created."))), "create toast");
                     host.Press("home").Press("space").Press("down").Press("space");
                     AssertEqual(2, screen.Grid.Marked.Count, "two marked");
@@ -121,7 +127,7 @@ namespace Test.Shared.Suites.Tui
                     host.Press("D");
                     TuiCase.Contains(host.Screen(), "Delete 2 selected mission(s)? This cannot be undone.", "bulk confirm");
                     host.Press("y");
-                    AssertTrue(host.PumpUntil(() => stub.Count("DELETE /api/v1/missions/msn_f/purge") == 1 && stub.Count("DELETE /api/v1/missions/msn_a/purge") == 1), "bulk purge");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("DELETE", "/api/v1/missions/msn_f/purge") == 1 && stub.CountFor("DELETE", "/api/v1/missions/msn_a/purge") == 1), "bulk purge");
                     AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.ActiveToasts().Any(t => t.Text.Contains("Purged 2 missions."))), "bulk toast");
                 }
             }));

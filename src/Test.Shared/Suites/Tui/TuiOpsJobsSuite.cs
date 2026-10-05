@@ -4,6 +4,7 @@ namespace Test.Shared.Suites.Tui
     using System.Collections.Generic;
     using System.Linq;
     using Armada.Tui.Screens.Operations;
+    using Armada.Tui.Services;
     using Test.Shared.Infrastructure;
     using Touchstone.Core;
     using static Test.Shared.Infrastructure.Asserts;
@@ -39,13 +40,13 @@ namespace Test.Shared.Suites.Tui
                     JobsScreen screen = (JobsScreen)host.Tui.Shell.Screen!;
                     AssertEqual("job_run", screen.Grid.Current!.Id, "newest first");
                     host.Press("x");
-                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/jobs/job_run/cancel") == 1), "cancel call");
-                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.ActiveToasts().Any(t => t.Text.Contains("Job \"Evaluate vessel health\" cancelled."))), "toast");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/jobs/job_run/cancel") == 1), "cancel call");
+                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.ActiveToasts().Any(t => t.Severity == NotificationSeverityEnum.Warning && t.Text.Contains("Job \"Evaluate vessel health\" cancelled."))), "toast");
                     host.Press("down");
-                    int before = stub.Count("POST /api/v1/jobs/job_bad/cancel");
+                    int before = stub.CountFor("POST", "/api/v1/jobs/job_bad/cancel");
                     host.Press("x");
                     host.Pump();
-                    AssertEqual(before, stub.Count("POST /api/v1/jobs/job_bad/cancel"), "finished jobs cannot be cancelled");
+                    AssertEqual(before, stub.CountFor("POST", "/api/v1/jobs/job_bad/cancel"), "finished jobs cannot be cancelled");
                     host.Press("j");
                     AssertTrue(host.PumpUntil(() => host.App.Modals.IsActive), "JSON viewer");
                     TuiCase.Contains(host.Screen(), "\"ErrorReason\": \"disk full\"", "JSON body");

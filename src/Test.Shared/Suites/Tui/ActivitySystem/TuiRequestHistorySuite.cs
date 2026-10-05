@@ -40,10 +40,10 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                     TuiCase.Contains(frame, "Success", "chart legend");
                     TuiCase.Contains(frame, "! 500", "failure status marker");
                     TuiCase.Contains(frame, "Delete Visible Range", "bulk range button");
-                    AssertTrue(stub.Requests.Any(r => r.StartsWith("GET /api/v1/request-history/summary?", StringComparison.Ordinal) && r.Contains("bucketMinutes=15")), "summary with bucket minutes");
+                    AssertTrue(stub.Saw("GET", "/api/v1/request-history/summary", r => r.QueryValue("bucketMinutes") == "15"), "summary with bucket minutes: " + String.Join("\n", stub.Requests));
                     RequestHistoryScreen screen = Current<RequestHistoryScreen>(host);
                     screen.SetRange("lastHour");
-                    AssertTrue(host.PumpUntil(() => stub.Requests.Any(r => r.Contains("summary") && (r.Contains("bucketMinutes=1&") || r.EndsWith("bucketMinutes=1", StringComparison.Ordinal)))), "hour range requery");
+                    AssertTrue(host.PumpUntil(() => stub.Saw("GET", "/api/v1/request-history/summary", r => r.QueryValue("bucketMinutes") == "1")), "hour range requery");
                 }
             }));
 
@@ -58,13 +58,13 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                     AssertTrue(screen.Filters.Visible, "filters expanded");
                     TuiCase.Contains(host.Screen(), "Status Code", "filter field");
                     screen.MethodFilter.Choose(screen.MethodFilter.Options.First(o => o.Value == "POST"));
-                    AssertTrue(host.PumpUntil(() => stub.Requests.Any(r => r.StartsWith("GET /api/v1/request-history?", StringComparison.Ordinal) && r.Contains("method=POST"))), "method filter sent");
+                    AssertTrue(host.PumpUntil(() => stub.Saw("GET", "/api/v1/request-history", r => r.QueryValue("method") == "POST")), "method filter sent");
                     screen.Filters.Scope.Focus(screen.RouteFilter);
                     host.Type("/api/v1/fleets");
                     host.Press("enter");
-                    AssertTrue(host.PumpUntil(() => stub.Requests.Any(r => r.Contains("route=/api/v1/fleets"))), "route filter sent: " + String.Join("\n", stub.Requests));
+                    AssertTrue(host.PumpUntil(() => stub.Saw("GET", "/api/v1/request-history", r => r.QueryValue("route") == "/api/v1/fleets")), "route filter sent: " + String.Join("\n", stub.Requests));
                     screen.ResultFilter.Choose(screen.ResultFilter.Options.First(o => o.Value == "false"));
-                    AssertTrue(host.PumpUntil(() => stub.Requests.Any(r => r.Contains("isSuccess=false"))), "result filter sent");
+                    AssertTrue(host.PumpUntil(() => stub.Saw("GET", "/api/v1/request-history", r => r.QueryValue("isSuccess") == "false")), "result filter sent");
                     AssertTrue(host.WaitForText("Delete Filtered"), "label switches");
                     TuiScreenDump.Write("requests-filters", host.Screen());
                     screen.ResetFilters();
@@ -119,16 +119,16 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                     host.Press("del");
                     AssertTrue(host.WaitForText("Delete 2 selected request-history entries?"), "confirm text");
                     host.Press("y");
-                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/request-history/delete/multiple") == 1), "batch delete sent");
-                    string bodies = String.Join("\n", stub.Bodies);
-                    AssertTrue(bodies.Contains("req_1") && bodies.Contains("req_2"), "ids sent");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/request-history/delete/multiple") == 1), "batch delete sent");
+                    StubRequest batch = stub.Last("POST", "/api/v1/request-history/delete/multiple");
+                    AssertEqual("req_1|req_2", String.Join("|", batch.BodyAs<Armada.Core.Models.DeleteMultipleRequest>().Ids.OrderBy(i => i, StringComparer.Ordinal)), "ids sent: " + batch.Body);
                     AssertTrue(host.WaitForText("Deleted 2 request entries."), "toast");
 
                     RequestHistoryScreen screen = Current<RequestHistoryScreen>(host);
                     screen.DeleteFilteredButton.Press();
                     AssertTrue(host.WaitForText("Delete all request-history entries matching the current filters?"), "filtered confirm");
                     host.Press("y");
-                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/request-history/delete/by-filter") == 1), "by-filter delete sent");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/request-history/delete/by-filter") == 1), "by-filter delete sent");
                 }
             }));
 
@@ -159,7 +159,7 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                 using (TuiTestHost host = TuiCase.SignedIn(160, 50, "/requests/req_1", stub))
                 {
                     AssertTrue(host.WaitForText("Entry ID"), "drawer opens");
-                    AssertTrue(stub.Count("GET /api/v1/request-history/req_1") >= 1, "entry fetched");
+                    AssertTrue(stub.CountFor("GET", "/api/v1/request-history/req_1") >= 1, "entry fetched");
                     RequestHistoryScreen screen = Current<RequestHistoryScreen>(host);
                     AssertTrue(screen.DetailDrawer.IsOpen, "drawer open");
                 }

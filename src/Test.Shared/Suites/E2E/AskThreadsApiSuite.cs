@@ -111,11 +111,11 @@ namespace Test.Shared.Suites.E2E
                 foreach (WebSocketTestClient s in new[] { aliceSocket, bobSocket, carolSocket })
                 {
                     await s.SendAsync(new Dictionary<string, object> { ["Route"] = "subscribe" }).ConfigureAwait(false);
-                    AssertNotNull(await s.WaitForAsync(m => m.Contains("status.snapshot")).ConfigureAwait(false), "subscribed");
+                    AssertNotNull(await s.WaitForAsync(m => E2eWebSocketFrame.IsType(m, "status.snapshot")).ConfigureAwait(false), "subscribed");
                 }
 
                 await adminSocket.SendAsync(new Dictionary<string, object> { ["Route"] = "subscribe", ["AllTenants"] = true }).ConfigureAwait(false);
-                AssertNotNull(await adminSocket.WaitForAsync(m => m.Contains("status.snapshot")).ConfigureAwait(false), "admin subscribed to all tenants");
+                AssertNotNull(await adminSocket.WaitForAsync(m => E2eWebSocketFrame.IsType(m, "status.snapshot")).ConfigureAwait(false), "admin subscribed to all tenants");
 
                 AskThread thread = await JsonHelper.DeserializeAsync<AskThread>(await a.PostAsync("/api/v1/ask/threads", JsonHelper.ToJsonContent(new { })).ConfigureAwait(false)).ConfigureAwait(false);
 
@@ -130,15 +130,18 @@ namespace Test.Shared.Suites.E2E
                 AskActionProposal proposal = await JsonHelper.DeserializeAsync<AskActionProposal>(action).ConfigureAwait(false);
                 AssertEqual(AskProposalStatusEnum.Executed, proposal.Status);
                 AssertEqual(AskProposalSourceEnum.QuickAction, proposal.Source);
-                AssertContains("ctive", proposal.ResultText ?? "", "real status handler result");
+                AssertEqual(System.Text.Json.JsonTokenType.Number, JsonShape.TopLevelProperty(proposal.ResultText ?? "", "ActiveVoyages")?.ValueToken, "real status handler result (ArmadaStatus.ActiveVoyages)");
+                AssertEqual(System.Text.Json.JsonTokenType.Number, JsonShape.TopLevelProperty(proposal.ResultText ?? "", "TotalCaptains")?.ValueToken, "real status handler result (ArmadaStatus.TotalCaptains)");
 
-                AssertNotNull(await aliceSocket.WaitForAsync(m => m.Contains("\"ask.proposal\"") && m.Contains(proposal.Id)).ConfigureAwait(false), "owner gets ask.proposal");
-                AssertNotNull(await aliceSocket.WaitForAsync(m => m.Contains("\"ask.message\"") && m.Contains(thread.Id)).ConfigureAwait(false), "owner gets ask.message");
-                AssertNotNull(await aliceSocket.WaitForAsync(m => m.Contains("\"ask.thread\"") && m.Contains(thread.Id)).ConfigureAwait(false), "owner gets ask.thread");
+                AssertNotNull(await aliceSocket.WaitForAsync(m => E2eWebSocketEventFrame.ParseOfType(m, "ask.proposal")?.Data?.Proposal?.Id == proposal.Id).ConfigureAwait(false), "owner gets ask.proposal");
+                AssertNotNull(await aliceSocket.WaitForAsync(m => E2eWebSocketEventFrame.ParseOfType(m, "ask.message")?.Data?.ThreadId == thread.Id).ConfigureAwait(false), "owner gets ask.message");
+                AssertNotNull(await aliceSocket.WaitForAsync(m => E2eWebSocketEventFrame.ParseOfType(m, "ask.thread")?.Data?.ThreadId == thread.Id).ConfigureAwait(false), "owner gets ask.thread");
                 await Task.Delay(500).ConfigureAwait(false);
-                AssertFalse(bobSocket.Received().Any(m => m.Contains("\"ask.")), "another user of the same tenant gets no ask.* events");
-                AssertFalse(carolSocket.Received().Any(m => m.Contains("\"ask.")), "another tenant gets no ask.* events");
-                AssertFalse(adminSocket.Received().Any(m => m.Contains("\"ask.")), "an all-tenants admin gets no ask.* events either");
+                // Leak check: an ask.* frame of any kind, or any frame that carries the thread id.
+                Func<string, bool> leaked = m => (E2eWebSocketFrame.Parse(m)?.Type ?? "").StartsWith("ask.", StringComparison.Ordinal) || m.Contains(thread.Id, StringComparison.Ordinal);
+                AssertFalse(bobSocket.Received().Any(leaked), "another user of the same tenant gets no ask.* events");
+                AssertFalse(carolSocket.Received().Any(leaked), "another tenant gets no ask.* events");
+                AssertFalse(adminSocket.Received().Any(leaked), "an all-tenants admin gets no ask.* events either");
 
                 AskMessagePage page = await JsonHelper.DeserializeAsync<AskMessagePage>(await a.PostAsync("/api/v1/ask/threads/" + thread.Id + "/messages/enumerate", JsonHelper.ToJsonContent(new { PageSize = 1 })).ConfigureAwait(false)).ConfigureAwait(false);
                 AssertEqual(1, page.Messages.Count, "page size");
@@ -189,7 +192,7 @@ namespace Test.Shared.Suites.E2E
 
                 AssertStatusCode(HttpStatusCode.OK, await a.GetAsync("/api/v1/voyages/" + work.EntityId).ConfigureAwait(false), "the voyage is visible in the caller's tenant");
 
-                AssertNotNull(await socket.WaitForAsync(m => m.Contains("\"ask.work\"") && m.Contains(work.Id)).ConfigureAwait(false), "ask.work delivered");
+                AssertNotNull(await socket.WaitForAsync(m => E2eWebSocketEventFrame.ParseOfType(m, "ask.work")?.Data?.TrackedWorkId == work.Id).ConfigureAwait(false), "ask.work delivered");
                 AskWorkSnapshot snapshot = await JsonHelper.DeserializeAsync<AskWorkSnapshot>(await a.GetAsync("/api/v1/ask/threads/" + thread.Id + "/work/" + work.Id).ConfigureAwait(false)).ConfigureAwait(false);
                 AssertEqual(work.EntityId, snapshot.EntityId);
 
@@ -228,18 +231,20 @@ namespace Test.Shared.Suites.E2E
                 catch (System.Net.WebSockets.WebSocketException) { wsAccepted = false; }
                 AssertFalse(wsAccepted, "a thread-scoped token is refused on /ws");
 
+                string proposed;
                 using (Armada.Runtimes.Mcp.McpToolClient mcp = new Armada.Runtimes.Mcp.McpToolClient("http://127.0.0.1:" + fx.McpPort + "/mcp", threadToken))
                 {
                     await mcp.InitializeAsync().ConfigureAwait(false);
                     string read = await mcp.CallToolAsync("enumerate", "{\"entityType\":\"vessel\",\"pageSize\":5}").ConfigureAwait(false);
-                    AssertContains(vessel.Id, read, "read-only tool runs as the user");
+                    EnumerationResult<Vessel> listed = JsonHelper.Deserialize<EnumerationResult<Vessel>>(read);
+                    AssertTrue(listed.Objects.Any(v => v.Id == vessel.Id), "read-only tool runs as the user: " + read);
 
-                    string proposed = await mcp.CallToolAsync("dispatch", "{\"title\":\"Gated\",\"vesselId\":\"" + vessel.Id + "\",\"missions\":[{\"title\":\"m\",\"description\":\"d\"}]}").ConfigureAwait(false);
-                    AssertContains("Proposed as aap_", proposed, "dispatch becomes a proposal");
+                    proposed = await mcp.CallToolAsync("dispatch", "{\"title\":\"Gated\",\"vesselId\":\"" + vessel.Id + "\",\"missions\":[{\"title\":\"m\",\"description\":\"d\"}]}").ConfigureAwait(false);
                 }
 
                 AskThreadDetail detail = await JsonHelper.DeserializeAsync<AskThreadDetail>(await a.GetAsync("/api/v1/ask/threads/" + thread.Id).ConfigureAwait(false)).ConfigureAwait(false);
                 AskActionProposal pending = detail.PendingProposals.Single();
+                AssertEqual(String.Format(Armada.Server.Ask.AskActionService.ProposedResultFormat, pending.Id), proposed, "dispatch becomes this proposal (the tool replies with the proposal's own id)");
                 AssertEqual("dispatch", pending.ToolName);
                 AssertNotNull(pending.ExpiresUtc, "ExpiresUtc");
                 AssertEqual(0, detail.TrackedWork.Count, "nothing ran yet");

@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import detailCodesSource from '../../../../Armada.Core/Services/Health/VesselHealthDetailCodes.cs?raw';
-import criterionEnumSource from '../../../../Armada.Core/Enums/VesselHealthCriterionEnum.cs?raw';
-import statusEnumSource from '../../../../Armada.Core/Enums/VesselHealthStatusEnum.cs?raw';
-import severityEnumSource from '../../../../Armada.Core/Enums/VulnerabilitySeverityEnum.cs?raw';
-import driftEnumSource from '../../../../Armada.Core/Enums/DependencyDriftEnum.cs?raw';
+import { backendCodes } from '../../test/backendCodes';
 import {
   CRITERION_LABELS,
   DETAIL_CODE_FORMATTERS,
@@ -21,36 +17,26 @@ const t: Translate = (text, params) => {
   return Object.entries(params).reduce((acc, [k, v]) => acc.split(`{{${k}}}`).join(v == null ? '' : String(v)), text);
 };
 
-function constCodes(source: string): string[] {
-  return Array.from(source.matchAll(/public const string (\w+)\s*=\s*"([^"]+)"/g)).map((m) => m[2]);
-}
-
-function enumMembers(source: string): string[] {
-  const body = source.slice(source.indexOf('{', source.indexOf('enum ')) + 1);
-  const withoutComments = body.replace(/\/\/\/.*$/gm, '').replace(/\[[^\]]*\]/g, '');
-  return Array.from(withoutComments.matchAll(/^\s*([A-Z][A-Za-z0-9]*)\s*(?:=\s*\d+\s*)?,?\s*$/gm)).map((m) => m[1]);
-}
-
 describe('vessel health detail codes', () => {
-  const backendCodes = constCodes(detailCodesSource);
+  const detailCodes = backendCodes.VesselHealthDetailCodes;
 
-  it('parses the backend code list', () => {
-    expect(backendCodes.length).toBeGreaterThanOrEqual(40);
-    expect(backendCodes).toContain('OutdatedPackages');
+  it('reads the backend code list', () => {
+    expect(detailCodes.length).toBeGreaterThanOrEqual(40);
+    expect(detailCodes).toContain('OutdatedPackages');
   });
 
   it('maps every backend detail code to a localized sentence', () => {
-    const missing = backendCodes.filter((code) => !DETAIL_CODE_FORMATTERS[code]);
+    const missing = detailCodes.filter((code) => !DETAIL_CODE_FORMATTERS[code]);
     expect(missing).toEqual([]);
   });
 
   it('has no mappings for codes the backend does not emit', () => {
-    const extra = Object.keys(DETAIL_CODE_FORMATTERS).filter((code) => !backendCodes.includes(code));
+    const extra = Object.keys(DETAIL_CODE_FORMATTERS).filter((code) => !detailCodes.includes(code));
     expect(extra).toEqual([]);
   });
 
   it('renders a non-empty sentence without leftover placeholders for every code', () => {
-    for (const code of backendCodes) {
+    for (const code of detailCodes) {
       for (const [a, b] of [[0, 0], [1, 1], [7, 2], [null, null]] as Array<[number | null, number | null]>) {
         const text = describeFinding({ detailCode: code, valueA: a, valueB: b }, t, 'en');
         expect(text.length, code).toBeGreaterThan(0);
@@ -77,14 +63,14 @@ describe('vessel health detail codes', () => {
 
 describe('vessel health label maps', () => {
   it('labels every backend criterion', () => {
-    const members = enumMembers(criterionEnumSource);
+    const members = backendCodes.VesselHealthCriterionEnum;
     expect(members).toContain('GitDivergence');
     expect(members.filter((m) => !CRITERION_LABELS[m as keyof typeof CRITERION_LABELS])).toEqual([]);
   });
 
   it('labels and describes every backend status', () => {
-    const members = enumMembers(statusEnumSource);
-    expect(members).toEqual(['Pass', 'Warn', 'Fail', 'NotApplicable', 'Unknown']);
+    const members = backendCodes.VesselHealthStatusEnum;
+    expect([...members].sort()).toEqual(['Fail', 'NotApplicable', 'Pass', 'Unknown', 'Warn']);
     for (const m of members) {
       expect(STATUS_LABELS[m as keyof typeof STATUS_LABELS]).toBeTruthy();
       expect(STATUS_DESCRIPTIONS[m as keyof typeof STATUS_DESCRIPTIONS]).toBeTruthy();
@@ -92,7 +78,9 @@ describe('vessel health label maps', () => {
   });
 
   it('labels every severity and drift value', () => {
-    for (const m of enumMembers(severityEnumSource)) expect(SEVERITY_LABELS[m as keyof typeof SEVERITY_LABELS], m).toBeTruthy();
-    for (const m of enumMembers(driftEnumSource)) expect(DRIFT_LABELS[m as keyof typeof DRIFT_LABELS], m).toBeTruthy();
+    expect(backendCodes.VulnerabilitySeverityEnum.length).toBeGreaterThan(0);
+    expect(backendCodes.DependencyDriftEnum.length).toBeGreaterThan(0);
+    for (const m of backendCodes.VulnerabilitySeverityEnum) expect(SEVERITY_LABELS[m as keyof typeof SEVERITY_LABELS], m).toBeTruthy();
+    for (const m of backendCodes.DependencyDriftEnum) expect(DRIFT_LABELS[m as keyof typeof DRIFT_LABELS], m).toBeTruthy();
   });
 });

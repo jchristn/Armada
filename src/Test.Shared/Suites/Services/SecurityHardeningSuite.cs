@@ -51,8 +51,10 @@ namespace Test.Shared.Suites.Services
             {
                 string? json = CaptainRuntimeOptions.WithAutoApprove("{\"endpoint\":\"local\",\"approvalPolicy\":\"ask\"}", false);
                 AssertNotNull(json);
-                AssertContains("\"endpoint\":\"local\"", json!);
-                AssertContains("\"autoApprove\":false", json);
+                RuntimeOptionsProbe options = JsonHelper.Deserialize<RuntimeOptionsProbe>(json!);
+                AssertEqual("local", options.Endpoint, "endpoint kept");
+                AssertEqual("ask", options.ApprovalPolicy, "approvalPolicy kept");
+                AssertEqual((bool?)false, options.AutoApprove, "autoApprove written as false");
                 AssertEqual(false, CaptainRuntimeOptions.GetExplicitAutoApprove(json));
                 AssertNull(CaptainRuntimeOptions.WithAutoApprove("{\"autoApprove\":false}", null));
             }));

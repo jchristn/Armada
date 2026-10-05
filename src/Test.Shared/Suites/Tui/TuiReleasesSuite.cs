@@ -4,6 +4,7 @@ namespace Test.Shared.Suites.Tui
     using System.Collections.Generic;
     using System.Linq;
     using System.Net;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Tui.Modals;
     using Armada.Tui.Screens.Delivery;
@@ -49,11 +50,11 @@ namespace Test.Shared.Suites.Tui
                 using (TuiTestHost host = TuiEntityFixtures.Open(stub, "/delivery?tab=releases&status=Candidate"))
                 {
                     ReleasesScreen screen = TuiEntityFixtures.Screen<ReleasesScreen>(host);
-                    TuiEntityFixtures.WaitForRequest(host, stub, "status=Candidate");
+                    TuiEntityFixtures.WaitForQuery(host, stub, "GET", "/api/v1/releases", "status", "Candidate");
                     AssertEqual("Candidate", screen.Filters.Value("status"), "deep-linked status");
                     host.Press("/");
                     host.Type("1.0");
-                    TuiEntityFixtures.WaitForRequest(host, stub, "search=1.0");
+                    TuiEntityFixtures.WaitForQuery(host, stub, "GET", "/api/v1/releases", "search", "1.0");
                 }
             }));
 
@@ -67,7 +68,7 @@ namespace Test.Shared.Suites.Tui
                     ReleasesScreen screen = TuiEntityFixtures.Screen<ReleasesScreen>(host);
                     TuiEntityFixtures.WaitFor(host, () => screen.Grid.Rows.Count == 25, "first page");
                     host.Press(">");
-                    TuiEntityFixtures.WaitForRequest(host, stub, "GET /api/v1/releases?pageNumber=2");
+                    TuiEntityFixtures.WaitForQuery(host, stub, "GET", "/api/v1/releases", "pageNumber", "2");
                     host.Press("<");
                     screen.Grid.SortBy("title", true);
                     TuiEntityFixtures.WaitFor(host, () => screen.Grid.Rows.Count > 0 && screen.Grid.Rows[0].Title == "Release 25", "sorted descending");
@@ -114,9 +115,10 @@ namespace Test.Shared.Suites.Tui
                     missions.Value = "msn_a\nmsn_b, msn_c";
                     host.Press("ctrl+s");
                     TuiEntityFixtures.WaitFor(host, () => posted != null && !host.App.Modals.IsActive, "posted and closed");
-                    AssertTrue(posted!.Contains("\"Title\":\"Hotfix\""), "title: " + posted);
-                    AssertTrue(posted.Contains("\"MissionIds\":[\"msn_a\",\"msn_b\",\"msn_c\"]"), "missions split: " + posted);
-                    AssertTrue(posted.Contains("\"Status\":\"Draft\""), "status");
+                    ReleaseUpsertRequest sent = JsonHelper.Deserialize<ReleaseUpsertRequest>(posted!);
+                    AssertEqual("Hotfix", sent.Title, "title: " + posted);
+                    AssertEqual("msn_a,msn_b,msn_c", String.Join(",", sent.MissionIds), "missions split: " + posted);
+                    AssertEqual(ReleaseStatusEnum.Draft, sent.Status, "status");
                 }
             }));
 
@@ -194,8 +196,9 @@ namespace Test.Shared.Suites.Tui
                     TuiCase.Contains(host.Screen(), "Open Backlog Item", "backlog action");
                     host.Press("ctrl+s");
                     TuiEntityFixtures.WaitFor(host, () => posted != null, "created");
-                    AssertTrue(posted!.Contains("\"ObjectiveIds\":[\"obj_1\"]"), "objectives linked: " + posted);
-                    AssertTrue(posted.Contains("\"CheckRunIds\":[\"chk_9\"]"), "checks: " + posted);
+                    ReleaseUpsertRequest linked = JsonHelper.Deserialize<ReleaseUpsertRequest>(posted!);
+                    AssertEqual("obj_1", String.Join(",", linked.ObjectiveIds), "objectives linked: " + posted);
+                    AssertEqual("chk_9", String.Join(",", linked.CheckRunIds), "checks: " + posted);
                     TuiEntityFixtures.WaitFor(host, () => host.Tui.Context.Router.Current!.Path == "/releases/rel_1", "opened the release");
                 }
             }));

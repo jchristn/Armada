@@ -7,10 +7,12 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
     using System.Net;
     using System.Net.Http;
     using System.Threading;
+    using Armada.Client.Models;
     using Armada.Tui.Screens;
     using Armada.Tui.Screens.Admin;
     using Armada.Tui.Widgets;
     using Test.Shared.Infrastructure;
+    using Test.Shared.Suites.Tui.Bodies;
     using Touchstone.Core;
     using static Test.Shared.Infrastructure.Asserts;
 
@@ -71,11 +73,12 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                 {
                     screen.Form.Scope.Focus(screen.MaxCaptains);
                     host.Press("ctrl+u").Type("20").Press("ctrl+s");
-                    AssertTrue(host.PumpUntil(() => stub.Count("PUT /api/v1/settings") == 1), "PUT sent");
-                    string body = stub.Bodies.Last(b => b.Contains("MaxCaptains"));
-                    AssertTrue(body.Contains("\"MaxCaptains\":20"), "new value: " + body);
-                    AssertFalse(body.Contains("Retention\""), "only the group: " + body);
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("PUT", "/api/v1/settings") == 1), "PUT sent");
+                    StubRequest put = stub.Last("PUT", "/api/v1/settings");
+                    AssertEqual(20, put.BodyAs<ServerSettingsUpdateBody>().MaxCaptains, "new value: " + put.Body);
+                    AssertFalse(JsonShape.HasPropertyAnywhere(put.Body, "Retention"), "only the group: " + put.Body);
                     AssertTrue(host.WaitForText("Server configuration saved"), "toast");
+                    AssertTrue(TuiToasts.WaitForSuccess(host, "Server configuration saved"), "success toast");
                 }
             }));
 
@@ -90,7 +93,7 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                     TuiCase.Contains(host.Screen(), "Must be a whole number from 1 to 16.", "message shown");
                     host.Press("ctrl+s");
                     host.Pump();
-                    AssertEqual(0, stub.Count("PUT /api/v1/settings"), "blocked");
+                    AssertEqual(0, stub.CountFor("PUT", "/api/v1/settings"), "blocked");
                     screen.HealthFields["thresholds.behindWarn"].Value = "10";
                     screen.HealthFields["thresholds.behindFail"].Value = "5";
                     screen.Form.Scope.Focus(screen.HealthFields["thresholds.behindFail"]);
@@ -99,7 +102,7 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                     AssertFalse(screen.Groups["repositoryHealth"].CanSave(), "rh blocked");
                     host.Press("ctrl+s");
                     host.Pump();
-                    AssertEqual(0, stub.Count("PUT /api/v1/settings"), "still blocked");
+                    AssertEqual(0, stub.CountFor("PUT", "/api/v1/settings"), "still blocked");
                     screen.HealthFields["intervalMinutes"].Value = "abc";
                     AssertEqual("Enter a whole number.", screen.HealthFields["intervalMinutes"].FieldError, "rh integer message");
                     screen.ConnectTimeout.Value = "1";
@@ -118,10 +121,14 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                     AssertTrue(screen.Groups["retention"].IsDirty, "dirty");
                     TuiCase.Contains(host.Screen(), "Unsaved changes", "dirty marker");
                     host.Press("ctrl+s");
-                    AssertTrue(host.PumpUntil(() => stub.Count("PUT /api/v1/settings") == 1), "PUT sent");
-                    string body = stub.Bodies.Last(b => b.Contains("Retention"));
-                    AssertTrue(body.Contains("\"JobRetentionDays\":60") && body.Contains("\"AskThreadArchiveAfterDays\":90"), "retention body: " + body);
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("PUT", "/api/v1/settings") == 1), "PUT sent");
+                    StubRequest put = stub.Last("PUT", "/api/v1/settings");
+                    ServerSettingsRetentionBody? retention = put.BodyAs<ServerSettingsUpdateBody>().Retention;
+                    AssertNotNull(retention, "retention group sent: " + put.Body);
+                    AssertEqual(60, retention!.JobRetentionDays, "job retention: " + put.Body);
+                    AssertEqual(90, retention.AskThreadArchiveAfterDays, "archive days: " + put.Body);
                     AssertTrue(host.WaitForText("Retention settings saved and applied."), "toast");
+                    AssertTrue(TuiToasts.WaitForSuccess(host, "Retention settings saved and applied."), "success toast");
                 }
             }));
 
@@ -149,6 +156,7 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                         AssertTrue(host.PumpUntil(() => File.Exists(target)), "file written");
                         AssertTrue(File.ReadAllBytes(target).SequenceEqual(zip), "bytes");
                         AssertTrue(host.WaitForText("Backup saved to"), "toast");
+                        AssertTrue(TuiToasts.WaitForSuccess(host, "Backup saved to"), "success toast");
                     }
                 }
                 finally
@@ -171,11 +179,12 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                         AssertTrue(host.WaitForText("File path"), "open prompt");
                         host.Type(file).Press("ctrl+s");
                         AssertTrue(host.WaitForText("Restore the database from"), "confirm");
-                        AssertEqual(0, stub.Count("POST /api/v1/restore"), "not before confirm");
+                        AssertEqual(0, stub.CountFor("POST", "/api/v1/restore"), "not before confirm");
                         host.Press("y");
-                        AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/restore") == 1), "posted");
-                        AssertTrue(stub.Bodies.Any(b => b == "ZIPDATA"), "file bytes posted");
+                        AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/restore") == 1), "posted");
+                        AssertEqual("ZIPDATA", stub.Last("POST", "/api/v1/restore").Body, "file bytes posted");
                         AssertTrue(host.WaitForText("Restore completed successfully."), "toast");
+                        AssertTrue(TuiToasts.WaitForSuccess(host, "Restore completed successfully."), "success toast");
                     }
                 }
                 finally
@@ -205,8 +214,8 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                     screen.ActionRows[1].Buttons[0].Press();
                     AssertTrue(host.WaitForText("Rebuild the Admiral from source"), "confirm");
                     host.Press("y");
-                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/server/rebuild") == 1), "rebuild posted");
-                    AssertTrue(stub.Bodies.Any(b => b.Contains("\"Ref\":\"main\"")), "ref sent");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/server/rebuild") == 1), "rebuild posted");
+                    AssertTrue(stub.Last("POST", "/api/v1/server/rebuild").BodyAs<RebuildRequest>().Ref == "main", "ref sent");
                     AssertTrue(host.WaitForText("published slot-2", 5000), "final log shown");
                     AssertTrue(host.PumpUntil(() => !screen.RebuildPolling), "polling stopped");
                     int after = polls;
@@ -231,24 +240,24 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                     AssertTrue(host.WaitForText("Restart the Admiral server?"), "restart confirm");
                     host.Press("n");
                     host.Pump();
-                    AssertEqual(0, stub.Count("POST /api/v1/server/restart"), "cancelled");
+                    AssertEqual(0, stub.CountFor("POST", "/api/v1/server/restart"), "cancelled");
                     screen.ActionRows[0].Buttons[2].Press();
                     AssertTrue(host.WaitForText("Restart the Admiral server?"), "restart confirm again");
                     host.Press("y");
-                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/server/restart") == 1), "restart sent");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/server/restart") == 1), "restart sent");
 
                     screen.ActionRows[2].Buttons[0].Press();
                     AssertTrue(host.WaitForText("This will shut down everything."), "stop confirm");
-                    AssertEqual(0, stub.Count("POST /api/v1/server/stop"), "stop waits");
+                    AssertEqual(0, stub.CountFor("POST", "/api/v1/server/stop"), "stop waits");
                     host.Press("y");
-                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/server/stop") == 1), "stop sent");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/server/stop") == 1), "stop sent");
 
                     screen.ActionRows[2].Buttons[1].Press();
                     AssertTrue(host.WaitForText("Factory reset will delete ALL data"), "reset confirm");
-                    AssertEqual(0, stub.Count("POST /api/v1/server/reset"), "reset waits");
+                    AssertEqual(0, stub.CountFor("POST", "/api/v1/server/reset"), "reset waits");
                     host.Press("esc");
                     host.Pump();
-                    AssertEqual(0, stub.Count("POST /api/v1/server/reset"), "reset cancelled");
+                    AssertEqual(0, stub.CountFor("POST", "/api/v1/server/reset"), "reset cancelled");
                 }
             }));
 
@@ -268,7 +277,7 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                     AssertTrue(screen.ActionRows[0].Buttons[1].Enabled, "health check allowed");
                     screen.ActionRows[0].Buttons[2].Press();
                     host.Pump();
-                    AssertEqual(0, stub.Count("POST /api/v1/server/restart"), "no restart");
+                    AssertEqual(0, stub.CountFor("POST", "/api/v1/server/restart"), "no restart");
                     AssertFalse(screen.AdmiralPort.CanFocus, "settings locked");
                     AssertFalse(screen.Groups["server"].CanSave(), "save blocked");
                 }

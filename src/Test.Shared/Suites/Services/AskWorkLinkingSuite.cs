@@ -102,7 +102,8 @@ namespace Test.Shared.Suites.Services
                 AssertEqual("dispatch", dispatch.ToolName);
                 AssertEqual(String.Join(",", new List<string> { "title", "vesselId", "missions", "description", "pipelineId" }), String.Join(",", dispatch.Arguments.Select(a => a.Name).ToList()));
                 AssertNotNull(dispatch.ArgumentsSchema, "schema");
-                AssertContains("\"vesselId\"", dispatch.ArgumentsSchema!.ToJsonString());
+                McpToolInputSchema dispatchSchema = JsonHelper.Deserialize<McpToolInputSchema>(dispatch.ArgumentsSchema!.ToJsonString());
+                AssertTrue(dispatchSchema.Properties.ContainsKey("vesselId"), "schema declares vesselId");
                 AssertEqual("run_fleet_action", actions.First(a => a.Name == "fleet-action").ToolName);
                 AssertEqual(String.Join(",", new List<string> { "actionId", "vesselIds", "concurrency" }), String.Join(",", actions.First(a => a.Name == "fleet-action").Arguments.Select(a => a.Name).ToList()));
                 AssertTrue(actions.First(a => a.Name == "status").ReadOnly, "status is read-only");

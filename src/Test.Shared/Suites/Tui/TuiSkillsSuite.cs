@@ -41,10 +41,10 @@ namespace Test.Shared.Suites.Tui
                 using (TuiTestHost host = TuiEntityFixtures.Open(stub, "/configuration?tab=skills&category=engineering"))
                 {
                     SkillsScreen screen = TuiEntityFixtures.Screen<SkillsScreen>(host);
-                    TuiEntityFixtures.WaitForRequest(host, stub, "category=engineering");
+                    TuiEntityFixtures.WaitForQuery(host, stub, "GET", "/api/v1/skills", "category", "engineering");
                     host.Press("/");
                     host.Type("test");
-                    TuiEntityFixtures.WaitForRequest(host, stub, "search=test");
+                    TuiEntityFixtures.WaitForQuery(host, stub, "GET", "/api/v1/skills", "search", "test");
                     host.Press("enter");
                     AssertTrue(ReferenceEquals(screen.Scope.Focused, screen.Grid), "enter returns to the grid");
                 }
@@ -60,7 +60,7 @@ namespace Test.Shared.Suites.Tui
                     SkillsScreen screen = TuiEntityFixtures.Screen<SkillsScreen>(host);
                     TuiEntityFixtures.WaitFor(host, () => screen.Grid.Rows.Count == 25, "first page");
                     host.Press(">");
-                    TuiEntityFixtures.WaitForRequest(host, stub, "GET /api/v1/skills?pageNumber=2");
+                    TuiEntityFixtures.WaitForQuery(host, stub, "GET", "/api/v1/skills", "pageNumber", "2");
                     host.Press("<");
                     screen.Grid.SortBy("name", true);
                     TuiEntityFixtures.WaitFor(host, () => screen.Grid.Rows.Count > 0 && screen.Grid.Rows[0].Name == "Skill 25", "sorted descending");
@@ -109,9 +109,10 @@ namespace Test.Shared.Suites.Tui
                     TuiConfigTestHelpers.Field<TextAreaField>(dialog, "Content").Value = "Always review.";
                     host.Press("ctrl+s");
                     TuiEntityFixtures.WaitFor(host, () => box.Body != null && !host.App.Modals.IsActive, "posted and closed");
-                    AssertTrue(box.Body!.Contains("\"Name\":\"Review habits\""), "name: " + box.Body);
-                    AssertTrue(box.Body.Contains("\"Content\":\"Always review.\""), "content");
-                    AssertTrue(box.Body.Contains("\"Scope\":\"TenantWide\""), "scope");
+                    Armada.Core.Models.Skill sent = box.As<Armada.Core.Models.Skill>();
+                    AssertEqual("Review habits", sent.Name, "name: " + box.Body);
+                    AssertEqual("Always review.", sent.Content, "content");
+                    AssertEqual("TenantWide", JsonShape.TopLevelProperty(box.Body!, "Scope")?.ScalarText, "scope sent explicitly (TenantWide is also the model default)");
                 }
             }));
 

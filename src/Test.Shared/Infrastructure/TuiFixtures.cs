@@ -26,7 +26,7 @@ namespace Test.Shared.Infrastructure
                 ? "[{\"Id\":\"ten_default\",\"Name\":\"Default Tenant\"}]"
                 : "[{\"Id\":\"ten_default\",\"Name\":\"Default Tenant\"},{\"Id\":\"ten_two\",\"Name\":\"Second Tenant\"}]";
             stub.Json("POST", "/api/v1/tenants/lookup", "{\"Tenants\":" + list + "}");
-            stub.On("POST", "/api/v1/authenticate", body => body.Contains("\"Password\":\"password\"")
+            stub.On("POST", "/api/v1/authenticate", body => JsonHelper.Deserialize<Armada.Core.Models.AuthenticateRequest>(body).Password == "password"
                 ? StubHttpHandler.Response(System.Net.HttpStatusCode.OK, "{\"Success\":true,\"Token\":\"tok_session\"}")
                 : StubHttpHandler.Response(System.Net.HttpStatusCode.Unauthorized, "{\"Error\":\"Unauthorized\",\"Message\":\"Authentication failed.\"}"));
             return stub;

@@ -4,8 +4,11 @@ namespace Test.Shared.Suites.Tui
     using System.Collections.Generic;
     using System.Linq;
     using System.Net;
+    using Armada.Core.Enums;
+    using Armada.Core.Models;
     using Armada.Tui.Screens;
     using Armada.Tui.Screens.Operations;
+    using Armada.Tui.Services;
     using Test.Shared.Infrastructure;
     using Touchstone.Core;
     using static Test.Shared.Infrastructure.Asserts;
@@ -47,10 +50,14 @@ namespace Test.Shared.Suites.Tui
                     AssertTrue(host.WaitForText("Unknown template variable: bogus"), "unknown variable\n" + host.Screen());
                     for (int i = 0; i < 10; i++) host.Press("backspace");
                     host.Press("ctrl+s");
-                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/fleet-actions") > 0 && stub.Bodies.Any(b => b.Contains("Show status"))), "create call\n" + host.Screen());
-                    string body = stub.Bodies.Last(b => b.Contains("Show status"));
-                    AssertTrue(body.Contains("\"TimeoutSeconds\":120") && body.Contains("\"DefaultConcurrency\":4") && body.Contains("\"Kind\":\"Command\""), "create body: " + body);
-                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.ActiveToasts().Any(t => t.Text.Contains("Fleet action \"Show status\" saved."))), "saved toast");
+                    AssertTrue(host.PumpUntil(() => stub.Saw("POST", "/api/v1/fleet-actions", r => r.TryBodyAs<FleetActionUpsertRequest>()?.Name == "Show status")), "create call\n" + host.Screen());
+                    StubRequest create = stub.Last("POST", "/api/v1/fleet-actions");
+                    FleetActionUpsertRequest created = create.BodyAs<FleetActionUpsertRequest>();
+                    AssertEqual("Show status", created.Name, "create name: " + create.Body);
+                    AssertEqual(120, created.TimeoutSeconds, "create timeout: " + create.Body);
+                    AssertEqual(4, created.DefaultConcurrency, "create concurrency: " + create.Body);
+                    AssertEqual(FleetActionKindEnum.Command, created.Kind, "create kind: " + create.Body);
+                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.ActiveToasts().Any(t => t.Severity == NotificationSeverityEnum.Success && t.Text.Contains("Fleet action \"Show status\" saved."))), "saved toast");
 
                     FleetActionsScreen screen = Content<FleetActionsScreen>(host);
                     host.Press("home");
@@ -58,8 +65,8 @@ namespace Test.Shared.Suites.Tui
                     host.Press("del");
                     TuiCase.Contains(host.Screen(), "is a built-in action. Deleting it hides", "hide text");
                     host.Press("y");
-                    AssertTrue(host.PumpUntil(() => stub.Count("DELETE /api/v1/fleet-actions/fa_builtin") == 1), "delete call");
-                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.ActiveToasts().Any(t => t.Text.Contains("Built-in action \"Fast-forward default branch\" hidden."))), "hidden toast");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("DELETE", "/api/v1/fleet-actions/fa_builtin") == 1), "delete call");
+                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.ActiveToasts().Any(t => t.Severity == NotificationSeverityEnum.Warning && t.Text.Contains("Built-in action \"Fast-forward default branch\" hidden."))), "hidden toast");
                 }
             }));
 
@@ -88,10 +95,12 @@ namespace Test.Shared.Suites.Tui
                     AssertTrue(host.WaitForText("Run on 2 vessels"), "review step\n" + host.Screen());
                     TuiCase.Contains(host.Screen(), "Vessels with uncommitted changes are skipped.", "clean-tree note");
                     host.Press("ctrl+s");
-                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/fleet-actions/fa_echo/run") == 1), "run call");
-                    string body = stub.Bodies.Last(b => b.Contains("VesselIds"));
-                    AssertTrue(body.Contains("vsl_a") && body.Contains("vsl_b") && body.Contains("\"Concurrency\":2"), "run body: " + body);
-                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.ActiveToasts().Any(t => t.Text.Contains("Fleet action started on 2 vessels."))), "started toast");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/fleet-actions/fa_echo/run") == 1), "run call");
+                    StubRequest run = stub.Last("POST", "/api/v1/fleet-actions/fa_echo/run");
+                    FleetActionRunRequest started = run.BodyAs<FleetActionRunRequest>();
+                    AssertEqual("vsl_a,vsl_b", String.Join(",", started.VesselIds.OrderBy(v => v, StringComparer.Ordinal)), "run vessels: " + run.Body);
+                    AssertEqual(2, started.Concurrency, "run concurrency: " + run.Body);
+                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.ActiveToasts().Any(t => t.Severity == NotificationSeverityEnum.Success && t.Text.Contains("Fleet action started on 2 vessels."))), "started toast");
                     AssertTrue(host.PumpUntil(() => host.Tui.Context.Router.Current!.FullPath == "/fleet-actions/runs/far_1"), "navigated to the run");
                 }
             }));
@@ -108,14 +117,14 @@ namespace Test.Shared.Suites.Tui
                     TuiCase.Contains(frame, "Ad hoc", "ad hoc tag");
                     FleetActionRunsScreen screen = Content<FleetActionRunsScreen>(host);
                     screen.StatusFilter.Choose(screen.StatusFilter.Options.First(o => o.Value == "Running"));
-                    AssertTrue(host.PumpUntil(() => stub.Bodies.Any(b => b.Contains("\"Status\":\"Running\""))), "server status filter");
+                    AssertTrue(host.PumpUntil(() => stub.Saw("POST", "/api/v1/fleet-action-runs/enumerate", r => r.TryBodyAs<Armada.Client.Models.FleetActionRunEnumerateQuery>()?.Status == FleetActionRunStatusEnum.Running)), "server status filter");
                     host.Press("home");
                     host.Press("x");
                     AssertTrue(host.WaitForText("Keep running"), "cancel confirm\n" + host.Screen());
                     TuiCase.Contains(host.Screen(), "Pending targets are cancelled", "cancel text");
                     host.Press("y");
-                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/fleet-action-runs/far_1/cancel") == 1), "cancel call");
-                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.ActiveToasts().Any(t => t.Text.Contains("Run \"Echo name\" cancelled."))), "cancel toast");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/fleet-action-runs/far_1/cancel") == 1), "cancel call");
+                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.ActiveToasts().Any(t => t.Severity == NotificationSeverityEnum.Warning && t.Text.Contains("Run \"Echo name\" cancelled."))), "cancel toast");
                     host.Press("enter");
                     AssertEqual("/fleet-actions/runs/far_1", host.Tui.Context.Router.Current!.FullPath, "Enter opens the run");
                 }

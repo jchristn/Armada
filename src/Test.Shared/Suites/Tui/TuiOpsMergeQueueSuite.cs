@@ -6,6 +6,7 @@ namespace Test.Shared.Suites.Tui
     using System.Net;
     using Armada.Tui.Screens;
     using Armada.Tui.Screens.Operations;
+    using Armada.Tui.Services;
     using Test.Shared.Infrastructure;
     using Touchstone.Core;
     using static Test.Shared.Infrastructure.Asserts;
@@ -43,21 +44,23 @@ namespace Test.Shared.Suites.Tui
                     AssertTrue(host.WaitForText("Enqueue Merge"), "enqueue dialog");
                     host.Type("feature/x");
                     host.Press("ctrl+s");
-                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/merge-queue") == 1), "enqueue call");
-                    string body = stub.Bodies.Last(b => b.Contains("feature/x"));
-                    AssertTrue(body.Contains("\"TargetBranch\":\"main\"") && body.Contains("\"Priority\":0"), "enqueue body: " + body);
-                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.ActiveToasts().Any(t => t.Text.Contains("Merge entry enqueued."))), "enqueue toast");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/merge-queue") == 1), "enqueue call");
+                    StubRequest enqueue = stub.Last("POST", "/api/v1/merge-queue");
+                    AssertEqual("feature/x", enqueue.BodyAs<Armada.Core.Models.MergeEntry>().BranchName, "enqueue branch: " + enqueue.Body);
+                    AssertEqual("main", enqueue.BodyProperty("TargetBranch")?.ScalarText, "target branch sent (main is also the model default): " + enqueue.Body);
+                    AssertEqual("0", enqueue.BodyProperty("Priority")?.ScalarText, "priority sent (0 is also the model default): " + enqueue.Body);
+                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.ActiveToasts().Any(t => t.Severity == NotificationSeverityEnum.Success && t.Text.Contains("Merge entry enqueued."))), "enqueue toast");
 
                     host.Press("home");
                     AssertEqual("mrg_1", screen.Grid.Current!.Id, "first");
                     host.Press("p");
                     TuiCase.Contains(host.Screen(), "Process merge entry mrg_1 now?", "process text");
                     host.Press("y");
-                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/merge-queue/mrg_1/process") == 1), "process");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/merge-queue/mrg_1/process") == 1), "process");
                     host.Press("x");
                     TuiCase.Contains(host.Screen(), "Cancel merge entry mrg_1?", "cancel text");
                     host.Press("y");
-                    AssertTrue(host.PumpUntil(() => stub.Count("DELETE /api/v1/merge-queue/mrg_1") == 1), "cancel uses the server's delete-or-cancel route");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("DELETE", "/api/v1/merge-queue/mrg_1") == 1), "cancel uses the server's delete-or-cancel route");
                     host.Press(".");
                     AssertTrue(host.PumpUntil(() => host.App.Modals.IsActive), "row menu");
                     TuiCase.Contains(host.Screen(), "Mission Diff", "diff offered with a mission");
@@ -68,17 +71,17 @@ namespace Test.Shared.Suites.Tui
                     host.Press("del");
                     TuiCase.Contains(host.Screen(), "Delete merge entry mrg_1? This cannot be undone.", "delete text");
                     host.Press("y");
-                    AssertTrue(host.PumpUntil(() => stub.Count("DELETE /api/v1/merge-queue/mrg_1") == 2), "delete");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("DELETE", "/api/v1/merge-queue/mrg_1") == 2), "delete");
                     host.Press("P");
                     TuiCase.Contains(host.Screen(), "Process all queued entries in the merge queue now?", "process all text");
                     host.Press("y");
-                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/merge-queue/process") == 1), "process all");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/merge-queue/process") == 1), "process all");
                     host.Press("home").Press("space").Press("down").Press("space");
                     host.Press("D");
                     TuiCase.Contains(host.Screen(), "Delete 2 selected merge queue entries? This cannot be undone.", "bulk text");
                     host.Press("y");
-                    AssertTrue(host.PumpUntil(() => stub.Count("DELETE /api/v1/merge-queue/mrg_2") == 1), "bulk delete");
-                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.ActiveToasts().Any(t => t.Text.Contains("Deleted 2 merge entries."))), "bulk toast");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("DELETE", "/api/v1/merge-queue/mrg_2") == 1), "bulk delete");
+                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.ActiveToasts().Any(t => t.Severity == NotificationSeverityEnum.Success && t.Text.Contains("Deleted 2 merge entries."))), "bulk toast");
                     host.Press("enter");
                     AssertTrue(host.PumpUntil(() => host.Tui.Context.Router.Current!.Path.StartsWith("/merge-queue/", StringComparison.Ordinal)), "Enter opens the entry");
                 }
@@ -101,13 +104,13 @@ namespace Test.Shared.Suites.Tui
                     host.Press("p");
                     TuiCase.Contains(host.Screen(), "Process merge entry for branch \"armada/one\"?", "process text");
                     host.Press("y");
-                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/merge-queue/mrg_1/process") == 1), "process");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/merge-queue/mrg_1/process") == 1), "process");
                     host.Press("l");
                     AssertTrue(host.WaitForText("Log: Mission msn_1..."), "log title\n" + host.Screen());
                     host.Press("esc");
                     host.Press("del");
                     host.Press("y");
-                    AssertTrue(host.PumpUntil(() => stub.Count("DELETE /api/v1/merge-queue/mrg_1") == 1), "delete");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("DELETE", "/api/v1/merge-queue/mrg_1") == 1), "delete");
                     AssertTrue(host.PumpUntil(() => host.Tui.Context.Router.Current!.Path == "/missions"), "back to the queue");
                 }
             }));

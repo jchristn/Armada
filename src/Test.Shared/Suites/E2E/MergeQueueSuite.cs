@@ -150,10 +150,7 @@ namespace Test.Shared.Suites.E2E
                 HttpClient authClient = fx.AuthClient;
 
                 HttpResponseMessage response = await authClient.GetAsync("/api/v1/merge-queue/mrg_nonexistent").ConfigureAwait(false);
-                ArmadaErrorResponse error = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(response).ConfigureAwait(false);
-                Assert(
-                    error.Error != null || error.Message != null,
-                    "Not found should return error");
+                await E2eApiErrorAssert.ExpectAsync(response, HttpStatusCode.NotFound, "Not found should return error").ConfigureAwait(false);
             }));
 
             cases.Add(CaseAsync("get_by_id_preserves_all_fields", "GetById_PreservesAllFields", TestTags.Positive, async () =>

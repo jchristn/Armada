@@ -13,6 +13,7 @@ import {
 } from '../../../api/client';
 import { translateTemplate } from '../../../i18n/runtime';
 import type { Captain, VesselImportBatch, VesselImportItem } from '../../../types/models';
+import { onlyCallArgs } from '../../../test/mockCalls';
 
 vi.mock('../../../api/client', () => ({
   apiErrorCode: vi.fn(() => null),
@@ -280,7 +281,7 @@ describe('ImportWizard', () => {
     fireEvent.change(picker, { target: { value: 'cpt_idle' } });
     fireEvent.click(screen.getByRole('button', { name: 'Import 2 repositories' }));
     await waitFor(() => expect(importVessels).toHaveBeenCalledTimes(1));
-    expect(vi.mocked(importVessels).mock.calls[0][0].Categorization).toEqual({ Enabled: true, CaptainId: 'cpt_idle', Prompt: null, ApplyAutomatically: false });
+    expect(onlyCallArgs(vi.mocked(importVessels))[0].Categorization).toEqual({ Enabled: true, CaptainId: 'cpt_idle', Prompt: null, ApplyAutomatically: false });
   });
 
   it('stays on the current step when the parent re-renders with a new onImported callback', async () => {

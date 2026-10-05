@@ -233,7 +233,10 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(response.JobId, batch.JobId);
                 Job? job = await JobWait.ForTerminalAsync(testDb.Driver, response.JobId!).ConfigureAwait(false);
                 AssertEqual(JobStatusEnum.Succeeded, job!.Status);
-                AssertContains("\"createdCount\":12", job.ResultJson ?? "");
+                VesselImportJobSummary importSummary = JsonHelper.Deserialize<VesselImportJobSummary>(job.ResultJson ?? "null");
+                AssertNotNull(importSummary, "import job result");
+                AssertEqual(12, importSummary.CreatedCount, "created count in the job result");
+                AssertEqual(batch.Id, importSummary.BatchId, "batch id in the job result");
                 AssertEqual(12, (await testDb.Driver.Vessels.EnumerateAsync(Constants.DefaultTenantId).ConfigureAwait(false)).Count);
             }));
 

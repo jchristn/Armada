@@ -4,6 +4,9 @@ namespace Test.Shared.Suites.Tui
     using System.Collections.Generic;
     using System.Linq;
     using System.Net;
+    using System.Text.Json;
+    using Armada.Core.Enums;
+    using Armada.Core.Models;
     using Armada.Tui.Modals;
     using Armada.Tui.Screens.Configuration;
     using Armada.Tui.Widgets;
@@ -47,14 +50,14 @@ namespace Test.Shared.Suites.Tui
                 using (TuiTestHost host = TuiEntityFixtures.Open(stub, "/configuration?tab=workflow-profiles&scope=Fleet"))
                 {
                     WorkflowProfilesScreen screen = TuiEntityFixtures.Screen<WorkflowProfilesScreen>(host);
-                    TuiEntityFixtures.WaitForRequest(host, stub, "scope=Fleet");
+                    TuiEntityFixtures.WaitForQuery(host, stub, "GET", "/api/v1/workflow-profiles", "scope", "Fleet");
                     host.Press("/");
                     host.Type("dot");
-                    TuiEntityFixtures.WaitForRequest(host, stub, "search=dot");
+                    TuiEntityFixtures.WaitForQuery(host, stub, "GET", "/api/v1/workflow-profiles", "search", "dot");
                     host.Press("esc");
                     SelectField<string> status = (SelectField<string>)screen.Filters.Field("status")!;
                     status.Choose(status.Options.First(o => o.Value == "inactive"));
-                    TuiEntityFixtures.WaitForRequest(host, stub, "active=false");
+                    TuiEntityFixtures.WaitForQuery(host, stub, "GET", "/api/v1/workflow-profiles", "active", "false");
                 }
             }));
 
@@ -68,7 +71,7 @@ namespace Test.Shared.Suites.Tui
                     WorkflowProfilesScreen screen = TuiEntityFixtures.Screen<WorkflowProfilesScreen>(host);
                     TuiEntityFixtures.WaitFor(host, () => screen.Grid.Rows.Count == 25, "first page");
                     host.Press(">");
-                    TuiEntityFixtures.WaitForRequest(host, stub, "GET /api/v1/workflow-profiles?pageNumber=2");
+                    TuiEntityFixtures.WaitForQuery(host, stub, "GET", "/api/v1/workflow-profiles", "pageNumber", "2");
                     host.Press("<");
                     screen.Grid.SortBy("name", true);
                     TuiEntityFixtures.WaitFor(host, () => screen.Grid.Rows.Count > 0 && screen.Grid.Rows[0].Name == "Profile 25", "sorted descending");
@@ -95,8 +98,9 @@ namespace Test.Shared.Suites.Tui
                     host.Type("Duplicate");
                     host.Press("enter");
                     TuiEntityFixtures.WaitFor(host, () => posted != null && host.Tui.Context.Router.Current!.Path == "/workflow-profiles/wfp_copy", "duplicated and opened");
-                    AssertTrue(posted!.Contains("\"Name\":\"Dotnet build (Copy)\""), "copy name: " + posted);
-                    AssertTrue(posted.Contains("\"IsDefault\":false"), "copy is not default");
+                    StubRequest copy = stub.Last("POST", "/api/v1/workflow-profiles");
+                    AssertEqual("Dotnet build (Copy)", copy.BodyAs<WorkflowProfile>().Name, "copy name");
+                    AssertEqual(JsonTokenType.False, copy.BodyProperty("IsDefault")?.ValueToken, "copy sends IsDefault false");
                 }
             }));
 
@@ -128,9 +132,12 @@ namespace Test.Shared.Suites.Tui
                     build.Value = "npm run build";
                     host.Press("ctrl+s");
                     TuiEntityFixtures.WaitFor(host, () => posted != null && host.Tui.Context.Router.Current!.Path == "/workflow-profiles/wfp_new", "posted and opened");
-                    AssertTrue(posted!.Contains("\"Name\":\"Node\""), "name: " + posted);
-                    AssertTrue(posted.Contains("\"BuildCommand\":\"npm run build\""), "build command");
-                    AssertTrue(posted.Contains("\"OwnershipScope\":\"TenantWide\""), "admin default visibility");
+                    StubRequest create = stub.Last("POST", "/api/v1/workflow-profiles");
+                    WorkflowProfile created = create.BodyAs<WorkflowProfile>();
+                    AssertEqual("Node", created.Name, "name");
+                    AssertEqual("npm run build", created.BuildCommand, "build command");
+                    AssertEqual(ScopeEnum.TenantWide, created.OwnershipScope, "admin default visibility");
+                    AssertNotNull(create.BodyProperty("OwnershipScope"), "visibility sent explicitly (not the model default)");
                 }
             }));
 
@@ -159,8 +166,9 @@ namespace Test.Shared.Suites.Tui
                     AssertTrue(screen.Editor.View.IsDirty, "dirty");
                     host.Press("ctrl+s");
                     TuiEntityFixtures.WaitFor(host, () => put != null, "saved");
-                    AssertTrue(put!.Contains("\"LintCommand\":\"dotnet format --verify-no-changes\""), "lint saved: " + put);
-                    AssertTrue(put.Contains("\"Key\":\"AWS_PROFILE\""), "required inputs kept");
+                    WorkflowProfile saved = stub.LastBody<WorkflowProfile>("PUT", "/api/v1/workflow-profiles/wfp_1");
+                    AssertEqual("dotnet format --verify-no-changes", saved.LintCommand, "lint saved");
+                    AssertTrue(saved.RequiredInputs.Any(i => i.Key == "AWS_PROFILE"), "required inputs kept");
                     screen.RunAction("validate");
                     TuiEntityFixtures.WaitFor(host, () => screen.Validation != null, "validated");
                     AssertEqual("validation", screen.ActivePanel, "validation panel shown");

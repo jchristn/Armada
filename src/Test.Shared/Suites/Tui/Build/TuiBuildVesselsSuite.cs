@@ -3,6 +3,10 @@ namespace Test.Shared.Suites.Tui.Build
     using System;
     using System.Collections.Generic;
     using System.Linq;
+    using System.Text.Json;
+    using Armada.Client.Models;
+    using Armada.Core.Enums;
+    using Armada.Core.Models;
     using Armada.Tui.Screens;
     using Armada.Tui.Screens.Build;
     using Armada.Tui.Screens.Operations;
@@ -84,7 +88,7 @@ namespace Test.Shared.Suites.Tui.Build
                     host.Press("D");
                     TuiCase.Contains(host.Screen(), "Delete 2 selected vessel(s)?", "bulk text");
                     host.Press("y");
-                    AssertTrue(host.PumpUntil(() => stub.Count("DELETE /api/v1/vessels/vsl_") == 2), "bulk delete calls");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("DELETE", "/api/v1/vessels/vsl_api") == 1 && stub.CountFor("DELETE", "/api/v1/vessels/vsl_demo") == 1), "bulk delete calls: " + String.Join("\n", stub.Requests));
                     AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.ActiveToasts().Any(t => t.Text.Contains("Deleted 2 vessels."))), "bulk toast");
                     host.Press("I");
                     AssertEqual("/vessels/import", host.Tui.Context.Router.Current!.Path, "import route");
@@ -108,10 +112,14 @@ namespace Test.Shared.Suites.Tui.Build
                     ((InputField)Row(dialog, "Repository URL")).Value = "https://x/new.git";
                     TuiCase.Contains(host.Screen(), "Merges the mission branch directly", "landing mode description");
                     host.Press("ctrl+s");
-                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/vessels") == 1), "create");
-                    string body = stub.Bodies.Last(b => b.Contains("NewRepo"));
-                    AssertTrue(body.Contains("\"LandingMode\":\"LocalMerge\"") && body.Contains("\"BranchCleanupPolicy\":\"LocalAndRemote\"") && body.Contains("\"EnableModelContext\":true"), "create defaults: " + body);
-                    AssertTrue(!body.Contains("gitHubTokenOverride"), "no token: " + body);
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/vessels") == 1), "create");
+                    StubRequest create = stub.Last("POST", "/api/v1/vessels");
+                    Vessel body = create.BodyAs<Vessel>();
+                    AssertEqual("NewRepo", body.Name, "created name");
+                    AssertEqual(LandingModeEnum.LocalMerge, body.LandingMode, "landing mode default");
+                    AssertEqual(BranchCleanupPolicyEnum.LocalAndRemote, body.BranchCleanupPolicy, "cleanup default");
+                    AssertEqual(JsonTokenType.True, create.BodyProperty("EnableModelContext")?.ValueToken, "EnableModelContext sent as true (not the model default)");
+                    AssertFalse(JsonShape.HasPropertyAnywhere(create.Body, "gitHubTokenOverride"), "no token property in any case: " + create.Body);
                     host.Press("home").Press("down");
                     host.Press("e");
                     AssertTrue(host.WaitForText("Edit Vessel"), "edit form");
@@ -119,11 +127,13 @@ namespace Test.Shared.Suites.Tui.Build
                     ((InputField)Row(dialog, "GitHub Token Override")).Value = "ghp_secret";
                     ((OpsTextArea)Row(dialog, "Protected Branch Patterns")).Text = "main\n\nrelease/*";
                     host.Press("ctrl+s");
-                    AssertTrue(host.PumpUntil(() => stub.Count("PUT /api/v1/vessels/vsl_demo") == 1), "update");
-                    string update = stub.Bodies.Last(b => b.Contains("ghp_secret"));
-                    AssertTrue(update.Contains("\"gitHubTokenOverride\":\"ghp_secret\""), "token: " + update);
-                    AssertTrue(update.Contains("\"ModelContext\":\"Uses xunit.\"") && update.Contains("\"WorkingDirectory\":\"/work/DemoRepo\""), "full record: " + update);
-                    AssertTrue(update.Contains("\"ProtectedBranchPatterns\":[\"main\",\"release/*\"]"), "line list: " + update);
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("PUT", "/api/v1/vessels/vsl_demo") == 1), "update");
+                    Vessel update = stub.LastBody<Vessel>("PUT", "/api/v1/vessels/vsl_demo");
+                    AssertTrue(update.GitHubTokenOverrideSpecified, "token property sent");
+                    AssertEqual("ghp_secret", update.GitHubTokenOverride, "token");
+                    AssertEqual("Uses xunit.", update.ModelContext, "full record: model context");
+                    AssertEqual("/work/DemoRepo", update.WorkingDirectory, "full record: working directory");
+                    AssertEqual("main|release/*", String.Join("|", update.ProtectedBranchPatterns), "line list");
                 }
             }));
 
@@ -147,16 +157,19 @@ namespace Test.Shared.Suites.Tui.Build
                     TuiCase.Contains(frame, "+2 / -1", "ahead behind");
                     TuiCase.Contains(frame, "Fix parser", "commit subject");
                     host.Press("down").Press("p");
-                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/vessels/vsl_demo/branches/push") == 1), "push");
-                    AssertTrue(stub.Bodies.Any(b => b.Contains("\"Branch\":\"feature/x\"")), "push body");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/vessels/vsl_demo/branches/push") == 1), "push");
+                    AssertEqual("feature/x", stub.LastBody<BranchActionRequest>("POST", "/api/v1/vessels/vsl_demo/branches/push").Branch, "push body");
                     host.Press("m");
                     AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.ActiveToasts().Any(t => t.Text.Contains("Select a source and a target branch."))), "merge needs branches");
                     VesselBranchesDialog branches = (VesselBranchesDialog)host.App.Modals.Top!;
                     branches.Source.Choose(branches.Source.Options.First(o => o.Value == "feature/x"));
                     branches.Target.Choose(branches.Target.Options.First(o => o.Value == "main"));
                     branches.Merge();
-                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/vessels/vsl_demo/branches/merge") == 1), "merge");
-                    AssertTrue(stub.Bodies.Any(b => b.Contains("\"Source\":\"feature/x\"") && b.Contains("\"Target\":\"main\"") && b.Contains("\"Push\":true")), "merge body");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/vessels/vsl_demo/branches/merge") == 1), "merge");
+                    BranchMergeRequest merge = stub.LastBody<BranchMergeRequest>("POST", "/api/v1/vessels/vsl_demo/branches/merge");
+                    AssertEqual("feature/x", merge.Source, "merge source");
+                    AssertEqual("main", merge.Target, "merge target");
+                    AssertTrue(merge.Push, "merge pushes");
                     host.Press("esc");
                     host.PumpUntil(() => !host.App.Modals.IsActive);
                     host.Press("home");
@@ -167,8 +180,8 @@ namespace Test.Shared.Suites.Tui.Build
                     AssertTrue(host.WaitForText("Refine Model Context"), "context dialog\n" + host.Screen());
                     AssertTrue(host.WaitForText("claude-1"), "captain preselected");
                     host.Press("ctrl+s");
-                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/vessels/vsl_api/build-context") == 1), "build context");
-                    AssertTrue(stub.Bodies.Any(b => b.Contains("\"CaptainId\":\"cpt_1\"")), "captain in body");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/vessels/vsl_api/build-context") == 1), "build context");
+                    AssertEqual("cpt_1", stub.LastBody<BuildVesselContextRequest>("POST", "/api/v1/vessels/vsl_api/build-context").CaptainId, "captain in body");
                     AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.ActiveToasts().Any(t => t.Text.Contains("Model Context updated for \"ApiRepo\"."))), "toast");
                 }
             }));

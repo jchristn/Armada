@@ -205,7 +205,7 @@ namespace Test.Shared.Suites.E2E
 
                 string responseText = await response.Content.ReadAsStringAsync();
                 AssertFalse(responseText.Contains(token, StringComparison.Ordinal));
-                AssertFalse(responseText.Contains("\"gitHubTokenOverride\"", StringComparison.Ordinal));
+                AssertFalse(JsonShape.HasPropertyAnywhere(responseText, "GitHubTokenOverride"), "no GitHubTokenOverride property in any casing");
 
                 Vessel vessel = JsonHelper.Deserialize<Vessel>(responseText);
                 createdVesselIds.Add(vessel.Id);
@@ -214,7 +214,7 @@ namespace Test.Shared.Suites.E2E
                 HttpResponseMessage getResponse = await authClient.GetAsync("/api/v1/vessels/" + vessel.Id);
                 string getText = await getResponse.Content.ReadAsStringAsync();
                 AssertFalse(getText.Contains(token, StringComparison.Ordinal));
-                AssertFalse(getText.Contains("\"gitHubTokenOverride\"", StringComparison.Ordinal));
+                AssertFalse(JsonShape.HasPropertyAnywhere(getText, "GitHubTokenOverride"), "no GitHubTokenOverride property in any casing");
                 Vessel fetched = JsonHelper.Deserialize<Vessel>(getText);
                 AssertTrue(fetched.HasGitHubTokenOverride);
             }));
@@ -263,10 +263,7 @@ namespace Test.Shared.Suites.E2E
                 HttpClient authClient = fx.AuthClient;
 
                 HttpResponseMessage response = await authClient.GetAsync("/api/v1/vessels/vsl_nonexistent");
-                ArmadaErrorResponse error = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(response);
-                Assert(
-                    error.Error != null || error.Message != null,
-                    "Should have Error or Message property");
+                await E2eApiErrorAssert.ExpectAsync(response, HttpStatusCode.NotFound, "Should have Error or Message property");
             }));
 
             cases.Add(CaseAsync("get_vessel_invalid_id_returns_error", "Get Vessel Invalid Id Returns Error", TestTags.Negative, async () =>
@@ -275,10 +272,7 @@ namespace Test.Shared.Suites.E2E
                 HttpClient authClient = fx.AuthClient;
 
                 HttpResponseMessage response = await authClient.GetAsync("/api/v1/vessels/invalid_id_format");
-                ArmadaErrorResponse error = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(response);
-                Assert(
-                    error.Error != null || error.Message != null,
-                    "Should have Error or Message property");
+                await E2eApiErrorAssert.ExpectAsync(response, HttpStatusCode.NotFound, "Should have Error or Message property");
             }));
 
             #endregion
@@ -504,18 +498,7 @@ namespace Test.Shared.Suites.E2E
                 HttpClient authClient = fx.AuthClient;
 
                 HttpResponseMessage response = await authClient.DeleteAsync("/api/v1/vessels/vsl_nonexistent");
-                string body = await response.Content.ReadAsStringAsync();
-                if (!string.IsNullOrEmpty(body))
-                {
-                    ArmadaErrorResponse error = JsonHelper.Deserialize<ArmadaErrorResponse>(body);
-                    Assert(
-                        error.Error != null || error.Message != null,
-                        "Should have Error or Message property");
-                }
-                else
-                {
-                    AssertEqual(HttpStatusCode.NoContent, response.StatusCode);
-                }
+                await E2eApiErrorAssert.ExpectAsync(response, HttpStatusCode.NotFound, "Deleting nonexistent vessel returns a typed 404");
             }));
 
             cases.Add(CaseAsync("get_vessel_after_delete_returns_not_found", "Get Vessel After Delete Returns Not Found", TestTags.Negative, async () =>
@@ -533,10 +516,7 @@ namespace Test.Shared.Suites.E2E
                 createdVesselIds.Remove(vesselId);
 
                 HttpResponseMessage getResp = await authClient.GetAsync("/api/v1/vessels/" + vesselId);
-                ArmadaErrorResponse error = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(getResp);
-                Assert(
-                    error.Error != null || error.Message != null,
-                    "Should have Error or Message property");
+                await E2eApiErrorAssert.ExpectAsync(getResp, HttpStatusCode.NotFound, "Should have Error or Message property");
             }));
 
             cases.Add(CaseAsync("delete_vessel_does_not_affect_other_vessels", "Delete Vessel Does Not Affect Other Vessels", TestTags.Positive, async () =>

@@ -6,6 +6,7 @@ namespace Test.Shared.Suites.Tui.Build
     using System.Net;
     using System.Threading;
     using Armada.Tui.Screens.Build;
+    using Armada.Tui.Services;
     using Test.Shared.Infrastructure;
     using Touchstone.Core;
     using static Test.Shared.Infrastructure.Asserts;
@@ -39,9 +40,12 @@ namespace Test.Shared.Suites.Tui.Build
                     host.Type("/repos").Press("enter").Type("/repos").Press("enter").Type("\"/other\"");
                     AssertTrue(host.WaitForText("2 paths"), "paths parsed\n" + host.Screen());
                     host.Press("ctrl+s");
-                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/vessels/import/discover") == 1), "discover call");
-                    string body = stub.Bodies.First(b => b.Contains("Directories"));
-                    AssertTrue(body.Contains("\"Directories\":[\"/repos\",\"/other\"]") && body.Contains("\"MaxDepth\":3") && body.Contains("\"RunInBackground\":true"), "discover body: " + body);
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/vessels/import/discover") == 1), "discover call");
+                    StubRequest discover = stub.Last("POST", "/api/v1/vessels/import/discover");
+                    Armada.Core.Models.VesselDiscoveryRequest discovered = discover.BodyAs<Armada.Core.Models.VesselDiscoveryRequest>();
+                    AssertEqual("/repos|/other", String.Join("|", discovered.Directories), "discover directories: " + discover.Body);
+                    AssertEqual(3, discovered.MaxDepth, "discover depth: " + discover.Body);
+                    AssertTrue(discovered.RunInBackground, "discover in background: " + discover.Body);
                     AssertTrue(host.WaitForText("Scanning for repositories in the background."), "discovering\n" + host.Screen());
                     AssertTrue(host.WaitForText("[2 Review]", 8000), "review\n" + host.Screen());
                     string frame = host.Screen();
@@ -65,12 +69,18 @@ namespace Test.Shared.Suites.Tui.Build
                     AssertTrue(host.WaitForText("Choose the captain that will recommend fleets."), "captain required\n" + host.Screen());
                     wizard.CategorizeCaptain.Choose(wizard.CategorizeCaptain.Options.First(o => o.Value == "cpt_1"));
                     host.Press("ctrl+s");
-                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/vessels/import") - stub.Count("POST /api/v1/vessels/import/") == 1), "import call");
-                    string import = stub.Bodies.First(b => b.Contains("\"BatchId\":\"vib_1\""));
-                    AssertTrue(import.Contains("\"Paths\":[\"/repos/api-service\"]") && import.Contains("\"FleetId\":\"flt_web\"") && import.Contains("\"LandingMode\":\"PullRequest\""), "import body: " + import);
-                    AssertTrue(import.Contains("\"CaptainId\":\"cpt_1\"") && !import.Contains("Group these repositories"), "categorization with default prompt as null: " + import);
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/vessels/import") == 1), "import call");
+                    StubRequest importCall = stub.Last("POST", "/api/v1/vessels/import");
+                    Armada.Core.Models.VesselImportRequest import = importCall.BodyAs<Armada.Core.Models.VesselImportRequest>();
+                    AssertEqual("vib_1", import.BatchId, "import batch: " + importCall.Body);
+                    AssertEqual("/repos/api-service", String.Join("|", import.Paths), "import paths: " + importCall.Body);
+                    AssertEqual("flt_web", import.FleetId, "import fleet: " + importCall.Body);
+                    AssertEqual(Armada.Core.Enums.LandingModeEnum.PullRequest, import.Defaults?.LandingMode, "import landing mode: " + importCall.Body);
+                    AssertNotNull(import.Categorization, "categorization sent: " + importCall.Body);
+                    AssertEqual("cpt_1", import.Categorization!.CaptainId, "categorization captain: " + importCall.Body);
+                    AssertNull(import.Categorization.Prompt, "categorization with default prompt as null: " + importCall.Body);
                     AssertTrue(host.WaitForText("[3 Results]"), "results\n" + host.Screen());
-                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.ActiveToasts().Any(t => t.Text.Contains("Import finished: 1 vessel created.")), 8000), "finished toast");
+                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.ActiveToasts().Any(t => t.Severity == NotificationSeverityEnum.Success && t.Text.Contains("Import finished: 1 vessel created.")), 8000), "finished toast");
                     AssertTrue(host.WaitForText("Fleets recommended", 8000), "recommendations\n" + host.Screen());
                     host.Press("]");
                     AssertTrue(host.WaitForText("Backend"), "fleet drafts\n" + host.Screen());
@@ -82,9 +92,10 @@ namespace Test.Shared.Suites.Tui.Build
                     host.Press("A");
                     TuiCase.Contains(host.Screen(), "1 repository will be assigned", "apply confirm");
                     host.Press("y");
-                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/vessels/import/batches/vib_1/fleet-recommendations/apply") == 1), "apply call");
-                    AssertTrue(stub.Bodies.Any(b => b.Contains("\"Name\":\"Services\"") && b.Contains("\"VesselIds\":[\"vsl_new\"]")), "apply body");
-                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.ActiveToasts().Any(t => t.Text.Contains("Fleets applied: 1 vessel assigned."))), "applied toast");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/vessels/import/batches/vib_1/fleet-recommendations/apply") == 1), "apply call");
+                    StubRequest apply = stub.Last("POST", "/api/v1/vessels/import/batches/vib_1/fleet-recommendations/apply");
+                    AssertTrue(apply.BodyAs<Armada.Core.Models.FleetRecommendationApplyRequest>().Fleets.Any(f => f.Name == "Services" && String.Join("|", f.VesselIds) == "vsl_new"), "apply body: " + apply.Body);
+                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.ActiveToasts().Any(t => t.Severity == NotificationSeverityEnum.Success && t.Text.Contains("Fleets applied: 1 vessel assigned."))), "applied toast");
                 }
             }));
 
@@ -107,7 +118,7 @@ namespace Test.Shared.Suites.Tui.Build
                     host.Press("space");
                     AssertEqual(2, wizard.Browse.Selected.Count, "worktree allowed");
                     TuiCase.Contains(host.Screen(), "2 folders selected", "selection summary");
-                    AssertTrue(stub.Requests.Any(r => r.StartsWith("GET /api/v1/vessels/import/browse?path=", StringComparison.Ordinal)), "browse folder call");
+                    AssertTrue(stub.Saw("GET", "/api/v1/vessels/import/browse", r => r.QueryValue("path") != null), "browse folder call");
                     host.Press("h");
                     AssertTrue(host.WaitForText("Completed with failures"), "history\n" + host.Screen());
                     host.Press("enter");

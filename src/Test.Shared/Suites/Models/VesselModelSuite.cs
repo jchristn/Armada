@@ -183,10 +183,9 @@ namespace Test.Shared.Suites.Models
                 vessel.StyleGuide = "test style";
 
                 string json = JsonSerializer.Serialize(vessel);
-                AssertContains("ProjectContext", json);
-                AssertContains("test context", json);
-                AssertContains("StyleGuide", json);
-                AssertContains("test style", json);
+                List<JsonPropertyShape> top = JsonShape.TopLevel(json);
+                AssertEqual("test context", top.Find(p => p.Name == "ProjectContext")?.ScalarText, "ProjectContext on the wire");
+                AssertEqual("test style", top.Find(p => p.Name == "StyleGuide")?.ScalarText, "StyleGuide on the wire");
             }));
 
             cases.Add(Case("github_token_override_deserialize_sets_hidden_property", "Vessel GitHub token override deserialize sets hidden property", TestTags.Positive, () =>
@@ -205,9 +204,9 @@ namespace Test.Shared.Suites.Models
                 vessel.GitHubTokenOverride = "ghp_hidden";
 
                 string json = JsonSerializer.Serialize(vessel);
-                AssertFalse(json.Contains("ghp_hidden", StringComparison.Ordinal));
-                AssertFalse(json.Contains("\"gitHubTokenOverride\"", StringComparison.Ordinal));
-                AssertContains("HasGitHubTokenOverride", json);
+                AssertFalse(json.Contains("ghp_hidden", StringComparison.Ordinal), "the token value is never serialized");
+                AssertFalse(JsonShape.HasPropertyAnywhere(json, "GitHubTokenOverride"), "no GitHubTokenOverride property in any casing");
+                AssertEqual(System.Text.Json.JsonTokenType.True, JsonShape.TopLevelProperty(json, "HasGitHubTokenOverride")?.ValueToken, "HasGitHubTokenOverride is true");
             }));
 
             cases.Add(Case("has_github_token_override_deserializes_from_read_model", "Vessel HasGitHubTokenOverride deserializes from read model", TestTags.Positive, () =>

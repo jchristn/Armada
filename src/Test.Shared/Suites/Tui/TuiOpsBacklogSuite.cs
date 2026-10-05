@@ -6,6 +6,7 @@ namespace Test.Shared.Suites.Tui
     using System.Net;
     using Armada.Tui.Screens;
     using Armada.Tui.Screens.Operations;
+    using Armada.Tui.Services;
     using Test.Shared.Infrastructure;
     using Touchstone.Core;
     using static Test.Shared.Infrastructure.Asserts;
@@ -60,10 +61,12 @@ namespace Test.Shared.Suites.Tui
                 {
                     AssertTrue(host.WaitForText("Fix login"), "rows");
                     host.Type("\u001b[1;3B");
-                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/backlog/reorder") == 1), "reorder call");
-                    string body = stub.Bodies.Last(b => b.Contains("ObjectiveId"));
-                    AssertTrue(body.Contains("\"ObjectiveId\":\"obj_a\"") && body.Contains("\"Rank\":2") && body.Contains("\"ObjectiveId\":\"obj_b\"") && body.Contains("\"Rank\":1"), "swap ranks: " + body);
-                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.ActiveToasts().Any(t => t.Text.Contains("Backlog ranking updated."))), "rank toast");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/backlog/reorder") == 1), "reorder call");
+                    StubRequest reorder = stub.Last("POST", "/api/v1/backlog/reorder");
+                    List<Armada.Core.Models.ObjectiveReorderItem> items = reorder.BodyAs<Armada.Core.Models.ObjectiveReorderRequest>().Items;
+                    AssertTrue(items.Any(i => i.ObjectiveId == "obj_a" && i.Rank == 2), "obj_a moves to rank 2: " + reorder.Body);
+                    AssertTrue(items.Any(i => i.ObjectiveId == "obj_b" && i.Rank == 1), "obj_b moves to rank 1: " + reorder.Body);
+                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.ActiveToasts().Any(t => t.Severity == NotificationSeverityEnum.Success && t.Text.Contains("Backlog ranking updated."))), "rank toast");
                     host.Press(".");
                     AssertTrue(host.PumpUntil(() => host.App.Modals.IsActive), "row menu");
                     string menu = host.Screen();
@@ -73,13 +76,13 @@ namespace Test.Shared.Suites.Tui
                     host.Press("del");
                     TuiCase.Contains(host.Screen(), "but leaves linked missions", "delete text");
                     host.Press("y");
-                    AssertTrue(host.PumpUntil(() => stub.Count("DELETE /api/v1/backlog/obj_a") == 1), "delete call");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("DELETE", "/api/v1/backlog/obj_a") == 1), "delete call");
                     host.Press("j");
                     AssertTrue(host.PumpUntil(() => host.App.Modals.IsActive), "json");
                     host.Press("esc");
                     host.Press("u");
-                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/backlog") >= 1 && stub.Bodies.Any(b => b.Contains("Fix login (Copy)"))), "duplicate call");
-                    AssertTrue(stub.Bodies.Any(b => b.Contains("Fix login (Copy)") && b.Contains("\"BacklogState\":\"Inbox\"") && b.Contains("\"Status\":\"Draft\"")), "duplicate payload");
+                    AssertTrue(host.PumpUntil(() => stub.Saw("POST", "/api/v1/backlog", r => r.TryBodyAs<Armada.Core.Models.ObjectiveUpsertRequest>()?.Title == "Fix login (Copy)")), "duplicate call");
+                    AssertTrue(stub.BodiesFor<Armada.Core.Models.ObjectiveUpsertRequest>("POST", "/api/v1/backlog").Any(b => b.Title == "Fix login (Copy)" && b.BacklogState == Armada.Core.Enums.ObjectiveBacklogStateEnum.Inbox && b.Status == Armada.Core.Enums.ObjectiveStatusEnum.Draft), "duplicate payload");
                     AssertTrue(host.PumpUntil(() => host.Tui.Context.Router.Current!.FullPath == "/backlog/obj_new"), "navigates to the copy");
                 }
             }));
@@ -100,9 +103,12 @@ namespace Test.Shared.Suites.Tui
                     TuiTestHostSettle(host);
                     host.Press("tab").Press("tab").Type("42");
                     host.Press("ctrl+s");
-                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/objectives/import/github") == 1), "import call\n" + host.Screen());
-                    string body = stub.Bodies.Last(b => b.Contains("\"Number\""));
-                    AssertTrue(body.Contains("\"Number\":42") && body.Contains("\"VesselId\":\"vsl_demo\"") && body.Contains("\"SourceType\":\"Issue\""), "import body: " + body);
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/objectives/import/github") == 1), "import call\n" + host.Screen());
+                    StubRequest import = stub.Last("POST", "/api/v1/objectives/import/github");
+                    Armada.Core.Models.GitHubObjectiveImportRequest imported = import.BodyAs<Armada.Core.Models.GitHubObjectiveImportRequest>();
+                    AssertEqual(42, imported.Number, "import number: " + import.Body);
+                    AssertEqual("vsl_demo", imported.VesselId, "import vessel: " + import.Body);
+                    AssertEqual("Issue", import.BodyProperty("SourceType")?.ScalarText, "source type sent (Issue is also the model default): " + import.Body);
                     AssertTrue(host.PumpUntil(() => host.Tui.Context.Router.Current!.FullPath == "/backlog/obj_imp"), "opens imported item");
                     host.Tui.Context.Router.Navigate("/objectives?vesselId=vsl_demo");
                     AssertTrue(host.WaitForText("Fix login"), "rows again");

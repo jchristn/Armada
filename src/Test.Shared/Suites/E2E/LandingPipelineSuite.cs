@@ -103,12 +103,7 @@ namespace Test.Shared.Suites.E2E
                 await TransitionAsync(authClient, missionId, "PullRequestOpen");
 
                 HttpResponseMessage resp = await TransitionAsync(authClient, missionId, "InProgress");
-                string respBody = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
-                ArmadaErrorResponse errorResp = JsonHelper.Deserialize<ArmadaErrorResponse>(respBody);
-
-                // Server returns 200 with an Error property in the body for invalid transitions
-                AssertTrue(errorResp.Error != null || (errorResp.Message != null && errorResp.Message.Contains("Invalid transition")),
-                    "Expected error response for invalid transition PullRequestOpen -> InProgress");
+                await E2eApiErrorAssert.ExpectAsync(resp, HttpStatusCode.BadRequest, "invalid transition PullRequestOpen -> InProgress is refused").ConfigureAwait(false);
 
                 // Mission should still be PullRequestOpen
                 Mission mission = await GetMissionAsync(authClient, missionId);
@@ -180,7 +175,8 @@ namespace Test.Shared.Suites.E2E
                 foreach (ArmadaEvent evt in events.Objects ?? new List<ArmadaEvent>())
                 {
                     string? msg = evt.Message;
-                    if (msg != null && msg.Contains("WorkProduced"))
+                    // TODO(R5, production): mission.status_changed carries the new status only in its message text.
+                    if (msg == "Mission " + missionId + " transitioned to WorkProduced")
                     {
                         found = true;
                         break;

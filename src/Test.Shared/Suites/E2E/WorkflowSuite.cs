@@ -237,15 +237,11 @@ namespace Test.Shared.Suites.E2E
 
                 // Invalid: Pending -> Complete (skip required steps)
                 HttpResponseMessage resp = await TransitionMissionStatusAsync(authClient, missionId, "Complete").ConfigureAwait(false);
-                ArmadaErrorResponse err = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(resp).ConfigureAwait(false);
-                Assert(err.Error != null || err.Message != null,
-                    "Should have Error or Message property for invalid transition");
+                await E2eApiErrorAssert.ExpectAsync(resp, HttpStatusCode.BadRequest, "Should have Error or Message property for invalid transition").ConfigureAwait(false);
 
                 // Invalid: Pending -> InProgress (must go through Assigned first)
                 HttpResponseMessage resp2 = await TransitionMissionStatusAsync(authClient, missionId, "InProgress").ConfigureAwait(false);
-                ArmadaErrorResponse err2 = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(resp2).ConfigureAwait(false);
-                Assert(err2.Error != null || err2.Message != null,
-                    "Should have Error or Message property for invalid transition");
+                await E2eApiErrorAssert.ExpectAsync(resp2, HttpStatusCode.BadRequest, "Should have Error or Message property for invalid transition").ConfigureAwait(false);
 
                 // Valid: Pending -> Assigned
                 HttpResponseMessage resp3 = await TransitionMissionStatusAsync(authClient, missionId, "Assigned").ConfigureAwait(false);
@@ -257,9 +253,7 @@ namespace Test.Shared.Suites.E2E
 
                 // Invalid: InProgress -> Assigned (can't go back to assigned)
                 HttpResponseMessage resp5 = await TransitionMissionStatusAsync(authClient, missionId, "Assigned").ConfigureAwait(false);
-                ArmadaErrorResponse err5 = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(resp5).ConfigureAwait(false);
-                Assert(err5.Error != null || err5.Message != null,
-                    "Should have Error or Message property for invalid transition");
+                await E2eApiErrorAssert.ExpectAsync(resp5, HttpStatusCode.BadRequest, "Should have Error or Message property for invalid transition").ConfigureAwait(false);
             }));
 
             cases.Add(CaseAsync("captain_lifecycle_create_stop_delete", "CaptainLifecycle_CreateStopDelete", TestTags.Positive, async () =>
@@ -285,9 +279,7 @@ namespace Test.Shared.Suites.E2E
 
                 // Verify it's gone
                 HttpResponseMessage getResp = await authClient.GetAsync("/api/v1/captains/" + captainId).ConfigureAwait(false);
-                ArmadaErrorResponse errResp = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(getResp).ConfigureAwait(false);
-                Assert(errResp.Error != null || errResp.Message != null,
-                    "Should have Error or Message property for deleted captain");
+                await E2eApiErrorAssert.ExpectAsync(getResp, HttpStatusCode.NotFound, "Should have Error or Message property for deleted captain").ConfigureAwait(false);
             }));
 
             cases.Add(CaseAsync("event_filtering_by_mission_id", "EventFiltering_ByMissionId", TestTags.Positive, async () =>

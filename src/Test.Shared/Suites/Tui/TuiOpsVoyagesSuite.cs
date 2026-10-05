@@ -6,6 +6,7 @@ namespace Test.Shared.Suites.Tui
     using System.Net;
     using Armada.Tui.Screens;
     using Armada.Tui.Screens.Operations;
+    using Armada.Tui.Services;
     using Test.Shared.Infrastructure;
     using Touchstone.Core;
     using static Test.Shared.Infrastructure.Asserts;
@@ -47,19 +48,19 @@ namespace Test.Shared.Suites.Tui
                     host.Press("x");
                     TuiCase.Contains(host.Screen(), "Cancel voyage \"Greeting rollout\"? All pending missions will be", "cancel text");
                     host.Press("y");
-                    AssertTrue(host.PumpUntil(() => stub.Count("DELETE /api/v1/voyages/vyg_g") == 1), "cancel call");
-                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.ActiveToasts().Any(t => t.Text.Contains("Voyage \"Greeting rollout\" cancelled."))), "cancel toast");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("DELETE", "/api/v1/voyages/vyg_g") == 1), "cancel call");
+                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.ActiveToasts().Any(t => t.Severity == NotificationSeverityEnum.Warning && t.Text.Contains("Voyage \"Greeting rollout\" cancelled."))), "cancel toast");
                     host.Press("del");
                     TuiCase.Contains(host.Screen(), "Purge voyage \"Greeting rollout\"?", "purge text");
                     host.Press("y");
-                    AssertTrue(host.PumpUntil(() => stub.Count("DELETE /api/v1/voyages/vyg_g/purge") == 1), "purge call");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("DELETE", "/api/v1/voyages/vyg_g/purge") == 1), "purge call");
                     host.Press("space").Press("down").Press("space");
                     TuiCase.Contains(host.Screen(), "Cancel Selected (2)", "bulk button");
                     host.Press("X");
                     TuiCase.Contains(host.Screen(), "Cancel 2 selected voyage(s)?", "bulk text");
                     host.Press("y");
-                    AssertTrue(host.PumpUntil(() => stub.Count("DELETE /api/v1/voyages/vyg_b") == 1), "bulk cancel");
-                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.ActiveToasts().Any(t => t.Text.Contains("Cancelled 2 voyages."))), "bulk toast");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("DELETE", "/api/v1/voyages/vyg_b") == 1), "bulk cancel");
+                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.ActiveToasts().Any(t => t.Severity == NotificationSeverityEnum.Success && t.Text.Contains("Cancelled 2 voyages."))), "bulk toast");
                     host.Press("n");
                     AssertEqual("/voyages/create", host.Tui.Context.Router.Current!.Path, "new voyage");
                 }
@@ -81,9 +82,12 @@ namespace Test.Shared.Suites.Tui
                     host.Press("F");
                     TuiCase.Contains(host.Screen(), "Retry 1 failed mission(s)?", "retry text");
                     host.Press("y");
-                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/missions") == 1), "retry creates a mission");
-                    string body = stub.Bodies.Last(b => b.Contains("Broken task"));
-                    AssertTrue(body.Contains("\"VoyageId\":\"vyg_b\"") && body.Contains("\"VesselId\":\"vsl_demo\""), "retry body: " + body);
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/missions") == 1), "retry creates a mission");
+                    StubRequest retry = stub.Last("POST", "/api/v1/missions");
+                    Armada.Core.Models.Mission retried = retry.BodyAs<Armada.Core.Models.Mission>();
+                    AssertEqual("Broken task", retried.Title, "retry title: " + retry.Body);
+                    AssertEqual("vyg_b", retried.VoyageId, "retry voyage: " + retry.Body);
+                    AssertEqual("vsl_demo", retried.VesselId, "retry vessel: " + retry.Body);
                     host.Press("]");
                     AssertTrue(host.WaitForText("Broken task"), "missions table");
                     TuiCase.Contains(host.Screen(), "claude-1", "captain name");
@@ -97,7 +101,7 @@ namespace Test.Shared.Suites.Tui
                     host.Press("del");
                     TuiCase.Contains(host.Screen(), "Permanently delete this voyage and all its missions?", "delete text");
                     host.Press("y");
-                    AssertTrue(host.PumpUntil(() => stub.Count("DELETE /api/v1/voyages/vyg_b/purge") == 1), "delete purges");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("DELETE", "/api/v1/voyages/vyg_b/purge") == 1), "delete purges");
                     AssertTrue(host.PumpUntil(() => host.Tui.Context.Router.Current!.Path == "/missions"), "back to voyages");
                 }
             }));
@@ -130,9 +134,12 @@ namespace Test.Shared.Suites.Tui
                     host.Type("Fix links");
                     TuiCase.Contains(host.Screen(), "Missions (2)", "count");
                     host.Press("ctrl+s");
-                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/voyages") == 1), "create call");
-                    string body = stub.Bodies.Last(b => b.Contains("Docs sweep"));
-                    AssertTrue(body.Contains("Update README") && body.Contains("Fix links") && body.Contains("\"VesselId\":\"vsl_demo\""), "body: " + body);
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/voyages") == 1), "create call");
+                    StubRequest create = stub.Last("POST", "/api/v1/voyages");
+                    Armada.Client.Models.VoyageCreateRequest voyage = create.BodyAs<Armada.Client.Models.VoyageCreateRequest>();
+                    AssertEqual("Docs sweep", voyage.Title, "title: " + create.Body);
+                    AssertEqual("Update README|Fix links", String.Join("|", voyage.Missions.Select(m => m.Title)), "missions: " + create.Body);
+                    AssertEqual("vsl_demo", voyage.VesselId, "vessel: " + create.Body);
                     AssertTrue(host.PumpUntil(() => host.Tui.Context.Router.Current!.Path == "/voyages/vyg_new"), "opens the voyage");
                 }
             }));

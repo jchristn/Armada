@@ -66,7 +66,7 @@ namespace Test.Shared.Suites.Services
 
                 AssertTrue(result.Success, "Expected the delegated command to succeed.");
                 AssertEqual(0, result.ExitCode);
-                AssertContains("git version", result.StandardOutput);
+                AssertEqual("git version 2.43.0", result.StandardOutput, "the Harbor's stdout is mapped verbatim");
             }));
 
             cases.Add(CaseAsync("timeout_when_no_reply", "RunAsync times out when the Harbor does not reply", TestTags.Negative, async () =>

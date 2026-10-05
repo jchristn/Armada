@@ -51,14 +51,13 @@ namespace Test.Shared.Suites.Services
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
                 using (CursorShimScope shim = CursorShimScope.Create())
                 {
-                    AgentLifecycleHandler handler = CreateHandler(testDb.Driver, out _);
+                    AgentLifecycleHandler handler = CreateHandler(testDb.Driver, out _, shim.ShimPath);
 
                     string? error = await handler.ValidateModelAsync(AgentRuntimeEnum.Cursor, "gpt-5.4-mini").ConfigureAwait(false);
                     string args = await WaitForRecordedArgsAsync(shim.ArgsFile, "gpt-5.4-mini").ConfigureAwait(false);
 
                     AssertNull(error, "Valid model should pass validation");
-                    AssertContains("--model", args, "Validation runtime args should include model flag");
-                    AssertContains("gpt-5.4-mini", args, "Validation runtime args should include requested model");
+                    AssertModelArgument(args, "gpt-5.4-mini", "Validation runtime args should pass --model gpt-5.4-mini");
                 }
             }));
 
@@ -67,7 +66,7 @@ namespace Test.Shared.Suites.Services
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
                 using (CursorShimScope shim = CursorShimScope.Create())
                 {
-                    AgentLifecycleHandler handler = CreateHandler(testDb.Driver, out _);
+                    AgentLifecycleHandler handler = CreateHandler(testDb.Driver, out _, shim.ShimPath);
                     Captain captain = new Captain("validation-captain", AgentRuntimeEnum.Cursor)
                     {
                         Model = "bad-model"
@@ -79,7 +78,7 @@ namespace Test.Shared.Suites.Services
                     AssertNotNull(error, "Invalid model should return an error");
                     AssertContains("bad-model", error!, "Error should include invalid model");
                     AssertContains("unknown model 'bad-model'", error!, "Error should include runtime output");
-                    AssertContains("--model", args, "Captain validation should launch runtime with model flag");
+                    AssertModelArgument(args, "bad-model", "Captain validation should launch runtime with --model bad-model");
                 }
             }));
 
@@ -88,7 +87,7 @@ namespace Test.Shared.Suites.Services
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
                 using (CursorShimScope shim = CursorShimScope.Create())
                 {
-                    AgentLifecycleHandler handler = CreateHandler(testDb.Driver, out _);
+                    AgentLifecycleHandler handler = CreateHandler(testDb.Driver, out _, shim.ShimPath);
                     Captain captain = new Captain("timeout-captain", AgentRuntimeEnum.Cursor)
                     {
                         Model = "hang-model"
@@ -100,7 +99,7 @@ namespace Test.Shared.Suites.Services
                     AssertNotNull(error, "Timed-out validation should return an error");
                     AssertContains("hang-model", error!, "Error should include requested model");
                     AssertContains("timed out", error!, "Error should report validation timeout");
-                    AssertContains("--model", args, "Timed-out validation should still launch runtime with model flag");
+                    AssertModelArgument(args, "hang-model", "Timed-out validation should still launch runtime with --model hang-model");
                 }
             }));
 
@@ -143,7 +142,7 @@ namespace Test.Shared.Suites.Services
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
                 using (CursorShimScope shim = CursorShimScope.Create())
                 {
-                    AgentLifecycleHandler handler = CreateHandler(testDb.Driver, out ArmadaSettings settings);
+                    AgentLifecycleHandler handler = CreateHandler(testDb.Driver, out ArmadaSettings settings, shim.ShimPath);
                     string worktreePath = Path.Combine(Path.GetTempPath(), "armada_cursor_launch_" + Guid.NewGuid().ToString("N"));
                     Directory.CreateDirectory(worktreePath);
 
@@ -172,6 +171,7 @@ namespace Test.Shared.Suites.Services
 
                         AssertTrue(processId > 0, "Launch should return a process id");
                         AssertContains("--model cursor-model", logContents, "Launch log should include captain model flag");
+                        AssertModelArgument(await WaitForRecordedArgsAsync(shim.ArgsFile, "cursor-model").ConfigureAwait(false), "cursor-model", "Launched runtime receives --model cursor-model");
                     }
                     finally
                     {
@@ -562,11 +562,23 @@ namespace Test.Shared.Suites.Services
             return CreateHandler(database, out settings, out _);
         }
 
-        private static AgentLifecycleHandler CreateHandler(DatabaseDriver database, out ArmadaSettings settings, out StubAdmiralService stubAdmiral)
+        private static AgentLifecycleHandler CreateHandler(DatabaseDriver database, out ArmadaSettings settings, string cursorExecutable)
+        {
+            return CreateHandler(database, out settings, out _, cursorExecutable);
+        }
+
+        private static AgentLifecycleHandler CreateHandler(DatabaseDriver database, out ArmadaSettings settings, out StubAdmiralService stubAdmiral, string? cursorExecutable = null)
         {
             LoggingModule logging = CreateLogging();
             settings = CreateSettings();
             AgentRuntimeFactory runtimeFactory = new AgentRuntimeFactory(logging);
+            if (cursorExecutable != null)
+            {
+                // Launch the shim by absolute path, so nothing is written to the user's profile (%APPDATA%\npm on
+                // Windows) or looked up through the host PATH.
+                runtimeFactory.Override(AgentRuntimeEnum.Cursor, () => new CursorRuntime(logging) { ExecutablePath = cursorExecutable });
+            }
+
             stubAdmiral = new StubAdmiralService();
             IAdmiralService admiral = stubAdmiral;
             IMessageTemplateService templateService = new MessageTemplateService(logging);
@@ -595,6 +607,19 @@ namespace Test.Shared.Suites.Services
             ArmadaSettings settings = new ArmadaSettings();
             settings.LogDirectory = Path.Combine(Path.GetTempPath(), "armada_lifecycle_logs_" + Guid.NewGuid().ToString("N"));
             return settings;
+        }
+
+        private static void AssertModelArgument(string recordedArgs, string model, string label)
+        {
+            // The shim writes "$*" on the first line and then one argument per line; check the argv sequence.
+            string[] lines = recordedArgs.Replace("\r", "").Split('\n');
+            bool found = false;
+            for (int i = 1; i + 1 < lines.Length; i++)
+            {
+                if (lines[i] == "--model" && lines[i + 1] == model) found = true;
+            }
+
+            AssertTrue(found, label + "; recorded:\n" + recordedArgs);
         }
 
         private static async Task<string> WaitForRecordedArgsAsync(string argsFile, string? expectedSubstring = null)
@@ -892,26 +917,23 @@ namespace Test.Shared.Suites.Services
         }
 
         /// <summary>
-        /// Installs a temporary cursor-agent shim that records its arguments and simulates
-        /// success, invalid-model, and hang behaviors, restoring PATH and any pre-existing
-        /// Windows shim on dispose.
+        /// Writes a temporary cursor-agent shim (launched by absolute path through a runtime factory override) that
+        /// records its arguments and simulates success, invalid-model, and hang behaviors. Nothing outside the temp
+        /// directory is touched: no PATH change and no file under the user profile.
         /// </summary>
         private sealed class CursorShimScope : IDisposable
         {
             public string ArgsFile { get; }
 
-            private readonly string _tempDirectory;
-            private readonly string _originalPath;
-            private readonly string? _windowsShimPath;
-            private readonly string? _windowsShimBackupPath;
+            public string ShimPath { get; }
 
-            private CursorShimScope(string tempDirectory, string argsFile, string originalPath, string? windowsShimPath, string? windowsShimBackupPath)
+            private readonly string _tempDirectory;
+
+            private CursorShimScope(string tempDirectory, string argsFile, string shimPath)
             {
                 _tempDirectory = tempDirectory;
                 ArgsFile = argsFile;
-                _originalPath = originalPath;
-                _windowsShimPath = windowsShimPath;
-                _windowsShimBackupPath = windowsShimBackupPath;
+                ShimPath = shimPath;
             }
 
             public static CursorShimScope Create()
@@ -920,64 +942,31 @@ namespace Test.Shared.Suites.Services
                 Directory.CreateDirectory(tempDirectory);
 
                 string argsFile = Path.Combine(tempDirectory, "cursor-args.txt");
-                string originalPath = Environment.GetEnvironmentVariable("PATH") ?? String.Empty;
-                string? windowsShimPath = null;
-                string? windowsShimBackupPath = null;
-
                 Environment.SetEnvironmentVariable("ARMADA_TEST_CURSOR_ARGS_FILE", argsFile);
 
+                string shimPath;
                 if (OperatingSystem.IsWindows())
                 {
-                    string npmDirectory = Path.Combine(
-                        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                        "npm");
-                    Directory.CreateDirectory(npmDirectory);
-
-                    windowsShimPath = Path.Combine(npmDirectory, "cursor-agent.cmd");
-                    if (File.Exists(windowsShimPath))
-                    {
-                        windowsShimBackupPath = Path.Combine(tempDirectory, "cursor-agent.original.cmd");
-                        File.Copy(windowsShimPath, windowsShimBackupPath, true);
-                    }
-
-                    File.WriteAllText(windowsShimPath, BuildWindowsShim());
+                    shimPath = Path.Combine(tempDirectory, "cursor-agent.cmd");
+                    File.WriteAllText(shimPath, BuildWindowsShim());
                 }
                 else
                 {
-                    string shimPath = Path.Combine(tempDirectory, "cursor-agent");
+                    shimPath = Path.Combine(tempDirectory, "cursor-agent");
                     File.WriteAllText(shimPath, BuildUnixShim());
                     File.SetUnixFileMode(
                         shimPath,
                         UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
                         UnixFileMode.GroupRead | UnixFileMode.GroupExecute |
                         UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
-                    Environment.SetEnvironmentVariable("PATH", tempDirectory + Path.PathSeparator + originalPath);
                 }
 
-                return new CursorShimScope(tempDirectory, argsFile, originalPath, windowsShimPath, windowsShimBackupPath);
+                return new CursorShimScope(tempDirectory, argsFile, shimPath);
             }
 
             public void Dispose()
             {
                 Environment.SetEnvironmentVariable("ARMADA_TEST_CURSOR_ARGS_FILE", null);
-                Environment.SetEnvironmentVariable("PATH", _originalPath);
-
-                if (OperatingSystem.IsWindows() && !String.IsNullOrEmpty(_windowsShimPath))
-                {
-                    try
-                    {
-                        if (!String.IsNullOrEmpty(_windowsShimBackupPath) && File.Exists(_windowsShimBackupPath))
-                        {
-                            File.Copy(_windowsShimBackupPath, _windowsShimPath, true);
-                        }
-                        else if (File.Exists(_windowsShimPath))
-                        {
-                            File.Delete(_windowsShimPath);
-                        }
-                    }
-                    catch { }
-                }
-
                 try { Directory.Delete(_tempDirectory, true); } catch { }
             }
 

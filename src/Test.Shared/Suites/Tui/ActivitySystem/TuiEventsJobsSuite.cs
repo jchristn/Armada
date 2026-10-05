@@ -55,9 +55,9 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                     host.Press("del");
                     AssertTrue(host.WaitForText("Delete 2 selected event(s)?"), "confirm text");
                     host.Press("y");
-                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/events/delete/multiple") == 1), "batch delete sent");
-                    string body = String.Join("\n", stub.Bodies);
-                    AssertTrue(body.Contains("evt_1") && body.Contains("evt_2"), "ids sent: " + body);
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/events/delete/multiple") == 1), "batch delete sent");
+                    StubRequest batch = stub.Last("POST", "/api/v1/events/delete/multiple");
+                    AssertEqual("evt_1|evt_2", String.Join("|", batch.BodyAs<Armada.Core.Models.DeleteMultipleRequest>().Ids.OrderBy(i => i, StringComparer.Ordinal)), "ids sent: " + batch.Body);
                 }
             }));
 
@@ -87,7 +87,7 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                     TuiCase.Contains(frame, "[Warnings]", "verdict");
                     TuiCase.Contains(frame, "Passed", "kpi");
                     host.Press("r");
-                    AssertTrue(host.PumpUntil(() => stub.Count("GET /api/v1/doctor") >= 2), "rerun");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("GET", "/api/v1/doctor") >= 2), "rerun");
                 }
             }));
 

@@ -687,6 +687,7 @@ namespace Test.Shared.Suites.Services
             string file = Path.Combine(TestTemp.NewDirectory("desktop"), "armada-harbor.desktop");
             File.WriteAllText(file, entry);
             ProcessOutcome outcome = RunTool(validator, file);
+            AssertEqual(0, outcome.ExitCode, "desktop-file-validate exit code: " + outcome.Output);
             AssertFalse(outcome.Output.Contains("error:"), "desktop-file-validate: " + outcome.Output);
         }
 
@@ -697,6 +698,9 @@ namespace Test.Shared.Suites.Services
             info.RedirectStandardOutput = true;
             info.RedirectStandardError = true;
             info.UseShellExecute = false;
+            // The tools' diagnostics are read as text below; pin the C locale so the wording does not depend on the host.
+            info.Environment["LC_ALL"] = "C";
+            info.Environment["LANG"] = "C";
             using (Process process = Process.Start(info)!)
             {
                 Task<string> stdout = process.StandardOutput.ReadToEndAsync();

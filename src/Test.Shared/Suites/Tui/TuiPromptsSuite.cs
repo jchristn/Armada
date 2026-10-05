@@ -125,9 +125,10 @@ namespace Test.Shared.Suites.Tui
                     AssertEqual("Hello {MissionId}", screen.ContentField.Value, "parameter inserted at cursor");
                     host.Press("ctrl+s");
                     TuiEntityFixtures.WaitFor(host, () => posted != null && host.Tui.Context.Router.Current!.Path == "/prompt-templates/mission.custom", "created and opened");
-                    AssertTrue(posted!.Contains("\"Name\":\"mission.custom\""), "name: " + posted);
-                    AssertTrue(posted.Contains("\"Category\":\"mission\""), "category: " + posted);
-                    AssertTrue(posted.Contains("\"Content\":\"Hello {MissionId}\""), "content: " + posted);
+                    Armada.Client.Models.PromptTemplateCreateRequest sent = JsonHelper.Deserialize<Armada.Client.Models.PromptTemplateCreateRequest>(posted!);
+                    AssertEqual("mission.custom", sent.Name, "name: " + posted);
+                    AssertEqual("mission", sent.Category, "category: " + posted);
+                    AssertEqual("Hello {MissionId}", sent.Content, "content: " + posted);
                 }
             }));
 
@@ -152,7 +153,7 @@ namespace Test.Shared.Suites.Tui
                     TuiCase.Contains(host.Screen(), "Unsaved changes", "dirty marker");
                     host.Press("ctrl+s");
                     TuiEntityFixtures.WaitFor(host, () => saved != null, "saved");
-                    AssertTrue(saved!.Contains("\"Content\":\"Edited\""), "content: " + saved);
+                    AssertEqual("Edited", JsonHelper.Deserialize<Armada.Client.Models.PromptTemplateUpdateRequest>(saved!).Content, "content: " + saved);
                     TuiEntityFixtures.WaitFor(host, () => !screen.Form!.View.IsDirty, "clean after save");
                 }
             }));

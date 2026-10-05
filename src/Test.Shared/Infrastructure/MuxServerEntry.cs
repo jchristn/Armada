@@ -1,28 +1,44 @@
 namespace Test.Shared.Infrastructure
 {
+    using System.Text.Json.Serialization;
+
     /// <summary>
-    /// Typed view of one server in a Mux mcp-servers.json document.
+    /// One server inside <see cref="MuxServersFile"/>.
     /// </summary>
-    public sealed class MuxServerEntry
+    public class MuxServerEntry
     {
+        #region Public-Members
+
         /// <summary>
         /// Server name.
         /// </summary>
+        [JsonPropertyName("name")]
         public string? Name { get; set; } = null;
 
         /// <summary>
-        /// Transport ("http").
+        /// Transport.
         /// </summary>
+        [JsonPropertyName("transport")]
         public string? Transport { get; set; } = null;
 
         /// <summary>
-        /// Base URL without the MCP path.
+        /// Base URL.
         /// </summary>
+        [JsonPropertyName("url")]
         public string? Url { get; set; } = null;
 
         /// <summary>
-        /// MCP path appended to the base URL.
+        /// MCP path under the base URL.
         /// </summary>
+        [JsonPropertyName("mcpPath")]
         public string? McpPath { get; set; } = null;
+
+        /// <summary>
+        /// Authentication block, or null.
+        /// </summary>
+        [JsonPropertyName("auth")]
+        public MuxServerAuth? Auth { get; set; } = null;
+
+        #endregion
     }
 }

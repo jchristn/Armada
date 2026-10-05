@@ -59,13 +59,16 @@ namespace Test.Shared.Suites.E2E
                 HttpResponseMessage response = await fx.AuthClient.PostAsync("/api/v1/vessel-health/enumerate", JsonHelper.ToJsonContent(new { nameContains = _VesselName, pageSize = 10, sortBy = "OverallStatus", sortDescending = true }));
                 AssertEqual(HttpStatusCode.OK, response.StatusCode);
                 string raw = await response.Content.ReadAsStringAsync();
-                AssertContains("\"Objects\"", raw);
-                AssertContains("\"TotalRecords\"", raw);
-                AssertContains("\"OverallStatus\":\"Unknown\"", raw);
+                List<JsonPropertyShape> shape = JsonShape.Properties(raw);
+                AssertEqual(System.Text.Json.JsonTokenType.StartArray, shape.Find(p => p.Depth == 1 && p.Name == "Objects")?.ValueToken, "Objects array (PascalCase)");
+                AssertEqual(System.Text.Json.JsonTokenType.Number, shape.Find(p => p.Depth == 1 && p.Name == "TotalRecords")?.ValueToken, "TotalRecords number (PascalCase)");
+                JsonPropertyShape? overall = shape.Find(p => p.Depth == 3 && p.Name == "OverallStatus");
+                AssertEqual(System.Text.Json.JsonTokenType.String, overall?.ValueToken, "OverallStatus is a string enum");
+                AssertEqual("Unknown", overall?.ScalarText, "OverallStatus value");
                 EnumerationResult<VesselHealth> page = JsonHelper.Deserialize<EnumerationResult<VesselHealth>>(raw);
                 AssertEqual(1L, page.TotalRecords);
                 AssertEqual(10, page.PageSize);
-                AssertFalse(raw.Contains("\"Id\":\"vhl_", StringComparison.Ordinal), "a never-evaluated vessel has no Id (null values are omitted on the wire)");
+                AssertFalse(shape.Any(p => p.Depth == 3 && String.Equals(p.Name, "Id", StringComparison.OrdinalIgnoreCase)), "a never-evaluated vessel has no Id (null values are omitted on the wire)");
                 AssertEqual(_VesselId, page.Objects[0].VesselId);
                 AssertEqual(_VesselName, page.Objects[0].VesselName);
 

@@ -51,8 +51,11 @@ namespace Test.Shared.Suites.Services
                 AssertEqual("1.0.0", Constants.ProductVersion);
                 AssertEqual(Constants.ProductVersion, versionMatch.Groups[1].Value.Trim());
                 AssertContains("<Version>" + Constants.ProductVersion + "</Version>", helmProjectContents, "Helm package version should align with the shared release version");
-                AssertContains("\"version\": \"" + Constants.ProductVersion + "\"", dashboardPackageContents, "Dashboard package.json should align with the shared release version");
-                AssertContains("\"version\": \"" + Constants.ProductVersion + "\"", dashboardLockContents, "Dashboard package-lock.json should align with the shared release version");
+                AssertEqual(Constants.ProductVersion, JsonHelper.Deserialize<NpmPackageVersionView>(dashboardPackageContents).Version, "Dashboard package.json should align with the shared release version");
+                NpmPackageVersionView dashboardLock = JsonHelper.Deserialize<NpmPackageVersionView>(dashboardLockContents);
+                AssertEqual(Constants.ProductVersion, dashboardLock.Version, "Dashboard package-lock.json should align with the shared release version");
+                AssertTrue(dashboardLock.Packages != null && dashboardLock.Packages.ContainsKey(""), "package-lock.json has a root package entry");
+                AssertEqual(Constants.ProductVersion, dashboardLock.Packages![""].Version, "Dashboard package-lock.json root package should align with the shared release version");
             }));
 
             cases.Add(Case("helm_program_uses_product_version_constant", "Helm Program Uses ProductVersion Constant", TestTags.Positive, () =>
@@ -404,8 +407,8 @@ namespace Test.Shared.Suites.Services
                 AssertContains("**Version:** " + Constants.ProductVersion, mcpApiContents, "MCP API header should use the shared release version");
                 AssertContains("**Version:** " + Constants.ProductVersion, proxyApiContents, "Proxy API header should use the shared release version");
                 AssertContains("Version: " + Constants.ProductVersion, postmanContents, "Postman collection description should use the shared release version");
-                AssertContains("\"Version\": \"" + Constants.ProductVersion + "\"", restHealthSample, "REST API health example should use the shared release version");
-                AssertContains("\"Version\": \"" + Constants.ProductVersion + "\"", postmanHealthResponseBody, "Postman health response body should use the shared release version");
+                AssertEqual(Constants.ProductVersion, JsonHelper.Deserialize<UpgradeHealthResponse>(restHealthSample).Version, "REST API health example should use the shared release version");
+                AssertEqual(Constants.ProductVersion, JsonHelper.Deserialize<UpgradeHealthResponse>(postmanHealthResponseBody).Version, "Postman health response body should use the shared release version");
 
                 AssertNoStaleVersionSurfaces(restJsonExamples, "REST API JSON examples", staleVersion => staleVersion);
                 AssertNoStaleVersionSurfaces(mcpJsonExamples, "MCP API JSON examples", staleVersion => staleVersion);

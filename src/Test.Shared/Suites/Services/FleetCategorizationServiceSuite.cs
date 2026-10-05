@@ -73,7 +73,10 @@ namespace Test.Shared.Suites.Services
                 Job? job = await JobWait.ForTerminalAsync(testDb.Driver, response.JobId!).ConfigureAwait(false);
                 AssertEqual(JobKindEnum.VesselDiscovery, job!.Kind);
                 AssertEqual(JobStatusEnum.Succeeded, job.Status);
-                AssertContains("\"candidateCount\":2", job.ResultJson ?? "");
+                VesselDiscoveryJobSummary discoverySummary = JsonHelper.Deserialize<VesselDiscoveryJobSummary>(job.ResultJson ?? "null");
+                AssertNotNull(discoverySummary, "discovery job result");
+                AssertEqual(2, discoverySummary.CandidateCount, "candidate count in the job result");
+                AssertEqual(response.BatchId, discoverySummary.BatchId, "batch id in the job result");
             }));
 
             cases.Add(CaseAsync("background_discovery_job_always_finishes", "Every background discovery job finishes once its batch is Discovered", TestTags.Reliability, async () =>
@@ -190,7 +193,10 @@ namespace Test.Shared.Suites.Services
                 Job? job = await JobWait.ForTerminalAsync(testDb.Driver, batch.CategorizationJobId!).ConfigureAwait(false);
                 AssertEqual(JobKindEnum.FleetCategorization, job!.Kind);
                 AssertEqual(JobStatusEnum.Succeeded, job.Status);
-                AssertContains("\"fleetCount\":2", job.ResultJson ?? "");
+                FleetCategorizationJobSummary categorizationSummary = JsonHelper.Deserialize<FleetCategorizationJobSummary>(job.ResultJson ?? "null");
+                AssertNotNull(categorizationSummary, "categorization job result");
+                AssertEqual(2, categorizationSummary.FleetCount, "fleet count in the job result");
+                AssertFalse(categorizationSummary.Applied, "job result says nothing was applied");
 
                 List<Fleet> fleets = await testDb.Driver.Fleets.EnumerateAsync(Constants.DefaultTenantId).ConfigureAwait(false);
                 AssertFalse(fleets.Any(f => f.Name == "Payments"), "nothing applied without auto-apply");
@@ -293,9 +299,11 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(1, recs[1].VesselIds.Count, "C was not assigned");
 
                 Job? job = await JobWait.ForTerminalAsync(testDb.Driver, batch.CategorizationJobId!).ConfigureAwait(false);
-                string result = job!.ResultJson ?? "";
-                AssertContains("unknown vessel vsl_invented", result);
-                AssertContains("\"uncategorizedCount\":1", result);
+                FleetCategorizationJobSummary result = JsonHelper.Deserialize<FleetCategorizationJobSummary>(job!.ResultJson ?? "null");
+                AssertNotNull(result, "categorization job result");
+                AssertEqual(1, result.UncategorizedCount, "uncategorized count in the job result");
+                // Warnings are free text (no warning code exists); the dropped vessel id is the fact checked.
+                AssertEqual(1, result.Warnings.Count(w => w.Contains("unknown vessel vsl_invented", StringComparison.Ordinal)), "one warning names the invented vessel: " + String.Join(" | ", result.Warnings));
             }));
 
             cases.Add(CaseAsync("cancel_via_job", "Cancelling the job stops the captain, fails the categorization, and releases the captain", TestTags.Positive, async () =>
@@ -404,7 +412,9 @@ namespace Test.Shared.Suites.Services
 
                 List<VesselImportFleetRecommendation> recs = await testDb.Driver.VesselImportFleetRecommendations.EnumerateByBatchAsync(Constants.DefaultTenantId, response.BatchId).ConfigureAwait(false);
                 AssertEqual(frontend.Id, recs.Single(r => r.Name == "Frontend").AppliedFleetId);
-                AssertContains("\"applied\":true", (await JobWait.ForTerminalAsync(testDb.Driver, batch.CategorizationJobId!).ConfigureAwait(false)).ResultJson ?? "");
+                FleetCategorizationJobSummary appliedSummary = JsonHelper.Deserialize<FleetCategorizationJobSummary>((await JobWait.ForTerminalAsync(testDb.Driver, batch.CategorizationJobId!).ConfigureAwait(false)).ResultJson ?? "null");
+                AssertNotNull(appliedSummary, "categorization job result");
+                AssertTrue(appliedSummary.Applied, "job result says the recommendations were applied");
             }));
 
             cases.Add(CaseAsync("request_validation", "Categorization requires an existing captain in the caller's tenant", TestTags.Negative, async () =>

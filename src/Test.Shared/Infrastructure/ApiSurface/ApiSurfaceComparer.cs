@@ -270,7 +270,7 @@ namespace Test.Shared.Infrastructure.ApiSurface
                 }
 
                 if (current.Experimental) diff.Breaking.Add(what + ": a stable key was marked experimental");
-                if (!String.Equals(old.Type, current.Type, StringComparison.Ordinal)) CompareSettingType(what, old.Type, current.Type, diff);
+                if (!String.Equals(old.Type, current.Type, StringComparison.Ordinal)) CompareSettingType(what, old, current, diff);
                 if (!String.Equals(old.Default, current.Default, StringComparison.Ordinal))
                     diff.Notes.Add(what + ": default " + (old.Default ?? "(object)") + " -> " + (current.Default ?? "(object)"));
             }
@@ -279,22 +279,21 @@ namespace Test.Shared.Infrastructure.ApiSurface
                 if (!baseline.Any(s => s.Key == key.Key)) diff.Additions.Add("Setting " + key.Key + (key.Experimental ? " (experimental)" : ""));
         }
 
-        private static void CompareSettingType(string what, string baseline, string live, ApiSurfaceDiff diff)
+        private static void CompareSettingType(string what, ApiSettingKey baseline, ApiSettingKey live, ApiSurfaceDiff diff)
         {
-            // Enums: "enum Name (A|B|C)". Adding a value is compatible; removing one or changing the enum is not.
-            int baseParen = baseline.IndexOf(" (", StringComparison.Ordinal);
-            int liveParen = live.IndexOf(" (", StringComparison.Ordinal);
-            if (baseline.StartsWith("enum ", StringComparison.Ordinal) && live.StartsWith("enum ", StringComparison.Ordinal) && baseParen > 0 && liveParen > 0
-                && String.Equals(baseline.Substring(0, baseParen), live.Substring(0, liveParen), StringComparison.Ordinal))
+            // Enums carry their value list. Adding a value (or changing nullability) is compatible; removing a value or
+            // changing the enum is not. Anything else that changes the type label is breaking.
+            if (baseline.EnumName != null && live.EnumName != null && baseline.EnumValues != null && live.EnumValues != null
+                && String.Equals(baseline.EnumName, live.EnumName, StringComparison.Ordinal))
             {
-                HashSet<string> liveValues = new HashSet<string>(live.Substring(liveParen + 2).TrimEnd(')', '?').Split('|'), StringComparer.Ordinal);
-                List<string> removed = baseline.Substring(baseParen + 2).TrimEnd(')', '?').Split('|').Where(v => !liveValues.Contains(v)).ToList();
+                HashSet<string> liveValues = new HashSet<string>(live.EnumValues, StringComparer.Ordinal);
+                List<string> removed = baseline.EnumValues.Where(v => !liveValues.Contains(v)).ToList();
                 if (removed.Count > 0) diff.Breaking.Add(what + ": enum values removed: " + String.Join(", ", removed));
-                else diff.Additions.Add(what + ": enum values added (" + live + ")");
+                else diff.Additions.Add(what + ": enum values added (" + live.Type + ")");
                 return;
             }
 
-            diff.Breaking.Add(what + ": type " + baseline + " -> " + live);
+            diff.Breaking.Add(what + ": type " + baseline.Type + " -> " + live.Type);
         }
 
         #endregion
