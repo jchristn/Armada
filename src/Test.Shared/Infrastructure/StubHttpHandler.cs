@@ -37,13 +37,6 @@ namespace Test.Shared.Infrastructure
             get { return _Log.Select(r => r.Text).ToList(); }
         }
 
-        /// <summary>
-        /// TRANSITIONAL (removed once R5 migrates every caller): request bodies in arrival order.
-        /// </summary>
-        public List<string> Bodies
-        {
-            get { return _Log.Select(r => r.Body).ToList(); }
-        }
 
         #endregion
 
@@ -97,17 +90,6 @@ namespace Test.Shared.Infrastructure
             return response;
         }
 
-        /// <summary>
-        /// Count requests whose text starts with a prefix.
-        /// </summary>
-        /// <param name="prefix">Prefix, for example "POST /api/v1/authenticate".</param>
-        /// <returns>Count.</returns>
-        public int Count(string prefix)
-        {
-            int n = 0;
-            foreach (string r in Requests) if (r.StartsWith(prefix, StringComparison.Ordinal)) n++;
-            return n;
-        }
 
         /// <summary>
         /// Requests with exactly this method and path (query ignored), in arrival order.

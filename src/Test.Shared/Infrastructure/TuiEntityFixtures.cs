@@ -117,18 +117,6 @@ namespace Test.Shared.Infrastructure
             if (!host.PumpUntil(condition, timeoutMs)) throw new AssertionException("Timed out waiting for: " + label + "\n" + host.Screen());
         }
 
-        /// <summary>
-        /// Wait until the stub saw a request starting with a prefix (method and path, optional query).
-        /// </summary>
-        /// <param name="host">Host.</param>
-        /// <param name="stub">Stub.</param>
-        /// <param name="prefix">Prefix such as <c>POST /api/v1/deployments</c>.</param>
-        /// <param name="timeoutMs">Timeout.</param>
-        public static void WaitForRequest(TuiTestHost host, StubHttpHandler stub, string prefix, int timeoutMs = 5000)
-        {
-            if (!host.PumpUntil(() => stub.Requests.Any(r => r.StartsWith(prefix, StringComparison.Ordinal) || r.Contains(prefix, StringComparison.Ordinal)), timeoutMs))
-                throw new AssertionException("No request matching \"" + prefix + "\". Seen:\n" + String.Join("\n", stub.Requests));
-        }
 
         /// <summary>
         /// Wait until the stub saw a request with exactly this method and path that satisfies an optional predicate, or fail.
@@ -164,17 +152,6 @@ namespace Test.Shared.Infrastructure
             return WaitForRequest(host, stub, method, path, r => r.QueryValue(name) == value, name + "=" + value, timeoutMs);
         }
 
-        /// <summary>
-        /// The body of the last request with a method and path prefix, or null.
-        /// </summary>
-        /// <param name="stub">Stub.</param>
-        /// <param name="prefix">Prefix.</param>
-        /// <returns>Body or null.</returns>
-        public static string? LastBody(StubHttpHandler stub, string prefix)
-        {
-            StubRequest? found = stub.Log.LastOrDefault(r => r.Text.StartsWith(prefix, StringComparison.Ordinal));
-            return found?.Body;
-        }
 
         #endregion
     }
