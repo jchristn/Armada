@@ -1,0 +1,123 @@
+name: install-verify
+
+# Install verification (V1 readiness W5.5): every supported install path is installed on a clean runner or
+# container, reaches the dashboard and an authenticated API, and dispatches one mission that must produce work.
+# The mission runs on an ApiEndpoint captain driven by a stub inference server, so no model or API key is needed.
+# The scripts live in scripts/common/install-verify/ and run the same way locally (see docs/RELEASING.md).
+#
+#   docker          docker/armada/compose.yaml (Admiral + standalone dashboard), built from this commit
+#   linux-packages  linux-server .deb (ubuntu:24.04) and .rpm (fedora:42), installed with apt-get / dnf
+#   dotnet-tool     the Armada.Helm NuGet global tool on Linux and macOS ("armada server start")
+#   macos-pkg       the pkg-server .pkg payload installed into a temp root, plus --install-service --dry-run
+#   windows         the NuGet global tool and Armada.Server.exe --install-service --dry-run
+#                   (written without a Windows machine; the first green run is the real check)
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "30 6 * * 1"
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "docker/**"
+      - "scripts/common/install-verify/**"
+      - "publisher.json"
+      - ".github/workflows/install-verify.yml"
+  pull_request:
+    paths:
+      - "src/Armada.Server/**"
+      - "src/Armada.Helm/**"
+      - "src/Armada.Publisher/**"
+      - "src/Armada.Dashboard/Dockerfile"
+      - "src/Armada.Dashboard/nginx.conf"
+      - "docker/**"
+      - "scripts/common/install-verify/**"
+      - "publisher.json"
+      - ".github/workflows/install-verify.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: install-verify-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "true"
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Docker compose install
+        run: bash scripts/common/install-verify/verify-docker.sh
+
+  linux-packages:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Install fpm
+        run: |
+          sudo gem install --no-document fpm
+          sudo apt-get update && sudo apt-get install -y rpm
+      - name: .deb on ubuntu:24.04
+        run: bash scripts/common/install-verify/verify-linux-package.sh --format deb --packages-dir "$RUNNER_TEMP/linux-packages"
+      - name: .rpm on fedora:42
+        run: bash scripts/common/install-verify/verify-linux-package.sh --format rpm --packages-dir "$RUNNER_TEMP/linux-packages"
+
+  dotnet-tool:
+    name: dotnet-tool (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+      - name: NuGet global tool install
+        run: bash scripts/common/install-verify/verify-dotnet-tool.sh
+
+  macos-pkg:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Server .pkg payload install
+        run: bash scripts/common/install-verify/verify-macos-pkg.sh
+
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Configure git
+        shell: pwsh
+        run: git config --global core.longpaths true
+      - name: NuGet global tool install and --install-service --dry-run
+        shell: pwsh
+        run: ./scripts/common/install-verify/verify-windows.ps1

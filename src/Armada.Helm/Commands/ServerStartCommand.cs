@@ -9,6 +9,7 @@ namespace Armada.Helm.Commands
     using Spectre.Console;
     using Spectre.Console.Cli;
     using Armada.Core;
+    using Armada.Helm.Infrastructure;
 
     /// <summary>
     /// Start the Admiral server.
@@ -39,14 +40,28 @@ namespace Armada.Helm.Commands
                 // Not running — proceed to start
             }
 
-            // Find the server executable
-            string? serverExe = FindServerExe();
-            if (serverExe == null)
+            // Find the server: an installed one first (next to the CLI, in the tool store, or armada-server on the
+            // PATH), then a development build from source.
+            ServerLaunchTarget? target = ServerLaunchTarget.FindInstalled(
+                Path.GetDirectoryName(Environment.ProcessPath),
+                AppContext.BaseDirectory,
+                Environment.GetEnvironmentVariable("PATH"),
+                RuntimeInformation.IsOSPlatform(OSPlatform.Windows));
+            if (target == null)
+            {
+                string? builtExe = FindServerExe();
+                if (builtExe != null) target = ServerLaunchTarget.ForExecutable(builtExe);
+            }
+
+            if (target == null)
             {
                 AnsiConsole.MarkupLine("[red]Admiral server executable not found.[/]");
-                AnsiConsole.MarkupLine("[dim]Looked for Armada.Server next to the CLI and in common source locations.[/]");
+                AnsiConsole.MarkupLine("[dim]Looked for Armada.Server next to the CLI, armada-server on the PATH, and common source locations.[/]");
                 return 1;
             }
+
+            string serverExe = target.ServerPath;
+            AnsiConsole.MarkupLine($"[dim]  Server:     {Markup.Escape(serverExe)}[/]");
 
             // Build and deploy the React dashboard if source is available
             BuildAndDeployDashboard(serverExe);
@@ -58,7 +73,8 @@ namespace Armada.Helm.Commands
             {
                 startInfo = new ProcessStartInfo
                 {
-                    FileName = serverExe,
+                    FileName = target.FileName,
+                    Arguments = target.JoinArguments(),
                     UseShellExecute = true,
                     WindowStyle = ProcessWindowStyle.Minimized
                 };
@@ -69,13 +85,14 @@ namespace Armada.Helm.Commands
                 // Use UseShellExecute=false and redirect streams to avoid holding the CLI streams.
                 startInfo = new ProcessStartInfo
                 {
-                    FileName = serverExe,
+                    FileName = target.FileName,
                     UseShellExecute = false,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     RedirectStandardInput = true,
                     CreateNoWindow = true
                 };
+                foreach (string argument in target.Arguments) startInfo.ArgumentList.Add(argument);
             }
 
             Process process = new Process { StartInfo = startInfo };
@@ -89,9 +106,9 @@ namespace Armada.Helm.Commands
             string baseUrl = GetBaseUrl();
             AnsiConsole.MarkupLine($"[green]Admiral server starting...[/] (PID: {process.Id})");
             AnsiConsole.MarkupLine($"[dim]  REST API:   {baseUrl}[/]");
-            AnsiConsole.MarkupLine($"[dim]  WebSocket:  ws://localhost:{Constants.DefaultAdmiralPort}/ws[/]");
+            AnsiConsole.MarkupLine($"[dim]  WebSocket:  ws://localhost:{GetSettings().AdmiralPort}/ws[/]");
             AnsiConsole.MarkupLine($"[dim]  Dashboard:  {baseUrl}/dashboard[/]");
-            AnsiConsole.MarkupLine($"[dim]  MCP:        http://localhost:{Constants.DefaultMcpPort}[/]");
+            AnsiConsole.MarkupLine($"[dim]  MCP:        http://localhost:{GetSettings().McpPort}[/]");
 
             // Poll until the server is ready
             bool ready = false;
@@ -130,9 +147,8 @@ namespace Armada.Helm.Commands
         }
 
         /// <summary>
-        /// Find the Admiral server executable.
-        /// 1. Next to the CLI executable (installed/published scenario)
-        /// 2. Dev: build from source project and return built exe path
+        /// Find a development build of the Admiral server: build the source project and return the built
+        /// executable path. Installed servers are found first by <see cref="ServerLaunchTarget.FindInstalled"/>.
         /// </summary>
         private string? FindServerExe()
         {
@@ -141,15 +157,7 @@ namespace Armada.Helm.Commands
                 ? "Armada.Server.exe"
                 : "Armada.Server";
 
-            // 1. Installed: Armada.Server[.exe] next to the CLI
-            string? cliDir = Path.GetDirectoryName(Environment.ProcessPath);
-            if (!string.IsNullOrEmpty(cliDir))
-            {
-                string installed = Path.Combine(cliDir, exeName);
-                if (File.Exists(installed)) return installed;
-            }
-
-            // 2. Dev: find and build the source project
+            // Dev: find and build the source project
             string? projectDir = FindServerProject();
             if (projectDir == null) return null;
 

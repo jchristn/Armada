@@ -403,6 +403,54 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("handle_process_exit_async_waits_for_launch_to_be_recorded", "HandleProcessExitAsync waits for an Assigned mission's launch to be recorded before handling a fast exit", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    DatabaseDriver db = testDb.Driver;
+                    StubGitService git = new StubGitService();
+                    ArmadaSettings settings = CreateSettings();
+                    settings.LogDirectory = Path.Combine(Path.GetTempPath(), "armada_test_logs_" + Guid.NewGuid().ToString("N"));
+                    AdmiralService service = CreateAdmiralService(CreateLogging(), db, settings, git);
+
+                    Voyage voyage = new Voyage("Fast Exit Voyage");
+                    voyage.Status = VoyageStatusEnum.InProgress;
+                    await db.Voyages.CreateAsync(voyage);
+
+                    // The in-process captain finished before the launch path wrote InProgress.
+                    Mission mission = new Mission("Fast Exit Mission");
+                    mission.VoyageId = voyage.Id;
+                    mission.Status = MissionStatusEnum.Assigned;
+                    await db.Missions.CreateAsync(mission);
+
+                    Captain captain = new Captain("fast-exit-captain");
+                    captain.State = CaptainStateEnum.Working;
+                    captain.CurrentMissionId = mission.Id;
+                    await db.Captains.CreateAsync(captain);
+
+                    string missionLogDir = Path.Combine(settings.LogDirectory, "missions");
+                    Directory.CreateDirectory(missionLogDir);
+                    await File.WriteAllTextAsync(
+                        Path.Combine(missionLogDir, mission.Id + ".log"),
+                        "[stderr] You've hit your limit and must wait for reset.\n[2026-04-02 23:49:03] Agent exited with code 1").ConfigureAwait(false);
+
+                    Task exitTask = service.HandleProcessExitAsync(2000000001, 1, captain.Id, mission.Id);
+                    await Task.Delay(500).ConfigureAwait(false);
+                    Mission? whileWaiting = await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
+                    AssertEqual(MissionStatusEnum.Assigned, whileWaiting!.Status, "The exit must not be handled while the launch is unrecorded");
+
+                    // The launch path now records the launch, as MissionService does after OnLaunchAgent returns.
+                    whileWaiting.Status = MissionStatusEnum.InProgress;
+                    whileWaiting.ProcessId = 2000000001;
+                    await db.Missions.UpdateAsync(whileWaiting).ConfigureAwait(false);
+
+                    await exitTask.ConfigureAwait(false);
+
+                    Mission? updatedMission = await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
+                    AssertEqual(MissionStatusEnum.Failed, updatedMission!.Status, "The exit should be handled once the launch is recorded, not lost");
+                }
+            }));
+
             cases.Add(CaseAsync("handle_process_exit_async_redispatches_on_interruption", "HandleProcessExitAsync re-dispatches (not fails) on an interruption (exit -1)", TestTags.Positive, async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())

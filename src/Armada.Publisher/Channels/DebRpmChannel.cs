@@ -81,10 +81,14 @@ namespace Armada.Publisher.Channels
             string installDir = Path.Combine(stagingRoot, "usr", "lib", context.Artifact.BinaryName);
             Directory.CreateDirectory(installDir);
 
-            foreach (string file in Directory.EnumerateFiles(published.OutputDirectory))
+            // Recursive: the server publish carries the React dashboard in a dashboard/ subdirectory.
+            foreach (string file in Directory.EnumerateFiles(published.OutputDirectory, "*", SearchOption.AllDirectories))
             {
                 if (file.EndsWith(".sha256", StringComparison.OrdinalIgnoreCase)) continue;
-                File.Copy(file, Path.Combine(installDir, Path.GetFileName(file)), true);
+                string destination = Path.Combine(installDir, Path.GetRelativePath(published.OutputDirectory, file));
+                string? parent = Path.GetDirectoryName(destination);
+                if (!string.IsNullOrEmpty(parent)) Directory.CreateDirectory(parent);
+                File.Copy(file, destination, true);
             }
 
             // Symlink into PATH (fpm keeps symlinks from a dir source).
@@ -170,8 +174,39 @@ namespace Armada.Publisher.Channels
                 "-p", context.OutputDirectory,
                 "--force"
             };
+            foreach (string dependency in Dependencies(outputType))
+            {
+                arguments.Add("-d");
+                arguments.Add(dependency);
+            }
+
             arguments.AddRange(scriptArguments);
             ProcessRunner.Run("fpm", arguments, context.RepoRoot);
+        }
+
+        /// <summary>
+        /// Package dependencies for a self-contained .NET program that drives git. The publish carries the .NET
+        /// runtime but not the native libraries it loads (ICU for globalization, OpenSSL for TLS), so a clean
+        /// machine without them aborts at startup; git is required for vessels, docks, and landing. Debian
+        /// package names differ per release, hence the alternatives (newest first).
+        /// </summary>
+        /// <param name="outputType">fpm output type: deb or rpm.</param>
+        /// <returns>Dependency expressions, one per -d argument.</returns>
+        public static List<string> Dependencies(string outputType)
+        {
+            if (string.Equals(outputType, "rpm", StringComparison.OrdinalIgnoreCase))
+            {
+                return new List<string> { "libicu", "openssl-libs", "ca-certificates", "tzdata", "git" };
+            }
+
+            return new List<string>
+            {
+                "libicu78 | libicu76 | libicu74 | libicu72 | libicu71 | libicu70 | libicu67 | libicu66",
+                "libssl3t64 | libssl3 | libssl1.1",
+                "ca-certificates",
+                "tzdata",
+                "git"
+            };
         }
 
         #endregion

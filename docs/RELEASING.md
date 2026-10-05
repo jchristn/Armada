@@ -95,8 +95,51 @@ Installers land in `installers/<version>/`. Each OS builds only its own formats;
 pushed with `build-all.sh <tag>` (or `build-admiral.sh` and `build-proxy.sh` separately) to `jchristn77/armada-server`
 and `jchristn77/armada-proxy`.
 
-Smoke-test at least one artifact per platform before publishing: install it on a clean machine or VM, start it, reach
-a logged-in dashboard, and dispatch one mission.
+Then run the install verification below on the release commit, and smoke-test at least one built artifact per
+platform by hand before publishing: install it on a clean machine or VM, start it, reach a logged-in dashboard, and
+dispatch one mission.
+
+### Install verification
+
+`.github/workflows/install-verify.yml` installs every supported path on a clean runner or container and drives it
+end to end: the Admiral becomes healthy, `/dashboard` serves the React build and its script loads, `admin@armada`
+logs in through `POST /api/v1/authenticate` and the session works on `GET /api/v1/whoami`, a fleet and a vessel are
+created from a temporary bare git repository, and one voyage with one mission is dispatched. The mission runs on an
+API-endpoint captain whose model endpoint is `scripts/common/install-verify/stub_inference.py`, a stub
+OpenAI-compatible server that asks the captain to write `INSTALL_SMOKE.md` and commit it, so no model or API key is
+involved. The mission must reach `WorkProduced` (or later) and its diff must contain the file. The workflow runs on
+pushes to `main` and pull requests that touch packaging, weekly, and on demand; the most recent run against the release
+commit must be green.
+
+| Path | Script | What it installs | Where |
+|------|--------|------------------|-------|
+| Docker | `verify-docker.sh` | `docker/armada/compose.yaml` built from the checkout, under a throwaway project with its own ports and data | ubuntu runner; local with Docker |
+| Linux packages | `verify-linux-package.sh --format deb` / `--format rpm` | `linux-server` package installed with `apt-get` in `ubuntu:24.04` or `dnf` in `fedora:42`, plus `--install-service --dry-run` | ubuntu runner; local with Docker (builds with fpm in a container when fpm is missing) |
+| NuGet global tool | `verify-dotnet-tool.sh` | `Armada.Helm` packed locally and installed with `dotnet tool install --tool-path`, then `armada server start` / `stop` | ubuntu and macOS runners; local |
+| macOS server `.pkg` | `verify-macos-pkg.sh` | `pkg-server` built, expanded with `pkgutil`, payload checked and installed into a temp root, plus `--install-service --dry-run` | macOS runner; local Mac |
+| Windows | `verify-windows.ps1` | the NuGet global tool as above, plus `Armada.Server.exe --install-service --dry-run` | windows runner |
+
+To run one locally (each needs the .NET SDK, git, and Python 3; Docker for the first two):
+
+```bash
+scripts/common/install-verify/verify-docker.sh
+scripts/common/install-verify/verify-linux-package.sh --format deb
+scripts/common/install-verify/verify-linux-package.sh --format rpm
+scripts/common/install-verify/verify-dotnet-tool.sh
+scripts/common/install-verify/verify-macos-pkg.sh            # macOS only
+pwsh scripts/common/install-verify/verify-windows.ps1        # Windows only
+```
+
+The scripts never touch `~/.armada`, the global dotnet tool directory, `docker/armada/db`, or any system location:
+each uses a temp directory for `ARMADA_DATA_DIR` and `HOME`, binds only ports in 34000-34100 on 127.0.0.1 (move the
+range with `IV_PORT_BASE`), installs the macOS payload into a temp root instead of running `installer`, uses
+`--dry-run` for every service flag, and stops what it started by PID or compose project name. Pass `--keep` to keep
+the temp directory (and, for Docker, the stack) for inspection. A script prints `PASS` or `FAIL` per step and exits
+non-zero on any failure.
+
+Not covered: the Windows `.msi` and Inno installers (a real install registers a service and a login item), the Harbor
+`.dmg` and Harbor packages (Harbor needs a desktop session), real service registration, and CLI captains (Claude Code,
+Codex, and the others need their own logins). Exercise those by hand on a clean machine as above.
 
 ## 7. Signing
 
