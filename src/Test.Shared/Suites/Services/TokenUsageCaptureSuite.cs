@@ -116,6 +116,35 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("quoted_token_marker_is_not_a_report", "A quoted or echoed [ARMADA:TOKENS] legend is not a token report", TestTags.Negative, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    DatabaseDriver db = testDb.Driver;
+                    LoggingModule logging = QuietLogging();
+
+                    // The old unanchored regex took the first marker anywhere, so the echoed prompt legend recorded
+                    // 1234/567 as real usage.
+                    string output =
+                        "- `[ARMADA:TOKENS] input=1234 output=567 cached=0` -- report the tokens you consumed\n" +
+                        "I would write [ARMADA:TOKENS] input=9 output=9 here.\n" +
+                        "```\n[ARMADA:TOKENS] input=7 output=7\n```\n" +
+                        "done";
+                    await TokenUsageCapture.CaptureAsync(db, logging, "mission",
+                        model: "claude-sonnet-4", runtime: "claudecode",
+                        tenantId: null, userId: null, vesselId: null, captainId: null, sourceId: "msn_q",
+                        inputTokens: null, outputTokens: null, cachedTokens: null,
+                        inputText: "the prompt", outputText: output);
+
+                    EnumerationResult<TokenUsageRecord> all = await db.TokenUsage.EnumerateAsync(new TokenUsageQuery());
+                    AssertEqual(1, all.Objects.Count, "One record written");
+                    TokenUsageRecord record = all.Objects[0];
+                    AssertTrue(record.Estimated, "No whole-line report: counts are estimated from text");
+                    AssertFalse(record.InputTokens == 1234L, "The echoed legend is not used as input tokens");
+                    AssertFalse(record.OutputTokens == 567L, "The echoed legend is not used as output tokens");
+                }
+            }));
+
             cases.Add(CaseAsync("zero_token_observation_writes_nothing", "All-zero observation writes nothing", TestTags.Negative, async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())

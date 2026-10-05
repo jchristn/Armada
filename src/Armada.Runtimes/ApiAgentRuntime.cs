@@ -52,6 +52,9 @@ namespace Armada.Runtimes
         /// <inheritdoc />
         public event Action<int, int?>? OnProcessExited;
 
+        /// <inheritdoc />
+        public event Action<int, RuntimeProviderError>? OnProviderError;
+
         /// <summary>
         /// Raised for each tool call phase (started, completed). This is the typed channel for tool activity:
         /// tool events are never written in-band on <see cref="OnStdoutReceived"/>, so model text cannot spoof a
@@ -306,6 +309,7 @@ namespace Armada.Runtimes
                     {
                         string reason = String.IsNullOrEmpty(response.Error) ? "the inference endpoint reported failure without detail" : response.Error!;
                         EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.Error, "[error] inference call failed: " + reason);
+                        if (response.StatusCode.HasValue) RaiseProviderError(processId, RuntimeProviderErrorParser.FromHttpStatus(response.StatusCode.Value, response.Error));
                         exitCode = 1;
                         break;
                     }
@@ -343,6 +347,13 @@ namespace Armada.Runtimes
             {
                 exitCode = -1;
                 EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.Cancelled, "[cancelled] the captain run was stopped.");
+            }
+            catch (System.Net.Http.HttpRequestException e)
+            {
+                exitCode = 1;
+                _Logging.Warn(_Header + "loop error for process " + processId + ": " + e.ToString());
+                Emit(processId, "[error] " + e.Message);
+                if (e.StatusCode.HasValue) RaiseProviderError(processId, RuntimeProviderErrorParser.FromHttpStatus((int)e.StatusCode.Value, e.Message));
             }
             catch (Exception e)
             {
@@ -466,6 +477,13 @@ namespace Armada.Runtimes
                 "commands in order to complete the mission described by the user. Make focused changes, verify your " +
                 "work, and when the mission is complete stop calling tools and reply with a concise summary of what " +
                 "you changed. If the mission instructions define [ARMADA:...] signals, emit them as plain text lines.";
+        }
+
+        private void RaiseProviderError(int processId, RuntimeProviderError? error)
+        {
+            if (error == null) return;
+            try { OnProviderError?.Invoke(processId, error); }
+            catch (Exception ex) { _Logging.Warn(_Header + "error in OnProviderError handler for process " + processId + ": " + ex.Message); }
         }
 
         private void Emit(int processId, string line)

@@ -88,6 +88,25 @@ namespace Armada.Runtimes
         }
 
         /// <summary>
+        /// Recognize Claude Code's own structured error output: in stream-json mode the terminal "result" event with
+        /// is_error set (stdout); in text mode the whole-line "API Error: STATUS {json}" and
+        /// "Claude AI usage limit reached|EPOCH" lines the CLI prints. Text-mode output never contains tool output, so
+        /// these lines can only come from the CLI.
+        /// </summary>
+        /// <param name="line">One output line.</param>
+        /// <param name="fromStdout">True for a stdout line.</param>
+        /// <returns>The provider error, or null.</returns>
+        protected override RuntimeProviderError? TryParseProviderError(string line, bool fromStdout)
+        {
+            if (StreamJsonOutput)
+            {
+                return fromStdout ? RuntimeProviderErrorParser.TryParseClaudeStreamJsonLine(line) : null;
+            }
+
+            return RuntimeProviderErrorParser.TryParseClaudeTextLine(line);
+        }
+
+        /// <summary>
         /// Build Claude Code CLI arguments.
         /// </summary>
         protected override List<string> BuildArguments(

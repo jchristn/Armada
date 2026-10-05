@@ -364,29 +364,25 @@ namespace Test.Shared.Suites.Services
                     settings.LogDirectory = Path.Combine(Path.GetTempPath(), "armada_test_logs_" + Guid.NewGuid().ToString("N"));
                     AdmiralService service = CreateAdmiralService(CreateLogging(), db, settings, git);
 
-                    Voyage voyage = new Voyage("Quota Voyage");
+                    Voyage voyage = new Voyage("Model Voyage");
                     voyage.Status = VoyageStatusEnum.InProgress;
                     await db.Voyages.CreateAsync(voyage);
 
-                    Mission mission = new Mission("Quota Judge");
+                    Mission mission = new Mission("Model Judge");
                     mission.VoyageId = voyage.Id;
                     mission.Status = MissionStatusEnum.InProgress;
                     mission.ProcessId = 4242;
                     await db.Missions.CreateAsync(mission);
 
-                    Captain captain = new Captain("quota-judge");
+                    Captain captain = new Captain("model-judge");
                     captain.State = CaptainStateEnum.Working;
                     captain.CurrentMissionId = mission.Id;
                     captain.ProcessId = 4242;
                     await db.Captains.CreateAsync(captain);
 
-                    string missionLogDir = Path.Combine(settings.LogDirectory, "missions");
-                    Directory.CreateDirectory(missionLogDir);
-                    await File.WriteAllTextAsync(
-                        Path.Combine(missionLogDir, mission.Id + ".log"),
-                        "[stderr] You've hit your limit and must wait for reset.\n[2026-04-02 23:49:03] Agent exited with code 1").ConfigureAwait(false);
-
-                    await service.HandleProcessExitAsync(4242, 1, captain.Id, mission.Id).ConfigureAwait(false);
+                    // The runtime reported a structured provider error: the model does not exist for these credentials.
+                    RuntimeProviderError providerError = new RuntimeProviderError { HttpStatusCode = 404, ErrorType = "not_found_error", Message = "model: claude-nonexistent" };
+                    await service.HandleProcessExitAsync(4242, RuntimeFailureClassifier.Decide(1, providerError), captain.Id, mission.Id).ConfigureAwait(false);
 
                     Mission? updatedMission = await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
                     Captain? updatedCaptain = await db.Captains.ReadAsync(captain.Id).ConfigureAwait(false);
@@ -396,7 +392,8 @@ namespace Test.Shared.Suites.Services
                     AssertNotNull(updatedCaptain, "Captain should still exist");
                     AssertNotNull(updatedVoyage, "Voyage should still exist");
                     AssertEqual(MissionStatusEnum.Failed, updatedMission!.Status, "Mission should fail immediately on a non-retryable runtime error");
-                    AssertContains("hit your limit", updatedMission.FailureReason ?? String.Empty, "Mission should preserve the runtime failure reason");
+                    AssertEqual(MissionFailureKindEnum.Crash, updatedMission.FailureKind, "A runtime exit failure is recorded as a crash");
+                    AssertContains("claude-nonexistent", updatedMission.FailureReason ?? String.Empty, "Mission should preserve the provider's error message");
                     AssertEqual(CaptainStateEnum.Stalled, updatedCaptain!.State, "Captain should be stalled when the runtime is unavailable");
                     AssertNull(updatedCaptain.CurrentMissionId, "Captain mission assignment should be cleared");
                     AssertEqual(VoyageStatusEnum.Cancelled, updatedVoyage!.Status, "Voyage should be halted after the failed mission");
@@ -931,6 +928,80 @@ namespace Test.Shared.Suites.Services
                     DispatchValidationResult result = await service.ValidateDispatchAsync(null, null, null, vessel.Id, 0, allowBareVoyage: false);
                     AssertFalse(result.IsValid, "zero missions should reject when bare is disallowed");
                     AssertEqual(DispatchValidationErrorEnum.NoMissions, result.Error);
+                }
+            }));
+
+            cases.Add(CaseAsync("handle_process_exit_async_quarantines_on_structured_usage_limit", "HandleProcessExitAsync quarantines a captain until the provider's stated reset", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    DatabaseDriver db = testDb.Driver;
+                    ArmadaSettings settings = CreateSettings();
+                    settings.CaptainQuarantineMinutes = 60;
+                    settings.LogDirectory = Path.Combine(Path.GetTempPath(), "armada_test_logs_" + Guid.NewGuid().ToString("N"));
+                    AdmiralService service = CreateAdmiralService(CreateLogging(), db, settings, new StubGitService());
+
+                    Mission mission = new Mission("Throttled");
+                    mission.Status = MissionStatusEnum.InProgress;
+                    mission.ProcessId = 4343;
+                    await db.Missions.CreateAsync(mission);
+
+                    Captain captain = new Captain("throttled-captain");
+                    captain.State = CaptainStateEnum.Working;
+                    captain.CurrentMissionId = mission.Id;
+                    captain.ProcessId = 4343;
+                    await db.Captains.CreateAsync(captain);
+
+                    DateTime before = DateTime.UtcNow;
+                    RuntimeProviderError providerError = new RuntimeProviderError { HttpStatusCode = 429, ErrorType = "rate_limit_error", RetryAfterSeconds = 300 };
+                    await service.HandleProcessExitAsync(4343, RuntimeFailureClassifier.Decide(1, providerError), captain.Id, mission.Id).ConfigureAwait(false);
+
+                    Captain? updatedCaptain = await db.Captains.ReadAsync(captain.Id).ConfigureAwait(false);
+                    AssertEqual(CaptainStateEnum.Quarantined, updatedCaptain!.State, "A structured usage limit quarantines the captain");
+                    AssertNotNull(updatedCaptain.QuarantineUntilUtc);
+                    double minutes = (updatedCaptain.QuarantineUntilUtc!.Value - before).TotalMinutes;
+                    AssertTrue(minutes > 4 && minutes < 6, "Quarantine window follows the provider's Retry-After (5 minutes), not the 60-minute default; got " + minutes);
+                }
+            }));
+
+            cases.Add(CaseAsync("handle_process_exit_async_ignores_error_words_in_log", "HandleProcessExitAsync never quarantines or stalls from words in the mission log", TestTags.Negative, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    DatabaseDriver db = testDb.Driver;
+                    ArmadaSettings settings = CreateSettings();
+                    settings.LogDirectory = Path.Combine(Path.GetTempPath(), "armada_test_logs_" + Guid.NewGuid().ToString("N"));
+                    AdmiralService service = CreateAdmiralService(CreateLogging(), db, settings, new StubGitService());
+
+                    Mission mission = new Mission("Build error");
+                    mission.Status = MissionStatusEnum.InProgress;
+                    mission.ProcessId = 4444;
+                    await db.Missions.CreateAsync(mission);
+
+                    Captain captain = new Captain("build-captain");
+                    captain.State = CaptainStateEnum.Working;
+                    captain.CurrentMissionId = mission.Id;
+                    captain.ProcessId = 4444;
+                    await db.Captains.CreateAsync(captain);
+
+                    // Before the fix these lines quarantined (429, billing, capacity) or stalled (forbidden, invalid model,
+                    // hit your limit) the captain because the classifier searched the log for those words.
+                    string missionLogDir = Path.Combine(settings.LogDirectory, "missions");
+                    Directory.CreateDirectory(missionLogDir);
+                    await File.WriteAllTextAsync(
+                        Path.Combine(missionLogDir, mission.Id + ".log"),
+                        "[stderr] src/BillingService.cs(10,5): error CS0403: capacity 429 forbidden invalid model\n" +
+                        "[stderr] You've hit your limit and must wait for reset. permission denied\n" +
+                        "[2026-04-02 23:49:03] Agent exited with code 1").ConfigureAwait(false);
+
+                    await service.HandleProcessExitAsync(4444, 1, captain.Id, mission.Id).ConfigureAwait(false);
+
+                    Mission? updatedMission = await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
+                    Captain? updatedCaptain = await db.Captains.ReadAsync(captain.Id).ConfigureAwait(false);
+                    AssertEqual(MissionStatusEnum.Failed, updatedMission!.Status);
+                    AssertEqual("Agent process exited with code 1", updatedMission.FailureReason, "The failure reason comes from the exit info, not a scraped log line");
+                    AssertEqual(CaptainStateEnum.Idle, updatedCaptain!.State, "Log words neither stall nor quarantine the captain");
+                    AssertNull(updatedCaptain.QuarantineUntilUtc);
                 }
             }));
 

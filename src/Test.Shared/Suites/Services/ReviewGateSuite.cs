@@ -147,6 +147,7 @@ namespace Test.Shared.Suites.Services
                     AssertNotNull(failed, "Failed reviewed mission should still exist");
                     AssertEqual(MissionStatusEnum.Failed, failed!.Status, "Denied review should fail the mission when configured");
                     AssertContains("Review denied", failed.FailureReason ?? "", "Failure reason should record the review denial");
+                    AssertEqual(MissionFailureKindEnum.ReviewDenied, failed.FailureKind, "failure kind is recorded where the failure happens");
                     AssertNotNull(downstream, "Downstream stage should still exist");
                     AssertEqual(MissionStatusEnum.Cancelled, downstream!.Status, "Downstream work should be cancelled when the review gate fails the pipeline");
                     AssertNotNull(voyage, "Voyage should still exist");

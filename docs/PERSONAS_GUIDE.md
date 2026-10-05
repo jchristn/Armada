@@ -82,9 +82,15 @@ Reviews completed work through a bounded three-lens contract.
   mission, stay in scope, and match the real codebase without inventing behavior?).
   Produce a verdict: PASS, FAIL, or NEEDS_REVISION.
 - **Bounded blocking:** To block (FAIL or NEEDS_REVISION) the Judge MUST include a
-  `## Affected Case` section exhibiting one concrete affected case -- a specific
-  file, line, or scenario. A blocking verdict without a concrete affected case is
-  not accepted. A PASS must fill all three lens sections with real reasoning; a
+  `## Affected Case` section exhibiting one concrete affected case as a labeled
+  field line: `File: <path>[:line]` or `Scenario: <inputs and the wrong result>`.
+  Only those labeled lines are read; a blocking verdict without one is not
+  accepted.
+- **Verdict signal:** The verdict is read only from a standalone
+  `[ARMADA:VERDICT] PASS|FAIL|NEEDS_REVISION` line outside any code block. Prose
+  such as "Verdict: PASS", bare PASS/FAIL lines (for example test-runner output),
+  and conflicting verdict lines are not verdicts; a Judge without exactly one
+  structured verdict blocks landing. A PASS must fill all three lens sections with real reasoning; a
   shallow or verdict-only PASS is rejected and the mission fails terminally rather
   than silently re-running.
 - **Prompt template:** `persona.judge`
@@ -161,9 +167,44 @@ When a pipeline has multiple stages:
 
 ### The Architect Special Case
 
-The Architect outputs structured mission definitions using `[ARMADA:MISSION]` markers.
-Currently this output is injected as context for the next stage; full automatic parsing
-into new Worker missions is a planned enhancement.
+The Architect outputs its plan as one fenced code block whose info string is `armada-plan`:
+
+````
+```armada-plan
+{"missions": [
+  {"title": "Add core model properties", "description": "Update Captain.cs and Mission.cs.", "dependsOn": null},
+  {"title": "Extend secondary backends", "description": "Update PostgreSQL and MySQL.", "dependsOn": 1},
+  {"title": "Document the final behavior", "description": "Update README.md.", "waitForOtherMissions": true}
+]}
+```
+````
+
+The Admiral deserializes the block and creates one Worker mission (plus the downstream
+stages) per entry. `dependsOn` is the 1-based number of an earlier entry whose full
+Worker -> Test Engineer -> Judge chain must finish first; `waitForOtherMissions` holds the
+mission until every other Worker mission in the voyage has settled. Sequencing comes only
+from these fields (persisted as `DependsOnMissionId` and `WaitForVoyageWorkers`), never from
+description wording.
+
+Fallback: when the output has no valid `armada-plan` block, the older `[ARMADA:MISSION]`
+marker format is still read (title on the marker line, description below, an optional
+standalone `Depends on: Mission N` line). For that format only, deferral wording such as
+"after both implementation missions complete" is converted once, at parse time, into
+`WaitForVoyageWorkers`; a mission created any other way is never deferred by its wording.
+
+### Captain Status Signals
+
+A captain may print `[ARMADA:STATUS] Testing` on a line of its own while it runs its tests,
+and `[ARMADA:STATUS] InProgress` to switch back. This is informational and is the only status
+change a captain can make:
+
+- Only the captain's own **stdout** counts. Agent CLIs print tool and command output (for
+  example a file the agent printed with `cat`) on stderr in text mode, so a status line inside
+  such output never changes the mission.
+- Only the InProgress/Testing toggle is applied. Review, WorkProduced, Complete, Failed, and
+  Cancelled are decided by the Admiral from the process exit and the completion pipeline
+  (diff capture, boundary scan, Definition-of-Done gate, Judge verdict, landing); a status line
+  naming them is recorded as a progress signal and otherwise ignored.
 
 ---
 

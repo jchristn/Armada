@@ -146,7 +146,7 @@ namespace Armada.Core.Services
                 sections.Add(
                     "Read " + instructionsFileName + " in the working directory. " +
                     "It contains the objective, repository context, and mission-format requirements. " +
-                    "Do not ask for more input. Read the file immediately and respond only with real [ARMADA:MISSION] blocks derived from that file.");
+                    "Do not ask for more input. Read the file immediately and respond only with real mission definitions derived from that file: one fenced `armada-plan` JSON block (preferred) or real [ARMADA:MISSION] blocks.");
             }
             else
             {
@@ -168,7 +168,7 @@ namespace Armada.Core.Services
         {
             return PersonaCatalog.NormalizeName(persona) switch
             {
-                PersonaCatalog.Architect => "You are an Armada architect agent. Respond only with real [ARMADA:MISSION] blocks. Do not emit [ARMADA:RESULT] or [ARMADA:VERDICT] lines.",
+                PersonaCatalog.Architect => "You are an Armada architect agent. Respond only with real mission definitions: one fenced `armada-plan` JSON block (preferred) or real [ARMADA:MISSION] blocks. Do not emit [ARMADA:RESULT] or [ARMADA:VERDICT] lines.",
                 PersonaCatalog.ProductManager => "You are an Armada product manager agent. Include `## Product Vision`, `## Use Cases`, `## Experience Requirements`, `## Validation`, and `## Future Readiness` sections before a standalone [ARMADA:RESULT] COMPLETE line.",
                 PersonaCatalog.UsabilityEngineer => "You are an Armada usability engineer agent. Include `## Usability`, `## Consistency`, `## Edge Cases`, and `## Residual Risks` sections before a standalone [ARMADA:RESULT] COMPLETE line.",
                 PersonaCatalog.Worker => "You are an Armada worker agent. End with a standalone [ARMADA:RESULT] COMPLETE line followed by a brief plain-text summary.",
@@ -193,7 +193,7 @@ namespace Armada.Core.Services
         {
             if (PersonaCatalog.Matches(persona, PersonaCatalog.Architect))
             {
-                return "You are an Armada architect agent. Analyze the objective and decompose it into right-sized missions using [ARMADA:MISSION] markers. Do not emit [ARMADA:RESULT] or [ARMADA:VERDICT] lines.";
+                return "You are an Armada architect agent. Analyze the objective and decompose it into right-sized missions in one fenced `armada-plan` JSON block (or [ARMADA:MISSION] markers). Do not emit [ARMADA:RESULT] or [ARMADA:VERDICT] lines.";
             }
 
             if (!String.IsNullOrEmpty(personaSummary))
@@ -221,7 +221,7 @@ namespace Armada.Core.Services
             return PersonaCatalog.NormalizeName(persona) switch
             {
                 PersonaCatalog.Architect =>
-                    "Respond only with real [ARMADA:MISSION] blocks. Do not emit [ARMADA:RESULT] or [ARMADA:VERDICT] lines.",
+                    ArchitectPlanParser.FormatInstructions() + " Do not emit [ARMADA:RESULT] or [ARMADA:VERDICT] lines.",
                 PersonaCatalog.ProductManager =>
                     "Before your result line, include `## Product Vision`, `## Use Cases`, `## Experience Requirements`, `## Validation`, and `## Future Readiness` sections. End with a standalone line `[ARMADA:RESULT] COMPLETE` followed by a brief plain-text summary.",
                 PersonaCatalog.UsabilityEngineer =>
@@ -241,7 +241,7 @@ namespace Armada.Core.Services
         {
             return PersonaCatalog.NormalizeName(persona) switch
             {
-                PersonaCatalog.Architect => "You are an Armada architect agent. Analyze the codebase and decompose the objective into right-sized missions using [ARMADA:MISSION] markers. Do not emit [ARMADA:RESULT] or [ARMADA:VERDICT] lines.",
+                PersonaCatalog.Architect => "You are an Armada architect agent. Analyze the codebase and decompose the objective into right-sized missions in one fenced `armada-plan` JSON block (or [ARMADA:MISSION] markers). Do not emit [ARMADA:RESULT] or [ARMADA:VERDICT] lines.",
                 PersonaCatalog.ProductManager => "You are an Armada product manager agent. Clarify the whole product picture, define user value and experience requirements, include `## Product Vision`, `## Use Cases`, `## Experience Requirements`, `## Validation`, and `## Future Readiness` sections, and end with a standalone [ARMADA:RESULT] COMPLETE line.",
                 PersonaCatalog.UsabilityEngineer => "You are an Armada usability engineer agent. Improve the work through the lens of usability, consistency, and edge-case handling, include `## Usability`, `## Consistency`, `## Edge Cases`, and `## Residual Risks` sections, and end with a standalone [ARMADA:RESULT] COMPLETE line.",
                 PersonaCatalog.Worker => "You are an Armada worker agent. Implement the requested code changes carefully, stay within scope, and end with a standalone [ARMADA:RESULT] COMPLETE line.",

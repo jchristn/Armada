@@ -511,6 +511,7 @@ namespace Armada.Server
                 {
                     mission.Status = MissionStatusEnum.LandingFailed;
                     mission.FailureReason = landingFailureReason;
+                    mission.FailureKind = MissionFailureKindEnum.LandingConflict;
                     mission.LastUpdateUtc = DateTime.UtcNow;
                     await _Database.Missions.UpdateAsync(mission).ConfigureAwait(false);
                     _Logging.Warn(_Header + "mission " + mission.Id + " landing failed, status set to LandingFailed");

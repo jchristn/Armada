@@ -180,6 +180,117 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("process_exit_carries_structured_provider_error", "A reported provider error decides the typed exit outcome handed to the admiral", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    AgentLifecycleHandler handler = CreateHandler(testDb.Driver, out _, out StubAdmiralService admiral);
+
+                    RuntimeProviderError error = new RuntimeProviderError { HttpStatusCode = 429, ErrorType = "rate_limit_error", RetryAfterSeconds = 120 };
+                    handler.HandleAgentProviderError(9101, error);
+                    await handler.HandleAgentProcessExitedAsync(9101, 1, "cpt_test", "msn_test").ConfigureAwait(false);
+
+                    AssertEqual(1, admiral.ExitInfos.Count, "one typed exit outcome reaches the admiral");
+                    AssertEqual(1, admiral.ExitInfos[0].ExitCode);
+                    AssertEqual(RuntimeFailureKindEnum.UsageLimit, admiral.ExitInfos[0].FailureKind);
+                    AssertEqual(120, admiral.ExitInfos[0].ProviderError!.RetryAfterSeconds);
+                }
+            }));
+
+            cases.Add(CaseAsync("process_exit_without_provider_error_is_crash", "A non-zero exit with no provider error is a crash, whatever the output said", TestTags.Negative, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    AgentLifecycleHandler handler = CreateHandler(testDb.Driver, out _, out StubAdmiralService admiral);
+
+                    // Output that the old substring classifier read as a usage limit or an auth failure.
+                    handler.HandleAgentOutput(9102, "error CS0403: billing quota 429 permission denied in BillingService.cs");
+                    await handler.HandleAgentProcessExitedAsync(9102, 1, "cpt_test", "msn_test").ConfigureAwait(false);
+
+                    // A provider error from an earlier process id never leaks into this one.
+                    handler.HandleAgentProviderError(9103, new RuntimeProviderError { HttpStatusCode = 401 });
+                    await handler.HandleAgentProcessExitedAsync(9103, 0, "cpt_test", "msn_test").ConfigureAwait(false);
+                    await handler.HandleAgentProcessExitedAsync(9103, 2, "cpt_test", "msn_test").ConfigureAwait(false);
+
+                    AssertEqual(3, admiral.ExitInfos.Count);
+                    AssertEqual(RuntimeFailureKindEnum.Crash, admiral.ExitInfos[0].FailureKind, "output text never classifies");
+                    AssertNull(admiral.ExitInfos[0].ProviderError);
+                    AssertEqual(RuntimeFailureKindEnum.Clean, admiral.ExitInfos[1].FailureKind, "a zero exit is clean even with a provider error");
+                    AssertEqual(RuntimeFailureKindEnum.Crash, admiral.ExitInfos[2].FailureKind, "the provider error is consumed by the exit that read it");
+                }
+            }));
+
+            cases.Add(CaseAsync("agent_status_line_cannot_complete_fail_or_review", "An [ARMADA:STATUS] line cannot complete, fail, cancel, or review a mission", TestTags.Negative, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    AgentLifecycleHandler handler = CreateHandler(testDb.Driver, out _);
+
+                    Mission mission = new Mission("Status mission");
+                    mission.Status = MissionStatusEnum.InProgress;
+                    await testDb.Driver.Missions.CreateAsync(mission).ConfigureAwait(false);
+
+                    // Before the fix any state-machine-valid status named in output was applied, so printing a doc
+                    // containing "[ARMADA:STATUS] Complete" completed the mission without landing.
+                    MissionStatusEnum[] refused = new MissionStatusEnum[]
+                    {
+                        MissionStatusEnum.Complete,
+                        MissionStatusEnum.Failed,
+                        MissionStatusEnum.Cancelled,
+                        MissionStatusEnum.Review,
+                        MissionStatusEnum.WorkProduced
+                    };
+                    foreach (MissionStatusEnum status in refused)
+                    {
+                        bool changed = await handler.ApplyAgentReportedStatusAsync(mission.Id, status).ConfigureAwait(false);
+                        AssertFalse(changed, status + " must not be applied from an agent status line");
+                    }
+
+                    Mission? reread = await testDb.Driver.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
+                    AssertEqual(MissionStatusEnum.InProgress, reread!.Status, "mission stays InProgress");
+
+                    AssertTrue(await handler.ApplyAgentReportedStatusAsync(mission.Id, MissionStatusEnum.Testing).ConfigureAwait(false), "Testing is agent-reportable");
+                    reread = await testDb.Driver.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
+                    AssertEqual(MissionStatusEnum.Testing, reread!.Status);
+                    AssertTrue(await handler.ApplyAgentReportedStatusAsync(mission.Id, MissionStatusEnum.InProgress).ConfigureAwait(false), "InProgress is agent-reportable from Testing");
+                }
+            }));
+
+            cases.Add(CaseAsync("combined_output_status_line_does_not_change_status", "A status line on the combined (stderr) channel is informational only", TestTags.Negative, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    AgentLifecycleHandler handler = CreateHandler(testDb.Driver, out _);
+
+                    Captain captain = new Captain("status-captain", AgentRuntimeEnum.Codex);
+                    Mission mission = new Mission("Status mission");
+                    mission.Status = MissionStatusEnum.InProgress;
+                    mission.CaptainId = captain.Id;
+                    captain.CurrentMissionId = mission.Id;
+                    await testDb.Driver.Captains.CreateAsync(captain).ConfigureAwait(false);
+                    await testDb.Driver.Missions.CreateAsync(mission).ConfigureAwait(false);
+
+                    int processId = 838383;
+                    RegisterTrackedProcess(handler, processId, captain.Id, mission.Id);
+
+                    // Codex prints command output (here: cat of a doc) on stderr, which reaches only the combined channel.
+                    handler.HandleAgentOutput(processId, "[ARMADA:STATUS] Testing");
+
+                    DateTime deadline = DateTime.UtcNow.AddSeconds(5);
+                    List<Signal> signals = new List<Signal>();
+                    while (DateTime.UtcNow < deadline)
+                    {
+                        signals = await testDb.Driver.Signals.EnumerateRecentAsync(50).ConfigureAwait(false);
+                        if (signals.Count > 0) break;
+                        await Task.Delay(25).ConfigureAwait(false);
+                    }
+
+                    AssertEqual(1, signals.Count, "the line is still recorded as an informational progress signal");
+                    Mission? reread = await testDb.Driver.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
+                    AssertEqual(MissionStatusEnum.InProgress, reread!.Status, "only the agent's stdout may toggle the phase");
+                }
+            }));
+
             cases.Add(CaseAsync("handle_agent_heartbeat_updates_mission_and_voyage_timestamps", "HandleAgentHeartbeat updates mission and voyage timestamps", TestTags.Positive, async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
@@ -448,10 +559,16 @@ namespace Test.Shared.Suites.Services
 
         private static AgentLifecycleHandler CreateHandler(DatabaseDriver database, out ArmadaSettings settings)
         {
+            return CreateHandler(database, out settings, out _);
+        }
+
+        private static AgentLifecycleHandler CreateHandler(DatabaseDriver database, out ArmadaSettings settings, out StubAdmiralService stubAdmiral)
+        {
             LoggingModule logging = CreateLogging();
             settings = CreateSettings();
             AgentRuntimeFactory runtimeFactory = new AgentRuntimeFactory(logging);
-            IAdmiralService admiral = new StubAdmiralService();
+            stubAdmiral = new StubAdmiralService();
+            IAdmiralService admiral = stubAdmiral;
             IMessageTemplateService templateService = new MessageTemplateService(logging);
 
             return new AgentLifecycleHandler(
@@ -750,8 +867,16 @@ namespace Test.Shared.Suites.Services
                 throw new NotImplementedException();
             }
 
+            public List<RuntimeExitInfo> ExitInfos { get; } = new List<RuntimeExitInfo>();
+
             public Task HandleProcessExitAsync(int processId, int? exitCode, string captainId, string missionId, CancellationToken token = default)
             {
+                return Task.CompletedTask;
+            }
+
+            public Task HandleProcessExitAsync(int processId, RuntimeExitInfo exitInfo, string captainId, string missionId, CancellationToken token = default)
+            {
+                lock (ExitInfos) ExitInfos.Add(exitInfo);
                 return Task.CompletedTask;
             }
 

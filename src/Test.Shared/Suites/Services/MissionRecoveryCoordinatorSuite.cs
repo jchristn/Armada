@@ -41,7 +41,7 @@ namespace Test.Shared.Suites.Services
                 IncidentService incidents = new IncidentService(testDb.Driver);
 
                 Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
-                Mission failed = await CreateFailedMissionAsync(testDb, vessel.Id, "definition_of_done_compile: build phase exited 1").ConfigureAwait(false);
+                Mission failed = await CreateFailedMissionAsync(testDb, vessel.Id, MissionFailureKindEnum.Compile, "Definition-of-Done gate failed (Compile): build phase exited 1").ConfigureAwait(false);
 
                 await coordinator.MaintainAsync().ConfigureAwait(false);
 
@@ -70,7 +70,7 @@ namespace Test.Shared.Suites.Services
                 IncidentService incidents = new IncidentService(testDb.Driver);
 
                 Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
-                await CreateFailedMissionAsync(testDb, vessel.Id, "Judge verdict: FAIL").ConfigureAwait(false);
+                await CreateFailedMissionAsync(testDb, vessel.Id, MissionFailureKindEnum.JudgeRejected, "Judge verdict: FAIL").ConfigureAwait(false);
 
                 await coordinator.MaintainAsync().ConfigureAwait(false);
 
@@ -87,7 +87,7 @@ namespace Test.Shared.Suites.Services
                 IncidentService incidents = new IncidentService(testDb.Driver);
 
                 Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
-                await CreateFailedMissionAsync(testDb, vessel.Id, "definition_of_done_testfail: test phase exited 1").ConfigureAwait(false);
+                await CreateFailedMissionAsync(testDb, vessel.Id, MissionFailureKindEnum.TestFail, "Definition-of-Done gate failed (TestFail): test phase exited 1").ConfigureAwait(false);
 
                 await coordinator.MaintainAsync().ConfigureAwait(false);
                 Incident incident = (await ReadRecoveryIncidentsAsync(incidents).ConfigureAwait(false))[0];
@@ -115,14 +115,14 @@ namespace Test.Shared.Suites.Services
                 IncidentService incidents = new IncidentService(testDb.Driver);
 
                 Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
-                await CreateFailedMissionAsync(testDb, vessel.Id, "definition_of_done_compile: build phase exited 1").ConfigureAwait(false);
+                await CreateFailedMissionAsync(testDb, vessel.Id, MissionFailureKindEnum.Compile, "Definition-of-Done gate failed (Compile): build phase exited 1").ConfigureAwait(false);
 
                 await coordinator.MaintainAsync().ConfigureAwait(false);
                 Incident incident = (await ReadRecoveryIncidentsAsync(incidents).ConfigureAwait(false))[0];
                 AssertEqual(1, incident.RecoveryAttempts, "first rescue dispatched");
 
                 // First rescue fails -> a second rescue should be dispatched (under the cap of 2).
-                await FailMissionAsync(testDb, incident.RescueMissionIds[0], "definition_of_done_compile: build phase exited 1").ConfigureAwait(false);
+                await FailMissionAsync(testDb, incident.RescueMissionIds[0], MissionFailureKindEnum.Compile, "Definition-of-Done gate failed (Compile): build phase exited 1").ConfigureAwait(false);
                 await coordinator.MaintainAsync().ConfigureAwait(false);
                 incident = (await ReadRecoveryIncidentsAsync(incidents).ConfigureAwait(false))[0];
                 AssertEqual(2, incident.RecoveryAttempts, "second rescue dispatched under the cap");
@@ -130,7 +130,7 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(IncidentStatusEnum.Open, incident.Status, "incident still open while retrying");
 
                 // Second rescue fails -> the cap is reached; the incident stays open for a human.
-                await FailMissionAsync(testDb, incident.RescueMissionIds[1], "definition_of_done_compile: build phase exited 1").ConfigureAwait(false);
+                await FailMissionAsync(testDb, incident.RescueMissionIds[1], MissionFailureKindEnum.Compile, "Definition-of-Done gate failed (Compile): build phase exited 1").ConfigureAwait(false);
                 await coordinator.MaintainAsync().ConfigureAwait(false);
                 incident = (await ReadRecoveryIncidentsAsync(incidents).ConfigureAwait(false))[0];
                 AssertEqual(2, incident.RecoveryAttempts, "no rescue beyond the cap");
@@ -147,7 +147,7 @@ namespace Test.Shared.Suites.Services
                 IncidentService incidents = new IncidentService(testDb.Driver);
 
                 Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
-                await CreateFailedMissionAsync(testDb, vessel.Id, "definition_of_done_compile: build phase exited 1").ConfigureAwait(false);
+                await CreateFailedMissionAsync(testDb, vessel.Id, MissionFailureKindEnum.Compile, "Definition-of-Done gate failed (Compile): build phase exited 1").ConfigureAwait(false);
 
                 await coordinator.MaintainAsync().ConfigureAwait(false);
                 await coordinator.MaintainAsync().ConfigureAwait(false);
@@ -155,6 +155,43 @@ namespace Test.Shared.Suites.Services
                 List<Incident> recovery = await ReadRecoveryIncidentsAsync(incidents).ConfigureAwait(false);
                 AssertEqual(1, recovery.Count, "the incident is not duplicated across passes");
                 AssertEqual(1, recovery[0].RecoveryAttempts, "no extra rescue while one is still in flight");
+            }));
+
+            cases.Add(CaseAsync("reason_text_without_kind_opens_no_incident", "Failure reason text that names a recoverable failure does not open an incident without a recorded kind", TestTags.Negative, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                ArmadaSettings settings = new ArmadaSettings();
+                settings.MaxMissionRecoveryAttempts = 2;
+                MissionRecoveryCoordinator coordinator = new MissionRecoveryCoordinator(CreateLogging(), testDb.Driver, settings);
+                IncidentService incidents = new IncidentService(testDb.Driver);
+
+                Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
+
+                // The old classifier rescued anything whose reason text contained "definition_of_done_compile",
+                // "conflict", "crash", "exited", or "timeout", whatever actually happened.
+                await CreateFailedMissionAsync(testDb, vessel.Id, null, "definition_of_done_compile: merge conflict, captain exited, timed out").ConfigureAwait(false);
+
+                await coordinator.MaintainAsync().ConfigureAwait(false);
+
+                List<Incident> recovery = await ReadRecoveryIncidentsAsync(incidents).ConfigureAwait(false);
+                AssertEqual(0, recovery.Count, "reason text alone never drives auto-rescue");
+            }));
+
+            cases.Add(CaseAsync("judge_rejection_reason_quoting_compile_opens_no_incident", "A judge rejection whose reason quotes a compile failure is not auto-rescued", TestTags.Negative, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                ArmadaSettings settings = new ArmadaSettings();
+                settings.MaxMissionRecoveryAttempts = 2;
+                MissionRecoveryCoordinator coordinator = new MissionRecoveryCoordinator(CreateLogging(), testDb.Driver, settings);
+                IncidentService incidents = new IncidentService(testDb.Driver);
+
+                Vessel vessel = await CreateVesselAsync(testDb).ConfigureAwait(false);
+                await CreateFailedMissionAsync(testDb, vessel.Id, MissionFailureKindEnum.JudgeRejected, "Judge verdict: FAIL (definition_of_done_compile crash timeout)").ConfigureAwait(false);
+
+                await coordinator.MaintainAsync().ConfigureAwait(false);
+
+                List<Incident> recovery = await ReadRecoveryIncidentsAsync(incidents).ConfigureAwait(false);
+                AssertEqual(0, recovery.Count, "the recorded kind decides, not the reason text");
             }));
 
             return new TestSuiteDescriptor(
@@ -181,20 +218,22 @@ namespace Test.Shared.Suites.Services
             return await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
         }
 
-        private static async Task<Mission> CreateFailedMissionAsync(TestDatabase testDb, string vesselId, string failureReason)
+        private static async Task<Mission> CreateFailedMissionAsync(TestDatabase testDb, string vesselId, MissionFailureKindEnum? failureKind, string failureReason)
         {
             Mission mission = new Mission("Do the thing", "Implement the thing correctly.");
             mission.VesselId = vesselId;
             mission.Status = MissionStatusEnum.Failed;
+            mission.FailureKind = failureKind;
             mission.FailureReason = failureReason;
             mission.DiffSnapshot = "diff --git a/x.cs b/x.cs\n+++ b/x.cs\n+broken";
             return await testDb.Driver.Missions.CreateAsync(mission).ConfigureAwait(false);
         }
 
-        private static async Task FailMissionAsync(TestDatabase testDb, string missionId, string failureReason)
+        private static async Task FailMissionAsync(TestDatabase testDb, string missionId, MissionFailureKindEnum failureKind, string failureReason)
         {
             Mission mission = (await testDb.Driver.Missions.ReadAsync(missionId).ConfigureAwait(false))!;
             mission.Status = MissionStatusEnum.Failed;
+            mission.FailureKind = failureKind;
             mission.FailureReason = failureReason;
             await testDb.Driver.Missions.UpdateAsync(mission).ConfigureAwait(false);
         }

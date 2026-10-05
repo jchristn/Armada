@@ -786,36 +786,81 @@ namespace Armada.Core.Services
             return normalized;
         }
 
-        private static CheckRunTypeEnum InferCheckRunType(string? workflowName)
+        /// <summary>
+        /// Infer a check-run type from a GitHub workflow name when the caller did not supply a structured type
+        /// (the import request's TypeOverride). GitHub workflow names are free text with no type field, so the name is
+        /// split into lowercase words on any non-alphanumeric character and matched word by word; a substring of a
+        /// longer word never counts ("upload" is not "load", "community" is not "unit", "latest" is not "test").
+        /// Unmatched names are <see cref="CheckRunTypeEnum.Build"/>.
+        /// </summary>
+        /// <param name="workflowName">Workflow name.</param>
+        /// <returns>The inferred check-run type.</returns>
+        public static CheckRunTypeEnum InferCheckRunType(string? workflowName)
         {
-            string normalized = Normalize(workflowName)?.ToLowerInvariant() ?? String.Empty;
-            if (normalized.Contains("rollback verify", StringComparison.Ordinal))
-                return CheckRunTypeEnum.RollbackVerification;
-            if (normalized.Contains("rollback", StringComparison.Ordinal))
-                return CheckRunTypeEnum.Rollback;
-            if (normalized.Contains("deploy verify", StringComparison.Ordinal) || normalized.Contains("verification", StringComparison.Ordinal))
-                return CheckRunTypeEnum.DeploymentVerification;
-            if (normalized.Contains("smoke", StringComparison.Ordinal))
-                return CheckRunTypeEnum.SmokeTest;
-            if (normalized.Contains("health", StringComparison.Ordinal))
-                return CheckRunTypeEnum.HealthCheck;
-            if (normalized.Contains("deploy", StringComparison.Ordinal))
-                return CheckRunTypeEnum.Deploy;
-            if (normalized.Contains("integration", StringComparison.Ordinal))
-                return CheckRunTypeEnum.IntegrationTest;
-            if (normalized.Contains("e2e", StringComparison.Ordinal) || normalized.Contains("end-to-end", StringComparison.Ordinal))
-                return CheckRunTypeEnum.E2ETest;
-            if (normalized.Contains("unit", StringComparison.Ordinal) || normalized.Contains("test", StringComparison.Ordinal))
-                return CheckRunTypeEnum.UnitTest;
-            if (normalized.Contains("release", StringComparison.Ordinal))
-                return CheckRunTypeEnum.ReleaseVersioning;
-            if (normalized.Contains("security", StringComparison.Ordinal) || normalized.Contains("scan", StringComparison.Ordinal))
-                return CheckRunTypeEnum.SecurityScan;
-            if (normalized.Contains("performance", StringComparison.Ordinal) || normalized.Contains("load", StringComparison.Ordinal) || normalized.Contains("benchmark", StringComparison.Ordinal))
-                return CheckRunTypeEnum.Performance;
-            if (normalized.Contains("migrate", StringComparison.Ordinal) || normalized.Contains("migration", StringComparison.Ordinal))
-                return CheckRunTypeEnum.Migration;
+            List<string> words = SplitWorkflowWords(workflowName);
+            HashSet<string> set = new HashSet<string>(words, StringComparer.Ordinal);
+
+            bool rollback = set.Contains("rollback") || set.Contains("rollbacks");
+            bool verify = set.Contains("verify") || set.Contains("verification") || set.Contains("verifications");
+            bool deploy = set.Contains("deploy") || set.Contains("deploys") || set.Contains("deployment") || set.Contains("deployments");
+
+            if (rollback && verify) return CheckRunTypeEnum.RollbackVerification;
+            if (rollback) return CheckRunTypeEnum.Rollback;
+            if (verify) return CheckRunTypeEnum.DeploymentVerification;
+            if (set.Contains("smoke")) return CheckRunTypeEnum.SmokeTest;
+            if (set.Contains("health") || set.Contains("healthcheck") || set.Contains("healthchecks")) return CheckRunTypeEnum.HealthCheck;
+            if (deploy) return CheckRunTypeEnum.Deploy;
+            if (set.Contains("integration")) return CheckRunTypeEnum.IntegrationTest;
+            if (set.Contains("e2e") || ContainsSequence(words, "end", "to", "end")) return CheckRunTypeEnum.E2ETest;
+            if (set.Contains("unit") || set.Contains("test") || set.Contains("tests") || set.Contains("testing")) return CheckRunTypeEnum.UnitTest;
+            if (set.Contains("release") || set.Contains("releases")) return CheckRunTypeEnum.ReleaseVersioning;
+            if (set.Contains("security") || set.Contains("scan") || set.Contains("scanning") || set.Contains("codeql")) return CheckRunTypeEnum.SecurityScan;
+            if (set.Contains("performance") || set.Contains("perf") || set.Contains("load") || set.Contains("benchmark") || set.Contains("benchmarks")) return CheckRunTypeEnum.Performance;
+            if (set.Contains("migrate") || set.Contains("migration") || set.Contains("migrations")) return CheckRunTypeEnum.Migration;
             return CheckRunTypeEnum.Build;
+        }
+
+        private static List<string> SplitWorkflowWords(string? workflowName)
+        {
+            List<string> words = new List<string>();
+            if (String.IsNullOrWhiteSpace(workflowName)) return words;
+
+            StringBuilder current = new StringBuilder();
+            foreach (char c in workflowName)
+            {
+                if (Char.IsLetterOrDigit(c))
+                {
+                    current.Append(Char.ToLowerInvariant(c));
+                }
+                else if (current.Length > 0)
+                {
+                    words.Add(current.ToString());
+                    current.Clear();
+                }
+            }
+
+            if (current.Length > 0) words.Add(current.ToString());
+            return words;
+        }
+
+        private static bool ContainsSequence(List<string> words, params string[] sequence)
+        {
+            for (int i = 0; i + sequence.Length <= words.Count; i++)
+            {
+                bool match = true;
+                for (int j = 0; j < sequence.Length; j++)
+                {
+                    if (!String.Equals(words[i + j], sequence[j], StringComparison.Ordinal))
+                    {
+                        match = false;
+                        break;
+                    }
+                }
+
+                if (match) return true;
+            }
+
+            return false;
         }
 
         private static CheckRunStatusEnum MapCheckRunStatus(string? status, string? conclusion)

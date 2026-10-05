@@ -2,9 +2,10 @@ namespace Armada.Core.Services
 {
     using System;
     using Armada.Core.Enums;
+    using Armada.Core.Models;
 
     /// <summary>
-    /// Pure classifier that maps a failed mission's status and failure reason to a
+    /// Pure classifier that maps a failed mission's status and persisted failure kind to a
     /// <see cref="MissionFailureKindEnum"/>, and decides whether that kind warrants an autonomous, bounded
     /// rescue mission. Side-effect free so it unit-tests without a database.
     /// </summary>
@@ -13,42 +14,49 @@ namespace Armada.Core.Services
         #region Public-Methods
 
         /// <summary>
-        /// Classify a failed mission from its status and failure reason.
+        /// Classify a failed mission from its status and its persisted failure kind. The kind is decided and stored
+        /// where the failure happens (<see cref="Mission.FailureKind"/>); this method never reads
+        /// <see cref="Mission.FailureReason"/>, which is human-readable text only. A LandingFailed mission without a
+        /// recorded kind is a landing conflict (the status itself says landing failed); any other mission without a
+        /// recorded kind (for example a failure recorded before the column existed) is
+        /// <see cref="MissionFailureKindEnum.Unknown"/> and is therefore never auto-rescued.
         /// </summary>
-        /// <param name="status">Mission status (only failure states classify meaningfully).</param>
-        /// <param name="failureReason">The mission's failure reason text.</param>
-        /// <returns>The classified failure kind.</returns>
-        public static MissionFailureKindEnum Classify(MissionStatusEnum status, string? failureReason)
+        /// <param name="status">Mission status.</param>
+        /// <param name="failureKind">The mission's persisted failure kind, when recorded.</param>
+        /// <returns>The failure kind.</returns>
+        public static MissionFailureKindEnum Classify(MissionStatusEnum status, MissionFailureKindEnum? failureKind)
         {
-            string reason = (failureReason ?? String.Empty).ToLowerInvariant();
-
-            if (reason.Contains("definition_of_done_compile")) return MissionFailureKindEnum.Compile;
-            if (reason.Contains("definition_of_done_testfail")) return MissionFailureKindEnum.TestFail;
-            if (reason.Contains("definition_of_done_timeout")) return MissionFailureKindEnum.Timeout;
-            if (reason.Contains("definition_of_done_infra")) return MissionFailureKindEnum.Infra;
-
-            if (reason.Contains("no_op_completion_detected")) return MissionFailureKindEnum.NoOp;
-
-            if (reason.Contains("judge verdict") || reason.Contains("judge pass rejected") || reason.Contains("judge mission"))
-                return MissionFailureKindEnum.JudgeRejected;
-
-            if (reason.Contains("outside its scoped file list") || reason.Contains("out-of-scope") || reason.Contains("out of scope"))
-                return MissionFailureKindEnum.ScopeViolation;
-
-            if (reason.Contains("secret") || reason.Contains("protected path") || reason.Contains("private identifier") || reason.Contains("boundary"))
-                return MissionFailureKindEnum.Boundary;
-
-            if (status == MissionStatusEnum.LandingFailed
-                || reason.Contains("merge conflict") || reason.Contains("conflict") || reason.Contains("push failed") || reason.Contains("landing"))
-                return MissionFailureKindEnum.LandingConflict;
-
-            if (reason.Contains("usage limit") || reason.Contains("quota") || reason.Contains("crash")
-                || reason.Contains("segmentation") || reason.Contains("exited") || reason.Contains("killed"))
-                return MissionFailureKindEnum.Crash;
-
-            if (reason.Contains("timeout") || reason.Contains("timed out")) return MissionFailureKindEnum.Timeout;
-
+            if (failureKind.HasValue) return failureKind.Value;
+            if (status == MissionStatusEnum.LandingFailed) return MissionFailureKindEnum.LandingConflict;
             return MissionFailureKindEnum.Unknown;
+        }
+
+        /// <summary>
+        /// Classify a failed mission (see <see cref="Classify(MissionStatusEnum, MissionFailureKindEnum?)"/>).
+        /// </summary>
+        /// <param name="mission">The mission.</param>
+        /// <returns>The failure kind.</returns>
+        public static MissionFailureKindEnum Classify(Mission mission)
+        {
+            if (mission == null) throw new ArgumentNullException(nameof(mission));
+            return Classify(mission.Status, mission.FailureKind);
+        }
+
+        /// <summary>
+        /// Map a Definition-of-Done gate outcome to the mission failure kind it records.
+        /// </summary>
+        /// <param name="outcome">The gate outcome.</param>
+        /// <returns>The failure kind.</returns>
+        public static MissionFailureKindEnum FromDefinitionOfDone(DefinitionOfDoneOutcomeEnum outcome)
+        {
+            switch (outcome)
+            {
+                case DefinitionOfDoneOutcomeEnum.Compile: return MissionFailureKindEnum.Compile;
+                case DefinitionOfDoneOutcomeEnum.TestFail: return MissionFailureKindEnum.TestFail;
+                case DefinitionOfDoneOutcomeEnum.Timeout: return MissionFailureKindEnum.Timeout;
+                case DefinitionOfDoneOutcomeEnum.Infra: return MissionFailureKindEnum.Infra;
+                default: return MissionFailureKindEnum.Unknown;
+            }
         }
 
         /// <summary>

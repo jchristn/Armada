@@ -587,7 +587,10 @@ namespace Armada.Core.Services
                 if (targetStatus == MissionStatusEnum.Complete)
                     mission.CompletedUtc = DateTime.UtcNow;
                 if (targetStatus == MissionStatusEnum.LandingFailed)
+                {
                     mission.FailureReason = reason;
+                    mission.FailureKind = MissionFailureKindEnum.LandingConflict;
+                }
                 await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
                 _Logging.Info(_Header + "reconciled mission " + missionId + " to " + targetStatus + ": " + reason);
             }

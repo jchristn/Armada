@@ -222,12 +222,7 @@ namespace Test.Shared.Suites.Services
 
         private static string? ParseStructuredJudgeVerdictSignal(string line)
         {
-            MethodInfo? method = typeof(MissionService).GetMethod(
-                "ParseStructuredJudgeVerdictSignal",
-                BindingFlags.Static | BindingFlags.NonPublic);
-            if (method == null) throw new InvalidOperationException("Could not find ParseStructuredJudgeVerdictSignal.");
-
-            return method.Invoke(null, new object[] { line })?.ToString();
+            return JudgeVerdictParser.ParseLine(line)?.ToString();
         }
 
         private static void AssertNotContains(string expectedToBeAbsent, string actual, string context)

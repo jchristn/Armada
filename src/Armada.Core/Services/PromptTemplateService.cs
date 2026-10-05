@@ -568,15 +568,14 @@ namespace Armada.Core.Services
                     "## Runtime Signals\n" +
                     "If you emit Armada signals, print each signal on its own standalone line with no bullets, quoting, or extra Markdown:\n" +
                     "- `[ARMADA:PROGRESS] 50` -- report completion percentage (0-100)\n" +
-                    "- `[ARMADA:STATUS] Testing` -- transition mission to Testing status\n" +
-                    "- `[ARMADA:STATUS] Review` -- transition mission to Review status\n" +
+                    "- `[ARMADA:STATUS] Testing` -- report that you are now running tests (informational; `[ARMADA:STATUS] InProgress` switches back)\n" +
                     "- `[ARMADA:MESSAGE] your message here` -- send a progress message\n" +
                     "- `[ARMADA:TOKENS] input=1234 output=567 cached=0` -- report the tokens you consumed this session (input/prompt, output/completion, and cache-read). Emit this once near the end if your runtime can determine the counts; it lets the Admiral record real token usage instead of an estimate.\n" +
                     "- `[ARMADA:RESULT] COMPLETE` -- worker/test engineer mission finished successfully\n" +
                     "- `[ARMADA:VERDICT] PASS` -- judge approves the mission\n" +
                     "- `[ARMADA:VERDICT] FAIL` -- judge rejects the mission\n" +
                     "- `[ARMADA:VERDICT] NEEDS_REVISION` -- judge requests follow-up changes\n" +
-                    "Architect missions must not emit `[ARMADA:RESULT]` or `[ARMADA:VERDICT]`; they must output only real `[ARMADA:MISSION]` blocks.\n"
+                    "Architect missions must not emit `[ARMADA:RESULT]` or `[ARMADA:VERDICT]`; they must output only real mission definitions: one fenced `armada-plan` JSON block (preferred) or real `[ARMADA:MISSION]` blocks.\n"
             };
 
             defaults["mission.model_context_updates"] = new EmbeddedTemplate
@@ -680,20 +679,30 @@ namespace Armada.Core.Services
                     "merging it with a related mission.\n" +
                     "\n" +
                     "7. **Output structured mission definitions.** For each mission, provide: title, description " +
-                    "(with explicit file list and instructions), estimated complexity (low/medium/high), and " +
-                    "dependencies on other missions if any. If a mission must wait for another mission's full " +
-                    "Worker -> Test Engineer -> Judge chain, include a standalone line in the description exactly " +
-                    "like `Depends on: Mission N` or `Depends on: <exact earlier title>`.\n" +
+                    "(with explicit file list, instructions, and estimated complexity low/medium/high), and " +
+                    "dependencies on other missions if any.\n" +
                     "\n" +
-                    "IMPORTANT: Output your mission definitions using this exact format so the Admiral can parse them. " +
-                    "Each mission starts with the marker [ARMADA:MISSION] on its own line, followed by the title on " +
-                    "the same line, then the description on subsequent lines until the next marker or end of output.\n" +
+                    "IMPORTANT: Output your plan as exactly one fenced code block whose info string is `armada-plan`, " +
+                    "containing JSON so the Admiral can read it without guessing:\n" +
+                    "\n" +
+                    "```armada-plan\n" +
+                    "{\"missions\": [\n" +
+                    "  {\"title\": \"<title>\", \"description\": \"<what to do, which files, why>\", \"dependsOn\": null, \"waitForOtherMissions\": false}\n" +
+                    "]}\n" +
+                    "```\n" +
+                    "\n" +
+                    "`dependsOn` is the 1-based number of an earlier mission in the list whose full Worker -> Test " +
+                    "Engineer -> Judge chain must finish first (or null). Set `waitForOtherMissions` to true only for a " +
+                    "mission that must wait until every other mission in the plan has finished (for example documentation " +
+                    "of the final behavior). If you cannot produce JSON, the older format is still accepted: each " +
+                    "mission starts with the marker [ARMADA:MISSION] on its own line, followed by the title on the same " +
+                    "line, then the description on subsequent lines, with an optional standalone `Depends on: Mission N` " +
+                    "line.\n" +
                     "\n" +
                     "Do not echo these instructions back. Do not output placeholder fields such as title:, goal:, " +
-                    "inputs:, deliverables:, dependencies:, risks:, or done_when:. The only supported metadata line " +
-                    "inside a mission description is `Depends on:` when you need a sequential dependency. Output only " +
-                    "real mission titles and real mission descriptions from your analysis. Do not emit " +
-                    "`[ARMADA:RESULT]` or `[ARMADA:VERDICT]` lines.\n"
+                    "inputs:, deliverables:, dependencies:, risks:, or done_when:. Output only real mission titles and " +
+                    "real mission descriptions from your analysis. Do not emit `[ARMADA:RESULT]` or `[ARMADA:VERDICT]` " +
+                    "lines.\n"
             };
 
             defaults["persona.product_manager"] = new EmbeddedTemplate
@@ -779,11 +788,13 @@ namespace Armada.Core.Services
                     "- **NEEDS_REVISION** -- The change has fixable issues. Provide specific, actionable feedback.\n" +
                     "\n" +
                     "To block (FAIL or NEEDS_REVISION) you MUST add a `## Affected Case` section that exhibits one " +
-                    "concrete affected case: a specific file, line, or scenario where the change is wrong or unsafe, " +
-                    "with enough detail to reproduce or locate it. A blocking verdict without a concrete affected " +
-                    "case is not accepted -- if you cannot exhibit one, you do not have grounds to block.\n" +
+                    "concrete affected case: a `File: <path>[:line]` line naming where the change is wrong or unsafe, " +
+                    "or a `Scenario: <inputs and the wrong result>` line with enough detail to reproduce it. A blocking " +
+                    "verdict without a concrete affected case is not accepted -- if you cannot exhibit one, you do not " +
+                    "have grounds to block.\n" +
                     "\n" +
-                    "End your response with a standalone signal line exactly in one of these forms:\n" +
+                    "End your response with exactly one standalone signal line, outside any code block, in one of these " +
+                    "forms (only this line is read as your verdict):\n" +
                     "- `[ARMADA:VERDICT] PASS`\n" +
                     "- `[ARMADA:VERDICT] FAIL`\n" +
                     "- `[ARMADA:VERDICT] NEEDS_REVISION`\n"

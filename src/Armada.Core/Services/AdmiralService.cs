@@ -723,9 +723,26 @@ namespace Armada.Core.Services
         /// <param name="captainId">Captain identifier associated with the process.</param>
         /// <param name="missionId">Mission identifier associated with the process.</param>
         /// <param name="token">Cancellation token.</param>
-        public async Task HandleProcessExitAsync(int processId, int? exitCode, string captainId, string missionId, CancellationToken token = default)
+        public Task HandleProcessExitAsync(int processId, int? exitCode, string captainId, string missionId, CancellationToken token = default)
         {
+            return HandleProcessExitAsync(processId, RuntimeFailureClassifier.Decide(exitCode, null), captainId, missionId, token);
+        }
+
+        /// <summary>
+        /// Handle an agent process exit with its typed exit outcome: reconcile the captain and mission state for the
+        /// exited process. Quarantine, stall, and crash-loop decisions read <see cref="RuntimeExitInfo.FailureKind"/>,
+        /// decided once from the exit code and the structured provider error; output text is never searched.
+        /// </summary>
+        /// <param name="processId">Operating-system process id that exited.</param>
+        /// <param name="exitInfo">Typed exit outcome.</param>
+        /// <param name="captainId">Captain identifier associated with the process.</param>
+        /// <param name="missionId">Mission identifier associated with the process.</param>
+        /// <param name="token">Cancellation token.</param>
+        public async Task HandleProcessExitAsync(int processId, RuntimeExitInfo exitInfo, string captainId, string missionId, CancellationToken token = default)
+        {
+            if (exitInfo == null) throw new ArgumentNullException(nameof(exitInfo));
             if (String.IsNullOrEmpty(captainId)) throw new ArgumentNullException(nameof(captainId));
+            int? exitCode = exitInfo.ExitCode;
             if (String.IsNullOrEmpty(missionId)) throw new ArgumentNullException(nameof(missionId));
 
             // System-scoped: process exit handler receives only IDs with no tenant context;
@@ -830,21 +847,22 @@ namespace Armada.Core.Services
                     return;
                 }
 
-                string failureReason = await BuildProcessExitFailureReasonAsync(missionId, exitCode, token).ConfigureAwait(false);
-                await HandleTerminalProcessExitFailureAsync(captain, mission, missionId, failureReason, token).ConfigureAwait(false);
+                string failureReason = exitInfo.Describe();
+                await HandleTerminalProcessExitFailureAsync(captain, mission, missionId, failureReason, exitInfo.FailureKind, token).ConfigureAwait(false);
 
                 // Provider usage-limit / auth failures will just fail again immediately; quarantine the
-                // captain out of the dispatch pool until it resets rather than handing it more work.
-                RuntimeFailureKindEnum failureKind = RuntimeFailureClassifier.Classify(exitCode, failureReason);
+                // captain out of the dispatch pool until it resets rather than handing it more work. The kind
+                // was decided once from the exit code and the structured provider error.
+                RuntimeFailureKindEnum failureKind = exitInfo.FailureKind;
                 if (failureKind == RuntimeFailureKindEnum.UsageLimit || failureKind == RuntimeFailureKindEnum.AuthFailure)
                 {
-                    await QuarantineCaptainAsync(captainId, failureKind, token, failureReason).ConfigureAwait(false);
+                    await QuarantineCaptainAsync(captainId, failureKind, token, exitInfo.ProviderError).ConfigureAwait(false);
                 }
                 else if (failureKind == RuntimeFailureKindEnum.Crash && RecordCrashAndCheckLoop(captainId))
                 {
                     // Crash-loop detection: N non-clean failures inside the window means this captain keeps
                     // dying on work rather than doing it; quarantine it so tier selection stops handing it more.
-                    await QuarantineCaptainAsync(captainId, RuntimeFailureKindEnum.Crash, token, failureReason).ConfigureAwait(false);
+                    await QuarantineCaptainAsync(captainId, RuntimeFailureKindEnum.Crash, token, exitInfo.ProviderError).ConfigureAwait(false);
                 }
             }
 
@@ -906,7 +924,7 @@ namespace Armada.Core.Services
             }
         }
 
-        private async Task QuarantineCaptainAsync(string captainId, RuntimeFailureKindEnum kind, CancellationToken token, string? providerOutput = null)
+        private async Task QuarantineCaptainAsync(string captainId, RuntimeFailureKindEnum kind, CancellationToken token, RuntimeProviderError? providerError = null)
         {
             Captain? captain = await _Database.Captains.ReadAsync(captainId, token).ConfigureAwait(false);
             if (captain == null) return;
@@ -918,11 +936,11 @@ namespace Armada.Core.Services
                 _ => "provider usage limit"
             };
 
-            // Prefer the provider's stated reset time (parsed from output) over the configured backoff, but
-            // never trust an unparseable or out-of-range value into the quarantine window.
+            // Prefer the provider's stated reset time (from the structured provider error: an explicit reset time
+            // or Retry-After) over the configured backoff, but never trust an out-of-range value into the window.
             DateTime nowUtc = DateTime.UtcNow;
             DateTime until = nowUtc.AddMinutes(_Settings.CaptainQuarantineMinutes);
-            if (ProviderResetParser.TryParseResetUtc(providerOutput, nowUtc, out DateTime? resetUtc) && resetUtc.HasValue)
+            if (ProviderResetParser.TryGetResetUtc(providerError, nowUtc, out DateTime? resetUtc) && resetUtc.HasValue)
             {
                 until = resetUtc.Value;
                 reason += " (provider reset time)";
@@ -1122,8 +1140,9 @@ namespace Armada.Core.Services
                         return;
                     }
 
-                    string failureReason = await BuildProcessExitFailureReasonAsync(missionId, exitCode, token).ConfigureAwait(false);
-                    await HandleTerminalProcessExitFailureAsync(captain, mission, missionId, failureReason, token).ConfigureAwait(false);
+                    // The health monitor only knows the exit code (no structured provider error reached it).
+                    RuntimeExitInfo healthExitInfo = RuntimeFailureClassifier.Decide(exitCode, null);
+                    await HandleTerminalProcessExitFailureAsync(captain, mission, missionId, healthExitInfo.Describe(), healthExitInfo.FailureKind, token).ConfigureAwait(false);
                 }
             }
             else
@@ -1155,6 +1174,7 @@ namespace Armada.Core.Services
                     {
                         mission.Status = MissionStatusEnum.Failed;
                         mission.FailureReason = "Mission exceeded max runtime of " + _Settings.MaxMissionRuntimeMinutes + " minutes";
+                        mission.FailureKind = MissionFailureKindEnum.MaxRuntimeExceeded;
                         mission.ProcessId = null;
                         mission.CompletedUtc = DateTime.UtcNow;
                         mission.LastUpdateUtc = DateTime.UtcNow;
@@ -1202,6 +1222,7 @@ namespace Armada.Core.Services
                             {
                                 mission.Status = MissionStatusEnum.Failed;
                                 mission.FailureReason = "Captain stalled, recovery exhausted";
+                                mission.FailureKind = MissionFailureKindEnum.StallRecoveryExhausted;
                                 mission.ProcessId = null;
                                 mission.CompletedUtc = DateTime.UtcNow;
                                 mission.LastUpdateUtc = DateTime.UtcNow;
@@ -1651,37 +1672,6 @@ namespace Armada.Core.Services
             }
         }
 
-        private async Task<string> BuildProcessExitFailureReasonAsync(string missionId, int? exitCode, CancellationToken token)
-        {
-            string logPath = Path.Combine(_Settings.LogDirectory, "missions", missionId + ".log");
-            if (File.Exists(logPath))
-            {
-                try
-                {
-                    string[] lines = await File.ReadAllLinesAsync(logPath, token).ConfigureAwait(false);
-                    for (int i = lines.Length - 1; i >= 0 && i >= lines.Length - 40; i--)
-                    {
-                        string line = lines[i].Trim();
-                        if (String.IsNullOrEmpty(line)) continue;
-                        if (line.Contains("API Error:", StringComparison.OrdinalIgnoreCase) ||
-                            line.Contains("overloaded_error", StringComparison.OrdinalIgnoreCase) ||
-                            line.Contains("[stderr]", StringComparison.OrdinalIgnoreCase) ||
-                            line.Contains("error", StringComparison.OrdinalIgnoreCase) ||
-                            line.Contains("exception", StringComparison.OrdinalIgnoreCase))
-                        {
-                            return NormalizeProcessExitFailureReason(line);
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _Logging.Warn(_Header + "could not inspect mission log for failure reason on " + missionId + ": " + ex.ToString());
-                }
-            }
-
-            return "Agent process exited with code " + (exitCode?.ToString() ?? "unknown");
-        }
-
         /// <summary>
         /// Handle an interrupted (cancelled/vanished) captain process by re-dispatching its mission instead of
         /// terminally failing it. Used for negative exit codes (a stop/shutdown cancellation or a missing PID),
@@ -1707,6 +1697,7 @@ namespace Armada.Core.Services
             mission.DockId = null;
             mission.ProcessId = null;
             mission.FailureReason = null;
+            mission.FailureKind = null;
             mission.StartedUtc = null;
             mission.CompletedUtc = null;
             mission.TotalRuntimeMs = null;
@@ -1729,12 +1720,14 @@ namespace Armada.Core.Services
             Mission? mission,
             string missionId,
             string failureReason,
+            RuntimeFailureKindEnum runtimeFailureKind,
             CancellationToken token)
         {
             if (mission != null)
             {
                 mission.Status = MissionStatusEnum.Failed;
                 mission.FailureReason = failureReason;
+                mission.FailureKind = MissionFailureKindEnum.Crash;
                 mission.ProcessId = null;
                 mission.CompletedUtc = DateTime.UtcNow;
                 mission.LastUpdateUtc = DateTime.UtcNow;
@@ -1755,7 +1748,8 @@ namespace Armada.Core.Services
             await ReclaimDockAsync(captain, mission, token).ConfigureAwait(false);
             await _Captains.ReleaseAsync(captain, token).ConfigureAwait(false);
 
-            if (IsCaptainUnavailableFailureReason(failureReason))
+            bool captainUnavailable = RuntimeFailureClassifier.IsCaptainUnavailable(runtimeFailureKind);
+            if (captainUnavailable)
             {
                 await _Database.Captains.UpdateStateAsync(captain.Id, CaptainStateEnum.Stalled, token).ConfigureAwait(false);
                 _Logging.Warn(_Header + "captain " + captain.Id + " marked Stalled after non-retryable runtime failure on mission " + missionId);
@@ -1772,7 +1766,7 @@ namespace Armada.Core.Services
             }
 
             string signalMessage = "Mission " + missionId + " failed: " + failureReason;
-            if (IsCaptainUnavailableFailureReason(failureReason))
+            if (captainUnavailable)
             {
                 signalMessage += " (captain stalled)";
             }
@@ -1780,52 +1774,6 @@ namespace Armada.Core.Services
             Signal signal = new Signal(SignalTypeEnum.Error, signalMessage);
             signal.FromCaptainId = captain.Id;
             await _Database.Signals.CreateAsync(signal, token).ConfigureAwait(false);
-        }
-
-        private static bool IsCaptainUnavailableFailureReason(string failureReason)
-        {
-            if (String.IsNullOrWhiteSpace(failureReason))
-                return false;
-
-            string normalized = NormalizeProcessExitFailureReason(failureReason);
-
-            if (normalized.Contains("hit your limit", StringComparison.OrdinalIgnoreCase) ||
-                normalized.Contains("rate limit", StringComparison.OrdinalIgnoreCase) ||
-                normalized.Contains("quota", StringComparison.OrdinalIgnoreCase) ||
-                normalized.Contains("insufficient_quota", StringComparison.OrdinalIgnoreCase) ||
-                normalized.Contains("invalid api key", StringComparison.OrdinalIgnoreCase) ||
-                normalized.Contains("authentication failed", StringComparison.OrdinalIgnoreCase) ||
-                normalized.Contains("unauthorized", StringComparison.OrdinalIgnoreCase) ||
-                normalized.Contains("forbidden", StringComparison.OrdinalIgnoreCase) ||
-                normalized.Contains("not logged in", StringComparison.OrdinalIgnoreCase) ||
-                normalized.Contains("login required", StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-
-            bool mentionsModel = normalized.Contains("model", StringComparison.OrdinalIgnoreCase);
-            bool modelUnavailable =
-                normalized.Contains("invalid", StringComparison.OrdinalIgnoreCase) ||
-                normalized.Contains("unknown", StringComparison.OrdinalIgnoreCase) ||
-                normalized.Contains("not found", StringComparison.OrdinalIgnoreCase) ||
-                normalized.Contains("unsupported", StringComparison.OrdinalIgnoreCase) ||
-                normalized.Contains("unavailable", StringComparison.OrdinalIgnoreCase);
-
-            return mentionsModel && modelUnavailable;
-        }
-
-        private static string NormalizeProcessExitFailureReason(string failureReason)
-        {
-            if (String.IsNullOrWhiteSpace(failureReason))
-                return String.Empty;
-
-            string normalized = failureReason.Trim();
-            if (normalized.StartsWith("[stderr]", StringComparison.OrdinalIgnoreCase))
-            {
-                normalized = normalized.Substring("[stderr]".Length).Trim();
-            }
-
-            return normalized;
         }
 
         private async Task HaltVoyageAsync(string voyageId, string failedMissionId, string failureReason, CancellationToken token)
@@ -1856,6 +1804,7 @@ namespace Armada.Core.Services
 
                 otherMission.Status = MissionStatusEnum.Cancelled;
                 otherMission.FailureReason = "Voyage halted after mission " + failedMissionId + " failed: " + failureReason;
+                otherMission.FailureKind = MissionFailureKindEnum.DependencyFailed;
                 otherMission.ProcessId = null;
                 otherMission.CompletedUtc = DateTime.UtcNow;
                 otherMission.LastUpdateUtc = DateTime.UtcNow;

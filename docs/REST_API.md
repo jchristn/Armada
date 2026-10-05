@@ -6973,6 +6973,9 @@ An atomic unit of work assigned to a captain.
 | `PrUrl` | string? | null | Pull request URL if created |
 | `CommitHash` | string? | null | Git commit hash captured on completion |
 | `DiffSnapshot` | string? | null | Always `null` in list/status responses to keep payloads compact. Use `GET /api/v1/missions/{id}/diff` to retrieve the full diff. |
+| `FailureReason` | string? | null | Human-readable reason for a failure or landing failure. Display text only; never parsed |
+| `FailureKind` | string? | null | Structured failure classification set where the failure happens: `Compile`, `TestFail`, `Timeout`, `LandingConflict`, `Crash`, `NoOp`, `Boundary`, `ScopeViolation`, `JudgeRejected`, `Infra`, `Unknown`, `ReviewDenied`, `DependencyFailed`, `MaxRuntimeExceeded`, `StallRecoveryExhausted`, `OperatorAction`, `InvalidOutput`. Autonomous recovery reads this field |
+| `WaitForVoyageWorkers` | bool | false | When true, a Worker mission is not assigned until every other Worker mission in its voyage has settled (set from an architect plan's `waitForOtherMissions`) |
 | `CreatedUtc` | datetime | now | Creation timestamp (UTC) |
 | `StartedUtc` | datetime? | null | Work start timestamp (UTC) |
 | `CompletedUtc` | datetime? | null | Completion timestamp (UTC) |

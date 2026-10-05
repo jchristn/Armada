@@ -13,7 +13,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
         private const string MissionSummarySelectColumns = @"
 id, tenant_id, user_id, voyage_id, vessel_id, captain_id, title, status, priority,
 parent_mission_id, branch_name, dock_id, process_id, pr_url, commit_hash,
-persona, depends_on_mission_id, failure_reason, requires_review, review_deny_action,
+persona, depends_on_mission_id, failure_reason, failure_kind, requires_review, review_deny_action,
 review_comment, reviewed_by_user_id, review_requested_utc, reviewed_utc,
 created_utc, started_utc, completed_utc, total_runtime_ms, last_update_utc,
 LEN(COALESCE(description, '')) AS description_length,
@@ -474,6 +474,7 @@ LEN(COALESCE(agent_output, '')) AS agent_output_length";
                 Persona = SqlServerDatabaseDriver.NullableString(reader["persona"]),
                 DependsOnMissionId = SqlServerDatabaseDriver.NullableString(reader["depends_on_mission_id"]),
                 FailureReason = SqlServerDatabaseDriver.NullableString(reader["failure_reason"]),
+                FailureKind = MissionFailureKindColumn.FromDbValue(reader["failure_kind"]),
                 RequiresReview = reader["requires_review"] != DBNull.Value && Convert.ToBoolean(reader["requires_review"]),
                 ReviewComment = SqlServerDatabaseDriver.NullableString(reader["review_comment"]),
                 ReviewedByUserId = SqlServerDatabaseDriver.NullableString(reader["reviewed_by_user_id"]),

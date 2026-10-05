@@ -123,6 +123,7 @@ namespace Test.Shared.Suites.Services
                     AssertEqual(MissionStatusEnum.LandingFailed, reread!.Status);
                     AssertContains("src/Foo.cs", reread.FailureReason ?? "");
                     AssertContains("src/Bar.cs", reread.FailureReason ?? "");
+                    AssertEqual(MissionFailureKindEnum.LandingConflict, reread.FailureKind, "failure kind is recorded where the failure happens");
                 }
             }));
 

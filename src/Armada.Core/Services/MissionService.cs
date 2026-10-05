@@ -100,9 +100,19 @@ namespace Armada.Core.Services
             public string Description { get; set; } = "";
 
             /// <summary>
-            /// Optional dependency reference emitted by the architect.
+            /// Optional dependency reference emitted by the architect (legacy marker format: a "Depends on:" line).
             /// </summary>
             public string? DependsOnReference { get; set; } = null;
+
+            /// <summary>
+            /// 1-based index of an earlier parsed mission this one depends on (structured armada-plan format).
+            /// </summary>
+            public int? DependsOnIndex { get; set; } = null;
+
+            /// <summary>
+            /// Whether the mission waits until the other Worker missions in the voyage settle.
+            /// </summary>
+            public bool WaitForOtherMissions { get; set; } = false;
         }
 
         private sealed class WorktreePlaybookLocation
@@ -131,17 +141,6 @@ namespace Armada.Core.Services
             public string EventType { get; set; } = String.Empty;
 
             public string EventMessage { get; set; } = String.Empty;
-        }
-
-        /// <summary>
-        /// Verdict extracted from a judge mission's output.
-        /// </summary>
-        private enum JudgeVerdict
-        {
-            None,
-            Pass,
-            Fail,
-            NeedsRevision
         }
 
         #endregion
@@ -233,6 +232,11 @@ namespace Armada.Core.Services
                         if (String.IsNullOrWhiteSpace(mission.FailureReason))
                         {
                             mission.FailureReason = "Parent voyage " + voyage.Id + " is " + voyage.Status + ".";
+                        }
+
+                        if (!mission.FailureKind.HasValue)
+                        {
+                            mission.FailureKind = MissionFailureKindEnum.DependencyFailed;
                         }
 
                         await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
@@ -654,6 +658,7 @@ namespace Armada.Core.Services
             {
                 mission.Status = MissionStatusEnum.LandingFailed;
                 mission.FailureReason = "Review approved but the mission dock was unavailable for landing.";
+                mission.FailureKind = MissionFailureKindEnum.LandingConflict;
                 mission.CompletedUtc = DateTime.UtcNow;
                 mission.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
@@ -700,6 +705,7 @@ namespace Armada.Core.Services
             {
                 mission.Status = MissionStatusEnum.Failed;
                 mission.FailureReason = BuildReviewDeniedFailureReason(reviewComment);
+                mission.FailureKind = MissionFailureKindEnum.ReviewDenied;
                 mission.CompletedUtc = DateTime.UtcNow;
                 mission.ProcessId = null;
                 mission.DockId = null;
@@ -721,6 +727,7 @@ namespace Armada.Core.Services
             mission.DiffSnapshot = null;
             mission.AgentOutput = null;
             mission.FailureReason = null;
+            mission.FailureKind = null;
             mission.StartedUtc = null;
             mission.CompletedUtc = null;
             mission.TotalRuntimeMs = null;
@@ -781,6 +788,7 @@ namespace Armada.Core.Services
 
             mission.Status = MissionStatusEnum.Failed;
             mission.FailureReason = DockBoundaryScanner.Summarize(findings);
+            mission.FailureKind = MissionFailureKindEnum.Boundary;
             mission.CaptainId = null;
             mission.DockId = null;
             mission.ProcessId = null;
@@ -842,7 +850,8 @@ namespace Armada.Core.Services
             if (result.Passed) return false;
 
             mission.Status = MissionStatusEnum.Failed;
-            mission.FailureReason = "definition_of_done_" + result.Outcome.ToString().ToLowerInvariant() + ": " + result.Detail;
+            mission.FailureReason = "Definition-of-Done gate failed (" + result.Outcome + "): " + result.Detail;
+            mission.FailureKind = MissionFailureClassifier.FromDefinitionOfDone(result.Outcome);
             mission.CompletedUtc = DateTime.UtcNow;
             mission.LastUpdateUtc = DateTime.UtcNow;
             await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
@@ -947,6 +956,7 @@ namespace Armada.Core.Services
                 mission.DiffSnapshot = null;
                 mission.AgentOutput = null;
                 mission.FailureReason = null;
+                mission.FailureKind = null;
                 mission.StartedUtc = null;
                 mission.CompletedUtc = null;
                 mission.TotalRuntimeMs = null;
@@ -965,8 +975,9 @@ namespace Armada.Core.Services
 
             // Retries exhausted: fail and surface to the operator inbox (LandingFailed/Failed feed it).
             mission.Status = MissionStatusEnum.Failed;
-            mission.FailureReason = "no_op_completion_detected: captain repeatedly completed with no changes after " +
+            mission.FailureReason = "No-op completion: the captain repeatedly completed with no changes after " +
                 mission.RedispatchAttempts + " re-dispatch attempt(s). Likely an impossible or mis-specified mission.";
+            mission.FailureKind = MissionFailureKindEnum.NoOp;
             mission.CaptainId = null;
             mission.DockId = null;
             mission.ProcessId = null;
@@ -1109,25 +1120,27 @@ namespace Armada.Core.Services
 
             if (!failedForScopeViolation && String.Equals(mission.Persona, "Judge", StringComparison.OrdinalIgnoreCase))
             {
-                JudgeVerdict verdict = ParseJudgeVerdict(mission.AgentOutput);
+                // Only the structured [ARMADA:VERDICT] protocol line counts; a missing or conflicting verdict is no
+                // verdict, which blocks landing.
+                JudgeVerdictEnum verdict = JudgeVerdictParser.Parse(mission.AgentOutput);
                 string? verdictFailureReason = null;
                 bool rejectedPass = false;
 
                 // A PASS must be substantiated (three lenses + real narrative). A rejected PASS is not
                 // silently re-run: it is downgraded to a blocking verdict and the mission fails terminally
                 // with an explicit reason so an operator sees it rather than a quiet re-dispatch.
-                if (verdict == JudgeVerdict.Pass && !TryValidateJudgePassOutput(mission.AgentOutput, out verdictFailureReason))
+                if (verdict == JudgeVerdictEnum.Pass && !TryValidateJudgePassOutput(mission.AgentOutput, out verdictFailureReason))
                 {
-                    verdict = JudgeVerdict.NeedsRevision;
+                    verdict = JudgeVerdictEnum.NeedsRevision;
                     rejectedPass = true;
                 }
 
-                if (verdict != JudgeVerdict.Pass)
+                if (verdict != JudgeVerdictEnum.Pass)
                 {
                     // To block, the Judge must exhibit a concrete affected case. A block without one is a
                     // contract violation: the mission still fails terminally, but the reason makes clear the
                     // Judge did not substantiate the block rather than the work being definitively wrong.
-                    bool isBlockingVerdict = verdict == JudgeVerdict.Fail || verdict == JudgeVerdict.NeedsRevision;
+                    bool isBlockingVerdict = verdict == JudgeVerdictEnum.Fail || verdict == JudgeVerdictEnum.NeedsRevision;
                     bool exhibitsAffectedCase = JudgeContract.ExhibitsAffectedCase(mission.AgentOutput);
 
                     string blockingReason;
@@ -1137,15 +1150,15 @@ namespace Armada.Core.Services
                     }
                     else if (isBlockingVerdict && !exhibitsAffectedCase)
                     {
-                        blockingReason = "Judge verdict: " + (verdict == JudgeVerdict.Fail ? "FAIL" : "NEEDS_REVISION") +
+                        blockingReason = "Judge verdict: " + (verdict == JudgeVerdictEnum.Fail ? "FAIL" : "NEEDS_REVISION") +
                             " but did not exhibit a concrete affected case; a block must cite a real affected file, line, or scenario";
                     }
                     else
                     {
                         blockingReason = verdict switch
                         {
-                            JudgeVerdict.Fail => "Judge verdict: FAIL",
-                            JudgeVerdict.NeedsRevision => "Judge verdict: NEEDS_REVISION",
+                            JudgeVerdictEnum.Fail => "Judge verdict: FAIL",
+                            JudgeVerdictEnum.NeedsRevision => "Judge verdict: NEEDS_REVISION",
                             _ => "Judge mission did not emit an explicit PASS verdict"
                         };
                     }
@@ -1154,6 +1167,7 @@ namespace Armada.Core.Services
                     mission.CompletedUtc = DateTime.UtcNow;
                     mission.LastUpdateUtc = DateTime.UtcNow;
                     mission.FailureReason = blockingReason;
+                    mission.FailureKind = MissionFailureKindEnum.JudgeRejected;
                     await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
                     _Logging.Warn(_Header + "judge mission " + mission.Id + " blocked landing: " + blockingReason);
                 }
@@ -1998,15 +2012,14 @@ namespace Armada.Core.Services
                         "## Progress Signals (Optional)\n" +
                         "You can report progress to the Admiral by printing these lines to stdout:\n" +
                         "- `[ARMADA:PROGRESS] 50` -- report completion percentage (0-100)\n" +
-                        "- `[ARMADA:STATUS] Testing` -- transition mission to Testing status\n" +
-                        "- `[ARMADA:STATUS] Review` -- transition mission to Review status\n" +
+                        "- `[ARMADA:STATUS] Testing` -- report that you are now running tests (informational; `[ARMADA:STATUS] InProgress` switches back)\n" +
                         "- `[ARMADA:MESSAGE] your message here` -- send a progress message\n" +
                         "- `[ARMADA:TOKENS] input=1234 output=567 cached=0` -- report the tokens you consumed this session (input/prompt, output/completion, and cache-read). Emit this once near the end if your runtime can determine the counts; it lets the Admiral record real token usage instead of an estimate.\n" +
                         "- `[ARMADA:RESULT] COMPLETE` -- worker/test engineer mission finished successfully\n" +
                         "- `[ARMADA:VERDICT] PASS` -- judge approves the mission\n" +
                         "- `[ARMADA:VERDICT] FAIL` -- judge rejects the mission\n" +
                         "- `[ARMADA:VERDICT] NEEDS_REVISION` -- judge requests follow-up changes\n" +
-                        "Architect missions must not emit `[ARMADA:RESULT]` or `[ARMADA:VERDICT]`; they must output only real `[ARMADA:MISSION]` blocks.\n";
+                        "Architect missions must not emit `[ARMADA:RESULT]` or `[ARMADA:VERDICT]`; they must output only real mission definitions: one fenced `armada-plan` JSON block (preferred) or real `[ARMADA:MISSION]` blocks.\n";
 
                 case "mission.model_context_updates":
                     return
@@ -2275,6 +2288,7 @@ namespace Armada.Core.Services
                     ParsedArchitectMission first = parsed[0];
                     nextMission.Title = first.Title + " [Worker]";
                     nextMission.Description = ArchitectHandoffMarker + "\n" + first.Description;
+                    nextMission.WaitForVoyageWorkers = first.WaitForOtherMissions;
                     nextMission.BranchName = null;
                     nextMission.LastUpdateUtc = DateTime.UtcNow;
                     await _Database.Missions.UpdateAsync(nextMission, token).ConfigureAwait(false);
@@ -2290,6 +2304,7 @@ namespace Armada.Core.Services
                                 additionalWorker.VoyageId = completedMission.VoyageId;
                                 additionalWorker.VesselId = completedMission.VesselId;
                         additionalWorker.Persona = "Worker";
+                        additionalWorker.WaitForVoyageWorkers = parsed[i].WaitForOtherMissions;
                         additionalWorker.DependsOnMissionId = completedMission.Id;
                         additionalWorker.RequiresReview = nextMission.RequiresReview;
                         additionalWorker.ReviewDenyAction = nextMission.ReviewDenyAction;
@@ -2317,6 +2332,7 @@ namespace Armada.Core.Services
                     " produced no valid mission definitions -- marking as failed");
                 completedMission.Status = MissionStatusEnum.Failed;
                 completedMission.FailureReason = failureReason;
+                completedMission.FailureKind = MissionFailureKindEnum.InvalidOutput;
                 completedMission.CompletedUtc = DateTime.UtcNow;
                 completedMission.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.Missions.UpdateAsync(completedMission, token).ConfigureAwait(false);
@@ -2384,7 +2400,7 @@ namespace Armada.Core.Services
                             "sibling missions in the same voyage. Assume there may be at least one hidden defect. " +
                             "Your response must include `## Correctness`, `## Blast Radius`, `## Source Fidelity`, and " +
                             "`## Verdict` sections. To block (FAIL or NEEDS_REVISION) you MUST add a `## Affected Case` " +
-                            "section exhibiting one concrete affected case (a specific file, line, or scenario); a block " +
+                            "section exhibiting one concrete affected case (a `File: <path>[:line]` or `Scenario: ...` line); a block " +
                             "without a concrete affected case is not accepted. End with a standalone line " +
                             "`[ARMADA:VERDICT] PASS`, `[ARMADA:VERDICT] FAIL`, or `[ARMADA:VERDICT] NEEDS_REVISION`.\n\n";
                         break;
@@ -2491,6 +2507,7 @@ namespace Armada.Core.Services
             {
                 dependent.Status = MissionStatusEnum.Cancelled;
                 dependent.FailureReason = "Blocked by failed dependency " + failedMission.Id;
+                dependent.FailureKind = MissionFailureKindEnum.DependencyFailed;
                 dependent.CompletedUtc = DateTime.UtcNow;
                 dependent.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.Missions.UpdateAsync(dependent, token).ConfigureAwait(false);
@@ -2635,14 +2652,25 @@ namespace Armada.Core.Services
             for (int i = 0; i < parsed.Count; i++)
             {
                 string? dependencyReference = parsed[i].DependsOnReference;
-                if (String.IsNullOrWhiteSpace(dependencyReference)) continue;
+                int? dependencyIndex = parsed[i].DependsOnIndex;
+                if (!dependencyIndex.HasValue && String.IsNullOrWhiteSpace(dependencyReference)) continue;
                 if (!workerRootsByIndex.TryGetValue(i + 1, out Mission? workerRoot)) continue;
 
-                Mission? resolvedDependency = ResolveArchitectDependencyTerminalStage(
-                    terminalStagesByIndex,
-                    terminalStagesByTitle,
-                    i + 1,
-                    dependencyReference);
+                // Structured plan: the dependency is an index. Legacy marker format: resolve the "Depends on:" text.
+                Mission? resolvedDependency;
+                if (dependencyIndex.HasValue)
+                {
+                    terminalStagesByIndex.TryGetValue(dependencyIndex.Value, out resolvedDependency);
+                    dependencyReference = "mission " + dependencyIndex.Value;
+                }
+                else
+                {
+                    resolvedDependency = ResolveArchitectDependencyTerminalStage(
+                        terminalStagesByIndex,
+                        terminalStagesByTitle,
+                        i + 1,
+                        dependencyReference!);
+                }
                 if (resolvedDependency == null)
                 {
                     _Logging.Warn(_Header + "could not resolve architect dependency '" + dependencyReference +
@@ -2697,13 +2725,31 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
-        /// Parse structured mission definitions from an architect's output.
-        /// Looks for [ARMADA:MISSION] markers in the mission diff snapshot or description.
+        /// Parse mission definitions from an architect's output. The structured armada-plan JSON block
+        /// (<see cref="ArchitectPlanParser"/>) is preferred: its dependsOn and waitForOtherMissions fields drive
+        /// sequencing. Only when the output has no valid plan block does this fall back to the legacy formats:
+        /// [ARMADA:MISSION] markers (with a "Depends on:" line) and then numbered summary lines, read from the agent
+        /// output, the diff snapshot, or the description.
         /// </summary>
         private List<ParsedArchitectMission> ParseArchitectOutput(Mission architectMission)
         {
             List<ParsedArchitectMission> results = new List<ParsedArchitectMission>();
             HashSet<string> seenTitles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            if (ArchitectPlanParser.TryParse(architectMission.AgentOutput, out ArchitectPlan? plan) && plan != null)
+            {
+                foreach (ArchitectPlanMission planned in plan.Missions)
+                {
+                    ParsedArchitectMission parsed = new ParsedArchitectMission();
+                    parsed.Title = planned.Title ?? String.Empty;
+                    parsed.Description = planned.Description ?? parsed.Title;
+                    parsed.DependsOnIndex = planned.DependsOn;
+                    parsed.WaitForOtherMissions = planned.WaitForOtherMissions;
+                    results.Add(parsed);
+                }
+
+                return results;
+            }
 
             string?[] candidateSources =
             {
@@ -2853,6 +2899,7 @@ namespace Armada.Core.Services
                 parsed.Title = normalizedTitle;
                 parsed.Description = normalizedDescription;
                 parsed.DependsOnReference = dependencyReference;
+                parsed.WaitForOtherMissions = LegacyDescriptionRequestsDeferral(normalizedDescription);
                 results.Add(parsed);
             }
         }
@@ -3261,6 +3308,7 @@ namespace Armada.Core.Services
             mission.CompletedUtc = DateTime.UtcNow;
             mission.LastUpdateUtc = DateTime.UtcNow;
             mission.FailureReason = "Mission modified files outside its scoped file list: " + String.Join(", ", outOfScopeFiles);
+            mission.FailureKind = MissionFailureKindEnum.ScopeViolation;
             await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
             _Logging.Warn(_Header + "mission " + mission.Id + " failed scope validation: " + mission.FailureReason);
             return true;
@@ -3341,29 +3389,6 @@ namespace Armada.Core.Services
             _Logging.Warn(_Header + "restored missing mission instructions from snapshot to " + instructionsPath);
         }
 
-        private JudgeVerdict ParseJudgeVerdict(string? agentOutput)
-        {
-            if (String.IsNullOrEmpty(agentOutput)) return JudgeVerdict.None;
-
-            string[] lines = agentOutput.Replace("\r\n", "\n").Split('\n');
-            for (int i = lines.Length - 1; i >= 0; i--)
-            {
-                string line = lines[i].Trim().Trim('\r');
-                if (String.IsNullOrEmpty(line)) continue;
-
-                JudgeVerdict? signalVerdict = ParseStructuredJudgeVerdictSignal(line);
-                if (signalVerdict.HasValue) return signalVerdict.Value;
-
-                if (IsAgentTelemetryLine(line)) continue;
-
-                string normalized = line.Trim().Trim('*', '_', '`', '#', '>', '-', ' ');
-                JudgeVerdict? explicitVerdict = ParseExplicitJudgeVerdictLine(normalized);
-                if (explicitVerdict.HasValue) return explicitVerdict.Value;
-            }
-
-            return JudgeVerdict.None;
-        }
-
         private bool TryValidateJudgePassOutput(string? agentOutput, out string? failureReason)
         {
             // Delegate the bounded three-lens PASS contract to the pure JudgeContract so the prompt builders,
@@ -3389,87 +3414,12 @@ namespace Armada.Core.Services
                 string line = rawLine.Trim();
                 if (String.IsNullOrWhiteSpace(line)) continue;
                 if (IsAgentTelemetryLine(line)) continue;
-                if (ParseStructuredJudgeVerdictSignal(line).HasValue) continue;
-
-                string normalized = line.Trim('*', '_', '`', '#', '>', '-', ' ');
-                if (ParseExplicitJudgeVerdictLine(normalized).HasValue) continue;
+                if (JudgeVerdictParser.ParseLine(line).HasValue) continue;
 
                 lines.Add(line);
             }
 
             return String.Join(" ", lines);
-        }
-
-        private static JudgeVerdict? ParseStructuredJudgeVerdictSignal(string line)
-        {
-            if (String.IsNullOrWhiteSpace(line)) return null;
-
-            System.Text.RegularExpressions.Match signal = System.Text.RegularExpressions.Regex.Match(
-                line.Trim(),
-                @"^\[ARMADA:VERDICT\]\s+(?<verdict>PASS|FAIL|NEEDS_REVISION)\s*$",
-                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            if (!signal.Success) return null;
-
-            return signal.Groups["verdict"].Value.ToUpperInvariant() switch
-            {
-                "PASS" => JudgeVerdict.Pass,
-                "FAIL" => JudgeVerdict.Fail,
-                "NEEDS_REVISION" => JudgeVerdict.NeedsRevision,
-                _ => null
-            };
-        }
-
-        private static JudgeVerdict? ParseExplicitJudgeVerdictLine(string normalizedLine)
-        {
-            if (String.IsNullOrEmpty(normalizedLine)) return null;
-
-            const System.Text.RegularExpressions.RegexOptions options = System.Text.RegularExpressions.RegexOptions.IgnoreCase;
-            string candidate = normalizedLine.Trim();
-            const string verdictSuffixPattern = @"(?:\s*$|\s*[\.,:;!?](?:\s+.+)?$|\s*-(?!-)\s+.+$)";
-
-            System.Text.RegularExpressions.Match labeledVerdict = System.Text.RegularExpressions.Regex.Match(
-                candidate,
-                @"^VERDICT\s*(?::|=|-|IS)?\s*(?:\*\*|__|`)?(?<verdict>PASS|FAIL|NEEDS_REVISION)(?:\*\*|__|`)?"
-                + verdictSuffixPattern,
-                options);
-            if (labeledVerdict.Success)
-                return labeledVerdict.Groups["verdict"].Value.ToUpperInvariant() switch
-                {
-                    "PASS" => JudgeVerdict.Pass,
-                    "FAIL" => JudgeVerdict.Fail,
-                    "NEEDS_REVISION" => JudgeVerdict.NeedsRevision,
-                    _ => null
-                };
-
-            System.Text.RegularExpressions.Match inlineLabeledVerdict = System.Text.RegularExpressions.Regex.Match(
-                candidate,
-                @"\bVERDICT\s*(?::|=|-|IS)?\s*(?:\*\*|__|`)?(?<verdict>PASS|FAIL|NEEDS_REVISION)(?:\*\*|__|`)?"
-                + verdictSuffixPattern,
-                options);
-            if (inlineLabeledVerdict.Success)
-                return inlineLabeledVerdict.Groups["verdict"].Value.ToUpperInvariant() switch
-                {
-                    "PASS" => JudgeVerdict.Pass,
-                    "FAIL" => JudgeVerdict.Fail,
-                    "NEEDS_REVISION" => JudgeVerdict.NeedsRevision,
-                    _ => null
-                };
-
-            System.Text.RegularExpressions.Match bareVerdict = System.Text.RegularExpressions.Regex.Match(
-                candidate,
-                @"^(?:\*\*|__|`)?(?<verdict>PASS|FAIL|NEEDS_REVISION)(?:\*\*|__|`)?"
-                + verdictSuffixPattern,
-                options);
-            if (bareVerdict.Success)
-                return bareVerdict.Groups["verdict"].Value.ToUpperInvariant() switch
-                {
-                    "PASS" => JudgeVerdict.Pass,
-                    "FAIL" => JudgeVerdict.Fail,
-                    "NEEDS_REVISION" => JudgeVerdict.NeedsRevision,
-                    _ => null
-                };
-
-            return null;
         }
 
         private async Task EmitMissionOutcomeTelemetryAsync(Mission mission, Captain captain, CancellationToken token)
@@ -3962,18 +3912,12 @@ namespace Armada.Core.Services
                     return false;
                 }
             }
-            catch
+            catch (JsonException)
             {
             }
 
-            string normalizedPersona = PersonaCatalog.NormalizeName(persona);
-            if (captain.AllowedPersonas.Contains("\"" + normalizedPersona + "\"", StringComparison.OrdinalIgnoreCase))
-                return true;
-
-            if (PersonaCatalog.Matches(persona, PersonaCatalog.TestEngineer) &&
-                captain.AllowedPersonas.Contains("\"" + PersonaCatalog.LegacyTestEngineer + "\"", StringComparison.OrdinalIgnoreCase))
-                return true;
-
+            // AllowedPersonas is a JSON array of persona names. A value that does not deserialize is not searched as
+            // text: the captain is treated as allowing no restricted persona until the setting is corrected.
             return false;
         }
 
@@ -4025,18 +3969,10 @@ namespace Armada.Core.Services
             if (mission == null) return false;
             if (!String.Equals(mission.Persona, "Worker", StringComparison.OrdinalIgnoreCase)) return false;
             if (String.IsNullOrEmpty(mission.VoyageId)) return false;
-            if (String.IsNullOrEmpty(mission.Description)) return false;
 
-            string description = mission.Description.ToLowerInvariant();
-            bool requestsDeferredExecution =
-                description.Contains("after both implementation missions complete") ||
-                description.Contains("sequential after both implementation missions") ||
-                description.Contains("after the implementation missions land") ||
-                description.Contains("after the implementation details are settled") ||
-                description.Contains("after implementation details are settled") ||
-                description.Contains("after the implementation details are finalized");
-
-            if (!requestsDeferredExecution) return false;
+            // Structured flag only (set from the architect plan's waitForOtherMissions, or once from the legacy
+            // marker-format description when the architect output was parsed). Description wording is never read here.
+            if (!mission.WaitForVoyageWorkers) return false;
 
             List<Mission> voyageMissions = await _Database.Missions.EnumerateByVoyageAsync(mission.VoyageId, token).ConfigureAwait(false);
             return voyageMissions.Any(m =>
@@ -4047,6 +3983,25 @@ namespace Armada.Core.Services
                 m.Status != MissionStatusEnum.Failed &&
                 m.Status != MissionStatusEnum.Cancelled &&
                 m.Status != MissionStatusEnum.LandingFailed);
+        }
+
+        /// <summary>
+        /// Legacy fallback for architect output in the [ARMADA:MISSION] marker format, which has no structured
+        /// sequencing field: a description that asks to run after the other implementation missions is converted once,
+        /// when the architect output is parsed, into <see cref="Mission.WaitForVoyageWorkers"/>. Never applied to
+        /// missions created any other way, and never consulted at dispatch time.
+        /// </summary>
+        private static bool LegacyDescriptionRequestsDeferral(string? description)
+        {
+            if (String.IsNullOrEmpty(description)) return false;
+
+            string lowered = description.ToLowerInvariant();
+            return lowered.Contains("after both implementation missions complete") ||
+                lowered.Contains("sequential after both implementation missions") ||
+                lowered.Contains("after the implementation missions land") ||
+                lowered.Contains("after the implementation details are settled") ||
+                lowered.Contains("after implementation details are settled") ||
+                lowered.Contains("after the implementation details are finalized");
         }
 
         private static string? ResolveGitInfoExcludePath(string worktreePath)

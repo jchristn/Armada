@@ -5,66 +5,91 @@ namespace Test.Shared.Suites.Services
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Core.Enums;
+    using Armada.Core.Models;
     using Armada.Core.Services;
     using Test.Shared.Infrastructure;
     using Touchstone.Core;
     using static Test.Shared.Infrastructure.Asserts;
 
     /// <summary>
-    /// Descriptors for <see cref="RuntimeFailureClassifier"/>. Positive cases confirm real provider
-    /// usage-limit and auth messages classify correctly; negative cases confirm a clean exit and an
-    /// unknown non-zero failure are not mistaken for a recoverable provider condition (which would cause a
-    /// false quarantine).
+    /// Descriptors for <see cref="RuntimeFailureClassifier"/>. Positive cases confirm structured provider errors
+    /// (HTTP status, provider error type) classify into usage-limit, auth, and model-unavailable kinds; negative
+    /// cases confirm that a non-zero exit without a structured provider error is a crash, so output text such as
+    /// "error CS0403" or "BillingService.cs" can never quarantine a captain.
     /// </summary>
     public sealed class RuntimeFailureClassifierSuite : IArmadaTestSuite
     {
         #region Public-Methods
 
         /// <summary>
-        /// Build the descriptor for the runtime-failure-classifier suite.
+        /// Build the descriptor for the suite.
         /// </summary>
         /// <returns>The suite descriptor.</returns>
         public TestSuiteDescriptor Build()
         {
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
 
-            cases.Add(Case("clean_exit_is_clean", "Exit code 0 classifies Clean regardless of output", TestTags.Positive, () =>
+            cases.Add(Case("clean_exit_is_clean", "Exit code 0 is Clean even with a provider error", TestTags.Positive, () =>
             {
-                AssertEqual(RuntimeFailureKindEnum.Clean, RuntimeFailureClassifier.Classify(0, "rate limit exceeded but we exited fine"));
                 AssertEqual(RuntimeFailureKindEnum.Clean, RuntimeFailureClassifier.Classify(0, null));
+                AssertEqual(RuntimeFailureKindEnum.Clean, RuntimeFailureClassifier.Classify(0, new RuntimeProviderError { HttpStatusCode = 429 }));
             }));
 
-            cases.Add(Case("usage_limit_signatures", "Provider throttle/quota messages classify UsageLimit", TestTags.Positive, () =>
+            cases.Add(Case("usage_limit_from_status", "HTTP 429, 402, and 529 classify as UsageLimit", TestTags.Positive, () =>
             {
-                AssertEqual(RuntimeFailureKindEnum.UsageLimit, RuntimeFailureClassifier.Classify(1, "Error 429: Too Many Requests"));
-                AssertEqual(RuntimeFailureKindEnum.UsageLimit, RuntimeFailureClassifier.Classify(1, "You have hit your usage limit for this model"));
-                AssertEqual(RuntimeFailureKindEnum.UsageLimit, RuntimeFailureClassifier.Classify(1, "insufficient_quota: please check your billing"));
-                AssertEqual(RuntimeFailureKindEnum.UsageLimit, RuntimeFailureClassifier.Classify(1, "Your credit balance is too low"));
+                AssertEqual(RuntimeFailureKindEnum.UsageLimit, RuntimeFailureClassifier.Classify(1, new RuntimeProviderError { HttpStatusCode = 429 }));
+                AssertEqual(RuntimeFailureKindEnum.UsageLimit, RuntimeFailureClassifier.Classify(1, new RuntimeProviderError { HttpStatusCode = 402 }));
+                AssertEqual(RuntimeFailureKindEnum.UsageLimit, RuntimeFailureClassifier.Classify(1, new RuntimeProviderError { HttpStatusCode = 529 }));
             }));
 
-            cases.Add(Case("auth_signatures", "Credential rejection messages classify AuthFailure", TestTags.Positive, () =>
+            cases.Add(Case("usage_limit_from_error_type", "Provider usage error types classify as UsageLimit", TestTags.Positive, () =>
             {
-                AssertEqual(RuntimeFailureKindEnum.AuthFailure, RuntimeFailureClassifier.Classify(1, "401 Unauthorized"));
-                AssertEqual(RuntimeFailureKindEnum.AuthFailure, RuntimeFailureClassifier.Classify(1, "Invalid API key provided"));
-                AssertEqual(RuntimeFailureKindEnum.AuthFailure, RuntimeFailureClassifier.Classify(1, "authentication failed"));
+                AssertEqual(RuntimeFailureKindEnum.UsageLimit, RuntimeFailureClassifier.Classify(1, new RuntimeProviderError { ErrorType = "rate_limit_error" }));
+                AssertEqual(RuntimeFailureKindEnum.UsageLimit, RuntimeFailureClassifier.Classify(1, new RuntimeProviderError { ErrorType = "insufficient_quota" }));
+                AssertEqual(RuntimeFailureKindEnum.UsageLimit, RuntimeFailureClassifier.Classify(1, new RuntimeProviderError { ErrorType = "usage_limit_reached" }));
             }));
 
-            cases.Add(Case("unknown_failure_is_crash", "Non-zero exit with no signature classifies Crash", TestTags.Negative, () =>
+            cases.Add(Case("auth_failure_from_status_and_type", "HTTP 401/403 and auth error types classify as AuthFailure", TestTags.Positive, () =>
             {
-                AssertEqual(RuntimeFailureKindEnum.Crash, RuntimeFailureClassifier.Classify(1, "Segmentation fault"));
-                AssertEqual(RuntimeFailureKindEnum.Crash, RuntimeFailureClassifier.Classify(139, "unexpected token in JSON"));
+                AssertEqual(RuntimeFailureKindEnum.AuthFailure, RuntimeFailureClassifier.Classify(1, new RuntimeProviderError { HttpStatusCode = 401 }));
+                AssertEqual(RuntimeFailureKindEnum.AuthFailure, RuntimeFailureClassifier.Classify(1, new RuntimeProviderError { HttpStatusCode = 403 }));
+                AssertEqual(RuntimeFailureKindEnum.AuthFailure, RuntimeFailureClassifier.Classify(1, new RuntimeProviderError { ErrorType = "authentication_error" }));
+                AssertEqual(RuntimeFailureKindEnum.AuthFailure, RuntimeFailureClassifier.Classify(1, new RuntimeProviderError { ErrorType = "permission_error" }));
             }));
 
-            cases.Add(Case("no_output_non_zero_is_crash", "Non-zero exit with empty output classifies Crash", TestTags.Negative, () =>
+            cases.Add(Case("model_unavailable_from_status_and_type", "HTTP 404 and not-found error types classify as ModelUnavailable", TestTags.Positive, () =>
+            {
+                AssertEqual(RuntimeFailureKindEnum.ModelUnavailable, RuntimeFailureClassifier.Classify(1, new RuntimeProviderError { HttpStatusCode = 404 }));
+                AssertEqual(RuntimeFailureKindEnum.ModelUnavailable, RuntimeFailureClassifier.Classify(1, new RuntimeProviderError { ErrorType = "not_found_error" }));
+            }));
+
+            cases.Add(Case("error_type_wins_over_status", "A known provider error type decides before the HTTP status", TestTags.Positive, () =>
+            {
+                AssertEqual(RuntimeFailureKindEnum.UsageLimit, RuntimeFailureClassifier.Classify(1, new RuntimeProviderError { HttpStatusCode = 403, ErrorType = "rate_limit_error" }));
+            }));
+
+            cases.Add(Case("no_provider_error_is_crash", "A non-zero exit without a provider error is Crash", TestTags.Negative, () =>
             {
                 AssertEqual(RuntimeFailureKindEnum.Crash, RuntimeFailureClassifier.Classify(1, null));
-                AssertEqual(RuntimeFailureKindEnum.Crash, RuntimeFailureClassifier.Classify(1, "   "));
+                AssertEqual(RuntimeFailureKindEnum.Crash, RuntimeFailureClassifier.Classify(null, null));
+                AssertEqual(RuntimeFailureKindEnum.Crash, RuntimeFailureClassifier.Classify(139, null));
             }));
 
-            cases.Add(Case("usage_limit_wins_over_auth", "Usage-limit signature is checked before auth", TestTags.Positive, () =>
+            cases.Add(Case("unknown_status_and_type_is_crash", "A provider error with an unknown status and type is Crash", TestTags.Negative, () =>
             {
-                // A message mentioning both should resolve to the more recoverable UsageLimit.
-                AssertEqual(RuntimeFailureKindEnum.UsageLimit, RuntimeFailureClassifier.Classify(1, "429 unauthorized-looking rate limit"));
+                AssertEqual(RuntimeFailureKindEnum.Crash, RuntimeFailureClassifier.Classify(1, new RuntimeProviderError { HttpStatusCode = 500, ErrorType = "api_error" }));
+                AssertEqual(RuntimeFailureKindEnum.Crash, RuntimeFailureClassifier.Classify(1, new RuntimeProviderError { Message = "rate limit 429 billing permission denied" }));
+            }));
+
+            cases.Add(Case("decide_builds_exit_info", "Decide records the exit code, provider error, and kind once", TestTags.Positive, () =>
+            {
+                RuntimeProviderError error = new RuntimeProviderError { HttpStatusCode = 401, Message = "invalid x-api-key" };
+                RuntimeExitInfo info = RuntimeFailureClassifier.Decide(1, error);
+                AssertEqual(1, info.ExitCode);
+                AssertEqual(RuntimeFailureKindEnum.AuthFailure, info.FailureKind);
+                AssertTrue(Object.ReferenceEquals(error, info.ProviderError), "provider error is carried");
+                AssertTrue(RuntimeFailureClassifier.IsCaptainUnavailable(info.FailureKind), "auth failure makes the captain unavailable");
+                AssertFalse(RuntimeFailureClassifier.IsCaptainUnavailable(RuntimeFailureKindEnum.Crash), "a crash does not");
             }));
 
             return new TestSuiteDescriptor(

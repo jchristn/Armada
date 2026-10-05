@@ -78,6 +78,7 @@ namespace Test.Shared.Suites.Services
                     Mission? updated = await testDb.Driver.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
                     AssertEqual(MissionStatusEnum.LandingFailed, updated!.Status, "mission must not stay WorkProduced");
                     AssertContains("merge conflict", updated.FailureReason ?? "");
+                    AssertEqual(MissionFailureKindEnum.LandingConflict, updated.FailureKind, "failure kind is recorded where the failure happens");
                 }
             }));
 

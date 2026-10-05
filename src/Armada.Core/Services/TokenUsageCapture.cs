@@ -28,15 +28,13 @@ namespace Armada.Core.Services
         // counts when a runtime does not report real usage.
         private const double _CharsPerToken = 3.5;
 
-        // Matches an agent-reported "[ARMADA:TOKENS] input=1234 output=567 cached=0" line, which the
-        // mission/captain instructions ask runtimes to emit. Reported counts are treated as real, not
-        // estimated.
-        private static readonly Regex _TokenMarker = new Regex(
-            @"\[ARMADA:TOKENS\]\s*(?<body>[^\r\n]*)",
-            RegexOptions.IgnoreCase | RegexOptions.Compiled);
-        private static readonly Regex _InputField = new Regex(@"input\s*=\s*(\d+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-        private static readonly Regex _OutputField = new Regex(@"output\s*=\s*(\d+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-        private static readonly Regex _CachedField = new Regex(@"cached\s*=\s*(\d+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        // An agent-reported "[ARMADA:TOKENS] input=1234 output=567 cached=0" protocol line, which the mission/captain
+        // instructions ask runtimes to emit. It counts only as a whole line of its own (outside fenced code blocks)
+        // made of key=value fields; the last such line wins. A marker quoted inside prose or the echoed prompt legend
+        // ("- `[ARMADA:TOKENS] input=1234 ...`") is not a report.
+        private static readonly Regex _TokenLine = new Regex(
+            @"^\[ARMADA:TOKENS\](?<fields>(?:[ \t]+[A-Za-z]+=\d+)+)[ \t]*$",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
         #endregion
 
@@ -188,22 +186,35 @@ namespace Armada.Core.Services
             cached = null;
             if (string.IsNullOrEmpty(text)) return;
 
-            Match marker = _TokenMarker.Match(text);
-            if (!marker.Success) return;
+            string? fields = null;
+            bool inFence = false;
+            foreach (string rawLine in text.Replace("\r\n", "\n").Split('\n'))
+            {
+                string line = rawLine.Trim();
+                if (line.StartsWith("```", StringComparison.Ordinal))
+                {
+                    inFence = !inFence;
+                    continue;
+                }
 
-            string body = marker.Groups["body"].Value;
-            input = ParseField(_InputField, body);
-            output = ParseField(_OutputField, body);
-            cached = ParseField(_CachedField, body);
-        }
+                if (inFence) continue;
 
-        private static long? ParseField(Regex pattern, string body)
-        {
-            Match match = pattern.Match(body);
-            if (!match.Success) return null;
-            if (long.TryParse(match.Groups[1].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out long value) && value >= 0)
-                return value;
-            return null;
+                Match marker = _TokenLine.Match(line);
+                if (marker.Success) fields = marker.Groups["fields"].Value;
+            }
+
+            if (fields == null) return;
+
+            foreach (string field in fields.Split(new char[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                int equals = field.IndexOf('=');
+                string key = field.Substring(0, equals);
+                if (!long.TryParse(field.Substring(equals + 1), NumberStyles.None, CultureInfo.InvariantCulture, out long value)) continue;
+
+                if (String.Equals(key, "input", StringComparison.OrdinalIgnoreCase)) input = value;
+                else if (String.Equals(key, "output", StringComparison.OrdinalIgnoreCase)) output = value;
+                else if (String.Equals(key, "cached", StringComparison.OrdinalIgnoreCase)) cached = value;
+            }
         }
 
         #endregion

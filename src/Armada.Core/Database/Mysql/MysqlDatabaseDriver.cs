@@ -703,6 +703,11 @@ namespace Armada.Core.Database.Mysql
                     76,
                     "Add nullable auto_approve to vessels: a per-vessel override of the captain auto-approve setting for missions on the vessel",
                     TableQueries.MigrationV76Statements
+                ),
+                new SchemaMigration(
+                    77,
+                    "Add failure_kind and wait_for_voyage_workers to missions: a persisted failure classification set where the failure happens, and a structured flag that defers a worker until the other workers in its voyage settle",
+                    TableQueries.MigrationV77Statements
                 )
             };
         }

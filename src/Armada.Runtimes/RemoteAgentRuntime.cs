@@ -41,6 +41,9 @@ namespace Armada.Runtimes
         /// <inheritdoc />
         public event Action<int, int?>? OnProcessExited;
 
+        /// <inheritdoc />
+        public event Action<int, RuntimeProviderError>? OnProviderError;
+
         #endregion
 
         #region Private-Members
@@ -175,6 +178,18 @@ namespace Armada.Runtimes
             OnOutputReceived?.Invoke(_ProcessId, data);
             if (stream == HarborOutputStreamEnum.Stdout)
                 OnStdoutReceived?.Invoke(_ProcessId, data);
+
+            // A harbor runs Claude Code missions in text mode, so the CLI's own whole-line protocol errors are the
+            // structured error channel here as well.
+            if (_RuntimeType == AgentRuntimeEnum.ClaudeCode)
+            {
+                RuntimeProviderError? error = RuntimeProviderErrorParser.TryParseClaudeTextLine(data);
+                if (error != null)
+                {
+                    try { OnProviderError?.Invoke(_ProcessId, error); }
+                    catch { }
+                }
+            }
         }
 
         /// <inheritdoc />

@@ -1908,6 +1908,15 @@ namespace Armada.Core.Database.Mysql.Queries
         };
 
         /// <summary>
+        /// Migration 77: persisted mission failure kind and the structured wait-for-voyage-workers flag.
+        /// </summary>
+        public static readonly string[] MigrationV77Statements = new string[]
+        {
+            @"ALTER TABLE missions ADD COLUMN failure_kind VARCHAR(64) NULL;",
+            @"ALTER TABLE missions ADD COLUMN wait_for_voyage_workers TINYINT(1) NOT NULL DEFAULT 0;"
+        };
+
+        /// <summary>
         /// Index DDL statements for all tables.
         /// </summary>
         public static readonly string[] Indexes = new string[]

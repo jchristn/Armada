@@ -88,6 +88,7 @@ namespace Test.Shared.Suites.Services
                     AssertNotNull(updatedCaptain, "Captain should still exist");
                     AssertEqual(MissionStatusEnum.Failed, updatedMission!.Status, "Mission should be failed when recovery relaunch fails");
                     AssertContains("synthetic relaunch failure", updatedMission.FailureReason ?? String.Empty);
+                    AssertEqual(MissionFailureKindEnum.StallRecoveryExhausted, updatedMission.FailureKind, "failure kind is recorded where the failure happens");
                     AssertEqual(CaptainStateEnum.Idle, updatedCaptain!.State, "Captain should return to Idle after failed recovery");
                     AssertNull(updatedCaptain.CurrentMissionId, "Captain current mission should be cleared");
                     AssertEqual(1, docks.ReclaimCalls, "Dock should be reclaimed after failed recovery");
@@ -127,6 +128,7 @@ namespace Test.Shared.Suites.Services
                     AssertNotNull(updatedCaptain, "Captain should still exist");
                     AssertEqual(MissionStatusEnum.Failed, updatedMission!.Status, "Mission should be failed when recovery prerequisites are missing");
                     AssertContains("mission or dock could not be reloaded", updatedMission.FailureReason ?? String.Empty);
+                    AssertEqual(MissionFailureKindEnum.Infra, updatedMission.FailureKind, "failure kind is recorded where the failure happens");
                     AssertEqual(CaptainStateEnum.Idle, updatedCaptain!.State, "Captain should return to Idle when recovery prerequisites are missing");
                     AssertNull(updatedCaptain.CurrentMissionId, "Captain current mission should be cleared");
                 }
