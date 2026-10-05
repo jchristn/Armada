@@ -1056,8 +1056,9 @@ namespace Armada.Tui.Screens.Operations
         {
             EntityChangedEvent? payload = message.GetData<EntityChangedEvent>();
             if (payload == null || String.IsNullOrEmpty(payload.Id) || String.IsNullOrEmpty(payload.State)) return;
-            CaptainStateEnum state;
-            if (!Enum.TryParse(payload.State, out state)) return;
+            CaptainStateEnum? typed = payload.CaptainState;
+            if (typed == null) return;
+            CaptainStateEnum state = typed.Value;
             foreach (Captain c in Reference.Captains.Where(c => c.Id == payload.Id))
             {
                 c.State = state;

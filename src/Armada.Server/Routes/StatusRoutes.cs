@@ -146,13 +146,13 @@ namespace Armada.Server.Routes
                 {
                     string settingsPath = _settings.EffectiveSettingsFilePath;
                     if (File.Exists(settingsPath))
-                        results.Add(new { Name = "Settings", Status = "Pass", Message = "Settings loaded from " + settingsPath });
+                        results.Add(new { Name = "Settings", Status = DoctorCheckStatusEnum.Pass, Message = "Settings loaded from " + settingsPath });
                     else
-                        results.Add(new { Name = "Settings", Status = "Fail", Message = "Settings file not found at " + settingsPath });
+                        results.Add(new { Name = "Settings", Status = DoctorCheckStatusEnum.Fail, Message = "Settings file not found at " + settingsPath });
                 }
                 catch (Exception ex)
                 {
-                    results.Add(new { Name = "Settings", Status = "Fail", Message = "Error checking settings: " + ex.Message });
+                    results.Add(new { Name = "Settings", Status = DoctorCheckStatusEnum.Fail, Message = "Error checking settings: " + ex.Message });
                 }
 
                 // 2. Git Availability
@@ -171,17 +171,17 @@ namespace Armada.Server.Routes
                         {
                             string gitOutput = gitProc.StandardOutput.ReadToEnd().Trim();
                             gitProc.WaitForExit(5000);
-                            results.Add(new { Name = "Git", Status = "Pass", Message = gitOutput });
+                            results.Add(new { Name = "Git", Status = DoctorCheckStatusEnum.Pass, Message = gitOutput });
                         }
                         else
                         {
-                            results.Add(new { Name = "Git", Status = "Fail", Message = "Could not start git process" });
+                            results.Add(new { Name = "Git", Status = DoctorCheckStatusEnum.Fail, Message = "Could not start git process" });
                         }
                     }
                 }
                 catch
                 {
-                    results.Add(new { Name = "Git", Status = "Fail", Message = "Git not found on PATH" });
+                    results.Add(new { Name = "Git", Status = DoctorCheckStatusEnum.Fail, Message = "Git not found on PATH" });
                 }
 
                 // 3. Database
@@ -191,20 +191,20 @@ namespace Armada.Server.Routes
                     if (File.Exists(dbPath))
                     {
                         FileInfo fi = new FileInfo(dbPath);
-                        results.Add(new { Name = "Database", Status = "Pass", Message = $"Database exists ({fi.Length / 1024} KB) at {dbPath}" });
+                        results.Add(new { Name = "Database", Status = DoctorCheckStatusEnum.Pass, Message = $"Database exists ({fi.Length / 1024} KB) at {dbPath}" });
                     }
                     else
                     {
-                        results.Add(new { Name = "Database", Status = "Warn", Message = "Database not found at " + dbPath });
+                        results.Add(new { Name = "Database", Status = DoctorCheckStatusEnum.Warn, Message = "Database not found at " + dbPath });
                     }
                 }
                 catch (Exception ex)
                 {
-                    results.Add(new { Name = "Database", Status = "Fail", Message = "Error checking database: " + ex.Message });
+                    results.Add(new { Name = "Database", Status = DoctorCheckStatusEnum.Fail, Message = "Error checking database: " + ex.Message });
                 }
 
                 // 4. Admiral Server (self-check — always passes if we reach here)
-                results.Add(new { Name = "Admiral Server", Status = "Pass", Message = "Server is healthy" });
+                results.Add(new { Name = "Admiral Server", Status = DoctorCheckStatusEnum.Pass, Message = "Server is healthy" });
 
                 // 5. Stalled Captains
                 try
@@ -214,13 +214,13 @@ namespace Armada.Server.Routes
                         : await _database.Captains.EnumerateByStateAsync(ctx.TenantId!, CaptainStateEnum.Stalled).ConfigureAwait(false);
                     int stalledCount = stalledCaptains.Count;
                     if (stalledCount == 0)
-                        results.Add(new { Name = "Stalled Captains", Status = "Pass", Message = "No stalled captains" });
+                        results.Add(new { Name = "Stalled Captains", Status = DoctorCheckStatusEnum.Pass, Message = "No stalled captains" });
                     else
-                        results.Add(new { Name = "Stalled Captains", Status = "Warn", Message = $"{stalledCount} captain(s) are stalled" });
+                        results.Add(new { Name = "Stalled Captains", Status = DoctorCheckStatusEnum.Warn, Message = $"{stalledCount} captain(s) are stalled" });
                 }
                 catch (Exception ex)
                 {
-                    results.Add(new { Name = "Stalled Captains", Status = "Fail", Message = "Error checking captains: " + ex.Message });
+                    results.Add(new { Name = "Stalled Captains", Status = DoctorCheckStatusEnum.Fail, Message = "Error checking captains: " + ex.Message });
                 }
 
                 // 6. Failed Missions
@@ -231,13 +231,13 @@ namespace Armada.Server.Routes
                         : await _database.Missions.EnumerateByStatusAsync(ctx.TenantId!, MissionStatusEnum.Failed).ConfigureAwait(false);
                     int failedCount = failedMissions.Count;
                     if (failedCount == 0)
-                        results.Add(new { Name = "Failed Missions", Status = "Pass", Message = "No failed missions" });
+                        results.Add(new { Name = "Failed Missions", Status = DoctorCheckStatusEnum.Pass, Message = "No failed missions" });
                     else
-                        results.Add(new { Name = "Failed Missions", Status = "Warn", Message = $"{failedCount} mission(s) have failed" });
+                        results.Add(new { Name = "Failed Missions", Status = DoctorCheckStatusEnum.Warn, Message = $"{failedCount} mission(s) have failed" });
                 }
                 catch (Exception ex)
                 {
-                    results.Add(new { Name = "Failed Missions", Status = "Fail", Message = "Error checking missions: " + ex.Message });
+                    results.Add(new { Name = "Failed Missions", Status = DoctorCheckStatusEnum.Fail, Message = "Error checking missions: " + ex.Message });
                 }
 
                 // 7. Agent Runtimes
@@ -275,22 +275,22 @@ namespace Armada.Server.Routes
                                 if (rtProc.ExitCode == 0 && !string.IsNullOrEmpty(rtOutput))
                                 {
                                     string path = rtOutput.Split('\n')[0].Trim();
-                                    results.Add(new { Name = runtimeNames[i], Status = "Pass", Message = runtimeNames[i] + " found at " + path });
+                                    results.Add(new { Name = runtimeNames[i], Status = DoctorCheckStatusEnum.Pass, Message = runtimeNames[i] + " found at " + path });
                                 }
                                 else
                                 {
-                                    results.Add(new { Name = runtimeNames[i], Status = "Warn", Message = runtimeNames[i] + " not found on PATH (optional)" });
+                                    results.Add(new { Name = runtimeNames[i], Status = DoctorCheckStatusEnum.Warn, Message = runtimeNames[i] + " not found on PATH (optional)" });
                                 }
                             }
                             else
                             {
-                                results.Add(new { Name = runtimeNames[i], Status = "Warn", Message = runtimeNames[i] + " not found (optional)" });
+                                results.Add(new { Name = runtimeNames[i], Status = DoctorCheckStatusEnum.Warn, Message = runtimeNames[i] + " not found (optional)" });
                             }
                         }
                     }
                     catch
                     {
-                        results.Add(new { Name = runtimeNames[i], Status = "Warn", Message = runtimeNames[i] + " not found (optional)" });
+                        results.Add(new { Name = runtimeNames[i], Status = DoctorCheckStatusEnum.Warn, Message = runtimeNames[i] + " not found (optional)" });
                     }
                 }
 

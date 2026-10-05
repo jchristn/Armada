@@ -98,8 +98,9 @@ namespace Armada.Publisher.Build
             if (!string.IsNullOrEmpty(certBase64))
             {
                 ImportCertificate(certBase64, certPassword);
-                _Identity = FirstNonEmpty(identityOverride, UsableConfigured(settings.DeveloperIdApplication), FindIdentity("Developer ID Application"));
-                _InstallerIdentity = FirstNonEmpty(installerOverride, UsableConfigured(settings.DeveloperIdInstaller), FindIdentity("Developer ID Installer"));
+                List<MacSigningIdentity> identities = ListIdentities();
+                _Identity = FirstNonEmpty(identityOverride, MacSigningIdentity.Select(identities, settings.DeveloperIdApplication, "Developer ID Application"));
+                _InstallerIdentity = FirstNonEmpty(installerOverride, MacSigningIdentity.Select(identities, settings.DeveloperIdInstaller, "Developer ID Installer"));
                 if (string.IsNullOrEmpty(_Identity)) _Identity = "-";
             }
             else if (!string.IsNullOrEmpty(identityOverride))
@@ -264,15 +265,6 @@ namespace Armada.Publisher.Build
             return string.Empty;
         }
 
-        private static string UsableConfigured(string configured)
-        {
-            // The checked-in manifest carries a "(TEAMID)" placeholder; treat it as unset so the identity
-            // is discovered from the imported certificate instead.
-            if (string.IsNullOrEmpty(configured)) return string.Empty;
-            if (configured.Contains("(TEAMID)", StringComparison.Ordinal)) return string.Empty;
-            return configured;
-        }
-
         private void ImportCertificate(string certBase64, string certPassword)
         {
             string keychainPassword = Guid.NewGuid().ToString("N");
@@ -305,22 +297,11 @@ namespace Armada.Publisher.Build
             }
         }
 
-        private string FindIdentity(string kind)
+        private List<MacSigningIdentity> ListIdentities()
         {
-            if (string.IsNullOrEmpty(_KeychainPath)) return string.Empty;
-
+            if (string.IsNullOrEmpty(_KeychainPath)) return new List<MacSigningIdentity>();
             string output = ProcessRunner.Capture("security", new List<string> { "find-identity", "-v", _KeychainPath });
-            foreach (string line in output.Split('\n'))
-            {
-                int start = line.IndexOf('"');
-                int end = line.LastIndexOf('"');
-                if (start < 0 || end <= start) continue;
-
-                string name = line.Substring(start + 1, end - start - 1);
-                if (name.StartsWith(kind, StringComparison.Ordinal)) return name;
-            }
-
-            return string.Empty;
+            return MacSigningIdentity.ParseFindIdentityOutput(output);
         }
 
         #endregion

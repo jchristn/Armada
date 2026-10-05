@@ -1,6 +1,7 @@
 namespace Armada.Client.Models
 {
     using System;
+    using Armada.Core.Enums;
 
     /// <summary>
     /// One diagnostics check result.
@@ -15,9 +16,9 @@ namespace Armada.Client.Models
         public string Name { get; set; } = "";
 
         /// <summary>
-        /// Status (Pass, Warn, Fail).
+        /// Check result.
         /// </summary>
-        public string Status { get; set; } = "";
+        public DoctorCheckStatusEnum Status { get; set; } = DoctorCheckStatusEnum.Pass;
 
         /// <summary>
         /// Detail message.

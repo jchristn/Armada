@@ -27,6 +27,11 @@ namespace Armada.Core.Models
         public string? NewPath { get; set; } = null;
 
         /// <summary>
+        /// Zero-based index of the line (in the diff text split on '\n') where this file section starts.
+        /// </summary>
+        public int StartLineIndex { get; set; } = 0;
+
+        /// <summary>
         /// True when git reported a binary difference (no line hunks).
         /// </summary>
         public bool IsBinary { get; set; } = false;

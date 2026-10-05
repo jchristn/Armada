@@ -315,13 +315,23 @@ namespace Armada.Helm.Commands
             }
         }
 
-        private string EventTypeColor(string eventType)
+        /// <summary>
+        /// Display color for an event type such as <c>mission.completed</c> or <c>mission.landing_failed</c>, chosen by
+        /// exact words of the action segment (after the last '.', split on '_'), never by substring.
+        /// </summary>
+        /// <param name="eventType">Event type.</param>
+        /// <returns>Spectre color name.</returns>
+        public static string EventTypeColor(string? eventType)
         {
-            if (eventType.Contains("completed")) return "green";
-            if (eventType.Contains("failed") || eventType.Contains("error")) return "red";
-            if (eventType.Contains("stalled")) return "yellow";
-            if (eventType.Contains("created") || eventType.Contains("assigned")) return "dodgerblue1";
-            if (eventType.Contains("started") || eventType.Contains("progress")) return "cyan1";
+            if (String.IsNullOrEmpty(eventType)) return "dim";
+            int dot = eventType!.LastIndexOf('.');
+            string action = dot >= 0 ? eventType.Substring(dot + 1) : eventType;
+            HashSet<string> words = new HashSet<string>(action.Split(new char[] { '_', '-' }, StringSplitOptions.RemoveEmptyEntries), StringComparer.OrdinalIgnoreCase);
+            if (words.Contains("completed")) return "green";
+            if (words.Contains("failed") || words.Contains("error")) return "red";
+            if (words.Contains("stalled")) return "yellow";
+            if (words.Contains("created") || words.Contains("assigned")) return "dodgerblue1";
+            if (words.Contains("started") || words.Contains("progress")) return "cyan1";
             return "dim";
         }
 

@@ -3,6 +3,7 @@ namespace Armada.Helm.Commands
     using System.ComponentModel;
     using Spectre.Console;
     using Spectre.Console.Cli;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Core.Services;
 
@@ -57,31 +58,34 @@ namespace Armada.Helm.Commands
             AnsiConsole.WriteLine();
 
             // Render diff with syntax coloring
-            foreach (string line in diff.Split('\n'))
+            // Line roles come from the structural parser (hunk line counts), so a content line that looks like a
+            // header ("+++ ...", "--- ...", "diff ...") is colored as the added or removed line it is.
+            string[] lines = diff.Split('\n');
+            UnifiedDiffParser.Parse(diff, out List<UnifiedDiffLineKindEnum> kinds);
+            for (int i = 0; i < lines.Length; i++)
             {
-                if (line.StartsWith("+++") || line.StartsWith("---"))
+                string line = lines[i];
+                UnifiedDiffLineKindEnum kind = i < kinds.Count ? kinds[i] : UnifiedDiffLineKindEnum.Other;
+                switch (kind)
                 {
-                    AnsiConsole.MarkupLine("[bold]" + Markup.Escape(line) + "[/]");
-                }
-                else if (line.StartsWith("@@"))
-                {
-                    AnsiConsole.MarkupLine("[cyan]" + Markup.Escape(line) + "[/]");
-                }
-                else if (line.StartsWith("diff "))
-                {
-                    AnsiConsole.MarkupLine("[bold yellow]" + Markup.Escape(line) + "[/]");
-                }
-                else if (line.StartsWith("+"))
-                {
-                    AnsiConsole.MarkupLine("[green]" + Markup.Escape(line) + "[/]");
-                }
-                else if (line.StartsWith("-"))
-                {
-                    AnsiConsole.MarkupLine("[red]" + Markup.Escape(line) + "[/]");
-                }
-                else
-                {
-                    AnsiConsole.WriteLine(line);
+                    case UnifiedDiffLineKindEnum.FileHeader:
+                        AnsiConsole.MarkupLine("[bold yellow]" + Markup.Escape(line) + "[/]");
+                        break;
+                    case UnifiedDiffLineKindEnum.Meta:
+                        AnsiConsole.MarkupLine("[bold]" + Markup.Escape(line) + "[/]");
+                        break;
+                    case UnifiedDiffLineKindEnum.HunkHeader:
+                        AnsiConsole.MarkupLine("[cyan]" + Markup.Escape(line) + "[/]");
+                        break;
+                    case UnifiedDiffLineKindEnum.Added:
+                        AnsiConsole.MarkupLine("[green]" + Markup.Escape(line) + "[/]");
+                        break;
+                    case UnifiedDiffLineKindEnum.Deleted:
+                        AnsiConsole.MarkupLine("[red]" + Markup.Escape(line) + "[/]");
+                        break;
+                    default:
+                        AnsiConsole.WriteLine(line);
+                        break;
                 }
             }
 

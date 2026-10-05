@@ -249,14 +249,16 @@ namespace Armada.Runtimes
                 logWriter = new StreamWriter(logFilePath, append: true) { AutoFlush = true };
                 string timestamp = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss");
                 string argsJoined = String.Join(" ", args);
-                // Write command on first line, then prompt content preserving newlines
+                // Write the command and its leading arguments on the first line, then the prompt argument (when the
+                // prompt is passed as an argument) preserving newlines. The prompt is located by its position in the
+                // argument list, not by searching the joined text for a marker.
                 string firstFlag = "";
                 string promptContent = argsJoined;
-                int promptStart = argsJoined.IndexOf("Mission:");
-                if (promptStart > 0)
+                int promptIndex = String.IsNullOrEmpty(prompt) ? -1 : args.IndexOf(prompt);
+                if (promptIndex > 0)
                 {
-                    firstFlag = argsJoined.Substring(0, promptStart).Trim();
-                    promptContent = argsJoined.Substring(promptStart);
+                    firstFlag = String.Join(" ", args.GetRange(0, promptIndex)).Trim();
+                    promptContent = String.Join(" ", args.GetRange(promptIndex, args.Count - promptIndex));
                 }
                 await logWriter.WriteLineAsync("[" + timestamp + "] Agent starting: " + command + " " + firstFlag).ConfigureAwait(false);
                 await logWriter.WriteLineAsync(promptContent).ConfigureAwait(false);

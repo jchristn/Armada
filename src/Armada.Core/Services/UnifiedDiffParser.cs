@@ -24,6 +24,27 @@ namespace Armada.Core.Services
         /// <returns>One entry per file section, in diff order.</returns>
         public static List<UnifiedDiffFile> Parse(string? diffText)
         {
+            return ParseCore(diffText, null);
+        }
+
+        /// <summary>
+        /// Parse unified diff text and classify every line (one entry per line of the text split on '\n').
+        /// </summary>
+        /// <param name="diffText">Diff text (null or empty yields no files and no lines).</param>
+        /// <param name="lineKinds">Structural kind of each line, in order.</param>
+        /// <returns>One entry per file section, in diff order.</returns>
+        public static List<UnifiedDiffFile> Parse(string? diffText, out List<UnifiedDiffLineKindEnum> lineKinds)
+        {
+            lineKinds = new List<UnifiedDiffLineKindEnum>();
+            return ParseCore(diffText, lineKinds);
+        }
+
+        #endregion
+
+        #region Private-Methods
+
+        private static List<UnifiedDiffFile> ParseCore(string? diffText, List<UnifiedDiffLineKindEnum>? kinds)
+        {
             List<UnifiedDiffFile> files = new List<UnifiedDiffFile>();
             if (String.IsNullOrEmpty(diffText)) return files;
 
@@ -45,6 +66,7 @@ namespace Armada.Core.Services
                     char marker = body.Length == 0 ? ' ' : body[0];
                     if (marker == '+' && remainingNew > 0)
                     {
+                        kinds?.Add(UnifiedDiffLineKindEnum.Added);
                         current.AddedLines.Add(new UnifiedDiffLine { NewLineNumber = newLine, Content = body.Length > 0 ? body.Substring(1) : String.Empty });
                         current.AddedLineCount++;
                         remainingNew--;
@@ -54,6 +76,7 @@ namespace Armada.Core.Services
                     }
                     if (marker == '-' && remainingOld > 0)
                     {
+                        kinds?.Add(UnifiedDiffLineKindEnum.Deleted);
                         current.DeletedLineCount++;
                         remainingOld--;
                         index++;
@@ -61,6 +84,7 @@ namespace Armada.Core.Services
                     }
                     if (marker == ' ' && remainingOld > 0 && remainingNew > 0)
                     {
+                        kinds?.Add(UnifiedDiffLineKindEnum.Context);
                         remainingOld--;
                         remainingNew--;
                         newLine++;
@@ -69,6 +93,7 @@ namespace Armada.Core.Services
                     }
                     if (marker == '\\')
                     {
+                        kinds?.Add(UnifiedDiffLineKindEnum.NoNewline);
                         index++;
                         continue;
                     }
@@ -82,6 +107,7 @@ namespace Armada.Core.Services
 
                 if (line.StartsWith("\\", StringComparison.Ordinal))
                 {
+                    kinds?.Add(UnifiedDiffLineKindEnum.NoNewline);
                     index++;
                     continue;
                 }
@@ -89,9 +115,11 @@ namespace Armada.Core.Services
                 if (line.StartsWith("diff --git ", StringComparison.Ordinal))
                 {
                     current = new UnifiedDiffFile();
+                    current.StartLineIndex = index;
                     currentHasHunk = false;
                     files.Add(current);
                     ParseDiffGitHeader(line.Substring("diff --git ".Length), current);
+                    kinds?.Add(UnifiedDiffLineKindEnum.FileHeader);
                     index++;
                     continue;
                 }
@@ -103,6 +131,7 @@ namespace Armada.Core.Services
                     if (current == null || currentHasHunk)
                     {
                         current = new UnifiedDiffFile();
+                        current.StartLineIndex = index;
                         currentHasHunk = false;
                         files.Add(current);
                     }
@@ -113,12 +142,15 @@ namespace Armada.Core.Services
                     current.NewPath = newPath;
                     if (oldPath == null && newPath != null) current.Kind = GitChangeKindEnum.Added;
                     else if (newPath == null && oldPath != null) current.Kind = GitChangeKindEnum.Deleted;
+                    kinds?.Add(UnifiedDiffLineKindEnum.Meta);
+                    kinds?.Add(UnifiedDiffLineKindEnum.Meta);
                     index += 2;
                     continue;
                 }
 
                 if (current == null)
                 {
+                    kinds?.Add(UnifiedDiffLineKindEnum.Other);
                     index++;
                     continue;
                 }
@@ -132,6 +164,7 @@ namespace Armada.Core.Services
                         newLine = newStart;
                         currentHasHunk = true;
                     }
+                    kinds?.Add(UnifiedDiffLineKindEnum.HunkHeader);
                     index++;
                     continue;
                 }
@@ -139,6 +172,11 @@ namespace Armada.Core.Services
                 if (!currentHasHunk)
                 {
                     ApplyExtendedHeader(line, current);
+                    kinds?.Add(UnifiedDiffLineKindEnum.Meta);
+                }
+                else
+                {
+                    kinds?.Add(UnifiedDiffLineKindEnum.Other);
                 }
 
                 index++;
@@ -146,10 +184,6 @@ namespace Armada.Core.Services
 
             return files;
         }
-
-        #endregion
-
-        #region Private-Methods
 
         private static string TrimCr(string value)
         {
