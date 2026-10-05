@@ -14,6 +14,7 @@ namespace Armada.Server.Mcp.Tools
     using Armada.Core.Enums;
     using Armada.Core.Settings;
     using Armada.Core.Models;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Shared helper methods used by MCP tool registration classes.
@@ -292,7 +293,7 @@ namespace Armada.Server.Mcp.Tools
         /// <param name="originalFilename">Name to report for the backup (for uploads).</param>
         /// <returns>Status, safety backup path, restored schema version, and a message.</returns>
         /// <exception cref="FileNotFoundException">When the ZIP does not exist.</exception>
-        /// <exception cref="InvalidOperationException">When the ZIP is not an Armada backup.</exception>
+        /// <exception cref="BackupValidationException">When the file is not a ZIP, has no armada.db, or is not an Armada database.</exception>
         /// <exception cref="NotSupportedException">When the database provider is not SQLite.</exception>
         public static async Task<object> PerformRestoreAsync(DatabaseDriver database, ArmadaSettings settings, string filePath, string? originalFilename = null)
         {
@@ -301,11 +302,18 @@ namespace Armada.Server.Mcp.Tools
                 throw new FileNotFoundException("Backup file not found: " + filePath);
 
             // Validate ZIP contents
-            using (ZipArchive zip = ZipFile.OpenRead(filePath))
+            try
             {
-                ZipArchiveEntry? dbEntry = zip.GetEntry("armada.db");
-                if (dbEntry == null)
-                    throw new InvalidOperationException("ZIP does not contain armada.db entry");
+                using (ZipArchive zip = ZipFile.OpenRead(filePath))
+                {
+                    ZipArchiveEntry? dbEntry = zip.GetEntry("armada.db");
+                    if (dbEntry == null)
+                        throw new BackupValidationException(BackupValidationFailureEnum.MissingDatabase, "ZIP does not contain armada.db entry");
+                }
+            }
+            catch (InvalidDataException ex)
+            {
+                throw new BackupValidationException(BackupValidationFailureEnum.NotAZipArchive, "The file is not a valid ZIP archive", ex);
             }
 
             string tempDir = Path.Combine(Path.GetTempPath(), "armada-restore-" + Guid.NewGuid().ToString("N"));
@@ -321,17 +329,25 @@ namespace Armada.Server.Mcp.Tools
 
                 // Validate extracted database
                 string validateConnStr = "Data Source=" + extractedDbPath + ";Pooling=False";
-                using (SqliteConnection validateConn = new SqliteConnection(validateConnStr))
+                object? migrationsTable;
+                try
                 {
-                    await validateConn.OpenAsync().ConfigureAwait(false);
-                    using (SqliteCommand cmd = validateConn.CreateCommand())
+                    using (SqliteConnection validateConn = new SqliteConnection(validateConnStr))
                     {
-                        cmd.CommandText = "SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations';";
-                        object? result = await cmd.ExecuteScalarAsync().ConfigureAwait(false);
-                        if (result == null || result == DBNull.Value)
-                            throw new InvalidOperationException("Extracted database does not contain schema_migrations table; not a valid Armada backup");
+                        await validateConn.OpenAsync().ConfigureAwait(false);
+                        using (SqliteCommand cmd = validateConn.CreateCommand())
+                        {
+                            cmd.CommandText = "SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations';";
+                            migrationsTable = await cmd.ExecuteScalarAsync().ConfigureAwait(false);
+                        }
                     }
                 }
+                catch (SqliteException ex)
+                {
+                    throw new BackupValidationException(BackupValidationFailureEnum.NotAnArmadaDatabase, "The backup's armada.db is not a SQLite database", ex);
+                }
+                if (migrationsTable == null || migrationsTable == DBNull.Value)
+                    throw new BackupValidationException(BackupValidationFailureEnum.NotAnArmadaDatabase, "Extracted database does not contain schema_migrations table; not a valid Armada backup");
 
                 // Create safety backup of current state
                 string timestamp = DateTime.UtcNow.ToString("yyyy-MM-dd-HHmmss");

@@ -5407,6 +5407,7 @@ Restore Armada from a previously created backup ZIP file.
 **Validation:**
 - ZIP must contain `armada.db` with a valid `schema_migrations` table
 - A safety backup is automatically created before overwriting the current database
+- A body that is not a ZIP, a ZIP without `armada.db`, or an `armada.db` that is not an Armada SQLite database is rejected with `400 BadRequest` (`Error: "BadRequest"`) and nothing is changed
 
 **Response:** `200 OK`
 

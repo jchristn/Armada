@@ -1554,7 +1554,8 @@ namespace Armada.Server
         /// <summary>
         /// Wrap a tool handler with its declared requirement from <see cref="McpToolAuthorizationRegistry"/>, checked
         /// against the caller of each call (the MCP request's credential, the loopback default context, or the Ask
-        /// Armada caller an approved proposal runs as). Undeclared tools fail closed to AdminOnly.
+        /// Armada caller an approved proposal runs as). Undeclared tools fail closed to AdminOnly. A refused call returns
+        /// <see cref="McpToolError"/> with <see cref="McpToolErrorCodeEnum.Forbidden"/>.
         /// </summary>
         private Func<System.Text.Json.JsonElement?, Task<object>> AuthorizeMcpTool(string name, Func<System.Text.Json.JsonElement?, Task<object>> handler)
         {
@@ -1570,7 +1571,9 @@ namespace Armada.Server
                     string needed = requirement.Level == PermissionLevel.AdminOnly
                         ? "an admin credential"
                         : requirement.Level == PermissionLevel.TenantAdmin ? "a tenant admin or admin credential" : "an authenticated caller";
-                    throw new UnauthorizedAccessException("Tool " + name + " requires " + needed + ".");
+                    // A typed refusal (ErrorCode Forbidden), like every other tool error, so clients and the Ask
+                    // Armada executor branch on the code rather than the message text.
+                    return McpToolError.Forbidden("Tool " + name + " requires " + needed + ".");
                 }
 
                 return await handler(args).ConfigureAwait(false);
