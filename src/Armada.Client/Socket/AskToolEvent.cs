@@ -54,6 +54,12 @@ namespace Armada.Client.Socket
         /// </summary>
         public System.Text.Json.Nodes.JsonNode? Result { get; set; } = null;
 
+        /// <summary>
+        /// True when the CLI refused the call because the turn's CLI tool permission policy did not grant it, or null
+        /// when unknown.
+        /// </summary>
+        public bool? PermissionDenied { get; set; } = null;
+
         #endregion
 
         #region Constructors-and-Factories

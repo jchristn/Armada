@@ -155,7 +155,9 @@ fills a disk.
 | Finished vessel import batches | `retention.importBatchRetentionDays` (0 disables) | 90 days |
 | Pre-migration database backups | `database.migrationBackupRetentionCount` | 5 |
 
-Vessel health findings history is not pruned today and grows with the evaluation schedule. Completed voyages,
+Vessel health findings history is not pruned today and grows with the evaluation schedule. CLI permission requests
+(one row per permission prompt a captain raised, with its redacted input and decision) are not pruned either, and are
+kept when their Ask thread is deleted. Completed voyages,
 missions, signals, and events expire on SQLite only (`dataRetentionDays`); on PostgreSQL, MySQL, and SQL Server prune
 them with your own database jobs. On a busy install, check the size of the database and of `~/.armada/logs` monthly.
 Request history capture can be turned off entirely
@@ -233,6 +235,16 @@ docker/armada/db docker/armada/logs`) rather than loosening permissions to world
 path mounted from the host, so it is owned by another user than the container's, and git refuses it. Trust the path
 as described in [DOCKER.md](DOCKER.md#vessels-from-repositories-mounted-into-the-container). Setting
 `safe.directory` through `GIT_CONFIG_COUNT` / `GIT_CONFIG_KEY_0` or `git -c` does not work for this case.
+
+**A captain says a shell command was refused, or a mission waits on approvals.** That is the CLI tool permission
+policy. The first `Armada:` line of `missions/<missionId>.log`, and the CLI tools note in an Ask conversation header,
+say which policy the launch used, where it came from, and where to change it (`ApproveInArmada` runs as `Refuse` on
+runtimes other than Claude Code and ApiEndpoint, on Harbors, and for Claude Code without a scoped MCP token). Pending requests are listed at
+`/cli-permissions` in the dashboard and in the TUI Approvals center; an undecided request is denied after
+`permissions.promptTimeoutSeconds` (default 600, 10 to 3600). The server defaults are `permissions.askDefaultPolicy`
+(`ApproveInArmada`) and `permissions.missionDefaultPolicy` (`Bypass`), and `permissions.allowOwnerApproval` (default
+false) lets owners decide their own requests; change them in `settings.json` or Settings > CLI Tool Permissions (they
+apply to the next launch). See [CAPTAINS.md](CAPTAINS.md#cli-tool-permissions).
 
 **The instance does not appear in the proxy.** Work through the failure modes in
 [TUNNEL_OPERATIONS.md](TUNNEL_OPERATIONS.md#common-failure-modes): a wrong scheme in `tunnelUrl`, a password mismatch,

@@ -8,6 +8,7 @@ namespace Armada.Core.Database.Mysql.Implementations
     using MySqlConnector;
     using Armada.Core.Database;
     using Armada.Core.Database.Interfaces;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
 
     /// <summary>
@@ -18,9 +19,9 @@ namespace Armada.Core.Database.Mysql.Implementations
         #region Private-Members
 
         private static readonly string _Insert = @"INSERT INTO ask_threads
-            (id, tenant_id, user_id, title, captain_id, auto_approve, summary_text, summary_utc, pinned, archived, last_message_utc, message_count, unread_count, created_utc, last_update_utc)
+            (id, tenant_id, user_id, title, captain_id, auto_approve, cli_permission_policy, summary_text, summary_utc, pinned, archived, last_message_utc, message_count, unread_count, created_utc, last_update_utc)
             VALUES
-            (@id, @tenant_id, @user_id, @title, @captain_id, @auto_approve, @summary_text, @summary_utc, @pinned, @archived, @last_message_utc, @message_count, @unread_count, @created_utc, @last_update_utc);";
+            (@id, @tenant_id, @user_id, @title, @captain_id, @auto_approve, @cli_permission_policy, @summary_text, @summary_utc, @pinned, @archived, @last_message_utc, @message_count, @unread_count, @created_utc, @last_update_utc);";
 
         private static readonly string _Update = @"UPDATE ask_threads SET
             title = @title, captain_id = @captain_id, auto_approve = @auto_approve, summary_text = @summary_text, summary_utc = @summary_utc,
@@ -107,6 +108,28 @@ namespace Armada.Core.Database.Mysql.Implementations
                     if (!includeArchived) MysqlCommandHelper.Add(cmd, "@archived", false);
                     MysqlCommandHelper.AddDate(cmd, "@cutoff", inactiveBeforeUtc);
                 }, FromReader, token).ConfigureAwait(false);
+        }
+
+        /// <inheritdoc />
+        public async Task<bool> UpdateCliPermissionPolicyAsync(string tenantId, string id, CliPermissionPolicyEnum? policy, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
+            if (String.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
+
+            int updated = 0;
+            await MysqlCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (MySqlConnection conn, MySqlTransaction tx) =>
+            {
+                updated = await MysqlCommandHelper.ExecuteAsync(conn, tx,
+                    "UPDATE ask_threads SET cli_permission_policy = @policy, last_update_utc = @now WHERE tenant_id = @tenant_id AND id = @id;",
+                    cmd =>
+                    {
+                        MysqlCommandHelper.Add(cmd, "@policy", policy?.ToString());
+                        MysqlCommandHelper.AddDate(cmd, "@now", DateTime.UtcNow);
+                        MysqlCommandHelper.Add(cmd, "@tenant_id", tenantId);
+                        MysqlCommandHelper.Add(cmd, "@id", id);
+                    }, token).ConfigureAwait(false);
+            }, token).ConfigureAwait(false);
+            return updated > 0;
         }
 
         /// <inheritdoc />
@@ -246,6 +269,7 @@ namespace Armada.Core.Database.Mysql.Implementations
             MysqlCommandHelper.Add(cmd, "@title", thread.Title);
             MysqlCommandHelper.Add(cmd, "@captain_id", thread.CaptainId);
             MysqlCommandHelper.Add(cmd, "@auto_approve", thread.AutoApprove);
+            MysqlCommandHelper.Add(cmd, "@cli_permission_policy", thread.CliPermissionPolicy?.ToString());
             MysqlCommandHelper.Add(cmd, "@summary_text", thread.SummaryText);
             MysqlCommandHelper.AddDate(cmd, "@summary_utc", thread.SummaryUtc);
             MysqlCommandHelper.Add(cmd, "@pinned", thread.Pinned);
@@ -266,6 +290,8 @@ namespace Armada.Core.Database.Mysql.Implementations
             thread.Title = reader["title"].ToString()!;
             thread.CaptainId = MysqlCommandHelper.ReadString(reader["captain_id"]);
             thread.AutoApprove = MysqlCommandHelper.ReadBool(reader["auto_approve"], false);
+            string? cliPolicy = MysqlCommandHelper.ReadString(reader["cli_permission_policy"]);
+            thread.CliPermissionPolicy = cliPolicy != null && Enum.TryParse<CliPermissionPolicyEnum>(cliPolicy, true, out CliPermissionPolicyEnum parsedPolicy) ? parsedPolicy : (CliPermissionPolicyEnum?)null;
             thread.SummaryText = MysqlCommandHelper.ReadString(reader["summary_text"]);
             thread.SummaryUtc = MysqlCommandHelper.ReadNullableDate(reader["summary_utc"]);
             thread.Pinned = MysqlCommandHelper.ReadBool(reader["pinned"], false);

@@ -29,6 +29,11 @@ namespace Armada.Server.WebSocket
         private readonly Action<Voyage, string?> _BroadcastVoyageChange;
 
         /// <summary>
+        /// CLI permission service for the CLI permission commands, or null (the commands then answer Unavailable).
+        /// </summary>
+        public CliPermissionService? CliPermissions { get; set; } = null;
+
+        /// <summary>
         /// Instantiate the command handler.
         /// </summary>
         /// <param name="admiral">Admiral service for command handling.</param>
@@ -112,7 +117,20 @@ namespace Armada.Server.WebSocket
         /// <param name="command">The deserialized WebSocket command.</param>
         /// <param name="rawBody">The raw JSON body string for data commands.</param>
         /// <returns>The result object to serialize and send back to the client.</returns>
-        public async Task<object> HandleCommandAsync(string action, WebSocketCommand command, string rawBody)
+        public Task<object> HandleCommandAsync(string action, WebSocketCommand command, string rawBody)
+        {
+            return HandleCommandAsync(action, command, rawBody, null);
+        }
+
+        /// <summary>
+        /// Handle a command for a known caller (commands that act as the caller, such as CLI permission decisions).
+        /// </summary>
+        /// <param name="action">Command action.</param>
+        /// <param name="command">Parsed command.</param>
+        /// <param name="rawBody">Raw message body.</param>
+        /// <param name="caller">Caller identity, or null.</param>
+        /// <returns>Command result or error.</returns>
+        public async Task<object> HandleCommandAsync(string action, WebSocketCommand command, string rawBody, AuthContext? caller)
         {
             // Only the declared surface is dispatched; an action handled below but missing from WebSocketSurface is a bug
             // that the API contract test catches.
@@ -750,6 +768,34 @@ namespace Armada.Server.WebSocket
                 }
 
                 // ── Captain actions ────────────────────────────────────────
+
+                case "list_cli_permission_requests":
+                {
+                    if (CliPermissions == null || caller == null)
+                        return WebSocketCommandError.Create(action, WebSocketCommandErrorCodeEnum.Unavailable, "CLI permissions are not available.");
+                    CliPermissionRequestQuery cliQuery = new CliPermissionRequestQuery();
+                    if (!String.IsNullOrWhiteSpace(command.Status))
+                    {
+                        if (!Armada.Core.EnumNames.TryParse(command.Status, true, out CliPermissionRequestStatusEnum cliStatus))
+                            return WebSocketCommandError.Create(action, WebSocketCommandErrorCodeEnum.InvalidArgument, "Invalid status: " + command.Status);
+                        cliQuery.Status = cliStatus;
+                    }
+
+                    if (!String.IsNullOrWhiteSpace(command.CaptainId)) cliQuery.CaptainId = command.CaptainId;
+                    List<CliPermissionRequest> cliRequests = await CliPermissions.ListAsync(caller, cliQuery).ConfigureAwait(false);
+                    return new { type = "command.result", action, data = (object)cliRequests };
+                }
+
+                case "decide_cli_permission_request":
+                {
+                    if (CliPermissions == null || caller == null)
+                        return WebSocketCommandError.Create(action, WebSocketCommandErrorCodeEnum.Unavailable, "CLI permissions are not available.");
+                    CliPermissionDecisionRequest? decisionBody = JsonSerializer.Deserialize<WebSocketDataCommand<CliPermissionDecisionRequest>>(rawBody, _JsonOptions)?.Data;
+                    if (decisionBody == null || String.IsNullOrWhiteSpace(command.Id))
+                        return WebSocketCommandError.Create(action, WebSocketCommandErrorCodeEnum.InvalidArgument, "id and data (decision) are required");
+                    CliPermissionRequest decided = await CliPermissions.DecideAsync(caller, command.Id!, decisionBody).ConfigureAwait(false);
+                    return new { type = "command.result", action, data = (object)decided };
+                }
 
                 case "list_captains":
                     EnumerationQuery captainQuery = command.Query ?? new EnumerationQuery();

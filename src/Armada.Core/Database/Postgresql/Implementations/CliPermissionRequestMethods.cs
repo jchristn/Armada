@@ -1,0 +1,211 @@
+namespace Armada.Core.Database.Postgresql.Implementations
+{
+    using System;
+    using System.Collections.Generic;
+    using System.Linq;
+    using System.Text;
+    using System.Threading;
+    using System.Threading.Tasks;
+    using Npgsql;
+    using Armada.Core.Database;
+    using Armada.Core.Database.Interfaces;
+    using Armada.Core.Enums;
+    using Armada.Core.Models;
+    using Armada.Core.Settings;
+    using SyslogLogging;
+
+    /// <summary>
+    /// PostgreSQL implementation of CLI permission request persistence.
+    /// </summary>
+    public class CliPermissionRequestMethods : ICliPermissionRequestMethods
+    {
+        #region Private-Members
+
+        private static readonly string _Insert = @"INSERT INTO cli_permission_requests
+            (id, tenant_id, user_id, captain_id, mission_id, voyage_id, vessel_id, thread_id, message_id, runtime, tool_name, input_text, summary_text, suggested_rule, status, decision_source, rule_id, decided_by_user_id, decision_message, expires_utc, decided_utc, created_utc, last_update_utc)
+            VALUES
+            (@id, @tenant_id, @user_id, @captain_id, @mission_id, @voyage_id, @vessel_id, @thread_id, @message_id, @runtime, @tool_name, @input_text, @summary_text, @suggested_rule, @status, @decision_source, @rule_id, @decided_by_user_id, @decision_message, @expires_utc, @decided_utc, @created_utc, @last_update_utc);";
+
+        private readonly string _ConnectionString;
+        private readonly SemaphoreSlim? _WriteLock;
+
+        #endregion
+
+        #region Constructors-and-Factories
+
+        /// <summary>
+        /// Instantiate.
+        /// </summary>
+        /// <param name="driver">PostgreSQL database driver.</param>
+        /// <param name="settings">Database settings.</param>
+        /// <param name="logging">Logging module.</param>
+        /// <exception cref="ArgumentNullException">Thrown when any argument is null.</exception>
+        public CliPermissionRequestMethods(PostgresqlDatabaseDriver driver, DatabaseSettings settings, LoggingModule logging)
+        {
+            if (driver == null) throw new ArgumentNullException(nameof(driver));
+            if (settings == null) throw new ArgumentNullException(nameof(settings));
+            if (logging == null) throw new ArgumentNullException(nameof(logging));
+            _ConnectionString = driver.ConnectionString;
+            _WriteLock = null;
+        }
+
+        #endregion
+
+        #region Public-Methods
+
+        /// <inheritdoc />
+        public async Task<CliPermissionRequest> CreateAsync(CliPermissionRequest request, CancellationToken token = default)
+        {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            request.LastUpdateUtc = DateTime.UtcNow;
+            await PostgresqlCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (NpgsqlConnection conn, NpgsqlTransaction tx) =>
+            {
+                await PostgresqlCommandHelper.ExecuteAsync(conn, tx, _Insert, cmd => Bind(cmd, request), token).ConfigureAwait(false);
+            }, token).ConfigureAwait(false);
+            return request;
+        }
+
+        /// <inheritdoc />
+        public async Task<CliPermissionRequest?> ReadAsync(string id, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
+            List<CliPermissionRequest> rows = await PostgresqlCommandHelper.QueryAsync(_ConnectionString,
+                "SELECT * FROM cli_permission_requests WHERE id = @id;",
+                cmd => PostgresqlCommandHelper.Add(cmd, "@id", id), FromReader, token).ConfigureAwait(false);
+            return rows.FirstOrDefault();
+        }
+
+        /// <inheritdoc />
+        public async Task UpdateMessageAsync(string id, string? messageId, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
+            await PostgresqlCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (NpgsqlConnection conn, NpgsqlTransaction tx) =>
+            {
+                await PostgresqlCommandHelper.ExecuteAsync(conn, tx,
+                    "UPDATE cli_permission_requests SET message_id = @message_id, last_update_utc = @now WHERE id = @id;",
+                    cmd =>
+                    {
+                        PostgresqlCommandHelper.Add(cmd, "@message_id", messageId);
+                        PostgresqlCommandHelper.AddDate(cmd, "@now", DateTime.UtcNow);
+                        PostgresqlCommandHelper.Add(cmd, "@id", id);
+                    }, token).ConfigureAwait(false);
+            }, token).ConfigureAwait(false);
+        }
+
+        /// <inheritdoc />
+        public async Task<bool> TryDecideAsync(string id, CliPermissionRequestStatusEnum status, CliPermissionDecisionSourceEnum source, string? ruleId, string? decidedByUserId, string? message, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
+            if (status == CliPermissionRequestStatusEnum.Pending) throw new ArgumentException("A decision cannot set Pending.", nameof(status));
+
+            int updated = 0;
+            DateTime now = DateTime.UtcNow;
+            await PostgresqlCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (NpgsqlConnection conn, NpgsqlTransaction tx) =>
+            {
+                updated = await PostgresqlCommandHelper.ExecuteAsync(conn, tx,
+                    "UPDATE cli_permission_requests SET status = @status, decision_source = @source, rule_id = @rule_id, decided_by_user_id = @decided_by_user_id, decision_message = @message, decided_utc = @now, last_update_utc = @now WHERE id = @id AND status = @pending;",
+                    cmd =>
+                    {
+                        PostgresqlCommandHelper.Add(cmd, "@status", status.ToString());
+                        PostgresqlCommandHelper.Add(cmd, "@source", source.ToString());
+                        PostgresqlCommandHelper.Add(cmd, "@rule_id", ruleId);
+                        PostgresqlCommandHelper.Add(cmd, "@decided_by_user_id", decidedByUserId);
+                        PostgresqlCommandHelper.Add(cmd, "@message", message);
+                        PostgresqlCommandHelper.AddDate(cmd, "@now", now);
+                        PostgresqlCommandHelper.Add(cmd, "@id", id);
+                        PostgresqlCommandHelper.Add(cmd, "@pending", CliPermissionRequestStatusEnum.Pending.ToString());
+                    }, token).ConfigureAwait(false);
+            }, token).ConfigureAwait(false);
+            return updated == 1;
+        }
+
+        /// <inheritdoc />
+        public async Task<List<CliPermissionRequest>> EnumerateAsync(CliPermissionRequestQuery query, CancellationToken token = default)
+        {
+            if (query == null) throw new ArgumentNullException(nameof(query));
+            StringBuilder sql = new StringBuilder("SELECT * FROM cli_permission_requests WHERE 1 = 1");
+            if (query.TenantId != null) sql.Append(" AND tenant_id = @tenant_id");
+            if (query.UserId != null) sql.Append(" AND user_id = @user_id");
+            if (query.Status.HasValue) sql.Append(" AND status = @status");
+            if (query.MissionId != null) sql.Append(" AND mission_id = @mission_id");
+            if (query.ThreadId != null) sql.Append(" AND thread_id = @thread_id");
+            if (query.CaptainId != null) sql.Append(" AND captain_id = @captain_id");
+            if (query.VesselId != null) sql.Append(" AND vessel_id = @vessel_id");
+            sql.Append(" ORDER BY created_utc DESC, id DESC LIMIT " + query.Limit + ";");
+
+            return await PostgresqlCommandHelper.QueryAsync(_ConnectionString, sql.ToString(), cmd =>
+            {
+                if (query.TenantId != null) PostgresqlCommandHelper.Add(cmd, "@tenant_id", query.TenantId);
+                if (query.UserId != null) PostgresqlCommandHelper.Add(cmd, "@user_id", query.UserId);
+                if (query.Status.HasValue) PostgresqlCommandHelper.Add(cmd, "@status", query.Status.Value.ToString());
+                if (query.MissionId != null) PostgresqlCommandHelper.Add(cmd, "@mission_id", query.MissionId);
+                if (query.ThreadId != null) PostgresqlCommandHelper.Add(cmd, "@thread_id", query.ThreadId);
+                if (query.CaptainId != null) PostgresqlCommandHelper.Add(cmd, "@captain_id", query.CaptainId);
+                if (query.VesselId != null) PostgresqlCommandHelper.Add(cmd, "@vessel_id", query.VesselId);
+            }, FromReader, token).ConfigureAwait(false);
+        }
+
+        #endregion
+
+        #region Private-Methods
+
+        private static void Bind(NpgsqlCommand cmd, CliPermissionRequest request)
+        {
+            PostgresqlCommandHelper.Add(cmd, "@id", request.Id);
+            PostgresqlCommandHelper.Add(cmd, "@tenant_id", request.TenantId);
+            PostgresqlCommandHelper.Add(cmd, "@user_id", request.UserId);
+            PostgresqlCommandHelper.Add(cmd, "@captain_id", request.CaptainId);
+            PostgresqlCommandHelper.Add(cmd, "@mission_id", request.MissionId);
+            PostgresqlCommandHelper.Add(cmd, "@voyage_id", request.VoyageId);
+            PostgresqlCommandHelper.Add(cmd, "@vessel_id", request.VesselId);
+            PostgresqlCommandHelper.Add(cmd, "@thread_id", request.ThreadId);
+            PostgresqlCommandHelper.Add(cmd, "@message_id", request.MessageId);
+            PostgresqlCommandHelper.Add(cmd, "@runtime", request.Runtime.ToString());
+            PostgresqlCommandHelper.Add(cmd, "@tool_name", request.ToolName);
+            PostgresqlCommandHelper.Add(cmd, "@input_text", request.InputText);
+            PostgresqlCommandHelper.Add(cmd, "@summary_text", request.SummaryText);
+            PostgresqlCommandHelper.Add(cmd, "@suggested_rule", request.SuggestedRule);
+            PostgresqlCommandHelper.Add(cmd, "@status", request.Status.ToString());
+            PostgresqlCommandHelper.Add(cmd, "@decision_source", request.DecisionSource?.ToString());
+            PostgresqlCommandHelper.Add(cmd, "@rule_id", request.RuleId);
+            PostgresqlCommandHelper.Add(cmd, "@decided_by_user_id", request.DecidedByUserId);
+            PostgresqlCommandHelper.Add(cmd, "@decision_message", request.DecisionMessage);
+            PostgresqlCommandHelper.AddDate(cmd, "@expires_utc", request.ExpiresUtc);
+            PostgresqlCommandHelper.AddDate(cmd, "@decided_utc", request.DecidedUtc);
+            PostgresqlCommandHelper.AddDate(cmd, "@created_utc", request.CreatedUtc);
+            PostgresqlCommandHelper.AddDate(cmd, "@last_update_utc", request.LastUpdateUtc);
+        }
+
+        private static CliPermissionRequest FromReader(NpgsqlDataReader reader)
+        {
+            CliPermissionRequest request = new CliPermissionRequest();
+            request.Id = reader["id"].ToString()!;
+            request.TenantId = PostgresqlCommandHelper.ReadString(reader["tenant_id"]);
+            request.UserId = PostgresqlCommandHelper.ReadString(reader["user_id"]);
+            request.CaptainId = PostgresqlCommandHelper.ReadString(reader["captain_id"]);
+            request.MissionId = PostgresqlCommandHelper.ReadString(reader["mission_id"]);
+            request.VoyageId = PostgresqlCommandHelper.ReadString(reader["voyage_id"]);
+            request.VesselId = PostgresqlCommandHelper.ReadString(reader["vessel_id"]);
+            request.ThreadId = PostgresqlCommandHelper.ReadString(reader["thread_id"]);
+            request.MessageId = PostgresqlCommandHelper.ReadString(reader["message_id"]);
+            request.Runtime = PostgresqlCommandHelper.ReadEnum(reader["runtime"], AgentRuntimeEnum.ClaudeCode);
+            request.ToolName = reader["tool_name"]?.ToString() ?? String.Empty;
+            request.InputText = reader["input_text"]?.ToString() ?? "{}";
+            request.SummaryText = reader["summary_text"]?.ToString() ?? String.Empty;
+            request.SuggestedRule = PostgresqlCommandHelper.ReadString(reader["suggested_rule"]);
+            request.Status = PostgresqlCommandHelper.ReadEnum(reader["status"], CliPermissionRequestStatusEnum.Pending);
+            string? source = PostgresqlCommandHelper.ReadString(reader["decision_source"]);
+            request.DecisionSource = source != null && Enum.TryParse<CliPermissionDecisionSourceEnum>(source, true, out CliPermissionDecisionSourceEnum parsed) ? parsed : (CliPermissionDecisionSourceEnum?)null;
+            request.RuleId = PostgresqlCommandHelper.ReadString(reader["rule_id"]);
+            request.DecidedByUserId = PostgresqlCommandHelper.ReadString(reader["decided_by_user_id"]);
+            request.DecisionMessage = PostgresqlCommandHelper.ReadString(reader["decision_message"]);
+            request.ExpiresUtc = PostgresqlCommandHelper.ReadDate(reader["expires_utc"]);
+            request.DecidedUtc = PostgresqlCommandHelper.ReadNullableDate(reader["decided_utc"]);
+            request.CreatedUtc = PostgresqlCommandHelper.ReadDate(reader["created_utc"]);
+            request.LastUpdateUtc = PostgresqlCommandHelper.ReadDate(reader["last_update_utc"]);
+            return request;
+        }
+
+        #endregion
+    }
+}

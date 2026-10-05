@@ -64,6 +64,18 @@ namespace Armada.Core.Authorization
             Add("voyage_status", "Voyage", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("fleet_action_run_status", "FleetActionRun", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("evaluate_autoland", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("list_cli_permission_requests", "CliPermission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("get_cli_permission_request", "CliPermission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("list_cli_permission_rules", "CliPermission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+
+            // CLI tool permissions. The prompt tool is callable only by a captain's scoped session and deciding only by a
+            // person (checked in the handlers); rule and policy changes need an admin.
+            Add("cli_permission_prompt", "CliPermission", ResourceOperationEnum.Execute, PermissionLevel.Authenticated);
+            Add("decide_cli_permission_request", "CliPermission", ResourceOperationEnum.Execute, PermissionLevel.Authenticated);
+            Add("create_cli_permission_rule", "CliPermission", ResourceOperationEnum.Create, PermissionLevel.TenantAdmin);
+            Add("update_cli_permission_rule", "CliPermission", ResourceOperationEnum.Update, PermissionLevel.TenantAdmin);
+            Add("delete_cli_permission_rule", "CliPermission", ResourceOperationEnum.Delete, PermissionLevel.TenantAdmin);
+            Add("set_captain_cli_permission_policy", "Captain", ResourceOperationEnum.Update, PermissionLevel.TenantAdmin);
 
             // Writes to caller-owned resources (memories, model endpoints, harbors), scoped to the caller in the tool handlers
             Add("create_memory", "Memory", ResourceOperationEnum.Create, PermissionLevel.Authenticated);

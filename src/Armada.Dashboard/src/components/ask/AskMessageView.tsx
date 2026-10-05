@@ -1,19 +1,21 @@
 import type { ReactNode } from 'react';
-import type { AskActionProposal, AskMessage, AskToolCall } from '../../types/models';
+import type { AskActionProposal, AskMessage, AskToolCall, CliPermissionRequest } from '../../types/models';
 import { useLocale } from '../../context/LocaleContext';
 import Markdown from '../shared/Markdown';
 import ChatToolChips, { type ToolEvent } from '../shared/ChatToolChips';
 import AskConfirmCard from './AskConfirmCard';
+import CliPermissionCard from '../cliPermissions/CliPermissionCard';
 
 /** Persisted tool calls in the shape the shared chips render. */
 export function toolCallsToEvents(calls: AskToolCall[] | null | undefined): ToolEvent[] {
   return (calls ?? []).map((call, i) => ({
     id: call.callId || call.id || `call-${i}`,
     name: call.toolName || 'tool',
-    status: call.ok === false ? 'failed' : call.ok == null && !call.resultText ? 'running' : 'success',
+    status: call.permissionDenied === true || call.ok === false ? 'failed' : call.ok == null && !call.resultText ? 'running' : 'success',
     arguments: call.argumentsText ?? null,
     result: call.resultText ?? null,
     elapsedMs: call.elapsedMs ?? null,
+    ...(call.permissionDenied === true ? { permissionDenied: true } : {}),
   }));
 }
 
@@ -34,13 +36,18 @@ interface AskMessageViewProps {
   workCard?: ReactNode;
   /** For milestones whose card lives on another message: scroll to it. */
   onShowWork?: () => void;
+  /** CliPermission cards: the latest copy of the linked request. */
+  cliRequest?: CliPermissionRequest | null;
+  onCliDecided?: (request: CliPermissionRequest) => void;
+  /** Explanation under tool calls the CLI refused for lack of permission (already localized). */
+  permissionDeniedNote?: string;
 }
 
 /**
  * One persisted message, rendered by kind: text (Markdown for the captain, plain for the user), tool-call chips,
  * confirm cards, action results, milestone updates, summaries, and errors.
  */
-export default function AskMessageView({ message, proposal, captainName, proposalBusy, onApprove, onReject, workCard, onShowWork }: AskMessageViewProps) {
+export default function AskMessageView({ message, proposal, captainName, proposalBusy, onApprove, onReject, workCard, onShowWork, cliRequest, onCliDecided, permissionDeniedNote }: AskMessageViewProps) {
   const { t, formatRelativeTime, formatDateTime } = useLocale();
   const kind = String(message.kind || 'Text');
   const role = String(message.role || 'Assistant');
@@ -65,6 +72,17 @@ export default function AskMessageView({ message, proposal, captainName, proposa
           ? <AskConfirmCard proposal={proposal} onApprove={onApprove} onReject={onReject} busy={proposalBusy} />
           : <div className="ask-confirm-card is-unknown"><Markdown>{text || t('A proposed action is loading...')}</Markdown></div>}
         {workCard}
+        <div className="ask-msg-meta">{when}</div>
+      </article>
+    );
+  }
+
+  if (kind === 'CliPermission') {
+    return (
+      <article className="ask-msg ask-msg-proposal ask-msg-cli-permission" data-sequence={message.sequence}>
+        {cliRequest
+          ? <CliPermissionCard request={cliRequest} onDecided={onCliDecided} />
+          : <div className="ask-confirm-card is-unknown"><p>{text || t('A CLI permission request is loading...')}</p></div>}
         <div className="ask-msg-meta">{when}</div>
       </article>
     );
@@ -161,6 +179,8 @@ export default function AskMessageView({ message, proposal, captainName, proposa
         argumentsLabel={t('Arguments')}
         resultLabel={t('Result')}
         noDetailsLabel={t('No details available.')}
+        permissionDeniedNote={permissionDeniedNote}
+        permissionDeniedLabel={t('Refused for lack of permission')}
       />
       <div className="ask-bubble ask-bubble-assistant">
         <div className="ask-bubble-head text-dim">

@@ -38,6 +38,12 @@ namespace Armada.Server.Ask
             + "When a tool result says \"Proposed as aap_... and waiting for the user's approval\", do not retry the call; tell the user in one or two sentences what you proposed and that it is waiting for their approval. "
             + "Work started from this conversation is tracked here automatically, so you do not need to poll it. Keep answers short and concrete.";
 
+        /// <summary>
+        /// CLI permission service: pending permission prompts of a thread are cancelled when its turn ends. Null leaves
+        /// them to expire.
+        /// </summary>
+        public CliPermissionService? CliPermissions { get; set; } = null;
+
         #endregion
 
         #region Private-Members
@@ -238,7 +244,7 @@ namespace Armada.Server.Ask
                 prompt.AppendLine("Work: " + AskMilestoneDetector.Describe(snapshot));
 
                 CaptainChatTurnOptions options = new CaptainChatTurnOptions();
-                options.Captain = CaptainForAskTurn(captain);
+                ApplyCliPermissions(options, thread, captain, false);
                 options.Prompt = prompt.ToString();
                 options.TenantId = thread.TenantId;
                 options.UserId = thread.UserId;
@@ -447,7 +453,7 @@ namespace Armada.Server.Ask
                 string? systemPrompt = await ResolveSystemPromptAsync().ConfigureAwait(false);
 
                 CaptainChatTurnOptions options = new CaptainChatTurnOptions();
-                options.Captain = CaptainForAskTurn(captain);
+                ApplyCliPermissions(options, current, captain, true);
                 options.Prompt = BuildPrompt(current, captain, history, note, systemPrompt, await BuildFocusAsync(current).ConfigureAwait(false));
                 options.ShowThinking = showThinking;
                 options.TenantId = thread.TenantId;
@@ -457,7 +463,7 @@ namespace Armada.Server.Ask
                 string turnId = handle.TurnId;
                 options.OnChunk = delta => Emit(thread, "ask.chunk", new { threadId = thread.Id, turnId, delta });
                 options.OnThinking = delta => Emit(thread, "ask.thinking", new { threadId = thread.Id, turnId, delta });
-                options.OnTool = activity => Emit(thread, "ask.tool", new { threadId = thread.Id, turnId, phase = activity.Phase, id = activity.Id, name = activity.Name, arguments = activity.Arguments, ok = activity.Ok, elapsedMs = activity.ElapsedMs, result = activity.Result });
+                options.OnTool = activity => Emit(thread, "ask.tool", new { threadId = thread.Id, turnId, phase = activity.Phase, id = activity.Id, name = activity.Name, arguments = activity.Arguments, ok = activity.Ok, elapsedMs = activity.ElapsedMs, result = activity.Result, permissionDenied = activity.PermissionDenied });
 
                 CaptainChatTurnResult result = await _Runner.RunTurnAsync(options, handle.Cancellation.Token).ConfigureAwait(false);
                 AskMessage reply = new AskMessage();
@@ -519,6 +525,7 @@ namespace Armada.Server.Ask
             finally
             {
                 if (reserved && handle.CaptainId != null) ReleaseCaptain(handle.CaptainId);
+                await CancelPendingCliPermissionsAsync(thread.Id).ConfigureAwait(false);
                 Release(handle);
                 Emit(thread, "ask.turn", new { threadId = thread.Id, turnId = handle.TurnId, state, messageId, error });
                 try { await _Threads.EmitThreadAsync(thread.Id).ConfigureAwait(false); }
@@ -558,7 +565,7 @@ namespace Armada.Server.Ask
                     if (captain != null)
                     {
                         CaptainChatTurnOptions options = new CaptainChatTurnOptions();
-                        options.Captain = CaptainForAskTurn(captain);
+                        ApplyCliPermissions(options, thread, captain, false);
                         options.Prompt = BuildPrompt(thread, captain, history,
                             "Summarize this conversation for the user in 3 to 6 short bullet points: what was asked, what was decided or started (with ids), and what is still open. Do not call any tools.", null);
                         options.TenantId = thread.TenantId;
@@ -642,14 +649,49 @@ namespace Armada.Server.Ask
         }
 
         /// <summary>
-        /// The captain an Ask turn or narration launches: with <see cref="AskSettings.CaptainAutoApprove"/> off (the
-        /// default) a copy with auto-approve forced off, so the CLI's own shell and file tools are not pre-approved for
-        /// whoever can post to a thread (O-02); with it on, the captain's own setting.
+        /// Apply the CLI tool permission policy of an Ask turn (see <see cref="CliPermissionPolicyResolver.ResolveForAsk"/>):
+        /// the launched captain is a copy whose auto-approve option is on only for Bypass (so the CLI's own shell and
+        /// file tools are never pre-approved for whoever can post to a thread unless an admin chose Bypass, O-02), and
+        /// ApproveInArmada sends Claude Code's permission prompts to Armada. Narrations and summaries never prompt
+        /// (nobody is waiting for them), so ApproveInArmada runs them as Refuse.
         /// </summary>
-        private Captain CaptainForAskTurn(Captain captain)
+        private void ApplyCliPermissions(CaptainChatTurnOptions options, AskThread thread, Captain captain, bool interactive)
         {
-            bool? forced = _Settings.Ask.CaptainAutoApprove ? (bool?)null : false;
-            return CaptainRuntimeOptions.WithEffectiveAutoApprove(captain, forced);
+            CliPermissionResolution permission = CliPermissionPolicyResolver.ResolveForAsk(_Settings, thread, captain, _Tokens != null);
+            CliPermissionPolicyEnum effective = permission.Effective;
+            if (!interactive && effective == CliPermissionPolicyEnum.ApproveInArmada) effective = CliPermissionPolicyEnum.Refuse;
+            options.Captain = CaptainRuntimeOptions.WithEffectiveAutoApprove(captain, effective == CliPermissionPolicyEnum.Bypass);
+            options.CliPermissionPolicy = effective;
+            options.PermissionPromptTimeoutSeconds = _Settings.Permissions.PromptTimeoutSeconds;
+
+            // API-endpoint captains run their shell tool in-process: their prompts go straight to the service.
+            CliPermissionService? permissions = CliPermissions;
+            if (permissions != null && effective == CliPermissionPolicyEnum.ApproveInArmada)
+            {
+                CliPermissionPromptContext context = new CliPermissionPromptContext
+                {
+                    TenantId = thread.TenantId,
+                    UserId = thread.UserId,
+                    ThreadId = thread.Id,
+                    CaptainId = captain.Id,
+                    Runtime = captain.Runtime
+                };
+                options.PermissionPrompt = (tool, input, cancel) => permissions.PromptAsync(context, tool, input, cancel);
+            }
+        }
+
+        private async Task CancelPendingCliPermissionsAsync(string threadId)
+        {
+            CliPermissionService? permissions = CliPermissions;
+            if (permissions == null) return;
+            try
+            {
+                await permissions.CancelPendingAsync(threadId, null).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _Logging.Debug(_Header + "could not cancel CLI permission requests of thread " + threadId + ": " + ex.Message);
+            }
         }
 
                 private bool TryReserveCaptain(string captainId)

@@ -237,6 +237,29 @@ namespace Armada.Core.Services
                         Href = "/ask/" + proposal.ThreadId
                     });
                 }
+
+                foreach (CliPermissionRequest request in (await PendingCliPermissionsAsync(auth, token).ConfigureAwait(false)).Take(_MaxPerCategory))
+                {
+                    string where = !String.IsNullOrEmpty(request.MissionTitle) ? "mission " + request.MissionTitle
+                        : (!String.IsNullOrEmpty(request.ThreadId) ? "an Ask conversation" : "a captain session");
+                    bool ownThread = !String.IsNullOrEmpty(request.ThreadId) && String.Equals(request.UserId, auth.UserId, StringComparison.Ordinal);
+                    items.Add(new InboxItem
+                    {
+                        Kind = InboxItemKinds.CliPermission,
+                        Severity = InboxSeverityEnum.Warning,
+                        Title = "CLI permission: " + request.ToolName + " " + Clip(request.SummaryText, 120),
+                        EntityName = request.ToolName,
+                        Detail = (String.IsNullOrEmpty(request.CaptainName) ? "A captain" : "Captain " + request.CaptainName)
+                            + (String.IsNullOrEmpty(request.VesselName) ? "" : " on " + request.VesselName)
+                            + " (" + where + ") is waiting for permission to run " + request.ToolName + "."
+                            + (request.CanDecide ? "" : " An admin must decide it."),
+                        EntityType = "cli_permission_request",
+                        EntityId = request.Id,
+                        Href = ownThread ? "/ask/" + request.ThreadId : "/cli-permissions?request=" + request.Id,
+                        CliPermission = request,
+                        ExpiresUtc = request.ExpiresUtc
+                    });
+                }
             }
             catch (Exception ex)
             {
@@ -291,6 +314,42 @@ namespace Armada.Core.Services
                     && (expiryMinutes == 0 || p.CreatedUtc.AddMinutes(expiryMinutes) >= now))
                 .OrderBy(p => p.CreatedUtc)
                 .ToList();
+        }
+
+        /// <summary>
+        /// Pending, unexpired CLI permission requests the caller may see (admins of the tenant, and the owner), with
+        /// names and the caller's CanDecide flag.
+        /// </summary>
+        private async Task<List<CliPermissionRequest>> PendingCliPermissionsAsync(AuthContext auth, CancellationToken token)
+        {
+            if (CliPermissionAccess.IsCaptainSession(auth)) return new List<CliPermissionRequest>();
+            CliPermissionRequestQuery query = new CliPermissionRequestQuery { Status = CliPermissionRequestStatusEnum.Pending, Limit = _MaxPerCategory };
+            if (!auth.IsAdmin)
+            {
+                query.TenantId = auth.TenantId;
+                if (!auth.IsTenantAdmin) query.UserId = auth.UserId;
+            }
+
+            DateTime now = DateTime.UtcNow;
+            List<CliPermissionRequest> pending = await _Database.CliPermissionRequests.EnumerateAsync(query, token).ConfigureAwait(false);
+            List<CliPermissionRequest> visible = pending.Where(r => r.ExpiresUtc > now && CliPermissionAccess.CanView(auth, r)).OrderBy(r => r.CreatedUtc).ToList();
+            CliPermissionSettings permissions = _Settings?.Permissions ?? new CliPermissionSettings();
+            foreach (CliPermissionRequest request in visible)
+            {
+                if (!String.IsNullOrEmpty(request.CaptainId)) request.CaptainName = (await _Database.Captains.ReadAsync(request.CaptainId!, token).ConfigureAwait(false))?.Name;
+                if (!String.IsNullOrEmpty(request.VesselId)) request.VesselName = (await _Database.Vessels.ReadAsync(request.VesselId!, token).ConfigureAwait(false))?.Name;
+                if (!String.IsNullOrEmpty(request.MissionId)) request.MissionTitle = (await _Database.Missions.ReadAsync(request.MissionId!, token).ConfigureAwait(false))?.Title;
+                request.CanDecide = CliPermissionAccess.CanDecide(auth, request, permissions);
+                request.CanRemember = request.CanDecide && CliPermissionAccess.CanRemember(auth, request);
+            }
+
+            return visible;
+        }
+
+        private static string Clip(string? text, int max)
+        {
+            if (String.IsNullOrEmpty(text)) return String.Empty;
+            return text!.Length <= max ? text : text.Substring(0, max) + "...";
         }
 
         private static int Clamp(int minutes)

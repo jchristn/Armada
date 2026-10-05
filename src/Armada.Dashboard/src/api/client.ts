@@ -162,6 +162,13 @@ import type {
   AskActionProposal,
   AskWorkSnapshot,
   AskQuickAction,
+  CliPermissionDecisionRequest,
+  CliPermissionPolicy,
+  CliPermissionRequest,
+  CliPermissionRequestQuery,
+  CliPermissionRule,
+  CliPermissionRuleCreateRequest,
+  CliPermissionRuleScope,
 } from '../types/models';
 
 const BASE_URL = import.meta.env.VITE_ARMADA_SERVER_URL || '';
@@ -1113,6 +1120,74 @@ export const getAskQuickActions = async (): Promise<AskQuickAction[]> => {
 
 // Needs-you inbox
 export const getInbox = () => get<InboxItem[]>('/api/v1/inbox');
+
+// ==================== CLI tool permissions ====================
+// Requests are CLI tool calls (shell, edit, fetch) a captain asked Armada to approve; rules allow or deny them by
+// pattern. Bodies are PascalCase for the C# server; responses are camelized by `request`.
+
+const CLI_PERMISSIONS = '/api/v1/cli-permissions';
+
+function cliQuery(params: Record<string, string | number | null | undefined>): string {
+  const parts = Object.entries(params)
+    .filter(([, v]) => v !== undefined && v !== null && v !== '')
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`);
+  return parts.length > 0 ? `?${parts.join('&')}` : '';
+}
+
+/** Requests visible to the caller, newest first; filter by status, mission, thread, captain, or vessel. */
+export const listCliPermissionRequests = (query?: CliPermissionRequestQuery) =>
+  get<CliPermissionRequest[]>(`${CLI_PERMISSIONS}/requests${cliQuery({
+    status: query?.status, missionId: query?.missionId, threadId: query?.threadId,
+    captainId: query?.captainId, vesselId: query?.vesselId, limit: query?.limit,
+  })}`);
+
+export const getCliPermissionRequest = (id: string) =>
+  get<CliPermissionRequest>(`${CLI_PERMISSIONS}/requests/${encodeURIComponent(id)}`);
+
+/** Allow once, allow and remember (creates an allow rule; admins only), or deny a pending request. 409 when no longer pending. */
+export const decideCliPermissionRequest = (id: string, body: CliPermissionDecisionRequest) => {
+  const payload: Record<string, unknown> = { Decision: body.decision };
+  if (body.message) payload.Message = body.message;
+  if (body.rulePattern) payload.RulePattern = body.rulePattern;
+  if (body.ruleScope) payload.RuleScope = body.ruleScope;
+  return post<CliPermissionRequest>(`${CLI_PERMISSIONS}/requests/${encodeURIComponent(id)}/decide`, payload);
+};
+
+/** Rules visible to the caller (own tenant plus all-tenant rules). */
+export const listCliPermissionRules = (query?: { scope?: CliPermissionRuleScope | null; vesselId?: string | null; captainId?: string | null }) =>
+  get<CliPermissionRule[]>(`${CLI_PERMISSIONS}/rules${cliQuery({ scope: query?.scope, vesselId: query?.vesselId, captainId: query?.captainId })}`);
+
+export const getCliPermissionRule = (id: string) =>
+  get<CliPermissionRule>(`${CLI_PERMISSIONS}/rules/${encodeURIComponent(id)}`);
+
+export const createCliPermissionRule = (rule: CliPermissionRuleCreateRequest) => {
+  const payload: Record<string, unknown> = { Pattern: rule.pattern, Action: rule.action, Scope: rule.scope };
+  if (rule.vesselId) payload.VesselId = rule.vesselId;
+  if (rule.captainId) payload.CaptainId = rule.captainId;
+  if (rule.tenantId) payload.TenantId = rule.tenantId;
+  if (rule.description) payload.Description = rule.description;
+  return post<CliPermissionRule>(`${CLI_PERMISSIONS}/rules`, payload);
+};
+
+/** Change a rule's pattern, action, or description (scope and target are fixed). */
+export const updateCliPermissionRule = (id: string, data: { pattern?: string; action?: CliPermissionRule['action']; description?: string | null }) => {
+  const payload: Record<string, unknown> = {};
+  if (data.pattern !== undefined) payload.Pattern = data.pattern;
+  if (data.action !== undefined) payload.Action = data.action;
+  if (data.description !== undefined) payload.Description = data.description;
+  return put<CliPermissionRule>(`${CLI_PERMISSIONS}/rules/${encodeURIComponent(id)}`, payload);
+};
+
+export const deleteCliPermissionRule = (id: string) =>
+  del<void>(`${CLI_PERMISSIONS}/rules/${encodeURIComponent(id)}`);
+
+/** Set (or clear with null) a captain's CLI tool permission policy. Global admin or tenant admin of the captain's tenant. */
+export const setCaptainCliPermissionPolicy = (captainId: string, policy: CliPermissionPolicy | null) =>
+  put<Captain>(`/api/v1/captains/${encodeURIComponent(captainId)}/cli-permission-policy`, { Policy: policy });
+
+/** Set (or clear with null) an Ask thread's CLI tool permission override. Owner only; Bypass requires an admin. */
+export const setAskThreadCliPermissionPolicy = (threadId: string, policy: CliPermissionPolicy | null) =>
+  put<AskThread>(`${askThreadPath(threadId)}/cli-permission-policy`, { Policy: policy });
 
 // Workspace terminal
 export const execWorkspaceCommand = (vesselId: string, command: string, timeoutSeconds?: number) =>

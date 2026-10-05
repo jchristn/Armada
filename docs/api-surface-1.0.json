@@ -156,6 +156,24 @@
       "experimental": false
     },
     {
+      "method": "PUT",
+      "route": "/api/v1/ask/threads/{id}/cli-permission-policy",
+      "auth": "Authenticated",
+      "resource": "AskThread:Update",
+      "requestType": "CliPermissionPolicyUpdateRequest",
+      "requestRequired": true,
+      "responses": {
+        "200": "AskThread",
+        "403": "ApiErrorResponse",
+        "404": ""
+      },
+      "tags": [
+        "Ask"
+      ],
+      "summary": "Set a thread's CLI tool permission policy",
+      "experimental": false
+    },
+    {
       "method": "POST",
       "route": "/api/v1/ask/threads/{id}/messages",
       "auth": "Authenticated",
@@ -600,6 +618,24 @@
       "experimental": false
     },
     {
+      "method": "PUT",
+      "route": "/api/v1/captains/{id}/cli-permission-policy",
+      "auth": "TenantAdmin",
+      "resource": "Captain:Update",
+      "requestType": "CliPermissionPolicyUpdateRequest",
+      "requestRequired": true,
+      "responses": {
+        "200": "Captain",
+        "403": "ApiErrorResponse",
+        "404": ""
+      },
+      "tags": [
+        "Captains"
+      ],
+      "summary": "Set a captain's CLI tool permission policy",
+      "experimental": false
+    },
+    {
       "method": "GET",
       "route": "/api/v1/captains/{id}/log",
       "auth": "Authenticated",
@@ -797,6 +833,144 @@
         "CheckRuns"
       ],
       "summary": "Retry a check run",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/cli-permissions/requests",
+      "auth": "Authenticated",
+      "resource": "CliPermission:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "List<CliPermissionRequest>",
+        "400": ""
+      },
+      "tags": [
+        "CliPermissions"
+      ],
+      "summary": "List CLI permission requests",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/cli-permissions/requests/{id}",
+      "auth": "Authenticated",
+      "resource": "CliPermission:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "CliPermissionRequest",
+        "404": ""
+      },
+      "tags": [
+        "CliPermissions"
+      ],
+      "summary": "Get a CLI permission request",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/cli-permissions/requests/{id}/decide",
+      "auth": "Authenticated",
+      "resource": "CliPermission:Execute",
+      "requestType": "CliPermissionDecisionRequest",
+      "requestRequired": true,
+      "responses": {
+        "200": "CliPermissionRequest",
+        "400": "",
+        "404": "",
+        "409": "ApiErrorResponse"
+      },
+      "tags": [
+        "CliPermissions"
+      ],
+      "summary": "Decide a CLI permission request",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/cli-permissions/rules",
+      "auth": "Authenticated",
+      "resource": "CliPermission:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "List<CliPermissionRule>"
+      },
+      "tags": [
+        "CliPermissions"
+      ],
+      "summary": "List CLI permission rules",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/cli-permissions/rules",
+      "auth": "TenantAdmin",
+      "resource": "CliPermission:Create",
+      "requestType": "CliPermissionRule",
+      "requestRequired": true,
+      "responses": {
+        "201": "CliPermissionRule",
+        "400": ""
+      },
+      "tags": [
+        "CliPermissions"
+      ],
+      "summary": "Create a CLI permission rule",
+      "experimental": false
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/v1/cli-permissions/rules/{id}",
+      "auth": "TenantAdmin",
+      "resource": "CliPermission:Delete",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "204": "",
+        "404": ""
+      },
+      "tags": [
+        "CliPermissions"
+      ],
+      "summary": "Delete a CLI permission rule",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/cli-permissions/rules/{id}",
+      "auth": "Authenticated",
+      "resource": "CliPermission:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "CliPermissionRule",
+        "404": ""
+      },
+      "tags": [
+        "CliPermissions"
+      ],
+      "summary": "Get a CLI permission rule",
+      "experimental": false
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v1/cli-permissions/rules/{id}",
+      "auth": "TenantAdmin",
+      "resource": "CliPermission:Update",
+      "requestType": "CliPermissionRule",
+      "requestRequired": true,
+      "responses": {
+        "200": "CliPermissionRule",
+        "400": "",
+        "404": ""
+      },
+      "tags": [
+        "CliPermissions"
+      ],
+      "summary": "Update a CLI permission rule",
       "experimental": false
     },
     {
@@ -6128,6 +6302,30 @@
       "experimental": false
     },
     {
+      "name": "cli_permission_prompt",
+      "auth": "Authenticated",
+      "resource": "CliPermission:Execute",
+      "arguments": [
+        {
+          "name": "input",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "tool_name",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "tool_use_id",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "Permission prompt tool for CLI captains (Claude Code --permission-prompt-tool). Only callable by a captain's own mission- or Ask-thread-scoped session; people decide requests with decide_cli_permission_request. Waits until an approver allows or denies the call, a CLI permission rule decides it, or it expires, then returns {\"behavior\":\"allow\",\"updatedInput\":{...}} or {\"behavior\":\"deny\",\"message\":\"...\"}.",
+      "experimental": false
+    },
+    {
       "name": "create_backlog_item",
       "auth": "TenantAdmin",
       "resource": "Objective:Create",
@@ -6466,6 +6664,50 @@
         }
       ],
       "description": "Register a new captain (AI agent)",
+      "experimental": false
+    },
+    {
+      "name": "create_cli_permission_rule",
+      "auth": "TenantAdmin",
+      "resource": "CliPermission:Create",
+      "arguments": [
+        {
+          "name": "action",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "captainId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "pattern",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "scope",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "tenantId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "vesselId",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "Create a CLI permission rule (admins). A matching deny rule denies a captain's permission prompt without asking; a matching allow rule allows it. Scope Global applies to every captain of the tenant (a global admin may omit tenantId to apply it to every tenant), Vessel to missions on one vessel, Captain to one captain.",
       "experimental": false
     },
     {
@@ -7166,6 +7408,40 @@
       "experimental": false
     },
     {
+      "name": "decide_cli_permission_request",
+      "auth": "Authenticated",
+      "resource": "CliPermission:Execute",
+      "arguments": [
+        {
+          "name": "decision",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "message",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "requestId",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "rulePattern",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "ruleScope",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "Allow once, allow and remember (store an allow rule; admins only), or deny a pending CLI permission request. Deciding requires a global admin or a tenant admin of the request's tenant, or the mission or thread owner when Permissions.AllowOwnerApproval is on. Requires a credential (not the unauthenticated loopback identity) and is refused for captain sessions, so a captain can never approve its own prompt.",
+      "experimental": false
+    },
+    {
       "name": "delete_backlog_item",
       "auth": "TenantAdmin",
       "resource": "Objective:Delete",
@@ -7205,6 +7481,20 @@
         }
       ],
       "description": "Permanently delete multiple captains from the database by ID. Captains that are Working or have active missions are skipped. Returns a summary of deleted and skipped entries. This cannot be undone.",
+      "experimental": false
+    },
+    {
+      "name": "delete_cli_permission_rule",
+      "auth": "TenantAdmin",
+      "resource": "CliPermission:Delete",
+      "arguments": [
+        {
+          "name": "ruleId",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "description": "Delete a CLI permission rule (admins of the rule's tenant).",
       "experimental": false
     },
     {
@@ -7933,6 +8223,20 @@
       "experimental": false
     },
     {
+      "name": "get_cli_permission_request",
+      "auth": "Authenticated",
+      "resource": "CliPermission:Read",
+      "arguments": [
+        {
+          "name": "requestId",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "description": "Get one CLI permission request visible to the caller.",
+      "experimental": false
+    },
+    {
       "name": "get_deployment",
       "auth": "Authenticated",
       "resource": "Deployment:Read",
@@ -8375,6 +8679,69 @@
         }
       ],
       "description": "List captain-backed refinement sessions for one backlog item (lightweight, paginated). Returns session metadata only, most-recently-updated first; fetch a session's transcript with get_backlog_refinement_session.",
+      "experimental": false
+    },
+    {
+      "name": "list_cli_permission_requests",
+      "auth": "Authenticated",
+      "resource": "CliPermission:Read",
+      "arguments": [
+        {
+          "name": "captainId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "missionId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "threadId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "vesselId",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "List CLI permission requests (a CLI captain asking to run one of its own tools, for example a shell command) visible to the caller, newest first. Admins see their tenant (global admins every tenant); other users see requests from their own missions and Ask conversations. Each request has the tool name, a redacted input summary, captain, vessel, mission or thread, status, expiry, and canDecide.",
+      "experimental": false
+    },
+    {
+      "name": "list_cli_permission_rules",
+      "auth": "Authenticated",
+      "resource": "CliPermission:Read",
+      "arguments": [
+        {
+          "name": "captainId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "scope",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "vesselId",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "List CLI permission rules visible to the caller (the caller's tenant plus rules for every tenant). Rules use Claude Code permission rule syntax, for example Bash(git status:*), WebFetch(domain:example.com), or Edit(//repo/src/**); deny rules win over allow rules.",
       "experimental": false
     },
     {
@@ -8995,6 +9362,25 @@
       "experimental": false
     },
     {
+      "name": "set_captain_cli_permission_policy",
+      "auth": "TenantAdmin",
+      "resource": "Captain:Update",
+      "arguments": [
+        {
+          "name": "captainId",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "policy",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "Set or clear a captain's CLI tool permission policy (Refuse, ApproveInArmada, or Bypass; omit policy to inherit). Requires a global admin or a tenant admin of the captain's tenant. Bypass runs the CLI with its permission-bypass flag (for example --dangerously-skip-permissions): the captain can run any command as the Admiral's user.",
+      "experimental": false
+    },
+    {
       "name": "set_harbor_enabled",
       "auth": "Authenticated",
       "resource": "Harbor:Update",
@@ -9530,6 +9916,35 @@
         }
       ],
       "description": "Update a captain's name or runtime. Operational fields (state, process, mission) are preserved.",
+      "experimental": false
+    },
+    {
+      "name": "update_cli_permission_rule",
+      "auth": "TenantAdmin",
+      "resource": "CliPermission:Update",
+      "arguments": [
+        {
+          "name": "action",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "pattern",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "ruleId",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "description": "Update a CLI permission rule's pattern, action, and description (admins of the rule's tenant).",
       "experimental": false
     },
     {
@@ -10418,6 +10833,7 @@
       "create_pipeline",
       "create_vessel",
       "create_voyage",
+      "decide_cli_permission_request",
       "delete_captain",
       "delete_fleet",
       "delete_persona",
@@ -10438,6 +10854,7 @@
       "get_vessel",
       "get_voyage",
       "list_captains",
+      "list_cli_permission_requests",
       "list_docks",
       "list_events",
       "list_fleets",
@@ -10556,7 +10973,8 @@
           "arguments",
           "ok",
           "elapsedMs",
-          "result"
+          "result",
+          "permissionDenied"
         ],
         "generic": false
       },
@@ -10635,6 +11053,30 @@
         "hasMessage": false,
         "payloadType": "CheckRun",
         "fields": [],
+        "generic": false
+      },
+      {
+        "type": "cli_permission.requested",
+        "scope": "approvers",
+        "hasMessage": false,
+        "payloadType": null,
+        "fields": [
+          "requestId",
+          "status",
+          "request"
+        ],
+        "generic": false
+      },
+      {
+        "type": "cli_permission.resolved",
+        "scope": "approvers",
+        "hasMessage": false,
+        "payloadType": null,
+        "fields": [
+          "requestId",
+          "status",
+          "request"
+        ],
         "generic": false
       },
       {
@@ -15612,6 +16054,48 @@
       "key": "notifications",
       "type": "bool",
       "default": "true",
+      "experimental": false
+    },
+    {
+      "key": "permissions",
+      "type": "object",
+      "default": null,
+      "experimental": false
+    },
+    {
+      "key": "permissions.allowOwnerApproval",
+      "type": "bool",
+      "default": "false",
+      "experimental": false
+    },
+    {
+      "key": "permissions.askDefaultPolicy",
+      "type": "enum CliPermissionPolicyEnum (Refuse|ApproveInArmada|Bypass)",
+      "default": "\"ApproveInArmada\"",
+      "experimental": false,
+      "enumName": "CliPermissionPolicyEnum",
+      "enumValues": [
+        "Refuse",
+        "ApproveInArmada",
+        "Bypass"
+      ]
+    },
+    {
+      "key": "permissions.missionDefaultPolicy",
+      "type": "enum CliPermissionPolicyEnum (Refuse|ApproveInArmada|Bypass)",
+      "default": "\"Bypass\"",
+      "experimental": false,
+      "enumName": "CliPermissionPolicyEnum",
+      "enumValues": [
+        "Refuse",
+        "ApproveInArmada",
+        "Bypass"
+      ]
+    },
+    {
+      "key": "permissions.promptTimeoutSeconds",
+      "type": "int",
+      "default": "600",
       "experimental": false
     },
     {

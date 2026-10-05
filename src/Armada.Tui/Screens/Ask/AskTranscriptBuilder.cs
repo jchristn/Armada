@@ -101,7 +101,7 @@ namespace Armada.Tui.Screens.Ask
                     .Where(id => id != null)
                     .Select(id => id!), StringComparer.Ordinal);
                 string? highlight = view.HighlightAt(nowUtc);
-                string frame = w + "|" + System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(theme) + "|" + loc.Locale + "|" + (ask.ActiveCaptain?.Name ?? "");
+                string frame = w + "|" + System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(theme) + "|" + loc.Locale + "|" + (ask.ActiveCaptain?.Name ?? "") + "|" + PermissionKey(conv.Thread?.CliPermission);
                 Dictionary<string, AskBlockCacheEntry> next = new Dictionary<string, AskBlockCacheEntry>(StringComparer.Ordinal);
                 int reused = 0;
                 int built = 0;
@@ -183,15 +183,17 @@ namespace Armada.Tui.Screens.Ask
 
         /// <summary>
         /// Tool chip lines (the dashboard's <c>ChatToolChips</c>): status glyph, name, result preview, and time; expanded
-        /// chips also show the arguments and the result.
+        /// chips also show the arguments and the result. A chip the CLI refused for lack of permission gets a line
+        /// explaining why from the thread's CLI permission resolution.
         /// </summary>
         /// <param name="tools">Chips.</param>
         /// <param name="expanded">Show details.</param>
         /// <param name="theme">Theme.</param>
         /// <param name="loc">Localization.</param>
         /// <param name="width">Width.</param>
+        /// <param name="permission">The thread's CLI permission resolution, or null.</param>
         /// <returns>Lines.</returns>
-        public static List<StyledText> ToolChips(IReadOnlyList<AskToolChip> tools, bool expanded, ArmadaTheme theme, LocalizationService loc, int width)
+        public static List<StyledText> ToolChips(IReadOnlyList<AskToolChip> tools, bool expanded, ArmadaTheme theme, LocalizationService loc, int width, CliPermissionResolution? permission = null)
         {
             List<StyledText> lines = new List<StyledText>();
             foreach (AskToolChip tool in tools)
@@ -202,6 +204,7 @@ namespace Armada.Tui.Screens.Ask
                 if (tool.Status != AskToolChipStatusEnum.Running && !String.IsNullOrEmpty(tool.Result)) line = line.Append(StyledText.From("  " + Preview(tool.Result!), theme.Muted));
                 line = line.Append(StyledText.From("  " + (tool.Status == AskToolChipStatusEnum.Running ? loc.T("running...") : ToolMs(tool.ElapsedMs)), theme.Muted));
                 lines.Add(Clip(line, width));
+                if (tool.PermissionDenied && tool.Status != AskToolChipStatusEnum.Running) lines.AddRange(AskCliPermissionCard.DeniedLines(permission, theme, loc, width));
                 if (!expanded) continue;
                 if (!String.IsNullOrEmpty(tool.Arguments))
                 {
@@ -239,6 +242,7 @@ namespace Armada.Tui.Screens.Ask
                 chip.Arguments = call.ArgumentsText;
                 chip.Result = call.ResultText;
                 chip.ElapsedMs = call.ElapsedMs;
+                chip.PermissionDenied = call.PermissionDenied == true;
                 chips.Add(chip);
                 i++;
             }
@@ -256,6 +260,7 @@ namespace Armada.Tui.Screens.Ask
             string? workId = message.TrackedWorkId ?? message.TrackedWork?.Id;
             if (workId != null && hosts.TryGetValue(workId, out string? host) && host == message.Id) return null;
             if (conv.ProposalFor(message) != null) return null;
+            if (message.Kind == AskMessageKindEnum.CliPermission && (message.CliPermissionRequest == null || message.CliPermissionRequest.Status == CliPermissionRequestStatusEnum.Pending)) return null;
             string text = message.ContentText ?? "";
             System.Text.StringBuilder sb = new System.Text.StringBuilder(160);
             sb.Append(frame).Append('|').Append((int)message.Kind).Append('|').Append((int)message.Role)
@@ -268,6 +273,12 @@ namespace Armada.Tui.Screens.Ask
                 .Append('|').Append(message.ThinkingText?.Length ?? -1).Append(':').Append(message.ThinkingText?.GetHashCode() ?? 0)
                 .Append('|').Append(view.ExpandedTools.Contains(message.Id) ? 'T' : 't')
                 .Append(view.ExpandedThinking.Contains(message.Id) ? 'K' : 'k');
+            if (message.CliPermissionRequest != null)
+            {
+                CliPermissionRequest request = message.CliPermissionRequest;
+                sb.Append("|p").Append(request.Status).Append(':').Append(request.DecisionSource?.ToString() ?? "").Append(':').Append(request.DecisionMessage ?? "");
+            }
+
             if (message.ToolCalls != null)
             {
                 foreach (AskMessageToolCall call in message.ToolCalls)
@@ -275,7 +286,8 @@ namespace Armada.Tui.Screens.Ask
                     sb.Append('|').Append(call.ToolName).Append(':').Append(call.Ok?.ToString() ?? "?")
                         .Append(':').Append(call.ArgumentsText?.Length ?? -1).Append(':').Append(call.ArgumentsText?.GetHashCode() ?? 0)
                         .Append(':').Append(call.ResultText?.Length ?? -1).Append(':').Append(call.ResultText?.GetHashCode() ?? 0)
-                        .Append(':').Append(call.ElapsedMs?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "");
+                        .Append(':').Append(call.ElapsedMs?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "")
+                        .Append(':').Append(call.PermissionDenied == true ? 'D' : 'd');
                 }
             }
 
@@ -285,6 +297,12 @@ namespace Armada.Tui.Screens.Ask
             }
 
             return sb.ToString();
+        }
+
+        private static string PermissionKey(CliPermissionResolution? resolution)
+        {
+            if (resolution == null) return "";
+            return resolution.Effective + ":" + resolution.Source + ":" + (resolution.FallbackReason?.ToString() ?? "");
         }
 
         private AskBlock EmptyState(AskController ask, ArmadaTheme theme, LocalizationService loc, int w)
@@ -367,6 +385,10 @@ namespace Armada.Tui.Screens.Ask
                 lines.Add(Header(StyledText.From("= " + loc.T("Conversation summary"), theme.Accent.WithAttribute(CellAttributes.Bold, true)), when, theme, w));
                 lines.AddRange(Markdown(text, w));
             }
+            else if (message.Kind == AskMessageKindEnum.CliPermission)
+            {
+                lines.AddRange(AskCliPermissionCard.Lines(message.CliPermissionRequest, text, theme, loc, nowUtc, w));
+            }
             else if (message.Kind == AskMessageKindEnum.Error)
             {
                 lines.Add(Header(StyledText.From("! " + loc.T("Error"), theme.Error.WithAttribute(CellAttributes.Bold, true)), when, theme, w));
@@ -384,7 +406,7 @@ namespace Armada.Tui.Screens.Ask
             else
             {
                 List<AskToolChip> chips = ChipsFor(message.ToolCalls);
-                if (chips.Count > 0) lines.AddRange(ToolChips(chips, view.ExpandedTools.Contains(block.Key), theme, loc, w));
+                if (chips.Count > 0) lines.AddRange(ToolChips(chips, view.ExpandedTools.Contains(block.Key), theme, loc, w, conv.Thread?.CliPermission));
                 string name = ask.CaptainName(message.CaptainId) ?? ask.ActiveCaptain?.Name ?? loc.T("Captain");
                 StyledText head = StyledText.From(name, theme.Success.WithAttribute(CellAttributes.Bold, true));
                 if (message.DurationMs != null) head = head.Append(StyledText.From("  " + AskTurnMetrics.FormatDuration(message.DurationMs), theme.Muted));
@@ -414,7 +436,7 @@ namespace Armada.Tui.Screens.Ask
             block.Kind = AskBlockKindEnum.Stream;
             string text = stream.Text;
             block.CopyText = text;
-            if (stream.Tools.Count > 0) block.Lines.AddRange(ToolChips(stream.Tools, view.ExpandedTools.Contains("stream"), theme, loc, w));
+            if (stream.Tools.Count > 0) block.Lines.AddRange(ToolChips(stream.Tools, view.ExpandedTools.Contains("stream"), theme, loc, w, ask.Conversation.Thread?.CliPermission));
             string name = ask.ActiveCaptain?.Name ?? loc.T("Captain");
             StyledText head = StyledText.From(name, theme.Success.WithAttribute(CellAttributes.Bold, true));
             head = head.Append(StyledText.From(stream.Finished ? "" : "  " + loc.T("replying..."), theme.Info));

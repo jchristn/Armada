@@ -1541,6 +1541,60 @@ namespace Armada.Core.Database.SqlServer.Queries
                     "Add failure_kind and wait_for_voyage_workers to missions: a persisted failure classification set where the failure happens, and a structured flag that defers a worker until the other workers in its voyage settle",
                     @"IF COL_LENGTH('missions', 'failure_kind') IS NULL ALTER TABLE missions ADD failure_kind NVARCHAR(64) NULL;",
                     @"IF COL_LENGTH('missions', 'wait_for_voyage_workers') IS NULL ALTER TABLE missions ADD wait_for_voyage_workers BIT NOT NULL CONSTRAINT DF_missions_wait_for_voyage_workers DEFAULT 0;"
+                ),
+                new SchemaMigration(
+                    78,
+                    "Add CLI tool permissions: cli_permission_requests and cli_permission_rules tables, cli_permission_policy on captains and ask_threads, and permission_denied on ask_message_tool_calls",
+                    @"
+                    IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'cli_permission_requests')
+                    CREATE TABLE cli_permission_requests (
+                        id NVARCHAR(64) NOT NULL PRIMARY KEY,
+                        tenant_id NVARCHAR(64),
+                        user_id NVARCHAR(64),
+                        captain_id NVARCHAR(64),
+                        mission_id NVARCHAR(64),
+                        voyage_id NVARCHAR(64),
+                        vessel_id NVARCHAR(64),
+                        thread_id NVARCHAR(64),
+                        message_id NVARCHAR(64),
+                        runtime NVARCHAR(64) NOT NULL,
+                        tool_name NVARCHAR(256) NOT NULL,
+                        input_text NVARCHAR(MAX) NOT NULL,
+                        summary_text NVARCHAR(MAX) NOT NULL,
+                        suggested_rule NVARCHAR(MAX),
+                        status NVARCHAR(64) NOT NULL,
+                        decision_source NVARCHAR(64),
+                        rule_id NVARCHAR(64),
+                        decided_by_user_id NVARCHAR(64),
+                        decision_message NVARCHAR(MAX),
+                        expires_utc DATETIME2 NOT NULL,
+                        decided_utc DATETIME2,
+                        created_utc DATETIME2 NOT NULL,
+                        last_update_utc DATETIME2 NOT NULL
+                    );",
+                    @"
+                    IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'cli_permission_rules')
+                    CREATE TABLE cli_permission_rules (
+                        id NVARCHAR(64) NOT NULL PRIMARY KEY,
+                        tenant_id NVARCHAR(64),
+                        scope NVARCHAR(64) NOT NULL,
+                        vessel_id NVARCHAR(64),
+                        captain_id NVARCHAR(64),
+                        pattern NVARCHAR(MAX) NOT NULL,
+                        action NVARCHAR(64) NOT NULL,
+                        description NVARCHAR(MAX),
+                        created_by_user_id NVARCHAR(64),
+                        created_utc DATETIME2 NOT NULL,
+                        last_update_utc DATETIME2 NOT NULL
+                    );",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_cli_permission_requests_status_created') CREATE INDEX idx_cli_permission_requests_status_created ON cli_permission_requests(status, created_utc);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_cli_permission_requests_tenant_status') CREATE INDEX idx_cli_permission_requests_tenant_status ON cli_permission_requests(tenant_id, status);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_cli_permission_requests_thread') CREATE INDEX idx_cli_permission_requests_thread ON cli_permission_requests(thread_id);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_cli_permission_requests_mission') CREATE INDEX idx_cli_permission_requests_mission ON cli_permission_requests(mission_id);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_cli_permission_rules_tenant_scope') CREATE INDEX idx_cli_permission_rules_tenant_scope ON cli_permission_rules(tenant_id, scope);",
+                    @"IF COL_LENGTH('captains', 'cli_permission_policy') IS NULL ALTER TABLE captains ADD cli_permission_policy NVARCHAR(64) NULL;",
+                    @"IF COL_LENGTH('ask_threads', 'cli_permission_policy') IS NULL ALTER TABLE ask_threads ADD cli_permission_policy NVARCHAR(64) NULL;",
+                    @"IF COL_LENGTH('ask_message_tool_calls', 'permission_denied') IS NULL ALTER TABLE ask_message_tool_calls ADD permission_denied BIT NULL;"
                 )
 
             };

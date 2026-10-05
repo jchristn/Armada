@@ -97,8 +97,9 @@ export const navSections: NavSection[] = [
   {
     key: 'system',
     label: 'SYSTEM',
-    matchers: ['/server', '/doctor', '/settings', '/admin', '/api-explorer'],
+    matchers: ['/server', '/doctor', '/settings', '/admin', '/api-explorer', '/cli-permissions'],
     items: [
+      { to: '/cli-permissions', label: 'CLI Tool Permissions', tooltip: 'Approve CLI tool requests from captains and manage allow and deny rules', icon: icons.cliPermissions },
       { to: '/api-explorer', label: 'API Explorer', tooltip: 'Browse the live OpenAPI document, execute requests, and inspect responses', icon: icons.apiExplorer },
       { to: '/server', label: 'Settings', tooltip: 'Server settings, diagnostics, and tenant/user/credential administration', icon: icons.server },
     ],

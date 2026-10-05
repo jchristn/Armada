@@ -45,6 +45,11 @@ namespace Armada.Core.Models
         /// </summary>
         public string? Result { get; set; } = null;
 
+        /// <summary>
+        /// True when the runtime reported the call as refused for lack of permission (completed phase), or null.
+        /// </summary>
+        public bool? PermissionDenied { get; set; } = null;
+
         #endregion
 
         #region Constructors-and-Factories

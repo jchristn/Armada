@@ -5,10 +5,12 @@ import type {
   AskThreadDetail,
   AskTrackedWork,
   AskWorkSnapshot,
+  CliPermissionRequest,
 } from '../types/models';
 import { applyToolEvent, type ToolEvent } from '../components/shared/ChatToolChips';
 import type { AskEvent } from './askEvents';
 import { applySnapshotToWork } from './askWork';
+import { mergeCliRequest } from './cliPermissions';
 
 /** The assistant reply being streamed for the current captain turn. */
 export interface StreamingTurn {
@@ -31,6 +33,8 @@ export interface ConversationState {
   snapshots: Record<string, AskWorkSnapshot>;
   /** Latest known state of every proposal, by id (events can arrive before or after the message). */
   proposals: Record<string, AskActionProposal>;
+  /** Latest known state of every CLI permission request of this thread, by id (cards and socket events). */
+  cliPermissions: Record<string, CliPermissionRequest>;
   streaming: StreamingTurn | null;
   turnActive: boolean;
   /** Last turn failure reported by the server, shown inline until the next turn. */
@@ -48,6 +52,7 @@ export type ConversationAction =
   | { type: 'confirmUser'; localId: string; messageId: string | null; turnId: string | null }
   | { type: 'dropOptimistic'; localId: string }
   | { type: 'proposal'; proposal: AskActionProposal }
+  | { type: 'cliPermission'; request: CliPermissionRequest }
   | { type: 'snapshot'; trackedWorkId: string; snapshot: AskWorkSnapshot }
   | { type: 'thread'; thread: AskThread }
   | { type: 'turnEnded' };
@@ -61,6 +66,7 @@ export function initialConversation(threadId: string | null = null): Conversatio
     trackedWork: [],
     snapshots: {},
     proposals: {},
+    cliPermissions: {},
     streaming: null,
     turnActive: false,
     turnError: null,
@@ -109,6 +115,18 @@ function indexProposals(state: Record<string, AskActionProposal>, messages: AskM
   }
   for (const proposal of extra ?? []) if (proposal?.id) next[proposal.id] = mergeProposal(next[proposal.id], proposal);
   return next;
+}
+
+function indexCliPermissions(state: Record<string, CliPermissionRequest>, messages: AskMessage[], extra?: CliPermissionRequest[] | null): Record<string, CliPermissionRequest> {
+  let next: Record<string, CliPermissionRequest> | null = null;
+  const add = (request: CliPermissionRequest | null | undefined) => {
+    if (!request?.id) return;
+    next = next ?? { ...state };
+    next[request.id] = mergeCliRequest(next[request.id], request);
+  };
+  for (const message of messages) add(message.cliPermissionRequest);
+  for (const request of extra ?? []) add(request);
+  return next ?? state;
 }
 
 function upsertWork(list: AskTrackedWork[], work: AskTrackedWork): AskTrackedWork[] {
@@ -170,6 +188,7 @@ export function conversationReducer(state: ConversationState, action: Conversati
         trackedWork: work,
         snapshots: snaps,
         proposals: indexProposals(state.proposals, messages, action.detail.pendingProposals),
+        cliPermissions: indexCliPermissions(state.cliPermissions, messages, action.detail.pendingCliPermissions),
         streaming,
         turnActive,
       };
@@ -179,7 +198,7 @@ export function conversationReducer(state: ConversationState, action: Conversati
       if (action.threadId !== state.threadId) return state;
       const messages = mergeMessages(state.messages, action.messages);
       const { work, snaps } = indexWork(state.trackedWork, state.snapshots, action.messages);
-      return { ...state, messages, hasMore: action.hasMore, trackedWork: work, snapshots: snaps, proposals: indexProposals(state.proposals, action.messages) };
+      return { ...state, messages, hasMore: action.hasMore, trackedWork: work, snapshots: snaps, proposals: indexProposals(state.proposals, action.messages), cliPermissions: indexCliPermissions(state.cliPermissions, action.messages) };
     }
 
     case 'latest': {
@@ -188,7 +207,7 @@ export function conversationReducer(state: ConversationState, action: Conversati
       const { work, snaps } = indexWork(state.trackedWork, state.snapshots, action.messages);
       let streaming = state.streaming;
       if (streaming?.finished) streaming = null;
-      return { ...state, messages, trackedWork: work, snapshots: snaps, proposals: indexProposals(state.proposals, action.messages), streaming };
+      return { ...state, messages, trackedWork: work, snapshots: snaps, proposals: indexProposals(state.proposals, action.messages), cliPermissions: indexCliPermissions(state.cliPermissions, action.messages), streaming };
     }
 
     case 'detail': {
@@ -203,6 +222,7 @@ export function conversationReducer(state: ConversationState, action: Conversati
         trackedWork: work,
         snapshots: snaps,
         proposals: indexProposals(state.proposals, [], action.detail.pendingProposals),
+        cliPermissions: indexCliPermissions(state.cliPermissions, [], action.detail.pendingCliPermissions),
       };
     }
 
@@ -223,6 +243,10 @@ export function conversationReducer(state: ConversationState, action: Conversati
 
     case 'proposal':
       return { ...state, proposals: { ...state.proposals, [action.proposal.id]: mergeProposal(state.proposals[action.proposal.id], action.proposal) } };
+
+    case 'cliPermission':
+      if (action.request.threadId && action.request.threadId !== state.threadId) return state;
+      return { ...state, cliPermissions: { ...state.cliPermissions, [action.request.id]: mergeCliRequest(state.cliPermissions[action.request.id], action.request) } };
 
     case 'snapshot': {
       const work = state.trackedWork.map((w) => (w.id === action.trackedWorkId ? applySnapshotToWork(w, action.snapshot) : w));
@@ -286,8 +310,9 @@ function applyEvent(state: ConversationState, event: AskEvent): ConversationStat
       const messages = mergeMessages(state.messages, [message]);
       const { work, snaps } = indexWork(state.trackedWork, state.snapshots, [message]);
       const proposals = indexProposals(state.proposals, [message]);
+      const cliPermissions = indexCliPermissions(state.cliPermissions, [message]);
       const streaming = closesStream(state.streaming, message) ? null : state.streaming;
-      return { ...state, messages, trackedWork: work, snapshots: snaps, proposals, streaming };
+      return { ...state, messages, trackedWork: work, snapshots: snaps, proposals, cliPermissions, streaming };
     }
 
     case 'ask.proposal':
@@ -327,6 +352,16 @@ export function proposalForMessage(state: Pick<ConversationState, 'proposals'>, 
   const id = message.proposalId ?? message.proposal?.id ?? null;
   if (id && state.proposals[id]) return message.proposal ? mergeProposal(message.proposal, state.proposals[id]) : state.proposals[id];
   return message.proposal ?? null;
+}
+
+/** The CLI permission request a CliPermission card renders: the latest event-driven copy merged over the embedded one. */
+export function cliRequestForMessage(state: Pick<ConversationState, 'cliPermissions'>, message: AskMessage): CliPermissionRequest | null {
+  const embedded = message.cliPermissionRequest ?? null;
+  const id = embedded?.id ?? null;
+  if (id && state.cliPermissions[id]) return mergeCliRequest(embedded ?? undefined, state.cliPermissions[id]);
+  if (embedded) return embedded;
+  // A card whose request was not hydrated: find the request that points at this message.
+  return Object.values(state.cliPermissions).find((r) => r.messageId === message.id) ?? null;
 }
 
 /**

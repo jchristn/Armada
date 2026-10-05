@@ -11,9 +11,16 @@ import PageHeader from '../components/shared/PageHeader';
 import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import { inboxItemTitle } from '../lib/deploymentApprovalLabel';
+import { useLiveRefresh } from '../lib/useLiveRefresh';
+import { CLI_PERMISSION_EVENT_PREFIX, isPendingRequest } from '../lib/cliPermissions';
+import CliPermissionDecisionControls from '../components/cliPermissions/CliPermissionDecisionControls';
+import CliPermissionCountdown from '../components/cliPermissions/CliPermissionCountdown';
+
+/** Inbox kind of a pending CLI tool permission request (InboxItemKinds.CliPermission). */
+const CLI_PERMISSION_KIND = 'cli_permission';
 
 /** Inbox kinds that wait on a decision from the user (approve or reject), as opposed to failures to fix. */
-const APPROVAL_KINDS: ReadonlySet<string> = new Set(['review', 'deployment_approval', 'ask_proposal']);
+const APPROVAL_KINDS: ReadonlySet<string> = new Set(['review', 'deployment_approval', 'ask_proposal', CLI_PERMISSION_KIND]);
 
 function severityColor(severity: InboxSeverity): string {
   if (severity === 'Critical') return 'var(--red)';
@@ -48,6 +55,9 @@ export default function Inbox() {
 
   const { seconds: refreshSeconds, setSeconds: setRefreshSeconds } = useAutoRefresh('inbox', load);
 
+  // A CLI tool request appears or is decided elsewhere: reload so the row appears or disappears promptly.
+  useLiveRefresh([CLI_PERMISSION_EVENT_PREFIX], () => { void load(); });
+
   const approvals = useMemo(() => items.filter((i) => APPROVAL_KINDS.has(i.kind)), [items]);
   const interventions = useMemo(() => items.filter((i) => !APPROVAL_KINDS.has(i.kind)), [items]);
 
@@ -55,10 +65,13 @@ export default function Inbox() {
     if (item.kind === 'ask_proposal') return t('Open conversation');
     if (item.kind === 'deployment_approval') return t('Open deployment');
     if (item.kind === 'review') return t('Review mission');
+    if (item.kind === CLI_PERMISSION_KIND) return t('Open request');
     return t('Open');
   }
 
   function renderItem(item: InboxItem, i: number) {
+    const cli = item.kind === CLI_PERMISSION_KIND ? item.cliPermission ?? null : null;
+    const decidable = !!cli && !!cli.canDecide && isPendingRequest(cli);
     return (
       <div
         key={`${item.kind}:${item.entityId ?? i}`}
@@ -70,6 +83,7 @@ export default function Inbox() {
           <div style={{ minWidth: 0, flex: '1 1 240px' }}>
             <strong>{inboxItemTitle(t, item)}</strong>
             <div className="text-dim" style={{ marginTop: '0.2rem' }}>{item.detail}</div>
+            {cli && cli.summaryText && <code className="inbox-cli-command">{cli.summaryText}</code>}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <span
@@ -78,7 +92,13 @@ export default function Inbox() {
             >
               {t(item.severity)}
             </span>
-            {APPROVAL_KINDS.has(item.kind) && (
+            {item.kind === CLI_PERMISSION_KIND && (
+              <CliPermissionCountdown expiresUtc={item.expiresUtc ?? cli?.expiresUtc} active={!cli || isPendingRequest(cli)} />
+            )}
+            {decidable && cli && (
+              <CliPermissionDecisionControls request={cli} onDecided={() => { void load(); }} />
+            )}
+            {APPROVAL_KINDS.has(item.kind) && !decidable && (
               <button
                 type="button"
                 className="btn btn-sm"

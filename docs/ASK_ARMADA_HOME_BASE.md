@@ -120,6 +120,54 @@ untouched).
   `/ask/<threadId>`), so the dashboard's Needs You page (`/inbox`) and the TUI's Needs You and Approvals
   center show them. Only the thread owner sees them; admins are not shown other users' proposals.
 
+### CLI tool permissions
+
+Proposals cover Armada's own MCP tools. The captain CLI's own tools (shell commands, web fetches, file tools outside
+the turn's temporary working directory) follow the turn's **CLI tool permission policy**: `Refuse`,
+`ApproveInArmada`, or `Bypass` (see `docs/CAPTAINS.md`, "CLI tool permissions", for the per-runtime flags and rule
+syntax).
+
+- **Resolution** (`CliPermissionPolicyResolver.ResolveForAsk`), most specific first: the thread's
+  `CliPermissionPolicy`; the captain's `CliPermissionPolicy`, where a captain-level `Bypass` counts only when
+  `Ask.CaptainAutoApprove` is true (Ask turns can be started by any user of the tenant); when
+  `Ask.CaptainAutoApprove` is true, the captain's legacy `autoApprove` option (absent or true is `Bypass`, false is
+  `Refuse`), which reproduces the behavior before CLI tool permissions; `Permissions.AskDefaultPolicy` (default
+  `ApproveInArmada`). `ApproveInArmada` runs as `Refuse` when the captain's runtime has no permission prompt hook
+  (`RuntimeUnsupported`; only Claude Code and ApiEndpoint captains have one, the latter for its `run_process` tool) or a Claude Code turn has no thread-scoped token (`NoSessionToken`). Milestone narrations and
+  summaries resolve the same way but never prompt (nobody is waiting for them): `ApproveInArmada` runs them as
+  `Refuse`. With `Ask.CaptainAutoApprove` false (the default), an Ask turn bypasses only when the thread itself is set
+  to `Bypass`, which only an admin can do.
+- **Approve in Armada.** A Claude Code turn is launched with `--permission-prompt-tool
+  mcp__armada__cli_permission_prompt` on its thread-scoped `armada` server. A tool that needs permission calls
+  `cli_permission_prompt`, which bypasses the proposal gate: a matching deny or allow rule decides at once; otherwise a
+  `Pending` CLI permission request is stored (input redacted), a **permission card** is posted (`AskMessage` with
+  `Kind` `CliPermission`, `Role` `System`, `ContentText` `<Tool>: <summary>`, and `CliPermissionRequest` attached), the
+  request appears in `AskThreadDetail.PendingCliPermissions`, the inbox (`cli_permission`), and the Approvals centers,
+  and `cli_permission.requested` goes to the approvers. The turn waits until someone decides, the request expires
+  (`Permissions.PromptTimeoutSeconds`, default 600), or the turn ends (pending requests of the thread are cancelled).
+  The card is re-sent through `ask.message` when the request is decided.
+- **The card** shows the tool, the command or input, the captain, an expiry countdown, and the status. A viewer who
+  may decide gets **Allow once**, **Allow and remember** (admins only: a dialog with an editable rule pattern that
+  defaults to the suggested rule, and a scope of Captain or Global; Vessel only for mission requests), and **Deny**
+  (optional message returned to the captain). Otherwise a pending card reads "Waiting for an admin to decide."
+- **Who decides.** Global admins and tenant admins of the thread's tenant always can; the thread owner only when
+  `Permissions.AllowOwnerApproval` is true (default false). The captain itself can never decide: its session cannot
+  call `decide_cli_permission_request`, and the decide, rule, and policy tools are refused in Ask threads (never
+  proposed), so a careless proposal approval cannot pre-approve the captain's own prompts.
+- **Refused calls (`[x!]`).** Claude Code reports tool calls it refused for lack of permission (`permission_denials` on
+  its result event). They are stored as `AskMessageToolCall.PermissionDenied` (and sent live as `ask.tool` with
+  `permissionDenied: true`), and the transcript marks them `[x!]` with an explanation from `AskThread.CliPermission`:
+  under `Refuse`, "Refused: CLI tools run with policy Refuse (from <source>). Change it in the conversation header (CLI
+  tools), on the captain, or in Settings > CLI Tool Permissions." plus the fallback reason when there is one; under
+  `ApproveInArmada`, "Denied in Armada (see the permission card)."
+- **Thread header control.** The conversation header has a **CLI tools** selector: Inherit, Refuse, Approve in
+  Armada, and Bypass (shown only to global and tenant admins, behind a strong warning confirmation). It calls
+  `PUT /api/v1/ask/threads/{id}/cli-permission-policy` (owner only; `Bypass` needs an admin, `403` otherwise) and shows
+  the effective policy, its source, and any fallback note from `AskThread.CliPermission`.
+- **Defaults.** Before CLI tool permissions an Ask turn ran without auto-approve (O-02), so tools that needed
+  permission were silently refused. `ApproveInArmada` keeps a person in front of every such call while letting the
+  user get a command run when an approver agrees.
+
 ### Live monitoring
 
 - `AskWorkTracker` (Server-owned, started with the server) watches every `Active` tracked item. It reacts
@@ -156,7 +204,7 @@ untouched).
 |---|---|---|---|
 | POST | `/ask/threads/enumerate` | `{ PageNumber, PageSize, Search, IncludeArchived }` | `EnumerationResult<AskThread>` ordered pinned first, then `LastMessageUtc` desc |
 | POST | `/ask/threads` | `{ Title?, CaptainId?, AutoApprove? }` | 201 `AskThread` |
-| GET | `/ask/threads/{id}` | | `AskThreadDetail { Thread, TrackedWork[], PendingProposals[] }` |
+| GET | `/ask/threads/{id}` | | `AskThreadDetail { Thread, TrackedWork[], PendingProposals[], PendingCliPermissions[] }` |
 | PUT | `/ask/threads/{id}` | `{ Title?, CaptainId?, AutoApprove?, Pinned?, Archived? }` | `AskThread` |
 | DELETE | `/ask/threads/{id}` | | 204 |
 | POST | `/ask/threads/{id}/messages/enumerate` | `{ BeforeSequence?, PageSize }` | `{ Messages: AskMessage[] (with ToolCalls[], Proposal?, TrackedWork?), HasMore }` |
@@ -168,6 +216,7 @@ untouched).
 | POST | `/ask/threads/{id}/proposals/{pid}/approve` | | `AskActionProposal` |
 | POST | `/ask/threads/{id}/proposals/{pid}/reject` | | `AskActionProposal` |
 | GET | `/ask/threads/{id}/work/{workId}` | | `AskWorkSnapshot` |
+| PUT | `/ask/threads/{id}/cli-permission-policy` | `{ Policy }` (`Refuse`, `ApproveInArmada`, `Bypass`, or null) | `AskThread` with `CliPermission`; 403 when a non-admin sets `Bypass` |
 | GET | `/ask/quick-actions` | | catalog of quick actions with their argument schemas |
 
 New auto-generated titles: the first user message is truncated to a short title; after the first
@@ -180,7 +229,9 @@ default.
 `ask.turn { turnId, state: started|completed|failed|cancelled, messageId }`,
 `ask.message { message }` (any persisted message: milestone, result, summary),
 `ask.proposal { proposal }`, `ask.work { trackedWorkId, snapshot }`,
-`ask.thread { thread }` (title, unread count, last message changed).
+`ask.thread { thread }` (title, unread count, last message changed). `ask.tool` also carries `permissionDenied`, and
+`ask.message` carries CLI permission cards. CLI permission requests are announced separately as
+`cli_permission.requested` and `cli_permission.resolved` to the request's approvers and owner, not only the owner.
 
 ### Dashboard
 
@@ -268,9 +319,13 @@ proposals next to mission reviews and deployment approvals. See `docs/TUI.md`.
 | `ProposalExpiryMinutes` | 60 | 1-1440 |
 | `TrackerIntervalSeconds` | 5 | 2-300 |
 | `NarrateMilestones` | true | -- |
-| `CaptainAutoApprove` | false | -- (when false, turns and narrations run the CLI captain without its auto-approve flags whatever the captain setting; see docs/SECURITY_REVIEW.md, O-02) |
+| `CaptainAutoApprove` | false | -- (when false, a captain-level `Bypass` and the captain's legacy `autoApprove` are ignored for turns and narrations; see "CLI tool permissions" above and docs/SECURITY_REVIEW.md, O-02) |
 | `NarrationTimeoutSeconds` | 60 | 10-600 |
 | `TurnTimeoutMinutes` | 15 | 1-120 |
+
+CLI tool permissions are configured in `ArmadaSettings.Permissions`: `AskDefaultPolicy` (default `ApproveInArmada`),
+`MissionDefaultPolicy` (default `Bypass`), `AllowOwnerApproval` (default false), and `PromptTimeoutSeconds` (default
+600, clamped to 10-3600).
 
 Retention is configured separately in `ArmadaSettings.Retention`: `AskThreadArchiveAfterDays` (default 90, 0
 never archives) and `AskThreadDeleteAfterDays` (default 0, never deletes), 0-3650; pinned threads are never
@@ -289,6 +344,7 @@ archived or deleted.
 | 2026-10-04 | backend agent | P5.2 (backend part) | Real run on macOS against a throwaway server (ports 47890/47891, `ARMADA_DATA_DIR` in a scratch directory) with a real Claude Code captain: unauthenticated `/ws` got `401`; the captain called `mcp__armada__dispatch` over its thread-scoped token and got "Proposed as aap_..." (no voyage existed before approval); approve executed the real handler (voyage created in the user's tenant), a second approve got `409`; `ask.work` snapshots and `WorkUpdate` messages followed the voyage (started, work produced, finished, the last one narrated by the captain); a second tenant's socket received only its `status.snapshot` and its REST read of the thread was `404`. Fixed during the run: percent-encoded session tokens on `?token=`, and voyages Armada marks Complete while a mission is still landing are now followed until every mission settles. |
 | 2026-10-04 | backend agent | P5.1 | REST_API.md, MCP_API.md, WEBSOCKET_API.md, Postman "Ask Threads" folder, CHANGELOG. README Ask section left for the dashboard merge. |
 | 2026-10-04 | orchestrator | P5.2 | Integration run through the real dashboard (Playwright, Chromium, 1512 px) against a throwaway server (ports 57890/57891) with a real Claude Code captain and a temp repo with a bare origin, vessel `LocalMerge` with auto-land on. Three conversations: (1) captain proposed `dispatch`, confirm card in about 6 s, approved, mission ran, landing failed because the first temp repo had no `origin` (test setup; the thread reported it correctly, including a captain-written explanation); (2) same flow in a new conversation through "Mission landed" and "voyage complete", commit verified on origin; (3) after fixes, order verified and rename, summarize, and delete exercised. Fixed during integration: the "not connected to Armada over MCP" banner was shown for Claude Code captains even though the server connects them per turn; the captain's reply was persisted when the turn ended, so a confirm card approved while the captain was still writing (and the resulting updates) sorted above the reply; the reply's position is now reserved when the turn starts. Full suite 2889/2889, dashboard 218/218. |
+| 2026-10-05 | cli-permissions agent | -- | CLI tool permissions in Ask: turns resolve `Refuse` / `ApproveInArmada` / `Bypass` (thread, captain, `Ask.CaptainAutoApprove` legacy mapping, `Permissions.AskDefaultPolicy` default `ApproveInArmada`); Claude Code permission prompts become `CliPermission` cards decided by admins (owners when `Permissions.AllowOwnerApproval`); `[x!]` explanations from typed permission denials; CLI tools control in the conversation header; narrations and summaries never prompt. Migration 78. |
 
 ## UI assumptions (dashboard, 2026-10-04)
 

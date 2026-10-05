@@ -115,6 +115,16 @@ If/when MCP-over-tunnel is added, this document will gain explicit routed-tool s
     - [run_fleet_action](#run_fleet_action)
     - [fleet_action_run_status](#fleet_action_run_status)
     - [cancel_fleet_action_run](#cancel_fleet_action_run)
+  - **CLI Permissions**
+    - [cli_permission_prompt](#cli_permission_prompt)
+    - [list_cli_permission_requests](#list_cli_permission_requests)
+    - [get_cli_permission_request](#get_cli_permission_request)
+    - [decide_cli_permission_request](#decide_cli_permission_request)
+    - [list_cli_permission_rules](#list_cli_permission_rules)
+    - [create_cli_permission_rule](#create_cli_permission_rule)
+    - [update_cli_permission_rule](#update_cli_permission_rule)
+    - [delete_cli_permission_rule](#delete_cli_permission_rule)
+    - [set_captain_cli_permission_policy](#set_captain_cli_permission_policy)
   - **Merge Queue**
     - [get_merge_entry](#get_merge_entry)
     - [enqueue_merge](#enqueue_merge)
@@ -189,8 +199,9 @@ If/when MCP-over-tunnel is added, this document will gain explicit routed-tool s
 **Contract.** Tool names, argument names and types, and which arguments are required are frozen for 1.0 and listed in
 [API_SURFACE_1.0.md](API_SURFACE_1.0.md) (rules: [COMPATIBILITY.md](COMPATIBILITY.md)). Arguments are camelCase (matched
 case-insensitively); tool results carry the same entity shapes as the REST API, with PascalCase property names (the
-camelCase exceptions are the `inbox` envelope, `count`, `criticalCount`, `warningCount`, and `items`, and the
-`list_prompt_templates` envelope and rows). Unlike REST, MCP results keep null-valued properties. Enums are emitted as their
+camelCase exceptions are the `inbox` envelope, `count`, `criticalCount`, `warningCount`, and `items`, the
+`list_prompt_templates` envelope and rows, the `list_cli_permission_requests` and `list_cli_permission_rules`
+envelopes, the `delete_cli_permission_rule` result, and the `cli_permission_prompt` answer). Unlike REST, MCP results keep null-valued properties. Enums are emitted as their
 names, as on REST. New tools, new optional arguments,
 and new result fields may be added in minor releases. Tools whose description starts with `[Experimental]` (the Harbor
 tools `get_harbor`, `create_harbor`, `update_harbor`, `delete_harbor`, `set_harbor_enabled`) are excluded from the
@@ -215,6 +226,7 @@ Armada exposes a full MCP server that allows AI agents and MCP-compatible client
 - Stop individual captains or all captains (emergency stop)
 - Manage the merge queue (enqueue, cancel, process, inspect)
 - Register and manage Harbors (host runners): inspect, create, update, enable/disable, and delete them
+- Answer CLI captains' permission prompts (`cli_permission_prompt`), and list and decide CLI permission requests, manage their rules, and set a captain's CLI tool permission policy
 - Manage model endpoints (external embedding/inference providers), validate them with a real request, and sweep their health
 
 MCP does **not** currently expose the newer dashboard/system helper REST surfaces such as:
@@ -298,7 +310,7 @@ call against the caller (including Ask Armada proposals executed after approval)
 
 | Level | Tools |
 |---|---|
-| Authenticated | Reads (`status`, `enumerate`, `get_*`, `list_*`, `mission_status`, `voyage_status`, logs, diffs, `inbox`, `vessel_health`, `search_memory`, `token_usage_summary`, ...) and writes to caller-owned resources (memories, model endpoints, harbors) |
+| Authenticated | Reads (`status`, `enumerate`, `get_*`, `list_*`, `mission_status`, `voyage_status`, logs, diffs, `inbox`, `vessel_health`, `search_memory`, `token_usage_summary`, ...), writes to caller-owned resources (memories, model endpoints, harbors), and `cli_permission_prompt` and `decide_cli_permission_request` (the handlers check the caller; see [CLI Permissions](#cli-permissions)) |
 | TenantAdmin | Every other write or execution (dispatch, captains, missions, voyages, docks, merge queue, signals, events, objectives, backlog, personas, pipelines, prompt templates, playbooks, releases, deployments, runbooks, check runs, fleet actions, vessel import, vessel health) |
 | AdminOnly | `backup`, `restore`, `stop_server` (a credential is required even on loopback; use `X-Api-Key` from `settings.json`) |
 
@@ -350,8 +362,14 @@ handler is registered through the Ask gate, which checks that claim:
   `get_deployment`, `get_dock`, `get_fleet`, `get_harbor`, `get_memory`, `get_merge_entry`, `get_mission_diff`,
   `get_mission_log`, `get_model_endpoint`, `get_objective`, `get_persona`, `get_pipeline`, `get_playbook`,
   `get_prompt_template`, `get_release`, `get_runbook`, `get_runbook_execution`, `get_vessel`), and the `list_*` readers
-  (`list_backlog`, `list_backlog_refinement_sessions`, `list_objectives`, `list_prompt_templates`). The list lives in
+  (`list_backlog`, `list_backlog_refinement_sessions`, `list_objectives`, `list_prompt_templates`,
+  `list_cli_permission_requests`, `list_cli_permission_rules`, plus `get_cli_permission_request`). The list lives in
   `AskToolPolicy`; any tool not on it (including tools added later) is treated as state-changing.
+- **`cli_permission_prompt`** (the captain CLI's own permission prompt) runs without becoming a proposal: an approver
+  answers it as a [CLI permission request](#cli-permissions).
+- **CLI permission decisions, rules, and policies** (`decide_cli_permission_request`, `create_cli_permission_rule`,
+  `update_cli_permission_rule`, `delete_cli_permission_rule`, `set_captain_cli_permission_policy`) are refused with
+  `ErrorCode` `Forbidden` and never proposed, so a captain cannot get its own prompts approved.
 - **Any other tool**, when the thread's `AutoApprove` is off, is **not executed**. A `Pending` proposal and an
   `ActionProposal` message are created, `ask.proposal` is sent to the owner, and the tool returns this text to the
   captain:
@@ -477,7 +495,7 @@ Return the operator's inbox: everything across the fleet that requires a human's
 
 **What qualifies.** Two kinds of item appear:
 
-- **Awaiting your decision (human-in-the-loop):** a mission in `Review` (approve or reject), a deployment in `PendingApproval`, or a pending Ask Armada action proposal in one of your own conversations.
+- **Awaiting your decision (human-in-the-loop):** a mission in `Review` (approve or reject), a deployment in `PendingApproval`, a pending Ask Armada action proposal in one of your own conversations, or a pending CLI permission request (a captain waiting to run one of its own tools, such as a shell command).
 - **Failed and needs intervention (human-out-of-the-loop):** a failed mission, a mission whose work could not be merged (landing failed), a failed merge, a failed or verification-failed deployment, or a stalled captain.
 
 Purely informational events (completions, normal progress) are deliberately excluded -- the inbox answers *"what needs me?"*, not *"what happened?"* (use `enumerate` or the Activity log for history). An empty `items` list means nothing currently needs the operator. Operational items are scoped like other reads (global admin: everything; tenant admin: the tenant; regular user: own items); Ask proposals are always limited to the caller's own threads, and proposals older than `Ask.ProposalExpiryMinutes` are left out (the same rule as `GET /api/v1/inbox`). Each category is capped at 100 items, and items are ordered by severity (`Critical` first), then title.
@@ -494,6 +512,7 @@ Purely informational events (completions, normal progress) are deliberately excl
 | `deployment_failed` | Deployment failed or failed verification | `Critical` |
 | `stalled_captain` | Captain is stalled and may need recovery or a dock reclaim | `Warning` |
 | `ask_proposal` | Ask Armada action proposal waiting for your approval (`Href` is the conversation, `/ask/<threadId>`) | `Warning` |
+| `cli_permission` | CLI permission request waiting for an approver; visible to global admins, the tenant's tenant admins, and the owner of the thread or mission (`Href` is `/ask/<threadId>` for the caller's own conversation, otherwise `/cli-permissions?request=<id>`) | `Warning` |
 
 **Input Schema:**
 
@@ -510,7 +529,8 @@ No parameters required.
 `warningCount`, `items`); each item is an `InboxItem` with `Kind`, `Severity`, `Title`, `Detail`, `EntityType`,
 `EntityName` (display name of the referenced entity; use it instead of parsing `Title`), `EntityId`, and a dashboard
 `Href`. Deployment items also carry `EnvironmentName` and `DeploymentTitle`, and their `Title` reads
-"Deploy to <environment>: <title>". `Severity` is `Critical`, `Warning`, or `Info`.
+"Deploy to <environment>: <title>". `cli_permission` items carry `CliPermission` (the request, with the caller's
+`CanDecide`) and `ExpiresUtc`. `Severity` is `Critical`, `Warning`, or `Info`.
 
 ```json
 {
@@ -895,6 +915,163 @@ Update an existing memory by id; only supplied fields change; increments `versio
 ### delete_memory
 
 Delete a memory that has become stale or is no longer relevant. Args: `memoryId` (required).
+
+---
+
+## CLI Permissions
+
+CLI tool permissions govern a CLI captain's own tools (shell commands, web fetches, file tools outside the accepted
+edits), not Armada's MCP tools. Under the `ApproveInArmada` policy a Claude Code captain sends each permission prompt to
+`cli_permission_prompt`, which creates a CLI permission request (`cpr_`) that an approver allows or denies; a matching
+rule (`cpl_`) decides without asking. The REST equivalents, the request and rule shapes, the rule syntax, and the
+access rules are in [REST_API.md](REST_API.md#cli-permissions); the policy resolution and per-runtime flags are in
+[CAPTAINS.md](CAPTAINS.md#cli-tool-permissions). Errors are `McpToolError`s: `NotFound` (missing, or not visible to the
+caller), `Forbidden` (the caller may not act), `InvalidArgument` (bad enum value or rule pattern), `Conflict` (the
+request is no longer pending), and `Unavailable` on the stdio server, which registers the tools without the service.
+
+Who may call what:
+
+| Tool | Caller |
+|---|---|
+| `cli_permission_prompt` | Only a captain's own mission- or Ask-thread-scoped session (a presented session token); every other caller gets `Forbidden` |
+| `list_cli_permission_requests`, `get_cli_permission_request` | Any authenticated person: global admins see every request, tenant admins their tenant, other users requests from their own Ask threads and missions. Captain sessions get an empty list (and `NotFound` by id) |
+| `decide_cli_permission_request` | A global admin, a tenant admin of the request's tenant, or the owner when `Permissions.AllowOwnerApproval` is true; `AllowAndRemember` needs an admin. Requires a presented credential: captain sessions and the unauthenticated loopback identity get `Forbidden`, so a captain can never approve its own prompt |
+| `list_cli_permission_rules` | Any authenticated person (the caller's tenant plus rules for every tenant; captain sessions get an empty list) |
+| `create_cli_permission_rule`, `update_cli_permission_rule`, `delete_cli_permission_rule` | TenantAdmin: global admins (any tenant, or every tenant), tenant admins (their own tenant) |
+| `set_captain_cli_permission_policy` | TenantAdmin: a global admin or a tenant admin of the captain's tenant; never a captain session |
+
+In an Ask conversation, `cli_permission_prompt` bypasses the proposal gate (an approver answers it instead), the three
+readers run like other read-only tools, and the decide, rule, and policy tools are refused outright with `Forbidden`
+(never proposed), so a captain cannot get its own prompts approved through a proposal.
+
+### cli_permission_prompt
+
+The permission prompt tool for CLI captains: the target of Claude Code's `--permission-prompt-tool
+mcp__armada__cli_permission_prompt`. Armada adds that flag itself on `ApproveInArmada` launches; people never call this
+tool.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `tool_name` | string | Yes | Tool that needs permission (for example `Bash`); at most 256 characters |
+| `input` | object | Yes | The tool's input as the CLI sent it |
+| `tool_use_id` | string | No | Tool use identifier |
+
+The call resolves the session (the Ask thread, checked against the token's owner, or the mission with its voyage,
+vessel, and dock) and evaluates the applicable rules (the tenant's `Global` rules and rules for every tenant, the
+mission's `Vessel` rules, the captain's `Captain` rules). A matching deny rule denies and a matching allow rule allows
+at once; both are recorded. Otherwise a `Pending` request is stored (input redacted), a `CliPermission` card is posted
+when the session is an Ask thread, `cli_permission.requested` is announced, and the call waits until an approver
+decides, `Permissions.PromptTimeoutSeconds` passes (`Expired`), or the turn or mission ends (`Cancelled`).
+
+**Response:** the answer in the shape Claude Code reads from the tool result text. Allowed (the original input,
+unchanged):
+
+```json
+{ "behavior": "allow", "updatedInput": { "command": "npm test", "description": "Run the tests" } }
+```
+
+Denied (by an approver, a rule, expiry, or cancellation):
+
+```json
+{ "behavior": "deny", "message": "An approver in Armada denied this Bash call (cpr_abc123). Reason: not on this branch. Do not retry the same call; continue without it or explain what you need." }
+```
+
+A session whose mission or thread no longer exists gets `NotFound`.
+
+### list_cli_permission_requests
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `status` | string | No | `Pending`, `Allowed`, `Denied`, `Expired`, or `Cancelled` |
+| `missionId` | string | No | Mission filter (`msn_`) |
+| `threadId` | string | No | Ask thread filter (`ath_`) |
+| `captainId` | string | No | Captain filter (`cpt_`) |
+| `vesselId` | string | No | Vessel filter (`vsl_`) |
+| `limit` | int | No | 1-1000, default 100 |
+
+**Response:** `{ "count": 1, "requests": [CliPermissionRequest, ...] }`, newest first. Each request carries the tool
+name, redacted `InputText`, `SummaryText`, `SuggestedRule`, captain, vessel, mission or thread, `Status`, `ExpiresUtc`,
+and the caller's `CanDecide` and `CanRemember`.
+
+### get_cli_permission_request
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `requestId` | string | Yes | Request ID (`cpr_`) |
+
+**Response:** the [CliPermissionRequest](REST_API.md#clipermissionrequest).
+
+### decide_cli_permission_request
+
+Allow once, allow and remember, or deny a pending request; the waiting captain continues with the answer.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `requestId` | string | Yes | Request ID (`cpr_`) |
+| `decision` | string | Yes | `AllowOnce`, `AllowAndRemember` (admins; also stores an allow rule), or `Deny` |
+| `message` | string | No | Returned to the captain with a denial; recorded with an allow |
+| `rulePattern` | string | No | Rule for `AllowAndRemember`, for example `Bash(git status:*)`; defaults to the request's `SuggestedRule` |
+| `ruleScope` | string | No | `Global`, `Vessel`, or `Captain` (default `Captain`) for that rule |
+
+**Response:** the decided CliPermissionRequest. `Conflict` when it is no longer pending.
+
+### list_cli_permission_rules
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `scope` | string | No | `Global`, `Vessel`, or `Captain` |
+| `vesselId` | string | No | Vessel filter (`vsl_`) |
+| `captainId` | string | No | Captain filter (`cpt_`) |
+
+**Response:** `{ "count": 1, "rules": [CliPermissionRule, ...] }`.
+
+### create_cli_permission_rule
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `pattern` | string | Yes | Rule in Claude Code permission rule syntax, for example `Bash(npm run test:*)`, `WebFetch(domain:example.com)`, `Edit(src/**)` |
+| `action` | string | Yes | `Allow` or `Deny` (deny rules win) |
+| `scope` | string | No | `Global` (default; every captain of the tenant), `Vessel`, or `Captain` |
+| `vesselId` | string | Vessel | Vessel for a `Vessel` rule |
+| `captainId` | string | Captain | Captain for a `Captain` rule |
+| `tenantId` | string | No | Tenant for a `Global` rule (global admins); omit for every tenant. A tenant admin's rules always belong to their tenant |
+| `description` | string | No | Optional note |
+
+A vessel or captain outside the caller's scope answers `NotFound`. **Response:** the created
+[CliPermissionRule](REST_API.md#clipermissionrule).
+
+### update_cli_permission_rule
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `ruleId` | string | Yes | Rule ID (`cpl_`) |
+| `pattern` | string | Yes | Rule pattern |
+| `action` | string | Yes | `Allow` or `Deny` |
+| `description` | string | No | Optional note (omit to clear) |
+
+Scope and target cannot change (delete and recreate). Rules for every tenant need a global admin. **Response:** the
+updated CliPermissionRule.
+
+### delete_cli_permission_rule
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `ruleId` | string | Yes | Rule ID (`cpl_`) |
+
+**Response:** `{ "deleted": true, "ruleId": "cpl_..." }`.
+
+### set_captain_cli_permission_policy
+
+Set or clear a captain's CLI tool permission policy. `Bypass` runs the CLI with its permission-bypass flag (for example
+`--dangerously-skip-permissions`): the captain can run any command as the Admiral's user. For Ask turns a captain-level
+`Bypass` applies only when `Ask.CaptainAutoApprove` is true.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `captainId` | string | Yes | Captain ID (`cpt_`) |
+| `policy` | string | No | `Refuse`, `ApproveInArmada`, or `Bypass`; omit to clear (inherit) |
+
+**Response:** the [Captain](REST_API.md#captain) with `CliPermissionPolicy`.
 
 ---
 
@@ -4821,6 +4998,7 @@ Paginated result wrapper returned by `enumerate`.
 | `ReasoningEffort` | string \| null | ReasoningEffortEnum value. Optional reasoning-effort level for this captain, translated to each runtime's native control at launch (Claude Code thinking budget, Codex model_reasoning_effort, Mux --effort). Runtimes without a native control ignore it. Null means "use the runtime default". |
 | `Tier` | string \| null | CaptainTierEnum value. Optional capability/cost tier used by dispatch to route missions of a given complexity. Null means the tier is auto-classified from the model name at selection time (defaulting to Standard). |
 | `RuntimeOptionsJson` | string \| null | Runtime-specific configuration serialized as JSON. Use this for settings that should not be promoted into generic captain fields. |
+| `CliPermissionPolicy` | string \| null | CliPermissionPolicyEnum value (`Refuse`, `ApproveInArmada`, `Bypass`) for the captain's own CLI tools, or null to inherit (the legacy `autoApprove` option, then the server default). Changed only with `set_captain_cli_permission_policy`; `update_captain` keeps it. See [CAPTAINS.md](CAPTAINS.md#cli-tool-permissions). |
 | `QuarantineUntilUtc` | string \| null | UTC time until which the captain is quarantined and excluded from dispatch selection. Null when the captain is not quarantined; a time in the past means the quarantine has expired and will be lifted on the next health tick. |
 | `QuarantineReason` | string \| null | Why the captain was quarantined (e.g. "provider usage limit", "auth failure", "crash loop"). Null when not quarantined. |
 | `LastProcessAliveUtc` | string \| null | UTC time the captain's OS process was last observed alive by the supervisor. This is distinct from `LastHeartbeatUtc`, which advances only on real agent output: stall detection compares output-heartbeat age so a process that is alive but silent is still detected as stalled, while liveness telemetry stays fresh here. |

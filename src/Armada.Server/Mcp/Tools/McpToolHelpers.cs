@@ -83,6 +83,7 @@ namespace Armada.Server.Mcp.Tools
                 caller.Claims.TryGetValue("isTenantAdmin", out string? isTenantAdmin);
                 caller.Claims.TryGetValue("authMethod", out string? authMethod);
                 caller.Claims.TryGetValue("missionId", out string? missionId);
+                caller.Claims.TryGetValue("askThreadId", out string? askThreadId);
                 AuthContext resolved = AuthContext.Authenticated(
                     String.IsNullOrEmpty(tenantId) ? Constants.DefaultTenantId : tenantId,
                     userId,
@@ -92,6 +93,7 @@ namespace Armada.Server.Mcp.Tools
                     null,
                     caller.Principal);
                 if (!String.IsNullOrEmpty(missionId)) resolved.MissionId = missionId;
+                if (!String.IsNullOrEmpty(askThreadId)) resolved.AskThreadId = askThreadId;
                 return resolved;
             }
 
@@ -103,6 +105,20 @@ namespace Armada.Server.Mcp.Tools
                 "Mcp",
                 null,
                 "MCP Default Tenant");
+        }
+
+        /// <summary>
+        /// Whether the current MCP call presented a credential that the transport authenticated (a bearer token, session
+        /// token, or API key). False for the unauthenticated loopback default identity and for stdio callers.
+        /// </summary>
+        /// <returns>True when the caller identity comes from a presented credential.</returns>
+        public static bool HasPresentedCredential()
+        {
+            Voltaic.Core.RpcCallContext? caller = Voltaic.Core.RpcCallContext.Current;
+            return caller != null
+                && caller.Claims != null
+                && caller.Claims.TryGetValue("userId", out string? userId)
+                && !String.IsNullOrEmpty(userId);
         }
 
         /// <summary>

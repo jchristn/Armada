@@ -71,6 +71,8 @@ namespace Armada.Core.Database.Mysql
             AskMessageToolCalls = new AskMessageToolCallMethods(_ConnectionString);
             AskActionProposals = new AskActionProposalMethods(_ConnectionString);
             AskTrackedWork = new AskTrackedWorkMethods(_ConnectionString);
+            CliPermissionRequests = new CliPermissionRequestMethods(_ConnectionString);
+            CliPermissionRules = new CliPermissionRuleMethods(_ConnectionString);
             FleetActions = new FleetActionMethods(_ConnectionString);
             FleetActionRuns = new FleetActionRunMethods(_ConnectionString);
             FleetActionRunTargets = new FleetActionRunTargetMethods(_ConnectionString);
@@ -708,6 +710,11 @@ namespace Armada.Core.Database.Mysql
                     77,
                     "Add failure_kind and wait_for_voyage_workers to missions: a persisted failure classification set where the failure happens, and a structured flag that defers a worker until the other workers in its voyage settle",
                     TableQueries.MigrationV77Statements
+                ),
+                new SchemaMigration(
+                    78,
+                    "Add CLI tool permissions: cli_permission_requests and cli_permission_rules tables, cli_permission_policy on captains and ask_threads, and permission_denied on ask_message_tool_calls",
+                    TableQueries.MigrationV78Statements
                 )
             };
         }
@@ -882,6 +889,12 @@ namespace Armada.Core.Database.Mysql
             try { captain.ModelEndpointId = NullableString(reader["model_endpoint_id"]); } catch { }
             captain.SystemInstructions = NullableString(reader["system_instructions"]);
             try { captain.RuntimeOptionsJson = NullableString(reader["runtime_options_json"]); } catch { }
+            try
+            {
+                string? cliPolicy = NullableString(reader["cli_permission_policy"]);
+                captain.CliPermissionPolicy = !String.IsNullOrEmpty(cliPolicy) && Enum.TryParse<CliPermissionPolicyEnum>(cliPolicy, out CliPermissionPolicyEnum parsedPolicy) ? parsedPolicy : (CliPermissionPolicyEnum?)null;
+            }
+            catch { captain.CliPermissionPolicy = null; }
             captain.State = Enum.Parse<CaptainStateEnum>(reader["state"].ToString()!);
             captain.CurrentMissionId = NullableString(reader["current_mission_id"]);
             captain.CurrentDockId = NullableString(reader["current_dock_id"]);

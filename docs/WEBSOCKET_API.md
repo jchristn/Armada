@@ -53,6 +53,7 @@ If the selected deployment disconnects or the tunnel drops, the proxy closes the
   - [runbook-execution.changed](#runbook-executionchanged)
   - [approval-needed](#approval-needed)
   - [Ask Armada thread events](#ask-armada-thread-events)
+  - [CLI permission events](#cli-permission-events)
   - [Planning session events](#planning-session-events)
   - [Generic Events](#generic-events)
 - [Command Actions](#command-actions)
@@ -62,6 +63,7 @@ If the selected deployment disconnects or the tunnel drops, the proxy closes the
   - [Voyage Actions](#voyage-actions)
   - [Mission Actions](#mission-actions)
   - [Captain Actions](#captain-actions)
+  - [CLI Permission Actions](#cli-permission-actions)
   - [Signal Actions](#signal-actions)
   - [Event Actions](#event-actions)
   - [Dock Actions](#dock-actions)
@@ -109,6 +111,7 @@ entitled to:
 |---|---|
 | Entity changes (`mission.changed`, `voyage.changed`, `captain.changed`, `check-run.changed`, `objective.changed`, `deployment.*`, `incident.changed`, `runbook-execution.changed`, `approval-needed`, planning and objective-refinement session events, generic events) | Sockets of the entity's tenant. Global admins may opt in to every tenant with `{ "Route": "subscribe", "AllTenants": true }`. Events whose tenant cannot be resolved go to global admins only. |
 | Ask Armada events (`ask.*`) | Only the sockets of the thread owner (same tenant and user). The all-tenants opt-in does not apply. |
+| CLI permission events (`cli_permission.*`) | The request's approvers and owner: global admins of the request's tenant or opted in to all tenants, the tenant's tenant admins, and the owner of the Ask thread or mission. Each copy carries that recipient's own `canDecide` and `canRemember`. |
 
 Commands (`Route: "command"`) require a global administrator (see [command](#command)).
 
@@ -845,8 +848,8 @@ Sent only to the sockets of the thread's owner. Every payload carries `threadId`
 | `ask.turn` | `{ threadId, turnId, state, messageId, error? }` | `state` is `started`, then `completed`, `failed`, or `cancelled` (`messageId` is the persisted reply or error message, null when cancelled) |
 | `ask.chunk` | `{ threadId, turnId, delta }` | Streamed reply text of a running turn |
 | `ask.thinking` | `{ threadId, turnId, delta }` | Streamed reasoning (when `ShowThinking`) |
-| `ask.tool` | `{ threadId, turnId, phase, id, name, arguments, ok, elapsedMs, result }` | A tool call started (`phase: "started"`) or completed (`"completed"`) |
-| `ask.message` | `{ threadId, message }` | Any persisted message (user, reply, proposal card, action result, work update, summary, error) with `toolCalls`, `proposal`, and `trackedWork` embedded; also re-sent for a confirm card when its proposal is decided |
+| `ask.tool` | `{ threadId, turnId, phase, id, name, arguments, ok, elapsedMs, result, permissionDenied }` | A tool call started (`phase: "started"`) or completed (`"completed"`). `permissionDenied` is `true` when the CLI refused the call because the turn's CLI tool permission policy did not grant it (Claude Code reports this in its result event, so a second `completed` event for an already completed call can arrive at the end of the turn); null otherwise |
+| `ask.message` | `{ threadId, message }` | Any persisted message (user, reply, proposal card, action result, work update, summary, error, CLI permission card) with `toolCalls`, `proposal`, `trackedWork`, and `cliPermissionRequest` embedded; also re-sent for a confirm card when its proposal is decided and for a CLI permission card when its request is decided, expires, or is cancelled |
 | `ask.proposal` | `{ threadId, proposal }` | A proposal was created or changed status (`expiresUtc` set while pending) |
 | `ask.work` | `{ threadId, trackedWorkId, snapshot, trackedWork }` | The snapshot of tracked work changed (see `AskWorkSnapshot` in REST_API.md) |
 | `ask.thread` | `{ threadId, thread }` | Title, counters (`messageCount`, `unreadCount`), `activeWorkCount`, or `activeTurnId` changed |
@@ -862,6 +865,35 @@ The direct captain chat endpoint (`POST /api/v1/captains/{id}/chat` with a `Turn
     "proposal": { "id": "aap_muu5...", "toolName": "dispatch", "status": "Pending", "summaryText": "Dispatch voyage \"Fix flaky test\" to vessel vsl_... with 1 mission(s)", "expiresUtc": "2026-10-04T19:00:00Z" }
   },
   "timestamp": "2026-10-04T18:00:00.000Z"
+}
+```
+
+### CLI permission events
+
+Sent when a CLI captain's permission prompt (for example a shell command under the `ApproveInArmada` policy) starts
+waiting for an approver, and when it is allowed, denied, expires, or is cancelled. Requests that a rule decides at once
+are recorded but not announced. Recipients are the request's approvers and owner (see
+[Authentication](#authentication)); the all-tenants opt-in admits a global admin to other tenants' requests. Field names
+are camelCase.
+
+| Type | Payload | When |
+|---|---|---|
+| `cli_permission.requested` | `{ requestId, status, request }` | A request is `Pending` |
+| `cli_permission.resolved` | `{ requestId, status, request }` | The request became `Allowed`, `Denied`, `Expired`, or `Cancelled` |
+
+`request` is the [CliPermissionRequest](REST_API.md#clipermissionrequest) (tool, redacted input and summary, suggested
+rule, captain, mission, vessel or thread, `expiresUtc`, decision fields) with `canDecide` and `canRemember` computed for
+the receiving socket's identity (`canDecide` is false once the request is no longer pending).
+
+```json
+{
+  "type": "cli_permission.requested",
+  "data": {
+    "requestId": "cpr_muu5...",
+    "status": "Pending",
+    "request": { "id": "cpr_muu5...", "toolName": "Bash", "summaryText": "npm test", "suggestedRule": "Bash(npm test:*)", "captainId": "cpt_...", "threadId": "ath_...", "status": "Pending", "expiresUtc": "2026-10-05T12:10:00Z", "canDecide": true, "canRemember": true }
+  },
+  "timestamp": "2026-10-05T12:00:00.000Z"
 }
 ```
 
@@ -984,6 +1016,8 @@ Commands are sent via the `command` route. Each command returns a `command.resul
 | | `create_captain` | Create captain | `data` |
 | | `update_captain` | Update captain (preserves operational fields) | `id`, `data` |
 | | `delete_captain` | Delete captain (refused while `Working` or with active missions) | `id` |
+| **CLI Permission** | `list_cli_permission_requests` | List CLI permission requests, newest first | optional `status`, `captainId` |
+| | `decide_cli_permission_request` | Allow once, allow and remember, or deny a pending request | `id`, `data` ([CliPermissionDecisionRequest](REST_API.md#clipermissiondecisionrequest)) |
 | **Signal** | `list_signals` | List/enumerate signals | optional `query` |
 | | `send_signal` | Create signal | `data` |
 | **Event** | `list_events` | List/enumerate events | optional `query` |
@@ -2226,6 +2260,65 @@ Get the current session log for a captain with pagination support. The log is re
   }
 }
 ```
+
+---
+
+### CLI Permission Actions
+
+Global administrators only, like every command. People who are not global admins decide CLI permission requests over
+REST (`POST /api/v1/cli-permissions/requests/{id}/decide`) or MCP.
+
+#### list_cli_permission_requests
+
+List CLI permission requests (newest first, at most 100).
+
+**Request:**
+
+```json
+{
+  "Route": "command",
+  "action": "list_cli_permission_requests",
+  "status": "Pending",
+  "captainId": "cpt_abc123"
+}
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `action` | string | Yes | `"list_cli_permission_requests"` |
+| `status` | string | No | `Pending`, `Allowed`, `Denied`, `Expired`, or `Cancelled` (`InvalidArgument` otherwise) |
+| `captainId` | string | No | Captain filter |
+
+**Response:** `command.result` whose `data` is an array of [CliPermissionRequest](REST_API.md#clipermissionrequest).
+
+---
+
+#### decide_cli_permission_request
+
+Decide a pending request; the waiting captain continues with the answer.
+
+**Request:**
+
+```json
+{
+  "Route": "command",
+  "action": "decide_cli_permission_request",
+  "id": "cpr_abc123",
+  "data": { "decision": "AllowAndRemember", "rulePattern": "Bash(npm test:*)", "ruleScope": "Captain" }
+}
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `action` | string | Yes | `"decide_cli_permission_request"` |
+| `id` | string | Yes | Request ID (`cpr_`) |
+| `data.decision` | string | Yes | `AllowOnce`, `AllowAndRemember`, or `Deny` |
+| `data.message` | string | No | Returned to the captain with a denial |
+| `data.rulePattern` | string | No | Rule stored by `AllowAndRemember` (defaults to the suggested rule) |
+| `data.ruleScope` | string | No | `Global`, `Vessel`, or `Captain` (default `Captain`) |
+
+**Response:** `command.result` whose `data` is the decided request. A request that is no longer pending answers
+`command.error` with `code` `Conflict`; a missing one `NotFound`; an invalid rule pattern `InvalidArgument`.
 
 ---
 

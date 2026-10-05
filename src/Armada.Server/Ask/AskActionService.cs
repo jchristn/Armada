@@ -430,6 +430,9 @@ namespace Armada.Server.Ask
                 return McpToolError.NotFound("The conversation for this session no longer exists.");
             }
 
+            if (AskToolPolicy.IsGateExempt(name)) return await handler(args).ConfigureAwait(false);
+            if (AskToolPolicy.IsThreadForbidden(name))
+                return McpToolError.Forbidden("Tool " + name + " cannot be used from an Ask conversation; CLI permission decisions, rules, and policies are made by people in Armada.");
             if (AskToolPolicy.IsReadOnly(name)) return await handler(args).ConfigureAwait(false);
 
             string argumentsText = args.HasValue ? args.Value.GetRawText() : "{}";

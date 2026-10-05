@@ -48,7 +48,14 @@ namespace Armada.Server.Ask
 
                 if (!String.IsNullOrEmpty(activity.Name)) call.ToolName = activity.Name!;
                 if (!String.IsNullOrEmpty(activity.Arguments)) call.ArgumentsText = activity.Arguments;
-                if (String.Equals(activity.Phase, "completed", StringComparison.OrdinalIgnoreCase))
+                if (activity.PermissionDenied == true)
+                {
+                    // A later typed report (Claude Code's permission_denials) marks a call already completed: keep its
+                    // result text and timing.
+                    call.PermissionDenied = true;
+                    call.Ok = false;
+                }
+                else if (String.Equals(activity.Phase, "completed", StringComparison.OrdinalIgnoreCase))
                 {
                     call.Ok = activity.Ok;
                     call.ResultText = activity.Result;

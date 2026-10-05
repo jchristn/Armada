@@ -63,8 +63,8 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 using (NpgsqlCommand cmd = new NpgsqlCommand())
                 {
                     cmd.Connection = conn;
-                    cmd.CommandText = @"INSERT INTO captains (id, tenant_id, user_id, name, runtime, model, model_endpoint_id, system_instructions, allowed_personas, preferred_persona, runtime_options_json, state, current_mission_id, current_dock_id, process_id, recovery_attempts, last_heartbeat_utc, last_process_alive_utc, reasoning_effort, tier, quarantine_until_utc, quarantine_reason, created_utc, last_update_utc)
-                        VALUES (@id, @tenant_id, @user_id, @name, @runtime, @model, @model_endpoint_id, @system_instructions, @allowed_personas, @preferred_persona, @runtime_options_json, @state, @current_mission_id, @current_dock_id, @process_id, @recovery_attempts, @last_heartbeat_utc, @last_process_alive_utc, @reasoning_effort, @tier, @quarantine_until_utc, @quarantine_reason, @created_utc, @last_update_utc);";
+                    cmd.CommandText = @"INSERT INTO captains (id, tenant_id, user_id, name, runtime, model, model_endpoint_id, system_instructions, allowed_personas, preferred_persona, runtime_options_json, cli_permission_policy, state, current_mission_id, current_dock_id, process_id, recovery_attempts, last_heartbeat_utc, last_process_alive_utc, reasoning_effort, tier, quarantine_until_utc, quarantine_reason, created_utc, last_update_utc)
+                        VALUES (@id, @tenant_id, @user_id, @name, @runtime, @model, @model_endpoint_id, @system_instructions, @allowed_personas, @preferred_persona, @runtime_options_json, @cli_permission_policy, @state, @current_mission_id, @current_dock_id, @process_id, @recovery_attempts, @last_heartbeat_utc, @last_process_alive_utc, @reasoning_effort, @tier, @quarantine_until_utc, @quarantine_reason, @created_utc, @last_update_utc);";
                     cmd.Parameters.AddWithValue("@id", captain.Id);
                     cmd.Parameters.AddWithValue("@tenant_id", (object?)captain.TenantId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@user_id", (object?)captain.UserId ?? DBNull.Value);
@@ -76,6 +76,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     cmd.Parameters.AddWithValue("@allowed_personas", (object?)captain.AllowedPersonas ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@preferred_persona", (object?)captain.PreferredPersona ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@runtime_options_json", (object?)captain.RuntimeOptionsJson ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@cli_permission_policy", (object?)captain.CliPermissionPolicy?.ToString() ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@state", captain.State.ToString());
                     cmd.Parameters.AddWithValue("@current_mission_id", (object?)captain.CurrentMissionId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@current_dock_id", (object?)captain.CurrentDockId ?? DBNull.Value);
@@ -223,6 +224,26 @@ namespace Armada.Core.Database.Postgresql.Implementations
             }
 
             return captain;
+        }
+
+        /// <inheritdoc />
+        public async Task<bool> UpdateCliPermissionPolicyAsync(string id, CliPermissionPolicyEnum? policy, CancellationToken token = default)
+        {
+            if (string.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
+
+            using (NpgsqlConnection conn = new NpgsqlConnection(_Settings.GetConnectionString()))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                using (NpgsqlCommand cmd = new NpgsqlCommand())
+                {
+                    cmd.Connection = conn;
+                    cmd.CommandText = "UPDATE captains SET cli_permission_policy = @policy, last_update_utc = @now WHERE id = @id;";
+                    cmd.Parameters.AddWithValue("@policy", (object?)policy?.ToString() ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@now", DateTime.UtcNow);
+                    cmd.Parameters.AddWithValue("@id", id);
+                    return await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false) > 0;
+                }
+            }
         }
 
         /// <summary>
@@ -976,6 +997,12 @@ namespace Armada.Core.Database.Postgresql.Implementations
             try { captain.AllowedPersonas = NullableString(reader["allowed_personas"]); } catch { }
             try { captain.PreferredPersona = NullableString(reader["preferred_persona"]); } catch { }
             try { captain.RuntimeOptionsJson = NullableString(reader["runtime_options_json"]); } catch { }
+            try
+            {
+                string? cliPolicy = NullableString(reader["cli_permission_policy"]);
+                captain.CliPermissionPolicy = !String.IsNullOrEmpty(cliPolicy) && Enum.TryParse<CliPermissionPolicyEnum>(cliPolicy, out CliPermissionPolicyEnum parsedPolicy) ? parsedPolicy : (CliPermissionPolicyEnum?)null;
+            }
+            catch { captain.CliPermissionPolicy = null; }
             try
             {
                 string? reasoningEffortStr = NullableString(reader["reasoning_effort"]);

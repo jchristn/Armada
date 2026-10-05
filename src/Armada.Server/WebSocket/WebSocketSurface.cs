@@ -82,7 +82,8 @@ namespace Armada.Server.WebSocket
             "backup", "restore",
             "get_persona", "create_persona", "update_persona", "delete_persona",
             "get_prompt_template", "update_prompt_template",
-            "get_pipeline", "create_pipeline", "update_pipeline", "delete_pipeline"
+            "get_pipeline", "create_pipeline", "update_pipeline", "delete_pipeline",
+            "list_cli_permission_requests", "decide_cli_permission_request"
         };
 
         /// <summary>
@@ -168,11 +169,15 @@ namespace Armada.Server.WebSocket
             events.Add(new WebSocketEventDescriptor("ask.turn", "user", false, null, new[] { "threadId", "turnId", "state", "messageId", "error" }, false));
             events.Add(new WebSocketEventDescriptor("ask.chunk", "user", false, null, new[] { "threadId", "turnId", "delta" }, false));
             events.Add(new WebSocketEventDescriptor("ask.thinking", "user", false, null, new[] { "threadId", "turnId", "delta" }, false));
-            events.Add(new WebSocketEventDescriptor("ask.tool", "user", false, null, new[] { "threadId", "turnId", "phase", "id", "name", "arguments", "ok", "elapsedMs", "result" }, false));
+            events.Add(new WebSocketEventDescriptor("ask.tool", "user", false, null, new[] { "threadId", "turnId", "phase", "id", "name", "arguments", "ok", "elapsedMs", "result", "permissionDenied" }, false));
             events.Add(new WebSocketEventDescriptor("ask.message", "user", false, null, new[] { "threadId", "message" }, false));
             events.Add(new WebSocketEventDescriptor("ask.proposal", "user", false, null, new[] { "threadId", "proposal" }, false));
             events.Add(new WebSocketEventDescriptor("ask.work", "user", false, null, new[] { "threadId", "trackedWorkId", "snapshot", "trackedWork" }, false));
             events.Add(new WebSocketEventDescriptor("ask.thread", "user", false, null, new[] { "threadId", "thread" }, false));
+
+            // CLI tool permissions (approvers: global admins, the tenant's tenant admins, and the owner)
+            events.Add(new WebSocketEventDescriptor("cli_permission.requested", "approvers", false, null, new[] { "requestId", "status", "request" }, false));
+            events.Add(new WebSocketEventDescriptor("cli_permission.resolved", "approvers", false, null, new[] { "requestId", "status", "request" }, false));
 
             // Generic events: GenericEventFields payload plus a message.
             string[] generic = new string[]

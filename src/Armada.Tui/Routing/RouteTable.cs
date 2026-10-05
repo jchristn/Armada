@@ -170,6 +170,7 @@ namespace Armada.Tui.Routing
             r.Add(Screen("/api-explorer", "API Explorer", "ApiExplorerScreen", "W7.6"));
             r.Add(Screen("/api-explorer/:operationId", "API Explorer", "ApiExplorerScreen", "W7.6"));
             r.Add(Redirect("/notifications", "/inbox"));
+            r.Add(Redirect("/cli-permissions", "/approvals"));
             r.Add(Redirect("/admin/tenants", "/server?tab=tenants"));
             r.Add(Redirect("/admin/users", "/server?tab=users"));
             r.Add(Redirect("/admin/credentials", "/server?tab=credentials"));

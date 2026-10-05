@@ -46,6 +46,11 @@ namespace Armada.Runtimes
         /// </summary>
         public string? Result { get; set; } = null;
 
+        /// <summary>
+        /// True when the call was refused for lack of permission (the CLI tool permission policy), or null.
+        /// </summary>
+        public bool? PermissionDenied { get; set; } = null;
+
         #endregion
     }
 }

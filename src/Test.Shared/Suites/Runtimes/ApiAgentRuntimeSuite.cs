@@ -3,6 +3,7 @@ namespace Test.Shared.Suites.Runtimes
     using System;
     using System.Collections.Generic;
     using System.IO;
+    using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Core.Enums;
@@ -121,6 +122,33 @@ namespace Test.Shared.Suites.Runtimes
                 {
                     Cleanup(dir);
                 }
+            }));
+
+            cases.Add(CaseAsync("shell_tool_follows_cli_permission_policy", "run_process is refused under Refuse, asks the in-process prompt under ApproveInArmada, and runs under Bypass or with no policy", TestTags.Positive, async () =>
+            {
+                ApiRuntimeToolEvent refused = await RunShellAsync(Armada.Core.Enums.CliPermissionPolicyEnum.Refuse, null).ConfigureAwait(false);
+                AssertEqual(false, refused.Ok, "Refuse refuses");
+                AssertEqual(true, refused.PermissionDenied, "typed refusal");
+
+                List<string> asked = new List<string>();
+                ApiRuntimeToolEvent denied = await RunShellAsync(Armada.Core.Enums.CliPermissionPolicyEnum.ApproveInArmada, (tool, input, ct) =>
+                {
+                    lock (asked) asked.Add(tool + " " + input);
+                    return Task.FromResult(new Armada.Core.Models.CliPermissionPromptOutcome { Allowed = false, Message = "no shell today" });
+                }).ConfigureAwait(false);
+                AssertEqual(true, denied.PermissionDenied, "denied in Armada");
+                AssertEqual("no shell today", denied.Result);
+                AssertEqual(1, asked.Count, "asked once");
+                AssertTrue(asked[0].StartsWith("run_process ", StringComparison.Ordinal), "prompted for run_process");
+
+                ApiRuntimeToolEvent allowed = await RunShellAsync(Armada.Core.Enums.CliPermissionPolicyEnum.ApproveInArmada, (tool, input, ct) => Task.FromResult(new Armada.Core.Models.CliPermissionPromptOutcome { Allowed = true })).ConfigureAwait(false);
+                AssertEqual(true, allowed.Ok, "allowed in Armada runs the command: " + allowed.Result);
+                AssertNull(allowed.PermissionDenied);
+
+                ApiRuntimeToolEvent noPrompt = await RunShellAsync(Armada.Core.Enums.CliPermissionPolicyEnum.ApproveInArmada, null).ConfigureAwait(false);
+                AssertEqual(true, noPrompt.PermissionDenied, "ApproveInArmada without a prompt refuses");
+                AssertEqual(true, (await RunShellAsync(Armada.Core.Enums.CliPermissionPolicyEnum.Bypass, null).ConfigureAwait(false)).Ok, "Bypass runs");
+                AssertEqual(true, (await RunShellAsync(null, null).ConfigureAwait(false)).Ok, "no policy keeps the previous behavior");
             }));
 
             cases.Add(CaseAsync("mcp_is_error_reported_on_typed_tool_channel", "An MCP tool result with isError is a failed tool event on the typed channel; stdout carries only model text", TestTags.Negative, async () =>
@@ -282,6 +310,37 @@ namespace Test.Shared.Suites.Runtimes
         #endregion
 
         #region Private-Methods
+
+        private static async Task<ApiRuntimeToolEvent> RunShellAsync(Armada.Core.Enums.CliPermissionPolicyEnum? policy, Func<string, string, CancellationToken, Task<Armada.Core.Models.CliPermissionPromptOutcome>>? prompt)
+        {
+            string dir = NewTempDir();
+            try
+            {
+                Queue<ToolChatResponse> script = new Queue<ToolChatResponse>();
+                script.Enqueue(new ToolChatResponse
+                {
+                    Success = true,
+                    Text = "Running.",
+                    ToolCalls = new List<ToolCall> { new ToolCall { Id = "sh1", Name = "run_process", ArgumentsJson = "{\"command\":\"echo hi\"}" } }
+                });
+                script.Enqueue(new ToolChatResponse { Success = true, Text = "Done.", ToolCalls = new List<ToolCall>() });
+                ModelEndpoint endpoint = new ModelEndpoint { Name = "test-endpoint", Provider = ModelProviderEnum.OpenAICompatible, Kind = ModelEndpointKindEnum.Inference, Model = "test-model", BaseUrl = "http://localhost:1" };
+                ApiAgentRuntime runtime = new ApiAgentRuntime(endpoint, CreateLogging(), 20, (ep, log) => new ScriptedClient(script, log));
+                runtime.ShellPolicy = policy;
+                runtime.PermissionPrompt = prompt;
+                List<ApiRuntimeToolEvent> events = new List<ApiRuntimeToolEvent>();
+                ManualResetEventSlim exited = new ManualResetEventSlim(false);
+                runtime.OnToolEvent += (pid, e) => { lock (events) events.Add(e); };
+                runtime.OnProcessExited += (pid, code) => exited.Set();
+                await runtime.StartAsync(dir, "Run echo.").ConfigureAwait(false);
+                AssertTrue(exited.Wait(TimeSpan.FromSeconds(30)), "loop completed");
+                lock (events) return events.Single(e => e.Phase == ApiRuntimeToolPhaseEnum.Completed && e.Id == "sh1");
+            }
+            finally
+            {
+                Cleanup(dir);
+            }
+        }
 
         private static System.Text.Json.JsonElement ParseArgs(string json)
         {

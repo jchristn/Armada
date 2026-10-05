@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { listCaptains, createCaptain, updateCaptain, deleteCaptain, stopCaptain, recallCaptain, stopAllCaptains, restartCaptain, getCaptainTools, listModelEndpoints } from '../api/client';
-import type { ModelEndpoint } from '../types/models';
+import { listCaptains, createCaptain, updateCaptain, deleteCaptain, stopCaptain, recallCaptain, stopAllCaptains, restartCaptain, getCaptainTools, listModelEndpoints, setCaptainCliPermissionPolicy } from '../api/client';
+import type { CliPermissionPolicy, ModelEndpoint } from '../types/models';
 import type { Captain, CaptainToolAccessResult } from '../types/models';
 import Pagination from '../components/shared/Pagination';
 import ActionMenu from '../components/shared/ActionMenu';
@@ -20,6 +20,8 @@ import PageHeader from '../components/shared/PageHeader';
 import ErrorModal from '../components/shared/ErrorModal';
 import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
+import { useAuth } from '../context/AuthContext';
+import CliPermissionPolicySelect from '../components/cliPermissions/CliPermissionPolicySelect';
 import { canCaptainStartPlanning } from '../lib/captains';
 import { buildMuxRuntimeOptionsJson, EMPTY_MUX_CAPTAIN_FORM, isMuxRuntime, muxFormFromCaptain, type MuxCaptainFormFields } from '../lib/mux';
 import { applyAutoApprove, autoApproveFromCaptain, supportsAutoApproveSwitch } from '../lib/captainApproval';
@@ -36,12 +38,16 @@ type CaptainFormState = {
   reasoningEffort: string;
   tier: string;
   autoApprove: boolean;
+  /** CLI tool permission policy; null inherits. Saved through its own endpoint on edit. */
+  cliPermissionPolicy: CliPermissionPolicy | null;
 } & MuxCaptainFormFields;
 
 export default function Captains() {
   const navigate = useNavigate();
   const { t, formatRelativeTime, formatDateTime } = useLocale();
   const { pushToast } = useNotifications();
+  const { isAdmin, isTenantAdmin } = useAuth();
+  const canManageCliPolicy = !!isAdmin || !!isTenantAdmin;
   const [captains, setCaptains] = useState<Captain[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -49,7 +55,7 @@ export default function Captains() {
   // Modal state
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Captain | null>(null);
-  const [form, setForm] = useState<CaptainFormState>({ name: '', runtime: '', systemInstructions: '', model: '', modelEndpointId: '', reasoningEffort: '', tier: '', autoApprove: true, ...EMPTY_MUX_CAPTAIN_FORM });
+  const [form, setForm] = useState<CaptainFormState>({ name: '', runtime: '', systemInstructions: '', model: '', modelEndpointId: '', reasoningEffort: '', tier: '', autoApprove: true, cliPermissionPolicy: null, ...EMPTY_MUX_CAPTAIN_FORM });
   const [saving, setSaving] = useState(false);
   const [inferenceEndpoints, setInferenceEndpoints] = useState<ModelEndpoint[]>([]);
 
@@ -160,7 +166,7 @@ export default function Captains() {
 
   // CRUD
   function openCreate() {
-    setForm({ name: '', runtime: '', systemInstructions: '', model: '', modelEndpointId: '', reasoningEffort: '', tier: '', autoApprove: true, ...EMPTY_MUX_CAPTAIN_FORM });
+    setForm({ name: '', runtime: '', systemInstructions: '', model: '', modelEndpointId: '', reasoningEffort: '', tier: '', autoApprove: true, cliPermissionPolicy: null, ...EMPTY_MUX_CAPTAIN_FORM });
     setEditing(null);
     setShowForm(true);
   }
@@ -175,6 +181,7 @@ export default function Captains() {
       reasoningEffort: c.reasoningEffort ?? '',
       tier: c.tier ?? '',
       autoApprove: autoApproveFromCaptain(c),
+      cliPermissionPolicy: c.cliPermissionPolicy ?? null,
       ...muxFormFromCaptain(c),
     });
     setEditing(c);
@@ -212,8 +219,17 @@ export default function Captains() {
       delete payload.muxMaxTokens;
       delete payload.muxSystemPromptPath;
       delete payload.muxApprovalPolicy;
-      if (editing) await updateCaptain(editing.id, payload);
-      else await createCaptain(payload);
+      // Captain update keeps the stored CLI tool permission policy; it changes through its own (admin) endpoint.
+      delete payload.cliPermissionPolicy;
+      if (editing) {
+        await updateCaptain(editing.id, payload);
+        if ((editing.cliPermissionPolicy ?? null) !== form.cliPermissionPolicy) {
+          await setCaptainCliPermissionPolicy(editing.id, form.cliPermissionPolicy);
+        }
+      } else {
+        if (form.cliPermissionPolicy) payload.cliPermissionPolicy = form.cliPermissionPolicy;
+        await createCaptain(payload);
+      }
       setShowForm(false);
       pushToast('success', editing
         ? t('Captain "{{name}}" saved.', { name: form.name })
@@ -469,6 +485,21 @@ export default function Captains() {
                 {' '}{t('Auto-approve agent tool use (runs the CLI with its permission-bypass flag)')}
               </label>
             )}
+            <div className="captain-cli-policy-field">
+              <label htmlFor="captain-cli-policy">{t('CLI tool permissions')}</label>
+              <CliPermissionPolicySelect
+                id="captain-cli-policy"
+                value={form.cliPermissionPolicy}
+                onChange={(value) => setForm((current) => ({ ...current, cliPermissionPolicy: value }))}
+                allowBypass={canManageCliPolicy}
+                disabled={!canManageCliPolicy}
+                ariaDescribedBy="captain-cli-policy-help"
+              />
+              <small id="captain-cli-policy-help" className="text-dim">
+                {t('How this captain handles shell commands, file edits, and fetches that need permission. Inherit: missions follow the auto-approve option when it is set, then the server default; Ask conversations use the server default (Settings > CLI Tool Permissions). A conversation can override it.')}
+                {!canManageCliPolicy && <> {t('Only admins can change this.')}</>}
+              </small>
+            </div>
             <MuxRuntimeFields
               runtime={form.runtime}
               form={form}

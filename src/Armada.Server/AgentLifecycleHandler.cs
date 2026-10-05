@@ -28,6 +28,7 @@ namespace Armada.Server
         private AgentRuntimeFactory _RuntimeFactory;
         private IHostProcessExecutor _HostProcessExecutor;
         private ISessionTokenService? _SessionTokens = null;
+        private CliPermissionService? _CliPermissions = null;
         private HarborConnectionManager? _HarborConnections;
         private Func<string, ModelEndpoint?>? _EndpointResolver;
         private MuxCliService _MuxCli;
@@ -171,6 +172,16 @@ namespace Armada.Server
         public void SetSessionTokenService(ISessionTokenService? tokens)
         {
             _SessionTokens = tokens;
+        }
+
+        /// <summary>
+        /// Provide the CLI permission service: pending permission prompts of a mission are cancelled when its captain
+        /// process exits.
+        /// </summary>
+        /// <param name="service">Service, or null.</param>
+        public void SetCliPermissionService(CliPermissionService? service)
+        {
+            _CliPermissions = service;
         }
 
         /// <summary>
@@ -494,6 +505,17 @@ namespace Armada.Server
             runtime.OnStdoutReceived += HandleAgentStdout;
             runtime.OnProviderError += HandleAgentProviderError;
             runtime.OnProcessExited += HandleAgentProcessExited;
+            string exitedMissionId = mission.Id;
+            runtime.OnProcessExited += (exitedPid, exitCode) =>
+            {
+                CliPermissionService? permissions = _CliPermissions;
+                if (permissions == null) return;
+                _ = Task.Run(async () =>
+                {
+                    try { await permissions.CancelPendingAsync(null, exitedMissionId).ConfigureAwait(false); }
+                    catch (Exception ex) { _Logging.Debug(_Header + "could not cancel CLI permission requests of " + exitedMissionId + ": " + ex.Message); }
+                });
+            };
 
             Vessel? vessel = null;
             if (!String.IsNullOrEmpty(mission.VesselId))
@@ -538,11 +560,36 @@ namespace Armada.Server
             int processId;
             try
             {
-                // A vessel-level auto-approve override wins over the captain's own setting for missions on that vessel.
-                Captain launchCaptain = CaptainRuntimeOptions.WithEffectiveAutoApprove(captain, vessel?.AutoApprove);
                 // O-20 / O-04: a mission-scoped MCP token binds the captain's Armada MCP connection to the mission's
                 // owner, so the captain no longer relies on the unauthenticated loopback identity.
                 string? missionToken = MintMissionToken(captain, mission);
+                // CLI tool permissions: vessel auto-approve override, then the captain's policy (or legacy autoApprove),
+                // then Permissions.MissionDefaultPolicy. Bypass maps to the runtime's bypass flag; ApproveInArmada routes
+                // Claude Code's permission prompts to Armada (it needs the mission token; Harbor launches fall back).
+                CliPermissionResolution permission = CliPermissionPolicyResolver.ResolveForMission(_Settings, captain, vessel, missionToken != null, runtime is RemoteAgentRuntime);
+                Captain launchCaptain = CaptainRuntimeOptions.WithEffectiveAutoApprove(captain, permission.Effective == CliPermissionPolicyEnum.Bypass);
+                CliPermissionService? permissions = _CliPermissions;
+                Func<string, string, CancellationToken, Task<CliPermissionPromptOutcome>>? inProcessPrompt = null;
+                if (permissions != null)
+                {
+                    CliPermissionPromptContext promptContext = new CliPermissionPromptContext
+                    {
+                        TenantId = mission.TenantId,
+                        UserId = mission.UserId,
+                        CaptainId = captain.Id,
+                        Runtime = captain.Runtime,
+                        MissionId = mission.Id,
+                        VoyageId = mission.VoyageId,
+                        VesselId = mission.VesselId,
+                        WorkingDirectory = dock.WorktreePath
+                    };
+                    inProcessPrompt = (tool, input, cancel) => permissions.PromptAsync(promptContext, tool, input, cancel);
+                }
+
+                CliPermissionLaunch.Apply(runtime, permission.Effective, _Settings.Permissions.PromptTimeoutSeconds, inProcessPrompt);
+
+                WriteMissionLogNote(logFilePath, permission.Note);
+                _Logging.Info(_Header + "mission " + mission.Id + " " + permission.Note);
                 bool isolateLaunch = _Settings.IsolateCaptainLaunch;
                 Dictionary<string, string>? environment = null;
                 if (missionToken != null)
@@ -614,6 +661,24 @@ namespace Armada.Server
             }
 
             return processId;
+        }
+
+        /// <summary>
+        /// Append an Armada note (for example the CLI tool permission policy and where to change it) to a mission log
+        /// before the captain starts, so a refused tool in the log has its explanation above it.
+        /// </summary>
+        private void WriteMissionLogNote(string logFilePath, string note)
+        {
+            if (String.IsNullOrEmpty(logFilePath) || String.IsNullOrEmpty(note)) return;
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(logFilePath)!);
+                File.AppendAllText(logFilePath, "[" + DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss") + "] Armada: " + note + Environment.NewLine);
+            }
+            catch (Exception ex)
+            {
+                _Logging.Debug(_Header + "could not write the mission log note: " + ex.Message);
+            }
         }
 
         /// <summary>

@@ -82,6 +82,12 @@ namespace Armada.Core.Models
         public long? ElapsedMs { get; set; } = null;
 
         /// <summary>
+        /// True when the CLI refused the call because it needed permission that the turn's CLI tool permission policy
+        /// did not grant (from the runtime's typed permission denial report), or null when unknown.
+        /// </summary>
+        public bool? PermissionDenied { get; set; } = null;
+
+        /// <summary>
         /// UTC creation time.
         /// </summary>
         public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;

@@ -70,6 +70,11 @@ namespace Armada.Tui.Ask
         public double? ToolElapsedMs { get; set; } = null;
 
         /// <summary>
+        /// True when the CLI refused the tool call for lack of permission (CLI tool permission policy), or null.
+        /// </summary>
+        public bool? ToolPermissionDenied { get; set; } = null;
+
+        /// <summary>
         /// Turn state.
         /// </summary>
         public AskTurnStateEnum State { get; set; } = AskTurnStateEnum.Started;

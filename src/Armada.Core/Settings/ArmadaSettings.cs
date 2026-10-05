@@ -723,6 +723,16 @@ namespace Armada.Core.Settings
         }
 
         /// <summary>
+        /// CLI tool permission settings (server default policies for Ask turns and missions, owner approval, prompt
+        /// timeout). Never null; setting null restores the defaults.
+        /// </summary>
+        public CliPermissionSettings Permissions
+        {
+            get => _Permissions;
+            set => _Permissions = value ?? new CliPermissionSettings();
+        }
+
+        /// <summary>
         /// Fleet action settings (concurrency cap, default timeout, output cap, run retention).
         /// Never null; setting null restores the defaults.
         /// </summary>
@@ -826,6 +836,7 @@ namespace Armada.Core.Settings
         private VesselImportSettings _Import = new VesselImportSettings();
         private FleetActionSettings _FleetActions = new FleetActionSettings();
         private AskSettings _Ask = new AskSettings();
+        private CliPermissionSettings _Permissions = new CliPermissionSettings();
         private RepositoryHealthSettings _RepositoryHealth = new RepositoryHealthSettings();
         private RetentionSettings _Retention = new RetentionSettings();
         private DatabaseSettings _Database = new DatabaseSettings();

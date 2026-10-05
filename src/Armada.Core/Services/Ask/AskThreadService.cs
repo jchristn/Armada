@@ -49,6 +49,12 @@ namespace Armada.Core.Services.Ask
         public Func<string, string?>? ActiveTurnResolver { get; set; } = null;
 
         /// <summary>
+        /// Whether Ask turns get thread-scoped MCP tokens (the session token service is configured). Used only to
+        /// report the CLI permission fallback on threads. Default true.
+        /// </summary>
+        public bool SessionTokensAvailable { get; set; } = true;
+
+        /// <summary>
         /// Snapshot builder used to embed the latest work snapshot in thread details and messages.
         /// </summary>
         public AskWorkSnapshotBuilder Snapshots => _Snapshots;
@@ -154,10 +160,12 @@ namespace Armada.Core.Services.Ask
             }
 
             detail.PendingProposals = await _Database.AskActionProposals.EnumerateByThreadAsync(thread.TenantId!, thread.Id, AskProposalStatusEnum.Pending, token).ConfigureAwait(false);
+            detail.PendingCliPermissions = await _Database.CliPermissionRequests.EnumerateAsync(new CliPermissionRequestQuery { TenantId = thread.TenantId, ThreadId = thread.Id, Status = CliPermissionRequestStatusEnum.Pending }, token).ConfigureAwait(false);
             foreach (AskActionProposal proposal in detail.PendingProposals) Decorate(proposal);
 
             thread.ActiveWorkCount = detail.TrackedWork.Count(w => w.State == AskTrackedWorkStateEnum.Active);
             thread.ActiveTurnId = ActiveTurnResolver?.Invoke(thread.Id);
+            thread.CliPermission = await ResolveCliPermissionAsync(thread, token).ConfigureAwait(false);
             detail.Thread = thread;
             return detail;
         }
@@ -412,6 +420,51 @@ namespace Armada.Core.Services.Ask
         }
 
         /// <summary>
+        /// Append the CliPermission card of a CLI permission request: store the message, link the request to it (the
+        /// request stores the message id), then announce the message with the request attached.
+        /// </summary>
+        /// <param name="thread">Thread.</param>
+        /// <param name="card">Card message (Kind CliPermission).</param>
+        /// <param name="request">The stored request.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The stored card with the request attached.</returns>
+        public async Task<AskMessage> AppendCliPermissionCardAsync(AskThread thread, AskMessage card, CliPermissionRequest request, CancellationToken token = default)
+        {
+            if (thread == null) throw new ArgumentNullException(nameof(thread));
+            if (card == null) throw new ArgumentNullException(nameof(card));
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            card.TenantId = thread.TenantId;
+            card.UserId = thread.UserId;
+            card.ThreadId = thread.Id;
+            card = await _Database.AskMessages.CreateAsync(card, true, token).ConfigureAwait(false);
+            await _Database.CliPermissionRequests.UpdateMessageAsync(request.Id, card.Id, token).ConfigureAwait(false);
+            request.MessageId = card.Id;
+            await PopulateAsync(thread, new List<AskMessage> { card }, token).ConfigureAwait(false);
+            Emit(thread, "ask.message", new { threadId = thread.Id, message = card });
+            await EmitThreadAsync(thread.Id, token).ConfigureAwait(false);
+            return card;
+        }
+
+        /// <summary>
+        /// Announce the current state of one message again (ask.message with nested data), for example after the CLI
+        /// permission request of a card was decided.
+        /// </summary>
+        /// <param name="threadId">Thread identifier.</param>
+        /// <param name="messageId">Message identifier.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The message, or null when the thread or message no longer exists.</returns>
+        public async Task<AskMessage?> RefreshMessageAsync(string threadId, string messageId, CancellationToken token = default)
+        {
+            AskThread? thread = await _Database.AskThreads.ReadByIdAsync(threadId, token).ConfigureAwait(false);
+            if (thread == null || String.IsNullOrEmpty(thread.TenantId)) return null;
+            AskMessage? message = await _Database.AskMessages.ReadAsync(thread.TenantId!, messageId, token).ConfigureAwait(false);
+            if (message == null) return null;
+            await PopulateAsync(thread, new List<AskMessage> { message }, token).ConfigureAwait(false);
+            Emit(thread, "ask.message", new { threadId = thread.Id, message });
+            return message;
+        }
+
+        /// <summary>
         /// Create a proposal and, unless suppressed, the ActionProposal message that renders its confirm card.
         /// </summary>
         /// <param name="thread">Thread.</param>
@@ -630,6 +683,26 @@ namespace Armada.Core.Services.Ask
             List<AskTrackedWork> work = await _Database.AskTrackedWork.EnumerateByThreadAsync(thread.TenantId!, thread.Id, token).ConfigureAwait(false);
             thread.ActiveWorkCount = work.Count(w => w.State == AskTrackedWorkStateEnum.Active);
             thread.ActiveTurnId = ActiveTurnResolver?.Invoke(thread.Id);
+            thread.CliPermission = await ResolveCliPermissionAsync(thread, token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// The CLI tool permission policy the thread's next turn would run with (null when the thread has no captain).
+        /// </summary>
+        private async Task<CliPermissionResolution?> ResolveCliPermissionAsync(AskThread thread, CancellationToken token)
+        {
+            if (String.IsNullOrEmpty(thread.CaptainId)) return null;
+            try
+            {
+                Captain? captain = await _Database.Captains.ReadAsync(thread.CaptainId!, token).ConfigureAwait(false);
+                if (captain == null) return null;
+                return CliPermissionPolicyResolver.ResolveForAsk(_Settings, thread, captain, SessionTokensAvailable);
+            }
+            catch (Exception ex) when (!(ex is OperationCanceledException))
+            {
+                _Logging.Debug(_Header + "could not resolve the CLI permission policy of thread " + thread.Id + ": " + ex.Message);
+                return null;
+            }
         }
 
         private async Task PopulateAsync(AskThread thread, List<AskMessage> messages, CancellationToken token)
@@ -638,6 +711,7 @@ namespace Armada.Core.Services.Ask
             List<AskMessageToolCall> calls = await _Database.AskMessageToolCalls.EnumerateByMessagesAsync(thread.TenantId!, thread.Id, messages.Select(m => m.Id).ToList(), token).ConfigureAwait(false);
             Dictionary<string, AskActionProposal?> proposals = new Dictionary<string, AskActionProposal?>(StringComparer.Ordinal);
             Dictionary<string, AskTrackedWork?> works = new Dictionary<string, AskTrackedWork?>(StringComparer.Ordinal);
+            List<CliPermissionRequest>? cliRequests = null;
 
             foreach (AskMessage message in messages)
             {
@@ -653,6 +727,16 @@ namespace Armada.Core.Services.Ask
                     }
 
                     message.Proposal = proposal;
+                }
+
+                if (message.Kind == AskMessageKindEnum.CliPermission)
+                {
+                    if (cliRequests == null)
+                    {
+                        cliRequests = await _Database.CliPermissionRequests.EnumerateAsync(new CliPermissionRequestQuery { TenantId = thread.TenantId, ThreadId = thread.Id, Limit = 1000 }, token).ConfigureAwait(false);
+                    }
+
+                    message.CliPermissionRequest = cliRequests.FirstOrDefault(r => String.Equals(r.MessageId, message.Id, StringComparison.Ordinal));
                 }
 
                 if (!String.IsNullOrEmpty(message.TrackedWorkId))

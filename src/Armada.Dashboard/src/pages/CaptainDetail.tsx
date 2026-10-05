@@ -12,7 +12,9 @@ import {
   listMissionSummaries,
   updateCaptain,
   deleteCaptain,
+  setCaptainCliPermissionPolicy,
 } from '../api/client';
+import type { CliPermissionPolicy } from '../types/models';
 import type { Captain, Mission, MissionSummary, LogResult, FormattedLogEntry, CaptainToolAccessResult } from '../types/models';
 import ActionMenu from '../components/shared/ActionMenu';
 import MuxRuntimeFields from '../components/captains/MuxRuntimeFields';
@@ -25,6 +27,9 @@ import StatusBadge from '../components/shared/StatusBadge';
 import CopyButton from '../components/shared/CopyButton';
 import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
+import { useAuth } from '../context/AuthContext';
+import CliPermissionPolicySelect from '../components/cliPermissions/CliPermissionPolicySelect';
+import { policyLabel } from '../lib/cliPermissions';
 import { buildMuxRuntimeOptionsJson, EMPTY_MUX_CAPTAIN_FORM, isMuxRuntime, muxFormFromCaptain, parseMuxCaptainOptions, type MuxCaptainFormFields } from '../lib/mux';
 import { applyAutoApprove, autoApproveFromCaptain, supportsAutoApproveSwitch } from '../lib/captainApproval';
 import { buildCaptainDuplicatePayload } from '../lib/duplicates';
@@ -40,11 +45,15 @@ type CaptainDetailFormState = {
   allowedPersonas: string;
   preferredPersona: string;
   autoApprove: boolean;
+  /** CLI tool permission policy; null inherits. Saved through its own endpoint. */
+  cliPermissionPolicy: CliPermissionPolicy | null;
 } & MuxCaptainFormFields;
 
 export default function CaptainDetail() {
   const { t, formatDateTime, formatRelativeTime } = useLocale();
   const { pushToast } = useNotifications();
+  const { isAdmin, isTenantAdmin } = useAuth();
+  const canManageCliPolicy = !!isAdmin || !!isTenantAdmin;
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [captain, setCaptain] = useState<Captain | null>(null);
@@ -55,7 +64,7 @@ export default function CaptainDetail() {
 
   // Edit
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState<CaptainDetailFormState>({ name: '', runtime: 'ClaudeCode', systemInstructions: '', model: '', reasoningEffort: '', tier: '', allowedPersonas: '', preferredPersona: '', autoApprove: true, ...EMPTY_MUX_CAPTAIN_FORM });
+  const [form, setForm] = useState<CaptainDetailFormState>({ name: '', runtime: 'ClaudeCode', systemInstructions: '', model: '', reasoningEffort: '', tier: '', allowedPersonas: '', preferredPersona: '', autoApprove: true, cliPermissionPolicy: null, ...EMPTY_MUX_CAPTAIN_FORM });
 
   // Log viewer
   const [logText, setLogText] = useState<string | null>(null);
@@ -120,6 +129,7 @@ export default function CaptainDetail() {
       allowedPersonas: captain.allowedPersonas ?? '',
       preferredPersona: captain.preferredPersona ?? '',
       autoApprove: autoApproveFromCaptain(captain),
+      cliPermissionPolicy: captain.cliPermissionPolicy ?? null,
       ...muxFormFromCaptain(captain),
     });
     setShowForm(true);
@@ -151,7 +161,12 @@ export default function CaptainDetail() {
       delete payload.muxMaxTokens;
       delete payload.muxSystemPromptPath;
       delete payload.muxApprovalPolicy;
+      // Captain update keeps the stored CLI tool permission policy; it changes through its own (admin) endpoint.
+      delete payload.cliPermissionPolicy;
       await updateCaptain(captain.id, payload);
+      if ((captain.cliPermissionPolicy ?? null) !== form.cliPermissionPolicy) {
+        await setCaptainCliPermissionPolicy(captain.id, form.cliPermissionPolicy);
+      }
       setShowForm(false);
       pushToast('success', t('Captain "{{name}}" saved.', { name: form.name }));
       load();
@@ -369,6 +384,21 @@ export default function CaptainDetail() {
                 {' '}{t('Auto-approve agent tool use (runs the CLI with its permission-bypass flag)')}
               </label>
             )}
+            <div className="captain-cli-policy-field">
+              <label htmlFor="captain-cli-policy">{t('CLI tool permissions')}</label>
+              <CliPermissionPolicySelect
+                id="captain-cli-policy"
+                value={form.cliPermissionPolicy}
+                onChange={(value) => setForm((current) => ({ ...current, cliPermissionPolicy: value }))}
+                allowBypass={canManageCliPolicy}
+                disabled={!canManageCliPolicy}
+                ariaDescribedBy="captain-cli-policy-help"
+              />
+              <small id="captain-cli-policy-help" className="text-dim">
+                {t('How this captain handles shell commands, file edits, and fetches that need permission. Inherit: missions follow the auto-approve option when it is set, then the server default; Ask conversations use the server default (Settings > CLI Tool Permissions). A conversation can override it.')}
+                {!canManageCliPolicy && <> {t('Only admins can change this.')}</>}
+              </small>
+            </div>
             <MuxRuntimeFields
               runtime={form.runtime}
               form={form}
@@ -415,6 +445,10 @@ export default function CaptainDetail() {
         <div className="detail-field"><span className="detail-label">{t('Name')}</span><span>{captain.name}</span></div>
         <div className="detail-field"><span className="detail-label">{t('Tenant ID')}</span><span className="mono">{captain.tenantId || '-'}</span></div>
         <div className="detail-field"><span className="detail-label">{t('Runtime')}</span><span>{captain.runtime || 'ClaudeCode'}</span></div>
+        <div className="detail-field">
+          <span className="detail-label">{t('CLI tool permissions')}</span>
+          <span data-testid="captain-cli-policy">{captain.cliPermissionPolicy ? policyLabel(t, captain.cliPermissionPolicy) : t('Inherit (auto-approve option, then server default)')}</span>
+        </div>
       </div>
       {isMuxRuntime(captain.runtime) && (
         <div className="detail-grid">

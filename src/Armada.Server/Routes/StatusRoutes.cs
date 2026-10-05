@@ -524,6 +524,8 @@ namespace Armada.Server.Routes
                     _settings.RepositoryHealth = body.RepositoryHealth;
                 if (body.Retention != null)
                     _settings.Retention = body.Retention;
+                if (body.Permissions != null)
+                    _settings.Permissions = body.Permissions;
 
                 bool remoteControlChanged = body.RemoteControl != null;
                 if (remoteControlChanged)
@@ -662,7 +664,8 @@ namespace Armada.Server.Routes
                 Import = _settings.Import,
                 FleetActions = _settings.FleetActions,
                 RepositoryHealth = _settings.RepositoryHealth,
-                Retention = _settings.Retention
+                Retention = _settings.Retention,
+                Permissions = _settings.Permissions
             };
         }
 

@@ -218,6 +218,8 @@ export interface Captain {
   allowedPersonas: string | null;
   preferredPersona: string | null;
   runtimeOptionsJson?: string | null;
+  /** CLI tool permission policy for this captain's CLI sessions; null or absent inherits (see CliPermissionPolicy). */
+  cliPermissionPolicy?: CliPermissionPolicy | null;
   state: string;
   currentMissionId: string | null;
   currentDockId: string | null;
@@ -1316,6 +1318,10 @@ export interface InboxItem {
   environmentName?: string | null;
   /** Deployment items: the deployment title. */
   deploymentTitle?: string | null;
+  /** cli_permission items: the pending CLI permission request (with the caller's canDecide / canRemember). */
+  cliPermission?: CliPermissionRequest | null;
+  /** cli_permission items: when the pending request expires (UTC). */
+  expiresUtc?: string | null;
   href: string;
 }
 
@@ -2965,7 +2971,7 @@ export interface RetentionSettingsData {
 // ---------------------------------------------------------------------------
 
 export type AskMessageRole = 'User' | 'Assistant' | 'System';
-export type AskMessageKind = 'Text' | 'ActionProposal' | 'ActionResult' | 'WorkUpdate' | 'Summary' | 'Error';
+export type AskMessageKind = 'Text' | 'ActionProposal' | 'ActionResult' | 'WorkUpdate' | 'Summary' | 'Error' | 'CliPermission';
 export type AskProposalStatus = 'Pending' | 'Approved' | 'Rejected' | 'Expired' | 'Executed' | 'Failed';
 export type AskProposalSource = 'Captain' | 'QuickAction';
 export type AskTrackedEntityType = 'Voyage' | 'Mission' | 'FleetActionRun' | 'Job' | 'VesselImportBatch';
@@ -2990,6 +2996,10 @@ export interface AskThread {
   activeWorkCount?: number;
   /** UI assumption: id of the captain turn currently running, when one is. */
   activeTurnId?: string | null;
+  /** The thread's CLI tool permission policy override; null inherits from the captain and the server default. */
+  cliPermissionPolicy?: CliPermissionPolicy | null;
+  /** The resolved CLI tool permission policy for this thread's captain turns (computed by the server). */
+  cliPermission?: CliPermissionResolution | null;
   createdUtc?: string;
   lastUpdateUtc?: string;
 }
@@ -3004,6 +3014,8 @@ export interface AskToolCall {
   resultText?: string | null;
   ok?: boolean | null;
   elapsedMs?: number | null;
+  /** True when the CLI refused the call because the turn's CLI tool permission policy did not grant it. */
+  permissionDenied?: boolean | null;
 }
 
 export interface AskActionProposal {
@@ -3113,6 +3125,8 @@ export interface AskMessage {
   toolCalls?: AskToolCall[] | null;
   proposal?: AskActionProposal | null;
   trackedWork?: AskTrackedWork | null;
+  /** CliPermission cards: the linked CLI permission request. */
+  cliPermissionRequest?: CliPermissionRequest | null;
   /** Client-only: true for an optimistic user message not yet persisted by the server. Never sent by the server. */
   isLocal?: boolean;
 }
@@ -3121,6 +3135,8 @@ export interface AskThreadDetail {
   thread: AskThread;
   trackedWork?: AskTrackedWork[] | null;
   pendingProposals?: AskActionProposal[] | null;
+  /** Pending CLI permission requests of this thread's captain turns. */
+  pendingCliPermissions?: CliPermissionRequest[] | null;
 }
 
 export interface AskMessagePage {
@@ -3160,4 +3176,127 @@ export interface AskQuickAction {
   toolName?: string | null;
   /** JSON schema of the tool arguments (object or JSON text). */
   argumentsSchema?: unknown;
+}
+
+// ---------------------------------------------------------------------------
+// CLI tool permissions: how CLI captains (Claude Code, Codex, ...) handle shell, edit, and fetch tool calls that need
+// permission. The server sends PascalCase; the API client camelizes. Enums travel as names.
+// ---------------------------------------------------------------------------
+
+/** Wire values of CliPermissionPolicyEnum. */
+export type CliPermissionPolicy = 'Refuse' | 'ApproveInArmada' | 'Bypass';
+/** Wire values of CliPermissionPolicySourceEnum: where the effective policy came from. */
+export type CliPermissionPolicySource = 'AskThread' | 'VesselAutoApprove' | 'Captain' | 'CaptainAutoApprove' | 'ServerDefault';
+/** Wire values of CliPermissionFallbackReasonEnum: why ApproveInArmada fell back to Refuse. */
+export type CliPermissionFallbackReason = 'RuntimeUnsupported' | 'NoSessionToken' | 'RemoteHarbor';
+/** Wire values of CliPermissionRequestStatusEnum. */
+export type CliPermissionRequestStatus = 'Pending' | 'Allowed' | 'Denied' | 'Expired' | 'Cancelled';
+/** Wire values of CliPermissionDecisionSourceEnum. */
+export type CliPermissionDecisionSource = 'Approver' | 'AllowRule' | 'DenyRule' | 'Timeout' | 'Cancelled';
+/** Wire values of CliPermissionDecisionEnum. */
+export type CliPermissionDecision = 'AllowOnce' | 'AllowAndRemember' | 'Deny';
+/** Wire values of CliPermissionRuleScopeEnum. */
+export type CliPermissionRuleScope = 'Global' | 'Vessel' | 'Captain';
+/** Wire values of CliPermissionRuleActionEnum. */
+export type CliPermissionRuleAction = 'Allow' | 'Deny';
+
+/** The resolved CLI tool permission policy of an Ask thread (or mission). */
+export interface CliPermissionResolution {
+  requested: CliPermissionPolicy;
+  effective: CliPermissionPolicy;
+  source: CliPermissionPolicySource;
+  fallbackReason?: CliPermissionFallbackReason | null;
+  /** One-line English explanation from the server (display only; the dashboard builds its own from the typed fields). */
+  note?: string | null;
+}
+
+/** A CLI tool call waiting on (or decided by) an approver in Armada. */
+export interface CliPermissionRequest {
+  id: string;
+  tenantId?: string | null;
+  userId?: string | null;
+  captainId?: string | null;
+  missionId?: string | null;
+  voyageId?: string | null;
+  vesselId?: string | null;
+  threadId?: string | null;
+  messageId?: string | null;
+  runtime?: string | null;
+  toolName: string;
+  /** The tool input as (redacted) JSON text. */
+  inputText?: string | null;
+  /** The command, URL, or path the tool acts on. */
+  summaryText?: string | null;
+  /** A rule pattern that would allow this call, e.g. Bash(git status:*). */
+  suggestedRule?: string | null;
+  status: CliPermissionRequestStatus | string;
+  decisionSource?: CliPermissionDecisionSource | string | null;
+  ruleId?: string | null;
+  decidedByUserId?: string | null;
+  decisionMessage?: string | null;
+  expiresUtc?: string | null;
+  decidedUtc?: string | null;
+  createdUtc?: string;
+  lastUpdateUtc?: string;
+  captainName?: string | null;
+  vesselName?: string | null;
+  missionTitle?: string | null;
+  threadTitle?: string | null;
+  /** True when the caller may allow or deny this request now. */
+  canDecide?: boolean;
+  /** True when the caller may also create an allow rule from it (Allow and remember). */
+  canRemember?: boolean;
+}
+
+/** Body of POST /api/v1/cli-permissions/requests/{id}/decide. */
+export interface CliPermissionDecisionRequest {
+  decision: CliPermissionDecision;
+  message?: string | null;
+  rulePattern?: string | null;
+  ruleScope?: CliPermissionRuleScope;
+}
+
+/** Query of GET /api/v1/cli-permissions/requests. */
+export interface CliPermissionRequestQuery {
+  status?: CliPermissionRequestStatus | null;
+  missionId?: string | null;
+  threadId?: string | null;
+  captainId?: string | null;
+  vesselId?: string | null;
+  limit?: number | null;
+}
+
+/** An allow or deny rule in Claude Code permission rule syntax, e.g. Bash(git status:*). */
+export interface CliPermissionRule {
+  id: string;
+  tenantId?: string | null;
+  scope: CliPermissionRuleScope;
+  vesselId?: string | null;
+  captainId?: string | null;
+  pattern: string;
+  action: CliPermissionRuleAction;
+  description?: string | null;
+  createdByUserId?: string | null;
+  createdUtc?: string;
+  lastUpdateUtc?: string;
+}
+
+/** Body of POST /api/v1/cli-permissions/rules. */
+export interface CliPermissionRuleCreateRequest {
+  pattern: string;
+  action: CliPermissionRuleAction;
+  scope: CliPermissionRuleScope;
+  vesselId?: string | null;
+  captainId?: string | null;
+  tenantId?: string | null;
+  description?: string | null;
+}
+
+/** Server `Permissions` settings group (global admin only). */
+export interface CliPermissionSettingsData {
+  askDefaultPolicy: CliPermissionPolicy;
+  missionDefaultPolicy: CliPermissionPolicy;
+  allowOwnerApproval: boolean;
+  /** Seconds a request waits for a decision (10-3600, default 600). */
+  promptTimeoutSeconds: number;
 }

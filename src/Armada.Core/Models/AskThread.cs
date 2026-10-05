@@ -1,6 +1,7 @@
 namespace Armada.Core.Models
 {
     using System;
+    using Armada.Core.Enums;
 
     /// <summary>
     /// A private Ask Armada conversation owned by one user. Threads keep their own message history, captain,
@@ -47,6 +48,19 @@ namespace Armada.Core.Models
         /// When true, state-changing tool calls run without a confirm card (still recorded as Executed proposals). Default false.
         /// </summary>
         public bool AutoApprove { get; set; } = false;
+
+        /// <summary>
+        /// CLI tool permission policy override for this thread's turns, or null to inherit (the captain's policy, then
+        /// Permissions.AskDefaultPolicy). Set through PUT /api/v1/ask/threads/{id}/cli-permission-policy (Bypass
+        /// requires an admin).
+        /// </summary>
+        public CliPermissionPolicyEnum? CliPermissionPolicy { get; set; } = null;
+
+        /// <summary>
+        /// The CLI tool permission policy the thread's next turn runs with, where it comes from, and any fallback
+        /// (computed on read; not persisted).
+        /// </summary>
+        public CliPermissionResolution? CliPermission { get; set; } = null;
 
         /// <summary>
         /// Latest conversation summary, used as context when older history is trimmed, or null.

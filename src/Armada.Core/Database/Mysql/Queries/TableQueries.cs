@@ -1917,6 +1917,60 @@ namespace Armada.Core.Database.Mysql.Queries
         };
 
         /// <summary>
+        /// Migration 78: CLI tool permissions (cli_permission_requests, cli_permission_rules, the captain and Ask thread
+        /// policy columns, and the Ask tool call permission_denied flag).
+        /// </summary>
+        public static readonly string[] MigrationV78Statements = new string[]
+        {
+            @"CREATE TABLE IF NOT EXISTS cli_permission_requests (
+                id VARCHAR(64) NOT NULL PRIMARY KEY,
+                tenant_id VARCHAR(64),
+                user_id VARCHAR(64),
+                captain_id VARCHAR(64),
+                mission_id VARCHAR(64),
+                voyage_id VARCHAR(64),
+                vessel_id VARCHAR(64),
+                thread_id VARCHAR(64),
+                message_id VARCHAR(64),
+                runtime VARCHAR(64) NOT NULL,
+                tool_name VARCHAR(256) NOT NULL,
+                input_text LONGTEXT NOT NULL,
+                summary_text LONGTEXT NOT NULL,
+                suggested_rule LONGTEXT,
+                status VARCHAR(64) NOT NULL,
+                decision_source VARCHAR(64),
+                rule_id VARCHAR(64),
+                decided_by_user_id VARCHAR(64),
+                decision_message LONGTEXT,
+                expires_utc DATETIME(6) NOT NULL,
+                decided_utc DATETIME(6),
+                created_utc DATETIME(6) NOT NULL,
+                last_update_utc DATETIME(6) NOT NULL
+            );",
+            @"CREATE TABLE IF NOT EXISTS cli_permission_rules (
+                id VARCHAR(64) NOT NULL PRIMARY KEY,
+                tenant_id VARCHAR(64),
+                scope VARCHAR(64) NOT NULL,
+                vessel_id VARCHAR(64),
+                captain_id VARCHAR(64),
+                pattern LONGTEXT NOT NULL,
+                action VARCHAR(64) NOT NULL,
+                description LONGTEXT,
+                created_by_user_id VARCHAR(64),
+                created_utc DATETIME(6) NOT NULL,
+                last_update_utc DATETIME(6) NOT NULL
+            );",
+            "CREATE INDEX idx_cli_permission_requests_status_created ON cli_permission_requests(status, created_utc);",
+            "CREATE INDEX idx_cli_permission_requests_tenant_status ON cli_permission_requests(tenant_id, status);",
+            "CREATE INDEX idx_cli_permission_requests_thread ON cli_permission_requests(thread_id);",
+            "CREATE INDEX idx_cli_permission_requests_mission ON cli_permission_requests(mission_id);",
+            "CREATE INDEX idx_cli_permission_rules_tenant_scope ON cli_permission_rules(tenant_id, scope);",
+            @"ALTER TABLE captains ADD COLUMN cli_permission_policy VARCHAR(64) NULL;",
+            @"ALTER TABLE ask_threads ADD COLUMN cli_permission_policy VARCHAR(64) NULL;",
+            @"ALTER TABLE ask_message_tool_calls ADD COLUMN permission_denied TINYINT(1) NULL;"
+        };
+
+        /// <summary>
         /// Index DDL statements for all tables.
         /// </summary>
         public static readonly string[] Indexes = new string[]

@@ -4,6 +4,7 @@ namespace Armada.Core.Database.Interfaces
     using System.Collections.Generic;
     using System.Threading;
     using System.Threading.Tasks;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
 
     /// <summary>
@@ -60,6 +61,17 @@ namespace Armada.Core.Database.Interfaces
         /// <returns>The updated thread as stored.</returns>
         /// <exception cref="ArgumentNullException">Thrown when the thread is null.</exception>
         Task<AskThread> UpdateAsync(AskThread thread, CancellationToken token = default);
+
+        /// <summary>
+        /// Set or clear a thread's CLI tool permission policy override. <see cref="UpdateAsync"/> never writes this
+        /// column.
+        /// </summary>
+        /// <param name="tenantId">Tenant identifier.</param>
+        /// <param name="id">Thread identifier.</param>
+        /// <param name="policy">Policy, or null to inherit.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>True when a row was updated.</returns>
+        Task<bool> UpdateCliPermissionPolicyAsync(string tenantId, string id, CliPermissionPolicyEnum? policy, CancellationToken token = default);
 
         /// <summary>
         /// Enumerate a user's threads: pinned first, then most recent activity (last message, else creation) first.

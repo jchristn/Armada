@@ -57,8 +57,8 @@ namespace Armada.Core.Database.SqlServer.Implementations
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqlCommand cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = @"INSERT INTO captains (id, tenant_id, user_id, name, runtime, model, model_endpoint_id, system_instructions, allowed_personas, preferred_persona, runtime_options_json, reasoning_effort, tier, state, current_mission_id, current_dock_id, process_id, recovery_attempts, last_heartbeat_utc, last_process_alive_utc, quarantine_until_utc, quarantine_reason, created_utc, last_update_utc)
-                        VALUES (@id, @tenant_id, @user_id, @name, @runtime, @model, @model_endpoint_id, @system_instructions, @allowed_personas, @preferred_persona, @runtime_options_json, @reasoning_effort, @tier, @state, @current_mission_id, @current_dock_id, @process_id, @recovery_attempts, @last_heartbeat_utc, @last_process_alive_utc, @quarantine_until_utc, @quarantine_reason, @created_utc, @last_update_utc);";
+                    cmd.CommandText = @"INSERT INTO captains (id, tenant_id, user_id, name, runtime, model, model_endpoint_id, system_instructions, allowed_personas, preferred_persona, runtime_options_json, cli_permission_policy, reasoning_effort, tier, state, current_mission_id, current_dock_id, process_id, recovery_attempts, last_heartbeat_utc, last_process_alive_utc, quarantine_until_utc, quarantine_reason, created_utc, last_update_utc)
+                        VALUES (@id, @tenant_id, @user_id, @name, @runtime, @model, @model_endpoint_id, @system_instructions, @allowed_personas, @preferred_persona, @runtime_options_json, @cli_permission_policy, @reasoning_effort, @tier, @state, @current_mission_id, @current_dock_id, @process_id, @recovery_attempts, @last_heartbeat_utc, @last_process_alive_utc, @quarantine_until_utc, @quarantine_reason, @created_utc, @last_update_utc);";
                     cmd.Parameters.AddWithValue("@id", captain.Id);
                     cmd.Parameters.AddWithValue("@tenant_id", (object?)captain.TenantId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@user_id", (object?)captain.UserId ?? DBNull.Value);
@@ -70,6 +70,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                     cmd.Parameters.AddWithValue("@allowed_personas", (object?)captain.AllowedPersonas ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@preferred_persona", (object?)captain.PreferredPersona ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@runtime_options_json", (object?)captain.RuntimeOptionsJson ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@cli_permission_policy", (object?)captain.CliPermissionPolicy?.ToString() ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@reasoning_effort", (object?)captain.ReasoningEffort?.ToString() ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@tier", (object?)captain.Tier?.ToString() ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@state", captain.State.ToString());
@@ -199,6 +200,25 @@ namespace Armada.Core.Database.SqlServer.Implementations
             }
 
             return captain;
+        }
+
+        /// <inheritdoc />
+        public async Task<bool> UpdateCliPermissionPolicyAsync(string id, CliPermissionPolicyEnum? policy, CancellationToken token = default)
+        {
+            if (string.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
+
+            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                using (SqlCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "UPDATE captains SET cli_permission_policy = @policy, last_update_utc = @now WHERE id = @id;";
+                    cmd.Parameters.AddWithValue("@policy", (object?)policy?.ToString() ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@now", SqlServerDatabaseDriver.ToIso8601(DateTime.UtcNow));
+                    cmd.Parameters.AddWithValue("@id", id);
+                    return await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false) > 0;
+                }
+            }
         }
 
         /// <inheritdoc />

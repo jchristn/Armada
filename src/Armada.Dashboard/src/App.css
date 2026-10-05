@@ -8973,3 +8973,32 @@ tr.row-muted td { opacity: 0.72; }
 }
 .password-change-explainer { color: var(--text-dim); font-size: 13px; margin: -16px 0 18px; text-align: center; }
 .captain-auto-approve-field { display: flex; align-items: center; gap: 0.4rem; font-weight: 500; }
+/* CLI tool permissions: approval cards, refused tool rows, policy pickers */
+.ask-confirm-card.is-allowed { border-left-color: var(--green); }
+.ask-confirm-card.is-denied { border-left-color: var(--red); }
+.ask-confirm-card.is-highlighted { box-shadow: 0 0 0 2px var(--accent); }
+.cli-perm-status.is-pending { color: var(--orange); }
+.cli-perm-status.is-allowed { color: var(--green); }
+.cli-perm-status.is-denied { color: var(--red); }
+.cli-perm-countdown { font-size: 0.76rem; color: var(--text-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cli-perm-countdown.is-urgent { color: var(--red); font-weight: 600; }
+.cli-perm-summary .ask-confirm-pre { white-space: pre-wrap; word-break: break-word; }
+.cli-perm-meta { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; margin: 0; font-size: 0.8rem; }
+.cli-perm-meta > div { display: flex; gap: 0.3rem; min-width: 0; }
+.cli-perm-meta dt { color: var(--text-dim); }
+.cli-perm-meta dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.cli-perm-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+.cli-perm-error { color: var(--red); font-size: 0.8rem; }
+.cli-perm-decision-message { margin: 0.25rem 0 0; font-size: 0.85rem; }
+.cli-perm-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem; }
+.cli-perm-list { display: flex; flex-direction: column; gap: 0.6rem; }
+.cli-rule-form { margin-top: 1rem; padding: 0.9rem 1rem; }
+.cli-rule-allow { color: var(--green); }
+.cli-rule-deny { color: var(--red); }
+.chat-tool-denied { border-left-color: var(--orange, #d98a00); }
+.chat-tool-denied .chat-tool-status { background: var(--orange, #d98a00); }
+.chat-tool-denied-note { width: 30rem; max-width: 100%; font-size: 0.76rem; color: var(--text-dim); padding: 0 0.2rem 0.15rem 0.6rem; border-left: 3px solid var(--orange, #d98a00); }
+.ask-cli-policy-field { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; font-size: 0.8rem; }
+.ask-cli-policy-effective { font-size: 0.74rem; }
+.inbox-cli-command { display: block; margin-top: 0.3rem; font-family: var(--mono); font-size: 0.78rem; white-space: pre-wrap; word-break: break-word; }
+.captain-cli-policy-field { display: flex; flex-direction: column; gap: 0.25rem; margin-bottom: 0.75rem; }

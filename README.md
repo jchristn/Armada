@@ -951,7 +951,11 @@ armada config init              # Interactive setup (optional)
 | `GitHubToken` | null | Optional global GitHub token used by Armada-owned integrations; vessels can override it per repository |
 | `RequireAuthForShutdown` | false | Deprecated and ignored: server stop, restart, rebuild, and rollback always require an admin |
 | `Mcp.ToolCallsPerSecond` | 100 | Per-client MCP tool call limit; 0 disables it |
-| `Ask.CaptainAutoApprove` | false | Run CLI captains with their auto-approve flags during Ask Armada turns |
+| `Ask.CaptainAutoApprove` | false | Let a captain's `Bypass` CLI tool permission policy (or its legacy `autoApprove`) apply to Ask Armada turns |
+| `Permissions.AskDefaultPolicy` | `ApproveInArmada` | CLI tool permission policy for Ask turns when neither the conversation nor the captain sets one: `Refuse`, `ApproveInArmada` (shell commands and other tools that need permission wait for an approver in Armada), or `Bypass` |
+| `Permissions.MissionDefaultPolicy` | `Bypass` | CLI tool permission policy for missions when neither the vessel nor the captain sets one (`Bypass` is the behavior before CLI tool permissions) |
+| `Permissions.AllowOwnerApproval` | false | Let the owner of a mission or Ask conversation decide its CLI permission requests (admins always can) |
+| `Permissions.PromptTimeoutSeconds` | 600 | Seconds a CLI permission request waits before it expires and is denied (10-3600) |
 | `TerminalBell` | true | Ring terminal bell during `armada watch` |
 | `DefaultRuntime` | null (auto-detect) | Default agent runtime |
 | `PlanningSessionInactivityTimeoutMinutes` | 60 | Automatically stop idle planning sessions after this many minutes; 0 disables the timeout |

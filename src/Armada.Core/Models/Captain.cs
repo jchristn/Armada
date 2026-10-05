@@ -127,6 +127,14 @@ namespace Armada.Core.Models
         public string? RuntimeOptionsJson { get; set; } = null;
 
         /// <summary>
+        /// CLI tool permission policy for this captain's own tools, or null to inherit (the legacy autoApprove runtime
+        /// option, then the server default). Accepted on captain create (which requires an admin); captain updates keep the
+        /// stored value: change it through PUT /api/v1/captains/{id}/cli-permission-policy (global admins, or tenant
+        /// admins of the captain's tenant).
+        /// </summary>
+        public CliPermissionPolicyEnum? CliPermissionPolicy { get; set; } = null;
+
+        /// <summary>
         /// Current state of the captain.
         /// </summary>
         public CaptainStateEnum State { get; set; } = CaptainStateEnum.Idle;

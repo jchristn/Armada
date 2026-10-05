@@ -15,6 +15,7 @@ namespace Armada.Server.WebSocket
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Core.Services;
     using Armada.Core.Services.Interfaces;
     using Armada.Core.Settings;
 
@@ -51,6 +52,7 @@ namespace Armada.Server.WebSocket
         private IAdmiralService _Admiral;
         private WebSocketCommandHandler _CommandHandler;
         private Func<string?, string?, string?, Task<AuthContext>>? _Authenticate;
+        private ArmadaSettings? _Settings;
         private ConcurrentDictionary<Guid, WebSocketClientState> _Clients = new ConcurrentDictionary<Guid, WebSocketClientState>();
         private ConditionalWeakTable<HttpContextBase, AuthContext> _UpgradeIdentities = new ConditionalWeakTable<HttpContextBase, AuthContext>();
 
@@ -83,6 +85,7 @@ namespace Armada.Server.WebSocket
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
             _Admiral = admiral ?? throw new ArgumentNullException(nameof(admiral));
             _Authenticate = authenticate;
+            _Settings = settings;
 
             _CommandHandler = new WebSocketCommandHandler(
                 _Admiral,
@@ -233,6 +236,75 @@ namespace Armada.Server.WebSocket
             if (String.IsNullOrEmpty(tenantId) || String.IsNullOrEmpty(userId)) return;
             object payload = BuildPayload(eventType, null, data);
             Deliver(payload, client => IsUserRecipient(client, tenantId, userId));
+        }
+
+        /// <summary>
+        /// Provide the CLI permission service for the CLI permission WebSocket commands.
+        /// </summary>
+        /// <param name="service">Service, or null.</param>
+        public void SetCliPermissionService(CliPermissionService? service)
+        {
+            _CommandHandler.CliPermissions = service;
+        }
+
+        /// <summary>
+        /// Deliver a CLI permission event (cli_permission.requested or cli_permission.resolved) to the request's
+        /// approvers and owner: global admins (of this tenant, or opted in to all tenants), the tenant's tenant admins,
+        /// and the owning user. Each recipient's copy carries its own canDecide and canRemember.
+        /// </summary>
+        /// <param name="eventType">Event type.</param>
+        /// <param name="request">Request.</param>
+        public void BroadcastCliPermission(string eventType, CliPermissionRequest request)
+        {
+            if (String.IsNullOrEmpty(eventType)) throw new ArgumentNullException(nameof(eventType));
+            if (request == null) return;
+            try
+            {
+                string requestJson = JsonSerializer.Serialize(request, _JsonOptions);
+                foreach (KeyValuePair<Guid, WebSocketClientState> kvp in _Clients)
+                {
+                    WebSocketClientState client = kvp.Value;
+                    if (!client.Session.IsConnected)
+                    {
+                        _Clients.TryRemove(kvp.Key, out _);
+                        continue;
+                    }
+
+                    if (!IsCliPermissionRecipient(client, request)) continue;
+                    CliPermissionRequest copy = JsonSerializer.Deserialize<CliPermissionRequest>(requestJson, _JsonOptions) ?? request;
+                    CliPermissionSettings permissions = _Settings?.Permissions ?? new CliPermissionSettings();
+                    copy.CanDecide = copy.Status == CliPermissionRequestStatusEnum.Pending && CliPermissionAccess.CanDecide(client.Auth, copy, permissions);
+                    copy.CanRemember = copy.CanDecide && CliPermissionAccess.CanRemember(client.Auth, copy);
+                    object payload = BuildPayload(eventType, null, new { requestId = copy.Id, status = copy.Status, request = copy });
+                    try
+                    {
+                        client.Session.SendTextAsync(JsonSerializer.Serialize(payload, _JsonOptions)).Wait();
+                    }
+                    catch
+                    {
+                        _Clients.TryRemove(kvp.Key, out _);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _Logging.Warn(_Header + "CLI permission broadcast error: " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Whether a socket identity should receive a CLI permission event. Exposed for unit tests.
+        /// </summary>
+        /// <param name="client">Socket identity.</param>
+        /// <param name="request">Request.</param>
+        /// <returns>True when the event may be delivered.</returns>
+        public static bool IsCliPermissionRecipient(WebSocketClientState client, CliPermissionRequest request)
+        {
+            if (client == null || request == null) return false;
+            if (!CliPermissionAccess.CanView(client.Auth, request)) return false;
+            if (client.IsAdmin && !client.AllTenants && !String.Equals(client.TenantId, request.TenantId, StringComparison.Ordinal))
+                return String.Equals(client.UserId, request.UserId, StringComparison.Ordinal);
+            return true;
         }
 
         /// <summary>
@@ -489,7 +561,7 @@ namespace Armada.Server.WebSocket
                     }
                     else
                     {
-                        result = await _CommandHandler.HandleCommandAsync(command.Action, command, body).ConfigureAwait(false);
+                        result = await _CommandHandler.HandleCommandAsync(command.Action, command, body, client.Auth).ConfigureAwait(false);
                     }
 
                     await session.SendTextAsync(JsonSerializer.Serialize(result, _JsonOptions)).ConfigureAwait(false);
