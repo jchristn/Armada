@@ -11,6 +11,7 @@ namespace Armada.Core.Services
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Core.Protocol;
     using Armada.Core.Services.Interfaces;
     using Armada.Core.Settings;
     using SyslogLogging;
@@ -1083,59 +1084,18 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
-        /// Find a JSON object containing a "fleets" property in free text (a captain reply), using brace matching that
-        /// respects string literals. Returns null when none is found.
+        /// Find a JSON object with a non-empty "fleets" list in free text (a captain reply): a fenced json block, or a
+        /// balanced object found by the shared string-aware scanner, deserialized into the typed recommendation document.
+        /// Returns null when none is found.
         /// </summary>
         private static string? ExtractRecommendationJson(string? text)
         {
-            if (String.IsNullOrWhiteSpace(text)) return null;
-            int search = text!.Length;
-            while (search > 0)
-            {
-                int key = text.LastIndexOf("\"fleets\"", search - 1, StringComparison.OrdinalIgnoreCase);
-                if (key < 0) return null;
-                int start = text.LastIndexOf('{', key);
-                if (start < 0) return null;
-
-                int depth = 0;
-                bool inString = false;
-                bool escaped = false;
-                for (int i = start; i < text.Length; i++)
-                {
-                    char c = text[i];
-                    if (inString)
-                    {
-                        if (escaped) escaped = false;
-                        else if (c == '\\') escaped = true;
-                        else if (c == '"') inString = false;
-                        continue;
-                    }
-
-                    if (c == '"') inString = true;
-                    else if (c == '{') depth++;
-                    else if (c == '}')
-                    {
-                        depth--;
-                        if (depth == 0)
-                        {
-                            string candidate = text.Substring(start, i - start + 1);
-                            try
-                            {
-                                FleetRecommendationDocument? doc = JsonSerializer.Deserialize<FleetRecommendationDocument>(candidate, _ParseOptions);
-                                if (doc != null && doc.Fleets != null && doc.Fleets.Count > 0) return candidate;
-                            }
-                            catch (JsonException)
-                            {
-                                // Not the object we want; keep searching earlier in the text.
-                            }
-
-                            break;
-                        }
-                    }
-                }
-
-                search = key;
-            }
+            if (EmbeddedJsonExtractor.TryExtract<FleetRecommendationDocument>(
+                    text,
+                    doc => doc.Fleets != null && doc.Fleets.Count > 0,
+                    out FleetRecommendationDocument? _,
+                    out string? json))
+                return json;
 
             return null;
         }

@@ -3,6 +3,7 @@ namespace Armada.Runtimes.Mcp
     using System.Collections.Generic;
     using System.Linq;
     using System.Text.Json.Serialization;
+    using Armada.Core.Protocol;
 
     /// <summary>
     /// A deserialized MCP <c>tools/call</c> result: the content parts and the <c>isError</c> flag the server sets for a
@@ -27,6 +28,13 @@ namespace Armada.Runtimes.Mcp
         /// </summary>
         [JsonPropertyName("isError")]
         public bool IsError { get; set; } = false;
+
+        /// <summary>
+        /// Structured result content as raw JSON, or null when the server sent none.
+        /// </summary>
+        [JsonPropertyName("structuredContent")]
+        [JsonConverter(typeof(RawJsonStringConverter))]
+        public string? StructuredContent { get; set; } = null;
 
         /// <summary>
         /// The text parts joined with newlines.

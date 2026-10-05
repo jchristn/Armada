@@ -10,6 +10,7 @@ namespace Armada.Server
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Core.Protocol;
     using Armada.Core.Services.Interfaces;
     using Armada.Runtimes;
     using Armada.Runtimes.Interfaces;
@@ -227,267 +228,176 @@ namespace Armada.Server
                 bool isMux = captain.Runtime == AgentRuntimeEnum.Mux;
                 bool isOpenCode = captain.Runtime == AgentRuntimeEnum.OpenCode;
                 bool isClaude = captain.Runtime == AgentRuntimeEnum.ClaudeCode;
-                bool isApiEndpoint = captain.Runtime == AgentRuntimeEnum.ApiEndpoint;
                 double? reportedDurationMs = null;
                 int? reportedTokens = null;
                 string? reportedModel = null;
                 string? claudeFinalReply = null;
                 
+                // The in-process (ApiEndpoint) runtime reports tool activity on a typed channel; its stdout carries only the
+                // model's reply text, so reply text can never spoof a tool card and no diagnostic line leaks into the answer.
+                if (runtime is ApiAgentRuntime apiRuntime)
+                {
+                    apiRuntime.OnToolEvent += (pid, toolEvent) => emitTool(new CaptainToolActivity
+                    {
+                        Phase = toolEvent.Phase == ApiRuntimeToolPhaseEnum.Completed ? "completed" : "started",
+                        Id = toolEvent.Id,
+                        Name = toolEvent.Name,
+                        Arguments = toolEvent.Arguments,
+                        Ok = toolEvent.Ok,
+                        ElapsedMs = toolEvent.ElapsedMs,
+                        Result = toolEvent.Result
+                    });
+                }
+
                 runtime.OnStdoutReceived += (pid, line) =>
                 {
-                    // Structured tool-activity events from the in-process (ApiEndpoint) runtime arrive as a
-                    // marked JSON line on stdout. Lift them into ask.tool card events (stamped with this
-                    // turn's id) and never let the marker line leak into the accumulated reply text.
-                    if (!String.IsNullOrEmpty(line) && line.StartsWith(ApiAgentRuntime.ToolEventMarker, StringComparison.Ordinal))
-                    {
-                        try
-                        {
-                            string toolJson = line.Substring(ApiAgentRuntime.ToolEventMarker.Length);
-                            using (JsonDocument doc = JsonDocument.Parse(toolJson))
-                            {
-                                JsonElement root = doc.RootElement;
-                                string? phase = root.TryGetProperty("phase", out JsonElement ph) && ph.ValueKind == JsonValueKind.String ? ph.GetString() : null;
-                                string? id = root.TryGetProperty("id", out JsonElement idv) && idv.ValueKind == JsonValueKind.String ? idv.GetString() : null;
-                                string? name = root.TryGetProperty("name", out JsonElement nmv) && nmv.ValueKind == JsonValueKind.String ? nmv.GetString() : null;
-                                string? arguments = root.TryGetProperty("arguments", out JsonElement av) && av.ValueKind == JsonValueKind.String ? av.GetString() : null;
-                                bool? ok = root.TryGetProperty("ok", out JsonElement okv) && (okv.ValueKind == JsonValueKind.True || okv.ValueKind == JsonValueKind.False) ? okv.GetBoolean() : (bool?)null;
-                                double? elapsedMs = root.TryGetProperty("elapsedMs", out JsonElement elv) && elv.ValueKind == JsonValueKind.Number ? elv.GetDouble() : (double?)null;
-                                string? resultText = root.TryGetProperty("result", out JsonElement rv) && rv.ValueKind == JsonValueKind.String ? rv.GetString() : null;
-                                emitTool(new CaptainToolActivity { Phase = phase ?? "started", Id = id, Name = name, Arguments = arguments, Ok = ok, ElapsedMs = elapsedMs, Result = resultText });
-                            }
-                        }
-                        catch (JsonException) { }
-                        return;
-                    }
-
-                    // The in-process (ApiEndpoint) runtime interleaves human-readable diagnostics
-                    // ([mcp] ..., [tool] ..., [tool:result] ..., and lifecycle [error]/[warning]/[cancelled])
-                    // on the same stdout channel as the model's reply text. Those belong in the tool cards
-                    // (delivered separately as TOOLEVENT lines), not in the answer -- drop them so they never
-                    // stream into or accumulate as the reply.
-                    if (isApiEndpoint && IsApiRuntimeDiagnostic(line))
-                    {
-                        return;
-                    }
-
                     if (isClaude)
                     {
-                        // Claude Code streaming-JSON: each stdout line is one JSON event. Incremental
-                        // content_block_delta/text_delta events stream the reply token-by-token; the terminal
-                        // "result" event carries the authoritative final message and metrics.
-                        try
+                        // Claude Code streaming-JSON: each stdout line is one typed event. Incremental text deltas stream
+                        // the reply token-by-token; the terminal "result" event carries the authoritative final message
+                        // and metrics. Non-event lines are ignored.
+                        if (!ClaudeStreamLine.TryParse(line, out ClaudeStreamLine? claudeEvent) || claudeEvent == null) return;
+
+                        string? deltaText = claudeEvent.TextDelta;
+                        if (!String.IsNullOrEmpty(deltaText))
                         {
-                            using (JsonDocument doc = JsonDocument.Parse(line.Trim()))
+                            lock (outputLock)
                             {
-                                JsonElement root = doc.RootElement;
-                                if (root.ValueKind != JsonValueKind.Object) return;
-                                string eventType = root.TryGetProperty("type", out JsonElement ty) && ty.ValueKind == JsonValueKind.String
-                                    ? ty.GetString() ?? String.Empty : String.Empty;
+                                if (firstOutputUtc == null) firstOutputUtc = DateTime.UtcNow;
+                                if (output.Length < _MaxOutputChars) output.Append(deltaText);
+                            }
+                            emitChunk(deltaText!);
+                        }
+                        else if (claudeEvent.Type == ClaudeStreamLine.TypeAssistant || claudeEvent.Type == ClaudeStreamLine.TypeUser)
+                        {
+                            ObserveClaudeToolBlocks(claudeEvent, toolCalls, emitTool);
+                        }
 
-                                if (eventType == "stream_event"
-                                    && root.TryGetProperty("event", out JsonElement ev) && ev.ValueKind == JsonValueKind.Object
-                                    && ev.TryGetProperty("type", out JsonElement evt) && evt.ValueKind == JsonValueKind.String
-                                    && evt.GetString() == "content_block_delta"
-                                    && ev.TryGetProperty("delta", out JsonElement delta) && delta.ValueKind == JsonValueKind.Object
-                                    && delta.TryGetProperty("type", out JsonElement dty) && dty.ValueKind == JsonValueKind.String
-                                    && dty.GetString() == "text_delta"
-                                    && delta.TryGetProperty("text", out JsonElement dtx) && dtx.ValueKind == JsonValueKind.String)
-                                {
-                                    string? deltaText = dtx.GetString();
-                                    if (!String.IsNullOrEmpty(deltaText))
-                                    {
-                                        lock (outputLock)
-                                        {
-                                            if (firstOutputUtc == null) firstOutputUtc = DateTime.UtcNow;
-                                            if (output.Length < _MaxOutputChars) output.Append(deltaText);
-                                        }
-                                        emitChunk(deltaText!);
-                                    }
-                                }
-                                else if (eventType == "assistant" || eventType == "user")
-                                {
-                                    ObserveClaudeToolBlocks(line, toolCalls, emitTool);
-                                }
-
-                                if (eventType == "assistant"
-                                    && root.TryGetProperty("message", out JsonElement assistantMessage)
-                                    && assistantMessage.ValueKind == JsonValueKind.Object
-                                    && assistantMessage.TryGetProperty("model", out JsonElement am) && am.ValueKind == JsonValueKind.String)
-                                {
-                                    lock (outputLock) reportedModel = am.GetString();
-                                }
-                                else if (eventType == "result")
-                                {
-                                    lock (outputLock)
-                                    {
-                                        if (root.TryGetProperty("result", out JsonElement resultText) && resultText.ValueKind == JsonValueKind.String)
-                                            claudeFinalReply = resultText.GetString();
-                                        if (root.TryGetProperty("duration_ms", out JsonElement durMs) && durMs.ValueKind == JsonValueKind.Number)
-                                            reportedDurationMs = durMs.GetDouble();
-                                        if (root.TryGetProperty("usage", out JsonElement usage) && usage.ValueKind == JsonValueKind.Object
-                                            && usage.TryGetProperty("output_tokens", out JsonElement outTok) && outTok.ValueKind == JsonValueKind.Number)
-                                            reportedTokens = outTok.GetInt32();
-                                    }
-                                }
+                        if (claudeEvent.Type == ClaudeStreamLine.TypeAssistant && !String.IsNullOrEmpty(claudeEvent.Message?.Model))
+                        {
+                            lock (outputLock) reportedModel = claudeEvent.Message!.Model;
+                        }
+                        else if (claudeEvent.Type == ClaudeStreamLine.TypeResult)
+                        {
+                            lock (outputLock)
+                            {
+                                if (claudeEvent.Result != null) claudeFinalReply = claudeEvent.Result;
+                                if (claudeEvent.DurationMs.HasValue) reportedDurationMs = claudeEvent.DurationMs.Value;
+                                if (claudeEvent.Usage?.OutputTokens != null) reportedTokens = ClampToInt(claudeEvent.Usage.OutputTokens.Value);
                             }
                         }
-                        catch (JsonException) { }
+
                         return;
                     }
 
-                    if (isMux && MuxRuntime.IsProtocolEventLine(line))
+                    if (isMux && MuxProtocolEvent.TryParse(line, out MuxProtocolEvent? muxEvent) && muxEvent != null)
                     {
-                        // Parse the Mux event for telemetry and live text. The final reply still comes
-                        // from the final-message artifact; assistant_text carries the streamed deltas.
-                        try
+                        // Telemetry and live text from the typed Mux event. The final reply still comes from the
+                        // final-message artifact; assistant_text carries the streamed deltas.
+                        string? deltaText = null;
+                        lock (outputLock)
                         {
-                            using (JsonDocument doc = JsonDocument.Parse(line.Trim()))
+                            if (!String.IsNullOrEmpty(muxEvent.Model)) reportedModel = muxEvent.Model;
+                            if (muxEvent.EventType == MuxProtocolEvent.AssistantText)
                             {
-                                JsonElement root = doc.RootElement;
-                                string eventType = root.TryGetProperty("eventType", out JsonElement et) && et.ValueKind == JsonValueKind.String
-                                    ? et.GetString() ?? String.Empty : String.Empty;
+                                if (firstOutputUtc == null) firstOutputUtc = DateTime.UtcNow;
+                                deltaText = muxEvent.Text;
+                                // Accumulate streamed assistant text so a reply survives even if the final-message
+                                // artifact (reply.txt) is not written.
+                                if (!String.IsNullOrEmpty(deltaText) && output.Length < _MaxOutputChars)
+                                    output.Append(deltaText);
+                            }
+                            else if (muxEvent.EventType == MuxProtocolEvent.RunCompleted)
+                            {
+                                if (muxEvent.DurationMs.HasValue) reportedDurationMs = muxEvent.DurationMs.Value;
+                                if (muxEvent.FinalEstimatedTokens.HasValue) reportedTokens = ClampToInt(muxEvent.FinalEstimatedTokens.Value);
+                            }
+                        }
 
-                                string? deltaText = null;
+                        // When --show-thinking is active, Mux streams the model's reasoning as assistant_thinking events
+                        // on a separate channel from the answer.
+                        string? thinkingDelta = null;
+                        if (muxEvent.EventType == MuxProtocolEvent.AssistantThinking && !String.IsNullOrEmpty(muxEvent.Text))
+                        {
+                            thinkingDelta = muxEvent.Text;
+                            lock (outputLock)
+                            {
+                                if (thinking.Length < _MaxOutputChars) thinking.Append(thinkingDelta);
+                            }
+                        }
+
+                        if (!String.IsNullOrEmpty(deltaText)) emitChunk(deltaText!);
+                        if (!String.IsNullOrEmpty(thinkingDelta)) emitThinking(thinkingDelta!);
+
+                        // Surface tool activity to the chat UI: when a tool call is proposed and when it completes (with
+                        // success/failure, runtime, and result for inspection).
+                        if (muxEvent.EventType == MuxProtocolEvent.ToolCallProposed && muxEvent.ToolCall != null)
+                        {
+                            emitTool(new CaptainToolActivity { Phase = "started", Id = muxEvent.ToolCall.Id, Name = muxEvent.ToolCall.Name, Arguments = Truncate(muxEvent.ToolCall.Arguments, 4000) });
+                        }
+                        else if (muxEvent.EventType == MuxProtocolEvent.ToolCallCompleted)
+                        {
+                            bool? ok = muxEvent.Result?.Success;
+                            string? resultJson = muxEvent.Result == null
+                                ? null
+                                : Truncate(muxEvent.Result.Content ?? JsonSerializer.Serialize(muxEvent.Result), 16000);
+                            emitTool(new CaptainToolActivity { Phase = "completed", Id = muxEvent.ToolCallId, Name = muxEvent.ToolName, Ok = ok, ElapsedMs = muxEvent.ElapsedMs, Result = resultJson });
+                        }
+
+                        return;
+                    }
+
+                    if (isOpenCode && OpenCodeStreamEvent.TryParse(line, out OpenCodeStreamEvent? openCodeEvent) && openCodeEvent != null)
+                    {
+                        // OpenCode --format json streams typed events with a nested part. Surface assistant text and
+                        // tool-call chips; the raw JSON envelope never leaks.
+                        OpenCodePart? part = openCodeEvent.Part;
+                        if (openCodeEvent.Type == OpenCodeStreamEvent.TypeText)
+                        {
+                            string? deltaText = openCodeEvent.AssistantText;
+                            if (!String.IsNullOrEmpty(deltaText))
+                            {
                                 lock (outputLock)
                                 {
-                                    if (root.TryGetProperty("model", out JsonElement m) && m.ValueKind == JsonValueKind.String)
-                                        reportedModel = m.GetString();
-                                    if (eventType == "assistant_text")
-                                    {
-                                        if (firstOutputUtc == null) firstOutputUtc = DateTime.UtcNow;
-                                        if (root.TryGetProperty("text", out JsonElement tx) && tx.ValueKind == JsonValueKind.String)
-                                        {
-                                            deltaText = tx.GetString();
-                                            // Accumulate streamed assistant text so a reply survives even if
-                                            // the final-message artifact (reply.txt) is not written.
-                                            if (!String.IsNullOrEmpty(deltaText) && output.Length < _MaxOutputChars)
-                                                output.Append(deltaText);
-                                        }
-                                    }
-                                    else if (eventType == "run_completed")
-                                    {
-                                        if (root.TryGetProperty("durationMs", out JsonElement d) && d.ValueKind == JsonValueKind.Number)
-                                            reportedDurationMs = d.GetDouble();
-                                        if (root.TryGetProperty("finalEstimatedTokens", out JsonElement ft) && ft.ValueKind == JsonValueKind.Number)
-                                            reportedTokens = ft.GetInt32();
-                                    }
+                                    if (firstOutputUtc == null) firstOutputUtc = DateTime.UtcNow;
+                                    if (output.Length < _MaxOutputChars) output.Append(deltaText);
                                 }
-
-                                // When --show-thinking is active, Mux streams the model's reasoning as
-                                // assistant_thinking events on a separate channel from the answer.
-                                string? thinkingDelta = null;
-                                if (eventType == "assistant_thinking"
-                                    && root.TryGetProperty("text", out JsonElement think)
-                                    && think.ValueKind == JsonValueKind.String)
-                                {
-                                    thinkingDelta = think.GetString();
-                                    if (!String.IsNullOrEmpty(thinkingDelta))
-                                    {
-                                        lock (outputLock)
-                                        {
-                                            if (thinking.Length < _MaxOutputChars) thinking.Append(thinkingDelta);
-                                        }
-                                    }
-                                }
-
-                                if (!String.IsNullOrEmpty(deltaText)) emitChunk(deltaText!);
-                                if (!String.IsNullOrEmpty(thinkingDelta)) emitThinking(thinkingDelta!);
-
-                                // Surface tool activity to the chat UI: when a tool call is proposed and when
-                                // it completes (with success/failure, runtime, and result for inspection).
-                                if (eventType == "tool_call_proposed" && root.TryGetProperty("toolCall", out JsonElement proposed))
-                                {
-                                    string? toolId = proposed.TryGetProperty("id", out JsonElement propId) && propId.ValueKind == JsonValueKind.String ? propId.GetString() : null;
-                                    string? toolName = proposed.TryGetProperty("name", out JsonElement pnm) && pnm.ValueKind == JsonValueKind.String ? pnm.GetString() : null;
-                                    string? argsJson = proposed.TryGetProperty("arguments", out JsonElement parg) ? Truncate(parg.GetRawText(), 4000) : null;
-                                    emitTool(new CaptainToolActivity { Phase = "started", Id = toolId, Name = toolName, Arguments = argsJson });
-                                }
-                                else if (eventType == "tool_call_completed")
-                                {
-                                    string? toolId = root.TryGetProperty("toolCallId", out JsonElement cid) && cid.ValueKind == JsonValueKind.String ? cid.GetString() : null;
-                                    string? toolName = root.TryGetProperty("toolName", out JsonElement cnm) && cnm.ValueKind == JsonValueKind.String ? cnm.GetString() : null;
-                                    double? elapsedMs = root.TryGetProperty("elapsedMs", out JsonElement cel) && cel.ValueKind == JsonValueKind.Number ? cel.GetDouble() : (double?)null;
-                                    bool? ok = null;
-                                    string? resultJson = null;
-                                    if (root.TryGetProperty("result", out JsonElement res))
-                                    {
-                                        if (res.TryGetProperty("success", out JsonElement suc) && (suc.ValueKind == JsonValueKind.True || suc.ValueKind == JsonValueKind.False))
-                                            ok = suc.GetBoolean();
-                                        JsonElement resultBody = res.TryGetProperty("content", out JsonElement content) ? content : res;
-                                        resultJson = Truncate(resultBody.GetRawText(), 16000);
-                                    }
-                                    emitTool(new CaptainToolActivity { Phase = "completed", Id = toolId, Name = toolName, Ok = ok, ElapsedMs = elapsedMs, Result = resultJson });
-                                }
+                                emitChunk(deltaText!);
                             }
                         }
-                        catch (JsonException) { }
-                        return;
-                    }
-
-                    if (isOpenCode && OpenCodeRuntime.IsProtocolEventLine(line))
-                    {
-                        // OpenCode --format json streams "type"-tagged events with a nested "part". Surface
-                        // assistant text and tool-call chips; drop the raw JSON envelope so it never leaks.
-                        try
+                        else if (openCodeEvent.Type == OpenCodeStreamEvent.TypeReasoning)
                         {
-                            using (JsonDocument doc = JsonDocument.Parse(line.Trim()))
+                            // OpenCode --thinking streams reasoning on a separate channel; surface it as thinking (never
+                            // as reply text).
+                            string? thinkingDelta = part?.Text;
+                            if (!String.IsNullOrEmpty(thinkingDelta) && showThinking)
                             {
-                                JsonElement root = doc.RootElement;
-                                string ocType = root.TryGetProperty("type", out JsonElement oct) && oct.ValueKind == JsonValueKind.String ? oct.GetString() ?? "" : "";
-                                JsonElement part = root.TryGetProperty("part", out JsonElement p) && p.ValueKind == JsonValueKind.Object ? p : default;
-
-                                if (ocType == "text" && part.ValueKind == JsonValueKind.Object
-                                    && part.TryGetProperty("text", out JsonElement txt) && txt.ValueKind == JsonValueKind.String)
+                                lock (outputLock)
                                 {
-                                    string deltaText = txt.GetString() ?? String.Empty;
-                                    if (!String.IsNullOrEmpty(deltaText))
-                                    {
-                                        lock (outputLock)
-                                        {
-                                            if (firstOutputUtc == null) firstOutputUtc = DateTime.UtcNow;
-                                            if (output.Length < _MaxOutputChars) output.Append(deltaText);
-                                        }
-                                        emitChunk(deltaText);
-                                    }
+                                    if (thinking.Length < _MaxOutputChars) thinking.Append(thinkingDelta);
                                 }
-                                else if (ocType == "reasoning" && part.ValueKind == JsonValueKind.Object
-                                    && part.TryGetProperty("text", out JsonElement rtxt) && rtxt.ValueKind == JsonValueKind.String)
-                                {
-                                    // OpenCode --thinking streams reasoning on a separate channel; surface it as
-                                    // thinking (never as reply text).
-                                    string thinkingDelta = rtxt.GetString() ?? String.Empty;
-                                    if (!String.IsNullOrEmpty(thinkingDelta) && showThinking)
-                                    {
-                                        lock (outputLock)
-                                        {
-                                            if (thinking.Length < _MaxOutputChars) thinking.Append(thinkingDelta);
-                                        }
-                                        emitThinking(thinkingDelta);
-                                    }
-                                }
-                                else if (ocType == "tool_use" && part.ValueKind == JsonValueKind.Object)
-                                {
-                                    string? toolName = part.TryGetProperty("tool", out JsonElement tnm) && tnm.ValueKind == JsonValueKind.String ? tnm.GetString() : null;
-                                    string? toolId = part.TryGetProperty("callID", out JsonElement cid) && cid.ValueKind == JsonValueKind.String ? cid.GetString() : null;
-                                    string? status = null;
-                                    string? argsJson = null;
-                                    string? resultJson = null;
-                                    bool? ok = null;
-                                    if (part.TryGetProperty("state", out JsonElement state) && state.ValueKind == JsonValueKind.Object)
-                                    {
-                                        status = state.TryGetProperty("status", out JsonElement stt) && stt.ValueKind == JsonValueKind.String ? stt.GetString() : null;
-                                        if (state.TryGetProperty("input", out JsonElement inp)) argsJson = Truncate(inp.GetRawText(), 4000);
-                                        if (state.TryGetProperty("output", out JsonElement outp) && outp.ValueKind == JsonValueKind.String) resultJson = Truncate(outp.GetString() ?? "", 16000);
-                                        if (state.TryGetProperty("metadata", out JsonElement md) && md.ValueKind == JsonValueKind.Object
-                                            && md.TryGetProperty("exit", out JsonElement ex) && ex.ValueKind == JsonValueKind.Number)
-                                            ok = ex.GetInt32() == 0;
-                                    }
-                                    string phase = String.Equals(status, "completed", StringComparison.OrdinalIgnoreCase) ? "completed" : "started";
-                                    emitTool(new CaptainToolActivity { Phase = phase, Id = toolId, Name = toolName, Arguments = argsJson, Ok = ok, Result = resultJson });
-                                }
+                                emitThinking(thinkingDelta!);
                             }
                         }
-                        catch (JsonException) { }
+                        else if (openCodeEvent.Type == OpenCodeStreamEvent.TypeToolUse && part != null)
+                        {
+                            OpenCodeToolState? state = part.State;
+                            string? status = state?.Status;
+                            bool failed = String.Equals(status, "error", StringComparison.Ordinal);
+                            bool completed = failed || String.Equals(status, "completed", StringComparison.Ordinal);
+                            bool? ok = failed ? false : (state?.Metadata?.Exit.HasValue == true ? state.Metadata.Exit.Value == 0 : (bool?)null);
+                            string? resultText = failed ? (state?.Error ?? state?.Output) : state?.Output;
+                            emitTool(new CaptainToolActivity
+                            {
+                                Phase = completed ? "completed" : "started",
+                                Id = part.CallId,
+                                Name = part.Tool,
+                                Arguments = Truncate(state?.Input, 4000),
+                                Ok = ok,
+                                Result = Truncate(resultText, 16000)
+                            });
+                        }
+
                         return;
                     }
 
@@ -677,27 +587,24 @@ namespace Armada.Server
             return new CaptainChatTurnResult { Response = Fail(error) };
         }
 
-        private static void ObserveClaudeToolBlocks(string line, ToolCallCollector collector, Action<CaptainToolActivity> emitTool)
+        private static void ObserveClaudeToolBlocks(ClaudeStreamLine parsed, ToolCallCollector collector, Action<CaptainToolActivity> emitTool)
         {
-            ClaudeStreamLine? parsed = null;
-            try { parsed = JsonSerializer.Deserialize<ClaudeStreamLine>(line.Trim()); }
-            catch (JsonException) { return; }
-            if (parsed?.Message?.Content == null) return;
+            if (parsed.Message?.Content == null) return;
 
             foreach (ClaudeStreamContentBlock block in parsed.Message.Content)
             {
                 if (block == null) continue;
-                if (String.Equals(block.Type, "tool_use", StringComparison.Ordinal))
+                if (String.Equals(block.Type, ClaudeStreamContentBlock.TypeToolUse, StringComparison.Ordinal))
                 {
                     emitTool(new CaptainToolActivity
                     {
                         Phase = "started",
                         Id = block.Id,
                         Name = block.Name,
-                        Arguments = Truncate(block.Input?.ToJsonString(), 4000)
+                        Arguments = Truncate(block.Input, 4000)
                     });
                 }
-                else if (String.Equals(block.Type, "tool_result", StringComparison.Ordinal))
+                else if (String.Equals(block.Type, ClaudeStreamContentBlock.TypeToolResult, StringComparison.Ordinal))
                 {
                     emitTool(new CaptainToolActivity
                     {
@@ -710,6 +617,13 @@ namespace Armada.Server
                     });
                 }
             }
+        }
+
+        private static int ClampToInt(long value)
+        {
+            if (value > Int32.MaxValue) return Int32.MaxValue;
+            if (value < Int32.MinValue) return Int32.MinValue;
+            return (int)value;
         }
 
 
@@ -798,22 +712,6 @@ namespace Armada.Server
         {
             if (String.IsNullOrEmpty(value) || value!.Length <= max) return value;
             return value.Substring(0, max) + "... (truncated)";
-        }
-
-        /// <summary>
-        /// Whether a stdout line from the in-process (ApiEndpoint) runtime is diagnostic chatter (MCP status,
-        /// tool call/result echoes, or a lifecycle marker) rather than the model's reply text. Such lines are
-        /// surfaced as tool cards separately and must not leak into the answer.
-        /// </summary>
-        private static bool IsApiRuntimeDiagnostic(string line)
-        {
-            if (String.IsNullOrEmpty(line)) return false;
-            return line.StartsWith("[mcp]", StringComparison.Ordinal)
-                || line.StartsWith("[tool]", StringComparison.Ordinal)
-                || line.StartsWith("[tool:result]", StringComparison.Ordinal)
-                || line.StartsWith("[error]", StringComparison.Ordinal)
-                || line.StartsWith("[warning]", StringComparison.Ordinal)
-                || line.StartsWith("[cancelled]", StringComparison.Ordinal);
         }
 
         private static CaptainChatResponse Fail(string error)

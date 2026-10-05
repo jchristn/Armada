@@ -5,6 +5,7 @@ namespace Armada.Runtimes.Tools
     using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
+    using Armada.Runtimes.Tools.Arguments;
     using Armada.Runtimes.Tools.Tasks;
 
     /// <summary>
@@ -110,30 +111,32 @@ namespace Armada.Runtimes.Tools
                 return Task.FromResult(Error(toolCallId, "task_planning_disabled", "Task planning is not active for this run."));
             }
 
-            List<AgentTask> tasks = new List<AgentTask>();
-            if (arguments.TryGetProperty("tasks", out JsonElement tasksElement) && tasksElement.ValueKind == JsonValueKind.Array)
+            if (!ToolArgumentParser.TryParse(arguments, out PlanTasksToolArguments? args, out string? argumentError))
             {
-                foreach (JsonElement taskElement in tasksElement.EnumerateArray())
-                {
-                    AgentTask task = new AgentTask
-                    {
-                        Id = GetString(taskElement, "id"),
-                        Title = GetString(taskElement, "title")
-                    };
+                return Task.FromResult(ToolArgumentParser.InvalidParameter(toolCallId, argumentError));
+            }
 
-                    if (taskElement.TryGetProperty("dependsOn", out JsonElement dependsElement) && dependsElement.ValueKind == JsonValueKind.Array)
+            List<AgentTask> tasks = new List<AgentTask>();
+            foreach (PlanTaskArguments? taskArguments in args.Tasks!)
+            {
+                AgentTask task = new AgentTask
+                {
+                    Id = taskArguments!.Id ?? string.Empty,
+                    Title = taskArguments.Title ?? string.Empty
+                };
+
+                if (taskArguments.DependsOn != null)
+                {
+                    foreach (string? dependency in taskArguments.DependsOn)
                     {
-                        foreach (JsonElement dependency in dependsElement.EnumerateArray())
+                        if (dependency != null)
                         {
-                            if (dependency.ValueKind == JsonValueKind.String)
-                            {
-                                task.DependsOn.Add(dependency.GetString() ?? string.Empty);
-                            }
+                            task.DependsOn.Add(dependency);
                         }
                     }
-
-                    tasks.Add(task);
                 }
+
+                tasks.Add(task);
             }
 
             TaskPlanValidationResult validation = TaskPlanValidator.Validate(tasks);
@@ -160,16 +163,6 @@ namespace Armada.Runtimes.Tools
         #endregion
 
         #region Private-Methods
-
-        private static string GetString(JsonElement element, string propertyName)
-        {
-            if (element.TryGetProperty(propertyName, out JsonElement value) && value.ValueKind == JsonValueKind.String)
-            {
-                return value.GetString() ?? string.Empty;
-            }
-
-            return string.Empty;
-        }
 
         private static ToolResult Error(string toolCallId, string code, string message)
         {

@@ -36,6 +36,12 @@ namespace Armada.Core.Services
         public string? StandardInput { get; set; } = null;
 
         /// <summary>
+        /// Optional environment variables set for the command (added to, or overriding, the inherited environment).
+        /// Applied by the local executor; null leaves the environment unchanged.
+        /// </summary>
+        public Dictionary<string, string>? Environment { get; set; } = null;
+
+        /// <summary>
         /// Timeout in milliseconds. Clamped to a minimum of 0 (0 means no explicit timeout); defaults to
         /// 120000.
         /// </summary>

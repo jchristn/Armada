@@ -6,6 +6,7 @@ namespace Armada.Runtimes.Tools
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Runtimes.Tools;
+    using Armada.Runtimes.Tools.Arguments;
 
     /// <summary>
     /// Deletes a file from the filesystem.
@@ -55,9 +56,14 @@ namespace Armada.Runtimes.Tools
         /// <returns>A <see cref="ToolResult"/> indicating success or failure.</returns>
         public Task<ToolResult> ExecuteAsync(string toolCallId, JsonElement arguments, string workingDirectory, CancellationToken cancellationToken)
         {
+            if (!ToolArgumentParser.TryParse(arguments, out DeleteFileToolArguments? args, out string? argumentError))
+            {
+                return Task.FromResult(ToolArgumentParser.InvalidParameter(toolCallId, argumentError));
+            }
+
             try
             {
-                string filePath = GetRequiredString(arguments, "file_path");
+                string filePath = args.FilePath!;
                 string resolvedPath = ResolvePath(filePath, workingDirectory);
 
                 if (!File.Exists(resolvedPath))
@@ -102,16 +108,6 @@ namespace Armada.Runtimes.Tools
         #endregion
 
         #region Private-Methods
-
-        private string GetRequiredString(JsonElement arguments, string propertyName)
-        {
-            if (arguments.TryGetProperty(propertyName, out JsonElement value) && value.ValueKind == JsonValueKind.String)
-            {
-                return value.GetString()!;
-            }
-
-            throw new ArgumentException($"Required parameter '{propertyName}' is missing or not a string.");
-        }
 
         private string ResolvePath(string filePath, string workingDirectory)
         {

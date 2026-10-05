@@ -1,8 +1,8 @@
 namespace Armada.Core.Services
 {
     using System;
-    using System.Text.Json;
     using System.Text.RegularExpressions;
+    using Armada.Core.Protocol;
 
     /// <summary>
     /// Turns a raw captain-runtime log line into something readable: resolves the real tool name out of a
@@ -61,128 +61,150 @@ namespace Armada.Core.Services
 
         private static bool TryFormatRuntimeSpecificEvent(string json, Armada.Core.Enums.AgentRuntimeEnum runtime, FormattedLogLine result)
         {
-            // Claude Code / Codex stream a "type"-tagged event with tool_use content blocks; OpenCode streams
-            // its own "type"-tagged events with a nested "part"; other runtimes use the shared eventType shape.
-            if (runtime != Armada.Core.Enums.AgentRuntimeEnum.ClaudeCode
-                && runtime != Armada.Core.Enums.AgentRuntimeEnum.Codex
-                && runtime != Armada.Core.Enums.AgentRuntimeEnum.OpenCode)
-                return false;
-
-            try
+            // Each runtime's own typed event shape: Claude Code stream-json, Codex exec --json, OpenCode --format json.
+            // Other runtimes use the shared Mux eventType shape (TryFormatMuxEvent).
+            switch (runtime)
             {
-                using JsonDocument doc = JsonDocument.Parse(json);
-                JsonElement root = doc.RootElement;
-                if (root.ValueKind != JsonValueKind.Object) return false;
-
-                string type = root.TryGetProperty("type", out JsonElement ty) && ty.ValueKind == JsonValueKind.String ? ty.GetString() ?? "" : "";
-
-                // OpenCode events: a nested "part" carries the tool name / assistant text.
-                if (runtime == Armada.Core.Enums.AgentRuntimeEnum.OpenCode
-                    && root.TryGetProperty("part", out JsonElement ocPart) && ocPart.ValueKind == JsonValueKind.Object)
-                {
-                    if (type == "tool_use" && ocPart.TryGetProperty("tool", out JsonElement ocTool) && ocTool.ValueKind == JsonValueKind.String)
-                    {
-                        string? status = ocPart.TryGetProperty("state", out JsonElement st) && st.ValueKind == JsonValueKind.Object
-                            && st.TryGetProperty("status", out JsonElement ss) && ss.ValueKind == JsonValueKind.String ? ss.GetString() : null;
-                        result.IsToolCall = true;
-                        result.ToolName = ocTool.GetString();
-                        result.Text = "-> tool " + (result.ToolName ?? "unknown") + (String.IsNullOrEmpty(status) ? "" : " (" + status + ")");
-                        return true;
-                    }
-                    if ((type == "text" || type == "reasoning") && ocPart.TryGetProperty("text", out JsonElement ocText) && ocText.ValueKind == JsonValueKind.String)
-                    {
-                        result.Text = (type == "reasoning" ? "(thinking) " : "") + (ocText.GetString() ?? "");
-                        return true;
-                    }
-                    // A step/other OpenCode event with no display text: drop it rather than echo raw JSON.
-                    if (type == "step_start" || type == "step_finish")
-                    {
-                        result.Dropped = true;
-                        return true;
-                    }
-                }
-
-                // A bare tool_use event.
-                if (type == "tool_use" && root.TryGetProperty("name", out JsonElement directName) && directName.ValueKind == JsonValueKind.String)
-                {
-                    result.IsToolCall = true;
-                    result.ToolName = directName.GetString();
-                    result.Text = "-> tool " + (result.ToolName ?? "unknown");
-                    return true;
-                }
-
-                // An assistant message carrying content blocks, one of which may be a tool_use.
-                JsonElement contentHolder = root;
-                if (root.TryGetProperty("message", out JsonElement message) && message.ValueKind == JsonValueKind.Object)
-                    contentHolder = message;
-
-                if (contentHolder.TryGetProperty("content", out JsonElement content) && content.ValueKind == JsonValueKind.Array)
-                {
-                    foreach (JsonElement block in content.EnumerateArray())
-                    {
-                        if (block.ValueKind != JsonValueKind.Object) continue;
-                        string blockType = block.TryGetProperty("type", out JsonElement bt) && bt.ValueKind == JsonValueKind.String ? bt.GetString() ?? "" : "";
-                        if (blockType == "tool_use" && block.TryGetProperty("name", out JsonElement bn) && bn.ValueKind == JsonValueKind.String)
-                        {
-                            result.IsToolCall = true;
-                            result.ToolName = bn.GetString();
-                            result.Text = "-> tool " + (result.ToolName ?? "unknown");
-                            return true;
-                        }
-                    }
-                }
+                case Armada.Core.Enums.AgentRuntimeEnum.ClaudeCode:
+                    return TryFormatClaudeEvent(json, result);
+                case Armada.Core.Enums.AgentRuntimeEnum.Codex:
+                    return TryFormatCodexEvent(json, result) || TryFormatClaudeEvent(json, result);
+                case Armada.Core.Enums.AgentRuntimeEnum.OpenCode:
+                    return TryFormatOpenCodeEvent(json, result);
+                default:
+                    return false;
             }
-            catch (JsonException)
+        }
+
+        private static bool TryFormatClaudeEvent(string json, FormattedLogLine result)
+        {
+            if (!ClaudeStreamLine.TryParse(json, out ClaudeStreamLine? evt) || evt == null) return false;
+
+            // A bare tool_use event.
+            if (evt.Type == ClaudeStreamLine.TypeToolUse && !String.IsNullOrEmpty(evt.Name))
             {
+                SetToolCall(result, evt.Name, "-> tool " + evt.Name);
+                return true;
+            }
+
+            // An assistant message carrying content blocks, one of which may be a tool_use.
+            if (evt.Message?.Content != null)
+            {
+                foreach (ClaudeStreamContentBlock block in evt.Message.Content)
+                {
+                    if (block != null && block.Type == ClaudeStreamContentBlock.TypeToolUse && !String.IsNullOrEmpty(block.Name))
+                    {
+                        SetToolCall(result, block.Name, "-> tool " + block.Name);
+                        return true;
+                    }
+                }
             }
 
             return false;
         }
 
+        private static bool TryFormatCodexEvent(string json, FormattedLogLine result)
+        {
+            if (!CodexStreamEvent.TryParse(json, out CodexStreamEvent? evt) || evt == null) return false;
+
+            CodexStreamItem? item = evt.Item;
+            if (item == null)
+            {
+                if (evt.Type == CodexStreamEvent.TypeError || evt.Type == CodexStreamEvent.TypeTurnFailed)
+                {
+                    result.Text = "(error) " + (evt.Message ?? evt.Error ?? String.Empty);
+                    return true;
+                }
+
+                // thread/turn lifecycle markers carry no display text.
+                result.Dropped = true;
+                return true;
+            }
+
+            switch (item.Type)
+            {
+                case CodexStreamItem.TypeMcpToolCall:
+                    {
+                        string name = String.IsNullOrEmpty(item.Server) ? (item.Tool ?? "unknown") : item.Server + "." + (item.Tool ?? "unknown");
+                        SetToolCall(result, name, "-> tool " + name + (String.IsNullOrEmpty(item.Status) ? "" : " (" + item.Status + ")"));
+                        return true;
+                    }
+                case CodexStreamItem.TypeCommandExecution:
+                    SetToolCall(result, "shell", "-> tool shell " + (item.Command ?? String.Empty) + (item.ExitCode.HasValue ? " (exit " + item.ExitCode.Value + ")" : ""));
+                    return true;
+                case CodexStreamItem.TypeAgentMessage:
+                    if (evt.Type != CodexStreamEvent.TypeItemCompleted || String.IsNullOrEmpty(item.Text)) { result.Dropped = true; return true; }
+                    result.Text = item.Text!;
+                    return true;
+                case CodexStreamItem.TypeReasoning:
+                    if (evt.Type != CodexStreamEvent.TypeItemCompleted || String.IsNullOrEmpty(item.Text)) { result.Dropped = true; return true; }
+                    result.Text = "(thinking) " + item.Text;
+                    return true;
+                default:
+                    result.Dropped = true;
+                    return true;
+            }
+        }
+
+        private static bool TryFormatOpenCodeEvent(string json, FormattedLogLine result)
+        {
+            if (!OpenCodeStreamEvent.TryParse(json, out OpenCodeStreamEvent? evt) || evt == null) return false;
+
+            OpenCodePart? part = evt.Part;
+            switch (evt.Type)
+            {
+                case OpenCodeStreamEvent.TypeToolUse:
+                    if (part == null || String.IsNullOrEmpty(part.Tool)) return false;
+                    {
+                        string? status = part.State?.Status;
+                        SetToolCall(result, part.Tool, "-> tool " + part.Tool + (String.IsNullOrEmpty(status) ? "" : " (" + status + ")"));
+                        return true;
+                    }
+                case OpenCodeStreamEvent.TypeText:
+                case OpenCodeStreamEvent.TypeReasoning:
+                    if (part?.Text == null) return false;
+                    result.Text = (evt.Type == OpenCodeStreamEvent.TypeReasoning ? "(thinking) " : "") + part.Text;
+                    return true;
+                case OpenCodeStreamEvent.TypeError:
+                    result.Text = "(error) " + (evt.Error ?? String.Empty);
+                    return true;
+                default:
+                    // A step marker with no display text: drop it rather than echo raw JSON.
+                    result.Dropped = true;
+                    return true;
+            }
+        }
+
         private static bool TryFormatJsonEvent(string json, FormattedLogLine result)
         {
-            try
+            if (!MuxProtocolEvent.TryParse(json, out MuxProtocolEvent? evt) || evt == null) return false;
+
+            switch (evt.EventType)
             {
-                using JsonDocument doc = JsonDocument.Parse(json);
-                JsonElement root = doc.RootElement;
-                if (root.ValueKind != JsonValueKind.Object) return false;
-
-                string eventType = root.TryGetProperty("eventType", out JsonElement et) && et.ValueKind == JsonValueKind.String
-                    ? et.GetString() ?? "" : "";
-
-                if (eventType == "tool_call_proposed" && root.TryGetProperty("toolCall", out JsonElement tc))
-                {
-                    string? name = tc.TryGetProperty("name", out JsonElement n) && n.ValueKind == JsonValueKind.String ? n.GetString() : null;
-                    result.IsToolCall = true;
-                    result.ToolName = name;
-                    result.Text = "-> tool " + (name ?? "unknown");
+                case MuxProtocolEvent.ToolCallProposed:
+                    if (evt.ToolCall == null) return false;
+                    SetToolCall(result, evt.ToolCall.Name, "-> tool " + (evt.ToolCall.Name ?? "unknown"));
                     return true;
-                }
-
-                if (eventType == "tool_call_completed")
-                {
-                    string? name = root.TryGetProperty("toolName", out JsonElement tn) && tn.ValueKind == JsonValueKind.String ? tn.GetString() : null;
-                    bool ok = true;
-                    if (root.TryGetProperty("result", out JsonElement res) && res.TryGetProperty("success", out JsonElement suc)
-                        && (suc.ValueKind == JsonValueKind.True || suc.ValueKind == JsonValueKind.False))
-                        ok = suc.GetBoolean();
-                    result.IsToolCall = true;
-                    result.ToolName = name;
-                    result.Text = "<- tool " + (name ?? "unknown") + (ok ? " ok" : " failed");
+                case MuxProtocolEvent.ToolCallCompleted:
+                    {
+                        bool ok = evt.Result?.Success ?? true;
+                        SetToolCall(result, evt.ToolName, "<- tool " + (evt.ToolName ?? "unknown") + (ok ? " ok" : " failed"));
+                        return true;
+                    }
+                case MuxProtocolEvent.AssistantText:
+                    if (evt.Text == null) return false;
+                    result.Text = evt.Text;
                     return true;
-                }
-
-                if (eventType == "assistant_text" && root.TryGetProperty("text", out JsonElement txt) && txt.ValueKind == JsonValueKind.String)
-                {
-                    result.Text = txt.GetString() ?? "";
-                    return true;
-                }
+                default:
+                    return false;
             }
-            catch (JsonException)
-            {
-            }
+        }
 
-            return false;
+        private static void SetToolCall(FormattedLogLine result, string? toolName, string text)
+        {
+            result.IsToolCall = true;
+            result.ToolName = toolName;
+            result.Text = text;
         }
 
         private static void ApplyRedactionAndTruncation(FormattedLogLine result)

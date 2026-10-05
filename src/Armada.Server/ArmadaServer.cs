@@ -57,6 +57,14 @@ namespace Armada.Server
             get { lock (_RegisteredMcpToolsLock) { return new List<CaptainToolSummary>(_RegisteredMcpToolDescriptors); } }
         }
 
+        /// <summary>
+        /// Source for every host touch point of captain runtime tool discovery (runtime config files, runtime CLIs,
+        /// installed-package inventories, MCP server connections). Null (the default) uses
+        /// <see cref="Armada.Server.RuntimeTools.HostRuntimeToolDiscoverySource"/>. Set before <see cref="StartAsync"/>;
+        /// test hosts set a fake so tests never read or launch the host user's tools.
+        /// </summary>
+        public Armada.Server.RuntimeTools.IRuntimeToolDiscoverySource? RuntimeToolDiscoverySource { get; set; } = null;
+
         #endregion
 
         #region Private-Members
@@ -498,7 +506,8 @@ namespace Armada.Server
             _CaptainTools = new CaptainToolService(
                 _Logging,
                 _Database,
-                _HarborConnectionManager);
+                _HarborConnectionManager,
+                RuntimeToolDiscoverySource);
 
             _RemoteTunnel.OnHandleRequest = HandleRemoteTunnelRequestAsync;
 

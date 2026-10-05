@@ -3,6 +3,7 @@ namespace Armada.Runtimes
     using System;
     using System.Collections.Generic;
     using Armada.Core.Models;
+    using Armada.Core.Protocol;
     using Armada.Core.Services;
     using SyslogLogging;
 
@@ -68,80 +69,27 @@ namespace Armada.Runtimes
         #region Public-Methods
 
         /// <summary>
-        /// Whether a captured output line is an OpenCode JSONL protocol event (a single-line JSON object with
-        /// a recognizable event discriminator), so callers can filter it out of human-readable output rather
+        /// Whether a captured output line is an OpenCode JSONL protocol event (a single-line JSON object whose
+        /// <c>type</c> is one of OpenCode's event types, <see cref="OpenCodeStreamEvent.KnownTypes"/>), so callers can filter it out of human-readable output rather
         /// than leaking raw JSON. Mirrors <c>MuxRuntime.IsProtocolEventLine</c>.
         /// </summary>
         /// <param name="line">Raw output line.</param>
         /// <returns>True when the line is an OpenCode protocol event.</returns>
         public static bool IsProtocolEventLine(string? line)
         {
-            if (String.IsNullOrWhiteSpace(line)) return false;
-            string trimmed = line!.Trim();
-            if (trimmed.Length < 2 || trimmed[0] != '{' || trimmed[trimmed.Length - 1] != '}') return false;
-
-            try
-            {
-                using (System.Text.Json.JsonDocument document = System.Text.Json.JsonDocument.Parse(trimmed))
-                {
-                    if (document.RootElement.ValueKind != System.Text.Json.JsonValueKind.Object) return false;
-                    // OpenCode --format json events carry a "type" (and often a "part") discriminator.
-                    return document.RootElement.TryGetProperty("type", out _)
-                        || document.RootElement.TryGetProperty("part", out _)
-                        || document.RootElement.TryGetProperty("eventType", out _);
-                }
-            }
-            catch (System.Text.Json.JsonException)
-            {
-                return false;
-            }
+            return OpenCodeStreamEvent.TryParse(line, out OpenCodeStreamEvent? _);
         }
 
         /// <summary>
-        /// Best-effort extraction of human-visible assistant text from an OpenCode protocol event, or null
-        /// when the event carries no display text (e.g. a tool call or step marker). Used to surface streamed
-        /// text without echoing the raw JSON envelope.
+        /// Extraction of human-visible assistant text from an OpenCode protocol event, or null when the event carries no
+        /// reply text (a tool call, a step marker, or reasoning, which is thinking rather than reply text).
         /// </summary>
         /// <param name="line">Raw protocol line.</param>
         /// <returns>The extracted text, or null.</returns>
         public static string? TryExtractAssistantText(string? line)
         {
-            if (String.IsNullOrWhiteSpace(line)) return null;
-            try
-            {
-                using (System.Text.Json.JsonDocument document = System.Text.Json.JsonDocument.Parse(line!.Trim()))
-                {
-                    System.Text.Json.JsonElement root = document.RootElement;
-                    if (root.ValueKind != System.Text.Json.JsonValueKind.Object) return null;
-
-                    // Reasoning is thinking, not reply text: never surface it as assistant text.
-                    string type = root.TryGetProperty("type", out System.Text.Json.JsonElement ty) && ty.ValueKind == System.Text.Json.JsonValueKind.String
-                        ? ty.GetString() ?? String.Empty : String.Empty;
-                    if (type == "reasoning") return null;
-
-                    if (TryGetString(root, "text", out string? direct)) return direct;
-                    if (root.TryGetProperty("part", out System.Text.Json.JsonElement part) && part.ValueKind == System.Text.Json.JsonValueKind.Object
-                        && TryGetString(part, "text", out string? partText)) return partText;
-                    if (root.TryGetProperty("message", out System.Text.Json.JsonElement message) && message.ValueKind == System.Text.Json.JsonValueKind.Object
-                        && TryGetString(message, "content", out string? content)) return content;
-                    return null;
-                }
-            }
-            catch (System.Text.Json.JsonException)
-            {
-                return null;
-            }
-        }
-
-        private static bool TryGetString(System.Text.Json.JsonElement element, string name, out string? value)
-        {
-            value = null;
-            if (element.TryGetProperty(name, out System.Text.Json.JsonElement prop) && prop.ValueKind == System.Text.Json.JsonValueKind.String)
-            {
-                value = prop.GetString();
-                return !String.IsNullOrEmpty(value);
-            }
-            return false;
+            if (!OpenCodeStreamEvent.TryParse(line, out OpenCodeStreamEvent? evt) || evt == null) return null;
+            return evt.AssistantText;
         }
 
         #endregion

@@ -131,6 +131,7 @@ namespace Test.Shared.Infrastructure
             logging.Settings.EnableConsole = false;
 
             ArmadaServer server = new ArmadaServer(logging, Settings, quiet: true);
+            server.RuntimeToolDiscoverySource = new RecordingRuntimeToolDiscoverySource();
             await server.StartAsync().ConfigureAwait(false);
             _Server = server;
 

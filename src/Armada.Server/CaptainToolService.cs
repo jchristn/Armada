@@ -3,6 +3,7 @@ namespace Armada.Server
     using Armada.Core.Database;
     using Armada.Core.Models;
     using Armada.Core.Services;
+    using Armada.Server.RuntimeTools;
     using SyslogLogging;
 
     /// <summary>
@@ -20,13 +21,20 @@ namespace Armada.Server
         /// <param name="database">Database driver.</param>
         /// <param name="harborConnections">Harbor connection manager, so runtime probes for captains that run
         /// on a Harbor can be executed on the Harbor host. Null in standalone mode (probes run locally).</param>
-        public CaptainToolService(LoggingModule logging, DatabaseDriver database, HarborConnectionManager? harborConnections = null)
+        /// <param name="discoverySource">Source for every host touch point of runtime tool discovery (config files, runtime
+        /// CLIs, installed-package inventories, MCP server connections). Null uses
+        /// <see cref="HostRuntimeToolDiscoverySource"/>; tests pass a fake so the host user's tools are never touched.</param>
+        public CaptainToolService(
+            LoggingModule logging,
+            DatabaseDriver database,
+            HarborConnectionManager? harborConnections = null,
+            IRuntimeToolDiscoverySource? discoverySource = null)
         {
             if (logging == null) throw new ArgumentNullException(nameof(logging));
             if (database == null) throw new ArgumentNullException(nameof(database));
 
             _database = database;
-            _runtimeCatalog = new CaptainRuntimeToolCatalogService(logging, harborConnections);
+            _runtimeCatalog = new CaptainRuntimeToolCatalogService(logging, harborConnections, discoverySource);
         }
 
         /// <summary>

@@ -220,6 +220,10 @@ namespace Armada.Core.Services
             }
         }
 
+        /// <summary>
+        /// Return the stream text when it is a single JSON object and nothing else. Mux writes its machine-readable
+        /// output as the whole of the stream, so text with a banner or log lines around a brace pair is not accepted.
+        /// </summary>
         private static string? ExtractJsonPayload(string text)
         {
             if (String.IsNullOrWhiteSpace(text))
@@ -227,11 +231,10 @@ namespace Armada.Core.Services
                 return null;
             }
 
-            int firstBrace = text.IndexOf('{');
-            int lastBrace = text.LastIndexOf('}');
-            if (firstBrace >= 0 && lastBrace > firstBrace)
+            string trimmed = text.Trim();
+            if (trimmed.Length >= 2 && trimmed[0] == '{' && trimmed[trimmed.Length - 1] == '}')
             {
-                return text.Substring(firstBrace, lastBrace - firstBrace + 1);
+                return trimmed;
             }
 
             return null;

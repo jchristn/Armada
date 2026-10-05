@@ -1,37 +1,63 @@
 namespace Armada.Server
 {
-    using System.Diagnostics;
-    using System.Net.Http;
-    using System.Text;
     using System.Text.Json;
     using System.Text.Json.Serialization;
-    using System.Text.RegularExpressions;
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Core.Services;
+    using Armada.Runtimes.Mcp;
+    using Armada.Server.RuntimeTools;
     using SyslogLogging;
-    using ArmadaConstants = Armada.Core.Constants;
 
     /// <summary>
-    /// Discovers runtime-visible MCP servers and probes them for tool inventories.
+    /// Discovers runtime-visible MCP servers and probes them for tool inventories. Every host touch point (config files,
+    /// runtime CLIs, installed-package inventories, MCP server connections) goes through an
+    /// <see cref="IRuntimeToolDiscoverySource"/>.
     /// </summary>
     internal sealed class CaptainRuntimeToolCatalogService
     {
+        #region Private-Members
+
         private readonly LoggingModule _Logging;
         private readonly HarborConnectionManager? _HarborConnections;
-        private readonly HttpClient _HttpClient = new HttpClient();
+        private readonly IRuntimeToolDiscoverySource _Discovery;
         private readonly JsonSerializerOptions _JsonOptions = new JsonSerializerOptions
         {
             PropertyNameCaseInsensitive = true
         };
 
-        public CaptainRuntimeToolCatalogService(LoggingModule logging, HarborConnectionManager? harborConnections = null)
+        #endregion
+
+        #region Constructors-and-Factories
+
+        /// <summary>
+        /// Instantiate.
+        /// </summary>
+        /// <param name="logging">Logging module.</param>
+        /// <param name="harborConnections">Harbor connection manager, or null in standalone mode.</param>
+        /// <param name="discovery">Discovery source for host touch points; null uses <see cref="HostRuntimeToolDiscoverySource"/>.</param>
+        public CaptainRuntimeToolCatalogService(
+            LoggingModule logging,
+            HarborConnectionManager? harborConnections = null,
+            IRuntimeToolDiscoverySource? discovery = null)
         {
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
             _HarborConnections = harborConnections;
+            _Discovery = discovery ?? new HostRuntimeToolDiscoverySource(logging);
         }
 
+        #endregion
+
+        #region Public-Methods
+
+        /// <summary>
+        /// Describe the tool sources visible from a captain's runtime.
+        /// </summary>
+        /// <param name="captain">Captain.</param>
+        /// <param name="database">Database driver.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The snapshot, or null when the runtime has no inventory implementation.</returns>
         public async Task<RuntimeToolCatalogSnapshot?> TryDescribeAsync(Captain captain, DatabaseDriver database, CancellationToken token = default)
         {
             if (captain == null) throw new ArgumentNullException(nameof(captain));
@@ -46,16 +72,16 @@ namespace Armada.Server
                 case AgentRuntimeEnum.ClaudeCode:
                     return await DescribeConfiguredRuntimeAsync(
                         "Claude Code",
-                        GetClaudeConfigPath(),
-                        TryLoadClaudeBuiltInInventory(),
+                        Path.Combine(_Discovery.GetUserProfileDirectory(), ".claude.json"),
+                        _Discovery.ReadBuiltInToolInventory(AgentRuntimeEnum.ClaudeCode),
                         token,
                         "Claude Code built-in tools are not currently enumerated by Armada.")
                         .ConfigureAwait(false);
                 case AgentRuntimeEnum.Gemini:
                     return await DescribeConfiguredRuntimeAsync(
                         "Gemini CLI",
-                        GetGeminiConfigPath(),
-                        TryLoadGeminiBuiltInInventory(),
+                        Path.Combine(_Discovery.GetUserProfileDirectory(), ".gemini", "settings.json"),
+                        _Discovery.ReadBuiltInToolInventory(AgentRuntimeEnum.Gemini),
                         token,
                         "Gemini built-in tools are not currently enumerated by Armada.")
                         .ConfigureAwait(false);
@@ -103,6 +129,10 @@ namespace Armada.Server
             }
         }
 
+        #endregion
+
+        #region Private-Methods
+
         private async Task<RuntimeToolCatalogSnapshot> DescribeCodexAsync(string? contextDirectory, CancellationToken token)
         {
             RuntimeToolCatalogSnapshot snapshot = new RuntimeToolCatalogSnapshot
@@ -132,7 +162,7 @@ namespace Armada.Server
         private async Task<RuntimeToolCatalogSnapshot> DescribeConfiguredRuntimeAsync(
             string runtimeName,
             string configPath,
-            RuntimeBuiltInInventory? builtInInventory,
+            RuntimeBuiltInToolInventory? builtInInventory,
             CancellationToken token,
             string builtInFallbackNote)
         {
@@ -185,8 +215,7 @@ namespace Armada.Server
             string? probeError = null;
             try
             {
-                MuxCliService muxCli = new MuxCliService(_Logging, host.Executor);
-                probe = await muxCli.ProbeAsync(captain, host.WorkingDirectory, token).ConfigureAwait(false);
+                probe = await _Discovery.ProbeMuxAsync(captain, host.Executor, host.WorkingDirectory, token).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (token.IsCancellationRequested)
             {
@@ -388,8 +417,8 @@ namespace Armada.Server
                 {
                     try
                     {
-                        List<CaptainToolSummary> tools = await ProbeServerToolsAsync(capturedServer, token).ConfigureAwait(false);
-                        tools = ApplyToolFilters(capturedServer, tools);
+                        List<McpRemoteTool> listed = await _Discovery.ListServerToolsAsync(capturedServer, token).ConfigureAwait(false);
+                        List<CaptainToolSummary> tools = ApplyToolFilters(capturedServer, ToToolSummaries(listed, capturedServer.Name));
 
                         capturedSummary.Reachable = true;
                         capturedSummary.ToolCount = tools.Count;
@@ -416,7 +445,7 @@ namespace Armada.Server
         private async Task<RuntimeToolCatalogSnapshot> ProbeConfiguredSourcesAsync(
             string runtimeName,
             List<RuntimeMcpServerDefinition> servers,
-            RuntimeBuiltInInventory? builtInInventory,
+            RuntimeBuiltInToolInventory? builtInInventory,
             string builtInFallbackNote,
             RuntimeToolCatalogSnapshot snapshot,
             CancellationToken token)
@@ -458,7 +487,7 @@ namespace Armada.Server
             return snapshot;
         }
 
-        private static void ApplyRuntimeBuiltInInventory(RuntimeToolCatalogSnapshot snapshot, RuntimeBuiltInInventory? builtInInventory)
+        private static void ApplyRuntimeBuiltInInventory(RuntimeToolCatalogSnapshot snapshot, RuntimeBuiltInToolInventory? builtInInventory)
         {
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
             if (builtInInventory == null || builtInInventory.Tools.Count < 1)
@@ -478,12 +507,9 @@ namespace Armada.Server
 
         private async Task<List<RuntimeMcpServerDefinition>> GetCodexServersAsync(string? contextDirectory, CancellationToken token)
         {
-            string codexCommand = ResolveCodexCommand();
-            CommandExecutionResult listResult = await RunProcessAsync(
-                codexCommand,
-                new[] { "mcp", "list", "--json" },
+            RuntimeCommandResult listResult = await _Discovery.RunCodexAsync(
+                new List<string> { "mcp", "list", "--json" },
                 contextDirectory,
-                null,
                 TimeSpan.FromSeconds(15),
                 token).ConfigureAwait(false);
 
@@ -501,11 +527,9 @@ namespace Armada.Server
             List<RuntimeMcpServerDefinition> results = new List<RuntimeMcpServerDefinition>();
             foreach (CodexMcpServerListEntry listedServer in listedServers)
             {
-                CommandExecutionResult getResult = await RunProcessAsync(
-                    codexCommand,
-                    new[] { "mcp", "get", listedServer.Name, "--json" },
+                RuntimeCommandResult getResult = await _Discovery.RunCodexAsync(
+                    new List<string> { "mcp", "get", listedServer.Name, "--json" },
                     contextDirectory,
-                    null,
                     TimeSpan.FromSeconds(15),
                     token).ConfigureAwait(false);
 
@@ -545,40 +569,46 @@ namespace Armada.Server
 
         private async Task<List<RuntimeMcpServerDefinition>> ReadJsonConfiguredServersAsync(string configPath, CancellationToken token)
         {
-            if (String.IsNullOrWhiteSpace(configPath) || !File.Exists(configPath))
+            if (String.IsNullOrWhiteSpace(configPath))
             {
                 return new List<RuntimeMcpServerDefinition>();
             }
 
-            string json = await File.ReadAllTextAsync(configPath, token).ConfigureAwait(false);
+            string? json = await _Discovery.ReadConfigFileAsync(configPath, token).ConfigureAwait(false);
             if (String.IsNullOrWhiteSpace(json))
             {
                 return new List<RuntimeMcpServerDefinition>();
             }
 
-            ClaudeCodeSettings? settings = JsonSerializer.Deserialize<ClaudeCodeSettings>(json, _JsonOptions);
+            RuntimeJsonMcpConfigFile? settings = JsonSerializer.Deserialize<RuntimeJsonMcpConfigFile>(json, _JsonOptions);
             if (settings?.McpServers == null || settings.McpServers.Count == 0)
             {
                 return new List<RuntimeMcpServerDefinition>();
             }
 
             List<RuntimeMcpServerDefinition> servers = new List<RuntimeMcpServerDefinition>();
-            foreach (KeyValuePair<string, McpServerEntry> entry in settings.McpServers)
+            foreach (KeyValuePair<string, RuntimeJsonMcpServerEntry> entry in settings.McpServers)
             {
+                if (entry.Value == null)
+                {
+                    continue;
+                }
+
                 RuntimeMcpServerDefinition server = new RuntimeMcpServerDefinition
                 {
                     Name = entry.Key,
                     Enabled = true,
                     TransportType = NormalizeTransport(
                         entry.Value.Type
-                        ?? GetExtensionString(entry.Value, "transport")
+                        ?? entry.Value.Transport
                         ?? InferTransport(entry.Value)),
-                    Url = entry.Value.Url ?? GetExtensionString(entry.Value, "httpUrl"),
+                    Url = entry.Value.Url ?? entry.Value.HttpUrl,
                     Command = entry.Value.Command,
                     Arguments = entry.Value.Args?.ToList() ?? new List<string>(),
-                    Environment = GetExtensionStringDictionary(entry.Value, "env"),
-                    Headers = GetExtensionStringDictionary(entry.Value, "headers")
-                        ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+                    Environment = entry.Value.Env != null && entry.Value.Env.Count > 0 ? entry.Value.Env : null,
+                    Headers = entry.Value.Headers != null && entry.Value.Headers.Count > 0
+                        ? entry.Value.Headers
+                        : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
                     EnabledTools = new List<string>(),
                     DisabledTools = new List<string>(),
                     StartupTimeout = TimeSpan.FromSeconds(6),
@@ -599,12 +629,7 @@ namespace Armada.Server
             }
 
             string configPath = Path.Combine(configDirectory, "mcp-servers.json");
-            if (!File.Exists(configPath))
-            {
-                return new List<RuntimeMcpServerDefinition>();
-            }
-
-            string json = await File.ReadAllTextAsync(configPath, token).ConfigureAwait(false);
+            string? json = await _Discovery.ReadConfigFileAsync(configPath, token).ConfigureAwait(false);
             if (String.IsNullOrWhiteSpace(json))
             {
                 return new List<RuntimeMcpServerDefinition>();
@@ -654,281 +679,32 @@ namespace Armada.Server
             return servers;
         }
 
-        private async Task<List<CaptainToolSummary>> ProbeServerToolsAsync(RuntimeMcpServerDefinition server, CancellationToken token)
+        private static List<CaptainToolSummary> ToToolSummaries(List<McpRemoteTool> listed, string sourceName)
         {
-            switch (server.TransportType)
-            {
-                case "stdio":
-                    return await ProbeStdioToolsAsync(server, token).ConfigureAwait(false);
-                case "streamable_http":
-                case "http":
-                    return await ProbeHttpToolsAsync(server, token).ConfigureAwait(false);
-                default:
-                    throw new InvalidOperationException("Unsupported MCP transport: " + server.TransportType);
-            }
-        }
-
-        private async Task<List<CaptainToolSummary>> ProbeHttpToolsAsync(RuntimeMcpServerDefinition server, CancellationToken token)
-        {
-            if (String.IsNullOrWhiteSpace(server.Url))
-            {
-                throw new InvalidOperationException("HTTP MCP server is missing a URL.");
-            }
-
-            string? sessionId = null;
-            string initializePayload = JsonSerializer.Serialize(new
-            {
-                jsonrpc = "2.0",
-                id = 1,
-                method = "initialize",
-                @params = new
-                {
-                    protocolVersion = "2025-03-26",
-                    capabilities = new { },
-                    clientInfo = new
-                    {
-                        name = "armada",
-                        version = ArmadaConstants.ProductVersion
-                    }
-                }
-            });
-
-            using (HttpRequestMessage initializeRequest = BuildHttpRequest(server, initializePayload, sessionId))
-            using (HttpResponseMessage initializeResponse = await _HttpClient.SendAsync(initializeRequest, token).ConfigureAwait(false))
-            {
-                string initializeContent = NormalizeSseJson(await initializeResponse.Content.ReadAsStringAsync(token).ConfigureAwait(false));
-                if (!initializeResponse.IsSuccessStatusCode)
-                {
-                    throw new InvalidOperationException(FirstNonEmptyLine(initializeContent, initializeResponse.ReasonPhrase));
-                }
-
-                if (initializeResponse.Headers.TryGetValues("Mcp-Session-Id", out IEnumerable<string>? values))
-                {
-                    sessionId = values.FirstOrDefault();
-                }
-
-                EnsureJsonRpcSuccess(initializeContent, 1);
-            }
-
-            string initializedPayload = JsonSerializer.Serialize(new
-            {
-                jsonrpc = "2.0",
-                method = "notifications/initialized",
-                @params = new { }
-            });
-
-            using (HttpRequestMessage initializedRequest = BuildHttpRequest(server, initializedPayload, sessionId))
-            using (HttpResponseMessage initializedResponse = await _HttpClient.SendAsync(initializedRequest, token).ConfigureAwait(false))
-            {
-                if (!initializedResponse.IsSuccessStatusCode && initializedResponse.StatusCode != System.Net.HttpStatusCode.Accepted)
-                {
-                    string message = await initializedResponse.Content.ReadAsStringAsync(token).ConfigureAwait(false);
-                    throw new InvalidOperationException(FirstNonEmptyLine(message, initializedResponse.ReasonPhrase));
-                }
-            }
-
             List<CaptainToolSummary> tools = new List<CaptainToolSummary>();
-            string? cursor = null;
-            int requestId = 2;
-
-            do
+            if (listed == null)
             {
-                object parameters = cursor == null ? new { } : new { cursor };
-                string payload = JsonSerializer.Serialize(new
-                {
-                    jsonrpc = "2.0",
-                    id = requestId,
-                    method = "tools/list",
-                    @params = parameters
-                });
-
-                using HttpRequestMessage request = BuildHttpRequest(server, payload, sessionId);
-                using HttpResponseMessage response = await _HttpClient.SendAsync(request, token).ConfigureAwait(false);
-                string content = NormalizeSseJson(await response.Content.ReadAsStringAsync(token).ConfigureAwait(false));
-                if (!response.IsSuccessStatusCode)
-                {
-                    throw new InvalidOperationException(FirstNonEmptyLine(content, response.ReasonPhrase));
-                }
-
-                using JsonDocument document = EnsureJsonRpcSuccess(content, requestId);
-                tools.AddRange(ParseToolList(document, server.Name));
-                cursor = ExtractNextCursor(document);
-                requestId++;
-            }
-            while (!String.IsNullOrWhiteSpace(cursor));
-
-            return tools;
-        }
-
-        private async Task<List<CaptainToolSummary>> ProbeStdioToolsAsync(RuntimeMcpServerDefinition server, CancellationToken token)
-        {
-            Exception? jsonLineFailure = null;
-
-            try
-            {
-                return await ProbeStdioToolsAsync(server, RpcWireProtocol.JsonLine, token).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                jsonLineFailure = ex;
-            }
-
-            try
-            {
-                return await ProbeStdioToolsAsync(server, RpcWireProtocol.ContentLength, token).ConfigureAwait(false);
-            }
-            catch (Exception framedFailure)
-            {
-                string message =
-                    "JSON-line probe failed: " + FirstNonEmptyLine(jsonLineFailure?.Message, null) + " " +
-                    "Content-Length probe failed: " + FirstNonEmptyLine(framedFailure.Message, null);
-                throw new InvalidOperationException(message.Trim());
-            }
-        }
-
-        private async Task<List<CaptainToolSummary>> ProbeStdioToolsAsync(
-            RuntimeMcpServerDefinition server,
-            RpcWireProtocol protocol,
-            CancellationToken token)
-        {
-            if (String.IsNullOrWhiteSpace(server.Command))
-            {
-                throw new InvalidOperationException("STDIO MCP server is missing a command.");
-            }
-
-            ProcessStartInfo startInfo = new ProcessStartInfo
-            {
-                FileName = server.Command!,
-                UseShellExecute = false,
-                RedirectStandardInput = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true
-            };
-
-            foreach (string argument in server.Arguments)
-            {
-                startInfo.ArgumentList.Add(argument);
-            }
-
-            if (!String.IsNullOrWhiteSpace(server.WorkingDirectory) && Directory.Exists(server.WorkingDirectory))
-            {
-                startInfo.WorkingDirectory = server.WorkingDirectory;
-            }
-
-            if (server.Environment != null)
-            {
-                foreach (KeyValuePair<string, string> entry in server.Environment)
-                {
-                    if (!String.IsNullOrWhiteSpace(entry.Key))
-                    {
-                        startInfo.Environment[entry.Key] = entry.Value;
-                    }
-                }
-            }
-
-            using Process process = new Process
-            {
-                StartInfo = startInfo
-            };
-
-            if (!process.Start())
-            {
-                throw new InvalidOperationException("Failed to start MCP stdio server process.");
-            }
-
-            using CancellationTokenSource timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(token);
-            timeoutCts.CancelAfter(server.StartupTimeout + server.ToolTimeout);
-
-            Stream input = process.StandardInput.BaseStream;
-            Stream output = process.StandardOutput.BaseStream;
-            Task<string> stderrTask = process.StandardError.ReadToEndAsync();
-
-            try
-            {
-                await WriteRpcMessageAsync(
-                    input,
-                    JsonSerializer.Serialize(new
-                    {
-                        jsonrpc = "2.0",
-                        id = 1,
-                        method = "initialize",
-                        @params = new
-                        {
-                            protocolVersion = "2025-03-26",
-                            capabilities = new { },
-                            clientInfo = new
-                            {
-                                name = "armada",
-                                version = ArmadaConstants.ProductVersion
-                            }
-                        }
-                    }),
-                    protocol,
-                    timeoutCts.Token).ConfigureAwait(false);
-
-                using JsonDocument initializeResponse = await ReadRpcResponseAsync(output, 1, protocol, timeoutCts.Token).ConfigureAwait(false);
-                EnsureJsonRpcSuccess(initializeResponse);
-
-                await WriteRpcMessageAsync(
-                    input,
-                    JsonSerializer.Serialize(new
-                    {
-                        jsonrpc = "2.0",
-                        method = "notifications/initialized",
-                        @params = new { }
-                    }),
-                    protocol,
-                    timeoutCts.Token).ConfigureAwait(false);
-
-                List<CaptainToolSummary> tools = new List<CaptainToolSummary>();
-                string? cursor = null;
-                int requestId = 2;
-
-                do
-                {
-                    object parameters = cursor == null ? new { } : new { cursor };
-                    await WriteRpcMessageAsync(
-                        input,
-                        JsonSerializer.Serialize(new
-                        {
-                            jsonrpc = "2.0",
-                            id = requestId,
-                            method = "tools/list",
-                            @params = parameters
-                        }),
-                        protocol,
-                        timeoutCts.Token).ConfigureAwait(false);
-
-                    using JsonDocument toolsResponse = await ReadRpcResponseAsync(output, requestId, protocol, timeoutCts.Token).ConfigureAwait(false);
-                    EnsureJsonRpcSuccess(toolsResponse);
-                    tools.AddRange(ParseToolList(toolsResponse, server.Name));
-                    cursor = ExtractNextCursor(toolsResponse);
-                    requestId++;
-                }
-                while (!String.IsNullOrWhiteSpace(cursor));
-
                 return tools;
             }
-            catch (Exception ex)
+
+            foreach (McpRemoteTool tool in listed)
             {
-                string stderr = await stderrTask.ConfigureAwait(false);
-                throw new InvalidOperationException(
-                    GetProtocolDisplayName(protocol) + ": " + FirstNonEmptyLine(ex.Message, stderr));
-            }
-            finally
-            {
-                try
+                if (tool == null || String.IsNullOrWhiteSpace(tool.Name))
                 {
-                    if (!process.HasExited)
-                    {
-                        process.Kill(true);
-                    }
+                    continue;
                 }
-                catch
+
+                tools.Add(new CaptainToolSummary
                 {
-                }
+                    Name = tool.Name,
+                    Description = tool.Description,
+                    InputSchemaJson = String.IsNullOrEmpty(tool.InputSchemaJson) ? null : tool.InputSchemaJson,
+                    RegistrationSource = sourceName,
+                    SourceKind = "McpServer"
+                });
             }
+
+            return tools;
         }
 
         private static List<CaptainToolSummary> ApplyToolFilters(RuntimeMcpServerDefinition server, List<CaptainToolSummary> tools)
@@ -950,412 +726,6 @@ namespace Armada.Server
             return filtered
                 .OrderBy(tool => tool.Name, StringComparer.OrdinalIgnoreCase)
                 .ToList();
-        }
-
-        private HttpRequestMessage BuildHttpRequest(RuntimeMcpServerDefinition server, string payload, string? sessionId)
-        {
-            HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Post, server.Url);
-            request.Content = new StringContent(payload, Encoding.UTF8, "application/json");
-            // MCP Streamable HTTP servers (including Armada's own Voltaic server) require the client to
-            // accept BOTH application/json and text/event-stream; sending only application/json is
-            // rejected with "requires Accept: application/json, text/event-stream".
-            request.Headers.Accept.ParseAdd("application/json");
-            request.Headers.Accept.ParseAdd("text/event-stream");
-
-            if (!String.IsNullOrWhiteSpace(sessionId))
-            {
-                request.Headers.TryAddWithoutValidation("Mcp-Session-Id", sessionId);
-            }
-
-            foreach (KeyValuePair<string, string> header in server.Headers)
-            {
-                request.Headers.TryAddWithoutValidation(header.Key, header.Value);
-            }
-
-            return request;
-        }
-
-        /// <summary>
-        /// Streamable HTTP MCP servers may return a single JSON body or an SSE stream (text/event-stream)
-        /// framed as "data: {json}" lines. Return the JSON payload in either case so the caller can parse it.
-        /// </summary>
-        private static string NormalizeSseJson(string content)
-        {
-            if (String.IsNullOrWhiteSpace(content))
-            {
-                return content;
-            }
-
-            string trimmed = content.TrimStart();
-            if (trimmed.StartsWith("{", StringComparison.Ordinal) || trimmed.StartsWith("[", StringComparison.Ordinal))
-            {
-                return content;
-            }
-
-            StringBuilder builder = new StringBuilder();
-            foreach (string rawLine in content.Split('\n'))
-            {
-                string line = rawLine.TrimEnd('\r');
-                if (line.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
-                {
-                    builder.Append(line.Substring(5).TrimStart());
-                }
-            }
-
-            string joined = builder.ToString().Trim();
-            return joined.Length > 0 ? joined : content;
-        }
-
-        private async Task<CommandExecutionResult> RunProcessAsync(
-            string command,
-            IEnumerable<string> arguments,
-            string? workingDirectory,
-            IDictionary<string, string>? environment,
-            TimeSpan timeout,
-            CancellationToken token)
-        {
-            ProcessStartInfo startInfo = new ProcessStartInfo
-            {
-                FileName = command,
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true
-            };
-
-            foreach (string argument in arguments)
-            {
-                startInfo.ArgumentList.Add(argument);
-            }
-
-            if (!String.IsNullOrWhiteSpace(workingDirectory) && Directory.Exists(workingDirectory))
-            {
-                startInfo.WorkingDirectory = workingDirectory;
-            }
-
-            if (environment != null)
-            {
-                foreach (KeyValuePair<string, string> entry in environment)
-                {
-                    if (!String.IsNullOrWhiteSpace(entry.Key))
-                    {
-                        startInfo.Environment[entry.Key] = entry.Value;
-                    }
-                }
-            }
-
-            using Process process = new Process
-            {
-                StartInfo = startInfo
-            };
-
-            if (!process.Start())
-            {
-                throw new InvalidOperationException("Failed to start process: " + command);
-            }
-
-            Task<string> stdoutTask = process.StandardOutput.ReadToEndAsync();
-            Task<string> stderrTask = process.StandardError.ReadToEndAsync();
-
-            using CancellationTokenSource timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(token);
-            timeoutCts.CancelAfter(timeout);
-
-            try
-            {
-                await process.WaitForExitAsync(timeoutCts.Token).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (!token.IsCancellationRequested)
-            {
-                try
-                {
-                    if (!process.HasExited)
-                    {
-                        process.Kill(true);
-                    }
-                }
-                catch
-                {
-                }
-
-                throw new TimeoutException(command + " timed out after " + timeout.TotalSeconds.ToString("0") + " seconds.");
-            }
-
-            return new CommandExecutionResult
-            {
-                ExitCode = process.ExitCode,
-                Stdout = (await stdoutTask.ConfigureAwait(false)).Trim(),
-                Stderr = (await stderrTask.ConfigureAwait(false)).Trim()
-            };
-        }
-
-        private static async Task WriteRpcMessageAsync(Stream input, string json, RpcWireProtocol protocol, CancellationToken token)
-        {
-            if (protocol == RpcWireProtocol.JsonLine)
-            {
-                byte[] payload = Encoding.UTF8.GetBytes(json + "\n");
-                await input.WriteAsync(payload, token).ConfigureAwait(false);
-                await input.FlushAsync(token).ConfigureAwait(false);
-                return;
-            }
-
-            byte[] framedPayload = Encoding.UTF8.GetBytes(json);
-            byte[] header = Encoding.ASCII.GetBytes("Content-Length: " + framedPayload.Length + "\r\n\r\n");
-            await input.WriteAsync(header, token).ConfigureAwait(false);
-            await input.WriteAsync(framedPayload, token).ConfigureAwait(false);
-            await input.FlushAsync(token).ConfigureAwait(false);
-        }
-
-        private async Task<JsonDocument> ReadRpcResponseAsync(Stream output, int requestId, RpcWireProtocol protocol, CancellationToken token)
-        {
-            while (true)
-            {
-                string message = await ReadRpcMessageAsync(output, protocol, token).ConfigureAwait(false);
-                JsonDocument? document = TryParseJsonDocument(message);
-                if (document == null)
-                {
-                    continue;
-                }
-
-                if (!document.RootElement.TryGetProperty("id", out JsonElement idElement))
-                {
-                    document.Dispose();
-                    continue;
-                }
-
-                if (idElement.ValueKind == JsonValueKind.Number && idElement.GetInt32() == requestId)
-                {
-                    return document;
-                }
-
-                if (idElement.ValueKind == JsonValueKind.String && Int32.TryParse(idElement.GetString(), out int parsedId) && parsedId == requestId)
-                {
-                    return document;
-                }
-
-                document.Dispose();
-            }
-        }
-
-        private static async Task<string> ReadRpcMessageAsync(Stream output, RpcWireProtocol protocol, CancellationToken token)
-        {
-            return protocol switch
-            {
-                RpcWireProtocol.JsonLine => await ReadJsonLineMessageAsync(output, token).ConfigureAwait(false),
-                _ => await ReadContentLengthMessageAsync(output, token).ConfigureAwait(false)
-            };
-        }
-
-        private static async Task<string> ReadJsonLineMessageAsync(Stream output, CancellationToken token)
-        {
-            while (true)
-            {
-                List<byte> lineBytes = new List<byte>();
-                byte[] buffer = new byte[1];
-
-                while (true)
-                {
-                    int bytesRead = await output.ReadAsync(buffer, token).ConfigureAwait(false);
-                    if (bytesRead <= 0)
-                    {
-                        throw new InvalidOperationException("MCP server closed the stream before replying.");
-                    }
-
-                    if (buffer[0] == '\n')
-                    {
-                        break;
-                    }
-
-                    if (buffer[0] != '\r')
-                    {
-                        lineBytes.Add(buffer[0]);
-                    }
-                }
-
-                string message = Encoding.UTF8.GetString(lineBytes.ToArray()).Trim();
-                if (!String.IsNullOrWhiteSpace(message))
-                {
-                    return message;
-                }
-            }
-        }
-
-        private static async Task<string> ReadContentLengthMessageAsync(Stream output, CancellationToken token)
-        {
-            List<byte> headerBytes = new List<byte>();
-            byte[] buffer = new byte[1];
-
-            while (true)
-            {
-                int bytesRead = await output.ReadAsync(buffer, token).ConfigureAwait(false);
-                if (bytesRead <= 0)
-                {
-                    throw new InvalidOperationException("MCP server closed the stream before replying.");
-                }
-
-                headerBytes.Add(buffer[0]);
-
-                int count = headerBytes.Count;
-                if (count >= 4 &&
-                    headerBytes[count - 4] == '\r' &&
-                    headerBytes[count - 3] == '\n' &&
-                    headerBytes[count - 2] == '\r' &&
-                    headerBytes[count - 1] == '\n')
-                {
-                    break;
-                }
-            }
-
-            string headerText = Encoding.ASCII.GetString(headerBytes.ToArray());
-            int contentLength = ParseContentLength(headerText);
-            byte[] payload = new byte[contentLength];
-            int offset = 0;
-
-            while (offset < contentLength)
-            {
-                int bytesRead = await output.ReadAsync(payload.AsMemory(offset, contentLength - offset), token).ConfigureAwait(false);
-                if (bytesRead <= 0)
-                {
-                    throw new InvalidOperationException("MCP server closed the stream during message payload.");
-                }
-
-                offset += bytesRead;
-            }
-
-            return Encoding.UTF8.GetString(payload);
-        }
-
-        private static JsonDocument? TryParseJsonDocument(string message)
-        {
-            string trimmed = message?.Trim() ?? String.Empty;
-            if (String.IsNullOrWhiteSpace(trimmed))
-            {
-                return null;
-            }
-
-            try
-            {
-                return JsonDocument.Parse(trimmed);
-            }
-            catch (JsonException)
-            {
-                return null;
-            }
-        }
-
-        private static int ParseContentLength(string headers)
-        {
-            foreach (string line in headers.Split(new[] { "\r\n" }, StringSplitOptions.RemoveEmptyEntries))
-            {
-                if (line.StartsWith("Content-Length:", StringComparison.OrdinalIgnoreCase))
-                {
-                    string value = line.Substring("Content-Length:".Length).Trim();
-                    if (Int32.TryParse(value, out int contentLength))
-                    {
-                        return contentLength;
-                    }
-                }
-            }
-
-            throw new InvalidOperationException("MCP response did not include a valid Content-Length header.");
-        }
-
-        private static List<CaptainToolSummary> ParseToolList(JsonDocument document, string sourceName)
-        {
-            List<CaptainToolSummary> tools = new List<CaptainToolSummary>();
-
-            if (!document.RootElement.TryGetProperty("result", out JsonElement resultElement) ||
-                !resultElement.TryGetProperty("tools", out JsonElement toolsElement) ||
-                toolsElement.ValueKind != JsonValueKind.Array)
-            {
-                return tools;
-            }
-
-            foreach (JsonElement toolElement in toolsElement.EnumerateArray())
-            {
-                string name = toolElement.TryGetProperty("name", out JsonElement nameElement)
-                    ? (nameElement.GetString() ?? String.Empty)
-                    : String.Empty;
-
-                if (String.IsNullOrWhiteSpace(name))
-                {
-                    continue;
-                }
-
-                string description = toolElement.TryGetProperty("description", out JsonElement descriptionElement)
-                    ? (descriptionElement.GetString() ?? String.Empty)
-                    : String.Empty;
-
-                string? inputSchemaJson = toolElement.TryGetProperty("inputSchema", out JsonElement schemaElement)
-                    ? schemaElement.GetRawText()
-                    : null;
-
-                tools.Add(new CaptainToolSummary
-                {
-                    Name = name,
-                    Description = description,
-                    InputSchemaJson = inputSchemaJson,
-                    RegistrationSource = sourceName,
-                    SourceKind = "McpServer"
-                });
-            }
-
-            return tools;
-        }
-
-        private static string? ExtractNextCursor(JsonDocument document)
-        {
-            if (!document.RootElement.TryGetProperty("result", out JsonElement resultElement))
-            {
-                return null;
-            }
-
-            if (resultElement.TryGetProperty("nextCursor", out JsonElement nextCursorElement) && nextCursorElement.ValueKind == JsonValueKind.String)
-            {
-                return nextCursorElement.GetString();
-            }
-
-            if (resultElement.TryGetProperty("next_cursor", out JsonElement snakeCursorElement) && snakeCursorElement.ValueKind == JsonValueKind.String)
-            {
-                return snakeCursorElement.GetString();
-            }
-
-            return null;
-        }
-
-        private static JsonDocument EnsureJsonRpcSuccess(string content, int expectedId)
-        {
-            JsonDocument document = JsonDocument.Parse(content);
-
-            if (!document.RootElement.TryGetProperty("id", out JsonElement idElement))
-            {
-                document.Dispose();
-                throw new InvalidOperationException("MCP response did not include an id.");
-            }
-
-            bool idMatches = (idElement.ValueKind == JsonValueKind.Number && idElement.GetInt32() == expectedId)
-                || (idElement.ValueKind == JsonValueKind.String && Int32.TryParse(idElement.GetString(), out int parsed) && parsed == expectedId);
-
-            if (!idMatches)
-            {
-                document.Dispose();
-                throw new InvalidOperationException("MCP response id did not match the request.");
-            }
-
-            EnsureJsonRpcSuccess(document);
-            return document;
-        }
-
-        private static void EnsureJsonRpcSuccess(JsonDocument document)
-        {
-            if (!document.RootElement.TryGetProperty("error", out JsonElement errorElement))
-            {
-                return;
-            }
-
-            string message = errorElement.TryGetProperty("message", out JsonElement messageElement)
-                ? (messageElement.GetString() ?? errorElement.GetRawText())
-                : errorElement.GetRawText();
-            throw new InvalidOperationException(message);
         }
 
         private async Task<string?> ResolveContextDirectoryAsync(Captain captain, DatabaseDriver database)
@@ -1395,309 +765,6 @@ namespace Armada.Server
             return null;
         }
 
-        private static string ResolveCodexCommand()
-        {
-            if (!OperatingSystem.IsWindows())
-            {
-                return "codex";
-            }
-
-            string candidate = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                "npm",
-                "codex.cmd");
-
-            return File.Exists(candidate) ? candidate : "codex.cmd";
-        }
-
-        private static string GetClaudeConfigPath()
-        {
-            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".claude.json");
-        }
-
-        private static string GetGeminiConfigPath()
-        {
-            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".gemini", "settings.json");
-        }
-
-        private static RuntimeBuiltInInventory? TryLoadClaudeBuiltInInventory()
-        {
-            string sdkToolsPath = GetClaudeSdkToolsPath();
-            if (!File.Exists(sdkToolsPath))
-            {
-                return null;
-            }
-
-            string contents = File.ReadAllText(sdkToolsPath);
-            MatchCollection matches = Regex.Matches(contents, @"^\s*\|\s*([A-Za-z0-9]+Input)\s*$", RegexOptions.Multiline);
-
-            if (matches.Count < 1)
-            {
-                return null;
-            }
-
-            const string sourceName = "Built-In";
-            HashSet<string> seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            List<CaptainToolSummary> tools = new List<CaptainToolSummary>();
-
-            foreach (Match match in matches)
-            {
-                string inputName = match.Groups[1].Value;
-                if (!seen.Add(inputName))
-                {
-                    continue;
-                }
-
-                ClaudeBuiltInToolDefinition definition = GetClaudeBuiltInToolDefinition(inputName);
-                tools.Add(CreateRuntimeBuiltInTool(definition.Name, definition.Description, sourceName));
-            }
-
-            return new RuntimeBuiltInInventory
-            {
-                SourceName = sourceName,
-                Target = "Installed CLI schema",
-                Note = "Armada enumerated " + tools.Count + " Claude Code built-in tool(s) from the installed CLI schema.",
-                Tools = tools
-            };
-        }
-
-        private static RuntimeBuiltInInventory? TryLoadGeminiBuiltInInventory()
-        {
-            string corePackagePath = GetGeminiCliCorePackagePath();
-            if (String.IsNullOrWhiteSpace(corePackagePath))
-            {
-                return null;
-            }
-
-            string baseDeclarationsPath = Path.Combine(corePackagePath, "dist", "src", "tools", "definitions", "base-declarations.js");
-            string toolNamesPath = Path.Combine(corePackagePath, "dist", "src", "tools", "tool-names.js");
-            string docsPath = Path.Combine(corePackagePath, "dist", "docs", "reference", "tools.md");
-
-            if (!File.Exists(baseDeclarationsPath) || !File.Exists(toolNamesPath))
-            {
-                return null;
-            }
-
-            HashSet<string> names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (Match match in Regex.Matches(
-                File.ReadAllText(baseDeclarationsPath),
-                @"export const [A-Z0-9_]+_TOOL_NAME = '([^']+)';"))
-            {
-                names.Add(match.Groups[1].Value);
-            }
-
-            foreach (Match match in Regex.Matches(
-                File.ReadAllText(toolNamesPath),
-                @"export const TRACKER_[A-Z0-9_]+_TOOL_NAME = '([^']+)';"))
-            {
-                names.Add(match.Groups[1].Value);
-            }
-
-            Dictionary<string, string> descriptions = File.Exists(docsPath)
-                ? ParseGeminiToolDescriptions(docsPath)
-                : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-            const string sourceName = "Gemini CLI Built-In Tools";
-            List<CaptainToolSummary> tools = new List<CaptainToolSummary>();
-
-            foreach (string name in names.OrderBy(value => value, StringComparer.OrdinalIgnoreCase))
-            {
-                string description = descriptions.TryGetValue(name, out string? documented)
-                    ? documented
-                    : GetGeminiFallbackDescription(name);
-                tools.Add(CreateRuntimeBuiltInTool(name, description, sourceName));
-            }
-
-            if (descriptions.TryGetValue("complete_task", out string? completeTaskDescription))
-            {
-                tools.Add(CreateRuntimeBuiltInTool("complete_task", completeTaskDescription, sourceName));
-            }
-
-            return new RuntimeBuiltInInventory
-            {
-                SourceName = sourceName,
-                Target = "Installed CLI package",
-                Note = "Armada enumerated " + tools.Count + " Gemini CLI built-in tool(s) from the installed CLI package.",
-                Tools = tools
-            };
-        }
-
-        private static Dictionary<string, string> ParseGeminiToolDescriptions(string docsPath)
-        {
-            Dictionary<string, string> descriptions = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-            foreach (string rawLine in File.ReadLines(docsPath))
-            {
-                string line = rawLine.Trim();
-                if (!line.StartsWith("|", StringComparison.Ordinal) || line.StartsWith("| :", StringComparison.Ordinal))
-                {
-                    continue;
-                }
-
-                string[] cells = line.Split('|');
-                if (cells.Length < 5)
-                {
-                    continue;
-                }
-
-                string? toolName = ExtractGeminiToolName(cells[2].Trim());
-                if (String.IsNullOrWhiteSpace(toolName))
-                {
-                    continue;
-                }
-
-                string description = cells[4].Trim().Replace("<br><br>", " ", StringComparison.Ordinal);
-                int parameterIndex = description.IndexOf("**Parameters:**", StringComparison.Ordinal);
-                if (parameterIndex >= 0)
-                {
-                    description = description.Substring(0, parameterIndex).Trim();
-                }
-
-                if (!String.IsNullOrWhiteSpace(description))
-                {
-                    descriptions[toolName] = description;
-                }
-            }
-
-            descriptions["tracker_create_task"] = "Creates a new tracker task in Gemini's built-in task graph.";
-            descriptions["tracker_update_task"] = "Updates an existing tracker task in Gemini's built-in task graph.";
-            descriptions["tracker_get_task"] = "Reads one tracker task from Gemini's built-in task graph.";
-            descriptions["tracker_list_tasks"] = "Lists tracker tasks from Gemini's built-in task graph.";
-            descriptions["tracker_add_dependency"] = "Adds a dependency edge between Gemini tracker tasks.";
-            descriptions["tracker_visualize"] = "Renders Gemini's built-in task graph and dependencies.";
-
-            return descriptions;
-        }
-
-        private static string? ExtractGeminiToolName(string toolCell)
-        {
-            if (String.IsNullOrWhiteSpace(toolCell))
-            {
-                return null;
-            }
-
-            if (toolCell.StartsWith("[`", StringComparison.Ordinal))
-            {
-                int end = toolCell.IndexOf("`]", StringComparison.Ordinal);
-                if (end > 2)
-                {
-                    return toolCell.Substring(2, end - 2).Trim();
-                }
-            }
-
-            if (toolCell.StartsWith("`", StringComparison.Ordinal) && toolCell.EndsWith("`", StringComparison.Ordinal) && toolCell.Length > 2)
-            {
-                return toolCell.Substring(1, toolCell.Length - 2).Trim();
-            }
-
-            return null;
-        }
-
-        private static string GetGeminiFallbackDescription(string name)
-        {
-            return name switch
-            {
-                "tracker_create_task" => "Creates a new tracker task in Gemini's built-in task graph.",
-                "tracker_update_task" => "Updates an existing tracker task in Gemini's built-in task graph.",
-                "tracker_get_task" => "Reads one tracker task from Gemini's built-in task graph.",
-                "tracker_list_tasks" => "Lists tracker tasks from Gemini's built-in task graph.",
-                "tracker_add_dependency" => "Adds a dependency edge between Gemini tracker tasks.",
-                "tracker_visualize" => "Renders Gemini's built-in task graph and dependencies.",
-                _ => "Gemini CLI built-in tool."
-            };
-        }
-
-        private static ClaudeBuiltInToolDefinition GetClaudeBuiltInToolDefinition(string inputName)
-        {
-            return inputName switch
-            {
-                "AgentInput" => new ClaudeBuiltInToolDefinition("Agent", "Spawns or resumes specialized subagents."),
-                "AskUserQuestionInput" => new ClaudeBuiltInToolDefinition("AskUserQuestion", "Asks the user follow-up questions when more input is needed."),
-                "BashInput" => new ClaudeBuiltInToolDefinition("Bash", "Runs shell commands in the current workspace."),
-                "ConfigInput" => new ClaudeBuiltInToolDefinition("Config", "Reads or updates Claude Code runtime settings."),
-                "EnterWorktreeInput" => new ClaudeBuiltInToolDefinition("EnterWorktree", "Creates or enters an isolated git worktree."),
-                "ExitPlanModeInput" => new ClaudeBuiltInToolDefinition("ExitPlanMode", "Finalizes a plan and requests approval to implement it."),
-                "ExitWorktreeInput" => new ClaudeBuiltInToolDefinition("ExitWorktree", "Leaves or removes an isolated git worktree."),
-                "FileEditInput" => new ClaudeBuiltInToolDefinition("Edit", "Replaces exact text inside an existing file."),
-                "FileReadInput" => new ClaudeBuiltInToolDefinition("Read", "Reads file contents, including notebooks and PDFs."),
-                "FileWriteInput" => new ClaudeBuiltInToolDefinition("Write", "Writes file contents from scratch."),
-                "GlobInput" => new ClaudeBuiltInToolDefinition("Glob", "Finds files by glob pattern."),
-                "GrepInput" => new ClaudeBuiltInToolDefinition("Grep", "Searches file contents with ripgrep."),
-                "ListMcpResourcesInput" => new ClaudeBuiltInToolDefinition("ListMcpResources", "Lists MCP resources exposed by configured servers."),
-                "McpInput" => new ClaudeBuiltInToolDefinition("Mcp", "Invokes a tool through a configured MCP server."),
-                "NotebookEditInput" => new ClaudeBuiltInToolDefinition("NotebookEdit", "Edits notebook cells in Jupyter notebooks."),
-                "ReadMcpResourceInput" => new ClaudeBuiltInToolDefinition("ReadMcpResource", "Reads one resource from a configured MCP server."),
-                "SubscribeMcpResourceInput" => new ClaudeBuiltInToolDefinition("SubscribeMcpResource", "Subscribes to change notifications for an MCP resource."),
-                "SubscribePollingInput" => new ClaudeBuiltInToolDefinition("SubscribePolling", "Polls an MCP tool or resource on a recurring interval."),
-                "TaskOutputInput" => new ClaudeBuiltInToolDefinition("TaskOutput", "Reads or waits on output from a background task."),
-                "TaskStopInput" => new ClaudeBuiltInToolDefinition("TaskStop", "Stops a running background task."),
-                "TodoWriteInput" => new ClaudeBuiltInToolDefinition("TodoWrite", "Maintains Claude Code's internal task list."),
-                "UnsubscribeMcpResourceInput" => new ClaudeBuiltInToolDefinition("UnsubscribeMcpResource", "Stops an MCP resource subscription."),
-                "UnsubscribePollingInput" => new ClaudeBuiltInToolDefinition("UnsubscribePolling", "Stops a recurring MCP polling subscription."),
-                "WebFetchInput" => new ClaudeBuiltInToolDefinition("WebFetch", "Fetches and processes a specific URL."),
-                "WebSearchInput" => new ClaudeBuiltInToolDefinition("WebSearch", "Searches the web for up-to-date information."),
-                _ => new ClaudeBuiltInToolDefinition(
-                    inputName.EndsWith("Input", StringComparison.Ordinal)
-                        ? inputName.Substring(0, inputName.Length - "Input".Length)
-                        : inputName,
-                    "Claude Code built-in tool.")
-            };
-        }
-
-        private static string GetClaudeSdkToolsPath()
-        {
-            if (OperatingSystem.IsWindows())
-            {
-                return Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                    "npm",
-                    "node_modules",
-                    "@anthropic-ai",
-                    "claude-code",
-                    "sdk-tools.d.ts");
-            }
-
-            return Path.Combine(
-                "/usr",
-                "local",
-                "lib",
-                "node_modules",
-                "@anthropic-ai",
-                "claude-code",
-                "sdk-tools.d.ts");
-        }
-
-        private static string GetGeminiCliCorePackagePath()
-        {
-            if (OperatingSystem.IsWindows())
-            {
-                string candidate = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                    "npm",
-                    "node_modules",
-                    "@google",
-                    "gemini-cli",
-                    "node_modules",
-                    "@google",
-                    "gemini-cli-core");
-
-                return Directory.Exists(candidate) ? candidate : String.Empty;
-            }
-
-            string unixCandidate = Path.Combine(
-                "/usr",
-                "local",
-                "lib",
-                "node_modules",
-                "@google",
-                "gemini-cli",
-                "node_modules",
-                "@google",
-                "gemini-cli-core");
-
-            return Directory.Exists(unixCandidate) ? unixCandidate : String.Empty;
-        }
-
         private static string NormalizeTransport(string? transport)
         {
             if (String.IsNullOrWhiteSpace(transport))
@@ -1713,14 +780,14 @@ namespace Armada.Server
             };
         }
 
-        private static string InferTransport(McpServerEntry entry)
+        private static string InferTransport(RuntimeJsonMcpServerEntry entry)
         {
             if (!String.IsNullOrWhiteSpace(entry.Command))
             {
                 return "stdio";
             }
 
-            if (!String.IsNullOrWhiteSpace(entry.Url) || !String.IsNullOrWhiteSpace(GetExtensionString(entry, "httpUrl")))
+            if (!String.IsNullOrWhiteSpace(entry.Url) || !String.IsNullOrWhiteSpace(entry.HttpUrl))
             {
                 return "streamable_http";
             }
@@ -1813,18 +880,7 @@ namespace Armada.Server
             };
         }
 
-        private static CaptainToolSummary CreateRuntimeBuiltInTool(string name, string description, string sourceName)
-        {
-            return new CaptainToolSummary
-            {
-                Name = name,
-                Description = description,
-                RegistrationSource = sourceName,
-                SourceKind = "RuntimeBuiltIn"
-            };
-        }
-
-        private static string ResolveMuxConfigDirectory(MuxProbeResult? probe, MuxCaptainOptions? options)
+        private string ResolveMuxConfigDirectory(MuxProbeResult? probe, MuxCaptainOptions? options)
         {
             if (!String.IsNullOrWhiteSpace(probe?.ConfigDirectory))
             {
@@ -1836,7 +892,7 @@ namespace Armada.Server
                 return options.ConfigDirectory!;
             }
 
-            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".mux");
+            return Path.Combine(_Discovery.GetUserProfileDirectory(), ".mux");
         }
 
         private static string BuildMuxBuiltInTarget(MuxProbeResult probe)
@@ -1960,45 +1016,6 @@ namespace Armada.Server
             return headers;
         }
 
-        private static string? GetExtensionString(McpServerEntry entry, string key)
-        {
-            if (entry.AdditionalProperties == null || !entry.AdditionalProperties.TryGetValue(key, out object? value) || value == null)
-            {
-                return null;
-            }
-
-            if (value is JsonElement element)
-            {
-                return element.ValueKind == JsonValueKind.String ? element.GetString() : null;
-            }
-
-            return value.ToString();
-        }
-
-        private static Dictionary<string, string>? GetExtensionStringDictionary(McpServerEntry entry, string key)
-        {
-            if (entry.AdditionalProperties == null || !entry.AdditionalProperties.TryGetValue(key, out object? value) || value == null)
-            {
-                return null;
-            }
-
-            if (value is JsonElement element && element.ValueKind == JsonValueKind.Object)
-            {
-                Dictionary<string, string> results = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                foreach (JsonProperty property in element.EnumerateObject())
-                {
-                    if (property.Value.ValueKind == JsonValueKind.String)
-                    {
-                        results[property.Name] = property.Value.GetString() ?? String.Empty;
-                    }
-                }
-
-                return results.Count > 0 ? results : null;
-            }
-
-            return null;
-        }
-
         private static string FirstNonEmptyLine(string? primary, string? secondary)
         {
             foreach (string source in new[] { primary ?? String.Empty, secondary ?? String.Empty })
@@ -2016,21 +1033,9 @@ namespace Armada.Server
             return String.Empty;
         }
 
-        private static string GetProtocolDisplayName(RpcWireProtocol protocol)
-        {
-            return protocol switch
-            {
-                RpcWireProtocol.JsonLine => "json-line",
-                _ => "content-length"
-            };
-        }
+        #endregion
 
-        private sealed class CommandExecutionResult
-        {
-            public int ExitCode { get; set; } = 0;
-            public string Stdout { get; set; } = String.Empty;
-            public string Stderr { get; set; } = String.Empty;
-        }
+        #region Private-Members-Types
 
         /// <summary>
         /// Where a captain's runtime CLI should be executed for probing, plus the working directory and
@@ -2042,12 +1047,6 @@ namespace Armada.Server
             public string? WorkingDirectory { get; set; } = null;
             public bool IsRemote { get; set; } = false;
             public string? HarborId { get; set; } = null;
-        }
-
-        private enum RpcWireProtocol
-        {
-            JsonLine,
-            ContentLength
         }
 
         internal sealed class RuntimeToolCatalogSnapshot
@@ -2064,23 +1063,6 @@ namespace Armada.Server
             public List<CaptainToolSummary> Tools { get; set; } = new List<CaptainToolSummary>();
         }
 
-        private sealed class RuntimeMcpServerDefinition
-        {
-            public string Name { get; set; } = String.Empty;
-            public bool Enabled { get; set; } = true;
-            public string TransportType { get; set; } = String.Empty;
-            public string? Url { get; set; } = null;
-            public string? Command { get; set; } = null;
-            public List<string> Arguments { get; set; } = new List<string>();
-            public string? WorkingDirectory { get; set; } = null;
-            public Dictionary<string, string>? Environment { get; set; } = null;
-            public Dictionary<string, string> Headers { get; set; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            public List<string> EnabledTools { get; set; } = new List<string>();
-            public List<string> DisabledTools { get; set; } = new List<string>();
-            public TimeSpan StartupTimeout { get; set; } = TimeSpan.FromSeconds(15);
-            public TimeSpan ToolTimeout { get; set; } = TimeSpan.FromSeconds(15);
-            public string Target { get; set; } = String.Empty;
-        }
 
         private sealed class MuxMcpServersFile
         {
@@ -2172,14 +1154,6 @@ namespace Armada.Server
             public Dictionary<string, string>? EnvHttpHeaders { get; set; } = null;
         }
 
-        private sealed class RuntimeBuiltInInventory
-        {
-            public string SourceName { get; set; } = String.Empty;
-            public string Target { get; set; } = String.Empty;
-            public string Note { get; set; } = String.Empty;
-            public List<CaptainToolSummary> Tools { get; set; } = new List<CaptainToolSummary>();
-        }
-
-        private sealed record ClaudeBuiltInToolDefinition(string Name, string Description);
+        #endregion
     }
 }

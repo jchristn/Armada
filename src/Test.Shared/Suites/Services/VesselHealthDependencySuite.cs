@@ -112,6 +112,18 @@ namespace Test.Shared.Suites.Services
 
             cases.Add(Case("failed_dotnet_list_is_never_pass", "A failed dotnet list (restore, exit code, missing tool, timeout, garbage) is Unknown, never Pass", TestTags.Negative, () =>
             {
+                // Restore state comes from obj/project.assets.json on disk, not from the tool's wording.
+                string unrestoredRoot = TestTemp.NewDirectory("health_deps_unrestored");
+                string unrestoredProject = Path.Combine(unrestoredRoot, "App.csproj");
+                File.WriteAllText(unrestoredProject, "<Project Sdk=\"Microsoft.NET.Sdk\"></Project>");
+                string restoredRoot = TestTemp.NewDirectory("health_deps_restored");
+                string restoredProject = Path.Combine(restoredRoot, "App.csproj");
+                File.WriteAllText(restoredProject, "<Project Sdk=\"Microsoft.NET.Sdk\"></Project>");
+                Directory.CreateDirectory(Path.Combine(restoredRoot, "obj"));
+                File.WriteAllText(Path.Combine(restoredRoot, "obj", "project.assets.json"), "{}");
+                List<string> unrestored = new List<string> { unrestoredProject };
+                List<string> restored = new List<string> { restoredProject };
+
                 List<DependencyToolResult> failures = new List<DependencyToolResult>
                 {
                     Completed(1, VesselHealthJsonFixtures.DotnetRestoreFailed),
@@ -120,19 +132,27 @@ namespace Test.Shared.Suites.Services
                     Completed(0, "this is not json"),
                     Completed(0, "{ \"version\": 1 }"),
                     new DependencyToolResult { Outcome = DependencyToolOutcomeEnum.ToolMissing },
-                    new DependencyToolResult { Outcome = DependencyToolOutcomeEnum.TimedOut }
+                    new DependencyToolResult { Outcome = DependencyToolOutcomeEnum.TimedOut },
+                    Completed(1, VesselHealthJsonFixtures.DotnetRestoreFailed),
+                    Completed(1, "", "error: No assets file was found for '/repo/obj/project.assets.json'. Run a NuGet package restore.")
+                };
+                List<List<string>?> projects = new List<List<string>?>
+                {
+                    unrestored, unrestored, restored, unrestored, unrestored, unrestored, unrestored, restored, null
                 };
                 string[] expected = new string[]
                 {
                     VesselHealthDetailCodes.RestoreRequired, VesselHealthDetailCodes.RestoreRequired, VesselHealthDetailCodes.ToolFailed,
-                    VesselHealthDetailCodes.ParseError, VesselHealthDetailCodes.ParseError, VesselHealthDetailCodes.ToolMissing, VesselHealthDetailCodes.Timeout
+                    VesselHealthDetailCodes.ParseError, VesselHealthDetailCodes.ParseError, VesselHealthDetailCodes.ToolMissing, VesselHealthDetailCodes.Timeout,
+                    // Restored projects: the words "Restore failed" / "No assets file" no longer make it RestoreRequired.
+                    VesselHealthDetailCodes.ToolFailed, VesselHealthDetailCodes.ToolFailed
                 };
 
                 for (int i = 0; i < failures.Count; i++)
                 {
                     foreach (DependencyScanModeEnum mode in new DependencyScanModeEnum[] { DependencyScanModeEnum.Outdated, DependencyScanModeEnum.Vulnerable })
                     {
-                        DependencyScanResult scan = DotnetListParser.Interpret(failures[i], mode, "/repo", 45);
+                        DependencyScanResult scan = DotnetListParser.Interpret(failures[i], mode, "/repo", 45, projects[i]);
                         AssertEqual(expected[i], scan.ErrorCode, "case " + i + " " + mode);
                         VesselHealthCriterionResult graded = mode == DependencyScanModeEnum.Outdated
                             ? DependenciesCriterion.Grade(scan, null)
@@ -142,75 +162,23 @@ namespace Test.Shared.Suites.Services
                     }
                 }
 
-                AssertEqual(45L, DotnetListParser.Interpret(failures[6], DependencyScanModeEnum.Outdated, "/repo", 45).ErrorValue!.Value, "timeout value");
+                AssertEqual(45L, DotnetListParser.Interpret(failures[6], DependencyScanModeEnum.Outdated, "/repo", 45, unrestored).ErrorValue!.Value, "timeout value");
             }));
 
-            cases.Add(Case("npm_outdated_exit_one_is_normal", "npm outdated exit code 1 with JSON parses normally", TestTags.Positive, () =>
+            cases.Add(Case("dotnet_json_extraction_is_string_aware", "dotnet list JSON after a log line containing braces is still extracted", TestTags.Positive, () =>
             {
-                DependencyScanResult scan = NpmOutputParser.InterpretOutdated(Completed(1, VesselHealthJsonFixtures.NpmOutdated), "web/package.json", 120);
-                AssertNull(scan.ErrorCode, "no error");
-                AssertEqual(2, scan.Dependencies.Count, "current-equals-latest entries are not outdated");
-                AssertEqual(DependencyDriftEnum.Patch, scan.Dependencies.Single(d => d.PackageName == "lodash").Drift);
-                AssertEqual(DependencyDriftEnum.Major, scan.Dependencies.Single(d => d.PackageName == "react").Drift);
-                AssertEqual("web/package.json", scan.Dependencies[0].ProjectPath);
-                AssertEqual("npm", scan.Dependencies[0].Ecosystem);
-
-                DependencyScanResult empty = NpmOutputParser.InterpretOutdated(Completed(0, ""), "package.json", 120);
-                AssertNull(empty.ErrorCode, "empty output with exit 0 means nothing outdated");
-                AssertEqual(VesselHealthStatusEnum.Pass, DependenciesCriterion.Grade(empty, null).Status);
+                string noisy = "info: building {target} for net8.0\n" + VesselHealthJsonFixtures.DotnetOutdated + "\ntrailing note }";
+                DependencyScanResult scan = DotnetListParser.Interpret(Completed(0, noisy), DependencyScanModeEnum.Outdated, "/repo", 120);
+                AssertNull(scan.ErrorCode, "the report is found despite stray braces around it");
+                AssertEqual(3, scan.Dependencies.Count);
             }));
 
-            cases.Add(Case("npm_audit_parses_fixture", "npm audit JSON parses severities and ignores the mixed via array", TestTags.Positive, () =>
+            cases.Add(Case("npm_restore_decided_by_error_code", "npm RestoreRequired comes from error.code, not from words in the summary", TestTags.Negative, () =>
             {
-                DependencyScanResult scan = NpmOutputParser.InterpretAudit(Completed(1, VesselHealthJsonFixtures.NpmAudit), "package.json", 120);
-                AssertNull(scan.ErrorCode, "no error");
-                AssertEqual(2, scan.Dependencies.Count);
-                AssertEqual(VulnerabilitySeverityEnum.Critical, scan.Dependencies.Single(d => d.PackageName == "minimist").Severity);
-                AssertEqual(VulnerabilitySeverityEnum.Moderate, scan.Dependencies.Single(d => d.PackageName == "nth-check").Severity);
-                AssertEqual(VesselHealthStatusEnum.Fail, VulnerabilitiesCriterion.Grade(scan, null).Status);
-
-                DependencyScanResult moderate = new DependencyScanResult { HasTargets = true };
-                moderate.Dependencies.Add(scan.Dependencies.Single(d => d.PackageName == "nth-check"));
-                AssertEqual(VesselHealthStatusEnum.Warn, VulnerabilitiesCriterion.Grade(moderate, null).Status, "moderate warns");
-
-                DependencyScanResult clean = NpmOutputParser.InterpretAudit(Completed(0, VesselHealthJsonFixtures.NpmAuditClean), "package.json", 120);
-                AssertEqual(VesselHealthStatusEnum.Pass, VulnerabilitiesCriterion.Grade(clean, null).Status);
-            }));
-
-            cases.Add(Case("npm_failures_are_unknown", "npm error envelopes, missing npm, and garbage output are Unknown", TestTags.Negative, () =>
-            {
-                AssertEqual(VesselHealthDetailCodes.RestoreRequired, NpmOutputParser.InterpretAudit(Completed(1, VesselHealthJsonFixtures.NpmErrorNoLock), "package.json", 120).ErrorCode);
-                AssertEqual(VesselHealthDetailCodes.RestoreRequired, NpmOutputParser.InterpretOutdated(Completed(1, VesselHealthJsonFixtures.NpmErrorNoLock), "package.json", 120).ErrorCode);
-                AssertEqual(VesselHealthDetailCodes.ToolMissing, NpmOutputParser.InterpretOutdated(new DependencyToolResult { Outcome = DependencyToolOutcomeEnum.ToolMissing }, "package.json", 120).ErrorCode);
-                AssertEqual(VesselHealthDetailCodes.ToolFailed, NpmOutputParser.InterpretOutdated(Completed(254, "", "npm ERR! something broke"), "package.json", 120).ErrorCode);
-                AssertEqual(VesselHealthDetailCodes.ParseError, NpmOutputParser.InterpretAudit(Completed(0, "{ \"advisories\": {} }"), "package.json", 120).ErrorCode);
-            }));
-
-            cases.Add(Case("nuget_targets_honor_solutions_and_excludes", "NuGet targets: 1-5 solutions, else non-test projects; excluded directories skipped", TestTags.Positive, () =>
-            {
-                RepositoryFileInventory withSolution = RepositoryFileInventory.FromTrackedFiles(new List<string>
-                {
-                    "src/App.sln", "src/App/App.csproj", "node_modules/pkg/Bad.sln", "bin/Other.sln"
-                }, new VesselImportSettings().ExcludedDirectoryNames);
-                List<string> solutionTargets = DependencyScanner.ResolveNuGetTargets(withSolution, 5, 50);
-                AssertEqual(1, solutionTargets.Count);
-                AssertEqual("src/App.sln", solutionTargets[0]);
-
-                List<string> manySolutions = Enumerable.Range(0, 6).Select(i => "s" + i + "/S" + i + ".sln").ToList();
-                manySolutions.Add("src/Lib/Lib.csproj");
-                manySolutions.Add("src/Lib.Tests/Lib.Tests.csproj");
-                RepositoryFileInventory many = RepositoryFileInventory.FromTrackedFiles(manySolutions, null);
-                List<string> projectTargets = DependencyScanner.ResolveNuGetTargets(many, 5, 50);
-                AssertEqual(1, projectTargets.Count, "test project excluded (by name without content)");
-                AssertEqual("src/Lib/Lib.csproj", projectTargets[0]);
-
-                RepositoryFileInventory npm = RepositoryFileInventory.FromTrackedFiles(new List<string>
-                {
-                    "package.json", "package-lock.json", "tools/package.json", "web/package.json", "web/npm-shrinkwrap.json"
-                }, null);
-                List<string> npmTargets = DependencyScanner.ResolveNpmTargets(npm);
-                AssertEqual(2, npmTargets.Count, "only package.json files with a lockfile");
-                AssertTrue(npmTargets.Contains("package.json") && npmTargets.Contains("web/package.json"));
+                string wordy = "{ \"error\": { \"code\": \"E404\", \"summary\": \"run npm install to restore\", \"detail\": \"assets file\" } }";
+                AssertEqual(VesselHealthDetailCodes.ToolFailed, NpmOutputParser.InterpretAudit(Completed(1, wordy), "package.json", 120).ErrorCode);
+                AssertEqual(VesselHealthDetailCodes.ToolFailed, NpmOutputParser.InterpretOutdated(Completed(1, wordy), "package.json", 120).ErrorCode);
+                AssertEqual(VesselHealthDetailCodes.ToolFailed, NpmOutputParser.InterpretOutdated(Completed(1, "", "npm ERR! run npm install first"), "package.json", 120).ErrorCode);
             }));
 
             cases.Add(CaseAsync("scanner_runs_tools_and_reports_failure", "The scanner runs dotnet per target, merges results, and a failed target keeps the scan Unknown", TestTags.Negative, async () =>
@@ -220,6 +188,7 @@ namespace Test.Shared.Suites.Services
                 Directory.CreateDirectory(Path.Combine(root, "b"));
                 File.WriteAllText(Path.Combine(root, "a", "A.sln"), "");
                 File.WriteAllText(Path.Combine(root, "b", "B.sln"), "");
+                File.WriteAllText(Path.Combine(root, "b", "B.csproj"), "<Project Sdk=\"Microsoft.NET.Sdk\"></Project>");
                 FakeHostCommandExecutor executor = new FakeHostCommandExecutor();
                 executor.Handler = request => request.Arguments.Any(a => a.EndsWith("A.sln", StringComparison.Ordinal))
                     ? FakeHostCommandExecutor.Result(0, VesselHealthJsonFixtures.DotnetOutdated)

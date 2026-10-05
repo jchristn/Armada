@@ -1,22 +1,41 @@
-namespace Armada.Server.Ask
+namespace Armada.Core.Protocol
 {
-    using System;
-    using System.Text;
-    using System.Text.Json.Nodes;
     using System.Text.Json.Serialization;
 
     /// <summary>
-    /// A content block of a Claude Code stream-json message: text, tool_use (a call), or tool_result (its outcome).
+    /// A content block of a Claude Code stream-json message: text, thinking, tool_use (a call), or tool_result (its
+    /// outcome).
     /// </summary>
     public class ClaudeStreamContentBlock
     {
         #region Public-Members
 
         /// <summary>
-        /// Block type (text, tool_use, tool_result, thinking).
+        /// Block type for text.
+        /// </summary>
+        public const string TypeText = "text";
+
+        /// <summary>
+        /// Block type for a tool call.
+        /// </summary>
+        public const string TypeToolUse = "tool_use";
+
+        /// <summary>
+        /// Block type for a tool result.
+        /// </summary>
+        public const string TypeToolResult = "tool_result";
+
+        /// <summary>
+        /// Block type (text, thinking, tool_use, tool_result).
         /// </summary>
         [JsonPropertyName("type")]
         public string? Type { get; set; } = null;
+
+        /// <summary>
+        /// Text of a text block, or null.
+        /// </summary>
+        [JsonPropertyName("text")]
+        public string? Text { get; set; } = null;
 
         /// <summary>
         /// Tool call identifier (tool_use).
@@ -31,10 +50,11 @@ namespace Armada.Server.Ask
         public string? Name { get; set; } = null;
 
         /// <summary>
-        /// Tool input (tool_use).
+        /// Tool input (tool_use) as raw JSON, or null.
         /// </summary>
         [JsonPropertyName("input")]
-        public JsonNode? Input { get; set; } = null;
+        [JsonConverter(typeof(RawJsonStringConverter))]
+        public string? Input { get; set; } = null;
 
         /// <summary>
         /// Identifier of the call a tool_result answers.
@@ -43,10 +63,10 @@ namespace Armada.Server.Ask
         public string? ToolUseId { get; set; } = null;
 
         /// <summary>
-        /// Result content (tool_result): a string or an array of text blocks.
+        /// Result content (tool_result): a string or an array of text blocks, read into text.
         /// </summary>
         [JsonPropertyName("content")]
-        public JsonNode? Content { get; set; } = null;
+        public ClaudeToolResultContent? Content { get; set; } = null;
 
         /// <summary>
         /// Whether the tool_result is an error.
@@ -59,29 +79,12 @@ namespace Armada.Server.Ask
         #region Public-Methods
 
         /// <summary>
-        /// Flatten the tool_result content to text.
+        /// The tool_result content as text.
         /// </summary>
-        /// <returns>The result text, or null.</returns>
+        /// <returns>The result text, or null when the block has no content.</returns>
         public string? ContentText()
         {
-            if (Content == null) return null;
-            if (Content is JsonValue value) return value.ToString();
-            if (Content is JsonArray array)
-            {
-                StringBuilder builder = new StringBuilder();
-                foreach (JsonNode? item in array)
-                {
-                    if (item is JsonObject obj && obj["text"] is JsonValue text)
-                    {
-                        if (builder.Length > 0) builder.Append('\n');
-                        builder.Append(text.ToString());
-                    }
-                }
-
-                return builder.ToString();
-            }
-
-            return Content.ToJsonString();
+            return Content?.Text;
         }
 
         #endregion

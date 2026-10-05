@@ -6,6 +6,7 @@ namespace Armada.Runtimes.Tools
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Runtimes.Tools;
+    using Armada.Runtimes.Tools.Arguments;
 
     /// <summary>
     /// Creates, deletes, or renames directories.
@@ -69,10 +70,15 @@ namespace Armada.Runtimes.Tools
         /// <returns>A <see cref="ToolResult"/> indicating success or failure.</returns>
         public Task<ToolResult> ExecuteAsync(string toolCallId, JsonElement arguments, string workingDirectory, CancellationToken cancellationToken)
         {
+            if (!ToolArgumentParser.TryParse(arguments, out ManageDirectoryToolArguments? args, out string? argumentError))
+            {
+                return Task.FromResult(ToolArgumentParser.InvalidParameter(toolCallId, argumentError));
+            }
+
             try
             {
-                string action = GetRequiredString(arguments, "action").ToLowerInvariant();
-                string path = GetRequiredString(arguments, "path");
+                string action = args.Action!.ToLowerInvariant();
+                string path = args.Path!;
                 string resolvedPath = ResolvePath(path, workingDirectory);
 
                 switch (action)
@@ -84,7 +90,7 @@ namespace Armada.Runtimes.Tools
                         return Task.FromResult(DeleteDirectory(toolCallId, resolvedPath));
 
                     case "rename":
-                        string newPath = GetOptionalString(arguments, "new_path");
+                        string newPath = args.NewPath ?? string.Empty;
                         if (string.IsNullOrWhiteSpace(newPath))
                         {
                             return Task.FromResult(new ToolResult
@@ -228,26 +234,6 @@ namespace Armada.Runtimes.Tools
                     Content = JsonSerializer.Serialize(new { success = false, error = "permission_denied", message = $"Permission denied renaming directory." })
                 };
             }
-        }
-
-        private string GetRequiredString(JsonElement arguments, string propertyName)
-        {
-            if (arguments.TryGetProperty(propertyName, out JsonElement value) && value.ValueKind == JsonValueKind.String)
-            {
-                return value.GetString()!;
-            }
-
-            throw new ArgumentException($"Required parameter '{propertyName}' is missing or not a string.");
-        }
-
-        private string GetOptionalString(JsonElement arguments, string propertyName)
-        {
-            if (arguments.TryGetProperty(propertyName, out JsonElement value) && value.ValueKind == JsonValueKind.String)
-            {
-                return value.GetString() ?? string.Empty;
-            }
-
-            return string.Empty;
         }
 
         private string ResolvePath(string filePath, string workingDirectory)

@@ -6,6 +6,7 @@ namespace Armada.Runtimes.Tools
     using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
+    using Armada.Runtimes.Tools.Arguments;
 
     /// <summary>
     /// Reads a file from the filesystem and returns its contents with line numbers.
@@ -66,13 +67,18 @@ namespace Armada.Runtimes.Tools
         /// <returns>A <see cref="ToolResult"/> containing the file contents with line numbers.</returns>
         public async Task<ToolResult> ExecuteAsync(string toolCallId, JsonElement arguments, string workingDirectory, CancellationToken cancellationToken)
         {
+            if (!ToolArgumentParser.TryParse(arguments, out ReadFileToolArguments? args, out string? argumentError))
+            {
+                return ToolArgumentParser.InvalidParameter(toolCallId, argumentError);
+            }
+
             try
             {
-                string filePath = GetRequiredString(arguments, "file_path");
+                string filePath = args.FilePath!;
                 string resolvedPath = ResolvePath(filePath, workingDirectory);
 
-                int offset = GetOptionalInt(arguments, "offset", 1);
-                int limit = GetOptionalInt(arguments, "limit", -1);
+                int offset = args.Offset ?? 1;
+                int limit = args.Limit ?? -1;
 
                 if (!File.Exists(resolvedPath))
                 {
@@ -143,26 +149,6 @@ namespace Armada.Runtimes.Tools
         #endregion
 
         #region Private-Methods
-
-        private string GetRequiredString(JsonElement arguments, string propertyName)
-        {
-            if (arguments.TryGetProperty(propertyName, out JsonElement value) && value.ValueKind == JsonValueKind.String)
-            {
-                return value.GetString()!;
-            }
-
-            throw new ArgumentException($"Required parameter '{propertyName}' is missing or not a string.");
-        }
-
-        private int GetOptionalInt(JsonElement arguments, string propertyName, int defaultValue)
-        {
-            if (arguments.TryGetProperty(propertyName, out JsonElement value) && value.ValueKind == JsonValueKind.Number)
-            {
-                return value.GetInt32();
-            }
-
-            return defaultValue;
-        }
 
         private string ResolvePath(string filePath, string workingDirectory)
         {

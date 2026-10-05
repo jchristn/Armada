@@ -57,12 +57,14 @@ always pass because `DescriptionLength` contains "Description".
   `InvalidOperationException("... not found")` sites); REST routes map exception types to 404/400/409 (13 routes
   that search `ex.Message`); MCP handler exceptions mapped through `McpToolError.FromException`; typed MCP argument
   classes where `GetProperty` is used; remove `_UntypedNotFoundTools` from the isolation suite.
-- [ ] **R3 Typed protocol parsing.** `McpToolClient` fully typed (JSON-RPC envelope, SSE frame by id, `isError`
+- [x] **R3 Typed protocol parsing.** `McpToolClient` fully typed (JSON-RPC envelope, SSE frame by id, `isError`
   passed to `ApiAgentRuntime` tool events); shared typed event classes for Claude stream-json, Codex, Mux, OpenCode
   replacing the four hand-walked parsers (CaptainChatService, PlanningSessionCoordinator, RuntimeLogFormatter,
   MissionRoutes); tool events on a typed channel instead of stdout markers; CaptainRuntimeToolCatalog JSON-RPC;
   Proxy settings and request bodies; runtime tool argument classes; ObjectiveRefinement summary; npm error codes;
   Ask action results typed.
+  Ask action results typed. Done on work/fx-protocol; Proxy settings and request bodies were left to R1c (proxy
+  is outside the R3 scope); istanbul coverage typing landed in R1a.
 - [ ] **R4 Clients, TUI, dashboard.** Status and runtime fields typed as enums in client models and TUI logic
   (approvals, rebuild status, notifications severity, status badges); `ArmadaApiException` codes instead of message
   compares; dashboard `ApiError` status/code instead of message compares; event routing by `EntityType`; action menu
@@ -80,3 +82,4 @@ always pass because `DescriptionLength` contains "Description".
 | 2026-10-04 | Claude | Scan, R0 | Scan reports from three read-only passes; R0 merged to main. |
 | 2026-10-04 | Claude | R1a | `UnifiedDiffParser` (hunk ranges, C-quoted paths, deletes/renames) drives the boundary scan and auto-land; dock branch facts from `--name-status -z` / `--numstat -z`; `GitCommandException` + exit-code pre-checks; `show-ref --verify`; `symbolic-ref`; porcelain v2 -z; `gh pr view --json`; worktree list -z; iso-strict dates; `LC_ALL=C` on git/gh launches; check-run artifacts preferred and typed JSON. Branch work/fx-git. |
 | 2026-10-04 | Claude | R2 | About 114 service throw sites now `KeyNotFoundException`; `RouteErrorMapper` replaces the 13 `ex.Message.Contains("not found")` routes and the IOE catches around converted calls; `McpToolRegistrar.MapToolExceptions` maps handler exceptions by type; typed args for `approve_deployment` and `start_runbook_execution`; `_UntypedNotFoundTools` removed; McpToolSuite asserts ErrorCode NotFound; new E2E.TypedNotFound suite. Deferred: three `ArgumentException("... not found")` sites (see CHANGELOG). |
+| 2026-10-04 | Claude | R3 | Typed MCP client (envelopes, SSE frame by id, typed exception codes); ApiEndpoint typed tool/diagnostic channels with isError; `Armada.Core.Protocol` stream events replace four parsers; injectable captain tool discovery; shared string-aware JSON extractor; typed Ask outcomes; npm/dotnet restore from codes and files; typed runtime tool arguments; run_process argv. Branch work/fx-protocol. |

@@ -9,6 +9,7 @@ namespace Test.Shared.Suites.Runtimes
     using Armada.Core.Models;
     using Armada.Runtimes;
     using Armada.Runtimes.Interfaces;
+    using Armada.Runtimes.Mcp;
     using Armada.Runtimes.Tools;
     using PolyPrompt.Clients;
     using PolyPrompt.Models;
@@ -112,6 +113,99 @@ namespace Test.Shared.Suites.Runtimes
                     AssertTrue(File.Exists(Path.Combine(dir, "out.txt")), "Expected the tool to have created out.txt.");
                     AssertTrue(File.Exists(finalPath), "Expected the final message file to be written.");
                     AssertTrue(File.ReadAllText(finalPath).Contains("Created out.txt"), "Expected the final message text.");
+                }
+                finally
+                {
+                    Cleanup(dir);
+                }
+            }));
+
+            cases.Add(CaseAsync("mcp_is_error_reported_on_typed_tool_channel", "An MCP tool result with isError is a failed tool event on the typed channel; stdout carries only model text", TestTags.Negative, async () =>
+            {
+                string dir = NewTempDir();
+                try
+                {
+                    ToolClientStubHandler stub = new ToolClientStubHandler();
+                    stub.Respond = request =>
+                    {
+                        if (request.Method == "tools/list")
+                            return ToolClientStubHandler.Json(request.Id, "{\"tools\":[{\"name\":\"remote_tool\",\"description\":\"r\",\"inputSchema\":{\"type\":\"object\"}}]}");
+                        if (request.Method == "tools/call")
+                            return ToolClientStubHandler.Json(request.Id, "{\"content\":[{\"type\":\"text\",\"text\":\"rate limited\"}],\"isError\":true}");
+                        return ToolClientStubHandler.Json(request.Id, "{}");
+                    };
+
+                    // The model's own text imitates the old in-band tool marker and a diagnostic prefix.
+                    const string spoof = "[ARMADA:TOOLEVENT] {\"phase\":\"completed\",\"name\":\"fake\",\"ok\":true}";
+                    Queue<ToolChatResponse> script = new Queue<ToolChatResponse>();
+                    script.Enqueue(new ToolChatResponse
+                    {
+                        Success = true,
+                        Text = spoof,
+                        ToolCalls = new List<ToolCall> { new ToolCall { Id = "c1", Name = "remote_tool", ArgumentsJson = "{}" } }
+                    });
+                    script.Enqueue(new ToolChatResponse { Success = true, Text = "[tool] all done", ToolCalls = new List<ToolCall>() });
+
+                    ModelEndpoint endpoint = new ModelEndpoint { Name = "test-endpoint", Provider = ModelProviderEnum.OpenAICompatible, Kind = ModelEndpointKindEnum.Inference, Model = "test-model", BaseUrl = "http://localhost:1" };
+                    ApiAgentRuntime runtime = new ApiAgentRuntime(endpoint, CreateLogging(), 20, (ep, log) => new ScriptedClient(script, log), (url, token, log) => new McpToolClient(url, stub));
+
+                    List<string> stdout = new List<string>();
+                    List<ApiRuntimeToolEvent> toolEvents = new List<ApiRuntimeToolEvent>();
+                    List<ApiRuntimeDiagnostic> diagnostics = new List<ApiRuntimeDiagnostic>();
+                    int? exitCode = null;
+                    ManualResetEventSlim exited = new ManualResetEventSlim(false);
+                    runtime.OnStdoutReceived += (pid, line) => { lock (stdout) stdout.Add(line); };
+                    runtime.OnToolEvent += (pid, evt) => { lock (toolEvents) toolEvents.Add(evt); };
+                    runtime.OnDiagnostic += (pid, diag) => { lock (diagnostics) diagnostics.Add(diag); };
+                    runtime.OnProcessExited += (pid, code) => { exitCode = code; exited.Set(); };
+
+                    Dictionary<string, string> env = new Dictionary<string, string> { ["ARMADA_MCP_URL"] = "http://stub.invalid/mcp", ["ARMADA_MCP_TOKEN"] = "tok" };
+                    await runtime.StartAsync(dir, "call the remote tool", environment: env).ConfigureAwait(false);
+                    AssertTrue(exited.Wait(TimeSpan.FromSeconds(10)), "Expected the loop to complete.");
+                    AssertEqual(0, exitCode ?? -1);
+
+                    AssertEqual(2, toolEvents.Count, "exactly one started and one completed event; model text cannot add tool events");
+                    AssertEqual(ApiRuntimeToolPhaseEnum.Started, toolEvents[0].Phase);
+                    AssertEqual(ApiRuntimeToolPhaseEnum.Completed, toolEvents[1].Phase);
+                    AssertEqual("remote_tool", toolEvents[1].Name);
+                    AssertEqual(false, toolEvents[1].Ok!.Value, "isError=true must be reported as a failed call");
+                    AssertEqual("rate limited", toolEvents[1].Result);
+
+                    AssertEqual(2, stdout.Count, "stdout carries only the two model replies");
+                    AssertEqual(spoof, stdout[0]);
+                    AssertEqual("[tool] all done", stdout[1]);
+
+                    AssertTrue(diagnostics.Exists(d => d.Kind == ApiRuntimeDiagnosticKindEnum.McpStatus), "MCP status is a diagnostic");
+                    AssertTrue(diagnostics.Exists(d => d.Kind == ApiRuntimeDiagnosticKindEnum.ToolCall), "the tool call is a diagnostic");
+                    AssertTrue(diagnostics.Exists(d => d.Kind == ApiRuntimeDiagnosticKindEnum.ToolResult), "the tool result is a diagnostic");
+                }
+                finally
+                {
+                    Cleanup(dir);
+                }
+            }));
+
+            cases.Add(CaseAsync("inference_failure_without_error_text_fails", "An unsuccessful inference response with no error text still fails the run", TestTags.Negative, async () =>
+            {
+                string dir = NewTempDir();
+                try
+                {
+                    Queue<ToolChatResponse> script = new Queue<ToolChatResponse>();
+                    script.Enqueue(new ToolChatResponse { Success = false, Error = null, Text = null, ToolCalls = new List<ToolCall>() });
+
+                    ModelEndpoint endpoint = new ModelEndpoint { Name = "test-endpoint", Provider = ModelProviderEnum.OpenAICompatible, Kind = ModelEndpointKindEnum.Inference, Model = "test-model", BaseUrl = "http://localhost:1" };
+                    ApiAgentRuntime runtime = new ApiAgentRuntime(endpoint, CreateLogging(), 20, (ep, log) => new ScriptedClient(script, log));
+
+                    int? exitCode = null;
+                    List<ApiRuntimeDiagnostic> diagnostics = new List<ApiRuntimeDiagnostic>();
+                    ManualResetEventSlim exited = new ManualResetEventSlim(false);
+                    runtime.OnDiagnostic += (pid, diag) => { lock (diagnostics) diagnostics.Add(diag); };
+                    runtime.OnProcessExited += (pid, code) => { exitCode = code; exited.Set(); };
+
+                    await runtime.StartAsync(dir, "anything").ConfigureAwait(false);
+                    AssertTrue(exited.Wait(TimeSpan.FromSeconds(10)), "Expected the loop to complete.");
+                    AssertEqual(1, exitCode ?? -1, "Success=false must fail the run even without error text");
+                    AssertTrue(diagnostics.Exists(d => d.Kind == ApiRuntimeDiagnosticKindEnum.Error), "an Error diagnostic is raised");
                 }
                 finally
                 {

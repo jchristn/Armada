@@ -382,7 +382,7 @@ namespace Armada.Server.Ask
                 || !String.Equals(thread.TenantId, tenantId, StringComparison.Ordinal)
                 || !String.Equals(thread.UserId, userId, StringComparison.Ordinal))
             {
-                return new { Error = "The conversation for this session no longer exists." };
+                return McpToolError.NotFound("The conversation for this session no longer exists.");
             }
 
             if (AskToolPolicy.IsReadOnly(name)) return await handler(args).ConfigureAwait(false);
@@ -410,7 +410,7 @@ namespace Armada.Server.Ask
             AskExecutionOutcome outcome = await InvokeAsync(handler, args).ConfigureAwait(false);
             await RecordOutcomeAsync(thread, proposal, outcome, CancellationToken.None).ConfigureAwait(false);
             if (outcome.Result != null) return outcome.Result;
-            return new { Error = outcome.ErrorText ?? "The tool failed." };
+            return new McpToolError(outcome.ErrorCode ?? McpToolErrorCodeEnum.Failed, outcome.ErrorText ?? "The tool failed.");
         }
 
         private async Task<AskActionProposal> ExecuteProposalAsync(AskThread thread, AskActionProposal proposal, AuthContext caller, CancellationToken token)
@@ -479,9 +479,19 @@ namespace Armada.Server.Ask
                 object result = await handler(args).ConfigureAwait(false);
                 outcome.Result = result;
                 outcome.ResultText = Truncate(Serialize(result));
-                string? error = ExtractError(outcome.ResultText);
-                outcome.Ok = String.IsNullOrEmpty(error);
-                outcome.ErrorText = error;
+
+                // Success is decided from the typed result object before it is serialized (and possibly truncated): a
+                // tool reports failure by returning McpToolError, never by a property name in its serialized text.
+                if (result is McpToolError toolError)
+                {
+                    outcome.Ok = false;
+                    outcome.ErrorCode = toolError.ErrorCode;
+                    outcome.ErrorText = String.IsNullOrWhiteSpace(toolError.Error) ? toolError.ErrorCode.ToString() : toolError.Error;
+                }
+                else
+                {
+                    outcome.Ok = true;
+                }
             }
             catch (Exception ex) when (!(ex is OperationCanceledException))
             {
@@ -538,7 +548,7 @@ namespace Armada.Server.Ask
             {
                 using (JsonDocument doc = JsonDocument.Parse(argumentsJson))
                 {
-                    if (doc.RootElement.ValueKind != JsonValueKind.Object) throw new ArgumentException("Tool arguments must be a JSON object.");
+                    if (!argumentsJson.TrimStart().StartsWith("{", StringComparison.Ordinal)) throw new ArgumentException("Tool arguments must be a JSON object.");
                     return doc.RootElement.Clone();
                 }
             }
@@ -554,18 +564,6 @@ namespace Armada.Server.Ask
             if (result is string text) return JsonSerializer.Serialize(text);
             try { return JsonSerializer.Serialize(result, result.GetType(), _ResultJson); }
             catch (Exception) { return JsonSerializer.Serialize(result.ToString()); }
-        }
-
-        private static string? ExtractError(string? resultJson)
-        {
-            AskWorkLinkProbe probe = new AskWorkLinkProbe();
-            if (!String.IsNullOrWhiteSpace(resultJson) && resultJson.TrimStart().StartsWith("{", StringComparison.Ordinal))
-            {
-                try { probe = JsonSerializer.Deserialize<AskWorkLinkProbe>(resultJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? probe; }
-                catch (JsonException) { }
-            }
-
-            return String.IsNullOrWhiteSpace(probe.Error) ? null : probe.Error;
         }
 
         private string? Truncate(string? value)

@@ -111,7 +111,7 @@ namespace Armada.Core.Services.Health
                     mode == DependencyScanModeEnum.Outdated ? "--outdated" : "--vulnerable", "--format", "json"
                 };
                 DependencyToolResult result = await _Runner.RunAsync(_DotnetExecutable, args, root, timeout, token).ConfigureAwait(false);
-                DependencyScanResult part = DotnetListParser.Interpret(result, mode, root, timeout);
+                DependencyScanResult part = DotnetListParser.Interpret(result, mode, root, timeout, ResolveCoveredProjects(inventory, root, target));
                 Absorb(merged, part);
                 if (part.ErrorCode == VesselHealthDetailCodes.ToolMissing) break;
             }
@@ -162,6 +162,39 @@ namespace Armada.Core.Services.Health
         }
 
         /// <summary>
+        /// Absolute paths of the project files a dotnet list target covers: the target itself when it is a project file,
+        /// otherwise every project file in the inventory under the solution's directory.
+        /// </summary>
+        /// <param name="inventory">Repository inventory.</param>
+        /// <param name="root">Repository root (absolute).</param>
+        /// <param name="target">Repository-relative target (solution or project).</param>
+        /// <returns>Absolute project file paths.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when inventory, root, or target is null.</exception>
+        public static List<string> ResolveCoveredProjects(RepositoryFileInventory inventory, string root, string target)
+        {
+            if (inventory == null) throw new ArgumentNullException(nameof(inventory));
+            if (root == null) throw new ArgumentNullException(nameof(root));
+            if (target == null) throw new ArgumentNullException(nameof(target));
+
+            List<string> projects = new List<string>();
+            if (IsProjectFile(target))
+            {
+                projects.Add(Path.Combine(root, target.Replace('/', Path.DirectorySeparatorChar)));
+                return projects;
+            }
+
+            string directory = RepositoryFileInventory.GetDirectory(target);
+            string prefix = directory.Length == 0 ? String.Empty : directory + "/";
+            foreach (string project in inventory.FindByExtension(".csproj").Concat(inventory.FindByExtension(".fsproj")).Concat(inventory.FindByExtension(".vbproj")))
+            {
+                if (prefix.Length > 0 && !project.StartsWith(prefix, StringComparison.Ordinal)) continue;
+                projects.Add(Path.Combine(root, project.Replace('/', Path.DirectorySeparatorChar)));
+            }
+
+            return projects;
+        }
+
+        /// <summary>
         /// Resolve npm targets: package.json files with a package-lock.json or npm-shrinkwrap.json beside them.
         /// </summary>
         /// <param name="inventory">Repository inventory.</param>
@@ -190,6 +223,14 @@ namespace Armada.Core.Services.Health
         {
             merged.AddFailure(part.ErrorCode, part.ErrorValue);
             foreach (VesselDependency dependency in part.Dependencies) DotnetListParser.Merge(merged.Dependencies, dependency);
+        }
+
+        private static bool IsProjectFile(string path)
+        {
+            string extension = Path.GetExtension(path);
+            return String.Equals(extension, ".csproj", StringComparison.OrdinalIgnoreCase)
+                || String.Equals(extension, ".fsproj", StringComparison.OrdinalIgnoreCase)
+                || String.Equals(extension, ".vbproj", StringComparison.OrdinalIgnoreCase);
         }
 
         #endregion

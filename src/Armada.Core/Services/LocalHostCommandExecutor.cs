@@ -1,6 +1,7 @@
 namespace Armada.Core.Services
 {
     using System;
+    using System.Collections.Generic;
     using System.Diagnostics;
     using System.Text;
 
@@ -44,6 +45,14 @@ namespace Armada.Core.Services
                 process.StartInfo = startInfo;
                 process.OutputDataReceived += (sender, e) => { if (e.Data != null) standardOutput.AppendLine(e.Data); };
                 process.ErrorDataReceived += (sender, e) => { if (e.Data != null) standardError.AppendLine(e.Data); };
+
+                if (request.Environment != null)
+                {
+                    foreach (KeyValuePair<string, string> variable in request.Environment)
+                    {
+                        if (!String.IsNullOrEmpty(variable.Key)) startInfo.Environment[variable.Key] = variable.Value;
+                    }
+                }
 
                 process.Start();
                 process.BeginOutputReadLine();

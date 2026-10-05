@@ -207,6 +207,26 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(0, h.Invocations.Count, "nothing executed");
             }));
 
+            cases.Add(CaseAsync("outcome_from_typed_result", "Success comes from the typed result: an Error-named field is not a failure and a huge McpToolError still fails", TestTags.Negative, async () =>
+            {
+                using AskTestHarness h = await AskTestHarness.CreateAsync().ConfigureAwait(false);
+                AuthContext owner = AskTestHarness.User("usr_typed");
+                AskThread thread = await h.Threads.CreateThreadAsync(owner, null).ConfigureAwait(false);
+
+                // A successful result that happens to carry an Error-named field (for example a record's last error).
+                h.RegisterStub("update_vessel", _ => new { Id = "vsl_x", Error = "previous run failed" });
+                AskProposalDecision ok = await h.Actions.SubmitQuickActionAsync(owner, thread.Id, new AskActionRequest { ToolName = "update_vessel" }).ConfigureAwait(false);
+                AssertEqual(AskProposalStatusEnum.Executed, ok.Proposal!.Status, "an Error field in a successful result is not a failure");
+                AssertNull(ok.Proposal.ErrorText);
+
+                // A failure whose serialized form exceeds the result limit (so its truncated text no longer parses).
+                string huge = new string('x', 70000);
+                h.RegisterStub("restore", _ => McpToolError.Conflict(huge));
+                AskProposalDecision failed = await h.Actions.SubmitQuickActionAsync(owner, thread.Id, new AskActionRequest { ToolName = "restore" }).ConfigureAwait(false);
+                AssertEqual(AskProposalStatusEnum.Failed, failed.Proposal!.Status, "a truncated McpToolError is still a failure");
+                AssertEqual(huge, failed.Proposal.ErrorText);
+            }));
+
             cases.Add(CaseAsync("failed_execution", "A tool that errors or throws marks the proposal Failed and posts an Error message", TestTags.Negative, async () =>
             {
                 using AskTestHarness h = await AskTestHarness.CreateAsync().ConfigureAwait(false);
