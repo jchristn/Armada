@@ -94,7 +94,6 @@ namespace Armada.Tui.Services
         private static readonly JsonSerializerOptions _Json = CreateJson();
         private static readonly Dictionary<string, NotificationSeverityEnum> _SeverityByName = BuildSeverityMap();
         private readonly List<NotificationEntry> _History = new List<NotificationEntry>();
-        private readonly Dictionary<NotificationAction, Action?> _ToastActions = new Dictionary<NotificationAction, Action?>();
         private readonly Dictionary<string, string> _LastSeen = new Dictionary<string, string>(StringComparer.Ordinal);
         private readonly IClock _Clock;
         private readonly ITextLocalizer _Loc;
@@ -275,7 +274,7 @@ namespace Armada.Tui.Services
                 string? route = entry.Route;
                 Action<string>? opener = RouteOpener;
                 bool actionable = route != null && opener != null;
-                Toast(entry.Severity, Render(entry), actionable ? "Open" : null, actionable ? () => opener!(route!) : null);
+                Toast(entry.Severity, Render(entry), actionable ? "Open" : null, actionable ? () => opener!(route!) : null, route);
             }
 
             if (entry.Severity == NotificationSeverityEnum.Error) Attention(Render(entry));
@@ -283,48 +282,23 @@ namespace Armada.Tui.Services
         }
 
         /// <summary>
-        /// Show a toast.
+        /// Show a toast. A toast raised again while it shows coalesces into it with a repeat count (TUIKit's
+        /// <see cref="NotificationCenter.CoalesceBy"/> <see cref="CoalesceMatch.Content"/>): same severity and text, and
+        /// an action with the same key, or the same label when either has no key. The merged toast runs the newest
+        /// callback. Give the action a key that names its target (<paramref name="actionKey"/>, for example the route it
+        /// opens), so toasts of the same text whose actions open different things stay apart.
         /// </summary>
         /// <param name="severity">Severity.</param>
         /// <param name="text">Text (already translated).</param>
-        /// <param name="actionLabel">English action label, or null.</param>
-        /// <param name="action">Action, or null.</param>
+        /// <param name="actionLabel">English action label, or null for none.</param>
+        /// <param name="action">Action, or null for none (a label without an action shows no action).</param>
+        /// <param name="actionKey">What the action targets (a route or an entity id), or null to match actions by label.</param>
         /// <returns>The toast.</returns>
-        public ToastEntry Toast(NotificationSeverityEnum severity, string text, string? actionLabel = null, Action? action = null)
+        public ToastEntry Toast(NotificationSeverityEnum severity, string text, string? actionLabel = null, Action? action = null, string? actionKey = null)
         {
-            long now = NowMilliseconds();
             List<NotificationAction>? actions = null;
-            if (actionLabel != null)
-            {
-                // TUIKit coalesces a repeat only when it carries the same action instances, and every caller builds a
-                // fresh callback, so a repeat of a showing toast with the same action label reuses that toast's action
-                // (whose callback becomes the newest one, as before).
-                NotificationAction? shared = null;
-                foreach (Notification showing in Toasts.Active(now))
-                {
-                    if (showing.Severity == ToTuiKit(severity) && String.Equals(showing.Text, text ?? "", StringComparison.Ordinal)
-                        && showing.Title == null && showing.Actions.Count == 1 && String.Equals(showing.Actions[0].Label, actionLabel, StringComparison.Ordinal))
-                    {
-                        shared = showing.Actions[0];
-                        break;
-                    }
-                }
-
-                if (shared == null)
-                {
-                    NotificationAction? created = null;
-                    created = new NotificationAction(actionLabel, () =>
-                    {
-                        if (created != null && _ToastActions.TryGetValue(created, out Action? callback) && callback != null) callback();
-                    });
-                    shared = created;
-                }
-
-                _ToastActions[shared] = action;
-                actions = new List<NotificationAction> { shared };
-            }
-
-            Notification toast = Toasts.Add(text ?? "", ToTuiKit(severity), now, null, null, actions);
+            if (actionLabel != null && action != null) actions = new List<NotificationAction> { new NotificationAction(actionLabel, action, actionKey) };
+            Notification toast = Toasts.Add(text ?? "", ToTuiKit(severity), NowMilliseconds(), null, null, actions);
             return View(toast);
         }
 
@@ -336,31 +310,18 @@ namespace Armada.Tui.Services
         {
             IReadOnlyList<Notification> active = Toasts.Active(NowMilliseconds());
             List<ToastEntry> toasts = new List<ToastEntry>(active.Count);
-            HashSet<NotificationAction> live = new HashSet<NotificationAction>();
-            for (int i = active.Count - 1; i >= 0; i--)
-            {
-                toasts.Add(View(active[i]));
-                foreach (NotificationAction a in active[i].Actions) live.Add(a);
-            }
-
-            foreach (NotificationAction stale in _ToastActions.Keys.Where(a => !live.Contains(a)).ToList()) _ToastActions.Remove(stale);
+            for (int i = active.Count - 1; i >= 0; i--) toasts.Add(View(active[i]));
             return toasts;
         }
 
         /// <summary>
-        /// Run the newest actionable toast's action and dismiss it.
+        /// Run the newest actionable toast's action and dismiss it (TUIKit's
+        /// <see cref="NotificationCenter.InvokeLatestAction"/>).
         /// </summary>
         /// <returns>True when an action ran.</returns>
         public bool RunLatestToastAction()
         {
-            foreach (Notification toast in Toasts.Active(NowMilliseconds()))
-            {
-                if (toast.Actions.Count == 0 || !_ToastActions.TryGetValue(toast.Actions[0], out Action? callback) || callback == null) continue;
-                Toasts.InvokeAction(toast, 0);
-                return true;
-            }
-
-            return false;
+            return Toasts.InvokeLatestAction(NowMilliseconds());
         }
 
         /// <summary>
@@ -369,7 +330,6 @@ namespace Armada.Tui.Services
         public void DismissToasts()
         {
             Toasts.DismissAll();
-            _ToastActions.Clear();
         }
 
         /// <summary>
@@ -452,6 +412,7 @@ namespace Armada.Tui.Services
             center.MaxConcurrent = 100;
             center.HistoryLimit = 0;
             center.CoalesceRepeats = true;
+            center.CoalesceBy = CoalesceMatch.Content;
             return center;
         }
 
@@ -484,12 +445,11 @@ namespace Armada.Tui.Services
 
         private ToastEntry View(Notification toast)
         {
-            string? label = toast.Actions.Count > 0 ? toast.Actions[0].Label : null;
-            Action? action = null;
-            if (toast.Actions.Count > 0) _ToastActions.TryGetValue(toast.Actions[0], out action);
+            NotificationAction? first = toast.Actions.Count > 0 ? toast.Actions[0] : null;
             DateTime expires = DateTime.UnixEpoch.AddMilliseconds(toast.LastRaisedAtMilliseconds + toast.TimeoutMilliseconds);
             string suffix = toast.RepeatCount > 1 ? String.Format(CultureInfo.InvariantCulture, Toasts.RepeatSuffixFormat, toast.RepeatCount) : "";
-            return new ToastEntry(toast.Id, FromTuiKit(toast.Severity), toast.Text, expires, label, action, toast.RepeatCount, suffix);
+            string severityLabel = Toasts.SeverityLabels.TryGetValue(toast.Severity, out string? shown) ? shown : "";
+            return new ToastEntry(toast.Id, FromTuiKit(toast.Severity), toast.Text, expires, first?.Label, first?.Callback, toast.RepeatCount, suffix, severityLabel);
         }
 
         private static Dictionary<string, NotificationSeverityEnum> BuildSeverityMap()

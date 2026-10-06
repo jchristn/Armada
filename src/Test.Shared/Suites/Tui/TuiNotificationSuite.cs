@@ -123,6 +123,39 @@ namespace Test.Shared.Suites.Tui
                 AssertFalse(svc.RunLatestToastAction(), "nothing left to run");
             }));
 
+            cases.Add(TuiCase.Sync(Suite, "toasts_for_different_targets_stay_apart", "Toasts with the same text whose Open actions target different entities stay apart; a true repeat still coalesces", () =>
+            {
+                ManualClock clock = new ManualClock();
+                NotificationService svc = new NotificationService(clock, new LocalizationService(), null, null, null);
+                List<string> opened = new List<string>();
+                svc.RouteOpener = route => opened.Add(route);
+                svc.PushEntityChange("Mission", "msn_1", "Fix tables", "Failed");
+                svc.PushEntityChange("Mission", "msn_2", "Fix tables", "Failed");
+                IReadOnlyList<ToastEntry> active = svc.ActiveToasts();
+                AssertEqual(2, active.Count, "two missions with the same title are two toasts");
+                AssertEqual(1, active[0].Repeat, "first not merged");
+                AssertEqual(1, active[1].Repeat, "second not merged");
+                AssertTrue(svc.RunLatestToastAction(), "Ctrl+O ran");
+                AssertEqual("/missions/msn_2", opened[opened.Count - 1], "the newest toast opens its own mission");
+                AssertTrue(svc.RunLatestToastAction(), "Ctrl+O ran again");
+                AssertEqual("/missions/msn_1", opened[opened.Count - 1], "the older toast still opens the first mission");
+
+                int first = 0;
+                int second = 0;
+                svc.Toast(NotificationSeverityEnum.Warning, "Permission needed: Bash", "Open", () => first++, "/missions/msn_1");
+                svc.Toast(NotificationSeverityEnum.Warning, "Permission needed: Bash", "Open", () => second++, "/missions/msn_2");
+                AssertEqual(2, svc.ActiveToasts().Count, "same text, different targets: two toasts");
+                svc.Toast(NotificationSeverityEnum.Warning, "Permission needed: Bash", "Open", () => first++, "/missions/msn_1");
+                active = svc.ActiveToasts();
+                AssertEqual(2, active.Count, "a repeat for the same target coalesces");
+                AssertEqual(2, active[active.Count - 1].Repeat, "the repeated target counts the repeat");
+                AssertEqual(" (x2)", active[active.Count - 1].RepeatSuffix, "repeat suffix");
+                AssertEqual("[!]", active[0].SeverityLabel, "severity spelled as text");
+                AssertTrue(svc.RunLatestToastAction(), "Ctrl+O ran the newest");
+                AssertEqual(1, first, "the repeated target's newest callback ran");
+                AssertEqual(0, second, "the other target did not run");
+            }));
+
             cases.Add(TuiCase.Sync(Suite, "cli_permission_merge_keeps_flags", "A flagless copy of a pending CLI permission request keeps the caller's decision flags", () =>
             {
                 Armada.Core.Models.CliPermissionRequest withFlags = new Armada.Core.Models.CliPermissionRequest { ToolName = "Bash", CanDecide = true, CanRemember = true };

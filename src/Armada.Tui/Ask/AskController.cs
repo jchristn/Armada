@@ -1407,7 +1407,7 @@ namespace Armada.Tui.Ask
             if (isNew && notify)
             {
                 string route = item.Route;
-                Context.Notifications.Toast(NotificationSeverityEnum.Warning, item.Title + (String.IsNullOrEmpty(item.Detail) ? "" : " - " + item.Detail), "Open", () => Context.Navigate(route));
+                Context.Notifications.Toast(NotificationSeverityEnum.Warning, item.Title + (String.IsNullOrEmpty(item.Detail) ? "" : " - " + item.Detail), "Open", () => Context.Navigate(route), route);
             }
         }
 
