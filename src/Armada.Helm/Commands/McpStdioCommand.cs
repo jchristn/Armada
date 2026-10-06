@@ -14,6 +14,7 @@ namespace Armada.Helm.Commands
     using Armada.Core.Services;
     using Armada.Core.Services.Interfaces;
     using Armada.Core.Settings;
+    using Armada.Helm.Infrastructure;
     using Armada.Runtimes;
     using Armada.Server;
     using Armada.Server.Mcp;
@@ -30,6 +31,20 @@ namespace Armada.Helm.Commands
         {
             // Load settings using Armada's configured serializer/options so camelCase settings.json is honored.
             ArmadaSettings armadaSettings = await ArmadaSettings.LoadAsync().ConfigureAwait(false);
+
+            // stdio MCP opens this machine's database directly; a remote target must be reached over HTTP MCP instead
+            // (armada mcp install --server ...). Refuse rather than silently serve the local database.
+            AdmiralTargetRequest request = new AdmiralTargetRequest { Server = settings.Server, Token = settings.Token, Profile = settings.Profile };
+            AdmiralTarget target = await AdmiralTargetResolver.CreateDefault(armadaSettings.AdmiralPort, armadaSettings.ApiKey).ResolveAsync(request, cancellationToken).ConfigureAwait(false);
+            if (!target.IsLocal)
+            {
+                throw new AdmiralTargetException(
+                    AdmiralTargetErrorEnum.LocalOnlyCommand,
+                    "'armada mcp stdio' acts only on this machine's Admiral (it opens the local database directly), but the target is " + target.Describe()
+                    + ". Point the MCP client at the remote Admiral's HTTP MCP endpoint with 'armada mcp install --server <url> --token <bearer>', or pass --profile local.",
+                    "mcp stdio");
+            }
+
             armadaSettings.InitializeDirectories();
 
             // Quiet logging -- stderr only, no console (stdout is the MCP transport)

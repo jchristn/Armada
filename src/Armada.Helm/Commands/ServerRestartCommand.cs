@@ -1,11 +1,13 @@
 namespace Armada.Helm.Commands
 {
     using System.ComponentModel;
+    using System.Net;
     using System.Net.Http;
     using System.Threading;
     using Spectre.Console;
     using Spectre.Console.Cli;
     using Armada.Core;
+    using Armada.Helm.Infrastructure;
 
     /// <summary>
     /// Restart the Admiral server: stop it if it is running, wait for it to exit, then start it again.
@@ -17,8 +19,72 @@ namespace Armada.Helm.Commands
         /// <inheritdoc />
         public override async Task<int> ExecuteAsync(CommandContext context, ServerStartSettings settings, CancellationToken cancellationToken)
         {
+            AdmiralTarget target = GetTarget();
+            if (!target.IsLocal) return await RestartRemoteAsync(target, cancellationToken).ConfigureAwait(false);
             await StopRunningServerAsync(cancellationToken).ConfigureAwait(false);
             return await base.ExecuteAsync(context, settings, cancellationToken).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Restart acts on a remote Admiral through POST /api/v1/server/restart, so it is not local-only (start is).
+        /// </summary>
+        protected override LocalOnlyCommandInfo? LocalOnly
+        {
+            get { return null; }
+        }
+
+        private async Task<int> RestartRemoteAsync(AdmiralTarget target, CancellationToken cancellationToken)
+        {
+            using (HttpClient client = CreateAdminHttpClient(TimeSpan.FromSeconds(10)))
+            {
+                HttpResponseMessage response;
+                try
+                {
+                    response = await client.PostAsync(target.BaseUrl + "/api/v1/server/restart", null, cancellationToken).ConfigureAwait(false);
+                }
+                catch (HttpRequestException)
+                {
+                    throw new AdmiralTargetException(AdmiralTargetErrorEnum.Unreachable, "Cannot reach the Admiral at " + target.Describe() + "; nothing was restarted.");
+                }
+
+                if (response.StatusCode == HttpStatusCode.Unauthorized || response.StatusCode == HttpStatusCode.Forbidden)
+                    throw CredentialError(target, response.StatusCode, "POST /api/v1/server/restart");
+                if (!response.IsSuccessStatusCode)
+                {
+                    AnsiConsole.MarkupLine("[red]The Admiral could not restart:[/] HTTP " + (int)response.StatusCode + " " + Markup.Escape(await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false)));
+                    return 1;
+                }
+            }
+
+            AnsiConsole.MarkupLine("[green]Restart requested[/] on " + Markup.Escape(target.Describe()) + "; waiting for it to answer again...");
+            using HttpClient poll = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
+            DateTime deadline = DateTime.UtcNow.AddSeconds(60);
+            bool wentDown = false;
+            while (DateTime.UtcNow < deadline)
+            {
+                await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
+                bool up;
+                try
+                {
+                    up = (await poll.GetAsync(target.BaseUrl + "/api/v1/status/health", cancellationToken).ConfigureAwait(false)).IsSuccessStatusCode;
+                }
+                catch (Exception ex) when (ex is HttpRequestException || ex is TaskCanceledException)
+                {
+                    up = false;
+                }
+
+                if (!up) wentDown = true;
+                else if (wentDown)
+                {
+                    AnsiConsole.MarkupLine("[green]Admiral is back up.[/]");
+                    return 0;
+                }
+            }
+
+            AnsiConsole.MarkupLine(wentDown
+                ? "[gold1]The Admiral stopped but did not answer again within 60 seconds; check it on its host.[/]"
+                : "[gold1]The Admiral kept answering; the restart may not have happened. Check admiral.log on its host.[/]");
+            return 1;
         }
 
         private async Task StopRunningServerAsync(CancellationToken cancellationToken)

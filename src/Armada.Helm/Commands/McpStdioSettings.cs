@@ -19,7 +19,7 @@ namespace Armada.Helm.Commands
     /// <summary>
     /// Settings for MCP stdio command.
     /// </summary>
-    public class McpStdioSettings : CommandSettings
+    public class McpStdioSettings : TargetSettings
     {
     }
 }

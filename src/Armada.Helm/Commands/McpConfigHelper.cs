@@ -21,12 +21,38 @@ namespace Armada.Helm.Commands
             string? ManualRemoveCommand = null,
             bool IsMuxServers = false,
             bool IsOpenCodeConfig = false,
-            McpClientKindEnum Kind = McpClientKindEnum.ClaudeCode);
+            McpClientKindEnum Kind = McpClientKindEnum.ClaudeCode,
+            JsonObject? ManualConfig = null);
+
+        /// <summary>
+        /// Where the MCP client config files live: the user's home, the project directory (Cursor), and Mux's config
+        /// directory. Tests pass temporary directories.
+        /// </summary>
+        internal sealed record McpInstallPaths(string HomeDirectory, string ProjectDirectory, string MuxConfigDirectory)
+        {
+            internal static McpInstallPaths Default()
+            {
+                return new McpInstallPaths(
+                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                    Environment.CurrentDirectory,
+                    GetMuxConfigDirectory());
+            }
+        }
+
+        /// <summary>
+        /// Placeholder shown instead of the token in printed snippets.
+        /// </summary>
+        internal const string TokenPlaceholder = "<token>";
 
         internal sealed record ApplyResult(string ClientName, string FilePath, bool Changed, string Message, bool IsProjectScoped = false);
         internal sealed record InstructionTarget(string ClientName, string FilePath, string Content, bool IsProjectScoped = false);
 
         internal static JsonSerializerOptions JsonOptions { get; } = new JsonSerializerOptions { WriteIndented = true };
+
+        /// <summary>
+        /// Options for printed snippets: placeholders such as &lt;token&gt; stay readable instead of \u003C escapes.
+        /// </summary>
+        internal static JsonSerializerOptions PrintJsonOptions { get; } = new JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
         private const string ManagedBlockStart = "<!-- armada:mcp:begin -->";
         private const string ManagedBlockEnd = "<!-- armada:mcp:end -->";
         private const string SourceMcpFramework = "net10.0";
@@ -302,6 +328,124 @@ namespace Armada.Helm.Commands
             }
 
             return targets;
+        }
+
+        /// <summary>
+        /// Client configurations for a remote Admiral's HTTP MCP endpoint with a bearer token. Claude Code, Gemini CLI,
+        /// Cursor, and OpenCode get an <c>Authorization: Bearer</c> header in their config file; Mux gets an
+        /// <c>auth</c> block sending the same header; Codex reads the token from <c>ARMADA_TOKEN</c> at runtime
+        /// (<c>codex mcp add --bearer-token-env-var</c>), so it is not written to disk. Printed snippets use
+        /// <see cref="TokenPlaceholder"/>.
+        /// </summary>
+        /// <param name="mcpUrl">Full MCP URL, for example <c>https://armada.example.com:7891/mcp</c>.</param>
+        /// <param name="bearerToken">Bearer token.</param>
+        /// <param name="paths">Config locations.</param>
+        /// <param name="includeMux">Include Mux.</param>
+        /// <param name="includeOpenCode">Include OpenCode.</param>
+        /// <returns>Targets.</returns>
+        internal static List<ConfigTarget> BuildRemoteTargets(string mcpUrl, string bearerToken, McpInstallPaths paths, bool includeMux, bool includeOpenCode)
+        {
+            if (String.IsNullOrWhiteSpace(mcpUrl)) throw new ArgumentNullException(nameof(mcpUrl));
+            if (String.IsNullOrWhiteSpace(bearerToken)) throw new ArgumentNullException(nameof(bearerToken));
+            if (paths == null) throw new ArgumentNullException(nameof(paths));
+
+            string codexCommand = ResolveCliCommand("codex");
+            Uri uri = new Uri(mcpUrl, UriKind.Absolute);
+            string muxBase = uri.GetLeftPart(UriPartial.Authority);
+            string muxPath = String.IsNullOrEmpty(uri.AbsolutePath) || uri.AbsolutePath == "/" ? "/mcp" : uri.AbsolutePath;
+
+            List<ConfigTarget> targets = new List<ConfigTarget>
+            {
+                new(
+                    "Claude Code",
+                    Path.Combine(paths.HomeDirectory, ".claude.json"),
+                    new JsonObject { ["type"] = "http", ["url"] = mcpUrl, ["headers"] = BearerHeaders(bearerToken) },
+                    InstallAgent: true,
+                    ManualInstallCommand: "claude mcp add --transport http --scope user armada " + mcpUrl + " --header \"Authorization: Bearer " + TokenPlaceholder + "\"",
+                    Kind: McpClientKindEnum.ClaudeCode),
+                new(
+                    "Codex",
+                    Path.Combine(paths.HomeDirectory, ".codex", "config.toml"),
+                    CliCommand: codexCommand,
+                    InstallArgs: new[] { "mcp", "add", "armada", "--url", mcpUrl, "--bearer-token-env-var", Infrastructure.AdmiralTargetResolver.TokenEnvironmentVariable },
+                    RemoveArgs: new[] { "mcp", "remove", "armada" },
+                    RemoveBeforeInstallName: "armada",
+                    ManualInstallCommand: codexCommand + " mcp add armada --url " + mcpUrl + " --bearer-token-env-var " + Infrastructure.AdmiralTargetResolver.TokenEnvironmentVariable,
+                    ManualRemoveCommand: codexCommand + " mcp remove armada",
+                    Kind: McpClientKindEnum.Codex),
+                new(
+                    "Gemini CLI",
+                    Path.Combine(paths.HomeDirectory, ".gemini", "settings.json"),
+                    new JsonObject { ["httpUrl"] = mcpUrl, ["headers"] = BearerHeaders(bearerToken) },
+                    Kind: McpClientKindEnum.GeminiCli,
+                    ManualConfig: new JsonObject { ["httpUrl"] = mcpUrl, ["headers"] = BearerHeaders(TokenPlaceholder) }),
+                new(
+                    "Cursor",
+                    Path.Combine(paths.ProjectDirectory, ".cursor", "mcp.json"),
+                    new JsonObject { ["url"] = mcpUrl, ["headers"] = BearerHeaders(bearerToken) },
+                    IsProjectScoped: true,
+                    Kind: McpClientKindEnum.Cursor,
+                    ManualConfig: new JsonObject { ["url"] = mcpUrl, ["headers"] = BearerHeaders(TokenPlaceholder) }),
+            };
+
+            if (includeMux)
+            {
+                targets.Add(new(
+                    "Mux",
+                    Path.Combine(paths.MuxConfigDirectory, "mcp-servers.json"),
+                    MuxEntry(muxBase, muxPath, bearerToken),
+                    IsMuxServers: true,
+                    Kind: McpClientKindEnum.Mux,
+                    ManualConfig: MuxEntry(muxBase, muxPath, TokenPlaceholder)));
+            }
+
+            if (includeOpenCode)
+            {
+                string openCodeDir = Path.Combine(paths.HomeDirectory, ".config", "opencode");
+                string jsonc = Path.Combine(openCodeDir, "opencode.jsonc");
+                targets.Add(new(
+                    "OpenCode",
+                    File.Exists(jsonc) ? jsonc : Path.Combine(openCodeDir, "opencode.json"),
+                    new JsonObject { ["type"] = "remote", ["url"] = mcpUrl, ["enabled"] = true, ["headers"] = BearerHeaders(bearerToken) },
+                    IsOpenCodeConfig: true,
+                    Kind: McpClientKindEnum.OpenCode,
+                    ManualConfig: new JsonObject { ["type"] = "remote", ["url"] = mcpUrl, ["enabled"] = true, ["headers"] = BearerHeaders(TokenPlaceholder) }));
+            }
+
+            return targets;
+        }
+
+        /// <summary>
+        /// Restrict a config file that now holds a bearer token to its owner (0600) on Unix. No-op on Windows, where the
+        /// file inherits the profile directory's ACL.
+        /// </summary>
+        /// <param name="path">File path.</param>
+        internal static void RestrictToOwner(string path)
+        {
+            if (OperatingSystem.IsWindows() || !File.Exists(path)) return;
+            File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+        }
+
+        private static JsonObject BearerHeaders(string token)
+        {
+            return new JsonObject { ["Authorization"] = "Bearer " + token };
+        }
+
+        private static JsonObject MuxEntry(string baseUrl, string mcpPath, string token)
+        {
+            return new JsonObject
+            {
+                ["name"] = "armada",
+                ["transport"] = "http",
+                ["url"] = baseUrl,
+                ["mcpPath"] = mcpPath,
+                ["auth"] = new JsonObject
+                {
+                    ["type"] = "apikey",
+                    ["apiKeyHeader"] = "Authorization",
+                    ["apiKeyValue"] = "Bearer " + token,
+                },
+            };
         }
 
         internal static List<InstructionTarget> BuildInstructionTargets()
@@ -685,26 +829,28 @@ namespace Armada.Helm.Commands
             if (!String.IsNullOrEmpty(target.ManualInstallCommand))
                 return target.ManualInstallCommand;
 
-            if (target.ArmadaConfig == null)
+            // ManualConfig is the printable form (token replaced by a placeholder) for configs that carry a credential.
+            JsonObject? config = target.ManualConfig ?? target.ArmadaConfig;
+            if (config == null)
                 return "";
 
             if (target.IsMuxServers)
             {
                 JsonObject muxRoot = new JsonObject
                 {
-                    ["servers"] = new JsonArray(target.ArmadaConfig.DeepClone()),
+                    ["servers"] = new JsonArray(config.DeepClone()),
                 };
-                return muxRoot.ToJsonString(JsonOptions);
+                return muxRoot.ToJsonString(PrintJsonOptions);
             }
 
             JsonObject root = new JsonObject
             {
-                ["mcpServers"] = new JsonObject
+                [target.IsOpenCodeConfig ? "mcp" : "mcpServers"] = new JsonObject
                 {
-                    ["armada"] = target.ArmadaConfig.DeepClone(),
+                    ["armada"] = config.DeepClone(),
                 },
             };
-            return root.ToJsonString(JsonOptions);
+            return root.ToJsonString(PrintJsonOptions);
         }
 
         internal static string BuildManualRemoveSnippet(ConfigTarget target)

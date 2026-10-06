@@ -258,7 +258,7 @@ To register Armada with Claude Code manually, add it as an HTTP MCP server:
 claude mcp add --transport http --scope user armada http://localhost:7891/mcp
 ```
 
-Drop `--scope user` to add it for the current project only. While the Admiral listens on localhost (the default), no token or header is required; if you changed `mcpPort`, substitute your port. When the Admiral listens on any other address (for example in Docker), every MCP call needs a credential: add `--header "Authorization: Bearer <token>"` (or `X-Api-Key`). Armada's `armada mcp install` (or `scripts/*/install-mcp`) configures this automatically for Claude Code and the other supported runtimes.
+Drop `--scope user` to add it for the current project only. While the Admiral listens on localhost (the default), no token or header is required; if you changed `mcpPort`, substitute your port. When the Admiral listens on any other address (for example in Docker), every MCP call needs a credential: add `--header "Authorization: Bearer <token>"` (or `X-Api-Key`). `armada mcp install --server <url> --token <token>` (or `--profile <name>`) writes the remote URL and the header for Claude Code, Gemini CLI, Cursor, Mux, and OpenCode, and configures Codex to read the token from `ARMADA_TOKEN`; without a remote target it writes the local, credential-less entries. See [REMOTE_SERVER.md](REMOTE_SERVER.md#mcp-clients-claude-code-codex-gemini-cli-cursor-mux-opencode).
 
 **Enterprise-managed Claude Code.** If the add is rejected with `Cannot add MCP server 'armada': not allowed by enterprise policy`, your organization's Claude Code managed settings restrict which MCP servers may be added (via `allowedMcpServers` / `managed-mcp.json`). This is enforced by IT and **cannot** be overridden by a user, a project `.mcp.json`, or `--mcp-config`. Ask your Claude Code administrator to allow the Armada endpoint by adding it to `allowedMcpServers` in the managed settings - on Windows `C:\Program Files\ClaudeCode\managed-settings.json` (or, higher priority, the Claude.ai admin console at Admin Settings > Claude Code > Managed settings):
 
@@ -300,6 +300,8 @@ REST API accepts: `Authorization: Bearer <token>`, `X-Token: <session token>`, o
   true (the default), the MCP listener's hostname (`rest.hostname`) is a loopback name (`localhost`, `127.0.0.1`,
   `::1`), and the caller connects from loopback. Such a call runs as the default tenant's tenant admin, which is
   what the local Claude Code setup in the README relies on. Otherwise it gets `401` with a `WWW-Authenticate` header.
+  A reverse proxy on the same host connects from loopback, so behind one set `mcp.allowUnauthenticatedLoopback` to
+  false (see [REMOTE_SERVER.md](REMOTE_SERVER.md#close-the-mcp-loopback-exemption-when-anything-proxies-to-it)).
 - With a valid credential, the caller's tenant, user, and role flow into every tool handler through Voltaic's ambient
   `RpcCallContext` (`McpToolHelpers.ResolveCallerContext()`).
 

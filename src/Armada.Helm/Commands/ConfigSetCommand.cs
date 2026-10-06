@@ -18,8 +18,16 @@ namespace Armada.Helm.Commands
     public class ConfigSetCommand : BaseCommand<ConfigSetSettings>
     {
         /// <inheritdoc />
+        protected override LocalOnlyCommandInfo? LocalOnly
+        {
+            get { return new LocalOnlyCommandInfo("config set", "it edits this machine's settings.json; change a remote Admiral's settings in its dashboard (Settings) or with PUT /api/v1/settings"); }
+        }
+
+        /// <inheritdoc />
         public override async Task<int> ExecuteAsync(CommandContext context, ConfigSetSettings settings, CancellationToken cancellationToken)
         {
+            RequireTarget();
+
             ArmadaSettings armadaSettings = await ArmadaSettings.LoadAsync().ConfigureAwait(false);
 
             string key = settings.Key.ToLowerInvariant();

@@ -9,6 +9,7 @@ namespace Armada.Helm.Commands
     using SyslogLogging;
     using TUIKit.Diagnostics;
     using Armada.Core.Settings;
+    using Armada.Helm.Infrastructure;
     using Armada.Server;
     using Armada.Tui;
     using Armada.Tui.Services;
@@ -26,10 +27,18 @@ namespace Armada.Helm.Commands
             options.ServerUrl = settings.Server;
             options.ProfileName = settings.Profile;
             options.StartRoute = settings.Route;
-            bool explicitServer = !String.IsNullOrWhiteSpace(settings.Server)
+            options.Token = String.IsNullOrWhiteSpace(settings.Token) ? null : settings.Token.Trim();
+
+            // The CLI's ARMADA_SERVER_URL selects the TUI's server too (before the TUI's own ARMADA_URL), unless
+            // --profile names a saved profile.
+            string? envServer = Environment.GetEnvironmentVariable(AdmiralTargetResolver.ServerUrlEnvironmentVariable);
+            if (String.IsNullOrWhiteSpace(options.ServerUrl) && String.IsNullOrWhiteSpace(options.ProfileName) && !String.IsNullOrWhiteSpace(envServer))
+                options.ServerUrl = AdmiralTargetResolver.NormalizeServerUrl(envServer, AdmiralTargetResolver.ServerUrlEnvironmentVariable);
+
+            bool explicitServer = !String.IsNullOrWhiteSpace(options.ServerUrl)
                 || !String.IsNullOrWhiteSpace(settings.Profile)
                 || !String.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(TuiPaths.ServerUrlEnvironmentVariable));
-            if (!explicitServer) options.DefaultServerUrl = GetBaseUrl();
+            if (!explicitServer) options.DefaultServerUrl = GetLocalBaseUrl();
             options.TelemetryHostFactory = StartTelemetryHost;
             return await ArmadaTuiApp.RunConsoleAsync(options, cancellationToken).ConfigureAwait(false);
         }

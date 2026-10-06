@@ -69,6 +69,20 @@ namespace Armada.Helm.Commands
             AnsiConsole.WriteLine();
             AnsiConsole.MarkupLine($"[dim]Settings file: {Markup.Escape(ArmadaSettings.DefaultSettingsPath)}[/]");
 
+            // Which Admiral the CLI talks to (flag > ARMADA_SERVER_URL > active profile > local); never the credential.
+            AdmiralTarget target = GetTarget();
+            AnsiConsole.WriteLine();
+            Table targetTable = TableRenderer.CreateTable("CLI Target", null);
+            targetTable.AddColumn("Key");
+            targetTable.AddColumn("Value");
+            targetTable.AddRow("url", Markup.Escape(target.BaseUrl));
+            targetTable.AddRow("source", target.Source.ToString());
+            targetTable.AddRow("profile", Markup.Escape(target.ProfileName ?? "-"));
+            targetTable.AddRow("local", target.IsLocal ? "yes" : "no");
+            targetTable.AddRow("credential", Markup.Escape(target.DescribeCredential()));
+            AnsiConsole.Write(targetTable);
+            AnsiConsole.MarkupLine("[dim]The settings above are this machine's; switch the target with 'armada profile use <name>' or --server/--profile.[/]");
+
             return 0;
         }
     }

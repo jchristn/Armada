@@ -141,6 +141,12 @@ namespace Armada.Helm
             HelpRow("config set <key> <value>", "Set a configuration value");
             HelpRow("config init", "Interactive setup (config auto-initializes)");
 
+            HelpHeading("Remote Admirals (armada profile ...)");
+            HelpRow("profile list", "List saved Admiral profiles and the active target");
+            HelpRow("profile add <name>", "Save a remote Admiral (--server <url>, --token, --use)");
+            HelpRow("profile use <name>", "Switch the active target ('local' for this machine)");
+            HelpRow("profile remove <name>", "Remove a profile and its stored token");
+
             HelpHeading("MCP integration (armada mcp ...)");
             HelpRow("mcp install", "Configure MCP for Claude Code, Codex, Gemini, Cursor, Mux");
             HelpRow("mcp remove", "Remove MCP integration from those clients");
@@ -152,6 +158,9 @@ namespace Armada.Helm
             HelpHeading("Global options");
             HelpRow("--help, -h, /?, -?", "Show help (top-level or per-command)");
             HelpRow("--version", "Show the Armada version");
+            HelpRow("--server <url>", "Talk to this Admiral (or ARMADA_SERVER_URL)");
+            HelpRow("--token <bearer>", "Credential for it (or ARMADA_TOKEN)");
+            HelpRow("--profile <name>", "Use a saved profile ('local' for this machine)");
 
             AnsiConsole.WriteLine();
             AnsiConsole.MarkupLine("[dim]Docs:[/] https://github.com/jchristn/Armada");
@@ -169,6 +178,7 @@ namespace Armada.Helm
 
             config.SetApplicationName("armada");
             config.SetApplicationVersion(Constants.ProductVersion);
+            config.SetExceptionHandler(HelmErrorHandler.Handle);
 
             // --- Common commands (top-level, used most often) ---
             config.AddCommand<GoCommand>("go")
@@ -368,6 +378,19 @@ namespace Armada.Helm
                     .WithDescription("Set a configuration value");
                 cfg.AddCommand<ConfigInitCommand>("init")
                     .WithDescription("Interactive setup (optional -- config auto-initializes)");
+            });
+
+            config.AddBranch("profile", profile =>
+            {
+                profile.SetDescription("Saved Admiral targets shared with armada tui (remote servers)");
+                profile.AddCommand<ProfileListCommand>("list")
+                    .WithDescription("List saved Admiral profiles and the active target");
+                profile.AddCommand<ProfileAddCommand>("add")
+                    .WithDescription("Add or update a profile (--server <url>, --token <bearer>, --use)");
+                profile.AddCommand<ProfileUseCommand>("use")
+                    .WithDescription("Make a profile the active target ('local' for this machine)");
+                profile.AddCommand<ProfileRemoveCommand>("remove")
+                    .WithDescription("Remove a profile and its stored token");
             });
 
             config.AddBranch("mcp", mcp =>

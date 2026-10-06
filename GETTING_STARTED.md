@@ -332,6 +332,8 @@ armada mcp      install|remove|stdio
 
 **MCP tools** - 146 tools for fleets, vessels, voyages, missions, captains, signals, events, docks, the merge queue, backlog, fleet actions, and more. Any MCP client can orchestrate Armada. See `docs/MCP_API.md` and `docs/CLAUDE_CODE_AS_ORCHESTRATOR.md`.
 
+**Remote Admiral** - Run the Admiral on a server and use it from other machines: `armada profile add prod --server https://armada.example.com --token <bearer>`, then `--profile prod` (or `armada profile use prod`) on any command, `armada tui --profile prod`, and `armada mcp install --profile prod` for MCP clients. See [docs/REMOTE_SERVER.md](docs/REMOTE_SERVER.md).
+
 ---
 
 ## Running with Docker

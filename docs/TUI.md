@@ -17,7 +17,9 @@ armada tui --server https://armada.example.com --profile prod --route "/missions
 
 With no options the TUI connects to the last profile you used, or to the local Admiral from your Armada settings. `--server` connects to a URL and remembers it as a profile named after the host. `--profile NAME` picks a saved profile (and, combined with `--server`, creates or updates it). `--route` chooses the first screen after sign-in; otherwise you land on the screen you left, and on a first run you land in Ask Armada.
 
-For scripted starts, `ARMADA_URL` supplies the server and `ARMADA_TOKEN` a session token or API key, which skips the login screen when the server accepts it.
+For scripted starts, `ARMADA_SERVER_URL` (or `ARMADA_URL`) supplies the server and `--token` or `ARMADA_TOKEN` a bearer token, session token, or API key, which skips the login screen when the server accepts it.
+
+The `armada` CLI uses the same profiles and stored tokens: `armada profile add NAME --server URL --token TOKEN` saves a server the TUI can open with `--profile NAME`, `armada profile use NAME` makes it the default for both, and a profile you sign in to here is available to CLI commands with `--profile NAME`. For running the Admiral on another machine, see [REMOTE_SERVER.md](REMOTE_SERVER.md).
 
 The terminal needs to be at least 80 columns by 24 rows. Below that the TUI shows a "terminal too small" screen with the size it needs and the size it has (Ctrl+Q still quits) and comes back when you resize. It works in Windows Terminal, iTerm2, kitty, WezTerm, Ghostty, Alacritty, GNOME Terminal, and inside tmux and SSH sessions. Terminal.app and legacy conhost run with fewer mouse and key features.
 
@@ -405,7 +407,7 @@ The header says `x Unreachable` or `o Offline`, or the login screen says "Failed
 
 - Check the Admiral answers: `curl http://127.0.0.1:7890/api/v1/status/health` (use your server's URL). If that fails, the server is not running or not reachable from this machine.
 - Point the TUI at the REST port (`admiralPort`, 7890 by default), not the MCP port (`mcpPort`, 7891 by default). The MCP port answers MCP clients only, so the TUI fails there.
-- Check the scheme: a server behind TLS needs `https://`. `--server URL` connects and saves a profile; in the login screen's Server picker, `e` edits the highlighted server's name and URL. `ARMADA_URL` overrides the server for one run.
+- Check the scheme: a server behind TLS needs `https://`. `--server URL` connects and saves a profile; in the login screen's Server picker, `e` edits the highlighted server's name and URL. `ARMADA_SERVER_URL` (or `ARMADA_URL`) overrides the server for one run.
 - `Live` in the header means the WebSocket is connected. `Healthy` with `Offline` means REST works but the WebSocket does not (a proxy that does not pass WebSocket upgrades, for example); lists still load and refresh on their timers, but live updates and toasts wait until it reconnects (the TUI retries with backoff from 1 to 30 seconds).
 - Through Armada.Proxy, use the proxy's URL; File has Switch Deployment and Proxy Logout.
 
@@ -413,7 +415,7 @@ The header says `x Unreachable` or `o Offline`, or the login screen says "Failed
 
 Ask shows "This captain is not connected to Armada over MCP, so it can answer but cannot propose actions." The captain can chat, but dispatches and other actions need it to reach the Admiral's MCP endpoint. Common causes:
 
-- The captain's MCP configuration points at a different host or port than the Admiral listens on. The MCP listener only answers requests whose Host matches the Admiral's `rest.hostname`: an Admiral bound to `127.0.0.1` rejects `http://localhost:7891/mcp`, and the reverse. Run `armada mcp install` again after changing the hostname or ports, so the client entries match (the Settings Server tab shows the MCP port).
+- The captain's MCP configuration points at a different host or port than the Admiral listens on. When `rest.hostname` names one host or address, the MCP listener only answers requests whose Host matches it (HTTP 404 otherwise): an Admiral bound to `127.0.0.1` rejects `http://localhost:7891/mcp`, and the reverse. Bound to `0.0.0.0`, `*`, or `+`, it accepts any Host; behind a reverse proxy, the proxy must send the bound Host upstream (see [REMOTE_SERVER.md](REMOTE_SERVER.md#3-tls-with-a-reverse-proxy)). Run `armada mcp install` again after changing the hostname or ports, so the client entries match (the Settings Server tab shows the MCP port).
 - The captain runs on another machine (a Harbor, a container) that cannot reach the Admiral's MCP port.
 - The connection goes through Armada.Proxy, which does not relay MCP.
 
@@ -441,7 +443,7 @@ When `NO_COLOR` is set, Theme: Auto picks High contrast, which uses reverse vide
 
 ### SSH and tmux
 
-- Run the TUI on either side of SSH: locally with `--server` pointing at the remote Admiral (through an SSH tunnel such as `ssh -L 7890:127.0.0.1:7890 host` when the port is not exposed), or on the remote host inside your SSH session.
+- Run the TUI on either side of SSH: locally with `--server` pointing at the remote Admiral (through an SSH tunnel such as `ssh -L 7890:127.0.0.1:7890 host` when the port is not exposed), or on the remote host inside your SSH session. The CLI works the same way (`armada mission list --server http://127.0.0.1:7890 --token TOKEN` through the tunnel).
 - tmux: use a 256-color terminal type (`set -g default-terminal "tmux-256color"` or `"screen-256color"`). tmux waits after Esc to see whether a key sequence follows; set `set -sg escape-time 10` so Esc and Alt+arrow keys respond at once.
 - Copying uses OSC 52. In tmux, `set -g set-clipboard on` lets it reach your local clipboard; terminals without OSC 52 get a dialog with the text to select by hand.
 - `F12` hands the mouse back to the terminal so you can select text with it; press `F12` again to give it back to the TUI.

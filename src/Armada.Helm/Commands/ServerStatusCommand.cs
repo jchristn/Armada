@@ -8,9 +8,10 @@ namespace Armada.Helm.Commands
     using Spectre.Console;
     using Spectre.Console.Cli;
     using Armada.Core;
+    using Armada.Helm.Infrastructure;
 
     /// <summary>
-    /// Check Admiral server health.
+    /// Check Admiral server status (the target's unauthenticated health endpoint).
     /// </summary>
     [Description("Check Admiral server status")]
     public class ServerStatusCommand : BaseCommand<ServerStatusSettings>
@@ -18,6 +19,7 @@ namespace Armada.Helm.Commands
         /// <inheritdoc />
         public override async Task<int> ExecuteAsync(CommandContext context, ServerStatusSettings settings, CancellationToken cancellationToken)
         {
+            AdmiralTarget target = GetTarget();
             try
             {
                 using HttpClient client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
@@ -26,6 +28,7 @@ namespace Armada.Helm.Commands
                 {
                     AnsiConsole.MarkupLine("[green]Admiral server is running![/]");
                     AnsiConsole.MarkupLine("[dodgerblue1]Health:[/] healthy");
+                    if (!target.IsLocal) AnsiConsole.MarkupLine("[dodgerblue1]Target:[/] " + Markup.Escape(target.Describe()));
                 }
                 else
                 {
@@ -36,7 +39,13 @@ namespace Armada.Helm.Commands
             catch (HttpRequestException)
             {
                 AnsiConsole.MarkupLine("[red]Admiral server is not reachable.[/]");
-                AnsiConsole.MarkupLine($"[dim]  Tried: {GetBaseUrl()}[/]");
+                AnsiConsole.MarkupLine($"[dim]  Tried: {Markup.Escape(GetBaseUrl())}[/]");
+                return 1;
+            }
+            catch (TaskCanceledException)
+            {
+                AnsiConsole.MarkupLine("[red]Admiral server did not answer within 5 seconds.[/]");
+                AnsiConsole.MarkupLine($"[dim]  Tried: {Markup.Escape(GetBaseUrl())}[/]");
                 return 1;
             }
 
