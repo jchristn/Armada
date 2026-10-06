@@ -239,6 +239,30 @@ namespace Test.Shared.Suites.Tui
                 }
             }));
 
+            cases.Add(TuiCase.Sync(Suite, "new_below_shrinks", "While detached, lines that go away below the reader lower the new-below count (TUIKit's TailFollow.OnContentRemoved)", () =>
+            {
+                AskFixtures fx = LongThread(0);
+                using (TuiTestHost host = TuiCase.SignedIn(120, 30, "/ask/ath_1", fx.Stub))
+                {
+                    AskScreen screen = Loaded(host, 0);
+                    screen.Scope.Focus(screen.Transcript);
+                    host.Press("pgup");
+                    AssertFalse(screen.Transcript.Following, "PgUp detaches");
+                    Inject(host, fx, 300, 3);
+                    int counted = screen.Transcript.NewBelow;
+                    AssertTrue(counted > 0, "new lines counted while detached");
+                    AskMessage local = AskFixtures.Message("local_1", "ath_1", 2000, AskMessageRoleEnum.User, AskMessageKindEnum.Text, "a message that is dropped again");
+                    local.IsLocal = true;
+                    host.Tui.Ask.Conversation.OptimisticUser(local);
+                    host.Screen();
+                    AssertTrue(screen.Transcript.NewBelow > counted, "the added message counts as new below");
+                    host.Tui.Ask.Conversation.DropOptimistic("local_1");
+                    host.Screen();
+                    AssertFalse(screen.Transcript.Following, "still detached");
+                    AssertEqual(counted, screen.Transcript.NewBelow, "the dropped message no longer counts");
+                }
+            }));
+
             cases.Add(TuiCase.Sync(Suite, "strip_localized", "The pending-approval strip and the new hints are translated in every catalog locale, with the count and keys kept", () =>
             {
                 string path = Path.Combine(ApiSurfaceFiles.FindRepositoryRoot(), "src", "Armada.Server", "wwwroot", "i18n", "armada.json");
