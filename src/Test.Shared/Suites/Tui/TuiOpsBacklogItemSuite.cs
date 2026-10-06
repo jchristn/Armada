@@ -135,6 +135,8 @@ namespace Test.Shared.Suites.Tui
                     host.Tui.Context.Events.Inject(AskFixtures.EventJson("objective-refinement-session.message.created",
                         "{\"sessionId\":\"ors_1\",\"objectiveId\":\"obj_a\",\"message\":{\"id\":\"orm_9\",\"objectiveRefinementSessionId\":\"ors_1\",\"objectiveId\":\"obj_a\",\"role\":\"Assistant\",\"sequence\":9,\"content\":\"Live streamed reply\",\"createdUtc\":\"2026-10-04T10:00:00Z\",\"lastUpdateUtc\":\"2026-10-04T10:00:00Z\"}}"));
                     AssertTrue(host.WaitForText("Live streamed reply"), "live message\n" + host.Screen());
+                    AssertTrue(host.SettleRequests(), "requests settled");
+                    AssertTrue(screen.Detail!.Messages.Any(m => m.Id == "orm_9"), "live message kept after the reload Apply started and the send response\n" + host.Screen());
                     host.Press("x");
                     AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/objective-refinement-sessions/ors_1/stop") == 1), "stop");
                     host.Tui.Context.Events.Inject(AskFixtures.EventJson("objective-refinement-session.deleted", "{\"sessionId\":\"ors_1\",\"objectiveId\":\"obj_a\"}"));
@@ -188,6 +190,50 @@ namespace Test.Shared.Suites.Tui
                         host.Pump();
                         AssertTrue(screen.Detail!.Messages.Any(m => m.Id == "orm_9"), "live reply kept after the send response");
                         TuiCase.Contains(host.Screen(), "Fast live reply", "live reply still on screen");
+                    }
+                }
+            }));
+
+            cases.Add(TuiCase.Sync(Suite, "reload_keeps_live_reply", "A captain reply that arrives live while the transcript reloads stays in the transcript", () =>
+            {
+                // Regression (CI Windows net8.0): Apply reloads the sessions and then the selected transcript. A live
+                // reply that arrived while that GET was in flight was replaced by the older response, so the reply
+                // vanished from the transcript.
+                StubHttpHandler stub = Stub();
+                string detailJson;
+                using (HttpClient probe = new HttpClient(stub, false))
+                {
+                    detailJson = probe.GetStringAsync("http://stub/api/v1/objective-refinement-sessions/ors_1").GetAwaiter().GetResult();
+                }
+
+                using (ManualResetEventSlim releaseReload = new ManualResetEventSlim(false))
+                {
+                    int holdReload = 0;
+                    stub.On("GET", "/api/v1/objective-refinement-sessions/ors_1", body =>
+                    {
+                        if (Volatile.Read(ref holdReload) == 1) releaseReload.Wait(TimeSpan.FromSeconds(30));
+                        return StubHttpHandler.Response(HttpStatusCode.OK, detailJson);
+                    });
+
+                    using (TuiTestHost host = TuiCase.SignedIn(160, 50, "/backlog/obj_a", stub))
+                    {
+                        BacklogItemScreen screen = (BacklogItemScreen)host.Tui.Shell.Screen!;
+                        AssertTrue(host.PumpUntil(() => screen.Detail != null), "session detail loaded");
+                        AssertTrue(host.SettleRequests(), "initial load settled");
+                        screen.SelectPanel("transcript");
+                        int gets = stub.CountFor("GET", "/api/v1/objective-refinement-sessions/ors_1");
+                        Volatile.Write(ref holdReload, 1);
+                        host.Press("A");
+                        AssertTrue(host.PumpUntil(() => stub.CountFor("GET", "/api/v1/objective-refinement-sessions/ors_1") == gets + 1), "transcript reload held");
+                        host.Tui.Context.Events.Inject(AskFixtures.EventJson("objective-refinement-session.message.created",
+                            "{\"sessionId\":\"ors_1\",\"objectiveId\":\"obj_a\",\"message\":{\"id\":\"orm_9\",\"objectiveRefinementSessionId\":\"ors_1\",\"objectiveId\":\"obj_a\",\"role\":\"Assistant\",\"sequence\":9,\"content\":\"Reply during reload\",\"createdUtc\":\"2026-10-04T10:00:00Z\",\"lastUpdateUtc\":\"2026-10-04T10:00:00Z\"}}"));
+                        AssertTrue(host.WaitForText("Reply during reload"), "live reply shown\n" + host.Screen());
+
+                        Volatile.Write(ref holdReload, 0);
+                        releaseReload.Set();
+                        AssertTrue(host.SettleRequests(), "reload applied");
+                        AssertTrue(screen.Detail!.Messages.Any(m => m.Id == "orm_9"), "live reply kept after the reload\n" + host.Screen());
+                        TuiCase.Contains(host.Screen(), "Reply during reload", "live reply still on screen");
                     }
                 }
             }));

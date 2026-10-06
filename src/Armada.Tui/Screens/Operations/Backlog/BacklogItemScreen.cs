@@ -471,8 +471,9 @@ namespace Armada.Tui.Screens.Operations
             {
                 if (detail != null)
                 {
-                    ShowDetail(detail);
-                    UpsertSession(detail.Session);
+                    ObjectiveRefinementSessionDetail merged = MergeWithLive(detail);
+                    ShowDetail(merged);
+                    UpsertSession(merged.Session);
                 }
 
                 Toast(NotificationSeverityEnum.Warning, Tr("Refinement session is stopping."));
@@ -509,7 +510,8 @@ namespace Armada.Tui.Screens.Operations
             _SelectedSessionId = sessionId;
             Call((c, t) => c.GetObjectiveRefinementSessionAsync(sessionId, t), detail =>
             {
-                if (_SelectedSessionId == sessionId) ShowDetail(detail);
+                if (_SelectedSessionId != sessionId) return;
+                ShowDetail(detail != null ? MergeWithLive(detail) : null);
             }, null, ex => { if (_SelectedSessionId == sessionId) ShowDetail(null); });
         }
 
@@ -1003,10 +1005,10 @@ namespace Armada.Tui.Screens.Operations
         }
 
         /// <summary>
-        /// Fold a detail from a request response into what live events already delivered for the same session. The
-        /// response can be built before a fast captain reply arrives over the WebSocket, so replacing the transcript
-        /// with it would drop that reply; for each message and for the session, the copy with the later
-        /// <c>LastUpdateUtc</c> wins.
+        /// Fold a detail from a request response (send, stop, or a transcript reload) into what live events already
+        /// delivered for the same session. The response can be built before a fast captain reply arrives over the
+        /// WebSocket, so replacing the transcript with it would drop that reply; for each message and for the session,
+        /// the copy with the later <c>LastUpdateUtc</c> wins.
         /// </summary>
         private ObjectiveRefinementSessionDetail MergeWithLive(ObjectiveRefinementSessionDetail incoming)
         {

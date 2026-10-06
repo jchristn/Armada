@@ -169,10 +169,12 @@ namespace Test.Shared.Suites.Tui
                     Select(host, ApprovalKindEnum.MissionReview);
                     host.Press("m").Type("Add tests").Press("enter");
                     AssertTrue(host.PumpUntil(() => stub.BodiesFor<MissionReviewDenyRequest>("POST", "/api/v1/missions/msn_r/review/deny").Any(d => d.Action == "RetryStage" && d.Comment == "Add tests")), "more work: deny with RetryStage");
+                    Decided(host, ApprovalKindEnum.MissionReview, "msn_r", "more work resolved");
                     Load(host);
                     Select(host, ApprovalKindEnum.MissionReview);
                     host.Press("d").Press("enter");
                     AssertTrue(host.PumpUntil(() => stub.BodiesFor<MissionReviewDenyRequest>("POST", "/api/v1/missions/msn_r/review/deny").Any(d => d.Action == "FailPipeline")), "deny with FailPipeline");
+                    Decided(host, ApprovalKindEnum.MissionReview, "msn_r", "deny resolved");
                     Load(host);
                     Select(host, ApprovalKindEnum.MissionReview);
                     int approvals = stub.CountFor("POST", "/api/v1/missions/msn_r/review/approve");
@@ -194,6 +196,7 @@ namespace Test.Shared.Suites.Tui
                     host.Press("y");
                     AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/deployments/dpl_1/approve") == 1), "approve call");
                     AssertTrue(host.PumpUntil(() => TuiToasts.Has(host, NotificationSeverityEnum.Success, "Deployment \"Release 2.3 hotfix\" updated.")), "toast");
+                    Decided(host, ApprovalKindEnum.DeploymentApproval, "dpl_1", "approve resolved");
                     Load(host);
                     Select(host, ApprovalKindEnum.DeploymentApproval);
                     host.Press("d");
@@ -207,34 +210,15 @@ namespace Test.Shared.Suites.Tui
 
             cases.Add(TuiCase.Sync(Suite, "landing_and_captains", "Retry landing; stop, recall, and restart a stalled captain", () =>
             {
-                using (TuiTestHost host = Host(out StubHttpHandler stub))
-                {
-                    Load(host);
-                    Select(host, ApprovalKindEnum.FailedLanding);
-                    host.Press("l");
-                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/missions/msn_l/retry-landing") == 1), "retry landing");
-                    AssertTrue(host.PumpUntil(() => TuiToasts.Has(host, NotificationSeverityEnum.Success, "Landing succeeded for \"Ship it\"")), "toast");
-                    Select(host, ApprovalKindEnum.StalledCaptain);
-                    host.Press("s");
-                    TuiCase.Contains(host.Screen(), "The captain process will be terminated.", "stop text");
-                    host.Press("y");
-                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/captains/cpt_s/stop") == 1), "stop");
-                    Load(host);
-                    Select(host, ApprovalKindEnum.StalledCaptain);
-                    host.Press("R").Press("y");
-                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/captains/cpt_s/stop") == 2), "recall uses the server's stop (recall) route");
-                    Load(host);
-                    Select(host, ApprovalKindEnum.StalledCaptain);
-                    host.Press("t");
-                    TuiCase.Contains(host.Screen(), "deleted and recreated with", "restart text");
-                    host.Press("y");
-                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/captains") >= 1 && stub.CountFor("DELETE", "/api/v1/captains/cpt_s") == 1), "restart deletes and recreates");
-                    Load(host);
-                    Select(host, ApprovalKindEnum.StalledCaptain);
-                    host.Tui.Context.External.UrlOpener = u => true;
-                    host.Press("enter");
-                    AssertEqual("/captains/cpt_s", host.Tui.Context.Router.Current!.FullPath, "Enter opens the item");
-                }
+                LandingAndCaptains(0);
+            }));
+
+            cases.Add(TuiCase.Sync(Suite, "landing_and_captains_slow_server", "Stop, recall, and restart a stalled captain when each decision returns slowly: the next step starts after the previous decision resolved", () =>
+            {
+                // Regression: the flow waited only for the stop request to reach the server, then re-seeded the queue
+                // and pressed the next key. A slow stop/recall response resolved the decision afterwards and removed
+                // the re-seeded item, so the restart key landed on another row (CI macOS net10.0).
+                LandingAndCaptains(400);
             }));
 
             cases.Add(TuiCase.Sync(Suite, "ask_proposals", "Ask proposals approve, reject, and show arguments from the center", () =>
@@ -384,6 +368,69 @@ namespace Test.Shared.Suites.Tui
             return new TestSuiteDescriptor(suiteId: Suite, displayName: "TUI approvals center", cases: cases);
         }
 
+        /// <summary>
+        /// Retry a landing, then stop, recall, and restart the stalled captain. Each step waits until the previous
+        /// decision resolved (its item left the queue) before re-seeding the queue, and lets in-flight requests finish
+        /// before pressing the next decision key, the way a user takes a moment between keys.
+        /// </summary>
+        /// <param name="delayMs">Delay for the captain decision routes (0 for none), to simulate a slow server.</param>
+        private static void LandingAndCaptains(int delayMs)
+        {
+            using (TuiTestHost host = Host(out StubHttpHandler stub))
+            {
+                if (delayMs > 0)
+                {
+                    stub.Delay("POST", "/api/v1/captains/cpt_s/stop", delayMs);
+                    stub.Delay("POST", "/api/v1/captains", delayMs);
+                }
+
+                Load(host);
+                Select(host, ApprovalKindEnum.FailedLanding);
+                host.Press("l");
+                AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/missions/msn_l/retry-landing") == 1), "retry landing");
+                AssertTrue(host.PumpUntil(() => TuiToasts.Has(host, NotificationSeverityEnum.Success, "Landing succeeded for \"Ship it\"")), "toast");
+                Decided(host, ApprovalKindEnum.FailedLanding, "msn_l", "retry landing resolved");
+                SelectSettled(host, ApprovalKindEnum.StalledCaptain);
+                host.Press("s");
+                TuiCase.Contains(host.Screen(), "The captain process will be terminated.", "stop text");
+                host.Press("y");
+                AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/captains/cpt_s/stop") == 1), "stop");
+                Decided(host, ApprovalKindEnum.StalledCaptain, "cpt_s", "stop resolved");
+                Load(host);
+                SelectSettled(host, ApprovalKindEnum.StalledCaptain);
+                host.Press("R").Press("y");
+                AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/captains/cpt_s/stop") == 2), "recall uses the server's stop (recall) route");
+                Decided(host, ApprovalKindEnum.StalledCaptain, "cpt_s", "recall resolved");
+                Load(host);
+                SelectSettled(host, ApprovalKindEnum.StalledCaptain);
+                host.Press("t");
+                TuiCase.Contains(host.Screen(), "deleted and recreated with", "restart text");
+                host.Press("y");
+                AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/captains") >= 1 && stub.CountFor("DELETE", "/api/v1/captains/cpt_s") == 1), "restart deletes and recreates");
+                Decided(host, ApprovalKindEnum.StalledCaptain, "cpt_s", "restart resolved");
+                Load(host);
+                SelectSettled(host, ApprovalKindEnum.StalledCaptain);
+                host.Tui.Context.External.UrlOpener = u => true;
+                host.Press("enter");
+                AssertEqual("/captains/cpt_s", host.Tui.Context.Router.Current!.FullPath, "Enter opens the item");
+            }
+        }
+
+        /// <summary>
+        /// Wait until a decision resolved: its item left the queue. Waiting only for the request to reach the server is
+        /// not enough, because the response removes the item later and would remove an item the next step re-seeded.
+        /// </summary>
+        private static void Decided(TuiTestHost host, ApprovalKindEnum kind, string entityId, string what)
+        {
+            AssertTrue(host.PumpUntil(() => host.Tui.Context.Approvals.Find(kind, entityId) == null), what + "\n" + host.Screen());
+        }
+
+        private static ApprovalsScreen SelectSettled(TuiTestHost host, ApprovalKindEnum kind)
+        {
+            AssertTrue(host.SettleRequests(), "requests settled");
+            return Select(host, kind);
+        }
+
         private static void ClickButton(TuiTestHost host, ApprovalsScreen screen, string itemKey, char decision)
         {
             host.Screen();
@@ -416,10 +463,11 @@ namespace Test.Shared.Suites.Tui
 
         private static void Load(TuiTestHost host)
         {
-            host.Tui.ApprovalSources.SyncInbox();
             host.Tui.Context.Status.PollAllAsync().GetAwaiter().GetResult();
-            host.PumpUntil(() => host.Tui.Context.Approvals.Count >= 4);
+            host.Pump();
+            host.Tui.ApprovalSources.SyncInbox();
             ForceResync(host);
+            AssertTrue(host.Tui.Context.Approvals.Count >= 4, "queue loaded\n" + host.Screen());
         }
 
         private static void ForceResync(TuiTestHost host)
