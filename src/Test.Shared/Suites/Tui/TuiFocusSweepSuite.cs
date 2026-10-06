@@ -57,6 +57,32 @@ namespace Test.Shared.Suites.Tui
                 }));
             }
 
+            cases.Add(TuiCase.Sync(Suite, "focus_audit", "TUIKit's FocusAudit on every route, with and without data: Tab returns to the first stop, Shift+Tab retraces every stop, no stop is hidden, and the layout never moves with focus", () =>
+            {
+                List<string> problems = new List<string>();
+                int audited = 0;
+                foreach (string path in TuiDisplaySuite.AllPaths())
+                {
+                    using (TuiTestHost host = TuiCase.SignedIn(120, 40, path))
+                    {
+                        audited += Audit(host, path, problems);
+                    }
+                }
+
+                foreach (TuiFocusRoute route in DataRoutes())
+                {
+                    using (TuiTestHost host = TuiCase.SignedIn(route.Width, route.Height, route.Path, route.Stub()))
+                    {
+                        // The record has to be on screen first: stops appear as its fields load.
+                        Settle(host);
+                        audited += Audit(host, route.Path + "@" + route.Width + "x" + route.Height, problems);
+                    }
+                }
+
+                Report(problems);
+                AssertTrue(audited >= TuiDisplaySuite.AllPaths().Count, "audited most routes (" + audited + ")");
+            }));
+
             cases.Add(TuiCase.Sync(Suite, "routes_with_data", "Record pages, panels, and forms with data: one focused box around the focused pane at every Tab stop", () =>
             {
                 List<string> problems = new List<string>();
@@ -303,6 +329,40 @@ namespace Test.Shared.Suites.Tui
             routes.Add(new TuiFocusRoute("/requests/req_1", 160, 50, TuiRequestHistorySuite.Stub));
             routes.Add(new TuiFocusRoute("/setup", 140, 50, TuiSetupWizardSuite.PopulatedServer));
             return routes;
+        }
+
+        /// <summary>
+        /// Run TUIKit's <see cref="FocusAudit"/> on a host's started application (hosts share the process, see
+        /// <see cref="TuiTestHost.StartApp"/>) with any error dialog closed (again if one opens during the audit). The audit's
+        /// focus-indicator check is off: Armada draws every box inside one TUIKit region, so TUIKit sees no region frame,
+        /// and <see cref="TuiFocusSweep"/> checks the boxes cell by cell instead. The import wizard is skipped: it keeps Tab
+        /// inside the wizard, so Tab stops moving at its last stop.
+        /// </summary>
+        /// <param name="host">Host.</param>
+        /// <param name="label">Route label for problems.</param>
+        /// <param name="problems">Problems found.</param>
+        /// <returns>1 when the route was audited, 0 when it was skipped.</returns>
+        private static int Audit(TuiTestHost host, string label, List<string> problems)
+        {
+            if (label.StartsWith("/vessels/import", StringComparison.Ordinal)) return 0;
+            host.StartApp();
+            FocusAuditOptions options = new FocusAuditOptions();
+            options.CheckFocusIndicator = false;
+            for (int attempt = 0; attempt < 4; attempt++)
+            {
+                host.Pump();
+                for (int i = 0; i < 4 && host.Tui.Context.Modals.IsModalOpen; i++) host.Press("esc");
+                if (host.Tui.Context.Modals.IsModalOpen) break;
+                FocusAuditResult result = FocusAudit.Run(host.App, options);
+                // A route without data reports its failed load in a dialog, which takes Tab while it is open; audit again
+                // once it is closed.
+                if (host.Tui.Context.Modals.IsModalOpen) continue;
+                foreach (FocusAuditProblem problem in result.Problems) problems.Add(label + ": " + problem);
+                return 1;
+            }
+
+            problems.Add(label + ": a dialog stayed open");
+            return 0;
         }
 
         private static void Settle(TuiTestHost host)

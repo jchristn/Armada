@@ -186,10 +186,11 @@ namespace Armada.Tui.Widgets
         }
 
         /// <summary>
-        /// True when a widget can take focus now: it is focusable, shown with something to interact with and enabled
-        /// (TUIKit's <see cref="TUIKit.Widgets.FocusScope.IsFocusable"/>: <see cref="IHideable"/> and
-        /// <see cref="IEnableable"/>), and, for Armada widgets, <see cref="ArmadaWidget.CanFocus"/>. Tab stops and focus
-        /// regions (<see cref="RegionFrames"/>) use the same test.
+        /// True when a widget can take focus now: it is focusable, shown with something to interact with, enabled, and a
+        /// Tab stop (TUIKit's <see cref="TUIKit.Widgets.FocusScope.IsTabStop"/>: <see cref="IHideable"/>,
+        /// <see cref="IEnableable"/>, and <see cref="IFocusStop"/>, which Armada widgets answer with
+        /// <see cref="ArmadaWidget.CanFocus"/>). Tab stops and focus regions (<see cref="RegionFrames"/>) use the same
+        /// test.
         /// </summary>
         /// <param name="child">Widget.</param>
         /// <returns>True for a focus stop.</returns>
@@ -252,7 +253,19 @@ namespace Armada.Tui.Widgets
         }
 
         /// <summary>
-        /// Move focus forward or backward; returns false at a boundary when <see cref="Wrap"/> is off.
+        /// Focus the first (or last) stop, and the first (or last) stop of every container entered on the way down
+        /// (TUIKit's <see cref="IFocusContainer.FocusEdge"/>), so the focused leaf is the scope's first (or last) Tab stop.
+        /// </summary>
+        /// <param name="first">True for the first stop; false for the last.</param>
+        public void FocusEdge(bool first)
+        {
+            if (!(first ? FocusFirst() : FocusLast())) return;
+            if (Focused is IFocusContainer container) container.FocusEdge(first);
+        }
+
+        /// <summary>
+        /// Move focus forward or backward, entering a container at its first (or, backward, last) stop all the way down;
+        /// returns false at a boundary when <see cref="Wrap"/> is off.
         /// </summary>
         /// <param name="forward">Direction.</param>
         /// <returns>True when focus moved.</returns>
@@ -273,12 +286,9 @@ namespace Armada.Tui.Widgets
                 {
                     if (i == _Index) return false;
                     SetIndex(i);
-                    if (_Children[i] is IFocusScopeOwner owner)
-                    {
-                        if (forward) owner.Scope.FocusFirst();
-                        else owner.Scope.FocusLast();
-                    }
-
+                    // Enter a container at its first (or, going back, last) stop all the way down, so Tab and Shift+Tab
+                    // retrace the same stops (TUIKit's IFocusContainer.FocusEdge).
+                    if (_Children[i] is IFocusContainer container) container.FocusEdge(forward);
                     return true;
                 }
             }
@@ -418,9 +428,10 @@ namespace Armada.Tui.Widgets
 
         private static bool CanTakeFocus(IWidget child)
         {
-            // Hidden widgets, and containers left with nothing to focus (ContainerWidget.IsVisible), are not stops.
-            if (!(child is IFocusable) || !TUIKit.Widgets.FocusScope.IsFocusable(child)) return false;
-            return !(child is ArmadaWidget aw) || aw.CanFocus;
+            // TUIKit's Tab-stop test: hidden widgets and containers left with nothing to focus (IHideable, see
+            // ContainerWidget.IsVisible), disabled ones (IEnableable), and Armada widgets that cannot take focus
+            // (IFocusStop, see ArmadaWidget.CanFocus) are not stops.
+            return child is IFocusable && TUIKit.Widgets.FocusScope.IsTabStop(child);
         }
 
         private static void Notify(IWidget? widget, bool focused)
