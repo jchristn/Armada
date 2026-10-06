@@ -2,7 +2,9 @@ namespace Test.Shared.Suites.Tui
 {
     using System;
     using System.Collections.Generic;
+    using System.IO;
     using System.Linq;
+    using System.Text;
     using Armada.Tui.Screens;
     using Armada.Tui.Shell;
     using Armada.Tui.Theming;
@@ -98,6 +100,7 @@ namespace Test.Shared.Suites.Tui
             CellBuffer frame = Render(host);
             // A dialog that opened while rendering (an error report) holds focus now.
             if (host.Tui.Context.Modals.IsModalOpen) return CheckModal(host, label + " dialog");
+            Dump(frame, label);
             ArmadaTheme theme = shell.Theme;
             ShellLayout? layout = shell.LastLayout;
             if (layout == null)
@@ -237,6 +240,7 @@ namespace Test.Shared.Suites.Tui
             CellBuffer frame = Render(host);
             if (!shell.LastFocusedBox.IsEmpty) problems.Add(label + ": a pane box " + shell.LastFocusedBox + " is focused behind the dialog");
             host.App.Modals.Render(new BufferSurface(frame));
+            Dump(frame, label);
             if (!(host.App.Modals.Top is Armada.Tui.Modals.ArmadaDialog dialog))
             {
                 problems.Add(label + ": the top modal is not an Armada dialog");
@@ -376,6 +380,64 @@ namespace Test.Shared.Suites.Tui
             }
 
             return result;
+        }
+
+        #endregion
+
+        #region Private-Methods
+
+        private static readonly HashSet<string> _Dumped = new HashSet<string>(StringComparer.Ordinal);
+
+        /// <summary>
+        /// Write a checked frame (text, then one style letter per cell and the style legend) to the directory named by
+        /// <c>ARMADA_TUI_SWEEP_DUMP</c>, so the frames of two builds can be compared cell by cell. Does nothing when the
+        /// variable is unset.
+        /// </summary>
+        /// <param name="frame">Frame.</param>
+        /// <param name="label">Check label (the file name).</param>
+        private static void Dump(CellBuffer frame, string label)
+        {
+            string? dir = Environment.GetEnvironmentVariable("ARMADA_TUI_SWEEP_DUMP");
+            if (String.IsNullOrEmpty(dir)) return;
+            StringBuilder name = new StringBuilder();
+            foreach (char c in label) name.Append(Char.IsLetterOrDigit(c) || c == '-' || c == '@' ? c : '_');
+            string file;
+            lock (_Dumped)
+            {
+                string baseName = name.ToString();
+                string candidate = baseName;
+                for (int n = 2; !_Dumped.Add(candidate); n++) candidate = baseName + "-" + n;
+                file = candidate;
+            }
+
+            List<string> styles = new List<string>();
+            StringBuilder text = new StringBuilder();
+            StringBuilder grid = new StringBuilder();
+            for (int y = 0; y < frame.Height; y++)
+            {
+                for (int x = 0; x < frame.Width; x++)
+                {
+                    Cell cell = frame.Get(x, y);
+                    if (!cell.IsContinuation) text.Append(String.IsNullOrEmpty(cell.Grapheme) ? " " : cell.Grapheme);
+                    string key = cell.Style.Foreground + "/" + cell.Style.Background + "/" + (int)cell.Style.Attributes;
+                    int index = styles.IndexOf(key);
+                    if (index < 0)
+                    {
+                        styles.Add(key);
+                        index = styles.Count - 1;
+                    }
+
+                    grid.Append((char)(index < 26 ? 'a' + index : (index < 52 ? 'A' + index - 26 : '0' + Math.Min(9, index - 52))));
+                }
+
+                text.Append('\n');
+                grid.Append('\n');
+            }
+
+            StringBuilder legend = new StringBuilder();
+            for (int i = 0; i < styles.Count; i++) legend.Append(i).Append(' ').Append(styles[i]).Append('\n');
+            Directory.CreateDirectory(dir!);
+            File.WriteAllText(Path.Combine(dir!, file + ".txt"), text + "\n" + grid + "\n" + legend);
         }
 
         #endregion
