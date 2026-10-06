@@ -260,7 +260,8 @@ namespace Test.Shared.Suites.Tui
                     try
                     {
                         System.Threading.Tasks.Task run = loop.RunAsync();
-                        Thread.Sleep(150);
+                        // Wait for the loop to compose a frame rather than a fixed 150 ms (a slow runner may need longer).
+                        AssertTrue(SpinWait.SpinUntil(() => g.Composed > 0, 10000), "the loop composed a frame");
                         long composed = g.Composed;
                         host.Backend.FeedInput("\u0011");
                         AssertTrue(run.Wait(3000), "Ctrl+Q ended the loop");
