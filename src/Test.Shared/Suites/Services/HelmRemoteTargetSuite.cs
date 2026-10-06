@@ -8,8 +8,10 @@ namespace Test.Shared.Suites.Services
     using System.Net.Http;
     using System.Net.Http.Json;
     using System.Text.Json;
+    using System.Text.Json.Serialization;
     using System.Threading;
     using System.Threading.Tasks;
+    using Spectre.Console;
     using Spectre.Console.Cli;
     using Armada.Core.Models;
     using Armada.Helm;
@@ -234,6 +236,71 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("mission_create_prints_server_mission", "mission create prints the server's created mission for both reply shapes (it used to print a default 'New Mission' with a random id for the wrapped Pending reply)", TestTags.Negative, async () =>
+            {
+                string wrapped = "{\"Mission\":{\"Id\":\"msn_server_wrapped\",\"Title\":\"Fix the login bug\",\"Status\":\"Pending\"},\"Warning\":\"Mission created but could not be assigned to any captain.\"}";
+                string bare = "{\"Id\":\"msn_server_bare\",\"Title\":\"Fix the login bug\",\"Status\":\"Assigned\",\"CaptainId\":\"cpt_server_1\"}";
+                Dictionary<string, string> replies = new Dictionary<string, string> { ["msn_server_wrapped"] = wrapped, ["msn_server_bare"] = bare };
+                foreach (KeyValuePair<string, string> reply in replies)
+                {
+                    using (RecordingAdmiralStub stub = new RecordingAdmiralStub())
+                    {
+                        stub.MissionCreateReply = reply.Value;
+                        CliRun run = await RunCliCapturedAsync("mission", "create", "Fix the login bug", "--server", stub.BaseUrl, "--token", "tok").ConfigureAwait(false);
+                        AssertEqual(0, run.ExitCode, reply.Key);
+                        AssertTrue(stub.Requests().Any(r => r.Method == "POST" && r.Path == "/api/v1/missions"), "the mission was posted to the --server URL");
+                        AssertContains(reply.Key, run.Output, "prints the server's mission id");
+                        AssertContains("Fix the login bug", run.Output, "prints the server's title");
+                        AssertFalse(run.Output.Contains("New Mission"), "never prints a default-constructed mission: " + run.Output);
+                        if (reply.Key == "msn_server_wrapped")
+                        {
+                            AssertContains("Status: Pending", run.Output);
+                            AssertContains("could not be assigned", run.Output, "the warning is shown");
+                        }
+                        else
+                        {
+                            AssertContains("Status: Assigned", run.Output);
+                            AssertContains("cpt_server_1", run.Output);
+                        }
+                    }
+                }
+            }));
+
+            cases.Add(CaseAsync("mission_create_against_admiral_prints_created_id", "mission create against a throwaway Admiral prints the id of the mission the Admiral stored", TestTags.Negative, async () =>
+            {
+                SecurityTestServer server = await SecurityTestServer.PrepareAsync("127.0.0.1", null).ConfigureAwait(false);
+                try
+                {
+                    await server.StartAsync().ConfigureAwait(false);
+                    string bearer;
+                    using (HttpClient admin = server.CreateRestClient(true))
+                    {
+                        HttpResponseMessage created = await admin.PostAsJsonAsync("/api/v1/credentials", new Credential("default", "default") { Name = "cli-mission", Active = true }).ConfigureAwait(false);
+                        Credential? credential = JsonSerializer.Deserialize<Credential>(await created.Content.ReadAsStringAsync().ConfigureAwait(false), new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                        bearer = credential?.BearerToken ?? "";
+                        AssertFalse(String.IsNullOrEmpty(bearer), "bearer token");
+                    }
+
+                    CliRun run = await RunCliCapturedAsync("mission", "create", "Cli created mission", "--server", server.BaseUrl, "--token", bearer).ConfigureAwait(false);
+                    AssertEqual(0, run.ExitCode);
+                    AssertFalse(run.Output.Contains("New Mission"), run.Output);
+
+                    using (HttpClient admin = server.CreateRestClient(true))
+                    {
+                        string listJson = await admin.GetStringAsync("/api/v1/missions").ConfigureAwait(false);
+                        EnumerationResult<Mission>? list = JsonSerializer.Deserialize<EnumerationResult<Mission>>(listJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true, Converters = { new JsonStringEnumConverter() } });
+                        Mission? stored = list?.Objects?.FirstOrDefault(m => m.Title == "Cli created mission");
+                        AssertNotNull(stored, "the Admiral stored the mission");
+                        AssertContains(stored!.Id, run.Output, "the printed id is the stored mission's id");
+                        AssertContains("Status: " + stored.Status, run.Output, "the printed status is the stored status");
+                    }
+                }
+                finally
+                {
+                    server.Dispose();
+                }
+            }));
+
             cases.Add(CaseAsync("local_only_commands_refuse_remote_target", "server start, reset, config set, config init, and mcp stdio refuse a remote target with a typed error", TestTags.Negative, async () =>
             {
                 string remote = "http://192.0.2.10:7890";
@@ -410,6 +477,32 @@ namespace Test.Shared.Suites.Services
             }
         }
 
+        private static async Task<CliRun> RunCliCapturedAsync(params string[] args)
+        {
+            // The runner executes cases one at a time, so swapping the global console for the call is safe.
+            IAnsiConsole previous = AnsiConsole.Console;
+            StringWriter writer = new StringWriter();
+            AnsiConsole.Console = AnsiConsole.Create(new AnsiConsoleSettings
+            {
+                Ansi = AnsiSupport.No,
+                ColorSystem = ColorSystemSupport.NoColors,
+                Interactive = InteractionSupport.No,
+                Out = new AnsiConsoleOutput(writer)
+            });
+            try
+            {
+                int exit = await RunCliAsync(args).ConfigureAwait(false);
+                CliRun run = new CliRun();
+                run.ExitCode = exit;
+                run.Output = writer.ToString();
+                return run;
+            }
+            finally
+            {
+                AnsiConsole.Console = previous;
+            }
+        }
+
         private static async Task<AdmiralTargetException> ExpectTargetErrorAsync<T>(Func<Task<T>> action)
         {
             try
@@ -451,6 +544,13 @@ namespace Test.Shared.Suites.Services
         #endregion
 
         #region Private-Classes
+
+        private sealed class CliRun
+        {
+            public int ExitCode { get; set; } = 0;
+
+            public string Output { get; set; } = "";
+        }
 
         private sealed class ProfileFixture
         {

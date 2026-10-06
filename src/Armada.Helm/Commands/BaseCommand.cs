@@ -8,6 +8,7 @@ namespace Armada.Helm.Commands
     using System.Text.Json.Serialization;
     using Spectre.Console;
     using Spectre.Console.Cli;
+    using Armada.Client.Models;
     using Armada.Core;
     using Armada.Core.Client;
     using Armada.Core.Models;
@@ -520,6 +521,23 @@ namespace Armada.Helm.Commands
                 throw await FailAsync(response, "POST " + path).ConfigureAwait(false);
             string json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
             return JsonSerializer.Deserialize<T>(json, _JsonOptions);
+        }
+
+        /// <summary>
+        /// Create a mission with <c>POST /api/v1/missions</c>. The Admiral replies with the bare mission when a captain
+        /// took it and with <c>{ Mission, Warning }</c> when the mission stays Pending; both shapes are read, so the
+        /// caller always gets the server's created mission (never a default-constructed one) and the warning.
+        /// </summary>
+        /// <param name="body">Mission request body.</param>
+        /// <returns>The created mission and optional warning, or null when the reply had no body.</returns>
+        protected async Task<MissionDispatchResult?> CreateMissionAsync(object body)
+        {
+            await EnsureServerAsync().ConfigureAwait(false);
+            HttpResponseMessage response = await GetHttpClient().PostAsJsonAsync(GetBaseUrl() + "/api/v1/missions", body, _JsonOptions).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+                throw await FailAsync(response, "POST /api/v1/missions").ConfigureAwait(false);
+            string json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            return MissionDispatchResult.Parse(json);
         }
 
         /// <summary>

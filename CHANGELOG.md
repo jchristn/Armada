@@ -352,6 +352,10 @@ Focus: the first stable release -- security hardening, a frozen and documented A
 
 - TUI: the notification center keeps its highlight on the same entry when new notifications arrive while it is open, so Enter opens the highlighted entry instead of whatever moved into its position. Found by an intermittent live test that assumed the newest entry was its own.
 
+- CLI: `armada mission create` printed a different mission ("New Mission", a random id, Pending) than the one it created whenever the Admiral replied with `{ Mission, Warning }` (no captain could take the mission yet): it read the wrapped reply as a bare mission. It now prints the server's created mission (id, title, status, captain) and the warning, locally and with `--server`. `mission retry` and `voyage retry` had the same bug and printed a random new id; `ArmadaApiClient.CreateMissionAsync` now reads both reply shapes too.
+
+- `armada server restart` (and the dashboard's restart) against an Admiral started as `dotnet Armada.Server.dll` relaunched a bare `dotnet`, which printed its usage and exited, so the Admiral never came back. The replacement now runs on the same host with the same arguments: `<same dotnet> <Armada.Server.dll> <original args>` for a dotnet-hosted Admiral, the executable directly for a native one, and a slot's `Armada.Server.dll` through the running dotnet host when the slot has no apphost. `--run-service` is not passed to the detached replacement.
+
 ### CI and test fixes
 - Fixed: fleet categorization finished its job before it released the captain and the re-run guard, and its heartbeat could write a finished job back to Running. A caller acting on the finished job saw the captain still Analyzing, got "Fleet categorization ... is already running" on a re-run, or waited for a job that never left Running. The captain is now released as soon as its process returns, the heartbeat is stopped first, and the job's terminal state is written last.
 - Fixed: background vessel discovery had the same heartbeat race, so a discovery job could stay Running after the batch reached Discovered.

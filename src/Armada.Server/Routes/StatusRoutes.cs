@@ -339,8 +339,8 @@ namespace Armada.Server.Routes
                     }
                 }
 
-                string replacementExe = await ResolveCurrentExecutableAsync().ConfigureAwait(false);
-                if (!ReplacementProcessLauncher.Launch(replacementExe, _logging, _HeaderRestart))
+                ReplacementCommand? replacement = await ResolveRestartCommandAsync().ConfigureAwait(false);
+                if (replacement == null || !ReplacementProcessLauncher.Launch(replacement, _logging, _HeaderRestart))
                 {
                     req.Http.Response.StatusCode = 500;
                     return new ApiErrorResponse { Error = ApiResultEnum.InternalError, Message = "Unable to launch a replacement Admiral process; server was not restarted." };
@@ -606,27 +606,31 @@ namespace Armada.Server.Routes
                 .WithSecurity("ApiKey"));
         }
 
-        private async Task<string> ResolveCurrentExecutableAsync()
+        private async Task<ReplacementCommand?> ResolveRestartCommandAsync()
         {
-            // Prefer the executable named by the active slot pointer so a restart after a rebuild comes up on
-            // the new build. Fall back to the currently running executable when no slot pointer is present
-            // (e.g. a classic non-slot install), preserving the original restart behavior.
+            // Prefer the build named by the active slot pointer so a restart after a rebuild comes up on the new
+            // build (its apphost, or its Armada.Server.dll through the dotnet host). Fall back to the running process
+            // when no slot pointer is present (a classic non-slot install): the same native executable, or the same
+            // dotnet host and server assembly, with the same arguments.
             try
             {
                 string? currentSlot = await _slots.ReadCurrentAsync().ConfigureAwait(false);
                 if (!String.IsNullOrWhiteSpace(currentSlot))
                 {
                     string slotExe = _slots.GetSlotExecutablePath(currentSlot!);
-                    if (File.Exists(slotExe)) return slotExe;
-                    _logging.Warn(_HeaderRestart + "current slot '" + currentSlot + "' executable not found at " + slotExe + "; falling back to the running executable");
+                    ReplacementCommand? slotCommand = ReplacementProcessLauncher.BuildForServerExecutable(slotExe);
+                    if (slotCommand != null) return slotCommand;
+                    _logging.Warn(_HeaderRestart + "current slot '" + currentSlot + "' has no executable at " + slotExe + " and no " + ReplacementProcessLauncher.ServerAssemblyFileName + "; falling back to the running process");
                 }
             }
             catch (Exception e)
             {
-                _logging.Warn(_HeaderRestart + "could not resolve the current slot; falling back to the running executable: " + e.Message);
+                _logging.Warn(_HeaderRestart + "could not resolve the current slot; falling back to the running process: " + e.Message);
             }
 
-            return Environment.ProcessPath ?? String.Empty;
+            ReplacementCommand? command = ReplacementProcessLauncher.BuildForCurrentProcess();
+            if (command == null) _logging.Warn(_HeaderRestart + "could not determine how this process was started (" + (Environment.ProcessPath ?? "no process path") + "); restart aborted");
+            return command;
         }
 
         private const string _RedactedSecret = "********";

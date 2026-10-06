@@ -9,7 +9,7 @@ namespace Test.Shared.Infrastructure
 
     /// <summary>
     /// A loopback HTTP stub standing in for a remote Admiral: answers the health endpoint and the mission and fleet
-    /// lists with empty pages, and records every request (path and credential headers) so tests can assert where the
+    /// lists with empty pages (and mission creation with <see cref="MissionCreateReply"/>), and records every request (path and credential headers) so tests can assert where the
     /// CLI sent its calls and with which credential.
     /// </summary>
     public sealed class RecordingAdmiralStub : IDisposable
@@ -20,6 +20,11 @@ namespace Test.Shared.Infrastructure
         /// Base URL, for example http://127.0.0.1:23456.
         /// </summary>
         public string BaseUrl { get; }
+
+        /// <summary>
+        /// Body returned (status 201) for <c>POST /api/v1/missions</c>; null answers that request with 404.
+        /// </summary>
+        public string? MissionCreateReply { get; set; } = null;
 
         #endregion
 
@@ -101,7 +106,13 @@ namespace Test.Shared.Infrastructure
 
                 string body;
                 int status = 200;
+                string? missionCreateReply = MissionCreateReply;
                 if (recorded.Path == "/api/v1/status/health") body = "{\"Status\":\"healthy\"}";
+                else if (recorded.Path == "/api/v1/missions" && recorded.Method == "POST" && missionCreateReply != null)
+                {
+                    status = 201;
+                    body = missionCreateReply;
+                }
                 else if (recorded.Path == "/api/v1/missions" || recorded.Path == "/api/v1/fleets")
                     body = "{\"Success\":true,\"PageNumber\":1,\"PageSize\":100,\"TotalPages\":0,\"TotalRecords\":0,\"Objects\":[]}";
                 else

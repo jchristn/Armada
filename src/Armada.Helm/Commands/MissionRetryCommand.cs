@@ -4,6 +4,7 @@ namespace Armada.Helm.Commands
     using System.Threading;
     using Spectre.Console;
     using Spectre.Console.Cli;
+    using Armada.Client.Models;
     using Armada.Core;
     using Armada.Core.Enums;
     using Armada.Core.Models;
@@ -47,7 +48,7 @@ namespace Armada.Helm.Commands
             }
 
             // Re-create as a new mission with the same details
-            Mission? retried = await PostAsync<Mission>("/api/v1/missions", new
+            MissionDispatchResult? result = await CreateMissionAsync(new
             {
                 Title = mission.Title,
                 Description = mission.Description,
@@ -55,6 +56,7 @@ namespace Armada.Helm.Commands
                 VoyageId = mission.VoyageId,
                 Priority = mission.Priority
             }).ConfigureAwait(false);
+            Mission? retried = result?.Mission;
 
             if (retried != null)
             {
