@@ -618,15 +618,17 @@ armada tui --profile work --route /missions
 |-----|------|
 | `Ctrl+K` | Command palette: every screen, tab, and command; type an id (`msn_...`, `vsl_...`) to open it |
 | `g` then a letter | Go to, for example: `g a` Ask, `g h` Home, `g i` Needs You, `g m` Missions, `g v` Vessels, `g c` Captains, `g d` Delivery, `g s` Settings |
-| `Ctrl+A` | Approvals center (Ask proposals, reviews, deployment approvals, failed landings, stalled captains) |
+| `Ctrl+A` | Approvals center (Ask proposals, CLI tool permission requests, reviews, deployment approvals, failed landings, stalled captains) |
 | `Ctrl+J` | Ask dock on any screen (in the Ask message box, `Ctrl+J` adds a line) |
 | `Alt+A` | Ask about this: a new conversation about the current screen's subject |
 | `z` / `Z` | Tables: cycle the page size / choose it (10, 25, 50, 100, 250) |
 | `Left` / `Right`, `[` / `]` | Hub tabs (`Left`/`Right` with the tab strip focused); `[` / `]` also switch detail panels |
 | `Esc`, `Alt+Down` | In Ask: leave the message box for the conversation (then `a` approve, `r` reject on a card); go straight to the oldest card waiting for approval |
+| `Tab` / `Shift+Tab`, `F6` | Next / previous focus region (`Shift+Tab` retraces `Tab` exactly, entering a form or list at its last stop); `F6` jumps between panes |
+| `g k` | CLI Tool Permissions: pending requests and the allow and deny rules |
 | `F10`, `?`, `Ctrl+N` | Menu bar, help for the current screen (`F1` while typing), notification center |
 
-The status bar hints follow whatever has keyboard focus: in a text field (the Ask message box, a filter row, a form field) the first hint says how to leave it and what that unlocks, and on a list or card they show that item's keys. Ask shows a strip above the message box while an action waits for approval, and confirm cards and Approvals center rows have clickable `[Approve]` / `[Reject]` (and `[Deny]`) buttons.
+The status bar hints follow whatever has keyboard focus: in a text field (the Ask message box, a filter row, a form field) the first hint says how to leave it and what that unlocks, and on a list or card they show that item's keys. Ask shows a strip above the message box while an action waits for approval, and confirm cards and Approvals center rows have clickable `[Approve]` / `[Reject]` (and `[Deny]`) buttons. In the conversation, `a` and `r` act on whatever you have highlighted that is waiting on a decision (the card, the captain reply that proposed it, or a work card row), and a CLI tool permission card takes `a` (allow once), `A` (allow and remember, admins), and `d` (deny). The transcript keeps following new messages while you are at the bottom, even with a card selected; scrolling up stops it, and `End` or any decision brings it back.
 
 **Display.** Dark, Light, High contrast, and Auto themes (Auto picks High contrast when `NO_COLOR` is set); Icons: Auto, Unicode, or ASCII (ASCII is picked automatically on non-UTF-8 terminals); no state is shown by color alone; works from 80x24 up; the dashboard's nine languages. Every pane and every focus region of a screen (tab bar, filter row, grid, form, the Ask conversation list, transcript, and message box) sits in its own box, and the one that has keyboard focus is drawn whole with heavy lines in the focus color (`#` and `=` in ASCII), the same way on every screen.
 
@@ -712,7 +714,7 @@ Armada is a C#/.NET solution with these main projects:
 | **Armada.Server** | Admiral process: REST API + WebSocket ([Watson](https://github.com/jchristn/watson)), MCP server ([Voltaic](https://github.com/jchristn/voltaic)), embedded dashboard |
 | **Armada.Dashboard** | React dashboard, served by the Admiral at `/dashboard` and also available as a standalone container |
 | **Armada.Helm** | CLI ([Spectre.Console](https://spectreconsole.net/)), thin HTTP client to Admiral; hosts `armada tui` |
-| **Armada.Tui** | Terminal UI (built on the TUIKit NuGet package) covering every dashboard screen (see [docs/TUI.md](docs/TUI.md)) |
+| **Armada.Tui** | Terminal UI (built on the TUIKit 1.5.0 NuGet package) covering every dashboard screen (see [docs/TUI.md](docs/TUI.md)) |
 | **Armada.Client** | Typed .NET client for the REST API and WebSocket, used by the TUI |
 | **Armada.Harbor** | Avalonia host-runner app that opens an authenticated link to the Admiral and executes agent processes, git, and worktrees on the developer's machine (see [docs/HARBOR.md](docs/HARBOR.md)) |
 | **Armada.Proxy** | Optional remote-access portal and relay (see [docs/REMOTE_MGMT.md](docs/REMOTE_MGMT.md)) |
