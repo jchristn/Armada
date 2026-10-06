@@ -167,9 +167,9 @@ namespace Armada.Proxy
 
             server.Middleware.Add(async (ctx, next, token) =>
             {
-                DateTime startUtc = DateTime.UtcNow;
+                long started = System.Diagnostics.Stopwatch.GetTimestamp();
                 await next().ConfigureAwait(false);
-                double elapsedMs = (DateTime.UtcNow - startUtc).TotalMilliseconds;
+                double elapsedMs = System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds;
                 _Logging.Debug(_Header + ctx.Request.Method + " " + ctx.Request.Url.RawWithoutQuery + " " + ctx.Response.StatusCode + " (" + elapsedMs.ToString("F2") + "ms)");
             });
 

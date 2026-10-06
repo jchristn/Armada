@@ -57,6 +57,17 @@ namespace Armada.Tui.Services
         /// </summary>
         public event EventHandler? Changed;
 
+        /// <summary>
+        /// Time source. The poll schedule is kept on its monotonic clock, never its wall clock: on the wall clock a
+        /// backward step (NTP) postponed every poll until the clock caught up, and a forward jump fired them all at
+        /// once. Defaults to <see cref="TimeProvider.System"/>; tests substitute a provider whose wall clock jumps.
+        /// </summary>
+        internal TimeProvider Time
+        {
+            get => _Time;
+            set => _Time = value ?? throw new ArgumentNullException(nameof(Time));
+        }
+
         #endregion
 
         #region Private-Members
@@ -64,10 +75,14 @@ namespace Armada.Tui.Services
         private readonly Func<ArmadaClient> _Client;
         private readonly IUiDispatcher _Dispatcher;
         private CancellationTokenSource? _Cts = null;
-        private DateTime _NextHealth = DateTime.MinValue;
-        private DateTime _NextJobs = DateTime.MinValue;
-        private DateTime _NextInbox = DateTime.MinValue;
-        private DateTime _LastInbox = DateTime.MinValue;
+        private TimeProvider _Time = TimeProvider.System;
+
+        // Schedule, as monotonic timestamps from _Time; null means due now (never polled, or Start reset it).
+        private readonly object _ScheduleLock = new object();
+        private long? _NextHealth = null;
+        private long? _NextJobs = null;
+        private long? _NextInbox = null;
+        private long? _LastInbox = null;
 
         #endregion
 
@@ -96,7 +111,10 @@ namespace Armada.Tui.Services
             Stop();
             CancellationTokenSource cts = new CancellationTokenSource();
             _Cts = cts;
-            _NextHealth = _NextJobs = _NextInbox = DateTime.MinValue;
+            lock (_ScheduleLock)
+            {
+                _NextHealth = _NextJobs = _NextInbox = null;
+            }
             InboxChecked = false;
             _ = Task.Run(() => LoopAsync(cts.Token));
         }
@@ -115,8 +133,12 @@ namespace Armada.Tui.Services
         /// </summary>
         public void NudgeInbox()
         {
-            DateTime earliest = _LastInbox.AddSeconds(4);
-            _NextInbox = earliest > DateTime.UtcNow ? earliest : DateTime.UtcNow;
+            long now = _Time.GetTimestamp();
+            lock (_ScheduleLock)
+            {
+                long earliest = _LastInbox.HasValue ? After(_LastInbox.Value, TimeSpan.FromSeconds(4)) : now;
+                _NextInbox = earliest > now ? earliest : now;
+            }
         }
 
         /// <summary>
@@ -148,26 +170,9 @@ namespace Armada.Tui.Services
         {
             while (!token.IsCancellationRequested)
             {
-                DateTime now = DateTime.UtcNow;
                 try
                 {
-                    if (now >= _NextHealth)
-                    {
-                        _NextHealth = now.AddSeconds(30);
-                        await PollHealthAsync(token).ConfigureAwait(false);
-                    }
-
-                    if (now >= _NextJobs)
-                    {
-                        await PollJobsAsync(token).ConfigureAwait(false);
-                        _NextJobs = now.AddSeconds(ActiveJobs.Count > 0 ? 5 : 30);
-                    }
-
-                    if (now >= _NextInbox)
-                    {
-                        _NextInbox = now.AddSeconds(20);
-                        await PollInboxAsync(token).ConfigureAwait(false);
-                    }
+                    await PollDueAsync(token).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
                 {
@@ -177,6 +182,52 @@ namespace Armada.Tui.Services
                 try { await Task.Delay(500, token).ConfigureAwait(false); }
                 catch (OperationCanceledException) { break; }
             }
+        }
+
+        /// <summary>
+        /// Run whichever polls are due now and schedule their next run (one iteration of the polling loop).
+        /// </summary>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>A task.</returns>
+        internal async Task PollDueAsync(CancellationToken token = default)
+        {
+            long now = _Time.GetTimestamp();
+
+            if (TakeDue(ref _NextHealth, now, TimeSpan.FromSeconds(30)))
+                await PollHealthAsync(token).ConfigureAwait(false);
+
+            bool jobsDue;
+            lock (_ScheduleLock)
+            {
+                jobsDue = !_NextJobs.HasValue || now >= _NextJobs.Value;
+            }
+
+            if (jobsDue)
+            {
+                await PollJobsAsync(token).ConfigureAwait(false);
+                lock (_ScheduleLock)
+                {
+                    _NextJobs = After(now, TimeSpan.FromSeconds(ActiveJobs.Count > 0 ? 5 : 30));
+                }
+            }
+
+            if (TakeDue(ref _NextInbox, now, TimeSpan.FromSeconds(20)))
+                await PollInboxAsync(token).ConfigureAwait(false);
+        }
+
+        private bool TakeDue(ref long? next, long now, TimeSpan interval)
+        {
+            lock (_ScheduleLock)
+            {
+                if (next.HasValue && now < next.Value) return false;
+                next = After(now, interval);
+                return true;
+            }
+        }
+
+        private long After(long timestamp, TimeSpan interval)
+        {
+            return timestamp + (long)(interval.TotalSeconds * _Time.TimestampFrequency);
         }
 
         private async Task PollHealthAsync(CancellationToken token)
@@ -212,7 +263,11 @@ namespace Armada.Tui.Services
 
         private async Task PollInboxAsync(CancellationToken token)
         {
-            _LastInbox = DateTime.UtcNow;
+            long polled = _Time.GetTimestamp();
+            lock (_ScheduleLock)
+            {
+                _LastInbox = polled;
+            }
             try
             {
                 List<InboxItem>? inbox = await _Client().GetInboxAsync(token).ConfigureAwait(false);

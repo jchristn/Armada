@@ -23,7 +23,9 @@ namespace Armada.Server
         private readonly LoggingModule _Logging;
         private readonly ArmadaSettings _Settings;
         private readonly object _SyncRoot = new object();
-        private readonly ConcurrentDictionary<string, DateTime> _OutstandingPings = new ConcurrentDictionary<string, DateTime>();
+        // Ping send times as monotonic Stopwatch timestamps, so the measured latency is not distorted by a wall-clock
+        // jump (the host sleeping and waking, an NTP step) between ping and pong.
+        private readonly ConcurrentDictionary<string, long> _OutstandingPings = new ConcurrentDictionary<string, long>();
         private readonly SemaphoreSlim _SendLock = new SemaphoreSlim(1, 1);
         private bool _WarnedDefaultPassword = false;
         private bool _WarnedInsecureCertificates = false;
@@ -492,7 +494,7 @@ namespace Armada.Server
 
                 string correlationId = Guid.NewGuid().ToString("N");
                 DateTime nowUtc = DateTime.UtcNow;
-                _OutstandingPings[correlationId] = nowUtc;
+                _OutstandingPings[correlationId] = Stopwatch.GetTimestamp();
 
                 await SendEnvelopeAsync(socket, RemoteTunnelProtocol.CreatePing(correlationId), token).ConfigureAwait(false);
 
@@ -531,11 +533,11 @@ namespace Armada.Server
 
             if (type == RemoteTunnelEnvelopeTypeEnum.Pong &&
                 !String.IsNullOrEmpty(correlationId) &&
-                _OutstandingPings.TryRemove(correlationId, out DateTime sentUtc))
+                _OutstandingPings.TryRemove(correlationId, out long sentTimestamp))
             {
                 UpdateStatus(status =>
                 {
-                    status.LatencyMs = (int)Math.Max(0, (DateTime.UtcNow - sentUtc).TotalMilliseconds);
+                    status.LatencyMs = (int)Math.Max(0, Stopwatch.GetElapsedTime(sentTimestamp).TotalMilliseconds);
                     return status;
                 });
                 return;

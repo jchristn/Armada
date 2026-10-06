@@ -448,6 +448,77 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("handle_process_exit_async_launch_wait_survives_wall_clock_jump", "HandleProcessExitAsync waits for the launch to be recorded on the monotonic clock: a wall-clock jump (sleep/wake) does not end the wait early", TestTags.Reliability, async () =>
+            {
+                // The 30 s wait used a DateTime.UtcNow deadline: when the host slept, the wall clock jumped past it and
+                // the exit was handled against the still-Assigned mission (which cannot move to Failed), so the
+                // outcome was lost once the launch path wrote InProgress. Every wall-clock reading here is 10 minutes
+                // after the last.
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    DatabaseDriver db = testDb.Driver;
+                    ArmadaSettings settings = CreateSettings();
+                    settings.LogDirectory = Path.Combine(Path.GetTempPath(), "armada_test_logs_" + Guid.NewGuid().ToString("N"));
+                    AdmiralService service = CreateAdmiralService(CreateLogging(), db, settings, new StubGitService());
+                    JumpingTimeProvider time = new JumpingTimeProvider();
+                    service.Time = time;
+
+                    Voyage voyage = new Voyage("Jump Voyage");
+                    voyage.Status = VoyageStatusEnum.InProgress;
+                    await db.Voyages.CreateAsync(voyage);
+                    Mission mission = new Mission("Jump Mission");
+                    mission.VoyageId = voyage.Id;
+                    mission.Status = MissionStatusEnum.Assigned;
+                    await db.Missions.CreateAsync(mission);
+                    Captain captain = new Captain("jump-captain");
+                    captain.State = CaptainStateEnum.Working;
+                    captain.CurrentMissionId = mission.Id;
+                    await db.Captains.CreateAsync(captain);
+
+                    Task exitTask = service.HandleProcessExitAsync(2000000002, 1, captain.Id, mission.Id);
+
+                    // Wait (on a condition, not a sleep) until the wait loop has gone around a few times.
+                    MonotonicDeadline deadline = MonotonicDeadline.After(TimeSpan.FromSeconds(20));
+                    while (time.TimestampReadings < 4 && !exitTask.IsCompleted && !deadline.Passed) await Task.Delay(10).ConfigureAwait(false);
+                    AssertFalse(exitTask.IsCompleted, "the exit is still waiting for the launch to be recorded");
+                    Mission? whileWaiting = await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
+                    AssertEqual(MissionStatusEnum.Assigned, whileWaiting!.Status, "the exit must not be handled while the launch is unrecorded");
+
+                    whileWaiting.Status = MissionStatusEnum.InProgress;
+                    whileWaiting.ProcessId = 2000000002;
+                    await db.Missions.UpdateAsync(whileWaiting).ConfigureAwait(false);
+                    await exitTask.ConfigureAwait(false);
+
+                    Mission? updatedMission = await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
+                    AssertEqual(MissionStatusEnum.Failed, updatedMission!.Status, "the exit is handled once the launch is recorded, not lost");
+                }
+            }));
+
+            cases.Add(CaseAsync("crash_loop_window_uses_monotonic_clock", "Crash-loop detection counts crashes inside the window on the monotonic clock: wall-clock jumps neither empty nor stretch the window", TestTags.Reliability, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    ArmadaSettings settings = CreateSettings();
+                    settings.CaptainCrashLoopThreshold = 3;
+                    settings.CaptainCrashLoopWindowMinutes = 15;
+                    AdmiralService service = CreateAdmiralService(CreateLogging(), testDb.Driver, settings, new StubGitService());
+                    JumpingTimeProvider time = new JumpingTimeProvider();
+                    service.Time = time;
+
+                    // Three crashes seconds apart while the wall clock leaps 10 minutes per reading: still a loop.
+                    AssertFalse(service.RecordCrashAndCheckLoop("cpt_jump"), "first crash");
+                    AssertFalse(service.RecordCrashAndCheckLoop("cpt_jump"), "second crash");
+                    AssertTrue(service.RecordCrashAndCheckLoop("cpt_jump"), "third crash inside the window is a loop despite the wall-clock jumps");
+
+                    // Crashes that really are further apart than the window (monotonic time) are not a loop.
+                    AssertFalse(service.RecordCrashAndCheckLoop("cpt_slow"), "first slow crash");
+                    time.Advance(TimeSpan.FromMinutes(16));
+                    AssertFalse(service.RecordCrashAndCheckLoop("cpt_slow"), "second slow crash, first one aged out");
+                    time.Advance(TimeSpan.FromMinutes(16));
+                    AssertFalse(service.RecordCrashAndCheckLoop("cpt_slow"), "third slow crash, earlier ones aged out");
+                }
+            }));
+
             cases.Add(CaseAsync("handle_process_exit_async_redispatches_on_interruption", "HandleProcessExitAsync re-dispatches (not fails) on an interruption (exit -1)", TestTags.Positive, async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())

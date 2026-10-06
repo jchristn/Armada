@@ -58,33 +58,67 @@ namespace Armada.Helm.Commands
 
             AnsiConsole.MarkupLine("[green]Restart requested[/] on " + Markup.Escape(target.Describe()) + "; waiting for it to answer again...");
             using HttpClient poll = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
-            DateTime deadline = DateTime.UtcNow.AddSeconds(60);
-            bool wentDown = false;
-            while (DateTime.UtcNow < deadline)
-            {
-                await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
-                bool up;
-                try
+            RestartWaitResultEnum result = await WaitForRestartAsync(
+                async token =>
                 {
-                    up = (await poll.GetAsync(target.BaseUrl + "/api/v1/status/health", cancellationToken).ConfigureAwait(false)).IsSuccessStatusCode;
-                }
-                catch (Exception ex) when (ex is HttpRequestException || ex is TaskCanceledException)
-                {
-                    up = false;
-                }
+                    try
+                    {
+                        return (await poll.GetAsync(target.BaseUrl + "/api/v1/status/health", token).ConfigureAwait(false)).IsSuccessStatusCode;
+                    }
+                    catch (Exception ex) when (ex is HttpRequestException || ex is TaskCanceledException)
+                    {
+                        return false;
+                    }
+                },
+                TimeSpan.FromSeconds(60),
+                TimeSpan.FromSeconds(1),
+                TimeProvider.System,
+                cancellationToken).ConfigureAwait(false);
 
-                if (!up) wentDown = true;
-                else if (wentDown)
-                {
-                    AnsiConsole.MarkupLine("[green]Admiral is back up.[/]");
-                    return 0;
-                }
+            if (result == RestartWaitResultEnum.BackUp)
+            {
+                AnsiConsole.MarkupLine("[green]Admiral is back up.[/]");
+                return 0;
             }
 
-            AnsiConsole.MarkupLine(wentDown
+            AnsiConsole.MarkupLine(result == RestartWaitResultEnum.DidNotReturn
                 ? "[gold1]The Admiral stopped but did not answer again within 60 seconds; check it on its host.[/]"
                 : "[gold1]The Admiral kept answering; the restart may not have happened. Check admiral.log on its host.[/]");
             return 1;
+        }
+
+        /// <summary>
+        /// Poll until the Admiral has gone down and answered again, or the timeout elapses. The timeout is measured on
+        /// the monotonic clock of <paramref name="time"/>: a wall-clock deadline expired early when the clock jumped (the
+        /// laptop running the CLI slept and woke).
+        /// </summary>
+        /// <param name="isUp">Health probe; true when the Admiral answers.</param>
+        /// <param name="timeout">How long to wait.</param>
+        /// <param name="interval">Delay before each probe.</param>
+        /// <param name="time">Time source.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The outcome.</returns>
+        internal static async Task<RestartWaitResultEnum> WaitForRestartAsync(
+            Func<CancellationToken, Task<bool>> isUp,
+            TimeSpan timeout,
+            TimeSpan interval,
+            TimeProvider time,
+            CancellationToken token = default)
+        {
+            if (isUp == null) throw new ArgumentNullException(nameof(isUp));
+            if (time == null) throw new ArgumentNullException(nameof(time));
+
+            long started = time.GetTimestamp();
+            bool wentDown = false;
+            while (time.GetElapsedTime(started) < timeout)
+            {
+                await Task.Delay(interval, token).ConfigureAwait(false);
+                bool up = await isUp(token).ConfigureAwait(false);
+                if (!up) wentDown = true;
+                else if (wentDown) return RestartWaitResultEnum.BackUp;
+            }
+
+            return wentDown ? RestartWaitResultEnum.DidNotReturn : RestartWaitResultEnum.NeverWentDown;
         }
 
         private async Task StopRunningServerAsync(CancellationToken cancellationToken)

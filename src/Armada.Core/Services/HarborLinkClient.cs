@@ -28,6 +28,18 @@ namespace Armada.Core.Services
         /// </summary>
         public string? McpBaseUrl { get; private set; } = null;
 
+        /// <summary>
+        /// Time source. Waits (the deferred-launch health poll) and job durations are measured on its monotonic clock
+        /// (<see cref="TimeProvider.GetTimestamp"/>), never on its wall clock, so a wall-clock jump (the host sleeping
+        /// and waking, an NTP step) cannot end a wait early or inflate a duration. Defaults to
+        /// <see cref="TimeProvider.System"/>; tests substitute a provider whose wall clock jumps.
+        /// </summary>
+        internal TimeProvider Time
+        {
+            get => _Time;
+            set => _Time = value ?? throw new ArgumentNullException(nameof(Time));
+        }
+
         #endregion
 
         #region Private-Members
@@ -46,6 +58,7 @@ namespace Armada.Core.Services
         private readonly object _JobLock = new object();
         private Action? _OnConnected;
         private Channel<HarborMessage>? _Outbound;
+        private TimeProvider _Time = TimeProvider.System;
 
         #endregion
 
@@ -319,23 +332,45 @@ namespace Armada.Core.Services
         {
             if (String.IsNullOrWhiteSpace(healthUrl)) return true;
 
-            DateTime deadline = DateTime.UtcNow.AddSeconds(timeoutSeconds < 1 ? 1 : timeoutSeconds);
             using (HttpClient client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) })
             {
-                while (DateTime.UtcNow < deadline)
-                {
-                    try
+                return await PollUntilHealthyAsync(
+                    async () =>
                     {
-                        HttpResponseMessage response = await client.GetAsync(healthUrl).ConfigureAwait(false);
-                        if (response.IsSuccessStatusCode) return true;
-                    }
-                    catch
-                    {
-                        // Not up yet; keep polling until the deadline.
-                    }
+                        try
+                        {
+                            HttpResponseMessage response = await client.GetAsync(healthUrl).ConfigureAwait(false);
+                            return response.IsSuccessStatusCode;
+                        }
+                        catch
+                        {
+                            // Not up yet; keep polling until the timeout.
+                            return false;
+                        }
+                    },
+                    TimeSpan.FromSeconds(timeoutSeconds < 1 ? 1 : timeoutSeconds),
+                    TimeSpan.FromSeconds(1)).ConfigureAwait(false);
+            }
+        }
 
-                    await Task.Delay(1000).ConfigureAwait(false);
-                }
+        /// <summary>
+        /// Probe until the probe reports healthy or the timeout elapses. The timeout is measured on the monotonic clock
+        /// of <see cref="Time"/>: a wall-clock deadline expired as soon as the host slept and woke, rolling back a
+        /// healthy new slot.
+        /// </summary>
+        /// <param name="probe">Health probe; true when healthy.</param>
+        /// <param name="timeout">How long to keep probing.</param>
+        /// <param name="interval">Delay between probes.</param>
+        /// <returns>True when the probe reported healthy in time.</returns>
+        internal async Task<bool> PollUntilHealthyAsync(Func<Task<bool>> probe, TimeSpan timeout, TimeSpan interval)
+        {
+            if (probe == null) throw new ArgumentNullException(nameof(probe));
+
+            long started = _Time.GetTimestamp();
+            while (_Time.GetElapsedTime(started) < timeout)
+            {
+                if (await probe().ConfigureAwait(false)) return true;
+                await Task.Delay(interval).ConfigureAwait(false);
             }
 
             return false;
@@ -357,8 +392,10 @@ namespace Armada.Core.Services
                 return;
             }
 
-            DateTime startedUtc = DateTime.UtcNow;
-            long firstOutputTicks = 0;
+            // Durations are measured on the monotonic clock: a wall-clock difference grows by however long the host
+            // slept while the job ran.
+            long started = _Time.GetTimestamp();
+            long firstOutputElapsedTicks = -1;
 
             try
             {
@@ -373,17 +410,18 @@ namespace Armada.Core.Services
                     },
                     (stream, data) =>
                     {
-                        // Record the first-output timestamp once (time-to-first-token proxy).
-                        System.Threading.Interlocked.CompareExchange(ref firstOutputTicks, DateTime.UtcNow.Ticks, 0);
+                        // Record the time to first output once (time-to-first-token proxy).
+                        System.Threading.Interlocked.CompareExchange(ref firstOutputElapsedTicks, _Time.GetElapsedTime(started).Ticks, -1);
                         Enqueue(new HarborOutput { JobId = launch.JobId, Stream = stream, Data = data });
                     },
                     exitCode =>
                     {
                         RemoveLiveJob(launch.JobId);
-                        long durationMs = (long)(DateTime.UtcNow - startedUtc).TotalMilliseconds;
-                        long? ttftMs = firstOutputTicks == 0
+                        long durationMs = (long)_Time.GetElapsedTime(started).TotalMilliseconds;
+                        long firstOutput = System.Threading.Interlocked.Read(ref firstOutputElapsedTicks);
+                        long? ttftMs = firstOutput < 0
                             ? (long?)null
-                            : (long)(new DateTime(firstOutputTicks, DateTimeKind.Utc) - startedUtc).TotalMilliseconds;
+                            : (long)TimeSpan.FromTicks(firstOutput).TotalMilliseconds;
                         Enqueue(new HarborExited { JobId = launch.JobId, ExitCode = exitCode, DurationMs = durationMs, TimeToFirstTokenMs = ttftMs });
                         Log(HarborLogDirection.Out, "Exited job " + launch.JobId + " (code " + exitCode
                             + ", runtime " + FormatDuration(durationMs)

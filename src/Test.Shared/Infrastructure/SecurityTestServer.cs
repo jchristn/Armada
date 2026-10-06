@@ -158,8 +158,8 @@ namespace Test.Shared.Infrastructure
 
             using (HttpClient client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) })
             {
-                DateTime deadline = DateTime.UtcNow.AddSeconds(30);
-                while (DateTime.UtcNow < deadline)
+                MonotonicDeadline deadline = MonotonicDeadline.After(TimeSpan.FromSeconds(30));
+                while (!deadline.Passed)
                 {
                     try
                     {

@@ -16,6 +16,21 @@ namespace Armada.Core.Services
     /// </summary>
     public class EscalationService : IEscalationService
     {
+        #region Public-Members
+
+        /// <summary>
+        /// Time source. Rule cooldowns are measured on its monotonic clock, never its wall clock, so a wall-clock jump
+        /// (the host sleeping and waking, an NTP step) neither ends a cooldown early nor, stepping back, silences a
+        /// rule. Defaults to <see cref="TimeProvider.System"/>; tests substitute a provider whose wall clock jumps.
+        /// </summary>
+        internal TimeProvider Time
+        {
+            get => _Time;
+            set => _Time = value ?? throw new ArgumentNullException(nameof(Time));
+        }
+
+        #endregion
+
         #region Private-Members
 
         private string _Header = "[EscalationService] ";
@@ -24,7 +39,8 @@ namespace Armada.Core.Services
         private ArmadaSettings _Settings;
         private HttpClient _HttpClient;
 
-        private ConcurrentDictionary<string, DateTime> _Cooldowns = new ConcurrentDictionary<string, DateTime>();
+        private ConcurrentDictionary<string, long> _Cooldowns = new ConcurrentDictionary<string, long>();
+        private TimeProvider _Time = TimeProvider.System;
 
         private static readonly JsonSerializerOptions _JsonOptions = new JsonSerializerOptions
         {
@@ -146,13 +162,14 @@ namespace Armada.Core.Services
         {
             // Check cooldown
             string cooldownKey = rule.Trigger.ToString() + ":" + entityId;
-            if (_Cooldowns.TryGetValue(cooldownKey, out DateTime lastFired))
+            long now = _Time.GetTimestamp();
+            if (_Cooldowns.TryGetValue(cooldownKey, out long lastFired))
             {
-                if ((DateTime.UtcNow - lastFired).TotalMinutes < rule.CooldownMinutes)
+                if (_Time.GetElapsedTime(lastFired, now).TotalMinutes < rule.CooldownMinutes)
                     return;
             }
 
-            _Cooldowns[cooldownKey] = DateTime.UtcNow;
+            _Cooldowns[cooldownKey] = now;
 
             switch (rule.Action)
             {

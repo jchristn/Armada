@@ -359,10 +359,13 @@ namespace Test.Shared.Suites.E2E
                 HttpResponseMessage resp = await client.GetAsync("/api/v1/cli-permissions/requests?status=Pending&threadId=" + threadId).ConfigureAwait(false);
                 if (resp.StatusCode != HttpStatusCode.OK) return false;
                 List<CliPermissionRequest> rows = await JsonHelper.DeserializeAsync<List<CliPermissionRequest>>(resp).ConfigureAwait(false);
-                found = rows.FirstOrDefault();
+                // Not the first Pending row: the request is listed before its Ask card is posted, and the callers read
+                // the card right after this returns (thread_prompt_denied_and_card failed with "Sequence contains no
+                // matching element" when it enumerated the messages in that gap).
+                found = CliPermissionPendingWait.FirstWithCard(rows);
                 return found != null;
             }, 15000).ConfigureAwait(false);
-            AssertTrue(ok, "a pending request appeared");
+            AssertTrue(ok, "a pending request with its Ask card appeared");
             return found!;
         }
 

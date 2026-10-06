@@ -152,8 +152,8 @@ namespace Test.Shared.Infrastructure
                 throw new TimeoutException("Baseline Admiral did not start. Output:\n" + output);
             }
 
-            DateTime deadline = DateTime.UtcNow.AddSeconds(60);
-            while (DateTime.UtcNow < deadline)
+            MonotonicDeadline deadline = MonotonicDeadline.After(TimeSpan.FromSeconds(60));
+            while (!deadline.Passed)
             {
                 try
                 {

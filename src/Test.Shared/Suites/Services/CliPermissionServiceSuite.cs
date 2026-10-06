@@ -271,6 +271,38 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(CliPermissionPolicyEnum.Bypass, (await h.Db.Driver.Captains.ReadAsync(captain.Id).ConfigureAwait(false))!.CliPermissionPolicy, "an ordinary captain update keeps the policy");
             }));
 
+            cases.Add(Case("pending_wait_waits_for_the_card", "A test waiting for a thread prompt's pending request returns only once its Ask card exists (the window between storing the request and posting its card)", async () =>
+            {
+                // PromptAsync stores the request as Pending, then posts the Ask card (card message, then MessageId). The
+                // E2E denial case waited for the first Pending row and then read the thread's messages, so under load it
+                // landed in that window and Single(Kind == CliPermission) threw "Sequence contains no matching
+                // element". This holds the window open deterministically: the request is stored without its card.
+                using AskTestHarness h = await AskTestHarness.CreateAsync().ConfigureAwait(false);
+                AuthContext owner = AskTestHarness.User("usr_cpo11", false);
+                AskThread thread = await h.Threads.CreateThreadAsync(owner, null).ConfigureAwait(false);
+                CliPermissionRequest request = new CliPermissionRequest { TenantId = thread.TenantId, UserId = thread.UserId, ThreadId = thread.Id, ToolName = "WebFetch", SummaryText = "https://example.com/x", ExpiresUtc = DateTime.UtcNow.AddMinutes(5) };
+                request = await h.Db.Driver.CliPermissionRequests.CreateAsync(request).ConfigureAwait(false);
+
+                List<CliPermissionRequest> listed = await h.Db.Driver.CliPermissionRequests.EnumerateAsync(new CliPermissionRequestQuery { ThreadId = thread.Id, Status = CliPermissionRequestStatusEnum.Pending }).ConfigureAwait(false);
+                AssertEqual(1, listed.Count, "inside the window the request is already listed as Pending");
+                AskMessagePage before = (await h.Threads.EnumerateMessagesAsync(owner, thread.Id, new AskMessageEnumerateRequest()).ConfigureAwait(false))!;
+                AssertFalse(before.Messages.Any(m => m.Kind == AskMessageKindEnum.CliPermission), "but its card does not exist yet (where the old wait let the test read)");
+                AssertNull(CliPermissionPendingWait.FirstWithCard(listed), "the wait does not return a request whose card is not posted");
+
+                Task<CliPermissionRequest> waited = WaitForPendingAsync(h, thread.Id);
+                AssertFalse(waited.IsCompleted, "still waiting inside the window");
+
+                AskMessage card = new AskMessage { Role = AskMessageRoleEnum.System, Kind = AskMessageKindEnum.CliPermission, ContentText = "WebFetch: https://example.com/x" };
+                card = await h.Threads.AppendCliPermissionCardAsync(thread, card, request).ConfigureAwait(false);
+
+                CliPermissionRequest pending = await waited.ConfigureAwait(false);
+                AssertEqual(request.Id, pending.Id);
+                AssertEqual(card.Id, pending.MessageId, "returned with its card linked");
+                AskMessagePage after = (await h.Threads.EnumerateMessagesAsync(owner, thread.Id, new AskMessageEnumerateRequest()).ConfigureAwait(false))!;
+                AskMessage shown = after.Messages.Single(m => m.Kind == AskMessageKindEnum.CliPermission);
+                AssertEqual(request.Id, shown.CliPermissionRequest!.Id, "the card is readable once the wait returns");
+            }));
+
             cases.Add(Case("sweep_resolves_orphaned_requests", "A pending request no call is waiting for (after a restart) is cancelled by the sweep", async () =>
             {
                 using AskTestHarness h = await AskTestHarness.CreateAsync().ConfigureAwait(false);
@@ -412,10 +444,10 @@ namespace Test.Shared.Suites.Services
             bool ok = await AskTestHarness.WaitUntilAsync(async () =>
             {
                 List<CliPermissionRequest> pending = await h.Db.Driver.CliPermissionRequests.EnumerateAsync(new CliPermissionRequestQuery { ThreadId = threadId, Status = CliPermissionRequestStatusEnum.Pending }).ConfigureAwait(false);
-                found = pending.FirstOrDefault(p => !String.IsNullOrEmpty(p.MessageId));
+                found = CliPermissionPendingWait.FirstWithCard(pending);
                 return found != null;
             }, 10000).ConfigureAwait(false);
-            AssertTrue(ok, "a pending request appeared");
+            AssertTrue(ok, "a pending request with its Ask card appeared");
             return found!;
         }
 

@@ -233,13 +233,17 @@ namespace Armada.Server.Routes
                     return new ApiErrorResponse { Error = ApiResultEnum.Conflict, Message = "Harbor is not connected; no link to probe over." };
                 }
 
+                // Normalized once: a body can set Arguments or WorkingDirectory to JSON null, so neither the audit
+                // record nor the command reads the raw request fields.
+                HostCommandRequest command = probe.ToHostCommandRequest();
+
                 if (_Database != null)
                 {
                     await CommandAudit.RecordAsync(_Database, new CommandAuditRecord
                     {
                         Source = "HarborProbe",
-                        Command = (String.IsNullOrWhiteSpace(probe.Executable) ? "git --version" : probe.Executable + (probe.Arguments != null && probe.Arguments.Count > 0 ? " " + String.Join(" ", probe.Arguments) : String.Empty)),
-                        WorkingDirectory = probe.WorkingDirectory,
+                        Command = command.Executable + (command.Arguments.Count > 0 ? " " + String.Join(" ", command.Arguments) : String.Empty),
+                        WorkingDirectory = command.WorkingDirectory,
                         Host = "Harbor " + harbor.Id,
                         TenantId = harbor.TenantId ?? ctx.TenantId,
                         UserId = ctx.UserId,
@@ -249,13 +253,7 @@ namespace Armada.Server.Routes
                 }
 
                 RemoteHostCommandExecutor executor = new RemoteHostCommandExecutor(_Connections, harbor.Id);
-                return await executor.RunAsync(new HostCommandRequest
-                {
-                    Executable = probe.Executable,
-                    Arguments = probe.Arguments,
-                    WorkingDirectory = probe.WorkingDirectory,
-                    TimeoutMs = probe.TimeoutMs
-                }).ConfigureAwait(false);
+                return await executor.RunAsync(command).ConfigureAwait(false);
             },
             api => api
                 .WithTag("Harbors")
