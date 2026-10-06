@@ -72,6 +72,7 @@ namespace Test.Shared.Suites.Services
                 FleetActionRun run = await h.StartCommandAsync("exit 3", new List<string> { vessel.Id }).ConfigureAwait(false);
 
                 FleetActionRun? done = await h.Runner.WaitForRunAsync(run.Id, RunWaitMs).ConfigureAwait(false);
+                AssertNotNull(done, "finished run");
                 AssertEqual(FleetActionRunStatusEnum.CompletedWithFailures, done!.Status);
                 AssertEqual(1, done.FailedCount);
                 FleetActionRunTarget target = (await h.TargetsAsync(run.Id).ConfigureAwait(false)).Single();
@@ -88,12 +89,51 @@ namespace Test.Shared.Suites.Services
                 FleetActionRun run = await h.StartCommandAsync("sleep 60", new List<string> { vessel.Id }, timeoutSeconds: 5).ConfigureAwait(false);
 
                 FleetActionRun? done = await h.Runner.WaitForRunAsync(run.Id, RunWaitMs).ConfigureAwait(false);
+                AssertNotNull(done, "finished run");
                 AssertTrue(sw.Elapsed < TimeSpan.FromSeconds(40), "timed out promptly instead of waiting for sleep 60");
                 AssertEqual(FleetActionRunStatusEnum.CompletedWithFailures, done!.Status);
                 FleetActionRunTarget target = (await h.TargetsAsync(run.Id).ConfigureAwait(false)).Single();
                 AssertEqual(FleetActionTargetStatusEnum.TimedOut, target.Status);
                 AssertEqual(FleetActionReasonCodes.Timeout, target.FailureReason);
                 AssertNull(target.ExitCode, "no exit code on timeout");
+            }));
+
+            cases.Add(CaseAsync("wait_survives_wall_clock_jump", "WaitForRunAsync waits on a monotonic clock: a wall-clock jump (the host sleeping and waking) does not end the wait early with null", TestTags.Reliability, async () =>
+            {
+                // The flaky "command exceeding the timeout" case failed with a NullReferenceException (done! was null)
+                // when the Mac slept during the 5 s command: the wall clock jumped past WaitForRunAsync's DateTime
+                // deadline while the Stopwatch-measured test had run only ~6 s. Here every reading of the runner's wall
+                // clock is 10 minutes after the previous one, so any wall-clock deadline is always already past.
+                using FleetActionTestHarness h = await FleetActionTestHarness.CreateAsync().ConfigureAwait(false);
+                DateTime origin = DateTime.UtcNow;
+                long readings = 0;
+                h.Runner.UtcNow = () => origin.AddMinutes(10 * Interlocked.Increment(ref readings));
+
+                Vessel vessel = await h.CreateRepoVesselAsync("jump").ConfigureAwait(false);
+                FleetActionRun run = await h.StartCommandAsync("sleep 60", new List<string> { vessel.Id }, timeoutSeconds: 1).ConfigureAwait(false);
+
+                FleetActionRun? done = await h.Runner.WaitForRunAsync(run.Id, RunWaitMs).ConfigureAwait(false);
+                AssertNotNull(done, "the wait returned the finished run instead of giving up on the jumped wall clock");
+                AssertEqual(FleetActionRunStatusEnum.CompletedWithFailures, done!.Status);
+                AssertTrue(Interlocked.Read(ref readings) > 0, "the runner read its wall clock");
+                FleetActionRunTarget target = (await h.TargetsAsync(run.Id).ConfigureAwait(false)).Single();
+                AssertEqual(FleetActionTargetStatusEnum.TimedOut, target.Status);
+                AssertEqual(FleetActionReasonCodes.Timeout, target.FailureReason);
+            }));
+
+            cases.Add(CaseAsync("wait_times_out_on_monotonic_clock", "WaitForRunAsync still gives up after its timeout for a run that does not finish", TestTags.Negative, async () =>
+            {
+                using FleetActionTestHarness h = await FleetActionTestHarness.CreateAsync().ConfigureAwait(false);
+                Vessel vessel = await h.CreateRepoVesselAsync("unfinished").ConfigureAwait(false);
+                FleetActionRun run = await h.StartCommandAsync("sleep 60", new List<string> { vessel.Id }, timeoutSeconds: 120).ConfigureAwait(false);
+
+                Stopwatch sw = Stopwatch.StartNew();
+                FleetActionRun? notYet = await h.Runner.WaitForRunAsync(run.Id, 300).ConfigureAwait(false);
+                AssertNull(notYet, "a running run is not returned");
+                AssertTrue(sw.ElapsedMilliseconds >= 300, "waited the full timeout");
+
+                await h.Service.CancelRunAsync(h.Admin, run.Id).ConfigureAwait(false);
+                AssertNotNull(await h.Runner.WaitForRunAsync(run.Id, RunWaitMs).ConfigureAwait(false), "cancelled run settled");
             }));
 
             cases.Add(CaseAsync("cancel_kills_and_cancels_pending", "Cancel mid-run kills the in-flight process and cancels pending targets", TestTags.Positive, async () =>
