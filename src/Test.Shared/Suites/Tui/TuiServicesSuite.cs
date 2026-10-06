@@ -109,12 +109,13 @@ namespace Test.Shared.Suites.Tui
                 AssertEqual(0, each, "nothing runs off the loop");
                 dispatcher.Drain();
                 AssertEqual(20, each, "every message delivered on drain");
-                Thread.Sleep(300);
-                dispatcher.Drain();
+                // The coalescing window runs on the real clock (Task.Delay), so wait for the refresh to arrive instead of
+                // sleeping a fixed time: a loaded runner can take longer than any fixed sleep. The upper bound only stops a
+                // hang; the count assertions are what the case checks.
+                AssertTrue(DrainUntil(dispatcher, () => coalesced >= 1, 10000), "the burst's refresh arrived");
                 AssertEqual(1, coalesced, "burst coalesced to one refresh");
                 pump.Inject(ArmadaSocketMessage.Parse("{\"type\":\"voyage.changed\"}")!);
-                Thread.Sleep(300);
-                dispatcher.Drain();
+                AssertTrue(DrainUntil(dispatcher, () => coalesced >= 2, 10000), "the next window's refresh arrived");
                 AssertEqual(20, each, "prefix filter");
                 AssertEqual(2, coalesced, "next window fires again");
             }));
@@ -399,6 +400,20 @@ namespace Test.Shared.Suites.Tui
             }));
 
             return new TestSuiteDescriptor(suiteId: Suite, displayName: "TUI services and client plumbing", cases: cases);
+        }
+
+        private static bool DrainUntil(QueueDispatcher dispatcher, Func<bool> condition, int timeoutMs)
+        {
+            System.Diagnostics.Stopwatch watch = System.Diagnostics.Stopwatch.StartNew();
+            while (watch.ElapsedMilliseconds < timeoutMs)
+            {
+                dispatcher.Drain();
+                if (condition()) return true;
+                Thread.Sleep(5);
+            }
+
+            dispatcher.Drain();
+            return condition();
         }
 
         private static string Temp()
