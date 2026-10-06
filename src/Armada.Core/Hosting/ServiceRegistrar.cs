@@ -55,12 +55,24 @@ namespace Armada.Core.Hosting
             }
         }
 
+        /// <summary>
+        /// Time source. The stop wait is measured on its monotonic clock, never its wall clock, so a wall-clock jump
+        /// (the host sleeping and waking, an NTP step) cannot cut the wait short. Defaults to
+        /// <see cref="TimeProvider.System"/>; tests substitute a provider whose wall clock jumps.
+        /// </summary>
+        internal TimeProvider Time
+        {
+            get { return _Time; }
+            set { _Time = value ?? throw new ArgumentNullException(nameof(Time)); }
+        }
+
         #endregion
 
         #region Private-Members
 
         private int _StopTimeoutSeconds = 30;
         private int _PollIntervalMs = 1000;
+        private TimeProvider _Time = TimeProvider.System;
         private const int _ErrorServiceNotActive = 1062;
         private const int _ErrorServiceDoesNotExist = 1060;
 
@@ -388,8 +400,10 @@ namespace Armada.Core.Hosting
 
         private void WaitForStopped()
         {
-            DateTime deadline = DateTime.UtcNow.AddSeconds(_StopTimeoutSeconds);
-            while (DateTime.UtcNow < deadline)
+            // Measured on the monotonic clock: a wall-clock deadline ended the wait at once when the clock jumped.
+            long started = _Time.GetTimestamp();
+            TimeSpan timeout = TimeSpan.FromSeconds(_StopTimeoutSeconds);
+            while (_Time.GetElapsedTime(started) < timeout)
             {
                 // Decide from sc.exe exit codes, not its localized text: a stop control on a stopped service fails
                 // with ERROR_SERVICE_NOT_ACTIVE, on a removed service with ERROR_SERVICE_DOES_NOT_EXIST, and on a

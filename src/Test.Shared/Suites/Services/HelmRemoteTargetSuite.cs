@@ -438,6 +438,51 @@ namespace Test.Shared.Suites.Services
                 AssertEqual("127.0.0.1", loaded.Rest.Hostname, "rest.hostname");
             }));
 
+            cases.Add(CaseAsync("restart_wait_survives_wall_clock_jump", "server restart against a remote Admiral waits on the monotonic clock: a wall-clock jump (sleep/wake) does not end the wait early", TestTags.Reliability, async () =>
+            {
+                // The wait used a DateTime.UtcNow deadline, so a wall-clock jump ended it after one probe and reported
+                // that the Admiral did not come back. Every wall-clock reading here is 10 minutes after the last.
+                int probes = 0;
+                RestartWaitResultEnum result = await ServerRestartCommand.WaitForRestartAsync(
+                    token => Task.FromResult(Interlocked.Increment(ref probes) >= 4),
+                    TimeSpan.FromSeconds(60),
+                    TimeSpan.FromMilliseconds(1),
+                    new JumpingTimeProvider()).ConfigureAwait(false);
+
+                AssertEqual(RestartWaitResultEnum.BackUp, result);
+                AssertEqual(4, probes, "down three times, then back up");
+            }));
+
+            cases.Add(CaseAsync("restart_wait_times_out_on_monotonic_clock", "server restart reports a remote Admiral that went down and never returned, or never went down, once the monotonic timeout elapses", TestTags.Negative, async () =>
+            {
+                JumpingTimeProvider time = new JumpingTimeProvider();
+                int downProbes = 0;
+                RestartWaitResultEnum down = await ServerRestartCommand.WaitForRestartAsync(
+                    token =>
+                    {
+                        Interlocked.Increment(ref downProbes);
+                        time.Advance(TimeSpan.FromSeconds(1));
+                        return Task.FromResult(false);
+                    },
+                    TimeSpan.FromSeconds(5),
+                    TimeSpan.FromMilliseconds(1),
+                    time).ConfigureAwait(false);
+                AssertEqual(RestartWaitResultEnum.DidNotReturn, down);
+                AssertEqual(5, downProbes);
+
+                JumpingTimeProvider time2 = new JumpingTimeProvider();
+                RestartWaitResultEnum neverDown = await ServerRestartCommand.WaitForRestartAsync(
+                    token =>
+                    {
+                        time2.Advance(TimeSpan.FromSeconds(1));
+                        return Task.FromResult(true);
+                    },
+                    TimeSpan.FromSeconds(5),
+                    TimeSpan.FromMilliseconds(1),
+                    time2).ConfigureAwait(false);
+                AssertEqual(RestartWaitResultEnum.NeverWentDown, neverDown);
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
                 displayName: "Helm Remote Target",

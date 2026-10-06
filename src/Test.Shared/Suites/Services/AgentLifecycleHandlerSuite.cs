@@ -211,8 +211,8 @@ namespace Test.Shared.Suites.Services
                         AssertFalse(handler.IsProcessExitHandled(processId), "Its exit has not been received");
 
                         release.TrySetResult(true);
-                        DateTime deadline = DateTime.UtcNow.AddSeconds(30);
-                        while (!handler.IsProcessExitHandled(processId) && DateTime.UtcNow < deadline)
+                        MonotonicDeadline deadline = MonotonicDeadline.After(TimeSpan.FromSeconds(30));
+                        while (!handler.IsProcessExitHandled(processId) && !deadline.Passed)
                             await Task.Delay(20).ConfigureAwait(false);
 
                         AssertTrue(handler.IsProcessExitHandled(processId), "The exit callback received the exit");
@@ -397,9 +397,9 @@ namespace Test.Shared.Suites.Services
                     // Codex prints command output (here: cat of a doc) on stderr, which reaches only the combined channel.
                     handler.HandleAgentOutput(processId, "[ARMADA:STATUS] Testing");
 
-                    DateTime deadline = DateTime.UtcNow.AddSeconds(5);
+                    MonotonicDeadline deadline = MonotonicDeadline.After(TimeSpan.FromSeconds(5));
                     List<Signal> signals = new List<Signal>();
-                    while (DateTime.UtcNow < deadline)
+                    while (!deadline.Passed)
                     {
                         signals = await testDb.Driver.Signals.EnumerateRecentAsync(50).ConfigureAwait(false);
                         if (signals.Count > 0) break;
@@ -409,6 +409,45 @@ namespace Test.Shared.Suites.Services
                     AssertEqual(1, signals.Count, "the line is still recorded as an informational progress signal");
                     Mission? reread = await testDb.Driver.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
                     AssertEqual(MissionStatusEnum.InProgress, reread!.Status, "only the agent's stdout may toggle the phase");
+                }
+            }));
+
+            cases.Add(CaseAsync("mission_heartbeat_throttle_uses_monotonic_clock", "The mission-heartbeat write throttle measures its interval on the monotonic clock, not the wall clock", TestTags.Reliability, async () =>
+            {
+                // The throttle compared DateTime.UtcNow readings: a wall-clock jump let every line through, and a
+                // backward NTP step suppressed writes until the clock caught up, so the mission looked stalled. Every
+                // wall-clock reading here is 10 minutes after the last.
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    AgentLifecycleHandler handler = CreateHandler(testDb.Driver, out _);
+                    JumpingTimeProvider time = new JumpingTimeProvider();
+                    handler.Time = time;
+
+                    AssertTrue(handler.ShouldPersistMissionHeartbeat("msn_throttle"), "the first heartbeat is written");
+                    AssertFalse(handler.ShouldPersistMissionHeartbeat("msn_throttle"), "a second heartbeat right away is throttled despite the wall-clock jump");
+                    time.Advance(TimeSpan.FromSeconds(16));
+                    AssertTrue(handler.ShouldPersistMissionHeartbeat("msn_throttle"), "written again once the interval has passed on the monotonic clock");
+                    AssertFalse(handler.ShouldPersistMissionHeartbeat("msn_throttle"), "and throttled again");
+                    AssertTrue(handler.ShouldPersistMissionHeartbeat("msn_other"), "missions are throttled independently");
+                }
+            }));
+
+            cases.Add(CaseAsync("handled_process_exit_retention_uses_monotonic_clock", "A handled process exit is remembered for 5 minutes of monotonic time; a wall-clock jump does not forget it early", TestTags.Reliability, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    AgentLifecycleHandler handler = CreateHandler(testDb.Driver, out _);
+                    JumpingTimeProvider time = new JumpingTimeProvider();
+                    handler.Time = time;
+                    int processId = 919191;
+                    RegisterTrackedProcess(handler, processId, "cpt_retention", "msn_retention");
+
+                    handler.HandleAgentProcessExited(processId, 0);
+                    AssertTrue(handler.IsProcessExitHandled(processId), "the exit is remembered right after it was handled, despite the wall-clock jump");
+                    time.Advance(TimeSpan.FromMinutes(4));
+                    AssertTrue(handler.IsProcessExitHandled(processId), "still remembered inside the 5-minute retention");
+                    time.Advance(TimeSpan.FromMinutes(2));
+                    AssertFalse(handler.IsProcessExitHandled(processId), "pruned once 5 minutes have passed on the monotonic clock");
                 }
             }));
 

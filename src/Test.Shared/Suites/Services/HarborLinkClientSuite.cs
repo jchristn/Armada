@@ -89,6 +89,72 @@ namespace Test.Shared.Suites.Services
                 await AssertThrowsAsync<ArgumentNullException>(() => client.RunSessionAsync(null!, CancellationToken.None));
             }));
 
+            cases.Add(CaseAsync("health_poll_survives_wall_clock_jump", "The deferred-launch health poll times out on the monotonic clock: a wall-clock jump (sleep/wake) does not end it early and roll back a healthy slot", TestTags.Reliability, async () =>
+            {
+                // The poll used a DateTime.UtcNow deadline: when the host slept while the new slot started, the wall
+                // clock jumped past the deadline and the poll gave up, rolling back a slot that was about to answer.
+                // Here every wall-clock reading is 10 minutes after the previous one.
+                HarborLinkClient client = new HarborLinkClient("hbr_lc4", "Rig", new List<HarborCapability>(), 4, new StubExecutor(new HostCommandResult()), CreateLogging(), 0);
+                JumpingTimeProvider time = new JumpingTimeProvider();
+                client.Time = time;
+                int probes = 0;
+
+                bool healthy = await client.PollUntilHealthyAsync(
+                    () => Task.FromResult(Interlocked.Increment(ref probes) >= 4),
+                    TimeSpan.FromSeconds(60),
+                    TimeSpan.FromMilliseconds(10)).ConfigureAwait(false);
+
+                AssertTrue(healthy, "the poll kept probing until the slot answered instead of giving up on the jumped wall clock");
+                AssertEqual(4, probes);
+            }));
+
+            cases.Add(CaseAsync("health_poll_times_out_on_monotonic_clock", "The deferred-launch health poll still gives up once its timeout elapses on the monotonic clock", TestTags.Negative, async () =>
+            {
+                HarborLinkClient client = new HarborLinkClient("hbr_lc5", "Rig", new List<HarborCapability>(), 4, new StubExecutor(new HostCommandResult()), CreateLogging(), 0);
+                JumpingTimeProvider time = new JumpingTimeProvider();
+                client.Time = time;
+                int probes = 0;
+
+                bool healthy = await client.PollUntilHealthyAsync(
+                    () =>
+                    {
+                        Interlocked.Increment(ref probes);
+                        time.Advance(TimeSpan.FromSeconds(1));
+                        return Task.FromResult(false);
+                    },
+                    TimeSpan.FromSeconds(5),
+                    TimeSpan.FromMilliseconds(1)).ConfigureAwait(false);
+
+                AssertFalse(healthy, "a slot that never answers is reported unhealthy");
+                AssertEqual(5, probes);
+            }));
+
+            cases.Add(CaseAsync("launch_durations_use_monotonic_clock", "A launched job's runtime and time to first output are measured on the monotonic clock, not inflated by a wall-clock jump", TestTags.Reliability, async () =>
+            {
+                JumpingTimeProvider time = new JumpingTimeProvider();
+                ScriptedJobRunner runner = new ScriptedJobRunner(time);
+                FakeTransport transport = new FakeTransport();
+                transport.Enqueue(HarborProtocol.Serialize(new HarborLaunchRequest { JobId = "job-m", Runtime = "claude", WorkingDirectory = "/repo" }));
+                HarborLinkClient client = new HarborLinkClient("hbr_lc6", "Rig", new List<HarborCapability>(), 4, new StubExecutor(new HostCommandResult()), CreateLogging(), 0, null, runner);
+                client.Time = time;
+
+                await client.RunSessionAsync(transport, CancellationToken.None).ConfigureAwait(false);
+
+                HarborExited? exited = null;
+                foreach (string raw in transport.Sent)
+                {
+                    if (HarborProtocol.Deserialize(raw) is HarborExited e) exited = e;
+                }
+
+                AssertNotNull(exited, "the exit was reported");
+                AssertNotNull(exited!.DurationMs, "runtime reported");
+                AssertNotNull(exited.TimeToFirstTokenMs, "time to first output reported");
+                // 2 s before the first output and 3 s more before the exit, on the monotonic clock. A wall-clock
+                // measurement would include the 10-minute jumps.
+                AssertTrue(exited.DurationMs!.Value >= 5000 && exited.DurationMs.Value < 60000, "runtime is the monotonic 5 s, not wall-clock jumps: " + exited.DurationMs.Value);
+                AssertTrue(exited.TimeToFirstTokenMs!.Value >= 2000 && exited.TimeToFirstTokenMs.Value <= exited.DurationMs.Value, "first output is the monotonic 2 s: " + exited.TimeToFirstTokenMs.Value);
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: "Services.HarborLinkClient",
                 displayName: "Harbor Link Client",
@@ -161,6 +227,26 @@ namespace Test.Shared.Suites.Services
             }
 
             public Task CloseAsync(CancellationToken token) => Task.CompletedTask;
+        }
+
+        private sealed class ScriptedJobRunner : IHarborJobRunner
+        {
+            private readonly JumpingTimeProvider _Time;
+
+            public ScriptedJobRunner(JumpingTimeProvider time) => _Time = time;
+
+            public Task StartAsync(HarborLaunchRequest request, string? mcpBaseUrl, Action<int> onStarted, Action<HarborOutputStreamEnum, string> onOutput, Action<int> onExited, CancellationToken token)
+            {
+                onStarted(4242);
+                _Time.Advance(TimeSpan.FromSeconds(2));
+                onOutput(HarborOutputStreamEnum.Stdout, "hello");
+                _Time.Advance(TimeSpan.FromSeconds(3));
+                onOutput(HarborOutputStreamEnum.Stdout, "more");
+                onExited(0);
+                return Task.CompletedTask;
+            }
+
+            public Task StopAsync(string jobId, int gracefulTimeoutMs, CancellationToken token) => Task.CompletedTask;
         }
 
         private sealed class StubExecutor : IHostCommandExecutor

@@ -238,8 +238,10 @@ namespace Armada.Server
                 object outputLock = new object();
                 StringBuilder output = new StringBuilder();
                 StringBuilder thinking = new StringBuilder();
-                DateTime startUtc = DateTime.UtcNow;
-                DateTime? firstOutputUtc = null;
+                // Turn timing is measured on the monotonic clock: a wall-clock difference grows by however long the
+                // host slept during the turn (or goes negative on a backward NTP step).
+                System.Diagnostics.Stopwatch turnTimer = System.Diagnostics.Stopwatch.StartNew();
+                TimeSpan? firstOutputAfter = null;
 
                 // Per-turn telemetry harvested from the captain's own output. Mux emits JSONL protocol
                 // events (run_started/assistant_text/run_completed) carrying model, duration, and token
@@ -288,7 +290,7 @@ namespace Armada.Server
                         {
                             lock (outputLock)
                             {
-                                if (firstOutputUtc == null) firstOutputUtc = DateTime.UtcNow;
+                                if (firstOutputAfter == null) firstOutputAfter = turnTimer.Elapsed;
                                 if (output.Length < _MaxOutputChars) output.Append(deltaText);
                             }
                             emitChunk(deltaText!);
@@ -342,7 +344,7 @@ namespace Armada.Server
                             if (!String.IsNullOrEmpty(muxEvent.Model)) reportedModel = muxEvent.Model;
                             if (muxEvent.EventType == MuxProtocolEvent.AssistantText)
                             {
-                                if (firstOutputUtc == null) firstOutputUtc = DateTime.UtcNow;
+                                if (firstOutputAfter == null) firstOutputAfter = turnTimer.Elapsed;
                                 deltaText = muxEvent.Text;
                                 // Accumulate streamed assistant text so a reply survives even if the final-message
                                 // artifact (reply.txt) is not written.
@@ -401,7 +403,7 @@ namespace Armada.Server
                             {
                                 lock (outputLock)
                                 {
-                                    if (firstOutputUtc == null) firstOutputUtc = DateTime.UtcNow;
+                                    if (firstOutputAfter == null) firstOutputAfter = turnTimer.Elapsed;
                                     if (output.Length < _MaxOutputChars) output.Append(deltaText);
                                 }
                                 emitChunk(deltaText!);
@@ -445,7 +447,7 @@ namespace Armada.Server
 
                     lock (outputLock)
                     {
-                        if (firstOutputUtc == null) firstOutputUtc = DateTime.UtcNow;
+                        if (firstOutputAfter == null) firstOutputAfter = turnTimer.Elapsed;
                         if (output.Length < _MaxOutputChars)
                         {
                             output.Append(line);
@@ -563,13 +565,13 @@ namespace Armada.Server
                     }
                 }
 
-                // Keep all timing on one wall-clock base so time-to-first-token never exceeds total and
+                // Keep all timing on one monotonic base so time-to-first-token never exceeds total and
                 // streaming always resolves. reportedDurationMs is captain-internal and, being on a
-                // different base than our wall clock, is used only as a fallback total.
-                double wallClockMs = (DateTime.UtcNow - startUtc).TotalMilliseconds;
-                double totalMs = wallClockMs > 0 ? wallClockMs : (reportedDurationMs ?? wallClockMs);
-                double? ttftMs = firstOutputUtc.HasValue
-                    ? Math.Min((firstOutputUtc.Value - startUtc).TotalMilliseconds, totalMs)
+                // different base than our timer, is used only as a fallback total.
+                double measuredMs = turnTimer.Elapsed.TotalMilliseconds;
+                double totalMs = measuredMs > 0 ? measuredMs : (reportedDurationMs ?? measuredMs);
+                double? ttftMs = firstOutputAfter.HasValue
+                    ? Math.Min(firstOutputAfter.Value.TotalMilliseconds, totalMs)
                     : (double?)null;
 
                 // Only Claude Code reports a real completion-token count (output_tokens from its "result"

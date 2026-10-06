@@ -167,6 +167,56 @@ namespace Test.Shared.Suites.Tui
                 AssertEqual(1, poller.Inbox.Count, "inbox");
             }));
 
+            cases.Add(TuiCase.Async(Suite, "status_poller_schedule_uses_monotonic_clock", "The status poller schedules polls on the monotonic clock: a wall-clock jump neither re-fires nor postpones them", async () =>
+            {
+                // The schedule held DateTime.UtcNow deadlines: a forward jump fired every poll at once and a backward
+                // NTP step postponed them all until the clock caught up. Every wall-clock reading here is 10 minutes
+                // after the last.
+                StubHttpHandler stub = TuiFixtures.SignedInServer();
+                stub.Json("GET", "/api/v1/jobs", "{\"Objects\":[],\"TotalRecords\":0}");
+                ArmadaClient client = new ArmadaClient(new ArmadaClientOptions("http://127.0.0.1:9"), stub);
+                QueueDispatcher dispatcher = new QueueDispatcher();
+                StatusPoller poller = new StatusPoller(() => client, dispatcher);
+                JumpingTimeProvider time = new JumpingTimeProvider();
+                poller.Time = time;
+
+                await poller.PollDueAsync();
+                AssertEqual(1, stub.CountFor("GET", "/api/v1/status/health"), "first pass polls health");
+                AssertEqual(1, stub.CountFor("GET", "/api/v1/jobs"), "first pass polls jobs");
+                AssertEqual(1, stub.CountFor("GET", "/api/v1/inbox"), "first pass polls the inbox");
+
+                await poller.PollDueAsync();
+                AssertEqual(1, stub.CountFor("GET", "/api/v1/status/health"), "nothing is due again right away despite the wall-clock jump");
+                AssertEqual(1, stub.CountFor("GET", "/api/v1/jobs"), "jobs not due");
+                AssertEqual(1, stub.CountFor("GET", "/api/v1/inbox"), "inbox not due");
+
+                time.Advance(TimeSpan.FromSeconds(21));
+                await poller.PollDueAsync();
+                AssertEqual(2, stub.CountFor("GET", "/api/v1/inbox"), "the inbox is due after 20 s of monotonic time");
+                AssertEqual(1, stub.CountFor("GET", "/api/v1/status/health"), "health waits for 30 s");
+
+                time.Advance(TimeSpan.FromSeconds(10));
+                await poller.PollDueAsync();
+                AssertEqual(2, stub.CountFor("GET", "/api/v1/status/health"), "health is due after 30 s");
+                AssertEqual(2, stub.CountFor("GET", "/api/v1/jobs"), "idle jobs are due after 30 s");
+                dispatcher.Drain();
+            }));
+
+            cases.Add(TuiCase.Async(Suite, "client_request_duration_uses_monotonic_clock", "The client's RequestCompleted duration is measured on the monotonic clock, not inflated by a wall-clock jump", async () =>
+            {
+                // The duration was DateTime.UtcNow - started: a wall-clock jump during a request (sleep/wake, NTP step)
+                // inflated it or made it negative. Every wall-clock reading here is 10 minutes after the last.
+                StubHttpHandler stub = TuiFixtures.SignedInServer();
+                ArmadaClient client = new ArmadaClient(new ArmadaClientOptions("http://127.0.0.1:9"), stub);
+                client.Time = new JumpingTimeProvider();
+                List<TimeSpan> durations = new List<TimeSpan>();
+                client.RequestCompleted += (sender, e) => durations.Add(e.Duration);
+
+                await client.GetHealthAsync();
+                AssertEqual(1, durations.Count, "one completed request");
+                AssertTrue(durations[0] >= TimeSpan.Zero && durations[0] < TimeSpan.FromMinutes(1), "the duration is the real request time, not the wall-clock jumps: " + durations[0]);
+            }));
+
             cases.Add(TuiCase.Sync(Suite, "external_files", "External service saves and loads files and expands ~", () =>
             {
                 string dir = Temp();

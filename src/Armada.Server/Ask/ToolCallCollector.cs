@@ -11,12 +11,28 @@ namespace Armada.Server.Ask
     /// <remarks>Thread safety: all members lock an internal object; runtime output callbacks may arrive on any thread.</remarks>
     public class ToolCallCollector
     {
+        #region Public-Members
+
+        /// <summary>
+        /// Time source. Elapsed times are measured on its monotonic clock, never its wall clock, so a wall-clock jump
+        /// (the host sleeping and waking, an NTP step) cannot inflate or negate them. Defaults to
+        /// <see cref="TimeProvider.System"/>; tests substitute a provider whose wall clock jumps.
+        /// </summary>
+        internal TimeProvider Time
+        {
+            get => _Time;
+            set => _Time = value ?? throw new ArgumentNullException(nameof(Time));
+        }
+
+        #endregion
+
         #region Private-Members
 
         private readonly object _Lock = new object();
         private readonly List<AskMessageToolCall> _Calls = new List<AskMessageToolCall>();
         private readonly Dictionary<string, AskMessageToolCall> _ById = new Dictionary<string, AskMessageToolCall>(StringComparer.Ordinal);
-        private readonly Dictionary<string, DateTime> _Started = new Dictionary<string, DateTime>(StringComparer.Ordinal);
+        private readonly Dictionary<string, long> _Started = new Dictionary<string, long>(StringComparer.Ordinal);
+        private TimeProvider _Time = TimeProvider.System;
 
         #endregion
 
@@ -42,7 +58,7 @@ namespace Armada.Server.Ask
                     if (!String.IsNullOrEmpty(activity.Id))
                     {
                         _ById[activity.Id!] = call;
-                        _Started[activity.Id!] = DateTime.UtcNow;
+                        _Started[activity.Id!] = _Time.GetTimestamp();
                     }
                 }
 
@@ -88,7 +104,7 @@ namespace Armada.Server.Ask
             if (String.IsNullOrEmpty(callId)) return null;
             lock (_Lock)
             {
-                return _Started.TryGetValue(callId!, out DateTime started) ? (DateTime.UtcNow - started).TotalMilliseconds : (double?)null;
+                return _Started.TryGetValue(callId!, out long started) ? _Time.GetElapsedTime(started).TotalMilliseconds : (double?)null;
             }
         }
 

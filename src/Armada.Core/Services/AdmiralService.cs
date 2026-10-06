@@ -78,6 +78,18 @@ namespace Armada.Core.Services
         /// </summary>
         public Func<int, bool>? OnIsProcessTracked { get; set; }
 
+        /// <summary>
+        /// Time source. In-process waits and windows (the wait for a fast-exiting captain's launch to be recorded, the
+        /// crash-loop window) are measured on its monotonic clock, never its wall clock, so a wall-clock jump (the host
+        /// sleeping and waking, an NTP step) cannot end a wait early or empty a window. Defaults to
+        /// <see cref="TimeProvider.System"/>; tests substitute a provider whose wall clock jumps.
+        /// </summary>
+        internal TimeProvider Time
+        {
+            get => _Time;
+            set => _Time = value ?? throw new ArgumentNullException(nameof(Time));
+        }
+
         #endregion
 
         #region Private-Members
@@ -90,8 +102,9 @@ namespace Armada.Core.Services
         private ArmadaSettings _Settings;
         private ISystemResourceProbe _ResourceProbe = new SystemResourceProbe();
         private long _MemoryPressureDeferrals = 0;
-        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, List<DateTime>> _CaptainCrashTimes =
-            new System.Collections.Concurrent.ConcurrentDictionary<string, List<DateTime>>();
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, List<long>> _CaptainCrashTimes =
+            new System.Collections.Concurrent.ConcurrentDictionary<string, List<long>>();
+        private TimeProvider _Time = TimeProvider.System;
         private ICaptainService _Captains;
         private IMissionService _Missions;
         private IVoyageService _Voyages;
@@ -804,8 +817,11 @@ namespace Armada.Core.Services
             // Wait briefly for the launch to be recorded before handling the exit.
             if (mission.Status == MissionStatusEnum.Assigned)
             {
-                DateTime waitUntilUtc = DateTime.UtcNow.AddSeconds(30);
-                while (mission != null && mission.Status == MissionStatusEnum.Assigned && DateTime.UtcNow < waitUntilUtc)
+                // Measured on the monotonic clock: a wall-clock deadline expired at once when the host slept and woke,
+                // and the exit was then handled against a mission the launch path was about to mark InProgress.
+                long waitStarted = _Time.GetTimestamp();
+                TimeSpan waitFor = TimeSpan.FromSeconds(30);
+                while (mission != null && mission.Status == MissionStatusEnum.Assigned && _Time.GetElapsedTime(waitStarted) < waitFor)
                 {
                     await Task.Delay(100, token).ConfigureAwait(false);
                     mission = await _Database.Missions.ReadAsync(missionId, token).ConfigureAwait(false);
@@ -939,19 +955,21 @@ namespace Armada.Core.Services
         /// the counter restarts after quarantine. Tracking is in-memory: a restart resets the counter, which
         /// is the intended behavior for a fresh process.
         /// </summary>
-        private bool RecordCrashAndCheckLoop(string captainId)
+        internal bool RecordCrashAndCheckLoop(string captainId)
         {
             int threshold = _Settings.CaptainCrashLoopThreshold;
             if (threshold <= 0) return false;
 
-            DateTime nowUtc = DateTime.UtcNow;
-            DateTime windowStart = nowUtc.AddMinutes(-Math.Max(1, _Settings.CaptainCrashLoopWindowMinutes));
+            // Crash times are monotonic timestamps: on the wall clock a sleep/wake jump between two crashes pushed the
+            // earlier one out of the window, and a backward step kept old crashes in it.
+            long now = _Time.GetTimestamp();
+            TimeSpan window = TimeSpan.FromMinutes(Math.Max(1, _Settings.CaptainCrashLoopWindowMinutes));
 
-            List<DateTime> times = _CaptainCrashTimes.GetOrAdd(captainId, _ => new List<DateTime>());
+            List<long> times = _CaptainCrashTimes.GetOrAdd(captainId, _ => new List<long>());
             lock (times)
             {
-                times.RemoveAll(t => t < windowStart);
-                times.Add(nowUtc);
+                times.RemoveAll(t => _Time.GetElapsedTime(t, now) > window);
+                times.Add(now);
                 if (times.Count >= threshold)
                 {
                     times.Clear();

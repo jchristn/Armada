@@ -1,6 +1,8 @@
 namespace Armada.Core.Models
 {
+    using System;
     using System.Collections.Generic;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Request to run a one-off host command on a connected Harbor over its link, for verifying end-to-end
@@ -40,6 +42,30 @@ namespace Armada.Core.Models
         /// </summary>
         public HarborProbeRequest()
         {
+        }
+
+        #endregion
+
+        #region Public-Methods
+
+        /// <summary>
+        /// The host command this probe runs. A request body can set any field to JSON null, which deserializes to null
+        /// despite the non-nullable declarations; a null field means the same as an omitted one, its default: a blank
+        /// executable runs "git", null arguments are "--version", and a null working directory is the Harbor's
+        /// default.
+        /// </summary>
+        /// <returns>The command request; never null, with non-null executable, arguments, and working directory.</returns>
+        public HostCommandRequest ToHostCommandRequest()
+        {
+            List<string>? arguments = Arguments;
+            string? workingDirectory = WorkingDirectory;
+            return new HostCommandRequest
+            {
+                Executable = String.IsNullOrWhiteSpace(Executable) ? "git" : Executable.Trim(),
+                Arguments = arguments != null ? new List<string>(arguments) : new List<string> { "--version" },
+                WorkingDirectory = workingDirectory ?? String.Empty,
+                TimeoutMs = TimeoutMs
+            };
         }
 
         #endregion

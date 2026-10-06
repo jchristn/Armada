@@ -48,6 +48,17 @@ namespace Armada.Client
         /// </summary>
         public event EventHandler<ArmadaRequestCompletedEventArgs>? RequestCompleted;
 
+        /// <summary>
+        /// Time source. Request durations are measured on its monotonic clock, never its wall clock, so a wall-clock
+        /// jump (the host sleeping and waking, an NTP step) cannot inflate or negate them. Defaults to
+        /// <see cref="TimeProvider.System"/>; tests substitute a provider whose wall clock jumps.
+        /// </summary>
+        internal TimeProvider Time
+        {
+            get => _Time;
+            set => _Time = value ?? throw new ArgumentNullException(nameof(Time));
+        }
+
         #endregion
 
         #region Private-Members
@@ -55,6 +66,7 @@ namespace Armada.Client
         private readonly HttpClient _Http;
         private readonly bool _OwnsHttp;
         private bool _Disposed = false;
+        private TimeProvider _Time = TimeProvider.System;
 
         #endregion
 
@@ -278,24 +290,24 @@ namespace Armada.Client
             CancellationToken token)
         {
             int timeoutMs = options != null && options.TimeoutMs.HasValue ? options.TimeoutMs.Value : Options.TimeoutMs;
-            DateTime started = DateTime.UtcNow;
+            long started = _Time.GetTimestamp();
             using (CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(token))
             {
                 timeout.CancelAfter(timeoutMs);
                 try
                 {
                     HttpResponseMessage response = await _Http.SendAsync(request, HttpCompletionOption.ResponseContentRead, timeout.Token).ConfigureAwait(false);
-                    RaiseCompleted(method, path, (int)response.StatusCode, DateTime.UtcNow - started);
+                    RaiseCompleted(method, path, (int)response.StatusCode, _Time.GetElapsedTime(started));
                     return response;
                 }
                 catch (OperationCanceledException oce) when (!token.IsCancellationRequested)
                 {
-                    RaiseCompleted(method, path, 0, DateTime.UtcNow - started);
+                    RaiseCompleted(method, path, 0, _Time.GetElapsedTime(started));
                     throw new ArmadaApiException("Request timed out", 0, ArmadaApiException.TimeoutCode, null, requestId, method, path, null, null, oce);
                 }
                 catch (HttpRequestException hre)
                 {
-                    RaiseCompleted(method, path, 0, DateTime.UtcNow - started);
+                    RaiseCompleted(method, path, 0, _Time.GetElapsedTime(started));
                     throw new ArmadaApiException(
                         "Could not reach the Armada server at " + Options.BaseUrl + ": " + hre.Message,
                         0, "unreachable", null, requestId, method, path, null, null, hre);

@@ -19,6 +19,22 @@ namespace Armada.Server
     /// </summary>
     public class AgentLifecycleHandler
     {
+        #region Public-Members
+
+        /// <summary>
+        /// Time source. In-process intervals (the mission-heartbeat write throttle and how long a handled process
+        /// exit is remembered) are measured on its monotonic clock, never its wall clock, so a wall-clock jump (the
+        /// host sleeping and waking, an NTP step) cannot forget a handled exit early or suppress heartbeat writes.
+        /// Defaults to <see cref="TimeProvider.System"/>; tests substitute a provider whose wall clock jumps.
+        /// </summary>
+        internal TimeProvider Time
+        {
+            get => _Time;
+            set => _Time = value ?? throw new ArgumentNullException(nameof(Time));
+        }
+
+        #endregion
+
         #region Private-Members
 
         private string _Header = "[AgentLifecycle] ";
@@ -39,6 +55,8 @@ namespace Armada.Server
         private Func<string, string, string?, string?, string?, string?, string?, string?, Task> _EmitEventAsync;
         private readonly TimeSpan _ModelValidationTimeout = TimeSpan.FromSeconds(5);
         private readonly TimeSpan _MissionHeartbeatPersistInterval = TimeSpan.FromSeconds(15);
+        private readonly TimeSpan _HandledProcessExitRetention = TimeSpan.FromMinutes(5);
+        private TimeProvider _Time = TimeProvider.System;
         private const int _MaxMissionOutputChars = 262144;
 
         /// <summary>
@@ -59,8 +77,9 @@ namespace Armada.Server
 
         /// <summary>
         /// Throttles mission heartbeat persistence so verbose logs do not rewrite mission/voyage rows on every output line.
+        /// Values are monotonic timestamps (<see cref="Time"/>) of the last persisted write.
         /// </summary>
-        private System.Collections.Concurrent.ConcurrentDictionary<string, DateTime> _MissionHeartbeatWrites = new System.Collections.Concurrent.ConcurrentDictionary<string, DateTime>();
+        private System.Collections.Concurrent.ConcurrentDictionary<string, long> _MissionHeartbeatWrites = new System.Collections.Concurrent.ConcurrentDictionary<string, long>();
 
         /// <summary>
         /// Tracks per-mission final response artifacts so canonical agent output can be recovered even if live streaming is noisy.
@@ -93,9 +112,9 @@ namespace Armada.Server
         /// <summary>
         /// Tracks process IDs whose exit has been received via the OnProcessExited callback.
         /// Used by the health check to avoid racing with the async exit handler.
-        /// Entries are pruned after 5 minutes.
+        /// Entries are pruned after 5 minutes. Values are monotonic timestamps (<see cref="Time"/>).
         /// </summary>
-        private System.Collections.Concurrent.ConcurrentDictionary<int, DateTime> _HandledProcessExits = new System.Collections.Concurrent.ConcurrentDictionary<int, DateTime>();
+        private System.Collections.Concurrent.ConcurrentDictionary<int, long> _HandledProcessExits = new System.Collections.Concurrent.ConcurrentDictionary<int, long>();
 
         /// <summary>
         /// The last structured provider error each running process reported (see IAgentRuntime.OnProviderError).
@@ -260,11 +279,12 @@ namespace Armada.Server
         /// <returns>True if the exit callback has already fired for this PID.</returns>
         public bool IsProcessExitHandled(int processId)
         {
-            // Prune stale entries older than 5 minutes
-            DateTime cutoff = DateTime.UtcNow.AddMinutes(-5);
-            foreach (System.Collections.Generic.KeyValuePair<int, DateTime> kvp in _HandledProcessExits)
+            // Prune entries older than 5 minutes, on the monotonic clock: on the wall clock a sleep/wake jump forgot a
+            // just-handled exit, and the health check could then race the exit handler.
+            long now = _Time.GetTimestamp();
+            foreach (System.Collections.Generic.KeyValuePair<int, long> kvp in _HandledProcessExits)
             {
-                if (kvp.Value < cutoff)
+                if (_Time.GetElapsedTime(kvp.Value, now) > _HandledProcessExitRetention)
                     _HandledProcessExits.TryRemove(kvp.Key, out _);
             }
 
@@ -799,29 +819,7 @@ namespace Armada.Server
             }
             if (String.IsNullOrEmpty(captainId)) return;
 
-            bool persistMissionHeartbeat = false;
-            DateTime nowUtc = DateTime.UtcNow;
-            if (!String.IsNullOrEmpty(missionId))
-            {
-                string capturedMissionId = missionId;
-                _MissionHeartbeatWrites.AddOrUpdate(
-                    capturedMissionId,
-                    _ =>
-                    {
-                        persistMissionHeartbeat = true;
-                        return nowUtc;
-                    },
-                    (_, previous) =>
-                    {
-                        if (nowUtc - previous >= _MissionHeartbeatPersistInterval)
-                        {
-                            persistMissionHeartbeat = true;
-                            return nowUtc;
-                        }
-
-                        return previous;
-                    });
-            }
+            bool persistMissionHeartbeat = !String.IsNullOrEmpty(missionId) && ShouldPersistMissionHeartbeat(missionId);
 
             string capturedCaptainId = captainId;
             _ = Task.Run(async () =>
@@ -1132,7 +1130,7 @@ namespace Armada.Server
             // The health check consults this set to avoid racing with the async exit handler
             // (e.g. triggering recovery for a process that exited cleanly but whose completion
             // handler hasn't finished yet).
-            _HandledProcessExits[processId] = DateTime.UtcNow;
+            _HandledProcessExits[processId] = _Time.GetTimestamp();
 
             string capturedCaptainId = captainId;
             string capturedMissionId = missionId;
@@ -1179,6 +1177,38 @@ namespace Armada.Server
         #endregion
 
         #region Private-Methods
+
+        /// <summary>
+        /// Whether a mission heartbeat should be written now: the first one for a mission, then at most one per
+        /// persist interval. The interval is measured on the monotonic clock: on the wall clock a backward step
+        /// suppressed writes until the clock caught up, and the mission looked stalled.
+        /// </summary>
+        /// <param name="missionId">Mission identifier.</param>
+        /// <returns>True when the heartbeat should be persisted.</returns>
+        internal bool ShouldPersistMissionHeartbeat(string missionId)
+        {
+            bool persist = false;
+            long now = _Time.GetTimestamp();
+            _MissionHeartbeatWrites.AddOrUpdate(
+                missionId,
+                _ =>
+                {
+                    persist = true;
+                    return now;
+                },
+                (_, previous) =>
+                {
+                    if (_Time.GetElapsedTime(previous, now) >= _MissionHeartbeatPersistInterval)
+                    {
+                        persist = true;
+                        return now;
+                    }
+
+                    persist = false;
+                    return previous;
+                });
+            return persist;
+        }
 
         /// <summary>
         /// Resolve the process executor for a launch. Prefers a connected, eligible Harbor (making Harbor the

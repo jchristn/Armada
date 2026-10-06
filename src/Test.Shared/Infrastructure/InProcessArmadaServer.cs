@@ -132,8 +132,8 @@ namespace Test.Shared.Infrastructure
             Client.DefaultRequestHeaders.Add("X-Api-Key", Settings.ApiKey);
             Client.Timeout = TimeSpan.FromSeconds(60);
 
-            DateTime deadline = DateTime.UtcNow.AddSeconds(30);
-            while (DateTime.UtcNow < deadline)
+            MonotonicDeadline deadline = MonotonicDeadline.After(TimeSpan.FromSeconds(30));
+            while (!deadline.Passed)
             {
                 try
                 {

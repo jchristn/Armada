@@ -451,6 +451,61 @@ namespace Test.Shared.Suites.Services
                 AssertContains("nothing to do", output.ToString());
             }));
 
+            cases.Add(Case("windows_stop_wait_survives_wall_clock_jump", "Windows uninstall waits for the stop on the monotonic clock: a wall-clock jump (sleep/wake) does not cut the wait short", TestTags.Reliability, () =>
+            {
+                // The wait used a DateTime.UtcNow deadline, so a wall-clock jump ended it after one probe and the
+                // service was deleted while still stopping. Every wall-clock reading here is 10 minutes after the last.
+                int stops = 0;
+                RecordingCommandRunner runner = new RecordingCommandRunner();
+                runner.Responder = (file, args) =>
+                {
+                    if (args[0] == "query") return new CommandResult(0, "", "");
+                    if (args[0] == "stop")
+                    {
+                        stops++;
+                        if (stops == 1) return new CommandResult(0, "", "");
+                        return stops <= 4 ? new CommandResult(1061, "", "") : new CommandResult(1062, "", "");
+                    }
+                    return null;
+                };
+                RegistrationContext context = AdmiralContext(HostPlatformEnum.Windows, "C:\\Armada\\Armada.Server.exe", true, NewHome());
+                StringWriter output = new StringWriter();
+                ServiceRegistrar registrar = new ServiceRegistrar(context, runner, output) { PollIntervalMs = 0 };
+                registrar.Time = new JumpingTimeProvider();
+
+                AssertEqual(RegistrationExitCode.Success, registrar.Uninstall());
+                AssertEqual("sc.exe query armada|sc.exe stop armada|sc.exe stop armada|sc.exe stop armada|sc.exe stop armada|sc.exe stop armada|sc.exe delete armada", String.Join("|", runner.Calls));
+                AssertFalse(output.ToString().Contains("did not report STOPPED"), "the wait did not time out");
+            }));
+
+            cases.Add(Case("windows_stop_wait_times_out_on_monotonic_clock", "Windows uninstall gives up waiting once the stop timeout elapses on the monotonic clock", TestTags.Negative, () =>
+            {
+                JumpingTimeProvider time = new JumpingTimeProvider();
+                int stops = 0;
+                RecordingCommandRunner runner = new RecordingCommandRunner();
+                runner.Responder = (file, args) =>
+                {
+                    if (args[0] == "query") return new CommandResult(0, "", "");
+                    if (args[0] == "stop")
+                    {
+                        stops++;
+                        if (stops == 1) return new CommandResult(0, "", "");
+                        time.Advance(TimeSpan.FromSeconds(1));
+                        return new CommandResult(1061, "", "");
+                    }
+                    return null;
+                };
+                RegistrationContext context = AdmiralContext(HostPlatformEnum.Windows, "C:\\Armada\\Armada.Server.exe", true, NewHome());
+                StringWriter output = new StringWriter();
+                ServiceRegistrar registrar = new ServiceRegistrar(context, runner, output) { PollIntervalMs = 0, StopTimeoutSeconds = 3 };
+                registrar.Time = time;
+
+                AssertEqual(RegistrationExitCode.Success, registrar.Uninstall());
+                AssertEqual(4, stops, "one stop request, then three probes before the 3 s timeout");
+                AssertContains("did not report STOPPED within 3 s", output.ToString());
+                AssertTrue(runner.Ran("sc.exe delete"), "deleted after the timeout");
+            }));
+
             cases.Add(Case("windows_dry_run_only_probes", "Windows --dry-run runs only the read-only query", TestTags.Positive, () =>
             {
                 RecordingCommandRunner runner = new RecordingCommandRunner();
