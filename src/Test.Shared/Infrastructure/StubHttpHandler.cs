@@ -37,6 +37,14 @@ namespace Test.Shared.Infrastructure
             get { return _Log.Select(r => r.Text).ToList(); }
         }
 
+        /// <summary>
+        /// Requests received whose response has not been returned yet. Thread-safe.
+        /// </summary>
+        public int InFlight
+        {
+            get { return Volatile.Read(ref _InFlight); }
+        }
+
 
         #endregion
 
@@ -44,6 +52,8 @@ namespace Test.Shared.Infrastructure
 
         private readonly ConcurrentQueue<StubRequest> _Log = new ConcurrentQueue<StubRequest>();
         private int _Sequence = -1;
+        private int _InFlight = 0;
+        private readonly ConcurrentDictionary<string, int> _Delays = new ConcurrentDictionary<string, int>(StringComparer.Ordinal);
         private readonly ConcurrentDictionary<string, Func<string, HttpResponseMessage>> _Routes = new ConcurrentDictionary<string, Func<string, HttpResponseMessage>>(StringComparer.Ordinal);
 
         #endregion
@@ -182,12 +192,43 @@ namespace Test.Shared.Infrastructure
             return result;
         }
 
+        /// <summary>
+        /// Delay every response to a route, to simulate a slow server.
+        /// </summary>
+        /// <param name="method">HTTP method.</param>
+        /// <param name="path">Path without query.</param>
+        /// <param name="milliseconds">Delay, 1 to 60000.</param>
+        /// <returns>This handler.</returns>
+        public StubHttpHandler Delay(string method, string path, int milliseconds)
+        {
+            if (milliseconds < 1 || milliseconds > 60000) throw new ArgumentOutOfRangeException(nameof(milliseconds));
+            _Delays[method.ToUpperInvariant() + " " + path] = milliseconds;
+            return this;
+        }
+
         #endregion
 
         #region Protected-Methods
 
         /// <inheritdoc />
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref _InFlight);
+            try
+            {
+                return await RespondAsync(request, cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                Interlocked.Decrement(ref _InFlight);
+            }
+        }
+
+        #endregion
+
+        #region Private-Methods
+
+        private async Task<HttpResponseMessage> RespondAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             string body = request.Content != null ? await request.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false) : "";
             string path = request.RequestUri!.AbsolutePath;
@@ -199,6 +240,7 @@ namespace Test.Shared.Infrastructure
             recorded.Query = request.RequestUri.Query;
             recorded.Body = body;
             _Log.Enqueue(recorded);
+            if (_Delays.TryGetValue(recorded.Method + " " + path, out int delayMs)) await Task.Delay(delayMs, cancellationToken).ConfigureAwait(false);
             if (_Routes.TryGetValue(key + request.RequestUri.Query, out Func<string, HttpResponseMessage>? exact)) return exact(body);
             if (_Routes.TryGetValue(key, out Func<string, HttpResponseMessage>? responder)) return responder(body);
             return Response(HttpStatusCode.NotFound, "{\"Error\":\"NotFound\",\"Message\":\"No stub for " + key + "\"}");

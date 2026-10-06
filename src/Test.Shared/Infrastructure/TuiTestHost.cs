@@ -62,6 +62,8 @@ namespace Test.Shared.Infrastructure
 
         #region Private-Members
 
+        private readonly StubHttpHandler? _Handler;
+
         private bool _Started = false;
 
         private static readonly Dictionary<string, string> _Keys = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -89,6 +91,7 @@ namespace Test.Shared.Infrastructure
         /// <param name="configure">Adjust start options, or null.</param>
         public TuiTestHost(int width, int height, StubHttpHandler? handler, string serverUrl = "http://127.0.0.1:9", Action<TuiStartOptions>? configure = null)
         {
+            _Handler = handler;
             Width = width;
             Height = height;
             TempDir = Path.Combine(Path.GetTempPath(), "armada-tui-test-" + Guid.NewGuid().ToString("N").Substring(0, 10));
@@ -125,6 +128,33 @@ namespace Test.Shared.Infrastructure
             PumpUntil(() => Tui.StartupTask.IsCompleted, 10000);
             Pump();
             return this;
+        }
+
+        /// <summary>
+        /// Pump until the screen has stopped asking the stub server for data: nothing in flight and no new request for
+        /// <paramref name="quietPumps"/> consecutive pumps, then a few more pumps so the last responses are applied.
+        /// Screens load reference data and records in the background and rebuild forms when it arrives, so a check
+        /// that walks focus stops must start after that, not while widgets are still being replaced. Without a stub
+        /// handler (end-to-end hosts) it only pumps.
+        /// </summary>
+        /// <param name="quietPumps">Consecutive pumps without a new request (default 20, minimum 1).</param>
+        /// <param name="timeoutMs">Upper bound in milliseconds (default 5000).</param>
+        /// <returns>True when the requests went quiet before the timeout.</returns>
+        public bool SettleRequests(int quietPumps = 20, int timeoutMs = 5000)
+        {
+            if (quietPumps < 1) throw new ArgumentOutOfRangeException(nameof(quietPumps));
+            int lastCount = -1;
+            int quiet = 0;
+            bool settled = PumpUntil(() =>
+            {
+                int count = _Handler != null ? _Handler.Log.Count : 0;
+                bool idle = _Handler == null || _Handler.InFlight == 0;
+                quiet = idle && count == lastCount ? quiet + 1 : 0;
+                lastCount = count;
+                return quiet >= quietPumps;
+            }, timeoutMs);
+            Pump();
+            return settled;
         }
 
         /// <summary>

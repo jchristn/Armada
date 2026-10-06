@@ -3,7 +3,9 @@ namespace Test.Shared.Suites.Tui
     using System;
     using System.Collections.Generic;
     using System.Linq;
+    using Armada.Tui.Screens;
     using Armada.Tui.Screens.Ask;
+    using Armada.Tui.Screens.Operations;
     using Armada.Tui.Shell;
     using Armada.Tui.Theming;
     using Armada.Tui.Widgets;
@@ -65,6 +67,9 @@ namespace Test.Shared.Suites.Tui
                 {
                     using (TuiTestHost host = TuiCase.SignedIn(120, 40, path))
                     {
+                        // Screens rebuild their forms when background data arrives (Dispatch rebuilds on pipelines,
+                        // captains, and personas), which replaces the widgets the audit is walking; start after.
+                        host.SettleRequests();
                         audited += Audit(host, path, problems);
                     }
                 }
@@ -81,6 +86,27 @@ namespace Test.Shared.Suites.Tui
 
                 Report(problems);
                 AssertTrue(audited >= TuiDisplaySuite.AllPaths().Count, "audited most routes (" + audited + ")");
+            }));
+
+            cases.Add(TuiCase.Sync(Suite, "focus_audit_slow_reference_data", "FocusAudit on Dispatch waits for slow reference data, which rebuilds the form when it arrives", () =>
+            {
+                // A slow runner delivered Dispatch's pipelines, captains, and personas after the audit had started; the
+                // form rebuild replaced the stop the audit began from, so Tab could never return to it.
+                StubHttpHandler stub = TuiFixtures.SignedInServer()
+                    .Delay("GET", "/api/v1/pipelines", 400)
+                    .Delay("GET", "/api/v1/captains", 400)
+                    .Delay("GET", "/api/v1/personas", 400);
+                using (TuiTestHost host = TuiCase.SignedIn(120, 40, "/dispatch?tab=dispatch", stub))
+                {
+                    AssertTrue(host.SettleRequests(), "requests settled\n" + String.Join("\n", stub.Requests));
+                    AssertEqual(0, stub.InFlight, "nothing in flight after settling");
+                    DispatchScreen dispatch = (DispatchScreen)((HubScreen)host.Tui.Shell.Screen!).Content;
+                    foreach (string name in new[] { "pipelines", "captains", "personas" })
+                        AssertTrue(dispatch.Reference.Loaded.Contains(name), name + " arrived (and the form rebuilt) before the audit starts");
+                    List<string> problems = new List<string>();
+                    AssertEqual(1, Audit(host, "/dispatch?tab=dispatch (slow data)", problems), "audited");
+                    Report(problems);
+                }
             }));
 
             cases.Add(TuiCase.Sync(Suite, "routes_with_data", "Record pages, panels, and forms with data: one focused box around the focused pane at every Tab stop", () =>
@@ -367,6 +393,7 @@ namespace Test.Shared.Suites.Tui
 
         private static void Settle(TuiTestHost host)
         {
+            host.SettleRequests();
             string previous = "";
             int stable = 0;
             host.PumpUntil(() =>
