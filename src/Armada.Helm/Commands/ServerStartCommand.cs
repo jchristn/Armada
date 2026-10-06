@@ -18,8 +18,16 @@ namespace Armada.Helm.Commands
     public class ServerStartCommand : BaseCommand<ServerStartSettings>
     {
         /// <inheritdoc />
+        protected override LocalOnlyCommandInfo? LocalOnly
+        {
+            get { return new LocalOnlyCommandInfo("server start", "it starts an Admiral process on this machine; start a remote Admiral on its own host"); }
+        }
+
+        /// <inheritdoc />
         public override async Task<int> ExecuteAsync(CommandContext context, ServerStartSettings settings, CancellationToken cancellationToken)
         {
+            RequireTarget();
+
             Program.WriteBanner();
             AnsiConsole.MarkupLine("[bold dodgerblue1]Admiral Server[/]");
             AnsiConsole.WriteLine();

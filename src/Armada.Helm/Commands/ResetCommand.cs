@@ -3,6 +3,7 @@ namespace Armada.Helm.Commands
     using System.ComponentModel;
     using Spectre.Console;
     using Spectre.Console.Cli;
+    using Armada.Helm.Infrastructure;
     using Armada.Core;
     using Armada.Core.Settings;
 
@@ -14,8 +15,16 @@ namespace Armada.Helm.Commands
     public class ResetCommand : BaseCommand<ResetSettings>
     {
         /// <inheritdoc />
+        protected override LocalOnlyCommandInfo? LocalOnly
+        {
+            get { return new LocalOnlyCommandInfo("reset", "it deletes this machine's Armada database, logs, docks, and repos"); }
+        }
+
+        /// <inheritdoc />
         public override async Task<int> ExecuteAsync(CommandContext context, ResetSettings settings, CancellationToken cancellationToken)
         {
+            RequireTarget();
+
             ArmadaSettings armadaSettings = GetSettings();
 
             if (!settings.Force)

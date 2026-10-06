@@ -140,6 +140,15 @@ The existing behavior, with one change: target the `current` slot's exe rather t
    `ARMADA_RESTART_WAIT_PID = <own pid>`, then stops.
 3. Child waits for the old PID, binds. No Harbor involved.
 
+The replacement runs on the same host with the same arguments
+(`ReplacementProcessLauncher`): the slot's apphost when present, else the slot's
+`Armada.Server.dll` through the dotnet host. With no slot pointer it relaunches the
+running process: a native `Armada.Server` / `Armada.Server.exe` directly, and an
+Admiral started as `dotnet Armada.Server.dll` as `<same dotnet> <Armada.Server.dll>
+<original args>` (it used to relaunch a bare `dotnet`, which exited, so the restart
+never came back). `--run-service` is not passed on, since the replacement is a
+detached child rather than a process the service manager started.
+
 ### Rebuild (new bits, Harbor-assisted rollback)
 
 ```

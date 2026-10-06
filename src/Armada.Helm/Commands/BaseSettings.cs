@@ -16,7 +16,7 @@ namespace Armada.Helm.Commands
     /// <summary>
     /// Base command settings with shared options.
     /// </summary>
-    public class BaseSettings : CommandSettings
+    public class BaseSettings : TargetSettings
     {
         /// <summary>
         /// Output in JSON format for machine consumption.

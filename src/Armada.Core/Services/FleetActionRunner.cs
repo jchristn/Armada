@@ -3,6 +3,7 @@ namespace Armada.Core.Services
     using System;
     using System.Collections.Concurrent;
     using System.Collections.Generic;
+    using System.Diagnostics;
     using System.IO;
     using System.Linq;
     using System.Text;
@@ -46,6 +47,19 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
+        /// Wall clock for the runner's timestamps (StartedUtc, CompletedUtc, LastUpdateUtc) and the retention cutoff.
+        /// Defaults to <see cref="DateTime.UtcNow"/>. Waits never use it: <see cref="WaitForRunAsync"/> measures its
+        /// timeout on a monotonic clock, so a wall-clock jump (the host sleeping and waking, an NTP step) cannot end it
+        /// early.
+        /// </summary>
+        /// <exception cref="ArgumentNullException">Thrown when set to null.</exception>
+        public Func<DateTime> UtcNow
+        {
+            get => _UtcNow;
+            set => _UtcNow = value ?? throw new ArgumentNullException(nameof(UtcNow));
+        }
+
+        /// <summary>
         /// Timeout for the dirty-tree pre-check (git status --porcelain), in milliseconds.
         /// Default 60000, minimum 1000, maximum 600000.
         /// </summary>
@@ -86,6 +100,7 @@ namespace Armada.Core.Services
         private int _GlobalInFlight = 0;
         private int _GlobalSlotPollMs = 250;
         private int _GitStatusTimeoutMs = 60000;
+        private Func<DateTime> _UtcNow = DefaultUtcNow;
         private bool _Disposed = false;
 
         #endregion
@@ -266,7 +281,7 @@ namespace Armada.Core.Services
                 if (context != null) context.CancelRequested = true;
 
                 run.Status = FleetActionRunStatusEnum.Cancelled;
-                run.LastUpdateUtc = DateTime.UtcNow;
+                run.LastUpdateUtc = _UtcNow();
                 await _Database.FleetActionRuns.UpdateAsync(run, token).ConfigureAwait(false);
 
                 List<FleetActionRunTarget> targets = await _Database.FleetActionRunTargets.ReadAllByRunAsync(runId, token).ConfigureAwait(false);
@@ -348,7 +363,7 @@ namespace Armada.Core.Services
         /// <returns>Number of runs deleted.</returns>
         public async Task<int> PruneExpiredRunsAsync(CancellationToken token = default)
         {
-            DateTime cutoff = DateTime.UtcNow.AddDays(-_Settings.FleetActions.RunRetentionDays);
+            DateTime cutoff = _UtcNow().AddDays(-_Settings.FleetActions.RunRetentionDays);
             List<TenantMetadata> tenants = await _Database.Tenants.EnumerateAsync(token).ConfigureAwait(false);
             int deleted = 0;
 
@@ -386,7 +401,8 @@ namespace Armada.Core.Services
         /// Wait until a run reaches a terminal status, polling the database.
         /// </summary>
         /// <param name="runId">Run identifier.</param>
-        /// <param name="timeoutMs">Maximum wait in milliseconds, minimum 1.</param>
+        /// <param name="timeoutMs">Maximum wait in milliseconds, minimum 1, measured on a monotonic clock (a wall-clock
+        /// jump such as the host sleeping and waking does not shorten it).</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The finished run, or null when it did not finish in time or does not exist.</returns>
         public async Task<FleetActionRun?> WaitForRunAsync(string runId, int timeoutMs, CancellationToken token = default)
@@ -394,13 +410,15 @@ namespace Armada.Core.Services
             if (String.IsNullOrEmpty(runId)) throw new ArgumentNullException(nameof(runId));
             if (timeoutMs < 1) timeoutMs = 1;
 
-            DateTime deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+            // Measured on a monotonic clock: a wall-clock deadline ended the wait early (returning null for a run that
+            // was still finishing) whenever the clock jumped forward, as it does when the host sleeps and wakes.
+            Stopwatch waited = Stopwatch.StartNew();
             while (true)
             {
                 FleetActionRun? run = await _Database.FleetActionRuns.ReadAsync(runId, token).ConfigureAwait(false);
                 if (run == null) return null;
                 if (IsTerminal(run.Status) && run.CompletedUtc.HasValue && !_Active.ContainsKey(runId)) return run;
-                if (DateTime.UtcNow >= deadline) return null;
+                if (waited.ElapsedMilliseconds >= timeoutMs) return null;
                 await Task.Delay(50, token).ConfigureAwait(false);
             }
         }
@@ -481,6 +499,11 @@ namespace Armada.Core.Services
         #endregion
 
         #region Private-Methods
+
+        private static DateTime DefaultUtcNow()
+        {
+            return DateTime.UtcNow;
+        }
 
         private SemaphoreSlim GetRunLock(string runId)
         {
@@ -584,8 +607,8 @@ namespace Armada.Core.Services
                 if (target == null || target.Status != FleetActionTargetStatusEnum.Pending) return null;
 
                 target.Status = FleetActionTargetStatusEnum.Running;
-                target.StartedUtc = DateTime.UtcNow;
-                target.LastUpdateUtc = DateTime.UtcNow;
+                target.StartedUtc = _UtcNow();
+                target.LastUpdateUtc = _UtcNow();
                 return await _Database.FleetActionRunTargets.UpdateAsync(target).ConfigureAwait(false);
             }
             finally
@@ -782,9 +805,9 @@ namespace Armada.Core.Services
 
                 if (!run.StartedUtc.HasValue || run.Status == FleetActionRunStatusEnum.Pending)
                 {
-                    run.StartedUtc ??= DateTime.UtcNow;
+                    run.StartedUtc ??= _UtcNow();
                     run.Status = FleetActionRunStatusEnum.Running;
-                    run.LastUpdateUtc = DateTime.UtcNow;
+                    run.LastUpdateUtc = _UtcNow();
                     run = await _Database.FleetActionRuns.UpdateAsync(run, token).ConfigureAwait(false);
                 }
 
@@ -889,7 +912,7 @@ namespace Armada.Core.Services
             }
 
             string title = "Fleet action: " + run.ActionName + " (" + vessel.Name + ")";
-            target.StartedUtc = DateTime.UtcNow;
+            target.StartedUtc = _UtcNow();
 
             string voyageId;
             try
@@ -908,7 +931,7 @@ namespace Armada.Core.Services
 
             target.VoyageId = voyageId;
             target.Status = FleetActionTargetStatusEnum.Running;
-            target.LastUpdateUtc = DateTime.UtcNow;
+            target.LastUpdateUtc = _UtcNow();
             await _Database.FleetActionRunTargets.UpdateAsync(target, token).ConfigureAwait(false);
             return true;
         }
@@ -1011,7 +1034,7 @@ namespace Armada.Core.Services
                     }
 
                     run.Status = FleetActionRunStatusEnum.Failed;
-                    run.LastUpdateUtc = DateTime.UtcNow;
+                    run.LastUpdateUtc = _UtcNow();
                     await _Database.FleetActionRuns.UpdateAsync(run).ConfigureAwait(false);
                     await RefreshRunCoreAsync(runId, CancellationToken.None).ConfigureAwait(false);
                 }
@@ -1034,9 +1057,9 @@ namespace Armada.Core.Services
             {
                 FleetActionRun? run = await _Database.FleetActionRuns.ReadAsync(runId).ConfigureAwait(false);
                 if (run == null || IsTerminal(run.Status)) return;
-                run.StartedUtc ??= DateTime.UtcNow;
+                run.StartedUtc ??= _UtcNow();
                 run.Status = FleetActionRunStatusEnum.Running;
-                run.LastUpdateUtc = DateTime.UtcNow;
+                run.LastUpdateUtc = _UtcNow();
                 await _Database.FleetActionRuns.UpdateAsync(run).ConfigureAwait(false);
             }
             finally
@@ -1088,28 +1111,28 @@ namespace Armada.Core.Services
 
             if (sticky)
             {
-                if (!unresolved && !run.CompletedUtc.HasValue) run.CompletedUtc = DateTime.UtcNow;
+                if (!unresolved && !run.CompletedUtc.HasValue) run.CompletedUtc = _UtcNow();
             }
             else if (unresolved)
             {
                 bool started = run.StartedUtc.HasValue || targets.Any(t => t.Status != FleetActionTargetStatusEnum.Pending);
                 run.Status = started ? FleetActionRunStatusEnum.Running : FleetActionRunStatusEnum.Pending;
-                if (started && !run.StartedUtc.HasValue) run.StartedUtc = DateTime.UtcNow;
+                if (started && !run.StartedUtc.HasValue) run.StartedUtc = _UtcNow();
             }
             else
             {
                 run.Status = run.FailedCount > 0 ? FleetActionRunStatusEnum.CompletedWithFailures : FleetActionRunStatusEnum.Completed;
-                run.StartedUtc ??= DateTime.UtcNow;
-                if (!run.CompletedUtc.HasValue) run.CompletedUtc = DateTime.UtcNow;
+                run.StartedUtc ??= _UtcNow();
+                if (!run.CompletedUtc.HasValue) run.CompletedUtc = _UtcNow();
             }
 
-            run.LastUpdateUtc = DateTime.UtcNow;
+            run.LastUpdateUtc = _UtcNow();
             await _Database.FleetActionRuns.UpdateAsync(run, CancellationToken.None).ConfigureAwait(false);
         }
 
-        private static void StampCompletion(FleetActionRunTarget target)
+        private void StampCompletion(FleetActionRunTarget target)
         {
-            DateTime now = DateTime.UtcNow;
+            DateTime now = _UtcNow();
             target.CompletedUtc = now;
             target.LastUpdateUtc = now;
             if (target.StartedUtc.HasValue) target.DurationMs = (long)(now - target.StartedUtc.Value).TotalMilliseconds;

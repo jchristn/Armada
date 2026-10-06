@@ -16,8 +16,16 @@ namespace Armada.Helm.Commands
     public class ConfigInitCommand : BaseCommand<ConfigInitSettings>
     {
         /// <inheritdoc />
+        protected override LocalOnlyCommandInfo? LocalOnly
+        {
+            get { return new LocalOnlyCommandInfo("config init", "it rewrites this machine's settings.json and data directory"); }
+        }
+
+        /// <inheritdoc />
         public override async Task<int> ExecuteAsync(CommandContext context, ConfigInitSettings settings, CancellationToken cancellationToken)
         {
+            RequireTarget();
+
             Program.WriteBanner();
             AnsiConsole.WriteLine();
             AnsiConsole.MarkupLine("[bold dodgerblue1]First-Time Setup[/]");

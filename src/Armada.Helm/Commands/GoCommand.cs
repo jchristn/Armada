@@ -28,7 +28,7 @@ namespace Armada.Helm.Commands
             List<Captain> captains = await EnsureCaptainsAsync().ConfigureAwait(false);
             if (captains.Count == 0)
             {
-                AnsiConsole.MarkupLine("[red]No captains available and auto-creation failed.[/]");
+                if (IsLocalTarget()) AnsiConsole.MarkupLine("[red]No captains available and auto-creation failed.[/]");
                 return 1;
             }
 
@@ -140,6 +140,14 @@ namespace Armada.Helm.Commands
 
         private async Task AutoScaleCaptainsAsync(int currentCaptainCount, int taskCount)
         {
+            if (!IsLocalTarget())
+            {
+                // MaxCaptains and the runtime defaults come from this machine's settings, which do not describe a
+                // remote Admiral; scale captains there explicitly.
+                AnsiConsole.MarkupLine("[dim]Remote target: captains are not auto-scaled; add more with 'armada captain add' if missions queue.[/]");
+                return;
+            }
+
             Core.Settings.ArmadaSettings armadaSettings = GetSettings();
             int maxCaptains = armadaSettings.MaxCaptains > 0 ? armadaSettings.MaxCaptains : Core.Constants.DefaultMaxCaptains;
             int needed = Math.Min(taskCount, maxCaptains) - currentCaptainCount;

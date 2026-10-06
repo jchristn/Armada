@@ -557,11 +557,16 @@ namespace Armada.Core.Client
         }
 
         /// <summary>
-        /// Create a mission.
+        /// Create a mission. The server replies with the bare mission, or with <c>{ Mission, Warning }</c>
+        /// (<see cref="MissionCreateResponse"/>) when the mission stays Pending; both shapes return the created mission.
         /// </summary>
         public async Task<Mission?> CreateMissionAsync(Mission mission, CancellationToken token = default)
         {
-            return await PostAsync<Mission, Mission>("/api/v1/missions", mission, token).ConfigureAwait(false);
+            string json = await PostRawAsync("/api/v1/missions", mission, token).ConfigureAwait(false);
+            if (String.IsNullOrWhiteSpace(json)) return null;
+            MissionCreateResponse? wrapped = JsonSerializer.Deserialize<MissionCreateResponse>(json, _JsonOptions);
+            if (wrapped != null && wrapped.Mission != null) return wrapped.Mission;
+            return JsonSerializer.Deserialize<Mission>(json, _JsonOptions);
         }
 
         /// <summary>
@@ -1608,6 +1613,15 @@ namespace Armada.Core.Client
             if (!response.IsSuccessStatusCode)
                 throw new HttpRequestException(json.Length > 0 ? json : response.ReasonPhrase, null, response.StatusCode);
             return JsonSerializer.Deserialize<TResponse>(json, _JsonOptions);
+        }
+
+        private async Task<string> PostRawAsync(string path, object body, CancellationToken token)
+        {
+            HttpResponseMessage response = await _Client.PostAsJsonAsync(_BaseUrl + path, body, _JsonOptions, token).ConfigureAwait(false);
+            string json = await response.Content.ReadAsStringAsync(token).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+                throw new HttpRequestException(json.Length > 0 ? json : response.ReasonPhrase, null, response.StatusCode);
+            return json;
         }
 
         private async Task<T?> PostAsync<T>(string path, object body, CancellationToken token) where T : class

@@ -4,6 +4,7 @@ namespace Armada.Helm.Commands
     using System.Threading;
     using Spectre.Console;
     using Spectre.Console.Cli;
+    using Armada.Helm.Infrastructure;
     using Armada.Core;
     using Armada.Core.Enums;
     using Armada.Core.Models;
@@ -73,7 +74,21 @@ namespace Armada.Helm.Commands
 
             AnsiConsole.Write(panel);
 
-            // Show session log if available
+            // Show session log if available (the local log files, or the REST log endpoint for a remote Admiral)
+            if (!IsLocalTarget())
+            {
+                RemoteLogResponse tail = await GetRemoteLogTailAsync("missions", mission.Id, 30).ConfigureAwait(false);
+                if (!String.IsNullOrEmpty(tail.Log))
+                {
+                    AnsiConsole.WriteLine();
+                    AnsiConsole.MarkupLine("[dodgerblue1]Session Log[/] [dim](last 30 lines)[/]");
+                    AnsiConsole.MarkupLine("[dim]" + new string('-', 60) + "[/]");
+                    AnsiConsole.WriteLine(tail.Log);
+                    AnsiConsole.MarkupLine("[dim]" + new string('-', 60) + "[/]");
+                    AnsiConsole.MarkupLine($"[dim]Full log: armada log {Markup.Escape(mission.Id)}[/]");
+                }
+            }
+            else
             {
                 string? logFile = null;
 

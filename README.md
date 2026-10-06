@@ -358,7 +358,7 @@ The dashboard supports language selection from the login screen and keeps the ch
 
 ### Running Agents Safely
 
-Captains run as CLI agents with your account's permissions, and by default with their auto-approve flags (Claude Code `--dangerously-skip-permissions`, Codex `--sandbox workspace-write`, or `--dangerously-bypass-approvals-and-sandbox` on Windows, Gemini `--approval-mode yolo`, Cursor `--force`, Mux `--yolo`, OpenCode `--auto`), so they can read, write, and execute without confirmation. To run a captain without them, untick **Auto-approve agent tool use** when editing the captain (or pass `autoApprove: false` to the `create_captain` / `update_captain` MCP tools); the runtime then uses its safer mode (for example Claude Code `--permission-mode acceptEdits`, Codex `--sandbox workspace-write`). Which of a captain's own tools may run is set by its CLI tool permission policy: `Refuse`, `ApproveInArmada` (Claude Code's permission prompts become approval cards in Ask, the Approvals center, and Needs You, with remembered allow and deny rules), or `Bypass`; see [CLI tool permissions](docs/ASK_ARMADA_HOME_BASE.md#cli-tool-permissions) and the `Permissions` settings. Run Armada under a dedicated account, keep it on localhost unless you need remote access, and review `audit.command` events for commands run through workspace exec, fleet actions, and check runs. See [Running agents safely](docs/SECURITY_REVIEW.md#running-agents-safely) and [SECURITY.md](SECURITY.md).
+Captains run as CLI agents with your account's permissions, and by default with their auto-approve flags (Claude Code `--dangerously-skip-permissions`, Codex `--sandbox workspace-write`, or `--dangerously-bypass-approvals-and-sandbox` on Windows, Gemini `--approval-mode yolo`, Cursor `--force`, Mux `--yolo`, OpenCode `--auto`), so they can read, write, and execute without confirmation. To run a captain without them, untick **Auto-approve agent tool use** when editing the captain (or pass `autoApprove: false` to the `create_captain` / `update_captain` MCP tools); the runtime then uses its safer mode (for example Claude Code `--permission-mode acceptEdits`, Codex `--sandbox workspace-write`). Which of a captain's own tools may run is set by its CLI tool permission policy: `Refuse`, `ApproveInArmada` (Claude Code's permission prompts become approval cards in Ask, the Approvals center, and Needs You, with remembered allow and deny rules), or `Bypass`; see [CLI tool permissions](docs/ASK_ARMADA_HOME_BASE.md#cli-tool-permissions) and the `Permissions` settings. Run Armada under a dedicated account, keep it on localhost unless you need remote access (then follow [docs/REMOTE_SERVER.md](docs/REMOTE_SERVER.md): a non-default admin password, TLS in front, and one bearer token per user or machine), and review `audit.command` events for commands run through workspace exec, fleet actions, and check runs. See [Running agents safely](docs/SECURITY_REVIEW.md#running-agents-safely) and [SECURITY.md](SECURITY.md).
 
 For a deeper walkthrough, see the [Getting Started Guide](GETTING_STARTED.md).
 
@@ -376,7 +376,7 @@ The remote browser flow is:
 
 The proxy keeps its own routes under `/proxy-api/v1/*`, serves the shared dashboard bundle at `/dashboard`, relays Armada REST traffic at `/api/v1/*`, and relays the dashboard websocket at `/ws`. Some local-only administrative actions are intentionally blocked by proxy policy in remote mode.
 
-See [docs/REMOTE_MGMT.md](docs/REMOTE_MGMT.md) and [docs/PROXY_API.md](docs/PROXY_API.md) for setup and route details.
+See [docs/REMOTE_MGMT.md](docs/REMOTE_MGMT.md) and [docs/PROXY_API.md](docs/PROXY_API.md) for setup and route details. To expose the Admiral itself instead (for the CLI, the TUI, MCP clients, and Harbors on other machines), see [docs/REMOTE_SERVER.md](docs/REMOTE_SERVER.md).
 
 ### Rebuilding Armada from the Dashboard
 
@@ -606,7 +606,7 @@ armada tui --server http://127.0.0.1:7890  # a specific server (saved as a profi
 armada tui --profile work --route /missions
 ```
 
-`--server` connects to a URL and saves it as a profile, `--profile` picks a saved one, and `--route` chooses the first screen (otherwise the screen you left, or Ask Armada on a first run). Profiles live in `~/.armada/tui.json`; tokens go to the OS keychain (a 0600 file as fallback).
+`--server` connects to a URL and saves it as a profile, `--profile` picks a saved one, and `--route` chooses the first screen (otherwise the screen you left, or Ask Armada on a first run). Profiles live in `~/.armada/tui.json`; tokens go to the OS keychain (a 0600 file as fallback). The `armada` CLI shares them: `armada profile add|use` saves and selects a remote Admiral for both, and `--token`, `ARMADA_SERVER_URL`, and `ARMADA_TOKEN` work for both (see [docs/REMOTE_SERVER.md](docs/REMOTE_SERVER.md)).
 
 **Sign in.** For a server on this machine the login screen is prefilled (`admin@armada`, the default password until the profile has signed in once, and the local API key for API Key Login; the prefilled password and key start selected, so typing replaces them). `F2` switches between email and API key login. The Server picker switches servers, "Add server..." adds one, and `e` edits the highlighted server's name and URL. The TUI does not force a password change: with the default password it signs in and shows a header warning.
 
@@ -879,8 +879,11 @@ armada health [--status Fail] [--fleet <id>] [--evaluate]
 armada server start|status|stop|restart
 armada config show|set|init
 armada mcp install|remove|stdio
+armada profile list|add|use|remove   Saved remote Admirals, shared with armada tui
 armada reset                 Danger zone: reset all Armada data
 ```
+
+Commands that talk to the Admiral accept `--server <url>`, `--token <bearer>`, and `--profile <name>` (or `ARMADA_SERVER_URL` and `ARMADA_TOKEN`, or the active profile) to act on an Admiral on another machine; `server start`, `reset`, `config set`, `config init`, and `mcp stdio` refuse a remote target. See [docs/REMOTE_SERVER.md](docs/REMOTE_SERVER.md#9-cli-command-reference-for-remote-targets).
 
 ### Examples
 
@@ -964,7 +967,7 @@ armada config init              # Interactive setup (optional)
 | `PlanningSessionAbandonmentTimeoutMinutes` | 240 | Safety-valve cleanup for abandoned planning sessions with no running process; 0 disables abandonment cleanup |
 | `PlanningSessionRetentionDays` | 0 | Automatically delete stopped or failed planning transcripts after this many days; 0 disables retention cleanup |
 
-The file uses camelCase keys (for example `mcp.toolCallsPerSecond`). The full list of settings is in [docs/API_SURFACE_1.0.md](docs/API_SURFACE_1.0.md#settings), and the operational ones (ports, TLS, backups, retention, troubleshooting) are explained in [docs/OPERATIONS.md](docs/OPERATIONS.md).
+The file uses camelCase keys (for example `mcp.toolCallsPerSecond`). The full list of settings is in [docs/API_SURFACE_1.0.md](docs/API_SURFACE_1.0.md#settings), and the operational ones (ports, TLS, backups, retention, troubleshooting) are explained in [docs/OPERATIONS.md](docs/OPERATIONS.md); running the Admiral on another machine is covered in [docs/REMOTE_SERVER.md](docs/REMOTE_SERVER.md).
 
 ## Authentication
 
@@ -1132,7 +1135,7 @@ For detailed setup and examples, see:
 
 ## Deployment
 
-Armada ships everything you need to run it three ways: a local developer install, a containerized deployment, and a split Admiral/Harbor topology. This section is the overview and the fast path; the [Running Locally (without Docker)](#running-locally-without-docker) and [Running Locally (with Docker)](#running-locally-with-docker) sections below have the full detail, and [docs/DOCKER.md](docs/DOCKER.md) and [docs/HARBOR.md](docs/HARBOR.md) go deeper still.
+Armada ships everything you need to run it three ways: a local developer install, a containerized deployment, and a split Admiral/Harbor topology. This section is the overview and the fast path; the [Running Locally (without Docker)](#running-locally-without-docker) and [Running Locally (with Docker)](#running-locally-with-docker) sections below have the full detail, and [docs/DOCKER.md](docs/DOCKER.md) and [docs/HARBOR.md](docs/HARBOR.md) go deeper still. To run the Admiral on another machine and use it from the dashboard, TUI, CLI, MCP clients, and Harbors, see [docs/REMOTE_SERVER.md](docs/REMOTE_SERVER.md).
 
 ### Deployment modes
 

@@ -21,5 +21,12 @@ namespace Armada.Helm.Commands
         [Description("Apply changes without confirmation prompts")]
         [CommandOption("--yes")]
         public bool Yes { get; set; } = false;
+
+        /// <summary>
+        /// MCP endpoint of a remote Admiral. Default for a remote target: the target's scheme and host on port 7891 at /mcp.
+        /// </summary>
+        [Description("MCP endpoint of a remote Admiral (default for a remote target: its host on port 7891, path /mcp)")]
+        [CommandOption("--mcp-url <URL>")]
+        public string? McpUrl { get; set; }
     }
 }

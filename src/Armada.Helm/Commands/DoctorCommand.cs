@@ -9,6 +9,7 @@ namespace Armada.Helm.Commands
     using Armada.Core.Models;
     using Armada.Core.Services;
     using Armada.Core.Settings;
+    using Armada.Helm.Infrastructure;
 
     /// <summary>
     /// System health check with actionable diagnostics.
@@ -24,21 +25,40 @@ namespace Armada.Helm.Commands
             AnsiConsole.WriteLine();
 
             int issues = 0;
+            AdmiralTarget target = GetTarget();
 
-            // 1. Settings file
-            issues += CheckSettings();
+            if (target.IsLocal)
+            {
+                // 1. Settings file
+                issues += CheckSettings();
 
-            // 2. Git
-            issues += CheckGit();
+                // 2. Git
+                issues += CheckGit();
 
-            // 3. Agent runtimes
-            issues += CheckRuntimes();
+                // 3. Agent runtimes
+                issues += CheckRuntimes();
 
-            // 4. Database
-            issues += await CheckDatabaseAsync().ConfigureAwait(false);
+                // 4. Database
+                issues += await CheckDatabaseAsync().ConfigureAwait(false);
 
-            // 5. Admiral server
-            issues += await CheckAdmiralAsync().ConfigureAwait(false);
+                // 5. Admiral server
+                issues += await CheckAdmiralAsync().ConfigureAwait(false);
+            }
+            else
+            {
+                // A remote Admiral: this machine's settings, database, and agent runtimes are not the ones in use.
+                AnsiConsole.MarkupLine("[dodgerblue1]INFO[/]  Target: " + Markup.Escape(target.Describe()) + "; credential: " + Markup.Escape(target.DescribeCredential()));
+                AnsiConsole.MarkupLine("[dim]SKIP  Local settings, database, and agent runtimes (they belong to the remote Admiral's host or its Harbors)[/]");
+                issues += CheckGit();
+                int remoteIssues = await CheckRemoteAdmiralAsync(target).ConfigureAwait(false);
+                issues += remoteIssues;
+                if (remoteIssues > 0)
+                {
+                    AnsiConsole.WriteLine();
+                    AnsiConsole.MarkupLine($"[gold1]{issues} issue(s) found.[/] See suggestions above.");
+                    return 1;
+                }
+            }
 
             // 6. Stalled captains
             issues += await CheckStalledCaptainsAsync().ConfigureAwait(false);
@@ -149,6 +169,33 @@ namespace Armada.Helm.Commands
 
             AnsiConsole.MarkupLine("[gold1]WARN[/]  Admiral server is not running (will auto-start on first command)");
             return 0;
+        }
+
+        private async Task<int> CheckRemoteAdmiralAsync(AdmiralTarget target)
+        {
+            bool healthy = await GetApiClient().HealthCheckAsync().ConfigureAwait(false);
+            if (!healthy)
+            {
+                AnsiConsole.MarkupLine("[red]FAIL[/]  Admiral at " + Markup.Escape(target.BaseUrl) + " is not reachable");
+                AnsiConsole.MarkupLine("        Fix: check the URL, rest.hostname on the server, the firewall, and the proxy. See docs/REMOTE_SERVER.md.");
+                return 1;
+            }
+
+            AnsiConsole.MarkupLine("[green]PASS[/]  Admiral at " + Markup.Escape(target.BaseUrl) + " is reachable");
+            if (target.SendsCredentialInsecurely)
+                AnsiConsole.MarkupLine("[gold1]WARN[/]  The credential travels over plain HTTP; use an https:// URL through a TLS-terminating proxy");
+
+            try
+            {
+                await GetAsync<ArmadaStatus>("/api/v1/status").ConfigureAwait(false);
+                AnsiConsole.MarkupLine("[green]PASS[/]  Credential accepted (" + Markup.Escape(target.DescribeCredential()) + ")");
+                return 0;
+            }
+            catch (AdmiralTargetException ex)
+            {
+                AnsiConsole.MarkupLine("[red]FAIL[/]  " + Markup.Escape(ex.Message));
+                return 1;
+            }
         }
 
         private async Task<int> CheckStalledCaptainsAsync()

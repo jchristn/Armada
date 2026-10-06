@@ -4,6 +4,7 @@ namespace Armada.Helm.Commands
     using System.Threading;
     using Spectre.Console;
     using Spectre.Console.Cli;
+    using Armada.Client.Models;
     using Armada.Core;
     using Armada.Core.Enums;
     using Armada.Core.Models;
@@ -37,7 +38,8 @@ namespace Armada.Helm.Commands
             if (!string.IsNullOrEmpty(settings.Voyage)) mission.VoyageId = settings.Voyage;
             if (settings.Priority.HasValue) mission.Priority = settings.Priority.Value;
 
-            Mission? created = await PostAsync<Mission>("/api/v1/missions", mission).ConfigureAwait(false);
+            MissionDispatchResult? result = await CreateMissionAsync(mission).ConfigureAwait(false);
+            Mission? created = result?.Mission;
 
             if (created == null)
             {
@@ -51,6 +53,8 @@ namespace Armada.Helm.Commands
             AnsiConsole.MarkupLine($"  [dodgerblue1]Status:[/] {created.Status}");
             if (!string.IsNullOrEmpty(created.CaptainId))
                 AnsiConsole.MarkupLine($"  [dodgerblue1]Captain:[/] {Markup.Escape(created.CaptainId)}");
+            if (!string.IsNullOrEmpty(result!.Warning))
+                AnsiConsole.MarkupLine($"  [gold1]Warning:[/] {Markup.Escape(result.Warning)}");
             AnsiConsole.MarkupLine($"  Run [green]armada watch[/] to monitor progress.");
             return 0;
         }

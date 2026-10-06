@@ -3,7 +3,6 @@ namespace Armada.Helm.Infrastructure
     using System;
     using System.IO;
     using System.Net.Http;
-    using System.Text.Json;
     using SyslogLogging;
     using Armada.Core;
     using Armada.Core.Settings;
@@ -45,14 +44,7 @@ namespace Armada.Helm.Infrastructure
             }
 
             // Load settings
-            ArmadaSettings settings = new ArmadaSettings();
-            string settingsPath = Path.Combine(Constants.DefaultDataDirectory, "settings.json");
-            if (File.Exists(settingsPath))
-            {
-                string json = File.ReadAllText(settingsPath);
-                ArmadaSettings? loaded = JsonSerializer.Deserialize<ArmadaSettings>(json);
-                if (loaded != null) settings = loaded;
-            }
+            ArmadaSettings settings = await LoadSettingsAsync(Path.Combine(Constants.DefaultDataDirectory, "settings.json")).ConfigureAwait(false);
 
             settings.InitializeDirectories();
 
@@ -83,6 +75,19 @@ namespace Armada.Helm.Infrastructure
                 }
                 await Task.Delay(250).ConfigureAwait(false);
             }
+        }
+
+        /// <summary>
+        /// Load the settings the embedded server runs with, through <see cref="ArmadaSettings.LoadAsync"/> so the
+        /// camelCase keys in settings.json (admiralPort, mcpPort, rest.hostname, ...) are honored. A case-sensitive
+        /// read used to drop them, so the embedded server bound the default ports and saved the defaults back over the
+        /// user's settings.
+        /// </summary>
+        /// <param name="settingsPath">settings.json path.</param>
+        /// <returns>Settings (defaults when the file does not exist).</returns>
+        public static Task<ArmadaSettings> LoadSettingsAsync(string settingsPath)
+        {
+            return ArmadaSettings.LoadAsync(settingsPath);
         }
 
         /// <summary>

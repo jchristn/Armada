@@ -29,7 +29,7 @@ administrator).
 | WebSocket endpoints | 2 | 1 |
 | WebSocket commands | 61 | 0 |
 | WebSocket event types | 67 | 0 |
-| CLI commands | 58 | 0 |
+| CLI commands | 62 | 0 |
 | Settings keys | 182 | 12 |
 
 ## REST API
@@ -667,64 +667,68 @@ Commands of the `armada` CLI (Helm). `*` marks a required argument or option. Gl
 
 | Command | Arguments | Options |
 |---|---|---|
-| `armada action cancel` | `<run>*` | `--json`, `--page`, `--page-size`, `--verbose` |
-| `armada action list` |  | `--include-inactive`, `--json`, `--page`, `--page-size`, `--runs`, `--verbose` |
-| `armada action run` | `<action>*` | `--concurrency\|-c`, `--fleet\|-f`, `--json`, `--page`, `--page-size`, `--verbose`, `--vessel\|-v` |
-| `armada action status` | `<run>*` | `--json`, `--page`, `--page-size`, `--verbose` |
-| `armada backlog create` |  | `--acceptance`, `--backlog-state`, `--blocked-by`, `--category`, `--constraint`, `--description\|-d`, `--due-utc`, `--effort`, `--evidence`, `--fleet`, `--json`, `--kind`, `--non-goal`, `--owner`, `--page`, `--page-size`, `--parent`, `--pipeline`, `--priority`, `--rank`, `--status`, `--summary`, `--tag`, `--target-version`, `--title\|-t`, `--verbose`, `--vessel` |
-| `armada backlog delete` | `<backlog>*` | `--json`, `--page`, `--page-size`, `--verbose` |
-| `armada backlog list` |  | `--backlog-state`, `--effort`, `--fleet`, `--json`, `--kind`, `--owner`, `--page`, `--page-size`, `--priority`, `--search\|-s`, `--status`, `--target-version`, `--verbose`, `--vessel` |
-| `armada backlog reorder` | `<backlog>*` | `--json`, `--page`, `--page-size`, `--rank\|-r`, `--verbose` |
-| `armada backlog show` | `<backlog>*` | `--json`, `--page`, `--page-size`, `--verbose` |
-| `armada backlog update` | `<backlog>*` | `--acceptance`, `--backlog-state`, `--blocked-by`, `--category`, `--constraint`, `--description\|-d`, `--due-utc`, `--effort`, `--evidence`, `--fleet`, `--json`, `--kind`, `--non-goal`, `--owner`, `--page`, `--page-size`, `--parent`, `--pipeline`, `--priority`, `--rank`, `--status`, `--summary`, `--tag`, `--target-version`, `--title\|-t`, `--verbose`, `--vessel` |
-| `armada captain add` | `<name>*` | `--json`, `--model\|-m`, `--mux-adapter-type`, `--mux-approval-policy`, `--mux-base-url`, `--mux-config-dir`, `--mux-endpoint`, `--mux-max-tokens`, `--mux-system-prompt-path`, `--mux-temperature`, `--page`, `--page-size`, `--runtime\|-r`, `--verbose` |
-| `armada captain list` |  | `--json`, `--page`, `--page-size`, `--verbose` |
-| `armada captain remove` | `<captain>*` | `--json`, `--page`, `--page-size`, `--verbose` |
-| `armada captain stop` | `<captain>*` | `--json`, `--page`, `--page-size`, `--verbose` |
-| `armada captain stop-all` |  | `--json`, `--page`, `--page-size`, `--verbose` |
-| `armada captain update` | `<captain>*` | `--json`, `--model\|-m`, `--mux-adapter-type`, `--mux-approval-policy`, `--mux-base-url`, `--mux-config-dir`, `--mux-endpoint`, `--mux-max-tokens`, `--mux-system-prompt-path`, `--mux-temperature`, `--name\|-n`, `--page`, `--page-size`, `--runtime\|-r`, `--verbose` |
-| `armada config init` |  | `--json`, `--page`, `--page-size`, `--verbose` |
-| `armada config set` | `<key>*` `<value>*` | `--json`, `--page`, `--page-size`, `--verbose` |
-| `armada config show` |  | `--json`, `--page`, `--page-size`, `--verbose` |
-| `armada diff` | `<mission>` | `--json`, `--page`, `--page-size`, `--verbose` |
-| `armada doctor` |  | `--json`, `--page`, `--page-size`, `--verbose` |
-| `armada fleet add` | `<name>*` | `--description\|-d`, `--json`, `--page`, `--page-size`, `--verbose` |
-| `armada fleet list` |  | `--json`, `--page`, `--page-size`, `--verbose` |
-| `armada fleet remove` | `<fleet>*` | `--json`, `--page`, `--page-size`, `--verbose` |
-| `armada go` | `<prompt>*` | `--json`, `--log\|-l`, `--merge`, `--no-merge`, `--no-pr`, `--no-push`, `--page`, `--page-size`, `--pr`, `--push`, `--repo\|-r`, `--task\|-t`, `--verbose`, `--vessel\|-v` |
-| `armada health` |  | `--evaluate\|-e`, `--fleet\|-f`, `--json`, `--page`, `--page-size`, `--status\|-s`, `--verbose` |
-| `armada inbox` |  | `--critical`, `--json`, `--page`, `--page-size`, `--verbose` |
-| `armada log` | `<identifier>*` | `--follow\|-f`, `--json`, `--lines\|-n`, `--page`, `--page-size`, `--verbose` |
-| `armada mcp install` |  | `--dry-run`, `--json`, `--page`, `--page-size`, `--verbose`, `--yes` |
-| `armada mcp remove` |  | `--dry-run`, `--json`, `--page`, `--page-size`, `--verbose`, `--yes` |
-| `armada mcp stdio` |  |  |
-| `armada mission cancel` | `<mission>*` | `--json`, `--page`, `--page-size`, `--verbose` |
-| `armada mission create` | `<title>*` | `--description\|-d`, `--json`, `--page`, `--page-size`, `--priority\|-p`, `--verbose`, `--vessel\|-v`, `--voyage` |
-| `armada mission list` |  | `--captain\|-c`, `--json`, `--page`, `--page-size`, `--status\|-s`, `--verbose`, `--vessel\|-v`, `--voyage` |
-| `armada mission restart` | `<mission>*` | `--description\|-d`, `--json`, `--page`, `--page-size`, `--title\|-t`, `--verbose` |
-| `armada mission retry` | `<mission>*` | `--json`, `--page`, `--page-size`, `--verbose` |
-| `armada mission show` | `<mission>*` | `--json`, `--page`, `--page-size`, `--verbose` |
-| `armada playbook add` | `<file-name>*` | `--content\|-c`, `--description\|-d`, `--from-file\|-f`, `--inactive`, `--json`, `--page`, `--page-size`, `--verbose` |
-| `armada playbook list` |  | `--json`, `--page`, `--page-size`, `--verbose` |
-| `armada playbook remove` | `<playbook>*` | `--json`, `--page`, `--page-size`, `--verbose` |
-| `armada playbook show` | `<playbook>*` | `--json`, `--page`, `--page-size`, `--verbose` |
-| `armada reset` |  | `--force\|-f`, `--json`, `--page`, `--page-size`, `--verbose` |
-| `armada server restart` |  | `--json`, `--page`, `--page-size`, `--verbose` |
-| `armada server start` |  | `--json`, `--page`, `--page-size`, `--verbose` |
-| `armada server status` |  | `--json`, `--page`, `--page-size`, `--verbose` |
-| `armada server stop` |  | `--json`, `--page`, `--page-size`, `--verbose` |
-| `armada status` |  | `--all\|-a`, `--json`, `--page`, `--page-size`, `--verbose` |
-| `armada tui` |  | `--profile`, `--route`, `--server` |
-| `armada vessel add` | `<name>*` `<repoUrl>*` | `--branch\|-b`, `--fleet\|-f`, `--json`, `--page`, `--page-size`, `--verbose` |
-| `armada vessel import` | `<paths>` | `--apply`, `--captain`, `--categorize`, `--depth`, `--dry-run`, `--fleet\|-f`, `--json`, `--page`, `--page-size`, `--prompt-file`, `--root\|-r`, `--verbose`, `--yes\|-y` |
-| `armada vessel list` |  | `--fleet\|-f`, `--json`, `--page`, `--page-size`, `--verbose` |
-| `armada vessel remove` | `<vessel>*` | `--json`, `--page`, `--page-size`, `--verbose` |
-| `armada voyage cancel` | `<voyage>*` | `--json`, `--page`, `--page-size`, `--verbose` |
-| `armada voyage create` | `<title>*` | `--json`, `--mission\|-m`, `--page`, `--page-size`, `--playbook\|-p`, `--verbose`, `--vessel\|-v` |
-| `armada voyage list` |  | `--json`, `--page`, `--page-size`, `--status\|-s`, `--verbose` |
-| `armada voyage retry` | `<voyage>*` | `--json`, `--page`, `--page-size`, `--verbose` |
-| `armada voyage show` | `<voyage>*` | `--json`, `--page`, `--page-size`, `--verbose` |
-| `armada watch` |  | `--captain\|-c`, `--interval\|-i`, `--json`, `--page`, `--page-size`, `--verbose` |
+| `armada action cancel` | `<run>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada action list` |  | `--include-inactive`, `--json`, `--page`, `--page-size`, `--profile`, `--runs`, `--server`, `--token`, `--verbose` |
+| `armada action run` | `<action>*` | `--concurrency\|-c`, `--fleet\|-f`, `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose`, `--vessel\|-v` |
+| `armada action status` | `<run>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada backlog create` |  | `--acceptance`, `--backlog-state`, `--blocked-by`, `--category`, `--constraint`, `--description\|-d`, `--due-utc`, `--effort`, `--evidence`, `--fleet`, `--json`, `--kind`, `--non-goal`, `--owner`, `--page`, `--page-size`, `--parent`, `--pipeline`, `--priority`, `--profile`, `--rank`, `--server`, `--status`, `--summary`, `--tag`, `--target-version`, `--title\|-t`, `--token`, `--verbose`, `--vessel` |
+| `armada backlog delete` | `<backlog>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada backlog list` |  | `--backlog-state`, `--effort`, `--fleet`, `--json`, `--kind`, `--owner`, `--page`, `--page-size`, `--priority`, `--profile`, `--search\|-s`, `--server`, `--status`, `--target-version`, `--token`, `--verbose`, `--vessel` |
+| `armada backlog reorder` | `<backlog>*` | `--json`, `--page`, `--page-size`, `--profile`, `--rank\|-r`, `--server`, `--token`, `--verbose` |
+| `armada backlog show` | `<backlog>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada backlog update` | `<backlog>*` | `--acceptance`, `--backlog-state`, `--blocked-by`, `--category`, `--constraint`, `--description\|-d`, `--due-utc`, `--effort`, `--evidence`, `--fleet`, `--json`, `--kind`, `--non-goal`, `--owner`, `--page`, `--page-size`, `--parent`, `--pipeline`, `--priority`, `--profile`, `--rank`, `--server`, `--status`, `--summary`, `--tag`, `--target-version`, `--title\|-t`, `--token`, `--verbose`, `--vessel` |
+| `armada captain add` | `<name>*` | `--json`, `--model\|-m`, `--mux-adapter-type`, `--mux-approval-policy`, `--mux-base-url`, `--mux-config-dir`, `--mux-endpoint`, `--mux-max-tokens`, `--mux-system-prompt-path`, `--mux-temperature`, `--page`, `--page-size`, `--profile`, `--runtime\|-r`, `--server`, `--token`, `--verbose` |
+| `armada captain list` |  | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada captain remove` | `<captain>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada captain stop` | `<captain>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada captain stop-all` |  | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada captain update` | `<captain>*` | `--json`, `--model\|-m`, `--mux-adapter-type`, `--mux-approval-policy`, `--mux-base-url`, `--mux-config-dir`, `--mux-endpoint`, `--mux-max-tokens`, `--mux-system-prompt-path`, `--mux-temperature`, `--name\|-n`, `--page`, `--page-size`, `--profile`, `--runtime\|-r`, `--server`, `--token`, `--verbose` |
+| `armada config init` |  | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada config set` | `<key>*` `<value>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada config show` |  | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada diff` | `<mission>` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada doctor` |  | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada fleet add` | `<name>*` | `--description\|-d`, `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada fleet list` |  | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada fleet remove` | `<fleet>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada go` | `<prompt>*` | `--json`, `--log\|-l`, `--merge`, `--no-merge`, `--no-pr`, `--no-push`, `--page`, `--page-size`, `--pr`, `--profile`, `--push`, `--repo\|-r`, `--server`, `--task\|-t`, `--token`, `--verbose`, `--vessel\|-v` |
+| `armada health` |  | `--evaluate\|-e`, `--fleet\|-f`, `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--status\|-s`, `--token`, `--verbose` |
+| `armada inbox` |  | `--critical`, `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada log` | `<identifier>*` | `--follow\|-f`, `--json`, `--lines\|-n`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada mcp install` |  | `--dry-run`, `--json`, `--mcp-url`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose`, `--yes` |
+| `armada mcp remove` |  | `--dry-run`, `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose`, `--yes` |
+| `armada mcp stdio` |  | `--profile`, `--server`, `--token` |
+| `armada mission cancel` | `<mission>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada mission create` | `<title>*` | `--description\|-d`, `--json`, `--page`, `--page-size`, `--priority\|-p`, `--profile`, `--server`, `--token`, `--verbose`, `--vessel\|-v`, `--voyage` |
+| `armada mission list` |  | `--captain\|-c`, `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--status\|-s`, `--token`, `--verbose`, `--vessel\|-v`, `--voyage` |
+| `armada mission restart` | `<mission>*` | `--description\|-d`, `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--title\|-t`, `--token`, `--verbose` |
+| `armada mission retry` | `<mission>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada mission show` | `<mission>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada playbook add` | `<file-name>*` | `--content\|-c`, `--description\|-d`, `--from-file\|-f`, `--inactive`, `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada playbook list` |  | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada playbook remove` | `<playbook>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada playbook show` | `<playbook>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada profile add` | `<name>*` | `--no-token`, `--server`, `--token`, `--use` |
+| `armada profile list` |  | `--json` |
+| `armada profile remove` | `<name>*` |  |
+| `armada profile use` | `<name>*` |  |
+| `armada reset` |  | `--force\|-f`, `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada server restart` |  | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada server start` |  | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada server status` |  | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada server stop` |  | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada status` |  | `--all\|-a`, `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada tui` |  | `--profile`, `--route`, `--server`, `--token` |
+| `armada vessel add` | `<name>*` `<repoUrl>*` | `--branch\|-b`, `--fleet\|-f`, `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada vessel import` | `<paths>` | `--apply`, `--captain`, `--categorize`, `--depth`, `--dry-run`, `--fleet\|-f`, `--json`, `--page`, `--page-size`, `--profile`, `--prompt-file`, `--root\|-r`, `--server`, `--token`, `--verbose`, `--yes\|-y` |
+| `armada vessel list` |  | `--fleet\|-f`, `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada vessel remove` | `<vessel>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada voyage cancel` | `<voyage>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada voyage create` | `<title>*` | `--json`, `--mission\|-m`, `--page`, `--page-size`, `--playbook\|-p`, `--profile`, `--server`, `--token`, `--verbose`, `--vessel\|-v` |
+| `armada voyage list` |  | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--status\|-s`, `--token`, `--verbose` |
+| `armada voyage retry` | `<voyage>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada voyage show` | `<voyage>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada watch` |  | `--captain\|-c`, `--interval\|-i`, `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
 
 ## Settings
 

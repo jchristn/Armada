@@ -12,7 +12,7 @@ take effect on the next server start.
 
 ## Deployment topologies
 
-Armada has four shapes in practice. They differ mainly in where the agent CLIs run, because a captain needs the
+Armada has four shapes in practice, and any of them can serve other machines (see Remote Admiral below). They differ mainly in where the agent CLIs run, because a captain needs the
 code, the git credentials, and the agent's own login on the machine that launches it.
 
 ### Single box (Local mode)
@@ -62,6 +62,13 @@ require a credential in every case. The Docker split profile binds `0.0.0.0`, so
 credential. And the advertised MCP URL must be reachable from the Harbor host, not from inside the container. [HARBOR.md](HARBOR.md) explains the model and
 [HARBOR_PROTOCOL.md](HARBOR_PROTOCOL.md) the wire contract.
 
+### Remote Admiral
+
+Any of the shapes above can serve other machines: bind `rest.hostname` beyond loopback (or put a TLS proxy in front),
+give each user or machine a bearer token, and point clients at it. The `armada` CLI targets it with `--server`,
+`--token`, and `--profile` (profiles shared with `armada tui`). [REMOTE_SERVER.md](REMOTE_SERVER.md) is the
+end-to-end guide.
+
 ### Remote access through Armada.Proxy
 
 `Armada.Proxy` lets you reach an Admiral that sits behind NAT without opening inbound ports to it. The Admiral opens
@@ -91,7 +98,9 @@ Every port below is configurable. The table shows defaults and the process that 
 | 514/udp | outbound only | Syslog target the Admiral sends to by default (`127.0.0.1:514`) | `syslogServers` |
 
 On a single box `rest.hostname` defaults to `localhost`, which keeps both 7890 and 7891 off the network. Setting it to
-`0.0.0.0`, `*`, or `+` exposes both listeners, and the Docker configs do exactly that. When you change `admiralPort`,
+`0.0.0.0`, `*`, or `+` exposes both listeners, and the Docker configs do exactly that. To run the Admiral for other
+machines (credentials, TLS, and connecting the dashboard, TUI, CLI, MCP clients, and Harbors), follow
+[REMOTE_SERVER.md](REMOTE_SERVER.md). When you change `admiralPort`,
 also set `ARMADA_BASE_URL` before running the install, update, or health-check scripts so they probe the right
 address.
 
@@ -101,9 +110,15 @@ Armada's TLS story for 1.0 is to terminate TLS in front of it. The Admiral has a
 the underlying web server, but there is no setting for a certificate path, and the MCP listener has no TLS option at
 all, so the flag alone does not give you a working HTTPS endpoint on every platform. Treat it as unsupported.
 
-The reliable setup is a reverse proxy (nginx, Caddy, Traefik, or a cloud load balancer) that holds the certificate
-and forwards to `127.0.0.1:7890` and `127.0.0.1:7891`. Forward WebSocket upgrades for `/ws` and, in split mode,
-`/v1.0/harbor/connect`. Keep the Admiral bound to loopback behind the proxy so nothing bypasses it.
+The reliable setup is a reverse proxy (nginx, Caddy, Traefik, or a cloud load balancer) on the same host that holds
+the certificate and forwards to `localhost:7890` and `localhost:7891`. Forward WebSocket upgrades for `/ws` and, in
+split mode, `/v1.0/harbor/connect`. Keep the Admiral bound to loopback behind the proxy so nothing bypasses it. Three
+details matter, each verified through Caddy: the MCP listener answers only the `Host` it is bound to, so the proxy
+must send `Host: localhost:7891` upstream (otherwise MCP returns 404); with `rest.hostname: localhost` the MCP
+listener may bind only `[::1]` (it did on macOS), so point the upstream at `localhost` rather than `127.0.0.1`; and
+because the proxy connects from loopback, set `mcp.allowUnauthenticatedLoopback: false` and `harbor.requireAuth: true`,
+or every credential-less MCP call through the proxy runs as the default tenant's tenant admin. A tested Caddyfile and
+the client setup are in [REMOTE_SERVER.md](REMOTE_SERVER.md#3-tls-with-a-reverse-proxy).
 
 The tunnel to Armada.Proxy is the one place where TLS is built in: give `remoteControl.tunnelUrl` a `wss://` (or
 `https://`) URL and the Admiral validates the proxy's certificate. Put the proxy itself behind a TLS-terminating

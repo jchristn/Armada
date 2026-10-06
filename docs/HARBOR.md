@@ -47,6 +47,8 @@ side of the link or debugging a connection.
 
 ## Installing and running the Harbor app
 
+For a Harbor on another machine than the Admiral (TLS, the `wss://` link URL, credentials, and the advertised MCP URL), see [REMOTE_SERVER.md](REMOTE_SERVER.md#harbors-on-other-machines).
+
 The host runner is `src/Armada.Harbor`, an Avalonia tray (menu bar) app. Install it on the machine where your
 repositories and agent logins live:
 
