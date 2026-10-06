@@ -204,7 +204,8 @@ namespace Test.Shared.Suites.Tui
                     ShellView shell = host.Tui.Shell;
                     ShellLayout layout = shell.LastLayout!;
                     AssertEqual(LayoutModeEnum.Narrow, layout.Mode, "narrow");
-                    AssertEqual(FocusFrameKindEnum.Box, FocusFrame.KindFor(layout.Main), "main boxed at the minimum");
+                    AssertFalse(FocusFrame.UsesGutter(layout.Main), "main boxed at the minimum, not a gutter");
+                    AssertEqual(new Rect(layout.Main.X + 1, layout.Main.Y + 1, layout.Main.Width - 2, layout.Main.Height - 2), FocusFrame.ContentRect(layout.Main), "main boxed at the minimum");
                     AssertEqual(new Rect(0, 2, 80, 21), layout.Main, "main border rectangle");
                     AssertEqual(new Rect(1, 3, 78, 19), layout.MainInner, "main content rectangle");
                     CellBuffer frame = Render(host);
@@ -217,7 +218,8 @@ namespace Test.Shared.Suites.Tui
                     host.Press("ctrl+j");
                     host.Screen();
                     layout = shell.LastLayout!;
-                    AssertEqual(FocusFrameKindEnum.Box, FocusFrame.KindFor(layout.Dock), "dock boxed at the minimum");
+                    AssertFalse(FocusFrame.UsesGutter(layout.Dock), "dock boxed at the minimum, not a gutter");
+                    AssertEqual(new Rect(layout.Dock.X + 1, layout.Dock.Y + 1, layout.Dock.Width - 2, layout.Dock.Height - 2), FocusFrame.ContentRect(layout.Dock), "dock boxed at the minimum");
                     AssertTrue(layout.DockInner.Height >= 4, "dock keeps room for its title, a line, and the input");
                     AssertTrue(layout.MainInner.Height >= 7, "main keeps usable rows with the dock open");
                     AssertTrue(PressUntil(host, "tab", () => ReferenceEquals(shell.Scope.Focused, shell.Dock)), "Tab reaches the dock");
@@ -245,10 +247,13 @@ namespace Test.Shared.Suites.Tui
 
             cases.Add(TuiCase.Sync(Suite, "frame_fallbacks", "Boxes need three rows and columns; smaller rectangles fall back to a left gutter bar; an inner sub-region lights the whole box", () =>
             {
-                AssertEqual(FocusFrameKindEnum.Box, FocusFrame.KindFor(new Rect(0, 0, 3, 3)), "3x3 box");
-                AssertEqual(FocusFrameKindEnum.Gutter, FocusFrame.KindFor(new Rect(0, 0, 20, 2)), "two rows: gutter");
-                AssertEqual(FocusFrameKindEnum.None, FocusFrame.KindFor(new Rect(0, 0, 1, 5)), "one column: nothing");
-                AssertEqual(new Rect(1, 0, 19, 2), FocusFrame.Inner(new Rect(0, 0, 20, 2)), "gutter reserves one column");
+                AssertFalse(FocusFrame.UsesGutter(new Rect(0, 0, 3, 3)), "3x3 box, not a gutter");
+                AssertEqual(new Rect(1, 1, 1, 1), FocusFrame.ContentRect(new Rect(0, 0, 3, 3)), "3x3 box");
+                AssertTrue(FocusFrame.UsesGutter(new Rect(0, 0, 20, 2)), "two rows: gutter");
+                AssertFalse(FocusFrame.UsesGutter(new Rect(0, 0, 1, 5)), "one column: no gutter");
+                AssertEqual(new Rect(0, 0, 1, 5), FocusFrame.ContentRect(new Rect(0, 0, 1, 5)), "one column: nothing, all content");
+                AssertEqual(new Rect(1, 0, 19, 2), FocusFrame.ContentRect(new Rect(0, 0, 20, 2)), "gutter reserves one column");
+                AssertEqual(new Rect(0, 0, 12, 4), FocusFrame.OuterRect(new Rect(1, 1, 10, 2)), "a box is one cell larger on every side");
                 ArmadaTheme theme = ThemePalettes.Dark();
 
                 CellBuffer gutter = new CellBuffer(20, 2);
@@ -257,13 +262,19 @@ namespace Test.Shared.Suites.Tui
                 AssertEqual(theme.FocusBorder, gutter.Get(0, 1).Style, "gutter style");
                 FocusFrame.Draw(new BufferSurface(gutter), new Rect(0, 0, 20, 2), theme, false);
                 AssertEqual(" ", gutter.Get(0, 0).Grapheme, "unfocused gutter blank");
+                ArmadaTheme ascii = ThemePalettes.Dark();
+                ascii.AsciiBorders = true;
+                FocusFrame.Draw(new BufferSurface(gutter), new Rect(0, 0, 20, 2), ascii, true);
+                AssertEqual("#", gutter.Get(0, 0).Grapheme, "ASCII focused gutter is the focused vertical glyph, not the plain |");
+                FocusFrame.Draw(new BufferSurface(gutter), new Rect(0, 0, 20, 2), ascii, false);
+                AssertEqual(" ", gutter.Get(0, 1).Grapheme, "ASCII unfocused gutter blank");
 
                 // A pane with two regions stacked inside it: the plain boxes share edges (tees where they meet the pane
                 // border), and the focused region's box is whole and heavy on top.
                 CellBuffer box = new CellBuffer(12, 8);
                 Rect pane = new Rect(0, 0, 12, 8);
-                Rect upper = FocusFrame.Outer(new Rect(1, 1, 10, 2));
-                Rect lower = FocusFrame.Outer(new Rect(1, 4, 10, 3));
+                Rect upper = FocusFrame.OuterRect(new Rect(1, 1, 10, 2));
+                Rect lower = FocusFrame.OuterRect(new Rect(1, 4, 10, 3));
                 FocusFrame.DrawNested(new BufferSurface(box), pane, theme, new List<Rect> { upper, lower }, Rect.Empty);
                 AssertEqual("\u251C", box.Get(0, 3).Grapheme, "tee where the shared line meets the left border");
                 AssertEqual("\u2524", box.Get(11, 3).Grapheme, "tee on the right border");
