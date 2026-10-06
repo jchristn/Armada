@@ -55,7 +55,7 @@ namespace Armada.Tui.Shell
         /// </summary>
         public Rect SidebarInner
         {
-            get { return FocusFrame.Inner(Sidebar); }
+            get { return FocusFrame.ContentRect(Sidebar); }
         }
 
         /// <summary>
@@ -63,7 +63,7 @@ namespace Armada.Tui.Shell
         /// </summary>
         public Rect MainInner
         {
-            get { return FocusFrame.Inner(Main); }
+            get { return FocusFrame.ContentRect(Main); }
         }
 
         /// <summary>
@@ -71,7 +71,7 @@ namespace Armada.Tui.Shell
         /// </summary>
         public Rect DockInner
         {
-            get { return FocusFrame.Inner(Dock); }
+            get { return FocusFrame.ContentRect(Dock); }
         }
 
         /// <summary>

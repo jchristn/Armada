@@ -369,7 +369,7 @@ namespace Armada.Tui
                 if (item.Kind == ApprovalKindEnum.CliPermission)
                 {
                     string route = item.Route ?? "/approvals";
-                    Context.Notifications.Toast(NotificationSeverityEnum.Warning, Context.Loc.T("Permission needed") + ": " + item.Title + (String.IsNullOrEmpty(item.Detail) ? "" : " - " + item.Detail), "Open", () => Context.Navigate(route));
+                    Context.Notifications.Toast(NotificationSeverityEnum.Warning, Context.Loc.T("Permission needed") + ": " + item.Title + (String.IsNullOrEmpty(item.Detail) ? "" : " - " + item.Detail), "Open", () => Context.Navigate(route), route);
                 }
             };
 

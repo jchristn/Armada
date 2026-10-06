@@ -10,10 +10,11 @@ namespace Armada.Tui.Shell
 
     /// <summary>
     /// Draws the active toasts of <see cref="NotificationService.Toasts"/> (a TUIKit <c>NotificationCenter</c>, which
-    /// keeps, expires, and coalesces them) at the top right below the menu bar. Armada draws them rather than TUIKit's
-    /// renderer because its look has no TUIKit equivalent: the severity spelled as a text label (<c>[!]</c>), half the
-    /// screen up to 60 cells, two wrapped lines, the newest four, and the action as a key line (<c>[Ctrl+O] Open</c>)
-    /// rather than a clickable button. Thread-safe (stateless).
+    /// keeps, expires, and coalesces them, and spells each severity as a label such as <c>[!]</c>) at the top right below
+    /// the menu bar. Armada draws them rather than TUIKit's renderer because part of its look has no TUIKit equivalent:
+    /// newest first, half the screen up to 60 cells, two wrapped lines, the newest four, and the action as a key line
+    /// (<c>[Ctrl+O] Open</c>, the key bound to <c>NotificationCenter.InvokeLatestAction</c>) rather than a clickable
+    /// button. Thread-safe (stateless).
     /// </summary>
     public static class ToastLayer
     {
@@ -51,13 +52,7 @@ namespace Armada.Tui.Shell
                     NotificationSeverityEnum.Error => theme.ToastError,
                     _ => theme.ToastInfo
                 };
-                string label = toast.Severity switch
-                {
-                    NotificationSeverityEnum.Success => "[ok] ",
-                    NotificationSeverityEnum.Warning => "[!] ",
-                    NotificationSeverityEnum.Error => "[x] ",
-                    _ => "[i] "
-                };
+                string label = toast.SeverityLabel.Length > 0 ? toast.SeverityLabel + " " : "";
                 List<string> lines = TextCells.Wrap(label + toast.Text.Trim() + toast.RepeatSuffix, boxWidth - 2).Take(2).ToList();
                 if (toast.ActionLabel != null) lines.Add("[" + ActionKey + "] " + loc.T(toast.ActionLabel));
                 int x = Math.Max(0, width - boxWidth - 1);

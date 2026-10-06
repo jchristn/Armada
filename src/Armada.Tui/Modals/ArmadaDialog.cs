@@ -54,10 +54,11 @@ namespace Armada.Tui.Modals
             Rect box = FrameBounds;
             if (box.Width < 3 || box.Height < 3) return;
             // The dialog that holds focus (TUIKit's Modal.IsTopmost) wears the one focus treatment of the TUI (see
-            // FocusFrame): its whole box in the focus style with heavy lines. A dialog under another keeps its plain
-            // border.
+            // FocusFrame): TUIKit draws its whole box in the focus style with heavy lines (FocusedBorder,
+            // FocusedBorderStyle, and FocusedTitleStyle, set from the palette). A dialog under another keeps its plain
+            // border. The title and footer are drawn again with Armada's truncation ("..."), which TUIKit's centered
+            // title (cut without a marker) and footer ("\u2026") do not share.
             if (!IsTopmost) return;
-            FocusFrame.Draw(surface, box, Theme, true);
             if (!String.IsNullOrEmpty(Title) && box.Width > 4)
             {
                 string label = TextCells.Truncate(" " + Title + " ", box.Width - 2);
@@ -79,6 +80,9 @@ namespace Armada.Tui.Modals
             Theme = theme ?? throw new ArgumentNullException(nameof(theme));
             BackgroundStyle = theme.Dialog;
             BorderStyleColor = theme.DialogBorder;
+            FocusedBorder = FocusFrame.FocusedBorderFor(theme);
+            FocusedBorderStyle = theme.FocusBorder;
+            FocusedTitleStyle = theme.FocusBorder;
         }
 
         #endregion

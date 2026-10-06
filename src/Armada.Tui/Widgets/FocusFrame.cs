@@ -15,10 +15,13 @@ namespace Armada.Tui.Widgets
     /// focused pane reads by shape as well as by color; every other box is a light line (<c>&#x250C; &#x2500; &#x2502;</c>
     /// or <c>+ - |</c>) in <see cref="ArmadaTheme.Border"/>, joined with tees where boxes share an edge. Box cells are
     /// always reserved, focused or not, so the layout never moves when focus does. Below three rows or columns a box
-    /// falls back to a one-column left gutter bar. The drawing is TUIKit's: <see cref="TUIKit.Widgets.FocusFrame"/> with
-    /// <see cref="FocusFrameOptions"/> for a box or gutter, and <c>SurfaceExtensions.DrawJoinedBox</c> for the shared
-    /// light lines and their tees; this class adds Armada's palette, box geometry (<see cref="Inner"/>, <see cref="Outer"/>),
-    /// left-aligned titles, and the plain-cornered focused box over joined neighbours. Stateless and thread-safe.
+    /// falls back to a one-column left gutter bar (<c>&#x2503;</c>, or <c>#</c> in ASCII), and a rectangle one column wide
+    /// keeps every column for content. The drawing and the geometry are TUIKit's: <see cref="TUIKit.Widgets.FocusFrame"/>
+    /// with Armada's <see cref="FocusFrameOptions"/> for a box or gutter and for <see cref="ContentRect"/>, <see cref="OuterRect"/>, and
+    /// <see cref="UsesGutter"/>, and <c>SurfaceExtensions.DrawJoinedBox</c> for the shared light lines and their tees.
+    /// The focused box is drawn over its joined neighbours as a plain box (<see cref="JoinMode.None"/>: heavy corners,
+    /// not TUIKit's default heavy junctions), the look the TUI shipped with; this class adds Armada's palette and the
+    /// left-aligned titles, which are drawn after every box so no box line covers one. Stateless and thread-safe.
     /// </summary>
     public static class FocusFrame
     {
@@ -61,45 +64,36 @@ namespace Armada.Tui.Widgets
         #region Public-Methods
 
         /// <summary>
-        /// The marker kind for a rectangle (by size only).
+        /// The content rectangle inside a frame (TUIKit's <see cref="TUIKit.Widgets.FocusFrame.ContentRect"/>): inset by
+        /// one cell for a box, minus the first column for the gutter, the whole rectangle when it is one column wide.
         /// </summary>
         /// <param name="outer">Rectangle including the border.</param>
-        /// <returns>Kind.</returns>
-        public static FocusFrameKindEnum KindFor(Rect outer)
+        /// <returns>Content rectangle (empty for an empty input).</returns>
+        public static Rect ContentRect(Rect outer)
         {
-            if (outer.Width >= 3 && outer.Height >= 3) return FocusFrameKindEnum.Box;
-            if (outer.Width >= 2 && outer.Height >= 1) return FocusFrameKindEnum.Gutter;
-            return FocusFrameKindEnum.None;
+            return TUIKit.Widgets.FocusFrame.ContentRect(outer, _Options);
         }
 
         /// <summary>
-        /// The content rectangle inside the border.
+        /// The box around a content rectangle, one cell larger on every side (TUIKit's
+        /// <see cref="TUIKit.Widgets.FocusFrame.OuterRect"/>).
         /// </summary>
-        /// <param name="outer">Rectangle including the border.</param>
-        /// <returns>Content rectangle (the input itself when no marker fits; empty stays empty).</returns>
-        public static Rect Inner(Rect outer)
+        /// <param name="content">Content rectangle.</param>
+        /// <returns>Box rectangle; an empty input is returned unchanged.</returns>
+        public static Rect OuterRect(Rect content)
         {
-            if (outer.IsEmpty) return outer;
-            switch (KindFor(outer))
-            {
-                case FocusFrameKindEnum.Box:
-                    return new Rect(outer.X + 1, outer.Y + 1, outer.Width - 2, outer.Height - 2);
-                case FocusFrameKindEnum.Gutter:
-                    return new Rect(outer.X + 1, outer.Y, outer.Width - 1, outer.Height);
-                default:
-                    return outer;
-            }
+            return TUIKit.Widgets.FocusFrame.OuterRect(content, _Options);
         }
 
         /// <summary>
-        /// The box around a content rectangle (one cell larger on every side).
+        /// True when a frame in <paramref name="outer"/> is the one-column gutter rather than a box (TUIKit's
+        /// <see cref="TUIKit.Widgets.FocusFrame.UsesGutter"/>).
         /// </summary>
-        /// <param name="inner">Content rectangle.</param>
-        /// <returns>Box rectangle, or empty for an empty input.</returns>
-        public static Rect Outer(Rect inner)
+        /// <param name="outer">Rectangle including the border.</param>
+        /// <returns>True for the gutter.</returns>
+        public static bool UsesGutter(Rect outer)
         {
-            if (inner.IsEmpty) return Rect.Empty;
-            return new Rect(inner.X - 1, inner.Y - 1, inner.Width + 2, inner.Height + 2);
+            return TUIKit.Widgets.FocusFrame.UsesGutter(outer, _Options);
         }
 
         /// <summary>
@@ -111,7 +105,7 @@ namespace Armada.Tui.Widgets
         public static string GlyphsFor(ArmadaTheme theme, bool focused)
         {
             if (theme == null) throw new ArgumentNullException(nameof(theme));
-            if (theme.AsciiBorders || theme.AsciiGlyphs) return focused ? AsciiFocusedGlyphs : AsciiGlyphs;
+            if (IsAscii(theme)) return focused ? AsciiFocusedGlyphs : AsciiGlyphs;
             return focused ? HeavyGlyphs : LightGlyphs;
         }
 
@@ -123,13 +117,25 @@ namespace Armada.Tui.Widgets
         public static string UnfocusedGlyphsFor(ArmadaTheme theme)
         {
             if (theme == null) throw new ArgumentNullException(nameof(theme));
-            if (theme.AsciiBorders || theme.AsciiGlyphs) return AsciiGlyphs;
+            if (IsAscii(theme)) return AsciiGlyphs;
             return LightGlyphs + LightJunctions;
         }
 
         /// <summary>
+        /// The border style the focused frame and the topmost dialog use in a palette (heavy lines, or ASCII
+        /// <c>#</c> and <c>=</c>).
+        /// </summary>
+        /// <param name="theme">Palette.</param>
+        /// <returns>Border style.</returns>
+        public static BorderStyle FocusedBorderFor(ArmadaTheme theme)
+        {
+            if (theme == null) throw new ArgumentNullException(nameof(theme));
+            return IsAscii(theme) ? BorderStyle.AsciiHeavy : BorderStyle.Thick;
+        }
+
+        /// <summary>
         /// Draw the border of a single pane around its content (call after the content so the border is never
-        /// covered): the whole box focused or the whole box plain.
+        /// covered): the whole box focused or the whole box plain, or the gutter column below three rows or columns.
         /// </summary>
         /// <param name="surface">Surface.</param>
         /// <param name="outer">Rectangle including the border.</param>
@@ -139,20 +145,6 @@ namespace Armada.Tui.Widgets
         {
             if (surface == null) throw new ArgumentNullException(nameof(surface));
             if (theme == null) throw new ArgumentNullException(nameof(theme));
-            FocusFrameKindEnum kind = KindFor(outer);
-            if (kind == FocusFrameKindEnum.None) return;
-            if (kind == FocusFrameKindEnum.Gutter)
-            {
-                // The gutter column is cleared whatever the state. TUIKit draws its ASCII gutter as "|", the same glyph as
-                // a plain ASCII line, so the focused ASCII gutter keeps the focused vertical glyph instead.
-                Rect gutter = new Rect(outer.X, outer.Y, 1, outer.Height);
-                surface.Fill(gutter, Cell.Blank(theme.Text));
-                if (!focused) return;
-                if (IsAscii(theme)) surface.Fill(gutter, Cell.Glyph(AsciiFocusedGlyphs.Substring(1, 1), theme.FocusBorder, 1));
-                else TUIKit.Widgets.FocusFrame.Draw(surface, outer, true, theme.FocusBorder, theme.Border, false, _Options);
-                return;
-            }
-
             TUIKit.Widgets.FocusFrame.Draw(surface, outer, focused, theme.FocusBorder, theme.Border, IsAscii(theme), _Options);
         }
 
@@ -171,23 +163,27 @@ namespace Armada.Tui.Widgets
             if (surface == null) throw new ArgumentNullException(nameof(surface));
             if (theme == null) throw new ArgumentNullException(nameof(theme));
             if (boxes == null) throw new ArgumentNullException(nameof(boxes));
-            if (KindFor(pane) != FocusFrameKindEnum.Box)
+            if (pane.IsEmpty || UsesGutter(pane) || ContentRect(pane) == pane)
             {
                 Draw(surface, pane, theme, !focusedBox.IsEmpty);
                 return;
             }
 
-            // Plain boxes join the lines already drawn (tees and crosses where they meet); the focused box is drawn
-            // last and unjoined, so it reads whole with plain heavy corners over the shared lines.
+            // Plain boxes join the lines already drawn (tees and crosses where they meet); the focused box goes last,
+            // drawn whole over the shared lines (FocusedJoinMode).
             BorderStyle plain = IsAscii(theme) ? BorderStyle.Ascii : BorderStyle.Line;
-            surface.DrawJoinedBox(pane, theme.Border, plain);
-            foreach (Rect box in boxes) surface.DrawJoinedBox(box.Intersect(pane), theme.Border, plain);
+            surface.DrawJoinedBox(pane, theme.Border, plain, null, theme.Border, _Options.UnfocusedJoinMode);
+            foreach (Rect box in boxes) surface.DrawJoinedBox(box.Intersect(pane), theme.Border, plain, null, theme.Border, _Options.UnfocusedJoinMode);
             Rect focused = focusedBox.Intersect(pane);
-            if (!focused.IsEmpty && KindFor(focused) == FocusFrameKindEnum.Box) Draw(surface, focused, theme, true);
+            if (!focused.IsEmpty && !UsesGutter(focused) && ContentRect(focused) != focused)
+                surface.DrawJoinedBox(focused, theme.FocusBorder, FocusedBorderFor(theme), null, theme.FocusBorder, _Options.FocusedJoinMode);
         }
 
         /// <summary>
         /// Draw a title on the top line of a box (after the boxes), in the box's style, two cells in from the corner.
+        /// TUIKit draws a left-aligned title (<see cref="TitleAlignment.Left"/>) with the box itself, which in a joined
+        /// layout lets a box drawn later (the focused one, below a titled box) cover the title, so Armada draws titles
+        /// in a pass of their own.
         /// </summary>
         /// <param name="surface">Surface.</param>
         /// <param name="box">Box.</param>
@@ -222,8 +218,15 @@ namespace Armada.Tui.Widgets
             options.UnfocusedBorder = BorderStyle.Line;
             options.TitleMarker = "";
             options.MinimumBoxSize = 3;
-            options.GutterGlyph = HeavyGlyphs.Substring(1, 1);
+            options.MinimumGutterWidth = 2;
+            options.FocusedGutterGlyph = HeavyGlyphs.Substring(1, 1);
+            options.AsciiFocusedGutterGlyph = AsciiFocusedGlyphs.Substring(1, 1);
+            // A pane drawn on its own is a plain box; inside a pane the plain boxes merge into tees, and the focused box
+            // is drawn over them as a plain box with heavy corners (JoinMode.None), not TUIKit's default of heavy
+            // junctions (OverlayWhole), which would change the approved look.
             options.JoinBorders = false;
+            options.UnfocusedJoinMode = JoinMode.Merge;
+            options.FocusedJoinMode = JoinMode.None;
             return options;
         }
 

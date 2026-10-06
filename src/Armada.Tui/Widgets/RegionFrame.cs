@@ -53,7 +53,7 @@ namespace Armada.Tui.Widgets
         {
             Widget = widget ?? throw new System.ArgumentNullException(nameof(widget));
             Region = region;
-            Box = FocusFrame.Outer(region);
+            Box = FocusFrame.OuterRect(region);
             Focused = focused;
         }
 

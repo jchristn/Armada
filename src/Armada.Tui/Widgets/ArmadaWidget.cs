@@ -11,7 +11,7 @@ namespace Armada.Tui.Widgets
     /// Base class for Armada widgets: carries the palette and localizer pushed down the tree, tracks focus, and
     /// provides default (non-consuming) input handling. Not thread-safe; use on the UI loop thread.
     /// </summary>
-    public abstract class ArmadaWidget : IWidget, IFocusable, IFocusAware, IMouseAware, IThemeable, IHideable
+    public abstract class ArmadaWidget : IWidget, IFocusable, IFocusAware, IMouseAware, IThemeable, IHideable, IFocusStop
     {
         #region Public-Members
 
@@ -42,6 +42,15 @@ namespace Armada.Tui.Widgets
         /// True when the widget can take focus (focus routers skip widgets that cannot). Default true.
         /// </summary>
         public virtual bool CanFocus { get; set; } = true;
+
+        /// <summary>
+        /// TUIKit's <see cref="IFocusStop"/>: Tab stops on the widget only while it can take focus
+        /// (<see cref="CanFocus"/>).
+        /// </summary>
+        public bool IsFocusStop
+        {
+            get { return CanFocus; }
+        }
 
         /// <summary>
         /// Hidden widgets are skipped by containers. Default true.

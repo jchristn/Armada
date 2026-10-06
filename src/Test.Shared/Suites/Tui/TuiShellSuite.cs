@@ -159,6 +159,26 @@ namespace Test.Shared.Suites.Tui
                 }
             }));
 
+            cases.Add(TuiCase.Sync(Suite, "hosts_share_the_process", "Headless TUI hosts do not claim the terminal, so several start side by side and each takes real clicks", () =>
+            {
+                using (TuiTestHost first = TuiCase.SignedIn(120, 40, "/missions"))
+                using (TuiTestHost second = TuiCase.SignedIn(120, 40, "/captains"))
+                {
+                    AssertFalse(first.Adapter.ClaimsTerminal, "the adapter passes on the headless backend's claim");
+                    first.StartApp();
+                    second.StartApp();
+                    AssertTrue(first.Tui.Shell.FocusPane("sidebar"), "first host: sidebar focused");
+                    AssertTrue(second.Tui.Shell.FocusPane("sidebar"), "second host: sidebar focused");
+                    second.Screen();
+                    ShellLayout layout = second.Tui.Shell.LastLayout ?? throw new AssertionException("no layout");
+                    second.Click(layout.MainInner.X + layout.MainInner.Width / 2, layout.MainInner.Bottom - 2);
+                    AssertTrue(ReferenceEquals(second.Tui.Shell.Scope.Focused, second.Tui.Shell.Screen), "a click in the second host's main pane focuses it");
+                    first.Pump();
+                    AssertTrue(ReferenceEquals(first.Tui.Shell.Scope.Focused, first.Tui.Shell.Sidebar), "the first host keeps its own focus");
+                    TuiCase.Contains(first.Screen(), "Missions", "the first host still renders its own screen");
+                }
+            }));
+
             return new TestSuiteDescriptor(suiteId: Suite, displayName: "TUI shell and layout", cases: cases);
         }
     }

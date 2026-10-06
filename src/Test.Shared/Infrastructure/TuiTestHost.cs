@@ -94,6 +94,9 @@ namespace Test.Shared.Infrastructure
             TempDir = Path.Combine(Path.GetTempPath(), "armada-tui-test-" + Guid.NewGuid().ToString("N").Substring(0, 10));
             Directory.CreateDirectory(TempDir);
             Backend = new HeadlessBackend(width, height);
+            // Hosts do not claim the process's terminal (TUIKit's ISharedTerminalBackend), so any number of them can
+            // start their application side by side.
+            Backend.ClaimsTerminal = false;
             Adapter = new TerminalBackendAdapter(Backend);
             App = new TuiApplication(Adapter);
             TuiStartOptions options = new TuiStartOptions();
@@ -181,8 +184,8 @@ namespace Test.Shared.Infrastructure
 
         /// <summary>
         /// Start the TUIKit application on the headless backend (once), so it composes real frames through
-        /// <see cref="TuiApplication.RenderOnce"/>, keeps a hit map, and can be audited (<c>FocusAudit</c>). Only one
-        /// started application may exist at a time; <see cref="Dispose"/> stops it.
+        /// <see cref="TuiApplication.RenderOnce"/>, keeps a hit map, and can be audited (<c>FocusAudit</c>). The backend
+        /// does not claim the terminal, so other hosts may be started at the same time; <see cref="Dispose"/> stops it.
         /// </summary>
         public void StartApp()
         {
@@ -197,8 +200,7 @@ namespace Test.Shared.Infrastructure
         /// them, hit-tests its last frame, focuses the region, synthesizes the click, and routes it to the widget
         /// under the pointer (the shell, bound to the full-screen region), the way a terminal's click arrives. The
         /// first click starts the application (TUIKit composes and keeps a hit map only once started) and every click
-        /// renders a frame first, so the hit map matches the screen. Only one started application may exist at a
-        /// time; <see cref="Dispose"/> stops it.
+        /// renders a frame first, so the hit map matches the screen. <see cref="Dispose"/> stops the application.
         /// </summary>
         /// <param name="x">Column.</param>
         /// <param name="y">Row.</param>

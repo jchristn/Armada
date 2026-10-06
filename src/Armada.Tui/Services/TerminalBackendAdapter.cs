@@ -10,10 +10,12 @@ namespace Armada.Tui.Services
     /// A pass-through <see cref="ITerminalBackend"/> that the TUI wraps around the real backend (console or headless) so
     /// it can (1) notice input as soon as it is read, which wakes the frame governor (W8.5), and (2) write ASCII
     /// equivalents of box-drawing, block, Braille, arrow, and bullet glyphs while ASCII icon mode is on (W8.4; see
-    /// <see cref="AsciiGlyphs"/>). Everything else is delegated unchanged. <see cref="ReadInput"/> and
+    /// <see cref="AsciiGlyphs"/>). Everything else is delegated unchanged, including whether the backend claims the
+    /// process's terminal (TUIKit's <see cref="ISharedTerminalBackend"/>), so a headless backend that does not claim it
+    /// lets several applications start in one process. <see cref="ReadInput"/> and
     /// <see cref="Write"/> are called on the TUIKit loop thread; <see cref="AsciiOutput"/> may be set from any thread.
     /// </summary>
-    public sealed class TerminalBackendAdapter : ITerminalBackend
+    public sealed class TerminalBackendAdapter : ITerminalBackend, ISharedTerminalBackend
     {
         #region Public-Members
 
@@ -60,6 +62,16 @@ namespace Armada.Tui.Services
         public bool IsInteractive
         {
             get { return Inner.IsInteractive; }
+        }
+
+        /// <summary>
+        /// True when the wrapped backend claims the process's only terminal: always for a real console, and for a
+        /// backend that does not implement <see cref="ISharedTerminalBackend"/>; a headless backend's
+        /// <see cref="HeadlessBackend.ClaimsTerminal"/> otherwise.
+        /// </summary>
+        public bool ClaimsTerminal
+        {
+            get { return !(Inner is ISharedTerminalBackend shared) || shared.ClaimsTerminal; }
         }
 
         #endregion

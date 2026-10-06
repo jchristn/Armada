@@ -15,6 +15,7 @@ namespace Armada.Tui.Screens.Entities
     using TUIKit.Input;
     using TUIKit.Widgets;
     using Button = Armada.Tui.Widgets.Button;
+    using TabStrip = Armada.Tui.Widgets.TabStrip;
 
     /// <summary>
     /// Base for the delivery and configuration detail screens (the dashboard's detail pages): a header with the record

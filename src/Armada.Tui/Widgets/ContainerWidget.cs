@@ -7,9 +7,11 @@ namespace Armada.Tui.Widgets
 
     /// <summary>
     /// Base for widgets that host children in a <see cref="FocusScope"/>: keys and mouse go through the scope, focus
-    /// state flows into it, and theme changes are forwarded to every child. Not thread-safe.
+    /// state flows into it, and theme changes are forwarded to every child. Each container is a TUIKit
+    /// <see cref="IFocusContainer"/>, so a parent scope entering it with Tab lands on its first stop all the way down (its
+    /// last with Shift+Tab). Not thread-safe.
     /// </summary>
-    public abstract class ContainerWidget : ArmadaWidget, IFocusScopeOwner, IPasteTarget
+    public abstract class ContainerWidget : ArmadaWidget, IFocusScopeOwner, IFocusContainer, IPasteTarget
     {
         #region Public-Members
 
@@ -45,6 +47,25 @@ namespace Armada.Tui.Widgets
         #endregion
 
         #region Public-Methods
+
+        /// <inheritdoc />
+        IFocusable? IFocusContainer.FocusedLeaf
+        {
+            get { return Scope.FocusedLeaf() as IFocusable; }
+        }
+
+        /// <inheritdoc />
+        bool IFocusContainer.MoveFocus(bool forward)
+        {
+            if (Scope.Focused is IFocusContainer inner && inner.MoveFocus(forward)) return true;
+            return Scope.Move(forward);
+        }
+
+        /// <inheritdoc />
+        void IFocusContainer.FocusEdge(bool first)
+        {
+            Scope.FocusEdge(first);
+        }
 
         /// <inheritdoc />
         public override bool HandleKey(KeyEvent key)

@@ -235,9 +235,11 @@ namespace Armada.Tui.Screens.Ask
                 }
             }
 
-            // Lines added below the reader's place (not those loaded or grown above it) count as new below.
+            // Lines added below the reader's place (not those loaded or grown above it) count as new below, and lines
+            // that go away below it (a dropped message, a card that shrank) lower the count again.
             int added = _Flat.Count - before - moved;
             if (added > 0) _Tail.OnContentAppended(added);
+            else if (added < 0) _Tail.OnContentRemoved(-added);
         }
 
         /// <summary>

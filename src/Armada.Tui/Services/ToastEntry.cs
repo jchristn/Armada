@@ -51,6 +51,12 @@ namespace Armada.Tui.Services
         /// </summary>
         public string RepeatSuffix { get; }
 
+        /// <summary>
+        /// The severity spelled as text, drawn before the text so severity never depends on color (TUIKit's
+        /// <c>NotificationCenter.SeverityLabels</c>: <c>[i]</c>, <c>[ok]</c>, <c>[!]</c>, <c>[x]</c>), or empty.
+        /// </summary>
+        public string SeverityLabel { get; }
+
         #endregion
 
         #region Constructors-and-Factories
@@ -66,7 +72,8 @@ namespace Armada.Tui.Services
         /// <param name="action">Action, or null.</param>
         /// <param name="repeat">Raise count (at least 1).</param>
         /// <param name="repeatSuffix">Repeat suffix, or empty.</param>
-        public ToastEntry(long id, NotificationSeverityEnum severity, string text, DateTime expiresUtc, string? actionLabel, Action? action, int repeat, string repeatSuffix)
+        /// <param name="severityLabel">Severity label, or empty.</param>
+        public ToastEntry(long id, NotificationSeverityEnum severity, string text, DateTime expiresUtc, string? actionLabel, Action? action, int repeat, string repeatSuffix, string severityLabel)
         {
             Id = id;
             Severity = severity;
@@ -76,6 +83,7 @@ namespace Armada.Tui.Services
             Action = action;
             Repeat = Math.Max(1, repeat);
             RepeatSuffix = repeatSuffix ?? "";
+            SeverityLabel = severityLabel ?? "";
         }
 
         #endregion
