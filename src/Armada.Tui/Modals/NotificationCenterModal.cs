@@ -20,9 +20,15 @@ namespace Armada.Tui.Modals
         #region Public-Members
 
         /// <summary>
-        /// Cursor index.
+        /// Cursor index into the history (newest first). Follows the selected entry when newer entries arrive while
+        /// the center is open, so Enter always opens the entry that is highlighted.
         /// </summary>
         public int Cursor { get; private set; } = 0;
+
+        /// <summary>
+        /// Id of the highlighted entry, or null before the first entry is shown or after the history is cleared.
+        /// </summary>
+        public string? SelectedEntryId { get; private set; } = null;
 
         #endregion
 
@@ -64,14 +70,15 @@ namespace Armada.Tui.Modals
         {
             if (HandleDismiss(key, null)) return true;
             IReadOnlyList<NotificationEntry> items = _Service.History;
+            Follow(items);
             bool clearKey = key.Code == KeyCode.Character && key.Rune == 'x' && key.Modifiers == KeyModifiers.None;
             if (!clearKey) _ClearArmed = false;
             switch (key.Code)
             {
-                case KeyCode.Up: Cursor = Math.Max(0, Cursor - 1); return true;
-                case KeyCode.Down: Cursor = Math.Min(Math.Max(0, items.Count - 1), Cursor + 1); return true;
-                case KeyCode.Home: Cursor = 0; return true;
-                case KeyCode.End: Cursor = Math.Max(0, items.Count - 1); return true;
+                case KeyCode.Up: MoveTo(items, Math.Max(0, Cursor - 1)); return true;
+                case KeyCode.Down: MoveTo(items, Math.Min(Math.Max(0, items.Count - 1), Cursor + 1)); return true;
+                case KeyCode.Home: MoveTo(items, 0); return true;
+                case KeyCode.End: MoveTo(items, Math.Max(0, items.Count - 1)); return true;
                 case KeyCode.Enter:
                     if (Cursor < items.Count)
                     {
@@ -94,6 +101,7 @@ namespace Armada.Tui.Modals
                         {
                             _Service.Clear();
                             Cursor = 0;
+                            SelectedEntryId = null;
                             _ClearArmed = false;
                         }
                         else
@@ -141,7 +149,7 @@ namespace Armada.Tui.Modals
             }
 
             _Height = Math.Max(1, (content.Size.Height - 2) / 2);
-            Cursor = Math.Clamp(Cursor, 0, items.Count - 1);
+            Follow(items);
             if (Cursor < _Scroll) _Scroll = Cursor;
             if (Cursor >= _Scroll + _Height) _Scroll = Cursor - _Height + 1;
             DateTime now = _Clock.UtcNow;
@@ -177,6 +185,35 @@ namespace Armada.Tui.Modals
         private ITextLocalizer Loc()
         {
             return Localizer;
+        }
+
+        private void Follow(IReadOnlyList<NotificationEntry> items)
+        {
+            if (items.Count == 0)
+            {
+                Cursor = 0;
+                return;
+            }
+
+            if (SelectedEntryId != null)
+            {
+                for (int i = 0; i < items.Count; i++)
+                {
+                    if (String.Equals(items[i].Id, SelectedEntryId, StringComparison.Ordinal))
+                    {
+                        Cursor = i;
+                        return;
+                    }
+                }
+            }
+
+            MoveTo(items, Math.Clamp(Cursor, 0, items.Count - 1));
+        }
+
+        private void MoveTo(IReadOnlyList<NotificationEntry> items, int index)
+        {
+            Cursor = index;
+            SelectedEntryId = index >= 0 && index < items.Count ? items[index].Id : null;
         }
 
         #endregion

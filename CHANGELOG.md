@@ -350,6 +350,8 @@ Focus: the first stable release -- security hardening, a frozen and documented A
 
 - Harbor: log lines never end with a period. The Harbor app's own messages were reworded, and `HarborLogEntry` drops a trailing period from every message (keeping an ellipsis), including lines that end with an exception's text.
 
+- TUI: the notification center keeps its highlight on the same entry when new notifications arrive while it is open, so Enter opens the highlighted entry instead of whatever moved into its position. Found by an intermittent live test that assumed the newest entry was its own.
+
 ### CI and test fixes
 - Fixed: fleet categorization finished its job before it released the captain and the re-run guard, and its heartbeat could write a finished job back to Running. A caller acting on the finished job saw the captain still Analyzing, got "Fleet categorization ... is already running" on a re-run, or waited for a job that never left Running. The captain is now released as soon as its process returns, the heartbeat is stopped first, and the job's terminal state is written last.
 - Fixed: background vessel discovery had the same heartbeat race, so a discovery job could stay Running after the batch reached Discovered.

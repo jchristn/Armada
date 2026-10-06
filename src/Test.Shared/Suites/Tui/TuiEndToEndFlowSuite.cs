@@ -12,6 +12,7 @@ namespace Test.Shared.Suites.Tui
     using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Tui.Approvals;
+    using Armada.Tui.Modals;
     using Armada.Tui.Screens;
     using Armada.Tui.Screens.Admin;
     using Armada.Tui.Screens.Ask;
@@ -187,8 +188,15 @@ namespace Test.Shared.Suites.Tui
                         AssertTrue(host.WaitForText(incident.Title!, 5000), "incident listed in the center\n" + host.Screen());
                         int unread = host.Tui.Context.Notifications.UnreadCount;
                         AssertTrue(unread >= 2, "unread entries: " + unread);
+                        // The shared live server can raise other entities' events after this mission's, so select the
+                        // mission's entry instead of assuming it is the newest.
+                        NotificationCenterModal center = (NotificationCenterModal)host.App.Modals.Top!;
+                        string missionEntryId = host.Tui.Context.Notifications.History.First(n => n.AssetType == "Mission" && n.Name == pending.Title).Id;
+                        host.Press("home");
+                        for (int step = 0; step < NotificationService.MaxHistory && center.SelectedEntryId != missionEntryId; step++) host.Press("down");
+                        AssertEqual(missionEntryId, center.SelectedEntryId, "mission entry selected");
                         host.Press("enter");
-                        AssertTrue(host.PumpUntil(() => host.Tui.Context.Router.Current!.Path == "/missions/" + pending.Id, 5000), "Enter opens the newest entry (the mission): " + host.Tui.Context.Router.Current!.Path);
+                        AssertTrue(host.PumpUntil(() => host.Tui.Context.Router.Current!.Path == "/missions/" + pending.Id, 5000), "Enter opens the selected entry (the mission): " + host.Tui.Context.Router.Current!.Path);
                         AssertTrue(host.Tui.Context.Notifications.UnreadCount < unread, "opened entry marked read");
                         StopLive(host);
                     }

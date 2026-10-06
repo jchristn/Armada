@@ -183,6 +183,26 @@ namespace Test.Shared.Suites.Tui
                 }
             }));
 
+            cases.Add(TuiCase.Sync(Suite, "center_selection_follows_entry", "A notification arriving while the center is open does not change which entry Enter opens", () =>
+            {
+                using (TuiTestHost host = TuiCase.SignedIn(120, 40, "/jobs"))
+                {
+                    host.Tui.Context.Notifications.PushEntityChange("Voyage", "vyg_1", "Release train", "Complete");
+                    host.Tui.Context.Notifications.PushEntityChange("Voyage", "vyg_2", "Hotfix train", "Complete");
+                    host.Press("ctrl+n");
+                    Armada.Tui.Modals.NotificationCenterModal center = (Armada.Tui.Modals.NotificationCenterModal)host.App.Modals.Top!;
+                    host.Press("down");
+                    host.Pump();
+                    string selected = center.SelectedEntryId!;
+                    AssertEqual(host.Tui.Context.Notifications.History.First(n => n.Name == "Release train").Id, selected, "second entry (older voyage) highlighted");
+                    host.Tui.Context.Notifications.PushEntityChange("Voyage", "vyg_3", "Late train", "Complete");
+                    host.Pump();
+                    AssertEqual(selected, center.SelectedEntryId, "selection stayed on the same entry");
+                    host.Press("enter");
+                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Router.Current!.Path == "/voyages/vyg_1"), "Enter opened the highlighted entry, not the one now at its old position");
+                }
+            }));
+
             cases.Add(TuiCase.Sync(Suite, "center_modal", "The notification center lists entries and Enter opens the item", () =>
             {
                 using (TuiTestHost host = TuiCase.SignedIn(120, 40, "/jobs"))
