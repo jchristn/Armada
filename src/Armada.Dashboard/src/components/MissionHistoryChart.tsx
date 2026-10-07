@@ -2,48 +2,21 @@ import { useEffect, useMemo, useState } from 'react';
 import { getMissionHistory } from '../api/client';
 import type { MissionHistorySummaryResult, Vessel, Fleet } from '../types/models';
 import { useLocale } from '../context/LocaleContext';
-
-const TIME_RANGES = [
-  { label: 'Last Hour', value: 'hour', hours: 1, stepMinutes: 1 },
-  { label: 'Last Day', value: 'day', hours: 24, stepMinutes: 15 },
-  { label: 'Last Week', value: 'week', hours: 168, stepMinutes: 60 },
-  { label: 'Last Month', value: 'month', hours: 720, stepMinutes: 360 },
-] as const;
-
-type TimeRangeValue = typeof TIME_RANGES[number]['value'];
-
-interface Bucket {
-  timestampMs: number;
-  complete: number;
-  failed: number;
-  other: number;
-}
+import {
+  computeYTicks,
+  formatBucketLabel,
+  formatTooltipTime,
+  historyBuckets,
+  missionHistoryQuery,
+  MISSION_HISTORY_RANGES as TIME_RANGES,
+  type MissionHistoryBucketView as Bucket,
+  type MissionHistoryRangeValue as TimeRangeValue,
+} from '../lib/missionHistory';
 
 interface MissionHistoryChartProps {
   vessels: Vessel[];
   fleets: Fleet[];
   onRefresh?: () => void;
-}
-
-function computeYTicks(max: number): number[] {
-  if (max <= 0) return [0];
-  const step = Math.max(1, Math.ceil(max / 4));
-  const ticks: number[] = [];
-  for (let i = 0; i <= max; i += step) ticks.push(i);
-  if (ticks[ticks.length - 1] < max) ticks.push(ticks[ticks.length - 1] + step);
-  return ticks;
-}
-
-function formatBucketLabel(ts: number, stepMinutes: number, hours: number): string {
-  const d = new Date(ts);
-  if (stepMinutes <= 15) return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-  if (hours > 48) return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-  return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-}
-
-function formatTooltipTime(ts: number): string {
-  const d = new Date(ts);
-  return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
 export default function MissionHistoryChart({ vessels, fleets, onRefresh }: MissionHistoryChartProps) {
@@ -70,17 +43,8 @@ export default function MissionHistoryChart({ vessels, fleets, onRefresh }: Miss
 
   useEffect(() => {
     let cancelled = false;
-    const end = new Date();
-    const start = new Date(end.getTime() - range.hours * 3600000);
-
     setLoading(true);
-    getMissionHistory({
-      fromUtc: start.toISOString(),
-      toUtc: end.toISOString(),
-      bucketMinutes: range.stepMinutes,
-      fleetId: fleetId || undefined,
-      vesselId: vesselId || undefined,
-    })
+    getMissionHistory(missionHistoryQuery(range, fleetId, vesselId, new Date()))
       .then((result) => {
         if (!cancelled) setHistory(result);
       })
@@ -96,14 +60,7 @@ export default function MissionHistoryChart({ vessels, fleets, onRefresh }: Miss
     };
   }, [fleetId, range.hours, range.stepMinutes, timeRange, vesselId]);
 
-  const buckets = useMemo<Bucket[]>(() => {
-    return (history?.buckets || []).map(bucket => ({
-      timestampMs: new Date(bucket.startUtc).getTime(),
-      complete: bucket.completeCount,
-      failed: bucket.failedCount,
-      other: bucket.otherCount,
-    }));
-  }, [history]);
+  const buckets = useMemo<Bucket[]>(() => historyBuckets(history), [history]);
 
   const totalComplete = history?.completeCount ?? 0;
   const totalFailed = history?.failedCount ?? 0;
@@ -119,16 +76,8 @@ export default function MissionHistoryChart({ vessels, fleets, onRefresh }: Miss
 
   const refresh = () => {
     onRefresh?.();
-    const end = new Date();
-    const start = new Date(end.getTime() - range.hours * 3600000);
     setLoading(true);
-    getMissionHistory({
-      fromUtc: start.toISOString(),
-      toUtc: end.toISOString(),
-      bucketMinutes: range.stepMinutes,
-      fleetId: fleetId || undefined,
-      vesselId: vesselId || undefined,
-    })
+    getMissionHistory(missionHistoryQuery(range, fleetId, vesselId, new Date()))
       .then(setHistory)
       .catch(() => setHistory(null))
       .finally(() => setLoading(false));

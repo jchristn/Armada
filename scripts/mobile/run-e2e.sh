@@ -9,6 +9,8 @@
 #      seeds, through the REST API, a vessel (a local git repo in the temp directory), an environment that requires
 #      approval, and one deployment waiting for it (the approvals flow approves it);
 #   3. builds and installs a Release build of the app (JS bundle embedded, no Metro) unless --no-app-build;
+#   3b. seeds Operations data (scripts/mobile/seed-e2e.py: a fleet, a vessel on a local bare repository, and a
+#      voyage with two missions that stay Pending, since there are no captains);
 #   4. runs every flow in src/Armada.Mobile/e2e with SERVER_URL pointing at the Admiral as the device sees it
 #      (127.0.0.1 from the iOS simulator, 10.0.2.2 from the Android emulator);
 #   5. stops the Admiral, and shuts down any simulator or emulator it booted.
@@ -119,7 +121,7 @@ cleanup() {
   if [ -n "$EMULATOR_PID" ]; then
     adb -s "$ANDROID_SERIAL" emu kill >/dev/null 2>&1 || kill "$EMULATOR_PID" 2>/dev/null || true
   fi
-  rm -rf "${DATA_DIR}/db" "${DATA_DIR}/docks" "${DATA_DIR}/repos"
+  rm -rf "${DATA_DIR}/db" "${DATA_DIR}/docks" "${DATA_DIR}/repos" "${DATA_DIR}/seed"
 }
 trap cleanup EXIT INT TERM
 
@@ -339,6 +341,8 @@ if [ "$PROXY" = "1" ]; then start_proxy; fi
 start_admiral
 if [ "$PROXY" = "1" ]; then wait_for_tunnel; fi
 seed_admiral
+log "seeding Operations data"
+python3 "${SCRIPT_DIR}/seed-e2e.py" --url "http://127.0.0.1:${PORT}" --data-dir "$DATA_DIR"
 case "$PLATFORM" in
   ios) run_ios ;;
   android) run_android ;;

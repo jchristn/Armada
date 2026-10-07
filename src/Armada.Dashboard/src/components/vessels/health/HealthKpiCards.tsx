@@ -3,16 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { getVesselHealthSummary } from '../../../api/client';
 import { useLocale } from '../../../context/LocaleContext';
 import type { VesselHealthSummary } from '../../../types/models';
-import { healthUrl } from '../../../lib/health/healthFilters';
+import { HEALTH_KPI_LINKS } from '../../../lib/health/healthKpiLinks';
 import { formatCount } from '../../../lib/health/healthText';
 import './vesselHealth.css';
 
-/** Home deep links. Vulnerabilities have no status filter in the enumerate DTO, so that tile sorts instead. */
-export const HEALTH_KPI_LINKS = {
-  failing: healthUrl({ overall: ['Fail'] }),
-  outdatedMajors: healthUrl({ deps: ['Fail'], sortBy: 'OutdatedMajorCount', sortDesc: true }),
-  vulnerable: healthUrl({ sortBy: 'VulnerableCount', sortDesc: true }),
-};
+/** Home deep links (shared with the mobile Home). */
+export { HEALTH_KPI_LINKS };
 
 interface HealthKpiCardsProps {
   /** Increment to reload (for example from the Home refresh button). */

@@ -3,21 +3,7 @@ import { Link } from 'react-router-dom';
 import { listPlaybooks } from '../../api/client';
 import type { Playbook, PlaybookDeliveryMode, SelectedPlaybook } from '../../types/models';
 import { useLocale } from '../../context/LocaleContext';
-
-const DELIVERY_MODE_COPY: Record<PlaybookDeliveryMode, { label: string; description: string }> = {
-  InlineFullContent: {
-    label: 'Inline Full Content',
-    description: 'Inject the complete markdown into the mission instructions.',
-  },
-  InstructionWithReference: {
-    label: 'Instruction With Reference',
-    description: 'Tell the model to read the materialized playbook path outside the worktree.',
-  },
-  AttachIntoWorktree: {
-    label: 'Attach Into Worktree',
-    description: 'Materialize the playbook in `.armada/playbooks/` and instruct the model to read it there.',
-  },
-};
+import { activePlaybooksOf, availablePlaybooks, PLAYBOOK_DELIVERY_MODES as DELIVERY_MODE_COPY, playbookOptionsForRow } from '../../lib/playbookSelection';
 
 interface PlaybookSelectorProps {
   value: SelectedPlaybook[];
@@ -55,9 +41,8 @@ export default function PlaybookSelector({ value, onChange, disabled = false }: 
     return () => { mounted = false; };
   }, [t]);
 
-  const activePlaybooks = playbooks.filter((playbook) => playbook.active !== false);
-  const selectedIds = new Set(value.map((item) => item.playbookId));
-  const availableDraftPlaybooks = activePlaybooks.filter((playbook) => !selectedIds.has(playbook.id));
+  const activePlaybooks = activePlaybooksOf(playbooks);
+  const availableDraftPlaybooks = availablePlaybooks(playbooks, value);
 
   useEffect(() => {
     const availableIds = new Set(availableDraftPlaybooks.map((playbook) => playbook.id));
@@ -69,18 +54,7 @@ export default function PlaybookSelector({ value, onChange, disabled = false }: 
   }
 
   function getOptionsForRow(playbookId: string) {
-    const otherSelectedIds = new Set(
-      value
-        .filter((item) => item.playbookId !== playbookId)
-        .map((item) => item.playbookId),
-    );
-    const options = activePlaybooks.filter((playbook) => playbook.id === playbookId || !otherSelectedIds.has(playbook.id));
-    const current = resolvePlaybook(playbookId);
-    if (current && !options.some((playbook) => playbook.id === current.id)) {
-      return [current, ...options];
-    }
-
-    return options;
+    return playbookOptionsForRow(playbooks, value, playbookId);
   }
 
   function updateSelectedPlaybook(index: number, playbookId: string) {

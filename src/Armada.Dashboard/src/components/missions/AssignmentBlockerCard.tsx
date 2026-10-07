@@ -1,25 +1,11 @@
 import { Link } from 'react-router-dom';
 import { useLocale } from '../../context/LocaleContext';
 import type { MissionAssignmentBlocker } from '../../types/models';
+import { assignmentBlockerTitle } from '../../lib/missionActions';
 
 interface AssignmentBlockerCardProps {
   blocker: MissionAssignmentBlocker;
 }
-
-const REASON_TITLES: Record<string, string> = {
-  AwaitingDispatch: 'About to start',
-  VesselMissing: 'No vessel',
-  VesselMisconfigured: 'Vessel needs attention',
-  DependencyNotFinished: 'Waiting for an earlier mission',
-  DependencyHandoffPending: 'Preparing the handoff',
-  WaitingForVoyageWorkers: 'Waiting for the other missions in this voyage',
-  VesselBroadScopeMissionActive: 'Vessel is held by a broad-scope mission',
-  BroadScopeWaitingForVessel: 'Waiting for the vessel to be free',
-  VesselConcurrencyLimit: 'Vessel runs one mission at a time',
-  NoCaptains: 'No captains',
-  NoIdleCaptain: 'Waiting for a captain',
-  NoEligibleCaptain: 'No captain can take this mission',
-};
 
 /**
  * Explains why a Pending mission is waiting, from the server-computed assignment blocker: the reason, a summary, when it
@@ -27,7 +13,7 @@ const REASON_TITLES: Record<string, string> = {
  */
 export default function AssignmentBlockerCard({ blocker }: AssignmentBlockerCardProps) {
   const { t, formatDateTime } = useLocale();
-  const title = REASON_TITLES[blocker.reason] ?? 'Waiting';
+  const title = assignmentBlockerTitle(blocker.reason);
 
   return (
     <div className="card assignment-blocker-card" role="status" style={{ marginBottom: '1rem' }} data-reason={blocker.reason}>

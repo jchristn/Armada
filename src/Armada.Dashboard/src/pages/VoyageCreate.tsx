@@ -8,12 +8,7 @@ import { useNotifications } from '../context/NotificationContext';
 import PlaybookSelector from '../components/shared/PlaybookSelector';
 import { sortByName } from '../lib/sortByName';
 import { findLandingMode, getVoyageLandingModes } from '../lib/vesselForm';
-
-interface MissionRow {
-  title: string;
-  description: string;
-  priority: number;
-}
+import { buildVoyageCreateRequest, newVoyageMissionRow, validateVoyageForm, type VoyageMissionRow } from '../lib/voyageForm';
 
 export default function VoyageCreate() {
   const { t } = useLocale();
@@ -32,9 +27,7 @@ export default function VoyageCreate() {
   const [selectedPlaybooks, setSelectedPlaybooks] = useState<SelectedPlaybook[]>([]);
 
   // Mission rows
-  const [missions, setMissions] = useState<MissionRow[]>([
-    { title: '', description: '', priority: 100 },
-  ]);
+  const [missions, setMissions] = useState<VoyageMissionRow[]>([newVoyageMissionRow()]);
 
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -45,14 +38,14 @@ export default function VoyageCreate() {
   }, []);
 
   function addMission() {
-    setMissions(m => [...m, { title: '', description: '', priority: 100 }]);
+    setMissions(m => [...m, newVoyageMissionRow()]);
   }
 
   function removeMission(index: number) {
     setMissions(m => m.filter((_, i) => i !== index));
   }
 
-  function updateMission(index: number, field: keyof MissionRow, value: string | number) {
+  function updateMission(index: number, field: keyof VoyageMissionRow, value: string | number) {
     setMissions(m => m.map((row, i) => i === index ? { ...row, [field]: value } : row));
   }
 
@@ -60,32 +53,13 @@ export default function VoyageCreate() {
     e.preventDefault();
     setError('');
 
-    if (!title.trim()) { setError(t('Voyage title is required.')); return; }
-    if (!vesselId) { setError(t('Please select a vessel.')); return; }
-
-    const validMissions = missions.filter(m => m.title.trim());
-    if (validMissions.length === 0) { setError(t('At least one mission with a title is required.')); return; }
+    const form = { title, description, vesselId, pipeline: selectedPipeline, landingMode, selectedPlaybooks, missions };
+    const problem = validateVoyageForm(form);
+    if (problem) { setError(t(problem)); return; }
 
     setSubmitting(true);
     try {
-      const missionPayloads = validMissions.map(m => ({
-        title: m.title.trim(),
-        description: m.description.trim() || m.title.trim(),
-        vesselId,
-        priority: m.priority || 100,
-      }));
-
-      // The server API accepts vesselId at the top level for convenience
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const voyage = await createVoyage({
-        title: title.trim(),
-        description: description.trim() || undefined,
-        vesselId,
-        ...(selectedPipeline ? { pipeline: selectedPipeline } : {}),
-        missions: missionPayloads,
-        ...(selectedPlaybooks.length > 0 ? { selectedPlaybooks } : {}),
-        ...(landingMode ? { landingMode } : {}),
-      });
+      const voyage = await createVoyage(buildVoyageCreateRequest(form));
 
       pushToast('success', t('Voyage "{{title}}" created.', { title: title.trim() }));
       navigate(`/voyages/${voyage.id}`);

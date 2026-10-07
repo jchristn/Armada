@@ -1,14 +1,6 @@
-import { Stack } from 'expo-router';
-import { useLocale } from '../../../i18n/LocaleContext';
-import { NavMenuScreen } from '../../../screens/NavMenuScreen';
+import { HomeScreen } from '../../../screens/operations/HomeScreen';
 
-/** Work tab root: Home (the dashboard overview, W2.1) and the OPERATIONS, DELIVERY, and BUILD destinations. */
+/** Work tab root: Home (the dashboard's System Status overview, W2.1), followed on phones by the Work sections. */
 export default function HomeRoute() {
-  const { t } = useLocale();
-  return (
-    <>
-      <Stack.Screen options={{ title: t('Work') }} />
-      <NavMenuScreen tab="work" />
-    </>
-  );
+  return <HomeScreen />;
 }

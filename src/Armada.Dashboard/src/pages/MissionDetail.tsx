@@ -38,10 +38,9 @@ import CaptainRef from '../components/shared/CaptainRef';
 import AssignmentBlockerCard from '../components/missions/AssignmentBlockerCard';
 import BranchesModal from '../components/vessels/BranchesModal';
 import { useLocale } from '../context/LocaleContext';
+import { MISSION_TRANSITION_STATUSES, formatMissionDuration, isMissionLogCompleted, missionLandingState } from '../lib/missionActions';
 
-const MISSION_STATUSES = [
-  'Pending', 'Assigned', 'InProgress', 'WorkProduced', 'Testing', 'Review', 'Complete', 'Failed', 'LandingFailed', 'Cancelled',
-];
+const MISSION_STATUSES = MISSION_TRANSITION_STATUSES;
 
 export default function MissionDetail() {
   const { t, formatDateTime, formatRelativeTime } = useLocale();
@@ -90,19 +89,7 @@ export default function MissionDetail() {
   // Confirm
   const [confirm, setConfirm] = useState<{ open: boolean; title: string; message: string; onConfirm: () => void }>({ open: false, title: '', message: '', onConfirm: () => {} });
 
-  const formatDuration = useCallback((totalRuntimeMs: number | null | undefined): string => {
-    if (totalRuntimeMs == null || totalRuntimeMs < 0) return t('N/A');
-    const totalSeconds = totalRuntimeMs / 1000;
-    if (totalSeconds < 60) return t('{{seconds}}s', { seconds: totalSeconds.toFixed(1) });
-
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    const seconds = Math.floor(totalSeconds % 60);
-
-    if (hours > 0) return t('{{hours}}h {{minutes}}m', { hours, minutes });
-    if (minutes > 0 && seconds > 0) return t('{{minutes}}m {{seconds}}s', { minutes, seconds });
-    return t('{{minutes}}m', { minutes });
-  }, [t]);
+  const formatDuration = useCallback((totalRuntimeMs: number | null | undefined): string => formatMissionDuration(totalRuntimeMs, t), [t]);
 
   // Lookup maps
   const vesselName = useMemo(() => {
@@ -401,26 +388,10 @@ export default function MissionDetail() {
 
   if (loading) return <p className="text-dim">{t('Loading...')}</p>;
   if (!mission) return <ErrorModal error={error || t('Mission not found.')} onClose={() => navigate('/missions')} />;
-  const canResolveReview = mission.status === 'Review' && mission.requiresReview;
-  const canMarkComplete = mission.status === 'Review' && !mission.requiresReview;
-  // A mission is landable when work is produced, a prior landing failed, or it sits in Review with no
-  // explicit review gate to resolve (requiresReview=false) -- in which case landing is how it graduates
-  // out of Review.
-  const canLand = mission.status === 'WorkProduced' || mission.status === 'LandingFailed'
-    || (mission.status === 'Review' && !mission.requiresReview);
-  const landLabel = mission.status === 'LandingFailed' ? t('Retry Landing') : t('Land');
-  // Landing Mode None: Armada never lands the branch, so Land can only be refused. Offer the merge instead.
-  const manualLandingOnly = !!landingPreview?.manualLandingOnly;
-  const showManualMerge = canLand && manualLandingOnly && !!mission.vesselId && !!mission.branchName;
-  const showLand = canLand && !showManualMerge;
-  const landableStatus = mission.status === 'WorkProduced' || mission.status === 'LandingFailed' || mission.status === 'PullRequestOpen'
-    || (mission.status === 'Review' && !mission.requiresReview);
-  let landingPill: { className: string; label: string };
-  if (mission.status === 'Complete') landingPill = { className: 'ready', label: t('Landed') };
-  else if (!landableStatus) landingPill = { className: 'warning', label: t('Not Ready Yet') };
-  else if (manualLandingOnly) landingPill = { className: 'warning', label: t('Merge By Hand') };
-  else if (landingPreview?.isReadyToLand) landingPill = { className: 'ready', label: t('Ready To Land') };
-  else landingPill = { className: 'warning', label: t('Needs Review') };
+  const landing = missionLandingState(mission, landingPreview);
+  const { canResolveReview, canMarkComplete, showManualMerge, showLand } = landing;
+  const landLabel = landing.isRetry ? t('Retry Landing') : t('Land');
+  const landingPill = { className: landing.pill.tone, label: t(landing.pill.label) };
   const handleLand = async () => { try { await retryMissionLanding(mission.id); pushToast('success', t('Landing succeeded! Mission status updated.')); loadMission(); } catch (e) { setError(e instanceof Error ? e.message : t('Landing failed.')); } };
 
   return (
@@ -568,7 +539,7 @@ export default function MissionDetail() {
         content={logModal.content}
         markdown
         totalLines={logModal.totalLines}
-        completed={mission != null && ['Complete', 'Failed', 'Cancelled', 'WorkProduced', 'LandingFailed', 'Review'].includes(mission.status)}
+        completed={mission != null && isMissionLogCompleted(mission.status)}
         onClose={() => setLogModal({ open: false, title: '', missionId: '', content: '', totalLines: 0, lineCount: 200 })}
         onRefresh={handleLogRefresh}
         onLineCountChange={handleLogLineCountChange}

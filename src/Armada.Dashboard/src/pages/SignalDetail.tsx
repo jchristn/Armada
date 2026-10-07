@@ -13,20 +13,11 @@ import CopyButton from '../components/shared/CopyButton';
 import ErrorModal from '../components/shared/ErrorModal';
 import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
+import { formatSignalPayload } from '../lib/signals';
 
 // The API may return missionId on signals even though the base type doesn't include it
 interface SignalWithMission extends Signal {
   missionId?: string | null;
-}
-
-function formatPayload(payload: string | null, emptyText: string): { isJson: boolean; formatted: string } {
-  if (!payload) return { isJson: false, formatted: emptyText };
-  try {
-    const parsed = JSON.parse(payload);
-    return { isJson: true, formatted: JSON.stringify(parsed, null, 2) };
-  } catch {
-    return { isJson: false, formatted: payload };
-  }
 }
 
 export default function SignalDetail() {
@@ -93,7 +84,7 @@ export default function SignalDetail() {
 
   if (!signal) return <p className="text-muted">{t('Loading...')}</p>;
 
-  const { isJson, formatted } = formatPayload(signal.payload, t('(empty)'));
+  const { isJson, formatted } = formatSignalPayload(signal.payload, t('(empty)'));
 
   return (
     <div>
