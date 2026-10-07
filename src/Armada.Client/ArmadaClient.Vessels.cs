@@ -141,6 +141,34 @@ namespace Armada.Client
         }
 
         /// <summary>
+        /// Dashboard <c>getVesselCommitActivity</c>: GET /api/v1/vessels/{id}/history/activity. Per-day commit counts
+        /// for the history heatmap.
+        /// </summary>
+        /// <param name="id">Vessel id.</param>
+        /// <param name="query">Optional branch, date range, and UTC offset.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The response.</returns>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        public Task<VesselCommitActivity?> GetVesselCommitActivityAsync(string id, VesselCommitActivityQuery? query = null, CancellationToken token = default)
+        {
+            return GetAsync<VesselCommitActivity>($"/api/v1/vessels/{E(id)}/history/activity" + ArmadaQueryString.FromObject(query), null, token);
+        }
+
+        /// <summary>
+        /// Dashboard <c>getVesselCommits</c>: GET /api/v1/vessels/{id}/history/commits. One page of commit history,
+        /// newest first; follow NextCursor for older pages.
+        /// </summary>
+        /// <param name="id">Vessel id.</param>
+        /// <param name="query">Optional branch, before date, cursor, and limit.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The response.</returns>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        public Task<VesselCommitPage?> GetVesselCommitsAsync(string id, VesselCommitQuery? query = null, CancellationToken token = default)
+        {
+            return GetAsync<VesselCommitPage>($"/api/v1/vessels/{E(id)}/history/commits" + ArmadaQueryString.FromObject(query), null, token);
+        }
+
+        /// <summary>
         /// Dashboard <c>pushVesselBranch</c>: POST /api/v1/vessels/{id}/branches/push.
         /// </summary>
         /// <param name="id">Vessel id.</param>
