@@ -44,7 +44,8 @@ export interface PushPayload {
   category: PushCategory | 'Test' | null;
 }
 
-const ID_PATTERN = /^[a-z]{2,4}_[A-Za-z0-9]{1,64}$/;
+// Prefix, underscore, then the PrettyId body, which itself may contain '_' and '-' (for example pdv_muyliuwq_Fg2p67toB2W).
+const ID_PATTERN = /^[a-z]{2,4}_[A-Za-z0-9_-]{1,96}$/;
 
 function idOrNull(value: unknown, prefix?: string): string | null {
   if (typeof value !== 'string' || !ID_PATTERN.test(value)) return null;

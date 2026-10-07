@@ -181,6 +181,15 @@ describe('push registration lifecycle', () => {
     expect(await registerDevice(deps, 'prf_a', SESSION, 'usr_1')).toEqual({ state: 'error', status: 403 });
   });
 
+  it('the secure store keeps records with real server ids (PrettyId bodies contain _ and -)', async () => {
+    const { secureRegistrationStore } = jest.requireActual('../push/registrationStore') as typeof import('../push/registrationStore');
+    const record: PushRegistrationRecord = { deviceId: 'pdv_muyliuwq_Fg2p67toB2W', expoPushToken: 'ExponentPushToken[x]', userId: 'default', categories: ['AskProposal'], registeredUtc: 'now' };
+    await secureRegistrationStore.write('prf_real', record);
+    expect(await secureRegistrationStore.read('prf_real')).toEqual(record);
+    await secureRegistrationStore.remove('prf_real');
+    expect(await secureRegistrationStore.read('prf_real')).toBeNull();
+  });
+
   it('finds the profile a push came from by its device id', async () => {
     const { deps, store } = setup();
     await registerDevice(deps, 'prf_a', SESSION, 'usr_1');

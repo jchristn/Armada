@@ -74,6 +74,14 @@ describe('push payload parsing', () => {
     expect(canAct(parsed)).toBe(false);
   });
 
+  it('accepts real PrettyId ids, whose body can contain _ and -', () => {
+    const parsed = parsePushData({ url: '/ask/ath_k2j3_Ab-9', kind: 'ask_proposal', entityId: 'aap_muyliuwq_Fg2p67toB2W', category: 'AskProposal', threadId: 'ath_k2j3_Ab-9', deviceId: 'pdv_muyliuwq_Fg2p67toB2W' })!;
+    expect(parsed.entityId).toBe('aap_muyliuwq_Fg2p67toB2W');
+    expect(parsed.threadId).toBe('ath_k2j3_Ab-9');
+    expect(parsed.deviceId).toBe('pdv_muyliuwq_Fg2p67toB2W');
+    expect(canAct(parsed)).toBe(true);
+  });
+
   it('a test push links to the root: it just opens the app', () => {
     expect(parsePushData({ url: '/', kind: 'test', entityId: 'pdv_1', category: 'Test', deviceId: 'pdv_1' })).toMatchObject({ kind: 'test', path: null, category: 'Test' });
   });

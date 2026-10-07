@@ -24,7 +24,7 @@ function parse(raw: string | null): PushRegistrationRecord | null {
   if (!raw) return null;
   try {
     const value = JSON.parse(raw) as Partial<PushRegistrationRecord>;
-    if (typeof value.deviceId !== 'string' || !/^pdv_[A-Za-z0-9]+$/.test(value.deviceId)) return null;
+    if (typeof value.deviceId !== 'string' || !/^pdv_[A-Za-z0-9_-]{1,96}$/.test(value.deviceId)) return null;
     if (typeof value.expoPushToken !== 'string') return null;
     return {
       deviceId: value.deviceId,

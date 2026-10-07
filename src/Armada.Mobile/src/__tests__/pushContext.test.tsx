@@ -81,7 +81,7 @@ function fakeApi(): jest.Mocked<PushApi> {
   return {
     register: jest.fn(async (_s, body) => {
       deviceSeq += 1;
-      return { id: `pdv_${deviceSeq}`, platform: 'Ios', expoPushToken: `masked-${body.expoPushToken.slice(-5)}`, categories: [...PUSH_CATEGORIES], active: true } as PushDevice;
+      return { id: `pdv_k${deviceSeq}_Ab-${deviceSeq}`, platform: 'Ios', expoPushToken: `masked-${body.expoPushToken.slice(-5)}`, categories: [...PUSH_CATEGORIES], active: true } as PushDevice;
     }),
     updateCategories: jest.fn(async (_s, id, categories) => ({ id, platform: 'Ios', expoPushToken: 'm', categories, active: true } as PushDevice)),
     remove: jest.fn(async (_s: ServerSession, _id: string): Promise<void> => undefined),
