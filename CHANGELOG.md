@@ -17,6 +17,11 @@ Focus: a landing-mode fix that was missed in 1.0.0. **Check your landing modes w
 - Dashboard, TUI, setup wizards, vessel import, and the MCP `import_vessels` description offer Merge and Push; Local Merge's label and help say nothing is pushed. The landing preview describes both modes, and the hotfix-into-a-protected-branch warning covers both.
 - Tests: every landing path for both modes (merge, push, merge and push failures, no working directory, no diff, voyage and global overrides, the MergeAndPush default, ignored legacy voyage flags), settings load of 1.0.0 files, persistence and JSON of every mode, the landing preview, the settings and voyage create API, the dashboard and TUI forms, and live runs against a real bare origin showing that `LocalMerge` leaves the origin untouched while `MergeAndPush` updates it.
 
+### Dashboard tables
+- Every dashboard table uses one shared table component. A **Columns** menu in each table's toolbar shows or hides columns; the choice is remembered per table in the browser, identity columns (Name, ID, or the table's equivalent) are always shown, and **Reset to default** restores the original set. In Events, the raw Mission and Voyage ID columns are hidden by default (Entity ID links to the same record).
+- Auto-refresh and refresh moved into the table toolbar row with the record count and pager, instead of a separate line.
+- Denser rows: Vessels shows Repository on one truncated line (full URL on hover) with the branch in its own column, and Landing Mode on one line ("Default (global)"); names, statuses, badges, and dates no longer wrap, and stacked two-line cells across the Delivery, Configuration, Activity, and detail tables were split into one-line cells with tooltips or optional columns.
+
 ---
 
 ## v1.0.0 (2026-10-05)
