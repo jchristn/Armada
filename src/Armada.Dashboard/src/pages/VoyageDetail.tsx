@@ -24,30 +24,7 @@ import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
 import { useLiveRefresh } from '../lib/useLiveRefresh';
 import { findLandingMode, getVoyageLandingModes } from '../lib/vesselForm';
-
-// ── Helper utilities ──
-
-function formatTimeAbsolute(utc: string | null | undefined): string {
-  if (!utc) return '-';
-  return new Date(utc).toLocaleString();
-}
-
-function formatTimeRelative(utc: string | null | undefined): string {
-  if (!utc) return '';
-  const d = new Date(utc);
-  const diff = Date.now() - d.getTime();
-  if (diff < 60000) return 'just now';
-  if (diff < 3600000) return Math.floor(diff / 60000) + 'm ago';
-  if (diff < 86400000) return Math.floor(diff / 3600000) + 'h ago';
-  return Math.floor(diff / 86400000) + 'd ago';
-}
-
-function formatDeliveryMode(value: string): string {
-  return value
-    .replace(/([a-z])([A-Z])/g, '$1 $2')
-    .replace('Into Worktree', 'Into Worktree')
-    .trim();
-}
+import { formatDeliveryMode, isVoyageActive, parseCaptainOverrides, retryMissionPayload, splitVoyageResponse, voyageProgress } from '../lib/voyageDetail';
 
 // ── Main component ──
 
@@ -92,15 +69,13 @@ export default function VoyageDetail() {
     // Show the loading state only on a voyage's first load; live refreshes update the page in place.
     if (loadedVoyageIdRef.current !== id) setLoading(true);
     try {
-      const v = await getVoyage(id);
       // The API may return { voyage, missions } or just the voyage object
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const raw = v as any;
-      if (raw.voyage) {
-        setVoyage(raw.voyage);
-        setMissions(raw.missions || []);
+      const parts = splitVoyageResponse(await getVoyage(id));
+      if (parts.missions) {
+        setVoyage(parts.voyage);
+        setMissions(parts.missions);
       } else {
-        setVoyage(raw);
+        setVoyage(parts.voyage);
         // Load missions separately
         try {
           const mResult = await listMissions({ pageSize: 1000, filters: { voyageId: id } });
@@ -127,9 +102,10 @@ export default function VoyageDetail() {
   }, [loadVoyage]);
 
   // Progress
-  const completedCount = missions.filter(m => m.status === 'Complete').length;
-  const failedCount = missions.filter(m => m.status === 'Failed').length;
-  const progressPct = missions.length > 0 ? Math.round((completedCount / missions.length) * 100) : 0;
+  const progress = voyageProgress(missions);
+  const completedCount = progress.completed;
+  const failedCount = progress.failed;
+  const progressPct = progress.percent;
   const voyageSnapshots: MissionPlaybookSnapshot[] = missions[0]?.playbookSnapshots || [];
   const voyageSelections: SelectedPlaybook[] = voyage?.selectedPlaybooks || [];
 
@@ -187,13 +163,7 @@ export default function VoyageDetail() {
         setConfirm(c => ({ ...c, open: false }));
         try {
           for (const m of failed) {
-            await createMission({
-              title: m.title,
-              description: m.description || undefined,
-              vesselId: m.vesselId || undefined,
-              voyageId: m.voyageId || undefined,
-              priority: m.priority,
-            });
+            await createMission(retryMissionPayload(m));
           }
           pushToast('success', t('Retried {{count}} failed mission(s).', { count: failed.length }));
           loadVoyage();
@@ -281,14 +251,14 @@ export default function VoyageDetail() {
         >
           {t('Draft Release')}
         </button>
-        {(voyage.status === 'Open' || voyage.status === 'InProgress') && (
+        {isVoyageActive(voyage.status) && (
           <button className="btn-sm btn-danger" onClick={handleCancel}>{t('Cancel Voyage')}</button>
         )}
         {failedCount > 0 && (
           <button className="btn-sm" onClick={handleRetryFailed}>{t('Retry Failed')} ({failedCount})</button>
         )}
         <button className="btn-sm" onClick={handleViewJson}>{t('View JSON')}</button>
-        {voyage.status !== 'Open' && voyage.status !== 'InProgress' && (
+        {!isVoyageActive(voyage.status) && (
           <button className="btn-sm btn-danger" onClick={handleDelete}>{t('Delete')}</button>
         )}
       </div>
@@ -322,8 +292,7 @@ export default function VoyageDetail() {
         </div>
 
         {(() => {
-          let overrides: CaptainAssignmentOverride[] = [];
-          try { overrides = voyage.captainOverridesJson ? JSON.parse(voyage.captainOverridesJson) : []; } catch { overrides = []; }
+          const overrides: CaptainAssignmentOverride[] = parseCaptainOverrides(voyage.captainOverridesJson);
           if (!overrides.length) return null;
           return (
             <div className="card">
