@@ -26,7 +26,7 @@ function row(over: Partial<VesselHealth> = {}): VesselHealth {
 function detail(over: Partial<VesselHealthDetail> = {}): VesselHealthDetail {
   return {
     health: row(),
-    findings: [{ vesselId: 'vsl_1', criterion: 'Tests', status: 'Warn', detailCode: null }],
+    findings: [{ vesselId: 'vsl_1', criterion: 'TestInfrastructure', status: 'Warn', detailCode: null }],
     dependencies: [{ vesselId: 'vsl_1', ecosystem: 'npm', packageName: 'left-pad', currentVersion: '1.0.0', latestVersion: '2.0.0', drift: 'Major', isVulnerable: false }],
     overrides: [],
     ...over,
