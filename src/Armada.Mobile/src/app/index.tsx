@@ -1,6 +1,13 @@
-import { Redirect } from 'expo-router';
+import { Redirect, type Href } from 'expo-router';
+import { useState } from 'react';
+import { takePendingLink } from '../navigation/pendingLink';
 
-/** The app opens into Ask Armada (MOBILE_APP_PLAN.md design principle 1); the dashboard Home is /home. */
+/**
+ * Where the app lands once signed in. A deep link that arrived before the session was ready (a cold start from a
+ * link or notification, or a link opened while signed out) wins; otherwise the app opens into Ask Armada
+ * (MOBILE_APP_PLAN.md design principle 1). The dashboard Home is /home.
+ */
 export default function Index() {
-  return <Redirect href="/ask" />;
+  const [target] = useState(() => takePendingLink() ?? '/ask');
+  return <Redirect href={target as Href} />;
 }

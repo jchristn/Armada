@@ -37,7 +37,7 @@ export function SignInScreen() {
       <Screen edges={['top', 'bottom', 'left', 'right']} testID="sign-in-add-server">
         <Header />
         <Section title={t('Connect to an Admiral')}>
-          <View style={styles.pad}>
+          <View style={styles.form}>
             <ProfileForm submitLabel={t('Continue')} onSubmit={async (draft) => { await saveProfile(draft); }} />
           </View>
         </Section>
@@ -283,6 +283,7 @@ const styles = StyleSheet.create({
   header: { alignItems: 'center', gap: spacing.sm, marginBottom: spacing.xl },
   logo: { width: 72, height: 72, borderRadius: 16 },
   pad: { paddingHorizontal: spacing.lg, marginBottom: spacing.lg },
+  form: { padding: spacing.lg, paddingBottom: spacing.sm },
   error: { flexDirection: 'row', gap: spacing.sm, alignItems: 'center', marginBottom: spacing.md },
   flex: { flex: 1 },
   label: { marginBottom: spacing.xs },

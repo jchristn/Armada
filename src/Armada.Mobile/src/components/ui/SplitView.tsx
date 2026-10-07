@@ -8,7 +8,7 @@ export interface SplitViewProps {
   master: ReactNode;
   /** The selected item; on phones it is shown instead of the list (the caller decides when). */
   detail: ReactNode | null;
-  /** Width of the list pane on tablets. */
+  /** Largest width of the list pane on tablets; it takes 40% of the space up to this. */
   masterWidth?: number;
 }
 
@@ -22,8 +22,8 @@ export function SplitView({ master, detail, masterWidth = 360 }: SplitViewProps)
   if (!isTablet) return <View style={styles.fill}>{detail ?? master}</View>;
   return (
     <View style={styles.row} testID="split-view">
-      <View style={[styles.master, { width: masterWidth, borderRightColor: colors.border }]}>{master}</View>
-      <View style={styles.fill}>{detail}</View>
+      <View style={[styles.master, { maxWidth: masterWidth, borderRightColor: colors.border }]}>{master}</View>
+      <View style={styles.detail}>{detail}</View>
     </View>
   );
 }
@@ -31,5 +31,6 @@ export function SplitView({ master, detail, masterWidth = 360 }: SplitViewProps)
 const styles = StyleSheet.create({
   fill: { flex: 1 },
   row: { flex: 1, flexDirection: 'row' },
-  master: { borderRightWidth: StyleSheet.hairlineWidth },
+  master: { flex: 2, borderRightWidth: StyleSheet.hairlineWidth },
+  detail: { flex: 3 },
 });

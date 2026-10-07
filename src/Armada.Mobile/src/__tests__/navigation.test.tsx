@@ -7,6 +7,8 @@ import type { ReactNode } from 'react';
 import * as RN from 'react-native';
 import { askArmadaModelItem, dashboardModelItem, navModelSections } from '@dashboard/lib/navModel';
 import AppTabsLayout from '../app/(app)/_layout';
+import Index from '../app/index';
+import { notePendingLink, setSignedInForLinks } from '../navigation/pendingLink';
 import { AuthProvider } from '../auth/AuthContext';
 import { LocaleProvider } from '../i18n/LocaleContext';
 import { appPathFromLink } from '../navigation/deepLinks';
@@ -122,6 +124,7 @@ function Providers({ children }: { children: ReactNode }) {
 
 const ROUTES = {
   _layout: () => <Providers><Slot /></Providers>,
+  index: Index,
   '(app)/_layout': AppTabsLayout,
   '(app)/(ask)/_layout': TabStack,
   '(app)/(ask)/ask/index': () => <RN.Text>Ask screen</RN.Text>,
@@ -178,6 +181,23 @@ describe('adaptive shell', () => {
     expect(screen.getByTestId('route-placeholder-title')).toHaveTextContent('Mission');
     expect(screen.getByTestId('route-placeholder-workstream')).toHaveTextContent('Coming in W2.2');
     expect(screen.getByText('msn_42')).toBeTruthy();
+  });
+
+  it('the app opens into Ask', async () => {
+    setWindow(390, 844);
+    const app = await renderApp('/');
+    expect(app.getPathname()).toBe('/ask');
+  });
+
+  it('a link that arrived before sign-in opens once the session is ready', async () => {
+    setWindow(390, 844);
+    setSignedInForLinks(false);
+    notePendingLink('/missions/msn_7');
+    const app = await renderApp('/');
+    expect(app.getPathname()).toBe('/missions/msn_7');
+    // Consumed: the next launch opens Ask again.
+    const again = await renderApp('/');
+    expect(again.getPathname()).toBe('/ask');
   });
 
   it('the sidebar navigates between tabs', async () => {

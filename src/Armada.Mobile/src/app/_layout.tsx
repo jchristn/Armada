@@ -1,4 +1,4 @@
-import { Stack, ThemeProvider as NavigationThemeProvider, useRouter, type Href } from 'expo-router';
+import { Stack, ThemeProvider as NavigationThemeProvider, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, type ReactNode } from 'react';
@@ -7,9 +7,10 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from '../auth/AuthContext';
 import { ToastHost } from '../components/app/ToastHost';
+import { IconButton } from '../components/ui';
 import { LocaleProvider, useLocale } from '../i18n/LocaleContext';
 import { navigationTheme } from '../navigation/navigationTheme';
-import { setSignedInForLinks, takePendingLink } from '../navigation/pendingLink';
+import { setSignedInForLinks } from '../navigation/pendingLink';
 import { ApprovalsProvider } from '../notifications/ApprovalsContext';
 import { NotificationProvider } from '../notifications/NotificationContext';
 import { SocketProvider } from '../socket/SocketContext';
@@ -45,13 +46,10 @@ function RootNavigator() {
     if (status !== 'loading') void SplashScreen.hideAsync().catch(() => undefined);
   }, [status]);
 
-  // Open a deep link that arrived before sign-in.
+  // Links that arrive before the session is ready are kept for the index route (app/index.tsx) to open.
   useEffect(() => {
     setSignedInForLinks(ready);
-    if (!ready) return;
-    const pending = takePendingLink();
-    if (pending) router.navigate(pending as Href);
-  }, [ready, router]);
+  }, [ready]);
 
   return (
     <NavigationThemeProvider value={navigationTheme(colors, dark)}>
@@ -62,7 +60,17 @@ function RootNavigator() {
           <Stack.Screen name="(app)" />
           <Stack.Screen
             name="notification-center"
-            options={{ presentation: 'modal', headerShown: true, title: t('Notifications'), headerTintColor: colors.primary }}
+            options={{
+              presentation: 'modal',
+              headerShown: true,
+              title: t('Notifications'),
+              headerTintColor: colors.primary,
+              headerStyle: { backgroundColor: colors.surface },
+              headerTitleStyle: { color: colors.text },
+              headerRight: () => (
+                <IconButton testID="notifications-close" icon="close" label={t('Close')} color="primary" onPress={() => router.back()} />
+              ),
+            }}
           />
         </Stack.Protected>
         <Stack.Protected guard={signedIn && mustChangePassword}>

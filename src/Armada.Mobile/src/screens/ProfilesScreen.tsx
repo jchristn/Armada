@@ -20,7 +20,7 @@ export function ProfilesScreen() {
   const [deleting, setDeleting] = useState<ServerProfile | null>(null);
 
   const master = (
-    <Screen testID="profiles" maxWidth={isTablet ? 360 : 720}>
+    <Screen testID="profiles">
       <Section title={t('Servers')}>
         {profiles.map((p) => (
           <SwipeRow
