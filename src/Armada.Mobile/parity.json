@@ -10,10 +10,10 @@
     {
       "kind": "route",
       "key": "/",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(work)/home.tsx",
       "workstream": "W2.1",
-      "notes": "mobile path /home"
+      "notes": "mobile path /home; HomeScreen (Work tab root on phones, followed by the Work destinations)"
     },
     {
       "kind": "route",
@@ -178,10 +178,10 @@
     {
       "kind": "route",
       "key": "/dispatch",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(work)/dispatch.tsx",
       "workstream": "W2.4",
-      "notes": ""
+      "notes": "DispatchHubScreen; dashboard router-state prefill arrives as query parameters (?from=vessel&vesselId=...)"
     },
     {
       "kind": "route",
@@ -194,10 +194,10 @@
     {
       "kind": "route",
       "key": "/docks/:id",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(work)/docks/[id].tsx",
       "workstream": "W2.4",
-      "notes": ""
+      "notes": "DockDetail"
     },
     {
       "kind": "route",
@@ -234,10 +234,10 @@
     {
       "kind": "route",
       "key": "/events/:id",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(more)/events/[id].tsx",
       "workstream": "W2.4",
-      "notes": ""
+      "notes": "EventDetail"
     },
     {
       "kind": "route",
@@ -322,26 +322,26 @@
     {
       "kind": "route",
       "key": "/merge-queue/:id",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(work)/merge-queue/[id].tsx",
       "workstream": "W2.4",
-      "notes": ""
+      "notes": "MergeEntryDetail"
     },
     {
       "kind": "route",
       "key": "/missions",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(work)/missions/index.tsx",
       "workstream": "W2.2",
-      "notes": ""
+      "notes": "MissionsHubScreen; split view on tablets"
     },
     {
       "kind": "route",
       "key": "/missions/:id",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(work)/missions/[id].tsx",
       "workstream": "W2.2",
-      "notes": ""
+      "notes": "MissionDetail; ?tab=diff|log|instructions opens a section"
     },
     {
       "kind": "route",
@@ -602,10 +602,10 @@
     {
       "kind": "route",
       "key": "/signals/:id",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(more)/signals/[id].tsx",
       "workstream": "W2.4",
-      "notes": ""
+      "notes": "SignalDetail"
     },
     {
       "kind": "route",
@@ -682,18 +682,18 @@
     {
       "kind": "route",
       "key": "/voyages/:id",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(work)/voyages/[id].tsx",
       "workstream": "W2.3",
-      "notes": ""
+      "notes": "VoyageDetail"
     },
     {
       "kind": "route",
       "key": "/voyages/create",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(work)/voyages/create.tsx",
       "workstream": "W2.3",
-      "notes": ""
+      "notes": "VoyageCreateScreen"
     },
     {
       "kind": "route",
@@ -939,15 +939,15 @@
       "kind": "tab",
       "key": "DispatchHub:backlog",
       "status": "planned",
-      "mobile": "/dispatch?tab=backlog",
-      "workstream": "W2.4",
-      "notes": "Backlog"
+      "mobile": "DispatchHubScreen",
+      "workstream": "W3.3",
+      "notes": "Backlog (Objectives) arrives with W3.3; the tab shows a note and opens the web dashboard meanwhile"
     },
     {
       "kind": "tab",
       "key": "DispatchHub:dispatch",
-      "status": "planned",
-      "mobile": "/dispatch?tab=dispatch",
+      "status": "implemented",
+      "mobile": "DispatchForm",
       "workstream": "W2.4",
       "notes": "Dispatch"
     },
@@ -970,24 +970,24 @@
     {
       "kind": "tab",
       "key": "MissionsHub:merge-queue",
-      "status": "planned",
-      "mobile": "/missions?tab=merge-queue",
+      "status": "implemented",
+      "mobile": "MergeQueueList",
       "workstream": "W2.2",
       "notes": "Merge Queue"
     },
     {
       "kind": "tab",
       "key": "MissionsHub:missions",
-      "status": "planned",
-      "mobile": "/missions?tab=missions",
+      "status": "implemented",
+      "mobile": "MissionsList",
       "workstream": "W2.2",
       "notes": "Missions"
     },
     {
       "kind": "tab",
       "key": "MissionsHub:voyages",
-      "status": "planned",
-      "mobile": "/missions?tab=voyages",
+      "status": "implemented",
+      "mobile": "VoyagesList",
       "workstream": "W2.2",
       "notes": "Voyages"
     },
@@ -1098,8 +1098,8 @@
     {
       "kind": "api",
       "key": "approveMissionReview",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "MissionDetail",
       "workstream": "W2.2",
       "notes": "Missions"
     },
@@ -1154,16 +1154,16 @@
     {
       "kind": "api",
       "key": "cancelMergeEntry",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "MergeEntryDetail",
       "workstream": "W2.4",
-      "notes": "Merge Queue"
+      "notes": "also row actions in MergeQueueList"
     },
     {
       "kind": "api",
       "key": "cancelVoyage",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "VoyagesList",
       "workstream": "W2.3",
       "notes": "Voyages"
     },
@@ -1306,8 +1306,8 @@
     {
       "kind": "api",
       "key": "createMission",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "MissionsList",
       "workstream": "W2.2",
       "notes": "Missions"
     },
@@ -1434,10 +1434,10 @@
     {
       "kind": "api",
       "key": "createVoyage",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "VoyageCreateScreen",
       "workstream": "W2.3",
-      "notes": "Voyages"
+      "notes": "also DispatchForm"
     },
     {
       "kind": "api",
@@ -1522,8 +1522,8 @@
     {
       "kind": "api",
       "key": "deleteDock",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "DockDetail",
       "workstream": "W2.4",
       "notes": "Docks"
     },
@@ -1538,8 +1538,8 @@
     {
       "kind": "api",
       "key": "deleteEventsBatch",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "EventsList",
       "workstream": "W2.4",
       "notes": "Events"
     },
@@ -1594,16 +1594,16 @@
     {
       "kind": "api",
       "key": "deleteMergeEntry",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "MergeEntryDetail",
       "workstream": "W2.4",
-      "notes": "Merge Queue"
+      "notes": "also row actions in MergeQueueList"
     },
     {
       "kind": "api",
       "key": "deleteMission",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "MissionsList",
       "workstream": "W2.2",
       "notes": "Missions"
     },
@@ -1722,8 +1722,8 @@
     {
       "kind": "api",
       "key": "deleteSignalsBatch",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "SignalsList",
       "workstream": "W2.4",
       "notes": "Signals"
     },
@@ -1794,8 +1794,8 @@
     {
       "kind": "api",
       "key": "denyMissionReview",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "MissionDetail",
       "workstream": "W2.2",
       "notes": "Missions"
     },
@@ -1820,8 +1820,8 @@
       "key": "dispatchMission",
       "status": "planned",
       "mobile": "",
-      "workstream": "W2.2",
-      "notes": "Missions"
+      "workstream": "W4.4",
+      "notes": "called by the Setup wizard (W4.4); the Operations screens create missions with createMission and voyages with createVoyage"
     },
     {
       "kind": "api",
@@ -1850,8 +1850,8 @@
     {
       "kind": "api",
       "key": "enqueueMerge",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "MergeQueueList",
       "workstream": "W2.4",
       "notes": "Merge Queue"
     },
@@ -2090,8 +2090,8 @@
     {
       "kind": "api",
       "key": "getDock",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "DockDetail",
       "workstream": "W2.4",
       "notes": "Docks"
     },
@@ -2100,8 +2100,8 @@
       "key": "getDoctor",
       "status": "planned",
       "mobile": "",
-      "workstream": "W2.1",
-      "notes": "Status / Health"
+      "workstream": "W4.4",
+      "notes": "Server hub Diagnostics tab; Home links to /server?tab=diagnostics as the dashboard does"
     },
     {
       "kind": "api",
@@ -2109,7 +2109,7 @@
       "status": "planned",
       "mobile": "",
       "workstream": "W2.2",
-      "notes": "Generic entity lookup"
+      "notes": "no dashboard page calls it; mapped when a screen needs a generic lookup"
     },
     {
       "kind": "api",
@@ -2122,8 +2122,8 @@
     {
       "kind": "api",
       "key": "getEvent",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "EventDetail",
       "workstream": "W2.4",
       "notes": "Events"
     },
@@ -2178,8 +2178,8 @@
     {
       "kind": "api",
       "key": "getHealth",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "HomeScreen",
       "workstream": "W2.1",
       "notes": "Status / Health"
     },
@@ -2218,64 +2218,64 @@
     {
       "kind": "api",
       "key": "getMergeEntry",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "MergeEntryDetail",
       "workstream": "W2.4",
-      "notes": "Merge Queue"
+      "notes": "also row actions in MergeQueueList"
     },
     {
       "kind": "api",
       "key": "getMission",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "MissionDetail",
       "workstream": "W2.2",
       "notes": "Missions"
     },
     {
       "kind": "api",
       "key": "getMissionDiff",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "MissionDetail",
       "workstream": "W2.2",
       "notes": "Missions"
     },
     {
       "kind": "api",
       "key": "getMissionGitHubPullRequest",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "MissionDetail",
       "workstream": "W2.2",
       "notes": "Missions"
     },
     {
       "kind": "api",
       "key": "getMissionHistory",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "MissionHistoryChart",
       "workstream": "W2.2",
-      "notes": "Missions"
+      "notes": "Home mission history chart"
     },
     {
       "kind": "api",
       "key": "getMissionInstructions",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "MissionDetail",
       "workstream": "W2.2",
       "notes": "Missions"
     },
     {
       "kind": "api",
       "key": "getMissionLandingPreview",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "MissionDetail",
       "workstream": "W2.2",
       "notes": "Missions"
     },
     {
       "kind": "api",
       "key": "getMissionLog",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "MissionDetail",
       "workstream": "W2.2",
       "notes": "Missions"
     },
@@ -2434,10 +2434,10 @@
     {
       "kind": "api",
       "key": "getSignal",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "SignalDetail",
       "workstream": "W2.4",
-      "notes": "Signals"
+      "notes": "mark read also from SignalsList"
     },
     {
       "kind": "api",
@@ -2450,8 +2450,8 @@
     {
       "kind": "api",
       "key": "getStatus",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "HomeScreen",
       "workstream": "W2.1",
       "notes": "Status / Health"
     },
@@ -2460,8 +2460,8 @@
       "key": "getTokenUsage",
       "status": "planned",
       "mobile": "",
-      "workstream": "W2.2",
-      "notes": "Missions"
+      "workstream": "W4.3",
+      "notes": "Activity hub Token Usage source"
     },
     {
       "kind": "api",
@@ -2546,16 +2546,16 @@
     {
       "kind": "api",
       "key": "getVoyage",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "VoyageDetail",
       "workstream": "W2.3",
       "notes": "Voyages"
     },
     {
       "kind": "api",
       "key": "getVoyageStatus",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "VoyagesList",
       "workstream": "W2.3",
       "notes": "Voyages"
     },
@@ -2706,8 +2706,8 @@
     {
       "kind": "api",
       "key": "listDocks",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "DocksList",
       "workstream": "W2.4",
       "notes": "Docks"
     },
@@ -2722,8 +2722,8 @@
     {
       "kind": "api",
       "key": "listEvents",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "EventsList",
       "workstream": "W2.4",
       "notes": "Events"
     },
@@ -2778,26 +2778,26 @@
     {
       "kind": "api",
       "key": "listMergeQueue",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "MergeQueueList",
       "workstream": "W2.4",
       "notes": "Merge Queue"
     },
     {
       "kind": "api",
       "key": "listMissionSummaries",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "MissionsList",
       "workstream": "W2.2",
       "notes": "Missions"
     },
     {
       "kind": "api",
       "key": "listMissions",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "VoyageDetail",
       "workstream": "W2.2",
-      "notes": "Missions"
+      "notes": "missions of a voyage"
     },
     {
       "kind": "api",
@@ -2914,8 +2914,8 @@
     {
       "kind": "api",
       "key": "listSignals",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "SignalsList",
       "workstream": "W2.4",
       "notes": "Signals"
     },
@@ -2954,8 +2954,8 @@
     {
       "kind": "api",
       "key": "listVoyages",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "VoyagesList",
       "workstream": "W2.3",
       "notes": "Voyages"
     },
@@ -2994,10 +2994,10 @@
     {
       "kind": "api",
       "key": "markSignalRead",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "SignalDetail",
       "workstream": "W2.4",
-      "notes": "Signals"
+      "notes": "mark read also from SignalsList"
     },
     {
       "kind": "api",
@@ -3042,32 +3042,32 @@
     {
       "kind": "api",
       "key": "processAllMergeQueue",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "MergeQueueList",
       "workstream": "W2.4",
       "notes": "Merge Queue"
     },
     {
       "kind": "api",
       "key": "processMergeEntry",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "MergeEntryDetail",
       "workstream": "W2.4",
-      "notes": "Merge Queue"
+      "notes": "also row actions in MergeQueueList"
     },
     {
       "kind": "api",
       "key": "purgeMission",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "MissionsList",
       "workstream": "W2.2",
       "notes": "Missions"
     },
     {
       "kind": "api",
       "key": "purgeVoyage",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "VoyagesList",
       "workstream": "W2.3",
       "notes": "Voyages"
     },
@@ -3178,8 +3178,8 @@
     {
       "kind": "api",
       "key": "restartMission",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "MissionsList",
       "workstream": "W2.2",
       "notes": "Missions"
     },
@@ -3210,8 +3210,8 @@
     {
       "kind": "api",
       "key": "retryMissionLanding",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "MissionsList",
       "workstream": "W2.2",
       "notes": "Missions"
     },
@@ -3306,8 +3306,8 @@
     {
       "kind": "api",
       "key": "sendSignal",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "SignalsList",
       "workstream": "W2.4",
       "notes": "Signals"
     },
@@ -3426,8 +3426,8 @@
     {
       "kind": "api",
       "key": "transitionMission",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "MissionsList",
       "workstream": "W2.2",
       "notes": "Missions"
     },
@@ -3538,8 +3538,8 @@
     {
       "kind": "api",
       "key": "updateMission",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "MissionDetail",
       "workstream": "W2.2",
       "notes": "Missions"
     },
