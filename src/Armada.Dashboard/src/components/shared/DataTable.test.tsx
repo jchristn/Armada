@@ -323,4 +323,21 @@ describe('DataTable toolbar', () => {
     expect(screen.getByLabelText('Select gateway')).not.toBeDisabled();
     expect(screen.getByLabelText('Select billing')).toBeDisabled();
   });
+
+  it('gives one-line names and links (which truncate with an ellipsis) a title with the full value', () => {
+    const long = 'a-very-long-vessel-name-that-will-be-truncated-by-the-one-line-name-rule';
+    const cols = (name: string): DataTableColumn<Row>[] => [
+      { key: 'name', label: 'Name', required: true, render: () => <strong>{name}</strong> },
+      { key: 'repo', label: 'Repository', render: (r) => <a href="#">{r.repo}</a> },
+      { key: 'id', label: 'ID', render: (r) => <strong title="custom">{r.id}</strong> },
+    ];
+    const view = render(<DataTable tableKey={KEY} columns={cols(long)} rows={[ROWS[0]]} rowKey={(r) => r.id} />);
+    expect(screen.getByText(long)).toHaveAttribute('title', long);
+    expect(screen.getByText(ROWS[0].repo)).toHaveAttribute('title', ROWS[0].repo);
+    // A title the page set itself is kept.
+    expect(screen.getByText('vsl_1')).toHaveAttribute('title', 'custom');
+    // The tooltip follows the text when a refresh changes it.
+    view.rerender(<DataTable tableKey={KEY} columns={cols('renamed')} rows={[ROWS[0]]} rowKey={(r) => r.id} />);
+    expect(screen.getByText('renamed')).toHaveAttribute('title', 'renamed');
+  });
 });

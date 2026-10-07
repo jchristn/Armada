@@ -1,4 +1,4 @@
-import { Fragment, type ReactNode } from 'react';
+import { Fragment, useLayoutEffect, useRef, type ReactNode } from 'react';
 import { useLocale } from '../../context/LocaleContext';
 import { useColumnVisibility } from '../../lib/useColumnVisibility';
 import AutoRefreshSelect from './AutoRefreshSelect';
@@ -104,6 +104,29 @@ export interface DataTableProps<T> {
   busy?: boolean;
 }
 
+/** Marks a title DataTable set itself (so it can keep it in step with the text, and never touches a page's own). */
+const AUTO_TITLE_ATTR = 'data-auto-title';
+
+/**
+ * Names and links rendered directly in a cell (`td > a`, `td > strong`) are kept on one line and truncate with an
+ * ellipsis (App.css, `.data-table td > a`). Give each one a title holding its full text so a truncated value is
+ * always available as a tooltip. Elements that already carry a title keep it.
+ */
+export function syncNameTitles(root: HTMLElement | null): void {
+  if (!root) return;
+  for (const el of Array.from(root.querySelectorAll<HTMLElement>('td > a, td > strong'))) {
+    const text = (el.textContent ?? '').trim();
+    const auto = el.hasAttribute(AUTO_TITLE_ATTR);
+    if (el.hasAttribute('title') && !auto) continue;
+    if (!text) {
+      if (auto) { el.removeAttribute('title'); el.removeAttribute(AUTO_TITLE_ATTR); }
+      continue;
+    }
+    if (el.getAttribute('title') !== text) el.setAttribute('title', text);
+    el.setAttribute(AUTO_TITLE_ATTR, '');
+  }
+}
+
 function sortIndicator(active: boolean, dir: 'asc' | 'desc'): string {
   if (!active) return '\u21C5';
   return dir === 'asc' ? '\u25B2' : '\u25BC';
@@ -125,6 +148,9 @@ export default function DataTable<T>(props: DataTableProps<T>) {
     columnsVersion = 0, className, wrapClassName, ariaLabel, busy,
   } = props;
   const { t } = useLocale();
+  const tableRef = useRef<HTMLTableElement>(null);
+  // After every render: cell contents may change without the row set changing (live refresh).
+  useLayoutEffect(() => { syncNameTitles(tableRef.current); });
   const visibility = useColumnVisibility(
     tableKey,
     columns.map((c) => ({ key: c.key, required: c.required || c.fixed, defaultHidden: c.defaultHidden })),
@@ -213,7 +239,7 @@ export default function DataTable<T>(props: DataTableProps<T>) {
       {toolbar}
       {placeholder ?? (
         <div className={`table-wrap${wrapClassName ? ` ${wrapClassName}` : ''}`} aria-busy={busy || undefined}>
-          <table className={className} aria-label={ariaLabel}>
+          <table ref={tableRef} className={className} aria-label={ariaLabel}>
             <thead>
               <tr>
                 {selection && (
