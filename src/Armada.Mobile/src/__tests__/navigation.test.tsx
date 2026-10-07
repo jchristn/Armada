@@ -8,10 +8,11 @@ import * as RN from 'react-native';
 import { askArmadaModelItem, dashboardModelItem, navModelSections } from '@dashboard/lib/navModel';
 import AppTabsLayout from '../app/(app)/_layout';
 import Index from '../app/index';
-import { notePendingLink, setSignedInForLinks } from '../navigation/pendingLink';
+import { notePendingLink, setSignedInForLinks, takePendingLink } from '../navigation/pendingLink';
 import { AuthProvider } from '../auth/AuthContext';
 import { LocaleProvider } from '../i18n/LocaleContext';
-import { appPathFromLink } from '../navigation/deepLinks';
+import { appPathFromLink, isRootLink } from '../navigation/deepLinks';
+import { redirectSystemPath } from '../app/+native-intent';
 import { DASHBOARD_ROUTES } from '../navigation/dashboardRoutes.generated';
 import { NAV_SECTIONS, activeNavKey, allNavItems, sectionsForTab } from '../navigation/navItems';
 import { matchRoute } from '../navigation/routeMatch';
@@ -86,6 +87,26 @@ describe('deep links and dashboard paths', () => {
 
   it.each(['javascript:alert(1)', 'file:///etc/passwd', 'armada://missions/../server', '', 'armada://a\u0000b'])('rejects %j', (link) => {
     expect(appPathFromLink(link)).toBeNull();
+  });
+
+  it('a link that names no page opens the app without becoming a pending link', () => {
+    setSignedInForLinks(false);
+    expect(isRootLink('armada://')).toBe(true);
+    expect(isRootLink('/')).toBe(true);
+    expect(isRootLink('armada://missions')).toBe(false);
+    expect(redirectSystemPath({ path: '/', initial: true })).toBe('/');
+    expect(redirectSystemPath({ path: 'armada://', initial: true })).toBe('/');
+    expect(takePendingLink()).toBeNull();
+  });
+
+  it('links to unknown screens are ignored; links to real pages are remembered for after sign-in', () => {
+    setSignedInForLinks(false);
+    expect(redirectSystemPath({ path: 'armada://expo-development-client/?url=x', initial: true })).toBeNull();
+    expect(takePendingLink()).toBeNull();
+    expect(redirectSystemPath({ path: 'armada://missions/msn_1', initial: true })).toBe('/missions/msn_1');
+    expect(takePendingLink()).toBe('/missions/msn_1');
+    expect(redirectSystemPath({ path: 'armada://profiles', initial: false })).toBe('/profiles');
+    takePendingLink();
   });
 
   it('static segments win over parameters', () => {

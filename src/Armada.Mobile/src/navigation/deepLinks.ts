@@ -37,3 +37,10 @@ export function appPathFromLink(link: string | null | undefined): string | null 
   if (path === '/') path = '/home';
   return `${path}${query}`;
 }
+
+/** True when a link names no page (armada://, armada:///, a bare path '/'): it just opens the app. */
+export function isRootLink(link: string | null | undefined): boolean {
+  if (!link) return true;
+  const value = link.trim().replace(/^armada:/i, '').replace(/[?#].*$/, '');
+  return /^\/*$/.test(value);
+}
