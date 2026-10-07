@@ -404,7 +404,7 @@ async function request<T>(method: string, path: string, body?: unknown, opts?: R
     const json = await res.json();
     return camelizeKeys(json) as T;
   } catch (err) {
-    // An external abort is a deliberate cancel (Stop), not a timeout — surface it distinctly so callers
+    // An external abort is a deliberate cancel (Stop), not a timeout; surface it distinctly so callers
     // can treat it as a clean stop instead of an error.
     if (external?.aborted) {
       throw new RequestCancelledError();

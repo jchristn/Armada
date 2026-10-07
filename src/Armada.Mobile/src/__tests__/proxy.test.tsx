@@ -36,13 +36,13 @@ describe('sha256 and base64url', () => {
   });
 
   it('matches Node for block boundaries and non-ASCII text', () => {
-    for (const s of ['a'.repeat(55), 'a'.repeat(56), 'a'.repeat(64), 'a'.repeat(119), 'pässwörd 你好 🚀']) {
+    for (const s of ['a'.repeat(55), 'a'.repeat(56), 'a'.repeat(64), 'a'.repeat(119), 'p\u00e4ssw\u00f6rd \u4f60\u597d \u{1f680}']) {
       expect(sha256Hex(s)).toBe(nodeSha(s));
     }
   });
 
   it('base64url has no padding and uses the URL alphabet', () => {
-    for (const s of ['', 'f', 'fo', 'foo', 'foob', '0f34455311b54e719f50927df5ecdfd7', 'ÿþ>>??']) {
+    for (const s of ['', 'f', 'fo', 'foo', 'foob', '0f34455311b54e719f50927df5ecdfd7', '\u00ff\u00fe>>??']) {
       expect(base64UrlUtf8(s)).toBe(Buffer.from(s, 'utf8').toString('base64url'));
     }
   });
