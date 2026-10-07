@@ -396,6 +396,8 @@ Once the vessels exist, **Vessel Health** (the Health tab on the Vessels page, o
 
 **Fleet Actions** apply one action across many vessels. A Command action runs a shell command in each vessel's working directory and records exit code and output; a Mission action dispatches one voyage per vessel, paced so a large run does not starve other work. Select the failing rows on the Health tab, choose **Run action**, and pick "Update outdated dependencies": each vessel gets a voyage whose prompt lists its own outdated packages, and the next evaluation shows the result.
 
+**View History** (a vessel's row menu or page, `H` in the TUI, or `armada vessel history <vessel>`) shows a commit heatmap for the vessel's branch in the style of a GitHub contribution graph, and the commits behind it, newest first: each with its message, author, local timestamps, lines added and removed, and the files it changed. Scroll back endlessly, click a heatmap day or pick a date to jump there, step back a year at a time to the first commit, and switch branches. History is read from the Admiral's copy of the repository (the same one Manage Branches shows).
+
 See [docs/FLEET_ACTIONS.md](docs/FLEET_ACTIONS.md), [docs/VESSEL_HEALTH.md](docs/VESSEL_HEALTH.md), and the Vessel Import section of [docs/REST_API.md](docs/REST_API.md).
 
 ## Ask Armada
@@ -866,7 +868,7 @@ armada diff [mission]        Show a mission's diff
 All commands accept names or IDs:
 
 ```
-armada vessel list|add|remove|import
+armada vessel list|add|remove|import|history
 armada captain list|add|update|stop|remove|stop-all
 armada fleet list|add|remove
 armada action list|run|status|cancel

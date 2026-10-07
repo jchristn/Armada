@@ -831,7 +831,7 @@ namespace Armada.Tui.Screens.Build
                     string path = !String.IsNullOrEmpty(f.OldPath) && f.OldPath != f.Path ? f.OldPath + " -> " + f.Path : f.Path;
                     rows.Add(new List<string>
                     {
-                        f.Kind.ToString(),
+                        Tr(f.Kind.ToString()),
                         path,
                         f.IsBinary ? Tr("binary") : "+" + (f.AddedLines ?? 0).ToString(CultureInfo.InvariantCulture),
                         f.IsBinary ? "" : "-" + (f.DeletedLines ?? 0).ToString(CultureInfo.InvariantCulture),

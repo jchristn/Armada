@@ -278,6 +278,32 @@ namespace Test.Shared.Suites.Tui.Build
                 }
             }));
 
+            cases.Add(TuiCase.Sync(Suite, "commit_detail_localized", "The commit detail translates each file's change kind through the catalog", () =>
+            {
+                StubHttpHandler stub = Stub();
+                Armada.Client.Models.I18nCatalog catalog = new Armada.Client.Models.I18nCatalog();
+                catalog.DefaultLocale = "en";
+                catalog.SupportedLocales = Armada.Tui.Services.LocalizationService.DefaultLocales.ToList();
+                Armada.Client.Models.I18nLocalePack de = new Armada.Client.Models.I18nLocalePack();
+                de.Phrases = new Dictionary<string, string> { ["Renamed"] = "Umbenannt" };
+                catalog.Locales["de"] = de;
+                stub.Json("GET", "/dashboard/i18n/armada.json", ArmadaJson.Serialize(catalog));
+                using (TuiTestHost host = new TuiTestHost(160, 50, stub, "http://127.0.0.1:9", o => { o.Token = "tok_env"; o.StartRoute = Route; }))
+                {
+                    host.Tui.Context.Prefs.Current.Locale = "de";
+                    host.Start();
+                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Session.IsSignedIn && host.Tui.Shell.Screen != null, 5000), "signed in");
+                    host.Tui.Context.Loc.SetLocale("de");
+                    VesselHistoryScreen screen = Screen(host);
+                    AssertTrue(host.WaitForText("Fix the parser"), "commits");
+                    host.Press("tab");
+                    host.Press("home");
+                    host.Press("enter");
+                    AssertTrue(host.PumpUntil(() => screen.DetailModal != null), "detail opened");
+                    AssertTrue(host.WaitForText("Umbenannt"), "translated change kind\n" + host.Screen());
+                }
+            }));
+
             cases.Add(TuiCase.Sync(Suite, "year_navigation", "[ moves the heatmap a year back while the branch has older commits, ] forward to today, never past either end", () =>
             {
                 StubHttpHandler stub = Stub();
