@@ -123,23 +123,15 @@ name: 02-operations
     timeout: 15000
 - assertVisible: "Mobile E2E voyage"
 - takeScreenshot: voyage-detail
-# Dispatch to the seeded vessel.
-- tapOn:
-    id: "tab-work"
-- tapOn:
-    id: "tab-work"
-- extendedWaitUntil:
-    visible:
-      id: "home-screen"
-    timeout: 10000
-- scrollUntilVisible:
-    element:
-      id: "home-dispatch"
-    direction: UP
-    visibilityPercentage: 100
-    centerElement: true
-- tapOn:
-    id: "home-dispatch"
+# Dispatch to the seeded vessel. The draft arrives through a link (the app form of the dashboard's router-state
+# prefill), which also keeps the long form's typing out of the flow.
+- openLink: "armada://dispatch?from=planning&prompt=Mobile%20E2E%20dispatched%20mission"
+# iOS asks before an app opens its own custom-scheme link.
+- runFlow:
+    when:
+      visible: "Open in .*"
+    commands:
+      - tapOn: "Open"
 - extendedWaitUntil:
     visible:
       id: "dispatch-screen"
@@ -147,21 +139,16 @@ name: 02-operations
 - tapOn:
     id: "dispatch-vessel"
 - tapOn: "e2e-repo.*"
+- extendedWaitUntil:
+    visible: "(?i)vessel readiness"
+    timeout: 10000
 - scrollUntilVisible:
     element:
       id: "dispatch-prompt"
     direction: DOWN
     visibilityPercentage: 100
     centerElement: true
-- tapOn:
-    id: "dispatch-prompt"
-- inputText: "Mobile E2E dispatched mission"
-- tapOn: "(?i)captain assignments"
-- runFlow:
-    when:
-      visible: "Speed up your typing.*"
-    commands:
-      - tapOn: "Continue"
+- assertVisible: "Mobile E2E dispatched mission"
 - scrollUntilVisible:
     element:
       id: "dispatch-submit"
