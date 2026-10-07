@@ -1,4 +1,4 @@
-import type { BadgeIcon, BadgeTone } from '../components/shared/CodeStatusBadge';
+import type { BadgeIcon, BadgeTone } from './badgeTypes';
 import type { FleetActionKind, FleetActionRunStatus, FleetActionTargetStatus } from '../types/models';
 
 /** Translator signature shared with `useLocale().t`. */

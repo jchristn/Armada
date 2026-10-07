@@ -1,4 +1,4 @@
-import { ArmadaSocket, buildSocketUrl, reconnectDelay, RECONNECT_MAX_MS, type SocketLike } from './armadaSocket';
+import { ArmadaSocket, buildSocketUrl, buildSocketUrlForServer, reconnectDelay, RECONNECT_MAX_MS, type SocketLike } from './armadaSocket';
 
 class FakeSocket implements SocketLike {
   readyState = 0;
@@ -112,5 +112,16 @@ describe('ArmadaSocket', () => {
     h.sockets[0].open();
     h.sockets[0].onmessage?.({ data: 'not json' });
     expect(h.messages).toEqual([]);
+  });
+});
+
+describe('buildSocketUrlForServer', () => {
+  it('maps http to ws and https to wss, keeping the port and any path prefix', () => {
+    expect(buildSocketUrlForServer('http://10.0.2.2:44010', null)).toBe('ws://10.0.2.2:44010/ws');
+    expect(buildSocketUrlForServer('https://armada.example/relay/abc/', 't k')).toBe('wss://armada.example/relay/abc/ws?token=t%20k');
+  });
+
+  it('rejects a URL without an http or https scheme', () => {
+    expect(() => buildSocketUrlForServer('ftp://x', null)).toThrow();
   });
 });

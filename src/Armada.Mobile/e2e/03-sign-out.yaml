@@ -1,0 +1,27 @@
+# Sign out from More; the app returns to sign-in for the same server, and a relaunch stays signed out.
+appId: ${APP_ID}
+name: 03-sign-out
+---
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: "tab-more"
+    timeout: 30000
+- tapOn:
+    id: "tab-more"
+- scrollUntilVisible:
+    element:
+      id: "sign-out"
+    direction: DOWN
+- tapOn:
+    id: "sign-out"
+- extendedWaitUntil:
+    visible:
+      id: "sign-in-email"
+    timeout: 20000
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: "sign-in-email"
+    timeout: 30000

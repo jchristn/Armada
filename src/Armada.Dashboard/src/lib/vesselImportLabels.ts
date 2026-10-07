@@ -1,4 +1,4 @@
-import type { BadgeIcon, BadgeTone } from '../components/shared/CodeStatusBadge';
+import type { BadgeIcon, BadgeTone } from './badgeTypes';
 import type { Job, VesselImportBatch, VesselImportBatchStatus, VesselImportCandidateStatus, VesselImportCategorizationStatus, VesselImportOutcome } from '../types/models';
 import type { StatusMeta, Translate } from './fleetActionLabels';
 

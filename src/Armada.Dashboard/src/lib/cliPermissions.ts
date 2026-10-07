@@ -173,8 +173,8 @@ export function useCountdown(expiresUtc: string | null | undefined, active: bool
   useEffect(() => {
     if (!active || !expiresUtc) return undefined;
     setNow(Date.now());
-    const id = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(id);
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
   }, [active, expiresUtc]);
   return secondsUntil(expiresUtc, now);
 }

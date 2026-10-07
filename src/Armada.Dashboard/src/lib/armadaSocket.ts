@@ -45,6 +45,19 @@ export function buildSocketUrl(location: { protocol: string; host: string }, tok
   return token ? `${base}?token=${encodeURIComponent(token)}` : base;
 }
 
+/**
+ * The socket URL for a server given by its base URL (`https://host:port/prefix`), for hosts that are not served
+ * by the Admiral (the mobile app). Any path prefix is kept, so a relayed server keeps its relay path.
+ */
+export function buildSocketUrlForServer(baseUrl: string, token: string | null | undefined): string {
+  const match = /^(https?):\/\/([^/?#]+)([^?#]*)/i.exec(baseUrl.trim());
+  if (!match) throw new Error('Server URL must start with http:// or https://');
+  const protocol = match[1].toLowerCase() === 'https' ? 'wss:' : 'ws:';
+  const prefix = match[3].replace(/\/+$/, '');
+  const base = `${protocol}//${match[2]}${prefix}/ws`;
+  return token ? `${base}?token=${encodeURIComponent(token)}` : base;
+}
+
 /** Delay before reconnect attempt `attempt` (0-based): exponential, capped, with +/-20% jitter. */
 export function reconnectDelay(attempt: number, random: () => number = Math.random): number {
   const safeAttempt = Math.max(0, Math.min(attempt, 10));
@@ -145,13 +158,13 @@ export class ArmadaSocket {
     this.clearTimer();
     const delay = reconnectDelay(this.attempt, this.options.random);
     this.attempt += 1;
-    const schedule = this.options.schedule ?? ((fn: () => void, ms: number) => window.setTimeout(fn, ms));
+    const schedule = this.options.schedule ?? ((fn: () => void, ms: number) => setTimeout(fn, ms));
     this.timer = schedule(() => { this.timer = null; this.connect(); }, delay);
   }
 
   private clearTimer(): void {
     if (this.timer === null) return;
-    const cancel = this.options.cancel ?? ((handle: unknown) => window.clearTimeout(handle as number));
+    const cancel = this.options.cancel ?? ((handle: unknown) => clearTimeout(handle as ReturnType<typeof setTimeout>));
     cancel(this.timer);
     this.timer = null;
   }

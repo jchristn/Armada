@@ -82,7 +82,7 @@ export function useHealthEvaluation({ onFinished, pollMs = 2000 }: UseHealthEval
   useEffect(() => {
     if (!trackedJobId) return undefined;
     let cancelled = false;
-    let timer: number | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
 
     const poll = async () => {
       try {
@@ -99,13 +99,13 @@ export function useHealthEvaluation({ onFinished, pollMs = 2000 }: UseHealthEval
       } catch {
         if (cancelled) return;
       }
-      timer = window.setTimeout(poll, pollMs);
+      timer = setTimeout(poll, pollMs);
     };
 
     void poll();
     return () => {
       cancelled = true;
-      if (timer !== undefined) window.clearTimeout(timer);
+      if (timer !== undefined) clearTimeout(timer);
     };
   }, [trackedJobId, pollMs]);
 

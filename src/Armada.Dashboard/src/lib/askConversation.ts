@@ -7,7 +7,7 @@ import type {
   AskWorkSnapshot,
   CliPermissionRequest,
 } from '../types/models';
-import { applyToolEvent, type ToolEvent } from '../components/shared/ChatToolChips';
+import { applyToolEvent, type ToolEvent } from './toolEvents';
 import type { AskEvent } from './askEvents';
 import { applySnapshotToWork } from './askWork';
 import { mergeCliRequest } from './cliPermissions';
