@@ -1,9 +1,11 @@
 name: ci
 
-# Runs on every push and pull request. Four jobs:
+# Runs on every push and pull request. Five jobs:
 #   build-and-test  Windows, macOS, and Linux x net8.0 and net10.0: warning-free build plus Test.Automated.
 #   dashboard       npm ci, build, Vitest, and a check that the committed dist/ matches a fresh build.
 #   tui-parity      The TUI parity manifest is current and has no planned entries.
+#   mobile          The Expo app: typecheck, lint (app and shared dashboard modules), Jest, route screens,
+#                   and the mobile parity manifest.
 #   compose         Validates every Docker compose file parses.
 on:
   push:
@@ -133,6 +135,50 @@ jobs:
       - uses: actions/checkout@v4
       - name: TUI parity manifest (no planned entries)
         run: python3 scripts/tui/generate-parity-manifest.py --check
+
+  # ------------------------------------------------------------------
+  # Mobile app (src/Armada.Mobile, Expo): typecheck, lint, Jest, and the
+  # parity gate. The app shares modules with the dashboard (api/client.ts,
+  # types, lib, i18n/catalog.ts), so a dashboard change runs this job too.
+  # Until W6 the parity check enforces a complete manifest; the W6 release
+  # gate adds --forbid-planned (MOBILE_APP_PLAN.md, Parity enforcement).
+  # Native builds and Maestro E2E need simulators and run locally
+  # (scripts/mobile/run-e2e.sh); EAS cloud builds are the maintainer's.
+  # ------------------------------------------------------------------
+  mobile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: src/Armada.Mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: src/Armada.Mobile/package-lock.json
+
+      - name: npm ci
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint (app and shared dashboard modules)
+        run: npm run lint
+
+      - name: Jest
+        run: npm run test:ci
+
+      - name: Route screens (every dashboard route has a screen)
+        run: npm run routes:check
+
+      - name: Mobile parity manifest
+        run: |
+          python3 ../../scripts/mobile/test_parity_manifest.py
+          npm run parity:check
 
   # ------------------------------------------------------------------
   # Compose files: parse and validate (no images are pulled or built).
