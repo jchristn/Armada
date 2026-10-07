@@ -3301,3 +3301,109 @@ export interface CliPermissionSettingsData {
   /** Seconds a request waits for a decision (10-3600, default 600). */
   promptTimeoutSeconds: number;
 }
+
+// ==================== Vessel History ====================
+
+/** Kind of change git reports for one path (server `GitChangeKindEnum`). */
+export type GitChangeKind = 'Modified' | 'Added' | 'Deleted' | 'Renamed' | 'Copied' | 'TypeChanged' | 'Unmerged' | 'Unknown';
+
+/** One changed path in a commit (server `GitChangedFile`). */
+export interface GitChangedFile {
+  kind: GitChangeKind;
+  /** Repository-relative path; for a rename or copy, the new path. */
+  path: string;
+  /** Source path for a rename or copy; null otherwise. */
+  oldPath: string | null;
+  /** Added lines; null for binary files or when not measured. */
+  addedLines: number | null;
+  /** Deleted lines; null for binary files or when not measured. */
+  deletedLines: number | null;
+  isBinary: boolean;
+}
+
+/** Commit count for one calendar day (one heatmap cell). */
+export interface VesselCommitActivityDay {
+  /** yyyy-MM-dd in the requested UTC offset. */
+  date: string;
+  count: number;
+}
+
+/** Per-day commit counts for a vessel branch (GET /api/v1/vessels/{id}/history/activity). */
+export interface VesselCommitActivity {
+  vesselId: string;
+  branch: string;
+  /** First day, yyyy-MM-dd, inclusive. */
+  from: string;
+  /** Last day, yyyy-MM-dd, inclusive. */
+  to: string;
+  utcOffsetMinutes: number;
+  /** One entry per day from..to inclusive, zero-filled, in date order. */
+  days: VesselCommitActivityDay[];
+  totalCommits: number;
+  maxDayCount: number;
+  /** Oldest commit date on the branch (whole history), or null when the branch has no commits. */
+  firstCommitUtc: string | null;
+  /** Newest commit date on the branch, or null when the branch has no commits. */
+  lastCommitUtc: string | null;
+  /** Error reading the repository (returned with HTTP 200), or null. */
+  error: string | null;
+}
+
+/** One commit with what it changed (server `VesselCommit`). */
+export interface VesselCommit {
+  sha: string;
+  shortSha: string;
+  subject: string;
+  body: string;
+  authorName: string;
+  authorEmail: string;
+  authoredUtc: string;
+  committerName: string;
+  committerEmail: string;
+  /** Commit date; history is ordered and filtered by it. */
+  committedUtc: string;
+  parentShas: string[];
+  isMerge: boolean;
+  /** All changed files, even when `files` is truncated. */
+  filesChanged: number;
+  addedLines: number;
+  deletedLines: number;
+  /** At most 200 entries. */
+  files: GitChangedFile[];
+  filesTruncated: boolean;
+}
+
+/** One page of commit history, newest first (GET /api/v1/vessels/{id}/history/commits). */
+export interface VesselCommitPage {
+  vesselId: string;
+  branch: string;
+  commits: VesselCommit[];
+  /** Cursor for the next (older) page, or null on the last page. */
+  nextCursor: string | null;
+  /** Error reading the repository (returned with HTTP 200), or null. */
+  error: string | null;
+}
+
+/** Query for `getVesselCommitActivity`. */
+export interface VesselCommitActivityQuery {
+  /** Branch; omitted for the vessel's default branch. */
+  branch?: string | null;
+  /** First day, yyyy-MM-dd; omitted for 364 days before `to`. */
+  from?: string | null;
+  /** Last day, yyyy-MM-dd; omitted for today in the offset. */
+  to?: string | null;
+  /** Offset to bucket days in (-840..840); omitted for UTC. */
+  utcOffsetMinutes?: number | null;
+}
+
+/** Query for `getVesselCommits`. */
+export interface VesselCommitQuery {
+  /** Branch; omitted for the vessel's default branch. Ignored with `cursor`. */
+  branch?: string | null;
+  /** Exclusive upper bound on commit date (ISO 8601). Ignored with `cursor`. */
+  before?: string | null;
+  /** `nextCursor` from the previous page. */
+  cursor?: string | null;
+  /** Page size 1..200 (server default 50). */
+  limit?: number | null;
+}

@@ -33,6 +33,7 @@ const Server = lazy(() => import('./pages/Server'));
 const FleetDetail = lazy(() => import('./pages/FleetDetail'));
 const VesselDetail = lazy(() => import('./pages/VesselDetail'));
 const VesselOnboarding = lazy(() => import('./pages/VesselOnboarding'));
+const VesselHistory = lazy(() => import('./pages/VesselHistory'));
 const CaptainDetail = lazy(() => import('./pages/CaptainDetail'));
 const MissionDetail = lazy(() => import('./pages/MissionDetail'));
 const VoyageDetail = lazy(() => import('./pages/VoyageDetail'));
@@ -118,6 +119,7 @@ export default function App() {
                       <Route path="vessels/health" element={<VesselsHub />} />
                       <Route path="vessels/:id" element={<VesselDetail />} />
                       <Route path="vessels/:id/onboarding" element={<VesselOnboarding />} />
+                      <Route path="vessels/:id/history" element={<VesselHistory />} />
                       <Route path="workspace" element={<Navigate to="/vessels?tab=workspace" replace />} />
                       <Route path="workspace/:vesselId" element={<Workspace />} />
                       <Route path="workspace/:vesselId/:panel" element={<Workspace />} />

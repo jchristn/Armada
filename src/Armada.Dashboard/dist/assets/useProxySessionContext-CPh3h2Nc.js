@@ -1,1 +1,0 @@
-import{a as e,c as t}from"./LocaleContext-DCEQGvWe.js";import{In as n}from"./client-yf6q34Vf.js";var r=t(e(),1);function i(){let[e,t]=(0,r.useState)(null);return(0,r.useEffect)(()=>{let e=!0;return n().then(n=>{e&&t(n)}).catch(()=>{e&&t(null)}),()=>{e=!1}},[]),e}export{i as t};

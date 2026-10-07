@@ -1,0 +1,166 @@
+/* Vessel History (/vessels/:id/history): commit heatmap and commit timeline. Uses the shared theme tokens. */
+
+.vhist-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 1rem 1.5rem;
+    padding: 0.75rem 1rem;
+    margin-bottom: 1rem;
+}
+.vhist-field { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.8rem; color: var(--text-dim); }
+.vhist-field select, .vhist-field input { min-width: 8rem; }
+.vhist-field .inline-actions { display: flex; align-items: center; gap: 0.35rem; }
+
+/* Heatmap */
+.vhist-heatmap-card { padding: 1rem; margin-bottom: 1rem; }
+.vhist-stale { opacity: 0.6; transition: opacity 0.15s; }
+.vhist-heatmap {
+    --heat-cell: 11px;
+    --heat-gap: 3px;
+    --heat-label: 2.25rem;
+    --heat-0: var(--bg-hover);
+    --heat-1: color-mix(in srgb, var(--green) 30%, var(--bg-card));
+    --heat-2: color-mix(in srgb, var(--green) 55%, var(--bg-card));
+    --heat-3: color-mix(in srgb, var(--green) 80%, var(--bg-card));
+    --heat-4: var(--green);
+}
+.vhist-heatmap-scroll { overflow-x: auto; padding-bottom: 0.25rem; }
+.vhist-heatmap-months,
+.vhist-heatmap-grid {
+    display: grid;
+    grid-template-columns: var(--heat-label) repeat(var(--heat-weeks), var(--heat-cell));
+    column-gap: var(--heat-gap);
+    width: max-content;
+}
+.vhist-heatmap-months { font-size: 0.7rem; color: var(--text-dim); margin-bottom: 0.2rem; }
+.vhist-heatmap-month { grid-row: 1; white-space: nowrap; overflow: visible; }
+.vhist-heatmap-corner { grid-column: 1; grid-row: 1; }
+.vhist-heatmap-grid { row-gap: var(--heat-gap); }
+.vhist-heatmap-row { display: contents; }
+.vhist-heatmap-weekday { font-size: 0.7rem; line-height: var(--heat-cell); color: var(--text-dim); }
+.vhist-heatmap-weekday-quiet > span[aria-hidden="true"] { visibility: hidden; }
+.vhist-heat-cell {
+    display: inline-block;
+    width: var(--heat-cell);
+    height: var(--heat-cell);
+    border-radius: 2px;
+    background: var(--heat-0);
+    outline-offset: 1px;
+    box-sizing: border-box;
+}
+.vhist-heatmap-grid .vhist-heat-cell[data-date] { cursor: pointer; }
+.vhist-heat-cell.level-1 { background: var(--heat-1); }
+.vhist-heat-cell.level-2 { background: var(--heat-2); }
+.vhist-heat-cell.level-3 { background: var(--heat-3); }
+.vhist-heat-cell.level-4 { background: var(--heat-4); }
+.vhist-heat-cell.vhist-heat-pad { background: transparent; }
+.vhist-heat-cell:hover { box-shadow: inset 0 0 0 1px var(--text-dim); }
+.vhist-heat-cell:focus-visible { outline: 2px solid var(--accent); }
+.vhist-heat-cell.selected { box-shadow: 0 0 0 2px var(--accent); }
+.vhist-heatmap-footer {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.6rem;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+}
+.vhist-heatmap-total { color: var(--text); }
+.vhist-heatmap-legend { display: inline-flex; align-items: center; gap: var(--heat-gap); }
+.vhist-heatmap-legend > span:first-child { margin-right: 0.25rem; }
+.vhist-heatmap-legend > span:last-child { margin-left: 0.25rem; }
+
+/* Commit list */
+.vhist-list-top { scroll-margin-top: 1rem; }
+.vhist-jump-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 0.75rem;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: var(--radius);
+    background: var(--bg-card);
+    font-size: 0.85rem;
+}
+.vhist-timeline { display: flex; flex-direction: column; gap: 1rem; }
+.vhist-day-header {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-dim);
+    margin: 0 0 0.4rem;
+}
+.vhist-day.selected .vhist-day-header { color: var(--accent); }
+.vhist-day.selected .vhist-commit-list { border-color: var(--accent); }
+.vhist-commit-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-card);
+}
+.vhist-commit { padding: 0.6rem 0.85rem; border-top: 1px solid var(--border); }
+.vhist-commit:first-child { border-top: none; }
+.vhist-commit-main { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
+.vhist-commit-toggle {
+    display: flex;
+    align-items: baseline;
+    gap: 0.4rem;
+    flex: 1 1 auto;
+    min-width: 0;
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+.vhist-commit-toggle:hover .vhist-commit-subject { color: var(--accent); }
+.vhist-commit-caret { color: var(--text-dim); width: 0.8rem; flex-shrink: 0; }
+.vhist-commit-subject { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vhist-commit-sha { display: inline-flex; align-items: center; gap: 0.25rem; flex-shrink: 0; }
+.vhist-merge-badge { flex-shrink: 0; }
+.vhist-commit-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem;
+    margin: 0.25rem 0 0 1.2rem;
+    font-size: 0.78rem;
+}
+.vhist-added { color: var(--green); font-family: var(--mono); }
+.vhist-deleted { color: var(--red); font-family: var(--mono); }
+.vhist-commit-detail { margin: 0.6rem 0 0.2rem 1.2rem; display: flex; flex-direction: column; gap: 0.5rem; }
+.vhist-commit-body {
+    margin: 0;
+    padding: 0.6rem 0.75rem;
+    background: var(--diff-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.vhist-commit-committer { font-size: 0.78rem; }
+.vhist-file-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.2rem; }
+.vhist-file { display: flex; align-items: center; gap: 0.5rem; min-width: 0; font-size: 0.8rem; }
+.vhist-file-kind { flex-shrink: 0; min-width: 4.5rem; text-align: center; }
+.vhist-file-path { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.vhist-file-stats { display: inline-flex; gap: 0.35rem; flex-shrink: 0; font-size: 0.78rem; }
+.vhist-files-truncated { font-size: 0.78rem; font-style: italic; }
+.vhist-sentinel { height: 1px; }
+.vhist-list-footer { display: flex; flex-direction: column; align-items: center; gap: 0.5rem; padding: 1rem 0; }
+.vhist-end { font-size: 0.8rem; }
+
+@media (max-width: 640px) {
+    .vhist-commit-absolute { display: none; }
+    .vhist-commit-meta, .vhist-commit-detail { margin-left: 0; }
+}
