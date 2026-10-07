@@ -1,0 +1,86 @@
+# Signed in (state kept from 01): Ask Armada against the throwaway Admiral. The seeded server has no captains, so
+# plain messages are disabled and quick actions still work: run /status from the / menu (creates the conversation
+# and posts its action result), find it in the conversation list, rename it from the options sheet, and delete it.
+appId: ${APP_ID}
+name: 04-ask
+---
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: "ask-screen"
+    timeout: 30000
+- tapOn:
+    id: "tab-ask"
+- extendedWaitUntil:
+    visible:
+      id: "ask-empty"
+    timeout: 20000
+- assertVisible: "Choose a captain to chat, or start work with a quick action."
+- takeScreenshot: ask-empty
+- tapOn:
+    id: "ask-input"
+- runFlow: common/dismiss-keyboard-tips.yaml
+- inputText: "/st"
+- extendedWaitUntil:
+    visible:
+      id: "ask-quick-status"
+    timeout: 10000
+- takeScreenshot: ask-quick-menu
+- tapOn:
+    id: "ask-quick-status"
+- extendedWaitUntil:
+    visible: "Action result"
+    timeout: 30000
+- assertVisible: "Show Armada status: done."
+- takeScreenshot: ask-action-result
+- tapOn:
+    id: "ask-open-options"
+- extendedWaitUntil:
+    visible:
+      id: "ask-options-rename"
+    timeout: 10000
+- tapOn:
+    id: "ask-options-rename"
+- extendedWaitUntil:
+    visible:
+      id: "ask-rename-title"
+    timeout: 10000
+- eraseText: 60
+- inputText: "Mobile E2E"
+- tapOn:
+    id: "ask-rename-confirm"
+- extendedWaitUntil:
+    visible: "Mobile E2E"
+    timeout: 10000
+- runFlow:
+    when:
+      visible:
+        id: "ask-open-list"
+    commands:
+      - tapOn:
+          id: "ask-open-list"
+      - extendedWaitUntil:
+          visible:
+            id: "ask-thread-list"
+          timeout: 10000
+      - assertVisible: "Mobile E2E"
+      - takeScreenshot: ask-thread-list
+      - tapOn:
+          id: "ask-close-list"
+- tapOn:
+    id: "ask-open-options"
+- extendedWaitUntil:
+    visible:
+      id: "ask-options-delete"
+    timeout: 10000
+- tapOn:
+    id: "ask-options-delete"
+- extendedWaitUntil:
+    visible: "Delete conversation"
+    timeout: 10000
+- tapOn:
+    id: "ask-delete-confirm-confirm"
+- extendedWaitUntil:
+    visible:
+      id: "ask-empty"
+    timeout: 20000
