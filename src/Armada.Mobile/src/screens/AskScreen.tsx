@@ -1,6 +1,7 @@
 import { Stack, useRouter, type Href } from 'expo-router';
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Linking, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { HeaderHeightContext } from 'expo-router/react-navigation';
 import type { AskThread, AskTrackedWork, CaptainToolAccessResult } from '@dashboard/types/models';
@@ -291,6 +292,8 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
       <SplitView master={threadList} detail={conversationPane} />
 
       <Modal visible={listOpen && !isTablet} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setListOpen(false)}>
+        {/* A modal is a new native root: swipe actions in the list need their own gesture root. */}
+        <GestureHandlerRootView style={styles.fill}>
         <SafeAreaView style={[styles.fill, { backgroundColor: colors.background }]} edges={['top', 'bottom', 'left', 'right']}>
           <View style={[styles.modalHead, { borderBottomColor: colors.border }]}>
             <AppText variant="heading" accessibilityRole="header" style={styles.fill}>{t('Conversations')}</AppText>
@@ -298,6 +301,7 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
           </View>
           {threadList}
         </SafeAreaView>
+        </GestureHandlerRootView>
       </Modal>
 
       <ConversationOptionsSheet
