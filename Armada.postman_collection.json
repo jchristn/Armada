@@ -308,6 +308,11 @@
             "key": "memoryId",
             "value": "",
             "type": "string"
+        },
+        {
+            "key": "pushDeviceId",
+            "value": "",
+            "type": "string"
         }
     ],
     "item": [
@@ -1053,6 +1058,34 @@
                             ]
                         },
                         "description": "Updates the Import, FleetActions, RepositoryHealth, and Retention settings objects. Each object, when supplied, replaces the whole object; omitted fields take their defaults and out-of-range values are clamped. Retention values are days from 0 to 3650, where 0 means never. All four are applied live. AdminOnly."
+                    }
+                },
+                {
+                    "name": "Update Push Settings",
+                    "request": {
+                        "method": "PUT",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"Push\": {\n    \"Enabled\": true,\n    \"ExpoAccessToken\": \"********\",\n    \"Categories\": [\n      \"AskProposal\",\n      \"CliPermission\",\n      \"MissionReview\",\n      \"DeploymentApproval\",\n      \"MissionFailed\",\n      \"LandingFailed\",\n      \"CaptainStalled\",\n      \"VoyageFinished\"\n    ],\n    \"MaxPerUserPerMinute\": 20,\n    \"DedupeWindowSeconds\": 300\n  }\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/settings",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "settings"
+                            ]
+                        },
+                        "description": "Replaces the Push settings object. Send ExpoAccessToken as ******** to keep the stored token."
                     }
                 },
                 {
@@ -4715,6 +4748,148 @@
                             ]
                         },
                         "description": "Deletes the thread with its messages, tool calls, proposals, and tracked-work rows (204). The work itself is untouched."
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Push Notifications",
+            "item": [
+                {
+                    "name": "Register Push Device",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"Platform\": \"Ios\",\n  \"ExpoPushToken\": \"ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]\",\n  \"DeviceName\": \"My iPhone\",\n  \"AppVersion\": \"1.0.0\",\n  \"Locale\": \"en-US\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/push/devices",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "push",
+                                "devices"
+                            ]
+                        },
+                        "description": "Registers (201) or refreshes (200) the caller's device by Expo push token. A token registered by another user moves to the caller."
+                    }
+                },
+                {
+                    "name": "List Push Devices",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/push/devices",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "push",
+                                "devices"
+                            ]
+                        },
+                        "description": "Lists the caller's devices. Admins may add ?userId= (and global admins ?tenantId=)."
+                    }
+                },
+                {
+                    "name": "Update Push Device",
+                    "request": {
+                        "method": "PUT",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"DeviceName\": \"Work phone\",\n  \"Categories\": [\n    \"AskProposal\",\n    \"CliPermission\",\n    \"MissionReview\"\n  ]\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/push/devices/{{pushDeviceId}}",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "push",
+                                "devices",
+                                "{{pushDeviceId}}"
+                            ]
+                        },
+                        "description": "Updates the device name and/or categories (an empty list mutes the device)."
+                    }
+                },
+                {
+                    "name": "Send Test Push",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/push/devices/{{pushDeviceId}}/test",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "push",
+                                "devices",
+                                "{{pushDeviceId}}",
+                                "test"
+                            ]
+                        },
+                        "description": "Sends a test notification and returns the outcome (Sent, Disabled, DeviceInactive, DeviceNotRegistered, RateLimited, Failed)."
+                    }
+                },
+                {
+                    "name": "Delete Push Device",
+                    "request": {
+                        "method": "DELETE",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/push/devices/{{pushDeviceId}}",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "push",
+                                "devices",
+                                "{{pushDeviceId}}"
+                            ]
+                        },
+                        "description": "Removes the device (204)."
                     }
                 }
             ]

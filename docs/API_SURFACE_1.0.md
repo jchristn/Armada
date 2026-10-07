@@ -24,13 +24,13 @@ administrator).
 
 | Surface | Total | Experimental |
 |---|---|---|
-| REST routes | 363 | 11 |
+| REST routes | 368 | 11 |
 | MCP tools | 155 | 5 |
 | WebSocket endpoints | 2 | 1 |
 | WebSocket commands | 61 | 0 |
 | WebSocket event types | 67 | 0 |
 | CLI commands | 63 | 0 |
-| Settings keys | 180 | 12 |
+| Settings keys | 186 | 12 |
 
 ## REST API
 
@@ -273,6 +273,11 @@ Base path `/api/v1`. Request and response bodies are PascalCase JSON; errors are
 | GET | `/api/v1/prompt-templates/{name}` | Authenticated |  | 200 `PromptTemplate`, 404 |  |
 | PUT | `/api/v1/prompt-templates/{name}` | Authenticated | `PromptTemplate` | 200 `PromptTemplate`, 404 |  |
 | POST | `/api/v1/prompt-templates/{name}/reset` | Authenticated |  | 200 `PromptTemplate`, 404 |  |
+| GET | `/api/v1/push/devices` | Authenticated |  | 200 `List<PushDevice>`, 403 `ApiErrorResponse` |  |
+| POST | `/api/v1/push/devices` | Authenticated | `PushDeviceRegisterRequest` | 200 `PushDevice`, 201 `PushDevice`, 400, 403 `ApiErrorResponse` |  |
+| DELETE | `/api/v1/push/devices/{id}` | Authenticated |  | 204, 404 |  |
+| PUT | `/api/v1/push/devices/{id}` | Authenticated | `PushDeviceUpdateRequest` | 200 `PushDevice`, 400, 404 |  |
+| POST | `/api/v1/push/devices/{id}/test` | Authenticated |  | 200 `PushTestResult`, 404 |  |
 | GET | `/api/v1/releases` | Authenticated |  | 200 `EnumerationResult<Release>` |  |
 | POST | `/api/v1/releases` | TenantAdmin | `ReleaseUpsertRequest` | 201 `Release` |  |
 | POST | `/api/v1/releases/enumerate` | Authenticated | `ReleaseQuery` (optional) | 200 `EnumerationResult<Release>` |  |
@@ -859,6 +864,12 @@ install with the home directory written as `~`; defaults are not frozen (see COM
 | `planningSessionAbandonmentTimeoutMinutes` | int | `240` |  |
 | `planningSessionInactivityTimeoutMinutes` | int | `60` |  |
 | `planningSessionRetentionDays` | int | `0` |  |
+| `push` | object |  |  |
+| `push.categories` | array<enum PushCategoryEnum (AskProposal\|CliPermission\|MissionReview\|DeploymentApproval\|MissionFailed\|LandingFailed\|CaptainStalled\|VoyageFinished)> | `["AskProposal","CliPermission","MissionReview","DeploymentApproval","MissionF...` |  |
+| `push.dedupeWindowSeconds` | int | `300` |  |
+| `push.enabled` | bool | `true` |  |
+| `push.expoAccessToken` | string | `null` |  |
+| `push.maxPerUserPerMinute` | int | `20` |  |
 | `rebuildSlotRetentionCount` | int | `3` | experimental |
 | `rebuildSupervisorHarborId` | string | `null` | experimental |
 | `remoteControl` | object |  |  |

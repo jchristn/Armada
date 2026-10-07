@@ -87,6 +87,24 @@ with that original input. Pending requests expire (`Permissions.PromptTimeoutSec
 cancelled when their turn or mission process ends or the Admiral no longer waits for them (for example after a
 restart); expired and cancelled requests are denials.
 
+### Push notifications
+
+The Admiral pushes inbox-worthy occurrences to the mobile apps through the Expo Push Service (outbound HTTPS to
+`exp.host`, relayed to APNs and FCM). Devices are registered per user (`push_devices`, `pdv_`), and delivery is decided
+by `PushNotificationService`; device access lives in `PushDeviceAccess`.
+
+| Concern | Handling |
+|---------|----------|
+| Who registers | Any signed-in user, for themselves only (`TenantId` and `UserId` come from the credential, never the body). Captain sessions (mission- or thread-scoped tokens) get `403` |
+| Who manages a device | The owner, tenant admins of the device's tenant, global admins; everyone else gets `404` (existence is not disclosed). Listing another user's devices needs a tenant admin of that user's tenant or a global admin (`403`) |
+| Token handling | The Expo push token is stored in plain text (it must be sent to Expo) and is masked in every API response (prefix plus the last four characters), so a token cannot be read back through the API, request history, or another user's listing. Registering a known token moves the device to the caller (a phone that changes accounts); because tokens are never returned, moving someone else's device requires already holding its token, which only the device and Expo have |
+| Recipients | The same visibility rules as the inbox and WebSocket, limited to the entity's tenant: Ask proposals to the thread owner only; CLI permission requests, mission reviews, and deployment approvals to the owner and the tenant's admins (CLI permission recipients are also checked with `CliPermissionAccess.CanView`); failures, stalled captains, and finished voyages to the owner (the tenant's admins when there is no active owner). Global admins of other tenants are not pushed (they still see the items in their inbox). Inactive users and devices are skipped |
+| Payload content | Title and body are bounded (64 and 178 characters), collapsed to one line, and pass through `SecretRedactor`; they never include code, diffs, failure reasons, tool input, or command text beyond a 60-character redacted summary of a CLI permission request. `data` holds only a dashboard path, the kind, the entity id, the category, and (for the owner) the Ask thread id. Payloads transit Expo, Apple, and Google, which is why they stay minimal |
+| Actions | The iOS category `armada_approve_deny` is only advertised to recipients who may decide (the thread owner for Ask proposals; `CliPermissionAccess.CanDecide` for CLI permission requests). The app performs the action through the existing authenticated REST routes, which enforce the same checks again; the server accepts no action from the push channel itself |
+| Expo access token | `Push.ExpoAccessToken` (optional; enhanced push security) is a secret: redacted as `********` in `GET /api/v1/settings` and kept when PUT sends the redacted value back; it is only sent to Expo as a bearer token. Changing `Push` settings is AdminOnly |
+| Abuse and failure | Per-user rate limit (`Push.MaxPerUserPerMinute`) and dedupe window (`Push.DedupeWindowSeconds`) bound the volume, including test pushes. Delivery is asynchronous on a bounded queue (oldest dropped when full); a transport failure is logged and retried with backoff for transient errors, and never fails the triggering request. Devices reported `DeviceNotRegistered` are deactivated. Deleting a user or tenant deletes its devices |
+| Tests | `E2E.Push`, `Services.PushNotifications`, and `Database.PushDevices` cover scoping (cross-tenant `404`), re-own, masking, redaction of the access token, recipient selection, payload redaction and truncation, and failure isolation; a recording transport is used, never the real Expo service |
+
 ### Safe defaults
 
 - The Admiral refuses to listen on a non-loopback hostname while default credentials are in use
@@ -122,8 +140,8 @@ restart); expired and cancelled requests are denials.
 ### Secrets
 
 Read endpoints never return API keys, bearer tokens (except once, in the create response), passwords, password
-hashes, session encryption keys, GitHub tokens, model endpoint API keys, or remote tunnel passwords and enrollment
-tokens. Request history redacts secret-bearing headers, any JSON or form key whose name contains `password` or
+hashes, session encryption keys, GitHub tokens, model endpoint API keys, remote tunnel passwords and enrollment
+tokens, or the Expo push access token (`Push.ExpoAccessToken`); push device tokens are masked. Request history redacts secret-bearing headers, any JSON or form key whose name contains `password` or
 `secret` or ends with `token`, `apikey`, `accesskey`, `secretkey`, `privatekey`, or `encryptionkey`, secret-shaped
 values under any key (`ghp_...`, `sk-...`, `AKIA...`), the raw query string, and the same patterns in non-JSON text.
 Request logs omit query strings. `E2E.SecretsAndAudit` seeds known secrets and greps responses, request history,
@@ -319,7 +337,7 @@ Recommendations:
 
 ## REST routes
 
-Generated from `RouteAuthorizationRegistry` (361 declarations: 359 API routes plus the OpenAPI document and Swagger
+Generated from `RouteAuthorizationRegistry` (366 declarations: 364 API routes plus the OpenAPI document and Swagger
 UI). Columns: requirement (`Resource:Operation`), permission level, tenant scoping (how the handler limits data to the
 caller), input (how the request is parsed; every typed body is deserialized into a model, unknown fields ignored), and
 the findings that apply. "caller tenant/user (handler)" means the handler or the service it calls reads and writes
@@ -355,6 +373,11 @@ only within the caller's tenant (tenant admins) or the caller's own records (reg
 | GET | `/api/v1/cli-permissions/rules/{id}` | CliPermissionRoutes | CliPermission:Read | Authenticated | caller tenant plus all-tenant rules (handler) | path | - |
 | PUT | `/api/v1/cli-permissions/rules/{id}` | CliPermissionRoutes | CliPermission:Update | TenantAdmin | rule's tenant; all-tenant rules global admin only (handler) | typed JSON body | - |
 | DELETE | `/api/v1/cli-permissions/rules/{id}` | CliPermissionRoutes | CliPermission:Delete | TenantAdmin | rule's tenant; all-tenant rules global admin only (handler) | path | - |
+| POST | `/api/v1/push/devices` | PushRoutes | PushDevice:Create | Authenticated | caller's own user and tenant from the credential; captain sessions refused (handler) | typed JSON body | - |
+| GET | `/api/v1/push/devices` | PushRoutes | PushDevice:Read | Authenticated | `PushDeviceAccess`: own devices; tenant admin a user of own tenant; global admin any (handler) | path + query | - |
+| PUT | `/api/v1/push/devices/{id}` | PushRoutes | PushDevice:Update | Authenticated | `PushDeviceAccess`: owner, tenant admins of the device's tenant, global admins (404 otherwise) | typed JSON body | - |
+| DELETE | `/api/v1/push/devices/{id}` | PushRoutes | PushDevice:Delete | Authenticated | `PushDeviceAccess` (404 otherwise) | path | - |
+| POST | `/api/v1/push/devices/{id}/test` | PushRoutes | PushDevice:Execute | Authenticated | `PushDeviceAccess` (404 otherwise) | path | - |
 | POST | `/api/v1/authenticate` | AuthRoutes | Session:Execute | None (public) | none | typed JSON body | F-08, F-26 Fixed |
 | GET | `/api/v1/whoami` | AuthRoutes | Session:Read | Authenticated | caller tenant/user (handler) | path | - |
 | POST | `/api/v1/tenants/lookup` | AuthRoutes | Session:Read | None (public) | none | typed JSON body | F-26 Fixed (rate limited) |

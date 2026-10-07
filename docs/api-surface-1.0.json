@@ -3939,6 +3939,94 @@
     },
     {
       "method": "GET",
+      "route": "/api/v1/push/devices",
+      "auth": "Authenticated",
+      "resource": "PushDevice:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "List<PushDevice>",
+        "403": "ApiErrorResponse"
+      },
+      "tags": [
+        "Push"
+      ],
+      "summary": "List push devices",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/push/devices",
+      "auth": "Authenticated",
+      "resource": "PushDevice:Create",
+      "requestType": "PushDeviceRegisterRequest",
+      "requestRequired": true,
+      "responses": {
+        "200": "PushDevice",
+        "201": "PushDevice",
+        "400": "",
+        "403": "ApiErrorResponse"
+      },
+      "tags": [
+        "Push"
+      ],
+      "summary": "Register or refresh a push device",
+      "experimental": false
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/v1/push/devices/{id}",
+      "auth": "Authenticated",
+      "resource": "PushDevice:Delete",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "204": "",
+        "404": ""
+      },
+      "tags": [
+        "Push"
+      ],
+      "summary": "Delete a push device",
+      "experimental": false
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v1/push/devices/{id}",
+      "auth": "Authenticated",
+      "resource": "PushDevice:Update",
+      "requestType": "PushDeviceUpdateRequest",
+      "requestRequired": true,
+      "responses": {
+        "200": "PushDevice",
+        "400": "",
+        "404": ""
+      },
+      "tags": [
+        "Push"
+      ],
+      "summary": "Update a push device",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/push/devices/{id}/test",
+      "auth": "Authenticated",
+      "resource": "PushDevice:Execute",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "PushTestResult",
+        "404": ""
+      },
+      "tags": [
+        "Push"
+      ],
+      "summary": "Send a test push",
+      "experimental": false
+    },
+    {
+      "method": "GET",
       "route": "/api/v1/releases",
       "auth": "Authenticated",
       "resource": "Release:Read",
@@ -17700,6 +17788,42 @@
       "key": "planningSessionRetentionDays",
       "type": "int",
       "default": "0",
+      "experimental": false
+    },
+    {
+      "key": "push",
+      "type": "object",
+      "default": null,
+      "experimental": false
+    },
+    {
+      "key": "push.categories",
+      "type": "array<enum PushCategoryEnum (AskProposal|CliPermission|MissionReview|DeploymentApproval|MissionFailed|LandingFailed|CaptainStalled|VoyageFinished)>",
+      "default": "[\"AskProposal\",\"CliPermission\",\"MissionReview\",\"DeploymentApproval\",\"MissionFailed\",\"LandingFailed\",\"CaptainStalled\",\"VoyageFinished\"]",
+      "experimental": false
+    },
+    {
+      "key": "push.dedupeWindowSeconds",
+      "type": "int",
+      "default": "300",
+      "experimental": false
+    },
+    {
+      "key": "push.enabled",
+      "type": "bool",
+      "default": "true",
+      "experimental": false
+    },
+    {
+      "key": "push.expoAccessToken",
+      "type": "string",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "push.maxPerUserPerMinute",
+      "type": "int",
+      "default": "20",
       "experimental": false
     },
     {
