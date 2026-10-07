@@ -1,5 +1,6 @@
 import type { FleetActionRun } from '../../types/models';
 import { useLocale } from '../../context/LocaleContext';
+import { runProgress } from '../../lib/fleetActionForm';
 
 interface RunProgressProps {
   run: Pick<FleetActionRun, 'targetCount' | 'succeededCount' | 'failedCount' | 'skippedCount' | 'cancelledCount'>;
@@ -13,10 +14,8 @@ interface RunProgressProps {
  */
 export default function RunProgress({ run, compact = false }: RunProgressProps) {
   const { t } = useLocale();
-  const total = Math.max(0, run.targetCount);
-  const done = run.succeededCount + run.failedCount + run.skippedCount + run.cancelledCount;
+  const { total, done, percent } = runProgress(run);
   const pct = (n: number) => (total > 0 ? `${(n / total) * 100}%` : '0%');
-  const percent = total > 0 ? Math.round((done / total) * 100) : 0;
   const summary = t('{{succeeded}} succeeded, {{failed}} failed, {{skipped}} skipped of {{total}}', {
     succeeded: run.succeededCount.toLocaleString(),
     failed: run.failedCount.toLocaleString(),
