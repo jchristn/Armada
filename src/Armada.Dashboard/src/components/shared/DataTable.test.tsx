@@ -57,7 +57,7 @@ describe('DataTable column chooser', () => {
     const { menu } = await openChooser();
     const items = within(menu).getAllByRole('menuitemcheckbox');
     // Fixed utility columns are not listed.
-    expect(items.map((i) => i.textContent)).toEqual(['☑NameAlways shown', '☑IDAlways shown', '☑Repository', '☐Created']);
+    expect(items.map((i) => i.textContent)).toEqual(['\u2611NameAlways shown', '\u2611IDAlways shown', '\u2611Repository', '\u2610Created']);
     const name = items[0];
     expect(name).toHaveAttribute('aria-disabled', 'true');
     expect(name).toHaveAttribute('aria-checked', 'true');
@@ -286,5 +286,41 @@ describe('DataTable toolbar', () => {
     expect(onToggle).toHaveBeenCalledWith(ROWS[0]);
     fireEvent.click(screen.getByText('billing'));
     expect(onRowClick).toHaveBeenCalledWith(ROWS[1]);
+  });
+
+  it('only marks rows clickable where isRowClickable allows (regression: every row showed a pointer)', () => {
+    const onRowClick = vi.fn();
+    render(
+      <DataTable
+        tableKey={KEY}
+        columns={columns()}
+        rows={ROWS}
+        rowKey={(r) => r.id}
+        onRowClick={onRowClick}
+        isRowClickable={(r) => r.id === 'vsl_2'}
+      />,
+    );
+    const gateway = screen.getByText('gateway').closest('tr') as HTMLElement;
+    const billing = screen.getByText('billing').closest('tr') as HTMLElement;
+    expect(gateway).not.toHaveClass('clickable');
+    expect(billing).toHaveClass('clickable');
+    fireEvent.click(gateway);
+    expect(onRowClick).not.toHaveBeenCalled();
+    fireEvent.click(billing);
+    expect(onRowClick).toHaveBeenCalledWith(ROWS[1]);
+  });
+
+  it('disables the checkbox of rows that cannot be selected', () => {
+    render(
+      <DataTable
+        tableKey={KEY}
+        columns={columns()}
+        rows={ROWS}
+        rowKey={(r) => r.id}
+        selection={{ isSelected: () => false, isSelectable: (r) => r.id === 'vsl_1', onToggle: vi.fn(), allSelected: false, onToggleAll: vi.fn(), selectAllLabel: 'Select all', rowLabel: (r) => `Select ${r.name}` }}
+      />,
+    );
+    expect(screen.getByLabelText('Select gateway')).not.toBeDisabled();
+    expect(screen.getByLabelText('Select billing')).toBeDisabled();
   });
 });

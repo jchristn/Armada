@@ -226,7 +226,7 @@ export default function Vessels() {
 
   const columns: DataTableColumn<Vessel>[] = [
     {
-      key: 'name', label: t('Name'), required: true, sortKey: 'name', headerTitle: t('Vessel name -- click to sort'),
+      key: 'name', label: t('Name'), required: true, sortKey: 'name', headerTitle: t('Vessel name -- click to sort'), cellClassName: 'cell-nowrap',
       filter: <input type="text" className="col-filter" aria-label={t('Filter vessels by name')} value={table.colFilters.name ?? ''} onChange={e => table.setColFilter('name', e.target.value)} placeholder={t('Search...')} />,
       render: (v) => <strong>{v.name}</strong>,
     },
@@ -240,7 +240,7 @@ export default function Vessels() {
       ),
     },
     {
-      key: 'fleet', label: t('Fleet'), sortKey: 'fleetId', headerTitle: t('Fleet -- click to sort'),
+      key: 'fleet', label: t('Fleet'), sortKey: 'fleetId', headerTitle: t('Fleet -- click to sort'), cellClassName: 'cell-nowrap',
       clearFilter: () => setFleetFilter(''),
       filter: (
         <select aria-label={t('Filter vessels by fleet')} className="col-filter" title={t('Filter vessels by fleet')} value={fleetFilter} onChange={e => { setFleetFilter(e.target.value); table.setPageNumber(1); }}>

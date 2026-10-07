@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import VesselDetail from './VesselDetail';
 import { listFleets, listMissionSummaries, listPipelines, listVessels, getVesselReadiness, getVesselLandingPreview, updateVessel } from '../api/client';
@@ -163,5 +163,52 @@ describe('VesselDetail View History', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Actions' }));
     fireEvent.click(await screen.findByRole('menuitem', { name: 'View History' }));
     expect(await screen.findByText('history at /vessels/vsl_1/history')).toBeInTheDocument();
+  });
+});
+
+describe('VesselDetail missions table', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.mocked(listVessels).mockResolvedValue(page([vessel]) as never);
+    vi.mocked(listFleets).mockResolvedValue(page([{ id: 'flt_1', name: 'Main' }]) as never);
+    vi.mocked(listMissionSummaries).mockResolvedValue(page([{
+      id: 'msn_1', title: 'Add request logging', status: 'InProgress', captainId: 'cpt_1',
+      branchName: 'armada/captain-1/msn_1-a-very-long-branch-name', vesselId: 'vsl_1', createdUtc: '2026-10-01T00:00:00Z',
+    }]) as never);
+    vi.mocked(listPipelines).mockResolvedValue(page([]) as never);
+    vi.mocked(getVesselReadiness).mockResolvedValue(null as never);
+    vi.mocked(getVesselLandingPreview).mockResolvedValue(null as never);
+  });
+
+  it('uses the shared table: Mission and ID are locked in the column chooser', async () => {
+    render(
+      <MemoryRouter initialEntries={['/vessels/vsl_1']}>
+        <Routes><Route path="/vessels/:id" element={<VesselDetail />} /></Routes>
+      </MemoryRouter>,
+    );
+    await screen.findByText('Add request logging');
+    const wrap = document.querySelector('[data-table="vessel-detail-missions"]') as HTMLElement;
+    await act(async () => { fireEvent.click(within(wrap).getByRole('button', { name: /^Columns/ })); });
+    const menu = screen.getByRole('menu', { name: 'Choose visible columns' });
+    expect(within(menu).getByRole('menuitemcheckbox', { name: /Mission/ })).toHaveAttribute('aria-disabled', 'true');
+    expect(within(menu).getByRole('menuitemcheckbox', { name: /^ID/ })).toHaveAttribute('aria-disabled', 'true');
+    expect(within(menu).getByRole('menuitemcheckbox', { name: /Branch/ })).not.toHaveAttribute('aria-disabled');
+  });
+
+  it('keeps the mission ID in its own column instead of a second line under the title, and branches on one line', async () => {
+    render(
+      <MemoryRouter initialEntries={['/vessels/vsl_1']}>
+        <Routes><Route path="/vessels/:id" element={<VesselDetail />} /></Routes>
+      </MemoryRouter>,
+    );
+    const title = await screen.findByText('Add request logging');
+    const missionCell = title.closest('td') as HTMLElement;
+    expect(missionCell).toHaveAttribute('data-col', 'mission');
+    expect(within(missionCell).queryByText('msn_1')).toBeNull();
+    const row = missionCell.closest('tr') as HTMLElement;
+    expect(within(row.querySelector('td[data-col="id"]') as HTMLElement).getByText('msn_1')).toBeInTheDocument();
+    const branch = within(row.querySelector('td[data-col="branch"]') as HTMLElement).getByText('armada/captain-1/msn_1-a-very-long-branch-name');
+    expect(branch).toHaveClass('cell-one-line');
+    expect(branch).toHaveAttribute('title', 'armada/captain-1/msn_1-a-very-long-branch-name');
   });
 });

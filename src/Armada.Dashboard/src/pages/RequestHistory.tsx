@@ -18,11 +18,9 @@ import type {
   RequestHistorySummaryBucket,
   RequestHistorySummaryResult,
 } from '../types/models';
-import Pagination from '../components/shared/Pagination';
+import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
 import ActionMenu from '../components/shared/ActionMenu';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
-import RefreshButton from '../components/shared/RefreshButton';
-import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
 import CopyButton from '../components/shared/CopyButton';
 import ErrorModal from '../components/shared/ErrorModal';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
@@ -528,6 +526,45 @@ export default function RequestHistory() {
     response: parseJsonString<Record<string, string | null>>(detailRecord?.detail?.responseHeadersJson, {}),
   }), [detailRecord]);
 
+  const columns: DataTableColumn<RequestHistoryEntry>[] = [
+    {
+      key: 'when', label: t('When'), required: true, cellClassName: 'cell-nowrap',
+      cellTitle: (entry) => formatDateTime(entry.createdUtc),
+      render: (entry) => formatRelativeTime(entry.createdUtc),
+    },
+    {
+      key: 'method', label: t('Method'),
+      render: (entry) => <span className={`request-method-pill request-method-${entry.method.toLowerCase()}`}>{entry.method}</span>,
+    },
+    {
+      key: 'route', label: t('Route'), required: true, cellClassName: 'request-route-cell mono', cellTitle: (entry) => entry.route,
+      render: (entry) => entry.route,
+    },
+    { key: 'principal', label: t('Principal'), render: (entry) => entry.principalDisplay || t('Anonymous') },
+    {
+      key: 'status', label: t('Status'),
+      render: (entry) => <span className={`request-status-pill ${entry.isSuccess ? 'success' : 'error'}`}>{entry.statusCode}</span>,
+    },
+    { key: 'duration', label: t('Duration'), cellClassName: 'cell-nowrap', render: (entry) => `${entry.durationMs.toFixed(2)} ms` },
+    {
+      key: 'payloads', label: t('Payloads'), cellClassName: 'cell-nowrap',
+      render: (entry) => `${formatBytes(entry.requestSizeBytes)} / ${formatBytes(entry.responseSizeBytes)}`,
+    },
+    {
+      key: 'actions', label: t('Actions'), fixed: true, interactive: true, className: 'text-right',
+      render: (entry) => (
+        <ActionMenu
+          id={`request-${entry.id}`}
+          items={[
+            { label: 'View', onClick: () => void openDetail(entry.id) },
+            { label: 'Replay in API Explorer', onClick: () => void handleReplay(entry.id) },
+            { label: 'Delete', danger: true, onClick: () => setDeleteTarget(entry) },
+          ]}
+        />
+      ),
+    },
+  ];
+
   return (
     <div className="request-history-page">
       <PageHeader
@@ -545,8 +582,6 @@ export default function RequestHistory() {
                 {hasActiveFilters ? t('Delete Filtered') : t('Delete Visible Range')}
               </button>
             )}
-            <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
-            <RefreshButton onRefresh={async () => { await Promise.all([loadEntries(), loadSummary()]); }} title={t('Refresh request data')} />
           </>
         )}
       />
@@ -693,84 +728,35 @@ export default function RequestHistory() {
         )}
       </div>
 
-      <Pagination
-        pageNumber={pageNumber}
-        pageSize={pageSize}
-        totalPages={totalPages}
-        totalRecords={totalRecords}
-        totalMs={totalMs}
-        onPageChange={setPageNumber}
-        onPageSizeChange={(size) => {
-          setPageSize(size);
-          setPageNumber(1);
+      <DataTable
+        tableKey="requesthistory"
+        columns={columns}
+        rows={loading ? [] : entries}
+        rowKey={(entry) => entry.id}
+        onRowClick={(entry) => void openDetail(entry.id)}
+        className="request-history-table"
+        wrapClassName="request-history-table-wrap"
+        pagination={{
+          pageNumber, pageSize, totalPages, totalRecords, totalMs,
+          onPageChange: setPageNumber,
+          onPageSizeChange: (size) => {
+            setPageSize(size);
+            setPageNumber(1);
+          },
         }}
+        autoRefresh={{ seconds: refreshSeconds, onChange: setRefreshSeconds }}
+        onRefresh={async () => { await Promise.all([loadEntries(), loadSummary()]); }}
+        refreshTitle={t('Refresh request data')}
+        selection={{
+          isSelected: (entry) => selectedIds.includes(entry.id),
+          onToggle: (entry) => setSelectedIds((current) => current.includes(entry.id) ? current.filter((idValue) => idValue !== entry.id) : [...current, entry.id]),
+          allSelected,
+          onToggleAll: (checked) => setSelectedIds(checked ? entries.map((entry) => entry.id) : []),
+          selectAllLabel: t('Select all visible requests'),
+          rowLabel: () => t('Select this request'),
+        }}
+        emptyMessage={loading ? t('Loading request history...') : t('No request history entries match the current filters.')}
       />
-
-      <div className="table-wrap request-history-table-wrap">
-        <table className="request-history-table">
-          <thead>
-            <tr>
-              <th className="col-checkbox">
-                <input aria-label={t('Select all visible requests')}
-                  type="checkbox"
-                  checked={allSelected}
-                  onChange={(event) => setSelectedIds(event.target.checked ? entries.map((entry) => entry.id) : [])}
-                  title={t('Select all visible requests')}
-                />
-              </th>
-              <th>{t('When')}</th>
-              <th>{t('Method')}</th>
-              <th>{t('Route')}</th>
-              <th>{t('Principal')}</th>
-              <th>{t('Status')}</th>
-              <th>{t('Duration')}</th>
-              <th>{t('Payloads')}</th>
-              <th className="text-right">{t('Actions')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr>
-                <td colSpan={9} className="text-dim">{t('Loading request history...')}</td>
-              </tr>
-            ) : entries.length === 0 ? (
-              <tr>
-                <td colSpan={9} className="text-dim">{t('No request history entries match the current filters.')}</td>
-              </tr>
-            ) : (
-              entries.map((entry) => (
-                <tr key={entry.id} className="clickable" onClick={() => void openDetail(entry.id)}>
-                  <td className="col-checkbox" onClick={(event) => event.stopPropagation()}>
-                    <input aria-label={t('Select this request')}
-                      type="checkbox"
-                      checked={selectedIds.includes(entry.id)}
-                      onChange={() => setSelectedIds((current) => current.includes(entry.id) ? current.filter((idValue) => idValue !== entry.id) : [...current, entry.id])}
-                      title={t('Select this request')}
-                    />
-                  </td>
-                  <td title={formatDateTime(entry.createdUtc)}>{formatRelativeTime(entry.createdUtc)}</td>
-                  <td><span className={`request-method-pill request-method-${entry.method.toLowerCase()}`}>{entry.method}</span></td>
-                  <td className="request-route-cell mono" title={entry.route}>{entry.route}</td>
-                  <td>{entry.principalDisplay || t('Anonymous')}</td>
-                  <td><span className={`request-status-pill ${entry.isSuccess ? 'success' : 'error'}`}>{entry.statusCode}</span></td>
-                  <td>{entry.durationMs.toFixed(2)} ms</td>
-                  <td>{formatBytes(entry.requestSizeBytes)} / {formatBytes(entry.responseSizeBytes)}</td>
-                  <td className="text-right" onClick={(event) => event.stopPropagation()}>
-                    <ActionMenu
-                      id={`request-${entry.id}`}
-                      items={[
-                        { label: 'View', onClick: () => void openDetail(entry.id) },
-                        { label: 'Replay in API Explorer', onClick: () => void handleReplay(entry.id) },
-                        { label: 'Delete', danger: true, onClick: () => setDeleteTarget(entry) },
-                      ]}
-                    />
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
 
       {(detailLoading || detailRecord) && (
         <div className="modal-overlay" onClick={() => { setDetailRecord(null); navigate('/requests'); }}>

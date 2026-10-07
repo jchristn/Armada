@@ -2,17 +2,15 @@ import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { listFleets, listVessels, listPipelines, createFleet, updateFleet, deleteFleet } from '../api/client';
 import type { Fleet, Vessel, Pipeline } from '../types/models';
-import Pagination from '../components/shared/Pagination';
+import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
 import ActionMenu from '../components/shared/ActionMenu';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import JsonViewer from '../components/shared/JsonViewer';
 import RecordDetailModal from '../components/shared/RecordDetailModal';
 import StatusBadge from '../components/shared/StatusBadge';
 import CopyButton from '../components/shared/CopyButton';
-import RefreshButton from '../components/shared/RefreshButton';
 import PageHeader from '../components/shared/PageHeader';
 import ErrorModal from '../components/shared/ErrorModal';
-import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
@@ -163,6 +161,49 @@ export default function Fleets() {
     });
   }
 
+  const columns: DataTableColumn<FleetWithCount>[] = [
+    {
+      key: 'name', label: t('Name'), required: true, sortKey: 'name', headerTitle: t('Fleet name -- click to sort'),
+      filter: <input type="text" className="col-filter" aria-label={t('Name')} value={table.colFilters.name ?? ''} onChange={e => table.setColFilter('name', e.target.value)} placeholder={t('Filter...')} />,
+      render: (f) => <strong>{f.name}</strong>,
+    },
+    {
+      key: 'id', label: t('ID'), required: true, cellClassName: 'mono text-dim table-id-cell',
+      render: (f) => (
+        <span className="id-display">
+          <span className="id-value" title={f.id}>{f.id}</span>
+          <CopyButton text={f.id} onClick={e => e.stopPropagation()} />
+        </span>
+      ),
+    },
+    {
+      key: 'description', label: t('Description'), sortKey: 'description', headerTitle: t('Description -- click to sort'),
+      cellClassName: 'text-dim truncate-cell',
+      clearFilter: () => table.setColFilter('description', ''),
+      filter: <input type="text" className="col-filter" aria-label={t('Description')} value={table.colFilters.description ?? ''} onChange={e => table.setColFilter('description', e.target.value)} placeholder={t('Filter...')} />,
+      render: (f) => f.description ? <span className="truncate-text" title={f.description}>{f.description}</span> : '-',
+    },
+    { key: 'vessels', label: t('Vessels'), sortKey: '_vesselCount', headerTitle: t('Vessel count -- click to sort'), render: (f) => f._vesselCount },
+    { key: 'active', label: t('Active'), render: (f) => (f.active !== false ? t('Yes') : t('No')) },
+    {
+      key: 'created', label: t('Created'), sortKey: 'createdUtc', headerTitle: t('Created date -- click to sort'),
+      cellClassName: 'text-dim cell-nowrap', cellTitle: (f) => formatDateTime(f.createdUtc),
+      render: (f) => formatRelativeTime(f.createdUtc),
+    },
+    {
+      key: 'actions', label: t('Actions'), fixed: true, interactive: true, className: 'text-right',
+      render: (f) => (
+        <ActionMenu id={`fleet-${f.id}`} items={[
+          { label: 'View Detail', onClick: () => navigate(`/fleets/${f.id}`) },
+          { label: 'Edit', onClick: () => openEdit(f) },
+          { label: 'Duplicate', onClick: () => void handleDuplicate(f) },
+          { label: 'View JSON', onClick: () => setJsonData({ open: true, title: `${t('Fleet')}: ${f.name}`, data: f }) },
+          { label: 'Delete', danger: true, onClick: () => handleDelete(f.id, f.name) },
+        ]} />
+      ),
+    },
+  ];
+
   return (
     <div>
       <PageHeader
@@ -170,8 +211,6 @@ export default function Fleets() {
         subtitle={t('Fleets are groups of vessels (repositories) useful for organizing and understanding relationships amongst code assets.')}
         actions={(
           <>
-            <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
-            <RefreshButton onRefresh={load} title={t('Refresh fleet data')} />
             {table.selected.length > 0 && (
               <button className="btn btn-sm btn-danger" onClick={handleBulkDelete}>
                 {t('Delete Selected')} ({table.selected.length})
@@ -225,85 +264,28 @@ export default function Fleets() {
       <ConfirmDialog open={confirm.open} title={confirm.title} message={confirm.message}
         onConfirm={confirm.onConfirm} onCancel={() => setConfirm(c => ({ ...c, open: false }))} />
 
-      {loading && fleets.length === 0 && <p className="text-dim">{t('Loading...')}</p>}
-      {!loading && fleets.length === 0 && <p className="text-dim">{t('No fleets configured.')}</p>}
-
-      {fleets.length > 0 && (
-        <>
-          <Pagination pageNumber={table.currentPage} pageSize={table.pageSize} totalPages={table.totalPages}
-            totalRecords={table.sorted.length}
-            onPageChange={p => table.setPageNumber(p)} onPageSizeChange={s => { table.setPageSize(s); table.setPageNumber(1); }} />
-
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th className="col-checkbox">
-                    <input aria-label={t('Select all fleets')} type="checkbox" checked={table.allSelected} onChange={e => e.target.checked ? table.selectAll() : table.clearSelection()} title={t('Select all fleets')} />
-                  </th>
-                  <th className="sortable" onClick={() => table.handleSort('name')} title={t('Fleet name -- click to sort')}>
-                    {t('Name')}{table.sortIcon('name')}
-                  </th>
-                  <th>{t('ID')}</th>
-                  <th className="sortable" onClick={() => table.handleSort('description')} title={t('Description -- click to sort')}>
-                    {t('Description')}{table.sortIcon('description')}
-                  </th>
-                  <th className="sortable" onClick={() => table.handleSort('_vesselCount')} title={t('Vessel count -- click to sort')}>
-                    {t('Vessels')}{table.sortIcon('_vesselCount')}
-                  </th>
-                  <th>{t('Active')}</th>
-                  <th className="sortable" onClick={() => table.handleSort('createdUtc')} title={t('Created date -- click to sort')}>
-                    {t('Created')}{table.sortIcon('createdUtc')}
-                  </th>
-                  <th className="text-right">{t('Actions')}</th>
-                </tr>
-                <tr className="column-filter-row">
-                  <td></td>
-                  <td><input type="text" className="col-filter" value={table.colFilters.name ?? ''} onChange={e => table.setColFilter('name', e.target.value)} placeholder={t('Filter...')} /></td>
-                  <td></td>
-                  <td><input type="text" className="col-filter" value={table.colFilters.description ?? ''} onChange={e => table.setColFilter('description', e.target.value)} placeholder={t('Filter...')} /></td>
-                  <td></td>
-                  <td></td>
-                  <td></td>
-                  <td></td>
-                </tr>
-              </thead>
-              <tbody>
-                {table.paginated.map(f => (
-                  <tr key={f.id} className="clickable" onClick={() => setViewRecord(f as unknown as Record<string, unknown>)}>
-                    <td className="col-checkbox" onClick={e => e.stopPropagation()}>
-                      <input aria-label={t('Select this fleet')} type="checkbox" checked={table.selected.includes(f.id)} onChange={() => table.toggleSelect(f.id)} title={t('Select this fleet')} />
-                    </td>
-                    <td><strong>{f.name}</strong></td>
-                    <td className="mono text-dim table-id-cell">
-                      <span className="id-display">
-                        <span className="id-value" title={f.id}>{f.id}</span>
-                        <CopyButton text={f.id} onClick={e => e.stopPropagation()} />
-                      </span>
-                    </td>
-                    <td className="text-dim">{f.description || '-'}</td>
-                    <td>{f._vesselCount}</td>
-                    <td>{f.active !== false ? t('Yes') : t('No')}</td>
-                    <td className="text-dim" title={formatDateTime(f.createdUtc)}>{formatRelativeTime(f.createdUtc)}</td>
-                    <td className="text-right" onClick={e => e.stopPropagation()}>
-                      <ActionMenu id={`fleet-${f.id}`} items={[
-                        { label: 'View Detail', onClick: () => navigate(`/fleets/${f.id}`) },
-                        { label: 'Edit', onClick: () => openEdit(f) },
-                        { label: 'Duplicate', onClick: () => void handleDuplicate(f) },
-                        { label: 'View JSON', onClick: () => setJsonData({ open: true, title: `${t('Fleet')}: ${f.name}`, data: f }) },
-                        { label: 'Delete', danger: true, onClick: () => handleDelete(f.id, f.name) },
-                      ]} />
-                    </td>
-                  </tr>
-                ))}
-                {table.paginated.length === 0 && (
-                  <tr><td colSpan={8} className="text-dim">{t('No fleets match the current filters.')}</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
+      <DataTable
+        tableKey="fleets"
+        columns={columns}
+        rows={table.paginated}
+        rowKey={(f) => f.id}
+        onRowClick={(f) => setViewRecord(f as unknown as Record<string, unknown>)}
+        sort={table.sortState}
+        pagination={table.paginationProps}
+        autoRefresh={{ seconds: refreshSeconds, onChange: setRefreshSeconds }}
+        onRefresh={load}
+        refreshTitle={t('Refresh fleet data')}
+        selection={{
+          isSelected: (f) => table.selected.includes(f.id),
+          onToggle: (f) => table.toggleSelect(f.id),
+          allSelected: table.allSelected,
+          onToggleAll: (checked) => (checked ? table.selectAll() : table.clearSelection()),
+          selectAllLabel: t('Select all fleets'),
+          rowLabel: () => t('Select this fleet'),
+        }}
+        emptyMessage={t('No fleets match the current filters.')}
+        placeholder={fleets.length > 0 ? undefined : <p className="text-dim">{loading ? t('Loading...') : t('No fleets configured.')}</p>}
+      />
     </div>
   );
 }

@@ -1,14 +1,12 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { listTenants, createTenant, updateTenant, deleteTenant } from '../../api/client';
 import type { TenantMetadata, TenantCreateRequest } from '../../types/models';
-import Pagination from '../../components/shared/Pagination';
+import DataTable, { type DataTableColumn } from '../../components/shared/DataTable';
 import ActionMenu from '../../components/shared/ActionMenu';
 import ConfirmDialog from '../../components/shared/ConfirmDialog';
 import JsonViewer from '../../components/shared/JsonViewer';
 import CopyButton from '../../components/shared/CopyButton';
 import GeneratedPasswordDialog from '../../components/shared/GeneratedPasswordDialog';
-import RefreshButton from '../../components/shared/RefreshButton';
-import AutoRefreshSelect from '../../components/shared/AutoRefreshSelect';
 import { useAutoRefresh } from '../../lib/useAutoRefresh';
 import { useAuth } from '../../context/AuthContext';
 import ErrorModal from '../../components/shared/ErrorModal';
@@ -98,7 +96,6 @@ export default function Tenants() {
     if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
     else { setSortField(field); setSortDir('asc'); }
   }
-  function sortIcon(field: SortField) { return sortField !== field ? '' : sortDir === 'asc' ? ' \u25B2' : ' \u25BC'; }
 
   const allSelected = selected.length > 0 && selected.length === filtered.length;
   function toggleSelect(id: string) { setSelected(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]); }
@@ -183,6 +180,42 @@ export default function Tenants() {
     });
   }
 
+  const columns: DataTableColumn<TenantMetadata>[] = [
+    {
+      key: 'name', label: t('Name'), required: true, sortKey: 'name',
+      filter: <input type="text" className="col-filter" aria-label={t('Filter by name')} value={colFilters.name} onChange={e => { setColFilters({ name: e.target.value }); setPageNumber(1); }} placeholder={t('Search...')} />,
+      render: (tenant) => <strong>{tenant.name}</strong>,
+    },
+    {
+      key: 'id', label: t('ID'), required: true, cellClassName: 'mono text-dim table-id-cell',
+      render: (tenant) => (
+        <span className="id-display">
+          <span className="id-value" title={tenant.id}>{tenant.id}</span>
+          <CopyButton text={tenant.id} onClick={e => e.stopPropagation()} />
+        </span>
+      ),
+    },
+    { key: 'active', label: t('Active'), sortKey: 'active', render: (tenant) => (tenant.active ? t('Yes') : t('No')) },
+    {
+      key: 'createdUtc', label: t('Created'), sortKey: 'createdUtc', cellClassName: 'text-dim cell-nowrap',
+      cellTitle: (tenant) => formatDateTime(tenant.createdUtc), render: (tenant) => formatRelativeTime(tenant.createdUtc),
+    },
+    {
+      key: 'lastUpdateUtc', label: t('Last Updated'), cellClassName: 'text-dim cell-nowrap',
+      cellTitle: (tenant) => formatDateTime(tenant.lastUpdateUtc), render: (tenant) => formatRelativeTime(tenant.lastUpdateUtc),
+    },
+    {
+      key: 'actions', label: t('Actions'), fixed: true, interactive: true, className: 'text-right',
+      render: (tenant) => (
+        <ActionMenu id={tenant.id} items={[
+          ...(isAdmin && !remoteProxyMode ? [{ label: 'Edit', onClick: () => openEdit(tenant) }] : []),
+          { label: 'View JSON', onClick: () => setJsonData({ open: true, title: `${t('Tenant')}: ${tenant.name}`, data: tenant }) },
+          ...(isAdmin && !remoteProxyMode ? [{ label: 'Delete', danger: true as const, onClick: () => handleDelete(tenant.id, tenant.name) }] : []),
+        ]} />
+      ),
+    },
+  ];
+
   return (
     <div>
       <div className="view-header">
@@ -197,8 +230,6 @@ export default function Tenants() {
         <div className="view-actions">
           {isAdmin && !remoteProxyMode && selected.length > 0 && <button className="btn btn-sm btn-danger" onClick={handleBulkDelete}>{t('Delete Selected')} ({selected.length})</button>}
           {isAdmin && !remoteProxyMode && <button className="btn btn-primary btn-sm" onClick={openCreate}>+ {t('Tenant')}</button>}
-          <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
-          <RefreshButton onRefresh={load} title="Refresh tenants" />
         </div>
       </div>
 
@@ -252,66 +283,36 @@ export default function Tenants() {
       <JsonViewer open={jsonData.open} title={jsonData.title} data={jsonData.data} onClose={() => setJsonData({ open: false, title: '', data: null })} />
       <ConfirmDialog open={confirm.open} title={confirm.title} message={confirm.message} resourceName={confirm.resourceName} danger requireDeleteConfirm onConfirm={confirm.onConfirm} onCancel={() => setConfirm(c => ({ ...c, open: false }))} />
 
-      {loading && items.length === 0 && <p className="text-dim">{t('Loading...')}</p>}
-      {!loading && items.length === 0 && <p className="text-dim">{t('No tenants found.')}</p>}
-
-      {items.length > 0 && (
-        <>
-          <Pagination pageNumber={currentPage} pageSize={pageSize} totalPages={totalPages} totalRecords={sorted.length}
-            onPageChange={p => setPageNumber(p)} onPageSizeChange={s => { setPageSize(s); setPageNumber(1); }} />
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th className="col-checkbox"><input aria-label={t('Select all tenants')} type="checkbox" checked={allSelected} onChange={e => e.target.checked ? setSelected(filtered.map(tenant => tenant.id)) : setSelected([])} title={t('Select all tenants')} /></th>
-                  <th className="sortable" onClick={() => handleSort('name')}>{t('Name')}{sortIcon('name')}</th>
-                  <th>{t('ID')}</th>
-                  <th className="sortable" onClick={() => handleSort('active')}>{t('Active')}{sortIcon('active')}</th>
-                  <th className="sortable" onClick={() => handleSort('createdUtc')}>{t('Created')}{sortIcon('createdUtc')}</th>
-                  <th>{t('Last Updated')}</th>
-                  <th className="text-right">{t('Actions')}</th>
-                </tr>
-                <tr className="column-filter-row">
-                  <td></td>
-                  <td><input type="text" className="col-filter" value={colFilters.name} onChange={e => { setColFilters({ name: e.target.value }); setPageNumber(1); }} placeholder={t('Search...')} /></td>
-                  <td></td><td></td><td></td><td></td><td></td>
-                </tr>
-              </thead>
-              <tbody>
-                {paginated.map(tenant => (
-                  <tr
-                    key={tenant.id}
-                    className="clickable"
-                    onClick={() => isAdmin && !remoteProxyMode
-                      ? openEdit(tenant)
-                      : setJsonData({ open: true, title: `${t('Tenant')}: ${tenant.name}`, data: tenant })}
-                  >
-                    <td className="col-checkbox" onClick={e => e.stopPropagation()}><input aria-label={t('Select this tenant')} type="checkbox" checked={selected.includes(tenant.id)} onChange={() => toggleSelect(tenant.id)} title={t('Select this tenant')} /></td>
-                    <td><strong>{tenant.name}</strong></td>
-                    <td className="mono text-dim table-id-cell">
-                      <span className="id-display">
-                        <span className="id-value" title={tenant.id}>{tenant.id}</span>
-                        <CopyButton text={tenant.id} onClick={e => e.stopPropagation()} />
-                      </span>
-                    </td>
-                    <td>{tenant.active ? t('Yes') : t('No')}</td>
-                    <td className="text-dim" title={formatDateTime(tenant.createdUtc)}>{formatRelativeTime(tenant.createdUtc)}</td>
-                    <td className="text-dim" title={formatDateTime(tenant.lastUpdateUtc)}>{formatRelativeTime(tenant.lastUpdateUtc)}</td>
-                    <td className="text-right" onClick={e => e.stopPropagation()}>
-                      <ActionMenu id={tenant.id} items={[
-                        ...(isAdmin && !remoteProxyMode ? [{ label: 'Edit', onClick: () => openEdit(tenant) }] : []),
-                        { label: 'View JSON', onClick: () => setJsonData({ open: true, title: `${t('Tenant')}: ${tenant.name}`, data: tenant }) },
-                        ...(isAdmin && !remoteProxyMode ? [{ label: 'Delete', danger: true as const, onClick: () => handleDelete(tenant.id, tenant.name) }] : []),
-                      ]} />
-                    </td>
-                  </tr>
-                ))}
-                {paginated.length === 0 && <tr><td colSpan={7} className="text-dim">{t('No tenants match filters.')}</td></tr>}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
+      <DataTable
+        tableKey="tenants"
+        columns={columns}
+        rows={paginated}
+        rowKey={(tenant) => tenant.id}
+        onRowClick={(tenant) => (isAdmin && !remoteProxyMode
+          ? openEdit(tenant)
+          : setJsonData({ open: true, title: `${t('Tenant')}: ${tenant.name}`, data: tenant }))}
+        sort={{ field: sortField, dir: sortDir, onSort: (f) => handleSort(f as SortField) }}
+        pagination={{
+          pageNumber: currentPage, pageSize, totalPages, totalRecords: sorted.length,
+          onPageChange: (p) => setPageNumber(p),
+          onPageSizeChange: (s) => { setPageSize(s); setPageNumber(1); },
+        }}
+        autoRefresh={{ seconds: refreshSeconds, onChange: setRefreshSeconds }}
+        onRefresh={load}
+        refreshTitle="Refresh tenants"
+        selection={{
+          isSelected: (tenant) => selected.includes(tenant.id),
+          onToggle: (tenant) => toggleSelect(tenant.id),
+          allSelected,
+          onToggleAll: (checked) => (checked ? setSelected(filtered.map(tenant => tenant.id)) : setSelected([])),
+          selectAllLabel: t('Select all tenants'),
+          rowLabel: () => t('Select this tenant'),
+        }}
+        emptyMessage={t('No tenants match filters.')}
+        placeholder={items.length > 0 ? undefined : loading
+          ? <p className="text-dim">{t('Loading...')}</p>
+          : <p className="text-dim">{t('No tenants found.')}</p>}
+      />
     </div>
   );
 }

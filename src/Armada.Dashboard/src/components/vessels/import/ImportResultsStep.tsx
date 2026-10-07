@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import type { VesselImportBatch, VesselImportItem, VesselImportOutcome } from '../../../types/models';
 import { useLocale } from '../../../context/LocaleContext';
 import CodeStatusBadge from '../../shared/CodeStatusBadge';
-import Pagination from '../../shared/Pagination';
+import DataTable from '../../shared/DataTable';
 import { OUTCOMES, OUTCOME_META, batchStatusBadge, outcomeBadge, outcomeReasonLabel } from '../../../lib/vesselImportLabels';
 
 interface ImportResultsStepProps {
@@ -82,48 +82,48 @@ export default function ImportResultsStep({ batch, items, selectedCount, polling
               </button>
             ))}
           </div>
-          <Pagination
-            pageNumber={page}
-            pageSize={pageSize}
-            totalPages={totalPages}
-            totalRecords={filtered.length}
-            onPageChange={setPageNumber}
-            onPageSizeChange={(s) => { setPageSize(s); setPageNumber(1); }}
-          />
-          <div className="table-wrap import-table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th scope="col">{t('Name')}</th>
-                  <th scope="col">{t('Outcome')}</th>
-                  <th scope="col">{t('Reason')}</th>
-                  <th scope="col">{t('Path')}</th>
-                  <th scope="col">{t('Vessel')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visible.map((item) => {
-                  const badge = outcomeBadge(t, item.outcome);
+          <DataTable
+            tableKey="vessel-import-results"
+            wrapClassName="import-table-wrap"
+            rows={visible}
+            rowKey={(item) => item.id || item.path}
+            pagination={{
+              pageNumber: page,
+              pageSize,
+              totalPages,
+              totalRecords: filtered.length,
+              onPageChange: setPageNumber,
+              onPageSizeChange: (size) => { setPageSize(size); setPageNumber(1); },
+            }}
+            emptyMessage={t('No items match the current filter.')}
+            columns={[
+              { key: 'name', label: t('Name'), required: true, render: (item) => <strong data-i18n-skip="true">{item.proposedName}</strong> },
+              { key: 'outcome', label: t('Outcome'), cellClassName: 'cell-nowrap', render: (item) => <CodeStatusBadge {...outcomeBadge(t, item.outcome)} /> },
+              {
+                // The outcome message used to be a second line under the reason; it is in the tooltip and its own
+                // (hidden by default) column now.
+                key: 'reason', label: t('Reason'),
+                cellTitle: (item) => item.outcomeMessage || undefined,
+                render: (item) => outcomeReasonLabel(t, item.outcomeReason) || <span className="text-dim">-</span>,
+              },
+              {
+                key: 'message', label: t('Message'), defaultHidden: true, cellClassName: 'text-dim truncate-cell',
+                cellTitle: (item) => item.outcomeMessage || undefined,
+                render: (item) => (item.outcomeMessage ? <span className="truncate-text" data-i18n-skip="true">{item.outcomeMessage}</span> : '-'),
+              },
+              {
+                key: 'path', label: t('Path'), cellClassName: 'mono', cellTitle: (item) => item.path,
+                render: (item) => <span className="cell-clip" data-i18n-skip="true"><span>{item.path}</span></span>,
+              },
+              {
+                key: 'vessel', label: t('Vessel'), interactive: true,
+                render: (item) => {
                   const vesselId = item.vesselId ?? item.existingVesselId;
-                  return (
-                    <tr key={item.id || item.path}>
-                      <td><strong data-i18n-skip="true">{item.proposedName}</strong></td>
-                      <td><CodeStatusBadge {...badge} /></td>
-                      <td>
-                        {outcomeReasonLabel(t, item.outcomeReason) || <span className="text-dim">-</span>}
-                        {item.outcomeMessage && <div className="text-dim cell-subline" data-i18n-skip="true">{item.outcomeMessage}</div>}
-                      </td>
-                      <td className="mono" title={item.path} data-i18n-skip="true"><span className="cell-clip"><span>{item.path}</span></span></td>
-                      <td>
-                        {vesselId ? <Link to={`/vessels/${vesselId}`} className="mono">{vesselId}</Link> : <span className="text-dim">-</span>}
-                      </td>
-                    </tr>
-                  );
-                })}
-                {visible.length === 0 && <tr><td colSpan={5} className="text-dim">{t('No items match the current filter.')}</td></tr>}
-              </tbody>
-            </table>
-          </div>
+                  return vesselId ? <Link to={`/vessels/${vesselId}`} className="mono">{vesselId}</Link> : <span className="text-dim">-</span>;
+                },
+              },
+            ]}
+          />
         </>
       )}
       {items.length === 0 && !polling && <p className="text-dim">{t('This batch has no items.')}</p>}

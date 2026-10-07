@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import RequestHistory from './RequestHistory';
 import {
@@ -289,5 +289,32 @@ describe('RequestHistory', () => {
         },
       });
     });
+  });
+
+  it('renders the table toolbar with refresh controls, a column chooser with locked identity columns, and one-line cells', async () => {
+    const { container } = render(
+      <MemoryRouter initialEntries={['/requests']}>
+        <Routes>
+          <Route path="/requests" element={<RequestHistory />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    const route = await screen.findByText('/api/v1/missions');
+    // Refresh and auto-refresh live in the table toolbar row, not the page header.
+    const bar = container.querySelector('.data-table .pagination-bar') as HTMLElement;
+    expect(within(bar).getByLabelText('Auto-refresh interval')).toBeInTheDocument();
+    expect(within(bar).getByTitle('Refresh request data')).toBeInTheDocument();
+    expect(container.querySelector('.page-header .auto-refresh-select')).toBeNull();
+    // Regression: duration and payload sizes stay on one line; the route truncates with its full value in the title.
+    const table = screen.getByRole('table');
+    expect(within(table).getByText('18.25 ms').closest('td')).toHaveClass('cell-nowrap');
+    expect(within(table).getByText(/ \/ /).closest('td')).toHaveClass('cell-nowrap');
+    expect(route.closest('td')).toHaveAttribute('title', '/api/v1/missions');
+
+    await act(async () => { fireEvent.click(within(bar).getByRole('button', { name: /^Columns/ })); });
+    const menu = screen.getByRole('menu', { name: 'Choose visible columns' });
+    expect(within(menu).getByRole('menuitemcheckbox', { name: /^When/ })).toHaveAttribute('aria-disabled', 'true');
+    expect(within(menu).getByRole('menuitemcheckbox', { name: /^Route/ })).toHaveAttribute('aria-disabled', 'true');
+    expect(within(menu).getByRole('menuitemcheckbox', { name: /^Principal/ })).not.toHaveAttribute('aria-disabled');
   });
 });

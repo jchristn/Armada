@@ -7,19 +7,17 @@ import {
   listVessels, listCaptains, listVoyages,
 } from '../api/client';
 import type { MissionSummary, Vessel, Captain, Voyage, MissionMode } from '../types/models';
-import Pagination from '../components/shared/Pagination';
+import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
 import LoadingIndicator from '../components/shared/LoadingIndicator';
 import ActionMenu from '../components/shared/ActionMenu';
 import StatusBadge from '../components/shared/StatusBadge';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import JsonViewer from '../components/shared/JsonViewer';
 import PageHeader from '../components/shared/PageHeader';
-import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import DiffViewer from '../components/shared/DiffViewer';
 import LogViewer from '../components/shared/LogViewer';
 import ErrorModal from '../components/shared/ErrorModal';
-import RefreshButton from '../components/shared/RefreshButton';
 import UserScopeFilter from '../components/shared/UserScopeFilter';
 import CopyButton from '../components/shared/CopyButton';
 import { useLocale } from '../context/LocaleContext';
@@ -153,10 +151,6 @@ export default function Missions() {
     else { setSortField(field); setSortDir('asc'); }
   }
 
-  function sortIcon(field: SortField) {
-    if (sortField !== field) return '';
-    return sortDir === 'asc' ? ' \u25B2' : ' \u25BC';
-  }
 
   // Selection
   const allSelected = selected.length > 0 && selected.length === sorted.length;
@@ -289,6 +283,77 @@ export default function Missions() {
     } catch { setError(t('Transition failed.')); }
   }
 
+  const columns: DataTableColumn<MissionSummary>[] = [
+    {
+      key: 'title', label: t('Title'), required: true, sortKey: 'title', headerTitle: t('Mission title -- click to sort'),
+      cellClassName: 'cell-title', cellTitle: (m) => m.title,
+      filter: <input type="text" className="col-filter" aria-label={t('Filter by title')} value={colFilters.title} onChange={e => setColFilters(f => ({ ...f, title: e.target.value }))} placeholder={t('Search...')} />,
+      render: (m) => <strong className="line-clamp-2">{m.title}</strong>,
+    },
+    {
+      key: 'id', label: t('ID'), required: true, cellClassName: 'mono text-dim table-id-cell',
+      render: (m) => (
+        <span className="id-display">
+          <span className="id-value" title={m.id}>{m.id}</span>
+          <CopyButton text={m.id} onClick={e => e.stopPropagation()} />
+        </span>
+      ),
+    },
+    {
+      key: 'status', label: t('Status'), sortKey: 'status', headerTitle: t('Status -- click to sort'), cellClassName: 'cell-nowrap',
+      clearFilter: () => setColFilters(f => ({ ...f, status: '' })),
+      filter: <input type="text" className="col-filter" aria-label={t('Filter by status')} value={colFilters.status} onChange={e => setColFilters(f => ({ ...f, status: e.target.value }))} placeholder={t('Search...')} />,
+      render: (m) => <StatusBadge status={m.status} />,
+    },
+    { key: 'priority', label: t('Priority'), sortKey: 'priority', headerTitle: t('Priority -- click to sort'), render: (m) => m.priority },
+    {
+      key: 'vessel', label: t('Vessel'), interactive: true,
+      render: (m) => m.vesselId ? (
+        <a href="#" onClick={e => { e.preventDefault(); navigate(`/vessels/${m.vesselId}`); }}>{vesselName(m.vesselId)}</a>
+      ) : '-',
+    },
+    {
+      key: 'captain', label: t('Captain'), interactive: true,
+      render: (m) => m.captainId ? (
+        <a href="#" onClick={e => { e.preventDefault(); navigate(`/captains/${m.captainId}`); }}>{captainName(m.captainId)}</a>
+      ) : '-',
+    },
+    {
+      key: 'voyage', label: t('Voyage'), interactive: true,
+      render: (m) => m.voyageId ? (
+        <span className="cell-clip mono"><a href="#" title={m.voyageId} onClick={e => { e.preventDefault(); navigate(`/voyages/${m.voyageId}`); }}>{m.voyageId}</a></span>
+      ) : '-',
+    },
+    {
+      key: 'branch', label: t('Branch'), cellClassName: 'mono text-dim table-url-cell', cellTitle: (m) => m.branchName || '',
+      clearFilter: () => setColFilters(f => ({ ...f, branch: '' })),
+      filter: <input type="text" className="col-filter" aria-label={t('Filter by branch')} value={colFilters.branch} onChange={e => setColFilters(f => ({ ...f, branch: e.target.value }))} placeholder={t('Search...')} />,
+      render: (m) => m.branchName ? (
+        <span className="id-display">
+          <span className="url-value">{m.branchName}</span>
+          <CopyButton text={m.branchName} onClick={e => e.stopPropagation()} title="Copy branch" />
+        </span>
+      ) : '-',
+    },
+    {
+      key: 'actions', label: t('Actions'), fixed: true, interactive: true, className: 'text-right',
+      render: (m) => (
+        <ActionMenu id={`mission-${m.id}`} items={[
+          { label: 'View Detail', onClick: () => navigate(`/missions/${m.id}`) },
+          { label: 'Edit', onClick: () => navigate(`/missions/${m.id}`) },
+          { label: 'Restart', onClick: () => handleRestart(m) },
+          ...((m.status === 'WorkProduced' || m.status === 'LandingFailed') ? [{ label: 'Retry Landing', onClick: () => handleRetryLanding(m) }] : []),
+          { label: 'View Diff', onClick: () => handleViewDiff(m.id) },
+          { label: 'View Log', onClick: () => handleViewLog(m.id, `${t('Log')}: ${m.title}`) },
+          { label: 'Transition Status', onClick: () => { setTransitionModal({ missionId: m.id, currentStatus: m.status }); setTransitionTarget(''); } },
+          { label: 'View JSON', onClick: () => setJsonData({ open: true, title: `${t('Mission')}: ${m.title}`, data: m }) },
+          { label: 'Cancel', danger: true, onClick: () => handleDelete(m.id, m.title) },
+          { label: 'Purge (permanent)', danger: true, onClick: () => handlePurge(m.id, m.title) },
+        ]} />
+      ),
+    },
+  ];
+
   return (
     <div>
       <PageHeader
@@ -301,8 +366,6 @@ export default function Missions() {
               {MISSION_STATUSES.map(s => <option key={s} value={s}>{t(s)}</option>)}
             </select>
             <UserScopeFilter value={userScope} onChange={(id) => { setUserScope(id); setPageNumber(1); }} />
-            <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
-            <RefreshButton onRefresh={load} title="Refresh mission data" />
             {selected.length > 0 && (
               <button className="btn btn-sm btn-danger" onClick={handleBulkDelete}>
                 {t('Delete Selected')} ({selected.length})
@@ -379,119 +442,34 @@ export default function Missions() {
         onLineCountChange={logModal ? (lines) => handleViewLog(logModal.missionId, logModal.title, lines) : undefined}
       />
 
-      {loading && missions.length === 0 && <LoadingIndicator fullHeight label={t('Loading missions...')} />}
-      {!loading && missions.length === 0 && <p className="text-dim">{t('No missions found.')}</p>}
-
-      {missions.length > 0 && (
-        <>
-          <Pagination pageNumber={pageNumber} pageSize={pageSize} totalPages={totalPages}
-            totalRecords={totalRecords}
-            onPageChange={p => setPageNumber(p)} onPageSizeChange={s => { setPageSize(s); setPageNumber(1); }} />
-
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th className="col-checkbox">
-                    <input aria-label={t('Select all missions')} type="checkbox" checked={allSelected} onChange={e => e.target.checked ? selectAll() : clearSelection()} title={t('Select all missions')} />
-                  </th>
-                  <th className="sortable" onClick={() => handleSort('title')} title={t('Mission title -- click to sort')}>
-                    {t('Title')}{sortIcon('title')}
-                  </th>
-                  <th>{t('ID')}</th>
-                  <th className="sortable" onClick={() => handleSort('status')} title={t('Status -- click to sort')}>
-                    {t('Status')}{sortIcon('status')}
-                  </th>
-                  <th className="sortable" onClick={() => handleSort('priority')} title={t('Priority -- click to sort')}>
-                    {t('Priority')}{sortIcon('priority')}
-                  </th>
-                  <th>{t('Vessel')}</th>
-                  <th>{t('Captain')}</th>
-                  <th>{t('Voyage')}</th>
-                  <th>{t('Branch')}</th>
-                  <th className="text-right">{t('Actions')}</th>
-                </tr>
-                <tr className="column-filter-row">
-                  <td></td>
-                  <td><input type="text" className="col-filter" value={colFilters.title} onChange={e => setColFilters(f => ({ ...f, title: e.target.value }))} placeholder={t('Search...')} /></td>
-                  <td></td>
-                  <td><input type="text" className="col-filter" value={colFilters.status} onChange={e => setColFilters(f => ({ ...f, status: e.target.value }))} placeholder={t('Search...')} /></td>
-                  <td></td>
-                  <td></td>
-                  <td></td>
-                  <td></td>
-                  <td><input type="text" className="col-filter" value={colFilters.branch} onChange={e => setColFilters(f => ({ ...f, branch: e.target.value }))} placeholder={t('Search...')} /></td>
-                  <td></td>
-                </tr>
-              </thead>
-              <tbody>
-                {sorted.map(m => (
-                  <tr key={m.id} className="clickable" onClick={() => navigate(`/missions/${m.id}`)}>
-                    <td className="col-checkbox" onClick={e => e.stopPropagation()}>
-                      <input aria-label={t('Select this mission')} type="checkbox" checked={selected.includes(m.id)} onChange={() => toggleSelect(m.id)} title={t('Select this mission')} />
-                    </td>
-                    <td className="cell-title" title={m.title}>
-                      <strong className="line-clamp-2">
-                        {m.title}
-                      </strong>
-                    </td>
-                    <td className="mono text-dim table-id-cell">
-                      <span className="id-display">
-                        <span className="id-value" title={m.id}>{m.id}</span>
-                        <CopyButton text={m.id} onClick={e => e.stopPropagation()} />
-                      </span>
-                    </td>
-                    <td>
-                      <StatusBadge status={m.status} />
-                    </td>
-                    <td>{m.priority}</td>
-                    <td onClick={e => e.stopPropagation()}>
-                      {m.vesselId ? (
-                        <a href="#" onClick={e => { e.preventDefault(); navigate(`/vessels/${m.vesselId}`); }}>{vesselName(m.vesselId)}</a>
-                      ) : '-'}
-                    </td>
-                    <td onClick={e => e.stopPropagation()}>
-                      {m.captainId ? (
-                        <a href="#" onClick={e => { e.preventDefault(); navigate(`/captains/${m.captainId}`); }}>{captainName(m.captainId)}</a>
-                      ) : '-'}
-                    </td>
-                    <td onClick={e => e.stopPropagation()}>
-                      {m.voyageId ? (
-                          <span className="cell-clip mono"><a href="#" title={m.voyageId} onClick={e => { e.preventDefault(); navigate(`/voyages/${m.voyageId}`); }}>{m.voyageId}</a></span>
-                      ) : '-'}
-                    </td>
-                    <td className="mono text-dim table-url-cell" title={m.branchName || ''}>
-                      {m.branchName ? (
-                        <span className="id-display">
-                          <span className="url-value">{m.branchName}</span>
-                          <CopyButton text={m.branchName} onClick={e => e.stopPropagation()} title="Copy branch" />
-                        </span>
-                      ) : '-'}
-                    </td>
-                    <td className="text-right" onClick={e => e.stopPropagation()}>
-                      <ActionMenu id={`mission-${m.id}`} items={[
-                        { label: 'View Detail', onClick: () => navigate(`/missions/${m.id}`) },
-                        { label: 'Edit', onClick: () => navigate(`/missions/${m.id}`) },
-                        { label: 'Restart', onClick: () => handleRestart(m) },
-                        ...((m.status === 'WorkProduced' || m.status === 'LandingFailed') ? [{ label: 'Retry Landing', onClick: () => handleRetryLanding(m) }] : []),
-                        { label: 'View Diff', onClick: () => handleViewDiff(m.id) },
-                        { label: 'View Log', onClick: () => handleViewLog(m.id, `${t('Log')}: ${m.title}`) },
-                        { label: 'Transition Status', onClick: () => { setTransitionModal({ missionId: m.id, currentStatus: m.status }); setTransitionTarget(''); } },
-                        { label: 'View JSON', onClick: () => setJsonData({ open: true, title: `${t('Mission')}: ${m.title}`, data: m }) },
-                        { label: 'Cancel', danger: true, onClick: () => handleDelete(m.id, m.title) },
-                        { label: 'Purge (permanent)', danger: true, onClick: () => handlePurge(m.id, m.title) },
-                      ]} />
-                    </td>
-                  </tr>
-                ))}
-                {sorted.length === 0 && (
-                  <tr><td colSpan={13} className="text-dim">{t('No missions match the current filters.')}</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
+      <DataTable
+        tableKey="missions"
+        columns={columns}
+        rows={sorted}
+        rowKey={(m) => m.id}
+        onRowClick={(m) => navigate(`/missions/${m.id}`)}
+        sort={{ field: sortField, dir: sortDir, onSort: (f) => handleSort(f as SortField) }}
+        pagination={{
+          pageNumber, pageSize, totalPages, totalRecords,
+          onPageChange: (p) => setPageNumber(p),
+          onPageSizeChange: (s) => { setPageSize(s); setPageNumber(1); },
+        }}
+        autoRefresh={{ seconds: refreshSeconds, onChange: setRefreshSeconds }}
+        onRefresh={load}
+        refreshTitle="Refresh mission data"
+        selection={{
+          isSelected: (m) => selected.includes(m.id),
+          onToggle: (m) => toggleSelect(m.id),
+          allSelected,
+          onToggleAll: (checked) => (checked ? selectAll() : clearSelection()),
+          selectAllLabel: t('Select all missions'),
+          rowLabel: () => t('Select this mission'),
+        }}
+        emptyMessage={t('No missions match the current filters.')}
+        placeholder={missions.length > 0 ? undefined : loading
+          ? <LoadingIndicator fullHeight label={t('Loading missions...')} />
+          : <p className="text-dim">{t('No missions found.')}</p>}
+      />
     </div>
   );
 }

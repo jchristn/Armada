@@ -93,4 +93,25 @@ describe('PlanningSessionListCard', () => {
     expect(onDeleteSession).toHaveBeenCalledTimes(1);
     expect(onlyCallArgs(onDeleteSession)[0].id).toBe('psn_active');
   });
+
+  it('shows the session ID in its own one-line column instead of a second line under the title', async () => {
+    const user = userEvent.setup();
+    renderCard();
+    await user.click(screen.getByRole('button', { name: /Recent Sessions/ }));
+    const titleCell = screen.getByText('Active planning session').closest('td') as HTMLElement;
+    expect(titleCell).not.toHaveTextContent('psn_active');
+    const idCell = screen.getByTitle('psn_active').closest('td') as HTMLElement;
+    expect(idCell).toHaveAttribute('data-col', 'id');
+  });
+
+  it('offers a column chooser with the title and ID locked', async () => {
+    const user = userEvent.setup();
+    renderCard();
+    await user.click(screen.getByRole('button', { name: /Recent Sessions/ }));
+    await user.click(screen.getByRole('button', { name: /^Columns/ }));
+    expect(screen.getByRole('menuitemcheckbox', { name: /Title/ })).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByRole('menuitemcheckbox', { name: /^\W*ID/ })).toHaveAttribute('aria-disabled', 'true');
+    await user.click(screen.getByRole('menuitemcheckbox', { name: /Pipeline/ }));
+    expect(screen.queryByRole('columnheader', { name: 'Pipeline' })).not.toBeInTheDocument();
+  });
 });

@@ -8,9 +8,8 @@ import ActionMenu from '../components/shared/ActionMenu';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import ErrorModal from '../components/shared/ErrorModal';
 import JsonViewer from '../components/shared/JsonViewer';
-import RefreshButton from '../components/shared/RefreshButton';
+import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
 import PageHeader from '../components/shared/PageHeader';
-import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import { canDeleteHistoryEntry } from '../lib/history';
 
@@ -375,6 +374,45 @@ export default function History() {
     }
   }
 
+  const columns: DataTableColumn<HistoricalTimelineEntry>[] = [
+    {
+      key: 'when', label: t('When'), cellClassName: 'text-dim cell-nowrap',
+      cellTitle: (entry) => formatDateTime(entry.occurredUtc),
+      render: (entry) => formatRelativeTime(entry.occurredUtc),
+    },
+    {
+      key: 'title', label: t('Title'), required: true,
+      // One line: the description is in the tooltip and in the optional Description column.
+      cellTitle: (entry) => [entry.title, entry.description].filter(Boolean).join('\n'),
+      render: (entry) => <strong className="cell-one-line">{entry.title}</strong>,
+    },
+    {
+      key: 'description', label: t('Description'), defaultHidden: true, cellClassName: 'text-dim',
+      render: (entry) => <span className="cell-one-line" title={entry.description || undefined}>{entry.description || '-'}</span>,
+    },
+    { key: 'source', label: t('Source'), cellClassName: 'cell-nowrap', render: (entry) => <span className="tag">{entry.sourceType}</span> },
+    {
+      key: 'status', label: t('Status'), cellClassName: 'cell-nowrap',
+      render: (entry) => (entry.status ? <span className={`tag ${severityClass(entry.severity)}`.trim()}>{entry.status}</span> : <span className="text-dim">-</span>),
+    },
+    { key: 'actor', label: t('Actor'), cellClassName: 'text-dim', render: (entry) => entry.actorDisplay || '-' },
+    { key: 'vessel', label: t('Vessel'), cellClassName: 'text-dim', render: (entry) => (entry.vesselId ? (vesselMap.get(entry.vesselId) || entry.vesselId) : '-') },
+    {
+      key: 'actions', label: t('Actions'), fixed: true, interactive: true, className: 'text-right',
+      render: (entry) => (
+        <ActionMenu
+          id={`history-${entry.id}`}
+          items={[
+            ...(entry.route ? [{ label: 'View', onClick: () => navigate(entry.route as string) }] : []),
+            ...(entry.metadataJson ? [{ label: 'View JSON', onClick: () => openMetadata(entry) }] : []),
+            ...(entry.vesselId ? [{ label: 'Open Workspace', onClick: () => navigate(`/workspace/${entry.vesselId}`) }] : []),
+            ...(canDeleteEntry(entry) ? [{ label: 'Delete', danger: true, onClick: () => setConfirmDelete(entry) }] : []),
+          ]}
+        />
+      ),
+    },
+  ];
+
   return (
     <div>
       <PageHeader
@@ -394,8 +432,6 @@ export default function History() {
             <button className="btn btn-sm" disabled={exporting !== null} onClick={() => exportCurrentView('md')}>
               {exporting === 'md' ? t('Exporting...') : t('Export Markdown')}
             </button>
-            <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
-            <RefreshButton onRefresh={load} title={t('Refresh history')} />
           </>
         )}
       />
@@ -520,60 +556,23 @@ export default function History() {
         )}
       </div>
 
-      {loading ? (
-        <p className="text-dim">{t('Loading...')}</p>
-      ) : entries.length === 0 ? (
-        <div className="playbook-empty-state">
-          <strong>{t('No history entries match the current filters.')}</strong>
-          <span>{t('Try broadening the filters or refresh after running additional work in Armada.')}</span>
-        </div>
-      ) : (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>{t('When')}</th>
-                <th>{t('Title')}</th>
-                <th>{t('Source')}</th>
-                <th>{t('Status')}</th>
-                <th>{t('Actor')}</th>
-                <th>{t('Vessel')}</th>
-                <th className="text-right">{t('Actions')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {entries.map((entry) => (
-                <tr
-                  key={entry.id}
-                  className={entry.route ? 'clickable' : undefined}
-                  onClick={entry.route ? () => navigate(entry.route as string) : undefined}
-                >
-                  <td className="text-dim" title={formatDateTime(entry.occurredUtc)} style={{ whiteSpace: 'nowrap' }}>{formatRelativeTime(entry.occurredUtc)}</td>
-                  <td>
-                    <strong>{entry.title}</strong>
-                    {entry.description && <div className="text-dim" style={{ fontSize: '0.8rem', marginTop: '0.15rem' }}>{entry.description}</div>}
-                  </td>
-                  <td><span className="tag">{entry.sourceType}</span></td>
-                  <td>{entry.status ? <span className={`tag ${severityClass(entry.severity)}`.trim()}>{entry.status}</span> : <span className="text-dim">-</span>}</td>
-                  <td className="text-dim">{entry.actorDisplay || '-'}</td>
-                  <td className="text-dim">{entry.vesselId ? (vesselMap.get(entry.vesselId) || entry.vesselId) : '-'}</td>
-                  <td className="text-right" onClick={(e) => e.stopPropagation()}>
-                    <ActionMenu
-                      id={`history-${entry.id}`}
-                      items={[
-                        ...(entry.route ? [{ label: 'View', onClick: () => navigate(entry.route as string) }] : []),
-                        ...(entry.metadataJson ? [{ label: 'View JSON', onClick: () => openMetadata(entry) }] : []),
-                        ...(entry.vesselId ? [{ label: 'Open Workspace', onClick: () => navigate(`/workspace/${entry.vesselId}`) }] : []),
-                        ...(canDeleteEntry(entry) ? [{ label: 'Delete', danger: true, onClick: () => setConfirmDelete(entry) }] : []),
-                      ]}
-                    />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <DataTable
+        tableKey="history"
+        columns={columns}
+        rows={entries}
+        rowKey={(entry) => entry.id}
+        onRowClick={(entry) => { if (entry.route) navigate(entry.route); }}
+        isRowClickable={(entry) => Boolean(entry.route)}
+        autoRefresh={{ seconds: refreshSeconds, onChange: setRefreshSeconds }}
+        onRefresh={load}
+        refreshTitle={t('Refresh history')}
+        placeholder={loading ? <p className="text-dim">{t('Loading...')}</p> : entries.length === 0 ? (
+          <div className="playbook-empty-state">
+            <strong>{t('No history entries match the current filters.')}</strong>
+            <span>{t('Try broadening the filters or refresh after running additional work in Armada.')}</span>
+          </div>
+        ) : undefined}
+      />
 
       <ConfirmDialog
         open={!!confirmDelete}

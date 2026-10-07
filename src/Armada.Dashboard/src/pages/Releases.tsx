@@ -9,8 +9,8 @@ import ActionMenu from '../components/shared/ActionMenu';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import ErrorModal from '../components/shared/ErrorModal';
 import JsonViewer from '../components/shared/JsonViewer';
-import RefreshButton from '../components/shared/RefreshButton';
-import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
+import CopyButton from '../components/shared/CopyButton';
+import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
 import PageHeader from '../components/shared/PageHeader';
 import StatusBadge from '../components/shared/StatusBadge';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
@@ -193,6 +193,73 @@ export default function Releases() {
     });
   }
 
+  function linkedWork(release: Release): string {
+    return `${release.voyageIds.length} ${t('voyages')}, ${release.missionIds.length} ${t('missions')}, ${release.checkRunIds.length} ${t('checks')}, ${release.artifacts.length} ${t('artifacts')}`;
+  }
+
+  const columns: DataTableColumn<Release>[] = [
+    {
+      key: 'title', label: t('Release'), required: true,
+      filter: <input type="text" className="col-filter" aria-label={t('Filter by title')} value={colFilters.title} onChange={e => setColFilters(f => ({ ...f, title: e.target.value }))} placeholder={t('Filter...')} />,
+      // One line: version, tag and summary have their own columns; the summary is also in the tooltip.
+      cellTitle: (release) => [release.title, release.summary].filter(Boolean).join('\n'),
+      render: (release) => <strong className="cell-one-line">{release.title}</strong>,
+    },
+    {
+      key: 'id', label: t('ID'), required: true, cellClassName: 'mono text-dim table-id-cell',
+      render: (release) => (
+        <span className="id-display">
+          <span className="id-value" title={release.id}>{release.id}</span>
+          <CopyButton text={release.id} onClick={e => e.stopPropagation()} />
+        </span>
+      ),
+    },
+    {
+      key: 'version', label: t('Version'), cellClassName: 'mono text-dim',
+      cellTitle: (release) => release.tagName || undefined,
+      render: (release) => <span className="cell-one-line">{release.version || t('Unversioned')}</span>,
+    },
+    {
+      key: 'tag', label: t('Tag'), defaultHidden: true, cellClassName: 'mono text-dim',
+      render: (release) => <span className="cell-one-line" title={release.tagName || undefined}>{release.tagName || '-'}</span>,
+    },
+    { key: 'status', label: t('Status'), cellClassName: 'cell-nowrap', render: (release) => <StatusBadge status={release.status} /> },
+    { key: 'vessel', label: t('Vessel'), cellClassName: 'text-dim', render: (release) => (release.vesselId ? (vesselMap.get(release.vesselId) || release.vesselId) : '-') },
+    { key: 'workflow', label: t('Workflow'), cellClassName: 'text-dim', render: (release) => (release.workflowProfileId ? (profileMap.get(release.workflowProfileId) || release.workflowProfileId) : t('Resolved default')) },
+    {
+      key: 'linkedWork', label: t('Linked Work'), cellClassName: 'text-dim',
+      render: (release) => <span className="cell-one-line" title={linkedWork(release)}>{linkedWork(release)}</span>,
+    },
+    {
+      key: 'summary', label: t('Summary'), defaultHidden: true, cellClassName: 'text-dim',
+      render: (release) => <span className="cell-one-line" title={release.summary || undefined}>{release.summary || '-'}</span>,
+    },
+    {
+      key: 'published', label: t('Published'), cellClassName: 'text-dim cell-nowrap',
+      cellTitle: (release) => (release.publishedUtc ? formatDateTime(release.publishedUtc) : ''),
+      render: (release) => (release.publishedUtc ? formatRelativeTime(release.publishedUtc) : '-'),
+    },
+    {
+      key: 'lastUpdated', label: t('Last Updated'), cellClassName: 'text-dim cell-nowrap',
+      cellTitle: (release) => formatDateTime(release.lastUpdateUtc),
+      render: (release) => formatRelativeTime(release.lastUpdateUtc),
+    },
+    {
+      key: 'actions', label: t('Actions'), fixed: true, interactive: true, className: 'text-right',
+      render: (release) => (
+        <ActionMenu
+          id={`release-${release.id}`}
+          items={[
+            { label: 'Open', onClick: () => navigate(`/releases/${release.id}`) },
+            ...(canManage ? [{ label: 'Edit', onClick: () => openEdit(release) }] : []),
+            { label: 'View JSON', onClick: () => setJsonData({ open: true, title: release.title, data: release }) },
+            ...(canManage ? [{ label: 'Delete', danger: true as const, onClick: () => handleDelete(release) }] : []),
+          ]}
+        />
+      ),
+    },
+  ];
+
   return (
     <div>
       <PageHeader
@@ -200,8 +267,6 @@ export default function Releases() {
         subtitle={t('First-class release records that bundle versions, notes, linked voyages and missions, structured checks, and derived artifacts.')}
         actions={(
           <>
-            <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
-            <RefreshButton onRefresh={load} title={t('Refresh releases')} />
             {canManage && (
               <button className="btn btn-primary" onClick={openCreate}>
                 + {t('Release')}
@@ -322,80 +387,22 @@ export default function Releases() {
         </div>
       </div>
 
-      {loading && releases.length === 0 ? (
-        <p className="text-dim">{t('Loading...')}</p>
-      ) : filtered.length === 0 ? (
-        <div className="playbook-empty-state">
-          <strong>{t('No releases match the current filters.')}</strong>
-          <span>{canManage ? t('Create a draft release from voyages, missions, or checks to begin tracking what is shipping.') : t('Ask a tenant administrator to create and manage release records.')}</span>
-        </div>
-      ) : (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>{t('Release')}</th>
-                <th>{t('Status')}</th>
-                <th>{t('Vessel')}</th>
-                <th>{t('Workflow')}</th>
-                <th>{t('Linked Work')}</th>
-                <th>{t('Published')}</th>
-                <th>{t('Last Updated')}</th>
-                <th className="text-right">{t('Actions')}</th>
-              </tr>
-              <tr className="column-filter-row">
-                <td><input type="text" className="col-filter" value={colFilters.title} onChange={e => setColFilters(f => ({ ...f, title: e.target.value }))} placeholder={t('Filter...')} /></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((release) => (
-                <tr key={release.id} className="clickable" onClick={() => canManage ? openEdit(release) : navigate(`/releases/${release.id}`)}>
-                  <td>
-                    <strong>{release.title}</strong>
-                    <div className="text-dim" style={{ marginTop: '0.2rem' }}>
-                      {release.version || t('Unversioned')} {release.tagName ? `• ${release.tagName}` : ''}
-                    </div>
-                    <div className="mono text-dim" style={{ fontSize: '0.78rem' }}>{release.id}</div>
-                    {release.summary && (
-                      <div className="text-dim" style={{ marginTop: '0.2rem' }}>{release.summary}</div>
-                    )}
-                  </td>
-                  <td><StatusBadge status={release.status} /></td>
-                  <td className="text-dim">{release.vesselId ? (vesselMap.get(release.vesselId) || release.vesselId) : '-'}</td>
-                  <td className="text-dim">{release.workflowProfileId ? (profileMap.get(release.workflowProfileId) || release.workflowProfileId) : t('Resolved default')}</td>
-                  <td className="text-dim">
-                    {`${release.voyageIds.length} ${t('voyages')}, ${release.missionIds.length} ${t('missions')}, ${release.checkRunIds.length} ${t('checks')}, ${release.artifacts.length} ${t('artifacts')}`}
-                  </td>
-                  <td className="text-dim" title={release.publishedUtc ? formatDateTime(release.publishedUtc) : ''}>
-                    {release.publishedUtc ? formatRelativeTime(release.publishedUtc) : '-'}
-                  </td>
-                  <td className="text-dim" title={formatDateTime(release.lastUpdateUtc)}>
-                    {formatRelativeTime(release.lastUpdateUtc)}
-                  </td>
-                  <td className="text-right" onClick={(event) => event.stopPropagation()}>
-                    <ActionMenu
-                      id={`release-${release.id}`}
-                      items={[
-                        { label: 'Open', onClick: () => navigate(`/releases/${release.id}`) },
-                        ...(canManage ? [{ label: 'Edit', onClick: () => openEdit(release) }] : []),
-                        { label: 'View JSON', onClick: () => setJsonData({ open: true, title: release.title, data: release }) },
-                        ...(canManage ? [{ label: 'Delete', danger: true as const, onClick: () => handleDelete(release) }] : []),
-                      ]}
-                    />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <DataTable
+        tableKey="releases"
+        columns={columns}
+        rows={filtered}
+        rowKey={(release) => release.id}
+        onRowClick={(release) => (canManage ? openEdit(release) : navigate(`/releases/${release.id}`))}
+        autoRefresh={{ seconds: refreshSeconds, onChange: setRefreshSeconds }}
+        onRefresh={load}
+        refreshTitle={t('Refresh releases')}
+        placeholder={loading && releases.length === 0 ? <p className="text-dim">{t('Loading...')}</p> : filtered.length === 0 ? (
+          <div className="playbook-empty-state">
+            <strong>{t('No releases match the current filters.')}</strong>
+            <span>{canManage ? t('Create a draft release from voyages, missions, or checks to begin tracking what is shipping.') : t('Ask a tenant administrator to create and manage release records.')}</span>
+          </div>
+        ) : undefined}
+      />
     </div>
   );
 }

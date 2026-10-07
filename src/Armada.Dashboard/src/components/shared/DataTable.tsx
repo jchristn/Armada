@@ -62,6 +62,8 @@ export interface DataTableSelection<T> {
   selectAllLabel: string;
   /** Already-translated label for a row checkbox. */
   rowLabel: (row: T) => string;
+  /** Rows for which this returns false get a disabled checkbox. Default: every row. */
+  isSelectable?: (row: T) => boolean;
 }
 
 export interface DataTableProps<T> {
@@ -71,6 +73,8 @@ export interface DataTableProps<T> {
   rows: T[];
   rowKey: (row: T) => string;
   onRowClick?: (row: T) => void;
+  /** Rows for which this returns false are not clickable (no pointer, no onRowClick). Default: all rows. */
+  isRowClickable?: (row: T) => boolean;
   rowClassName?: (row: T) => string | undefined;
   rowTitle?: (row: T) => string | undefined;
   /** Extra content rendered after a row (an expanded detail row); receives the visible column count. */
@@ -101,8 +105,8 @@ export interface DataTableProps<T> {
 }
 
 function sortIndicator(active: boolean, dir: 'asc' | 'desc'): string {
-  if (!active) return '⇅';
-  return dir === 'asc' ? '▲' : '▼';
+  if (!active) return '\u21C5';
+  return dir === 'asc' ? '\u25B2' : '\u25BC';
 }
 
 /**
@@ -116,7 +120,7 @@ function sortIndicator(active: boolean, dir: 'asc' | 'desc'): string {
  */
 export default function DataTable<T>(props: DataTableProps<T>) {
   const {
-    tableKey, columns, rows, rowKey, onRowClick, rowClassName, rowTitle, renderRowDetail, selection, sort,
+    tableKey, columns, rows, rowKey, onRowClick, isRowClickable, rowClassName, rowTitle, renderRowDetail, selection, sort,
     emptyMessage, placeholder, pagination, recordCount, autoRefresh, onRefresh, refreshTitle, toolbarExtra,
     columnsVersion = 0, className, wrapClassName, ariaLabel, busy,
   } = props;
@@ -168,7 +172,7 @@ export default function DataTable<T>(props: DataTableProps<T>) {
   const toolbar = pagination ? (
     <Pagination {...pagination} tools={hasTools ? tools : undefined} />
   ) : (count !== null || hasTools) ? (
-    <div className="pagination-bar table-toolbar">
+    <div className="pagination-bar data-table-toolbar">
       <div className="pagination-info">
         {count !== null && (
           <span className="pagination-records">
@@ -246,14 +250,16 @@ export default function DataTable<T>(props: DataTableProps<T>) {
             <tbody>
               {rows.map((row, index) => {
                 const id = rowKey(row);
-                const rowClasses = [onRowClick ? 'clickable' : '', rowClassName?.(row) ?? ''].filter(Boolean).join(' ');
+                const clickable = Boolean(onRowClick) && (isRowClickable ? isRowClickable(row) : true);
+                const rowClasses = [clickable ? 'clickable' : '', rowClassName?.(row) ?? ''].filter(Boolean).join(' ');
                 return (
                   <Fragment key={id}>
-                    <tr className={rowClasses || undefined} title={rowTitle?.(row)} onClick={onRowClick ? () => onRowClick(row) : undefined}>
+                    <tr className={rowClasses || undefined} title={rowTitle?.(row)} onClick={clickable ? () => onRowClick!(row) : undefined}>
                       {selection && (
                         <td className="col-checkbox" onClick={(e) => e.stopPropagation()}>
                           <input
                             type="checkbox"
+                            disabled={selection.isSelectable ? !selection.isSelectable(row) : undefined}
                             checked={selection.isSelected(row)}
                             aria-label={selection.rowLabel(row)}
                             title={selection.rowLabel(row)}

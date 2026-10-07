@@ -397,11 +397,11 @@ body {
     table-layout: fixed;
 }
 
-.captain-tool-viewer-table th:nth-child(1) {
+.captain-tool-viewer-table th[data-col="tool"] {
     width: 20%;
 }
 
-.captain-tool-viewer-table th:nth-child(2) {
+.captain-tool-viewer-table th[data-col="source"] {
     width: 9%;
 }
 
@@ -424,27 +424,27 @@ body {
     vertical-align: top;
 }
 
-.captain-tool-viewer-server-table th:nth-child(1) {
+.captain-tool-viewer-server-table th[data-col="source"] {
     width: 15%;
 }
 
-.captain-tool-viewer-server-table th:nth-child(2) {
+.captain-tool-viewer-server-table th[data-col="transport"] {
     width: 9%;
 }
 
-.captain-tool-viewer-server-table th:nth-child(3) {
+.captain-tool-viewer-server-table th[data-col="endpoint"] {
     width: 24%;
 }
 
-.captain-tool-viewer-server-table th:nth-child(4) {
+.captain-tool-viewer-server-table th[data-col="status"] {
     width: 12%;
 }
 
-.captain-tool-viewer-server-table th:nth-child(5) {
+.captain-tool-viewer-server-table th[data-col="tools"] {
     width: 8%;
 }
 
-.captain-tool-viewer-server-table th:nth-child(6) {
+.captain-tool-viewer-server-table th[data-col="notes"] {
     width: 32%;
 }
 
@@ -4318,7 +4318,7 @@ table.table-dense td { padding-left: 0.45rem; padding-right: 0.45rem; }
     gap: 1rem;
 }
 
-.planning-session-table th:nth-child(1) {
+.planning-session-table th[data-col="title"] {
     width: 28%;
 }
 
@@ -9011,8 +9011,11 @@ tr.row-muted td { opacity: 0.72; }
     display: flex;
     align-items: center;
     gap: 0.4rem;
-    flex-wrap: wrap;
 }
+.table-tools { flex-wrap: wrap; }
+.pagination-pager { flex-wrap: nowrap; white-space: nowrap; }
+.pagination-bar select { width: auto; }
+.pagination-pager .page-size-select { margin-left: 0; }
 .pagination-controls { flex-wrap: wrap; justify-content: flex-end; }
 .table-tools + .pagination-pager { padding-left: 0.4rem; border-left: 1px solid var(--border); }
 .data-table > .pagination-bar { margin-bottom: 0.5rem; }
@@ -9038,6 +9041,8 @@ tr.row-muted td { opacity: 0.72; }
 .column-chooser-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .column-chooser-note { font-size: 0.72rem; white-space: nowrap; }
 .column-chooser-separator { border-top: 1px solid var(--border); margin: 0.25rem 0; }
+th .th-sort-btn { text-transform: inherit; letter-spacing: inherit; font-weight: inherit; }
+th .th-sort-btn:hover { color: var(--text); }
 th .th-sort-icon { font-size: 0.7rem; opacity: 0.45; }
 th .th-sort-icon.th-sort-active { opacity: 1; }
 th[aria-sort] { white-space: nowrap; }
@@ -9053,3 +9058,27 @@ td .cell-one-line,
     white-space: nowrap;
 }
 td.cell-nowrap { white-space: nowrap; }
+
+/* Filter-row controls fill their column but never widen it: a select's intrinsic width is its longest option,
+   which used to make columns such as Landing Mode much wider than their values. */
+thead tr.column-filter-row td select.col-filter,
+thead tr.column-filter-row td input.col-filter { width: 0; min-width: 100%; }
+
+/* Home: voyage progress bar and percentage on one line. */
+.dashboard-progress-cell { display: flex; align-items: center; gap: 0.4rem; min-width: 7rem; white-space: nowrap; }
+.dashboard-progress-cell .progress-bar { flex: 1; min-width: 4rem; display: block; margin-bottom: 0; }
+.dashboard-progress-cell .progress-fill { display: block; }
+.check-run-comparison-line.check-run-comparison-inline { margin-top: 0; flex-wrap: nowrap; white-space: nowrap; }
+
+/* Entity names and links in data tables stay on one line: a squeezed column no longer wraps "perf-vessel-0001"
+   into two lines (doubling the row height). Very long names truncate with an ellipsis; on narrow screens the
+   table scrolls horizontally inside .table-wrap. */
+.data-table td > a,
+.data-table td > strong {
+    display: inline-block;
+    max-width: var(--cell-name-max, 20rem);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: bottom;
+}

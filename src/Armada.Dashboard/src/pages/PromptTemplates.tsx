@@ -5,14 +5,12 @@ import type { PromptTemplate } from '../types/models';
 import { useAuth } from '../context/AuthContext';
 import { canEdit as canEditScoped, type ScopeViewer } from '../lib/scoping';
 import ScopeBadge from '../components/shared/ScopeBadge';
-import Pagination from '../components/shared/Pagination';
+import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
 import ActionMenu from '../components/shared/ActionMenu';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import JsonViewer from '../components/shared/JsonViewer';
 import RecordDetailModal from '../components/shared/RecordDetailModal';
 import StatusBadge from '../components/shared/StatusBadge';
-import RefreshButton from '../components/shared/RefreshButton';
-import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
 import PageHeader from '../components/shared/PageHeader';
 import ErrorModal from '../components/shared/ErrorModal';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
@@ -116,10 +114,6 @@ export default function PromptTemplates() {
     else { setSortField(field); setSortDir('asc'); }
   }
 
-  function sortIcon(field: SortField) {
-    if (sortField !== field) return '';
-    return sortDir === 'asc' ? ' \u25B2' : ' \u25BC';
-  }
 
   // Actions
   function handleResetToDefault(name: string) {
@@ -148,6 +142,55 @@ export default function PromptTemplates() {
     }
   }
 
+  const columns: DataTableColumn<PromptTemplate>[] = [
+    {
+      key: 'name', label: translate('Name'), required: true, sortKey: 'name', headerTitle: translate('Template name -- click to sort'),
+      filter: <input type="text" className="col-filter" aria-label={translate('Filter by name')} value={colFilters.name} onChange={e => { setColFilters(f => ({ ...f, name: e.target.value })); setPageNumber(1); }} placeholder={translate('Filter...')} />,
+      render: (template) => <strong>{template.name}</strong>,
+    },
+    {
+      key: 'description', label: translate('Description'), sortKey: 'description', headerTitle: translate('Description -- click to sort'),
+      // One line; the full description is in the tooltip.
+      cellClassName: 'text-dim truncate-cell', cellTitle: (template) => template.description || undefined,
+      clearFilter: () => setColFilters(f => ({ ...f, description: '' })),
+      filter: <input type="text" className="col-filter" aria-label={translate('Filter by description')} value={colFilters.description} onChange={e => { setColFilters(f => ({ ...f, description: e.target.value })); setPageNumber(1); }} placeholder={translate('Filter...')} />,
+      render: (template) => <span className="truncate-text">{template.description || '-'}</span>,
+    },
+    { key: 'category', label: translate('Category'), sortKey: 'category', headerTitle: translate('Category -- click to sort'), render: (template) => <StatusBadge status={template.category} /> },
+    { key: 'visibility', label: translate('Visibility'), render: (template) => <ScopeBadge scope={template.scope} /> },
+    {
+      key: 'isBuiltIn', label: translate('Built-in'), sortKey: 'isBuiltIn', headerTitle: translate('Built-in -- click to sort'),
+      render: (template) => (template.isBuiltIn ? <StatusBadge status="Built-in" /> : '-'),
+    },
+    {
+      key: 'contentLength', label: translate('Content Length'), sortKey: 'contentLength', headerTitle: translate('Content length -- click to sort'),
+      cellClassName: 'mono text-dim cell-nowrap',
+      render: (template) => `${(template.content ?? '').length.toLocaleString()} ${translate('chars')}`,
+    },
+    {
+      key: 'active', label: translate('Active'), sortKey: 'active', headerTitle: translate('Active -- click to sort'),
+      render: (template) => <StatusBadge status={template.active !== false ? 'Active' : 'Inactive'} />,
+    },
+    {
+      key: 'lastUpdateUtc', label: translate('Last Updated'), sortKey: 'lastUpdateUtc', headerTitle: translate('Last updated -- click to sort'),
+      cellClassName: 'text-dim cell-nowrap', cellTitle: (template) => formatDateTime(template.lastUpdateUtc),
+      render: (template) => formatRelativeTime(template.lastUpdateUtc),
+    },
+    {
+      key: 'actions', label: translate('Actions'), fixed: true, interactive: true, className: 'text-right',
+      render: (template) => (
+        <ActionMenu id={`template-${template.id}`} items={[
+          canEditScoped(viewer, template)
+            ? { label: 'Edit', onClick: () => navigate(`/prompt-templates/${encodeURIComponent(template.name)}`) }
+            : { label: 'Open', onClick: () => navigate(`/prompt-templates/${encodeURIComponent(template.name)}`) },
+          { label: 'Duplicate', onClick: () => void handleDuplicate(template) },
+          { label: 'View JSON', onClick: () => setJsonData({ open: true, title: `${translate('Template')}: ${template.name}`, data: template }) },
+          ...(template.isBuiltIn && canEditScoped(viewer, template) ? [{ label: 'Reset to Default', danger: true as const, onClick: () => handleResetToDefault(template.name) }] : []),
+        ]} />
+      ),
+    },
+  ];
+
   return (
     <div>
       <PageHeader
@@ -155,8 +198,6 @@ export default function PromptTemplates() {
         subtitle={translate('Prompt templates define the instructions and structure used when generating prompts for captains and missions.')}
         actions={(
           <>
-            <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
-            <RefreshButton onRefresh={load} title={translate('Refresh prompt template data')} />
             <button className="btn btn-primary btn-sm" onClick={() => navigate('/prompt-templates/create')}>
               + {translate('Prompt Template')}
             </button>
@@ -201,86 +242,26 @@ export default function PromptTemplates() {
         </div>
       )}
 
-      {loading && templates.length === 0 && <p className="text-dim">{translate('Loading...')}</p>}
-      {!loading && templates.length === 0 && <p className="text-dim">{translate('No prompt templates found.')}</p>}
-
-      {templates.length > 0 && (
-        <>
-          <Pagination pageNumber={currentPage} pageSize={pageSize} totalPages={totalPages}
-            totalRecords={sorted.length}
-            onPageChange={p => setPageNumber(p)} onPageSizeChange={s => { setPageSize(s); setPageNumber(1); }} />
-
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th className="sortable" onClick={() => handleSort('name')} title={translate('Template name -- click to sort')}>
-                    {translate('Name')}{sortIcon('name')}
-                  </th>
-                  <th className="sortable" onClick={() => handleSort('description')} title={translate('Description -- click to sort')}>
-                    {translate('Description')}{sortIcon('description')}
-                  </th>
-                  <th className="sortable" onClick={() => handleSort('category')} title={translate('Category -- click to sort')}>
-                    {translate('Category')}{sortIcon('category')}
-                  </th>
-                  <th>{translate('Visibility')}</th>
-                  <th className="sortable" onClick={() => handleSort('isBuiltIn')} title={translate('Built-in -- click to sort')}>
-                    {translate('Built-in')}{sortIcon('isBuiltIn')}
-                  </th>
-                  <th className="sortable" onClick={() => handleSort('contentLength')} title={translate('Content length -- click to sort')}>
-                    {translate('Content Length')}{sortIcon('contentLength')}
-                  </th>
-                  <th className="sortable" onClick={() => handleSort('active')} title={translate('Active -- click to sort')}>
-                    {translate('Active')}{sortIcon('active')}
-                  </th>
-                  <th className="sortable" onClick={() => handleSort('lastUpdateUtc')} title={translate('Last updated -- click to sort')}>
-                    {translate('Last Updated')}{sortIcon('lastUpdateUtc')}
-                  </th>
-                  <th className="text-right">{translate('Actions')}</th>
-                </tr>
-                <tr className="column-filter-row">
-                  <td><input type="text" className="col-filter" value={colFilters.name} onChange={e => { setColFilters(f => ({ ...f, name: e.target.value })); setPageNumber(1); }} placeholder={translate('Filter...')} /></td>
-                  <td><input type="text" className="col-filter" value={colFilters.description} onChange={e => { setColFilters(f => ({ ...f, description: e.target.value })); setPageNumber(1); }} placeholder={translate('Filter...')} /></td>
-                  <td></td>
-                  <td></td>
-                  <td></td>
-                  <td></td>
-                  <td></td>
-                  <td></td>
-                  <td></td>
-                </tr>
-              </thead>
-              <tbody>
-                {paginated.map(template => (
-                  <tr key={template.id} className="clickable" onClick={() => setViewRecord(template as unknown as Record<string, unknown>)}>
-                    <td><strong>{template.name}</strong></td>
-                    <td className="text-dim">{template.description || '-'}</td>
-                    <td><StatusBadge status={template.category} /></td>
-                    <td><ScopeBadge scope={template.scope} /></td>
-                    <td>{template.isBuiltIn ? <StatusBadge status="Built-in" /> : '-'}</td>
-                    <td className="mono text-dim">{(template.content ?? '').length.toLocaleString()} {translate('chars')}</td>
-                    <td><StatusBadge status={template.active !== false ? 'Active' : 'Inactive'} /></td>
-                    <td className="text-dim" title={formatDateTime(template.lastUpdateUtc)}>{formatRelativeTime(template.lastUpdateUtc)}</td>
-                    <td className="text-right" onClick={e => e.stopPropagation()}>
-                      <ActionMenu id={`template-${template.id}`} items={[
-                        canEditScoped(viewer, template)
-                          ? { label: 'Edit', onClick: () => navigate(`/prompt-templates/${encodeURIComponent(template.name)}`) }
-                          : { label: 'Open', onClick: () => navigate(`/prompt-templates/${encodeURIComponent(template.name)}`) },
-                        { label: 'Duplicate', onClick: () => void handleDuplicate(template) },
-                        { label: 'View JSON', onClick: () => setJsonData({ open: true, title: `${translate('Template')}: ${template.name}`, data: template }) },
-                        ...(template.isBuiltIn && canEditScoped(viewer, template) ? [{ label: 'Reset to Default', danger: true as const, onClick: () => handleResetToDefault(template.name) }] : []),
-                      ]} />
-                    </td>
-                  </tr>
-                ))}
-                {paginated.length === 0 && (
-                  <tr><td colSpan={9} className="text-dim">{translate('No prompt templates match the current filters.')}</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
+      <DataTable
+        tableKey="prompttemplates"
+        columns={columns}
+        rows={paginated}
+        rowKey={(template) => template.id}
+        onRowClick={(template) => setViewRecord(template as unknown as Record<string, unknown>)}
+        sort={{ field: sortField, dir: sortDir, onSort: (f) => handleSort(f as SortField) }}
+        pagination={{
+          pageNumber: currentPage, pageSize, totalPages, totalRecords: sorted.length,
+          onPageChange: (p) => setPageNumber(p),
+          onPageSizeChange: (s) => { setPageSize(s); setPageNumber(1); },
+        }}
+        autoRefresh={{ seconds: refreshSeconds, onChange: setRefreshSeconds }}
+        onRefresh={load}
+        refreshTitle={translate('Refresh prompt template data')}
+        emptyMessage={translate('No prompt templates match the current filters.')}
+        placeholder={templates.length > 0 ? undefined : loading
+          ? <p className="text-dim">{translate('Loading...')}</p>
+          : <p className="text-dim">{translate('No prompt templates found.')}</p>}
+      />
     </div>
   );
 }

@@ -126,7 +126,7 @@ export default function ColumnChooser({ options, isVisible, onToggle, onReset, i
         onClick={() => setOpen((v) => !v)}
       >
         <span>{label}</span>
-        <span aria-hidden="true" className="column-chooser-caret">{'▾'}</span>
+        <span aria-hidden="true" className="column-chooser-caret">{'\u25BE'}</span>
       </button>
       {open && createPortal(
         <div
@@ -160,7 +160,7 @@ export default function ColumnChooser({ options, isVisible, onToggle, onReset, i
                   }
                 }}
               >
-                <span aria-hidden="true" className="column-chooser-check">{checked ? '☑' : '☐'}</span>
+                <span aria-hidden="true" className="column-chooser-check">{checked ? '\u2611' : '\u2610'}</span>
                 <span className="column-chooser-label">{option.label}</span>
                 {option.required && <span className="column-chooser-note text-dim">{t('Always shown')}</span>}
               </div>

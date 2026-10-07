@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import VoyageDetail from './VoyageDetail';
 import { getVoyage, listCaptains, listVessels } from '../api/client';
@@ -120,5 +120,34 @@ describe('VoyageDetail configuration', () => {
     vi.mocked(getVoyage).mockResolvedValue({ voyage: voyage('InProgress'), missions: [] } as never);
     renderDetail();
     expect(await screen.findByText('(vessel or global default)')).toBeInTheDocument();
+  });
+});
+
+describe('VoyageDetail missions table', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.mocked(listVessels).mockResolvedValue({ success: true, pageNumber: 1, pageSize: 1000, totalPages: 1, totalRecords: 0, totalMs: 1, objects: [] });
+    vi.mocked(listCaptains).mockResolvedValue({ success: true, pageNumber: 1, pageSize: 1000, totalPages: 1, totalRecords: 0, totalMs: 1, objects: [] });
+    vi.mocked(getVoyage).mockResolvedValue({ voyage: voyage('InProgress'), missions: [mission('InProgress')] } as never);
+  });
+
+  it('locks Mission and ID in the column chooser and shows the ID in its own column, not under the title', async () => {
+    render(
+      <MemoryRouter initialEntries={['/voyages/vyg_1']}>
+        <Routes><Route path="/voyages/:id" element={<VoyageDetail />} /></Routes>
+      </MemoryRouter>,
+    );
+    const title = await screen.findByText('Add request logging');
+    const missionCell = title.closest('td') as HTMLElement;
+    expect(missionCell).toHaveAttribute('data-col', 'mission');
+    expect(within(missionCell).queryByText('msn_1')).toBeNull();
+    expect(within(missionCell.closest('tr') as HTMLElement).getByText('msn_1').closest('td')).toHaveAttribute('data-col', 'id');
+
+    const wrap = document.querySelector('[data-table="voyage-detail-missions"]') as HTMLElement;
+    await act(async () => { fireEvent.click(within(wrap).getByRole('button', { name: /^Columns/ })); });
+    const menu = screen.getByRole('menu', { name: 'Choose visible columns' });
+    expect(within(menu).getByRole('menuitemcheckbox', { name: /Mission/ })).toHaveAttribute('aria-disabled', 'true');
+    // The row action buttons are a fixed column, not offered in the chooser.
+    expect(within(menu).queryByRole('menuitemcheckbox', { name: /Actions/ })).toBeNull();
   });
 });

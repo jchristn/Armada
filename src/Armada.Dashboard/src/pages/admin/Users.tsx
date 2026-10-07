@@ -1,13 +1,11 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { listUsers, createUser, updateUser, deleteUser, listTenants, isApiStatus } from '../../api/client';
 import type { UserMaster, TenantMetadata, UserUpsertRequest } from '../../types/models';
-import Pagination from '../../components/shared/Pagination';
+import DataTable, { type DataTableColumn } from '../../components/shared/DataTable';
 import ActionMenu from '../../components/shared/ActionMenu';
 import ConfirmDialog from '../../components/shared/ConfirmDialog';
 import JsonViewer from '../../components/shared/JsonViewer';
 import CopyButton from '../../components/shared/CopyButton';
-import RefreshButton from '../../components/shared/RefreshButton';
-import AutoRefreshSelect from '../../components/shared/AutoRefreshSelect';
 import { useAutoRefresh } from '../../lib/useAutoRefresh';
 import { useAuth } from '../../context/AuthContext';
 import ErrorModal from '../../components/shared/ErrorModal';
@@ -109,7 +107,6 @@ export default function Users() {
     if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
     else { setSortField(field); setSortDir('asc'); }
   }
-  function sortIcon(field: SortField) { return sortField !== field ? '' : sortDir === 'asc' ? ' \u25B2' : ' \u25BC'; }
 
   const allSelected = selected.length > 0 && selected.length === filtered.length;
   function toggleSelect(id: string) { setSelected(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]); }
@@ -238,6 +235,63 @@ export default function Users() {
     });
   }
 
+  const columns: DataTableColumn<UserMaster>[] = [
+    {
+      key: 'email', label: t('Email'), required: true, sortKey: 'email',
+      filter: <input type="text" className="col-filter" aria-label={t('Filter by email')} value={colFilters.email} onChange={e => { setColFilters(f => ({ ...f, email: e.target.value })); setPageNumber(1); }} placeholder={t('Search...')} />,
+      render: (u) => <strong>{u.email}</strong>,
+    },
+    {
+      key: 'id', label: t('ID'), required: true, cellClassName: 'mono text-dim table-id-cell',
+      render: (u) => (
+        <span className="id-display">
+          <span className="id-value" title={u.id}>{u.id}</span>
+          <CopyButton text={u.id} onClick={e => e.stopPropagation()} />
+        </span>
+      ),
+    },
+    {
+      key: 'name', label: t('Name'), sortKey: 'firstName',
+      clearFilter: () => setColFilters(f => ({ ...f, firstName: '' })),
+      filter: <input type="text" className="col-filter" aria-label={t('Filter by name')} value={colFilters.firstName} onChange={e => { setColFilters(f => ({ ...f, firstName: e.target.value })); setPageNumber(1); }} placeholder={t('Search...')} />,
+      render: (u) => [u.firstName, u.lastName].filter(Boolean).join(' ') || '-',
+    },
+    {
+      key: 'tenant', label: t('Tenant'), cellClassName: 'text-dim',
+      clearFilter: () => setColFilters(f => ({ ...f, tenantId: '' })),
+      filter: (
+        <select aria-label={t('All tenants')}
+          className="col-filter"
+          value={colFilters.tenantId}
+          onChange={e => { setColFilters(f => ({ ...f, tenantId: e.target.value })); setPageNumber(1); }}
+        >
+          <option value="">{t('All tenants')}</option>
+          {tenants.map(tn => (
+            <option key={tn.id} value={tn.id}>{tn.name}</option>
+          ))}
+        </select>
+      ),
+      render: (u) => tenantName(u.tenantId),
+    },
+    { key: 'isAdmin', label: t('Global Admin'), sortKey: 'isAdmin', render: (u) => (u.isAdmin ? t('Yes') : t('No')) },
+    { key: 'isTenantAdmin', label: t('Tenant Admin'), render: (u) => (u.isTenantAdmin ? t('Yes') : t('No')) },
+    { key: 'active', label: t('Active'), sortKey: 'active', render: (u) => (u.active ? t('Yes') : t('No')) },
+    {
+      key: 'createdUtc', label: t('Created'), sortKey: 'createdUtc', cellClassName: 'text-dim cell-nowrap',
+      cellTitle: (u) => formatDateTime(u.createdUtc), render: (u) => formatRelativeTime(u.createdUtc),
+    },
+    {
+      key: 'actions', label: t('Actions'), fixed: true, interactive: true, className: 'text-right',
+      render: (u) => (
+        <ActionMenu id={u.id} items={[
+          ...(remoteProxyMode ? [] : [{ label: 'Edit', onClick: () => openEdit(u) }]),
+          { label: 'View JSON', onClick: () => setJsonData({ open: true, title: `${t('User')}: ${u.email}`, data: u }) },
+          ...((isAdmin || isTenantAdmin) && !remoteProxyMode ? [{ label: 'Delete', danger: true as const, onClick: () => handleDelete(u.id, u.email) }] : []),
+        ]} />
+      ),
+    },
+  ];
+
   return (
     <div>
       <div className="view-header">
@@ -254,8 +308,6 @@ export default function Users() {
         <div className="view-actions">
           {(isAdmin || isTenantAdmin) && !remoteProxyMode && selected.length > 0 && <button className="btn btn-sm btn-danger" onClick={handleBulkDelete}>{t('Delete Selected')} ({selected.length})</button>}
           {(isAdmin || isTenantAdmin) && !remoteProxyMode && <button className="btn btn-primary btn-sm" onClick={openCreate}>+ {t('User')}</button>}
-          <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
-          <RefreshButton onRefresh={load} title="Refresh users" />
         </div>
       </div>
 
@@ -336,86 +388,36 @@ export default function Users() {
       <JsonViewer open={jsonData.open} title={jsonData.title} data={jsonData.data} onClose={() => setJsonData({ open: false, title: '', data: null })} />
       <ConfirmDialog open={confirm.open} title={confirm.title} message={confirm.message} resourceName={confirm.resourceName} danger requireDeleteConfirm onConfirm={confirm.onConfirm} onCancel={() => setConfirm(c => ({ ...c, open: false }))} />
 
-      {loading && items.length === 0 && <p className="text-dim">{t('Loading...')}</p>}
-      {!loading && items.length === 0 && <p className="text-dim">{t('No users found.')}</p>}
-
-      {items.length > 0 && (
-        <>
-          <Pagination pageNumber={currentPage} pageSize={pageSize} totalPages={totalPages} totalRecords={sorted.length}
-            onPageChange={p => setPageNumber(p)} onPageSizeChange={s => { setPageSize(s); setPageNumber(1); }} />
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th className="col-checkbox"><input aria-label={t('Select all users')} type="checkbox" checked={allSelected} onChange={e => e.target.checked ? setSelected(filtered.map(u => u.id)) : setSelected([])} title={t('Select all users')} /></th>
-                  <th className="sortable" onClick={() => handleSort('email')}>{t('Email')}{sortIcon('email')}</th>
-                  <th>{t('ID')}</th>
-                  <th className="sortable" onClick={() => handleSort('firstName')}>{t('Name')}{sortIcon('firstName')}</th>
-                  <th>{t('Tenant')}</th>
-                  <th className="sortable" onClick={() => handleSort('isAdmin')}>{t('Global Admin')}{sortIcon('isAdmin')}</th>
-                  <th>{t('Tenant Admin')}</th>
-                  <th className="sortable" onClick={() => handleSort('active')}>{t('Active')}{sortIcon('active')}</th>
-                  <th className="sortable" onClick={() => handleSort('createdUtc')}>{t('Created')}{sortIcon('createdUtc')}</th>
-                  <th className="text-right">{t('Actions')}</th>
-                </tr>
-                <tr className="column-filter-row">
-                  <td></td>
-                  <td><input type="text" className="col-filter" value={colFilters.email} onChange={e => { setColFilters(f => ({ ...f, email: e.target.value })); setPageNumber(1); }} placeholder={t('Search...')} /></td>
-                  <td></td>
-                  <td><input type="text" className="col-filter" value={colFilters.firstName} onChange={e => { setColFilters(f => ({ ...f, firstName: e.target.value })); setPageNumber(1); }} placeholder={t('Search...')} /></td>
-                  <td>
-                    <select aria-label={t('All tenants')}
-                      className="col-filter"
-                      value={colFilters.tenantId}
-                      onChange={e => { setColFilters(f => ({ ...f, tenantId: e.target.value })); setPageNumber(1); }}
-                    >
-                      <option value="">{t('All tenants')}</option>
-                      {tenants.map(t => (
-                        <option key={t.id} value={t.id}>{t.name}</option>
-                      ))}
-                    </select>
-                  </td>
-                  <td></td><td></td><td></td><td></td><td></td>
-                </tr>
-              </thead>
-              <tbody>
-                {paginated.map(u => (
-                  <tr
-                    key={u.id}
-                    className="clickable"
-                    onClick={() => remoteProxyMode
-                      ? setJsonData({ open: true, title: `${t('User')}: ${u.email}`, data: u })
-                      : openEdit(u)}
-                  >
-                    <td className="col-checkbox" onClick={e => e.stopPropagation()}><input aria-label={t('Select this user')} type="checkbox" checked={selected.includes(u.id)} onChange={() => toggleSelect(u.id)} title={t('Select this user')} /></td>
-                    <td><strong>{u.email}</strong></td>
-                    <td className="mono text-dim table-id-cell">
-                      <span className="id-display">
-                        <span className="id-value" title={u.id}>{u.id}</span>
-                        <CopyButton text={u.id} onClick={e => e.stopPropagation()} />
-                      </span>
-                    </td>
-                    <td>{[u.firstName, u.lastName].filter(Boolean).join(' ') || '-'}</td>
-                    <td className="text-dim">{tenantName(u.tenantId)}</td>
-                    <td>{u.isAdmin ? t('Yes') : t('No')}</td>
-                    <td>{u.isTenantAdmin ? t('Yes') : t('No')}</td>
-                    <td>{u.active ? t('Yes') : t('No')}</td>
-                    <td className="text-dim" title={formatDateTime(u.createdUtc)}>{formatRelativeTime(u.createdUtc)}</td>
-                    <td className="text-right" onClick={e => e.stopPropagation()}>
-                      <ActionMenu id={u.id} items={[
-                        ...(remoteProxyMode ? [] : [{ label: 'Edit', onClick: () => openEdit(u) }]),
-                        { label: 'View JSON', onClick: () => setJsonData({ open: true, title: `${t('User')}: ${u.email}`, data: u }) },
-                        ...((isAdmin || isTenantAdmin) && !remoteProxyMode ? [{ label: 'Delete', danger: true as const, onClick: () => handleDelete(u.id, u.email) }] : []),
-                      ]} />
-                    </td>
-                  </tr>
-                ))}
-                {paginated.length === 0 && <tr><td colSpan={10} className="text-dim">{t('No users match filters.')}</td></tr>}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
+      <DataTable
+        tableKey="users"
+        columns={columns}
+        rows={paginated}
+        rowKey={(u) => u.id}
+        onRowClick={(u) => (remoteProxyMode
+          ? setJsonData({ open: true, title: `${t('User')}: ${u.email}`, data: u })
+          : openEdit(u))}
+        sort={{ field: sortField, dir: sortDir, onSort: (f) => handleSort(f as SortField) }}
+        pagination={{
+          pageNumber: currentPage, pageSize, totalPages, totalRecords: sorted.length,
+          onPageChange: (p) => setPageNumber(p),
+          onPageSizeChange: (s) => { setPageSize(s); setPageNumber(1); },
+        }}
+        autoRefresh={{ seconds: refreshSeconds, onChange: setRefreshSeconds }}
+        onRefresh={load}
+        refreshTitle="Refresh users"
+        selection={{
+          isSelected: (u) => selected.includes(u.id),
+          onToggle: (u) => toggleSelect(u.id),
+          allSelected,
+          onToggleAll: (checked) => (checked ? setSelected(filtered.map(u => u.id)) : setSelected([])),
+          selectAllLabel: t('Select all users'),
+          rowLabel: () => t('Select this user'),
+        }}
+        emptyMessage={t('No users match filters.')}
+        placeholder={items.length > 0 ? undefined : loading
+          ? <p className="text-dim">{t('Loading...')}</p>
+          : <p className="text-dim">{t('No users found.')}</p>}
+      />
     </div>
   );
 }

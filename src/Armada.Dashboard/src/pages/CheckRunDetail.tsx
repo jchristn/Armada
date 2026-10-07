@@ -6,6 +6,7 @@ import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import CopyButton from '../components/shared/CopyButton';
+import DataTable from '../components/shared/DataTable';
 import ErrorModal from '../components/shared/ErrorModal';
 import JsonViewer from '../components/shared/JsonViewer';
 import PageHeader from '../components/shared/PageHeader';
@@ -309,26 +310,20 @@ export default function CheckRunDetail() {
         {run.artifacts.length === 0 ? (
           <p className="text-dim">{t('No artifacts were collected for this run.')}</p>
         ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>{t('Path')}</th>
-                  <th>{t('Size')}</th>
-                  <th>{t('Last Write')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {run.artifacts.map((artifact) => (
-                  <tr key={artifact.path}>
-                    <td className="mono">{artifact.path}</td>
-                    <td>{artifact.sizeBytes.toLocaleString()} {t('bytes')}</td>
-                    <td>{formatDateTime(artifact.lastWriteUtc)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            tableKey="check-run-artifacts"
+            rows={run.artifacts}
+            rowKey={(artifact) => artifact.path}
+            recordCount={null}
+            columns={[
+              {
+                key: 'path', label: t('Path'), required: true, cellClassName: 'mono',
+                render: (artifact) => <span className="cell-one-line" style={{ ['--cell-max' as string]: '40rem' }} title={artifact.path}>{artifact.path}</span>,
+              },
+              { key: 'size', label: t('Size'), cellClassName: 'cell-nowrap', render: (artifact) => `${artifact.sizeBytes.toLocaleString()} ${t('bytes')}` },
+              { key: 'lastWrite', label: t('Last Write'), cellClassName: 'cell-nowrap', render: (artifact) => formatDateTime(artifact.lastWriteUtc) },
+            ]}
+          />
         )}
       </div>
 

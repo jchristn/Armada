@@ -6,11 +6,9 @@ import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
 import type { Fleet, Job, VesselHealth as VesselHealthRow, VesselHealthSortField, VesselHealthStatus, VesselHealthSummary } from '../types/models';
 import PageHeader from '../components/shared/PageHeader';
-import Pagination from '../components/shared/Pagination';
+import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
 import ActionMenu from '../components/shared/ActionMenu';
 import JsonViewer from '../components/shared/JsonViewer';
-import RefreshButton from '../components/shared/RefreshButton';
-import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
 import LoadingIndicator from '../components/shared/LoadingIndicator';
 import BranchesModal from '../components/vessels/BranchesModal';
 import HealthStatusBadge from '../components/vessels/health/HealthStatusBadge';
@@ -35,9 +33,12 @@ import { describeEvaluationStart, useHealthEvaluation } from '../lib/health/useH
 import RunActionModal from '../components/fleetActions/RunActionModal';
 
 const TABLE_KEY = 'vessel-health';
+// Identity columns: always shown, locked in the column chooser.
 const PINNED_COLUMNS = ['vessel', 'overall'];
-// Secondary columns hidden until the user turns them on (Columns menu); the detail modal always shows them.
+// Secondary columns hidden until the user turns them on (column chooser); the detail modal always shows them.
 // Bump DEFAULT_COLUMNS_VERSION when this list grows so stored selections pick up the new defaults once.
+// The shared DataTable keeps the choice under armada_columns_vessel-health and reads the older
+// armada_table_vessel-health.hiddenColumns once, so choices made with the previous chooser carry over.
 const DEFAULT_HIDDEN_COLUMNS = ['lastCommit', 'evaluated'];
 const DEFAULT_COLUMNS_VERSION = 1;
 const TEXT_DEBOUNCE_MS = 350;
@@ -56,6 +57,8 @@ interface ColumnDef {
   title: string;
   sort?: VesselHealthSortField;
   className?: string;
+  /** Cell-only classes (not applied to the header). */
+  cellClassName?: string;
   render: (row: VesselHealthRow) => ReactNode;
 }
 
@@ -88,7 +91,7 @@ export default function VesselHealth({ onRunAction }: VesselHealthProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const queryKey = searchParams.toString();
   const filters = useMemo(() => filtersFromQuery(new URLSearchParams(queryKey)), [queryKey]);
-  const prefs = useTablePrefs(TABLE_KEY, { pinned: PINNED_COLUMNS, defaultHidden: DEFAULT_HIDDEN_COLUMNS, defaultsVersion: DEFAULT_COLUMNS_VERSION });
+  const prefs = useTablePrefs(TABLE_KEY);
 
   const [rows, setRows] = useState<VesselHealthRow[]>([]);
   const [runActionIds, setRunActionIds] = useState<string[] | null>(null);
@@ -275,13 +278,20 @@ export default function VesselHealth({ onRunAction }: VesselHealthProps) {
       sort: 'VesselName',
       className: 'vh-col-vessel',
       render: (row) => (
-        <div className="vh-vessel-cell">
-          <Link to={`/vessels/${encodeURIComponent(row.vesselId)}`} onClick={(e) => e.stopPropagation()} title={row.vesselId}>
-            <strong>{row.vesselName || row.vesselId}</strong>
-          </Link>
-          {row.currentBranch && <span className="mono text-dim vh-branch" title={`${t('Checked-out branch')}: ${row.currentBranch}`}>{row.currentBranch}</span>}
-        </div>
+        <Link to={`/vessels/${encodeURIComponent(row.vesselId)}`} onClick={(e) => e.stopPropagation()} title={row.vesselId}>
+          <strong>{row.vesselName || row.vesselId}</strong>
+        </Link>
       ),
+    },
+    {
+      // Used to be a second line under the vessel name; its own one-line column now.
+      key: 'branch',
+      label: msg('Branch'),
+      title: msg('Checked-out branch'),
+      cellClassName: 'mono text-dim',
+      render: (row) => (row.currentBranch
+        ? <span className="cell-one-line vh-branch" title={`${t('Checked-out branch')}: ${row.currentBranch}`}>{row.currentBranch}</span>
+        : <span className="text-dim">-</span>),
     },
     {
       key: 'fleet',
@@ -416,14 +426,29 @@ export default function VesselHealth({ onRunAction }: VesselHealthProps) {
         : <span className="text-dim">{t('Never')}</span>),
     },
   ];
-  const visibleColumns = columns.filter((c) => prefs.isVisible(c.key));
-  const colSpan = visibleColumns.length + 2;
-
-  function ariaSort(field?: VesselHealthSortField): 'ascending' | 'descending' | 'none' | undefined {
-    if (!field) return undefined;
-    if (filters.sortBy !== field) return 'none';
-    return filters.sortDesc ? 'descending' : 'ascending';
-  }
+  const tableColumns: DataTableColumn<VesselHealthRow>[] = [
+    ...columns.map((col) => ({
+      key: col.key,
+      label: t(col.label),
+      headerTitle: t(col.title),
+      sortKey: col.sort,
+      className: col.className,
+      cellClassName: col.cellClassName,
+      required: PINNED_COLUMNS.includes(col.key),
+      defaultHidden: DEFAULT_HIDDEN_COLUMNS.includes(col.key),
+      render: col.render,
+    })),
+    {
+      key: 'actions',
+      label: t('Actions'),
+      fixed: true,
+      interactive: true,
+      header: <span className="vh-col-actions-label">{t('Actions')}</span>,
+      headerClassName: 'text-right vh-col-actions-head',
+      cellClassName: 'text-right',
+      render: (row) => <ActionMenu id={`vessel-health-${row.vesselId}`} items={rowActions(row)} />,
+    },
+  ];
 
   function rowActions(row: VesselHealthRow) {
     return [
@@ -464,8 +489,6 @@ export default function VesselHealth({ onRunAction }: VesselHealthProps) {
         subtitle={t('Find repositories that need attention: divergence, dirty checkouts, stale branches, outdated or vulnerable dependencies, tests, and CI.')}
         actions={(
           <>
-            <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
-            <RefreshButton onRefresh={refreshAll} title={msg('Refresh vessel health')} />
             {isTenantAdmin && (
               <button
                 type="button"
@@ -662,16 +685,6 @@ export default function VesselHealth({ onRunAction }: VesselHealthProps) {
                 {t('Clear filters')}
               </button>
             )}
-            <div className="vh-filters-spacer" />
-            <ChecklistDropdown
-              label={t('Columns')}
-              options={columns.map((c) => ({ value: c.key, label: t(c.label), locked: PINNED_COLUMNS.includes(c.key) }))}
-              selected={columns.filter((c) => prefs.isVisible(c.key)).map((c) => c.key)}
-              ariaLabel={t('Choose visible columns')}
-              onToggle={(v) => prefs.toggleColumn(v)}
-              align="right"
-              footer={<button type="button" className="btn btn-sm" onClick={() => prefs.showAllColumns()}>{t('Show all')}</button>}
-            />
           </div>
 
           {error && (
@@ -698,82 +711,52 @@ export default function VesselHealth({ onRunAction }: VesselHealthProps) {
             </div>
           )}
 
-          <Pagination
-            key={`${filters.page}-${prefs.pageSize}`}
-            pageNumber={filters.page}
-            pageSize={prefs.pageSize}
-            totalPages={totalPages}
-            totalRecords={totalRecords}
-            onPageChange={(p) => updateFilters({ ...filters, page: Math.max(1, Math.min(totalPages, p)) })}
-            onPageSizeChange={(size) => { prefs.setPageSize(size); updateFilters({ ...filters, page: 1 }); }}
+          <DataTable
+            tableKey={TABLE_KEY}
+            columns={tableColumns}
+            columnsVersion={DEFAULT_COLUMNS_VERSION}
+            rows={rows}
+            rowKey={(row) => row.vesselId}
+            onRowClick={(row) => openDetail(row)}
+            className="vh-table"
+            wrapClassName={`vh-table-wrap${loading ? ' vh-loading' : ''}`}
+            busy={loading}
+            sort={{
+              field: filters.sortBy,
+              dir: filters.sortDesc ? 'desc' : 'asc',
+              onSort: (field) => updateFilters(toggleSort(filters, field as VesselHealthSortField)),
+            }}
+            pagination={{
+              pageNumber: filters.page,
+              pageSize: prefs.pageSize,
+              totalPages,
+              totalRecords,
+              onPageChange: (p) => updateFilters({ ...filters, page: Math.max(1, Math.min(totalPages, p)) }),
+              onPageSizeChange: (size) => { prefs.setPageSize(size); updateFilters({ ...filters, page: 1 }); },
+            }}
+            autoRefresh={{ seconds: refreshSeconds, onChange: setRefreshSeconds }}
+            onRefresh={refreshAll}
+            refreshTitle={msg('Refresh vessel health')}
+            selection={{
+              isSelected: (row) => selected.includes(row.vesselId),
+              onToggle: (row) => setSelected((s) => (s.includes(row.vesselId) ? s.filter((x) => x !== row.vesselId) : [...s, row.vesselId])),
+              allSelected,
+              onToggleAll: (checked) => setSelected(checked ? pageIds : []),
+              selectAllLabel: t('Select all vessels on this page'),
+              rowLabel: (row) => t('Select {{name}}', { name: row.vesselName ?? row.vesselId }),
+            }}
+            emptyMessage={error ? undefined : (
+              <span className="vh-no-match">
+                {t('No vessels match the current filters.')}{' '}
+                {filtered && (
+                  <button type="button" className="btn btn-sm" onClick={() => updateFilters({ ...DEFAULT_HEALTH_FILTERS, sortBy: filters.sortBy, sortDesc: filters.sortDesc })}>
+                    {t('Clear filters')}
+                  </button>
+                )}
+              </span>
+            )}
+            placeholder={!loaded && loading ? <LoadingIndicator label={t('Loading vessel health...')} /> : undefined}
           />
-
-          {!loaded && loading ? (
-            <LoadingIndicator label={t('Loading vessel health...')} />
-          ) : (
-            <div className={`table-wrap vh-table-wrap${loading ? ' vh-loading' : ''}`} aria-busy={loading}>
-              <table className="vh-table">
-                <thead>
-                  <tr>
-                    <th className="col-checkbox" scope="col">
-                      <input
-                        type="checkbox"
-                        checked={allSelected}
-                        aria-label={t('Select all vessels on this page')}
-                        title={t('Select all vessels on this page')}
-                        onChange={(e) => setSelected(e.target.checked ? pageIds : [])}
-                      />
-                    </th>
-                    {visibleColumns.map((col) => (
-                      <th key={col.key} scope="col" aria-sort={ariaSort(col.sort)} className={col.className}>
-                        {col.sort ? (
-                          <button type="button" className="vh-sort-btn" title={t(col.title)} onClick={() => updateFilters(toggleSort(filters, col.sort!))}>
-                            {t(col.label)}
-                            <span aria-hidden="true" className="vh-sort-icon">
-                              {filters.sortBy === col.sort ? (filters.sortDesc ? '\u25BC' : '\u25B2') : '\u21C5'}
-                            </span>
-                          </button>
-                        ) : t(col.label)}
-                      </th>
-                    ))}
-                    <th scope="col" className="text-right vh-col-actions-head"><span className="vh-col-actions-label">{t('Actions')}</span></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((row) => (
-                    <tr key={row.vesselId} className="clickable" onClick={() => openDetail(row)}>
-                      <td className="col-checkbox" onClick={(e) => e.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          checked={selected.includes(row.vesselId)}
-                          aria-label={t('Select {{name}}', { name: row.vesselName ?? row.vesselId })}
-                          onChange={() => setSelected((s) => (s.includes(row.vesselId) ? s.filter((x) => x !== row.vesselId) : [...s, row.vesselId]))}
-                        />
-                      </td>
-                      {visibleColumns.map((col) => (
-                        <td key={col.key} className={col.className}>{col.render(row)}</td>
-                      ))}
-                      <td className="text-right" onClick={(e) => e.stopPropagation()}>
-                        <ActionMenu id={`vessel-health-${row.vesselId}`} items={rowActions(row)} />
-                      </td>
-                    </tr>
-                  ))}
-                  {rows.length === 0 && !error && (
-                    <tr>
-                      <td colSpan={colSpan} className="text-dim vh-no-match">
-                        {t('No vessels match the current filters.')}{' '}
-                        {filtered && (
-                          <button type="button" className="btn btn-sm" onClick={() => updateFilters({ ...DEFAULT_HEALTH_FILTERS, sortBy: filters.sortBy, sortDesc: filters.sortDesc })}>
-                            {t('Clear filters')}
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
         </>
       )}
 
