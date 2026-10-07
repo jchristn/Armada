@@ -16,9 +16,10 @@ export function buildClientMockFactory(): Record<string, unknown> {
   const actual = jest.requireActual('@dashboard/api/client') as Record<string, unknown>;
   const mocks: Record<string, unknown> = {};
   for (const [name, value] of Object.entries(actual)) {
-    if (typeof value !== 'function' || PURE.has(name) || name in base) continue;
+    // base spreads the real client; only its own fakes (auth calls) win over the generic mock.
+    if (typeof value !== 'function' || PURE.has(name) || (name in base && base[name] !== value)) continue;
     if (/^[A-Z]/.test(name)) continue;
     mocks[name] = jest.fn(async () => undefined);
   }
-  return { ...mocks, ...base };
+  return { ...base, ...mocks };
 }
