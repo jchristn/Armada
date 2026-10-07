@@ -1,6 +1,6 @@
 import { Stack, useFocusEffect, useRouter, type Href } from 'expo-router';
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Linking, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, Linking, Modal, Pressable, StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { HeaderHeightContext } from 'expo-router/react-navigation';
@@ -180,7 +180,7 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
   );
 
   const conversationPane = (
-    <KeyboardAvoidingView style={styles.fill} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 0}>
+    <KeyboardAvoidingView style={styles.fill} behavior="padding" keyboardVerticalOffset={headerHeight}>
       {ungated ? (
         <Banner tone="warning" title={t('Actions from this captain run without approval cards.')} message={t('This runtime uses its own Armada connection, so anything it does through Armada tools happens immediately.')} testID="ask-ungated-note" />
       ) : null}
