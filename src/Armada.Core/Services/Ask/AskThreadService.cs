@@ -44,6 +44,12 @@ namespace Armada.Core.Services.Ask
         public Action<string, string, string, object>? OnUserEvent { get; set; } = null;
 
         /// <summary>
+        /// Called after a proposal is created (any status), for example to push a pending proposal to the thread
+        /// owner's devices. Must not block; exceptions are caught and logged. Null disables the callback.
+        /// </summary>
+        public Action<AskActionProposal>? OnProposalCreated { get; set; } = null;
+
+        /// <summary>
         /// Returns the id of the captain turn running in a thread, or null. Null resolver means no turn is ever reported.
         /// </summary>
         public Func<string, string?>? ActiveTurnResolver { get; set; } = null;
@@ -497,6 +503,13 @@ namespace Armada.Core.Services.Ask
 
             Decorate(proposal);
             Emit(thread, "ask.proposal", new { threadId = thread.Id, proposal });
+            Action<AskActionProposal>? created = OnProposalCreated;
+            if (created != null)
+            {
+                try { created(proposal); }
+                catch (Exception ex) { _Logging.Warn(_Header + "proposal created callback failed: " + ex.Message); }
+            }
+
             return proposal;
         }
 
