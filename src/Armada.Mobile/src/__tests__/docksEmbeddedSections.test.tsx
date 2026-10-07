@@ -34,15 +34,17 @@ beforeEach(() => {
   api.listVessels.mockResolvedValue(page([]) as never);
   api.listCaptains.mockResolvedValue(page([]) as never);
   api.getSignal.mockResolvedValue({ id: 'sig_1', type: 'Mail', payload: 'hi', fromCaptainId: null, toCaptainId: null, read: false, createdUtc: '2026-10-07T10:00:00Z', tenantId: null });
+  api.getDock.mockResolvedValue({ id: 'dck_1', vesselId: 'vsl_1', captainId: null, branchName: 'armada/x', worktreePath: '/w', active: true, createdUtc: '2026-10-07T10:00:00Z' } as never);
 });
 
 describe('placeholder hubs serve the sections already built', () => {
   it('maps hub queries to sections', () => {
     expect(embeddedSectionFor('/captains', { tab: 'docks' })?.key).toBe('docks');
-    expect(embeddedSectionFor('/activity', { source: ['signals'] })?.key).toBe('signals');
-    expect(embeddedSectionFor('/activity', { source: 'history' })).toBeNull();
+    expect(embeddedSectionFor('/captains', { tab: ['docks'] })?.key).toBe('docks');
+    // The Activity hub (W4.3) is a real screen now and embeds the Events and Signals lists itself.
+    expect(embeddedSectionFor('/activity', { source: 'signals' })).toBeNull();
     expect(embeddedSectionFor('/vessels', { tab: 'docks' })).toBeNull();
-    expect(Object.keys(EMBEDDED_SECTIONS['/activity'].sections)).toEqual(['events', 'signals']);
+    expect(Object.keys(EMBEDDED_SECTIONS)).toEqual(['/captains']);
   });
 
   it('/captains?tab=docks renders the Docks list; a row pushes the dock on phones', async () => {
@@ -58,19 +60,19 @@ describe('placeholder hubs serve the sections already built', () => {
 
   it('on tablets the detail opens beside the list', async () => {
     mockWindow.width = 1180;
-    setMockParams({ source: 'signals' });
-    await renderScreen(<RoutePlaceholder pattern="/activity" />);
-    await fireEvent.press(await screen.findByTestId('signal-row-sig_1'));
-    expect(await screen.findByTestId('signal-detail')).toBeTruthy();
+    setMockParams({ tab: 'docks' });
+    await renderScreen(<RoutePlaceholder pattern="/captains" />);
+    await fireEvent.press(await screen.findByTestId('dock-row-dck_1'));
+    expect(await screen.findByTestId('dock-detail')).toBeTruthy();
     expect(screen.getByTestId('split-view')).toBeTruthy();
-    expect(mockRouter.push).not.toHaveBeenCalledWith('/signals/sig_1');
+    expect(mockRouter.push).not.toHaveBeenCalledWith('/docks/dck_1');
   });
 
   it('without a section the hub placeholder lists the built sections', async () => {
-    await renderScreen(<RoutePlaceholder pattern="/activity" />);
+    await renderScreen(<RoutePlaceholder pattern="/captains" />);
     expect(await screen.findByTestId('route-placeholder-title')).toBeTruthy();
-    await fireEvent.press(screen.getByTestId('route-placeholder-section-events'));
-    expect(mockRouter.setParams).toHaveBeenCalledWith({ source: 'events' });
+    await fireEvent.press(screen.getByTestId('route-placeholder-section-docks'));
+    expect(mockRouter.setParams).toHaveBeenCalledWith({ tab: 'docks' });
   });
 
   it('other placeholders are unchanged', async () => {

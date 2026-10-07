@@ -7,11 +7,7 @@ import { useLocale } from '../i18n/LocaleContext';
 import { spacing } from '../theme/typography';
 import { DockDetail } from './operations/DockDetail';
 import { DocksList } from './operations/DocksList';
-import { EventDetail } from './operations/EventDetail';
-import { EventsList } from './operations/EventsList';
 import type { OperationsDetailProps, OperationsListProps } from './operations/listTypes';
-import { SignalDetail } from './operations/SignalDetail';
-import { SignalsList } from './operations/SignalsList';
 
 /** A list built ahead of the hub that hosts it on the dashboard (for example Docks before the Captains hub). */
 export interface EmbeddedSection {
@@ -30,22 +26,15 @@ export interface EmbeddedHub {
 
 /**
  * Placeholder hubs that already serve some of their sections. The dashboard shows the Docks list as the Captains
- * hub tab (/captains?tab=docks, W3.2) and Signals and Events as Activity sources (/activity?source=..., W4.3); W2.4
- * built those lists first, so the hub placeholders serve them until W3.2 and W4.3 replace the hub screens (which
- * then embed the same list components).
+ * hub tab (/captains?tab=docks, W3.2); W2.4 built that list first, so the hub placeholder serves it until W3.2
+ * replaces the hub screen (which then embeds the same list component). The Activity hub (W4.3) embeds the Events
+ * and Signals lists itself.
  */
 export const EMBEDDED_SECTIONS: Record<string, EmbeddedHub> = {
   '/captains': {
     param: 'tab',
     sections: {
       docks: { label: 'Docks', List: DocksList, Detail: DockDetail, route: (id) => `/docks/${id}` },
-    },
-  },
-  '/activity': {
-    param: 'source',
-    sections: {
-      events: { label: 'Events', List: EventsList, Detail: EventDetail, route: (id) => `/events/${id}` },
-      signals: { label: 'Signals', List: SignalsList, Detail: SignalDetail, route: (id) => `/signals/${id}` },
     },
   },
 };
