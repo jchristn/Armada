@@ -1,4 +1,6 @@
-import type { Captain, PlanningSession, PlanningSessionMessage } from '../../types/models';
+// Planning session list, transcript, and dispatch-draft logic shared by the dashboard's Planning page and the
+// mobile app's Planning screens (pure; no React or browser APIs).
+import type { Captain, PlanningSession, PlanningSessionMessage } from '../types/models';
 
 export type DispatchSeedSource = 'auto' | 'summary';
 
