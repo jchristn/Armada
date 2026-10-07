@@ -1,4 +1,4 @@
-import { Stack, useRouter, type Href } from 'expo-router';
+import { Stack, useFocusEffect, useRouter, type Href } from 'expo-router';
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Linking, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -87,10 +87,12 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
     setThreadId(lastThreadId);
   }
 
-  useEffect(() => {
+  // The conversation on screen (unread stays zero, approval toasts skip it). Both /ask and /ask/:threadId can be in
+  // the stack at once, so only the focused one registers.
+  useFocusEffect(useCallback(() => {
     setOpenThreadId(threadId);
     return () => setOpenThreadId(null);
-  }, [threadId, setOpenThreadId]);
+  }, [threadId, setOpenThreadId]));
 
   const onCreated = useCallback((id: string) => setThreadId(id), []);
   const conversation = useAskConversation({ threadId, onCreated });
