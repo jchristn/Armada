@@ -30,7 +30,7 @@ administrator).
 | WebSocket commands | 61 | 0 |
 | WebSocket event types | 67 | 0 |
 | CLI commands | 63 | 0 |
-| Settings keys | 182 | 12 |
+| Settings keys | 180 | 12 |
 
 ## REST API
 
@@ -693,7 +693,7 @@ Commands of the `armada` CLI (Helm). `*` marks a required argument or option. Gl
 | `armada fleet add` | `<name>*` | `--description\|-d`, `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
 | `armada fleet list` |  | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
 | `armada fleet remove` | `<fleet>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
-| `armada go` | `<prompt>*` | `--json`, `--log\|-l`, `--merge`, `--no-merge`, `--no-pr`, `--no-push`, `--page`, `--page-size`, `--pr`, `--profile`, `--push`, `--repo\|-r`, `--server`, `--task\|-t`, `--token`, `--verbose`, `--vessel\|-v` |
+| `armada go` | `<prompt>*` | `--json`, `--landing-mode`, `--log\|-l`, `--page`, `--page-size`, `--profile`, `--repo\|-r`, `--server`, `--task\|-t`, `--token`, `--verbose`, `--vessel\|-v` |
 | `armada health` |  | `--evaluate\|-e`, `--fleet\|-f`, `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--status\|-s`, `--token`, `--verbose` |
 | `armada inbox` |  | `--critical`, `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
 | `armada log` | `<identifier>*` | `--follow\|-f`, `--json`, `--lines\|-n`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
@@ -759,9 +759,7 @@ install with the home directory written as `~`; defaults are not frozen (see COM
 | `ask.proposalExpiryMinutes` | int | `60` |  |
 | `ask.trackerIntervalSeconds` | int | `5` |  |
 | `ask.turnTimeoutMinutes` | int | `15` |  |
-| `autoCreatePullRequests` | bool | `false` |  |
 | `autoMergePullRequests` | bool | `false` |  |
-| `autoPush` | bool | `true` |  |
 | `branchCleanupPolicy` | enum BranchCleanupPolicyEnum (LocalOnly\|LocalAndRemote\|None) | `"LocalOnly"` |  |
 | `captainCrashLoopThreshold` | int | `3` |  |
 | `captainCrashLoopWindowMinutes` | int | `15` |  |
@@ -820,7 +818,7 @@ install with the home directory written as `~`; defaults are not frozen (see COM
 | `import.inlineBatchLimit` | int | `25` |  |
 | `import.maxDepth` | int | `6` |  |
 | `isolateCaptainLaunch` | bool | `false` |  |
-| `landingMode` | enum LandingModeEnum (LocalMerge\|PullRequest\|MergeQueue\|None)? | `null` |  |
+| `landingMode` | enum LandingModeEnum (LocalMerge\|PullRequest\|MergeQueue\|None\|MergeAndPush)? | `"MergeAndPush"` |  |
 | `logDirectory` | string | `"~/.armada/logs"` |  |
 | `loginRateLimit` | object |  |  |
 | `loginRateLimit.enabled` | bool | `true` |  |

@@ -14136,42 +14136,18 @@
         },
         {
           "kind": "option",
-          "name": "log",
-          "short": "l",
+          "name": "landing-mode",
+          "short": null,
           "valueKind": "scalar",
           "type": "String",
           "required": false
         },
         {
           "kind": "option",
-          "name": "merge",
-          "short": null,
-          "valueKind": "flag",
-          "type": "Boolean?",
-          "required": false
-        },
-        {
-          "kind": "option",
-          "name": "no-merge",
-          "short": null,
-          "valueKind": "flag",
-          "type": "Boolean",
-          "required": false
-        },
-        {
-          "kind": "option",
-          "name": "no-pr",
-          "short": null,
-          "valueKind": "flag",
-          "type": "Boolean",
-          "required": false
-        },
-        {
-          "kind": "option",
-          "name": "no-push",
-          "short": null,
-          "valueKind": "flag",
-          "type": "Boolean",
+          "name": "log",
+          "short": "l",
+          "valueKind": "scalar",
+          "type": "String",
           "required": false
         },
         {
@@ -14192,26 +14168,10 @@
         },
         {
           "kind": "option",
-          "name": "pr",
-          "short": null,
-          "valueKind": "flag",
-          "type": "Boolean?",
-          "required": false
-        },
-        {
-          "kind": "option",
           "name": "profile",
           "short": null,
           "valueKind": "scalar",
           "type": "String",
-          "required": false
-        },
-        {
-          "kind": "option",
-          "name": "push",
-          "short": null,
-          "valueKind": "flag",
-          "type": "Boolean?",
           "required": false
         },
         {
@@ -17092,21 +17052,9 @@
       "experimental": false
     },
     {
-      "key": "autoCreatePullRequests",
-      "type": "bool",
-      "default": "false",
-      "experimental": false
-    },
-    {
       "key": "autoMergePullRequests",
       "type": "bool",
       "default": "false",
-      "experimental": false
-    },
-    {
-      "key": "autoPush",
-      "type": "bool",
-      "default": "true",
       "experimental": false
     },
     {
@@ -17490,15 +17438,16 @@
     },
     {
       "key": "landingMode",
-      "type": "enum LandingModeEnum (LocalMerge|PullRequest|MergeQueue|None)?",
-      "default": "null",
+      "type": "enum LandingModeEnum (LocalMerge|PullRequest|MergeQueue|None|MergeAndPush)?",
+      "default": "\"MergeAndPush\"",
       "experimental": false,
       "enumName": "LandingModeEnum",
       "enumValues": [
         "LocalMerge",
         "PullRequest",
         "MergeQueue",
-        "None"
+        "None",
+        "MergeAndPush"
       ]
     },
     {
