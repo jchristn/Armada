@@ -23,11 +23,12 @@ import RefreshButton from '../components/shared/RefreshButton';
 import UserScopeFilter from '../components/shared/UserScopeFilter';
 import CopyButton from '../components/shared/CopyButton';
 import { useLocale } from '../context/LocaleContext';
+import { MISSION_LIST_STATUSES, canRetryLanding, matchesMissionColumnFilters } from '../lib/missionActions';
 
 type SortDir = 'asc' | 'desc';
 type SortField = 'title' | 'status' | 'priority' | 'createdUtc';
 
-const MISSION_STATUSES = ['Pending', 'Assigned', 'InProgress', 'WorkProduced', 'Testing', 'Review', 'Complete', 'Failed', 'Cancelled'];
+const MISSION_STATUSES = MISSION_LIST_STATUSES;
 
 export default function Missions() {
   const navigate = useNavigate();
@@ -123,11 +124,7 @@ export default function Missions() {
 
   // Client-side column filter + sort
   const filtered = useMemo(() => {
-    return missions.filter(m =>
-      (!colFilters.title || m.title.toLowerCase().includes(colFilters.title.toLowerCase())) &&
-      (!colFilters.status || (m.status ?? '').toLowerCase().includes(colFilters.status.toLowerCase())) &&
-      (!colFilters.branch || (m.branchName ?? '').toLowerCase().includes(colFilters.branch.toLowerCase()))
-    );
+    return missions.filter(m => matchesMissionColumnFilters(m, colFilters));
   }, [missions, colFilters]);
 
   const sorted = useMemo(() => {
@@ -473,7 +470,7 @@ export default function Missions() {
                         { label: 'View Detail', onClick: () => navigate(`/missions/${m.id}`) },
                         { label: 'Edit', onClick: () => navigate(`/missions/${m.id}`) },
                         { label: 'Restart', onClick: () => handleRestart(m) },
-                        ...((m.status === 'WorkProduced' || m.status === 'LandingFailed') ? [{ label: 'Retry Landing', onClick: () => handleRetryLanding(m) }] : []),
+                        ...(canRetryLanding(m.status) ? [{ label: 'Retry Landing', onClick: () => handleRetryLanding(m) }] : []),
                         { label: 'View Diff', onClick: () => handleViewDiff(m.id) },
                         { label: 'View Log', onClick: () => handleViewLog(m.id, `${t('Log')}: ${m.title}`) },
                         { label: 'Transition Status', onClick: () => { setTransitionModal({ missionId: m.id, currentStatus: m.status }); setTransitionTarget(''); } },
