@@ -11,6 +11,7 @@ import {
   candidateStatusBadge,
   hintLabel,
 } from '../../../lib/vesselImportLabels';
+import { IMPORT_LANDING_MODES } from '../../../lib/vesselImport';
 
 export interface ImportDefaults {
   fleetId: string;
@@ -29,15 +30,6 @@ interface ImportReviewStepProps {
   defaults: ImportDefaults;
   onDefaultsChange: (defaults: ImportDefaults) => void;
 }
-
-const LANDING_MODES: Array<{ value: string; label: string }> = [
-  { value: '', label: 'Default (use global setting)' },
-  { value: 'LocalMerge', label: 'Local Merge' },
-  { value: 'MergeAndPush', label: 'Merge and Push' },
-  { value: 'PullRequest', label: 'Pull Request' },
-  { value: 'MergeQueue', label: 'Merge Queue' },
-  { value: 'None', label: 'None' },
-];
 
 /** Review step: candidate table with status badges and filter, selection, fleet picker and defaults. */
 export default function ImportReviewStep({
@@ -194,7 +186,7 @@ export default function ImportReviewStep({
           <label className="form-field">
             <span className="form-label">{t('Landing Mode')}</span>
             <select value={defaults.landingMode} onChange={(e) => onDefaultsChange({ ...defaults, landingMode: e.target.value })}>
-              {LANDING_MODES.map((m) => <option key={m.value || 'default'} value={m.value}>{t(m.label)}</option>)}
+              {IMPORT_LANDING_MODES.map((m) => <option key={m.value || 'default'} value={m.value}>{t(m.label)}</option>)}
             </select>
           </label>
         </div>

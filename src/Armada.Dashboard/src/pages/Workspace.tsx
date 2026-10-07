@@ -32,11 +32,24 @@ import {
   buildWorkspaceContextSnippet,
   buildWorkspaceDispatchDraft,
   buildWorkspacePlanningDraft,
+  collapseWorkspacePathMap,
+  createDraftFile,
+  getExpandedWorkspacePaths,
   getWorkspaceName,
   getWorkspaceParentPath,
-  inferWorkspaceLanguage,
+  isWorkspacePathInScope,
   normalizeWorkspacePath,
-} from '../components/workspace/workspaceUtils';
+  pruneWorkspaceEntryDirectoryMap,
+  pruneWorkspaceFileMap,
+  pruneWorkspacePathMap,
+  pruneWorkspaceStringMap,
+  remapWorkspaceEntryDirectoryMap,
+  remapWorkspaceFileMap,
+  remapWorkspacePathMap,
+  remapWorkspaceScopedPath,
+  remapWorkspaceStringMap,
+  sortWorkspacePathsByDepth,
+} from '../lib/workspace';
 
 interface PersistedWorkspaceState {
   expandedPaths: Record<string, boolean>;
@@ -67,24 +80,6 @@ const RECENT_VESSELS_KEY = 'armada_workspace_recent_vessels';
 
 function getPersistedWorkspaceKey(vesselId: string) {
   return `armada_workspace_state_${vesselId}`;
-}
-
-function createDraftFile(path: string): WorkspaceFileResponse {
-  const normalizedPath = normalizeWorkspacePath(path);
-  return {
-    vesselId: '',
-    path: normalizedPath,
-    name: getWorkspaceName(normalizedPath),
-    content: '',
-    contentHash: '',
-    isEditable: true,
-    isBinary: false,
-    isLarge: false,
-    previewTruncated: false,
-    sizeBytes: 0,
-    lastWriteUtc: new Date().toISOString(),
-    language: inferWorkspaceLanguage(normalizedPath),
-  };
 }
 
 type ContextField = 'projectContext' | 'styleGuide' | 'modelContext';
@@ -1144,126 +1139,4 @@ function rememberVessel(vesselId: string) {
   } catch {
     // ignore persistence failures
   }
-}
-
-function getExpandedWorkspacePaths(expandedPaths: Record<string, boolean>) {
-  return Object.keys(expandedPaths).filter((path) => expandedPaths[path] || path === '');
-}
-
-function sortWorkspacePathsByDepth(paths: string[]) {
-  return paths
-    .map(normalizeWorkspacePath)
-    .filter((path, index, array) => !!path && array.indexOf(path) === index)
-    .sort((left, right) => {
-      const depthDifference = getWorkspacePathDepth(left) - getWorkspacePathDepth(right);
-      return depthDifference !== 0 ? depthDifference : left.localeCompare(right);
-    });
-}
-
-function getWorkspacePathDepth(path: string) {
-  if (!path) return 0;
-  return path.split('/').length;
-}
-
-function isWorkspacePathInScope(candidatePath: string, scopePath: string) {
-  return candidatePath === scopePath || candidatePath.startsWith(`${scopePath}/`);
-}
-
-function remapWorkspaceScopedPath(candidatePath: string, sourcePath: string, nextPath: string) {
-  if (candidatePath === sourcePath) return nextPath;
-  if (candidatePath.startsWith(`${sourcePath}/`)) {
-    return `${nextPath}${candidatePath.slice(sourcePath.length)}`;
-  }
-
-  return candidatePath;
-}
-
-function remapWorkspacePathMap(pathMap: Record<string, boolean>, sourcePath: string, nextPath: string) {
-  return Object.fromEntries(
-    Object.entries(pathMap).map(([path, expanded]) => [remapWorkspaceScopedPath(path, sourcePath, nextPath), expanded]),
-  );
-}
-
-function pruneWorkspacePathMap(pathMap: Record<string, boolean>, targetPath: string) {
-  return Object.fromEntries(
-    Object.entries(pathMap).filter(([path]) => !isWorkspacePathInScope(path, targetPath)),
-  );
-}
-
-function collapseWorkspacePathMap(pathMap: Record<string, boolean>, targetPath: string) {
-  return Object.fromEntries(
-    Object.entries(pathMap).filter(([path]) => path === '' || !isWorkspacePathInScope(path, targetPath)),
-  );
-}
-
-function remapWorkspaceFileMap<T extends WorkspaceFileResponse>(fileMap: Record<string, T>, sourcePath: string, nextPath: string) {
-  return Object.fromEntries(
-    Object.entries(fileMap).map(([path, value]) => {
-      const remappedPath = remapWorkspaceScopedPath(path, sourcePath, nextPath);
-      return [
-        remappedPath,
-        {
-          ...value,
-          path: remappedPath,
-          name: getWorkspaceName(remappedPath),
-        },
-      ];
-    }),
-  );
-}
-
-function pruneWorkspaceFileMap<T>(fileMap: Record<string, T>, targetPath: string) {
-  return Object.fromEntries(
-    Object.entries(fileMap).filter(([path]) => !isWorkspacePathInScope(path, targetPath)),
-  );
-}
-
-function remapWorkspaceStringMap(valueMap: Record<string, string>, sourcePath: string, nextPath: string) {
-  return Object.fromEntries(
-    Object.entries(valueMap).map(([path, value]) => [remapWorkspaceScopedPath(path, sourcePath, nextPath), value]),
-  );
-}
-
-function pruneWorkspaceStringMap(valueMap: Record<string, string>, targetPath: string) {
-  return Object.fromEntries(
-    Object.entries(valueMap).filter(([path]) => !isWorkspacePathInScope(path, targetPath)),
-  );
-}
-
-function remapWorkspaceEntryDirectoryMap(
-  directoryMap: Record<string, WorkspaceTreeEntry[]>,
-  sourcePath: string,
-  nextPath: string,
-) {
-  return Object.fromEntries(
-    Object.entries(directoryMap).map(([directoryPath, entries]) => [
-      remapWorkspaceScopedPath(directoryPath, sourcePath, nextPath),
-      entries.map((entry) => {
-        if (!isWorkspacePathInScope(entry.relativePath, sourcePath)) {
-          return entry;
-        }
-
-        const remappedPath = remapWorkspaceScopedPath(entry.relativePath, sourcePath, nextPath);
-        return {
-          ...entry,
-          name: getWorkspaceName(remappedPath),
-          relativePath: remappedPath,
-        };
-      }),
-    ]),
-  );
-}
-
-function pruneWorkspaceEntryDirectoryMap(
-  directoryMap: Record<string, WorkspaceTreeEntry[]>,
-  targetPath: string,
-) {
-  return Object.fromEntries(
-    Object.entries(directoryMap)
-      .filter(([directoryPath]) => !isWorkspacePathInScope(directoryPath, targetPath))
-      .map(([directoryPath, entries]) => [
-        directoryPath,
-        entries.filter((entry) => !isWorkspacePathInScope(entry.relativePath, targetPath)),
-      ]),
-  );
 }

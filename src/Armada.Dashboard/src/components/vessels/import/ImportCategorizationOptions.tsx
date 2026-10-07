@@ -1,30 +1,9 @@
 import type { Captain } from '../../../types/models';
 import { useLocale } from '../../../context/LocaleContext';
 import CaptainPicker from '../../shared/CaptainPicker';
+import { isCaptainAvailable, validateCategorization, type CategorizationOptions } from '../../../lib/vesselImport';
 
-/** Fleet categorization choices made on the Review step. */
-export interface CategorizationOptions {
-  enabled: boolean;
-  captainId: string | null;
-  prompt: string;
-  applyAutomatically: boolean;
-}
-
-export const EMPTY_CATEGORIZATION: CategorizationOptions = { enabled: false, captainId: null, prompt: '', applyAutomatically: false };
-
-/** Captain states that can take a categorization job right away. */
-export function isCaptainAvailable(captain: Captain): boolean {
-  return captain.state === 'Idle';
-}
-
-/** Validation errors for the categorization options (English source strings; translate when rendering). */
-export function validateCategorization(options: CategorizationOptions): { captain?: string; prompt?: string } {
-  const errors: { captain?: string; prompt?: string } = {};
-  if (!options.enabled) return errors;
-  if (!options.captainId) errors.captain = 'Choose the captain that will recommend fleets.';
-  if (options.prompt.length > 32768) errors.prompt = 'Instructions must be 32768 characters or fewer.';
-  return errors;
-}
+export { EMPTY_CATEGORIZATION, isCaptainAvailable, validateCategorization, type CategorizationOptions } from '../../../lib/vesselImport';
 
 interface ImportCategorizationOptionsProps {
   value: CategorizationOptions;
