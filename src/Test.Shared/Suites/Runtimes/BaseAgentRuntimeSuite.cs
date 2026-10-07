@@ -210,6 +210,78 @@ namespace Test.Shared.Suites.Runtimes
                 await WaitForConditionAsync(() => exited, 1000);
             }));
 
+            cases.Add(CaseAsync("stdin_prompt_has_no_byte_order_mark", "A Stdin Prompt Reaches The Agent As Exactly Its UTF-8 Bytes, With No Byte Order Mark", TestTags.Positive, async () =>
+            {
+                // Regression: stdin used Encoding.UTF8, whose BOM preamble Process.Start flushed to the pipe before the
+                // prompt (and, when the agent had already exited, made Process.Start itself throw "Broken pipe").
+                string root = TestTemp.NewDirectory("stdin_bom");
+                try
+                {
+                    string captured = Path.Combine(root, "stdin.bin");
+                    TestAgentRuntime runtime = new TestAgentRuntime(CreateLogging());
+                    runtime.PromptOnStdin = true;
+                    if (OperatingSystem.IsWindows())
+                    {
+                        runtime.CommandOverride = "powershell";
+                        runtime.ArgsOverride = new List<string>
+                        {
+                            "-NoProfile",
+                            "-Command",
+                            "$i = [Console]::OpenStandardInput(); $o = [System.IO.File]::Create('" + captured + "'); $i.CopyTo($o); $o.Close()"
+                        };
+                    }
+                    else
+                    {
+                        runtime.CommandOverride = "sh";
+                        runtime.ArgsOverride = new List<string> { "-c", "cat > \"$1\"", "sh", captured };
+                    }
+
+                    TaskCompletionSource<int?> exited = new TaskCompletionSource<int?>(TaskCreationOptions.RunContinuationsAsynchronously);
+                    runtime.OnProcessExited += (_, code) => exited.TrySetResult(code);
+
+                    string prompt = "Respond with OK \u2019 done.";
+                    await runtime.StartAsync(root, prompt).ConfigureAwait(false);
+                    int? exitCode = await exited.Task.WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
+                    AssertEqual(0, exitCode ?? -1, "the capturing agent exits cleanly");
+
+                    byte[] expected = System.Text.Encoding.UTF8.GetBytes(prompt);
+                    byte[] actual = await File.ReadAllBytesAsync(captured).ConfigureAwait(false);
+                    AssertEqual(Convert.ToHexString(expected), Convert.ToHexString(actual), "the agent reads exactly the prompt's UTF-8 bytes (no EF BB BF preamble)");
+                }
+                finally
+                {
+                    TestTemp.TryDelete(root);
+                }
+            }));
+
+            cases.Add(CaseAsync("agent_exiting_before_prompt_is_read_reports_exit", "An Agent That Exits Without Reading A Pipe-Overflowing Prompt Is Reported Through OnProcessExited, Not Thrown", TestTags.Negative, async () =>
+            {
+                // The agent never reads stdin and exits at once; a 1 MiB prompt exceeds any pipe buffer, so the prompt
+                // write must fail with a broken pipe. StartAsync has to return the pid and report the exit code.
+                TestAgentRuntime runtime = new TestAgentRuntime(CreateLogging());
+                runtime.PromptOnStdin = true;
+                if (OperatingSystem.IsWindows())
+                {
+                    runtime.CommandOverride = "cmd";
+                    runtime.ArgsOverride = new List<string> { "/c", "exit 7" };
+                }
+                else
+                {
+                    runtime.CommandOverride = "sh";
+                    runtime.ArgsOverride = new List<string> { "-c", "exit 7" };
+                }
+
+                TaskCompletionSource<int?> exited = new TaskCompletionSource<int?>(TaskCreationOptions.RunContinuationsAsynchronously);
+                runtime.OnProcessExited += (_, code) => exited.TrySetResult(code);
+
+                string prompt = new string('p', 1024 * 1024);
+                int pid = await runtime.StartAsync(Path.GetTempPath(), prompt).ConfigureAwait(false);
+                AssertTrue(pid > 0, "StartAsync returns the launched pid instead of throwing");
+
+                int? exitCode = await exited.Task.WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
+                AssertEqual(7, exitCode ?? -1, "the agent's exit is reported with its exit code");
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
                 displayName: "Base Agent Runtime",
