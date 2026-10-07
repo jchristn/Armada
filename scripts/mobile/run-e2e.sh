@@ -11,14 +11,25 @@
 #      (127.0.0.1 from the iOS simulator, 10.0.2.2 from the Android emulator);
 #   5. stops the Admiral, and shuts down any simulator or emulator it booted.
 #
+# With --proxy it also starts a throwaway Armada.Proxy (port --proxy-port, default port+10, data in the same temp
+# directory), enables the Admiral's remote-control tunnel to it, and after the flows above runs the flows in
+# src/Armada.Mobile/e2e/proxy with PROXY_URL, PROXY_PASSWORD, and PROXY_INSTANCE: sign in to the proxy, pick the
+# Admiral, sign in to it through the relay, and load screens over the relayed REST API and WebSocket.
+#
 # Usage:
 #   scripts/mobile/run-e2e.sh --platform ios [--device "iPhone 17"] [--port 44010] [--no-app-build] [--no-server-build]
 #   scripts/mobile/run-e2e.sh --platform android [--avd Armada_Phone] [--port 44010] [--no-app-build]
 #   scripts/mobile/run-e2e.sh --platform both
+#   scripts/mobile/run-e2e.sh --platform ios --proxy [--proxy-port 44020] [--proxy-only]
 # Options:
 #   --keep            leave the Admiral, simulator, and emulator running (prints how to stop them)
 #   --output DIR      Maestro reports and screenshots (default: a temp directory, printed at the end)
 #   --flows PATH      a single flow file or folder (default: src/Armada.Mobile/e2e)
+#   --proxy           also start Armada.Proxy and run the proxy flows
+#   --proxy-only      with --proxy, run only the proxy flows
+#   --push-sim        iOS only: also run src/Armada.Mobile/e2e/push-sim, delivering simulated pushes with
+#                     `xcrun simctl push` (an APNs payload shaped like Expo's) while the tap flows run
+#   --push-sim-only   run only the push-sim flows
 #
 # Requirements: .NET 10 SDK, Node 24, Xcode + CocoaPods (iOS), Android SDK + JDK 17 (Android), Maestro
 # (curl -fsSL https://get.maestro.mobile.dev | bash). See src/Armada.Mobile/README.md.
@@ -38,6 +49,14 @@ BUILD_SERVER=1
 KEEP=0
 OUTPUT=""
 FLOWS="${MOBILE}/e2e"
+PROXY=0
+PROXY_ONLY=0
+PROXY_PORT=""
+PROXY_PASSWORD="e2e-proxy-$(od -An -N6 -tx1 /dev/urandom | tr -d ' \n')"
+PROXY_INSTANCE="armada-e2e"
+PROXY_PID=""
+PUSH_SIM=0
+PUSH_SIM_ONLY=0
 APP_ID="${ARMADA_MOBILE_BUNDLE_ID:-com.armada.mobile}"
 
 while [ $# -gt 0 ]; do
@@ -51,6 +70,11 @@ while [ $# -gt 0 ]; do
     --keep) KEEP=1; shift ;;
     --output) OUTPUT="$2"; shift 2 ;;
     --flows) FLOWS="$2"; shift 2 ;;
+    --proxy) PROXY=1; shift ;;
+    --proxy-only) PROXY=1; PROXY_ONLY=1; shift ;;
+    --proxy-port) PROXY_PORT="$2"; shift 2 ;;
+    --push-sim) PUSH_SIM=1; shift ;;
+    --push-sim-only) PUSH_SIM=1; PUSH_SIM_ONLY=1; shift ;;
     -h|--help) sed -n '2,30p' "$0"; exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
@@ -65,6 +89,7 @@ export PATH="$JAVA_HOME/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:
 export MAESTRO_CLI_NO_ANALYTICS=1 MAESTRO_CLI_ANALYSIS_NOTIFICATION_DISABLED=true
 
 MCP_PORT=$((PORT + 1))
+PROXY_PORT="${PROXY_PORT:-$((PORT + 10))}"
 DATA_DIR="$(mktemp -d "${TMPDIR:-/tmp}/armada-mobile-e2e.XXXXXX")"
 OUTPUT="${OUTPUT:-${DATA_DIR}/maestro}"
 mkdir -p "$OUTPUT"
@@ -77,12 +102,16 @@ log() { echo "[mobile-e2e] $*"; }
 
 cleanup() {
   if [ "$KEEP" = "1" ]; then
-    log "--keep: Admiral pid ${SERVER_PID:-none} (data ${DATA_DIR}); simulator ${BOOTED_SIM:-none}; emulator pid ${EMULATOR_PID:-none}"
+    log "--keep: Admiral pid ${SERVER_PID:-none} (data ${DATA_DIR}); proxy pid ${PROXY_PID:-none}; simulator ${BOOTED_SIM:-none}; emulator pid ${EMULATOR_PID:-none}"
     return
   fi
   if [ -n "$SERVER_PID" ] && kill -0 "$SERVER_PID" 2>/dev/null; then
     kill "$SERVER_PID" 2>/dev/null || true
     wait "$SERVER_PID" 2>/dev/null || true
+  fi
+  if [ -n "$PROXY_PID" ] && kill -0 "$PROXY_PID" 2>/dev/null; then
+    kill "$PROXY_PID" 2>/dev/null || true
+    wait "$PROXY_PID" 2>/dev/null || true
   fi
   if [ -n "$BOOTED_SIM" ]; then xcrun simctl shutdown "$BOOTED_SIM" >/dev/null 2>&1 || true; fi
   if [ -n "$EMULATOR_PID" ]; then
@@ -94,7 +123,47 @@ trap cleanup EXIT INT TERM
 
 port_free() { ! (echo >"/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
 
+start_proxy() {
+  if ! port_free "$PROXY_PORT"; then echo "port $PROXY_PORT is in use; pass --proxy-port" >&2; exit 1; fi
+  if [ "$BUILD_SERVER" = "1" ]; then
+    log "building Armada.Proxy (${FRAMEWORK})"
+    dotnet build "${REPO_ROOT}/src/Armada.Proxy/Armada.Proxy.csproj" -c Release -f "$FRAMEWORK" --nologo -v q >/dev/null
+  fi
+  mkdir -p "${DATA_DIR}/proxy/logs"
+  cat > "${DATA_DIR}/proxy/proxysettings.json" <<JSON
+{ "ArmadaProxy": { "dataDirectory": "${DATA_DIR}/proxy", "logDirectory": "${DATA_DIR}/proxy/logs", "hostname": "127.0.0.1", "port": ${PROXY_PORT} } }
+JSON
+  log "starting Armada.Proxy on 127.0.0.1:${PROXY_PORT}"
+  (cd "${DATA_DIR}/proxy" && ARMADA_PROXY_PASSWORD="$PROXY_PASSWORD" exec dotnet "${REPO_ROOT}/src/Armada.Proxy/bin/Release/${FRAMEWORK}/Armada.Proxy.dll" \
+    --config "${DATA_DIR}/proxy/proxysettings.json" > "${DATA_DIR}/proxy-console.log" 2>&1) &
+  PROXY_PID=$!
+  for _ in $(seq 1 240); do
+    if curl -fsS "http://127.0.0.1:${PROXY_PORT}/proxy-api/v1/status/health" >/dev/null 2>&1; then log "Armada.Proxy healthy"; return; fi
+    if ! kill -0 "$PROXY_PID" 2>/dev/null; then tail -30 "${DATA_DIR}/proxy-console.log" >&2; echo "Armada.Proxy exited" >&2; exit 1; fi
+    sleep 0.5
+  done
+  echo "Armada.Proxy did not become healthy" >&2
+  exit 1
+}
+
+wait_for_tunnel() {
+  for _ in $(seq 1 120); do
+    if curl -fsS "http://127.0.0.1:${PROXY_PORT}/proxy-api/v1/status/health" 2>/dev/null | grep -q '"connectedInstances":[1-9]'; then
+      log "Admiral tunnel connected to the proxy"
+      return
+    fi
+    sleep 0.5
+  done
+  echo "the Admiral did not connect its tunnel to the proxy" >&2
+  exit 1
+}
+
 start_admiral() {
+  REMOTE_CONTROL_JSON=""
+  if [ "$PROXY" = "1" ]; then
+    REMOTE_CONTROL_JSON=",
+  \"remoteControl\": { \"enabled\": true, \"tunnelUrl\": \"ws://127.0.0.1:${PROXY_PORT}/tunnel\", \"instanceId\": \"${PROXY_INSTANCE}\", \"password\": \"${PROXY_PASSWORD}\", \"heartbeatIntervalSeconds\": 10 }"
+  fi
   for p in "$PORT" "$MCP_PORT"; do
     if ! port_free "$p"; then echo "port $p is in use; pass --port" >&2; exit 1; fi
   done
@@ -117,7 +186,7 @@ start_admiral() {
   "rest": { "hostname": "127.0.0.1" },
   "database": { "type": "Sqlite", "filename": "${DATA_DIR}/db/armada.db" },
   "repositoryHealth": { "intervalMinutes": 0 },
-  "telemetry": { "enabled": false, "prometheusEnabled": false }
+  "telemetry": { "enabled": false, "prometheusEnabled": false }${REMOTE_CONTROL_JSON}
 }
 JSON
   log "starting Admiral on 127.0.0.1:${PORT} (data ${DATA_DIR})"
@@ -134,14 +203,54 @@ JSON
 }
 
 run_flows() {
-  local platform="$1" device="$2" server_url="$3"
-  log "running Maestro flows on ${platform} (${device}) against ${server_url}"
-  if ! maestro --device "$device" test "$FLOWS" \
-      -e SERVER_URL="$server_url" -e APP_ID="$APP_ID" -e PLATFORM="$platform" \
-      --format junit --output "${OUTPUT}/${platform}-report.xml" \
-      --test-output-dir "${OUTPUT}/${platform}"; then
-    STATUS=1
+  local platform="$1" device="$2" server_url="$3" proxy_url="$4"
+  if [ "$PROXY_ONLY" != "1" ] && [ "$PUSH_SIM_ONLY" != "1" ]; then
+    log "running Maestro flows on ${platform} (${device}) against ${server_url}"
+    if ! maestro --device "$device" test "$FLOWS" \
+        -e SERVER_URL="$server_url" -e APP_ID="$APP_ID" -e PLATFORM="$platform" \
+        --format junit --output "${OUTPUT}/${platform}-report.xml" \
+        --test-output-dir "${OUTPUT}/${platform}"; then
+      STATUS=1
+    fi
   fi
+  if [ "$PROXY" = "1" ] && [ "$PUSH_SIM_ONLY" != "1" ]; then
+    log "running Maestro proxy flows on ${platform} (${device}) against ${proxy_url}"
+    if ! maestro --device "$device" test "${MOBILE}/e2e/proxy" \
+        -e PROXY_URL="$proxy_url" -e PROXY_PASSWORD="$PROXY_PASSWORD" -e PROXY_INSTANCE="$PROXY_INSTANCE" \
+        -e APP_ID="$APP_ID" -e PLATFORM="$platform" \
+        --format junit --output "${OUTPUT}/${platform}-proxy-report.xml" \
+        --test-output-dir "${OUTPUT}/${platform}-proxy"; then
+      STATUS=1
+    fi
+  fi
+}
+
+# Run one push-sim flow while delivering the given APNs payload every few seconds until the flow ends (a banner
+# lasts a few seconds; repeating it removes any race with Maestro's startup).
+push_sim_flow() {
+  local udid="$1" flow="$2" payload="$3" name
+  name="$(basename "$flow" .yaml)"
+  printf '%s' "$payload" > "${DATA_DIR}/${name}.apns"
+  maestro --device "$udid" test "$flow" -e APP_ID="$APP_ID" -e SERVER_URL="http://127.0.0.1:${PORT}" \
+    --format junit --output "${OUTPUT}/ios-${name}-report.xml" --test-output-dir "${OUTPUT}/ios-push-sim" &
+  local mpid=$!
+  while kill -0 "$mpid" 2>/dev/null; do
+    xcrun simctl push "$udid" "$APP_ID" "${DATA_DIR}/${name}.apns" >/dev/null 2>&1 || true
+    sleep 3
+  done
+  wait "$mpid" || STATUS=1
+}
+
+run_push_sim() {
+  local udid="$1" dir="${MOBILE}/e2e/push-sim"
+  log "running simulated push flows on iOS (${udid})"
+  if ! maestro --device "$udid" test "${dir}/01-enable-notifications.yaml" -e APP_ID="$APP_ID" -e SERVER_URL="http://127.0.0.1:${PORT}" \
+      --format junit --output "${OUTPUT}/ios-push-enable-report.xml" --test-output-dir "${OUTPUT}/ios-push-sim"; then
+    STATUS=1
+    return
+  fi
+  push_sim_flow "$udid" "${dir}/02-tap-notification.yaml" \
+    '{"aps":{"alert":{"title":"E2E permission request","body":"Captain wants to use Bash"},"category":"armada_approve_deny","badge":1,"sound":"default"},"body":{"url":"/cli-permissions?request=cpr_e2e_push1","kind":"cli_permission","entityId":"cpr_e2e_push1","category":"CliPermission"}}'
 }
 
 run_ios() {
@@ -168,17 +277,31 @@ for runtime, devices in json.load(sys.stdin)['devices'].items():
     (cd "$MOBILE" && npx expo prebuild --platform ios --no-install >/dev/null && (cd ios && pod install >/dev/null) \
       && npx expo run:ios --configuration Release --device "$udid" --no-bundler)
   fi
-  run_flows ios "$udid" "http://127.0.0.1:${PORT}"
+  run_flows ios "$udid" "http://127.0.0.1:${PORT}" "http://127.0.0.1:${PROXY_PORT}"
+  if [ "$PUSH_SIM" = "1" ]; then run_push_sim "$udid"; fi
+}
+
+# The serial of the running emulator whose AVD is $AVD (other emulators may be running for other work).
+avd_serial() {
+  local serial
+  for serial in $(adb devices | awk '/^emulator-[0-9]+[[:space:]]+device$/ {print $1}'); do
+    if [ "$(adb -s "$serial" emu avd name 2>/dev/null | head -1 | tr -d '\r')" = "$AVD" ]; then echo "$serial"; return; fi
+  done
 }
 
 run_android() {
-  if ! adb devices | grep -q "emulator-.*device$"; then
+  ANDROID_SERIAL="$(avd_serial)"
+  if [ -z "$ANDROID_SERIAL" ]; then
     log "booting emulator ${AVD}"
     emulator -avd "$AVD" -no-snapshot-save -no-boot-anim >/dev/null 2>&1 &
     EMULATOR_PID=$!
+    for _ in $(seq 1 240); do
+      ANDROID_SERIAL="$(avd_serial)"
+      [ -n "$ANDROID_SERIAL" ] && break
+      sleep 1
+    done
+    [ -n "$ANDROID_SERIAL" ] || { echo "emulator ${AVD} did not come up" >&2; exit 1; }
   fi
-  adb wait-for-device
-  ANDROID_SERIAL="$(adb devices | awk '/emulator-.*device$/ {print $1; exit}')"
   export ANDROID_SERIAL
   until [ "$(adb -s "$ANDROID_SERIAL" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; do sleep 1; done
   if [ "$BUILD_APP" = "1" ]; then
@@ -186,10 +309,12 @@ run_android() {
     (cd "$MOBILE" && npx expo prebuild --platform android --no-install >/dev/null \
       && npx expo run:android --variant release --device "$AVD" --no-bundler)
   fi
-  run_flows android "$ANDROID_SERIAL" "http://10.0.2.2:${PORT}"
+  run_flows android "$ANDROID_SERIAL" "http://10.0.2.2:${PORT}" "http://10.0.2.2:${PROXY_PORT}"
 }
 
+if [ "$PROXY" = "1" ]; then start_proxy; fi
 start_admiral
+if [ "$PROXY" = "1" ]; then wait_for_tunnel; fi
 case "$PLATFORM" in
   ios) run_ios ;;
   android) run_android ;;

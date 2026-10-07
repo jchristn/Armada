@@ -1,0 +1,115 @@
+# Fresh install: add an Armada.Proxy server, sign in to the proxy with its password, pick the Admiral the throwaway
+# Admiral tunnels in as, sign in to that Admiral through the relay (default password, "Skip for now"), and load
+# screens whose data comes over the relayed REST API (Approvals inbox) and the relayed WebSocket.
+appId: ${APP_ID}
+name: 01-proxy-sign-in
+---
+- launchApp:
+    clearState: true
+    clearKeychain: true
+- extendedWaitUntil:
+    visible:
+      id: "profile-url"
+    timeout: 60000
+- tapOn:
+    id: "profile-kind-proxy"
+- tapOn:
+    id: "profile-url"
+- runFlow: common/dismiss-keyboard-tips.yaml
+- tapOn:
+    id: "profile-url"
+- inputText: ${PROXY_URL}
+- pressKey: Enter
+- tapOn:
+    id: "profile-save"
+- extendedWaitUntil:
+    visible:
+      id: "proxy-password"
+    timeout: 20000
+- takeScreenshot: proxy-portal
+# A wrong password is refused without leaving the portal step.
+- tapOn:
+    id: "proxy-password"
+- inputText: "not-the-password"
+- pressKey: Enter
+- extendedWaitUntil:
+    visible: "The proxy password is incorrect."
+    timeout: 20000
+- tapOn:
+    id: "proxy-password"
+- eraseText: 40
+- inputText: ${PROXY_PASSWORD}
+- pressKey: Enter
+- extendedWaitUntil:
+    visible:
+      id: "proxy-instance-${PROXY_INSTANCE}"
+    timeout: 20000
+- takeScreenshot: proxy-instances
+- tapOn:
+    id: "proxy-instance-${PROXY_INSTANCE}"
+- extendedWaitUntil:
+    visible:
+      id: "sign-in-email"
+    timeout: 20000
+- assertVisible:
+    id: "proxy-instance-bar"
+- assertVisible: ".*Through Armada.Proxy.*"
+- takeScreenshot: proxy-admiral-sign-in
+- tapOn:
+    id: "sign-in-email"
+- inputText: "admin@armada"
+- pressKey: Enter
+- extendedWaitUntil:
+    visible:
+      id: "sign-in-password"
+    timeout: 20000
+- tapOn:
+    id: "sign-in-password"
+- inputText: "password"
+- pressKey: Enter
+- extendedWaitUntil:
+    visible:
+      id: "password-change-skip"
+    timeout: 20000
+- tapOn:
+    id: "password-change-skip"
+- tapOn:
+    id: "password-skip-confirm-confirm"
+# A fresh install has not decided on notifications: the one-time explanation sheet appears over Ask.
+- extendedWaitUntil:
+    visible:
+      id: "push-prompt-later"
+    timeout: 20000
+- takeScreenshot: push-prompt
+- tapOn:
+    id: "push-prompt-later"
+- assertVisible: "Ask Armada"
+- takeScreenshot: proxy-ask
+# Approvals loads the inbox from the Admiral through the relay.
+- tapOn:
+    id: "tab-approvals"
+- extendedWaitUntil:
+    visible:
+      id: "approvals-inbox"
+    timeout: 20000
+- takeScreenshot: proxy-approvals
+# Preferences shows this device's push state for the proxied server.
+- tapOn:
+    id: "tab-more"
+- extendedWaitUntil:
+    visible:
+      id: "more-menu"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "nav-/preferences"
+    direction: DOWN
+- tapOn:
+    id: "nav-/preferences"
+- scrollUntilVisible:
+    element:
+      id: "push-status"
+    direction: DOWN
+- assertVisible:
+    id: "push-status"
+- takeScreenshot: proxy-preferences

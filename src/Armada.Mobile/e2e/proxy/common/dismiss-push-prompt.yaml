@@ -1,0 +1,11 @@
+# After the first sign-in the app explains push notifications once and offers to turn them on; the flows take
+# "Not now" (the OS permission dialog is not part of these flows). Elsewhere this does nothing.
+appId: ${APP_ID}
+---
+- runFlow:
+    when:
+      visible:
+        id: "push-prompt-later"
+    commands:
+      - tapOn:
+          id: "push-prompt-later"

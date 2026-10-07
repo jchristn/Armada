@@ -1,0 +1,21 @@
+# The runner delivers a simulated CLI permission push every few seconds while this flow runs; approval kinds show a
+# banner even in the foreground. The banner belongs to SpringBoard, outside the app's view hierarchy, so it is tapped
+# by position. Tapping it opens the validated deep link: the CLI Tool Permissions page for that request.
+appId: ${APP_ID}
+name: 02-tap-notification
+---
+- extendedWaitUntil:
+    visible:
+      id: "tab-work"
+    timeout: 20000
+- retry:
+    maxRetries: 6
+    commands:
+      - tapOn:
+          point: "50%,10%"
+      - extendedWaitUntil:
+          visible: "CLI Tool Permissions"
+          timeout: 4000
+- takeScreenshot: push-opened
+- assertVisible:
+    id: "route-placeholder-title"

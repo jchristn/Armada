@@ -1,0 +1,36 @@
+# Signed in through the proxy (state kept from 01): a relaunch restores the proxy session and the Admiral session
+# without asking again; signing out of the proxy returns to the portal step.
+appId: ${APP_ID}
+name: 02-proxy-relaunch
+---
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: "tab-ask"
+    timeout: 30000
+- tapOn:
+    id: "tab-approvals"
+- extendedWaitUntil:
+    visible:
+      id: "approvals-inbox"
+    timeout: 20000
+- tapOn:
+    id: "tab-more"
+- scrollUntilVisible:
+    element:
+      id: "sign-out"
+    direction: DOWN
+- tapOn:
+    id: "sign-out"
+- extendedWaitUntil:
+    visible:
+      id: "proxy-instance-bar"
+    timeout: 20000
+- tapOn:
+    id: "proxy-sign-out"
+- extendedWaitUntil:
+    visible:
+      id: "proxy-password"
+    timeout: 20000
+- takeScreenshot: proxy-signed-out

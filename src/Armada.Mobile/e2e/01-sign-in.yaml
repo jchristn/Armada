@@ -49,6 +49,14 @@ name: 01-sign-in
 - assertVisible: "Keep the default password?"
 - tapOn:
     id: "password-skip-confirm-confirm"
+# A fresh install has not decided on notifications: the one-time explanation sheet appears over Ask.
+- extendedWaitUntil:
+    visible:
+      id: "push-prompt-later"
+    timeout: 20000
+- takeScreenshot: push-prompt
+- tapOn:
+    id: "push-prompt-later"
 - extendedWaitUntil:
     visible:
       id: "route-placeholder-title"
