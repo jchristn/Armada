@@ -113,15 +113,59 @@ When a mission's agent exits successfully, Armada sets the mission to `WorkProdu
 
 1. **Voyage-level** `LandingMode` (if the mission belongs to a voyage with a non-null `LandingMode`)
 2. **Vessel-level** `LandingMode` (on the target vessel)
-3. **Global** `LandingMode` (in `ArmadaSettings`)
-4. **Legacy booleans** (`AutoPush`, `AutoCreatePullRequests`, `AutoMergePullRequests`) if all of the above are null
+3. **Global** `LandingMode` (in `ArmadaSettings`, default `MergeAndPush`)
+4. `MergeAndPush` when none of the above is set
 
 | Landing Mode | Behavior |
 |---|---|
-| `LocalMerge` | Merge the branch into the vessel's configured working directory and push, but only when the vessel has both `WorkingDirectory` and `LocalPath` configured. Mission transitions to `Complete` on success or `LandingFailed` on failure (a failed push after a successful merge also counts as failure). A mission with no diff is marked `Complete` without a merge. If those vessel paths are not configured, the mission remains at `WorkProduced`. |
-| `PullRequest` | Push the branch and create a pull request. Mission transitions to `PullRequestOpen` (or `LandingFailed` if the push or PR creation fails). Each health check polls open PRs; once merged, the mission transitions to `Complete`. When auto-merge is enabled (`AutoMergePullRequests`), Armada also enables auto-merge on the PR. |
+| `LocalMerge` | Merge the branch into the vessel's default branch in the vessel's configured working directory. **Nothing is pushed**: the merge stays in your local checkout until you push it yourself. Runs only when the vessel has both `WorkingDirectory` and `LocalPath` configured. Mission transitions to `Complete` on success or `LandingFailed` if the merge fails. A mission with no diff is marked `Complete` without a merge. If those vessel paths are not configured, the mission remains at `WorkProduced`. |
+| `MergeAndPush` | The default. The same local merge as `LocalMerge`, then a push of the working directory's branch to its remote (for example `origin` on GitHub). The working directory needs a remote. Mission transitions to `Complete` when both succeed, or `LandingFailed` when the merge or the push fails; after a failed push the merge stays in the working directory and the mission branch is kept for a retry. Same `WorkingDirectory` and `LocalPath` requirement and no-diff handling as `LocalMerge`. |
+| `PullRequest` | Push the branch and create a pull request. Mission transitions to `PullRequestOpen` (or `LandingFailed` if the push or PR creation fails). Each health check polls open PRs; once merged, the mission transitions to `Complete`. When auto-merge is enabled (`AutoMergePullRequests`, global or per voyage), Armada also enables auto-merge on the PR. |
 | `MergeQueue` | Enqueue the mission branch into Armada's merge queue (target: the vessel's default branch) for serialized testing and landing. The mission stays `WorkProduced` while the entry is `Queued` or `Testing`, and its voyage stays `InProgress` (not `Complete`) until the entry settles: `Landed` moves the mission to `Complete`, a failure moves it to `LandingFailed`. |
 | `None` | No automated landing. The mission stays at `WorkProduced` for manual handling: merge its branch yourself (the dashboard and TUI mission pages offer **Merge in Manage Branches** instead of Land). Once the mission's commit is contained in the vessel's target branch (`git merge-base --is-ancestor`, checked right after a Manage Branches merge and on every health check), Armada moves the mission to `Complete`. |
+
+### Where to set it
+
+| Scope | Dashboard | TUI | CLI | REST |
+|---|---|---|---|---|
+| Global default | Server > Agent Settings > **Default Landing Mode** | Server settings > Agent Settings > Default Landing Mode | `armada config set landingMode MergeAndPush` (edits this machine's `settings.json`; restart the Admiral) | `PUT /api/v1/settings` with `{"LandingMode": "MergeAndPush"}` |
+| Vessel | Vessels > Edit > **Landing Mode** | Vessels > edit vessel > Landing Mode | n/a | `PUT /api/v1/vessels/{id}` with `LandingMode` |
+| Voyage | Voyages > New voyage > **Landing Mode** | New voyage > Landing Mode | `armada go --landing-mode MergeAndPush ...` | `POST /api/v1/voyages` with `LandingMode` |
+
+The global default lives in `settings.json` as `landingMode`. The legacy `autoPush` and `autoCreatePullRequests` settings and the per-voyage `AutoPush` and `AutoCreatePullRequests` fields no longer affect landing (see the upgrade notes below). `AutoMergePullRequests` still applies to the `PullRequest` mode.
+
+### Upgrading from 1.0.0 (landing modes, fixed in 1.0.1)
+
+Version 1.0.0 shipped with a `LocalMerge` mode that also pushed to the remote, which its name did not say. In 1.0.1:
+
+- `LocalMerge` merges into the working directory **without pushing**.
+- The new `MergeAndPush` mode does exactly what `LocalMerge` did in 1.0.0 (merge, then push).
+- The global default is `MergeAndPush`, used whenever no voyage, vessel, or global landing mode is set (in 1.0.0 an unset mode fell back to the legacy flags, whose defaults also merged and pushed).
+- The legacy flags are gone: the `autoPush` and `autoCreatePullRequests` settings, the settings API's `AutoCreatePr`, the dashboard and TUI "Auto-Create Pull Requests" toggle, the voyage create "Auto-Push" / "Auto-Create PRs" / "Auto-Merge PRs" checkboxes, and `armada go --push/--no-push/--pr/--no-pr/--merge/--no-merge` (use `--landing-mode`). A `settings.json` from 1.0.0 that has no `landingMode` keeps its behavior: `autoCreatePullRequests: true` loads as `PullRequest`, `autoPush: false` loads as `LocalMerge`, anything else as `MergeAndPush`.
+
+Nothing is migrated for you: every `LocalMerge` you set in 1.0.0 now merges without pushing. If you want finished work to keep reaching GitHub (or your other remote), change those settings to `MergeAndPush`:
+
+1. **Find the vessels that use `LocalMerge`.** In the dashboard, open Vessels and filter Landing Mode by **Local Merge**; in the TUI, use the Vessels landing mode filter. Over REST:
+
+   ```bash
+   curl -s -H "Authorization: Bearer $TOKEN" "http://localhost:7890/api/v1/vessels?pageSize=1000" \
+     | jq -r '.Objects[] | select(.LandingMode == "LocalMerge") | "\(.Id) \(.Name)"'
+   ```
+
+2. **Switch each one to `MergeAndPush`.** Dashboard: Vessels > the vessel's actions > Edit > Landing Mode > **Merge and Push -- local merge, then push to the remote** > Save. TUI: Vessels > edit the vessel > Landing Mode > Merge and Push > Save. REST (read the vessel, change the field, write it back):
+
+   ```bash
+   curl -s -H "Authorization: Bearer $TOKEN" http://localhost:7890/api/v1/vessels/vsl_abc123 \
+     | jq '.LandingMode = "MergeAndPush"' \
+     | curl -s -X PUT -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+         --data @- http://localhost:7890/api/v1/vessels/vsl_abc123
+   ```
+
+3. **Check the global default.** If your `settings.json` sets `"landingMode": "LocalMerge"`, change it in the dashboard (Server > Agent Settings > Default Landing Mode), the TUI, with `PUT /api/v1/settings` and `{"LandingMode": "MergeAndPush"}`, or on the Admiral's machine with `armada config set landingMode MergeAndPush` followed by an Admiral restart. If `settings.json` has no `landingMode`, nothing needs to change.
+
+4. **Check voyages and scripts.** Voyages created with `LandingMode` `LocalMerge` keep it; create new voyages with `MergeAndPush` (or no landing mode, to inherit the vessel's). Replace `armada go --push` with `armada go --landing-mode MergeAndPush` and `--pr` with `--landing-mode PullRequest` in scripts.
+
+5. **Push anything that landed without a push.** Missions that landed with `LocalMerge` after the upgrade left their merge in the vessel's working directory; push it with `git -C <working directory> push`.
 
 ---
 
@@ -139,7 +183,7 @@ After a mission's work has landed, Armada can automatically clean up the mission
 
 ## Configuration
 
-- **`LandingMode`** (in `ArmadaSettings`) -- global landing policy. Can be overridden per-vessel (`Vessel.LandingMode`) or per-voyage (`Voyage.LandingMode`).
+- **`LandingMode`** (in `ArmadaSettings`, default `MergeAndPush`) -- global landing policy. Can be overridden per-vessel (`Vessel.LandingMode`) or per-voyage (`Voyage.LandingMode`).
 - **`BranchCleanupPolicy`** (in `ArmadaSettings`) -- global branch cleanup policy. Can be overridden per-vessel (`Vessel.BranchCleanupPolicy`).
 - **`MergeQueueTestCommand`** (in `ArmadaSettings`) -- default test command to run for entries that don't specify their own. Can be overridden per entry via the `testCommand` parameter on `enqueue_merge`.
 - **`DocksDirectory`** -- parent directory for temporary merge worktrees. Worktrees are created under `_merge-queue/` within this directory.

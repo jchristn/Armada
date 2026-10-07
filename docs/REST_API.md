@@ -1115,7 +1115,7 @@ Each result has a `Status` of `Pass`, `Warn`, or `Fail`. Stalled-captain and fai
 
 #### GET /api/v1/settings
 
-Returns current server settings including ports, agent configuration, system paths, and remote-control tunnel configuration. `AutoCreatePr` mirrors the `autoCreatePullRequests` setting. `RemoteControl.Password` is always returned as `********`, and `RemoteControl.EnrollmentToken` is returned as `********` when set.
+Returns current server settings including ports, agent configuration, system paths, and remote-control tunnel configuration. `LandingMode` is the global (default) landing mode, `MergeAndPush` unless changed (see [MERGING.md](MERGING.md#landing-mode)). `RemoteControl.Password` is always returned as `********`, and `RemoteControl.EnrollmentToken` is returned as `********` when set.
 
 **Permission:** AdminOnly
 
@@ -1132,7 +1132,7 @@ Returns current server settings including ports, agent configuration, system pat
   "PlanningSessionInactivityTimeoutMinutes": 60,
   "PlanningSessionAbandonmentTimeoutMinutes": 240,
   "PlanningSessionRetentionDays": 0,
-  "AutoCreatePr": false,
+  "LandingMode": "MergeAndPush",
   "DataDirectory": "C:\\Users\\joelc\\.armada",
   "DatabasePath": "C:\\Users\\joelc\\.armada\\armada.db",
   "LogDirectory": "C:\\Users\\joelc\\.armada\\logs",
@@ -1186,7 +1186,7 @@ Returns current server settings including ports, agent configuration, system pat
 
 #### PUT /api/v1/settings
 
-Accepts partial updates to editable server settings and saves them to `settings.json`. Editable top-level fields: `AdmiralPort`, `McpPort`, `MaxCaptains`, `HeartbeatIntervalSeconds`, `StallThresholdMinutes`, `IdleCaptainTimeoutSeconds`, `PlanningSessionInactivityTimeoutMinutes`, `PlanningSessionAbandonmentTimeoutMinutes`, `PlanningSessionRetentionDays`, `AutoCreatePr`, `SelfVesselId`, `RebuildSlotRetentionCount`, `RemoteControl`, `Import`, `FleetActions`, `RepositoryHealth`, `Retention`, and `Permissions`; omitted fields are unchanged. When `RemoteControl` is supplied, it replaces the full `RemoteControl` settings object (send `Password` or `EnrollmentToken` as `********` to keep the stored value). When `Import` is supplied, it replaces the full `Import` (vessel import) settings object; see [Vessel Import](#vessel-import) for the fields and their ranges. When `FleetActions` is supplied, it replaces the full `FleetActions` object (omitted fields take their defaults; values are clamped: `MaxConcurrency` 1-32, `DefaultTimeoutSeconds` 5-7200, `MaxOutputBytes` 1024-1048576, `RunRetentionDays` 1-3650) and applies immediately.
+Accepts partial updates to editable server settings and saves them to `settings.json`. Editable top-level fields: `AdmiralPort`, `McpPort`, `MaxCaptains`, `HeartbeatIntervalSeconds`, `StallThresholdMinutes`, `IdleCaptainTimeoutSeconds`, `PlanningSessionInactivityTimeoutMinutes`, `PlanningSessionAbandonmentTimeoutMinutes`, `PlanningSessionRetentionDays`, `LandingMode` (the global landing mode: `LocalMerge`, `MergeAndPush`, `PullRequest`, `MergeQueue`, or `None`), `SelfVesselId`, `RebuildSlotRetentionCount`, `RemoteControl`, `Import`, `FleetActions`, `RepositoryHealth`, `Retention`, and `Permissions`; omitted fields are unchanged. When `RemoteControl` is supplied, it replaces the full `RemoteControl` settings object (send `Password` or `EnrollmentToken` as `********` to keep the stored value). When `Import` is supplied, it replaces the full `Import` (vessel import) settings object; see [Vessel Import](#vessel-import) for the fields and their ranges. When `FleetActions` is supplied, it replaces the full `FleetActions` object (omitted fields take their defaults; values are clamped: `MaxConcurrency` 1-32, `DefaultTimeoutSeconds` 5-7200, `MaxOutputBytes` 1024-1048576, `RunRetentionDays` 1-3650) and applies immediately.
 
 **Permission:** AdminOnly
 
@@ -2263,7 +2263,7 @@ Import is idempotent: a selected path that already has a vessel (by working dire
 | `Paths` | string[] | yes | Candidate paths to import, exactly as returned in `Candidates[].Path`. Must not be empty; every path must belong to the batch. |
 | `FleetId` | string | no | Fleet (`flt_` prefix) to assign the vessels to; must exist in the tenant |
 | `Defaults.DefaultPipelineId` | string | no | Default pipeline (`ppl_` prefix) for the vessels |
-| `Defaults.LandingMode` | string | no | `LocalMerge`, `PullRequest`, `MergeQueue`, or `None` |
+| `Defaults.LandingMode` | string | no | `LocalMerge`, `MergeAndPush`, `PullRequest`, `MergeQueue`, or `None` |
 | `Categorization.Enabled` | bool | no | Default `false`. When `true`, a `FleetCategorization` job starts after the vessels exist (see Fleet categorization above). |
 | `Categorization.CaptainId` | string | when enabled | Captain (`cpt_` prefix) that recommends fleets. Must exist in the caller's tenant (`400 InvalidRequest` otherwise); it must be `Idle` when the job starts. |
 | `Categorization.Prompt` | string | no | Instructions for the captain (max 32,768 characters). Omit or leave empty to use the `import.fleet_categorization` prompt template. The output contract is always appended. |
@@ -2792,6 +2792,7 @@ Create a new voyage with optional missions. Missions are automatically dispatche
 | `SelectedPlaybooks` | array | no | Ordered [SelectedPlaybook](#selectedplaybook) rows to apply to all created missions |
 | `PipelineId` | string | no | Pipeline ID to use for this voyage (overrides vessel/fleet default) |
 | `Pipeline` | string | no | Pipeline name to use for this voyage (alternative to `PipelineId`) |
+| `LandingMode` | string | no | [LandingModeEnum](#landingmodeenum) for this voyage's missions; omit to inherit the vessel's, then the global default |
 
 **Response:** `201 Created` - [Voyage](#voyage)
 
@@ -7935,9 +7936,9 @@ A batch of related missions tracked together.
 | `CreatedUtc` | datetime | now | Creation timestamp (UTC) |
 | `CompletedUtc` | datetime? | null | Completion timestamp (UTC) |
 | `LastUpdateUtc` | datetime | now | Last update timestamp (UTC) |
-| `AutoPush` | bool? | null | Per-voyage auto-push override (null = use global setting) |
-| `AutoCreatePullRequests` | bool? | null | Per-voyage auto-create PRs override |
-| `AutoMergePullRequests` | bool? | null | Per-voyage auto-merge PRs override |
+| `AutoPush` | bool? | null | Legacy; ignored since 1.0.1 (use `LandingMode`) |
+| `AutoCreatePullRequests` | bool? | null | Legacy; ignored since 1.0.1 (use `LandingMode` `PullRequest`) |
+| `AutoMergePullRequests` | bool? | null | Per-voyage auto-merge override for pull requests opened by the `PullRequest` landing mode (null = use the global setting) |
 | `LandingMode` | [LandingModeEnum](#landingmodeenum)? | null | Per-voyage landing policy override (null = use vessel/global setting) |
 
 ---
@@ -8731,7 +8732,8 @@ Ownership scope for Category B configuration entities (see [Data Scoping](#data-
 
 | Value | Description |
 |---|---|
-| `LocalMerge` | Merge branch into default branch locally and push |
+| `LocalMerge` | Merge the branch into the default branch in the vessel's working directory; nothing is pushed |
+| `MergeAndPush` | Merge the branch into the default branch in the vessel's working directory, then push it to the remote (the default) |
 | `PullRequest` | Create a pull request and poll for merge confirmation |
 | `MergeQueue` | Enqueue the branch into Armada's merge queue |
 | `None` | No automated landing; leave work on the branch |
@@ -8949,6 +8951,7 @@ Request body for creating a voyage with missions.
 | `Pipeline` | string | no | Pipeline name override |
 | `ObjectiveId` | string? | null | Objective (backlog item) to link the voyage to |
 | `CaptainAssignments` | array? | null | Per-persona captain overrides: each entry binds a persona to a preferred captain and a fallback tier for every mission of that persona in the voyage |
+| `LandingMode` | [LandingModeEnum](#landingmodeenum)? | null | Landing mode for this voyage's missions; null inherits the vessel's, then the global default |
 
 ---
 

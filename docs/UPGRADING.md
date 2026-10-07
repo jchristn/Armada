@@ -27,6 +27,13 @@ then replace the binaries the way you installed them. The new Admiral migrates t
 Use the update script that matches how you installed; they are not interchangeable (for example `update.bat`
 updates the global-tool install and does not touch the `ArmadaAdmiral` startup entry).
 
+### Changes to act on when coming from 1.0.0
+
+1.0.1 fixes the landing modes. `LocalMerge` now merges into the working directory without pushing; the new
+`MergeAndPush` mode merges and pushes (what `LocalMerge` did in 1.0.0) and is the global default. Nothing is
+migrated: switch every vessel, voyage, and global `landingMode` that should keep pushing from `LocalMerge` to
+`MergeAndPush`. See [Upgrading from 1.0.0](MERGING.md#upgrading-from-100-landing-modes-fixed-in-101) for the steps.
+
 ### Changes to act on when coming from 0.9.x
 
 1.0.0 tightened several defaults. Check these before you start the new version (the CHANGELOG has the full list):

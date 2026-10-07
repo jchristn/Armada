@@ -950,10 +950,8 @@ armada config init              # Interactive setup (optional)
 | `MaxCaptains` | 0 (no limit; `armada go` auto-creates at most 5) | Maximum total captains |
 | `StallThresholdMinutes` | 10 | Minutes before a captain is considered stalled |
 | `MaxRecoveryAttempts` | 3 | Auto-recovery attempts before giving up |
-| `AutoPush` | true | Push branches to remote on mission completion |
-| `AutoCreatePullRequests` | false | Create PRs on mission completion |
-| `AutoMergePullRequests` | false | Auto-merge PRs after creation |
-| `LandingMode` | null | Landing policy: `LocalMerge`, `PullRequest`, `MergeQueue`, or `None` |
+| `LandingMode` | `MergeAndPush` | Default landing policy (vessels and voyages can override it): `MergeAndPush` (merge into the working directory, then push), `LocalMerge` (merge, no push), `PullRequest`, `MergeQueue`, or `None`. See [docs/MERGING.md](docs/MERGING.md#landing-mode); upgrading from 1.0.0, read [the landing mode notes](docs/MERGING.md#upgrading-from-100-landing-modes-fixed-in-101) |
+| `AutoMergePullRequests` | false | Enable auto-merge on pull requests opened by the `PullRequest` landing mode |
 | `BranchCleanupPolicy` | `LocalOnly` | Branch cleanup after landing: `LocalOnly`, `LocalAndRemote`, or `None` |
 | `GitHubToken` | null | Optional global GitHub token used by Armada-owned integrations; vessels can override it per repository |
 | `RequireAuthForShutdown` | false | Deprecated and ignored: server stop, restart, rebuild, and rollback always require an admin |
@@ -1666,6 +1664,10 @@ v1.0.0 is the first stable release: security hardening, a frozen and documented 
 - Codex captains run with `--sandbox workspace-write` (codex 0.159 removed `--full-auto`).
 
 **New settings worth reviewing:** `mcp.toolCallsPerSecond`, `mcp.missionScopedTokens` (default true), `mcp.allowUnauthenticatedLoopback` (default true), `ask.*` (including `captainAutoApprove`, default false), `retention.*` (Ask threads archive after 90 idle days, finished jobs deleted after 30), `loginRateLimit`, `database.migrationBackupRetentionCount`, `database.requireBackupConfirmationForMigrations`, and the per-vessel `AutoApprove` override.
+
+### v1.0.0 to v1.0.1
+
+**Landing modes changed; check yours.** `LocalMerge` no longer pushes: it merges finished work into the vessel's working directory and stops there. The new `MergeAndPush` mode merges and then pushes (what `LocalMerge` did in 1.0.0), and it is the global default. Nothing is migrated, so switch any vessel, voyage, or global `landingMode` that should keep pushing from `LocalMerge` to `MergeAndPush`. The `autoPush`/`autoCreatePullRequests` settings, the "Auto-Create Pull Requests" toggle, and `armada go --push/--pr/--merge` are replaced by landing modes (`armada go --landing-mode`, `armada config set landingMode`). Step-by-step instructions: [docs/MERGING.md](docs/MERGING.md#upgrading-from-100-landing-modes-fixed-in-101).
 
 ## Issues and Discussions
 

@@ -125,7 +125,7 @@ def main():
                         help="nonpending: any state after Pending passes; complete: the mission must produce work; "
                              "landed: the mission must reach Complete (landed)")
     parser.add_argument("--working-directory", default=None, help="Vessel WorkingDirectory (the user's checkout)")
-    parser.add_argument("--landing-mode", default=None, choices=["LocalMerge", "PullRequest", "MergeQueue", "None"],
+    parser.add_argument("--landing-mode", default=None, choices=["LocalMerge", "MergeAndPush", "PullRequest", "MergeQueue", "None"],
                         help="Vessel LandingMode")
     parser.add_argument("--timings", action="store_true", help="Prefix each step with the elapsed seconds")
     args = parser.parse_args()

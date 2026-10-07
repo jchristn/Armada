@@ -4,6 +4,21 @@ All notable changes to Armada are documented in this file.
 
 ---
 
+## v1.0.1 (2026-10-07)
+
+Focus: a landing-mode fix that was missed in 1.0.0. **Check your landing modes when upgrading**; see [Upgrading from 1.0.0](docs/MERGING.md#upgrading-from-100-landing-modes-fixed-in-101).
+
+### Landing modes
+- **Changed, action may be needed:** `LocalMerge` now merges the mission branch into the vessel's working directory **without pushing**. In 1.0.0 it also pushed to the remote, which its name did not say. Nothing is migrated: a vessel, voyage, or global setting left at `LocalMerge` stops pushing after the upgrade. To keep pushing, switch it to `MergeAndPush` (steps for the dashboard, TUI, CLI, and REST are in [docs/MERGING.md](docs/MERGING.md#upgrading-from-100-landing-modes-fixed-in-101)).
+- New landing mode `MergeAndPush`: merge into the working directory, then push the working directory's branch to its remote, which is exactly what `LocalMerge` did in 1.0.0. A failed push marks the mission `LandingFailed` and keeps the mission branch for a retry.
+- The global landing mode (`ArmadaSettings.LandingMode`, `landingMode` in `settings.json`) defaults to `MergeAndPush` and is used whenever no voyage, vessel, or global mode is set. A 1.0.0 `settings.json` without `landingMode` keeps its behavior: `autoCreatePullRequests: true` loads as `PullRequest`, `autoPush: false` as `LocalMerge`, anything else as `MergeAndPush`.
+- Removed options that no longer applied: the `autoPush` and `autoCreatePullRequests` settings (and the `armada config` key `autoCreatePullRequests`, replaced by `landingMode`), `AutoCreatePr` in `GET`/`PUT /api/v1/settings` (replaced by `LandingMode`), the dashboard and TUI "Auto-Create Pull Requests" toggle (replaced by **Default Landing Mode**), the voyage create "Auto-Push", "Auto-Create PRs", and "Auto-Merge PRs" checkboxes (never sent to the server; replaced by a **Landing Mode** select), and `armada go --push`, `--no-push`, `--pr`, `--no-pr`, `--merge`, `--no-merge` (never applied by the server; replaced by `--landing-mode`). A voyage's stored `AutoPush` and `AutoCreatePullRequests` fields are kept in the API but ignored; `AutoMergePullRequests` still applies to the `PullRequest` mode.
+- `POST /api/v1/voyages` accepts `LandingMode` for the voyage's missions, stored before any mission is dispatched; `armada go --landing-mode` sends it.
+- Dashboard, TUI, setup wizards, vessel import, and the MCP `import_vessels` description offer Merge and Push; Local Merge's label and help say nothing is pushed. The landing preview describes both modes, and the hotfix-into-a-protected-branch warning covers both.
+- Tests: every landing path for both modes (merge, push, merge and push failures, no working directory, no diff, voyage and global overrides, the MergeAndPush default, ignored legacy voyage flags), settings load of 1.0.0 files, persistence and JSON of every mode, the landing preview, the settings and voyage create API, the dashboard and TUI forms, and live runs against a real bare origin showing that `LocalMerge` leaves the origin untouched while `MergeAndPush` updates it.
+
+---
+
 ## v1.0.0 (2026-10-05)
 
 Focus: the first stable release -- security hardening, a frozen and documented API surface, upgrade safety, Ask Armada as the home base, the terminal UI, Harbors, vessel import and fleet operations, and install packages for every platform.

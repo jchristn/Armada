@@ -95,7 +95,7 @@ namespace Armada.Server.Mcp.Tools
                         allNew = new { type = "boolean", description = "Import every candidate with status New (paths is then ignored)" },
                         fleetId = new { type = "string", description = "Fleet ID (flt_ prefix) to assign the vessels to" },
                         defaultPipelineId = new { type = "string", description = "Default pipeline ID (ppl_ prefix) for the vessels" },
-                        landingMode = new { type = "string", description = "Landing mode for the vessels: LocalMerge, PullRequest, MergeQueue, or None" },
+                        landingMode = new { type = "string", description = "Landing mode for the vessels: LocalMerge (merge into the working directory, no push), MergeAndPush (merge, then push), PullRequest, MergeQueue, or None" },
                         categorize = new { type = "boolean", description = "After the import, have a captain analyze the selected repositories and recommend fleets (FleetCategorization job). Requires captainId" },
                         captainId = new { type = "string", description = "Captain ID (cpt_ prefix) that recommends fleets; must exist in your tenant and should be Idle" },
                         prompt = new { type = "string", description = "Categorization instructions; omit to use the import.fleet_categorization prompt template. The output-format contract is always appended" },

@@ -33,7 +33,7 @@ namespace Armada.Server.Mcp
         public string? DefaultPipelineId { get; set; }
 
         /// <summary>
-        /// Landing mode name for created vessels (LocalMerge, PullRequest, MergeQueue, None).
+        /// Landing mode name for created vessels (LocalMerge, MergeAndPush, PullRequest, MergeQueue, None).
         /// </summary>
         public string? LandingMode { get; set; }
 

@@ -2936,9 +2936,9 @@ recognize.
 | `createdUtc` | string | ISO 8601 creation timestamp |
 | `completedUtc` | string \| null | ISO 8601 completion timestamp |
 | `lastUpdateUtc` | string | ISO 8601 last update timestamp |
-| `autoPush` | bool \| null | Override global auto-push setting |
-| `autoCreatePullRequests` | bool \| null | Override global auto-create PR setting |
-| `autoMergePullRequests` | bool \| null | Override global auto-merge PR setting |
+| `autoPush` | bool \| null | Legacy; ignored since 1.0.1 (use `landingMode`) |
+| `autoCreatePullRequests` | bool \| null | Legacy; ignored since 1.0.1 (use `landingMode` `PullRequest`) |
+| `autoMergePullRequests` | bool \| null | Override the global auto-merge setting for pull requests opened by the `PullRequest` landing mode |
 | `landingMode` | string \| null | [LandingModeEnum](#landingmodeenum) -- per-voyage landing policy override |
 | `sourcePlanningSessionId` | string \| null | Planning session that dispatched the voyage |
 | `sourcePlanningMessageId` | string \| null | Planning message the voyage was dispatched from |
@@ -3091,7 +3091,8 @@ mission or a voyage's missions are read; WebSocket commands and events do not co
 
 | Value | Description |
 |---|---|
-| `LocalMerge` | Merge branch into default branch locally and push |
+| `LocalMerge` | Merge the branch into the default branch in the vessel's working directory; nothing is pushed |
+| `MergeAndPush` | Merge the branch into the default branch in the vessel's working directory, then push it to the remote (the default) |
 | `PullRequest` | Create a pull request and poll for merge confirmation |
 | `MergeQueue` | Enqueue the branch into Armada's merge queue |
 | `None` | No automated landing; leave work on the branch |

@@ -1568,7 +1568,7 @@ Requires a tenant admin caller.
     "allNew": { "type": "boolean", "description": "Import every candidate with status New (paths is then ignored)" },
     "fleetId": { "type": "string", "description": "Fleet ID (flt_ prefix) to assign the vessels to" },
     "defaultPipelineId": { "type": "string", "description": "Default pipeline ID (ppl_ prefix) for the vessels" },
-    "landingMode": { "type": "string", "description": "Landing mode for the vessels: LocalMerge, PullRequest, MergeQueue, or None" },
+    "landingMode": { "type": "string", "description": "Landing mode for the vessels: LocalMerge (merge into the working directory, no push), MergeAndPush (merge, then push), PullRequest, MergeQueue, or None" },
     "categorize": { "type": "boolean", "description": "After the import, have a captain analyze the selected repositories and recommend fleets (FleetCategorization job). Requires captainId" },
     "captainId": { "type": "string", "description": "Captain ID (cpt_ prefix) that recommends fleets; must exist in your tenant and should be Idle" },
     "prompt": { "type": "string", "description": "Categorization instructions; omit to use the import.fleet_categorization prompt template. The output-format contract is always appended" },
@@ -1585,7 +1585,7 @@ Requires a tenant admin caller.
 | `allNew` | boolean | No | Import every candidate with status `New` |
 | `fleetId` | string | No | Fleet to assign the vessels to (must exist in the tenant) |
 | `defaultPipelineId` | string | No | Default pipeline for the vessels |
-| `landingMode` | string | No | `LocalMerge`, `PullRequest`, `MergeQueue`, or `None` |
+| `landingMode` | string | No | `LocalMerge`, `MergeAndPush`, `PullRequest`, `MergeQueue`, or `None` |
 | `categorize` | boolean | No | Recommend fleets with a captain after the import (see [REST_API.md](REST_API.md#vessel-import), Fleet categorization) |
 | `captainId` | string | With `categorize` | Captain that recommends fleets; must exist in the tenant |
 | `prompt` | string | No | Instructions for the captain; default is the `import.fleet_categorization` prompt template |
@@ -4919,9 +4919,9 @@ Paginated result wrapper returned by `enumerate`.
 | `CreatedUtc` | string | ISO 8601 creation timestamp |
 | `CompletedUtc` | string \| null | ISO 8601 completion timestamp |
 | `LastUpdateUtc` | string | ISO 8601 last update timestamp |
-| `AutoPush` | bool \| null | Override global auto-push setting |
-| `AutoCreatePullRequests` | bool \| null | Override global auto-create PR setting |
-| `AutoMergePullRequests` | bool \| null | Override global auto-merge PR setting |
+| `AutoPush` | bool \| null | Legacy; ignored since 1.0.1 (use `LandingMode`) |
+| `AutoCreatePullRequests` | bool \| null | Legacy; ignored since 1.0.1 (use `LandingMode` `PullRequest`) |
+| `AutoMergePullRequests` | bool \| null | Override the global auto-merge setting for pull requests opened by the `PullRequest` landing mode |
 | `LandingMode` | string \| null | [LandingModeEnum](#landingmodeenum) - per-voyage landing policy override |
 | `TenantId` | string \| null | Tenant identifier. |
 | `UserId` | string \| null | Owning user identifier. |
@@ -5330,7 +5330,8 @@ Returned by `health_check_model_endpoints`.
 
 | Value | Description |
 |---|---|
-| `LocalMerge` | Merge branch into default branch locally and push |
+| `LocalMerge` | Merge the branch into the default branch in the vessel's working directory; nothing is pushed |
+| `MergeAndPush` | Merge the branch into the default branch in the vessel's working directory, then push it to the remote (the default) |
 | `PullRequest` | Create a pull request and poll for merge confirmation |
 | `MergeQueue` | Enqueue the branch into Armada's merge queue |
 | `None` | No automated landing: the mission stops at `WorkProduced` with its work on the branch, to be merged by hand (the dashboard and TUI offer Merge in Manage Branches). The Admiral moves it to `Complete` once its commit is contained in the target branch, checked right after a Manage Branches merge and on every health check |
