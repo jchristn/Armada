@@ -9,9 +9,9 @@ import ActionMenu from '../components/shared/ActionMenu';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import ErrorModal from '../components/shared/ErrorModal';
 import JsonViewer from '../components/shared/JsonViewer';
-import RefreshButton from '../components/shared/RefreshButton';
+import CopyButton from '../components/shared/CopyButton';
+import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
 import PageHeader from '../components/shared/PageHeader';
-import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import { buildEnvironmentDuplicatePayload } from '../lib/duplicates';
 
@@ -231,6 +231,73 @@ export default function Environments() {
     }
   }
 
+  const columns: DataTableColumn<DeploymentEnvironment>[] = [
+    {
+      key: 'name', label: t('Environment'), required: true,
+      filter: <input type="text" className="col-filter" aria-label={t('Filter by name')} value={colFilters.name} onChange={e => setColFilters(f => ({ ...f, name: e.target.value }))} placeholder={t('Filter...')} />,
+      // One line: default/active state and description have their own columns; the description is also in the tooltip.
+      cellTitle: (environment) => [environment.name, environment.description].filter(Boolean).join('\n'),
+      render: (environment) => <strong className="cell-one-line">{environment.name}</strong>,
+    },
+    {
+      key: 'id', label: t('ID'), required: true, cellClassName: 'mono text-dim table-id-cell',
+      render: (environment) => (
+        <span className="id-display">
+          <span className="id-value" title={environment.id}>{environment.id}</span>
+          <CopyButton text={environment.id} onClick={e => e.stopPropagation()} />
+        </span>
+      ),
+    },
+    { key: 'kind', label: t('Kind'), cellClassName: 'text-dim', render: (environment) => environment.kind },
+    { key: 'vessel', label: t('Vessel'), cellClassName: 'text-dim', render: (environment) => (environment.vesselId ? (vesselMap.get(environment.vesselId) || environment.vesselId) : '-') },
+    {
+      key: 'state', label: t('State'), cellClassName: 'text-dim cell-nowrap',
+      render: (environment) => `${environment.active ? t('Active') : t('Inactive')}${environment.isDefault ? ` \u2022 ${t('Default target')}` : ''}`,
+    },
+    {
+      key: 'baseUrl', label: t('Base URL'), cellClassName: 'text-dim',
+      cellTitle: (environment) => environment.baseUrl || undefined,
+      clearFilter: () => setColFilters(f => ({ ...f, baseUrl: '' })),
+      filter: <input type="text" className="col-filter" aria-label={t('Filter by base URL')} value={colFilters.baseUrl} onChange={e => setColFilters(f => ({ ...f, baseUrl: e.target.value }))} placeholder={t('Filter...')} />,
+      render: (environment) => <span className="cell-clip"><span>{environment.baseUrl || '-'}</span></span>,
+    },
+    {
+      key: 'health', label: t('Health'), cellClassName: 'text-dim',
+      cellTitle: (environment) => environment.healthEndpoint || undefined,
+      clearFilter: () => setColFilters(f => ({ ...f, health: '' })),
+      filter: <input type="text" className="col-filter" aria-label={t('Filter by health endpoint')} value={colFilters.health} onChange={e => setColFilters(f => ({ ...f, health: e.target.value }))} placeholder={t('Filter...')} />,
+      render: (environment) => <span className="cell-clip"><span>{environment.healthEndpoint || '-'}</span></span>,
+    },
+    {
+      key: 'policy', label: t('Policy'), cellClassName: 'text-dim cell-nowrap',
+      render: (environment) => (environment.requiresApproval ? t('Approval required') : t('Self-service')),
+    },
+    {
+      key: 'description', label: t('Description'), defaultHidden: true, cellClassName: 'text-dim',
+      render: (environment) => <span className="cell-one-line" title={environment.description || undefined}>{environment.description || '-'}</span>,
+    },
+    {
+      key: 'lastUpdated', label: t('Last Updated'), cellClassName: 'text-dim cell-nowrap',
+      cellTitle: (environment) => formatDateTime(environment.lastUpdateUtc),
+      render: (environment) => formatRelativeTime(environment.lastUpdateUtc),
+    },
+    {
+      key: 'actions', label: t('Actions'), fixed: true, interactive: true, className: 'text-right',
+      render: (environment) => (
+        <ActionMenu
+          id={`environment-${environment.id}`}
+          items={[
+            { label: 'Open', onClick: () => navigate(`/environments/${environment.id}`) },
+            ...(canManage ? [{ label: 'Edit', onClick: () => openEdit(environment) }] : []),
+            ...(canManage ? [{ label: 'Duplicate', onClick: () => void handleDuplicate(environment) }] : []),
+            { label: 'View JSON', onClick: () => setJsonData({ open: true, title: environment.name, data: environment }) },
+            ...(canManage ? [{ label: 'Delete', danger: true as const, onClick: () => handleDelete(environment) }] : []),
+          ]}
+        />
+      ),
+    },
+  ];
+
   return (
     <div>
       <PageHeader
@@ -238,8 +305,6 @@ export default function Environments() {
         subtitle={t('Named deployment targets for vessels, with URLs, configuration sources, approval requirements, and operator notes.')}
         actions={(
           <>
-            <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
-            <RefreshButton onRefresh={load} title={t('Refresh environments')} />
             {canManage && (
               <button className="btn btn-primary" onClick={openCreate}>
                 + {t('Environment')}
@@ -368,79 +433,22 @@ export default function Environments() {
         </div>
       </div>
 
-      {loading && environments.length === 0 ? (
-        <p className="text-dim">{t('Loading...')}</p>
-      ) : filtered.length === 0 ? (
-        <div className="playbook-empty-state">
-          <strong>{t('No environments match the current filters.')}</strong>
-          <span>{canManage ? t('Create an environment to capture deployment metadata, URLs, and approval rules for a vessel.') : t('Ask a tenant administrator to create and manage environment records.')}</span>
-        </div>
-      ) : (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>{t('Environment')}</th>
-                <th>{t('Kind')}</th>
-                <th>{t('Vessel')}</th>
-                <th>{t('Base URL')}</th>
-                <th>{t('Health')}</th>
-                <th>{t('Policy')}</th>
-                <th>{t('Last Updated')}</th>
-                <th className="text-right">{t('Actions')}</th>
-              </tr>
-              <tr className="column-filter-row">
-                <td><input type="text" className="col-filter" value={colFilters.name} onChange={e => setColFilters(f => ({ ...f, name: e.target.value }))} placeholder={t('Filter...')} /></td>
-                <td></td>
-                <td></td>
-                <td><input type="text" className="col-filter" value={colFilters.baseUrl} onChange={e => setColFilters(f => ({ ...f, baseUrl: e.target.value }))} placeholder={t('Filter...')} /></td>
-                <td><input type="text" className="col-filter" value={colFilters.health} onChange={e => setColFilters(f => ({ ...f, health: e.target.value }))} placeholder={t('Filter...')} /></td>
-                <td></td>
-                <td></td>
-                <td></td>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((environment) => (
-                <tr key={environment.id} className="clickable" onClick={() => canManage ? openEdit(environment) : navigate(`/environments/${environment.id}`)}>
-                  <td>
-                    <strong>{environment.name}</strong>
-                    <div className="text-dim" style={{ marginTop: '0.2rem' }}>
-                      {environment.isDefault ? t('Default target') : t('Non-default')} {environment.active ? '• ' + t('Active') : '• ' + t('Inactive')}
-                    </div>
-                    <div className="id-display mono text-dim" style={{ fontSize: '0.78rem' }}><span className="id-value" title={environment.id}>{environment.id}</span></div>
-                    {environment.description && (
-                      <div className="text-dim" style={{ marginTop: '0.2rem' }}>{environment.description}</div>
-                    )}
-                  </td>
-                  <td className="text-dim">{environment.kind}</td>
-                  <td className="text-dim">{environment.vesselId ? (vesselMap.get(environment.vesselId) || environment.vesselId) : '-'}</td>
-                  <td className="text-dim" title={environment.baseUrl || undefined}><span className="cell-clip"><span>{environment.baseUrl || '-'}</span></span></td>
-                  <td className="text-dim" title={environment.healthEndpoint || undefined}><span className="cell-clip"><span>{environment.healthEndpoint || '-'}</span></span></td>
-                  <td className="text-dim">
-                    {environment.requiresApproval ? t('Approval required') : t('Self-service')}
-                  </td>
-                  <td className="text-dim" title={formatDateTime(environment.lastUpdateUtc)}>
-                    {formatRelativeTime(environment.lastUpdateUtc)}
-                  </td>
-                  <td className="text-right" onClick={(event) => event.stopPropagation()}>
-                    <ActionMenu
-                      id={`environment-${environment.id}`}
-                      items={[
-                        { label: 'Open', onClick: () => navigate(`/environments/${environment.id}`) },
-                        ...(canManage ? [{ label: 'Edit', onClick: () => openEdit(environment) }] : []),
-                        ...(canManage ? [{ label: 'Duplicate', onClick: () => void handleDuplicate(environment) }] : []),
-                        { label: 'View JSON', onClick: () => setJsonData({ open: true, title: environment.name, data: environment }) },
-                        ...(canManage ? [{ label: 'Delete', danger: true as const, onClick: () => handleDelete(environment) }] : []),
-                      ]}
-                    />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <DataTable
+        tableKey="environments"
+        columns={columns}
+        rows={filtered}
+        rowKey={(environment) => environment.id}
+        onRowClick={(environment) => (canManage ? openEdit(environment) : navigate(`/environments/${environment.id}`))}
+        autoRefresh={{ seconds: refreshSeconds, onChange: setRefreshSeconds }}
+        onRefresh={load}
+        refreshTitle={t('Refresh environments')}
+        placeholder={loading && environments.length === 0 ? <p className="text-dim">{t('Loading...')}</p> : filtered.length === 0 ? (
+          <div className="playbook-empty-state">
+            <strong>{t('No environments match the current filters.')}</strong>
+            <span>{canManage ? t('Create an environment to capture deployment metadata, URLs, and approval rules for a vessel.') : t('Ask a tenant administrator to create and manage environment records.')}</span>
+          </div>
+        ) : undefined}
+      />
     </div>
   );
 }

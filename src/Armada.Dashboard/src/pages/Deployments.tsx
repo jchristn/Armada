@@ -28,8 +28,8 @@ import ActionMenu from '../components/shared/ActionMenu';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import ErrorModal from '../components/shared/ErrorModal';
 import JsonViewer from '../components/shared/JsonViewer';
-import RefreshButton from '../components/shared/RefreshButton';
-import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
+import CopyButton from '../components/shared/CopyButton';
+import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import StatusBadge from '../components/shared/StatusBadge';
 import { buildEnvironmentOptions } from '../lib/deploymentEnvironments';
@@ -282,6 +282,67 @@ export default function Deployments() {
     });
   }
 
+  const columns: DataTableColumn<Deployment>[] = [
+    {
+      key: 'title', label: t('Deployment'), required: true,
+      filter: <input type="text" className="col-filter" aria-label={t('Filter by title')} value={colFilters.title} onChange={e => setColFilters(f => ({ ...f, title: e.target.value }))} placeholder={t('Filter...')} />,
+      // One line: the summary and approval requirement are in the tooltip and in their own (optional) columns.
+      cellTitle: (deployment) => [deployment.title, deployment.summary, deployment.approvalRequired ? t('Approval required') : ''].filter(Boolean).join('\n'),
+      render: (deployment) => <strong className="cell-one-line">{deployment.title}</strong>,
+    },
+    {
+      key: 'id', label: t('ID'), required: true, cellClassName: 'mono text-dim table-id-cell',
+      render: (deployment) => (
+        <span className="id-display">
+          <span className="id-value" title={deployment.id}>{deployment.id}</span>
+          <CopyButton text={deployment.id} onClick={e => e.stopPropagation()} />
+        </span>
+      ),
+    },
+    { key: 'status', label: t('Status'), cellClassName: 'cell-nowrap', render: (deployment) => <StatusBadge status={deployment.status} /> },
+    { key: 'verification', label: t('Verification'), cellClassName: 'cell-nowrap', render: (deployment) => <StatusBadge status={deployment.verificationStatus} /> },
+    {
+      key: 'sourceRef', label: t('Source Ref'), cellClassName: 'mono text-dim',
+      render: (deployment) => <span className="cell-one-line" title={deployment.sourceRef || undefined}>{deployment.sourceRef || '-'}</span>,
+    },
+    { key: 'vessel', label: t('Vessel'), cellClassName: 'text-dim', render: (deployment) => (deployment.vesselId ? (vesselMap.get(deployment.vesselId) || deployment.vesselId) : '-') },
+    {
+      key: 'environment', label: t('Environment'), cellClassName: 'text-dim',
+      clearFilter: () => setColFilters(f => ({ ...f, environmentName: '' })),
+      filter: <input type="text" className="col-filter" aria-label={t('Filter by environment')} value={colFilters.environmentName} onChange={e => setColFilters(f => ({ ...f, environmentName: e.target.value }))} placeholder={t('Filter...')} />,
+      render: (deployment) => (deployment.environmentId ? (environmentMap.get(deployment.environmentId) || deployment.environmentName || deployment.environmentId) : (deployment.environmentName || '-')),
+    },
+    { key: 'release', label: t('Release'), cellClassName: 'text-dim', render: (deployment) => (deployment.releaseId ? (releaseMap.get(deployment.releaseId) || deployment.releaseId) : '-') },
+    { key: 'checks', label: t('Checks'), cellClassName: 'text-dim', render: (deployment) => deployment.checkRunIds.length },
+    {
+      key: 'approval', label: t('Approval'), defaultHidden: true, cellClassName: 'text-dim cell-nowrap',
+      render: (deployment) => (deployment.approvalRequired ? t('Approval required') : '-'),
+    },
+    {
+      key: 'summary', label: t('Summary'), defaultHidden: true, cellClassName: 'text-dim',
+      render: (deployment) => <span className="cell-one-line" title={deployment.summary || undefined}>{deployment.summary || '-'}</span>,
+    },
+    {
+      key: 'lastUpdated', label: t('Last Updated'), cellClassName: 'text-dim cell-nowrap',
+      cellTitle: (deployment) => formatDateTime(deployment.lastUpdateUtc),
+      render: (deployment) => formatRelativeTime(deployment.lastUpdateUtc),
+    },
+    {
+      key: 'actions', label: t('Actions'), fixed: true, interactive: true, className: 'text-right',
+      render: (deployment) => (
+        <ActionMenu
+          id={`deployment-${deployment.id}`}
+          items={[
+            { label: 'Open', onClick: () => navigate(`/deployments/${deployment.id}`) },
+            ...(canManage ? [{ label: 'Edit', onClick: () => openEdit(deployment) }] : []),
+            { label: 'View JSON', onClick: () => setJsonData({ open: true, title: deployment.title, data: deployment }) },
+            ...(canManage ? [{ label: 'Delete', danger: true as const, onClick: () => handleDelete(deployment) }] : []),
+          ]}
+        />
+      ),
+    },
+  ];
+
   return (
     <div>
       <PageHeader
@@ -289,8 +350,6 @@ export default function Deployments() {
         subtitle={t('First-class deployment records linking releases, environments, checks, approval, verification, rollback, and request-history evidence.')}
         actions={(
           <>
-            <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
-            <RefreshButton onRefresh={load} title={t('Refresh deployments')} />
             {canManage && (
               <button className="btn btn-primary" onClick={openCreate}>
                 + {t('Deployment')}
@@ -431,79 +490,22 @@ export default function Deployments() {
         </div>
       </div>
 
-      {loading && deployments.length === 0 ? (
-        <p className="text-dim">{t('Loading...')}</p>
-      ) : filtered.length === 0 ? (
-        <div className="playbook-empty-state">
-          <strong>{t('No deployments match the current filters.')}</strong>
-          <span>{canManage ? t('Create a deployment from an environment or release to track approval, execution, verification, and rollback in one record.') : t('Ask a tenant administrator to create and manage deployment records.')}</span>
-        </div>
-      ) : (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>{t('Deployment')}</th>
-                <th>{t('Status')}</th>
-                <th>{t('Verification')}</th>
-                <th>{t('Vessel')}</th>
-                <th>{t('Environment')}</th>
-                <th>{t('Release')}</th>
-                <th>{t('Checks')}</th>
-                <th>{t('Last Updated')}</th>
-                <th className="text-right">{t('Actions')}</th>
-              </tr>
-              <tr className="column-filter-row">
-                <td><input type="text" className="col-filter" value={colFilters.title} onChange={e => setColFilters(f => ({ ...f, title: e.target.value }))} placeholder={t('Filter...')} /></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td><input type="text" className="col-filter" value={colFilters.environmentName} onChange={e => setColFilters(f => ({ ...f, environmentName: e.target.value }))} placeholder={t('Filter...')} /></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((deployment) => (
-                <tr key={deployment.id} className="clickable" onClick={() => canManage ? openEdit(deployment) : navigate(`/deployments/${deployment.id}`)}>
-                  <td>
-                    <strong>{deployment.title}</strong>
-                    <div className="text-dim" style={{ marginTop: '0.2rem' }}>
-                      {deployment.sourceRef || t('No source ref')} {deployment.approvalRequired ? `• ${t('Approval required')}` : ''}
-                    </div>
-                    <div className="mono text-dim" style={{ fontSize: '0.78rem' }}>{deployment.id}</div>
-                    {deployment.summary && (
-                      <div className="text-dim" style={{ marginTop: '0.2rem' }}>{deployment.summary}</div>
-                    )}
-                  </td>
-                  <td><StatusBadge status={deployment.status} /></td>
-                  <td><StatusBadge status={deployment.verificationStatus} /></td>
-                  <td className="text-dim">{deployment.vesselId ? (vesselMap.get(deployment.vesselId) || deployment.vesselId) : '-'}</td>
-                  <td className="text-dim">{deployment.environmentId ? (environmentMap.get(deployment.environmentId) || deployment.environmentName || deployment.environmentId) : (deployment.environmentName || '-')}</td>
-                  <td className="text-dim">{deployment.releaseId ? (releaseMap.get(deployment.releaseId) || deployment.releaseId) : '-'}</td>
-                  <td className="text-dim">{deployment.checkRunIds.length}</td>
-                  <td className="text-dim" title={formatDateTime(deployment.lastUpdateUtc)}>
-                    {formatRelativeTime(deployment.lastUpdateUtc)}
-                  </td>
-                  <td className="text-right" onClick={(event) => event.stopPropagation()}>
-                    <ActionMenu
-                      id={`deployment-${deployment.id}`}
-                      items={[
-                        { label: 'Open', onClick: () => navigate(`/deployments/${deployment.id}`) },
-                        ...(canManage ? [{ label: 'Edit', onClick: () => openEdit(deployment) }] : []),
-                        { label: 'View JSON', onClick: () => setJsonData({ open: true, title: deployment.title, data: deployment }) },
-                        ...(canManage ? [{ label: 'Delete', danger: true as const, onClick: () => handleDelete(deployment) }] : []),
-                      ]}
-                    />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <DataTable
+        tableKey="deployments"
+        columns={columns}
+        rows={filtered}
+        rowKey={(deployment) => deployment.id}
+        onRowClick={(deployment) => (canManage ? openEdit(deployment) : navigate(`/deployments/${deployment.id}`))}
+        autoRefresh={{ seconds: refreshSeconds, onChange: setRefreshSeconds }}
+        onRefresh={load}
+        refreshTitle={t('Refresh deployments')}
+        placeholder={loading && deployments.length === 0 ? <p className="text-dim">{t('Loading...')}</p> : filtered.length === 0 ? (
+          <div className="playbook-empty-state">
+            <strong>{t('No deployments match the current filters.')}</strong>
+            <span>{canManage ? t('Create a deployment from an environment or release to track approval, execution, verification, and rollback in one record.') : t('Ask a tenant administrator to create and manage deployment records.')}</span>
+          </div>
+        ) : undefined}
+      />
     </div>
   );
 }

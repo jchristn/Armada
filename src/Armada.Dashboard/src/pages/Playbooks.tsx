@@ -12,8 +12,8 @@ import ActionMenu from '../components/shared/ActionMenu';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import ErrorModal from '../components/shared/ErrorModal';
 import JsonViewer from '../components/shared/JsonViewer';
-import RefreshButton from '../components/shared/RefreshButton';
-import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
+import CopyButton from '../components/shared/CopyButton';
+import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
 import PageHeader from '../components/shared/PageHeader';
 import StatusBadge from '../components/shared/StatusBadge';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
@@ -174,6 +174,63 @@ export default function Playbooks() {
     }
   }
 
+  const emptyState = (
+    <div className="playbook-empty-state">
+      <strong>{t('No playbooks match the current filters.')}</strong>
+      <span>{canManage ? t('Create a playbook to start standardizing dispatch behavior.') : t('Ask a tenant administrator to create playbooks for shared guidance.')}</span>
+    </div>
+  );
+
+  const columns: DataTableColumn<Playbook>[] = [
+    {
+      key: 'fileName', label: t('File'), required: true,
+      clearFilter: () => setColFilters(f => ({ ...f, fileName: '' })),
+      filter: <input type="text" className="col-filter" aria-label={t('File')} value={colFilters.fileName} onChange={e => setColFilters(f => ({ ...f, fileName: e.target.value }))} placeholder={t('Filter...')} />,
+      render: (playbook) => <strong>{playbook.fileName}</strong>,
+    },
+    {
+      key: 'id', label: t('ID'), required: true, cellClassName: 'mono text-dim table-id-cell',
+      render: (playbook) => (
+        <span className="id-display">
+          <span className="id-value" title={playbook.id}>{playbook.id}</span>
+          <CopyButton text={playbook.id} onClick={e => e.stopPropagation()} />
+        </span>
+      ),
+    },
+    {
+      key: 'description', label: t('Description'), cellClassName: 'text-dim',
+      clearFilter: () => setColFilters(f => ({ ...f, description: '' })),
+      filter: <input type="text" className="col-filter" aria-label={t('Description')} value={colFilters.description} onChange={e => setColFilters(f => ({ ...f, description: e.target.value }))} placeholder={t('Filter...')} />,
+      render: (playbook) => playbook.description || '-',
+    },
+    { key: 'visibility', label: t('Visibility'), cellClassName: 'cell-nowrap', render: (playbook) => <ScopeBadge scope={playbook.scope} /> },
+    { key: 'status', label: t('Status'), cellClassName: 'cell-nowrap', render: (playbook) => <StatusBadge status={playbook.active ? 'Active' : 'Inactive'} /> },
+    { key: 'content', label: t('Content'), cellClassName: 'text-dim cell-nowrap', render: (playbook) => <>{playbook.content.length.toLocaleString()} {t('chars')}</> },
+    {
+      key: 'lastUpdated', label: t('Last Updated'), cellClassName: 'text-dim cell-nowrap',
+      cellTitle: (playbook) => formatDateTime(playbook.lastUpdateUtc),
+      render: (playbook) => formatRelativeTime(playbook.lastUpdateUtc),
+    },
+    {
+      key: 'actions', label: t('Actions'), fixed: true, interactive: true, className: 'text-right',
+      render: (playbook) => {
+        const canEditRow = canEditScoped(viewer, playbook);
+        return (
+          <ActionMenu
+            id={`playbook-${playbook.id}`}
+            items={[
+              { label: 'Open', onClick: () => navigate(`/playbooks/${playbook.id}`) },
+              ...(canEditRow ? [{ label: 'Edit', onClick: () => openEdit(playbook) }] : []),
+              { label: 'Duplicate', onClick: () => void handleDuplicate(playbook) },
+              { label: 'View JSON', onClick: () => setJsonData({ open: true, title: playbook.fileName, data: playbook }) },
+              ...(canEditRow ? [{ label: 'Delete', danger: true as const, onClick: () => handleDelete(playbook) }] : []),
+            ]}
+          />
+        );
+      },
+    },
+  ];
+
   return (
     <div>
       <PageHeader
@@ -181,8 +238,6 @@ export default function Playbooks() {
         subtitle={t('Tenant-scoped markdown playbooks that can be attached to voyages and missions. Use them for durable engineering rules, architecture standards, or execution checklists.')}
         actions={(
           <>
-            <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
-            <RefreshButton onRefresh={load} title={t('Refresh playbooks')} />
             <button className="btn btn-primary" onClick={openCreate}>
               + {t('Playbook')}
             </button>
@@ -261,77 +316,18 @@ export default function Playbooks() {
         </div>
       </div>
 
-      {loading && playbooks.length === 0 ? (
-        <p className="text-dim">{t('Loading...')}</p>
-      ) : filtered.length === 0 ? (
-        <div className="playbook-empty-state">
-          <strong>{t('No playbooks match the current filters.')}</strong>
-          <span>{canManage ? t('Create a playbook to start standardizing dispatch behavior.') : t('Ask a tenant administrator to create playbooks for shared guidance.')}</span>
-        </div>
-      ) : (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>{t('File')}</th>
-                <th>{t('Description')}</th>
-                <th>{t('Visibility')}</th>
-                <th>{t('Status')}</th>
-                <th>{t('Content')}</th>
-                <th>{t('Last Updated')}</th>
-                <th className="text-right">{t('Actions')}</th>
-              </tr>
-              <tr className="column-filter-row">
-                <td><input type="text" className="col-filter" value={colFilters.fileName} onChange={e => setColFilters(f => ({ ...f, fileName: e.target.value }))} placeholder={t('Filter...')} /></td>
-                <td><input type="text" className="col-filter" value={colFilters.description} onChange={e => setColFilters(f => ({ ...f, description: e.target.value }))} placeholder={t('Filter...')} /></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((playbook) => {
-                const canEditRow = canEditScoped(viewer, playbook);
-                return (
-                <tr key={playbook.id} className="clickable" onClick={() => canEditRow ? openEdit(playbook) : navigate(`/playbooks/${playbook.id}`)}>
-                  <td>
-                    <strong>{playbook.fileName}</strong>
-                    <div className="mono text-dim" style={{ fontSize: '0.78rem' }}>{playbook.id}</div>
-                  </td>
-                  <td className="text-dim">{playbook.description || '-'}</td>
-                  <td>
-                    <ScopeBadge scope={playbook.scope} />
-                  </td>
-                  <td>
-                    <StatusBadge status={playbook.active ? 'Active' : 'Inactive'} />
-                  </td>
-                  <td className="text-dim">
-                    {playbook.content.length.toLocaleString()} {t('chars')}
-                  </td>
-                  <td className="text-dim" title={formatDateTime(playbook.lastUpdateUtc)}>
-                    {formatRelativeTime(playbook.lastUpdateUtc)}
-                  </td>
-                  <td className="text-right" onClick={(event) => event.stopPropagation()}>
-                    <ActionMenu
-                      id={`playbook-${playbook.id}`}
-                      items={[
-                        { label: 'Open', onClick: () => navigate(`/playbooks/${playbook.id}`) },
-                        ...(canEditRow ? [{ label: 'Edit', onClick: () => openEdit(playbook) }] : []),
-                        { label: 'Duplicate', onClick: () => void handleDuplicate(playbook) },
-                        { label: 'View JSON', onClick: () => setJsonData({ open: true, title: playbook.fileName, data: playbook }) },
-                        ...(canEditRow ? [{ label: 'Delete', danger: true as const, onClick: () => handleDelete(playbook) }] : []),
-                      ]}
-                    />
-                  </td>
-                </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <DataTable
+        tableKey="playbooks"
+        columns={columns}
+        rows={filtered}
+        rowKey={(playbook) => playbook.id}
+        onRowClick={(playbook) => (canEditScoped(viewer, playbook) ? openEdit(playbook) : navigate(`/playbooks/${playbook.id}`))}
+        autoRefresh={{ seconds: refreshSeconds, onChange: setRefreshSeconds }}
+        onRefresh={load}
+        refreshTitle="Refresh playbooks"
+        emptyMessage={emptyState}
+        placeholder={playbooks.length > 0 ? undefined : loading ? <p className="text-dim">{t('Loading...')}</p> : emptyState}
+      />
     </div>
   );
 }

@@ -12,8 +12,8 @@ import ActionMenu from '../components/shared/ActionMenu';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import ErrorModal from '../components/shared/ErrorModal';
 import JsonViewer from '../components/shared/JsonViewer';
-import RefreshButton from '../components/shared/RefreshButton';
-import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
+import CopyButton from '../components/shared/CopyButton';
+import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import PageHeader from '../components/shared/PageHeader';
 import StatusBadge from '../components/shared/StatusBadge';
@@ -244,6 +244,72 @@ export default function WorkflowProfiles() {
     }
   }
 
+  const emptyState = (
+    <div className="playbook-empty-state">
+      <strong>{t('No workflow profiles match the current filters.')}</strong>
+      <span>{canManage ? t('Create a workflow profile to teach Armada how a project actually builds and ships.') : t('Ask a tenant administrator to define workflow profiles for shared build and deploy actions.')}</span>
+    </div>
+  );
+
+  // Name, ID and description used to stack in one cell, and "Default" sat under the scope badge; each is on one line now.
+  const columns: DataTableColumn<WorkflowProfile>[] = [
+    {
+      key: 'name', label: t('Profile'), required: true,
+      clearFilter: () => setColFilters(f => ({ ...f, name: '' })),
+      filter: <input type="text" className="col-filter" aria-label={t('Profile')} value={colFilters.name} onChange={e => setColFilters(f => ({ ...f, name: e.target.value }))} placeholder={t('Filter...')} />,
+      render: (profile) => <strong>{profile.name}</strong>,
+    },
+    {
+      key: 'id', label: t('ID'), required: true, cellClassName: 'mono text-dim table-id-cell',
+      render: (profile) => (
+        <span className="id-display">
+          <span className="id-value" title={profile.id}>{profile.id}</span>
+          <CopyButton text={profile.id} onClick={e => e.stopPropagation()} />
+        </span>
+      ),
+    },
+    {
+      key: 'description', label: t('Description'), defaultHidden: true, cellClassName: 'text-dim truncate-cell',
+      render: (profile) => profile.description ? <span className="truncate-text" title={profile.description}>{profile.description}</span> : '-',
+    },
+    {
+      key: 'scope', label: t('Scope'), cellClassName: 'cell-nowrap',
+      render: (profile) => (
+        <>
+          <StatusBadge status={profile.scope} />
+          {profile.isDefault && <span className="text-dim"> {t('Default')}</span>}
+        </>
+      ),
+    },
+    { key: 'visibility', label: t('Visibility'), cellClassName: 'cell-nowrap', render: (profile) => <ScopeBadge scope={profile.ownershipScope} /> },
+    { key: 'capabilities', label: t('Capabilities'), cellClassName: 'text-dim cell-nowrap', render: (profile) => <>{countProfileCapabilities(profile)} {t('commands')}</> },
+    { key: 'targets', label: t('Targets'), cellClassName: 'text-dim cell-nowrap', render: (profile) => <>{profile.environments.length} {t('environments')}</> },
+    { key: 'status', label: t('Status'), cellClassName: 'cell-nowrap', render: (profile) => <StatusBadge status={profile.active ? 'Active' : 'Inactive'} /> },
+    {
+      key: 'lastUpdated', label: t('Last Updated'), cellClassName: 'text-dim cell-nowrap',
+      cellTitle: (profile) => formatDateTime(profile.lastUpdateUtc),
+      render: (profile) => formatRelativeTime(profile.lastUpdateUtc),
+    },
+    {
+      key: 'actions', label: t('Actions'), fixed: true, interactive: true, className: 'text-right',
+      render: (profile) => {
+        const canEditRow = canEditProfile(profile);
+        return (
+          <ActionMenu
+            id={`workflow-profile-${profile.id}`}
+            items={[
+              { label: 'Open', onClick: () => navigate(`/workflow-profiles/${profile.id}`) },
+              ...(canEditRow ? [{ label: 'Edit', onClick: () => openEdit(profile) }] : []),
+              { label: 'Duplicate', onClick: () => void handleDuplicate(profile) },
+              { label: 'View JSON', onClick: () => setJsonData({ open: true, title: profile.name, data: profile }) },
+              ...(canEditRow ? [{ label: 'Delete', danger: true as const, onClick: () => handleDelete(profile) }] : []),
+            ]}
+          />
+        );
+      },
+    },
+  ];
+
   return (
     <div>
       <PageHeader
@@ -251,8 +317,6 @@ export default function WorkflowProfiles() {
         subtitle={t('Tenant-scoped command profiles that tell Armada how each project builds, tests, packages, releases, deploys, and verifies itself.')}
         actions={(
           <>
-            <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
-            <RefreshButton onRefresh={load} title={t('Refresh workflow profiles')} />
             <button className="btn btn-primary" onClick={openCreate}>
               + {t('Workflow Profile')}
             </button>
@@ -395,78 +459,18 @@ export default function WorkflowProfiles() {
         </div>
       </div>
 
-      {loading && profiles.length === 0 ? (
-        <p className="text-dim">{t('Loading...')}</p>
-      ) : filtered.length === 0 ? (
-        <div className="playbook-empty-state">
-          <strong>{t('No workflow profiles match the current filters.')}</strong>
-          <span>{canManage ? t('Create a workflow profile to teach Armada how a project actually builds and ships.') : t('Ask a tenant administrator to define workflow profiles for shared build and deploy actions.')}</span>
-        </div>
-      ) : (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>{t('Profile')}</th>
-                <th>{t('Scope')}</th>
-                <th>{t('Visibility')}</th>
-                <th>{t('Capabilities')}</th>
-                <th>{t('Targets')}</th>
-                <th>{t('Status')}</th>
-                <th>{t('Last Updated')}</th>
-                <th className="text-right">{t('Actions')}</th>
-              </tr>
-              <tr className="column-filter-row">
-                <td><input type="text" className="col-filter" value={colFilters.name} onChange={e => setColFilters(f => ({ ...f, name: e.target.value }))} placeholder={t('Filter...')} /></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((profile) => {
-                const canEditRow = canEditProfile(profile);
-                return (
-                <tr key={profile.id} className="clickable" onClick={() => canEditRow ? openEdit(profile) : navigate(`/workflow-profiles/${profile.id}`)}>
-                  <td>
-                    <strong>{profile.name}</strong>
-                    <div className="mono text-dim" style={{ fontSize: '0.78rem' }}>{profile.id}</div>
-                    {profile.description && (
-                      <div className="text-dim" style={{ marginTop: '0.2rem' }}>{profile.description}</div>
-                    )}
-                  </td>
-                  <td>
-                    <StatusBadge status={profile.scope} />
-                    {profile.isDefault && <div className="text-dim" style={{ marginTop: '0.25rem' }}>{t('Default')}</div>}
-                  </td>
-                  <td><ScopeBadge scope={profile.ownershipScope} /></td>
-                  <td className="text-dim">{countProfileCapabilities(profile)} {t('commands')}</td>
-                  <td className="text-dim">{profile.environments.length} {t('environments')}</td>
-                  <td><StatusBadge status={profile.active ? 'Active' : 'Inactive'} /></td>
-                  <td className="text-dim" title={formatDateTime(profile.lastUpdateUtc)}>{formatRelativeTime(profile.lastUpdateUtc)}</td>
-                  <td className="text-right" onClick={(event) => event.stopPropagation()}>
-                    <ActionMenu
-                      id={`workflow-profile-${profile.id}`}
-                      items={[
-                        { label: 'Open', onClick: () => navigate(`/workflow-profiles/${profile.id}`) },
-                        ...(canEditRow ? [{ label: 'Edit', onClick: () => openEdit(profile) }] : []),
-                        { label: 'Duplicate', onClick: () => void handleDuplicate(profile) },
-                        { label: 'View JSON', onClick: () => setJsonData({ open: true, title: profile.name, data: profile }) },
-                        ...(canEditRow ? [{ label: 'Delete', danger: true as const, onClick: () => handleDelete(profile) }] : []),
-                      ]}
-                    />
-                  </td>
-                </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <DataTable
+        tableKey="workflowprofiles"
+        columns={columns}
+        rows={filtered}
+        rowKey={(profile) => profile.id}
+        onRowClick={(profile) => (canEditProfile(profile) ? openEdit(profile) : navigate(`/workflow-profiles/${profile.id}`))}
+        autoRefresh={{ seconds: refreshSeconds, onChange: setRefreshSeconds }}
+        onRefresh={load}
+        refreshTitle="Refresh workflow profiles"
+        emptyMessage={emptyState}
+        placeholder={profiles.length > 0 ? undefined : loading ? <p className="text-dim">{t('Loading...')}</p> : emptyState}
+      />
     </div>
   );
 }

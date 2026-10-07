@@ -25,6 +25,7 @@ import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import CopyButton, { copyToClipboard } from '../components/shared/CopyButton';
 import JsonViewer from '../components/shared/JsonViewer';
+import DataTable from '../components/shared/DataTable';
 import FilterBar from '../components/shared/FilterBar';
 import MissionHistoryChart from '../components/MissionHistoryChart';
 import HealthKpiCards from '../components/vessels/health/HealthKpiCards';
@@ -471,74 +472,75 @@ export default function Dashboard() {
       {status?.voyages && status.voyages.length > 0 && (
         <div style={{ marginTop: '1.5rem' }}>
           <h3>{t('Voyage Progress')}</h3>
-          <div className="table-wrap">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th title={t('Voyage name and unique identifier')}>{t('Voyage')}</th>
-                  <th title={t('Current voyage lifecycle state')}>{t('Status')}</th>
-                  <th title={t('Vessel(s) targeted by this voyage\'s missions')}>{t('Vessel')}</th>
-                  <th title={t('Percentage of missions completed')}>{t('Progress')}</th>
-                  <th title={t('Completed vs total missions in this voyage')}>{t('Missions')}</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {status.voyages.map((vp) => (
-                  <tr
-                    key={vp.voyage?.id}
-                    className="clickable"
-                    onClick={() => navigate(`/voyages/${vp.voyage?.id}`)}
-                  >
-                    <td>
-                      <strong>{vp.voyage?.title || vp.voyage?.id}</strong>
-                      <div className="text-dim id-display">
-                        <span className="mono">{vp.voyage?.id}</span>
-                        <CopyButton text={vp.voyage?.id || ''} onClick={e => e.stopPropagation()} />
-                      </div>
-                    </td>
-                    <td>
-                      <StatusBadge status={vp.voyage?.status || ''} />
-                    </td>
-                    <td className="text-dim">{voyageVesselNames(vp.vesselIds)}</td>
-                    <td>
-                      <div className="progress-bar">
-                        <div
-                          className="progress-fill"
-                          style={{ width: `${voyagePercent(vp)}%` }}
-                        />
-                      </div>
-                      <span className="text-dim">{voyagePercent(vp)}%</span>
-                    </td>
-                    <td>
-                      <span>
-                        {vp.completedMissions}/{vp.totalMissions} {t('done')}
-                      </span>
-                      {vp.failedMissions > 0 && (
-                        <span className="text-dim">, {vp.failedMissions} {t('failed')}</span>
-                      )}
-                    </td>
-                    <td onClick={(e) => e.stopPropagation()}>
-                      <ActionMenu
-                        id={`voyage-action-${vp.voyage?.id}`}
-                        items={[
-                          {
-                            label: 'View JSON',
-                            onClick: () =>
-                              setJsonViewer({
-                                open: true,
-                                title: `${t('Voyage')}: ${vp.voyage?.title || vp.voyage?.id}`,
-                                data: vp.voyage,
-                              }),
-                          },
-                        ]}
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            tableKey="dashboard-voyage-progress"
+            className="table"
+            rows={status.voyages}
+            rowKey={(vp) => vp.voyage?.id ?? ''}
+            recordCount={null}
+            onRowClick={(vp) => navigate(`/voyages/${vp.voyage?.id}`)}
+            columns={[
+              {
+                key: 'voyage', label: t('Voyage'), required: true, headerTitle: t('Voyage name and unique identifier'), cellClassName: 'cell-title',
+                cellTitle: (vp) => vp.voyage?.title || vp.voyage?.id,
+                render: (vp) => <strong className="line-clamp-2">{vp.voyage?.title || vp.voyage?.id}</strong>,
+              },
+              {
+                key: 'id', label: t('ID'), required: true, cellClassName: 'mono text-dim table-id-cell',
+                render: (vp) => (
+                  <span className="id-display">
+                    <span className="id-value" title={vp.voyage?.id}>{vp.voyage?.id}</span>
+                    <CopyButton text={vp.voyage?.id || ''} onClick={e => e.stopPropagation()} />
+                  </span>
+                ),
+              },
+              { key: 'status', label: t('Status'), headerTitle: t('Current voyage lifecycle state'), cellClassName: 'cell-nowrap', render: (vp) => <StatusBadge status={vp.voyage?.status || ''} /> },
+              {
+                key: 'vessel', label: t('Vessel'), headerTitle: t('Vessel(s) targeted by this voyage\'s missions'), cellClassName: 'text-dim',
+                render: (vp) => <span className="cell-one-line" title={voyageVesselNames(vp.vesselIds)}>{voyageVesselNames(vp.vesselIds)}</span>,
+              },
+              {
+                key: 'progress', label: t('Progress'), headerTitle: t('Percentage of missions completed'),
+                // Bar and percentage on one line.
+                render: (vp) => (
+                  <span className="dashboard-progress-cell">
+                    <span className="progress-bar">
+                      <span className="progress-fill" style={{ width: `${voyagePercent(vp)}%` }} />
+                    </span>
+                    <span className="text-dim nowrap">{voyagePercent(vp)}%</span>
+                  </span>
+                ),
+              },
+              {
+                key: 'missions', label: t('Missions'), headerTitle: t('Completed vs total missions in this voyage'), cellClassName: 'cell-nowrap',
+                render: (vp) => (
+                  <>
+                    <span>{vp.completedMissions}/{vp.totalMissions} {t('done')}</span>
+                    {vp.failedMissions > 0 && <span className="text-dim">, {vp.failedMissions} {t('failed')}</span>}
+                  </>
+                ),
+              },
+              {
+                key: 'actions', label: t('Actions'), fixed: true, interactive: true, header: <span className="sr-only">{t('Actions')}</span>,
+                render: (vp) => (
+                  <ActionMenu
+                    id={`voyage-action-${vp.voyage?.id}`}
+                    items={[
+                      {
+                        label: 'View JSON',
+                        onClick: () =>
+                          setJsonViewer({
+                            open: true,
+                            title: `${t('Voyage')}: ${vp.voyage?.title || vp.voyage?.id}`,
+                            data: vp.voyage,
+                          }),
+                      },
+                    ]}
+                  />
+                ),
+              },
+            ]}
+          />
         </div>
       )}
 
@@ -586,81 +588,74 @@ export default function Dashboard() {
         </div>
 
         {filteredRecentMissions.length > 0 ? (
-          <div className="table-wrap">
-            <table className="table mission-table">
-              <thead>
-                <tr>
-                  <th title={t('Mission title')}>{t('Mission')}</th>
-                  <th title={t('Mission ID')}>{t('ID')}</th>
-                  <th title={t('Current mission lifecycle state')}>{t('Status')}</th>
-                  <th title={t('Target repository for this mission')}>{t('Vessel')}</th>
-                  <th title={t('AI captain assigned to execute this mission')}>{t('Captain')}</th>
-                  <th title={t('When this mission was created')}>{t('Created')}</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredRecentMissions.map((m) => (
-                  <tr
-                    key={m.id}
-                    className="clickable"
-                    onClick={() => navigate(`/missions/${m.id}`)}
-                  >
-                    <td className="cell-title" title={m.title}>
-                      <strong className="line-clamp-2">{m.title}</strong>
-                    </td>
-                    <td className="mono text-dim">
-                      <span className="id-display">
-                        <span className="id-value" title={m.id}>{m.id}</span>
-                        <CopyButton text={m.id} onClick={e => e.stopPropagation()} />
-                      </span>
-                    </td>
-                    <td>
-                      <StatusBadge status={m.status} />
-                    </td>
-                    <td>{vesselName(m.vesselId)}</td>
-                    <td>{captainName(m.captainId)}</td>
-                    <td className="text-dim" title={formatDateTime(m.createdUtc)}>
-                      {formatRelativeTime(m.createdUtc)}
-                    </td>
-                    <td onClick={(e) => e.stopPropagation()}>
-                      <ActionMenu
-                        id={`mission-action-${m.id}`}
-                        items={[
-                          {
-                            label: 'View Detail',
-                            onClick: () => navigate(`/missions/${m.id}`),
+          <DataTable
+            tableKey="dashboard-recent-missions"
+            className="table"
+            rows={filteredRecentMissions}
+            rowKey={(m) => m.id}
+            recordCount={null}
+            onRowClick={(m) => navigate(`/missions/${m.id}`)}
+            columns={[
+              {
+                key: 'mission', label: t('Mission'), required: true, headerTitle: t('Mission title'), cellClassName: 'cell-title',
+                cellTitle: (m) => m.title,
+                render: (m) => <strong className="line-clamp-2">{m.title}</strong>,
+              },
+              {
+                key: 'id', label: t('ID'), required: true, headerTitle: t('Mission ID'), cellClassName: 'mono text-dim table-id-cell',
+                render: (m) => (
+                  <span className="id-display">
+                    <span className="id-value" title={m.id}>{m.id}</span>
+                    <CopyButton text={m.id} onClick={e => e.stopPropagation()} />
+                  </span>
+                ),
+              },
+              { key: 'status', label: t('Status'), headerTitle: t('Current mission lifecycle state'), cellClassName: 'cell-nowrap', render: (m) => <StatusBadge status={m.status} /> },
+              { key: 'vessel', label: t('Vessel'), headerTitle: t('Target repository for this mission'), render: (m) => vesselName(m.vesselId) },
+              { key: 'captain', label: t('Captain'), headerTitle: t('AI captain assigned to execute this mission'), render: (m) => captainName(m.captainId) },
+              {
+                key: 'created', label: t('Created'), headerTitle: t('When this mission was created'), cellClassName: 'text-dim cell-nowrap',
+                cellTitle: (m) => formatDateTime(m.createdUtc),
+                render: (m) => formatRelativeTime(m.createdUtc),
+              },
+              {
+                key: 'actions', label: t('Actions'), fixed: true, interactive: true, header: <span className="sr-only">{t('Actions')}</span>,
+                render: (m) => (
+                  <ActionMenu
+                    id={`mission-action-${m.id}`}
+                    items={[
+                      {
+                        label: 'View Detail',
+                        onClick: () => navigate(`/missions/${m.id}`),
+                      },
+                      {
+                        label: 'View JSON',
+                        onClick: () =>
+                          setJsonViewer({ open: true, title: `${t('Mission')}: ${m.title}`, data: m }),
+                      },
+                      ...(m.status === 'Failed' || m.status === 'Cancelled' || m.status === 'LandingFailed' ? [{
+                        label: 'Restart',
+                        onClick: async () => { try { await restartMission(m.id); loadAll(); } catch { /* ignore */ } },
+                      }] : []),
+                      {
+                        label: 'Delete',
+                        danger: true,
+                        onClick: () => setConfirm({
+                          open: true,
+                          title: t('Delete Mission'),
+                          message: t('Delete this mission?'),
+                          onConfirm: async () => {
+                            setConfirm((current) => ({ ...current, open: false }));
+                            await handleDeleteMission(m.id);
                           },
-                          {
-                            label: 'View JSON',
-                            onClick: () =>
-                              setJsonViewer({ open: true, title: `${t('Mission')}: ${m.title}`, data: m }),
-                          },
-                          ...(m.status === 'Failed' || m.status === 'Cancelled' || m.status === 'LandingFailed' ? [{
-                            label: 'Restart',
-                            onClick: async () => { try { await restartMission(m.id); loadAll(); } catch { /* ignore */ } },
-                          }] : []),
-                          {
-                            label: 'Delete',
-                            danger: true,
-                            onClick: () => setConfirm({
-                              open: true,
-                              title: t('Delete Mission'),
-                              message: t('Delete this mission?'),
-                              onConfirm: async () => {
-                                setConfirm((current) => ({ ...current, open: false }));
-                                await handleDeleteMission(m.id);
-                              },
-                            }),
-                          },
-                        ]}
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                        }),
+                      },
+                    ]}
+                  />
+                ),
+              },
+            ]}
+          />
         ) : (
           <p className="text-dim">{t('No missions found.')}</p>
         )}

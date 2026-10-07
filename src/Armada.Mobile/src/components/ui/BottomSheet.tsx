@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/ThemeContext';
 import { radius, spacing } from '../../theme/typography';
@@ -24,7 +24,8 @@ export function BottomSheet({ open, title, onClose, closeLabel, children, testID
   const insets = useSafeAreaInsets();
   return (
     <Modal visible={open} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
-      <KeyboardAvoidingView style={styles.fill} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      {/* Padding on both platforms: with Android edge-to-edge the window no longer resizes for the keyboard. */}
+      <KeyboardAvoidingView style={styles.fill} behavior="padding">
         <Pressable style={[styles.fill, { backgroundColor: colors.overlay }]} onPress={onClose} accessibilityRole="button" accessibilityLabel={closeLabel} />
         <View
           testID={testID}

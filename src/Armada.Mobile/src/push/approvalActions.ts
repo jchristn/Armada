@@ -1,9 +1,9 @@
-import { approveAskProposal, decideCliPermissionRequest, rejectAskProposal } from '@dashboard/api/client';
+import { decideApproval } from '../approvals/actions';
 
 /**
- * The approve / deny calls a notification action performs. A small interface so the Approvals center (W1, in
- * src/approvals/actions.ts) can supply its own implementation at merge time; until then this default calls the
- * shared dashboard client directly (the same routes the dashboard's Approvals page uses).
+ * The approve / deny calls a notification action performs. They go through the Approvals center's decideApproval
+ * (src/approvals/actions.ts), so a decision made from a notification behaves exactly like one made in the app. The
+ * small interface keeps the push handling testable with a fake.
  */
 export interface ApprovalActions {
   approveAskProposal: (threadId: string, proposalId: string) => Promise<unknown>;
@@ -13,8 +13,8 @@ export interface ApprovalActions {
 }
 
 export const defaultApprovalActions: ApprovalActions = {
-  approveAskProposal: (threadId, proposalId) => approveAskProposal(threadId, proposalId),
-  rejectAskProposal: (threadId, proposalId) => rejectAskProposal(threadId, proposalId),
-  allowCliPermissionOnce: (requestId) => decideCliPermissionRequest(requestId, { decision: 'AllowOnce' }),
-  denyCliPermission: (requestId) => decideCliPermissionRequest(requestId, { decision: 'Deny' }),
+  approveAskProposal: (threadId, proposalId) => decideApproval({ kind: 'ask_proposal', threadId, proposalId }, 'approve'),
+  rejectAskProposal: (threadId, proposalId) => decideApproval({ kind: 'ask_proposal', threadId, proposalId }, 'deny'),
+  allowCliPermissionOnce: (requestId) => decideApproval({ kind: 'cli_permission', requestId }, 'approve'),
+  denyCliPermission: (requestId) => decideApproval({ kind: 'cli_permission', requestId }, 'deny'),
 };

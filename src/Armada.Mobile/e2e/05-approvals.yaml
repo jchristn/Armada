@@ -1,0 +1,30 @@
+# Signed in: the approvals center shows the deployment that scripts/mobile/run-e2e.sh seeded through the REST API
+# (environment "production" requires approval; deployment "Release 2.3" waits for it). Approve it in place with the
+# dashboard's confirmation; the center is then empty and the Approvals badge clears.
+appId: ${APP_ID}
+name: 05-approvals
+---
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: "tab-approvals"
+    timeout: 30000
+- tapOn:
+    id: "tab-approvals"
+- extendedWaitUntil:
+    visible: "Deploy to production: Release 2.3"
+    timeout: 30000
+- assertVisible: "Waiting for your approval \\(1\\)"
+- takeScreenshot: approvals-pending
+- tapOn:
+    id: "deployment-approve-.*"
+- extendedWaitUntil:
+    visible: "Approve Deployment"
+    timeout: 10000
+- assertVisible: "Approve and execute \"Deploy to production: Release 2.3\"\\?"
+- tapOn:
+    id: "deployment-confirm-confirm"
+- extendedWaitUntil:
+    visible: "You are all caught up."
+    timeout: 30000
+- takeScreenshot: approvals-done

@@ -6,7 +6,7 @@ import {
   getMissionDiff, getMissionLog,
 } from '../api/client';
 import type { MergeEntry, Vessel } from '../types/models';
-import Pagination from '../components/shared/Pagination';
+import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
 import ActionMenu from '../components/shared/ActionMenu';
 import StatusBadge from '../components/shared/StatusBadge';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
@@ -16,9 +16,7 @@ import DiffViewer from '../components/shared/DiffViewer';
 import PageHeader from '../components/shared/PageHeader';
 import LogViewer from '../components/shared/LogViewer';
 import ErrorModal from '../components/shared/ErrorModal';
-import RefreshButton from '../components/shared/RefreshButton';
 import CopyButton from '../components/shared/CopyButton';
-import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
 import UserScopeFilter from '../components/shared/UserScopeFilter';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import { useLocale } from '../context/LocaleContext';
@@ -138,10 +136,6 @@ export default function MergeQueue() {
     else { setSortField(field); setSortDir('asc'); }
   }
 
-  function sortIcon(field: SortField) {
-    if (sortField !== field) return '';
-    return sortDir === 'asc' ? ' \u25B2' : ' \u25BC';
-  }
 
   // Selection
   const allSelected = selected.length > 0 && selected.length === sorted.length;
@@ -296,6 +290,89 @@ export default function MergeQueue() {
     if (logModal.missionId) fetchLog(logModal.missionId, lines);
   }, [logModal.missionId, fetchLog]);
 
+  function branchCell(branch: string) {
+    return branch ? (
+      <span className="id-display">
+        <span className="url-value" title={branch}>{branch}</span>
+        <CopyButton text={branch} onClick={e => e.stopPropagation()} title={t('Copy branch')} />
+      </span>
+    ) : '-';
+  }
+
+  const columns: DataTableColumn<MergeEntry>[] = [
+    {
+      key: 'id', label: t('ID'), required: true, cellClassName: 'mono text-dim table-id-cell',
+      render: (entry) => (
+        <span className="id-display">
+          <span className="id-value" title={entry.id}>{entry.id}</span>
+          <CopyButton text={entry.id} onClick={e => e.stopPropagation()} />
+        </span>
+      ),
+    },
+    {
+      key: 'branchName', label: t('Branch'), required: true, sortKey: 'branchName', headerTitle: t('Branch -- click to sort'),
+      cellClassName: 'mono text-dim table-url-cell',
+      filter: <input type="text" className="col-filter" aria-label={t('Filter by branch')} value={colFilters.branchName} onChange={e => setColFilters(f => ({ ...f, branchName: e.target.value }))} placeholder={t('Filter...')} />,
+      render: (entry) => branchCell(entry.branchName),
+    },
+    {
+      key: 'targetBranch', label: t('Target'), sortKey: 'targetBranch', headerTitle: t('Target branch -- click to sort'),
+      cellClassName: 'mono text-dim table-url-cell',
+      clearFilter: () => setColFilters(f => ({ ...f, targetBranch: '' })),
+      filter: <input type="text" className="col-filter" aria-label={t('Filter by target branch')} value={colFilters.targetBranch} onChange={e => setColFilters(f => ({ ...f, targetBranch: e.target.value }))} placeholder={t('Filter...')} />,
+      render: (entry) => branchCell(entry.targetBranch),
+    },
+    {
+      key: 'status', label: t('Status'), sortKey: 'status', headerTitle: t('Status -- click to sort'), cellClassName: 'cell-nowrap',
+      clearFilter: () => setColFilters(f => ({ ...f, status: '' })),
+      filter: <input type="text" className="col-filter" aria-label={t('Filter by status')} value={colFilters.status} onChange={e => setColFilters(f => ({ ...f, status: e.target.value }))} placeholder={t('Filter...')} />,
+      render: (entry) => <StatusBadge status={entry.status} />,
+    },
+    { key: 'priority', label: t('Priority'), sortKey: 'priority', headerTitle: t('Priority -- click to sort'), render: (entry) => entry.priority },
+    {
+      key: 'mission', label: t('Mission'), interactive: true, cellClassName: 'mono',
+      // One line: mission IDs truncate with an ellipsis; the full ID is in the tooltip.
+      render: (entry) => entry.missionId ? (
+        <span className="cell-clip">
+          <a href="#" title={entry.missionId} onClick={e => { e.preventDefault(); navigate(`/missions/${entry.missionId}`); }}>
+            {entry.missionId}
+          </a>
+        </span>
+      ) : '-',
+    },
+    {
+      key: 'vessel', label: t('Vessel'), interactive: true,
+      clearFilter: () => setColFilters(f => ({ ...f, vesselId: '' })),
+      filter: (
+        <select aria-label={t('Filter by vessel')} className="col-filter" title={t('Filter by vessel')} value={colFilters.vesselId} onChange={e => { setColFilters(f => ({ ...f, vesselId: e.target.value })); }}>
+          <option value="">{t('All Vessels')}</option>
+          {vessels.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+        </select>
+      ),
+      render: (entry) => entry.vesselId ? (
+        <a href="#" onClick={e => { e.preventDefault(); navigate(`/vessels/${entry.vesselId}`); }}>
+          {vesselName(entry.vesselId)}
+        </a>
+      ) : '-',
+    },
+    {
+      key: 'actions', label: t('Actions'), fixed: true, interactive: true, className: 'text-right',
+      render: (entry) => (
+        <ActionMenu id={`merge-${entry.id}`} items={[
+          { label: 'View Detail', onClick: () => navigate(`/merge-queue/${entry.id}`) },
+          { label: 'Process', onClick: () => handleProcess(entry.id) },
+          { label: 'Cancel', onClick: () => handleCancel(entry.id) },
+          ...(entry.missionId ? [
+            { label: 'Mission Diff', onClick: () => handleMissionDiff(entry.missionId!) },
+            { label: 'Mission Log', onClick: () => handleMissionLog(entry.missionId!) },
+          ] : []),
+          { label: 'View JSON', onClick: () => setJsonData({ open: true, title: `${t('Merge Entry')}: ${entry.id}`, data: entry }) },
+          { label: 'Delete', danger: true as const, onClick: () => handleDelete(entry.id) },
+        ]} />
+      ),
+    },
+  ];
+
   return (
     <div>
       <PageHeader
@@ -304,8 +381,6 @@ export default function MergeQueue() {
         actions={(
           <>
             <UserScopeFilter value={userScope} onChange={(id) => { setUserScope(id); setPageNumber(1); }} />
-            <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
-            <RefreshButton onRefresh={load} title={t('Refresh merge queue')} />
             {selected.length > 0 && (
               <button className="btn btn-sm btn-danger" onClick={handleBulkDelete}>
                 {t('Delete Selected')} ({selected.length})
@@ -373,123 +448,34 @@ export default function MergeQueue() {
         onLineCountChange={handleLogLineCountChange}
       />
 
-      {loading && entries.length === 0 && <p className="text-dim">{t('Loading...')}</p>}
-      {!loading && entries.length === 0 && <p className="text-dim">{t('Merge queue is empty.')}</p>}
-
-      {entries.length > 0 && (
-        <>
-          <Pagination pageNumber={pageNumber} pageSize={pageSize} totalPages={totalPages}
-            totalRecords={totalRecords}
-            onPageChange={p => setPageNumber(p)} onPageSizeChange={s => { setPageSize(s); setPageNumber(1); }} />
-
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th className="col-checkbox">
-                    <input aria-label={t('Select all entries')} type="checkbox" checked={allSelected} onChange={e => e.target.checked ? selectAll() : clearSelection()} title={t('Select all entries')} />
-                  </th>
-                  <th>{t('ID')}</th>
-                  <th className="sortable" onClick={() => handleSort('branchName')} title={t('Branch -- click to sort')}>
-                    {t('Branch')}{sortIcon('branchName')}
-                  </th>
-                  <th className="sortable" onClick={() => handleSort('targetBranch')} title={t('Target branch -- click to sort')}>
-                    {t('Target')}{sortIcon('targetBranch')}
-                  </th>
-                  <th className="sortable" onClick={() => handleSort('status')} title={t('Status -- click to sort')}>
-                    {t('Status')}{sortIcon('status')}
-                  </th>
-                  <th className="sortable" onClick={() => handleSort('priority')} title={t('Priority -- click to sort')}>
-                    {t('Priority')}{sortIcon('priority')}
-                  </th>
-                  <th>{t('Mission')}</th>
-                  <th>{t('Vessel')}</th>
-                  <th className="text-right">{t('Actions')}</th>
-                </tr>
-                <tr className="column-filter-row">
-                  <td></td>
-                  <td></td>
-                  <td><input type="text" className="col-filter" value={colFilters.branchName} onChange={e => setColFilters(f => ({ ...f, branchName: e.target.value }))} placeholder={t('Filter...')} /></td>
-                  <td><input type="text" className="col-filter" value={colFilters.targetBranch} onChange={e => setColFilters(f => ({ ...f, targetBranch: e.target.value }))} placeholder={t('Filter...')} /></td>
-                  <td><input type="text" className="col-filter" value={colFilters.status} onChange={e => setColFilters(f => ({ ...f, status: e.target.value }))} placeholder={t('Filter...')} /></td>
-                  <td></td>
-                  <td></td>
-                  <td>
-                    <select aria-label={t('Filter by vessel')} className="col-filter" title={t('Filter by vessel')} value={colFilters.vesselId} onChange={e => { setColFilters(f => ({ ...f, vesselId: e.target.value })); }}>
-                      <option value="">{t('All Vessels')}</option>
-                      {vessels.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-                    </select>
-                  </td>
-                  <td></td>
-                </tr>
-              </thead>
-              <tbody>
-                {sorted.map(entry => (
-                  <tr key={entry.id} className="clickable" onClick={() => setViewRecord(entry as unknown as Record<string, unknown>)}>
-                    <td className="col-checkbox" onClick={e => e.stopPropagation()}>
-                      <input aria-label={t('Select this entry')} type="checkbox" checked={selected.includes(entry.id)} onChange={() => toggleSelect(entry.id)} title={t('Select this entry')} />
-                    </td>
-                    <td className="mono text-dim table-id-cell">
-                      <span className="id-display">
-                        <span className="id-value" title={entry.id}>{entry.id}</span>
-                        <CopyButton text={entry.id} onClick={e => e.stopPropagation()} />
-                      </span>
-                    </td>
-                    <td className="mono text-dim table-url-cell">
-                      {entry.branchName ? (
-                        <span className="id-display">
-                          <span className="url-value" title={entry.branchName}>{entry.branchName}</span>
-                          <CopyButton text={entry.branchName} onClick={e => e.stopPropagation()} title={t('Copy branch')} />
-                        </span>
-                      ) : '-'}
-                    </td>
-                    <td className="mono text-dim table-url-cell">
-                      {entry.targetBranch ? (
-                        <span className="id-display">
-                          <span className="url-value" title={entry.targetBranch}>{entry.targetBranch}</span>
-                          <CopyButton text={entry.targetBranch} onClick={e => e.stopPropagation()} title={t('Copy branch')} />
-                        </span>
-                      ) : '-'}
-                    </td>
-                    <td><StatusBadge status={entry.status} /></td>
-                    <td>{entry.priority}</td>
-                    <td onClick={e => e.stopPropagation()}>
-                      {entry.missionId ? (
-                        <a href="#" onClick={e => { e.preventDefault(); navigate(`/missions/${entry.missionId}`); }}>
-                          {entry.missionId}
-                        </a>
-                      ) : '-'}
-                    </td>
-                    <td onClick={e => e.stopPropagation()}>
-                      {entry.vesselId ? (
-                        <a href="#" onClick={e => { e.preventDefault(); navigate(`/vessels/${entry.vesselId}`); }}>
-                          {vesselName(entry.vesselId)}
-                        </a>
-                      ) : '-'}
-                    </td>
-                    <td className="text-right" onClick={e => e.stopPropagation()}>
-                      <ActionMenu id={`merge-${entry.id}`} items={[
-                        { label: 'View Detail', onClick: () => navigate(`/merge-queue/${entry.id}`) },
-                        { label: 'Process', onClick: () => handleProcess(entry.id) },
-                        { label: 'Cancel', onClick: () => handleCancel(entry.id) },
-                        ...(entry.missionId ? [
-                          { label: 'Mission Diff', onClick: () => handleMissionDiff(entry.missionId!) },
-                          { label: 'Mission Log', onClick: () => handleMissionLog(entry.missionId!) },
-                        ] : []),
-                        { label: 'View JSON', onClick: () => setJsonData({ open: true, title: `${t('Merge Entry')}: ${entry.id}`, data: entry }) },
-                        { label: 'Delete', danger: true as const, onClick: () => handleDelete(entry.id) },
-                      ]} />
-                    </td>
-                  </tr>
-                ))}
-                {sorted.length === 0 && (
-                  <tr><td colSpan={9} className="text-dim">{t('No entries match the current filters.')}</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
+      <DataTable
+        tableKey="mergequeue"
+        columns={columns}
+        rows={sorted}
+        rowKey={(entry) => entry.id}
+        onRowClick={(entry) => setViewRecord(entry as unknown as Record<string, unknown>)}
+        sort={{ field: sortField, dir: sortDir, onSort: (f) => handleSort(f as SortField) }}
+        pagination={{
+          pageNumber, pageSize, totalPages, totalRecords,
+          onPageChange: (p) => setPageNumber(p),
+          onPageSizeChange: (s) => { setPageSize(s); setPageNumber(1); },
+        }}
+        autoRefresh={{ seconds: refreshSeconds, onChange: setRefreshSeconds }}
+        onRefresh={load}
+        refreshTitle={t('Refresh merge queue')}
+        selection={{
+          isSelected: (entry) => selected.includes(entry.id),
+          onToggle: (entry) => toggleSelect(entry.id),
+          allSelected,
+          onToggleAll: (checked) => (checked ? selectAll() : clearSelection()),
+          selectAllLabel: t('Select all entries'),
+          rowLabel: () => t('Select this entry'),
+        }}
+        emptyMessage={t('No entries match the current filters.')}
+        placeholder={entries.length > 0 ? undefined : loading
+          ? <p className="text-dim">{t('Loading...')}</p>
+          : <p className="text-dim">{t('Merge queue is empty.')}</p>}
+      />
     </div>
   );
 }

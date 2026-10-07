@@ -3,6 +3,7 @@ import { listFleets, listVessels } from '../../api/client';
 import type { Fleet, Vessel } from '../../types/models';
 import { useLocale } from '../../context/LocaleContext';
 import DialogShell from '../shared/DialogShell';
+import DataTable from '../shared/DataTable';
 import { ErrorState, LoadingState } from '../shared/StateBlocks';
 import { MAX_RUN_VESSELS } from './RunActionModal';
 
@@ -98,31 +99,34 @@ export default function VesselPickerModal({ open, onClose, onPicked, title }: Ve
       {loading && <LoadingState />}
       {!loading && !error && vessels.length === 0 && <p className="text-dim">{t('No vessels yet. Import repositories from the Vessels page first.')}</p>}
       {!loading && !error && vessels.length > 0 && (
-        <div className="table-wrap picker-table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th className="col-checkbox" scope="col">
-                  <input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} aria-label={t('Select all visible vessels')} title={t('Select all visible vessels')} />
-                </th>
-                <th scope="col">{t('Name')}</th>
-                <th scope="col">{t('Working Directory')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((v) => (
-                <tr key={v.id} className="clickable" onClick={() => toggle(v.id)}>
-                  <td className="col-checkbox" onClick={(e) => e.stopPropagation()}>
-                    <input type="checkbox" checked={selected.includes(v.id)} onChange={() => toggle(v.id)} aria-label={t('Select {{name}}', { name: v.name })} />
-                  </td>
-                  <td><strong>{v.name}</strong></td>
-                  <td className="mono text-dim" title={v.workingDirectory ?? ''}><span className="cell-clip"><span>{v.workingDirectory || '-'}</span></span></td>
-                </tr>
-              ))}
-              {filtered.length === 0 && <tr><td colSpan={3} className="text-dim">{t('No vessels match the current filters.')}</td></tr>}
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          tableKey="fleet-action-vessel-picker"
+          wrapClassName="picker-table-wrap"
+          rows={filtered}
+          rowKey={(v) => v.id}
+          onRowClick={(v) => toggle(v.id)}
+          selection={{
+            isSelected: (v) => selected.includes(v.id),
+            onToggle: (v) => toggle(v.id),
+            allSelected: allVisibleSelected,
+            onToggleAll: () => toggleAllVisible(),
+            selectAllLabel: t('Select all visible vessels'),
+            rowLabel: (v) => t('Select {{name}}', { name: v.name }),
+          }}
+          emptyMessage={t('No vessels match the current filters.')}
+          columns={[
+            { key: 'name', label: t('Name'), required: true, render: (v) => <strong>{v.name}</strong> },
+            {
+              key: 'fleet', label: t('Fleet'), cellClassName: 'cell-nowrap',
+              render: (v) => (v.fleetId ? fleets.find((f) => f.id === v.fleetId)?.name ?? v.fleetId : '-'),
+            },
+            {
+              key: 'workingDirectory', label: t('Working Directory'), cellClassName: 'mono text-dim',
+              cellTitle: (v) => v.workingDirectory ?? '',
+              render: (v) => <span className="cell-clip"><span>{v.workingDirectory || '-'}</span></span>,
+            },
+          ]}
+        />
       )}
     </DialogShell>
   );

@@ -15,8 +15,8 @@ import ActionMenu from '../components/shared/ActionMenu';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import ErrorModal from '../components/shared/ErrorModal';
 import JsonViewer from '../components/shared/JsonViewer';
-import RefreshButton from '../components/shared/RefreshButton';
-import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
+import CopyButton from '../components/shared/CopyButton';
+import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import PageHeader from '../components/shared/PageHeader';
 import StatusBadge from '../components/shared/StatusBadge';
@@ -145,6 +145,65 @@ export default function Harbors() {
     });
   }
 
+  const emptyState = (
+    <div className="playbook-empty-state">
+      <strong>{t('No harbors match the current filters.')}</strong>
+      <span>{canManage ? t('Install the Harbor app on a host and connect it, or pre-register one here.') : t('Ask a tenant administrator to connect a Harbor.')}</span>
+    </div>
+  );
+
+  // The ID used to sit under the name, and the capability list wrapped; both are one line now.
+  const columns: DataTableColumn<Harbor>[] = [
+    {
+      key: 'name', label: t('Harbor'), required: true, cellClassName: 'cell-nowrap',
+      render: (harbor) => (
+        <>
+          <strong>{harbor.name}</strong>
+          {!harbor.enabled && <span className="text-dim"> ({t('disabled')})</span>}
+        </>
+      ),
+    },
+    {
+      key: 'id', label: t('ID'), required: true, cellClassName: 'mono text-dim table-id-cell',
+      render: (harbor) => (
+        <span className="id-display">
+          <span className="id-value" title={harbor.id}>{harbor.id}</span>
+          <CopyButton text={harbor.id} onClick={e => e.stopPropagation()} />
+        </span>
+      ),
+    },
+    { key: 'status', label: t('Status'), cellClassName: 'cell-nowrap', render: (harbor) => <StatusBadge status={harbor.connectionStatus} /> },
+    {
+      key: 'capabilities', label: t('Capabilities'), cellClassName: 'text-dim',
+      render: (harbor) => {
+        if (harbor.capabilities.length === 0) return '-';
+        const text = harbor.capabilities.map((c) => c.name).join(', ');
+        return <span className="cell-one-line" title={text}>{text}</span>;
+      },
+    },
+    { key: 'capacity', label: t('Capacity'), cellClassName: 'text-dim', render: (harbor) => harbor.maxConcurrentJobs },
+    {
+      key: 'lastSeen', label: t('Last Seen'), cellClassName: 'text-dim cell-nowrap',
+      cellTitle: (harbor) => (harbor.lastSeenUtc ? formatDateTime(harbor.lastSeenUtc) : ''),
+      render: (harbor) => (harbor.lastSeenUtc ? formatRelativeTime(harbor.lastSeenUtc) : t('Never')),
+    },
+    {
+      key: 'actions', label: t('Actions'), fixed: true, interactive: true, className: 'text-right',
+      render: (harbor) => (
+        <ActionMenu
+          id={`harbor-${harbor.id}`}
+          items={[
+            { label: 'Details', onClick: () => setDetail({ open: true, harbor }) },
+            ...(canManage ? [{ label: 'Edit', onClick: () => openEdit(harbor) }] : []),
+            ...(canManage ? [{ label: harbor.enabled ? 'Disable' : 'Enable', onClick: () => handleToggle(harbor) }] : []),
+            { label: 'View JSON', onClick: () => setJsonData({ open: true, title: harbor.name, data: harbor }) },
+            ...(canManage ? [{ label: 'Delete', danger: true as const, onClick: () => handleDelete(harbor) }] : []),
+          ]}
+        />
+      ),
+    },
+  ];
+
   return (
     <div>
       <PageHeader
@@ -152,8 +211,6 @@ export default function Harbors() {
         subtitle={t('Detached host runners that execute captains, git, and worktrees on the machines where your repositories and tool logins live.')}
         actions={(
           <>
-            <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
-            <RefreshButton onRefresh={load} title={t('Refresh harbors')} />
             {canManage && (
               <button className="btn btn-primary" onClick={openCreate}>+ {t('Harbor')}</button>
             )}
@@ -258,58 +315,18 @@ export default function Harbors() {
         </div>
       </div>
 
-      {loading && harbors.length === 0 ? (
-        <p className="text-dim">{t('Loading...')}</p>
-      ) : filtered.length === 0 ? (
-        <div className="playbook-empty-state">
-          <strong>{t('No harbors match the current filters.')}</strong>
-          <span>{canManage ? t('Install the Harbor app on a host and connect it, or pre-register one here.') : t('Ask a tenant administrator to connect a Harbor.')}</span>
-        </div>
-      ) : (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>{t('Harbor')}</th>
-                <th>{t('Status')}</th>
-                <th>{t('Capabilities')}</th>
-                <th>{t('Capacity')}</th>
-                <th>{t('Last Seen')}</th>
-                <th className="text-right">{t('Actions')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((harbor) => (
-                <tr key={harbor.id} className="clickable" onClick={() => setDetail({ open: true, harbor })}>
-                  <td>
-                    <strong>{harbor.name}</strong>
-                    {!harbor.enabled && <span className="text-dim"> ({t('disabled')})</span>}
-                    <div className="mono text-dim" style={{ fontSize: '0.78rem' }}>{harbor.id}</div>
-                  </td>
-                  <td><StatusBadge status={harbor.connectionStatus} /></td>
-                  <td className="text-dim">{harbor.capabilities.length === 0 ? '-' : harbor.capabilities.map((c) => c.name).join(', ')}</td>
-                  <td className="text-dim">{harbor.maxConcurrentJobs}</td>
-                  <td className="text-dim" title={harbor.lastSeenUtc ? formatDateTime(harbor.lastSeenUtc) : ''}>
-                    {harbor.lastSeenUtc ? formatRelativeTime(harbor.lastSeenUtc) : t('Never')}
-                  </td>
-                  <td className="text-right" onClick={(e) => e.stopPropagation()}>
-                    <ActionMenu
-                      id={`harbor-${harbor.id}`}
-                      items={[
-                        { label: 'Details', onClick: () => setDetail({ open: true, harbor }) },
-                        ...(canManage ? [{ label: 'Edit', onClick: () => openEdit(harbor) }] : []),
-                        ...(canManage ? [{ label: harbor.enabled ? 'Disable' : 'Enable', onClick: () => handleToggle(harbor) }] : []),
-                        { label: 'View JSON', onClick: () => setJsonData({ open: true, title: harbor.name, data: harbor }) },
-                        ...(canManage ? [{ label: 'Delete', danger: true as const, onClick: () => handleDelete(harbor) }] : []),
-                      ]}
-                    />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <DataTable
+        tableKey="harbors"
+        columns={columns}
+        rows={filtered}
+        rowKey={(harbor) => harbor.id}
+        onRowClick={(harbor) => setDetail({ open: true, harbor })}
+        autoRefresh={{ seconds: refreshSeconds, onChange: setRefreshSeconds }}
+        onRefresh={load}
+        refreshTitle="Refresh harbors"
+        emptyMessage={emptyState}
+        placeholder={harbors.length > 0 ? undefined : loading ? <p className="text-dim">{t('Loading...')}</p> : emptyState}
+      />
     </div>
   );
 }

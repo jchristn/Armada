@@ -7,6 +7,7 @@ import ConfirmDialog from '../components/shared/ConfirmDialog';
 import JsonViewer from '../components/shared/JsonViewer';
 import PageHeader from '../components/shared/PageHeader';
 import CopyButton from '../components/shared/CopyButton';
+import DataTable from '../components/shared/DataTable';
 import ErrorModal from '../components/shared/ErrorModal';
 import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
@@ -174,39 +175,38 @@ export default function FleetDetail() {
       {vessels.length > 0 && (
         <div>
           <h3>{t('Vessels')}</h3>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th title={t('Vessel name and unique identifier')}>{t('Name')}</th>
-                  <th title={t('Git repository URL')}>{t('Repo URL')}</th>
-                  <th title={t('Default branch for merging')}>{t('Branch')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {vessels.map(v => (
-                  <tr key={v.id} className="clickable" onClick={() => navigate(`/vessels/${v.id}`)}>
-                    <td>
-                      <strong>{v.name}</strong>
-                      <div className="text-dim id-display">
-                        <span className="mono">{v.id}</span>
-                        <CopyButton text={v.id} />
-                      </div>
-                    </td>
-                    <td className="text-dim vessel-repo-cell table-url-cell">
-                      {v.repoUrl ? (
-                        <span className="id-display">
-                          <span className="url-value" title={v.repoUrl}>{v.repoUrl}</span>
-                          <CopyButton text={v.repoUrl} onClick={e => e.stopPropagation()} title={t('Copy URL')} />
-                        </span>
-                      ) : '-'}
-                    </td>
-                    <td>{v.defaultBranch || 'main'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            tableKey="fleet-detail-vessels"
+            rows={vessels}
+            rowKey={(v) => v.id}
+            recordCount={null}
+            onRowClick={(v) => navigate(`/vessels/${v.id}`)}
+            columns={[
+              { key: 'name', label: t('Name'), required: true, headerTitle: t('Vessel name and unique identifier'), render: (v) => <strong>{v.name}</strong> },
+              {
+                key: 'id', label: t('ID'), required: true, cellClassName: 'mono text-dim table-id-cell',
+                render: (v) => (
+                  <span className="id-display">
+                    <span className="id-value" title={v.id}>{v.id}</span>
+                    <CopyButton text={v.id} />
+                  </span>
+                ),
+              },
+              {
+                key: 'repoUrl', label: t('Repo URL'), headerTitle: t('Git repository URL'), cellClassName: 'text-dim vessel-repo-cell table-url-cell',
+                render: (v) => v.repoUrl ? (
+                  <span className="id-display">
+                    <span className="url-value" title={v.repoUrl}>{v.repoUrl}</span>
+                    <CopyButton text={v.repoUrl} onClick={e => e.stopPropagation()} title={t('Copy URL')} />
+                  </span>
+                ) : '-',
+              },
+              {
+                key: 'branch', label: t('Branch'), headerTitle: t('Default branch for merging'), cellClassName: 'mono',
+                render: (v) => <span className="cell-one-line" title={v.defaultBranch || 'main'}>{v.defaultBranch || 'main'}</span>,
+              },
+            ]}
+          />
         </div>
       )}
       {vessels.length === 0 && <p className="text-dim" style={{ marginTop: '1rem' }}>{t('No vessels in this fleet.')}</p>}

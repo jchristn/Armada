@@ -2,16 +2,14 @@ import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { listEvents, deleteEventsBatch, listCaptains, listVessels } from '../api/client';
 import type { ArmadaEvent, Captain, Vessel } from '../types/models';
-import Pagination from '../components/shared/Pagination';
+import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
 import ActionMenu from '../components/shared/ActionMenu';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import JsonViewer from '../components/shared/JsonViewer';
 import RecordDetailModal from '../components/shared/RecordDetailModal';
 import CopyButton from '../components/shared/CopyButton';
-import RefreshButton from '../components/shared/RefreshButton';
 import PageHeader from '../components/shared/PageHeader';
 import ErrorModal from '../components/shared/ErrorModal';
-import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
 import UserScopeFilter from '../components/shared/UserScopeFilter';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import { useLocale } from '../context/LocaleContext';
@@ -123,10 +121,6 @@ export default function Events() {
     else { setSortField(field); setSortDir('asc'); }
   }
 
-  function sortIcon(field: SortField) {
-    if (sortField !== field) return '';
-    return sortDir === 'asc' ? ' \u25B2' : ' \u25BC';
-  }
 
   // Selection
   const allSelected = selected.length > 0 && selected.length === sorted.length;
@@ -170,6 +164,86 @@ export default function Events() {
     });
   }
 
+  function colFilterInput(key: 'eventType' | 'entityType' | 'message', label: string) {
+    return <input type="text" className="col-filter" aria-label={label} value={colFilters[key]} onChange={e => setColFilters(f => ({ ...f, [key]: e.target.value }))} placeholder={t('Filter...')} />;
+  }
+
+  // Mission and Voyage repeat what Entity ID usually already links to, so they start hidden (column chooser).
+  const columns: DataTableColumn<ArmadaEvent>[] = [
+    {
+      key: 'id', label: t('ID'), required: true, cellClassName: 'mono text-dim table-id-cell',
+      render: (evt) => (
+        <span className="id-display">
+          <span className="id-value" title={evt.id}>{evt.id}</span>
+          <CopyButton text={evt.id} onClick={e => e.stopPropagation()} />
+        </span>
+      ),
+    },
+    {
+      key: 'eventType', label: t('Event Type'), sortKey: 'eventType', headerTitle: t('Event type -- click to sort'),
+      clearFilter: () => setColFilters(f => ({ ...f, eventType: '' })), filter: colFilterInput('eventType', t('Event Type')),
+      render: (evt) => <span className="cell-clip" title={evt.eventType}><span>{evt.eventType}</span></span>,
+    },
+    {
+      key: 'entityType', label: t('Entity Type'), sortKey: 'entityType', headerTitle: t('Entity type -- click to sort'), cellClassName: 'text-dim',
+      clearFilter: () => setColFilters(f => ({ ...f, entityType: '' })), filter: colFilterInput('entityType', t('Entity Type')),
+      render: (evt) => evt.entityType || '-',
+    },
+    {
+      key: 'entityId', label: t('Entity ID'), cellClassName: 'mono text-dim table-id-cell', interactive: true,
+      render: (evt) => {
+        if (!evt.entityId) return '-';
+        const entRoute = entityRoute(evt.entityType, evt.entityId);
+        return (
+          <span className="id-display">
+            {entRoute ? (
+              <a href="#" className="id-value" title={evt.entityId} onClick={e => { e.preventDefault(); navigate(entRoute); }}>{evt.entityId}</a>
+            ) : (
+              <span className="id-value" title={evt.entityId}>{evt.entityId}</span>
+            )}
+            <CopyButton text={evt.entityId} onClick={e => e.stopPropagation()} />
+          </span>
+        );
+      },
+    },
+    {
+      key: 'captain', label: t('Captain'), interactive: true,
+      render: (evt) => evt.captainId ? <a href="#" onClick={e => { e.preventDefault(); navigate(`/captains/${evt.captainId}`); }}>{captainName(evt.captainId)}</a> : '-',
+    },
+    {
+      key: 'mission', label: t('Mission'), defaultHidden: true, cellClassName: 'mono text-dim', interactive: true,
+      render: (evt) => evt.missionId ? <span className="cell-clip"><a href="#" title={evt.missionId} onClick={e => { e.preventDefault(); navigate(`/missions/${evt.missionId}`); }}>{evt.missionId}</a></span> : '-',
+    },
+    {
+      key: 'vessel', label: t('Vessel'), interactive: true,
+      render: (evt) => evt.vesselId ? <a href="#" onClick={e => { e.preventDefault(); navigate(`/vessels/${evt.vesselId}`); }}>{vesselName(evt.vesselId)}</a> : '-',
+    },
+    {
+      key: 'voyage', label: t('Voyage'), defaultHidden: true, cellClassName: 'mono text-dim', interactive: true,
+      render: (evt) => evt.voyageId ? <span className="cell-clip"><a href="#" title={evt.voyageId} onClick={e => { e.preventDefault(); navigate(`/voyages/${evt.voyageId}`); }}>{evt.voyageId}</a></span> : '-',
+    },
+    {
+      key: 'message', label: t('Message'), cellClassName: 'truncate-cell', cellTitle: (evt) => evt.message ?? undefined,
+      clearFilter: () => setColFilters(f => ({ ...f, message: '' })), filter: colFilterInput('message', t('Message')),
+      render: (evt) => <span className="truncate-text">{evt.message}</span>,
+    },
+    {
+      key: 'created', label: t('Created'), sortKey: 'createdUtc', headerTitle: t('Created -- click to sort'),
+      cellClassName: 'text-dim cell-nowrap', cellTitle: (evt) => formatDateTime(evt.createdUtc),
+      render: (evt) => formatRelativeTime(evt.createdUtc),
+    },
+    {
+      key: 'actions', label: t('Actions'), fixed: true, interactive: true, className: 'text-right',
+      render: (evt) => (
+        <ActionMenu id={`event-${evt.id}`} items={[
+          { label: 'View Detail', onClick: () => navigate(`/events/${evt.id}`) },
+          { label: 'View JSON', onClick: () => setJsonData({ open: true, title: `${t('Event')}: ${evt.id}`, data: evt }) },
+          { label: 'Delete', danger: true, onClick: () => handleDeleteSingle(evt.id) },
+        ]} />
+      ),
+    },
+  ];
+
   return (
     <div>
       <PageHeader
@@ -178,8 +252,6 @@ export default function Events() {
         actions={(
           <>
             <UserScopeFilter value={userScope} onChange={(id) => { setUserScope(id); setPageNumber(1); }} />
-            <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
-            <RefreshButton onRefresh={load} title={t('Refresh event data')} />
             {selected.length > 0 && (
               <button className="btn btn-sm btn-danger" onClick={handleBulkDelete}>
                 {t('Delete Selected')} ({selected.length})
@@ -204,125 +276,33 @@ export default function Events() {
       <ConfirmDialog open={confirm.open} title={confirm.title} message={confirm.message}
         onConfirm={confirm.onConfirm} onCancel={() => setConfirm(c => ({ ...c, open: false }))} />
 
-      {loading && events.length === 0 && <p className="text-dim">{t('Loading...')}</p>}
-      {!loading && events.length === 0 && <p className="text-dim">{t('No events found.')}</p>}
-
-      {events.length > 0 && (
-        <>
-          <Pagination pageNumber={pageNumber} pageSize={pageSize} totalPages={totalPages}
-            totalRecords={totalRecords}
-            onPageChange={p => setPageNumber(p)} onPageSizeChange={s => { setPageSize(s); setPageNumber(1); }} />
-
-          <div className="table-wrap">
-            <table className="table-dense">
-              <thead>
-                <tr>
-                  <th className="col-checkbox">
-                    <input aria-label={t('Select all events')} type="checkbox" checked={allSelected} onChange={e => e.target.checked ? selectAll() : clearSelection()} title={t('Select all events')} />
-                  </th>
-                  <th>{t('ID')}</th>
-                  <th className="sortable" onClick={() => handleSort('eventType')} title={t('Event type -- click to sort')}>
-                    {t('Event Type')}{sortIcon('eventType')}
-                  </th>
-                  <th className="sortable" onClick={() => handleSort('entityType')} title={t('Entity type -- click to sort')}>
-                    {t('Entity Type')}{sortIcon('entityType')}
-                  </th>
-                  <th>{t('Entity ID')}</th>
-                  <th>{t('Captain')}</th>
-                  <th>{t('Mission')}</th>
-                  <th>{t('Vessel')}</th>
-                  <th>{t('Voyage')}</th>
-                  <th>{t('Message')}</th>
-                  <th className="sortable" onClick={() => handleSort('createdUtc')} title={t('Created -- click to sort')}>
-                    {t('Created')}{sortIcon('createdUtc')}
-                  </th>
-                  <th className="text-right">{t('Actions')}</th>
-                </tr>
-                <tr className="column-filter-row">
-                  <td></td>
-                  <td></td>
-                  <td><input type="text" className="col-filter" value={colFilters.eventType} onChange={e => setColFilters(f => ({ ...f, eventType: e.target.value }))} placeholder={t('Filter...')} /></td>
-                  <td><input type="text" className="col-filter" value={colFilters.entityType} onChange={e => setColFilters(f => ({ ...f, entityType: e.target.value }))} placeholder={t('Filter...')} /></td>
-                  <td></td>
-                  <td></td>
-                  <td></td>
-                  <td></td>
-                  <td></td>
-                  <td><input type="text" className="col-filter" value={colFilters.message} onChange={e => setColFilters(f => ({ ...f, message: e.target.value }))} placeholder={t('Filter...')} /></td>
-                  <td></td>
-                  <td></td>
-                </tr>
-              </thead>
-              <tbody>
-                {sorted.map(evt => {
-                  const entRoute = entityRoute(evt.entityType, evt.entityId);
-                  return (
-                    <tr key={evt.id} className="clickable" onClick={() => setViewRecord(evt as unknown as Record<string, unknown>)}>
-                      <td className="col-checkbox" onClick={e => e.stopPropagation()}>
-                        <input aria-label={t('Select this event')} type="checkbox" checked={selected.includes(evt.id)} onChange={() => toggleSelect(evt.id)} title={t('Select this event')} />
-                      </td>
-                      <td className="mono text-dim table-id-cell">
-                        <span className="id-display">
-                          <span className="id-value" title={evt.id}>{evt.id}</span>
-                          <CopyButton text={evt.id} onClick={e => e.stopPropagation()} />
-                        </span>
-                      </td>
-                      <td><span className="cell-clip" title={evt.eventType}><span>{evt.eventType}</span></span></td>
-                      <td className="text-dim">{evt.entityType || '-'}</td>
-                      <td className="mono text-dim table-id-cell" onClick={e => e.stopPropagation()}>
-                        {evt.entityId ? (
-                          <span className="id-display">
-                            {entRoute ? (
-                              <a href="#" className="id-value" title={evt.entityId} onClick={e => { e.preventDefault(); navigate(entRoute); }}>{evt.entityId}</a>
-                            ) : (
-                              <span className="id-value" title={evt.entityId}>{evt.entityId}</span>
-                            )}
-                            <CopyButton text={evt.entityId} onClick={e => e.stopPropagation()} />
-                          </span>
-                        ) : '-'}
-                      </td>
-                      <td onClick={e => e.stopPropagation()}>
-                        {evt.captainId ? (
-                          <a href="#" onClick={e => { e.preventDefault(); navigate(`/captains/${evt.captainId}`); }}>{captainName(evt.captainId)}</a>
-                        ) : '-'}
-                      </td>
-                      <td className="mono text-dim" onClick={e => e.stopPropagation()}>
-                        {evt.missionId ? (
-                          <span className="cell-clip"><a href="#" title={evt.missionId} onClick={e => { e.preventDefault(); navigate(`/missions/${evt.missionId}`); }}>{evt.missionId}</a></span>
-                        ) : '-'}
-                      </td>
-                      <td onClick={e => e.stopPropagation()}>
-                        {evt.vesselId ? (
-                          <a href="#" onClick={e => { e.preventDefault(); navigate(`/vessels/${evt.vesselId}`); }}>{vesselName(evt.vesselId)}</a>
-                        ) : '-'}
-                      </td>
-                      <td className="mono text-dim" onClick={e => e.stopPropagation()}>
-                        {evt.voyageId ? (
-                          <span className="cell-clip"><a href="#" title={evt.voyageId} onClick={e => { e.preventDefault(); navigate(`/voyages/${evt.voyageId}`); }}>{evt.voyageId}</a></span>
-                        ) : '-'}
-                      </td>
-                      <td title={evt.message}>
-                        <span className="truncate-text">{evt.message}</span>
-                      </td>
-                      <td className="text-dim" title={formatDateTime(evt.createdUtc)}>{formatRelativeTime(evt.createdUtc)}</td>
-                      <td className="text-right" onClick={e => e.stopPropagation()}>
-                        <ActionMenu id={`event-${evt.id}`} items={[
-                          { label: 'View Detail', onClick: () => navigate(`/events/${evt.id}`) },
-                          { label: 'View JSON', onClick: () => setJsonData({ open: true, title: `${t('Event')}: ${evt.id}`, data: evt }) },
-                          { label: 'Delete', danger: true, onClick: () => handleDeleteSingle(evt.id) },
-                        ]} />
-                      </td>
-                    </tr>
-                  );
-                })}
-                {sorted.length === 0 && (
-                  <tr><td colSpan={12} className="text-dim">{t('No events match the current filters.')}</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
+      <DataTable
+        tableKey="events"
+        columns={columns}
+        rows={sorted}
+        rowKey={(evt) => evt.id}
+        onRowClick={(evt) => setViewRecord(evt as unknown as Record<string, unknown>)}
+        sort={{ field: sortField, dir: sortDir, onSort: (field) => handleSort(field as SortField) }}
+        pagination={{
+          pageNumber, pageSize, totalPages, totalRecords,
+          onPageChange: (p) => setPageNumber(p),
+          onPageSizeChange: (size) => { setPageSize(size); setPageNumber(1); },
+        }}
+        autoRefresh={{ seconds: refreshSeconds, onChange: setRefreshSeconds }}
+        onRefresh={load}
+        refreshTitle={t('Refresh event data')}
+        selection={{
+          isSelected: (evt) => selected.includes(evt.id),
+          onToggle: (evt) => toggleSelect(evt.id),
+          allSelected,
+          onToggleAll: (checked) => (checked ? selectAll() : clearSelection()),
+          selectAllLabel: t('Select all events'),
+          rowLabel: () => t('Select this event'),
+        }}
+        className="table-dense"
+        emptyMessage={t('No events match the current filters.')}
+        placeholder={events.length > 0 ? undefined : <p className="text-dim">{loading ? t('Loading...') : t('No events found.')}</p>}
+      />
     </div>
   );
 }

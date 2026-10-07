@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import type { Fleet, Pipeline, VesselImportCandidateStatus, VesselImportHint, VesselImportItem } from '../../../types/models';
 import { useLocale } from '../../../context/LocaleContext';
 import CodeStatusBadge from '../../shared/CodeStatusBadge';
-import Pagination from '../../shared/Pagination';
+import DataTable from '../../shared/DataTable';
 import {
   CANDIDATE_STATUSES,
   CANDIDATE_STATUS_META,
@@ -116,62 +116,63 @@ export default function ImportReviewStep({
         <span className="text-dim toolbar-note">{t('{count, plural, one {# selected} other {# selected}}', { count: selected.length })}</span>
       </div>
 
-      <Pagination
-        pageNumber={page}
-        pageSize={pageSize}
-        totalPages={totalPages}
-        totalRecords={filtered.length}
-        onPageChange={setPageNumber}
-        onPageSizeChange={(s) => { setPageSize(s); setPageNumber(1); }}
+      <DataTable
+        tableKey="vessel-import-review"
+        wrapClassName="import-table-wrap"
+        rows={visible}
+        rowKey={(c) => c.id || c.path}
+        onRowClick={(c) => { if (selectable(c)) toggle(c.path); }}
+        isRowClickable={selectable}
+        rowClassName={(c) => (selectable(c) ? undefined : 'row-muted')}
+        pagination={{
+          pageNumber: page,
+          pageSize,
+          totalPages,
+          totalRecords: filtered.length,
+          onPageChange: setPageNumber,
+          onPageSizeChange: (size) => { setPageSize(size); setPageNumber(1); },
+        }}
+        emptyMessage={t('No candidates match the current filters.')}
+        selection={{
+          isSelected: (c) => selected.includes(c.path),
+          isSelectable: selectable,
+          onToggle: (c) => toggle(c.path),
+          allSelected: allFilteredSelected,
+          onToggleAll: () => toggleAllFiltered(),
+          selectAllLabel: t('Select all importable candidates in this view'),
+          rowLabel: (c) => t('Select {{name}}', { name: c.proposedName }),
+        }}
+        columns={[
+          { key: 'name', label: t('Name'), required: true, render: (c) => <strong data-i18n-skip="true">{c.proposedName}</strong> },
+          {
+            // The existing-vessel link used to be a second line under the badge; it sits beside it on one line now.
+            key: 'status', label: t('Status'), cellClassName: 'cell-nowrap',
+            render: (c) => (
+              <>
+                <CodeStatusBadge {...candidateStatusBadge(t, c.candidateStatus)} />
+                {c.candidateStatus === 'AlreadyOnboarded' && c.existingVesselId && (
+                  <>
+                    {' '}
+                    <Link to={`/vessels/${c.existingVesselId}`} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>{t('Open existing vessel')}</Link>
+                  </>
+                )}
+              </>
+            ),
+          },
+          {
+            key: 'path', label: t('Path'), cellClassName: 'mono', cellTitle: (c) => c.path,
+            render: (c) => <span className="cell-clip" data-i18n-skip="true"><span>{c.path}</span></span>,
+          },
+          {
+            key: 'remote', label: t('Remote'), cellClassName: 'mono text-dim', cellTitle: (c) => c.remoteUrl ?? '',
+            render: (c) => <span className="cell-clip" data-i18n-skip="true"><span>{c.remoteUrl || t('(no origin)')}</span></span>,
+          },
+          {
+            key: 'branch', label: t('Branch'), cellClassName: 'mono text-dim', cellTitle: (c) => c.defaultBranch || '',
+            render: (c) => <span className="cell-clip" data-i18n-skip="true"><span>{c.defaultBranch || '-'}</span></span>,
+          },
+        ]}
       />
-      <div className="table-wrap import-table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th className="col-checkbox" scope="col">
-                <input type="checkbox" checked={allFilteredSelected} disabled={filteredSelectable.length === 0} onChange={toggleAllFiltered} aria-label={t('Select all importable candidates in this view')} title={t('Select all importable candidates in this view')} />
-              </th>
-              <th scope="col">{t('Name')}</th>
-              <th scope="col">{t('Status')}</th>
-              <th scope="col">{t('Path')}</th>
-              <th scope="col">{t('Remote')}</th>
-              <th scope="col">{t('Branch')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {visible.map((c) => {
-              const badge = candidateStatusBadge(t, c.candidateStatus);
-              const canSelect = selectable(c);
-              return (
-                <tr key={c.id || c.path} className={canSelect ? 'clickable' : 'row-muted'} onClick={() => { if (canSelect) toggle(c.path); }}>
-                  <td className="col-checkbox" onClick={(e) => e.stopPropagation()}>
-                    <input
-                      type="checkbox"
-                      checked={selected.includes(c.path)}
-                      disabled={!canSelect}
-                      onChange={() => toggle(c.path)}
-                      aria-label={t('Select {{name}}', { name: c.proposedName })}
-                    />
-                  </td>
-                  <td><strong data-i18n-skip="true">{c.proposedName}</strong></td>
-                  <td>
-                    <CodeStatusBadge {...badge} />
-                    {c.candidateStatus === 'AlreadyOnboarded' && c.existingVesselId && (
-                      <div className="cell-subline">
-                        <Link to={`/vessels/${c.existingVesselId}`} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>{t('Open existing vessel')}</Link>
-                      </div>
-                    )}
-                  </td>
-                  <td className="mono" title={c.path} data-i18n-skip="true"><span className="cell-clip"><span>{c.path}</span></span></td>
-                  <td className="mono text-dim" title={c.remoteUrl ?? ''} data-i18n-skip="true"><span className="cell-clip"><span>{c.remoteUrl || t('(no origin)')}</span></span></td>
-                  <td className="mono text-dim" title={c.defaultBranch || ''} data-i18n-skip="true"><span className="cell-clip"><span>{c.defaultBranch || '-'}</span></span></td>
-                </tr>
-              );
-            })}
-            {visible.length === 0 && <tr><td colSpan={6} className="text-dim">{t('No candidates match the current filters.')}</td></tr>}
-          </tbody>
-        </table>
-      </div>
 
       <fieldset className="form-fieldset import-defaults">
         <legend className="form-label">{t('Defaults for the new vessels')}</legend>

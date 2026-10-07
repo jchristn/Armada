@@ -23,6 +23,7 @@ import {
 } from '../../../lib/health/healthText';
 import { useFocusTrap } from '../../../lib/useFocusTrap';
 import CopyButton, { copyToClipboard } from '../../shared/CopyButton';
+import DataTable from '../../shared/DataTable';
 import ConfirmDialog from '../../shared/ConfirmDialog';
 import LoadingIndicator from '../../shared/LoadingIndicator';
 import HealthStatusBadge from './HealthStatusBadge';
@@ -345,48 +346,51 @@ export default function VesselHealthDetailModal({
             detail.findings.length === 0 ? (
               <p className="text-dim">{t('No findings yet. Findings appear after the first evaluation.')}</p>
             ) : (
-              <div className="table-wrap">
-                <table className="vh-findings-table">
-                  <thead>
-                    <tr>
-                      <th scope="col">{t('Criterion')}</th>
-                      <th scope="col">{t('Status')}</th>
-                      <th scope="col">{t('Details')}</th>
-                      {canAdmin && <th scope="col" className="text-right">{t('Actions')}</th>}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {findingsByCriterion.map((finding) => {
+              <DataTable
+                tableKey="vessel-health-findings"
+                className="vh-findings-table"
+                rows={findingsByCriterion}
+                rowKey={(finding) => finding.criterion}
+                recordCount={null}
+                columns={[
+                  { key: 'criterion', label: t('Criterion'), required: true, cellClassName: 'vh-nowrap', render: (finding) => criterionLabel(t, finding.criterion) },
+                  {
+                    key: 'status', label: t('Status'), cellClassName: 'vh-nowrap',
+                    render: (finding) => {
                       const o = overrideByCriterion.get(finding.criterion);
                       return (
-                        <tr key={finding.criterion}>
-                          <td className="vh-nowrap">{criterionLabel(t, finding.criterion)}</td>
-                          <td className="vh-nowrap">
-                            <HealthStatusBadge status={finding.status} />
-                            {o && (
-                              <span className="vh-override-chip">
-                                <span className="text-dim">{t('Overridden to')}</span>{' '}
-                                <HealthStatusBadge status={o.status} overridden overrideNote={o.note ?? undefined} />
-                              </span>
-                            )}
-                          </td>
-                          <td>
-                            <div>{describeFinding(finding, t, locale)}</div>
-                            {o?.note && <div className="text-dim vh-note">{t('Note: {{note}}', { note: o.note })}</div>}
-                          </td>
-                          {canAdmin && (
-                            <td className="text-right">
-                              <button type="button" className="btn btn-sm" onClick={() => startOverride(finding.criterion)}>
-                                {o ? t('Edit override') : t('Override...')}
-                              </button>
-                            </td>
+                        <>
+                          <HealthStatusBadge status={finding.status} />
+                          {o && (
+                            <span className="vh-override-chip">
+                              <span className="text-dim">{t('Overridden to')}</span>{' '}
+                              <HealthStatusBadge status={o.status} overridden overrideNote={o.note ?? undefined} />
+                            </span>
                           )}
-                        </tr>
+                        </>
                       );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                    },
+                  },
+                  {
+                    // The override note used to be a second line under the details; it is in the tooltip (and the
+                    // override chip and the Overrides tab show it too).
+                    key: 'details', label: t('Details'),
+                    cellTitle: (finding) => {
+                      const note = overrideByCriterion.get(finding.criterion)?.note;
+                      return note ? t('Note: {{note}}', { note }) : undefined;
+                    },
+                    render: (finding) => describeFinding(finding, t, locale),
+                  },
+                  ...(canAdmin ? [{
+                    key: 'actions', label: t('Actions'), fixed: true, interactive: true, className: 'text-right',
+                    render: (finding: VesselHealthDetail['findings'][number]) => (
+                      <button type="button" className="btn btn-sm" onClick={() => startOverride(finding.criterion)}>
+                        {overrideByCriterion.get(finding.criterion) ? t('Edit override') : t('Override...')}
+                      </button>
+                    ),
+                  }] : []),
+                ]}
+              />
             )
           )}
 
@@ -394,49 +398,47 @@ export default function VesselHealthDetailModal({
             detail.dependencies.length === 0 ? (
               <p className="text-dim">{t('No outdated or vulnerable dependencies were found.')}</p>
             ) : (
-              <div className="table-wrap">
-                <table className="vh-deps-table">
-                  <thead>
-                    <tr>
-                      <th scope="col">{t('Ecosystem')}</th>
-                      <th scope="col">{t('Project')}</th>
-                      <th scope="col">{t('Package')}</th>
-                      <th scope="col">{t('Version')}</th>
-                      <th scope="col">{t('Drift')}</th>
-                      <th scope="col">{t('Vulnerability')}</th>
-                      <th scope="col">{t('Advisory')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {detail.dependencies.map((dep, i) => (
-                      <tr key={dep.id ?? `${dep.projectPath}-${dep.packageName}-${i}`}>
-                        <td className="vh-nowrap">{dep.ecosystem}</td>
-                        <td className="mono vh-path" title={dep.projectPath ?? undefined}>{dep.projectPath || '-'}</td>
-                        <td className="mono vh-nowrap">{dep.packageName}</td>
-                        <td className="mono vh-nowrap">
-                          {dep.currentVersion || '-'}
-                          {dep.latestVersion ? <> {'\u2192'} {dep.latestVersion}</> : null}
-                        </td>
-                        <td>
-                          {dep.drift && dep.drift !== 'None'
-                            ? <span className={`tag vh-drift vh-drift-${dep.drift.toLowerCase()}`}>{driftLabel(t, dep.drift)}</span>
-                            : <span className="text-dim">-</span>}
-                        </td>
-                        <td>
-                          {dep.isVulnerable
-                            ? <span className={`tag vh-sev vh-sev-${(dep.severity ?? 'None').toLowerCase()}`}>{severityLabel(t, dep.severity)}</span>
-                            : <span className="text-dim">-</span>}
-                        </td>
-                        <td>
-                          {dep.advisoryUrl
-                            ? <a href={dep.advisoryUrl} target="_blank" rel="noopener noreferrer">{t('Advisory')}</a>
-                            : <span className="text-dim">-</span>}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <DataTable
+                tableKey="vessel-health-dependencies"
+                className="vh-deps-table"
+                rows={detail.dependencies}
+                rowKey={(dep) => dep.id ?? `${dep.projectPath}-${dep.packageName}-${dep.currentVersion}`}
+                columns={[
+                  { key: 'ecosystem', label: t('Ecosystem'), cellClassName: 'vh-nowrap', render: (dep) => dep.ecosystem },
+                  {
+                    key: 'project', label: t('Project'), cellClassName: 'mono',
+                    render: (dep) => <span className="vh-path cell-one-line" title={dep.projectPath ?? undefined}>{dep.projectPath || '-'}</span>,
+                  },
+                  { key: 'package', label: t('Package'), required: true, cellClassName: 'mono vh-nowrap', render: (dep) => dep.packageName },
+                  {
+                    key: 'version', label: t('Version'), cellClassName: 'mono vh-nowrap',
+                    render: (dep) => (
+                      <>
+                        {dep.currentVersion || '-'}
+                        {dep.latestVersion ? <> {'\u2192'} {dep.latestVersion}</> : null}
+                      </>
+                    ),
+                  },
+                  {
+                    key: 'drift', label: t('Drift'), cellClassName: 'vh-nowrap',
+                    render: (dep) => (dep.drift && dep.drift !== 'None'
+                      ? <span className={`tag vh-drift vh-drift-${dep.drift.toLowerCase()}`}>{driftLabel(t, dep.drift)}</span>
+                      : <span className="text-dim">-</span>),
+                  },
+                  {
+                    key: 'vulnerability', label: t('Vulnerability'), cellClassName: 'vh-nowrap',
+                    render: (dep) => (dep.isVulnerable
+                      ? <span className={`tag vh-sev vh-sev-${(dep.severity ?? 'None').toLowerCase()}`}>{severityLabel(t, dep.severity)}</span>
+                      : <span className="text-dim">-</span>),
+                  },
+                  {
+                    key: 'advisory', label: t('Advisory'), cellClassName: 'vh-nowrap',
+                    render: (dep) => (dep.advisoryUrl
+                      ? <a href={dep.advisoryUrl} target="_blank" rel="noopener noreferrer">{t('Advisory')}</a>
+                      : <span className="text-dim">-</span>),
+                  },
+                ]}
+              />
             )
           )}
 

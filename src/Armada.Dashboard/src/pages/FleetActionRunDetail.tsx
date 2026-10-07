@@ -16,10 +16,9 @@ import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
 import { useAuth } from '../context/AuthContext';
 import PageHeader from '../components/shared/PageHeader';
-import Pagination from '../components/shared/Pagination';
+import DataTable from '../components/shared/DataTable';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import JsonViewer from '../components/shared/JsonViewer';
-import RefreshButton from '../components/shared/RefreshButton';
 import CopyButton from '../components/shared/CopyButton';
 import CodeStatusBadge from '../components/shared/CodeStatusBadge';
 import { EmptyState, ErrorState, LoadingState } from '../components/shared/StateBlocks';
@@ -239,7 +238,6 @@ export default function FleetActionRunDetail() {
               {autoRefreshing && <span className="follow-dot follow-dot-active" aria-hidden="true" />}
               {refreshState}
             </span>
-            <RefreshButton onRefresh={refresh} title={t('Refresh run')} />
             <button type="button" className="btn btn-sm" onClick={() => setShowJson(true)}>{t('View JSON')}</button>
             {!active && run.failedCount > 0 && isTenantAdmin && (
               <button type="button" className="btn btn-sm" onClick={() => void startRerunFailed()} disabled={rerunLoading}>
@@ -294,72 +292,73 @@ export default function FleetActionRunDetail() {
       </div>
 
       {targetsError && <ErrorState message={targetsError} onRetry={() => void refresh()} />}
-      {targetsLoading && targets.length === 0 && !targetsError && <LoadingState />}
-      {!targetsLoading && !targetsError && targetsTotal === 0 && (
-        <EmptyState title={targetStatus ? t('No targets match this status') : t('This run has no targets')} />
-      )}
-
-      {targetsTotal > 0 && (
-        <>
-          <Pagination
-            pageNumber={pageNumber}
-            pageSize={pageSize}
-            totalPages={targetsPages}
-            totalRecords={targetsTotal}
-            onPageChange={(p) => updateParams({ page: String(p) })}
-            onPageSizeChange={(s) => { setPageSize(s); updateParams({ page: null }); }}
-          />
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th scope="col">{t('Vessel')}</th>
-                  <th scope="col">{t('Status')}</th>
-                  <th scope="col">{t('Reason')}</th>
-                  {run.kind === 'Command' && <th scope="col" className="text-right">{t('Exit code')}</th>}
-                  <th scope="col" className="text-right">{t('Duration')}</th>
-                  {run.kind === 'Mission' && <th scope="col">{t('Voyage')}</th>}
-                  {run.kind === 'Command' && <th scope="col">{t('Output')}</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {targets.map((target) => {
-                  const tb = targetStatusBadge(t, target.status);
-                  const reason = reasonLabel(t, target.skipReason, target.failureReason);
-                  const clickable = run.kind === 'Command' || Boolean(target.voyageId);
-                  return (
-                    <tr key={target.id} className={clickable ? 'clickable' : undefined} onClick={() => onTargetClick(target)}>
-                      <td>
-                        <Link to={`/vessels/${target.vesselId}`} onClick={(e) => e.stopPropagation()}><strong>{target.vesselName}</strong></Link>
-                        <div className="text-dim mono cell-subline">{target.vesselId}</div>
-                      </td>
-                      <td><CodeStatusBadge {...tb} /></td>
-                      <td title={target.skipReason ?? target.failureReason ?? ''}>{reason || <span className="text-dim">-</span>}</td>
-                      {run.kind === 'Command' && <td className="text-right mono">{target.exitCode ?? '-'}</td>}
-                      <td className="text-right mono nowrap">{formatDurationMs(t, locale, target.durationMs ?? durationBetween(target.startedUtc, target.completedUtc, target.status === 'Running'))}</td>
-                      {run.kind === 'Mission' && (
-                        <td>
-                          {target.voyageId
-                            ? <Link to={`/voyages/${target.voyageId}`} className="mono" onClick={(e) => e.stopPropagation()}>{target.voyageId}</Link>
-                            : <span className="text-dim">-</span>}
-                        </td>
-                      )}
-                      {run.kind === 'Command' && (
-                        <td onClick={(e) => e.stopPropagation()}>
-                          <button type="button" className="btn btn-sm" onClick={() => setDrawerTargetId(target.id)} aria-label={t('View output for {{name}}', { name: target.vesselName })}>
-                            {t('View output')}
-                          </button>
-                          {target.outputTruncated && <span className="tag review" style={{ marginLeft: '0.35rem' }} title={t('Output was truncated.')}>{t('Truncated')}</span>}
-                        </td>
-                      )}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
+      <DataTable
+        tableKey="fleet-action-run-targets"
+        rows={targets}
+        rowKey={(target) => target.id}
+        onRowClick={onTargetClick}
+        isRowClickable={(target) => run?.kind !== 'Mission' || Boolean(target.voyageId)}
+        pagination={{
+          pageNumber,
+          pageSize,
+          totalPages: targetsPages,
+          totalRecords: targetsTotal,
+          onPageChange: (p) => updateParams({ page: String(p) }),
+          onPageSizeChange: (s) => { setPageSize(s); updateParams({ page: null }); },
+        }}
+        onRefresh={refresh}
+        refreshTitle={t('Refresh run')}
+        placeholder={targetsTotal > 0 ? undefined : (targetsLoading && !targetsError) ? <LoadingState /> : !targetsError ? (
+          <EmptyState title={targetStatus ? t('No targets match this status') : t('This run has no targets')} />
+        ) : <></>}
+        columns={[
+          {
+            key: 'vessel', label: t('Vessel'), required: true,
+            cellTitle: (target) => target.vesselId,
+            render: (target) => <Link to={`/vessels/${target.vesselId}`} onClick={(e) => e.stopPropagation()}><strong>{target.vesselName}</strong></Link>,
+          },
+          {
+            key: 'vesselId', label: t('Vessel ID'), defaultHidden: true, cellClassName: 'mono text-dim table-id-cell',
+            render: (target) => (
+              <span className="id-display">
+                <span className="id-value" title={target.vesselId}>{target.vesselId}</span>
+                <CopyButton text={target.vesselId} />
+              </span>
+            ),
+          },
+          { key: 'status', label: t('Status'), cellClassName: 'cell-nowrap', render: (target) => <CodeStatusBadge {...targetStatusBadge(t, target.status)} /> },
+          {
+            key: 'reason', label: t('Reason'),
+            cellTitle: (target) => target.skipReason ?? target.failureReason ?? '',
+            render: (target) => reasonLabel(t, target.skipReason, target.failureReason) || <span className="text-dim">-</span>,
+          },
+          ...(run.kind === 'Command' ? [{
+            key: 'exitCode', label: t('Exit code'), className: 'text-right', cellClassName: 'mono',
+            render: (target: FleetActionRunTargetSummary) => target.exitCode ?? '-',
+          }] : []),
+          {
+            key: 'duration', label: t('Duration'), className: 'text-right', cellClassName: 'mono nowrap',
+            render: (target) => formatDurationMs(t, locale, target.durationMs ?? durationBetween(target.startedUtc, target.completedUtc, target.status === 'Running')),
+          },
+          ...(run.kind === 'Mission' ? [{
+            key: 'voyage', label: t('Voyage'), cellClassName: 'mono',
+            render: (target: FleetActionRunTargetSummary) => (target.voyageId
+              ? <Link to={`/voyages/${target.voyageId}`} className="mono" onClick={(e) => e.stopPropagation()}>{target.voyageId}</Link>
+              : <span className="text-dim">-</span>),
+          }] : []),
+          ...(run.kind === 'Command' ? [{
+            key: 'output', label: t('Output'), interactive: true, cellClassName: 'cell-nowrap',
+            render: (target: FleetActionRunTargetSummary) => (
+              <>
+                <button type="button" className="btn btn-sm" onClick={() => setDrawerTargetId(target.id)} aria-label={t('View output for {{name}}', { name: target.vesselName })}>
+                  {t('View output')}
+                </button>
+                {target.outputTruncated && <span className="tag review" style={{ marginLeft: '0.35rem' }} title={t('Output was truncated.')}>{t('Truncated')}</span>}
+              </>
+            ),
+          }] : []),
+        ]}
+      />
 
       <TargetDetailDrawer runId={run.id} targetId={drawerTargetId} onClose={() => setDrawerTargetId(null)} />
       <JsonViewer open={showJson} title={t('Fleet action run: {{name}}', { name: run.actionName })} id={run.id} data={run} onClose={() => setShowJson(false)} />

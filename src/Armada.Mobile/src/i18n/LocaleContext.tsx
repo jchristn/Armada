@@ -53,6 +53,15 @@ function deviceLocales(): string[] {
   }
 }
 
+/**
+ * The server sends .NET timestamps with up to seven fractional digits ("...:43.592272Z"); Hermes' Date parser only
+ * accepts up to three, so trim the fraction to milliseconds before parsing. Other values pass through unchanged.
+ */
+export function normalizeUtc(utc: string | null | undefined): string | null | undefined {
+  if (!utc) return utc;
+  return utc.replace(/(T\d{2}:\d{2}:\d{2}\.\d{3})\d+/, '$1');
+}
+
 function safeFormat(format: () => string, fallback: string): string {
   try {
     return format();
@@ -129,9 +138,13 @@ export function LocaleProvider({ children, serverUrl, requestHeaders = null, bun
       catalogSource,
       // A new function identity per locale/catalog so memoized consumers re-render with the new language.
       t: (text, params) => translateTemplate(locale, text, catalog, params),
-      formatDateTime: (utc) => safeFormat(() => formatAbsoluteDateTime(locale, utc), utc ?? ''),
-      formatDate: (utc) => safeFormat(() => formatDateOnly(locale, utc), utc ?? ''),
-      formatRelativeTime: (utc) => safeFormat(() => formatRelativeFromUtc(locale, utc), utc ?? '-'),
+      formatDateTime: (utc) => safeFormat(() => formatAbsoluteDateTime(locale, normalizeUtc(utc)), utc ?? ''),
+      formatDate: (utc) => safeFormat(() => formatDateOnly(locale, normalizeUtc(utc)), utc ?? ''),
+      // Without Intl.RelativeTimeFormat (some engines), fall back to the absolute local time, not the raw ISO text.
+      formatRelativeTime: (utc) => safeFormat(
+        () => formatRelativeFromUtc(locale, normalizeUtc(utc)),
+        safeFormat(() => formatAbsoluteDateTime(locale, normalizeUtc(utc)), utc ?? '-'),
+      ),
     };
   }, [catalog, catalogSource, locale, setLocale]);
 

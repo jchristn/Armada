@@ -99,7 +99,7 @@ export function useResourceTable<T>(options: UseResourceTableOptions<T>) {
 
   function sortIcon(field: string) {
     if (sortField !== field) return '';
-    return sortDir === 'asc' ? ' ▲' : ' ▼';
+    return sortDir === 'asc' ? ' \u25B2' : ' \u25BC';
   }
 
   const allSelected = selected.length > 0 && selected.length === filtered.length;
@@ -113,7 +113,25 @@ export function useResourceTable<T>(options: UseResourceTableOptions<T>) {
     setSelected([]);
   }
 
+  /** Props for DataTable's `sort`. */
+  const sortState = { field: sortField, dir: sortDir, onSort: handleSort };
+
+  /** Props for DataTable's `pagination` (client-side paging over the filtered rows). */
+  const paginationProps = {
+    pageNumber: currentPage,
+    pageSize,
+    totalPages,
+    totalRecords: sorted.length,
+    onPageChange: (page: number) => setPageNumber(Math.max(1, Math.min(totalPages, page))),
+    onPageSizeChange: (size: number) => {
+      setPageSize(size);
+      setPageNumber(1);
+    },
+  };
+
   return {
+    sortState,
+    paginationProps,
     search,
     setSearch: updateSearch,
     colFilters,

@@ -4,30 +4,9 @@
 
 import { Fragment } from 'react';
 import type { ToolEvent } from '../../lib/toolEvents';
+import { formatToolMs, prettyJson, toolResultPreview as resultPreview } from '../../lib/askFormat';
 
 export { applyToolEvent, type ToolEvent, type ToolEventMessage } from '../../lib/toolEvents';
-
-// Pretty-print a JSON string for the expandable tool detail; fall back to the raw text.
-function prettyJson(raw: string): string {
-  try { return JSON.stringify(JSON.parse(raw), null, 2); } catch { return raw; }
-}
-
-// A compact one-line preview of a tool result for the collapsed card summary: JSON is flattened to a
-// single line, whitespace collapsed, and the whole thing truncated so it never wraps the summary row.
-function resultPreview(raw: string): string {
-  let text = raw;
-  try { text = JSON.stringify(JSON.parse(raw)); } catch { /* not JSON: use as-is */ }
-  text = text.replace(/\s+/g, ' ').trim();
-  const max = 80;
-  return text.length > max ? text.slice(0, max) + '…' : text;
-}
-
-// Compact runtime label for a tool call.
-function formatToolMs(ms: number | null | undefined): string {
-  if (ms == null) return '';
-  if (ms < 1000) return `${Math.round(ms)}ms`;
-  return `${(ms / 1000).toFixed(ms < 10000 ? 2 : 1)}s`;
-}
 
 interface ChatToolChipsProps {
   tools: ToolEvent[] | undefined;

@@ -20,6 +20,7 @@ import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import CopyButton from '../components/shared/CopyButton';
+import DataTable from '../components/shared/DataTable';
 import ErrorModal from '../components/shared/ErrorModal';
 import JsonViewer from '../components/shared/JsonViewer';
 import PageHeader from '../components/shared/PageHeader';
@@ -624,36 +625,34 @@ export default function ReleaseDetail() {
             {release.artifacts.length === 0 ? (
               <p className="text-dim">{t('No artifacts are currently linked to this release. Refresh the release after relevant check runs complete to rebuild derived artifact metadata.')}</p>
             ) : (
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>{t('Source')}</th>
-                      <th>{t('Path')}</th>
-                      <th>{t('Size')}</th>
-                      <th>{t('Last Write')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {release.artifacts.map((artifact) => (
-                      <tr key={`${artifact.sourceId || 'source'}-${artifact.path}`}>
-                        <td className="text-dim">
-                          {artifact.sourceType}
-                          {artifact.sourceId && (
-                            <>
-                              {' '}
-                              <Link to={`/checks/${artifact.sourceId}`}>{artifact.sourceId}</Link>
-                            </>
-                          )}
-                        </td>
-                        <td className="mono">{artifact.path}</td>
-                        <td>{artifact.sizeBytes.toLocaleString()} {t('bytes')}</td>
-                        <td>{artifact.lastWriteUtc ? formatDateTime(artifact.lastWriteUtc) : '-'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <DataTable
+                tableKey="release-detail-artifacts"
+                rows={release.artifacts}
+                rowKey={(artifact) => `${artifact.sourceId || 'source'}-${artifact.path}`}
+                recordCount={null}
+                columns={[
+                  {
+                    key: 'source', label: t('Source'), cellClassName: 'text-dim cell-nowrap',
+                    render: (artifact) => (
+                      <>
+                        {artifact.sourceType}
+                        {artifact.sourceId && (
+                          <>
+                            {' '}
+                            <Link className="mono" to={`/checks/${artifact.sourceId}`}>{artifact.sourceId}</Link>
+                          </>
+                        )}
+                      </>
+                    ),
+                  },
+                  {
+                    key: 'path', label: t('Path'), required: true, cellClassName: 'mono',
+                    render: (artifact) => <span className="cell-one-line" style={{ ['--cell-max' as string]: '40rem' }} title={artifact.path}>{artifact.path}</span>,
+                  },
+                  { key: 'size', label: t('Size'), cellClassName: 'cell-nowrap', render: (artifact) => `${artifact.sizeBytes.toLocaleString()} ${t('bytes')}` },
+                  { key: 'lastWrite', label: t('Last Write'), cellClassName: 'cell-nowrap', render: (artifact) => (artifact.lastWriteUtc ? formatDateTime(artifact.lastWriteUtc) : '-') },
+                ]}
+              />
             )}
           </div>
 

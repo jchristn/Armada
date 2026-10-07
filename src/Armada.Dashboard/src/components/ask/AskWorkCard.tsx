@@ -2,21 +2,12 @@ import { Link } from 'react-router-dom';
 import type { AskMissionSnapshot, AskTargetSnapshot, AskTrackedWork, AskWorkSnapshot } from '../../types/models';
 import { useLocale } from '../../context/LocaleContext';
 import StatusBadge from '../shared/StatusBadge';
-import { isFailedChildStatus, isWorkActive, statusCounts, workProgress, workRoute } from '../../lib/askWork';
+import { entityTypeLabel, isFailedChildStatus, isWorkActive, statusCounts, workProgress, workRoute } from '../../lib/askWork';
 
 /** Localized label for a tracked entity type; unknown types render as-is. */
 export function useEntityTypeLabel(): (entityType: string | null | undefined) => string {
   const { t } = useLocale();
-  return (entityType) => {
-    switch (entityType) {
-      case 'Voyage': return t('Voyage');
-      case 'Mission': return t('Mission');
-      case 'FleetActionRun': return t('Fleet action run');
-      case 'Job': return t('Background job');
-      case 'VesselImportBatch': return t('Vessel import');
-      default: return entityType ?? '';
-    }
-  };
+  return (entityType) => entityTypeLabel(t, entityType);
 }
 
 interface AskWorkCardProps {

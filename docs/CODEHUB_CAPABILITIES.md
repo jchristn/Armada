@@ -708,7 +708,7 @@ because Phase C has nothing to grade until vessels exist in bulk.
   confirmation for a Command run states the vessel count and that the command runs
   in each working directory.
   _Acceptance:_ visual QA as in A9; a 50-target run stays responsive.
-  _Notes:_ Built and unit-tested; visual QA done under V1_READINESS W6.4. Actions/Runs tables have no column chooser and sort only by Created (the server supports no other order).
+  _Notes:_ Built and unit-tested; visual QA done under V1_READINESS W6.4. Actions/Runs tables now render through the shared DataTable, so they have the column chooser (Name/Action and ID are always shown) and the refresh controls in the pager row; they still sort only by Created (the server supports no other order).
 
 - [x] **B10 -- Docs.** Update REST_API.md, MCP_API.md, Postman ("Fleet Actions"
   folder), a new `docs/FLEET_ACTIONS.md` guide, and the CHANGELOG.

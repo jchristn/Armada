@@ -1,4 +1,5 @@
 import { useLocale } from '../../context/LocaleContext';
+import DataTable, { type DataTableColumn } from '../shared/DataTable';
 import type { CaptainToolAccessResult, CaptainToolServerSummary, CaptainToolSummary } from '../../types/models';
 
 interface CaptainToolViewerProps {
@@ -39,83 +40,72 @@ export default function CaptainToolViewer({ open, captainName, loading, error, d
     return notes.length > 0 ? notes.join(' | ') : '-';
   }
 
-  function renderServerTable(title: string, servers: CaptainToolServerSummary[], emptyMessage: string) {
+  function renderServerTable(tableKey: string, title: string, servers: CaptainToolServerSummary[], emptyMessage: string) {
+    const columns: DataTableColumn<CaptainToolServerSummary>[] = [
+      { key: 'source', label: t('Source'), required: true, render: (server) => <strong>{server.name}</strong> },
+      { key: 'transport', label: t('Transport'), render: (server) => server.transport || '-' },
+      {
+        key: 'endpoint', label: t('Endpoint / Target'), cellClassName: 'mono captain-tool-viewer-endpoint-cell',
+        // One line; the full endpoint is in the tooltip.
+        render: (server) => <span className="cell-one-line" title={formatEndpoint(server)}>{formatEndpoint(server)}</span>,
+      },
+      {
+        key: 'status', label: t('Status'), cellClassName: 'cell-nowrap',
+        render: (server) => (
+          <span className={`tag ${server.reachable ? 'complete' : server.enabled ? 'review' : 'idle'}`}>
+            {server.status}
+          </span>
+        ),
+      },
+      { key: 'tools', label: t('Tools'), render: (server) => server.toolCount },
+      {
+        key: 'notes', label: t('Notes'), cellClassName: 'text-dim captain-tool-viewer-notes-cell',
+        cellTitle: (server) => formatServerNotes(server),
+        render: (server) => <span className="line-clamp-2">{formatServerNotes(server)}</span>,
+      },
+    ];
     return (
       <section className="captain-tool-viewer-section">
         <h4>{title}</h4>
         {servers.length === 0 ? (
           <p className="text-dim">{emptyMessage}</p>
         ) : (
-          <div className="table-wrap captain-tool-viewer-table captain-tool-viewer-server-table">
-            <table>
-              <thead>
-                <tr>
-                  <th>{t('Source')}</th>
-                  <th>{t('Transport')}</th>
-                  <th>{t('Endpoint / Target')}</th>
-                  <th>{t('Status')}</th>
-                  <th>{t('Tools')}</th>
-                  <th>{t('Notes')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {servers.map((server) => (
-                  <tr key={`${server.sourceKind}:${server.name}`}>
-                    <td>
-                      <strong>{server.name}</strong>
-                    </td>
-                    <td>{server.transport || '-'}</td>
-                    <td className="mono captain-tool-viewer-endpoint-cell" title={formatEndpoint(server)}>
-                      {formatEndpoint(server)}
-                    </td>
-                    <td>
-                      <span className={`tag ${server.reachable ? 'complete' : server.enabled ? 'review' : 'idle'}`}>
-                        {server.status}
-                      </span>
-                    </td>
-                    <td>{server.toolCount}</td>
-                    <td className="text-dim captain-tool-viewer-notes-cell" title={formatServerNotes(server)}>
-                      {formatServerNotes(server)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            tableKey={tableKey}
+            columns={columns}
+            rows={servers}
+            rowKey={(server) => `${server.sourceKind}:${server.name}`}
+            wrapClassName="captain-tool-viewer-table captain-tool-viewer-server-table"
+            ariaLabel={title}
+          />
         )}
       </section>
     );
   }
 
-  function renderToolTable(title: string, tools: CaptainToolSummary[], emptyMessage: string) {
+  function renderToolTable(tableKey: string, title: string, tools: CaptainToolSummary[], emptyMessage: string) {
+    const columns: DataTableColumn<CaptainToolSummary>[] = [
+      { key: 'tool', label: t('Tool'), required: true, cellClassName: 'mono captain-tool-viewer-tool-name', render: (tool) => tool.name },
+      {
+        key: 'source', label: t('Server / Source'), cellClassName: 'captain-tool-viewer-source',
+        render: (tool) => <span className="tag idle">{tool.registrationSource || t('Internal')}</span>,
+      },
+      { key: 'description', label: t('Description'), render: (tool) => tool.description },
+    ];
     return (
       <section className="captain-tool-viewer-section">
         <h4>{title}</h4>
         {tools.length === 0 ? (
           <p className="text-dim">{emptyMessage}</p>
         ) : (
-          <div className="table-wrap captain-tool-viewer-table">
-            <table>
-              <thead>
-                <tr>
-                  <th>{t('Tool')}</th>
-                  <th>{t('Server / Source')}</th>
-                  <th>{t('Description')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {tools.map((tool) => (
-                  <tr key={`${tool.registrationSource || 'internal'}:${tool.name}`}>
-                    <td className="mono captain-tool-viewer-tool-name">{tool.name}</td>
-                    <td className="captain-tool-viewer-source">
-                      <span className="tag idle">{tool.registrationSource || t('Internal')}</span>
-                    </td>
-                    <td>{tool.description}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            tableKey={tableKey}
+            columns={columns}
+            rows={tools}
+            rowKey={(tool) => `${tool.registrationSource || 'internal'}:${tool.name}`}
+            wrapClassName="captain-tool-viewer-table"
+            ariaLabel={title}
+          />
         )}
       </section>
     );
@@ -166,6 +156,7 @@ export default function CaptainToolViewer({ open, captainName, loading, error, d
             )}
 
             {renderServerTable(
+              'captain-tools-mcp-servers',
               t('Configured MCP Servers'),
               configuredMcpServers,
               t('No external MCP servers are configured for this captain runtime.'),
@@ -173,12 +164,14 @@ export default function CaptainToolViewer({ open, captainName, loading, error, d
 
             {runtimeSources.length > 0 &&
               renderServerTable(
+                'captain-tools-runtime-sources',
                 t('Runtime Sources'),
                 runtimeSources,
                 t('No runtime-managed sources were reported for this captain runtime.'),
               )}
 
             {renderToolTable(
+              'captain-tools-internal',
               t('Runtime Internal Tools'),
               runtimeInternalTools,
               runtimeReportedToolCount > 0
@@ -187,6 +180,7 @@ export default function CaptainToolViewer({ open, captainName, loading, error, d
             )}
 
             {renderToolTable(
+              'captain-tools-mcp',
               t('MCP Tools'),
               mcpTools,
               configuredMcpServers.length > 0

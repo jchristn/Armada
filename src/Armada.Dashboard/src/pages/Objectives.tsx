@@ -37,9 +37,9 @@ import ConfirmDialog from '../components/shared/ConfirmDialog';
 import ErrorModal from '../components/shared/ErrorModal';
 import JsonViewer from '../components/shared/JsonViewer';
 import RecordDetailModal from '../components/shared/RecordDetailModal';
-import RefreshButton from '../components/shared/RefreshButton';
+import CopyButton from '../components/shared/CopyButton';
+import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
 import StatusBadge from '../components/shared/StatusBadge';
-import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
 import UserScopeFilter from '../components/shared/UserScopeFilter';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import { buildObjectiveDuplicatePayload } from '../lib/duplicates';
@@ -350,6 +350,129 @@ export default function Objectives() {
     return searchParams ? `/backlog/new?${searchParams}` : '/backlog/new';
   }, [vesselFilter]);
 
+  // The backlog item, scope and due/updated cells used to stack up to four lines each. Every value is its own one-line
+  // column now; the less essential ones start hidden and the column chooser turns them on.
+  const columns: DataTableColumn<Objective>[] = [
+    {
+      key: 'rank', label: t('Rank'), interactive: true,
+      render: (objective) => (
+        <div className="backlog-rank-cell">
+          <strong>{objective.rank}</strong>
+          {canManage && (
+            <div className="backlog-rank-buttons">
+              <button type="button" className="btn btn-sm" onClick={() => void handleMoveRank(objective.id, -1)} aria-label={t('Move backlog item up')}>
+                {'\u2191'}
+              </button>
+              <button type="button" className="btn btn-sm" onClick={() => void handleMoveRank(objective.id, 1)} aria-label={t('Move backlog item down')}>
+                {'\u2193'}
+              </button>
+            </div>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: 'title', label: t('Backlog Item'), required: true,
+      clearFilter: () => setColFilters(f => ({ ...f, title: '' })),
+      filter: <input type="text" className="col-filter" aria-label={t('Backlog Item')} value={colFilters.title} onChange={e => setColFilters(f => ({ ...f, title: e.target.value }))} placeholder={t('Filter...')} />,
+      cellTitle: (objective) => objective.description || undefined,
+      render: (objective) => <strong>{objective.title}</strong>,
+    },
+    {
+      key: 'id', label: t('ID'), required: true, cellClassName: 'mono text-dim table-id-cell',
+      render: (objective) => (
+        <span className="id-display">
+          <span className="id-value" title={objective.id}>{objective.id}</span>
+          <CopyButton text={objective.id} onClick={e => e.stopPropagation()} />
+        </span>
+      ),
+    },
+    {
+      key: 'owner', label: t('Owner'), cellClassName: 'text-dim',
+      render: (objective) => <span className="cell-one-line" title={objective.owner || undefined}>{objective.owner || t('No owner')}</span>,
+    },
+    {
+      key: 'category', label: t('Category'), defaultHidden: true, cellClassName: 'text-dim',
+      render: (objective) => objective.category ? <span className="cell-one-line" title={objective.category}>{objective.category}</span> : '-',
+    },
+    {
+      key: 'targetVersion', label: t('Target Version'), defaultHidden: true, cellClassName: 'text-dim cell-nowrap',
+      render: (objective) => objective.targetVersion || '-',
+    },
+    {
+      key: 'description', label: t('Description'), defaultHidden: true, cellClassName: 'text-dim truncate-cell',
+      render: (objective) => objective.description ? <span className="truncate-text" title={objective.description}>{objective.description}</span> : '-',
+    },
+    {
+      key: 'shape', label: t('Shape'), cellClassName: 'cell-nowrap',
+      render: (objective) => (
+        <div className="backlog-chip-row">
+          <span className={`tag ${objective.kind.toLowerCase()}`}>{objective.kind}</span>
+          <span className={`tag ${objective.priority.toLowerCase()}`}>{objective.priority}</span>
+          <span className={`tag ${objective.effort.toLowerCase()}`}>{objective.effort}</span>
+        </div>
+      ),
+    },
+    {
+      key: 'state', label: t('State'), cellClassName: 'cell-nowrap',
+      render: (objective) => (
+        <div className="backlog-chip-row">
+          <StatusBadge status={objective.status} />
+          <span className={`tag ${objective.backlogState.toLowerCase()}`}>{objective.backlogState}</span>
+          {objective.blockedByObjectiveIds.length > 0 && (
+            <span className="text-dim">{t('Blocked by')} {objective.blockedByObjectiveIds.length}</span>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: 'vessels', label: t('Vessels'), cellClassName: 'text-dim',
+      render: (objective) => {
+        if (objective.vesselIds.length > 0) {
+          const names = renderNames(objective.vesselIds, vesselMap);
+          return <span className="cell-one-line" title={names}>{names}</span>;
+        }
+        // The planning note used to be a third line under the scope; it is the tooltip now.
+        return <span className="cell-one-line" title={t('Needs a vessel before planning, dispatch, or release drafting can start.')}>{t('No vessel linked')}</span>;
+      },
+    },
+    {
+      key: 'fleets', label: t('Fleets'), cellClassName: 'text-dim',
+      render: (objective) => {
+        const names = objective.fleetIds.length > 0 ? renderNames(objective.fleetIds, fleetMap) : t('No fleet linked');
+        return <span className="cell-one-line" title={names}>{names}</span>;
+      },
+    },
+    {
+      key: 'due', label: t('Due'), cellClassName: 'text-dim cell-nowrap',
+      cellTitle: (objective) => (objective.dueUtc ? formatDateTime(objective.dueUtc) : undefined),
+      render: (objective) => (objective.dueUtc ? formatRelativeTime(objective.dueUtc) : t('No due date')),
+    },
+    {
+      key: 'lastUpdated', label: t('Last Updated'), cellClassName: 'text-dim cell-nowrap',
+      cellTitle: (objective) => formatDateTime(objective.lastUpdateUtc),
+      render: (objective) => formatRelativeTime(objective.lastUpdateUtc),
+    },
+    {
+      key: 'actions', label: t('Actions'), fixed: true, interactive: true, className: 'text-right',
+      render: (objective) => (
+        <ActionMenu
+          id={`backlog-${objective.id}`}
+          items={[
+            { label: 'Open', onClick: () => navigate(`/backlog/${objective.id}`) },
+            ...(canManage ? [{ label: 'Duplicate', onClick: () => void handleDuplicate(objective) }] : []),
+            { label: 'View JSON', onClick: () => setJsonData({ open: true, title: objective.title, data: objective }) },
+            ...(canManage ? [
+              { label: 'Move Up', onClick: () => void handleMoveRank(objective.id, -1) },
+              { label: 'Move Down', onClick: () => void handleMoveRank(objective.id, 1) },
+              { label: 'Delete', danger: true as const, onClick: () => handleDelete(objective) },
+            ] : []),
+          ]}
+        />
+      ),
+    },
+  ];
+
   return (
     <div>
       <PageHeader
@@ -358,8 +481,6 @@ export default function Objectives() {
         actions={(
           <>
             <UserScopeFilter value={userScope} onChange={setUserScope} />
-            <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
-            <RefreshButton onRefresh={load} title={t('Refresh backlog')} />
             {canManage && (
               <button className="btn" onClick={() => setImportModalOpen(true)}>
                 {t('Import GitHub')}
@@ -552,147 +673,48 @@ export default function Objectives() {
         </div>
       </div>
 
-      {loading && objectives.length === 0 ? (
-        <div className="playbook-empty-state">
-          <strong>{t('Loading backlog...')}</strong>
-          <span>{t('Checking for backlog items and scope links.')}</span>
-        </div>
-      ) : objectives.length === 0 ? (
-        <div className="playbook-empty-state">
-          <strong>{t('No backlog items yet.')}</strong>
-          <span>
-            {canManage
-              ? t('Create a backlog item to start triage, refinement, planning readiness, and delivery lineage inside Armada.')
-              : t('Ask a tenant administrator to create and manage backlog items.')}
-          </span>
-        </div>
-      ) : orderedObjectives.length === 0 ? (
-        <div className="playbook-empty-state">
-          <strong>{t('No backlog items match the current filters.')}</strong>
-          <span>
-            {canManage
-              ? t('Capture a backlog item to start with inbox triage, refinement, planning readiness, and delivery lineage inside Armada.')
-              : t('Ask a tenant administrator to create and manage backlog items.')}
-          </span>
-          {hasActiveFilters && (
-            <div className="backlog-empty-actions">
-              <button type="button" className="btn btn-sm" onClick={clearFilters}>
-                {t('Reset Filters')}
-              </button>
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>{t('Rank')}</th>
-                <th>{t('Backlog Item')}</th>
-                <th>{t('Shape')}</th>
-                <th>{t('State')}</th>
-                <th>{t('Scope')}</th>
-                <th>{t('Due / Updated')}</th>
-                <th className="text-right">{t('Actions')}</th>
-              </tr>
-              <tr className="column-filter-row">
-                <td></td>
-                <td><input type="text" className="col-filter" value={colFilters.title} onChange={e => setColFilters(f => ({ ...f, title: e.target.value }))} placeholder={t('Filter...')} /></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-              </tr>
-            </thead>
-            <tbody>
-              {orderedObjectives.map((objective) => {
-                return (
-                  <tr key={objective.id} className="clickable" onClick={() => setViewRecord(objective as unknown as Record<string, unknown>)}>
-                    <td onClick={(event) => event.stopPropagation()}>
-                      <div className="backlog-rank-cell">
-                        <strong>{objective.rank}</strong>
-                        {canManage && (
-                          <div className="backlog-rank-buttons">
-                            <button type="button" className="btn btn-sm" onClick={() => void handleMoveRank(objective.id, -1)} aria-label={t('Move backlog item up')}>
-                              ↑
-                            </button>
-                            <button type="button" className="btn btn-sm" onClick={() => void handleMoveRank(objective.id, 1)} aria-label={t('Move backlog item down')}>
-                              ↓
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                    <td>
-                      <strong>{objective.title}</strong>
-                      <div className="text-dim" style={{ marginTop: '0.2rem' }}>
-                        {objective.owner || t('No owner')}
-                        {objective.category ? ` · ${objective.category}` : ''}
-                        {objective.targetVersion ? ` · ${objective.targetVersion}` : ''}
-                      </div>
-                      <div className="mono text-dim" style={{ fontSize: '0.78rem' }}>{objective.id}</div>
-                      {objective.description && (
-                        <div className="text-dim" style={{ marginTop: '0.2rem' }}>{objective.description}</div>
-                      )}
-                    </td>
-                    <td>
-                      <div className="backlog-chip-row">
-                        <span className={`tag ${objective.kind.toLowerCase()}`}>{objective.kind}</span>
-                        <span className={`tag ${objective.priority.toLowerCase()}`}>{objective.priority}</span>
-                        <span className={`tag ${objective.effort.toLowerCase()}`}>{objective.effort}</span>
-                      </div>
-                    </td>
-                    <td>
-                      <div className="backlog-chip-row">
-                        <StatusBadge status={objective.status} />
-                        <span className={`tag ${objective.backlogState.toLowerCase()}`}>{objective.backlogState}</span>
-                      </div>
-                      {objective.blockedByObjectiveIds.length > 0 && (
-                        <div className="text-dim" style={{ marginTop: '0.3rem' }}>
-                          {t('Blocked by')} {objective.blockedByObjectiveIds.length}
-                        </div>
-                      )}
-                    </td>
-                    <td className="text-dim">
-                      <div>{objective.vesselIds.length > 0 ? renderNames(objective.vesselIds, vesselMap) : t('No vessel linked')}</div>
-                      <div style={{ marginTop: '0.25rem' }}>{objective.fleetIds.length > 0 ? renderNames(objective.fleetIds, fleetMap) : t('No fleet linked')}</div>
-                      {objective.vesselIds.length < 1 && (
-                        <div className="text-dim backlog-scope-note">
-                          {t('Needs a vessel before planning, dispatch, or release drafting can start.')}
-                        </div>
-                      )}
-                    </td>
-                    <td className="text-dim">
-                      <div title={objective.dueUtc ? formatDateTime(objective.dueUtc) : undefined}>
-                        {objective.dueUtc ? t('Due {{date}}', { date: formatRelativeTime(objective.dueUtc) }) : t('No due date')}
-                      </div>
-                      <div style={{ marginTop: '0.25rem' }} title={formatDateTime(objective.lastUpdateUtc)}>
-                        {t('Updated {{time}}', { time: formatRelativeTime(objective.lastUpdateUtc) })}
-                      </div>
-                    </td>
-                    <td className="text-right" onClick={(event) => event.stopPropagation()}>
-                      <ActionMenu
-                        id={`backlog-${objective.id}`}
-                        items={[
-                          { label: 'Open', onClick: () => navigate(`/backlog/${objective.id}`) },
-                          ...(canManage ? [{ label: 'Duplicate', onClick: () => void handleDuplicate(objective) }] : []),
-                          { label: 'View JSON', onClick: () => setJsonData({ open: true, title: objective.title, data: objective }) },
-                          ...(canManage ? [
-                            { label: 'Move Up', onClick: () => void handleMoveRank(objective.id, -1) },
-                            { label: 'Move Down', onClick: () => void handleMoveRank(objective.id, 1) },
-                            { label: 'Delete', danger: true as const, onClick: () => handleDelete(objective) },
-                          ] : []),
-                        ]}
-                      />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <DataTable
+        tableKey="objectives"
+        columns={columns}
+        rows={orderedObjectives}
+        rowKey={(objective) => objective.id}
+        onRowClick={(objective) => setViewRecord(objective as unknown as Record<string, unknown>)}
+        autoRefresh={{ seconds: refreshSeconds, onChange: setRefreshSeconds }}
+        onRefresh={load}
+        refreshTitle="Refresh backlog"
+        emptyMessage={(
+          <div className="playbook-empty-state">
+            <strong>{t('No backlog items match the current filters.')}</strong>
+            <span>
+              {canManage
+                ? t('Capture a backlog item to start with inbox triage, refinement, planning readiness, and delivery lineage inside Armada.')
+                : t('Ask a tenant administrator to create and manage backlog items.')}
+            </span>
+            {hasActiveFilters && (
+              <div className="backlog-empty-actions">
+                <button type="button" className="btn btn-sm" onClick={clearFilters}>
+                  {t('Reset Filters')}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+        placeholder={objectives.length > 0 ? undefined : loading ? (
+          <div className="playbook-empty-state">
+            <strong>{t('Loading backlog...')}</strong>
+            <span>{t('Checking for backlog items and scope links.')}</span>
+          </div>
+        ) : (
+          <div className="playbook-empty-state">
+            <strong>{t('No backlog items yet.')}</strong>
+            <span>
+              {canManage
+                ? t('Create a backlog item to start triage, refinement, planning readiness, and delivery lineage inside Armada.')
+                : t('Ask a tenant administrator to create and manage backlog items.')}
+            </span>
+          </div>
+        )}
+      />
     </div>
   );
 }

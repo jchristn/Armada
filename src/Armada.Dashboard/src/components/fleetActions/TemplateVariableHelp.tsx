@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useLocale } from '../../context/LocaleContext';
 import { TEMPLATE_VARIABLES } from '../../lib/fleetActionLabels';
+import DataTable from '../shared/DataTable';
 
 interface TemplateVariableHelpProps {
   /** Start expanded. */
@@ -25,27 +26,29 @@ export default function TemplateVariableHelp({ defaultOpen = false, onInsert }: 
           <p className="text-dim form-help">
             {t('Variables are substituted per vessel in a single pass, without shell escaping. Names are case-insensitive. Any other {{name}} is rejected.')}
           </p>
-          <table className="template-help-table">
-            <tbody>
-              {TEMPLATE_VARIABLES.map((v) => {
-                const token = `{{${v.name}}}`;
-                return (
-                  <tr key={v.name}>
-                    <td>
-                      {onInsert ? (
-                        <button type="button" className="btn btn-sm mono template-help-token" onClick={() => onInsert(token)} title={t('Insert {{token}}', { token })} aria-label={t('Insert {{token}}', { token })} data-i18n-skip="true">
-                          {token}
-                        </button>
-                      ) : (
-                        <code>{token}</code>
-                      )}
-                    </td>
-                    <td className="text-dim">{t(v.description)}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <DataTable
+            tableKey="template-variables"
+            className="template-help-table"
+            recordCount={null}
+            rows={TEMPLATE_VARIABLES}
+            rowKey={(v) => v.name}
+            columns={[
+              {
+                key: 'variable', label: t('Variable'), required: true,
+                render: (v) => {
+                  const token = `{{${v.name}}}`;
+                  return onInsert ? (
+                    <button type="button" className="btn btn-sm mono template-help-token" onClick={() => onInsert(token)} title={t('Insert {{token}}', { token })} aria-label={t('Insert {{token}}', { token })} data-i18n-skip="true">
+                      {token}
+                    </button>
+                  ) : (
+                    <code>{token}</code>
+                  );
+                },
+              },
+              { key: 'description', label: t('Description'), required: true, cellClassName: 'text-dim', render: (v) => t(v.description) },
+            ]}
+          />
         </>
       )}
     </div>

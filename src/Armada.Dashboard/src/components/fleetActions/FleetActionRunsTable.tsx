@@ -1,16 +1,15 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { cancelFleetActionRun, enumerateFleetActionRuns } from '../../api/client';
 import type { FleetActionRun, FleetActionRunStatus } from '../../types/models';
 import { useLocale } from '../../context/LocaleContext';
 import { useNotifications } from '../../context/NotificationContext';
 import { useAuth } from '../../context/AuthContext';
-import Pagination from '../shared/Pagination';
+import DataTable, { type DataTableColumn } from '../shared/DataTable';
+import CopyButton from '../shared/CopyButton';
 import ActionMenu from '../shared/ActionMenu';
 import ConfirmDialog from '../shared/ConfirmDialog';
 import JsonViewer from '../shared/JsonViewer';
-import RefreshButton from '../shared/RefreshButton';
-import AutoRefreshSelect from '../shared/AutoRefreshSelect';
 import CodeStatusBadge from '../shared/CodeStatusBadge';
 import { EmptyState, ErrorState, LoadingState } from '../shared/StateBlocks';
 import RunProgress from './RunProgress';
@@ -92,6 +91,78 @@ export default function FleetActionRunsTable() {
 
   const filtered = status !== '';
 
+  const columns: DataTableColumn<FleetActionRun>[] = [
+    {
+      key: 'action', label: t('Action'), required: true, cellClassName: 'cell-nowrap',
+      render: (r) => (
+        <>
+          <strong>{r.actionName}</strong>
+          {!r.actionId && <span className="tag idle" style={{ marginLeft: '0.4rem' }}>{t('Ad hoc')}</span>}
+        </>
+      ),
+    },
+    {
+      // The run ID used to sit on a second line under the action name; it is its own one-line column now.
+      key: 'id', label: t('ID'), required: true, cellClassName: 'mono text-dim table-id-cell',
+      render: (r) => (
+        <span className="id-display">
+          <span className="id-value" title={r.id}>{r.id}</span>
+          <CopyButton text={r.id} onClick={(e) => e.stopPropagation()} />
+        </span>
+      ),
+    },
+    { key: 'kind', label: t('Kind'), cellClassName: 'cell-nowrap', render: (r) => t(KIND_LABELS[r.kind]) },
+    { key: 'status', label: t('Status'), cellClassName: 'cell-nowrap', render: (r) => <CodeStatusBadge {...runStatusBadge(t, r.status)} /> },
+    { key: 'progress', label: t('Progress'), cellClassName: 'progress-cell', render: (r) => <RunProgress run={r} compact /> },
+    {
+      key: 'created', label: t('Created'), sortKey: 'created', headerTitle: t('Sort by created date'), cellClassName: 'text-dim nowrap',
+      cellTitle: (r) => formatDateTime(r.createdUtc), render: (r) => formatRelativeTime(r.createdUtc),
+    },
+    {
+      key: 'started', label: t('Started'), cellClassName: 'text-dim nowrap',
+      cellTitle: (r) => formatDateTime(r.startedUtc), render: (r) => (r.startedUtc ? formatRelativeTime(r.startedUtc) : '-'),
+    },
+    {
+      key: 'completed', label: t('Completed'), cellClassName: 'text-dim nowrap',
+      cellTitle: (r) => formatDateTime(r.completedUtc), render: (r) => (r.completedUtc ? formatRelativeTime(r.completedUtc) : '-'),
+    },
+    {
+      key: 'duration', label: t('Duration'), className: 'text-right', cellClassName: 'mono nowrap',
+      render: (r) => formatDurationMs(t, locale, durationBetween(r.startedUtc, r.completedUtc, isRunActive(r.status))),
+    },
+    {
+      key: 'actions', label: t('Actions'), fixed: true, interactive: true, className: 'text-right',
+      render: (r) => (
+        <ActionMenu
+          id={`fleet-run-${r.id}`}
+          items={[
+            { label: 'View', onClick: () => navigate(`/fleet-actions/runs/${r.id}`) },
+            ...(isRunActive(r.status) ? [{ label: 'Cancel', danger: true, onClick: () => setConfirmCancel(r), disabled: !isTenantAdmin }] : []),
+            { label: 'View JSON', onClick: () => setJson(r) },
+          ]}
+        />
+      ),
+    },
+  ];
+
+  let placeholder: ReactNode = undefined;
+  if (totalRecords === 0) {
+    if (loading && !error) placeholder = <LoadingState />;
+    else if (error) placeholder = <></>;
+    else if (!filtered) {
+      placeholder = (
+        <EmptyState
+          title={t('No fleet action runs yet')}
+          actions={<button type="button" className="btn btn-primary btn-sm" onClick={() => navigate('/vessels')}>{t('Go to Vessels')}</button>}
+        >
+          <p>{t('Select vessels on the Vessels page and choose Run action... in the selection bar, or run an action from the Actions tab.')}</p>
+        </EmptyState>
+      );
+    } else {
+      placeholder = <EmptyState title={t('No runs match this status')} actions={<button type="button" className="btn btn-sm" onClick={() => updateParams({ status: null, page: null })}>{t('Clear filter')}</button>} />;
+    }
+  }
+
   return (
     <div>
       <div className="table-toolbar">
@@ -105,93 +176,36 @@ export default function FleetActionRunsTable() {
           </label>
           {filtered && <button type="button" className="btn btn-sm" onClick={() => updateParams({ status: null, page: null })}>{t('Clear filter')}</button>}
         </div>
-        <div className="table-toolbar-right">
-          <AutoRefreshSelect seconds={seconds} onChange={setSeconds} />
-          <RefreshButton onRefresh={load} title={t('Refresh runs')} />
-        </div>
       </div>
 
       {error && <ErrorState message={error} onRetry={() => void load()} />}
-      {loading && rows.length === 0 && !error && <LoadingState />}
 
-      {!loading && !error && totalRecords === 0 && !filtered && (
-        <EmptyState
-          title={t('No fleet action runs yet')}
-          actions={<button type="button" className="btn btn-primary btn-sm" onClick={() => navigate('/vessels')}>{t('Go to Vessels')}</button>}
-        >
-          <p>{t('Select vessels on the Vessels page and choose Run action... in the selection bar, or run an action from the Actions tab.')}</p>
-        </EmptyState>
-      )}
-      {!loading && !error && totalRecords === 0 && filtered && (
-        <EmptyState title={t('No runs match this status')} actions={<button type="button" className="btn btn-sm" onClick={() => updateParams({ status: null, page: null })}>{t('Clear filter')}</button>} />
-      )}
-
-      {totalRecords > 0 && (
-        <>
-          <Pagination
-            pageNumber={pageNumber}
-            pageSize={pageSize}
-            totalPages={totalPages}
-            totalRecords={totalRecords}
-            totalMs={totalMs}
-            onPageChange={(p) => updateParams({ page: String(p) })}
-            onPageSizeChange={(s) => { setPageSize(s); updateParams({ page: null }); }}
-          />
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th scope="col">{t('Action')}</th>
-                  <th scope="col">{t('Kind')}</th>
-                  <th scope="col">{t('Status')}</th>
-                  <th scope="col">{t('Progress')}</th>
-                  <th scope="col" className="sortable" aria-sort={order === 'CreatedAscending' ? 'ascending' : 'descending'}>
-                    <button type="button" className="th-sort-btn" onClick={() => updateParams({ order: order === 'CreatedAscending' ? null : 'asc', page: null })} title={t('Sort by created date')}>
-                      {t('Created')} <span aria-hidden="true">{order === 'CreatedAscending' ? '\u25B2' : '\u25BC'}</span>
-                    </button>
-                  </th>
-                  <th scope="col">{t('Started')}</th>
-                  <th scope="col">{t('Completed')}</th>
-                  <th scope="col" className="text-right">{t('Duration')}</th>
-                  <th scope="col" className="text-right">{t('Actions')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => {
-                  const badge = runStatusBadge(t, r.status);
-                  return (
-                    <tr key={r.id} className="clickable" onClick={() => navigate(`/fleet-actions/runs/${r.id}`)}>
-                      <td>
-                        <strong>{r.actionName}</strong>
-                        {!r.actionId && <span className="tag idle" style={{ marginLeft: '0.4rem' }}>{t('Ad hoc')}</span>}
-                        <div className="text-dim mono cell-subline">{r.id}</div>
-                      </td>
-                      <td>{t(KIND_LABELS[r.kind])}</td>
-                      <td><CodeStatusBadge {...badge} /></td>
-                      <td className="progress-cell"><RunProgress run={r} compact /></td>
-                      <td className="text-dim nowrap" title={formatDateTime(r.createdUtc)}>{formatRelativeTime(r.createdUtc)}</td>
-                      <td className="text-dim nowrap" title={formatDateTime(r.startedUtc)}>{r.startedUtc ? formatRelativeTime(r.startedUtc) : '-'}</td>
-                      <td className="text-dim nowrap" title={formatDateTime(r.completedUtc)}>{r.completedUtc ? formatRelativeTime(r.completedUtc) : '-'}</td>
-                      <td className="text-right mono nowrap">{formatDurationMs(t, locale, durationBetween(r.startedUtc, r.completedUtc, isRunActive(r.status)))}</td>
-                      <td className="text-right" onClick={(e) => e.stopPropagation()}>
-                        <ActionMenu
-                          id={`fleet-run-${r.id}`}
-                          items={[
-                            { label: 'View', onClick: () => navigate(`/fleet-actions/runs/${r.id}`) },
-                            ...(isRunActive(r.status) ? [{ label: 'Cancel', danger: true, onClick: () => setConfirmCancel(r), disabled: !isTenantAdmin }] : []),
-                            { label: 'View JSON', onClick: () => setJson(r) },
-                          ]}
-                        />
-                      </td>
-                    </tr>
-                  );
-                })}
-                {rows.length === 0 && <tr><td colSpan={9} className="text-dim">{t('No runs on this page.')}</td></tr>}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
+      <DataTable
+        tableKey="fleet-action-runs"
+        columns={columns}
+        rows={rows}
+        rowKey={(r) => r.id}
+        onRowClick={(r) => navigate(`/fleet-actions/runs/${r.id}`)}
+        sort={{
+          field: 'created',
+          dir: order === 'CreatedAscending' ? 'asc' : 'desc',
+          onSort: () => updateParams({ order: order === 'CreatedAscending' ? null : 'asc', page: null }),
+        }}
+        pagination={{
+          pageNumber,
+          pageSize,
+          totalPages,
+          totalRecords,
+          totalMs,
+          onPageChange: (p) => updateParams({ page: String(p) }),
+          onPageSizeChange: (size) => { setPageSize(size); updateParams({ page: null }); },
+        }}
+        autoRefresh={{ seconds, onChange: setSeconds }}
+        onRefresh={load}
+        refreshTitle="Refresh runs"
+        emptyMessage={t('No runs on this page.')}
+        placeholder={placeholder}
+      />
 
       <JsonViewer open={json !== null} title={json ? t('Fleet action run: {{name}}', { name: json.actionName }) : ''} id={json?.id} data={json} onClose={() => setJson(null)} />
       <ConfirmDialog
