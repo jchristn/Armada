@@ -430,6 +430,7 @@ namespace Armada.Core.Services.Push
             message.Data.EntityId = occurrence.EntityId;
             message.Data.Category = occurrence.Category.ToString();
             message.Data.ThreadId = recipient.IsOwner ? occurrence.ThreadId : null;
+            message.Data.DeviceId = String.IsNullOrEmpty(device.Id) ? null : device.Id;
             message.Sound = "default";
             message.Badge = badge;
             bool actionable = recipient.CanAct
@@ -479,6 +480,7 @@ namespace Armada.Core.Services.Push
             message.Data.Kind = PushNotificationKinds.Test;
             message.Data.EntityId = device.Id;
             message.Data.Category = "Test";
+            message.Data.DeviceId = device.Id;
 
             try
             {

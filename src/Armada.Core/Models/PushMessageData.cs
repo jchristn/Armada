@@ -42,6 +42,15 @@ namespace Armada.Core.Models
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? ThreadId { get; set; } = null;
 
+        /// <summary>
+        /// Identifier (pdv_ prefix) of the registered device the message was built for. An app signed in to more
+        /// than one Admiral uses it to tell which server profile a notification belongs to; null when not built for a
+        /// registered device.
+        /// </summary>
+        [JsonPropertyName("deviceId")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? DeviceId { get; set; } = null;
+
         #endregion
 
         #region Constructors-and-Factories
