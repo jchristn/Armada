@@ -118,4 +118,17 @@ describe('CLI Tool Permissions page', () => {
     expect(screen.queryByRole('form', { name: 'New rule' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Delete rule/ })).not.toBeInTheDocument();
   });
+  it('rules table: shared column chooser with Pattern locked, refresh in the toolbar, patterns on one line', async () => {
+    renderAt('/cli-permissions?tab=rules');
+    const pattern = await screen.findByText('Bash(rm -rf:*)');
+    expect(pattern).toHaveClass('cell-one-line');
+    expect(pattern).toHaveAttribute('title', 'Bash(rm -rf:*)');
+    const bar = document.querySelector('.data-table .pagination-bar') as HTMLElement;
+    expect(within(bar).getByTitle('Refresh rules')).toBeInTheDocument();
+    fireEvent.click(within(bar).getByRole('button', { name: /^Columns/ }));
+    const menu = await screen.findByRole('menu', { name: 'Choose visible columns' });
+    expect(within(menu).getByRole('menuitemcheckbox', { name: /^Pattern/ })).toHaveAttribute('aria-disabled', 'true');
+    fireEvent.click(within(menu).getByRole('menuitemcheckbox', { name: /^Description/ }));
+    expect(screen.queryByText('Never wipe')).not.toBeInTheDocument();
+  });
 });

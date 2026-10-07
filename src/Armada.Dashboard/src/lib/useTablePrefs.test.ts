@@ -1,55 +1,50 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import { useTablePrefs } from './useTablePrefs';
 
 const KEY = 'prefs-test';
 const STORAGE = 'armada_table_' + KEY;
-const DEFAULT_HIDDEN = ['lastCommit', 'evaluated'];
 
-function stored(): { pageSize?: number; hiddenColumns?: string[]; defaultsVersion?: number } {
+function stored(): { pageSize?: number } {
   return JSON.parse(localStorage.getItem(STORAGE) || '{}');
 }
 
 describe('useTablePrefs', () => {
   beforeEach(() => localStorage.clear());
+  afterEach(() => vi.restoreAllMocks());
 
-  it('hides the default-hidden columns for a new user', () => {
-    const { result } = renderHook(() => useTablePrefs(KEY, { defaultHidden: DEFAULT_HIDDEN, defaultsVersion: 1 }));
-    expect(result.current.isVisible('lastCommit')).toBe(false);
-    expect(result.current.isVisible('evaluated')).toBe(false);
-    expect(result.current.isVisible('fleet')).toBe(true);
-    expect(stored().defaultsVersion).toBe(1);
+  it('uses the default page size for a new user and persists it', () => {
+    const { result } = renderHook(() => useTablePrefs(KEY));
+    expect(result.current.pageSize).toBe(25);
+    expect(stored()).toEqual({ pageSize: 25 });
   });
 
-  it('adds newly default-hidden columns once to a selection saved against an older version', () => {
+  it('restores and persists a chosen page size', () => {
     localStorage.setItem(STORAGE, JSON.stringify({ pageSize: 50, hiddenColumns: ['ci'] }));
-    const { result } = renderHook(() => useTablePrefs(KEY, { defaultHidden: DEFAULT_HIDDEN, defaultsVersion: 1 }));
+    const { result } = renderHook(() => useTablePrefs(KEY));
     expect(result.current.pageSize).toBe(50);
-    expect(result.current.isVisible('ci')).toBe(false);
-    expect(result.current.isVisible('lastCommit')).toBe(false);
-    expect(stored()).toEqual({ pageSize: 50, hiddenColumns: ['ci', 'lastCommit', 'evaluated'], defaultsVersion: 1 });
+    act(() => result.current.setPageSize(100));
+    expect(result.current.pageSize).toBe(100);
+    // Other fields (the hidden columns older builds stored here) are kept for the DataTable to migrate.
+    expect(stored()).toEqual({ pageSize: 100, hiddenColumns: ['ci'] });
   });
 
-  it('keeps a selection saved against the current version, including columns the user turned back on', () => {
-    localStorage.setItem(STORAGE, JSON.stringify({ pageSize: 25, hiddenColumns: [], defaultsVersion: 1 }));
-    const { result } = renderHook(() => useTablePrefs(KEY, { defaultHidden: DEFAULT_HIDDEN, defaultsVersion: 1 }));
-    expect(result.current.isVisible('lastCommit')).toBe(true);
-    expect(result.current.isVisible('evaluated')).toBe(true);
+  it('rejects page sizes the pager does not offer', () => {
+    localStorage.setItem(STORAGE, JSON.stringify({ pageSize: 37 }));
+    const { result } = renderHook(() => useTablePrefs(KEY, { defaultPageSize: 10 }));
+    expect(result.current.pageSize).toBe(10);
+    act(() => result.current.setPageSize(999));
+    expect(result.current.pageSize).toBe(10);
   });
 
-  it('shows every column with showAllColumns and restores the defaults with resetColumns', () => {
-    const { result } = renderHook(() => useTablePrefs(KEY, { defaultHidden: DEFAULT_HIDDEN, defaultsVersion: 1 }));
-    act(() => result.current.showAllColumns());
-    expect(result.current.hiddenColumns).toEqual([]);
-    act(() => result.current.resetColumns());
-    expect(result.current.hiddenColumns).toEqual(DEFAULT_HIDDEN);
-  });
-
-  it('never hides pinned columns', () => {
-    localStorage.setItem(STORAGE, JSON.stringify({ hiddenColumns: ['vessel'] }));
-    const { result } = renderHook(() => useTablePrefs(KEY, { pinned: ['vessel'], defaultHidden: DEFAULT_HIDDEN, defaultsVersion: 1 }));
-    expect(result.current.isVisible('vessel')).toBe(true);
-    act(() => result.current.toggleColumn('vessel'));
-    expect(result.current.isVisible('vessel')).toBe(true);
+  it('falls back to the default when storage is corrupt or unavailable', () => {
+    localStorage.setItem(STORAGE, '{not json');
+    expect(renderHook(() => useTablePrefs(KEY)).result.current.pageSize).toBe(25);
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('SecurityError'); });
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('QuotaExceededError'); });
+    const { result } = renderHook(() => useTablePrefs(KEY));
+    expect(result.current.pageSize).toBe(25);
+    act(() => result.current.setPageSize(50));
+    expect(result.current.pageSize).toBe(50);
   });
 });

@@ -6,15 +6,13 @@ import { useAuth } from '../context/AuthContext';
 import { canEdit as canEditScoped, resolveCreateScope, type ScopeViewer } from '../lib/scoping';
 import ScopeBadge from '../components/shared/ScopeBadge';
 import ScopeSelect from '../components/shared/ScopeSelect';
-import Pagination from '../components/shared/Pagination';
+import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
 import ActionMenu from '../components/shared/ActionMenu';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import JsonViewer from '../components/shared/JsonViewer';
 import RecordDetailModal from '../components/shared/RecordDetailModal';
 import BoolIcon from '../components/shared/BoolIcon';
 import CopyButton from '../components/shared/CopyButton';
-import RefreshButton from '../components/shared/RefreshButton';
-import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
 import PageHeader from '../components/shared/PageHeader';
 import ErrorModal from '../components/shared/ErrorModal';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
@@ -40,7 +38,7 @@ export default function Pipelines() {
   const navigate = useNavigate();
   const { isAdmin, isTenantAdmin, user } = useAuth();
   const viewer: ScopeViewer = { isAdmin, isTenantAdmin, tenantId: user?.user?.tenantId, userId: user?.user?.id };
-  const { t, formatRelativeTime } = useLocale();
+  const { t, formatRelativeTime, formatDateTime } = useLocale();
   const { pushToast } = useNotifications();
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [loading, setLoading] = useState(true);
@@ -187,6 +185,50 @@ export default function Pipelines() {
     }
   }
 
+  const columns: DataTableColumn<Pipeline>[] = [
+    {
+      key: 'name', label: t('Name'), required: true, sortKey: 'name', headerTitle: t('Pipeline name -- click to sort'), cellClassName: 'cell-ident',
+      filter: <input type="text" className="col-filter" aria-label={t('Name')} value={table.colFilters.name ?? ''} onChange={e => table.setColFilter('name', e.target.value)} placeholder={t('Search...')} />,
+      render: (p) => <strong>{p.name}</strong>,
+    },
+    {
+      key: 'id', label: t('ID'), required: true, cellClassName: 'mono text-dim table-id-cell',
+      render: (p) => (
+        <span className="id-display">
+          <span className="id-value" title={p.id}>{p.id}</span>
+          <CopyButton text={p.id} onClick={e => e.stopPropagation()} />
+        </span>
+      ),
+    },
+    {
+      key: 'description', label: t('Description'), sortKey: 'description', headerTitle: t('Description -- click to sort'), cellClassName: 'text-dim truncate-cell',
+      clearFilter: () => table.setColFilter('description', ''),
+      filter: <input type="text" className="col-filter" aria-label={t('Description')} value={table.colFilters.description ?? ''} onChange={e => table.setColFilter('description', e.target.value)} placeholder={t('Search...')} />,
+      render: (p) => p.description ? <span className="truncate-text" title={p.description}>{p.description}</span> : '-',
+    },
+    { key: 'stages', label: t('Stages'), sortKey: 'stages', headerTitle: t('Stage count -- click to sort'), cellClassName: 'cell-ident', render: (p) => formatStages(p.stages) },
+    { key: 'visibility', label: t('Visibility'), render: (p) => <ScopeBadge scope={p.scope} /> },
+    { key: 'isBuiltIn', label: t('Built-in'), sortKey: 'isBuiltIn', headerTitle: t('Built-in -- click to sort'), render: (p) => <BoolIcon value={!!p.isBuiltIn} falseVariant="dash" trueTitle={t('Built-in')} falseTitle={t('Not built-in')} /> },
+    { key: 'active', label: t('Active'), sortKey: 'active', headerTitle: t('Active -- click to sort'), render: (p) => <BoolIcon value={p.active !== false} falseVariant="cross" trueTitle={t('Active')} falseTitle={t('Inactive')} /> },
+    {
+      key: 'created', label: t('Created'), sortKey: 'createdUtc', headerTitle: t('Created date -- click to sort'),
+      cellClassName: 'text-dim cell-nowrap', cellTitle: (p) => formatDateTime(p.createdUtc),
+      render: (p) => formatRelativeTime(p.createdUtc),
+    },
+    {
+      key: 'actions', label: t('Actions'), fixed: true, interactive: true, className: 'text-right',
+      render: (p) => (
+        <ActionMenu id={`pipeline-${p.id}`} items={[
+          { label: 'View Detail', onClick: () => navigate(`/pipelines/${encodeURIComponent(p.name)}`) },
+          ...(canEditScoped(viewer, p) ? [{ label: 'Edit', onClick: () => openEdit(p) }] : []),
+          { label: 'Duplicate', onClick: () => void handleDuplicate(p) },
+          { label: 'View JSON', onClick: () => setJsonData({ open: true, title: `${t('Pipeline')}: ${p.name}`, data: p }) },
+          ...(!p.isBuiltIn && canEditScoped(viewer, p) ? [{ label: 'Delete', danger: true as const, onClick: () => handleDelete(p.name) }] : []),
+        ]} />
+      ),
+    },
+  ];
+
   return (
     <div>
       <PageHeader
@@ -194,8 +236,6 @@ export default function Pipelines() {
         subtitle={t('Multi-stage workflows combining different personas')}
         actions={(
           <>
-            <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
-            <RefreshButton onRefresh={load} title="Refresh pipeline data" />
             <button className="btn btn-primary btn-sm" onClick={openCreate}>+ {t('Pipeline')}</button>
           </>
         )}
@@ -289,88 +329,20 @@ export default function Pipelines() {
       <ConfirmDialog open={confirm.open} title={confirm.title} message={confirm.message}
         onConfirm={confirm.onConfirm} onCancel={() => setConfirm(c => ({ ...c, open: false }))} />
 
-      {loading && pipelines.length === 0 && <p className="text-dim">{t('Loading...')}</p>}
-      {!loading && pipelines.length === 0 && <p className="text-dim">{t('No pipelines configured.')}</p>}
-
-      {pipelines.length > 0 && (
-        <>
-          <Pagination pageNumber={table.currentPage} pageSize={table.pageSize} totalPages={table.totalPages}
-            totalRecords={table.sorted.length}
-            onPageChange={p => table.setPageNumber(p)} onPageSizeChange={s => { table.setPageSize(s); table.setPageNumber(1); }} />
-
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th className="sortable" onClick={() => table.handleSort('name')} title={t('Pipeline name -- click to sort')}>
-                    {t('Name')}{table.sortIcon('name')}
-                  </th>
-                  <th>{t('ID')}</th>
-                  <th className="sortable" onClick={() => table.handleSort('description')} title={t('Description -- click to sort')}>
-                    {t('Description')}{table.sortIcon('description')}
-                  </th>
-                  <th className="sortable" onClick={() => table.handleSort('stages')} title={t('Stage count -- click to sort')}>
-                    {t('Stages')}{table.sortIcon('stages')}
-                  </th>
-                  <th>{t('Visibility')}</th>
-                  <th className="sortable" onClick={() => table.handleSort('isBuiltIn')} title={t('Built-in -- click to sort')}>
-                    {t('Built-in')}{table.sortIcon('isBuiltIn')}
-                  </th>
-                  <th className="sortable" onClick={() => table.handleSort('active')} title={t('Active -- click to sort')}>
-                    {t('Active')}{table.sortIcon('active')}
-                  </th>
-                  <th className="sortable" onClick={() => table.handleSort('createdUtc')} title={t('Created date -- click to sort')}>
-                    {t('Created')}{table.sortIcon('createdUtc')}
-                  </th>
-                  <th className="text-right">{t('Actions')}</th>
-                </tr>
-                <tr className="column-filter-row">
-                  <td><input type="text" className="col-filter" value={table.colFilters.name ?? ''} onChange={e => table.setColFilter('name', e.target.value)} placeholder={t('Search...')} /></td>
-                  <td></td>
-                  <td><input type="text" className="col-filter" value={table.colFilters.description ?? ''} onChange={e => table.setColFilter('description', e.target.value)} placeholder={t('Search...')} /></td>
-                  <td></td>
-                  <td></td>
-                  <td></td>
-                  <td></td>
-                  <td></td>
-                  <td></td>
-                </tr>
-              </thead>
-              <tbody>
-                {table.paginated.map(p => (
-                  <tr key={p.id} className="clickable" onClick={() => setViewRecord(p as unknown as Record<string, unknown>)}>
-                    <td className="cell-ident"><strong>{p.name}</strong></td>
-                    <td className="mono text-dim table-id-cell">
-                      <span className="id-display">
-                        <span className="id-value" title={p.id}>{p.id}</span>
-                        <CopyButton text={p.id} onClick={e => e.stopPropagation()} />
-                      </span>
-                    </td>
-                    <td className="text-dim">{p.description || '-'}</td>
-                    <td className="cell-ident">{formatStages(p.stages)}</td>
-                    <td><ScopeBadge scope={p.scope} /></td>
-                    <td><BoolIcon value={!!p.isBuiltIn} falseVariant="dash" trueTitle={t('Built-in')} falseTitle={t('Not built-in')} /></td>
-                    <td><BoolIcon value={p.active !== false} falseVariant="cross" trueTitle={t('Active')} falseTitle={t('Inactive')} /></td>
-                    <td className="text-dim">{formatRelativeTime(p.createdUtc)}</td>
-                    <td className="text-right" onClick={e => e.stopPropagation()}>
-                      <ActionMenu id={`pipeline-${p.id}`} items={[
-                        { label: 'View Detail', onClick: () => navigate(`/pipelines/${encodeURIComponent(p.name)}`) },
-                        ...(canEditScoped(viewer, p) ? [{ label: 'Edit', onClick: () => openEdit(p) }] : []),
-                        { label: 'Duplicate', onClick: () => void handleDuplicate(p) },
-                        { label: 'View JSON', onClick: () => setJsonData({ open: true, title: `${t('Pipeline')}: ${p.name}`, data: p }) },
-                        ...(!p.isBuiltIn && canEditScoped(viewer, p) ? [{ label: 'Delete', danger: true as const, onClick: () => handleDelete(p.name) }] : []),
-                      ]} />
-                    </td>
-                  </tr>
-                ))}
-                {table.paginated.length === 0 && (
-                  <tr><td colSpan={9} className="text-dim">{t('No pipelines match the current filters.')}</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
+      <DataTable
+        tableKey="pipelines"
+        columns={columns}
+        rows={table.paginated}
+        rowKey={(p) => p.id}
+        onRowClick={(p) => setViewRecord(p as unknown as Record<string, unknown>)}
+        sort={table.sortState}
+        pagination={table.paginationProps}
+        autoRefresh={{ seconds: refreshSeconds, onChange: setRefreshSeconds }}
+        onRefresh={load}
+        refreshTitle="Refresh pipeline data"
+        emptyMessage={t('No pipelines match the current filters.')}
+        placeholder={pipelines.length > 0 ? undefined : <p className="text-dim">{loading ? t('Loading...') : t('No pipelines configured.')}</p>}
+      />
     </div>
   );
 }

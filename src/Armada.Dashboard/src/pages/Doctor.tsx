@@ -3,6 +3,7 @@ import { getDoctor } from '../api/client';
 import StatusBadge from '../components/shared/StatusBadge';
 import ErrorModal from '../components/shared/ErrorModal';
 import PageHeader from '../components/shared/PageHeader';
+import DataTable from '../components/shared/DataTable';
 import { useLocale } from '../context/LocaleContext';
 
 interface DiagnosticCheck {
@@ -104,28 +105,18 @@ export default function Doctor() {
           </div>
 
           {/* Results Table */}
-          <div className="table-wrap">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>{t('Check')}</th>
-                  <th>{t('Status')}</th>
-                  <th>{t('Message')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {results.map((check, i) => (
-                  <tr key={i}>
-                    <td style={{ fontWeight: 500 }}>{check.name}</td>
-                    <td>
-                      <StatusBadge status={check.status} />
-                    </td>
-                    <td className="text-muted">{check.message}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            tableKey="doctor-checks"
+            className="table"
+            rows={results.map((check, index) => ({ check, index }))}
+            rowKey={(row) => String(row.index)}
+            recordCount={null}
+            columns={[
+              { key: 'check', label: t('Check'), required: true, render: ({ check }) => <span style={{ fontWeight: 500 }}>{check.name}</span> },
+              { key: 'status', label: t('Status'), cellClassName: 'cell-nowrap', render: ({ check }) => <StatusBadge status={check.status} /> },
+              { key: 'message', label: t('Message'), cellClassName: 'text-muted', render: ({ check }) => check.message },
+            ]}
+          />
         </>
       )}
 

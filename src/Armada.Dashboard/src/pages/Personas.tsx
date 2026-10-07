@@ -6,15 +6,13 @@ import { useAuth } from '../context/AuthContext';
 import { canEdit as canEditScoped, resolveCreateScope, type ScopeViewer } from '../lib/scoping';
 import ScopeBadge from '../components/shared/ScopeBadge';
 import ScopeSelect from '../components/shared/ScopeSelect';
-import Pagination from '../components/shared/Pagination';
+import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
 import ActionMenu from '../components/shared/ActionMenu';
 import StatusBadge from '../components/shared/StatusBadge';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import JsonViewer from '../components/shared/JsonViewer';
 import RecordDetailModal from '../components/shared/RecordDetailModal';
 import CopyButton from '../components/shared/CopyButton';
-import RefreshButton from '../components/shared/RefreshButton';
-import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
 import PageHeader from '../components/shared/PageHeader';
 import ErrorModal from '../components/shared/ErrorModal';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
@@ -127,6 +125,56 @@ export default function Personas() {
     }
   }
 
+  const columns: DataTableColumn<Persona>[] = [
+    {
+      key: 'name', label: t('Name'), required: true, sortKey: 'name', headerTitle: t('Persona name -- click to sort'), cellClassName: 'cell-ident',
+      filter: <input type="text" className="col-filter" aria-label={t('Name')} value={table.colFilters.name ?? ''} onChange={e => table.setColFilter('name', e.target.value)} placeholder={t('Filter...')} />,
+      render: (p) => <strong>{p.name}</strong>,
+    },
+    {
+      key: 'id', label: t('ID'), required: true, cellClassName: 'mono text-dim table-id-cell',
+      render: (p) => (
+        <span className="id-display">
+          <span className="id-value" title={p.id}>{p.id}</span>
+          <CopyButton text={p.id} onClick={e => e.stopPropagation()} />
+        </span>
+      ),
+    },
+    {
+      key: 'description', label: t('Description'), sortKey: 'description', headerTitle: t('Description -- click to sort'), cellClassName: 'text-dim truncate-cell',
+      clearFilter: () => table.setColFilter('description', ''),
+      filter: <input type="text" className="col-filter" aria-label={t('Description')} value={table.colFilters.description ?? ''} onChange={e => table.setColFilter('description', e.target.value)} placeholder={t('Filter...')} />,
+      render: (p) => p.description ? <span className="truncate-text" title={p.description}>{p.description}</span> : '-',
+    },
+    {
+      key: 'promptTemplateName', label: t('Prompt Template'), sortKey: 'promptTemplateName', headerTitle: t('Prompt template -- click to sort'), cellClassName: 'mono text-dim cell-ident',
+      clearFilter: () => table.setColFilter('promptTemplateName', ''),
+      filter: <input type="text" className="col-filter" aria-label={t('Prompt Template')} value={table.colFilters.promptTemplateName ?? ''} onChange={e => table.setColFilter('promptTemplateName', e.target.value)} placeholder={t('Filter...')} />,
+      render: (p) => p.promptTemplateName,
+    },
+    { key: 'visibility', label: t('Visibility'), render: (p) => <ScopeBadge scope={p.scope} /> },
+    { key: 'isBuiltIn', label: t('Built-in'), sortKey: 'isBuiltIn', headerTitle: t('Built-in -- click to sort'), render: (p) => (p.isBuiltIn ? <StatusBadge status="Built-in" /> : <span className="text-dim">-</span>) },
+    { key: 'active', label: t('Active'), sortKey: 'active', headerTitle: t('Active -- click to sort'), render: (p) => <StatusBadge status={p.active ? 'Active' : 'Inactive'} /> },
+    {
+      key: 'created', label: t('Created'), sortKey: 'createdUtc', headerTitle: t('Created date -- click to sort'),
+      cellClassName: 'text-dim cell-nowrap', cellTitle: (p) => formatDateTime(p.createdUtc),
+      render: (p) => formatRelativeTime(p.createdUtc),
+    },
+    {
+      key: 'actions', label: t('Actions'), fixed: true, interactive: true, className: 'text-right',
+      render: (p) => (
+        <ActionMenu id={`persona-${p.name}`} items={[
+          { label: 'View Detail', onClick: () => navigate(`/personas/${encodeURIComponent(p.name)}`) },
+          ...(canEditScoped(viewer, p) ? [{ label: 'Edit', onClick: () => openEdit(p) }] : []),
+          { label: 'Duplicate', onClick: () => void handleDuplicate(p) },
+          { label: 'Edit Backing Prompt', onClick: () => navigate(`/prompt-templates/${encodeURIComponent(p.promptTemplateName)}`) },
+          { label: 'View JSON', onClick: () => setJsonData({ open: true, title: `${t('Persona')}: ${p.name}`, data: p }) },
+          ...(!p.isBuiltIn && canEditScoped(viewer, p) ? [{ label: 'Delete', danger: true as const, onClick: () => handleDelete(p.name) }] : []),
+        ]} />
+      ),
+    },
+  ];
+
   return (
     <div>
       <PageHeader
@@ -134,8 +182,6 @@ export default function Personas() {
         subtitle={t('Named configurations that define how captains behave when executing missions.')}
         actions={(
           <>
-            <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
-            <RefreshButton onRefresh={load} title={t('Refresh persona data')} />
             <button className="btn btn-primary btn-sm" onClick={openCreate}>+ {t('Persona')}</button>
           </>
         )}
@@ -187,89 +233,20 @@ export default function Personas() {
       <ConfirmDialog open={confirm.open} title={confirm.title} message={confirm.message}
         onConfirm={confirm.onConfirm} onCancel={() => setConfirm(c => ({ ...c, open: false }))} />
 
-      {loading && personas.length === 0 && <p className="text-dim">{t('Loading...')}</p>}
-      {!loading && personas.length === 0 && <p className="text-dim">{t('No personas configured.')}</p>}
-
-      {personas.length > 0 && (
-        <>
-          <Pagination pageNumber={table.currentPage} pageSize={table.pageSize} totalPages={table.totalPages}
-            totalRecords={table.sorted.length}
-            onPageChange={p => table.setPageNumber(p)} onPageSizeChange={s => { table.setPageSize(s); table.setPageNumber(1); }} />
-
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th className="sortable" onClick={() => table.handleSort('name')} title={t('Persona name -- click to sort')}>
-                    {t('Name')}{table.sortIcon('name')}
-                  </th>
-                  <th>{t('ID')}</th>
-                  <th className="sortable" onClick={() => table.handleSort('description')} title={t('Description -- click to sort')}>
-                    {t('Description')}{table.sortIcon('description')}
-                  </th>
-                  <th className="sortable" onClick={() => table.handleSort('promptTemplateName')} title={t('Prompt template -- click to sort')}>
-                    {t('Prompt Template')}{table.sortIcon('promptTemplateName')}
-                  </th>
-                  <th>{t('Visibility')}</th>
-                  <th className="sortable" onClick={() => table.handleSort('isBuiltIn')} title={t('Built-in -- click to sort')}>
-                    {t('Built-in')}{table.sortIcon('isBuiltIn')}
-                  </th>
-                  <th className="sortable" onClick={() => table.handleSort('active')} title={t('Active -- click to sort')}>
-                    {t('Active')}{table.sortIcon('active')}
-                  </th>
-                  <th className="sortable" onClick={() => table.handleSort('createdUtc')} title={t('Created date -- click to sort')}>
-                    {t('Created')}{table.sortIcon('createdUtc')}
-                  </th>
-                  <th className="text-right">{t('Actions')}</th>
-                </tr>
-                <tr className="column-filter-row">
-                  <td><input type="text" className="col-filter" value={table.colFilters.name ?? ''} onChange={e => table.setColFilter('name', e.target.value)} placeholder={t('Filter...')} /></td>
-                  <td></td>
-                  <td><input type="text" className="col-filter" value={table.colFilters.description ?? ''} onChange={e => table.setColFilter('description', e.target.value)} placeholder={t('Filter...')} /></td>
-                  <td><input type="text" className="col-filter" value={table.colFilters.promptTemplateName ?? ''} onChange={e => table.setColFilter('promptTemplateName', e.target.value)} placeholder={t('Filter...')} /></td>
-                  <td></td>
-                  <td></td>
-                  <td></td>
-                  <td></td>
-                  <td></td>
-                </tr>
-              </thead>
-              <tbody>
-                {table.paginated.map(p => (
-                  <tr key={p.name} className="clickable" onClick={() => setViewRecord(p as unknown as Record<string, unknown>)}>
-                    <td className="cell-ident"><strong>{p.name}</strong></td>
-                    <td className="mono text-dim table-id-cell">
-                      <span className="id-display">
-                        <span className="id-value" title={p.id}>{p.id}</span>
-                        <CopyButton text={p.id} onClick={e => e.stopPropagation()} />
-                      </span>
-                    </td>
-                    <td className="text-dim">{p.description ?? '-'}</td>
-                    <td className="mono text-dim cell-ident">{p.promptTemplateName}</td>
-                    <td><ScopeBadge scope={p.scope} /></td>
-                    <td>{p.isBuiltIn ? <StatusBadge status="Built-in" /> : <span className="text-dim">-</span>}</td>
-                    <td><StatusBadge status={p.active ? 'Active' : 'Inactive'} /></td>
-                    <td className="text-dim" title={formatDateTime(p.createdUtc)}>{formatRelativeTime(p.createdUtc)}</td>
-                    <td className="text-right" onClick={e => e.stopPropagation()}>
-                      <ActionMenu id={`persona-${p.name}`} items={[
-                        { label: 'View Detail', onClick: () => navigate(`/personas/${encodeURIComponent(p.name)}`) },
-                        ...(canEditScoped(viewer, p) ? [{ label: 'Edit', onClick: () => openEdit(p) }] : []),
-                        { label: 'Duplicate', onClick: () => void handleDuplicate(p) },
-                        { label: 'Edit Backing Prompt', onClick: () => navigate(`/prompt-templates/${encodeURIComponent(p.promptTemplateName)}`) },
-                        { label: 'View JSON', onClick: () => setJsonData({ open: true, title: `${t('Persona')}: ${p.name}`, data: p }) },
-                        ...(!p.isBuiltIn && canEditScoped(viewer, p) ? [{ label: 'Delete', danger: true as const, onClick: () => handleDelete(p.name) }] : []),
-                      ]} />
-                    </td>
-                  </tr>
-                ))}
-                {table.paginated.length === 0 && (
-                  <tr><td colSpan={9} className="text-dim">{t('No personas match the current filters.')}</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
+      <DataTable
+        tableKey="personas"
+        columns={columns}
+        rows={table.paginated}
+        rowKey={(p) => p.name}
+        onRowClick={(p) => setViewRecord(p as unknown as Record<string, unknown>)}
+        sort={table.sortState}
+        pagination={table.paginationProps}
+        autoRefresh={{ seconds: refreshSeconds, onChange: setRefreshSeconds }}
+        onRefresh={load}
+        refreshTitle={t('Refresh persona data')}
+        emptyMessage={t('No personas match the current filters.')}
+        placeholder={personas.length > 0 ? undefined : <p className="text-dim">{loading ? t('Loading...') : t('No personas configured.')}</p>}
+      />
     </div>
   );
 }

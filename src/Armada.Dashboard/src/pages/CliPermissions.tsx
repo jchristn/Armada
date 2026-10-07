@@ -25,6 +25,7 @@ import PageHeader from '../components/shared/PageHeader';
 import Tabs, { type TabDef } from '../components/shared/Tabs';
 import RefreshButton from '../components/shared/RefreshButton';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
+import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
 import ErrorModal from '../components/shared/ErrorModal';
 import CliPermissionCard from '../components/cliPermissions/CliPermissionCard';
 import { useLiveRefresh } from '../lib/useLiveRefresh';
@@ -211,6 +212,38 @@ function RulesPanel() {
     }
   }
 
+  const ruleColumns: DataTableColumn<CliPermissionRule>[] = [
+    {
+      key: 'pattern', label: t('Pattern'), required: true,
+      render: (rule) => <code className="cell-one-line" title={rule.pattern}>{rule.pattern}</code>,
+    },
+    {
+      key: 'action', label: t('Action'), cellClassName: 'cell-nowrap',
+      render: (rule) => <span className={`tag cli-rule-${String(rule.action).toLowerCase()}`}>{rule.action === 'Deny' ? t('Deny') : t('Allow')}</span>,
+    },
+    {
+      key: 'target', label: t('Applies to'), cellClassName: 'cell-nowrap',
+      render: (rule) => <>{target(rule)}{!rule.tenantId && <span className="text-dim"> {t('(all tenants)')}</span>}</>,
+    },
+    {
+      key: 'description', label: t('Description'), cellClassName: 'truncate-cell',
+      render: (rule) => (rule.description ? <span className="truncate-text" title={rule.description}>{rule.description}</span> : <span className="text-dim">-</span>),
+    },
+    {
+      key: 'created', label: t('Created'), cellClassName: 'cell-nowrap',
+      render: (rule) => (rule.createdUtc ? <span title={formatDateTime(rule.createdUtc)}>{formatRelativeTime(rule.createdUtc)}</span> : '-'),
+    },
+    ...(canEdit ? [{
+      key: 'actions', label: t('Actions'), fixed: true, interactive: true,
+      header: <span className="sr-only">{t('Actions')}</span>,
+      render: (rule: CliPermissionRule) => (
+        <button type="button" className="btn btn-sm btn-danger" onClick={() => setDeleteTarget(rule)} aria-label={t('Delete rule {{pattern}}', { pattern: rule.pattern })}>
+          {t('Delete')}
+        </button>
+      ),
+    }] : []),
+  ];
+
   return (
     <section aria-label={t('Rules')}>
       <p className="text-dim" style={{ marginTop: 0 }}>
@@ -226,48 +259,18 @@ function RulesPanel() {
             <option value="Captain">{t('Captain')}</option>
           </select>
         </label>
-        <RefreshButton onRefresh={load} title={t('Refresh rules')} />
       </div>
       <ErrorModal error={error} onClose={() => setError('')} />
 
-      {loading && rules.length === 0 ? (
-        <p className="text-dim">{t('Loading...')}</p>
-      ) : rules.length === 0 ? (
-        <p className="text-dim">{t('No rules yet.')}</p>
-      ) : (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>{t('Pattern')}</th>
-                <th>{t('Action')}</th>
-                <th>{t('Applies to')}</th>
-                <th>{t('Description')}</th>
-                <th>{t('Created')}</th>
-                {canEdit && <th aria-label={t('Actions')} />}
-              </tr>
-            </thead>
-            <tbody>
-              {rules.map((rule) => (
-                <tr key={rule.id}>
-                  <td><code>{rule.pattern}</code></td>
-                  <td><span className={`tag cli-rule-${String(rule.action).toLowerCase()}`}>{rule.action === 'Deny' ? t('Deny') : t('Allow')}</span></td>
-                  <td>{target(rule)}{!rule.tenantId && <span className="text-dim"> {t('(all tenants)')}</span>}</td>
-                  <td>{rule.description || <span className="text-dim">-</span>}</td>
-                  <td>{rule.createdUtc ? <span title={formatDateTime(rule.createdUtc)}>{formatRelativeTime(rule.createdUtc)}</span> : '-'}</td>
-                  {canEdit && (
-                    <td>
-                      <button type="button" className="btn btn-sm btn-danger" onClick={() => setDeleteTarget(rule)} aria-label={t('Delete rule {{pattern}}', { pattern: rule.pattern })}>
-                        {t('Delete')}
-                      </button>
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <DataTable
+        tableKey="cli-permission-rules"
+        columns={ruleColumns}
+        rows={rules}
+        rowKey={(rule) => rule.id}
+        onRefresh={load}
+        refreshTitle="Refresh rules"
+        placeholder={rules.length > 0 ? undefined : loading ? <p className="text-dim">{t('Loading...')}</p> : <p className="text-dim">{t('No rules yet.')}</p>}
+      />
 
       {canEdit && (
         <form className="card cli-rule-form" onSubmit={(e) => void create(e)} aria-label={t('New rule')}>

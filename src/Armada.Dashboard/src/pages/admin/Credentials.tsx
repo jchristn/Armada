@@ -1,13 +1,11 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { listCredentials, createCredential, updateCredential, deleteCredential, listUsers, listTenants } from '../../api/client';
 import type { Credential, UserMaster, TenantMetadata } from '../../types/models';
-import Pagination from '../../components/shared/Pagination';
+import DataTable, { type DataTableColumn } from '../../components/shared/DataTable';
 import ActionMenu from '../../components/shared/ActionMenu';
 import ConfirmDialog from '../../components/shared/ConfirmDialog';
 import JsonViewer from '../../components/shared/JsonViewer';
 import CopyButton from '../../components/shared/CopyButton';
-import RefreshButton from '../../components/shared/RefreshButton';
-import AutoRefreshSelect from '../../components/shared/AutoRefreshSelect';
 import { useAutoRefresh } from '../../lib/useAutoRefresh';
 import { useAuth } from '../../context/AuthContext';
 import ErrorModal from '../../components/shared/ErrorModal';
@@ -104,7 +102,6 @@ export default function Credentials() {
     if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
     else { setSortField(field); setSortDir('asc'); }
   }
-  function sortIcon(field: SortField) { return sortField !== field ? '' : sortDir === 'asc' ? ' \u25B2' : ' \u25BC'; }
 
   const allSelected = selected.length > 0 && selected.length === filtered.length;
   function toggleSelect(id: string) { setSelected(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]); }
@@ -204,6 +201,76 @@ export default function Credentials() {
     });
   }
 
+  const columns: DataTableColumn<Credential>[] = [
+    {
+      key: 'name', label: t('Name'), required: true, sortKey: 'name',
+      filter: <input type="text" className="col-filter" aria-label={t('Filter by name')} value={colFilters.name} onChange={e => { setColFilters(f => ({ ...f, name: e.target.value })); setPageNumber(1); }} placeholder={t('Search...')} />,
+      render: (c) => <strong>{c.name || '-'}</strong>,
+    },
+    {
+      key: 'id', label: t('ID'), required: true, cellClassName: 'mono text-dim table-id-cell',
+      render: (c) => (
+        <span className="id-display">
+          <span className="id-value" title={c.id}>{c.id}</span>
+          <CopyButton text={c.id} onClick={e => e.stopPropagation()} />
+        </span>
+      ),
+    },
+    {
+      key: 'user', label: t('User'), sortKey: 'userId', cellClassName: 'text-dim',
+      clearFilter: () => setColFilters(f => ({ ...f, userId: '' })),
+      filter: (
+        <select aria-label={t('All users')}
+          className="col-filter"
+          value={colFilters.userId}
+          onChange={e => { setColFilters(f => ({ ...f, userId: e.target.value })); setPageNumber(1); }}
+        >
+          <option value="">{t('All users')}</option>
+          {users.map(u => (
+            <option key={u.id} value={u.id}>{u.email}</option>
+          ))}
+        </select>
+      ),
+      render: (c) => userName(c.userId),
+    },
+    {
+      key: 'tenant', label: t('Tenant'), cellClassName: 'text-dim',
+      clearFilter: () => setColFilters(f => ({ ...f, tenantId: '' })),
+      filter: (
+        <select aria-label={t('All tenants')}
+          className="col-filter"
+          value={colFilters.tenantId}
+          onChange={e => { setColFilters(f => ({ ...f, tenantId: e.target.value })); setPageNumber(1); }}
+        >
+          <option value="">{t('All tenants')}</option>
+          {tenants.map(tn => (
+            <option key={tn.id} value={tn.id}>{tn.name}</option>
+          ))}
+        </select>
+      ),
+      render: (c) => tenantName(c.tenantId),
+    },
+    {
+      key: 'bearerToken', label: t('Bearer Token'), cellClassName: 'mono text-dim table-url-cell',
+      render: (c) => <span className="url-value" title={t('Tokens are shown once, when the credential is created.')}>{c.bearerToken}</span>,
+    },
+    { key: 'active', label: t('Active'), sortKey: 'active', render: (c) => (c.active ? t('Yes') : t('No')) },
+    {
+      key: 'createdUtc', label: t('Created'), sortKey: 'createdUtc', cellClassName: 'text-dim cell-nowrap',
+      cellTitle: (c) => formatDateTime(c.createdUtc), render: (c) => formatRelativeTime(c.createdUtc),
+    },
+    {
+      key: 'actions', label: t('Actions'), fixed: true, interactive: true, className: 'text-right',
+      render: (c) => (
+        <ActionMenu id={c.id} items={[
+          ...(remoteProxyMode ? [] : [{ label: 'Edit', onClick: () => openEdit(c) }]),
+          { label: 'View JSON', onClick: () => setJsonData({ open: true, title: `${t('Credential')}: ${c.name || c.id}`, data: c }) },
+          ...(remoteProxyMode ? [] : [{ label: 'Delete', danger: true, onClick: () => handleDelete(c.id, c.name ?? '') }]),
+        ]} />
+      ),
+    },
+  ];
+
   return (
     <div>
       <div className="view-header">
@@ -214,8 +281,6 @@ export default function Credentials() {
         <div className="view-actions">
           {!remoteProxyMode && selected.length > 0 && <button className="btn btn-sm btn-danger" onClick={handleBulkDelete}>{t('Delete Selected')} ({selected.length})</button>}
           {!remoteProxyMode && <button className="btn btn-primary btn-sm" onClick={openCreate}>+ {t('Credential')}</button>}
-          <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
-          <RefreshButton onRefresh={load} title="Refresh credentials" />
         </div>
       </div>
 
@@ -283,97 +348,36 @@ export default function Credentials() {
       <JsonViewer open={jsonData.open} title={jsonData.title} data={jsonData.data} onClose={() => setJsonData({ open: false, title: '', data: null })} />
       <ConfirmDialog open={confirm.open} title={confirm.title} message={confirm.message} resourceName={confirm.resourceName} danger requireDeleteConfirm onConfirm={confirm.onConfirm} onCancel={() => setConfirm(c => ({ ...c, open: false }))} />
 
-      {loading && items.length === 0 && <p className="text-dim">{t('Loading...')}</p>}
-      {!loading && items.length === 0 && <p className="text-dim">{t('No credentials found.')}</p>}
-
-      {items.length > 0 && (
-        <>
-          <Pagination pageNumber={currentPage} pageSize={pageSize} totalPages={totalPages} totalRecords={sorted.length}
-            onPageChange={p => setPageNumber(p)} onPageSizeChange={s => { setPageSize(s); setPageNumber(1); }} />
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th className="col-checkbox"><input aria-label={t('Select all credentials')} type="checkbox" checked={allSelected} onChange={e => e.target.checked ? setSelected(filtered.map(c => c.id)) : setSelected([])} title={t('Select all credentials')} /></th>
-                  <th className="sortable" onClick={() => handleSort('name')}>{t('Name')}{sortIcon('name')}</th>
-                  <th>{t('ID')}</th>
-                  <th className="sortable" onClick={() => handleSort('userId')}>{t('User')}{sortIcon('userId')}</th>
-                  <th>{t('Tenant')}</th>
-                  <th>{t('Bearer Token')}</th>
-                  <th className="sortable" onClick={() => handleSort('active')}>{t('Active')}{sortIcon('active')}</th>
-                  <th className="sortable" onClick={() => handleSort('createdUtc')}>{t('Created')}{sortIcon('createdUtc')}</th>
-                  <th className="text-right">{t('Actions')}</th>
-                </tr>
-                <tr className="column-filter-row">
-                  <td></td>
-                  <td><input type="text" className="col-filter" value={colFilters.name} onChange={e => { setColFilters(f => ({ ...f, name: e.target.value })); setPageNumber(1); }} placeholder={t('Search...')} /></td>
-                  <td></td>
-                  <td>
-                    <select aria-label={t('All users')}
-                      className="col-filter"
-                      value={colFilters.userId}
-                      onChange={e => { setColFilters(f => ({ ...f, userId: e.target.value })); setPageNumber(1); }}
-                    >
-                      <option value="">{t('All users')}</option>
-                      {users.map(u => (
-                        <option key={u.id} value={u.id}>{u.email}</option>
-                      ))}
-                    </select>
-                  </td>
-                  <td>
-                    <select aria-label={t('All tenants')}
-                      className="col-filter"
-                      value={colFilters.tenantId}
-                      onChange={e => { setColFilters(f => ({ ...f, tenantId: e.target.value })); setPageNumber(1); }}
-                    >
-                      <option value="">{t('All tenants')}</option>
-                      {tenants.map(t => (
-                        <option key={t.id} value={t.id}>{t.name}</option>
-                      ))}
-                    </select>
-                  </td>
-                  <td></td><td></td><td></td><td></td>
-                </tr>
-              </thead>
-              <tbody>
-                {paginated.map(c => (
-                  <tr
-                    key={c.id}
-                    className="clickable"
-                    onClick={() => remoteProxyMode
-                      ? setJsonData({ open: true, title: `${t('Credential')}: ${c.name || c.id}`, data: c })
-                      : openEdit(c)}
-                  >
-                    <td className="col-checkbox" onClick={e => e.stopPropagation()}><input aria-label={t('Select this credential')} type="checkbox" checked={selected.includes(c.id)} onChange={() => toggleSelect(c.id)} title={t('Select this credential')} /></td>
-                    <td><strong>{c.name || '-'}</strong></td>
-                     <td className="mono text-dim table-id-cell">
-                       <span className="id-display">
-                         <span className="id-value" title={c.id}>{c.id}</span>
-                         <CopyButton text={c.id} onClick={e => e.stopPropagation()} />
-                       </span>
-                     </td>
-                    <td className="text-dim">{userName(c.userId)}</td>
-                    <td className="text-dim">{tenantName(c.tenantId)}</td>
-                     <td className="mono text-dim table-url-cell">
-                       <span className="url-value" title={t('Tokens are shown once, when the credential is created.')}>{c.bearerToken}</span>
-                     </td>
-                    <td>{c.active ? t('Yes') : t('No')}</td>
-                    <td className="text-dim" title={formatDateTime(c.createdUtc)}>{formatRelativeTime(c.createdUtc)}</td>
-                    <td className="text-right" onClick={e => e.stopPropagation()}>
-                      <ActionMenu id={c.id} items={[
-                        ...(remoteProxyMode ? [] : [{ label: 'Edit', onClick: () => openEdit(c) }]),
-                        { label: 'View JSON', onClick: () => setJsonData({ open: true, title: `${t('Credential')}: ${c.name || c.id}`, data: c }) },
-                        ...(remoteProxyMode ? [] : [{ label: 'Delete', danger: true, onClick: () => handleDelete(c.id, c.name ?? '') }]),
-                      ]} />
-                    </td>
-                  </tr>
-                ))}
-                {paginated.length === 0 && <tr><td colSpan={9} className="text-dim">{t('No credentials match filters.')}</td></tr>}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
+      <DataTable
+        tableKey="credentials"
+        columns={columns}
+        rows={paginated}
+        rowKey={(c) => c.id}
+        onRowClick={(c) => (remoteProxyMode
+          ? setJsonData({ open: true, title: `${t('Credential')}: ${c.name || c.id}`, data: c })
+          : openEdit(c))}
+        sort={{ field: sortField, dir: sortDir, onSort: (f) => handleSort(f as SortField) }}
+        pagination={{
+          pageNumber: currentPage, pageSize, totalPages, totalRecords: sorted.length,
+          onPageChange: (p) => setPageNumber(p),
+          onPageSizeChange: (s) => { setPageSize(s); setPageNumber(1); },
+        }}
+        autoRefresh={{ seconds: refreshSeconds, onChange: setRefreshSeconds }}
+        onRefresh={load}
+        refreshTitle="Refresh credentials"
+        selection={{
+          isSelected: (c) => selected.includes(c.id),
+          onToggle: (c) => toggleSelect(c.id),
+          allSelected,
+          onToggleAll: (checked) => (checked ? setSelected(filtered.map(c => c.id)) : setSelected([])),
+          selectAllLabel: t('Select all credentials'),
+          rowLabel: () => t('Select this credential'),
+        }}
+        emptyMessage={t('No credentials match filters.')}
+        placeholder={items.length > 0 ? undefined : loading
+          ? <p className="text-dim">{t('Loading...')}</p>
+          : <p className="text-dim">{t('No credentials found.')}</p>}
+      />
     </div>
   );
 }

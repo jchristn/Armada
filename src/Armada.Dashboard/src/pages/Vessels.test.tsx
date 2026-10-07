@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Vessels from './Vessels';
@@ -68,5 +68,88 @@ describe('Vessels row actions', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Actions' }));
     fireEvent.click(await screen.findByRole('menuitem', { name: 'View History' }));
     expect(await screen.findByText('history at /vessels/vsl_1/history')).toBeInTheDocument();
+  });
+});
+
+describe('Vessels table layout', () => {
+  const long = {
+    ...vessel,
+    id: 'vsl_2',
+    name: 'platform',
+    repoUrl: 'https://github.example.com/some-very-long-organization-name/a-repository-with-a-really-long-name.git',
+    defaultBranch: 'release/2026-10',
+    landingMode: 'MergeAndPush',
+  } as unknown as Vessel;
+
+  beforeEach(() => {
+    localStorage.clear();
+    vi.mocked(listVessels).mockResolvedValue(page([vessel, long]) as never);
+    vi.mocked(listFleets).mockResolvedValue(page([]) as never);
+    vi.mocked(listPipelines).mockResolvedValue(page([]) as never);
+    vi.mocked(getVesselGitStatus).mockResolvedValue({ vesselId: 'vsl_1', commitsAhead: 0, commitsBehind: 0 });
+    vi.mocked(getVesselBranches).mockResolvedValue({ vesselId: 'vsl_1', branches: [], branchCount: 0 });
+  });
+
+  function renderPage() {
+    return render(
+      <MemoryRouter initialEntries={['/vessels']}>
+        <Vessels />
+      </MemoryRouter>,
+    );
+  }
+
+  function cell(row: HTMLElement, col: string): HTMLElement {
+    return row.querySelector(`td[data-col="${col}"]`) as HTMLElement;
+  }
+
+  it('renders the default landing mode on one line with the detail in the tooltip', async () => {
+    renderPage();
+    const row = (await screen.findByText('gateway')).closest('tr') as HTMLElement;
+    const landing = cell(row, 'landingMode');
+    expect(landing.textContent).toBe('Default (global)');
+    expect(landing.querySelectorAll('div')).toHaveLength(0);
+    expect(landing.querySelector('.cell-one-line')?.getAttribute('title')).toContain('global default');
+  });
+
+  it('renders a set landing mode as one line without the stacked summary', async () => {
+    renderPage();
+    const row = (await screen.findByText('platform')).closest('tr') as HTMLElement;
+    const landing = cell(row, 'landingMode');
+    expect(landing.textContent).toBe('MergeAndPush');
+    expect(landing.querySelector('.cell-one-line')?.getAttribute('title')).toContain('local + push');
+  });
+
+  it('keeps the repository on one truncating line and moves the branch to its own column', async () => {
+    renderPage();
+    const row = (await screen.findByText('platform')).closest('tr') as HTMLElement;
+    const repo = cell(row, 'repoUrl');
+    expect(repo).toHaveClass('table-url-cell');
+    const value = repo.querySelector('.url-value') as HTMLElement;
+    expect(value.getAttribute('title')).toBe(long.repoUrl);
+    expect(repo.querySelector('.cell-subline')).toBeNull();
+    expect(repo.textContent).not.toContain('release/2026-10');
+    expect(cell(row, 'defaultBranch').textContent).toBe('release/2026-10');
+  });
+
+  it('puts auto-refresh and refresh in the table toolbar next to the record count', async () => {
+    const { container } = renderPage();
+    await screen.findByText('gateway');
+    expect(container.querySelector('.page-header select')).toBeNull();
+    const bar = container.querySelector('.data-table .pagination-bar') as HTMLElement;
+    expect(bar.textContent).toContain('2 records');
+    expect(bar.querySelector('select[aria-label="Auto-refresh interval"]')).not.toBeNull();
+    expect(bar.querySelector('.refresh-btn')).not.toBeNull();
+  });
+
+  it('offers a column chooser that locks Name and ID and persists hidden columns', async () => {
+    renderPage();
+    await screen.findByText('gateway');
+    fireEvent.click(screen.getByRole('button', { name: /^Columns/ }));
+    const menu = await screen.findByRole('menu');
+    expect(within(menu).getByRole('menuitemcheckbox', { name: /^Name/ })).toHaveAttribute('aria-disabled', 'true');
+    expect(within(menu).getByRole('menuitemcheckbox', { name: /^ID/ })).toHaveAttribute('aria-disabled', 'true');
+    fireEvent.click(within(menu).getByRole('menuitemcheckbox', { name: /Sync/ }));
+    expect(screen.queryByRole('columnheader', { name: 'Sync' })).not.toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem('armada_columns_vessels') ?? '{}').hidden).toEqual(['sync']);
   });
 });

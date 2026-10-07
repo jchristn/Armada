@@ -25,6 +25,7 @@ import JsonViewer from '../components/shared/JsonViewer';
 import PageHeader from '../components/shared/PageHeader';
 import StatusBadge from '../components/shared/StatusBadge';
 import CopyButton from '../components/shared/CopyButton';
+import DataTable from '../components/shared/DataTable';
 import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
 import { useAuth } from '../context/AuthContext';
@@ -628,36 +629,38 @@ export default function CaptainDetail() {
       <div style={{ marginTop: '1rem' }}>
         <h3>{t('Recent Missions')}</h3>
         {missions.length > 0 ? (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th title={t('Mission name and unique identifier')}>{t('Mission')}</th>
-                  <th title={t('Current mission lifecycle state')}>{t('Status')}</th>
-                  <th title={t('Git branch for this mission\'s work')}>{t('Branch')}</th>
-                  <th title={t('When the mission was completed or created')}>{t('Date')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {missions.map(m => (
-                  <tr key={m.id} className="clickable" onClick={() => navigate(`/missions/${m.id}`)}>
-                    <td>
-                      <strong>{m.title}</strong>
-                      <div className="text-dim id-display">
-                        <span className="mono">{m.id}</span>
-                        <CopyButton text={m.id} />
-                      </div>
-                    </td>
-                    <td><StatusBadge status={m.status} /></td>
-                    <td className="text-dim">{m.branchName || '-'}</td>
-                    <td className="text-dim" title={formatDateTime(m.completedUtc || m.createdUtc)}>
-                      {formatRelativeTime(m.completedUtc || m.createdUtc)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            tableKey="captain-detail-missions"
+            rows={missions}
+            rowKey={(m) => m.id}
+            recordCount={null}
+            onRowClick={(m) => navigate(`/missions/${m.id}`)}
+            columns={[
+              {
+                key: 'mission', label: t('Mission'), required: true, headerTitle: t('Mission name and unique identifier'),
+                render: (m) => <strong className="cell-one-line" title={m.title}>{m.title}</strong>,
+              },
+              {
+                key: 'id', label: t('ID'), required: true, cellClassName: 'mono text-dim table-id-cell',
+                render: (m) => (
+                  <span className="id-display">
+                    <span className="id-value" title={m.id}>{m.id}</span>
+                    <CopyButton text={m.id} onClick={(e) => e.stopPropagation()} />
+                  </span>
+                ),
+              },
+              { key: 'status', label: t('Status'), headerTitle: t('Current mission lifecycle state'), cellClassName: 'cell-nowrap', render: (m) => <StatusBadge status={m.status} /> },
+              {
+                key: 'branch', label: t('Branch'), headerTitle: t('Git branch for this mission\'s work'), cellClassName: 'mono text-dim',
+                render: (m) => <span className="cell-one-line" title={m.branchName || undefined}>{m.branchName || '-'}</span>,
+              },
+              {
+                key: 'date', label: t('Date'), headerTitle: t('When the mission was completed or created'), cellClassName: 'text-dim cell-nowrap',
+                cellTitle: (m) => formatDateTime(m.completedUtc || m.createdUtc),
+                render: (m) => formatRelativeTime(m.completedUtc || m.createdUtc),
+              },
+            ]}
+          />
         ) : (
           <p className="text-dim" style={{ marginTop: '0.5rem' }}>{t('No missions yet')}</p>
         )}

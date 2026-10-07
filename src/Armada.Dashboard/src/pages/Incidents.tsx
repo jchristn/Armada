@@ -28,9 +28,9 @@ import ConfirmDialog from '../components/shared/ConfirmDialog';
 import ErrorModal from '../components/shared/ErrorModal';
 import JsonViewer from '../components/shared/JsonViewer';
 import RecordDetailModal from '../components/shared/RecordDetailModal';
-import RefreshButton from '../components/shared/RefreshButton';
+import CopyButton from '../components/shared/CopyButton';
+import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
 import StatusBadge from '../components/shared/StatusBadge';
-import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 
 const INCIDENT_STATUSES: IncidentStatus[] = ['Open', 'Monitoring', 'Mitigated', 'RolledBack', 'Closed'];
@@ -211,6 +211,60 @@ export default function Incidents() {
     });
   }
 
+  const columns: DataTableColumn<Incident>[] = [
+    {
+      key: 'title', label: t('Incident'), required: true,
+      filter: <input type="text" className="col-filter" aria-label={t('Filter by title')} value={colFilters.title} onChange={e => setColFilters(f => ({ ...f, title: e.target.value }))} placeholder={t('Filter...')} />,
+      // One line: the summary (or impact) is in the tooltip and in the optional Summary column.
+      cellTitle: (incident) => [incident.title, incident.summary || incident.impact].filter(Boolean).join('\n'),
+      render: (incident) => <strong className="cell-one-line">{incident.title}</strong>,
+    },
+    {
+      key: 'id', label: t('ID'), required: true, cellClassName: 'mono text-dim table-id-cell',
+      render: (incident) => (
+        <span className="id-display">
+          <span className="id-value" title={incident.id}>{incident.id}</span>
+          <CopyButton text={incident.id} onClick={e => e.stopPropagation()} />
+        </span>
+      ),
+    },
+    { key: 'status', label: t('Status'), cellClassName: 'cell-nowrap', render: (incident) => <StatusBadge status={incident.status} /> },
+    { key: 'severity', label: t('Severity'), cellClassName: 'cell-nowrap', render: (incident) => <StatusBadge status={incident.severity} /> },
+    {
+      key: 'environment', label: t('Environment'), cellClassName: 'text-dim',
+      clearFilter: () => setColFilters(f => ({ ...f, environmentName: '' })),
+      filter: <input type="text" className="col-filter" aria-label={t('Filter by environment')} value={colFilters.environmentName} onChange={e => setColFilters(f => ({ ...f, environmentName: e.target.value }))} placeholder={t('Filter...')} />,
+      render: (incident) => (incident.environmentId ? (environmentMap.get(incident.environmentId) || incident.environmentName || incident.environmentId) : (incident.environmentName || '-')),
+    },
+    { key: 'deployment', label: t('Deployment'), cellClassName: 'text-dim', render: (incident) => (incident.deploymentId ? (deploymentMap.get(incident.deploymentId) || incident.deploymentId) : '-') },
+    { key: 'release', label: t('Release'), cellClassName: 'text-dim', render: (incident) => (incident.releaseId ? (releaseMap.get(incident.releaseId) || incident.releaseId) : '-') },
+    {
+      key: 'summary', label: t('Summary'), defaultHidden: true, cellClassName: 'text-dim',
+      render: (incident) => {
+        const text = incident.summary || incident.impact || t('No summary provided');
+        return <span className="cell-one-line" title={text}>{text}</span>;
+      },
+    },
+    {
+      key: 'lastUpdated', label: t('Last Updated'), cellClassName: 'text-dim cell-nowrap',
+      cellTitle: (incident) => formatDateTime(incident.lastUpdateUtc),
+      render: (incident) => formatRelativeTime(incident.lastUpdateUtc),
+    },
+    {
+      key: 'actions', label: t('Actions'), fixed: true, interactive: true, className: 'text-right',
+      render: (incident) => (
+        <ActionMenu
+          id={`incident-${incident.id}`}
+          items={[
+            { label: 'Open', onClick: () => navigate(`/incidents/${incident.id}`, { state: carryState }) },
+            { label: 'View JSON', onClick: () => setJsonData({ open: true, title: incident.title, data: incident }) },
+            ...(canManage ? [{ label: 'Delete', danger: true as const, onClick: () => handleDelete(incident) }] : []),
+          ]}
+        />
+      ),
+    },
+  ];
+
   return (
     <div>
       <PageHeader
@@ -218,8 +272,6 @@ export default function Incidents() {
         subtitle={t('Track incidents, hotfix context, rollback history, recovery notes, and postmortems alongside deployments and releases.')}
         actions={(
           <>
-            <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
-            <RefreshButton onRefresh={load} title={t('Refresh incidents')} />
             {canManage && (
               <button className="btn btn-primary" onClick={openCreate}>
                 + {t('Incident')}
@@ -365,70 +417,22 @@ export default function Incidents() {
         </div>
       </div>
 
-      {loading && incidents.length === 0 ? (
-        <p className="text-dim">{t('Loading...')}</p>
-      ) : filtered.length === 0 ? (
-        <div className="playbook-empty-state">
-          <strong>{t('No incidents match the current filters.')}</strong>
-          <span>{canManage ? t('Create incidents from deployments or environments to preserve hotfix and rollback context.') : t('Ask a tenant administrator to create and manage incident records.')}</span>
-        </div>
-      ) : (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>{t('Incident')}</th>
-                <th>{t('Status')}</th>
-                <th>{t('Severity')}</th>
-                <th>{t('Environment')}</th>
-                <th>{t('Deployment')}</th>
-                <th>{t('Release')}</th>
-                <th>{t('Last Updated')}</th>
-                <th className="text-right">{t('Actions')}</th>
-              </tr>
-              <tr className="column-filter-row">
-                <td><input type="text" className="col-filter" value={colFilters.title} onChange={e => setColFilters(f => ({ ...f, title: e.target.value }))} placeholder={t('Filter...')} /></td>
-                <td></td>
-                <td></td>
-                <td><input type="text" className="col-filter" value={colFilters.environmentName} onChange={e => setColFilters(f => ({ ...f, environmentName: e.target.value }))} placeholder={t('Filter...')} /></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((incident) => (
-                <tr key={incident.id} className="clickable" onClick={() => setViewRecord(incident as unknown as Record<string, unknown>)}>
-                  <td>
-                    <strong>{incident.title}</strong>
-                    <div className="text-dim" style={{ marginTop: '0.2rem' }}>
-                      {incident.summary || incident.impact || t('No summary provided')}
-                    </div>
-                    <div className="mono text-dim" style={{ fontSize: '0.78rem' }}>{incident.id}</div>
-                  </td>
-                  <td><StatusBadge status={incident.status} /></td>
-                  <td><StatusBadge status={incident.severity} /></td>
-                  <td className="text-dim">{incident.environmentId ? (environmentMap.get(incident.environmentId) || incident.environmentName || incident.environmentId) : (incident.environmentName || '-')}</td>
-                  <td className="text-dim">{incident.deploymentId ? (deploymentMap.get(incident.deploymentId) || incident.deploymentId) : '-'}</td>
-                  <td className="text-dim">{incident.releaseId ? (releaseMap.get(incident.releaseId) || incident.releaseId) : '-'}</td>
-                  <td className="text-dim" title={formatDateTime(incident.lastUpdateUtc)}>{formatRelativeTime(incident.lastUpdateUtc)}</td>
-                  <td className="text-right" onClick={(event) => event.stopPropagation()}>
-                    <ActionMenu
-                      id={`incident-${incident.id}`}
-                      items={[
-                        { label: 'Open', onClick: () => navigate(`/incidents/${incident.id}`, { state: carryState }) },
-                        { label: 'View JSON', onClick: () => setJsonData({ open: true, title: incident.title, data: incident }) },
-                        ...(canManage ? [{ label: 'Delete', danger: true as const, onClick: () => handleDelete(incident) }] : []),
-                      ]}
-                    />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <DataTable
+        tableKey="incidents"
+        columns={columns}
+        rows={filtered}
+        rowKey={(incident) => incident.id}
+        onRowClick={(incident) => setViewRecord(incident as unknown as Record<string, unknown>)}
+        autoRefresh={{ seconds: refreshSeconds, onChange: setRefreshSeconds }}
+        onRefresh={load}
+        refreshTitle={t('Refresh incidents')}
+        placeholder={loading && incidents.length === 0 ? <p className="text-dim">{t('Loading...')}</p> : filtered.length === 0 ? (
+          <div className="playbook-empty-state">
+            <strong>{t('No incidents match the current filters.')}</strong>
+            <span>{canManage ? t('Create incidents from deployments or environments to preserve hotfix and rollback context.') : t('Ask a tenant administrator to create and manage incident records.')}</span>
+          </div>
+        ) : undefined}
+      />
     </div>
   );
 }

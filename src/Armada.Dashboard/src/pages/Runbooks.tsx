@@ -30,9 +30,9 @@ import ConfirmDialog from '../components/shared/ConfirmDialog';
 import ErrorModal from '../components/shared/ErrorModal';
 import JsonViewer from '../components/shared/JsonViewer';
 import RecordDetailModal from '../components/shared/RecordDetailModal';
-import RefreshButton from '../components/shared/RefreshButton';
+import CopyButton from '../components/shared/CopyButton';
+import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
 import StatusBadge from '../components/shared/StatusBadge';
-import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import { buildRunbookDuplicatePayload } from '../lib/duplicates';
 
@@ -236,6 +236,96 @@ export default function Runbooks() {
     }
   }
 
+  const emptyState = (
+    <div className="playbook-empty-state">
+      <strong>{t('No runbooks match the current filters.')}</strong>
+      <span>{canManage ? t('Create a runbook to guide release, deploy, rollback, migration, or incident work step by step.') : t('Ask a tenant administrator to create and manage runbooks.')}</span>
+    </div>
+  );
+
+  // The runbook and binding cells used to stack four and three lines; each value is its own one-line column now,
+  // with the less essential ones hidden by default (the column chooser turns them on).
+  const columns: DataTableColumn<Runbook>[] = [
+    {
+      key: 'title', label: t('Runbook'), required: true,
+      clearFilter: () => setColFilters(f => ({ ...f, title: '' })),
+      filter: <input type="text" className="col-filter" aria-label={t('Runbook')} value={colFilters.title} onChange={e => setColFilters(f => ({ ...f, title: e.target.value }))} placeholder={t('Filter...')} />,
+      cellTitle: (runbook) => runbook.description || undefined,
+      render: (runbook) => <strong>{runbook.title}</strong>,
+    },
+    {
+      key: 'id', label: t('ID'), required: true, cellClassName: 'mono text-dim table-id-cell',
+      render: (runbook) => (
+        <span className="id-display">
+          <span className="id-value" title={runbook.id}>{runbook.id}</span>
+          <CopyButton text={runbook.id} onClick={e => e.stopPropagation()} />
+        </span>
+      ),
+    },
+    {
+      key: 'fileName', label: t('File Name'), defaultHidden: true, cellClassName: 'mono text-dim',
+      render: (runbook) => <span className="cell-one-line" title={runbook.fileName}>{runbook.fileName}</span>,
+    },
+    {
+      key: 'description', label: t('Description'), defaultHidden: true, cellClassName: 'text-dim truncate-cell',
+      render: (runbook) => runbook.description ? <span className="truncate-text" title={runbook.description}>{runbook.description}</span> : '-',
+    },
+    { key: 'status', label: t('Status'), cellClassName: 'cell-nowrap', render: (runbook) => <StatusBadge status={runbook.active ? 'Active' : 'Inactive'} /> },
+    {
+      key: 'workflowProfile', label: t('Workflow Profile'), cellClassName: 'text-dim',
+      render: (runbook) => {
+        const text = runbook.workflowProfileId ? (profileMap.get(runbook.workflowProfileId) || runbook.workflowProfileId) : t('No workflow profile');
+        return <span className="cell-one-line" title={text}>{text}</span>;
+      },
+    },
+    {
+      key: 'environment', label: t('Environment'), cellClassName: 'text-dim',
+      render: (runbook) => {
+        const text = runbook.environmentId ? (environmentMap.get(runbook.environmentId) || runbook.environmentName || runbook.environmentId) : (runbook.environmentName || t('No environment'));
+        return <span className="cell-one-line" title={text}>{text}</span>;
+      },
+    },
+    {
+      key: 'defaultCheck', label: t('Default Check Type'), defaultHidden: true, cellClassName: 'text-dim cell-nowrap',
+      render: (runbook) => runbook.defaultCheckType || t('No default check'),
+    },
+    {
+      key: 'steps', label: t('Steps'), cellClassName: 'text-dim cell-nowrap',
+      render: (runbook) => <>{runbook.steps.length} {t('steps')} {'\u2022'} {runbook.parameters.length} {t('parameters')}</>,
+    },
+    {
+      key: 'executions', label: t('Executions'), cellClassName: 'text-dim cell-nowrap',
+      render: (runbook) => {
+        const counts = executionCounts.get(runbook.id) || { total: 0, running: 0 };
+        return <>{counts.total} {t('total')} {'\u2022'} {counts.running} {t('running')}</>;
+      },
+    },
+    { key: 'visibility', label: t('Visibility'), cellClassName: 'cell-nowrap', render: (runbook) => <ScopeBadge scope={runbook.scope} /> },
+    {
+      key: 'lastUpdated', label: t('Last Updated'), cellClassName: 'text-dim cell-nowrap',
+      cellTitle: (runbook) => formatDateTime(runbook.lastUpdateUtc),
+      render: (runbook) => formatRelativeTime(runbook.lastUpdateUtc),
+    },
+    {
+      key: 'actions', label: t('Actions'), fixed: true, interactive: true, className: 'text-right',
+      render: (runbook) => {
+        const counts = executionCounts.get(runbook.id) || { total: 0, running: 0 };
+        return (
+          <ActionMenu
+            id={`runbook-${runbook.id}`}
+            items={[
+              { label: 'Open', onClick: () => navigate(`/runbooks/${runbook.id}`, { state: carryState }) },
+              { label: 'Duplicate', onClick: () => void handleDuplicate(runbook) },
+              { label: 'View JSON', onClick: () => setJsonData({ open: true, title: runbook.title, data: runbook }) },
+              ...(counts.running > 0 ? [{ label: `Running: ${counts.running}`, onClick: () => navigate(`/runbooks/${runbook.id}`, { state: carryState }) }] : []),
+              ...(canEditScoped(viewer, runbook) ? [{ label: 'Delete', danger: true as const, onClick: () => handleDelete(runbook) }] : []),
+            ]}
+          />
+        );
+      },
+    },
+  ];
+
   return (
     <div>
       <PageHeader
@@ -243,8 +333,6 @@ export default function Runbooks() {
         subtitle={t('Playbook-backed operational runbooks with bound workflow profiles, environments, parameters, step tracking, and execution history.')}
         actions={(
           <>
-            <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
-            <RefreshButton onRefresh={load} title={t('Refresh runbooks')} />
             <button className="btn btn-primary" onClick={openCreate}>
               + {t('Runbook')}
             </button>
@@ -366,82 +454,18 @@ export default function Runbooks() {
         </div>
       </div>
 
-      {loading && runbooks.length === 0 ? (
-        <p className="text-dim">{t('Loading...')}</p>
-      ) : filtered.length === 0 ? (
-        <div className="playbook-empty-state">
-          <strong>{t('No runbooks match the current filters.')}</strong>
-          <span>{canManage ? t('Create a runbook to guide release, deploy, rollback, migration, or incident work step by step.') : t('Ask a tenant administrator to create and manage runbooks.')}</span>
-        </div>
-      ) : (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>{t('Runbook')}</th>
-                <th>{t('Binding')}</th>
-                <th>{t('Steps')}</th>
-                <th>{t('Executions')}</th>
-                <th>{t('Visibility')}</th>
-                <th>{t('Last Updated')}</th>
-                <th className="text-right">{t('Actions')}</th>
-              </tr>
-              <tr className="column-filter-row">
-                <td><input type="text" className="col-filter" value={colFilters.title} onChange={e => setColFilters(f => ({ ...f, title: e.target.value }))} placeholder={t('Filter...')} /></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((runbook) => {
-                const counts = executionCounts.get(runbook.id) || { total: 0, running: 0 };
-                return (
-                  <tr key={runbook.id} className="clickable" onClick={() => setViewRecord(runbook as unknown as Record<string, unknown>)}>
-                    <td>
-                      <strong>{runbook.title}</strong>
-                      <div className="text-dim" style={{ marginTop: '0.2rem' }}>
-                        {runbook.fileName} {runbook.active ? `• ${t('Active')}` : `• ${t('Inactive')}`}
-                      </div>
-                      <div className="mono text-dim" style={{ fontSize: '0.78rem' }}>{runbook.id}</div>
-                      {runbook.description && (
-                        <div className="text-dim" style={{ marginTop: '0.2rem' }}>{runbook.description}</div>
-                      )}
-                    </td>
-                    <td className="text-dim">
-                      <div>{runbook.workflowProfileId ? (profileMap.get(runbook.workflowProfileId) || runbook.workflowProfileId) : t('No workflow profile')}</div>
-                      <div>{runbook.environmentId ? (environmentMap.get(runbook.environmentId) || runbook.environmentName || runbook.environmentId) : (runbook.environmentName || t('No environment'))}</div>
-                      <div>{runbook.defaultCheckType || t('No default check')}</div>
-                    </td>
-                    <td className="text-dim">{runbook.steps.length} {t('steps')} • {runbook.parameters.length} {t('parameters')}</td>
-                    <td className="text-dim">
-                      <div>{counts.total} {t('total')}</div>
-                      <div>{counts.running} {t('running')}</div>
-                    </td>
-                    <td><ScopeBadge scope={runbook.scope} /></td>
-                    <td className="text-dim" title={formatDateTime(runbook.lastUpdateUtc)}>{formatRelativeTime(runbook.lastUpdateUtc)}</td>
-                    <td className="text-right" onClick={(event) => event.stopPropagation()}>
-                      <ActionMenu
-                        id={`runbook-${runbook.id}`}
-                        items={[
-                        { label: 'Open', onClick: () => navigate(`/runbooks/${runbook.id}`, { state: carryState }) },
-                        { label: 'Duplicate', onClick: () => void handleDuplicate(runbook) },
-                        { label: 'View JSON', onClick: () => setJsonData({ open: true, title: runbook.title, data: runbook }) },
-                        ...(counts.running > 0 ? [{ label: `Running: ${counts.running}`, onClick: () => navigate(`/runbooks/${runbook.id}`, { state: carryState }) }] : []),
-                        ...(canEditScoped(viewer, runbook) ? [{ label: 'Delete', danger: true as const, onClick: () => handleDelete(runbook) }] : []),
-                        ]}
-                      />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <DataTable
+        tableKey="runbooks"
+        columns={columns}
+        rows={filtered}
+        rowKey={(runbook) => runbook.id}
+        onRowClick={(runbook) => setViewRecord(runbook as unknown as Record<string, unknown>)}
+        autoRefresh={{ seconds: refreshSeconds, onChange: setRefreshSeconds }}
+        onRefresh={load}
+        refreshTitle="Refresh runbooks"
+        emptyMessage={emptyState}
+        placeholder={runbooks.length > 0 ? undefined : loading ? <p className="text-dim">{t('Loading...')}</p> : emptyState}
+      />
     </div>
   );
 }

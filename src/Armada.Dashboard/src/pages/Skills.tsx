@@ -12,8 +12,8 @@ import ActionMenu from '../components/shared/ActionMenu';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import ErrorModal from '../components/shared/ErrorModal';
 import JsonViewer from '../components/shared/JsonViewer';
-import RefreshButton from '../components/shared/RefreshButton';
-import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
+import CopyButton from '../components/shared/CopyButton';
+import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import PageHeader from '../components/shared/PageHeader';
 import StatusBadge from '../components/shared/StatusBadge';
@@ -146,6 +146,66 @@ export default function Skills() {
     });
   }
 
+  const emptyState = (
+    <div className="playbook-empty-state">
+      <strong>{t('No skills match the current filters.')}</strong>
+      <span>{canManage ? t('Create a skill to capture a reusable habit that can be attached to projects.') : t('Ask a tenant administrator to define skills.')}</span>
+    </div>
+  );
+
+  // Name, ID and description used to stack in one cell; each is its own one-line column now.
+  const columns: DataTableColumn<Skill>[] = [
+    {
+      key: 'name', label: t('Skill'), required: true,
+      clearFilter: () => setColFilters(f => ({ ...f, name: '' })),
+      filter: <input type="text" className="col-filter" aria-label={t('Skill')} value={colFilters.name} onChange={e => setColFilters(f => ({ ...f, name: e.target.value }))} placeholder={t('Filter...')} />,
+      render: (skill) => <strong>{skill.name}</strong>,
+    },
+    {
+      key: 'id', label: t('ID'), required: true, cellClassName: 'mono text-dim table-id-cell',
+      render: (skill) => (
+        <span className="id-display">
+          <span className="id-value" title={skill.id}>{skill.id}</span>
+          <CopyButton text={skill.id} onClick={e => e.stopPropagation()} />
+        </span>
+      ),
+    },
+    {
+      key: 'description', label: t('Description'), cellClassName: 'text-dim truncate-cell',
+      render: (skill) => skill.description ? <span className="truncate-text" title={skill.description}>{skill.description}</span> : '-',
+    },
+    {
+      key: 'category', label: t('Category'), cellClassName: 'text-dim',
+      clearFilter: () => setColFilters(f => ({ ...f, category: '' })),
+      filter: <input type="text" className="col-filter" aria-label={t('Category')} value={colFilters.category} onChange={e => setColFilters(f => ({ ...f, category: e.target.value }))} placeholder={t('Filter...')} />,
+      render: (skill) => skill.category || '-',
+    },
+    { key: 'visibility', label: t('Visibility'), cellClassName: 'cell-nowrap', render: (skill) => <ScopeBadge scope={skill.scope} /> },
+    { key: 'status', label: t('Status'), cellClassName: 'cell-nowrap', render: (skill) => <StatusBadge status={skill.active ? 'Active' : 'Inactive'} /> },
+    {
+      key: 'lastUpdated', label: t('Last Updated'), cellClassName: 'text-dim cell-nowrap',
+      cellTitle: (skill) => formatDateTime(skill.lastUpdateUtc),
+      render: (skill) => formatRelativeTime(skill.lastUpdateUtc),
+    },
+    {
+      key: 'actions', label: t('Actions'), fixed: true, interactive: true, className: 'text-right',
+      render: (skill) => {
+        const canEditRow = canEditScoped(viewer, skill);
+        return (
+          <ActionMenu
+            id={`skill-${skill.id}`}
+            items={[
+              { label: 'Open', onClick: () => navigate(`/skills/${skill.id}`) },
+              ...(canEditRow ? [{ label: 'Edit', onClick: () => openEdit(skill) }] : []),
+              { label: 'View JSON', onClick: () => setJsonData({ open: true, title: skill.name, data: skill }) },
+              ...(canEditRow ? [{ label: 'Delete', danger: true as const, onClick: () => handleDelete(skill) }] : []),
+            ]}
+          />
+        );
+      },
+    },
+  ];
+
   return (
     <div>
       <PageHeader
@@ -153,8 +213,6 @@ export default function Skills() {
         subtitle={t('A directory of reusable capability snippets attached to projects and injected into mission prompts.')}
         actions={(
           <>
-            <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
-            <RefreshButton onRefresh={load} title={t('Refresh skills')} />
             <button className="btn btn-primary" onClick={openCreate}>+ {t('Skill')}</button>
           </>
         )}
@@ -228,66 +286,18 @@ export default function Skills() {
         </div>
       </div>
 
-      {loading && skills.length === 0 ? (
-        <p className="text-dim">{t('Loading...')}</p>
-      ) : filtered.length === 0 ? (
-        <div className="playbook-empty-state">
-          <strong>{t('No skills match the current filters.')}</strong>
-          <span>{canManage ? t('Create a skill to capture a reusable habit that can be attached to projects.') : t('Ask a tenant administrator to define skills.')}</span>
-        </div>
-      ) : (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>{t('Skill')}</th>
-                <th>{t('Category')}</th>
-                <th>{t('Visibility')}</th>
-                <th>{t('Status')}</th>
-                <th>{t('Last Updated')}</th>
-                <th className="text-right">{t('Actions')}</th>
-              </tr>
-              <tr className="column-filter-row">
-                <td><input type="text" className="col-filter" value={colFilters.name} onChange={e => setColFilters(f => ({ ...f, name: e.target.value }))} placeholder={t('Filter...')} /></td>
-                <td><input type="text" className="col-filter" value={colFilters.category} onChange={e => setColFilters(f => ({ ...f, category: e.target.value }))} placeholder={t('Filter...')} /></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((skill) => {
-                const canEditRow = canEditScoped(viewer, skill);
-                return (
-                <tr key={skill.id} className="clickable" onClick={() => canEditRow ? openEdit(skill) : navigate(`/skills/${skill.id}`)}>
-                  <td>
-                    <strong>{skill.name}</strong>
-                    <div className="mono text-dim" style={{ fontSize: '0.78rem' }}>{skill.id}</div>
-                    {skill.description && <div className="text-dim" style={{ marginTop: '0.2rem' }}>{skill.description}</div>}
-                  </td>
-                  <td className="text-dim">{skill.category || '-'}</td>
-                  <td><ScopeBadge scope={skill.scope} /></td>
-                  <td><StatusBadge status={skill.active ? 'Active' : 'Inactive'} /></td>
-                  <td className="text-dim" title={formatDateTime(skill.lastUpdateUtc)}>{formatRelativeTime(skill.lastUpdateUtc)}</td>
-                  <td className="text-right" onClick={(e) => e.stopPropagation()}>
-                    <ActionMenu
-                      id={`skill-${skill.id}`}
-                      items={[
-                        { label: 'Open', onClick: () => navigate(`/skills/${skill.id}`) },
-                        ...(canEditRow ? [{ label: 'Edit', onClick: () => openEdit(skill) }] : []),
-                        { label: 'View JSON', onClick: () => setJsonData({ open: true, title: skill.name, data: skill }) },
-                        ...(canEditRow ? [{ label: 'Delete', danger: true as const, onClick: () => handleDelete(skill) }] : []),
-                      ]}
-                    />
-                  </td>
-                </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <DataTable
+        tableKey="skills"
+        columns={columns}
+        rows={filtered}
+        rowKey={(skill) => skill.id}
+        onRowClick={(skill) => (canEditScoped(viewer, skill) ? openEdit(skill) : navigate(`/skills/${skill.id}`))}
+        autoRefresh={{ seconds: refreshSeconds, onChange: setRefreshSeconds }}
+        onRefresh={load}
+        refreshTitle="Refresh skills"
+        emptyMessage={emptyState}
+        placeholder={skills.length > 0 ? undefined : loading ? <p className="text-dim">{t('Loading...')}</p> : emptyState}
+      />
     </div>
   );
 }

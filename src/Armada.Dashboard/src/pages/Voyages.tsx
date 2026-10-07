@@ -2,15 +2,13 @@ import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { listVoyages, cancelVoyage, purgeVoyage, getVoyageStatus } from '../api/client';
 import type { Voyage } from '../types/models';
-import Pagination from '../components/shared/Pagination';
+import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
 import ActionMenu from '../components/shared/ActionMenu';
 import StatusBadge from '../components/shared/StatusBadge';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import JsonViewer from '../components/shared/JsonViewer';
 import RecordDetailModal from '../components/shared/RecordDetailModal';
 import CopyButton from '../components/shared/CopyButton';
-import RefreshButton from '../components/shared/RefreshButton';
-import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
 import UserScopeFilter from '../components/shared/UserScopeFilter';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import PageHeader from '../components/shared/PageHeader';
@@ -142,6 +140,52 @@ export default function Voyages() {
     } catch { setError(t('Failed to load voyage status.')); }
   }
 
+  const columns: DataTableColumn<Voyage>[] = [
+    {
+      key: 'title', label: t('Title'), required: true, sortKey: 'title', headerTitle: t('Voyage title -- click to sort'),
+      cellClassName: 'cell-title', cellTitle: (v) => v.title,
+      filter: <input type="text" className="col-filter" aria-label={t('Title')} value={table.colFilters.title ?? ''} onChange={e => table.setColFilter('title', e.target.value)} placeholder={t('Search...')} />,
+      render: (v) => <strong className="line-clamp-2">{v.title}</strong>,
+    },
+    {
+      key: 'id', label: t('ID'), required: true, cellClassName: 'mono text-dim table-id-cell',
+      render: (v) => (
+        <span className="id-display">
+          <span className="id-value" title={v.id}>{v.id}</span>
+          <CopyButton text={v.id} onClick={e => e.stopPropagation()} />
+        </span>
+      ),
+    },
+    {
+      key: 'status', label: t('Status'), sortKey: 'status', headerTitle: t('Status -- click to sort'), cellClassName: 'cell-nowrap',
+      clearFilter: () => table.setColFilter('status', ''),
+      filter: <input type="text" className="col-filter" aria-label={t('Status')} value={table.colFilters.status ?? ''} onChange={e => table.setColFilter('status', e.target.value)} placeholder={t('Search...')} />,
+      render: (v) => <StatusBadge status={v.status} />,
+    },
+    {
+      key: 'landingMode', label: t('Landing Mode'),
+      headerTitle: t('How the voyage\'s missions land; Default uses the vessel\'s mode, then the global setting'),
+      cellClassName: 'text-dim cell-nowrap',
+      // One line: the mode (or "Default" when inherited); the short summary and full explanation are in the tooltip.
+      render: (v) => {
+        const info = findLandingMode(landingModes, v.landingMode);
+        return <span className="cell-one-line" title={`${info.short} -- ${info.description}`}>{v.landingMode || t('Default')}</span>;
+      },
+    },
+    {
+      key: 'actions', label: t('Actions'), fixed: true, interactive: true, className: 'text-right',
+      render: (v) => (
+        <ActionMenu id={`voyage-${v.id}`} items={[
+          { label: 'View Detail', onClick: () => navigate(`/voyages/${v.id}`) },
+          { label: 'View Status', onClick: () => handleViewStatus(v.id) },
+          { label: 'View JSON', onClick: () => setJsonData({ open: true, title: `${t('Voyage')}: ${v.title}`, data: v }) },
+          { label: 'Cancel', danger: true, onClick: () => handleCancel(v.id, v.title) },
+          { label: 'Purge', danger: true, onClick: () => handlePurge(v.id, v.title) },
+        ]} />
+      ),
+    },
+  ];
+
   return (
     <div>
       <PageHeader
@@ -150,8 +194,6 @@ export default function Voyages() {
         actions={(
           <>
             <UserScopeFilter value={userScope} onChange={(id) => { setUserScope(id); setPageNumber(1); }} />
-            <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
-            <RefreshButton onRefresh={load} title="Refresh voyage data" />
             {table.selected.length > 0 && (
               <button className="btn btn-sm btn-danger" onClick={handleBulkCancel}>
                 {t('Cancel Selected')} ({table.selected.length})
@@ -177,77 +219,32 @@ export default function Voyages() {
       <ConfirmDialog open={confirm.open} title={confirm.title} message={confirm.message}
         onConfirm={confirm.onConfirm} onCancel={() => setConfirm(c => ({ ...c, open: false }))} />
 
-      {loading && voyages.length === 0 && <p className="text-dim">{t('Loading...')}</p>}
-      {!loading && voyages.length === 0 && <p className="text-dim">{t('No voyages found.')}</p>}
-
-      {voyages.length > 0 && (
-        <>
-          <Pagination pageNumber={pageNumber} pageSize={pageSize} totalPages={totalPages}
-            totalRecords={totalRecords}
-            onPageChange={p => setPageNumber(p)} onPageSizeChange={s => { setPageSize(s); setPageNumber(1); }} />
-
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th className="col-checkbox">
-                    <input aria-label={t('Select all voyages')} type="checkbox" checked={table.allSelected} onChange={e => e.target.checked ? table.selectAll() : table.clearSelection()} title={t('Select all voyages')} />
-                  </th>
-                  <th className="sortable" onClick={() => table.handleSort('title')} title={t('Voyage title -- click to sort')}>
-                    {t('Title')}{table.sortIcon('title')}
-                  </th>
-                  <th>{t('ID')}</th>
-                  <th className="sortable" onClick={() => table.handleSort('status')} title={t('Status -- click to sort')}>
-                    {t('Status')}{table.sortIcon('status')}
-                  </th>
-                  <th title={t('How the voyage\'s missions land; Default uses the vessel\'s mode, then the global setting')}>{t('Landing Mode')}</th>
-                  <th className="text-right">{t('Actions')}</th>
-                </tr>
-                <tr className="column-filter-row">
-                  <td></td>
-                  <td><input type="text" className="col-filter" value={table.colFilters.title ?? ''} onChange={e => table.setColFilter('title', e.target.value)} placeholder={t('Search...')} /></td>
-                  <td></td>
-                  <td><input type="text" className="col-filter" value={table.colFilters.status ?? ''} onChange={e => table.setColFilter('status', e.target.value)} placeholder={t('Search...')} /></td>
-                  <td></td>
-                  <td></td>
-                </tr>
-              </thead>
-              <tbody>
-                {table.sorted.map(v => (
-                  <tr key={v.id} className="clickable" onClick={() => setViewRecord(v as unknown as Record<string, unknown>)}>
-                    <td className="col-checkbox" onClick={e => e.stopPropagation()}>
-                      <input aria-label={t('Select this voyage')} type="checkbox" checked={table.selected.includes(v.id)} onChange={() => table.toggleSelect(v.id)} title={t('Select this voyage')} />
-                    </td>
-                    <td className="cell-title" title={v.title}>
-                      <strong className="line-clamp-2">{v.title}</strong>
-                    </td>
-                    <td className="mono text-dim table-id-cell">
-                      <span className="id-display">
-                        <span className="id-value" title={v.id}>{v.id}</span>
-                        <CopyButton text={v.id} onClick={e => e.stopPropagation()} />
-                      </span>
-                    </td>
-                    <td><StatusBadge status={v.status} /></td>
-                    <td className="text-dim" title={findLandingMode(landingModes, v.landingMode).description}>{v.landingMode || t('Default')}</td>
-                    <td className="text-right" onClick={e => e.stopPropagation()}>
-                      <ActionMenu id={`voyage-${v.id}`} items={[
-                        { label: 'View Detail', onClick: () => navigate(`/voyages/${v.id}`) },
-                        { label: 'View Status', onClick: () => handleViewStatus(v.id) },
-                        { label: 'View JSON', onClick: () => setJsonData({ open: true, title: `${t('Voyage')}: ${v.title}`, data: v }) },
-                        { label: 'Cancel', danger: true, onClick: () => handleCancel(v.id, v.title) },
-                        { label: 'Purge', danger: true, onClick: () => handlePurge(v.id, v.title) },
-                      ]} />
-                    </td>
-                  </tr>
-                ))}
-                {table.sorted.length === 0 && (
-                  <tr><td colSpan={8} className="text-dim">{t('No voyages match the current filters.')}</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
+      <DataTable
+        tableKey="voyages"
+        columns={columns}
+        rows={table.sorted}
+        rowKey={(v) => v.id}
+        onRowClick={(v) => setViewRecord(v as unknown as Record<string, unknown>)}
+        sort={table.sortState}
+        pagination={{
+          pageNumber, pageSize, totalPages, totalRecords,
+          onPageChange: (p) => setPageNumber(p),
+          onPageSizeChange: (size) => { setPageSize(size); setPageNumber(1); },
+        }}
+        autoRefresh={{ seconds: refreshSeconds, onChange: setRefreshSeconds }}
+        onRefresh={load}
+        refreshTitle="Refresh voyage data"
+        selection={{
+          isSelected: (v) => table.selected.includes(v.id),
+          onToggle: (v) => table.toggleSelect(v.id),
+          allSelected: table.allSelected,
+          onToggleAll: (checked) => (checked ? table.selectAll() : table.clearSelection()),
+          selectAllLabel: t('Select all voyages'),
+          rowLabel: () => t('Select this voyage'),
+        }}
+        emptyMessage={t('No voyages match the current filters.')}
+        placeholder={voyages.length > 0 ? undefined : <p className="text-dim">{loading ? t('Loading...') : t('No voyages found.')}</p>}
+      />
     </div>
   );
 }

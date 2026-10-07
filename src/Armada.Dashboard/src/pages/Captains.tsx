@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { listCaptains, createCaptain, updateCaptain, deleteCaptain, stopCaptain, recallCaptain, stopAllCaptains, restartCaptain, getCaptainTools, listModelEndpoints, setCaptainCliPermissionPolicy } from '../api/client';
 import type { CliPermissionPolicy, ModelEndpoint } from '../types/models';
 import type { Captain, CaptainToolAccessResult } from '../types/models';
-import Pagination from '../components/shared/Pagination';
+import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
 import ActionMenu from '../components/shared/ActionMenu';
 import StatusBadge from '../components/shared/StatusBadge';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
@@ -12,8 +12,6 @@ import CaptainTierBadge from '../components/shared/CaptainTierBadge';
 import CaptainToolViewer from '../components/captains/CaptainToolViewer';
 import JsonViewer from '../components/shared/JsonViewer';
 import CopyButton from '../components/shared/CopyButton';
-import RefreshButton from '../components/shared/RefreshButton';
-import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
 import UserScopeFilter from '../components/shared/UserScopeFilter';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import PageHeader from '../components/shared/PageHeader';
@@ -142,11 +140,6 @@ export default function Captains() {
   function handleSort(field: SortField) {
     if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
     else { setSortField(field); setSortDir('asc'); }
-  }
-
-  function sortIcon(field: SortField) {
-    if (sortField !== field) return '';
-    return sortDir === 'asc' ? ' \u25B2' : ' \u25BC';
   }
 
   // Selection
@@ -394,6 +387,85 @@ export default function Captains() {
     });
   }
 
+  function setColFilter(key: 'name' | 'runtime' | 'state', value: string) {
+    setColFilters(f => ({ ...f, [key]: value }));
+    setPageNumber(1);
+  }
+
+  const columns: DataTableColumn<Captain>[] = [
+    {
+      key: 'name', label: t('Name'), required: true, sortKey: 'name', headerTitle: t('Captain name -- click to sort'), cellClassName: 'cell-nowrap',
+      filter: <input type="text" className="col-filter" aria-label={t('Name')} value={colFilters.name} onChange={e => setColFilter('name', e.target.value)} placeholder={t('Filter...')} />,
+      render: (c) => <><strong>{c.name}</strong>{c.tier ? <> <CaptainTierBadge tier={c.tier} /></> : null}</>,
+    },
+    {
+      key: 'id', label: t('ID'), required: true, cellClassName: 'mono text-dim table-id-cell',
+      render: (c) => (
+        <span className="id-display">
+          <span className="id-value" title={c.id}>{c.id}</span>
+          <CopyButton text={c.id} onClick={e => e.stopPropagation()} />
+        </span>
+      ),
+    },
+    {
+      key: 'runtime', label: t('Runtime'), sortKey: 'runtime', headerTitle: t('Runtime -- click to sort'), cellClassName: 'text-dim',
+      clearFilter: () => setColFilter('runtime', ''),
+      filter: <input type="text" className="col-filter" aria-label={t('Runtime')} value={colFilters.runtime} onChange={e => setColFilter('runtime', e.target.value)} placeholder={t('Filter...')} />,
+      render: (c) => c.runtime,
+    },
+    {
+      key: 'state', label: t('State'), sortKey: 'state', headerTitle: t('State -- click to sort'), cellClassName: 'cell-nowrap',
+      clearFilter: () => setColFilter('state', ''),
+      filter: <input type="text" className="col-filter" aria-label={t('State')} value={colFilters.state} onChange={e => setColFilter('state', e.target.value)} placeholder={t('Filter...')} />,
+      render: (c) => (
+        <>
+          <StatusBadge status={c.state} />
+          {c.state === 'Quarantined' && (
+            <span className="tag stalled" title={c.quarantineReason || undefined} style={{ marginLeft: '0.35rem' }}>
+              {c.quarantineUntilUtc ? t('until {{time}}', { time: formatRelativeTime(c.quarantineUntilUtc) }) : t('quarantined')}
+            </span>
+          )}
+        </>
+      ),
+    },
+    {
+      key: 'currentMission', label: t('Current Mission'), cellClassName: 'mono text-dim cell-nowrap', interactive: true,
+      cellTitle: (c) => c.currentMissionId ?? undefined,
+      render: (c) => c.currentMissionId ? (
+        <a href="#" onClick={e => { e.preventDefault(); navigate(`/missions/${c.currentMissionId}`); }}>
+          {c.currentMissionId.substring(0, 8)}...
+        </a>
+      ) : '-',
+    },
+    {
+      key: 'heartbeat', label: t('Heartbeat'), cellClassName: 'text-dim cell-nowrap', cellTitle: (c) => formatDateTime(c.lastHeartbeatUtc),
+      render: (c) => formatRelativeTime(c.lastHeartbeatUtc),
+    },
+    {
+      key: 'created', label: t('Created'), sortKey: 'createdUtc', headerTitle: t('Created date -- click to sort'),
+      cellClassName: 'text-dim cell-nowrap', cellTitle: (c) => formatDateTime(c.createdUtc),
+      render: (c) => formatRelativeTime(c.createdUtc),
+    },
+    {
+      key: 'actions', label: t('Actions'), fixed: true, interactive: true, className: 'text-right',
+      render: (c) => (
+        <ActionMenu id={`captain-${c.id}`} items={[
+          { label: 'View Detail', onClick: () => navigate(`/captains/${c.id}`) },
+          ...(canCaptainStartPlanning(c) ? [{ label: 'Start Planning', onClick: () => handleStartPlanning(c) }] : []),
+          { label: 'Edit', onClick: () => openEdit(c) },
+          { label: 'Duplicate', onClick: () => void handleDuplicate(c) },
+          { label: 'View Tools', onClick: () => void handleViewTools(c) },
+          { label: 'View JSON', onClick: () => setJsonData({ open: true, title: `${t('Captain')}: ${c.name}`, data: c }) },
+          { label: 'View Notifications', onClick: () => navigate('/inbox') },
+          { label: 'Stop', onClick: () => handleStop(c.id, c.name) },
+          { label: 'Recall', onClick: () => handleRecall(c.id, c.name) },
+          { label: 'Restart', onClick: () => handleRestart(c.id, c.name) },
+          { label: 'Delete', danger: true, onClick: () => handleDelete(c.id, c.name) },
+        ]} />
+      ),
+    },
+  ];
+
   return (
     <div>
       <PageHeader
@@ -402,8 +474,6 @@ export default function Captains() {
         actions={(
           <>
             <UserScopeFilter value={userScope} onChange={(id) => { setUserScope(id); setPageNumber(1); }} />
-            <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
-            <RefreshButton onRefresh={load} title={t('Refresh captain data')} />
             {selected.length > 0 && (
               <button className="btn btn-sm btn-danger" onClick={handleBulkDelete}>
                 {t('Delete Selected')} ({selected.length})
@@ -533,107 +603,32 @@ export default function Captains() {
       <ConfirmDialog open={confirm.open} title={confirm.title} message={confirm.message}
         onConfirm={confirm.onConfirm} onCancel={() => setConfirm(c => ({ ...c, open: false }))} />
 
-      {loading && captains.length === 0 && <p className="text-dim">{t('Loading...')}</p>}
-      {!loading && captains.length === 0 && <p className="text-dim">{t('No captains configured.')}</p>}
-
-      {captains.length > 0 && (
-        <>
-          <Pagination pageNumber={currentPage} pageSize={pageSize} totalPages={totalPages}
-            totalRecords={sorted.length}
-            onPageChange={p => setPageNumber(p)} onPageSizeChange={s => { setPageSize(s); setPageNumber(1); }} />
-
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th className="col-checkbox">
-                    <input aria-label={t('Select all captains')} type="checkbox" checked={allSelected} onChange={e => e.target.checked ? selectAll() : clearSelection()} title={t('Select all captains')} />
-                  </th>
-                  <th className="sortable" onClick={() => handleSort('name')} title={t('Captain name -- click to sort')}>
-                    {t('Name')}{sortIcon('name')}
-                  </th>
-                  <th>{t('ID')}</th>
-                  <th className="sortable" onClick={() => handleSort('runtime')} title={t('Runtime -- click to sort')}>
-                    {t('Runtime')}{sortIcon('runtime')}
-                  </th>
-                  <th className="sortable" onClick={() => handleSort('state')} title={t('State -- click to sort')}>
-                    {t('State')}{sortIcon('state')}
-                  </th>
-                  <th>{t('Current Mission')}</th>
-                  <th>{t('Heartbeat')}</th>
-                  <th className="sortable" onClick={() => handleSort('createdUtc')} title={t('Created date -- click to sort')}>
-                    {t('Created')}{sortIcon('createdUtc')}
-                  </th>
-                  <th className="text-right">{t('Actions')}</th>
-                </tr>
-                <tr className="column-filter-row">
-                  <td></td>
-                  <td><input type="text" className="col-filter" value={colFilters.name} onChange={e => { setColFilters(f => ({ ...f, name: e.target.value })); setPageNumber(1); }} placeholder={t('Filter...')} /></td>
-                  <td></td>
-                  <td><input type="text" className="col-filter" value={colFilters.runtime} onChange={e => { setColFilters(f => ({ ...f, runtime: e.target.value })); setPageNumber(1); }} placeholder={t('Filter...')} /></td>
-                  <td><input type="text" className="col-filter" value={colFilters.state} onChange={e => { setColFilters(f => ({ ...f, state: e.target.value })); setPageNumber(1); }} placeholder={t('Filter...')} /></td>
-                  <td></td>
-                  <td></td>
-                  <td></td>
-                  <td></td>
-                </tr>
-              </thead>
-              <tbody>
-                {paginated.map(c => (
-                  <tr key={c.id} className="clickable" onClick={() => openEdit(c)}>
-                    <td className="col-checkbox" onClick={e => e.stopPropagation()}>
-                      <input aria-label={t('Select this captain')} type="checkbox" checked={selected.includes(c.id)} onChange={() => toggleSelect(c.id)} title={t('Select this captain')} />
-                    </td>
-                    <td><strong>{c.name}</strong>{c.tier ? <> <CaptainTierBadge tier={c.tier} /></> : null}</td>
-                    <td className="mono text-dim table-id-cell">
-                      <span className="id-display">
-                        <span className="id-value" title={c.id}>{c.id}</span>
-                        <CopyButton text={c.id} onClick={e => e.stopPropagation()} />
-                      </span>
-                    </td>
-                    <td className="text-dim">{c.runtime}</td>
-                    <td>
-                      <StatusBadge status={c.state} />
-                      {c.state === 'Quarantined' && (
-                        <span className="tag stalled" title={c.quarantineReason || undefined} style={{ marginLeft: '0.35rem' }}>
-                          {c.quarantineUntilUtc ? t('until {{time}}', { time: formatRelativeTime(c.quarantineUntilUtc) }) : t('quarantined')}
-                        </span>
-                      )}
-                    </td>
-                    <td className="mono text-dim" onClick={e => e.stopPropagation()}>
-                      {c.currentMissionId ? (
-                        <a href="#" onClick={e => { e.preventDefault(); navigate(`/missions/${c.currentMissionId}`); }}>
-                          {c.currentMissionId.substring(0, 8)}...
-                        </a>
-                      ) : '-'}
-                    </td>
-                    <td className="text-dim" title={formatDateTime(c.lastHeartbeatUtc)}>{formatRelativeTime(c.lastHeartbeatUtc)}</td>
-                    <td className="text-dim" title={formatDateTime(c.createdUtc)}>{formatRelativeTime(c.createdUtc)}</td>
-                    <td className="text-right" onClick={e => e.stopPropagation()}>
-                      <ActionMenu id={`captain-${c.id}`} items={[
-                        { label: 'View Detail', onClick: () => navigate(`/captains/${c.id}`) },
-                        ...(canCaptainStartPlanning(c) ? [{ label: 'Start Planning', onClick: () => handleStartPlanning(c) }] : []),
-                        { label: 'Edit', onClick: () => openEdit(c) },
-                        { label: 'Duplicate', onClick: () => void handleDuplicate(c) },
-                        { label: 'View Tools', onClick: () => void handleViewTools(c) },
-                        { label: 'View JSON', onClick: () => setJsonData({ open: true, title: `${t('Captain')}: ${c.name}`, data: c }) },
-                        { label: 'View Notifications', onClick: () => navigate('/inbox') },
-                        { label: 'Stop', onClick: () => handleStop(c.id, c.name) },
-                        { label: 'Recall', onClick: () => handleRecall(c.id, c.name) },
-                        { label: 'Restart', onClick: () => handleRestart(c.id, c.name) },
-                        { label: 'Delete', danger: true, onClick: () => handleDelete(c.id, c.name) },
-                      ]} />
-                    </td>
-                  </tr>
-                ))}
-                {paginated.length === 0 && (
-                  <tr><td colSpan={9} className="text-dim">{t('No captains match the current filters.')}</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
+      <DataTable
+        tableKey="captains"
+        columns={columns}
+        rows={paginated}
+        rowKey={(c) => c.id}
+        onRowClick={openEdit}
+        sort={{ field: sortField, dir: sortDir, onSort: (field) => handleSort(field as SortField) }}
+        pagination={{
+          pageNumber: currentPage, pageSize, totalPages, totalRecords: sorted.length,
+          onPageChange: (p) => setPageNumber(p),
+          onPageSizeChange: (size) => { setPageSize(size); setPageNumber(1); },
+        }}
+        autoRefresh={{ seconds: refreshSeconds, onChange: setRefreshSeconds }}
+        onRefresh={load}
+        refreshTitle={t('Refresh captain data')}
+        selection={{
+          isSelected: (c) => selected.includes(c.id),
+          onToggle: (c) => toggleSelect(c.id),
+          allSelected,
+          onToggleAll: (checked) => (checked ? selectAll() : clearSelection()),
+          selectAllLabel: t('Select all captains'),
+          rowLabel: () => t('Select this captain'),
+        }}
+        emptyMessage={t('No captains match the current filters.')}
+        placeholder={captains.length > 0 ? undefined : <p className="text-dim">{loading ? t('Loading...') : t('No captains configured.')}</p>}
+      />
     </div>
   );
 }

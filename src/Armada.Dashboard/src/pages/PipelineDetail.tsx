@@ -9,6 +9,7 @@ import PageHeader from '../components/shared/PageHeader';
 import JsonViewer from '../components/shared/JsonViewer';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import CopyButton from '../components/shared/CopyButton';
+import DataTable from '../components/shared/DataTable';
 import ErrorModal from '../components/shared/ErrorModal';
 import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
@@ -369,35 +370,33 @@ export default function PipelineDetail() {
       <div>
         <h3>{t('Stages')}</h3>
         {pipeline.stages.length > 0 ? (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th title={t('Execution order of the stage')}>{t('Order')}</th>
-                  <th title={t('Name of the persona assigned to this stage')}>{t('Persona Name')}</th>
-                  <th title={t('Whether this stage can be skipped')}>{t('Optional')}</th>
-                  <th title={t('Whether this stage requires an explicit review approval')}>{t('Review')}</th>
-                  <th title={t('Action to take if the review gate is denied')}>{t('On Deny')}</th>
-                  <th title={t('Description of this stage')}>{t('Description')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pipeline.stages
-                  .slice()
-                  .sort((a, b) => a.order - b.order)
-                  .map(stage => (
-                    <tr key={stage.id}>
-                      <td>{stage.order}</td>
-                      <td><strong>{stage.personaName}</strong></td>
-                      <td>{stage.isOptional ? <span className="badge badge-info">{t('Yes')}</span> : <span className="badge">{t('No')}</span>}</td>
-                      <td>{stage.requiresReview ? <span className="badge badge-warning">{t('Required')}</span> : <span className="text-dim">{t('None')}</span>}</td>
-                      <td>{stage.requiresReview ? <span>{stage.reviewDenyAction === 'FailPipeline' ? t('Fail pipeline') : t('Retry stage')}</span> : <span className="text-dim">-</span>}</td>
-                      <td className="text-dim">{stage.description || '-'}</td>
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            tableKey="pipeline-detail-stages"
+            rows={pipeline.stages.slice().sort((a, b) => a.order - b.order)}
+            rowKey={(stage) => stage.id}
+            recordCount={null}
+            columns={[
+              { key: 'order', label: t('Order'), required: true, headerTitle: t('Execution order of the stage'), cellClassName: 'cell-nowrap', render: (stage) => stage.order },
+              { key: 'persona', label: t('Persona Name'), required: true, headerTitle: t('Name of the persona assigned to this stage'), cellClassName: 'cell-ident', render: (stage) => <strong>{stage.personaName}</strong> },
+              {
+                key: 'optional', label: t('Optional'), headerTitle: t('Whether this stage can be skipped'), cellClassName: 'cell-nowrap',
+                render: (stage) => stage.isOptional ? <span className="badge badge-info">{t('Yes')}</span> : <span className="badge">{t('No')}</span>,
+              },
+              {
+                key: 'review', label: t('Review'), headerTitle: t('Whether this stage requires an explicit review approval'), cellClassName: 'cell-nowrap',
+                render: (stage) => stage.requiresReview ? <span className="badge badge-warning">{t('Required')}</span> : <span className="text-dim">{t('None')}</span>,
+              },
+              {
+                key: 'onDeny', label: t('On Deny'), headerTitle: t('Action to take if the review gate is denied'), cellClassName: 'cell-nowrap',
+                render: (stage) => stage.requiresReview ? <span>{stage.reviewDenyAction === 'FailPipeline' ? t('Fail pipeline') : t('Retry stage')}</span> : <span className="text-dim">-</span>,
+              },
+              {
+                key: 'description', label: t('Description'), headerTitle: t('Description of this stage'), cellClassName: 'text-dim',
+                cellTitle: (stage) => stage.description || undefined,
+                render: (stage) => <span className="line-clamp-2">{stage.description || '-'}</span>,
+              },
+            ]}
+          />
         ) : (
           <p className="text-dim" style={{ marginTop: '1rem' }}>{t('No stages defined.')}</p>
         )}

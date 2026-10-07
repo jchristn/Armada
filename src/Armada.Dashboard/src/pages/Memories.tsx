@@ -4,12 +4,11 @@ import type { Memory, MemoryType } from '../types/models';
 import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
 import PageHeader from '../components/shared/PageHeader';
-import Pagination from '../components/shared/Pagination';
+import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import JsonViewer from '../components/shared/JsonViewer';
 import ScopeBadge from '../components/shared/ScopeBadge';
 import CopyButton from '../components/shared/CopyButton';
-import RefreshButton from '../components/shared/RefreshButton';
 
 const TYPES: MemoryType[] = ['Episodic', 'Semantic', 'Procedural'];
 
@@ -19,7 +18,7 @@ const TYPES: MemoryType[] = ['Episodic', 'Semantic', 'Procedural'];
  * pruning stale entries. Memories are primarily written by agents over MCP; operators curate here.
  */
 export default function Memories() {
-  const { t, formatRelativeTime } = useLocale();
+  const { t, formatRelativeTime, formatDateTime } = useLocale();
   const { pushToast } = useNotifications();
 
   const [memories, setMemories] = useState<Memory[]>([]);
@@ -64,12 +63,48 @@ export default function Memories() {
     }
   };
 
+  const memorySummary = (m: Memory) => m.summary || m.content;
+
+  const columns: DataTableColumn<Memory>[] = [
+    {
+      key: 'type', label: t('Type'), cellClassName: 'cell-nowrap',
+      render: (m) => <span className={`tag tag-${m.type.toLowerCase()}`}>{t(m.type)}</span>,
+    },
+    { key: 'topic', label: t('Topic'), cellClassName: 'text-dim', render: (m) => m.topic || '-' },
+    {
+      // One line; the full summary (or content) is in the tooltip.
+      key: 'summary', label: t('Summary'), required: true, cellClassName: 'truncate-cell', cellTitle: memorySummary,
+      render: (m) => <span className="truncate-text">{memorySummary(m)}</span>,
+    },
+    { key: 'salience', label: t('Salience'), cellClassName: 'text-dim', render: (m) => m.salience.toFixed(2) },
+    {
+      key: 'vessel', label: t('Vessel'), cellClassName: 'mono text-dim',
+      render: (m) => {
+        const vesselId = m.vesselId || m.sourceVesselId;
+        return vesselId ? <span className="cell-clip" title={vesselId}><span>{vesselId}</span></span> : '-';
+      },
+    },
+    { key: 'visibility', label: t('Visibility'), render: (m) => <ScopeBadge scope={m.scope} /> },
+    {
+      key: 'updated', label: t('Updated'), cellClassName: 'text-dim cell-nowrap', cellTitle: (m) => formatDateTime(m.lastUpdateUtc),
+      render: (m) => formatRelativeTime(m.lastUpdateUtc),
+    },
+    {
+      key: 'actions', label: t('Actions'), fixed: true, interactive: true, className: 'text-right',
+      render: (m) => (
+        <span className="id-display">
+          <CopyButton text={m.id} />
+          <button className="btn-danger btn-sm" onClick={() => setConfirm({ open: true, id: m.id })}>{t('Delete')}</button>
+        </span>
+      ),
+    },
+  ];
+
   return (
     <div>
       <PageHeader
         title={t('Memory')}
         subtitle={t('Durable memories distilled from voyages: episodic, semantic, and procedural.')}
-        actions={<RefreshButton onRefresh={load} />}
       />
 
       <div className="filter-bar" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', margin: '0.5rem 0' }}>
@@ -99,57 +134,22 @@ export default function Memories() {
         onCancel={() => setConfirm({ open: false, id: '' })}
       />
 
-      {loading && memories.length === 0 && <p className="text-dim">{t('Loading...')}</p>}
-      {!loading && memories.length === 0 && <p className="text-dim">{t('No memories recorded yet.')}</p>}
-
-      {memories.length > 0 && (
-        <>
-          <Pagination
-            pageNumber={pageNumber}
-            pageSize={pageSize}
-            totalPages={totalPages}
-            totalRecords={totalRecords}
-            onPageChange={setPageNumber}
-            onPageSizeChange={s => { setPageSize(s); setPageNumber(1); }}
-          />
-
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>{t('Type')}</th>
-                  <th>{t('Topic')}</th>
-                  <th>{t('Summary')}</th>
-                  <th>{t('Salience')}</th>
-                  <th>{t('Vessel')}</th>
-                  <th>{t('Visibility')}</th>
-                  <th>{t('Updated')}</th>
-                  <th className="text-right">{t('Actions')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {memories.map(m => (
-                  <tr key={m.id} className="clickable" onClick={() => setJsonData({ open: true, title: `${t('Memory')}: ${m.id}`, data: m })}>
-                    <td><span className={`tag tag-${m.type.toLowerCase()}`}>{t(m.type)}</span></td>
-                    <td className="text-dim">{m.topic || '-'}</td>
-                    <td>{m.summary || (m.content.length > 80 ? `${m.content.slice(0, 80)}...` : m.content)}</td>
-                    <td className="text-dim">{m.salience.toFixed(2)}</td>
-                    <td className="mono text-dim">{m.vesselId || m.sourceVesselId || '-'}</td>
-                    <td><ScopeBadge scope={m.scope} /></td>
-                    <td className="text-dim">{formatRelativeTime(m.lastUpdateUtc)}</td>
-                    <td className="text-right" onClick={e => e.stopPropagation()}>
-                      <span className="id-display">
-                        <CopyButton text={m.id} />
-                        <button className="btn-danger btn-sm" onClick={() => setConfirm({ open: true, id: m.id })}>{t('Delete')}</button>
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
+      <DataTable
+        tableKey="memories"
+        columns={columns}
+        rows={memories}
+        rowKey={(m) => m.id}
+        onRowClick={(m) => setJsonData({ open: true, title: `${t('Memory')}: ${m.id}`, data: m })}
+        pagination={{
+          pageNumber, pageSize, totalPages, totalRecords,
+          onPageChange: setPageNumber,
+          onPageSizeChange: (s) => { setPageSize(s); setPageNumber(1); },
+        }}
+        onRefresh={load}
+        placeholder={memories.length > 0 ? undefined : loading
+          ? <p className="text-dim">{t('Loading...')}</p>
+          : <p className="text-dim">{t('No memories recorded yet.')}</p>}
+      />
     </div>
   );
 }
