@@ -1,6 +1,8 @@
 namespace Armada.Proxy.Services
 {
     using System.Collections.Concurrent;
+    using System.Security.Cryptography;
+    using System.Text;
     using Armada.Core;
     using Armada.Proxy.Settings;
 
@@ -119,7 +121,7 @@ namespace Armada.Proxy.Services
                 Token = RemoteTunnelAuth.CreateNonce(24),
                 ExpiresUtc = _UtcNow().AddHours(Constants.SessionTokenLifetimeHours)
             };
-            _Sessions[session.Token] = session;
+            _Sessions[HashToken(session.Token)] = session;
             return true;
         }
 
@@ -152,14 +154,15 @@ namespace Armada.Proxy.Services
                 return false;
             }
 
-            if (!_Sessions.TryGetValue(normalizedToken, out ProxyBrowserSession? existingSession))
+            string key = HashToken(normalizedToken);
+            if (!_Sessions.TryGetValue(key, out ProxyBrowserSession? existingSession))
             {
                 return false;
             }
 
             if (existingSession.ExpiresUtc <= _UtcNow())
             {
-                _Sessions.TryRemove(normalizedToken, out ProxyBrowserSession? _);
+                _Sessions.TryRemove(key, out ProxyBrowserSession? _);
                 return false;
             }
 
@@ -183,7 +186,7 @@ namespace Armada.Proxy.Services
             string? normalizedInstanceId = String.IsNullOrWhiteSpace(instanceId) ? null : instanceId.Trim();
             ProxyBrowserSession updated = Clone(existingSession!);
             updated.SelectedInstanceId = normalizedInstanceId;
-            _Sessions[normalizedToken] = updated;
+            _Sessions[HashToken(normalizedToken)] = updated;
             session = Clone(updated);
             return true;
         }
@@ -198,7 +201,7 @@ namespace Armada.Proxy.Services
                 return;
             }
 
-            _Sessions.TryRemove(sessionToken.Trim(), out ProxyBrowserSession? _);
+            _Sessions.TryRemove(HashToken(sessionToken.Trim()), out ProxyBrowserSession? _);
         }
 
         #endregion
@@ -208,6 +211,8 @@ namespace Armada.Proxy.Services
         private readonly ProxySettings _Settings;
         private readonly Func<DateTime> _UtcNow;
         private readonly ConcurrentDictionary<string, DateTime> _Challenges = new ConcurrentDictionary<string, DateTime>(StringComparer.Ordinal);
+        // Keyed by the SHA-256 of the token, so a lookup compares digests of the presented value rather than the raw
+        // secret (no timing signal about a real token's prefix) and the raw tokens are not held as dictionary keys.
         private readonly ConcurrentDictionary<string, ProxyBrowserSession> _Sessions = new ConcurrentDictionary<string, ProxyBrowserSession>(StringComparer.Ordinal);
 
         #endregion
@@ -247,7 +252,7 @@ namespace Armada.Proxy.Services
                 return false;
             }
 
-            if (!_Sessions.TryGetValue(normalizedToken, out ProxyBrowserSession? existingSession))
+            if (!_Sessions.TryGetValue(HashToken(normalizedToken), out ProxyBrowserSession? existingSession))
             {
                 error = "Proxy session is invalid or expired.";
                 return false;
@@ -255,13 +260,18 @@ namespace Armada.Proxy.Services
 
             if (existingSession.ExpiresUtc <= _UtcNow())
             {
-                _Sessions.TryRemove(normalizedToken, out ProxyBrowserSession? _);
+                _Sessions.TryRemove(HashToken(normalizedToken), out ProxyBrowserSession? _);
                 error = "Proxy session is invalid or expired.";
                 return false;
             }
 
             session = existingSession;
             return true;
+        }
+
+        private static string HashToken(string token)
+        {
+            return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token)));
         }
 
         private static ProxyBrowserSession Clone(ProxyBrowserSession source)

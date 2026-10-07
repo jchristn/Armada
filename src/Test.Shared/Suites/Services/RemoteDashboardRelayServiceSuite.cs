@@ -283,6 +283,33 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(404, missingSession.StatusCode, "Closed websocket sessions should be removed from relay state");
             }));
 
+            cases.Add(CaseAsync("handle_async_web_socket_open_drops_proxy_session_subprotocol", "HandleAsync WebSocketOpenDropsProxySessionSubprotocol", TestTags.Negative, async () =>
+            {
+                await using LoopbackRelayHost host = await LoopbackRelayHost.StartAsync().ConfigureAwait(false);
+                RelayEventCollector collector = new RelayEventCollector();
+                await using RemoteDashboardRelayService service = new RemoteDashboardRelayService(
+                    CreateLogging(),
+                    CreateSettings(host.Port),
+                    collector.RecordAsync);
+
+                RemoteTunnelRequestResult openResult = await service.HandleAsync(
+                    RemoteTunnelProtocol.CreateRequest(
+                        "armada.ws.open",
+                        new RemoteTunnelWebSocketOpenRequest
+                        {
+                            ProxySocketId = "sock-proto",
+                            Path = "/ws",
+                            Subprotocols = "armada, armada-token.YWRtaXJhbA, " + Constants.ProxySessionProtocolPrefix + "cHJveHk"
+                        }),
+                    CancellationToken.None).ConfigureAwait(false);
+                AssertEqual(200, openResult.StatusCode, "WebSocket open should succeed");
+
+                string? offered = await host.WaitForWebSocketProtocolsAsync().ConfigureAwait(false);
+                AssertNotNull(offered, "the local /ws upgrade should be observed");
+                AssertContains("armada-token.YWRtaXJhbA", offered!, "the Admiral's own token entry is relayed");
+                AssertFalse(offered!.Contains(Constants.ProxySessionProtocolPrefix, StringComparison.OrdinalIgnoreCase), "a proxy session entry must never reach the local /ws upgrade: " + offered);
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
                 displayName: "Remote Dashboard Relay Service",
@@ -401,6 +428,20 @@ namespace Test.Shared.Suites.Services
 
             public int Port { get; }
 
+            private readonly ConcurrentQueue<string> _WebSocketProtocols = new ConcurrentQueue<string>();
+
+            public async Task<string?> WaitForWebSocketProtocolsAsync(int timeoutMs = 5000)
+            {
+                MonotonicDeadline deadline = MonotonicDeadline.After(TimeSpan.FromMilliseconds(timeoutMs));
+                while (!deadline.Passed)
+                {
+                    if (_WebSocketProtocols.TryPeek(out string? value)) return value;
+                    await Task.Delay(20).ConfigureAwait(false);
+                }
+
+                return null;
+            }
+
             public static Task<LoopbackRelayHost> StartAsync()
             {
                 return Task.FromResult(new LoopbackRelayHost(ReservePort()));
@@ -457,6 +498,7 @@ namespace Test.Shared.Suites.Services
                 if (context.Request.IsWebSocketRequest &&
                     String.Equals(context.Request.Url?.AbsolutePath, "/ws", StringComparison.OrdinalIgnoreCase))
                 {
+                    _WebSocketProtocols.Enqueue(context.Request.Headers["Sec-WebSocket-Protocol"] ?? String.Empty);
                     HttpListenerWebSocketContext socketContext = await context.AcceptWebSocketAsync(null).ConfigureAwait(false);
                     await HandleWebSocketAsync(socketContext.WebSocket, token).ConfigureAwait(false);
                     return;

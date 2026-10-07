@@ -53,6 +53,14 @@ namespace Armada.Client
         public string? ApiKey { get; set; } = null;
 
         /// <summary>
+        /// Armada.Proxy session token (the <c>token</c> returned by <c>POST /proxy-api/v1/auth/login</c>), sent as the
+        /// <c>X-Armada-Proxy-Session</c> header when <see cref="BaseUrl"/> points at an Armada.Proxy. The proxy consumes
+        /// it and never relays it; the Admiral credential (<see cref="Token"/>, <see cref="BearerToken"/>, or
+        /// <see cref="ApiKey"/>) is relayed to the selected deployment. Null sends no proxy header.
+        /// </summary>
+        public string? ProxySessionToken { get; set; } = null;
+
+        /// <summary>
         /// Default request timeout in milliseconds. Default 30000 (the dashboard default). Minimum 1000, maximum
         /// 3600000 (one hour); values outside the range are clamped. Individual calls that the dashboard runs with a
         /// longer timeout (planning, chat, checks, imports) override this per call.

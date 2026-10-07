@@ -14,9 +14,11 @@ namespace Test.Shared.Suites.Services
     using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
+    using Armada.Client;
     using Armada.Core;
     using Armada.Core.Models;
     using Armada.Proxy;
+    using Armada.Proxy.Services;
     using Armada.Proxy.Settings;
     using SyslogLogging;
     using Test.Shared.Infrastructure;
@@ -252,6 +254,250 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("native_bearer_session_login_select_relay_and_websocket", "NativeBearerSessionLoginSelectRelayAndWebSocket", TestTags.Positive, async () =>
+            {
+                ProxyTestHarness harness = await ProxyTestHarness.StartAsync().WaitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false);
+                try
+                {
+                    NativeLoginResult login = await harness.NativeLoginAsync().WaitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false);
+                    AssertEqual(HttpStatusCode.OK, login.Response.StatusCode, "native login should succeed");
+                    string proxyToken = login.Body?.Token ?? String.Empty;
+                    AssertFalse(String.IsNullOrWhiteSpace(proxyToken), "login body should carry the proxy session token");
+                    AssertTrue(login.Response.Headers.CacheControl?.NoStore == true, "a response carrying a session token should be Cache-Control: no-store");
+
+                    Dictionary<string, string> bearer = new Dictionary<string, string> { ["Authorization"] = "Bearer " + proxyToken };
+
+                    HttpResponseMessage instancesResponse = await harness.SendNativeAsync(HttpMethod.Get, "/proxy-api/v1/instances", bearer).ConfigureAwait(false);
+                    AssertEqual(HttpStatusCode.OK, instancesResponse.StatusCode, "Authorization: Bearer <proxy token> should list instances");
+                    InstancesBody instances = await ReadBodyAsync<InstancesBody>(instancesResponse).ConfigureAwait(false);
+                    AssertEqual(1, instances.Count, "one tunneled instance should be visible");
+                    AssertEqual("smoke-instance", instances.Instances[0].InstanceId, "instance id should match the fake tunnel");
+
+                    HttpResponseMessage selectResponse = await harness.SendNativeAsync(HttpMethod.Post, "/proxy-api/v1/session/instance", bearer, new { instanceId = "smoke-instance" }).ConfigureAwait(false);
+                    AssertEqual(HttpStatusCode.OK, selectResponse.StatusCode, "selection with a bearer session should succeed");
+
+                    HttpResponseMessage contextResponse = await harness.SendNativeAsync(HttpMethod.Get, "/proxy-api/v1/session/context", bearer).ConfigureAwait(false);
+                    AssertEqual(HttpStatusCode.OK, contextResponse.StatusCode, "session context with a bearer session");
+                    SessionContextBody context = await ReadBodyAsync<SessionContextBody>(contextResponse).ConfigureAwait(false);
+                    AssertEqual("smoke-instance", context.SelectedInstanceId, "the selection is bound to the bearer session server-side");
+
+                    // Relayed REST: the proxy session rides in X-Armada-Proxy-Session; Authorization belongs to the Admiral.
+                    HttpResponseMessage relayedGet = await harness.SendNativeAsync(HttpMethod.Get, "/api/v1/status/health", new Dictionary<string, string>
+                    {
+                        [Constants.ProxySessionTokenHeader] = proxyToken,
+                        ["Authorization"] = "Bearer admiral-bearer-token"
+                    }).ConfigureAwait(false);
+                    AssertEqual(HttpStatusCode.OK, relayedGet.StatusCode, "relayed GET with the proxy header should succeed");
+                    Dictionary<string, string> getHeaders = harness.Tunnel.GetLastHeaders("/api/v1/status/health");
+                    AssertEqual("Bearer admiral-bearer-token", getHeaders.GetValueOrDefault("Authorization"), "the Admiral's Authorization header is relayed untouched");
+                    AssertFalse(getHeaders.ContainsKey(Constants.ProxySessionTokenHeader), "the proxy session header must not be relayed to the Admiral");
+
+                    HttpResponseMessage relayedPost = await harness.SendNativeAsync(HttpMethod.Post, "/api/v1/planning-sessions", new Dictionary<string, string>
+                    {
+                        [Constants.ProxySessionTokenHeader] = proxyToken,
+                        ["X-Token"] = "admiral-session-token"
+                    }, new { title = "Native plan" }).ConfigureAwait(false);
+                    AssertEqual(HttpStatusCode.Created, relayedPost.StatusCode, "relayed POST with the proxy header should succeed");
+                    Dictionary<string, string> postHeaders = harness.Tunnel.GetLastHeaders("/api/v1/planning-sessions");
+                    AssertEqual("admiral-session-token", postHeaders.GetValueOrDefault("X-Token"), "the Admiral's X-Token is relayed untouched");
+                    AssertFalse(postHeaders.ContainsKey(Constants.ProxySessionTokenHeader), "the proxy session header must not be relayed on POST");
+
+                    // Relayed WebSocket: the proxy token as a subprotocol entry; the Admiral token as armada-token.<base64url>.
+                    string admiralEntry = "armada-token." + Base64Url("admiral-session-token");
+                    using (ClientWebSocket socket = await harness.ConnectNativeWebSocketAsync(new[]
+                    {
+                        "armada",
+                        admiralEntry,
+                        ProxySessionCredentials.EncodeProtocolEntry(proxyToken)
+                    }).WaitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false))
+                    {
+                        await SendWebSocketTextAsync(socket, "native hello").ConfigureAwait(false);
+                        AssertEqual("echo:native hello", await ReceiveWebSocketTextAsync(socket).ConfigureAwait(false), "the subprotocol-authenticated socket should relay traffic");
+                    }
+
+                    RemoteTunnelWebSocketOpenRequest open = harness.Tunnel.GetOpenRequests().Last();
+                    AssertNotNull(open.Subprotocols, "the Admiral's subprotocol entries should be relayed");
+                    AssertContains(admiralEntry, open.Subprotocols!, "the armada-token entry reaches the Admiral");
+                    AssertFalse(open.Subprotocols!.Contains(Constants.ProxySessionProtocolPrefix, StringComparison.OrdinalIgnoreCase), "the proxy session entry must not reach the Admiral: " + open.Subprotocols);
+                    AssertFalse(open.Subprotocols!.Contains(Base64Url(proxyToken), StringComparison.Ordinal), "the proxy token must not reach the Admiral in any form");
+
+                    // The dedicated header also works on the upgrade (React Native's WebSocket can set headers); the
+                    // query string stays the Admiral's.
+                    using (ClientWebSocket socket = await harness.ConnectNativeWebSocketAsync(
+                        null,
+                        new Dictionary<string, string> { [Constants.ProxySessionTokenHeader] = proxyToken },
+                        "?token=admiral-session-token").WaitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false))
+                    {
+                        await SendWebSocketTextAsync(socket, "header hello").ConfigureAwait(false);
+                        AssertEqual("echo:header hello", await ReceiveWebSocketTextAsync(socket).ConfigureAwait(false), "the header-authenticated socket should relay traffic");
+                    }
+
+                    AssertEqual("token=admiral-session-token", harness.Tunnel.GetOpenRequests().Last().QueryString, "the Admiral's query token is relayed untouched");
+                }
+                finally
+                {
+                    await harness.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+                }
+            }));
+
+            cases.Add(CaseAsync("native_bearer_logout_invalidates_token", "NativeBearerLogoutInvalidatesToken", TestTags.Negative, async () =>
+            {
+                ProxyTestHarness harness = await ProxyTestHarness.StartAsync().WaitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false);
+                try
+                {
+                    NativeLoginResult login = await harness.NativeLoginAsync().WaitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false);
+                    string proxyToken = login.Body?.Token ?? String.Empty;
+                    Dictionary<string, string> bearer = new Dictionary<string, string> { ["Authorization"] = "Bearer " + proxyToken };
+                    HttpResponseMessage select = await harness.SendNativeAsync(HttpMethod.Post, "/proxy-api/v1/session/instance", bearer, new { instanceId = "smoke-instance" }).ConfigureAwait(false);
+                    AssertEqual(HttpStatusCode.OK, select.StatusCode, "selection before logout");
+
+                    HttpResponseMessage logout = await harness.SendNativeAsync(HttpMethod.Post, "/proxy-api/v1/auth/logout", bearer).ConfigureAwait(false);
+                    AssertEqual(HttpStatusCode.OK, logout.StatusCode, "bearer logout should succeed");
+
+                    HttpResponseMessage instances = await harness.SendNativeAsync(HttpMethod.Get, "/proxy-api/v1/instances", bearer).ConfigureAwait(false);
+                    AssertEqual(HttpStatusCode.Unauthorized, instances.StatusCode, "a logged-out bearer token is rejected on /proxy-api");
+
+                    HttpResponseMessage relayed = await harness.SendNativeAsync(HttpMethod.Get, "/api/v1/status/health", new Dictionary<string, string> { [Constants.ProxySessionTokenHeader] = proxyToken }).ConfigureAwait(false);
+                    AssertEqual(HttpStatusCode.Unauthorized, relayed.StatusCode, "a logged-out token is rejected on relayed routes");
+
+                    using ClientWebSocket socket = await harness.ConnectNativeWebSocketAsync(new[] { ProxySessionCredentials.EncodeProtocolEntry(proxyToken) }).WaitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false);
+                    AssertTrue(await WaitForWebSocketCloseAsync(socket).ConfigureAwait(false), "a logged-out token is rejected on /ws");
+                    AssertEqual(0, harness.Tunnel.GetOpenRequests().Count, "no websocket should be opened on the Admiral for a logged-out token");
+                }
+                finally
+                {
+                    await harness.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+                }
+            }));
+
+            cases.Add(CaseAsync("native_bearer_expired_token_rejected", "NativeBearerExpiredTokenRejected", TestTags.Negative, async () =>
+            {
+                ManualClock clock = new ManualClock(DateTime.UtcNow);
+                ProxyTestHarness harness = await ProxyTestHarness.StartAsync(utcNow: clock.Now).WaitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false);
+                try
+                {
+                    NativeLoginResult login = await harness.NativeLoginAsync().WaitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false);
+                    string proxyToken = login.Body?.Token ?? String.Empty;
+                    Dictionary<string, string> bearer = new Dictionary<string, string> { ["Authorization"] = "Bearer " + proxyToken };
+                    HttpResponseMessage select = await harness.SendNativeAsync(HttpMethod.Post, "/proxy-api/v1/session/instance", bearer, new { instanceId = "smoke-instance" }).ConfigureAwait(false);
+                    AssertEqual(HttpStatusCode.OK, select.StatusCode, "selection before expiry");
+
+                    clock.Advance(TimeSpan.FromHours(Constants.SessionTokenLifetimeHours).Add(TimeSpan.FromMinutes(1)));
+
+                    HttpResponseMessage instances = await harness.SendNativeAsync(HttpMethod.Get, "/proxy-api/v1/instances", bearer).ConfigureAwait(false);
+                    AssertEqual(HttpStatusCode.Unauthorized, instances.StatusCode, "an expired bearer token is rejected on /proxy-api");
+
+                    HttpResponseMessage relayed = await harness.SendNativeAsync(HttpMethod.Get, "/api/v1/status/health", new Dictionary<string, string> { [Constants.ProxySessionTokenHeader] = proxyToken }).ConfigureAwait(false);
+                    AssertEqual(HttpStatusCode.Unauthorized, relayed.StatusCode, "an expired token is rejected on relayed routes");
+                    AssertEqual(0, harness.Tunnel.GetRequestCount("/api/v1/status/health"), "nothing is relayed for an expired token");
+                }
+                finally
+                {
+                    await harness.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+                }
+            }));
+
+            cases.Add(CaseAsync("native_login_lockout_applies", "NativeLoginLockoutApplies", TestTags.Negative, async () =>
+            {
+                ProxyTestHarness harness = await ProxyTestHarness.StartAsync(configure: settings =>
+                {
+                    settings.LoginMaxFailures = 3;
+                    settings.LoginLockoutSeconds = 120;
+                }).WaitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false);
+                try
+                {
+                    for (int i = 0; i < 3; i++)
+                    {
+                        NativeLoginResult bad = await harness.NativeLoginAsync("wrong-password").WaitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false);
+                        AssertEqual(HttpStatusCode.Unauthorized, bad.Response.StatusCode, "failed native login " + (i + 1));
+                    }
+
+                    NativeLoginResult locked = await harness.NativeLoginAsync().WaitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false);
+                    AssertEqual((HttpStatusCode)429, locked.Response.StatusCode, "a locked-out native client gets 429 even with the right password");
+                    AssertNull(locked.Body, "no session token is issued while locked out");
+                }
+                finally
+                {
+                    await harness.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+                }
+            }));
+
+            cases.Add(CaseAsync("proxy_and_admiral_credentials_are_separated", "ProxyAndAdmiralCredentialsAreSeparated", TestTags.Negative, async () =>
+            {
+                ProxyTestHarness harness = await ProxyTestHarness.StartAsync().WaitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false);
+                try
+                {
+                    NativeLoginResult login = await harness.NativeLoginAsync().WaitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false);
+                    string proxyToken = login.Body?.Token ?? String.Empty;
+                    HttpResponseMessage select = await harness.SendNativeAsync(HttpMethod.Post, "/proxy-api/v1/session/instance", new Dictionary<string, string> { [Constants.ProxySessionTokenHeader] = proxyToken }, new { instanceId = "smoke-instance" }).ConfigureAwait(false);
+                    AssertEqual(HttpStatusCode.OK, select.StatusCode, "selection with the dedicated header");
+
+                    // On relayed routes Authorization is the Admiral's: even a valid proxy token there is not a proxy session.
+                    HttpResponseMessage bearerOnRelay = await harness.SendNativeAsync(HttpMethod.Get, "/api/v1/separation-probe", new Dictionary<string, string> { ["Authorization"] = "Bearer " + proxyToken }).ConfigureAwait(false);
+                    AssertEqual(HttpStatusCode.Unauthorized, bearerOnRelay.StatusCode, "Authorization on a relayed route is never read as the proxy session");
+                    AssertEqual(0, harness.Tunnel.GetRequestCount("/api/v1/separation-probe"), "nothing is relayed without a proxy session");
+
+                    // On /ws an armada-token entry is the Admiral's, never the proxy's.
+                    using (ClientWebSocket socket = await harness.ConnectNativeWebSocketAsync(new[] { "armada-token." + Base64Url(proxyToken) }).WaitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false))
+                    {
+                        AssertTrue(await WaitForWebSocketCloseAsync(socket).ConfigureAwait(false), "an armada-token entry is not a proxy session");
+                    }
+
+                    // An Admiral credential on /proxy-api is simply not a valid proxy session.
+                    HttpResponseMessage admiralOnProxyApi = await harness.SendNativeAsync(HttpMethod.Get, "/proxy-api/v1/instances", new Dictionary<string, string> { ["Authorization"] = "Bearer admiral-bearer-token" }).ConfigureAwait(false);
+                    AssertEqual(HttpStatusCode.Unauthorized, admiralOnProxyApi.StatusCode, "an Admiral token is not a proxy session");
+
+                    // The dedicated header wins over Authorization on /proxy-api; an invalid header does not fall back.
+                    HttpResponseMessage headerWins = await harness.SendNativeAsync(HttpMethod.Get, "/proxy-api/v1/instances", new Dictionary<string, string>
+                    {
+                        [Constants.ProxySessionTokenHeader] = "not-a-session",
+                        ["Authorization"] = "Bearer " + proxyToken
+                    }).ConfigureAwait(false);
+                    AssertEqual(HttpStatusCode.Unauthorized, headerWins.StatusCode, "a present X-Armada-Proxy-Session is authoritative");
+
+                    // Browser flow: the proxy cookie stays at the proxy.
+                    await harness.LoginAsync().WaitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false);
+                    await harness.SelectInstanceAsync("smoke-instance").WaitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false);
+                    HttpResponseMessage cookieRelay = await harness.Browser.GetAsync("/api/v1/cookie-probe").ConfigureAwait(false);
+                    AssertEqual(HttpStatusCode.OK, cookieRelay.StatusCode, "cookie-authenticated relay still works");
+                    Dictionary<string, string> cookieHeaders = harness.Tunnel.GetLastHeaders("/api/v1/cookie-probe");
+                    AssertFalse(cookieHeaders.ContainsKey("Cookie"), "the proxy session cookie must not be relayed to the Admiral");
+                }
+                finally
+                {
+                    await harness.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+                }
+            }));
+
+            cases.Add(CaseAsync("armada_client_proxy_session_token_option", "ArmadaClientProxySessionTokenOption", TestTags.Positive, async () =>
+            {
+                ProxyTestHarness harness = await ProxyTestHarness.StartAsync().WaitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false);
+                try
+                {
+                    NativeLoginResult login = await harness.NativeLoginAsync().WaitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false);
+                    string proxyToken = login.Body?.Token ?? String.Empty;
+
+                    using (ArmadaClient anonymous = new ArmadaClient(new ArmadaClientOptions("http://127.0.0.1:" + harness.Port)))
+                    {
+                        AssertNull(await anonymous.GetProxySessionContextAsync().ConfigureAwait(false), "no proxy session without the option");
+                    }
+
+                    ArmadaClientOptions options = new ArmadaClientOptions("http://127.0.0.1:" + harness.Port)
+                    {
+                        ProxySessionToken = proxyToken,
+                        Token = "admiral-session-token"
+                    };
+                    using (ArmadaClient client = new ArmadaClient(options))
+                    {
+                        AssertNotNull(await client.GetProxySessionContextAsync().ConfigureAwait(false), "ProxySessionToken authenticates to the proxy");
+                    }
+                }
+                finally
+                {
+                    await harness.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+                }
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
                 displayName: "Proxy Dashboard Relay Integration",
@@ -261,6 +507,22 @@ namespace Test.Shared.Suites.Services
         #endregion
 
         #region Private-Methods
+
+        private static readonly JsonSerializerOptions _JsonOptions = new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true
+        };
+
+        private static async Task<T> ReadBodyAsync<T>(HttpResponseMessage response) where T : class, new()
+        {
+            string text = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            return JsonSerializer.Deserialize<T>(text, _JsonOptions) ?? new T();
+        }
+
+        private static string Base64Url(string value)
+        {
+            return Convert.ToBase64String(Encoding.UTF8.GetBytes(value)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+        }
 
         private static async Task SendWebSocketTextAsync(ClientWebSocket socket, string text)
         {
@@ -340,6 +602,72 @@ namespace Test.Shared.Suites.Services
                 tags: new List<string> { tag });
         }
 
+        private sealed class ChallengeBody
+        {
+            public string? Nonce { get; set; }
+        }
+
+        private sealed class LoginBody
+        {
+            public string? Token { get; set; }
+
+            public DateTime ExpiresUtc { get; set; }
+
+            public string? SelectedInstanceId { get; set; }
+        }
+
+        private sealed class InstancesBody
+        {
+            public int Count { get; set; }
+
+            public List<InstanceBody> Instances { get; set; } = new List<InstanceBody>();
+        }
+
+        private sealed class InstanceBody
+        {
+            public string? InstanceId { get; set; }
+
+            public string? State { get; set; }
+        }
+
+        private sealed class SessionContextBody
+        {
+            public string? SelectedInstanceId { get; set; }
+        }
+
+        private sealed class NativeLoginResult
+        {
+            public NativeLoginResult(HttpResponseMessage response, LoginBody? body)
+            {
+                Response = response;
+                Body = body;
+            }
+
+            public HttpResponseMessage Response { get; }
+
+            public LoginBody? Body { get; }
+        }
+
+        private sealed class ManualClock
+        {
+            private long _Ticks;
+
+            public ManualClock(DateTime startUtc)
+            {
+                _Ticks = startUtc.Ticks;
+            }
+
+            public DateTime Now()
+            {
+                return new DateTime(Interlocked.Read(ref _Ticks), DateTimeKind.Utc);
+            }
+
+            public void Advance(TimeSpan by)
+            {
+                Interlocked.Add(ref _Ticks, by.Ticks);
+            }
+        }
+
         private sealed class ProxyTestHarness : IAsyncDisposable
         {
             private readonly Uri _BaseUri;
@@ -363,6 +691,11 @@ namespace Test.Shared.Suites.Services
                 _BaseUri = baseUri;
                 _Logging = logging;
                 _DataDirectory = dataDirectory;
+                Native = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false })
+                {
+                    BaseAddress = baseUri,
+                    Timeout = TimeSpan.FromSeconds(15)
+                };
             }
 
             public ArmadaProxyServer Proxy { get; }
@@ -371,7 +704,17 @@ namespace Test.Shared.Suites.Services
 
             public HttpClient Browser { get; }
 
-            public static async Task<ProxyTestHarness> StartAsync(IEnumerable<string>? tunnelCapabilities = null)
+            /// <summary>
+            /// Native-app style client: no cookie jar, every credential is an explicit header.
+            /// </summary>
+            public HttpClient Native { get; }
+
+            public int Port => _BaseUri.Port;
+
+            public static async Task<ProxyTestHarness> StartAsync(
+                IEnumerable<string>? tunnelCapabilities = null,
+                Action<ProxySettings>? configure = null,
+                Func<DateTime>? utcNow = null)
             {
                 EnsureStaticProxyAssets();
 
@@ -388,10 +731,11 @@ namespace Test.Shared.Suites.Services
                     DataDirectory = dataDirectory,
                     LogDirectory = Path.Combine(dataDirectory, "logs")
                 };
+                configure?.Invoke(settings);
                 settings.InitializeDirectories();
 
                 LoggingModule logging = CreateLogging();
-                ArmadaProxyServer proxy = new ArmadaProxyServer(logging, settings, quiet: true);
+                ArmadaProxyServer proxy = new ArmadaProxyServer(logging, settings, quiet: true, utcNow: utcNow);
                 await proxy.StartAsync().ConfigureAwait(false);
 
                 FakeTunnelClient tunnel = new FakeTunnelClient(port, password, "smoke-instance", tunnelCapabilities);
@@ -500,8 +844,61 @@ namespace Test.Shared.Suites.Services
                 throw new TimeoutException("Timed out waiting for connected instance " + instanceId + ".");
             }
 
+            /// <summary>
+            /// Sign in like a native client: challenge, proof, and the session token from the JSON body.
+            /// </summary>
+            public async Task<NativeLoginResult> NativeLoginAsync(string password = "proxy-smoke-password")
+            {
+                HttpResponseMessage challengeResponse = await Native.GetAsync("/proxy-api/v1/auth/challenge").ConfigureAwait(false);
+                ChallengeBody challenge = await ReadBodyAsync<ChallengeBody>(challengeResponse).ConfigureAwait(false);
+                string proof = RemoteTunnelAuth.ComputeBrowserLoginProof(password, challenge.Nonce ?? String.Empty);
+                HttpResponseMessage response = await Native.PostAsync("/proxy-api/v1/auth/login", CreateJsonContent(new
+                {
+                    nonce = challenge.Nonce,
+                    proofSha256 = proof
+                })).ConfigureAwait(false);
+                string text = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                LoginBody? body = (int)response.StatusCode == 200 ? JsonSerializer.Deserialize<LoginBody>(text, _JsonOptions) : null;
+                return new NativeLoginResult(response, body);
+            }
+
+            public Task<HttpResponseMessage> SendNativeAsync(HttpMethod method, string path, Dictionary<string, string>? headers = null, object? body = null)
+            {
+                HttpRequestMessage request = new HttpRequestMessage(method, path);
+                foreach (KeyValuePair<string, string> header in headers ?? new Dictionary<string, string>())
+                {
+                    request.Headers.TryAddWithoutValidation(header.Key, header.Value);
+                }
+
+                if (body != null)
+                {
+                    request.Content = CreateJsonContent(body);
+                }
+
+                return Native.SendAsync(request);
+            }
+
+            public async Task<ClientWebSocket> ConnectNativeWebSocketAsync(IEnumerable<string>? subprotocols, Dictionary<string, string>? headers = null, string? query = null)
+            {
+                ClientWebSocket socket = new ClientWebSocket();
+                foreach (string protocol in subprotocols ?? Array.Empty<string>())
+                {
+                    socket.Options.AddSubProtocol(protocol);
+                }
+
+                foreach (KeyValuePair<string, string> header in headers ?? new Dictionary<string, string>())
+                {
+                    socket.Options.SetRequestHeader(header.Key, header.Value);
+                }
+
+                using CancellationTokenSource connectTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                await socket.ConnectAsync(new Uri("ws://127.0.0.1:" + _BaseUri.Port + "/ws" + (query ?? String.Empty)), connectTimeout.Token).ConfigureAwait(false);
+                return socket;
+            }
+
             public async ValueTask DisposeAsync()
             {
+                Native.Dispose();
                 Browser.Dispose();
                 await Tunnel.DisposeAsync().ConfigureAwait(false);
                 Proxy.Dispose();
@@ -547,6 +944,8 @@ namespace Test.Shared.Suites.Services
             private readonly List<string> _Capabilities;
             private readonly ConcurrentDictionary<string, int> _HttpRequestCounts = new ConcurrentDictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             private readonly ConcurrentDictionary<string, bool> _OpenSockets = new ConcurrentDictionary<string, bool>(StringComparer.Ordinal);
+            private readonly ConcurrentDictionary<string, Dictionary<string, string>> _LastHeaders = new ConcurrentDictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
+            private readonly ConcurrentQueue<RemoteTunnelWebSocketOpenRequest> _OpenRequests = new ConcurrentQueue<RemoteTunnelWebSocketOpenRequest>();
             private readonly SemaphoreSlim _SendLock = new SemaphoreSlim(1, 1);
 
             private ClientWebSocket? _Socket;
@@ -572,6 +971,24 @@ namespace Test.Shared.Suites.Services
             public int GetRequestCount(string path)
             {
                 return _HttpRequestCounts.TryGetValue(path, out int count) ? count : 0;
+            }
+
+            /// <summary>
+            /// Headers of the last relayed HTTP request for a path, as the Admiral side would receive them.
+            /// </summary>
+            public Dictionary<string, string> GetLastHeaders(string path)
+            {
+                return _LastHeaders.TryGetValue(path, out Dictionary<string, string>? headers)
+                    ? headers
+                    : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            }
+
+            /// <summary>
+            /// Every websocket open request relayed to this instance, in order.
+            /// </summary>
+            public List<RemoteTunnelWebSocketOpenRequest> GetOpenRequests()
+            {
+                return _OpenRequests.ToList();
             }
 
             public async Task ConnectAsync()
@@ -694,6 +1111,7 @@ namespace Test.Shared.Suites.Services
                         RemoteTunnelHttpRelayRequest? relayRequest = envelope.Payload?.Deserialize<RemoteTunnelHttpRelayRequest>(RemoteTunnelProtocol.JsonOptions);
                         relayRequest ??= new RemoteTunnelHttpRelayRequest();
                         string path = relayRequest.Path ?? "/";
+                        _LastHeaders[path] = new Dictionary<string, string>(relayRequest.Headers ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase);
                         _HttpRequestCounts.AddOrUpdate(path, 1, (_, current) => current + 1);
                         await SendEnvelopeAsync(
                             RemoteTunnelProtocol.CreateResponse(
@@ -713,6 +1131,7 @@ namespace Test.Shared.Suites.Services
                             return;
                         }
 
+                        _OpenRequests.Enqueue(openRequest);
                         _OpenSockets[openRequest.ProxySocketId] = true;
                         await SendEnvelopeAsync(RemoteTunnelProtocol.CreateResponse(envelope.CorrelationId, new RemoteTunnelRequestResult
                         {

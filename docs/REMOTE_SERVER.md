@@ -421,6 +421,53 @@ Admiral opens an outbound tunnel and remote browsers use the relayed dashboard. 
 routes, and it does not carry MCP, the CLI's REST calls, or Harbor links, so it complements this guide rather than
 replacing it. Setup is in [REMOTE_MGMT.md](REMOTE_MGMT.md); operations in [TUNNEL_OPERATIONS.md](TUNNEL_OPERATIONS.md).
 
+### Native clients through Armada.Proxy
+
+Native clients (the Armada mobile app, scripts, `Armada.Client` with `ProxySessionToken`) do not use the browser
+cookie. They hold two separate tokens and send each in its own place (full rules in
+[PROXY_API.md](PROXY_API.md#native-clients-bearer-sessions)):
+
+- the **proxy session token**, from the proxy's login, in `X-Armada-Proxy-Session` (or `Authorization: Bearer` on
+  `/proxy-api/*` only, or an `armada-proxy-session.<base64url>` subprotocol entry on `/ws`);
+- the **Admiral credential** (session token, bearer credential, or API key) in `X-Token`, `Authorization: Bearer`, or
+  `X-Api-Key` on relayed `/api/v1/*`, and `?token=` or `armada-token.<base64url>` on `/ws`. The proxy relays these
+  untouched and never relays its own token.
+
+Request sequence (`P` is the proxy session token, `A` the Admiral token):
+
+```text
+1. GET  /proxy-api/v1/auth/challenge
+   -> {"nonce":"<nonce>","expiresUtc":"..."}
+2. POST /proxy-api/v1/auth/login
+   Content-Type: application/json
+   {"nonce":"<nonce>","proofSha256":"<sha256hex('proxy-browser-login:proxy:' + nonce + ':' + sha256hex(trim(password)))>"}
+   -> {"token":"<P>","expiresUtc":"...","selectedInstanceId":null}   (Cache-Control: no-store; 429 + Retry-After when locked out)
+3. GET  /proxy-api/v1/instances
+   Authorization: Bearer <P>
+   -> {"count":1,"instances":[{"instanceId":"armada-...","state":"connected","capabilities":[...]}]}
+4. POST /proxy-api/v1/session/instance
+   Authorization: Bearer <P>
+   {"instanceId":"armada-..."}
+   -> session context; the selection is stored on the proxy session (409 if not connected or not relay-capable)
+5. POST /api/v1/authenticate                         (sign in to the selected Admiral through the relay)
+   X-Armada-Proxy-Session: <P>
+   {"Email":"dev@example.com","TenantId":"default","Password":"..."}
+   -> {"Success":true,"Token":"<A>",...}            (POST /api/v1/tenants/lookup is also allowed)
+6. GET|POST|PUT|DELETE /api/v1/...
+   X-Armada-Proxy-Session: <P>
+   X-Token: <A>                                     (or Authorization: Bearer <A> for a bearer credential)
+7. WS   /ws
+   Sec-WebSocket-Protocol: armada, armada-proxy-session.<base64url(P)>, armada-token.<base64url(A)>
+   (or: header X-Armada-Proxy-Session: <P> on the upgrade and /ws?token=<percent-encoded A>)
+8. POST /proxy-api/v1/session/logout-instance        (switch deployment; Authorization: Bearer <P>)
+   POST /proxy-api/v1/auth/logout                    (Authorization: Bearer <P>; P is rejected everywhere afterwards)
+```
+
+`401` from `/proxy-api/*` or from a relayed route without a valid `P` means the proxy session expired (24 hours) or was
+logged out: sign in to the proxy again. `409` means no deployment is selected or it disconnected. A `401` with a valid
+`P` comes from the Admiral and means `A` is missing or expired. The relay blocks writes to `settings`, `tenants`,
+`users`, and `credentials`, so create bearer credentials for a device directly on the Admiral or in the dashboard.
+
 For a single user, an SSH tunnel is another way to reach a `localhost`-bound Admiral without changing anything on it
 (**not run here**):
 
