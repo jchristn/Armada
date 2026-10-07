@@ -7,6 +7,7 @@ import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
 import PlaybookSelector from '../components/shared/PlaybookSelector';
 import { sortByName } from '../lib/sortByName';
+import { findLandingMode, getVoyageLandingModes } from '../lib/vesselForm';
 
 interface MissionRow {
   title: string;
@@ -17,6 +18,7 @@ interface MissionRow {
 export default function VoyageCreate() {
   const { t } = useLocale();
   const { pushToast } = useNotifications();
+  const landingModes = getVoyageLandingModes(t);
   const navigate = useNavigate();
   const [vessels, setVessels] = useState<Vessel[]>([]);
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
@@ -26,9 +28,7 @@ export default function VoyageCreate() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [vesselId, setVesselId] = useState('');
-  const [autoPush, setAutoPush] = useState(false);
-  const [autoCreatePRs, setAutoCreatePRs] = useState(false);
-  const [autoMergePRs, setAutoMergePRs] = useState(false);
+  const [landingMode, setLandingMode] = useState('');
   const [selectedPlaybooks, setSelectedPlaybooks] = useState<SelectedPlaybook[]>([]);
 
   // Mission rows
@@ -84,6 +84,7 @@ export default function VoyageCreate() {
         ...(selectedPipeline ? { pipeline: selectedPipeline } : {}),
         missions: missionPayloads,
         ...(selectedPlaybooks.length > 0 ? { selectedPlaybooks } : {}),
+        ...(landingMode ? { landingMode } : {}),
       });
 
       pushToast('success', t('Voyage "{{title}}" created.', { title: title.trim() }));
@@ -145,24 +146,13 @@ export default function VoyageCreate() {
             </select>
           </label>
 
-          {/* Checkboxes */}
-          <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
-              <input type="checkbox" checked={autoPush} onChange={e => setAutoPush(e.target.checked)}
-                style={{ width: 'auto', margin: 0 }} />
-              {t('Auto-Push')}
-            </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
-              <input type="checkbox" checked={autoCreatePRs} onChange={e => setAutoCreatePRs(e.target.checked)}
-                style={{ width: 'auto', margin: 0 }} />
-              {t('Auto-Create PRs')}
-            </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
-              <input type="checkbox" checked={autoMergePRs} onChange={e => setAutoMergePRs(e.target.checked)}
-                style={{ width: 'auto', margin: 0 }} />
-              {t('Auto-Merge PRs')}
-            </label>
-          </div>
+          <label style={{ display: 'block', marginBottom: 14 }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)' }}>{t('Landing Mode')}</span>
+            <select value={landingMode} onChange={e => setLandingMode(e.target.value)} style={{ marginTop: 4 }}>
+              {landingModes.map(m => <option key={m.value || 'default'} value={m.value}>{m.label}</option>)}
+            </select>
+            <small className="text-dim">{findLandingMode(landingModes, landingMode).description}</small>
+          </label>
         </div>
 
         <PlaybookSelector value={selectedPlaybooks} onChange={setSelectedPlaybooks} disabled={submitting} />

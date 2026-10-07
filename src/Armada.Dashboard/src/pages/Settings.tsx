@@ -7,6 +7,8 @@ import PageHeader from '../components/shared/PageHeader';
 import ErrorModal from '../components/shared/ErrorModal';
 import { useLocale } from '../context/LocaleContext';
 import { useProxySessionContext } from '../lib/useProxySessionContext';
+import DefaultLandingModeField from '../components/settings/DefaultLandingModeField';
+import { DEFAULT_GLOBAL_LANDING_MODE } from '../lib/vesselForm';
 
 interface ServerSettings {
   admiralPort: number;
@@ -15,7 +17,7 @@ interface ServerSettings {
   heartbeatIntervalSeconds: number;
   stallThresholdMinutes: number;
   idleCaptainTimeoutSeconds: number;
-  autoCreatePr: boolean;
+  landingMode?: string | null;
   dataDirectory: string;
   databasePath: string;
   logDirectory: string;
@@ -78,7 +80,7 @@ export default function Settings() {
         heartbeatIntervalSeconds: settings.heartbeatIntervalSeconds,
         stallThresholdMinutes: settings.stallThresholdMinutes,
         idleCaptainTimeoutSeconds: settings.idleCaptainTimeoutSeconds,
-        autoCreatePr: settings.autoCreatePr,
+        landingMode: settings.landingMode || DEFAULT_GLOBAL_LANDING_MODE,
       });
       setSettings(updated as unknown as ServerSettings);
       showToast(t('Settings saved successfully'));
@@ -249,16 +251,7 @@ export default function Settings() {
                   title={t('Auto-remove idle captains after this many seconds (0 = disabled)')}
                 />
               </div>
-              <div className="form-group">
-                <label className="settings-checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={settings.autoCreatePr}
-                    onChange={(e) => setSettings({ ...settings, autoCreatePr: e.target.checked })}
-                  />
-                  <span>{t('Auto-Create Pull Requests')}</span>
-                </label>
-              </div>
+              <DefaultLandingModeField value={settings.landingMode} onChange={(landingMode) => setSettings({ ...settings, landingMode })} />
             </div>
           </div>
           </fieldset>

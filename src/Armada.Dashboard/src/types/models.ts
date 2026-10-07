@@ -2418,6 +2418,8 @@ export interface VoyageCreateRequest {
   selectedPlaybooks?: SelectedPlaybook[];
   objectiveId?: string;
   captainAssignments?: CaptainAssignmentOverride[];
+  /** Landing mode for the voyage's missions; omitted to inherit the vessel's mode, then the global default. */
+  landingMode?: string;
 }
 
 export interface TransitionRequest {

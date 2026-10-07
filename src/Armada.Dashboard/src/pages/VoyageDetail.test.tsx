@@ -41,11 +41,11 @@ vi.mock('../context/WebSocketContext', () => ({
   }),
 }));
 
-function voyage(status: string): Voyage {
+function voyage(status: string, landingMode: string | null = null): Voyage {
   return {
     id: 'vyg_1', tenantId: 'default', title: 'Gateway hardening', description: null, status,
     createdUtc: '2026-10-04T00:00:00Z', completedUtc: null, lastUpdateUtc: '2026-10-04T00:00:00Z',
-    autoPush: null, autoCreatePullRequests: null, autoMergePullRequests: null, landingMode: null,
+    autoPush: true, autoCreatePullRequests: true, autoMergePullRequests: null, landingMode,
   };
 }
 
@@ -86,5 +86,39 @@ describe('VoyageDetail live refresh', () => {
 
     await waitFor(() => expect(screen.getByText('1/1 complete, 0 failed')).toBeTruthy());
     expect(vi.mocked(getVoyage)).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('VoyageDetail configuration', () => {
+  beforeEach(() => {
+    handlers.clear();
+    vi.mocked(getVoyage).mockReset();
+    vi.mocked(listVessels).mockResolvedValue({ success: true, pageNumber: 1, pageSize: 1000, totalPages: 1, totalRecords: 0, totalMs: 1, objects: [] });
+    vi.mocked(listCaptains).mockResolvedValue({ success: true, pageNumber: 1, pageSize: 1000, totalPages: 1, totalRecords: 0, totalMs: 1, objects: [] });
+  });
+
+  function renderDetail() {
+    render(
+      <MemoryRouter initialEntries={['/voyages/vyg_1']}>
+        <Routes>
+          <Route path="/voyages/:id" element={<VoyageDetail />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+  }
+
+  it('shows the landing mode with its short label and not the legacy push and pull request flags', async () => {
+    vi.mocked(getVoyage).mockResolvedValue({ voyage: voyage('InProgress', 'MergeAndPush'), missions: [] } as never);
+    renderDetail();
+    expect(await screen.findByText('(local + push)')).toBeInTheDocument();
+    expect(screen.getByText(/MergeAndPush/)).toBeInTheDocument();
+    expect(screen.queryByText('Auto-Push')).toBeNull();
+    expect(screen.queryByText('Auto-Create PRs')).toBeNull();
+  });
+
+  it('shows Default when the voyage inherits its landing mode', async () => {
+    vi.mocked(getVoyage).mockResolvedValue({ voyage: voyage('InProgress'), missions: [] } as never);
+    renderDetail();
+    expect(await screen.findByText('(vessel or global default)')).toBeInTheDocument();
   });
 });

@@ -9,6 +9,7 @@ namespace Armada.Tui.Screens.Operations
     using Armada.Core.Models;
     using Armada.Tui.Input;
     using Armada.Tui.Routing;
+    using Armada.Tui.Screens.Build;
     using Armada.Tui.Services;
     using Armada.Tui.Text;
     using Armada.Tui.Widgets;
@@ -18,7 +19,7 @@ namespace Armada.Tui.Screens.Operations
 
     /// <summary>
     /// Create Voyage (W3.9, <c>/voyages/create</c>), the dashboard's VoyageCreate page: title, description, vessel,
-    /// pipeline (or inherit), Auto-Push, Auto-Create PRs, Auto-Merge PRs, playbooks with a delivery mode, and the
+    /// pipeline (or inherit), landing mode (or inherit), playbooks with a delivery mode, and the
     /// missions list (title, priority, description; <c>Ctrl+N</c> adds, <c>Ctrl+D</c> removes the focused one).
     /// <c>Ctrl+S</c> creates the voyage and opens it; <c>Esc</c> returns to Voyages. Not thread-safe.
     /// </summary>
@@ -52,19 +53,9 @@ namespace Armada.Tui.Screens.Operations
         public SelectField<string> Pipeline { get; }
 
         /// <summary>
-        /// Auto-Push.
+        /// Landing mode (value: enum name; empty inherits the vessel's mode, then the global default).
         /// </summary>
-        public OpsCheckField AutoPush { get; } = new OpsCheckField("");
-
-        /// <summary>
-        /// Auto-Create PRs.
-        /// </summary>
-        public OpsCheckField AutoCreatePrs { get; } = new OpsCheckField("");
-
-        /// <summary>
-        /// Auto-Merge PRs.
-        /// </summary>
-        public OpsCheckField AutoMergePrs { get; } = new OpsCheckField("");
+        public SelectField<string> LandingMode { get; }
 
         /// <summary>
         /// Playbooks.
@@ -148,6 +139,13 @@ namespace Armada.Tui.Screens.Operations
             Vessel = NewSelect("Vessel", new List<SelectOption<string>>(), "Select a vessel...");
             Pipeline = NewSelect("Pipeline", new List<SelectOption<string>> { new SelectOption<string>("", Tr("Inherit (vessel, then fleet, then WorkerOnly)")) });
             Pipeline.SetValue("");
+            LandingMode = NewSelect("Landing Mode", LandingModeInfo.Voyage.Select(m => new SelectOption<string>(m.Value, Tr(m.Label), Tr(m.Description))).ToList());
+            LandingMode.SetValue("");
+            LandingMode.ValueChanged += (s, e) =>
+            {
+                FormRow? row = Form.Rows.FirstOrDefault(r => ReferenceEquals(r.Field, LandingMode));
+                if (row != null) row.Hint = LandingModeInfo.ForVoyage(LandingMode.Value).Description;
+            };
             Playbooks.ModalHost = context.Modals;
             Playbooks.PickerTitle = "Playbooks";
             Playbooks.Placeholder = "None";
@@ -235,6 +233,7 @@ namespace Armada.Tui.Screens.Operations
             req.Description = desc.Length > 0 ? desc : null;
             req.VesselId = Vessel.Value;
             if (!String.IsNullOrEmpty(Pipeline.Value)) req.Pipeline = Pipeline.Value;
+            if (Enum.TryParse<LandingModeEnum>(LandingMode.Value ?? "", out LandingModeEnum landingMode)) req.LandingMode = landingMode;
             req.Missions = missions;
             PlaybookDeliveryModeEnum mode = Enum.TryParse(DeliveryMode.Value, out PlaybookDeliveryModeEnum dm) ? dm : PlaybookDeliveryModeEnum.InlineFullContent;
             if (Playbooks.Values.Count > 0)
@@ -377,9 +376,7 @@ namespace Armada.Tui.Screens.Operations
             form.AddField("Description", VoyageDescription, null, 3);
             form.AddField("Vessel", Vessel);
             form.AddField("Pipeline", Pipeline);
-            form.AddField("Auto-Push", AutoPush);
-            form.AddField("Auto-Create PRs", AutoCreatePrs);
-            form.AddField("Auto-Merge PRs", AutoMergePrs);
+            form.AddField("Landing Mode", LandingMode, LandingModeInfo.ForVoyage(LandingMode.Value).Description);
             form.AddSection("Playbooks");
             form.AddField("Playbooks", Playbooks, Reference.Loaded.Contains("playbooks") && Playbooks.Options.Count == 0 ? "No active playbooks found." : null);
             form.AddField("Delivery mode", DeliveryMode);
