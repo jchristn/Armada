@@ -72,6 +72,8 @@ namespace Armada.Tui.Widgets
         /// <inheritdoc />
         public override bool HandleKey(KeyEvent key)
         {
+            // Alt+arrows belong to the shell (Back and Forward), as in ArmadaGrid.
+            if ((key.Modifiers & KeyModifiers.Alt) != 0 && key.Code != KeyCode.Character) return false;
             bool forward = key.Code == KeyCode.Right || key.Code == KeyCode.Enter || (key.Code == KeyCode.Character && key.Rune == ' ' && key.Modifiers == KeyModifiers.None);
             bool backward = key.Code == KeyCode.Left;
             if (!forward && !backward) return false;

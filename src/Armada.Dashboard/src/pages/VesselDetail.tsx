@@ -118,6 +118,11 @@ export default function VesselDetail() {
     });
   }
 
+  function handleDispatch() {
+    if (!vessel) return;
+    navigate('/dispatch', { state: { fromVessel: true, vesselId: vessel.id } });
+  }
+
   function handleManageObjectives() {
     if (!vessel) return;
     const params = new URLSearchParams({ vesselId: vessel.id });
@@ -155,6 +160,9 @@ export default function VesselDetail() {
         title={vessel.name}
         actions={
           <>
+            <button type="button" className="btn btn-sm btn-primary" onClick={handleDispatch}>
+              {t('Dispatch')}
+            </button>
             <button type="button" className="btn btn-sm" onClick={handleManageObjectives}>
               {t('Manage Objectives')}
             </button>
@@ -174,6 +182,7 @@ export default function VesselDetail() {
             </button>
             <VesselHealthButton vesselId={vessel.id} vesselName={vessel.name} defaultBranch={vessel.defaultBranch} />
             <ActionMenu id={`vessel-${vessel.id}`} items={[
+              { label: 'Dispatch', onClick: handleDispatch },
               { label: 'Manage Objectives', onClick: handleManageObjectives },
               { label: 'Manage Fleet', onClick: () => navigate(`/fleets/${vessel.fleetId}`), disabled: !vessel.fleetId },
               { label: 'Run Check', onClick: () => navigate('/checks', { state: { prefill: { vesselId: vessel.id, branchName: vessel.defaultBranch || '' } } }) },

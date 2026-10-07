@@ -125,6 +125,7 @@ namespace Armada.Tui.Screens.Build
             MissionGrid.AddColumn(new GridColumn<MissionSummary>("branch", "Branch", m => String.IsNullOrEmpty(m.BranchName) ? "-" : m.BranchName!) { Weight = 3 });
             MissionGrid.Activated += (s, m) => Context.Navigate("/missions/" + Uri.EscapeDataString(m.Id));
 
+            Action("dispatch", "Dispatch", () => Context.Navigate(VesselsScreen.DispatchRoute(Vessel!)), "d", () => Vessel != null, true);
             Action("objectives", "Manage Objectives", () => Context.Navigate(VesselsScreen.ObjectivesRoute(Vessel!)), "O", () => Vessel != null, true);
             Action("fleet", "Manage Fleet", () => Context.Navigate("/fleets/" + Uri.EscapeDataString(Vessel!.FleetId!)), "f", () => !String.IsNullOrEmpty(Vessel?.FleetId), true);
             Action("onboarding", "Onboarding", () => Context.Navigate("/vessels/" + Uri.EscapeDataString(VesselId) + "/onboarding"), "g", () => Vessel != null, true);

@@ -422,6 +422,7 @@ export default function Vessels() {
                     </td>
                     <td className="text-right" onClick={e => e.stopPropagation()}>
                       <ActionMenu id={`vessel-${v.id}`} items={[
+                        { label: 'Dispatch', onClick: () => navigate('/dispatch', { state: { fromVessel: true, vesselId: v.id } }) },
                         { label: 'Manage Branches', onClick: () => setBranchesModal({ vesselId: v.id, vesselName: v.name }) },
                         { label: 'Manage Objectives', onClick: () => manageObjectives(v) },
                         { label: 'Manage Fleet', onClick: () => navigate(`/fleets/${v.fleetId}`), disabled: !v.fleetId },

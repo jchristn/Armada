@@ -95,7 +95,8 @@ restart); expired and cancelled requests are denials.
   start; Docker compose requires it.
 - A session for an `admin@armada` account that still has the default password is flagged
   (`PasswordChangeRequired` on authenticate and whoami) but not blocked; the dashboard shows a password change
-  screen and the TUI shows a header warning. (The server-side block was removed at the user's request so the TUI
+  screen that can be skipped after a risk confirmation (the default credentials banner stays), and the TUI shows a
+  header warning. (The server-side block was removed at the user's request so the TUI
   and API work on a fresh local install.)
 - The seeded `default` bearer token stops working, and is deactivated, once its owner's default password is changed
   (chosen over "once another credential exists" because the password change is the explicit "this install is now
@@ -181,7 +182,7 @@ and the server log for them.
 | O-03 | Medium | REST, WebSocket | `GET /api/v1/status` and the WebSocket `subscribe` snapshot are server-wide: captain and mission counts, active voyage titles, and the last signals of every tenant reach any authenticated user. | Closed: status is scoped to the caller's tenant on REST, the MCP `status` tool, and the WebSocket snapshot; global admins still see every tenant (`E2E.SurfaceScoping`). Server-wide `RemoteTunnel` and `MemoryPressureDeferrals` fields remain visible. |
 | O-04 | Medium | Harbor | Split-mode captains (experimental, D3) receive no MCP credential, so with authenticated MCP on a non-loopback Admiral their call-home tool calls are refused. | Closed (F-29 id takeover, F-36 credential). Decision: the token acts as the mission's owner and is visible to the Harbor host while the mission runs (a Harbor operated by another user of the tenant, or a shared Harbor, can use it over MCP until the mission leaves `InProgress`); it is never valid on REST, WebSocket or the Harbor link. Residual (post-1.0): an advertised MCP URL that is not plain `http://host:port/mcp` (https, path prefix) gets the token in the environment only, not a per-launch binding; Gemini and Cursor bind only with `IsolateCaptainLaunch`. |
 | O-05 | Medium | Authentication | Passwords used unsalted SHA-256; no rate limiting or lockout. | Closed in W1.9 (F-26). Residual: lockouts are in memory (reset on restart); the WebSocket upgrade and Harbor link are not limited; behind a reverse proxy every client shares one address (raise `maxFailuresPerAddress`); an upgraded database cannot be used for password login by an older Admiral (UPGRADING.md). Owner: W1 follow-up. |
-| O-06 | Medium | REST | Creating a tenant seeds `admin@armada` with the default password in that tenant. It is caught by the banner and the forced password change, but not by the startup bind guard once the server is running. | Closed (F-37). The dashboard and TUI tenant forms take an optional admin password and show a generated one once, in a copyable dialog. |
+| O-06 | Medium | REST | Creating a tenant seeds `admin@armada` with the default password in that tenant. It is caught by the banner and the password change prompt, but not by the startup bind guard once the server is running. | Closed (F-37). The dashboard and TUI tenant forms take an optional admin password and show a generated one once, in a copyable dialog. |
 | O-07 | Medium | REST, MCP (TenantAdmin) | Vessel `RepoUrl`, `LocalPath`, and `WorkingDirectory` are not validated: `file://` and local paths clone any repository the Admiral can read, a `RepoUrl` starting with `-` is a possible git option injection, and a prepared bare repository's hooks run during worktree operations. Vessel import browse defaults to the Admiral user's home directory and does not resolve symlinks in the requested path. | W1 follow-up (path and URL allow-lists, `--` before user arguments to git). |
 | O-08 | Medium | Fleet actions (TenantAdmin) | Template variables (`vessel.name`, `vessel.defaultBranch`, `vessel.workingDirectory`, `vessel.buildCommand`, `health.summary`) are substituted into shell text unescaped. | Fleet Actions owner (shell-quote substitutions). |
 | O-09 | Medium | Deployments (TenantAdmin) | Environment health and verification URLs make server-side HTTP requests (SSRF to internal addresses). | Delivery owner (URL allow-list, block link-local and metadata addresses). |
@@ -213,7 +214,7 @@ and the server log for them.
 | Tenant admin editing, deleting, or minting credentials for a global admin | Allowed | 403 |
 | Deleting `audit.*` events (REST and MCP) | Tenant admin (own tenant) | Global admin only |
 | `POST /api/v1/onboarding` | Enabled by default | Disabled by default (`AllowSelfRegistration`) |
-| Dashboard session of an `admin@armada` account with the default password | Full access | Full access, flagged; the dashboard prompts for a change |
+| Dashboard session of an `admin@armada` account with the default password | Full access | Full access, flagged; the dashboard prompts for a change (skippable after a risk confirmation) |
 | `PUT /api/v1/account/password` | (new) | Authenticated |
 | `POST /api/v1/ask` | Authenticated | Removed (D3) |
 

@@ -3,6 +3,22 @@ import type { WhoAmIResult } from '../types/models';
 import { setAuthToken, setOnUnauthorized, whoami } from '../api/client';
 
 const SESSION_STORAGE_KEY = 'armada_session_token';
+const PASSWORD_CHANGE_SKIP_KEY_PREFIX = 'armada_password_change_skipped:';
+
+function passwordChangeSkipKey(me: WhoAmIResult | null): string | null {
+  const id = me?.user?.id;
+  return id ? PASSWORD_CHANGE_SKIP_KEY_PREFIX + id : null;
+}
+
+function readPasswordChangeSkipped(me: WhoAmIResult | null): boolean {
+  const key = passwordChangeSkipKey(me);
+  if (!key) return false;
+  try {
+    return localStorage.getItem(key) === '1';
+  } catch {
+    return false;
+  }
+}
 
 interface AuthState {
   sessionToken: string | null;
@@ -15,6 +31,10 @@ interface AuthState {
   logout: () => void;
   /** Re-read whoami (for example after a password change). */
   refresh: () => Promise<void>;
+  /** The signed-in user chose to keep the default password for now (remembered per user in this browser). */
+  passwordChangeSkipped: boolean;
+  /** Keep the default password and continue to the dashboard; the default credentials banner stays visible. */
+  skipPasswordChange: () => void;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -25,6 +45,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   });
   const [user, setUser] = useState<WhoAmIResult | null>(null);
   const [loading, setLoading] = useState(true);
+  const [skippedUserId, setSkippedUserId] = useState<string | null>(null);
 
   const logout = useCallback(() => {
     setSessionToken(null);
@@ -82,12 +103,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(me);
   }, []);
 
+  const skipPasswordChange = useCallback(() => {
+    const key = passwordChangeSkipKey(user);
+    if (key) {
+      try {
+        localStorage.setItem(key, '1');
+      } catch {
+        // Storage unavailable: the skip still holds for this page load.
+      }
+    }
+    setSkippedUserId(user?.user?.id ?? null);
+  }, [user]);
+
+  const passwordChangeSkipped = readPasswordChangeSkipped(user)
+    || (!!user?.user?.id && skippedUserId === user.user.id);
+
   const isAuthenticated = !!sessionToken && !!user;
   const isAdmin = user?.user?.isAdmin ?? false;
   const isTenantAdmin = isAdmin || (user?.user?.isTenantAdmin ?? false);
 
   return (
-    <AuthContext.Provider value={{ sessionToken, user, isAuthenticated, isAdmin, isTenantAdmin, loading, login, logout, refresh }}>
+    <AuthContext.Provider value={{ sessionToken, user, isAuthenticated, isAdmin, isTenantAdmin, loading, login, logout, refresh, passwordChangeSkipped, skipPasswordChange }}>
       {children}
     </AuthContext.Provider>
   );

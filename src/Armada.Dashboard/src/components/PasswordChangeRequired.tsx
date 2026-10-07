@@ -1,21 +1,24 @@
 import { useState, type FormEvent } from 'react';
 import { changePassword } from '../api/client';
+import ConfirmDialog from './shared/ConfirmDialog';
 import { useAuth } from '../context/AuthContext';
 import { useLocale } from '../context/LocaleContext';
 
 /**
  * Shown instead of the dashboard while the signed-in account (the seeded admin@armada) still uses the default
- * password. The Admiral reports this through PasswordChangeRequired; the dashboard and TUI hold the session here until
- * the password is changed (the flag is advisory on the server; see docs/SECURITY_REVIEW.md).
+ * password. The Admiral reports this through PasswordChangeRequired (advisory on the server; see
+ * docs/SECURITY_REVIEW.md). The user can change the password here or skip after confirming the risk; the default
+ * credentials banner stays visible until the password changes.
  */
 export default function PasswordChangeRequired() {
-  const { refresh, logout } = useAuth();
+  const { refresh, logout, skipPasswordChange } = useAuth();
   const { t } = useLocale();
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [confirmSkip, setConfirmSkip] = useState(false);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -48,7 +51,7 @@ export default function PasswordChangeRequired() {
       <div className="login-card">
         <h1>{t('Change the default password')}</h1>
         <p className="password-change-explainer">
-          {t('This account still uses the default password. Choose a new one to continue. Changing it also disables the default bearer token.')}
+          {t('This account still uses the default password. Choose a new one, or skip for now. Changing it also disables the default bearer token.')}
         </p>
         {error && <div className="login-error" role="alert">{error}</div>}
         <form onSubmit={handleSubmit}>
@@ -67,8 +70,19 @@ export default function PasswordChangeRequired() {
           <button type="submit" disabled={busy}>{busy ? t('Saving...') : t('Change password')}</button>
         </form>
         <div className="login-actions">
+          <button type="button" className="link-btn" onClick={() => setConfirmSkip(true)}>{t('Skip for now')}</button>
           <button type="button" className="link-btn" onClick={logout}>{t('Sign out')}</button>
         </div>
+        <ConfirmDialog
+          open={confirmSkip}
+          title={t('Keep the default password?')}
+          message={t('Anyone who can reach this server can sign in as admin@armada with the well-known default password, and the default bearer token stays active. Only skip on a server that is reachable from this machine alone (localhost). You can change it later by editing your own account on the Users page.')}
+          confirmLabel={t('Skip and continue')}
+          cancelLabel={t('Cancel')}
+          danger
+          onConfirm={() => { setConfirmSkip(false); skipPasswordChange(); }}
+          onCancel={() => setConfirmSkip(false)}
+        />
       </div>
     </div>
   );

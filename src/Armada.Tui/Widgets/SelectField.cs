@@ -158,7 +158,8 @@ namespace Armada.Tui.Widgets
                 return Open() != null || key.Code != KeyCode.Down;
             }
 
-            if (key.Code == KeyCode.Left || key.Code == KeyCode.Right)
+            // Alt+arrows belong to the shell (Back and Forward), as in ArmadaGrid.
+            if ((key.Code == KeyCode.Left || key.Code == KeyCode.Right) && (key.Modifiers & KeyModifiers.Alt) == 0)
             {
                 if (Options.Count == 0) return true;
                 int idx = Selected == null ? -1 : Options.IndexOf(Selected);

@@ -89,6 +89,40 @@ namespace Test.Shared.Suites.Tui.Build
         }
 
         /// <summary>
+        /// d on a Vessels row and d on the vessel page both open Dispatch with that vessel pre-selected and no
+        /// pre-fill banner.
+        /// </summary>
+        public static void VesselDispatch()
+        {
+            StubHttpHandler stub = TuiBuildVesselsSuite.Stub();
+            stub.Json("GET", "/api/v1/vessels/vsl_demo", BuildStubs.Vessel("vsl_demo", "DemoRepo", "flt_web", "LocalMerge"));
+            using (TuiTestHost host = TuiCase.SignedIn(180, 60, "/vessels", stub))
+            {
+                TuiEntityFixtures.WaitFor(host, () => host.Screen().Contains("DemoRepo", StringComparison.Ordinal), "dispatch: vessels listed");
+                VesselsScreen list = (VesselsScreen)((Armada.Tui.Screens.HubScreen)host.Tui.Shell.Screen!).Content;
+                host.Press("home");
+                for (int i = 0; i < 5 && list.Grid.Current?.Id != "vsl_demo"; i++) host.Press("down");
+                AssertEqual("vsl_demo", list.Grid.Current?.Id, "dispatch: row selected");
+
+                host.Press("d");
+                AssertDispatchFor(host, "vsl_demo", "dispatch: d on the row");
+
+                host.Press("alt+left");
+                TuiEntityFixtures.WaitFor(host, () => host.Tui.Context.Router.Current!.FullPath == "/vessels", "dispatch: Alt+Left returns to Vessels (now " + host.Tui.Context.Router.Current!.FullPath + ")");
+                VesselsScreen back = (VesselsScreen)((Armada.Tui.Screens.HubScreen)host.Tui.Shell.Screen!).Content;
+                TuiEntityFixtures.WaitFor(host, () => back.Grid.Rows.Any(r => r.Id == "vsl_demo"), "dispatch: vessels listed again");
+                host.Press("home");
+                for (int i = 0; i < 5 && back.Grid.Current?.Id != "vsl_demo"; i++) host.Press("down");
+                host.Press("enter");
+                TuiEntityFixtures.WaitFor(host, () => host.Tui.Context.Router.Current!.FullPath == "/vessels/vsl_demo", "dispatch: Enter opens the vessel page (now " + host.Tui.Context.Router.Current!.FullPath + ")");
+                TuiEntityFixtures.WaitFor(host, () => host.Screen().Contains("Needs Attention", StringComparison.Ordinal), "dispatch: vessel page loaded");
+
+                host.Press("d");
+                AssertDispatchFor(host, "vsl_demo", "dispatch: d on the vessel page");
+            }
+        }
+
+        /// <summary>
         /// Vessels, Enter opens the vessel page; ] moves through the tabs to the missions; the action menu and the edit
         /// form open and close; g opens onboarding, n follows the next step; Alt+Left walks back to Vessels.
         /// </summary>
@@ -150,6 +184,18 @@ namespace Test.Shared.Suites.Tui.Build
             AssertTrue(stub.CountFor("GET", "/api/v1/vessels/vsl_demo/landing-preview") >= 1, "vessel: landing preview loaded");
             List<StubRequest> missions = stub.RequestsFor("GET", "/api/v1/missions/summaries");
             AssertTrue(missions.Any(r => r.QueryValue("vesselId") == "vsl_demo"), "vessel: missions scoped to the vessel: " + String.Join(", ", missions.Select(r => r.Query)));
+        }
+
+        #endregion
+
+        #region Private-Methods
+
+        private static void AssertDispatchFor(TuiTestHost host, string vesselId, string label)
+        {
+            TuiEntityFixtures.WaitFor(host, () => host.Tui.Context.Router.Current!.Path == "/dispatch", label + " opens Dispatch (now " + host.Tui.Context.Router.Current!.FullPath + ")");
+            Armada.Tui.Screens.Operations.DispatchScreen dispatch = (Armada.Tui.Screens.Operations.DispatchScreen)((Armada.Tui.Screens.HubScreen)host.Tui.Shell.Screen!).Content;
+            TuiEntityFixtures.WaitFor(host, () => dispatch.Vessel.Value == vesselId, label + " pre-selects the vessel (now " + (dispatch.Vessel.Value ?? "none") + ")");
+            AssertFalse(host.Screen().Contains("Prefilled from", StringComparison.Ordinal), label + " shows no pre-fill banner\n" + host.Screen());
         }
 
         #endregion

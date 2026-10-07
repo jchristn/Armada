@@ -11,7 +11,7 @@ namespace Armada.Tui.Screens.Operations
     /// Pre-fill handoffs between screens. The dashboard passes these as React Router state; the TUI carries the same
     /// fields in the route query so they survive Back and Forward the same way router state does, and deep links can
     /// use them. <c>from</c> names the source (the dashboard's <c>fromPlanning</c>, <c>fromWorkspace</c>,
-    /// <c>fromIncident</c>, <c>fromObjective</c>, <c>fromSetupWizard</c> flags); the other keys match the dashboard's
+    /// <c>fromIncident</c>, <c>fromObjective</c>, <c>fromSetupWizard</c>, <c>fromVessel</c> flags); the other keys match the dashboard's
     /// state fields. Dispatch reads <c>/dispatch?from=...&amp;vesselId=&amp;pipelineName=&amp;prompt=&amp;voyageTitle=&amp;
     /// objectiveId=&amp;playbooks=</c> (playbooks as JSON); Planning reads <c>/planning?from=...&amp;captainId=&amp;
     /// objectiveId=&amp;vesselId=&amp;fleetId=&amp;pipelineId=&amp;title=&amp;initialPrompt=</c>.
@@ -44,6 +44,11 @@ namespace Armada.Tui.Screens.Operations
         /// Source: Setup Wizard.
         /// </summary>
         public const string FromSetupWizard = "setup";
+
+        /// <summary>
+        /// Source: a vessel (Vessels list or vessel detail); pre-selects the vessel only.
+        /// </summary>
+        public const string FromVessel = "vessel";
 
         #endregion
 

@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import VesselDetail from './VesselDetail';
 import { listFleets, listMissionSummaries, listPipelines, listVessels, getVesselReadiness, getVesselLandingPreview, updateVessel } from '../api/client';
 import { translateTemplate } from '../i18n/runtime';
@@ -96,5 +96,34 @@ describe('VesselDetail Edit (F13)', () => {
     });
     expect(payload).not.toHaveProperty('gitHubTokenOverride');
     expect(payload).not.toHaveProperty('hasGitHubTokenOverride');
+  });
+});
+
+describe('VesselDetail Dispatch', () => {
+  beforeEach(() => {
+    vi.mocked(listVessels).mockResolvedValue(page([vessel]) as never);
+    vi.mocked(listFleets).mockResolvedValue(page([{ id: 'flt_1', name: 'Main' }]) as never);
+    vi.mocked(listMissionSummaries).mockResolvedValue(page([]) as never);
+    vi.mocked(listPipelines).mockResolvedValue(page([]) as never);
+    vi.mocked(getVesselReadiness).mockResolvedValue(null as never);
+    vi.mocked(getVesselLandingPreview).mockResolvedValue(null as never);
+  });
+
+  it('opens Dispatch with this vessel preselected', async () => {
+    function DispatchProbe() {
+      const state = useLocation().state as { fromVessel?: boolean; vesselId?: string } | null;
+      return <div>dispatch for {state?.fromVessel ? state.vesselId : 'none'}</div>;
+    }
+    render(
+      <MemoryRouter initialEntries={['/vessels/vsl_1']}>
+        <Routes>
+          <Route path="/vessels/:id" element={<VesselDetail />} />
+          <Route path="/dispatch" element={<DispatchProbe />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Dispatch' }));
+    expect(await screen.findByText('dispatch for vsl_1')).toBeInTheDocument();
   });
 });

@@ -130,6 +130,7 @@ namespace Armada.Tui.Screens.Build
             ScreenActions.Add(new OpsScreenAction("import", "Import repositories", () => Context.Navigate("/vessels/import"), "I", () => IsTenantAdmin));
             ScreenActions.Add(new OpsScreenAction("new", "+ Vessel", () => VesselForm.Open(this, null, Fleets, Pipelines, v => Refresh()), "n"));
 
+            RowActions.Add(new OpsAction<Vessel>("dispatch", "Dispatch", v => Context.Navigate(DispatchRoute(v)), "d"));
             RowActions.Add(new OpsAction<Vessel>("branches", "Manage Branches", v => ManageBranches(v), "b"));
             RowActions.Add(new OpsAction<Vessel>("objectives", "Manage Objectives", v => Context.Navigate(ObjectivesRoute(v)), "O"));
             RowActions.Add(new OpsAction<Vessel>("fleet", "Manage Fleet", v => Context.Navigate("/fleets/" + Uri.EscapeDataString(v.FleetId!)), "f", v => !String.IsNullOrEmpty(v.FleetId)));
@@ -165,6 +166,17 @@ namespace Armada.Tui.Screens.Build
             q["vesselId"] = vessel.Id;
             if (!String.IsNullOrEmpty(vessel.FleetId)) q["fleetId"] = vessel.FleetId!;
             return "/dispatch" + RouteMatch.BuildQuery(q);
+        }
+
+        /// <summary>
+        /// The Dispatch route with a vessel pre-selected (the dashboard's Dispatch row action).
+        /// </summary>
+        /// <param name="vessel">Vessel.</param>
+        /// <returns>Route.</returns>
+        public static string DispatchRoute(Vessel vessel)
+        {
+            if (vessel == null) throw new ArgumentNullException(nameof(vessel));
+            return OpsHandoff.Dispatch(OpsHandoff.FromVessel, vessel.Id, null, null, null, null, null);
         }
 
         /// <summary>

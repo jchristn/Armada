@@ -22,6 +22,7 @@ interface DispatchPrefillState {
   fromWorkspace?: boolean;
   fromIncident?: boolean;
   fromObjective?: boolean;
+  fromVessel?: boolean;
   objectiveId?: string;
   vesselId?: string;
   pipelineName?: string;
@@ -101,7 +102,7 @@ export default function Dispatch() {
     if (prefillAppliedRef.current) return;
 
     const prefill = location.state as DispatchPrefillState | null;
-    if (!prefill?.fromPlanning && !prefill?.fromWorkspace && !prefill?.fromIncident && !prefill?.fromObjective) return;
+    if (!prefill?.fromPlanning && !prefill?.fromWorkspace && !prefill?.fromIncident && !prefill?.fromObjective && !prefill?.fromVessel) return;
 
     if (prefill.vesselId) setVesselId(prefill.vesselId);
     if (prefill.pipelineName) setSelectedPipeline(prefill.pipelineName);
