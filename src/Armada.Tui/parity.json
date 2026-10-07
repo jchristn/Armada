@@ -609,6 +609,14 @@
     },
     {
       "kind": "route",
+      "key": "/vessels/:id/history",
+      "status": "implemented",
+      "tui": "VesselHistoryScreen",
+      "workstream": "W4.4",
+      "notes": "commit heatmap (local days, year back/forward to the first commit, arrows + Enter jump to a day), commits by day with endless paging, commit detail with files, jump to date (t), latest (l), branch (b), copy SHA (y); H from the Vessels row and the vessel page"
+    },
+    {
+      "kind": "route",
       "key": "/vessels/health",
       "status": "implemented",
       "tui": "HubScreen",
@@ -2430,6 +2438,22 @@
       "tui": "ArmadaClient.GetVesselBranchesAsync",
       "workstream": "W0.2",
       "notes": "Vessels | used by ServerSettingsScreen"
+    },
+    {
+      "kind": "api",
+      "key": "getVesselCommitActivity",
+      "status": "implemented",
+      "tui": "ArmadaClient.GetVesselCommitActivityAsync",
+      "workstream": "W4.4",
+      "notes": "Vessels | used by VesselHistoryScreen"
+    },
+    {
+      "kind": "api",
+      "key": "getVesselCommits",
+      "status": "implemented",
+      "tui": "ArmadaClient.GetVesselCommitsAsync",
+      "workstream": "W4.4",
+      "notes": "Vessels | used by VesselHistoryScreen"
     },
     {
       "kind": "api",

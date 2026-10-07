@@ -10,7 +10,7 @@ namespace Test.Shared.Suites.Tui.Build
 
     /// <summary>
     /// Keyboard flows for the BUILD screens that are not plain lists (Tui.KeyboardFlows.Build): the import wizard and
-    /// the vessel page with its onboarding page. Each runs the table-driven flow's steps by hand (open, filter, select,
+    /// the vessel page with its onboarding and history pages. Each runs the table-driven flow's steps by hand (open, filter, select,
     /// row menu, form, open the row, back) and checks the requests with the structured stub helpers.
     /// </summary>
     internal static class TuiBuildPageFlows
@@ -120,6 +120,51 @@ namespace Test.Shared.Suites.Tui.Build
                 host.Press("d");
                 AssertDispatchFor(host, "vsl_demo", "dispatch: d on the vessel page");
             }
+        }
+
+        /// <summary>
+        /// The vessel page, H opens the history; Left and Enter jump the list to a heatmap day; Tab reaches the list and
+        /// Enter opens a commit; t opens the date prompt and Esc dismisses it; Alt+Left returns to the vessel page.
+        /// </summary>
+        public static void VesselHistory()
+        {
+            StubHttpHandler stub = TuiBuildVesselHistorySuite.Stub();
+            using (TuiTestHost host = TuiCase.SignedIn(180, 60, "/vessels/vsl_demo", stub))
+            {
+                TuiEntityFixtures.WaitFor(host, () => host.Screen().Contains("Needs Attention", StringComparison.Ordinal), "history: vessel page loaded");
+                host.Press("H");
+                TuiEntityFixtures.WaitFor(host, () => host.Tui.Context.Router.Current!.FullPath == "/vessels/vsl_demo/history", "history: H opens the history (now " + host.Tui.Context.Router.Current!.FullPath + ")");
+                VesselHistoryScreen screen = (VesselHistoryScreen)host.Tui.Shell.Screen!;
+                TuiEntityFixtures.WaitFor(host, () => host.Screen().Contains("Fix the parser", StringComparison.Ordinal), "history: commits listed");
+                TuiEntityFixtures.WaitFor(host, () => screen.Activity != null, "history: activity loaded");
+
+                // A heatmap day.
+                host.Press("left").Press("enter");
+                DateTime day = screen.Today.AddDays(-7);
+                TuiEntityFixtures.WaitFor(host, () => screen.JumpDate == day, "history: Left then Enter jumps to a week ago");
+                TuiEntityFixtures.WaitFor(host, () => stub.RequestsFor("GET", "/api/v1/vessels/vsl_demo/history/commits").Any(r => r.QueryValue("before") != null), "history: the list reloads before the day");
+
+                // The list and a commit.
+                host.Press("tab");
+                TuiEntityFixtures.WaitFor(host, () => ReferenceEquals(screen.Scope.Focused, screen.CommitGrid) && screen.CurrentCommit() != null, "history: Tab reaches the list");
+                host.Press("enter");
+                TuiEntityFixtures.WaitFor(host, () => screen.DetailModal != null && host.Screen().Contains("Commit abc1234", StringComparison.Ordinal), "history: Enter opens the commit");
+                host.Press("esc");
+                TuiEntityFixtures.WaitFor(host, () => !host.App.Modals.IsActive, "history: commit closed");
+
+                // The date prompt.
+                host.Press("t");
+                TuiEntityFixtures.WaitFor(host, () => host.Screen().Contains("Jump to Date", StringComparison.Ordinal), "history: t opens the date prompt");
+                host.Press("esc");
+                if (host.App.Modals.IsActive) host.Press("y");
+                TuiEntityFixtures.WaitFor(host, () => !host.App.Modals.IsActive, "history: prompt dismissed");
+
+                // Back.
+                host.Press("alt+left");
+                TuiEntityFixtures.WaitFor(host, () => host.Tui.Context.Router.Current!.FullPath == "/vessels/vsl_demo", "history: Alt+Left returns to the vessel page (now " + host.Tui.Context.Router.Current!.FullPath + ")");
+            }
+
+            AssertTrue(stub.CountFor("GET", "/api/v1/vessels/vsl_demo/history/activity") >= 1, "history: activity requested");
         }
 
         /// <summary>

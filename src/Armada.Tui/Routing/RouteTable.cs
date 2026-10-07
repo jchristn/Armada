@@ -113,6 +113,7 @@ namespace Armada.Tui.Routing
             r.Add(Hub("/vessels/health", "Vessel Health", vessels, "health"));
             r.Add(Screen("/vessels/:id", "Vessel", "VesselScreen", "W4.4"));
             r.Add(Screen("/vessels/:id/onboarding", "Vessel Onboarding", "VesselOnboardingScreen", "W4.4"));
+            r.Add(Screen("/vessels/:id/history", "Vessel History", "VesselHistoryScreen", "W4.4"));
             r.Add(Redirect("/workspace", "/vessels?tab=workspace"));
             r.Add(Screen("/workspace/:vesselId", "Workspace", "WorkspaceScreen", "W4.6"));
             r.Add(Screen("/workspace/:vesselId/:panel", "Workspace", "WorkspaceScreen", "W4.6"));
