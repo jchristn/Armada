@@ -601,19 +601,19 @@
     },
     {
       "kind": "route",
-      "key": "/vessels/:id/onboarding",
-      "status": "implemented",
-      "tui": "VesselOnboardingScreen",
-      "workstream": "W4.4",
-      "notes": "counts, next recommended step, readiness, grouped checklist, open issues; Steps panel follows actions"
-    },
-    {
-      "kind": "route",
       "key": "/vessels/:id/history",
       "status": "implemented",
       "tui": "VesselHistoryScreen",
       "workstream": "W4.4",
       "notes": "commit heatmap (local days, year back/forward to the first commit, arrows + Enter jump to a day), commits by day with endless paging, commit detail with files, jump to date (t), latest (l), branch (b), copy SHA (y); H from the Vessels row and the vessel page"
+    },
+    {
+      "kind": "route",
+      "key": "/vessels/:id/onboarding",
+      "status": "implemented",
+      "tui": "VesselOnboardingScreen",
+      "workstream": "W4.4",
+      "notes": "counts, next recommended step, readiness, grouped checklist, open issues; Steps panel follows actions"
     },
     {
       "kind": "route",
