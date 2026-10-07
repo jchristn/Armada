@@ -2,6 +2,7 @@ namespace Armada.Core.Services
 {
     using System.Collections.Generic;
     using System.Diagnostics;
+    using System.Globalization;
     using System.IO;
     using System.Linq;
     using System.Text.Json;
@@ -1023,9 +1024,149 @@ namespace Armada.Core.Services
             return result.Succeeded && String.Equals(result.StandardOutput.Trim(), "true", StringComparison.Ordinal);
         }
 
+        /// <inheritdoc />
+        public async Task<string?> ResolveBranchTipAsync(string repoPath, string branch, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(repoPath)) throw new ArgumentNullException(nameof(repoPath));
+            if (String.IsNullOrEmpty(branch)) throw new ArgumentNullException(nameof(branch));
+            if (!GitRevisionNames.IsSafeBranchName(branch)) throw new ArgumentException("Branch is not a valid branch name: " + branch, nameof(branch));
+
+            List<string> candidates = new List<string>();
+            if (!GitRevisionNames.IsFullCommitId(branch) && !branch.StartsWith("refs/", StringComparison.Ordinal))
+            {
+                candidates.Add("refs/heads/" + branch);
+                candidates.Add("refs/remotes/origin/" + branch);
+            }
+            candidates.Add(branch);
+
+            foreach (string candidate in candidates)
+            {
+                GitProcessResult result = await ExecuteProcessAsync(repoPath, "git", token, "rev-parse", "--verify", "--quiet", candidate + "^{commit}").ConfigureAwait(false);
+                if (!result.Succeeded) continue;
+                string sha = result.StandardOutput.Trim();
+                if (GitRevisionNames.IsFullCommitId(sha)) return sha;
+            }
+
+            return null;
+        }
+
+        /// <inheritdoc />
+        public async Task<VesselCommitActivity> GetCommitActivityAsync(string repoPath, string branch, DateTime fromDate, DateTime toDate, int utcOffsetMinutes, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(repoPath)) throw new ArgumentNullException(nameof(repoPath));
+            if (String.IsNullOrEmpty(branch)) throw new ArgumentNullException(nameof(branch));
+            if (Math.Abs(utcOffsetMinutes) > Constants.VesselHistoryMaxUtcOffsetMinutes) throw new ArgumentOutOfRangeException(nameof(utcOffsetMinutes));
+            DateTime from = DateTime.SpecifyKind(fromDate.Date, DateTimeKind.Unspecified);
+            DateTime to = DateTime.SpecifyKind(toDate.Date, DateTimeKind.Unspecified);
+            if (to < from) throw new ArgumentOutOfRangeException(nameof(toDate), "toDate is before fromDate");
+
+            VesselCommitActivity activity = new VesselCommitActivity();
+            activity.Branch = branch;
+            activity.From = from.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            activity.To = to.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            activity.UtcOffsetMinutes = utcOffsetMinutes;
+            int dayCount = (int)(to - from).TotalDays + 1;
+            int[] counts = new int[dayCount];
+            for (int d = 0; d < dayCount; d++)
+            {
+                activity.Days.Add(new VesselCommitActivityDay { Date = from.AddDays(d).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) });
+            }
+
+            string? tip = await ResolveBranchTipAsync(repoPath, branch, token).ConfigureAwait(false);
+            if (tip == null)
+            {
+                activity.Error = "Branch " + branch + " was not found or has no commits";
+                return activity;
+            }
+
+            long? first = null;
+            long? last = null;
+            string tipOutput = await RunGitAsync(repoPath, token, "log", "--no-show-signature", "-1", "--format=%ct", tip, "--").ConfigureAwait(false);
+            foreach (long seconds in ParseUnixSecondsLines(tipOutput)) last = seconds;
+            string rootOutput = await RunGitAsync(repoPath, token, "log", "--no-show-signature", "--max-parents=0", "--format=%ct", tip, "--").ConfigureAwait(false);
+            foreach (long seconds in ParseUnixSecondsLines(rootOutput))
+            {
+                if (!first.HasValue || seconds < first.Value) first = seconds;
+            }
+
+            // The range in UTC: local midnight of fromDate to local midnight after toDate, shifted by the offset. git's
+            // --since/--until get a day of slack on each side; the exact bounds are applied here.
+            long offsetSeconds = utcOffsetMinutes * 60L;
+            long rangeStart = new DateTimeOffset(from, TimeSpan.Zero).ToUnixTimeSeconds() - offsetSeconds;
+            long rangeEnd = new DateTimeOffset(to.AddDays(1), TimeSpan.Zero).ToUnixTimeSeconds() - offsetSeconds;
+            string since = "--since=@" + (rangeStart - 86400L).ToString(CultureInfo.InvariantCulture) + " +0000";
+            string until = "--until=@" + (rangeEnd + 86400L).ToString(CultureInfo.InvariantCulture) + " +0000";
+            string rangeOutput = await RunGitAsync(repoPath, token, "log", "--no-show-signature", "--format=%ct", since, until, tip, "--").ConfigureAwait(false);
+
+            foreach (long seconds in ParseUnixSecondsLines(rangeOutput))
+            {
+                if (!first.HasValue || seconds < first.Value) first = seconds;
+                if (!last.HasValue || seconds > last.Value) last = seconds;
+                if (seconds < rangeStart || seconds >= rangeEnd) continue;
+                int index = (int)((seconds - rangeStart) / 86400L);
+                if (index >= 0 && index < dayCount) counts[index]++;
+            }
+
+            int total = 0;
+            int max = 0;
+            for (int d = 0; d < dayCount; d++)
+            {
+                activity.Days[d].Count = counts[d];
+                total += counts[d];
+                if (counts[d] > max) max = counts[d];
+            }
+
+            activity.TotalCommits = total;
+            activity.MaxDayCount = max;
+            activity.FirstCommitUtc = first.HasValue ? DateTimeOffset.FromUnixTimeSeconds(first.Value).UtcDateTime : null;
+            activity.LastCommitUtc = last.HasValue ? DateTimeOffset.FromUnixTimeSeconds(last.Value).UtcDateTime : null;
+            return activity;
+        }
+
+        /// <inheritdoc />
+        public async Task<GitCommitLogPage> GetCommitLogAsync(string repoPath, string tipSha, long? untilUnixSeconds, int skip, int limit, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(repoPath)) throw new ArgumentNullException(nameof(repoPath));
+            if (String.IsNullOrEmpty(tipSha)) throw new ArgumentNullException(nameof(tipSha));
+            if (!GitRevisionNames.IsFullCommitId(tipSha)) throw new ArgumentException("tipSha must be a full commit id", nameof(tipSha));
+            if (skip < 0) throw new ArgumentOutOfRangeException(nameof(skip));
+            if (limit < 1) throw new ArgumentOutOfRangeException(nameof(limit));
+
+            List<string> args = new List<string>
+            {
+                "log", "--no-show-signature", "--date-order", "-z", "--no-color", "--no-ext-diff", "--no-textconv",
+                "--format=" + GitMachineOutputParser.CommitLogFormat,
+                "--raw", "--numstat", "-M", "--root", "--diff-merges=first-parent",
+                "--skip=" + skip.ToString(CultureInfo.InvariantCulture),
+                "--max-count=" + (limit + 1).ToString(CultureInfo.InvariantCulture)
+            };
+            if (untilUnixSeconds.HasValue)
+                args.Add("--until=@" + untilUnixSeconds.Value.ToString(CultureInfo.InvariantCulture) + " +0000");
+            args.Add(tipSha);
+            args.Add("--");
+
+            string output = await RunGitAsync(repoPath, token, args.ToArray()).ConfigureAwait(false);
+            List<VesselCommit> commits = GitMachineOutputParser.ParseCommitLogZ(output, Constants.VesselHistoryMaxFilesPerCommit);
+
+            GitCommitLogPage page = new GitCommitLogPage();
+            page.HasMore = commits.Count > limit;
+            page.Commits = commits.Count > limit ? commits.GetRange(0, limit) : commits;
+            return page;
+        }
+
         #endregion
 
         #region Private-Methods
+
+        private static List<long> ParseUnixSecondsLines(string output)
+        {
+            List<long> values = new List<long>();
+            foreach (string line in (output ?? String.Empty).Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                if (Int64.TryParse(line, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out long seconds)) values.Add(seconds);
+            }
+            return values;
+        }
 
         private async Task<bool> RefResolvesAsync(string repoPath, string gitRef, CancellationToken token)
         {

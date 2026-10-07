@@ -1883,6 +1883,82 @@
                     }
                 },
                 {
+                    "name": "Get Vessel Commit Activity",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/vessels/{{vesselId}}/history/activity?branch=main&from=2025-10-07&to=2026-10-06&utcOffsetMinutes=-420",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "vessels",
+                                "{{vesselId}}",
+                                "history",
+                                "activity"
+                            ],
+                            "query": [
+                                {
+                                    "key": "branch",
+                                    "value": "main"
+                                },
+                                {
+                                    "key": "from",
+                                    "value": "2025-10-07"
+                                },
+                                {
+                                    "key": "to",
+                                    "value": "2026-10-06"
+                                },
+                                {
+                                    "key": "utcOffsetMinutes",
+                                    "value": "-420"
+                                }
+                            ]
+                        },
+                        "description": "Per-day commit counts on a vessel branch for the history heatmap: one zero-filled entry per day from 'from' to 'to' (at most 1830 days), bucketed by committer date in utcOffsetMinutes (-840..840). All parameters are optional (defaults: the vessel's default branch, the last 365 days, UTC). Repository problems return 200 with Error set."
+                    }
+                },
+                {
+                    "name": "List Vessel Commits",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/vessels/{{vesselId}}/history/commits?branch=main&before=2026-10-01&limit=50",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "vessels",
+                                "{{vesselId}}",
+                                "history",
+                                "commits"
+                            ],
+                            "query": [
+                                {
+                                    "key": "branch",
+                                    "value": "main"
+                                },
+                                {
+                                    "key": "before",
+                                    "value": "2026-10-01"
+                                },
+                                {
+                                    "key": "limit",
+                                    "value": "50"
+                                }
+                            ]
+                        },
+                        "description": "One page of commit history, newest commit date first, with changed files and line counts (merges against the first parent, at most 200 files per commit). before is an exclusive ISO 8601 bound (a bare date is midnight UTC); limit is 1-200 (default 50). Pass NextCursor back as cursor for older pages (branch and before are then ignored); it is null on the last page."
+                    }
+                },
+                {
                     "name": "Push Vessel Branch",
                     "request": {
                         "method": "POST",

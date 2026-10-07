@@ -5,6 +5,7 @@ namespace Test.Shared.Infrastructure
     using System.IO;
     using System.Threading;
     using System.Threading.Tasks;
+    using Armada.Core.Models;
     using Armada.Core.Services.Interfaces;
 
     /// <summary>
@@ -117,5 +118,11 @@ namespace Test.Shared.Infrastructure
         public Task<IReadOnlyList<string>> ListTrackedFilesAsync(string repoPath, CancellationToken token = default) => Task.FromResult<IReadOnlyList<string>>(new List<string>());
         /// <summary>Report whether a path is bare (always false).</summary>
         public Task<bool> IsBareRepositoryAsync(string path, CancellationToken token = default) => Task.FromResult(false);
+        /// <summary>Resolve a branch tip (always null).</summary>
+        public Task<string?> ResolveBranchTipAsync(string repoPath, string branch, CancellationToken token = default) => Task.FromResult<string?>(null);
+        /// <summary>Read commit activity (always empty).</summary>
+        public Task<VesselCommitActivity> GetCommitActivityAsync(string repoPath, string branch, DateTime fromDate, DateTime toDate, int utcOffsetMinutes, CancellationToken token = default) => Task.FromResult(new VesselCommitActivity { Branch = branch });
+        /// <summary>Read a commit page (always empty).</summary>
+        public Task<GitCommitLogPage> GetCommitLogAsync(string repoPath, string tipSha, long? untilUnixSeconds, int skip, int limit, CancellationToken token = default) => Task.FromResult(new GitCommitLogPage());
     }
 }

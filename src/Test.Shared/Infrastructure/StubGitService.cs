@@ -209,5 +209,14 @@ namespace Test.Shared.Infrastructure
 
         public Task<bool> IsBareRepositoryAsync(string path, CancellationToken token = default)
             => Task.FromResult(false);
+
+        public Task<string?> ResolveBranchTipAsync(string repoPath, string branch, CancellationToken token = default)
+            => Task.FromResult<string?>(null);
+
+        public Task<VesselCommitActivity> GetCommitActivityAsync(string repoPath, string branch, DateTime fromDate, DateTime toDate, int utcOffsetMinutes, CancellationToken token = default)
+            => Task.FromResult(new VesselCommitActivity { Branch = branch });
+
+        public Task<GitCommitLogPage> GetCommitLogAsync(string repoPath, string tipSha, long? untilUnixSeconds, int skip, int limit, CancellationToken token = default)
+            => Task.FromResult(new GitCommitLogPage());
     }
 }

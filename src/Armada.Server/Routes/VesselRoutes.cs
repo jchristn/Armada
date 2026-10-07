@@ -1,6 +1,7 @@
 namespace Armada.Server.Routes
 {
     using System.Diagnostics;
+    using System.Globalization;
     using System.IO;
     using System.Text.Json;
     using WatsonWebserver;
@@ -364,6 +365,172 @@ namespace Armada.Server.Routes
                 .WithSummary("List vessel branches")
                 .WithDescription("Returns the vessel repository's branches with current flag and ahead/behind counts relative to the default branch.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Vessel ID (vsl_ prefix)"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(503, OpenApiJson.For<ApiStatusErrorResponse>("Git service is not available (Error ServiceUnavailable)"))
+                .WithSecurity("ApiKey"));
+
+            app.Get("/api/v1/vessels/{id}/history/activity", async (ApiRequest req) =>
+            {
+                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
+                {
+                    req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
+                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
+                }
+                string id = req.Parameters["id"];
+                Vessel? vessel = ctx.IsAdmin
+                    ? await _database.Vessels.ReadAsync(id).ConfigureAwait(false)
+                    : ctx.IsTenantAdmin
+                        ? await _database.Vessels.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false)
+                        : await _database.Vessels.ReadAsync(ctx.TenantId!, ctx.UserId!, id).ConfigureAwait(false);
+                if (vessel == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Vessel not found" }; }
+                if (_git == null) { req.Http.Response.StatusCode = 503; return new ApiStatusErrorResponse(ApiStatusErrorCodeEnum.ServiceUnavailable, "Git service is not available"); }
+
+                string branch = NormalizeEmpty(UnescapeQueryValue(req.Query.GetValueOrDefault("branch"))) ?? DefaultBranchOf(vessel);
+                if (!GitRevisionNames.IsSafeBranchName(branch)) { req.Http.Response.StatusCode = 400; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "branch is not a valid branch name" }; }
+
+                int offset = 0;
+                string? offsetRaw = NormalizeEmpty(req.Query.GetValueOrDefault("utcOffsetMinutes"));
+                if (offsetRaw != null && !Int32.TryParse(offsetRaw, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out offset))
+                { req.Http.Response.StatusCode = 400; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "utcOffsetMinutes must be an integer" }; }
+                if (Math.Abs(offset) > Constants.VesselHistoryMaxUtcOffsetMinutes)
+                { req.Http.Response.StatusCode = 400; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "utcOffsetMinutes must be between -" + Constants.VesselHistoryMaxUtcOffsetMinutes + " and " + Constants.VesselHistoryMaxUtcOffsetMinutes }; }
+
+                string? fromRaw = NormalizeEmpty(req.Query.GetValueOrDefault("from"));
+                string? toRaw = NormalizeEmpty(req.Query.GetValueOrDefault("to"));
+                DateTime to = DateTime.UtcNow.AddMinutes(offset).Date;
+                if (toRaw != null && !TryParseDay(toRaw, out to))
+                { req.Http.Response.StatusCode = 400; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "to must be a date in yyyy-MM-dd form" }; }
+                DateTime from = to.AddDays(-364);
+                if (fromRaw != null && !TryParseDay(fromRaw, out from))
+                { req.Http.Response.StatusCode = 400; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "from must be a date in yyyy-MM-dd form" }; }
+                if (from > to)
+                { req.Http.Response.StatusCode = 400; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "from must not be after to" }; }
+                if ((to - from).TotalDays > Constants.VesselHistoryMaxActivityRangeDays)
+                { req.Http.Response.StatusCode = 400; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "The range from..to must be at most " + Constants.VesselHistoryMaxActivityRangeDays + " days" }; }
+
+                string? repoPath = ResolveRepoPath(vessel);
+                if (repoPath == null)
+                    return EmptyActivity(id, branch, from, to, offset, "No repository found for this vessel");
+
+                try
+                {
+                    VesselCommitActivity activity = await _git.GetCommitActivityAsync(repoPath, branch, from, to, offset).ConfigureAwait(false);
+                    activity.VesselId = id;
+                    return activity;
+                }
+                catch (Exception ex)
+                {
+                    return EmptyActivity(id, branch, from, to, offset, "Git error: " + ex.Message);
+                }
+            },
+            api => api
+                .WithTag("Vessels")
+                .WithSummary("Get vessel commit activity")
+                .WithDescription("Returns per-day commit counts on a vessel branch for the history heatmap: one zero-filled entry per day from 'from' to 'to' inclusive, bucketed by committer date shifted by utcOffsetMinutes, plus the range total, the largest day count, and the committer dates of the first and last commits on the branch. Repository problems (no local clone yet, unknown branch, git failure) return 200 with Error set.")
+                .WithParameter(OpenApiParameterMetadata.Path("id", "Vessel ID (vsl_ prefix)"))
+                .WithParameter(OpenApiParameterMetadata.Query("branch", "Branch to read (default: the vessel's default branch, else main)", false))
+                .WithParameter(OpenApiParameterMetadata.Query("from", "First day, yyyy-MM-dd (default: 364 days before 'to')", false))
+                .WithParameter(OpenApiParameterMetadata.Query("to", "Last day, yyyy-MM-dd, inclusive (default: today in the offset); at most 1830 days after 'from'", false))
+                .WithParameter(OpenApiParameterMetadata.Query("utcOffsetMinutes", "UTC offset in minutes to bucket days in, -840 to 840 (default 0)", false, OpenApiSchemaMetadata.Integer()))
+                .WithResponse(200, OpenApiJson.For<VesselCommitActivity>("Per-day commit counts (Error set for repository problems)"))
+                .WithResponse(400, OpenApiJson.For<ApiErrorResponse>("Invalid branch, dates, range, or offset (Error BadRequest)"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(503, OpenApiJson.For<ApiStatusErrorResponse>("Git service is not available (Error ServiceUnavailable)"))
+                .WithSecurity("ApiKey"));
+
+            app.Get("/api/v1/vessels/{id}/history/commits", async (ApiRequest req) =>
+            {
+                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
+                {
+                    req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
+                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
+                }
+                string id = req.Parameters["id"];
+                Vessel? vessel = ctx.IsAdmin
+                    ? await _database.Vessels.ReadAsync(id).ConfigureAwait(false)
+                    : ctx.IsTenantAdmin
+                        ? await _database.Vessels.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false)
+                        : await _database.Vessels.ReadAsync(ctx.TenantId!, ctx.UserId!, id).ConfigureAwait(false);
+                if (vessel == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Vessel not found" }; }
+                if (_git == null) { req.Http.Response.StatusCode = 503; return new ApiStatusErrorResponse(ApiStatusErrorCodeEnum.ServiceUnavailable, "Git service is not available"); }
+
+                int limit = Constants.VesselHistoryDefaultPageSize;
+                string? limitRaw = NormalizeEmpty(req.Query.GetValueOrDefault("limit"));
+                if (limitRaw != null && !Int32.TryParse(limitRaw, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out limit))
+                { req.Http.Response.StatusCode = 400; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "limit must be an integer" }; }
+                if (limit < 1 || limit > Constants.VesselHistoryMaxPageSize)
+                { req.Http.Response.StatusCode = 400; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "limit must be between 1 and " + Constants.VesselHistoryMaxPageSize }; }
+
+                VesselCommitCursor? cursor = null;
+                string? cursorRaw = NormalizeEmpty(UnescapeQueryValue(req.Query.GetValueOrDefault("cursor")));
+                string branch;
+                long? until = null;
+                if (cursorRaw != null)
+                {
+                    if (!VesselCommitCursor.TryDecode(cursorRaw, out cursor) || cursor == null)
+                    { req.Http.Response.StatusCode = 400; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "cursor is not valid; pass a NextCursor value unchanged" }; }
+                    branch = cursor.Branch;
+                    until = cursor.Until;
+                }
+                else
+                {
+                    branch = NormalizeEmpty(UnescapeQueryValue(req.Query.GetValueOrDefault("branch"))) ?? DefaultBranchOf(vessel);
+                    if (!GitRevisionNames.IsSafeBranchName(branch)) { req.Http.Response.StatusCode = 400; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "branch is not a valid branch name" }; }
+                    string? beforeRaw = NormalizeEmpty(UnescapeQueryValue(req.Query.GetValueOrDefault("before")));
+                    if (beforeRaw != null)
+                    {
+                        if (!TryParseBefore(beforeRaw, out long beforeUntil))
+                        { req.Http.Response.StatusCode = 400; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "before must be an ISO 8601 date or date-time (yyyy-MM-dd means the start of that day in UTC)" }; }
+                        until = beforeUntil;
+                    }
+                }
+
+                VesselCommitPage page = new VesselCommitPage { VesselId = id, Branch = branch };
+                string? repoPath = ResolveRepoPath(vessel);
+                if (repoPath == null)
+                {
+                    page.Error = "No repository found for this vessel";
+                    return page;
+                }
+
+                try
+                {
+                    string? tip = cursor != null ? cursor.Tip : await _git.ResolveBranchTipAsync(repoPath, branch).ConfigureAwait(false);
+                    if (tip == null)
+                    {
+                        page.Error = "Branch " + branch + " was not found or has no commits";
+                        return page;
+                    }
+
+                    int skip = cursor != null ? cursor.Skip : 0;
+                    GitCommitLogPage log = await _git.GetCommitLogAsync(repoPath, tip, until, skip, limit).ConfigureAwait(false);
+                    page.Commits = log.Commits;
+                    if (log.HasMore)
+                    {
+                        VesselCommitCursor next = new VesselCommitCursor { Branch = branch, Tip = tip, Until = until, Skip = skip + log.Commits.Count };
+                        page.NextCursor = next.Encode();
+                    }
+                    return page;
+                }
+                catch (Exception ex)
+                {
+                    page.Error = "Git error: " + ex.Message;
+                    return page;
+                }
+            },
+            api => api
+                .WithTag("Vessels")
+                .WithSummary("List vessel commits")
+                .WithDescription("Returns one page of a vessel branch's commit history, newest commit date first (git log --date-order), each commit with its author, committer, dates, message, and changed files with added and deleted lines (merge commits against their first parent; at most 200 files listed per commit, FilesTruncated set beyond that). Follow NextCursor for older pages: the cursor pins the branch tip the first page resolved, so commits that land later do not shift paging; pass it alone (branch and before are then ignored). NextCursor is null on the last page. Repository problems return 200 with Error set.")
+                .WithParameter(OpenApiParameterMetadata.Path("id", "Vessel ID (vsl_ prefix)"))
+                .WithParameter(OpenApiParameterMetadata.Query("branch", "Branch to read (default: the vessel's default branch, else main); ignored with cursor", false))
+                .WithParameter(OpenApiParameterMetadata.Query("before", "Only commits with a commit date strictly before this instant (ISO 8601; a bare yyyy-MM-dd means the start of that day in UTC); ignored with cursor", false))
+                .WithParameter(OpenApiParameterMetadata.Query("cursor", "Opaque cursor from the previous page's NextCursor", false))
+                .WithParameter(OpenApiParameterMetadata.Query("limit", "Page size, 1-200 (default 50)", false, OpenApiSchemaMetadata.Integer()))
+                .WithResponse(200, OpenApiJson.For<VesselCommitPage>("One page of commits (Error set for repository problems)"))
+                .WithResponse(400, OpenApiJson.For<ApiErrorResponse>("Invalid branch, before, cursor, or limit (Error BadRequest)"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithResponse(503, OpenApiJson.For<ApiStatusErrorResponse>("Git service is not available (Error ServiceUnavailable)"))
                 .WithSecurity("ApiKey"));
@@ -855,6 +1022,53 @@ namespace Armada.Server.Routes
             {
                 return value;
             }
+        }
+
+        private static string DefaultBranchOf(Vessel vessel)
+        {
+            return String.IsNullOrWhiteSpace(vessel.DefaultBranch) ? "main" : vessel.DefaultBranch.Trim();
+        }
+
+        private static bool TryParseDay(string value, out DateTime day)
+        {
+            return DateTime.TryParseExact(value, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out day);
+        }
+
+        /// <summary>
+        /// Parse the history before filter (an exclusive instant) into git's inclusive --until bound in Unix seconds:
+        /// commit dates are whole seconds, so "strictly before T" is "at or before ceil(T) - 1".
+        /// </summary>
+        private static bool TryParseBefore(string value, out long untilUnixSeconds)
+        {
+            untilUnixSeconds = 0;
+            DateTimeOffset instant;
+            if (DateTime.TryParseExact(value, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime day))
+            {
+                instant = new DateTimeOffset(day, TimeSpan.Zero);
+            }
+            else if (!DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out instant))
+            {
+                return false;
+            }
+
+            long milliseconds = instant.ToUnixTimeMilliseconds();
+            long ceilingSeconds = milliseconds / 1000L + (milliseconds % 1000L > 0 ? 1L : 0L);
+            untilUnixSeconds = ceilingSeconds - 1L;
+            return true;
+        }
+
+        private static VesselCommitActivity EmptyActivity(string vesselId, string branch, DateTime from, DateTime to, int offset, string error)
+        {
+            VesselCommitActivity activity = new VesselCommitActivity();
+            activity.VesselId = vesselId;
+            activity.Branch = branch;
+            activity.From = from.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            activity.To = to.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            activity.UtcOffsetMinutes = offset;
+            for (DateTime day = from; day <= to; day = day.AddDays(1))
+                activity.Days.Add(new VesselCommitActivityDay { Date = day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) });
+            activity.Error = error;
+            return activity;
         }
 
         private static string? NormalizeEmpty(string? value)

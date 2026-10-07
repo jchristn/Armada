@@ -437,6 +437,8 @@ namespace Armada.Core.Authorization
             Add("PATCH", "/api/v1/vessels/{id}/context", "Vessel", ResourceOperationEnum.Update, PermissionLevel.TenantAdmin);
             Add("GET", "/api/v1/vessels/{id}/git-status", "Vessel", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("GET", "/api/v1/vessels/{id}/branches", "Vessel", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/vessels/{id}/history/activity", "Vessel", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/vessels/{id}/history/commits", "Vessel", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("POST", "/api/v1/vessels/{id}/branches/push", "Vessel", ResourceOperationEnum.Execute, PermissionLevel.TenantAdmin);
             Add("POST", "/api/v1/vessels/{id}/branches/merge", "Vessel", ResourceOperationEnum.Execute, PermissionLevel.TenantAdmin);
             Add("GET", "/api/v1/vessels/{id}/readiness", "Vessel", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
