@@ -3,6 +3,7 @@ import { listUsers } from '../../api/client';
 import type { UserMaster } from '../../types/models';
 import { useAuth } from '../../context/AuthContext';
 import { useLocale } from '../../context/LocaleContext';
+import { userScopeLabel } from '../../lib/userScope';
 
 interface UserScopeFilterProps {
   /** Currently selected user id, or '' for "all users in scope". */
@@ -34,16 +35,11 @@ export default function UserScopeFilter({ value, onChange }: UserScopeFilterProp
 
   if (!canScope) return null;
 
-  function userLabel(user: UserMaster): string {
-    const name = [user.firstName, user.lastName].filter(Boolean).join(' ').trim();
-    return name ? `${name} (${user.email})` : user.email;
-  }
-
   return (
     <select aria-label={t('View records for a specific user')} value={value} onChange={(event) => onChange(event.target.value)} title={t('View records for a specific user')}>
       <option value="">{t('All users')}</option>
       {users.map((user) => (
-        <option key={user.id} value={user.id}>{userLabel(user)}</option>
+        <option key={user.id} value={user.id}>{userScopeLabel(user)}</option>
       ))}
     </select>
   );

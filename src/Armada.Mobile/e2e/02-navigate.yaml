@@ -10,19 +10,25 @@ name: 02-navigate
     timeout: 30000
 - tapOn:
     id: "tab-work"
+# The Work tab opens on Home (W2.1); the Work destinations follow the overview.
 - extendedWaitUntil:
     visible:
-      id: "work-menu"
+      id: "home-screen"
     timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "nav-/missions"
+    direction: DOWN
+    visibilityPercentage: 100
+    centerElement: true
 - assertVisible: "OPERATIONS"
 - takeScreenshot: work
 - tapOn:
     id: "nav-/missions"
 - extendedWaitUntil:
     visible:
-      id: "route-placeholder-workstream"
+      id: "missions-list"
     timeout: 10000
-- assertVisible: "Coming in W2.2"
 # Tapping the active tab pops its stack to the root (works the same on iOS and Android).
 - tapOn:
     id: "tab-work"
@@ -30,6 +36,8 @@ name: 02-navigate
     element:
       id: "nav-/vessels"
     direction: DOWN
+    visibilityPercentage: 100
+    centerElement: true
 - tapOn:
     id: "nav-/vessels"
 - assertVisible: "Coming in W3.1"
@@ -61,6 +69,8 @@ name: 02-navigate
     element:
       id: "nav-/preferences"
     direction: DOWN
+    visibilityPercentage: 100
+    centerElement: true
 - tapOn:
     id: "nav-/preferences"
 - extendedWaitUntil:
