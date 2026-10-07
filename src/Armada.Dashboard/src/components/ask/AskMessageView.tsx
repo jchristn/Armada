@@ -1,29 +1,13 @@
 import type { ReactNode } from 'react';
-import type { AskActionProposal, AskMessage, AskToolCall, CliPermissionRequest } from '../../types/models';
+import type { AskActionProposal, AskMessage, CliPermissionRequest } from '../../types/models';
 import { useLocale } from '../../context/LocaleContext';
 import Markdown from '../shared/Markdown';
-import ChatToolChips, { type ToolEvent } from '../shared/ChatToolChips';
+import ChatToolChips from '../shared/ChatToolChips';
+import { formatTurnDuration as formatDuration, toolCallsToEvents } from '../../lib/askFormat';
 import AskConfirmCard from './AskConfirmCard';
 import CliPermissionCard from '../cliPermissions/CliPermissionCard';
 
-/** Persisted tool calls in the shape the shared chips render. */
-export function toolCallsToEvents(calls: AskToolCall[] | null | undefined): ToolEvent[] {
-  return (calls ?? []).map((call, i) => ({
-    id: call.callId || call.id || `call-${i}`,
-    name: call.toolName || 'tool',
-    status: call.permissionDenied === true || call.ok === false ? 'failed' : call.ok == null && !call.resultText ? 'running' : 'success',
-    arguments: call.argumentsText ?? null,
-    result: call.resultText ?? null,
-    elapsedMs: call.elapsedMs ?? null,
-    ...(call.permissionDenied === true ? { permissionDenied: true } : {}),
-  }));
-}
-
-function formatDuration(ms: number | null | undefined): string {
-  if (ms == null) return '';
-  if (ms < 1000) return `${Math.round(ms)}ms`;
-  return `${(ms / 1000).toFixed(ms < 10000 ? 1 : 0)}s`;
-}
+export { toolCallsToEvents } from '../../lib/askFormat';
 
 interface AskMessageViewProps {
   message: AskMessage;

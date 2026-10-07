@@ -13,6 +13,7 @@ import quickMenuSource from '../components/ask/AskQuickActionMenu.tsx?raw';
 import dispatchSource from '../components/ask/AskDispatchForm.tsx?raw';
 import fleetActionSource from '../components/ask/AskFleetActionForm.tsx?raw';
 import quickActionsSource from './askQuickActions.ts?raw';
+import askWorkSource from './askWork.ts?raw';
 import type { I18nCatalog } from '../i18n/runtime';
 
 const S = "'((?:[^'\\\\]|\\\\.)*)'";
@@ -24,7 +25,7 @@ const ERROR_LINE = /errors\.\w+ = (.*?);?$/gm;
 
 const SOURCES = [
   pageSource, threadListSource, headerSource, stripSource, messageListSource, messageViewSource, confirmSource,
-  workCardSource, composerSource, quickMenuSource, dispatchSource, fleetActionSource,
+  workCardSource, composerSource, quickMenuSource, dispatchSource, fleetActionSource, askWorkSource,
 ];
 
 /** Every literal the Ask Armada home base passes to the translator. */

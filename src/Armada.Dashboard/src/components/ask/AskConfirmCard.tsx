@@ -3,12 +3,9 @@ import type { AskActionProposal } from '../../types/models';
 import { useLocale } from '../../context/LocaleContext';
 import StatusBadge from '../shared/StatusBadge';
 import CopyButton from '../shared/CopyButton';
+import { prettyJson } from '../../lib/askFormat';
 
-/** Pretty-print JSON text; fall back to the raw text. */
-export function prettyJson(raw: string | null | undefined): string {
-  if (!raw) return '';
-  try { return JSON.stringify(JSON.parse(raw), null, 2); } catch { return raw; }
-}
+export { prettyJson } from '../../lib/askFormat';
 
 interface AskConfirmCardProps {
   proposal: AskActionProposal;
