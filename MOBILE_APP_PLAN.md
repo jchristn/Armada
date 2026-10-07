@@ -3,7 +3,7 @@
 > **Type:** implementation plan (work-tracking). Annotate task status and the progress log as you go; keep this
 > document in sync with what actually shipped.
 >
-> **Status:** In progress (W0 started)
+> **Status:** In progress (W0 and W5.1 in progress; W5.2 done)
 > **Built on:** React Native with Expo SDK 57 (TypeScript, Expo Router), in `src/Armada.Mobile`
 > **Parity baseline:** the web dashboard at `src/Armada.Dashboard` as of 2026-10-07 (the same surfaces the TUI parity
 > manifest tracks: page routes, hub tabs, server-calling API client functions, WebSocket events, Server-page settings)
@@ -169,7 +169,7 @@ selection) are recorded per entry in the manifest notes.
 
 ### W5. Push and remote access
 - [ ] W5.1 Server S1 and S2 with tests on all four database providers
-- [ ] W5.2 Proxy P1 with tests
+- [x] W5.2 Proxy P1 with tests (`X-Armada-Proxy-Session` on every route, Bearer on `/proxy-api`, `armada-proxy-session.<b64url>` subprotocol on `/ws`; proxy credentials never relayed to the Admiral; request sequence in docs/REMOTE_SERVER.md)
 - [ ] W5.3 App: permission prompt, device registration per profile, categories in settings, notification tap and
   action handling (deep link, approve/deny with unlock), badge counts
 - [ ] W5.4 Proxy profiles in the app (portal sign-in, instance picker)
@@ -200,3 +200,4 @@ Milestone C: push, proxy, quality pass, store-ready builds.
 | Date | Who | Item | Notes |
 |---|---|---|---|
 | 2026-10-07 | orchestrator | plan | Plan written from the maintainer's decisions (Expo, full parity, direct + proxy + push, store-ready) |
+| 2026-10-07 | W5.2 | work/mobile-proxy | Proxy bearer sessions for native clients; proxy session cookie and header no longer enter the tunnel (F-38); sessions stored by SHA-256; Armada.Client ProxySessionToken; 46/46 proxy and 5/5 relay tests |
