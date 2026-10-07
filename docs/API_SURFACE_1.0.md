@@ -24,12 +24,12 @@ administrator).
 
 | Surface | Total | Experimental |
 |---|---|---|
-| REST routes | 361 | 11 |
+| REST routes | 363 | 11 |
 | MCP tools | 155 | 5 |
 | WebSocket endpoints | 2 | 1 |
 | WebSocket commands | 61 | 0 |
 | WebSocket event types | 67 | 0 |
-| CLI commands | 62 | 0 |
+| CLI commands | 63 | 0 |
 | Settings keys | 182 | 12 |
 
 ## REST API
@@ -368,6 +368,8 @@ Base path `/api/v1`. Request and response bodies are PascalCase JSON; errors are
 | GET | `/api/v1/vessels/{id}/health` | Authenticated |  | 200 `VesselHealthDetail`, 404 |  |
 | DELETE | `/api/v1/vessels/{id}/health/overrides/{criterion}` | TenantAdmin |  | 200 `VesselHealthDetail`, 404 |  |
 | PUT | `/api/v1/vessels/{id}/health/overrides/{criterion}` | TenantAdmin | `VesselHealthOverrideRequest` | 200 `VesselHealthDetail`, 404 |  |
+| GET | `/api/v1/vessels/{id}/history/activity` | Authenticated |  | 200 `VesselCommitActivity`, 400 `ApiErrorResponse`, 404, 503 `ApiStatusErrorResponse` |  |
+| GET | `/api/v1/vessels/{id}/history/commits` | Authenticated |  | 200 `VesselCommitPage`, 400 `ApiErrorResponse`, 404, 503 `ApiStatusErrorResponse` |  |
 | GET | `/api/v1/vessels/{id}/landing-preview` | Authenticated |  | 200 `LandingPreviewResult`, 404 |  |
 | GET | `/api/v1/vessels/{id}/readiness` | Authenticated |  | 200 `VesselReadinessResult`, 400, 404 |  |
 | GET | `/api/v1/voyages` | Authenticated |  | 200 `EnumerationResult<Voyage>` |  |
@@ -720,6 +722,7 @@ Commands of the `armada` CLI (Helm). `*` marks a required argument or option. Gl
 | `armada status` |  | `--all\|-a`, `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
 | `armada tui` |  | `--profile`, `--route`, `--server`, `--token` |
 | `armada vessel add` | `<name>*` `<repoUrl>*` | `--branch\|-b`, `--fleet\|-f`, `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada vessel history` | `<vessel>*` | `--all`, `--before`, `--branch\|-b`, `--from`, `--heatmap`, `--json`, `--limit\|-n`, `--page`, `--page-size`, `--profile`, `--server`, `--to`, `--token`, `--verbose` |
 | `armada vessel import` | `<paths>` | `--apply`, `--captain`, `--categorize`, `--depth`, `--dry-run`, `--fleet\|-f`, `--json`, `--page`, `--page-size`, `--profile`, `--prompt-file`, `--root\|-r`, `--server`, `--token`, `--verbose`, `--yes\|-y` |
 | `armada vessel list` |  | `--fleet\|-f`, `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
 | `armada vessel remove` | `<vessel>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |

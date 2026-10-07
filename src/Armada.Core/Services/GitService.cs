@@ -1081,9 +1081,9 @@ namespace Armada.Core.Services
 
             long? first = null;
             long? last = null;
-            string tipOutput = await RunGitAsync(repoPath, token, "log", "-1", "--format=%ct", tip, "--").ConfigureAwait(false);
+            string tipOutput = await RunGitAsync(repoPath, token, "log", "--no-show-signature", "-1", "--format=%ct", tip, "--").ConfigureAwait(false);
             foreach (long seconds in ParseUnixSecondsLines(tipOutput)) last = seconds;
-            string rootOutput = await RunGitAsync(repoPath, token, "log", "--max-parents=0", "--format=%ct", tip, "--").ConfigureAwait(false);
+            string rootOutput = await RunGitAsync(repoPath, token, "log", "--no-show-signature", "--max-parents=0", "--format=%ct", tip, "--").ConfigureAwait(false);
             foreach (long seconds in ParseUnixSecondsLines(rootOutput))
             {
                 if (!first.HasValue || seconds < first.Value) first = seconds;
@@ -1096,7 +1096,7 @@ namespace Armada.Core.Services
             long rangeEnd = new DateTimeOffset(to.AddDays(1), TimeSpan.Zero).ToUnixTimeSeconds() - offsetSeconds;
             string since = "--since=@" + (rangeStart - 86400L).ToString(CultureInfo.InvariantCulture) + " +0000";
             string until = "--until=@" + (rangeEnd + 86400L).ToString(CultureInfo.InvariantCulture) + " +0000";
-            string rangeOutput = await RunGitAsync(repoPath, token, "log", "--format=%ct", since, until, tip, "--").ConfigureAwait(false);
+            string rangeOutput = await RunGitAsync(repoPath, token, "log", "--no-show-signature", "--format=%ct", since, until, tip, "--").ConfigureAwait(false);
 
             foreach (long seconds in ParseUnixSecondsLines(rangeOutput))
             {
@@ -1134,7 +1134,7 @@ namespace Armada.Core.Services
 
             List<string> args = new List<string>
             {
-                "log", "--date-order", "-z", "--no-color", "--no-ext-diff", "--no-textconv",
+                "log", "--no-show-signature", "--date-order", "-z", "--no-color", "--no-ext-diff", "--no-textconv",
                 "--format=" + GitMachineOutputParser.CommitLogFormat,
                 "--raw", "--numstat", "-M", "--root", "--diff-merges=first-parent",
                 "--skip=" + skip.ToString(CultureInfo.InvariantCulture),

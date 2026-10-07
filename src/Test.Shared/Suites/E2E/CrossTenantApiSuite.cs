@@ -449,6 +449,19 @@ namespace Test.Shared.Suites.E2E
                 AssertEqual(HttpStatusCode.NotFound, response.StatusCode);
             }));
 
+            cases.Add(CaseAsync("vessel_history_from_tenant_b_returns_404", "Vessel history (activity and commits) from tenant B returns 404; tenant A reads it", TestTags.Negative, async () =>
+            {
+                await E2EServerFixture.AcquireAsync(this);
+
+                foreach (string route in new[] { "/history/activity", "/history/commits" })
+                {
+                    HttpResponseMessage denied = await _ClientB!.GetAsync("/api/v1/vessels/" + _VesselAId + route).ConfigureAwait(false);
+                    AssertEqual(HttpStatusCode.NotFound, denied.StatusCode, "tenant B " + route);
+                    HttpResponseMessage allowed = await _ClientA!.GetAsync("/api/v1/vessels/" + _VesselAId + route).ConfigureAwait(false);
+                    AssertEqual(HttpStatusCode.OK, allowed.StatusCode, "tenant A " + route);
+                }
+            }));
+
             cases.Add(CaseAsync("vessel_delete_from_tenant_b_returns_404", "Vessel_DeleteFromTenantB_Returns404", TestTags.Negative, async () =>
             {
                 await E2EServerFixture.AcquireAsync(this);

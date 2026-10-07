@@ -491,7 +491,7 @@ or `armada profile use local` goes back.
 
 ## 9. CLI command reference for remote targets
 
-Every command was evaluated for whether it can act on a remote Admiral. Summary: 49 commands work remotely through
+Every command was evaluated for whether it can act on a remote Admiral. Summary: 50 commands work remotely through
 REST, 5 are local-only and refuse a remote target, 4 manage local client files (and use the target where it matters),
 and 4 manage profiles.
 
@@ -515,6 +515,7 @@ and 4 manage profiles.
 | `backlog list`, `show`, `create`, `update`, `delete`, `reorder` | Yes | target options | |
 | `vessel list`, `add`, `remove` | Yes | target options | The repo URL must be clonable from the Admiral host (or Harbor). |
 | `vessel import` | Yes | target options | Paths and `--root` are directories on the Admiral host, not on this machine. |
+| `vessel history` | Yes | target options | Git runs on the Admiral host against the vessel's repository; days are grouped in this machine's time zone. `--all` follows the server's cursor. |
 | `captain list`, `add`, `update`, `stop`, `remove`, `stop-all` | Yes | target options | The runtime must be installed and signed in on the Admiral host or a Harbor. |
 | `fleet list`, `add`, `remove` | Yes | target options | |
 | `server status` | Yes | target options | Unauthenticated health check of the target. |

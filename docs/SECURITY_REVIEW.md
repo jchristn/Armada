@@ -654,6 +654,8 @@ only within the caller's tenant (tenant admins) or the caller's own records (reg
 | PATCH | `/api/v1/vessels/{id}/context` | VesselRoutes | Vessel:Update | TenantAdmin | caller tenant/user (handler) | typed JSON body | - |
 | GET | `/api/v1/vessels/{id}/git-status` | VesselRoutes | Vessel:Read | Authenticated | caller tenant/user (handler) | path | - |
 | GET | `/api/v1/vessels/{id}/branches` | VesselRoutes | Vessel:Read | Authenticated | caller tenant/user (handler) | path | - |
+| GET | `/api/v1/vessels/{id}/history/activity` | VesselRoutes | Vessel:Read | Authenticated | caller tenant/user (handler) | path + query | - |
+| GET | `/api/v1/vessels/{id}/history/commits` | VesselRoutes | Vessel:Read | Authenticated | caller tenant/user (handler) | path + query | - |
 | POST | `/api/v1/vessels/{id}/branches/push` | VesselRoutes | Vessel:Execute | TenantAdmin | caller tenant/user (handler) | typed JSON body | - |
 | POST | `/api/v1/vessels/{id}/branches/merge` | VesselRoutes | Vessel:Execute | TenantAdmin | caller tenant/user (handler) | typed JSON body | - |
 | GET | `/api/v1/vessels/{id}/readiness` | VesselRoutes | Vessel:Read | Authenticated | caller tenant/user (handler) | path + query | - |

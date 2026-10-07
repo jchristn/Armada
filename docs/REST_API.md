@@ -549,8 +549,8 @@ Every REST error is an `ApiErrorResponse` with a stable `Error` code that matche
 - Exceptions to the shape, frozen for 1.0 and documented with their routes: `POST /api/v1/authenticate` returns
   `AuthenticateResult { Success: false, ... }` with 401 on bad credentials, `POST /api/v1/onboarding` returns
   `OnboardingResult { Success: false, ErrorMessage }` with 400/403/409, and the vessel git helpers
-  (`GET /api/v1/vessels/{id}/git-status`, `GET /api/v1/vessels/{id}/branches`) report a git failure in an `Error`
-  field of a `200` result.
+  (`GET /api/v1/vessels/{id}/git-status`, `GET /api/v1/vessels/{id}/branches`, `GET /api/v1/vessels/{id}/history/activity`,
+  `GET /api/v1/vessels/{id}/history/commits`) report a git failure in an `Error` field of a `200` result.
 - Clients should check the HTTP status code first, then read `Error`.
 
 ---
@@ -1755,6 +1755,131 @@ List the branches in the vessel repository, each with a current flag and ahead/b
 
 When the repository cannot be resolved or a git error occurs, the response carries an `Error` field instead of branches.
 
+**Error:** `404` - Vessel not found
+**Error:** `503` - Git service is not available
+
+---
+
+#### GET /api/v1/vessels/{id}/history/activity
+
+Per-day commit counts on a vessel branch, for the history heatmap. Days are bucketed by the commit date (committer
+date) shifted by `utcOffsetMinutes`; `Days` holds one entry per day from `From` to `To` inclusive, in date order,
+including days with no commits. `FirstCommitUtc` and `LastCommitUtc` cover the whole branch, not just the range (use
+them to bound year navigation). Git runs on the Admiral against the same repository as the branches route (the
+vessel's bare clone, else its working directory).
+
+**Permission:** Authenticated
+
+**Path Parameters:**
+| Parameter | Description |
+|---|---|
+| `id` | Vessel ID (`vsl_` prefix) |
+
+**Query Parameters:**
+| Parameter | Description |
+|---|---|
+| `branch` | Branch to read (default: the vessel's `DefaultBranch`, else `main`) |
+| `from` | First day, `yyyy-MM-dd` (default: 364 days before `to`) |
+| `to` | Last day, `yyyy-MM-dd`, inclusive (default: today in the offset); at most 1830 days after `from` |
+| `utcOffsetMinutes` | UTC offset in minutes to bucket days in, `-840` to `840` (default `0`); for example `-420` for UTC-7 |
+
+**Response:** `200 OK` - `VesselCommitActivity`
+
+```json
+{
+  "VesselId": "vsl_abc123",
+  "Branch": "main",
+  "From": "2025-10-07",
+  "To": "2026-10-06",
+  "UtcOffsetMinutes": -420,
+  "Days": [ { "Date": "2025-10-07", "Count": 0 }, { "Date": "2025-10-08", "Count": 3 } ],
+  "TotalCommits": 412,
+  "MaxDayCount": 17,
+  "FirstCommitUtc": "2024-03-01T17:02:11Z",
+  "LastCommitUtc": "2026-10-06T22:40:05Z",
+  "Error": null
+}
+```
+
+When the repository cannot be resolved, the branch does not exist or has no commits, or git fails, the response is
+still `200` with `Error` set and zero-filled `Days`.
+
+**Error:** `400` - `BadRequest`: `from` or `to` not a `yyyy-MM-dd` date, `from` after `to`, a range over 1830 days, an
+offset outside -840..840 or not an integer, or an invalid branch name
+**Error:** `404` - Vessel not found
+**Error:** `503` - Git service is not available
+
+---
+
+#### GET /api/v1/vessels/{id}/history/commits
+
+One page of a vessel branch's commit history, newest commit date first (`git log --date-order`: a commit never
+appears after its parents). Each commit carries its full and short SHA, subject and body, author and committer with
+dates (UTC), parent SHAs, `IsMerge`, and its changed files (`GitChangedFile`: `Kind`, `Path`, `OldPath` for a rename
+or copy, `AddedLines`, `DeletedLines`, `IsBinary`) with totals. Merge commits are measured against their first parent;
+binary files count zero lines. `Files` lists at most 200 files; `FilesChanged` and the line totals always count every
+file, and `FilesTruncated` is `true` when more were changed.
+
+**Permission:** Authenticated
+
+**Path Parameters:**
+| Parameter | Description |
+|---|---|
+| `id` | Vessel ID (`vsl_` prefix) |
+
+**Query Parameters:**
+| Parameter | Description |
+|---|---|
+| `branch` | Branch to read (default: the vessel's `DefaultBranch`, else `main`); ignored with `cursor` |
+| `before` | Only commits with a commit date strictly before this instant: ISO 8601, and a bare `yyyy-MM-dd` means the start of that day in UTC (to jump to a local day, send the next local midnight with its offset); ignored with `cursor` |
+| `cursor` | `NextCursor` from the previous page, unchanged |
+| `limit` | Page size, 1-200 (default 50) |
+
+**Paging:** `NextCursor` is an opaque string, or `null` on the last page. Pass it back as `cursor` (with `limit` if you
+like); `branch` and `before` are then taken from the cursor. The cursor pins the tip commit the first page resolved,
+so commits that land on the branch while you page do not shift, duplicate, or skip entries; start again without a
+cursor to see them. A cursor that is not one the server issued is a `400`.
+
+**Response:** `200 OK` - `VesselCommitPage`
+
+```json
+{
+  "VesselId": "vsl_abc123",
+  "Branch": "main",
+  "Commits": [
+    {
+      "Sha": "3f9c2d1e8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3d",
+      "ShortSha": "3f9c2d1",
+      "Subject": "Fix the login redirect",
+      "Body": "The redirect lost the return URL.",
+      "AuthorName": "Ada",
+      "AuthorEmail": "ada@example.com",
+      "AuthoredUtc": "2026-10-06T21:12:00Z",
+      "CommitterName": "Ada",
+      "CommitterEmail": "ada@example.com",
+      "CommittedUtc": "2026-10-06T21:15:42Z",
+      "ParentShas": [ "9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b" ],
+      "IsMerge": false,
+      "FilesChanged": 2,
+      "AddedLines": 14,
+      "DeletedLines": 3,
+      "Files": [
+        { "Kind": "Modified", "Path": "src/login.ts", "OldPath": null, "AddedLines": 12, "DeletedLines": 3, "IsBinary": false },
+        { "Kind": "Renamed", "Path": "docs/auth.md", "OldPath": "docs/login.md", "AddedLines": 2, "DeletedLines": 0, "IsBinary": false }
+      ],
+      "FilesTruncated": false
+    }
+  ],
+  "NextCursor": "eyJWIjoxLCJCcmFuY2giOiJtYWluIiwiVGlwIjoi...",
+  "Error": null
+}
+```
+
+Repository problems (no repository, unknown branch, a cursor whose tip commit no longer exists, git failure) return
+`200` with `Error` set and no commits.
+
+**Error:** `400` - `BadRequest`: `limit` outside 1-200 or not an integer, an invalid `before`, a malformed `cursor`, or
+an invalid branch name
 **Error:** `404` - Vessel not found
 **Error:** `503` - Git service is not available
 

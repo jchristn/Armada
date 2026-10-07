@@ -19,7 +19,7 @@ namespace Armada.Helm.Rendering
 
         private static readonly string[] _LevelColors = new string[] { "grey30", "darkgreen", "green4", "green3", "green1" };
         private static readonly char[] _AsciiLevels = new char[] { '.', '-', '+', '*', '#' };
-        private const string _UnicodeCell = "■";
+        private const string _UnicodeCell = "\u25A0";
         private const int _RowLabelWidth = 4;
 
         #endregion

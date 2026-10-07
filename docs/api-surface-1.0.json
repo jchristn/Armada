@@ -5530,6 +5530,44 @@
     },
     {
       "method": "GET",
+      "route": "/api/v1/vessels/{id}/history/activity",
+      "auth": "Authenticated",
+      "resource": "Vessel:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "VesselCommitActivity",
+        "400": "ApiErrorResponse",
+        "404": "",
+        "503": "ApiStatusErrorResponse"
+      },
+      "tags": [
+        "Vessels"
+      ],
+      "summary": "Get vessel commit activity",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/vessels/{id}/history/commits",
+      "auth": "Authenticated",
+      "resource": "Vessel:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "VesselCommitPage",
+        "400": "ApiErrorResponse",
+        "404": "",
+        "503": "ApiStatusErrorResponse"
+      },
+      "tags": [
+        "Vessels"
+      ],
+      "summary": "List vessel commits",
+      "experimental": false
+    },
+    {
+      "method": "GET",
       "route": "/api/v1/vessels/{id}/landing-preview",
       "auth": "Authenticated",
       "resource": "Vessel:Read",
@@ -16043,6 +16081,132 @@
         {
           "kind": "option",
           "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "vessel history",
+      "description": "Show a vessel's commit history or activity heatmap (accepts name or ID)",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "vessel",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "all",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "before",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "branch",
+          "short": "b",
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "from",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "heatmap",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "limit",
+          "short": "n",
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "to",
           "short": null,
           "valueKind": "scalar",
           "type": "String",
