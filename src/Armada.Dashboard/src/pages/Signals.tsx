@@ -21,8 +21,7 @@ import { useAutoRefresh } from '../lib/useAutoRefresh';
 import ErrorModal from '../components/shared/ErrorModal';
 import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
-
-const SIGNAL_TYPES = ['Nudge', 'Mail', 'Assignment', 'Progress', 'Completion', 'Error'] as const;
+import { SIGNAL_TYPES, buildSendSignalRequest, signalListFilters } from '../lib/signals';
 
 type SortDir = 'asc' | 'desc';
 
@@ -77,11 +76,7 @@ export default function Signals() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const filters: Record<string, string> = {};
-      if (filterType) filters.type = filterType;
-      if (filterToCaptain) filters.toCaptainId = filterToCaptain;
-      if (filterUnreadOnly) filters.unreadOnly = 'true';
-      if (userScope) filters.userId = userScope;
+      const filters = signalListFilters({ type: filterType, toCaptainId: filterToCaptain, unreadOnly: filterUnreadOnly, userId: userScope });
       const result = await listSignals({ pageNumber: page, pageSize, filters });
       setSignals(result.objects || []);
       setTotalPages(result.totalPages || 0);
@@ -152,11 +147,7 @@ export default function Signals() {
     e.preventDefault();
     setSendLoading(true);
     try {
-      await sendSignal({
-        type: sendForm.type || 'Nudge',
-        payload: sendForm.payload || undefined,
-        toCaptainId: sendForm.toCaptainId || undefined,
-      });
+      await sendSignal(buildSendSignalRequest(sendForm));
       setShowSendModal(false);
       pushToast('success', t('Signal sent.'));
       load();

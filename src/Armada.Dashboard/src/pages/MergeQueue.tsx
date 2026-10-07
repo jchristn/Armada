@@ -23,6 +23,7 @@ import UserScopeFilter from '../components/shared/UserScopeFilter';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
+import { buildEnqueueMergeRequest, emptyEnqueueMergeForm, type EnqueueMergeForm } from '../lib/mergeQueueForm';
 
 type SortDir = 'asc' | 'desc';
 type SortField = 'branchName' | 'targetBranch' | 'status' | 'priority' | 'createdUtc';
@@ -45,9 +46,7 @@ export default function MergeQueue() {
 
   // Enqueue modal
   const [showEnqueue, setShowEnqueue] = useState(false);
-  const [enqueueForm, setEnqueueForm] = useState({
-    branchName: '', targetBranch: 'main', missionId: '', vesselId: '', testCommand: '', priority: 0,
-  });
+  const [enqueueForm, setEnqueueForm] = useState<EnqueueMergeForm>(emptyEnqueueMergeForm);
 
   // JSON viewer
   const [jsonData, setJsonData] = useState<{ open: boolean; title: string; data: unknown }>({ open: false, title: '', data: null });
@@ -155,14 +154,7 @@ export default function MergeQueue() {
   async function handleEnqueue(e: React.FormEvent) {
     e.preventDefault();
     try {
-      await enqueueMerge({
-        branchName: enqueueForm.branchName,
-        targetBranch: enqueueForm.targetBranch || 'main',
-        missionId: enqueueForm.missionId || undefined,
-        vesselId: enqueueForm.vesselId || undefined,
-        testCommand: enqueueForm.testCommand || undefined,
-        priority: enqueueForm.priority,
-      });
+      await enqueueMerge(buildEnqueueMergeRequest(enqueueForm));
       setShowEnqueue(false);
       pushToast('success', t('Merge entry enqueued.'));
       load();
@@ -313,7 +305,7 @@ export default function MergeQueue() {
             )}
             <button className="btn btn-sm" onClick={handleProcessAll} title={t('Process all queued entries')}>{t('Process All')}</button>
             <button className="btn btn-primary btn-sm" onClick={() => {
-              setEnqueueForm({ branchName: '', targetBranch: 'main', missionId: '', vesselId: '', testCommand: '', priority: 0 });
+              setEnqueueForm(emptyEnqueueMergeForm());
               setShowEnqueue(true);
             }}>+ {t('Enqueue')}</button>
           </>
