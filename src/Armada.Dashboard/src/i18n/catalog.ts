@@ -136,11 +136,11 @@ function applyDynamicPatterns(locale: string, text: string, catalog: I18nCatalog
   let match = text.match(/^\+\s+(.+)$/);
   if (match) return `+ ${translateLabel(locale, match[1], catalog)}`;
 
-  match = text.match(/^←\s+(.+)$/);
-  if (match) return `← ${translateLabel(locale, match[1], catalog)}`;
+  match = text.match(/^\u2190\s+(.+)$/);
+  if (match) return `\u2190 ${translateLabel(locale, match[1], catalog)}`;
 
-  match = text.match(/^(.+)\s+→$/);
-  if (match) return `${translateLabel(locale, match[1], catalog)} →`;
+  match = text.match(/^(.+)\s+\u2192$/);
+  if (match) return `${translateLabel(locale, match[1], catalog)} \u2192`;
 
   const lowercaseStatus = [
     'healthy',
