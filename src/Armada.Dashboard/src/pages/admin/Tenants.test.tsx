@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import Tenants from './Tenants';
 import { createTenant, listTenants } from '../../api/client';
 import { onlyCallArgs } from '../../test/mockCalls';
@@ -128,5 +128,30 @@ describe('Tenants create admin password', () => {
       ...Object.keys(window.sessionStorage).map(k => window.sessionStorage.getItem(k) ?? ''),
     ];
     expect(stored.some(v => v.includes(GENERATED))).toBe(false);
+  });
+});
+
+async function openColumnChooser() {
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /^Columns/ })); });
+  return screen.getByRole('menu', { name: 'Choose visible columns' });
+}
+
+describe('Tenants table', () => {
+  beforeEach(() => window.localStorage.clear());
+
+  it('keeps the toolbar (refresh, auto-refresh, columns) when there are no tenants, and locks Name and ID', async () => {
+    vi.mocked(listTenants).mockResolvedValue({
+      success: true, pageNumber: 1, pageSize: 9999, totalPages: 1, totalRecords: 0, totalMs: 1, objects: [],
+    } as Awaited<ReturnType<typeof listTenants>>);
+    const { container } = render(<Tenants />);
+    expect(await screen.findByText('No tenants found.')).toBeInTheDocument();
+    const bar = container.querySelector('.data-table .pagination-bar') as HTMLElement;
+    expect(within(bar).getByLabelText('Auto-refresh interval')).toBeInTheDocument();
+    expect(within(bar).getByTitle('Refresh tenants')).toBeInTheDocument();
+    expect(container.querySelector('.view-actions .auto-refresh-select')).toBeNull();
+    const menu = await openColumnChooser();
+    expect(within(menu).getByRole('menuitemcheckbox', { name: /^Name/ })).toHaveAttribute('aria-disabled', 'true');
+    expect(within(menu).getByRole('menuitemcheckbox', { name: /^ID/ })).toHaveAttribute('aria-disabled', 'true');
+    expect(within(menu).getByRole('menuitemcheckbox', { name: /^Last Updated/ })).not.toHaveAttribute('aria-disabled');
   });
 });

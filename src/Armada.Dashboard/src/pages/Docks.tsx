@@ -2,14 +2,12 @@ import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { listDocks, deleteDock, listCaptains, listVessels } from '../api/client';
 import type { Dock, Captain, Vessel } from '../types/models';
-import Pagination from '../components/shared/Pagination';
+import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
 import ActionMenu from '../components/shared/ActionMenu';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import JsonViewer from '../components/shared/JsonViewer';
 import RecordDetailModal from '../components/shared/RecordDetailModal';
 import CopyButton from '../components/shared/CopyButton';
-import RefreshButton from '../components/shared/RefreshButton';
-import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
 import UserScopeFilter from '../components/shared/UserScopeFilter';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import PageHeader from '../components/shared/PageHeader';
@@ -136,6 +134,60 @@ export default function Docks() {
     });
   }
 
+  const columns: DataTableColumn<Dock>[] = [
+    {
+      key: 'id', label: t('ID'), required: true, cellClassName: 'mono text-dim table-id-cell',
+      render: (d) => (
+        <span className="id-display">
+          <span className="id-value" title={d.id}>{d.id}</span>
+          <CopyButton text={d.id} onClick={e => e.stopPropagation()} />
+        </span>
+      ),
+    },
+    {
+      key: 'vessel', label: t('Vessel'), interactive: true,
+      render: (d) => d.vesselId ? <a href="#" onClick={e => { e.preventDefault(); navigate(`/vessels/${d.vesselId}`); }}>{vesselName(d.vesselId)}</a> : '-',
+    },
+    {
+      key: 'captain', label: t('Captain'), interactive: true,
+      render: (d) => d.captainId ? <a href="#" onClick={e => { e.preventDefault(); navigate(`/captains/${d.captainId}`); }}>{captainName(d.captainId)}</a> : '-',
+    },
+    {
+      key: 'branchName', label: t('Branch'), sortKey: 'branchName', headerTitle: t('Branch name -- click to sort'),
+      cellClassName: 'mono text-dim table-url-cell',
+      clearFilter: () => table.setColFilter('branchName', ''),
+      filter: <input type="text" className="col-filter" aria-label={t('Branch')} value={table.colFilters.branchName ?? ''} onChange={e => table.setColFilter('branchName', e.target.value)} placeholder={t('Filter...')} />,
+      render: (d) => d.branchName ? (
+        <span className="id-display">
+          <span className="url-value" title={d.branchName}>{d.branchName}</span>
+          <CopyButton text={d.branchName} onClick={e => e.stopPropagation()} title={t('Copy branch')} />
+        </span>
+      ) : '-',
+    },
+    {
+      key: 'worktreePath', label: t('Worktree Path'), cellClassName: 'mono text-dim', cellTitle: (d) => d.worktreePath || '',
+      clearFilter: () => table.setColFilter('worktreePath', ''),
+      filter: <input type="text" className="col-filter" aria-label={t('Worktree Path')} value={table.colFilters.worktreePath ?? ''} onChange={e => table.setColFilter('worktreePath', e.target.value)} placeholder={t('Filter...')} />,
+      render: (d) => <span className="cell-clip"><span>{d.worktreePath || '-'}</span></span>,
+    },
+    { key: 'active', label: t('Active'), sortKey: 'active', headerTitle: t('Active status -- click to sort'), render: (d) => (d.active ? t('Yes') : t('No')) },
+    {
+      key: 'created', label: t('Created'), sortKey: 'createdUtc', headerTitle: t('Created -- click to sort'),
+      cellClassName: 'text-dim cell-nowrap', cellTitle: (d) => formatDateTime(d.createdUtc),
+      render: (d) => formatRelativeTime(d.createdUtc),
+    },
+    {
+      key: 'actions', label: t('Actions'), fixed: true, interactive: true, className: 'text-right',
+      render: (d) => (
+        <ActionMenu id={`dock-${d.id}`} items={[
+          { label: 'View Detail', onClick: () => navigate(`/docks/${d.id}`) },
+          { label: 'View JSON', onClick: () => setJsonData({ open: true, title: `${t('Dock')}: ${d.id}`, data: d }) },
+          { label: 'Delete', danger: true, onClick: () => handleDelete(d.id) },
+        ]} />
+      ),
+    },
+  ];
+
   return (
     <div>
       <PageHeader
@@ -144,8 +196,6 @@ export default function Docks() {
         actions={(
           <>
             <UserScopeFilter value={userScope} onChange={(id) => { setUserScope(id); setPageNumber(1); }} />
-            <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
-            <RefreshButton onRefresh={load} title={t('Refresh dock data')} />
             {table.selected.length > 0 && (
               <button className="btn btn-sm btn-danger" onClick={handleBulkDelete}>
                 {t('Delete Selected')} ({table.selected.length})
@@ -168,101 +218,32 @@ export default function Docks() {
       <ConfirmDialog open={confirm.open} title={confirm.title} message={confirm.message}
         onConfirm={confirm.onConfirm} onCancel={() => setConfirm(c => ({ ...c, open: false }))} />
 
-      {loading && docks.length === 0 && <p className="text-dim">{t('Loading...')}</p>}
-      {!loading && docks.length === 0 && <p className="text-dim">{t('No docks found.')}</p>}
-
-      {docks.length > 0 && (
-        <>
-          <Pagination pageNumber={pageNumber} pageSize={pageSize} totalPages={totalPages}
-            totalRecords={totalRecords}
-            onPageChange={p => setPageNumber(p)} onPageSizeChange={s => { setPageSize(s); setPageNumber(1); }} />
-
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th className="col-checkbox">
-                    <input aria-label={t('Select all docks')} type="checkbox" checked={table.allSelected} onChange={e => e.target.checked ? table.selectAll() : table.clearSelection()} title={t('Select all docks')} />
-                  </th>
-                  <th>{t('ID')}</th>
-                  <th>{t('Vessel')}</th>
-                  <th>{t('Captain')}</th>
-                  <th className="sortable" onClick={() => table.handleSort('branchName')} title={t('Branch name -- click to sort')}>
-                    {t('Branch')}{table.sortIcon('branchName')}
-                  </th>
-                  <th>{t('Worktree Path')}</th>
-                  <th className="sortable" onClick={() => table.handleSort('active')} title={t('Active status -- click to sort')}>
-                    {t('Active')}{table.sortIcon('active')}
-                  </th>
-                  <th className="sortable" onClick={() => table.handleSort('createdUtc')} title={t('Created -- click to sort')}>
-                    {t('Created')}{table.sortIcon('createdUtc')}
-                  </th>
-                  <th className="text-right">{t('Actions')}</th>
-                </tr>
-                <tr className="column-filter-row">
-                  <td></td>
-                  <td></td>
-                  <td></td>
-                  <td></td>
-                  <td><input type="text" className="col-filter" value={table.colFilters.branchName ?? ''} onChange={e => table.setColFilter('branchName', e.target.value)} placeholder={t('Filter...')} /></td>
-                  <td><input type="text" className="col-filter" value={table.colFilters.worktreePath ?? ''} onChange={e => table.setColFilter('worktreePath', e.target.value)} placeholder={t('Filter...')} /></td>
-                  <td></td>
-                  <td></td>
-                  <td></td>
-                </tr>
-              </thead>
-              <tbody>
-                {table.sorted.map(d => (
-                  <tr key={d.id} className="clickable" onClick={() => setViewRecord(d as unknown as Record<string, unknown>)}>
-                    <td className="col-checkbox" onClick={e => e.stopPropagation()}>
-                      <input aria-label={t('Select this dock')} type="checkbox" checked={table.selected.includes(d.id)} onChange={() => table.toggleSelect(d.id)} title={t('Select this dock')} />
-                    </td>
-                    <td className="mono text-dim table-id-cell">
-                      <span className="id-display">
-                        <span className="id-value" title={d.id}>{d.id}</span>
-                        <CopyButton text={d.id} onClick={e => e.stopPropagation()} />
-                      </span>
-                    </td>
-                    <td onClick={e => e.stopPropagation()}>
-                      {d.vesselId ? (
-                        <a href="#" onClick={e => { e.preventDefault(); navigate(`/vessels/${d.vesselId}`); }}>{vesselName(d.vesselId)}</a>
-                      ) : '-'}
-                    </td>
-                    <td onClick={e => e.stopPropagation()}>
-                      {d.captainId ? (
-                        <a href="#" onClick={e => { e.preventDefault(); navigate(`/captains/${d.captainId}`); }}>{captainName(d.captainId)}</a>
-                      ) : '-'}
-                    </td>
-                    <td className="mono text-dim table-url-cell">
-                      {d.branchName ? (
-                        <span className="id-display">
-                          <span className="url-value" title={d.branchName}>{d.branchName}</span>
-                          <CopyButton text={d.branchName} onClick={e => e.stopPropagation()} title={t('Copy branch')} />
-                        </span>
-                      ) : '-'}
-                    </td>
-                    <td className="mono text-dim" title={d.worktreePath || ''}>
-                      <span className="cell-clip"><span>{d.worktreePath || '-'}</span></span>
-                    </td>
-                    <td>{d.active ? t('Yes') : t('No')}</td>
-                    <td className="text-dim" title={formatDateTime(d.createdUtc)}>{formatRelativeTime(d.createdUtc)}</td>
-                    <td className="text-right" onClick={e => e.stopPropagation()}>
-                      <ActionMenu id={`dock-${d.id}`} items={[
-                        { label: 'View Detail', onClick: () => navigate(`/docks/${d.id}`) },
-                        { label: 'View JSON', onClick: () => setJsonData({ open: true, title: `${t('Dock')}: ${d.id}`, data: d }) },
-                        { label: 'Delete', danger: true, onClick: () => handleDelete(d.id) },
-                      ]} />
-                    </td>
-                  </tr>
-                ))}
-                {table.sorted.length === 0 && (
-                  <tr><td colSpan={9} className="text-dim">{t('No docks match the current filters.')}</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
+      <DataTable
+        tableKey="docks"
+        columns={columns}
+        rows={table.sorted}
+        rowKey={(d) => d.id}
+        onRowClick={(d) => setViewRecord(d as unknown as Record<string, unknown>)}
+        sort={table.sortState}
+        pagination={{
+          pageNumber, pageSize, totalPages, totalRecords,
+          onPageChange: (p) => setPageNumber(p),
+          onPageSizeChange: (size) => { setPageSize(size); setPageNumber(1); },
+        }}
+        autoRefresh={{ seconds: refreshSeconds, onChange: setRefreshSeconds }}
+        onRefresh={load}
+        refreshTitle={t('Refresh dock data')}
+        selection={{
+          isSelected: (d) => table.selected.includes(d.id),
+          onToggle: (d) => table.toggleSelect(d.id),
+          allSelected: table.allSelected,
+          onToggleAll: (checked) => (checked ? table.selectAll() : table.clearSelection()),
+          selectAllLabel: t('Select all docks'),
+          rowLabel: () => t('Select this dock'),
+        }}
+        emptyMessage={t('No docks match the current filters.')}
+        placeholder={docks.length > 0 ? undefined : <p className="text-dim">{loading ? t('Loading...') : t('No docks found.')}</p>}
+      />
     </div>
   );
 }

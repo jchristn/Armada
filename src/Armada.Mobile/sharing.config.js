@@ -20,6 +20,7 @@ const dashboardOnly = [
   'lib/useAutoRefresh.ts', // per-table interval persisted in localStorage
   'lib/usePersistedPageSize.ts', // page size persisted in localStorage
   'lib/useTablePrefs.ts', // table preferences persisted in localStorage
+  'lib/useColumnVisibility.ts', // table column choice persisted in localStorage
   'lib/useInboxCount.ts', // bound to the dashboard WebSocketContext; mobile uses lib/inboxSummary.ts
   'lib/useLiveRefresh.ts', // bound to the dashboard WebSocketContext
 ];

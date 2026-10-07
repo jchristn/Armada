@@ -20,6 +20,7 @@ import JsonViewer from '../components/shared/JsonViewer';
 import DiffViewer from '../components/shared/DiffViewer';
 import LogViewer from '../components/shared/LogViewer';
 import CopyButton from '../components/shared/CopyButton';
+import DataTable from '../components/shared/DataTable';
 import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
 import { useLiveRefresh } from '../lib/useLiveRefresh';
@@ -384,48 +385,54 @@ export default function VoyageDetail() {
       {/* Missions table */}
       <h3 style={{ marginBottom: 12 }}>{t('Missions')}</h3>
       {missions.length > 0 ? (
-        <div className="table-wrap">
-        <table className="table">
-          <thead>
-            <tr>
-              <th>{t('Mission')}</th>
-              <th>{t('Status')}</th>
-              <th>{t('Vessel')}</th>
-              <th>{t('Captain')}</th>
-              <th>{t('Branch')}</th>
-              <th style={{ width: 120 }}>{t('Actions')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {missions.map(m => (
-              <tr key={m.id} style={{ cursor: 'pointer' }} onClick={() => nav(`/missions/${m.id}`)}>
-                <td className="cell-title">
-                  <strong>{m.title}</strong>
-                  <div className="id-display text-muted mono" style={{ fontSize: 11 }}>
-                    <span className="id-value" title={m.id}>{m.id}</span>
-                    <CopyButton text={m.id} onClick={e => e.stopPropagation()} />
-                  </div>
-                </td>
-                <td>
-                  <StatusBadge status={m.status} />
-                </td>
-                <td>{m.vesselId ? <Link to={`/vessels/${m.vesselId}`} onClick={e => e.stopPropagation()}>{vesselName(m.vesselId)}</Link> : '-'}</td>
-                <td>{m.captainId ? <Link to={`/captains/${m.captainId}`} onClick={e => e.stopPropagation()}>{captainName(m.captainId)}</Link> : '-'}</td>
-                <td className="mono text-muted" style={{ fontSize: 11 }} title={m.branchName || undefined}>
-                  <span className="cell-clip"><span>{m.branchName || '-'}</span></span>
-                </td>
-                <td onClick={e => e.stopPropagation()}>
-                  <div style={{ display: 'flex', gap: 4 }}>
-                    <button className="btn-sm" onClick={() => handleMissionDiff(m.id, m.title)} title={t('View Diff')}>{t('Diff')}</button>
-                    <button className="btn-sm" onClick={() => handleMissionLog(m.id, m.title)} title={t('View Log')}>{t('Log')}</button>
-                    <button className="btn-sm" onClick={() => nav(`/missions/${m.id}`)} title={t('View Detail')}>{t('Detail')}</button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        </div>
+        <DataTable
+          tableKey="voyage-detail-missions"
+          className="table"
+          rows={missions}
+          rowKey={(m) => m.id}
+          recordCount={null}
+          onRowClick={(m) => nav(`/missions/${m.id}`)}
+          columns={[
+            {
+              key: 'mission', label: t('Mission'), required: true, cellClassName: 'cell-title',
+              cellTitle: (m) => m.title,
+              render: (m) => <strong className="line-clamp-2">{m.title}</strong>,
+            },
+            {
+              key: 'id', label: t('ID'), required: true, cellClassName: 'mono text-dim table-id-cell',
+              render: (m) => (
+                <span className="id-display">
+                  <span className="id-value" title={m.id}>{m.id}</span>
+                  <CopyButton text={m.id} onClick={e => e.stopPropagation()} />
+                </span>
+              ),
+            },
+            { key: 'status', label: t('Status'), cellClassName: 'cell-nowrap', render: (m) => <StatusBadge status={m.status} /> },
+            {
+              key: 'vessel', label: t('Vessel'),
+              render: (m) => m.vesselId ? <Link to={`/vessels/${m.vesselId}`} onClick={e => e.stopPropagation()}>{vesselName(m.vesselId)}</Link> : '-',
+            },
+            {
+              key: 'captain', label: t('Captain'),
+              render: (m) => m.captainId ? <Link to={`/captains/${m.captainId}`} onClick={e => e.stopPropagation()}>{captainName(m.captainId)}</Link> : '-',
+            },
+            {
+              key: 'branch', label: t('Branch'), cellClassName: 'mono text-muted',
+              cellTitle: (m) => m.branchName || undefined,
+              render: (m) => <span className="cell-clip"><span>{m.branchName || '-'}</span></span>,
+            },
+            {
+              key: 'actions', label: t('Actions'), fixed: true, interactive: true, cellClassName: 'cell-nowrap',
+              render: (m) => (
+                <div style={{ display: 'flex', gap: 4 }}>
+                  <button className="btn-sm" onClick={() => handleMissionDiff(m.id, m.title)} title={t('View Diff')}>{t('Diff')}</button>
+                  <button className="btn-sm" onClick={() => handleMissionLog(m.id, m.title)} title={t('View Log')}>{t('Log')}</button>
+                  <button className="btn-sm" onClick={() => nav(`/missions/${m.id}`)} title={t('View Detail')}>{t('Detail')}</button>
+                </div>
+              ),
+            },
+          ]}
+        />
       ) : (
         <p className="text-muted">{t('No missions in this voyage.')}</p>
       )}

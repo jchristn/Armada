@@ -8,14 +8,12 @@ import {
   listCaptains,
 } from '../api/client';
 import type { Signal, Captain, SendSignalRequest } from '../types/models';
-import Pagination from '../components/shared/Pagination';
+import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
 import ActionMenu from '../components/shared/ActionMenu';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import JsonViewer from '../components/shared/JsonViewer';
 import RecordDetailModal from '../components/shared/RecordDetailModal';
 import CopyButton from '../components/shared/CopyButton';
-import RefreshButton from '../components/shared/RefreshButton';
-import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
 import UserScopeFilter from '../components/shared/UserScopeFilter';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import ErrorModal from '../components/shared/ErrorModal';
@@ -130,11 +128,6 @@ export default function Signals() {
     }
   }
 
-  function sortIcon(field: string) {
-    if (sortField !== field) return '';
-    return sortDir === 'asc' ? ' \u25B2' : ' \u25BC';
-  }
-
   // Selection
   function toggleSelection(id: string) {
     setSelected(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
@@ -197,6 +190,64 @@ export default function Signals() {
     setPage(1);
   }
 
+  function colFilterInput(key: 'type' | 'from' | 'to' | 'payload', label: string) {
+    return <input type="text" className="col-filter" aria-label={label} placeholder={t('Filter...')} value={colFilters[key]} onChange={e => setColFilters({ ...colFilters, [key]: e.target.value })} />;
+  }
+
+  function captainLink(id: string | null) {
+    return id
+      ? <a href={`/captains/${id}`} onClick={e => { e.preventDefault(); e.stopPropagation(); navigate(`/captains/${id}`); }}>{captainName(id)}</a>
+      : t('Admiral');
+  }
+
+  const columns: DataTableColumn<Signal>[] = [
+    {
+      key: 'id', label: t('ID'), required: true, sortKey: 'id', cellClassName: 'mono table-id-cell',
+      render: (sig) => (
+        <span className="id-display" style={{ color: 'var(--primary)' }}>
+          <span className="id-value" title={sig.id}>{sig.id}</span>
+          <CopyButton text={sig.id} onClick={e => e.stopPropagation()} />
+        </span>
+      ),
+    },
+    {
+      key: 'type', label: t('Type'), sortKey: 'type', cellClassName: 'cell-nowrap',
+      clearFilter: () => setColFilters(f => ({ ...f, type: '' })), filter: colFilterInput('type', t('Type')),
+      render: (sig) => <span className={`status status-${(sig.type || '').toLowerCase()}`}>{sig.type}</span>,
+    },
+    {
+      key: 'from', label: t('From'), sortKey: 'fromCaptainId', interactive: true,
+      clearFilter: () => setColFilters(f => ({ ...f, from: '' })), filter: colFilterInput('from', t('From')),
+      render: (sig) => captainLink(sig.fromCaptainId),
+    },
+    {
+      key: 'to', label: t('To'), sortKey: 'toCaptainId', interactive: true,
+      clearFilter: () => setColFilters(f => ({ ...f, to: '' })), filter: colFilterInput('to', t('To')),
+      render: (sig) => captainLink(sig.toCaptainId),
+    },
+    { key: 'read', label: t('Read'), render: (sig) => (sig.read ? t('Yes') : t('No')) },
+    {
+      key: 'payload', label: t('Payload'), cellClassName: 'truncate-cell', cellTitle: (sig) => sig.payload || undefined,
+      clearFilter: () => setColFilters(f => ({ ...f, payload: '' })), filter: colFilterInput('payload', t('Payload')),
+      render: (sig) => <span className="truncate-text">{sig.payload || '-'}</span>,
+    },
+    {
+      key: 'created', label: t('Time'), sortKey: 'createdUtc', cellClassName: 'text-muted cell-nowrap', cellTitle: (sig) => formatDateTime(sig.createdUtc),
+      render: (sig) => formatRelativeTime(sig.createdUtc),
+    },
+    {
+      key: 'actions', label: t('Actions'), fixed: true, interactive: true,
+      render: (sig) => (
+        <ActionMenu id={`signal-${sig.id}`} items={[
+          { label: 'View Detail', onClick: () => navigate(`/signals/${sig.id}`) },
+          ...(!sig.read ? [{ label: 'Mark Read', onClick: () => handleMarkRead(sig.id) }] : []),
+          { label: 'View JSON', onClick: () => setJsonView({ title: `${t('Signal')}: ${sig.id}`, data: sig }) },
+          { label: 'Delete', danger: true, onClick: () => setConfirmAction({ message: t('Delete signal {{id}}?', { id: sig.id }), action: async () => { try { await deleteSignalsBatch([sig.id]); pushToast('warning', t('Signal {{id}} deleted.', { id: sig.id })); setConfirmAction(null); load(); } catch { setError(t('Delete failed.')); setConfirmAction(null); } } }) },
+        ]} />
+      ),
+    },
+  ];
+
   return (
     <div>
       {/* Header */}
@@ -236,89 +287,34 @@ export default function Signals() {
         {(filterType || filterToCaptain || filterUnreadOnly) && (
           <button className="btn-sm" onClick={resetFilters}>{t('Clear Filters')}</button>
         )}
+        <UserScopeFilter value={userScope} onChange={(id) => { setUserScope(id); setPage(1); }} />
       </div>
 
-      {/* Pagination */}
-      {totalPages > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Pagination pageNumber={page} totalPages={totalPages} totalRecords={totalRecords} totalMs={totalMs}
-            pageSize={pageSize} onPageChange={setPage} onPageSizeChange={handlePageSizeChange} />
-          <UserScopeFilter value={userScope} onChange={(id) => { setUserScope(id); setPage(1); }} />
-          <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
-          <RefreshButton onRefresh={load} title={t('Refresh signals')} />
-        </div>
-      )}
-
-      {/* Table */}
-      {sorted.length > 0 ? (
-        <div style={{ overflowX: 'auto' }}>
-          <table className="table">
-            <thead>
-              <tr>
-                <th style={{ width: 32 }}>
-                  <input aria-label={t('Select all signals')} type="checkbox" checked={selected.length > 0 && selected.length === sorted.length} onChange={e => e.target.checked ? selectAll() : clearSelection()} title={t('Select all signals')} style={{ width: 'auto' }} />
-                </th>
-                <th style={{ cursor: 'pointer' }} onClick={() => handleSort('id')}>{t('ID')}{sortIcon('id')}</th>
-                <th style={{ cursor: 'pointer' }} onClick={() => handleSort('type')}>{t('Type')}{sortIcon('type')}</th>
-                <th style={{ cursor: 'pointer' }} onClick={() => handleSort('fromCaptainId')}>{t('From')}{sortIcon('fromCaptainId')}</th>
-                <th style={{ cursor: 'pointer' }} onClick={() => handleSort('toCaptainId')}>{t('To')}{sortIcon('toCaptainId')}</th>
-                <th>{t('Read')}</th>
-                <th>{t('Payload')}</th>
-                <th style={{ cursor: 'pointer' }} onClick={() => handleSort('createdUtc')}>{t('Time')}{sortIcon('createdUtc')}</th>
-                <th>{t('Actions')}</th>
-              </tr>
-              <tr>
-                <td />
-                <td />
-                <td><input type="text" placeholder={t('Filter...')} value={colFilters.type} onChange={e => setColFilters({ ...colFilters, type: e.target.value })} style={{ padding: '2px 6px', fontSize: 11, width: '100%' }} /></td>
-                <td><input type="text" placeholder={t('Filter...')} value={colFilters.from} onChange={e => setColFilters({ ...colFilters, from: e.target.value })} style={{ padding: '2px 6px', fontSize: 11, width: '100%' }} /></td>
-                <td><input type="text" placeholder={t('Filter...')} value={colFilters.to} onChange={e => setColFilters({ ...colFilters, to: e.target.value })} style={{ padding: '2px 6px', fontSize: 11, width: '100%' }} /></td>
-                <td />
-                <td><input type="text" placeholder={t('Filter...')} value={colFilters.payload} onChange={e => setColFilters({ ...colFilters, payload: e.target.value })} style={{ padding: '2px 6px', fontSize: 11, width: '100%' }} /></td>
-                <td />
-                <td />
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.map(sig => (
-                <tr key={sig.id} className="clickable" onClick={() => setViewRecord(sig as unknown as Record<string, unknown>)}>
-                  <td onClick={e => e.stopPropagation()}><input type="checkbox" aria-label={t('Select this signal')} checked={selected.includes(sig.id)} onChange={() => toggleSelection(sig.id)} style={{ width: 'auto' }} /></td>
-                  <td className="mono table-id-cell" style={{ color: 'var(--primary)' }}>
-                    <span className="id-display">
-                      <span className="id-value">{sig.id}</span>
-                      <CopyButton text={sig.id} onClick={e => e.stopPropagation()} />
-                    </span>
-                  </td>
-                  <td><span className={`status status-${(sig.type || '').toLowerCase()}`}>{sig.type}</span></td>
-                  <td onClick={e => e.stopPropagation()}>
-                    {sig.fromCaptainId
-                      ? <a href={`/captains/${sig.fromCaptainId}`} onClick={e => { e.preventDefault(); e.stopPropagation(); navigate(`/captains/${sig.fromCaptainId}`); }}>{captainName(sig.fromCaptainId)}</a>
-                      : t('Admiral')}
-                  </td>
-                  <td onClick={e => e.stopPropagation()}>
-                    {sig.toCaptainId
-                      ? <a href={`/captains/${sig.toCaptainId}`} onClick={e => { e.preventDefault(); e.stopPropagation(); navigate(`/captains/${sig.toCaptainId}`); }}>{captainName(sig.toCaptainId)}</a>
-                      : t('Admiral')}
-                  </td>
-                  <td>{sig.read ? t('Yes') : t('No')}</td>
-                  <td title={sig.payload || undefined}><span className="truncate-text">{sig.payload || '-'}</span></td>
-                  <td className="text-muted" title={formatDateTime(sig.createdUtc)} style={{ whiteSpace: 'nowrap' }}>{formatRelativeTime(sig.createdUtc)}</td>
-                  <td onClick={e => e.stopPropagation()}>
-                    <ActionMenu id={`signal-${sig.id}`} items={[
-                      { label: 'View Detail', onClick: () => navigate(`/signals/${sig.id}`) },
-                      ...(!sig.read ? [{ label: 'Mark Read', onClick: () => handleMarkRead(sig.id) }] : []),
-                      { label: 'View JSON', onClick: () => setJsonView({ title: `${t('Signal')}: ${sig.id}`, data: sig }) },
-                      { label: 'Delete', danger: true, onClick: () => setConfirmAction({ message: t('Delete signal {{id}}?', { id: sig.id }), action: async () => { try { await deleteSignalsBatch([sig.id]); pushToast('warning', t('Signal {{id}} deleted.', { id: sig.id })); setConfirmAction(null); load(); } catch { setError(t('Delete failed.')); setConfirmAction(null); } } }) },
-                    ]} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <p className="text-muted" style={{ padding: 20 }}>{loading ? t('Loading...') : t('No signals found.')}</p>
-      )}
+      <DataTable
+        tableKey="signals"
+        columns={columns}
+        rows={sorted}
+        rowKey={(sig) => sig.id}
+        onRowClick={(sig) => setViewRecord(sig as unknown as Record<string, unknown>)}
+        sort={{ field: sortField, dir: sortDir, onSort: handleSort }}
+        pagination={{
+          pageNumber: page, pageSize, totalPages: Math.max(1, totalPages), totalRecords, totalMs,
+          onPageChange: setPage,
+          onPageSizeChange: handlePageSizeChange,
+        }}
+        autoRefresh={{ seconds: refreshSeconds, onChange: setRefreshSeconds }}
+        onRefresh={load}
+        refreshTitle={t('Refresh signals')}
+        selection={{
+          isSelected: (sig) => selected.includes(sig.id),
+          onToggle: (sig) => toggleSelection(sig.id),
+          allSelected: selected.length > 0 && selected.length === sorted.length,
+          onToggleAll: (checked) => (checked ? selectAll() : clearSelection()),
+          selectAllLabel: t('Select all signals'),
+          rowLabel: () => t('Select this signal'),
+        }}
+        placeholder={sorted.length > 0 ? undefined : <p className="text-muted" style={{ padding: 20 }}>{loading ? t('Loading...') : t('No signals found.')}</p>}
+      />
 
       {/* Send Signal Modal */}
       {showSendModal && (

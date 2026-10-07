@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import VesselHealth from './VesselHealth';
@@ -233,5 +233,49 @@ describe('VesselHealth page', () => {
     expect(screen.getByText('1 vessel selected')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Run action...' }));
     expect(await screen.findByTestId('run-action-modal')).toHaveTextContent('vsl_app|Mission');
+  });
+  it('uses the shared column chooser: identity columns locked, secondary columns hidden by default', async () => {
+    vi.mocked(enumerateVesselHealth).mockResolvedValue(page([failingRow]));
+    vi.mocked(getVesselHealthSummary).mockResolvedValue(summary({ totalVessels: 1, fail: 1 }));
+    renderPage();
+    await screen.findByText('app');
+    const headers = screen.getAllByRole('columnheader').map((h) => h.textContent ?? '');
+    expect(headers.some((h) => h.startsWith('Last commit'))).toBe(false);
+    expect(headers.some((h) => h.startsWith('Evaluated'))).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: /^Columns/ }));
+    const menu = await screen.findByRole('menu', { name: 'Choose visible columns' });
+    expect(within(menu).getByRole('menuitemcheckbox', { name: /^Vessel/ })).toHaveAttribute('aria-disabled', 'true');
+    expect(within(menu).getByRole('menuitemcheckbox', { name: /^Overall/ })).toHaveAttribute('aria-disabled', 'true');
+    expect(within(menu).getByRole('menuitemcheckbox', { name: /^Last commit/ })).toHaveAttribute('aria-checked', 'false');
+    // The old page-local chooser is gone: only one Columns button.
+    expect(screen.getAllByRole('button', { name: /^Columns/ })).toHaveLength(1);
+  });
+
+  it('honors a column choice saved by the previous chooser (armada_table_vessel-health)', async () => {
+    localStorage.setItem('armada_table_vessel-health', JSON.stringify({ pageSize: 25, hiddenColumns: ['ci', 'fleet'], defaultsVersion: 1 }));
+    vi.mocked(enumerateVesselHealth).mockResolvedValue(page([failingRow]));
+    vi.mocked(getVesselHealthSummary).mockResolvedValue(summary({ totalVessels: 1, fail: 1 }));
+    renderPage();
+    await screen.findByText('app');
+    const headers = screen.getAllByRole('columnheader').map((h) => h.textContent ?? '');
+    expect(headers.some((h) => h.startsWith('CI'))).toBe(false);
+    expect(headers.some((h) => h.startsWith('Fleet'))).toBe(false);
+    expect(headers.some((h) => h.startsWith('Divergence'))).toBe(true);
+    // The stored list was complete for the same defaults version, so default-hidden columns the user had turned on stay on.
+    expect(headers.some((h) => h.startsWith('Last commit'))).toBe(true);
+  });
+
+  it('shows the checked-out branch in its own one-line column, not under the vessel name', async () => {
+    vi.mocked(enumerateVesselHealth).mockResolvedValue(page([{ ...failingRow, currentBranch: 'feature/a-very-long-branch-name' }]));
+    vi.mocked(getVesselHealthSummary).mockResolvedValue(summary({ totalVessels: 1, fail: 1 }));
+    renderPage();
+    const branch = await screen.findByText('feature/a-very-long-branch-name');
+    expect(branch).toHaveClass('cell-one-line');
+    expect(branch).toHaveAttribute('title', 'Checked-out branch: feature/a-very-long-branch-name');
+    expect(branch.closest('td')).toHaveAttribute('data-col', 'branch');
+    expect(screen.getByText('app').closest('td')).not.toContainElement(branch);
+    // The mono cell style applies to the cells only; the header keeps the header font.
+    expect(branch.closest('td')).toHaveClass('mono');
+    expect(document.querySelector('th[data-col="branch"]')).not.toHaveClass('mono');
   });
 });

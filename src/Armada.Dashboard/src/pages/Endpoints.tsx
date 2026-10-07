@@ -18,8 +18,7 @@ import ActionMenu from '../components/shared/ActionMenu';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import ErrorModal from '../components/shared/ErrorModal';
 import JsonViewer from '../components/shared/JsonViewer';
-import RefreshButton from '../components/shared/RefreshButton';
-import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
+import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import PageHeader from '../components/shared/PageHeader';
 import StatusBadge from '../components/shared/StatusBadge';
@@ -264,6 +263,79 @@ export default function Endpoints() {
     });
   }
 
+  const columns: DataTableColumn<ModelEndpoint>[] = [
+    {
+      key: 'name', label: t('Endpoint'), required: true, cellClassName: 'cell-nowrap',
+      render: (endpoint) => (
+        <>
+          <strong>{endpoint.name}</strong>
+          {!endpoint.enabled && <span className="text-dim"> ({t('disabled')})</span>}
+        </>
+      ),
+    },
+    {
+      key: 'id', label: t('ID'), required: true, cellClassName: 'mono text-dim table-id-cell', interactive: true,
+      render: (endpoint) => (
+        <span className="id-display">
+          <span className="id-value" title={endpoint.id}>{endpoint.id}</span>
+          <CopyButton text={endpoint.id} title={t('Copy endpoint ID')} />
+        </span>
+      ),
+    },
+    {
+      // Was a third line under the name; now its own one-line column.
+      key: 'baseUrl', label: t('Base URL'), cellClassName: 'mono text-dim',
+      cellTitle: (endpoint) => endpoint.baseUrl,
+      render: (endpoint) => <span className="cell-clip"><span>{endpoint.baseUrl}</span></span>,
+    },
+    { key: 'kind', label: t('Kind'), cellClassName: 'text-dim', render: (endpoint) => endpoint.kind },
+    { key: 'provider', label: t('Provider'), cellClassName: 'text-dim', render: (endpoint) => endpoint.provider },
+    {
+      key: 'model', label: t('Model'), cellClassName: 'text-dim',
+      render: (endpoint) => <span className="cell-one-line" title={endpoint.model || undefined}>{endpoint.model || '-'}</span>,
+    },
+    { key: 'visibility', label: t('Visibility'), cellClassName: 'cell-nowrap', render: (endpoint) => <ScopeBadge scope={endpoint.scope} /> },
+    {
+      key: 'health', label: t('Health'), interactive: true, cellClassName: 'cell-nowrap',
+      render: (endpoint) => (
+        <span
+          className="health-cell"
+          role="button"
+          tabIndex={0}
+          title={t('View health detail')}
+          onClick={() => setHealth({ open: true, endpoint })}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setHealth({ open: true, endpoint }); } }}
+        >
+          <StatusBadge status={endpoint.healthStatus} />
+          {endpoint.healthHistory.length > 0 && <HealthHistogram history={endpoint.healthHistory} width={96} height={18} />}
+        </span>
+      ),
+    },
+    {
+      key: 'lastChecked', label: t('Last Checked'), cellClassName: 'text-dim cell-nowrap',
+      cellTitle: (endpoint) => (endpoint.lastHealthCheckUtc ? formatDateTime(endpoint.lastHealthCheckUtc) : ''),
+      render: (endpoint) => (endpoint.lastHealthCheckUtc ? formatRelativeTime(endpoint.lastHealthCheckUtc) : t('Never')),
+    },
+    {
+      key: 'actions', label: t('Actions'), fixed: true, interactive: true, className: 'text-right',
+      render: (endpoint) => {
+        const canEditRow = canEditScoped(viewer, endpoint);
+        return (
+          <ActionMenu
+            id={`endpoint-${endpoint.id}`}
+            items={[
+              { label: 'Health', onClick: () => setHealth({ open: true, endpoint }) },
+              ...(canEditRow ? [{ label: validating === endpoint.id ? 'Validating...' : 'Validate', onClick: () => handleValidate(endpoint) }] : []),
+              ...(canEditRow ? [{ label: 'Edit', onClick: () => openEdit(endpoint) }] : []),
+              { label: 'View JSON', onClick: () => setJsonData({ open: true, title: endpoint.name, data: endpoint }) },
+              ...(canEditRow ? [{ label: 'Delete', danger: true as const, onClick: () => handleDelete(endpoint) }] : []),
+            ]}
+          />
+        );
+      },
+    },
+  ];
+
   return (
     <div>
       <PageHeader
@@ -271,8 +343,6 @@ export default function Endpoints() {
         subtitle={t('Managed embedding and inference model endpoints. Health checks are deduplicated by base URL; Validate sends a real request to the configured model.')}
         actions={(
           <>
-            <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
-            <RefreshButton onRefresh={load} title={t('Refresh endpoints')} />
             {canManage && (
               <button className="btn" onClick={handleSweep} disabled={sweeping} title={t('Probe all enabled endpoints, deduplicated by base URL.')}>
                 {sweeping ? t('Sweeping...') : t('Run Health Sweep')}
@@ -512,81 +582,22 @@ export default function Endpoints() {
         </div>
       </div>
 
-      {loading && endpoints.length === 0 ? (
-        <p className="text-dim">{t('Loading...')}</p>
-      ) : filtered.length === 0 ? (
-        <div className="playbook-empty-state">
-          <strong>{t('No endpoints match the current filters.')}</strong>
-          <span>{canManage ? t('Add an embedding or inference endpoint to manage and monitor it.') : t('Ask a tenant administrator to configure model endpoints.')}</span>
-        </div>
-      ) : (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>{t('Endpoint')}</th>
-                <th>{t('Kind')}</th>
-                <th>{t('Provider')}</th>
-                <th>{t('Model')}</th>
-                <th>{t('Visibility')}</th>
-                <th>{t('Health')}</th>
-                <th>{t('Last Checked')}</th>
-                <th className="text-right">{t('Actions')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((endpoint) => {
-                const canEditRow = canEditScoped(viewer, endpoint);
-                return (
-                <tr key={endpoint.id} className="clickable" onClick={() => canEditRow ? openEdit(endpoint) : setHealth({ open: true, endpoint })}>
-                  <td>
-                    <strong>{endpoint.name}</strong>
-                    {!endpoint.enabled && <span className="text-dim"> ({t('disabled')})</span>}
-                    <div className="id-display mono text-dim" style={{ fontSize: '0.78rem' }} onClick={(e) => e.stopPropagation()}>
-                      <span className="id-value" title={endpoint.id}>{endpoint.id}</span>
-                      <CopyButton text={endpoint.id} title={t('Copy endpoint ID')} />
-                    </div>
-                    <div className="cell-clip mono text-dim" style={{ fontSize: '0.78rem' }} title={endpoint.baseUrl}><span>{endpoint.baseUrl}</span></div>
-                  </td>
-                  <td className="text-dim">{endpoint.kind}</td>
-                  <td className="text-dim">{endpoint.provider}</td>
-                  <td className="text-dim">{endpoint.model || '-'}</td>
-                  <td><ScopeBadge scope={endpoint.scope} /></td>
-                  <td onClick={(e) => e.stopPropagation()}>
-                    <span
-                      className="health-cell"
-                      role="button"
-                      tabIndex={0}
-                      title={t('View health detail')}
-                      onClick={() => setHealth({ open: true, endpoint })}
-                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setHealth({ open: true, endpoint }); } }}
-                    >
-                      <StatusBadge status={endpoint.healthStatus} />
-                      {endpoint.healthHistory.length > 0 && <HealthHistogram history={endpoint.healthHistory} width={96} height={18} />}
-                    </span>
-                  </td>
-                  <td className="text-dim" title={endpoint.lastHealthCheckUtc ? formatDateTime(endpoint.lastHealthCheckUtc) : ''}>
-                    {endpoint.lastHealthCheckUtc ? formatRelativeTime(endpoint.lastHealthCheckUtc) : t('Never')}
-                  </td>
-                  <td className="text-right" onClick={(e) => e.stopPropagation()}>
-                    <ActionMenu
-                      id={`endpoint-${endpoint.id}`}
-                      items={[
-                        { label: 'Health', onClick: () => setHealth({ open: true, endpoint }) },
-                        ...(canEditRow ? [{ label: validating === endpoint.id ? 'Validating...' : 'Validate', onClick: () => handleValidate(endpoint) }] : []),
-                        ...(canEditRow ? [{ label: 'Edit', onClick: () => openEdit(endpoint) }] : []),
-                        { label: 'View JSON', onClick: () => setJsonData({ open: true, title: endpoint.name, data: endpoint }) },
-                        ...(canEditRow ? [{ label: 'Delete', danger: true as const, onClick: () => handleDelete(endpoint) }] : []),
-                      ]}
-                    />
-                  </td>
-                </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <DataTable
+        tableKey="model-endpoints"
+        columns={columns}
+        rows={filtered}
+        rowKey={(endpoint) => endpoint.id}
+        onRowClick={(endpoint) => (canEditScoped(viewer, endpoint) ? openEdit(endpoint) : setHealth({ open: true, endpoint }))}
+        autoRefresh={{ seconds: refreshSeconds, onChange: setRefreshSeconds }}
+        onRefresh={load}
+        refreshTitle={t('Refresh endpoints')}
+        placeholder={loading && endpoints.length === 0 ? <p className="text-dim">{t('Loading...')}</p> : filtered.length === 0 ? (
+          <div className="playbook-empty-state">
+            <strong>{t('No endpoints match the current filters.')}</strong>
+            <span>{canManage ? t('Add an embedding or inference endpoint to manage and monitor it.') : t('Ask a tenant administrator to configure model endpoints.')}</span>
+          </div>
+        ) : undefined}
+      />
     </div>
   );
 }

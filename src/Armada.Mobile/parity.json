@@ -68,16 +68,16 @@
       "key": "/approvals",
       "status": "extension",
       "mobile": "src/app/(app)/(approvals)/approvals.tsx",
-      "workstream": "W0.5",
-      "notes": "Approvals tab root: the Needs You count and approvals center entry (TUI has the same route)"
+      "workstream": "W1.3",
+      "notes": "Approvals tab root: the approvals center (NeedsYouScreen): Ask proposals, CLI permissions, mission reviews, deployment approvals with inline decisions; failed landings, failed missions, stalled captains with their fix; recent alerts (TUI has the same route)"
     },
     {
       "kind": "route",
       "key": "/ask/:threadId?",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(ask)/ask/index.tsx",
       "workstream": "W1.1",
-      "notes": "two mobile routes: /ask and /ask/:threadId"
+      "notes": "two mobile routes: /ask and /ask/:threadId (AskScreen); phones open the conversation list as a sheet, tablets split list and conversation; /ask reopens the last conversation once per app session"
     },
     {
       "kind": "route",
@@ -282,10 +282,10 @@
     {
       "kind": "route",
       "key": "/inbox",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(approvals)/inbox.tsx",
       "workstream": "W1.3",
-      "notes": ""
+      "notes": "NeedsYouScreen: the Needs You inbox with decisions in place (same screen as the Approvals tab root)"
     },
     {
       "kind": "route",
@@ -357,7 +357,7 @@
       "status": "extension",
       "mobile": "src/app/notification-center.tsx",
       "workstream": "W0.5",
-      "notes": "In-app notification history (the dashboard's bell menu), a modal over every tab"
+      "notes": "In-app notification history (the dashboard's bell menu), a modal over every tab; All/Unread filter and severity badges (W1.4)"
     },
     {
       "kind": "route",
@@ -1082,10 +1082,10 @@
     {
       "kind": "api",
       "key": "approveAskProposal",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "useAskConversation",
       "workstream": "W1.1",
-      "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
+      "notes": "Ask Armada (shared lib/askConversation, askThreads, askEvents)"
     },
     {
       "kind": "api",
@@ -1101,7 +1101,7 @@
       "status": "implemented",
       "mobile": "MissionDetail",
       "workstream": "W2.2",
-      "notes": "Missions"
+      "notes": "Missions; also the Approvals center (W1.3)"
     },
     {
       "kind": "api",
@@ -1130,10 +1130,10 @@
     {
       "kind": "api",
       "key": "cancelAskTurn",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "useAskConversation",
       "workstream": "W1.1",
-      "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
+      "notes": "Ask Armada (shared lib/askConversation, askThreads, askEvents)"
     },
     {
       "kind": "api",
@@ -1188,8 +1188,8 @@
       "key": "chatWithCaptain",
       "status": "planned",
       "mobile": "",
-      "workstream": "W1.1",
-      "notes": "Ask Armada"
+      "workstream": "W3.2",
+      "notes": "captain chat panel on the captain detail page (not part of Ask Armada threads)"
     },
     {
       "kind": "api",
@@ -1202,10 +1202,10 @@
     {
       "kind": "api",
       "key": "createAskThread",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "useAskConversation",
       "workstream": "W1.1",
-      "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
+      "notes": "Ask Armada (shared lib/askConversation, askThreads, askEvents)"
     },
     {
       "kind": "api",
@@ -1236,8 +1236,8 @@
       "key": "createCliPermissionRule",
       "status": "planned",
       "mobile": "",
-      "workstream": "W1.2",
-      "notes": "CLI tool permissions"
+      "workstream": "W4.4",
+      "notes": "CLI Tool Permissions page (requests and rules hub); Ask and the approvals center decide requests through decideCliPermissionRequest (W1.2)"
     },
     {
       "kind": "api",
@@ -1458,18 +1458,18 @@
     {
       "kind": "api",
       "key": "decideCliPermissionRequest",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "approvals/actions",
       "workstream": "W1.2",
-      "notes": "CLI tool permissions"
+      "notes": "Allow once / Allow and remember / Deny on CLI permission cards (Ask transcript and approvals center); the same function serves push actions"
     },
     {
       "kind": "api",
       "key": "deleteAskThread",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "AskContext",
       "workstream": "W1.1",
-      "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
+      "notes": "Ask Armada (shared lib/askConversation, askThreads, askEvents)"
     },
     {
       "kind": "api",
@@ -1500,8 +1500,8 @@
       "key": "deleteCliPermissionRule",
       "status": "planned",
       "mobile": "",
-      "workstream": "W1.2",
-      "notes": "CLI tool permissions"
+      "workstream": "W4.4",
+      "notes": "CLI Tool Permissions page (requests and rules hub); Ask and the approvals center decide requests through decideCliPermissionRequest (W1.2)"
     },
     {
       "kind": "api",
@@ -1797,7 +1797,7 @@
       "status": "implemented",
       "mobile": "MissionDetail",
       "workstream": "W2.2",
-      "notes": "Missions"
+      "notes": "Missions; also the Approvals center (W1.3)"
     },
     {
       "kind": "api",
@@ -1858,18 +1858,18 @@
     {
       "kind": "api",
       "key": "enumerateAskMessages",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "useAskConversation",
       "workstream": "W1.1",
-      "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
+      "notes": "Ask Armada (shared lib/askConversation, askThreads, askEvents)"
     },
     {
       "kind": "api",
       "key": "enumerateAskThreads",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "AskContext",
       "workstream": "W1.1",
-      "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
+      "notes": "Ask Armada (shared lib/askConversation, askThreads, askEvents)"
     },
     {
       "kind": "api",
@@ -2002,26 +2002,26 @@
     {
       "kind": "api",
       "key": "getAskQuickActions",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "AskContext",
       "workstream": "W1.1",
-      "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
+      "notes": "Ask Armada (shared lib/askConversation, askThreads, askEvents)"
     },
     {
       "kind": "api",
       "key": "getAskThread",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "useAskConversation",
       "workstream": "W1.1",
-      "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
+      "notes": "Ask Armada (shared lib/askConversation, askThreads, askEvents)"
     },
     {
       "kind": "api",
       "key": "getAskWorkSnapshot",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "useAskConversation",
       "workstream": "W1.1",
-      "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
+      "notes": "Ask Armada (shared lib/askConversation, askThreads, askEvents)"
     },
     {
       "kind": "api",
@@ -2068,16 +2068,16 @@
       "key": "getCliPermissionRequest",
       "status": "planned",
       "mobile": "",
-      "workstream": "W1.2",
-      "notes": "CLI tool permissions"
+      "workstream": "W4.4",
+      "notes": "CLI Tool Permissions page (requests and rules hub); Ask and the approvals center decide requests through decideCliPermissionRequest (W1.2)"
     },
     {
       "kind": "api",
       "key": "getCliPermissionRule",
       "status": "planned",
       "mobile": "",
-      "workstream": "W1.2",
-      "notes": "CLI tool permissions"
+      "workstream": "W4.4",
+      "notes": "CLI Tool Permissions page (requests and rules hub); Ask and the approvals center decide requests through decideCliPermissionRequest (W1.2)"
     },
     {
       "kind": "api",
@@ -2189,7 +2189,7 @@
       "status": "implemented",
       "mobile": "ApprovalsContext",
       "workstream": "W0.6",
-      "notes": "Approvals badge count (W0.6); the approvals center itself is W1.3"
+      "notes": "Approvals badge count (W0.6) and the approvals center items (W1.3)"
     },
     {
       "kind": "api",
@@ -2676,16 +2676,16 @@
       "key": "listCliPermissionRequests",
       "status": "planned",
       "mobile": "",
-      "workstream": "W1.2",
-      "notes": "CLI tool permissions"
+      "workstream": "W4.4",
+      "notes": "CLI Tool Permissions page (requests and rules hub); Ask and the approvals center decide requests through decideCliPermissionRequest (W1.2)"
     },
     {
       "kind": "api",
       "key": "listCliPermissionRules",
       "status": "planned",
       "mobile": "",
-      "workstream": "W1.2",
-      "notes": "CLI tool permissions"
+      "workstream": "W4.4",
+      "notes": "CLI Tool Permissions page (requests and rules hub); Ask and the approvals center decide requests through decideCliPermissionRequest (W1.2)"
     },
     {
       "kind": "api",
@@ -2986,10 +2986,10 @@
     {
       "kind": "api",
       "key": "markAskThreadRead",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "AskContext",
       "workstream": "W1.1",
-      "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
+      "notes": "Ask Armada (shared lib/askConversation, askThreads, askEvents)"
     },
     {
       "kind": "api",
@@ -3106,10 +3106,10 @@
     {
       "kind": "api",
       "key": "rejectAskProposal",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "useAskConversation",
       "workstream": "W1.1",
-      "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
+      "notes": "Ask Armada (shared lib/askConversation, askThreads, askEvents)"
     },
     {
       "kind": "api",
@@ -3181,7 +3181,7 @@
       "status": "implemented",
       "mobile": "MissionsList",
       "workstream": "W2.2",
-      "notes": "Missions"
+      "notes": "Missions; also the Approvals center (W1.3)"
     },
     {
       "kind": "api",
@@ -3213,7 +3213,7 @@
       "status": "implemented",
       "mobile": "MissionsList",
       "workstream": "W2.2",
-      "notes": "Missions"
+      "notes": "Missions; also the Approvals center (W1.3)"
     },
     {
       "kind": "api",
@@ -3242,10 +3242,10 @@
     {
       "kind": "api",
       "key": "runAskQuickAction",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "useAskConversation",
       "workstream": "W1.1",
-      "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
+      "notes": "Ask Armada (shared lib/askConversation, askThreads, askEvents)"
     },
     {
       "kind": "api",
@@ -3282,10 +3282,10 @@
     {
       "kind": "api",
       "key": "sendAskMessage",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "useAskConversation",
       "workstream": "W1.1",
-      "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
+      "notes": "Ask Armada (shared lib/askConversation, askThreads, askEvents)"
     },
     {
       "kind": "api",
@@ -3314,18 +3314,18 @@
     {
       "kind": "api",
       "key": "setAskThreadCliPermissionPolicy",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "AskContext",
       "workstream": "W1.2",
-      "notes": "CLI tool permissions"
+      "notes": "CLI tools policy in the conversation options sheet (Bypass needs the warning confirmed)"
     },
     {
       "kind": "api",
       "key": "setCaptainCliPermissionPolicy",
       "status": "planned",
       "mobile": "",
-      "workstream": "W1.2",
-      "notes": "CLI tool permissions"
+      "workstream": "W3.2",
+      "notes": "captain CLI permission policy on the captain pages"
     },
     {
       "kind": "api",
@@ -3394,10 +3394,10 @@
     {
       "kind": "api",
       "key": "summarizeAskThread",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "AskContext",
       "workstream": "W1.1",
-      "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
+      "notes": "Ask Armada (shared lib/askConversation, askThreads, askEvents)"
     },
     {
       "kind": "api",
@@ -3442,10 +3442,10 @@
     {
       "kind": "api",
       "key": "updateAskThread",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "AskContext",
       "workstream": "W1.1",
-      "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
+      "notes": "Ask Armada (shared lib/askConversation, askThreads, askEvents)"
     },
     {
       "kind": "api",
@@ -3468,8 +3468,8 @@
       "key": "updateCliPermissionRule",
       "status": "planned",
       "mobile": "",
-      "workstream": "W1.2",
-      "notes": "CLI tool permissions"
+      "workstream": "W4.4",
+      "notes": "CLI Tool Permissions page (requests and rules hub); Ask and the approvals center decide requests through decideCliPermissionRequest (W1.2)"
     },
     {
       "kind": "api",
@@ -3714,66 +3714,66 @@
     {
       "kind": "event",
       "key": "ask.chunk",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "AskContext, useAskConversation",
       "workstream": "W1.1",
-      "notes": ""
+      "notes": "thread list and activity (AskContext); open conversation (useAskConversation, shared lib/askEvents)"
     },
     {
       "kind": "event",
       "key": "ask.message",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "AskContext, useAskConversation",
       "workstream": "W1.1",
-      "notes": ""
+      "notes": "thread list and activity (AskContext); open conversation (useAskConversation, shared lib/askEvents)"
     },
     {
       "kind": "event",
       "key": "ask.proposal",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "AskContext, useAskConversation",
       "workstream": "W1.1",
-      "notes": ""
+      "notes": "thread list and activity (AskContext); open conversation (useAskConversation, shared lib/askEvents)"
     },
     {
       "kind": "event",
       "key": "ask.thinking",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "AskContext, useAskConversation",
       "workstream": "W1.1",
-      "notes": ""
+      "notes": "thread list and activity (AskContext); open conversation (useAskConversation, shared lib/askEvents)"
     },
     {
       "kind": "event",
       "key": "ask.thread",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "AskContext, useAskConversation",
       "workstream": "W1.1",
-      "notes": ""
+      "notes": "thread list and activity (AskContext); open conversation (useAskConversation, shared lib/askEvents)"
     },
     {
       "kind": "event",
       "key": "ask.tool",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "AskContext, useAskConversation",
       "workstream": "W1.1",
-      "notes": ""
+      "notes": "thread list and activity (AskContext); open conversation (useAskConversation, shared lib/askEvents)"
     },
     {
       "kind": "event",
       "key": "ask.turn",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "AskContext, useAskConversation",
       "workstream": "W1.1",
-      "notes": ""
+      "notes": "thread list and activity (AskContext); open conversation (useAskConversation, shared lib/askEvents)"
     },
     {
       "kind": "event",
       "key": "ask.work",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "AskContext, useAskConversation",
       "workstream": "W1.1",
-      "notes": ""
+      "notes": "thread list and activity (AskContext); open conversation (useAskConversation, shared lib/askEvents)"
     },
     {
       "kind": "event",

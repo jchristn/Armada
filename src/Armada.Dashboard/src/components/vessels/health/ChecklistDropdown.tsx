@@ -1,11 +1,9 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useLocale } from '../../../context/LocaleContext';
 
 export interface ChecklistOption {
   value: string;
   label: string;
-  /** Rendered checked and disabled (for example pinned columns). */
-  locked?: boolean;
 }
 
 interface ChecklistDropdownProps {
@@ -19,15 +17,13 @@ interface ChecklistDropdownProps {
   onClear?: () => void;
   /** Already-translated accessible name for the popover group. */
   ariaLabel: string;
-  footer?: ReactNode;
-  align?: 'left' | 'right';
 }
 
 /**
- * Compact multi-select: a button that opens a small checkbox popover. Used for the status filters and
- * the column chooser. Closes on outside click and Escape; the popover lives outside table scroll areas.
+ * Compact multi-select: a button that opens a small checkbox popover. Used for the status filters (the column
+ * chooser is the shared DataTable's). Closes on outside click and Escape; the popover lives outside table scroll areas.
  */
-export default function ChecklistDropdown({ label, summary, options, selected, onToggle, onClear, ariaLabel, footer, align = 'left' }: ChecklistDropdownProps) {
+export default function ChecklistDropdown({ label, summary, options, selected, onToggle, onClear, ariaLabel }: ChecklistDropdownProps) {
   const { t } = useLocale();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -69,24 +65,22 @@ export default function ChecklistDropdown({ label, summary, options, selected, o
         <span aria-hidden="true" className="vh-caret">{'\u25BE'}</span>
       </button>
       {open && (
-        <div id={popoverId} className={`vh-checklist-popover${align === 'right' ? ' vh-align-right' : ''}`} role="group" aria-label={ariaLabel}>
+        <div id={popoverId} className="vh-checklist-popover" role="group" aria-label={ariaLabel}>
           {options.map((option) => {
-            const checked = option.locked || selected.includes(option.value);
+            const checked = selected.includes(option.value);
             return (
-              <label key={option.value} className={`vh-checklist-item${option.locked ? ' vh-locked' : ''}`}>
+              <label key={option.value} className="vh-checklist-item">
                 <input
                   type="checkbox"
                   checked={checked}
-                  disabled={option.locked}
                   onChange={() => onToggle(option.value)}
                 />
                 <span>{option.label}</span>
               </label>
             );
           })}
-          {(onClear || footer) && (
+          {onClear && (
             <div className="vh-checklist-footer">
-              {footer}
               {onClear && (
                 <button type="button" className="btn btn-sm" onClick={() => onClear()} disabled={!active}>
                   {t('Clear')}

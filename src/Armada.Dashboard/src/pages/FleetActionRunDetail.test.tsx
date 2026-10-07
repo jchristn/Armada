@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import FleetActionRunDetail, { RUN_DETAIL_REFRESH_SECONDS } from './FleetActionRunDetail';
 import {
@@ -124,5 +124,30 @@ describe('FleetActionRunDetail', () => {
     const buttons = screen.getAllByRole('button', { name: 'Cancel run' });
     fireEvent.click(buttons[buttons.length - 1]);
     await waitFor(() => expect(cancelFleetActionRun).toHaveBeenCalledWith('far_1'));
+  });
+
+  it('puts the targets pager and refresh in the shared table toolbar and keeps the vessel ID off a second line', async () => {
+    localStorage.clear();
+    vi.mocked(getFleetActionRun).mockResolvedValue({ run: run('Completed'), targets: [] });
+    renderPage();
+    const vesselLink = await screen.findByRole('link', { name: 'api' });
+    const wrap = document.querySelector('[data-table="fleet-action-run-targets"]') as HTMLElement;
+    const bar = wrap.querySelector('.pagination-bar') as HTMLElement;
+    expect(within(bar).getByText('1 record')).toBeInTheDocument();
+    expect(within(bar).getByTitle('Refresh run')).toBeInTheDocument();
+    expect(screen.getAllByTitle('Refresh run')).toHaveLength(1);
+    expect(within(bar).getByRole('button', { name: 'Next' })).toBeDisabled();
+
+    // The vessel cell is one line; its ID is an optional column, hidden by default, and in the tooltip.
+    const cell = vesselLink.closest('td') as HTMLElement;
+    expect(cell).toHaveAttribute('title', 'vsl_1');
+    expect(within(cell).queryByText('vsl_1')).toBeNull();
+    expect(wrap.querySelector('th[data-col="vesselId"]')).toBeNull();
+
+    await act(async () => { fireEvent.click(within(bar).getByRole('button', { name: /^Columns/ })); });
+    const menu = screen.getByRole('menu', { name: 'Choose visible columns' });
+    expect(within(menu).getByRole('menuitemcheckbox', { name: /^Vessel(?! ID)/ })).toHaveAttribute('aria-disabled', 'true');
+    fireEvent.click(within(menu).getByRole('menuitemcheckbox', { name: /Vessel ID/ }));
+    expect(wrap.querySelector('th[data-col="vesselId"]')).not.toBeNull();
   });
 });

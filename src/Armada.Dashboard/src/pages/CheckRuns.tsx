@@ -17,8 +17,8 @@ import ErrorModal from '../components/shared/ErrorModal';
 import JsonViewer from '../components/shared/JsonViewer';
 import RecordDetailModal from '../components/shared/RecordDetailModal';
 import ReadinessPanel from '../components/shared/ReadinessPanel';
-import RefreshButton from '../components/shared/RefreshButton';
-import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
+import CopyButton from '../components/shared/CopyButton';
+import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import StatusBadge from '../components/shared/StatusBadge';
 import WorkflowCommandPreview from '../components/shared/WorkflowCommandPreview';
@@ -327,6 +327,92 @@ export default function CheckRuns() {
     }
   }
 
+  const columns: DataTableColumn<CheckRun>[] = [
+    {
+      key: 'check', label: t('Check'), required: true,
+      filter: <input type="text" className="col-filter" aria-label={t('Filter by check')} value={colFilters.label} onChange={e => setColFilters(f => ({ ...f, label: e.target.value }))} placeholder={t('Filter...')} />,
+      // One line: type, parsed results, comparison and ID were stacked under the label; each is its own column now.
+      cellTitle: (run) => `${run.label || run.type} (${run.type})`,
+      render: (run) => <strong className="cell-one-line">{run.label || run.type}</strong>,
+    },
+    {
+      key: 'id', label: t('ID'), required: true, cellClassName: 'mono text-dim table-id-cell',
+      render: (run) => (
+        <span className="id-display">
+          <span className="id-value" title={run.id}>{run.id}</span>
+          <CopyButton text={run.id} onClick={e => e.stopPropagation()} />
+        </span>
+      ),
+    },
+    { key: 'type', label: t('Type'), cellClassName: 'text-dim cell-nowrap', render: (run) => run.type },
+    {
+      key: 'results', label: t('Results'), cellClassName: 'text-dim',
+      render: (run) => {
+        const summary = summarizeRunParsing(run);
+        return summary ? <span className="cell-one-line" title={summary}>{summary}</span> : '-';
+      },
+    },
+    {
+      key: 'comparison', label: t('Comparison'),
+      render: (run) => {
+        const comparison = comparisonMap.get(run.id);
+        if (!comparison) return <span className="text-dim">-</span>;
+        const scope = `vs ${formatCheckRunComparisonScope(comparison.scope)}`;
+        const summary = formatCheckRunComparisonSummary(comparison);
+        return (
+          <span
+            className={`check-run-comparison-line check-run-comparison-inline${comparison.hasRegression ? ' regression' : comparison.hasImprovement ? ' improvement' : ''}`}
+            title={`${scope}: ${summary}`}
+          >
+            <span className="check-run-comparison-context">{scope}</span>
+            <span className="cell-one-line">{summary}</span>
+          </span>
+        );
+      },
+    },
+    { key: 'vessel', label: t('Vessel'), render: (run) => (run.vesselId ? (vesselMap.get(run.vesselId) || run.vesselId) : '-') },
+    { key: 'status', label: t('Status'), cellClassName: 'cell-nowrap', render: (run) => <StatusBadge status={run.status} /> },
+    { key: 'source', label: t('Source'), cellClassName: 'text-dim', render: (run) => (run.source === 'External' ? `${run.source}${run.providerName ? ` / ${run.providerName}` : ''}` : run.source) },
+    {
+      key: 'environment', label: t('Environment'), cellClassName: 'text-dim',
+      clearFilter: () => setColFilters(f => ({ ...f, environmentName: '' })),
+      filter: <input type="text" className="col-filter" aria-label={t('Filter by environment')} value={colFilters.environmentName} onChange={e => setColFilters(f => ({ ...f, environmentName: e.target.value }))} placeholder={t('Filter...')} />,
+      render: (run) => run.environmentName || '-',
+    },
+    { key: 'duration', label: t('Duration'), cellClassName: 'text-dim cell-nowrap', render: (run) => (run.durationMs != null ? `${Math.round(run.durationMs)} ms` : '-') },
+    {
+      key: 'created', label: t('Created'), cellClassName: 'text-dim cell-nowrap',
+      cellTitle: (run) => formatDateTime(run.createdUtc),
+      render: (run) => formatRelativeTime(run.createdUtc),
+    },
+    {
+      key: 'actions', label: t('Actions'), fixed: true, interactive: true, className: 'text-right',
+      render: (run) => (
+        <ActionMenu
+          id={`check-run-${run.id}`}
+          items={[
+            { label: 'Open', onClick: () => navigate(`/checks/${run.id}`) },
+            {
+              label: 'Draft Release',
+              onClick: () => navigate('/releases/new', {
+                state: {
+                  prefill: {
+                    vesselId: run.vesselId || null,
+                    voyageIds: run.voyageId ? [run.voyageId] : [],
+                    missionIds: run.missionId ? [run.missionId] : [],
+                    checkRunIds: [run.id],
+                    title: run.label ? `${run.label} Release` : `${run.type} Release`,
+                  },
+                },
+              }),
+            },
+            { label: 'View JSON', onClick: () => setJsonData({ open: true, title: run.label || run.id, data: run }) },
+          ]}
+        />
+      ),
+    },
+  ];
+
   return (
     <div>
       <PageHeader
@@ -334,8 +420,6 @@ export default function CheckRuns() {
         subtitle={t('Structured build, test, deploy, and verification runs with durable output, artifacts, and retry support.')}
         actions={(
           <>
-            <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
-            <RefreshButton onRefresh={load} title={t('Refresh check runs')} />
             <button className="btn btn-primary" onClick={() => openRunModal()}>
               + {t('Run Check')}
             </button>
@@ -536,98 +620,22 @@ export default function CheckRuns() {
         </div>
       </div>
 
-      {loading && runs.length === 0 ? (
-        <p className="text-dim">{t('Loading...')}</p>
-      ) : filtered.length === 0 ? (
-        <div className="playbook-empty-state">
-          <strong>{t('No check runs match the current filters.')}</strong>
-          <span>{t('Run a structured check to capture build, test, or deploy evidence for a vessel.')}</span>
-        </div>
-      ) : (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>{t('Check')}</th>
-                <th>{t('Vessel')}</th>
-                <th>{t('Status')}</th>
-                <th>{t('Source')}</th>
-                <th>{t('Environment')}</th>
-                <th>{t('Duration')}</th>
-                <th>{t('Created')}</th>
-                <th className="text-right">{t('Actions')}</th>
-              </tr>
-              <tr className="column-filter-row">
-                <td><input type="text" className="col-filter" value={colFilters.label} onChange={e => setColFilters(f => ({ ...f, label: e.target.value }))} placeholder={t('Filter...')} /></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td><input type="text" className="col-filter" value={colFilters.environmentName} onChange={e => setColFilters(f => ({ ...f, environmentName: e.target.value }))} placeholder={t('Filter...')} /></td>
-                <td></td>
-                <td></td>
-                <td></td>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((run) => (
-                <tr key={run.id} className="clickable" onClick={() => setViewRecord(run as unknown as Record<string, unknown>)}>
-                  <td>
-                    {(() => {
-                      const parsingSummary = summarizeRunParsing(run);
-                      const comparison = comparisonMap.get(run.id);
-                      return (
-                        <>
-                          <strong>{run.label || run.type}</strong>
-                          <div className="text-dim" style={{ marginTop: '0.2rem' }}>{run.type}</div>
-                          {parsingSummary && (
-                            <div className="text-dim" style={{ marginTop: '0.2rem', fontSize: '0.82rem' }}>{parsingSummary}</div>
-                          )}
-                          {comparison && (
-                            <div className={`check-run-comparison-line${comparison.hasRegression ? ' regression' : comparison.hasImprovement ? ' improvement' : ''}`}>
-                              <span className="check-run-comparison-context">{`vs ${formatCheckRunComparisonScope(comparison.scope)}`}</span>
-                              <span>{formatCheckRunComparisonSummary(comparison)}</span>
-                            </div>
-                          )}
-                          <div className="mono text-dim" style={{ fontSize: '0.78rem' }}>{run.id}</div>
-                        </>
-                      );
-                    })()}
-                  </td>
-                  <td>{run.vesselId ? (vesselMap.get(run.vesselId) || run.vesselId) : '-'}</td>
-                  <td><StatusBadge status={run.status} /></td>
-                  <td className="text-dim">{run.source === 'External' ? `${run.source}${run.providerName ? ` / ${run.providerName}` : ''}` : run.source}</td>
-                  <td className="text-dim">{run.environmentName || '-'}</td>
-                  <td className="text-dim">{run.durationMs != null ? `${Math.round(run.durationMs)} ms` : '-'}</td>
-                  <td className="text-dim" title={formatDateTime(run.createdUtc)}>{formatRelativeTime(run.createdUtc)}</td>
-                  <td className="text-right" onClick={(event) => event.stopPropagation()}>
-                    <ActionMenu
-                      id={`check-run-${run.id}`}
-                      items={[
-                        { label: 'Open', onClick: () => navigate(`/checks/${run.id}`) },
-                        {
-                          label: 'Draft Release',
-                          onClick: () => navigate('/releases/new', {
-                            state: {
-                              prefill: {
-                                vesselId: run.vesselId || null,
-                                voyageIds: run.voyageId ? [run.voyageId] : [],
-                                missionIds: run.missionId ? [run.missionId] : [],
-                                checkRunIds: [run.id],
-                                title: run.label ? `${run.label} Release` : `${run.type} Release`,
-                              },
-                            },
-                          }),
-                        },
-                        { label: 'View JSON', onClick: () => setJsonData({ open: true, title: run.label || run.id, data: run }) },
-                      ]}
-                    />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <DataTable
+        tableKey="checkruns"
+        columns={columns}
+        rows={filtered}
+        rowKey={(run) => run.id}
+        onRowClick={(run) => setViewRecord(run as unknown as Record<string, unknown>)}
+        autoRefresh={{ seconds: refreshSeconds, onChange: setRefreshSeconds }}
+        onRefresh={load}
+        refreshTitle={t('Refresh check runs')}
+        placeholder={loading && runs.length === 0 ? <p className="text-dim">{t('Loading...')}</p> : filtered.length === 0 ? (
+          <div className="playbook-empty-state">
+            <strong>{t('No check runs match the current filters.')}</strong>
+            <span>{t('Run a structured check to capture build, test, or deploy evidence for a vessel.')}</span>
+          </div>
+        ) : undefined}
+      />
     </div>
   );
 }

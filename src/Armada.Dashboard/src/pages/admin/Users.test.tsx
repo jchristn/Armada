@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import Users from './Users';
 import { ApiError, listUsers, updateUser } from '../../api/client';
 import { onlyCallArgs } from '../../test/mockCalls';
@@ -143,5 +143,31 @@ describe('Users edit form password change', () => {
     expect(id).toBe('usr_other');
     expect(body.password).toBe('new-password-1');
     expect('currentPassword' in body).toBe(false);
+  });
+});
+
+async function openColumnChooser() {
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /^Columns/ })); });
+  return screen.getByRole('menu', { name: 'Choose visible columns' });
+}
+
+describe('Users table', () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    vi.mocked(listUsers).mockResolvedValue({
+      success: true, pageNumber: 1, pageSize: 9999, totalPages: 1, totalRecords: 2, totalMs: 1, objects: [self, other],
+    } as Awaited<ReturnType<typeof listUsers>>);
+  });
+
+  it('locks Email and ID in the column chooser and hides an optional column', async () => {
+    render(<Users />);
+    await screen.findByText('me@example.com');
+    const menu = await openColumnChooser();
+    expect(within(menu).getByRole('menuitemcheckbox', { name: /^Email/ })).toHaveAttribute('aria-disabled', 'true');
+    expect(within(menu).getByRole('menuitemcheckbox', { name: /^ID/ })).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByRole('columnheader', { name: /Tenant Admin/ })).toBeInTheDocument();
+    fireEvent.click(within(menu).getByRole('menuitemcheckbox', { name: /^Tenant Admin/ }));
+    expect(screen.queryByRole('columnheader', { name: /Tenant Admin/ })).not.toBeInTheDocument();
+    expect(screen.getByText('me@example.com')).toBeInTheDocument();
   });
 });

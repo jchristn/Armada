@@ -51,7 +51,7 @@ name: 01-sign-in
     id: "password-skip-confirm-confirm"
 - extendedWaitUntil:
     visible:
-      id: "route-placeholder-title"
+      id: "ask-screen"
     timeout: 20000
 - assertVisible:
     id: "tab-ask"

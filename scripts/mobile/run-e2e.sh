@@ -5,7 +5,9 @@
 #   1. builds Armada.Server (Release) from this checkout unless --no-server-build;
 #   2. starts a throwaway Admiral on 127.0.0.1 with ARMADA_DATA_DIR in a temp directory (never ~/.armada) and
 #      ports from --port (default 44010; MCP is port+1; Prometheus is off). It keeps the default admin password,
-#      which the Admiral allows on loopback, so the flows exercise the "Skip for now" password-change path;
+#      which the Admiral allows on loopback, so the flows exercise the "Skip for now" password-change path. It
+#      seeds, through the REST API, a vessel (a local git repo in the temp directory), an environment that requires
+#      approval, and one deployment waiting for it (the approvals flow approves it);
 #   3. builds and installs a Release build of the app (JS bundle embedded, no Metro) unless --no-app-build;
 #   3b. seeds Operations data (scripts/mobile/seed-e2e.py: a fleet, a vessel on a local bare repository, and a
 #      voyage with two missions that stay Pending, since there are no captains);
@@ -135,6 +137,27 @@ JSON
   exit 1
 }
 
+# Seed what the flows need through the REST API, as the default admin: one deployment awaiting approval.
+seed_admiral() {
+  local base="http://127.0.0.1:${PORT}" token repo vessel env
+  token="$(curl -fsS -X POST "${base}/api/v1/authenticate" -H 'Content-Type: application/json' \
+    -d '{"email":"admin@armada","password":"password","tenantId":"default"}' | python3 -c 'import json,sys; print(json.load(sys.stdin)["Token"])')"
+  repo="${DATA_DIR}/seed-repo"
+  mkdir -p "$repo"
+  git -C "$repo" init -q -b main
+  echo "seed" > "${repo}/README.md"
+  git -C "$repo" add README.md
+  git -C "$repo" -c user.email=e2e@armada -c user.name=e2e commit -qm seed
+  id_of() { python3 -c 'import json,sys; print(json.load(sys.stdin)["Id"])'; }
+  vessel="$(curl -fsS -X POST "${base}/api/v1/vessels" -H "X-Token: ${token}" -H 'Content-Type: application/json' \
+    -d "{\"name\":\"demo-api\",\"repoUrl\":\"${repo}\",\"defaultBranch\":\"main\"}" | id_of)"
+  env="$(curl -fsS -X POST "${base}/api/v1/environments" -H "X-Token: ${token}" -H 'Content-Type: application/json' \
+    -d "{\"vesselId\":\"${vessel}\",\"name\":\"production\",\"kind\":\"Production\",\"requiresApproval\":true}" | id_of)"
+  curl -fsS -X POST "${base}/api/v1/deployments" -H "X-Token: ${token}" -H 'Content-Type: application/json' \
+    -d "{\"vesselId\":\"${vessel}\",\"environmentId\":\"${env}\",\"title\":\"Release 2.3\",\"autoExecute\":false}" >/dev/null
+  log "seeded a deployment awaiting approval (vessel ${vessel}, environment ${env})"
+}
+
 run_flows() {
   local platform="$1" device="$2" server_url="$3"
   log "running Maestro flows on ${platform} (${device}) against ${server_url}"
@@ -173,14 +196,27 @@ for runtime, devices in json.load(sys.stdin)['devices'].items():
   run_flows ios "$udid" "http://127.0.0.1:${PORT}"
 }
 
+# The serial of the running emulator whose AVD is $AVD (other emulators may be running), or nothing.
+avd_serial() {
+  local serial
+  for serial in $(adb devices | awk '/emulator-.*device$/ {print $1}'); do
+    if [ "$(adb -s "$serial" emu avd name 2>/dev/null | head -1 | tr -d '\r')" = "$AVD" ]; then echo "$serial"; return; fi
+  done
+}
+
 run_android() {
-  if ! adb devices | grep -q "emulator-.*device$"; then
+  ANDROID_SERIAL="$(avd_serial)"
+  if [ -z "$ANDROID_SERIAL" ]; then
     log "booting emulator ${AVD}"
     emulator -avd "$AVD" -no-snapshot-save -no-boot-anim >/dev/null 2>&1 &
     EMULATOR_PID=$!
+    for _ in $(seq 1 180); do
+      ANDROID_SERIAL="$(avd_serial)"
+      [ -n "$ANDROID_SERIAL" ] && break
+      sleep 1
+    done
+    [ -n "$ANDROID_SERIAL" ] || { echo "emulator ${AVD} did not come up" >&2; exit 1; }
   fi
-  adb wait-for-device
-  ANDROID_SERIAL="$(adb devices | awk '/emulator-.*device$/ {print $1; exit}')"
   export ANDROID_SERIAL
   until [ "$(adb -s "$ANDROID_SERIAL" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; do sleep 1; done
   if [ "$BUILD_APP" = "1" ]; then
@@ -192,6 +228,7 @@ run_android() {
 }
 
 start_admiral
+seed_admiral
 log "seeding Operations data"
 python3 "${SCRIPT_DIR}/seed-e2e.py" --url "http://127.0.0.1:${PORT}" --data-dir "$DATA_DIR"
 case "$PLATFORM" in

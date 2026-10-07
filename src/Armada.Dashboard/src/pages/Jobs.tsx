@@ -4,8 +4,7 @@ import type { Job } from '../types/models';
 import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
 import StatusBadge from '../components/shared/StatusBadge';
-import RefreshButton from '../components/shared/RefreshButton';
-import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
+import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 
 const TERMINAL = ['Succeeded', 'Failed', 'Cancelled'];
@@ -44,6 +43,38 @@ export default function Jobs() {
     }
   }
 
+  const columns: DataTableColumn<Job>[] = [
+    {
+      key: 'name', label: t('Name'), required: true,
+      cellTitle: (job) => [job.name, job.errorReason].filter(Boolean).join('\n'),
+      render: (job) => <span className="cell-one-line">{job.name}</span>,
+    },
+    { key: 'kind', label: t('Kind'), render: (job) => job.kind },
+    { key: 'status', label: t('Status'), cellClassName: 'cell-nowrap', render: (job) => <StatusBadge status={job.status} /> },
+    { key: 'progress', label: t('Progress'), cellClassName: 'mono cell-nowrap', render: (job) => `${job.progress}%` },
+    {
+      // Was a small second line under the name; now its own one-line column (full text in the tooltip).
+      key: 'error', label: t('Error'), cellClassName: 'text-dim',
+      render: (job) => (job.errorReason ? <span className="cell-one-line" title={job.errorReason}>{job.errorReason}</span> : '-'),
+    },
+    {
+      key: 'created', label: t('Created'), cellClassName: 'text-dim cell-nowrap',
+      cellTitle: (job) => formatDateTime(job.createdUtc),
+      render: (job) => formatRelativeTime(job.createdUtc),
+    },
+    {
+      key: 'updated', label: t('Updated'), cellClassName: 'text-dim cell-nowrap',
+      cellTitle: (job) => formatDateTime(job.lastUpdateUtc),
+      render: (job) => formatRelativeTime(job.lastUpdateUtc),
+    },
+    {
+      key: 'actions', label: t('Actions'), header: '', fixed: true, interactive: true, className: 'text-right',
+      render: (job) => (!TERMINAL.includes(job.status) ? (
+        <button type="button" className="btn btn-sm" onClick={() => handleCancel(job)}>{t('Cancel')}</button>
+      ) : null),
+    },
+  ];
+
   return (
     <div className="jobs-page">
       <div className="view-header">
@@ -51,57 +82,24 @@ export default function Jobs() {
           <h2>{t('Jobs')}</h2>
           <p className="text-dim view-subtitle">{t('Background jobs and their status.')}</p>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
-          <RefreshButton onRefresh={load} title={t('Refresh jobs')} />
-        </div>
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}
 
-      {loading ? (
-        <p className="text-dim">{t('Loading...')}</p>
-      ) : jobs.length === 0 ? (
-        <div className="card" style={{ padding: '1.25rem' }}>
-          <p className="text-muted">{t('No background jobs.')}</p>
-        </div>
-      ) : (
-        <div className="card" style={{ overflowX: 'auto' }}>
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>{t('Name')}</th>
-                <th>{t('Kind')}</th>
-                <th>{t('Status')}</th>
-                <th>{t('Progress')}</th>
-                <th>{t('Created')}</th>
-                <th>{t('Updated')}</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {jobs.map((job) => (
-                <tr key={job.id}>
-                  <td>
-                    {job.name}
-                    {job.errorReason && <div className="text-dim" style={{ fontSize: '0.72rem' }}>{job.errorReason}</div>}
-                  </td>
-                  <td>{job.kind}</td>
-                  <td><StatusBadge status={job.status} /></td>
-                  <td className="mono">{job.progress}%</td>
-                  <td className="text-dim" title={formatDateTime(job.createdUtc)}>{formatRelativeTime(job.createdUtc)}</td>
-                  <td className="text-dim" title={formatDateTime(job.lastUpdateUtc)}>{formatRelativeTime(job.lastUpdateUtc)}</td>
-                  <td>
-                    {!TERMINAL.includes(job.status) && (
-                      <button type="button" className="btn btn-sm" onClick={() => handleCancel(job)}>{t('Cancel')}</button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <DataTable
+        tableKey="jobs"
+        columns={columns}
+        rows={jobs}
+        rowKey={(job) => job.id}
+        autoRefresh={{ seconds: refreshSeconds, onChange: setRefreshSeconds }}
+        onRefresh={load}
+        refreshTitle={t('Refresh jobs')}
+        placeholder={loading && jobs.length === 0 ? <p className="text-dim">{t('Loading...')}</p> : jobs.length === 0 ? (
+          <div className="card" style={{ padding: '1.25rem' }}>
+            <p className="text-muted">{t('No background jobs.')}</p>
+          </div>
+        ) : undefined}
+      />
     </div>
   );
 }
