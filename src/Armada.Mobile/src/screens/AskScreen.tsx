@@ -144,6 +144,12 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
     if (await deleteThread(target) && target.id === conv.threadId) setThreadId(null);
   }
 
+  function commitRename() {
+    setRenameOpen(false);
+    const next = renameValue.trim();
+    if (thread && next && next !== thread.title) void applyUpdate(thread, { title: next });
+  }
+
   function selectWork(work: AskTrackedWork) {
     if (messageListRef.current?.scrollToWork(work.id)) {
       setHighlightedWorkId(work.id);
@@ -331,17 +337,17 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
       />
 
       <BottomSheet open={renameOpen} title={t('Rename conversation')} onClose={() => setRenameOpen(false)} closeLabel={t('Cancel')} testID="ask-rename-sheet">
-        <TextField label={t('Conversation title')} value={renameValue} maxLength={200} onChangeText={setRenameValue} autoFocus testID="ask-rename-title" />
-        <Button
-          label={t('Rename')}
-          disabled={!renameValue.trim()}
-          onPress={() => {
-            setRenameOpen(false);
-            const next = renameValue.trim();
-            if (thread && next && next !== thread.title) void applyUpdate(thread, { title: next });
-          }}
-          testID="ask-rename-confirm"
+        <TextField
+          label={t('Conversation title')}
+          value={renameValue}
+          maxLength={200}
+          onChangeText={setRenameValue}
+          autoFocus
+          returnKeyType="done"
+          onSubmitEditing={commitRename}
+          testID="ask-rename-title"
         />
+        <Button label={t('Rename')} disabled={!renameValue.trim()} onPress={commitRename} testID="ask-rename-confirm" />
       </BottomSheet>
 
       <ConfirmDialog

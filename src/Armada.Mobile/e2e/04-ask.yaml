@@ -25,7 +25,12 @@ name: 04-ask
     visible:
       id: "ask-quick-status"
     timeout: 10000
+# The keyboard can still be animating in and moving the composer; tap only once the layout has settled.
+- waitForAnimationToEnd:
+    timeout: 5000
 - takeScreenshot: ask-quick-menu
+- waitForAnimationToEnd:
+    timeout: 5000
 - tapOn:
     id: "ask-quick-status"
 - extendedWaitUntil:
