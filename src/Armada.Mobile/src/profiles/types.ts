@@ -18,6 +18,11 @@ export interface ServerProfile {
   lastTenantName: string | null;
   lastUserEmail: string | null;
   createdUtc: string;
+  /**
+   * Proxy profiles: the Admiral instance picked on the proxy (re-selected after the proxy session is renewed, so a
+   * re-sign-in returns to the same Admiral). Absent on profiles saved before W5.4.
+   */
+  proxyInstanceId?: string | null;
 }
 
 export type ServerProfileKind = 'Direct' | 'Proxy';

@@ -203,6 +203,7 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(request.Id, ownerMessage.Data.EntityId);
                 AssertEqual("CliPermission", ownerMessage.Data.Category);
                 AssertEqual("ath_p", ownerMessage.Data.ThreadId, "owner gets the thread");
+                AssertEqual(device.Id, ownerMessage.Data.DeviceId, "the message names the device it was built for");
                 AssertNull(ownerMessage.CategoryId, "no actions for a recipient who cannot decide");
                 AssertEqual(3, ownerMessage.Badge, "badge");
                 AssertEqual("default", ownerMessage.Sound, "sound");
@@ -434,6 +435,7 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(PushTestStatusEnum.Sent, sent.Status, sent.Message ?? "");
                 AssertNotNull(sent.TicketId, "ticket id");
                 AssertEqual(PushNotificationKinds.Test, transport.Messages.Single().Data.Kind, "test kind (categories ignored)");
+                AssertEqual(device.Id, transport.Messages.Single().Data.DeviceId, "test push names the device");
 
                 settings.Push.Enabled = false;
                 AssertEqual(PushTestStatusEnum.Disabled, (await push.SendTestAsync(device).ConfigureAwait(false)).Status);

@@ -6,6 +6,7 @@ import { useAuth } from '../auth/AuthContext';
 import { InsecureUrlWarning } from '../components/app/InsecureUrlWarning';
 import { LocalePicker } from '../components/app/LocalePicker';
 import { ProfileForm } from '../components/app/ProfileForm';
+import { ProxyInstanceBar, ProxyInstancePicker, ProxyPortalForm } from '../components/app/ProxySignIn';
 import { AppText, BottomSheet, Button, Icon, ListRow, Screen, Section, SegmentedControl, TextField } from '../components/ui';
 import { useLocale } from '../i18n/LocaleContext';
 import { spacing } from '../theme/typography';
@@ -15,10 +16,11 @@ type Mode = 'email' | 'apikey';
 
 /**
  * Sign-in, mirroring the dashboard's LoginFlow: email, then tenant lookup (skipped when there is one tenant), then
- * password; or an API key / bearer token. Adds the server profile choice (which Admiral to sign in to).
+ * password; or an API key / bearer token. Adds the server profile choice (which Admiral to sign in to). A Proxy
+ * profile first signs in to Armada.Proxy and picks an Admiral instance; the Admiral sign-in then goes through the relay.
  */
 export function SignInScreen() {
-  const { activeProfile, profiles, login, saveProfile, selectProfile } = useAuth();
+  const { activeProfile, profiles, login, saveProfile, selectProfile, proxyStage } = useAuth();
   const { t } = useLocale();
   const [mode, setMode] = useState<Mode>(activeProfile?.signInMethod === 'token' ? 'apikey' : 'email');
   const [step, setStep] = useState<Step>('email');
@@ -117,6 +119,11 @@ export function SignInScreen() {
       </Section>
       <InsecureUrlWarning url={activeProfile.url} />
 
+      {proxyStage === 'portal' ? <ProxyPortalForm /> : null}
+      {proxyStage === 'instance' ? <ProxyInstancePicker /> : null}
+      {proxyStage === 'admiral' ? <ProxyInstanceBar /> : null}
+
+      {proxyStage === 'portal' || proxyStage === 'instance' ? null : (
       <View style={styles.pad}>
         <SegmentedControl
           label={t('Sign-in method')}
@@ -225,6 +232,7 @@ export function SignInScreen() {
           </>
         ) : null}
       </View>
+      )}
 
       <LanguageSection />
       <AppText variant="caption" muted style={styles.defaults}>
@@ -248,7 +256,7 @@ export function SignInScreen() {
               <ListRow
                 key={p.id}
                 title={p.name}
-                subtitle={p.url}
+                subtitle={p.kind === 'Proxy' ? `${p.url} (${t('Armada.Proxy')})` : p.url}
                 selected={p.id === activeProfile.id}
                 accessory={p.id === activeProfile.id ? <Icon name="checkmark" color="primary" accessibilityLabel={t('Selected')} /> : null}
                 onPress={() => { void selectProfile(p.id); setServersOpen(false); }}

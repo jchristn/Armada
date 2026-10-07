@@ -1,0 +1,28 @@
+# Signed in through the proxy (state kept from 01): a relaunch restores the proxy session and the Admiral session
+# without asking again; signing out of the proxy returns to the portal step.
+appId: ${APP_ID}
+name: 02-proxy-relaunch
+---
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible: "Ask Armada"
+    timeout: 30000
+- runFlow: common/open-approvals.yaml
+# The inbox comes from the Admiral through the relay: the seeded deployment approval, or nothing left to decide
+# when an earlier flow already approved it.
+- extendedWaitUntil:
+    visible: "(Deploy to production: Release 2.3|You are all caught up.)"
+    timeout: 20000
+- runFlow: common/sign-out.yaml
+- extendedWaitUntil:
+    visible:
+      id: "proxy-instance-bar"
+    timeout: 20000
+- tapOn:
+    id: "proxy-sign-out"
+- extendedWaitUntil:
+    visible:
+      id: "proxy-password"
+    timeout: 20000
+- takeScreenshot: proxy-signed-out

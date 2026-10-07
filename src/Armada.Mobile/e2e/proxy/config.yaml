@@ -1,0 +1,9 @@
+# Proxy flows: scripts/mobile/run-e2e.sh --proxy starts a throwaway Armada.Proxy relaying to a throwaway Admiral and
+# passes PROXY_URL (as the device reaches it), PROXY_PASSWORD, PROXY_INSTANCE, and APP_ID.
+flows:
+  - "0*.yaml"
+executionOrder:
+  continueOnFailure: false
+  flowsOrder:
+    - 01-proxy-sign-in
+    - 02-proxy-relaunch

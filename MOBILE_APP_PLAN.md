@@ -3,7 +3,7 @@
 > **Type:** implementation plan (work-tracking). Annotate task status and the progress log as you go; keep this
 > document in sync with what actually shipped.
 >
-> **Status:** In progress (W0, W1, W5.1 and W5.2 done; W2 and W5.3/W5.4 in progress)
+> **Status:** In progress (W0, W1 and W5 done; W2 in progress)
 > **Built on:** React Native with Expo SDK 57 (TypeScript, Expo Router), in `src/Armada.Mobile`
 > **Parity baseline:** the web dashboard at `src/Armada.Dashboard` as of 2026-10-07 (the same surfaces the TUI parity
 > manifest tracks: page routes, hub tabs, server-calling API client functions, WebSocket events, Server-page settings)
@@ -170,9 +170,9 @@ selection) are recorded per entry in the manifest notes.
 ### W5. Push and remote access
 - [x] W5.1 Server S1 and S2 with tests on all four database providers
 - [x] W5.2 Proxy P1 with tests (`X-Armada-Proxy-Session` on every route, Bearer on `/proxy-api`, `armada-proxy-session.<b64url>` subprotocol on `/ws`; proxy credentials never relayed to the Admiral; request sequence in docs/REMOTE_SERVER.md)
-- [ ] W5.3 App: permission prompt, device registration per profile, categories in settings, notification tap and
+- [x] W5.3 App: permission prompt, device registration per profile, categories in settings, notification tap and
   action handling (deep link, approve/deny with unlock), badge counts
-- [ ] W5.4 Proxy profiles in the app (portal sign-in, instance picker)
+- [x] W5.4 Proxy profiles in the app (portal sign-in, instance picker)
 
 ### W6. Quality and release readiness
 - [ ] W6.1 Accessibility pass (VoiceOver, TalkBack, font scaling, contrast)
@@ -204,3 +204,4 @@ Milestone C: push, proxy, quality pass, store-ready builds.
 | 2026-10-07 | W5.1 | work/mobile-push | S1+S2: push_devices (migration 79, 4 providers), /api/v1/push/devices, PushNotificationService over Expo (batched, retry, DeviceNotRegistered cleanup, rate limit, dedupe), Push settings with redacted token; DB parity OK on all four providers. Recipients: failures to owner only, approvals to owner and tenant admins; iOS category armada_approve_deny |
 | 2026-10-07 | W0 | work/mobile-w0 | Expo SDK 57 app; dashboard client host-agnostic (configureClient); profiles, sign-in, Skip, biometric; adaptive shell + deep links + placeholders for all 85 routes; socket lifecycle, notifications, Approvals badge; 171 Jest, Maestro 3/3 on iOS and Android; parity.json 552 entries; CI mobile job; iOS scene plugin (remove on SDK 58) |
 | 2026-10-07 | W1 | work/mobile-w1 | Ask Armada (threads, streaming, / quick actions and forms, confirm/CLI/work cards, options), approvals center (/approvals, /inbox) with approvals/actions.ts for push, approval toasts, notification filter; shared lib extractions (askFormat, askCaptain, inboxKinds); Hermes timestamp and Android keyboard fixes; Jest 221; Maestro 5/5 iOS + Android; iPad split checked |
+| 2026-10-07 | W5.3/W5.4 | work/mobile-push-app | Push: permission sheet after sign-in, per-profile registration (pdv_ kept in keychain; re-register on token change; delete on sign-out/removal), category switches + test push, validated tap deep links, Approve/Deny with unlock + biometric via W1 decideApproval, badge; server adds data.deviceId. Proxy profiles: portal proof login, instance picker, X-Armada-Proxy-Session / Bearer / WS subprotocol with header fallback, expiry resumes with proxy password only. Dashboard configureClient({headers}). Jest 323; Maestro iPhone main+proxy+simctl push, iPad and Armada_Tablet proxy flows |
