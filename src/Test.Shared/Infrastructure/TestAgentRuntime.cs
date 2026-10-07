@@ -33,6 +33,12 @@ namespace Test.Shared.Infrastructure
         public List<string> ArgsOverride { get; set; } = new List<string> { "--version" };
 
         /// <summary>
+        /// When true, the prompt is delivered on the launched command's stdin (as the Claude Code, Codex, Gemini,
+        /// Cursor, and OpenCode runtimes do) instead of being dropped.
+        /// </summary>
+        public bool PromptOnStdin { get; set; } = false;
+
+        /// <summary>
         /// Initialize the test runtime.
         /// </summary>
         /// <param name="logging">Logging module.</param>
@@ -63,6 +69,11 @@ namespace Test.Shared.Infrastructure
             string? model,
             string? finalMessageFilePath,
             Captain? captain) => ArgsOverride;
+
+        /// <summary>
+        /// Whether the prompt is written to the launched command's stdin; see <see cref="PromptOnStdin"/>.
+        /// </summary>
+        protected override bool UsePromptStdin => PromptOnStdin;
 
         /// <summary>
         /// The stand-in command (for example <c>sleep</c>) takes no agent CLI flags, so the launch plan's MCP binding
