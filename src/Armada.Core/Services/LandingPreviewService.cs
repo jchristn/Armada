@@ -252,7 +252,7 @@ namespace Armada.Core.Services
             if (String.Equals(result.BranchCategory, "Hotfix", StringComparison.OrdinalIgnoreCase)
                 && result.TargetBranchProtected
                 && result.RequirePullRequestForProtectedBranches
-                && result.LandingMode == LandingModeEnum.LocalMerge)
+                && (result.LandingMode == LandingModeEnum.LocalMerge || result.LandingMode == LandingModeEnum.MergeAndPush))
             {
                 AddIssue(
                     result,
@@ -362,7 +362,9 @@ namespace Armada.Core.Services
                 case LandingModeEnum.MergeQueue:
                     return "Enqueue the branch in merge queue";
                 case LandingModeEnum.LocalMerge:
-                    return "Merge the branch directly into the target branch";
+                    return "Merge the branch into the target branch in the working directory, without pushing";
+                case LandingModeEnum.MergeAndPush:
+                    return "Merge the branch into the target branch in the working directory, then push it";
                 case LandingModeEnum.None:
                     return "Manual landing only";
                 default:

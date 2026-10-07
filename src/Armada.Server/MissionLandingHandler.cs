@@ -176,7 +176,8 @@ namespace Armada.Server
             {
                 // Explicit landing mode takes precedence over boolean flags
                 effectivePr = resolvedLandingMode.Value == LandingModeEnum.PullRequest;
-                effectivePush = effectivePr || resolvedLandingMode.Value == LandingModeEnum.LocalMerge;
+                // LocalMerge merges without pushing; MergeAndPush merges and then pushes the working directory
+                effectivePush = effectivePr || resolvedLandingMode.Value == LandingModeEnum.MergeAndPush;
                 effectiveMerge = effectivePr && (voyage?.AutoMergePullRequests ?? _Settings.AutoMergePullRequests);
             }
             else
@@ -321,7 +322,7 @@ namespace Armada.Server
                     && !landingModeIsMergeQueue
                     && vessel != null && !String.IsNullOrEmpty(vessel.WorkingDirectory) && !String.IsNullOrEmpty(vessel.LocalPath))
                 {
-                    // Local merge runs for LocalMerge and for the legacy unset mode. An explicit None (manual landing)
+                    // Local merge runs for LocalMerge, MergeAndPush, and the legacy unset mode. An explicit None (manual landing)
                     // or MergeQueue must never merge into the user's working directory, even when one is configured.
                     // Check if the mission actually produced mergeable changes.
                     // Pipeline stages like Architect may complete without code changes (they output
