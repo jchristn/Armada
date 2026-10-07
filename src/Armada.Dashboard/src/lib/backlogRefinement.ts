@@ -1,4 +1,4 @@
-import type { Captain, ObjectiveRefinementMessage, ObjectiveRefinementSession } from '../../types/models';
+import type { Captain, ObjectiveRefinementMessage, ObjectiveRefinementSession } from '../types/models';
 
 export function upsertRefinementSession(
   sessions: ObjectiveRefinementSession[],
