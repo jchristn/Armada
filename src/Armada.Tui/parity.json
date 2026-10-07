@@ -3913,14 +3913,6 @@
     },
     {
       "kind": "setting",
-      "key": "settings.autoCreatePr",
-      "status": "implemented",
-      "tui": "ServerSettingsScreen",
-      "workstream": "W7.7",
-      "notes": ""
-    },
-    {
-      "kind": "setting",
       "key": "settings.dataDirectory",
       "status": "implemented",
       "tui": "ServerSettingsScreen",
@@ -4026,6 +4018,14 @@
     {
       "kind": "setting",
       "key": "settings.import.maxDepth",
+      "status": "implemented",
+      "tui": "ServerSettingsScreen",
+      "workstream": "W7.7",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.landingMode",
       "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",

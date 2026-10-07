@@ -1463,7 +1463,7 @@ function dashboard() {
                     heartbeatIntervalSeconds: this.serverSettings.heartbeatIntervalSeconds,
                     stallThresholdMinutes: this.serverSettings.stallThresholdMinutes,
                     idleCaptainTimeoutSeconds: this.serverSettings.idleCaptainTimeoutSeconds,
-                    autoCreatePr: this.serverSettings.autoCreatePr
+                    landingMode: this.serverSettings.landingMode || 'MergeAndPush'
                 });
                 this.toast('Agent settings saved');
             } catch (e) { this.toast('Failed: ' + e.message, 'error'); }

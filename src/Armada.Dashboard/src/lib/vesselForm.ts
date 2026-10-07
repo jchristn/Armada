@@ -74,6 +74,23 @@ export function getLandingModes(t: (text: string) => string): LandingModeOption[
   ];
 }
 
+/** Landing modes for a voyage: the inherit entry (vessel, then global setting) followed by every mode. */
+export function getVoyageLandingModes(t: (text: string) => string): LandingModeOption[] {
+  const modes = getLandingModes(t).filter(m => m.value);
+  return [
+    { value: '', label: t('Default (use vessel or global setting)'), short: t('vessel or global default'), description: t('Uses the vessel\'s landing mode, or the global default when the vessel does not set one.') },
+    ...modes,
+  ];
+}
+
+/** Landing modes for the global default (no inherit entry). */
+export function getGlobalLandingModes(t: (text: string) => string): LandingModeOption[] {
+  return getLandingModes(t).filter(m => m.value);
+}
+
+/** The landing mode the Admiral uses when the global setting is absent. */
+export const DEFAULT_GLOBAL_LANDING_MODE = 'MergeAndPush';
+
 /** Returns the metadata for a landing mode, falling back to the default entry. */
 export function findLandingMode(modes: LandingModeOption[], mode: string | null | undefined): LandingModeOption {
   return modes.find(m => m.value === (mode ?? '')) ?? modes[0];

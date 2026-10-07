@@ -22,6 +22,8 @@ import type { CliPermissionSettingsData, FleetActionSettingsData, RetentionSetti
 import ImportFleetActionSettings from '../components/settings/ImportFleetActionSettings';
 import RetentionSettings from '../components/settings/RetentionSettings';
 import CliPermissionSettings from '../components/settings/CliPermissionSettings';
+import DefaultLandingModeField from '../components/settings/DefaultLandingModeField';
+import { DEFAULT_GLOBAL_LANDING_MODE } from '../lib/vesselForm';
 import LogViewer from '../components/shared/LogViewer';
 import RefreshButton from '../components/shared/RefreshButton';
 import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
@@ -94,7 +96,7 @@ interface ServerSettings {
   planningSessionInactivityTimeoutMinutes: number;
   planningSessionAbandonmentTimeoutMinutes: number;
   planningSessionRetentionDays: number;
-  autoCreatePr: boolean;
+  landingMode?: string | null;
   dataDirectory: string;
   databasePath: string;
   logDirectory: string;
@@ -147,6 +149,7 @@ function mergeServerSettings(data: ServerSettings | null): ServerSettings | null
   if (!data) return null;
   return {
     ...data,
+    landingMode: data.landingMode || DEFAULT_GLOBAL_LANDING_MODE,
     remoteControl: {
       ...getDefaultRemoteControlSettings(),
       ...(data.remoteControl ?? {}),
@@ -363,7 +366,7 @@ export default function Server() {
         heartbeatIntervalSeconds: settings.heartbeatIntervalSeconds,
         stallThresholdMinutes: settings.stallThresholdMinutes,
         idleCaptainTimeoutSeconds: settings.idleCaptainTimeoutSeconds,
-        autoCreatePr: settings.autoCreatePr,
+        landingMode: settings.landingMode || DEFAULT_GLOBAL_LANDING_MODE,
       });
       setSettings(mergeServerSettings(updated as unknown as ServerSettings));
       showToast('success', t('Agent settings saved'));
@@ -924,7 +927,7 @@ export default function Server() {
       {/* Agent Settings */}
       {settings && (
         <div className="settings-section" style={{ marginTop: '1.5rem' }}>
-          <h3 title={t('Settings that control captain monitoring, stalling, cleanup, and pull-request automation.')}>{t('Agent Settings')}</h3>
+          <h3 title={t('Settings that control captain monitoring, stalling, cleanup, and how finished missions land.')}>{t('Agent Settings')}</h3>
           <fieldset disabled={remoteSettingsLocked} style={{ border: 'none', margin: 0, padding: 0 }}>
             <div className="settings-grid">
               <div className="form-group">
@@ -972,16 +975,7 @@ export default function Server() {
                   title={t('Auto-remove idle captains after this many seconds (0 = disabled)')}
                 />
               </div>
-              <div className="form-group">
-                <label className="settings-checkbox-label" title={t('Automatically open pull requests when supported by the mission and vessel configuration.')}>
-                  <input
-                    type="checkbox"
-                    checked={settings.autoCreatePr}
-                    onChange={(e) => setSettings({ ...settings, autoCreatePr: e.target.checked })}
-                  />
-                  <span>{t('Auto-Create Pull Requests')}</span>
-                </label>
-              </div>
+              <DefaultLandingModeField value={settings.landingMode} onChange={(landingMode) => setSettings({ ...settings, landingMode })} />
             </div>
             <button
               className="btn-primary btn-sm"

@@ -8,6 +8,7 @@ namespace Armada.Tui.Screens.Operations
     using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Tui.Routing;
+    using Armada.Tui.Screens.Build;
     using Armada.Tui.Services;
     using Armada.Tui.Widgets;
     using TUIKit;
@@ -262,10 +263,9 @@ namespace Armada.Tui.Screens.Operations
             doc.Field("ID", v.Id);
             doc.Field("Description", v.Description);
             doc.Section("Configuration");
-            doc.YesNo("Auto-Push", v.AutoPush);
-            doc.YesNo("Auto-Create PRs", v.AutoCreatePullRequests);
+            LandingModeInfo landing = LandingModeInfo.ForVoyage(v.LandingMode?.ToString());
+            doc.Field("Landing Mode", (v.LandingMode?.ToString() ?? doc.Loc.T("Default")) + " (" + doc.Loc.T(landing.Short) + ")");
             doc.YesNo("Auto-Merge PRs", v.AutoMergePullRequests);
-            doc.Field("Landing Mode", v.LandingMode?.ToString());
 
             List<CaptainAssignmentOverride> overrides = new List<CaptainAssignmentOverride>();
             if (!String.IsNullOrEmpty(v.CaptainOverridesJson))

@@ -26,6 +26,14 @@ namespace Armada.Tui.Screens.Build
         };
 
         /// <summary>
+        /// The landing modes a voyage can pick, in the dashboard's order; the first (empty value) inherits the vessel's
+        /// mode, then the global default.
+        /// </summary>
+        public static readonly IReadOnlyList<LandingModeInfo> Voyage = new List<LandingModeInfo>(
+            new[] { new LandingModeInfo("", "Default (use vessel or global setting)", "vessel or global default", "Uses the vessel's landing mode, or the global default when the vessel does not set one.") }
+                .Concat(All.Where(m => m.Value.Length > 0)));
+
+        /// <summary>
         /// Enum value name, or empty for the global default.
         /// </summary>
         public string Value { get; }
@@ -77,6 +85,17 @@ namespace Armada.Tui.Screens.Build
         {
             string value = mode ?? "";
             return All.FirstOrDefault(m => String.Equals(m.Value, value, StringComparison.Ordinal)) ?? All[0];
+        }
+
+        /// <summary>
+        /// The voyage entry for a mode (the inherit entry for null or unknown values).
+        /// </summary>
+        /// <param name="mode">Mode name, or null.</param>
+        /// <returns>Entry.</returns>
+        public static LandingModeInfo ForVoyage(string? mode)
+        {
+            string value = mode ?? "";
+            return Voyage.FirstOrDefault(m => String.Equals(m.Value, value, StringComparison.Ordinal)) ?? Voyage[0];
         }
 
         #endregion

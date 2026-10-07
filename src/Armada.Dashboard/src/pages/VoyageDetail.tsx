@@ -23,6 +23,7 @@ import CopyButton from '../components/shared/CopyButton';
 import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
 import { useLiveRefresh } from '../lib/useLiveRefresh';
+import { findLandingMode, getVoyageLandingModes } from '../lib/vesselForm';
 
 // ── Helper utilities ──
 
@@ -315,10 +316,8 @@ export default function VoyageDetail() {
         <div className="card">
           <h3>{t('Configuration')}</h3>
           <div style={{ display: 'grid', gap: 8 }}>
-            <div><span className="text-muted" style={{ fontSize: 12 }}>{t('Auto-Push')}</span><div>{voyage.autoPush != null ? (voyage.autoPush ? t('Yes') : t('No')) : '-'}</div></div>
-            <div><span className="text-muted" style={{ fontSize: 12 }}>{t('Auto-Create PRs')}</span><div>{voyage.autoCreatePullRequests != null ? (voyage.autoCreatePullRequests ? t('Yes') : t('No')) : '-'}</div></div>
             <div><span className="text-muted" style={{ fontSize: 12 }}>{t('Auto-Merge PRs')}</span><div>{voyage.autoMergePullRequests != null ? (voyage.autoMergePullRequests ? t('Yes') : t('No')) : '-'}</div></div>
-            <div><span className="text-muted" style={{ fontSize: 12 }}>{t('Landing Mode')}</span><div>{voyage.landingMode || '-'}</div></div>
+            <div><span className="text-muted" style={{ fontSize: 12 }}>{t('Landing Mode')}</span><div title={findLandingMode(getVoyageLandingModes(t), voyage.landingMode).description}>{voyage.landingMode || t('Default')} <span className="text-dim">({findLandingMode(getVoyageLandingModes(t), voyage.landingMode).short})</span></div></div>
           </div>
         </div>
 

@@ -4,6 +4,7 @@ namespace Test.Shared.Suites.Tui
     using System.Collections.Generic;
     using System.Linq;
     using System.Net;
+    using Armada.Core.Enums;
     using Armada.Tui.Screens;
     using Armada.Tui.Screens.Operations;
     using Armada.Tui.Services;
@@ -32,7 +33,10 @@ namespace Test.Shared.Suites.Tui
                     string frame = host.Screen();
                     TuiCase.Contains(frame, "[Voyages]", "tab");
                     TuiCase.Contains(frame, "Batches of related missions dispatched together", "subtitle");
-                    TuiCase.Contains(frame, "PullRequest", "landing mode");
+                    TuiCase.Contains(frame, "PullRequest (opens a PR)", "landing mode with its short label");
+                    TuiCase.Contains(frame, "Default (vessel or global", "inherited landing mode");
+                    TuiCase.NotContains(frame, "Auto Push", "no legacy Auto Push column");
+                    TuiCase.NotContains(frame, "Auto Create PRs", "no legacy Auto Create PRs column");
                     VoyagesScreen screen = (VoyagesScreen)((HubScreen)host.Tui.Shell.Screen!).Content;
                     host.Press("/").Press("tab").Type("Greet");
                     AssertTrue(host.PumpUntil(() => !host.Screen().Contains("Billing cleanup")), "title filter");
@@ -74,6 +78,9 @@ namespace Test.Shared.Suites.Tui
                     AssertTrue(host.WaitForText("Billing cleanup"), "heading\n" + host.Screen());
                     string frame = host.Screen();
                     TuiCase.Contains(frame, "1/3 complete, 1 failed", "progress");
+                    TuiCase.Contains(frame, "Default (vessel or global default)", "inherited landing mode");
+                    TuiCase.NotContains(frame, "Auto-Push", "no legacy Auto-Push row");
+                    TuiCase.NotContains(frame, "Auto-Create PRs", "no legacy Auto-Create PRs row");
                     TuiCase.Contains(frame, "Retry Failed (1)", "retry button");
                     TuiCase.Contains(frame, "Captain Assignments", "assignments");
                     TuiCase.Contains(frame, "fallback: Premium", "fallback tier");
@@ -140,7 +147,37 @@ namespace Test.Shared.Suites.Tui
                     AssertEqual("Docs sweep", voyage.Title, "title: " + create.Body);
                     AssertEqual("Update README|Fix links", String.Join("|", voyage.Missions.Select(m => m.Title)), "missions: " + create.Body);
                     AssertEqual("vsl_demo", voyage.VesselId, "vessel: " + create.Body);
+                    AssertNull(voyage.LandingMode, "inherit sends no landing mode: " + create.Body);
+                    AssertFalse(JsonShape.HasPropertyAnywhere(create.Body, "LandingMode"), "no LandingMode property on inherit: " + create.Body);
                     AssertTrue(host.PumpUntil(() => host.Tui.Context.Router.Current!.Path == "/voyages/vyg_new"), "opens the voyage");
+                }
+            }));
+
+            cases.Add(TuiCase.Sync(Suite, "create_landing_mode", "Create Voyage offers inherit plus every landing mode instead of the legacy push and PR toggles, and sends the chosen mode", () =>
+            {
+                StubHttpHandler stub = Stub();
+                using (TuiTestHost host = TuiCase.SignedIn(150, 50, "/voyages/create", stub))
+                {
+                    AssertTrue(host.WaitForText("Voyage Details"), "form\n" + host.Screen());
+                    VoyageCreateScreen screen = (VoyageCreateScreen)host.Tui.Shell.Screen!;
+                    AssertEqual("|LocalMerge|MergeAndPush|PullRequest|MergeQueue|None", String.Join("|", screen.LandingMode.Options.Select(o => o.Value)), "landing options");
+                    AssertEqual("Default (use vessel or global setting)", screen.LandingMode.Selected!.Label, "inherit by default");
+                    string frame = host.Screen();
+                    TuiCase.Contains(frame, "Landing Mode", "landing mode row");
+                    TuiCase.NotContains(frame, "Auto-Push", "no Auto-Push");
+                    TuiCase.NotContains(frame, "Auto-Create PRs", "no Auto-Create PRs");
+                    TuiCase.NotContains(frame, "Auto-Merge PRs", "no Auto-Merge PRs");
+                    screen.VoyageTitle.Value = "Docs sweep";
+                    host.PumpUntil(() => screen.Vessel.Options.Count > 0);
+                    screen.Vessel.Choose(screen.Vessel.Options[0]);
+                    screen.MissionTitles[0].Value = "Update README";
+                    screen.LandingMode.Choose(screen.LandingMode.Options.First(o => o.Value == "MergeAndPush"));
+                    AssertTrue(host.WaitForText("local working directory, then pushes it"), "hint follows the choice\n" + host.Screen());
+                    host.Press("ctrl+s");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/voyages") == 1), "create call");
+                    StubRequest create = stub.Last("POST", "/api/v1/voyages");
+                    AssertEqual(LandingModeEnum.MergeAndPush, create.BodyAs<Armada.Client.Models.VoyageCreateRequest>().LandingMode, "landing mode: " + create.Body);
+                    AssertTrue(create.Body.Contains("\"MergeAndPush\""), "sent as the enum name: " + create.Body);
                 }
             }));
 

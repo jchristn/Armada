@@ -78,10 +78,14 @@
                         <input type="number" x-model.number="serverSettings.idleCaptainTimeoutSeconds" min="0" title="Auto-remove idle captains after this many seconds (0 = disabled)">
                     </div>
                     <div class="form-group">
-                        <label class="settings-checkbox-label" title="Automatically open pull requests when supported by the mission and vessel configuration.">
-                            <input type="checkbox" x-model="serverSettings.autoCreatePr">
-                            <span>Auto-Create Pull Requests</span>
-                        </label>
+                        <label title="How finished missions land when neither the vessel nor the voyage sets a landing mode (default Merge and Push).">Default Landing Mode</label>
+                        <select :value="serverSettings.landingMode || 'MergeAndPush'" @change="serverSettings.landingMode = $event.target.value" title="How finished missions land when neither the vessel nor the voyage sets a landing mode (default Merge and Push).">
+                            <option value="LocalMerge">Local Merge -- into your working directory, no push</option>
+                            <option value="MergeAndPush">Merge and Push -- local merge, then push to the remote</option>
+                            <option value="PullRequest">Pull Request -- push and open a PR</option>
+                            <option value="MergeQueue">Merge Queue -- validated sequential merge</option>
+                            <option value="None">None -- manual integration</option>
+                        </select>
                     </div>
                 </div>
                 <button class="btn btn-primary btn-sm" @click="saveAgentSettings()" title="Save agent settings changes">Save Agent Settings</button>

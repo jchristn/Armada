@@ -136,7 +136,7 @@ namespace Armada.Tui.Screens.Admin
         /// <summary>Idle captain timeout.</summary>
         public InputField IdleCaptainTimeout { get; } = new InputField();
 
-        /// <summary>Auto-create pull requests.</summary>
+        /// <summary>Default landing mode.</summary>
         public SelectField<string> DefaultLandingMode { get; } = new SelectField<string>();
 
         /// <summary>Planning idle timeout.</summary>

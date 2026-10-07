@@ -18,10 +18,12 @@ import ErrorModal from '../components/shared/ErrorModal';
 import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
 import { useResourceTable } from '../lib/useResourceTable';
+import { findLandingMode, getVoyageLandingModes } from '../lib/vesselForm';
 
 export default function Voyages() {
   const navigate = useNavigate();
   const { t } = useLocale();
+  const landingModes = getVoyageLandingModes(t);
   const { pushToast } = useNotifications();
   const [voyages, setVoyages] = useState<Voyage[]>([]);
   const [loading, setLoading] = useState(true);
@@ -198,9 +200,7 @@ export default function Voyages() {
                   <th className="sortable" onClick={() => table.handleSort('status')} title={t('Status -- click to sort')}>
                     {t('Status')}{table.sortIcon('status')}
                   </th>
-                  <th>{t('Auto Push')}</th>
-                  <th>{t('Auto Create PRs')}</th>
-                  <th>{t('Landing Mode')}</th>
+                  <th title={t('How the voyage\'s missions land; Default uses the vessel\'s mode, then the global setting')}>{t('Landing Mode')}</th>
                   <th className="text-right">{t('Actions')}</th>
                 </tr>
                 <tr className="column-filter-row">
@@ -208,8 +208,6 @@ export default function Voyages() {
                   <td><input type="text" className="col-filter" value={table.colFilters.title ?? ''} onChange={e => table.setColFilter('title', e.target.value)} placeholder={t('Search...')} /></td>
                   <td></td>
                   <td><input type="text" className="col-filter" value={table.colFilters.status ?? ''} onChange={e => table.setColFilter('status', e.target.value)} placeholder={t('Search...')} /></td>
-                  <td></td>
-                  <td></td>
                   <td></td>
                   <td></td>
                 </tr>
@@ -230,9 +228,7 @@ export default function Voyages() {
                       </span>
                     </td>
                     <td><StatusBadge status={v.status} /></td>
-                    <td>{v.autoPush != null ? (v.autoPush ? t('Yes') : t('No')) : '-'}</td>
-                    <td>{v.autoCreatePullRequests != null ? (v.autoCreatePullRequests ? t('Yes') : t('No')) : '-'}</td>
-                    <td className="text-dim">{v.landingMode || '-'}</td>
+                    <td className="text-dim" title={findLandingMode(landingModes, v.landingMode).description}>{v.landingMode || t('Default')}</td>
                     <td className="text-right" onClick={e => e.stopPropagation()}>
                       <ActionMenu id={`voyage-${v.id}`} items={[
                         { label: 'View Detail', onClick: () => navigate(`/voyages/${v.id}`) },

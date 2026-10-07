@@ -8,6 +8,7 @@ namespace Armada.Tui.Screens.Operations
     using Armada.Client.Models;
     using Armada.Core.Models;
     using Armada.Tui.Routing;
+    using Armada.Tui.Screens.Build;
     using Armada.Tui.Services;
     using Armada.Tui.Widgets;
 
@@ -62,9 +63,7 @@ namespace Armada.Tui.Screens.Operations
             Column("title", "Title", v => v.Title, 4, null, v => v.Title);
             Column("id", "ID", v => v.Id, 0, 24);
             Column("status", "Status", v => StatusBadge.Label(v.Status), 0, 14, v => v.Status.ToString(), (v, t) => StatusBadge.Style(v.Status, t));
-            Column("autoPush", "Auto Push", v => YesNo(v.AutoPush), 0, 10);
-            Column("autoCreatePullRequests", "Auto Create PRs", v => YesNo(v.AutoCreatePullRequests), 0, 15);
-            Column("landingMode", "Landing Mode", v => v.LandingMode?.ToString() ?? "-", 1);
+            Column("landingMode", "Landing Mode", v => (v.LandingMode?.ToString() ?? Tr("Default")) + " (" + Tr(LandingModeInfo.ForVoyage(v.LandingMode?.ToString()).Short) + ")", 1);
             GridColumn<Voyage> created = Column("createdUtc", "Created", v => Context.Loc.FormatRelative(v.CreatedUtc, Context.Clock.UtcNow), 0, 14, v => v.CreatedUtc);
             created.DefaultVisible = false;
 
@@ -134,11 +133,6 @@ namespace Armada.Tui.Screens.Operations
         #endregion
 
         #region Private-Methods
-
-        private string YesNo(bool? value)
-        {
-            return value.HasValue ? Tr(value.Value ? "Yes" : "No") : "-";
-        }
 
         private void ViewStatus(Voyage v)
         {
