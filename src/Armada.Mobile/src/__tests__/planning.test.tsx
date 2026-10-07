@@ -7,6 +7,7 @@ import * as client from '@dashboard/api/client';
 import type { Captain, PlanningSession, PlanningSessionDetail, PlanningSessionMessage, Vessel } from '@dashboard/types/models';
 import PlanningIndexRoute from '../app/(app)/(work)/planning/index';
 import PlanningSessionRoute from '../app/(app)/(work)/planning/[id]';
+import { dispatchPrefillFromParams } from '../screens/operations/w24/dispatchLink';
 import { planningDispatchHref } from '../screens/planning/planningDispatch';
 import { prefillFromParams } from '../screens/planning/PlanningScreen';
 import { BuildProviders, buildSockets, page } from '../test/buildFixtures';
@@ -71,11 +72,15 @@ beforeEach(async () => {
 describe('planning helpers', () => {
   it('builds the Dispatch route params the dashboard passes as router state', () => {
     const s = session({ pipelineId: 'ppl_1', selectedPlaybooks: [{ playbookId: 'pbk_1', deliveryMode: 'InlineFullContent' }] });
-    expect(planningDispatchHref(s, [{ id: 'ppl_1', name: 'Reviewed' }], 'Do it', ' Voyage ')).toEqual({
-      pathname: '/dispatch',
-      params: { fromPlanning: '1', vesselId: 'vsl_1', prompt: 'Do it', pipelineName: 'Reviewed', voyageTitle: 'Voyage', selectedPlaybooks: '[{"playbookId":"pbk_1","deliveryMode":"InlineFullContent"}]' },
+    // The Dispatch screen reads the link back into the dashboard's prefill state.
+    const read = (href: string) => dispatchPrefillFromParams(Object.fromEntries(new URLSearchParams(href.split('?')[1]).entries()));
+    expect(planningDispatchHref(s, [{ id: 'ppl_1', name: 'Reviewed' }], 'Do it', ' Voyage ')).toMatch(/^\/dispatch\?from=planning&/);
+    expect(read(planningDispatchHref(s, [{ id: 'ppl_1', name: 'Reviewed' }], 'Do it', ' Voyage '))).toEqual({
+      fromVessel: false, fromPlanning: true, fromWorkspace: false, fromIncident: false, fromObjective: false,
+      vesselId: 'vsl_1', prompt: 'Do it', pipelineName: 'Reviewed', voyageTitle: 'Voyage',
+      selectedPlaybooks: [{ playbookId: 'pbk_1', deliveryMode: 'InlineFullContent' }],
     });
-    expect(planningDispatchHref(session(), [], 'Do it', null).params).toEqual({ fromPlanning: '1', vesselId: 'vsl_1', prompt: 'Do it' });
+    expect(read(planningDispatchHref(session(), [], 'Do it', null))).toMatchObject({ fromPlanning: true, vesselId: 'vsl_1', prompt: 'Do it' });
   });
 
   it('reads a start prefill from route params', () => {

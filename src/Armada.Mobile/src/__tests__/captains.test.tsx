@@ -4,7 +4,7 @@ import type { Captain, CaptainToolAccessResult, Dock } from '@dashboard/types/mo
 import { CaptainDetailScreen } from '../screens/captains/CaptainDetailScreen';
 import { CaptainsTab, filterCaptains } from '../screens/captains/CaptainsTab';
 import { chatHistory, metricsLine } from '../screens/captains/CaptainChat';
-import { DocksTab, filterDocks } from '../screens/captains/DocksTab';
+import { DocksTab } from '../screens/captains/DocksTab';
 import { BuildProviders, buildSockets, deliver, page } from '../test/buildFixtures';
 
 jest.mock('@dashboard/api/client', () => require('../test/buildClientMock').buildClientMockFactory());
@@ -71,13 +71,6 @@ describe('captain list logic', () => {
     expect(filterCaptains([BOB, ADA], { ...base, state: 'Idle' }).map((c) => c.name)).toEqual(['Ada']);
   });
 
-  it('filters docks by branch, path, or id and by active state', () => {
-    const docks = [dock(), dock({ id: 'dck_2', branchName: 'main', worktreePath: '/srv/x', active: false })];
-    expect(filterDocks(docks, 'fix', '').map((d) => d.id)).toEqual(['dck_1']);
-    expect(filterDocks(docks, '/srv', '').map((d) => d.id)).toEqual(['dck_2']);
-    expect(filterDocks(docks, '', 'inactive').map((d) => d.id)).toEqual(['dck_2']);
-    expect(filterDocks(docks, '', 'active').map((d) => d.id)).toEqual(['dck_1']);
-  });
 
   it('builds chat history from user and assistant turns and formats metrics', () => {
     expect(chatHistory([{ role: 'user', text: 'hi' }, { role: 'system', text: 'Stopped.' }, { role: 'assistant', text: 'hello' }]))
@@ -250,18 +243,13 @@ describe('Captain detail', () => {
 });
 
 describe('Docks tab', () => {
-  it('lists docks with names, opens a dock, and deletes with the confirmation', async () => {
+  it('embeds the Operations docks list; a row pushes the dock on phones', async () => {
     api.listDocks.mockResolvedValue(page([dock(), dock({ id: 'dck_2', branchName: null, active: false })]));
     api.listVessels.mockResolvedValue(page([{ id: 'vsl_1', name: 'api' } as never]));
     await render(<BuildProviders><DocksTab /></BuildProviders>);
-    await waitFor(() => expect(screen.getByTestId('dock-row-dck_1')).toBeTruthy());
-    await waitFor(() => expect(screen.getByTestId('dock-row-dck_1')).toHaveTextContent(/Vessel: api/));
-    expect(screen.getByTestId('dock-row-dck_1')).toHaveTextContent(/Captain: Ada/);
+    await waitFor(() => expect(screen.getByTestId('dock-row-dck_2')).toBeTruthy());
+    expect(screen.getByTestId('docks-list')).toBeTruthy();
     await fireEvent.press(screen.getByTestId('dock-row-dck_2'));
     expect(mockRouter.push).toHaveBeenCalledWith('/docks/dck_2');
-    await act(async () => { fireEvent(screen.getByTestId('dock-swipe-dck_1'), 'accessibilityAction', { nativeEvent: { actionName: 'delete' } }); });
-    expect(screen.getByText('Delete dock dck_1? This will clean up the git worktree and cannot be undone.')).toBeTruthy();
-    await fireEvent.press(screen.getByTestId('dock-confirm-confirm'));
-    await waitFor(() => expect(api.deleteDock).toHaveBeenCalledWith('dck_1'));
   });
 });

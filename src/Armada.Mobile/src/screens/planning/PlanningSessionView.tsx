@@ -198,7 +198,7 @@ export function PlanningSessionView({ sessionId, catalog, embedded, initialCompo
   const openInDispatch = async (prompt: string, voyageTitle: string | null) => {
     if (!current || !prompt.trim()) return;
     try { setDetail(await stopPlanningSession(current.id)); } catch { /* the user can still end the session by hand */ }
-    router.push(planningDispatchHref(current, catalog.pipelines, prompt.trim(), voyageTitle) as unknown as Href);
+    router.push(planningDispatchHref(current, catalog.pipelines, prompt.trim(), voyageTitle) as Href);
   };
 
   if (session.loading) return <LoadingState label={t('Loading planning session...')} />;

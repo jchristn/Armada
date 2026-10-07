@@ -5,7 +5,7 @@ import * as client from '@dashboard/api/client';
 import type { FleetAction, FleetActionRun, FleetActionRunTarget, FleetActionRunTargetSummary, Vessel } from '@dashboard/types/models';
 import { FleetActionRunDetailView } from '../screens/fleetActions/FleetActionRunDetailView';
 import { FleetActionRunsTab, runStatusParam } from '../screens/fleetActions/FleetActionRunsTab';
-import { FleetActionsTab, parseVesselIds } from '../screens/fleetActions/FleetActionsTab';
+import { FleetActionsTab, parseRunKind, parseVesselIds } from '../screens/fleetActions/FleetActionsTab';
 import { RunActionSheet } from '../screens/fleetActions/RunActionSheet';
 import { tailLines } from '../screens/fleetActions/TargetDetailSheet';
 import { usePolling } from '../screens/fleetActions/usePolling';
@@ -83,6 +83,8 @@ describe('fleet action helpers', () => {
   it('parses the vessels and status parameters and tails output', () => {
     expect(parseVesselIds('vsl_1, vsl_2,,vsl_1')).toEqual(['vsl_1', 'vsl_2']);
     expect(parseVesselIds(undefined)).toEqual([]);
+    expect(parseRunKind('Mission')).toBe('Mission');
+    expect(parseRunKind('Bogus')).toBeUndefined();
     expect(runStatusParam('Running')).toBe('Running');
     expect(runStatusParam('bogus')).toBe('');
     expect(tailLines('a\nb\nc', 2)).toBe('b\nc');

@@ -2,7 +2,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { deleteFleetAction, enumerateFleetActions, getSettings } from '@dashboard/api/client';
-import type { FleetAction } from '@dashboard/types/models';
+import type { FleetAction, FleetActionKind } from '@dashboard/types/models';
 import { useActionRunner } from '../../build/fields';
 import { ListPane } from '../../build/ListPane';
 import { usePagedList } from '../../build/usePagedList';
@@ -16,6 +16,12 @@ import { FleetActionFormSheet } from './FleetActionFormSheet';
 import { NO_RUN_FLOW, RunFlowSheet, type RunFlow } from './RunFlowSheet';
 
 type Order = 'CreatedDescending' | 'CreatedAscending';
+
+/** The run kind from `?kind=` (Command or Mission), or undefined. */
+export function parseRunKind(raw: string | string[] | undefined): FleetActionKind | undefined {
+  const text = Array.isArray(raw) ? raw[0] : raw;
+  return text === 'Command' || text === 'Mission' ? text : undefined;
+}
 
 /** Vessel ids from `?vessels=a,b` (the vessel screens' "Run action" shortcut). */
 export function parseVesselIds(raw: string | string[] | undefined): string[] {
@@ -34,7 +40,7 @@ export function FleetActionsTab() {
   const { isTenantAdmin } = useAuth();
   const { pushToast } = useNotifications();
   const router = useRouter();
-  const params = useLocalSearchParams<{ run?: string; vessels?: string }>();
+  const params = useLocalSearchParams<{ run?: string; vessels?: string; kind?: string }>();
   const { run } = useActionRunner();
   const [order, setOrder] = useState<Order>('CreatedDescending');
   const [defaultTimeout, setDefaultTimeout] = useState(300);
@@ -62,13 +68,14 @@ export function FleetActionsTab() {
   // `?run=new` (and optional `vessels=`) opens the run flow once, then clears the parameters.
   const startRun = params.run === 'new';
   const presetVessels = parseVesselIds(params.vessels).join(',');
+  const presetKind = parseRunKind(params.kind);
   useEffect(() => {
     if (!startRun) return;
     const ids = presetVessels ? presetVessels.split(',') : [];
     // eslint-disable-next-line react-hooks/set-state-in-effect -- a deep link opens the run flow once
-    setRunFlow({ stage: ids.length > 0 ? 'run' : 'pick', actionId: null, vesselIds: ids });
-    router.setParams({ run: undefined, vessels: undefined });
-  }, [startRun, presetVessels, router]);
+    setRunFlow({ stage: ids.length > 0 ? 'run' : 'pick', actionId: null, vesselIds: ids, kind: presetKind });
+    router.setParams({ run: undefined, vessels: undefined, kind: undefined });
+  }, [startRun, presetVessels, presetKind, router]);
 
   async function remove(a: FleetAction) {
     setConfirmDelete(null);

@@ -40,6 +40,7 @@ import { useLayout } from '../../navigation/useLayout';
 import { useNotifications } from '../../notifications/NotificationContext';
 import { useTheme } from '../../theme/ThemeContext';
 import { MIN_TOUCH, radius, spacing, typography } from '../../theme/typography';
+import { dispatchHref } from '../operations/w24/dispatchLink';
 import { PathPromptSheet } from './PathPromptSheet';
 import { rememberWorkspaceVessel } from './recentVessels';
 import { WorkspaceContextSheet } from './WorkspaceContextSheet';
@@ -252,12 +253,12 @@ export function WorkspaceScreen({ vesselId, initialPanel = 'files' }: { vesselId
   function plan() {
     if (!vessel || actionable.length === 0) return;
     const draft = buildWorkspacePlanningDraft(vessel, actionable);
-    router.push({ pathname: '/planning', params: { vesselId: vessel.id, fleetId: vessel.fleetId ?? '', title: draft.title, prompt: draft.prompt } } as unknown as Href);
+    router.push({ pathname: '/planning', params: { from: 'workspace', vesselId: vessel.id, fleetId: vessel.fleetId ?? '', title: draft.title, prompt: draft.prompt } } as unknown as Href);
   }
   function dispatch() {
     if (!vessel || actionable.length === 0) return;
     const draft = buildWorkspaceDispatchDraft(vessel, actionable);
-    router.push({ pathname: '/dispatch', params: { vesselId: vessel.id, title: draft.title, prompt: draft.prompt } } as unknown as Href);
+    router.push(dispatchHref('workspace', { vesselId: vessel.id, voyageTitle: draft.title, prompt: draft.prompt }) as Href);
   }
   function runCheck() {
     if (!vessel) return;

@@ -15,6 +15,8 @@ import { parseGitHubNumber } from '../screens/objectives/GitHubImportSheet';
 import { withPrimaryVessel } from '../screens/objectives/ObjectiveForm';
 import { activeFilterCount } from '../screens/objectives/ObjectivesList';
 import { armadaLinkGroups, backlogItemPath, dispatchHref, historyHref, planningHref, releaseHref } from '../screens/objectives/objectiveLinks';
+import { dispatchPrefillFromParams } from '../screens/operations/w24/dispatchLink';
+import { prefillFromParams } from '../screens/planning/PlanningScreen';
 import { BuildProviders, buildSockets, deliver, page } from '../test/buildFixtures';
 
 jest.mock('@dashboard/api/client', () => require('../test/buildClientMock').buildClientMockFactory());
@@ -98,11 +100,15 @@ describe('backlog helpers', () => {
     expect(planning.get('objectiveId')).toBe('obj_a');
     expect(planning.get('title')).toBe('Alpha Planning');
     expect(planning.get('pipelineId')).toBe('ppl_1');
-    expect(planning.get('initialPrompt')).toContain('Backlog Item: Alpha');
+    // The Planning and Dispatch screens read these links back into the dashboard's prefill state.
+    const planningPrefill = prefillFromParams(Object.fromEntries(planning.entries()));
+    expect(planningPrefill.source).toBe('objective');
+    expect(planningPrefill.prefill?.initialPrompt).toContain('Backlog Item: Alpha');
     const dispatch = new URLSearchParams(dispatchHref(item, 'vsl_1', [{ id: 'ppl_1', name: 'Default' } as never]).split('?')[1]);
-    expect(dispatch.get('pipelineName')).toBe('Default');
-    expect(dispatch.get('selectedPlaybooks')).toBe('pbk_1:InlineFullContent');
-    expect(dispatch.get('prompt')).toContain('Implement backlog item: Alpha');
+    const dispatchPrefill = dispatchPrefillFromParams(Object.fromEntries(dispatch.entries()));
+    expect(dispatchPrefill).toMatchObject({ fromObjective: true, objectiveId: 'obj_a', vesselId: 'vsl_1', pipelineName: 'Default', voyageTitle: 'Alpha' });
+    expect(dispatchPrefill?.selectedPlaybooks).toEqual([{ playbookId: 'pbk_1', deliveryMode: 'InlineFullContent' }]);
+    expect(dispatchPrefill?.prompt).toContain('Implement backlog item: Alpha');
     expect(releaseHref(item, 'vsl_1')).toMatch(/^\/releases\/new\?objectiveIds=obj_a&vesselId=vsl_1&title=Alpha%20Release/);
     expect(historyHref(item)).toBe('/activity?source=history&objectiveId=obj_a');
     expect(armadaLinkGroups(objective({ missionIds: ['msn_1'], refinementSessionIds: ['ors_1'] })).map((g) => [g.key, g.href(g.ids[0])])).toEqual([

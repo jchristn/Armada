@@ -1,3 +1,4 @@
+import type { FleetActionKind } from '@dashboard/types/models';
 import { BottomSheet } from '../../components/ui';
 import { useLocale } from '../../i18n/LocaleContext';
 import { RunActionContent } from './RunActionSheet';
@@ -8,6 +9,8 @@ export interface RunFlow {
   stage: 'pick' | 'run' | null;
   actionId: string | null;
   vesselIds: string[];
+  /** Preferred kind (Health's Run action asks for Mission, as the dashboard's initialKind does). */
+  kind?: FleetActionKind;
 }
 
 export const NO_RUN_FLOW: RunFlow = { stage: null, actionId: null, vesselIds: [] };
@@ -28,7 +31,7 @@ export function RunFlowSheet({ flow, onChange }: { flow: RunFlow; onChange: (nex
       testID={flow.stage === 'pick' ? 'vessel-picker' : 'run-action'}
     >
       {flow.stage === 'pick' ? <VesselPickerContent onClose={close} onPicked={(ids) => onChange({ ...flow, stage: 'run', vesselIds: ids })} /> : null}
-      {flow.stage === 'run' ? <RunActionContent open vesselIds={flow.vesselIds} initialActionId={flow.actionId} onClose={close} /> : null}
+      {flow.stage === 'run' ? <RunActionContent open vesselIds={flow.vesselIds} initialActionId={flow.actionId} initialKind={flow.kind} onClose={close} /> : null}
     </BottomSheet>
   );
 }

@@ -3,13 +3,14 @@ import {
   buildObjectiveDispatchPrompt,
   buildObjectivePlanningPrompt,
   buildObjectiveReleaseNotes,
-  joinSuggestedPlaybooks,
 } from '@dashboard/lib/backlogUtils';
+import { dispatchHref as dispatchLink } from '../operations/w24/dispatchLink';
 
 /**
  * Where a backlog item leads: its canonical route and the prefilled Planning, Dispatch, and Release drafts the
  * dashboard opens with router state. Mobile routes cannot carry state, so the same prefill travels as query
- * parameters (the receiving screens read them; names match the dashboard's state fields).
+ * parameters in the receiving screens' formats (Planning: PlanningScreen prefillFromParams; Dispatch:
+ * operations/w24/dispatchLink.ts).
  */
 
 /** The canonical route of a backlog item (the dashboard links /backlog/:id; /objectives/:id shows the same page). */
@@ -28,24 +29,23 @@ function withQuery(path: string, params: Record<string, string | null | undefine
 /** Start Planning: a planning session prefilled from the item (needs a primary vessel). */
 export function planningHref(objective: Objective, fleetId: string, vesselId: string): string {
   return withQuery('/planning', {
-    fromObjective: 'true',
+    from: 'objective',
     objectiveId: objective.id,
     title: `${objective.title} Planning`,
     fleetId,
     vesselId,
     pipelineId: objective.suggestedPipelineId,
-    initialPrompt: buildObjectivePlanningPrompt(objective),
+    prompt: buildObjectivePlanningPrompt(objective),
   });
 }
 
-/** Open In Dispatch: dispatch prefilled from the item (prompt, pipeline, playbooks as `id:mode` lines). */
+/** Open In Dispatch: dispatch prefilled from the item (prompt, pipeline, playbooks), in the Dispatch screen's link format. */
 export function dispatchHref(objective: Objective, vesselId: string, pipelines: Pipeline[]): string {
-  return withQuery('/dispatch', {
-    fromObjective: 'true',
+  return dispatchLink('objective', {
     objectiveId: objective.id,
     vesselId,
     pipelineName: pipelines.find((pipeline) => pipeline.id === objective.suggestedPipelineId)?.name,
-    selectedPlaybooks: joinSuggestedPlaybooks(objective.suggestedPlaybooks),
+    selectedPlaybooks: objective.suggestedPlaybooks?.length ? objective.suggestedPlaybooks : undefined,
     prompt: buildObjectiveDispatchPrompt(objective),
     voyageTitle: objective.title,
   });
