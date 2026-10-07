@@ -1971,6 +1971,30 @@ namespace Armada.Core.Database.Mysql.Queries
         };
 
         /// <summary>
+        /// Migration 79: push notification devices (push_devices, one row per Expo push token).
+        /// </summary>
+        public static readonly string[] MigrationV79Statements = new string[]
+        {
+            @"CREATE TABLE IF NOT EXISTS push_devices (
+                id VARCHAR(64) NOT NULL PRIMARY KEY,
+                tenant_id VARCHAR(64),
+                user_id VARCHAR(64),
+                platform VARCHAR(32) NOT NULL,
+                expo_push_token VARCHAR(256) NOT NULL,
+                device_name VARCHAR(256),
+                app_version VARCHAR(64),
+                locale VARCHAR(64),
+                categories VARCHAR(1024) NOT NULL,
+                active TINYINT(1) NOT NULL DEFAULT 1,
+                created_utc DATETIME(6) NOT NULL,
+                last_seen_utc DATETIME(6) NOT NULL,
+                last_update_utc DATETIME(6) NOT NULL
+            );",
+            "CREATE UNIQUE INDEX idx_push_devices_token ON push_devices(expo_push_token);",
+            "CREATE INDEX idx_push_devices_tenant_user ON push_devices(tenant_id, user_id);"
+        };
+
+        /// <summary>
         /// Index DDL statements for all tables.
         /// </summary>
         public static readonly string[] Indexes = new string[]
