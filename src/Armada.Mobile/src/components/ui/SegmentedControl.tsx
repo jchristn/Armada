@@ -34,7 +34,7 @@ export function SegmentedControl<T extends string>({ options, value, onChange, l
             onPress={() => onChange(option.value)}
             style={[styles.segment, selected ? { backgroundColor: colors.primary } : null]}
           >
-            <AppText variant="label" color={selected ? 'primaryText' : 'text'} style={styles.label}>{option.label}</AppText>
+            <AppText variant="label" color={selected ? 'primaryText' : 'text'} style={styles.label} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{option.label}</AppText>
           </Pressable>
         );
       })}

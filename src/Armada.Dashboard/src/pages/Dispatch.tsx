@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Link } from 'react-router-dom';
 import { listVessels, listPipelines, listCaptains, listPersonas, createVoyage, getVesselReadiness } from '../api/client';
-import type { Vessel, Pipeline, SelectedPlaybook, VesselReadinessResult, Captain, Persona, CaptainAssignmentOverride, CaptainTier } from '../types/models';
+import type { Vessel, Pipeline, SelectedPlaybook, VesselReadinessResult, Captain, Persona } from '../types/models';
 import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
 import PlaybookSelector from '../components/shared/PlaybookSelector';
@@ -11,25 +11,17 @@ import PageHeader from '../components/shared/PageHeader';
 import CaptainPicker from '../components/shared/CaptainPicker';
 import FallbackTierSelect from '../components/shared/FallbackTierSelect';
 import { sortByName } from '../lib/sortByName';
-
-interface StepAssignment {
-  captainId: string | null;
-  fallbackTier: CaptainTier | null;
-}
-
-interface DispatchPrefillState {
-  fromPlanning?: boolean;
-  fromWorkspace?: boolean;
-  fromIncident?: boolean;
-  fromObjective?: boolean;
-  fromVessel?: boolean;
-  objectiveId?: string;
-  vesselId?: string;
-  pipelineName?: string;
-  prompt?: string;
-  selectedPlaybooks?: SelectedPlaybook[];
-  voyageTitle?: string;
-}
+import {
+  buildDispatchVoyageRequest,
+  dispatchPrefillNotice,
+  effectiveStepPersonas,
+  hasDispatchPrefill,
+  parseDispatchPriority,
+  pipelineStepPersonas,
+  seedStepAssignments,
+  type DispatchPrefillState,
+  type StepAssignment,
+} from '../lib/dispatchRequest';
 
 export default function Dispatch() {
   const { t } = useLocale();
@@ -72,29 +64,16 @@ export default function Dispatch() {
 
   // The distinct personas (steps) of the selected pipeline, in stage order, de-duplicated.
   const selectedPipelineObj = pipelines.find((p) => p.name === selectedPipeline) ?? null;
-  const stepPersonas: string[] = selectedPipelineObj
-    ? Array.from(new Set(selectedPipelineObj.stages.slice().sort((a, b) => a.order - b.order).map((s) => s.personaName)))
-    : [];
+  const stepPersonas: string[] = pipelineStepPersonas(selectedPipelineObj);
 
   // With a specific pipeline, offer a captain per step. With "Inherit" (no explicit pipeline) the resolved
   // stages are not known at dispatch time, so offer a single wildcard ("*") picker that applies to every
   // step -- letting an operator pin a captain (e.g. an API-endpoint captain) regardless of pipeline.
-  const effectivePersonas: string[] = stepPersonas.length > 0 ? stepPersonas : ['*'];
+  const effectivePersonas: string[] = effectiveStepPersonas(stepPersonas);
 
   // Seed each step's preferred captain from that persona's default whenever the pipeline (or personas) change.
   useEffect(() => {
-    setStepAssignments((current) => {
-      const next: Record<string, StepAssignment> = {};
-      for (const personaName of effectivePersonas) {
-        if (current[personaName]) {
-          next[personaName] = current[personaName];
-        } else {
-          const persona = personas.find((p) => p.name === personaName);
-          next[personaName] = { captainId: persona?.defaultCaptainId ?? null, fallbackTier: null };
-        }
-      }
-      return next;
-    });
+    setStepAssignments((current) => seedStepAssignments(current, effectivePersonas, personas));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPipeline, personas]);
 
@@ -102,7 +81,7 @@ export default function Dispatch() {
     if (prefillAppliedRef.current) return;
 
     const prefill = location.state as DispatchPrefillState | null;
-    if (!prefill?.fromPlanning && !prefill?.fromWorkspace && !prefill?.fromIncident && !prefill?.fromObjective && !prefill?.fromVessel) return;
+    if (!prefill || !hasDispatchPrefill(prefill)) return;
 
     if (prefill.vesselId) setVesselId(prefill.vesselId);
     if (prefill.pipelineName) setSelectedPipeline(prefill.pipelineName);
@@ -148,32 +127,22 @@ export default function Dispatch() {
 
     const isMultiStage = selectedPipelineObj != null && selectedPipelineObj.stages.length > 1;
 
-    const tasks = [prompt.trim()];
-    if (!tasks.length) return;
-
-    const captainAssignments: CaptainAssignmentOverride[] = Object.entries(stepAssignments)
-      .filter(([, assignment]) => assignment.captainId || assignment.fallbackTier)
-      .map(([persona, assignment]) => ({ persona, captainId: assignment.captainId, fallbackTier: assignment.fallbackTier }));
-
     setDispatching(true);
     setResult(null);
     try {
-      const resolvedVoyageTitle = voyageTitle.trim() || (tasks.length > 1 ? t('Multi-task voyage') : tasks[0].substring(0, 80));
-      const missions = tasks.map((t) => ({
+      const request = buildDispatchVoyageRequest({
         vesselId,
-        title: t.substring(0, 80),
-        description: t,
+        prompt,
         priority,
-      }));
-      const voyage = await createVoyage({
-        title: resolvedVoyageTitle,
-        vesselId,
-        missions,
-        ...(objectiveId ? { objectiveId } : {}),
-        ...(selectedPipeline ? { pipeline: selectedPipeline } : {}),
-        ...(selectedPlaybooks.length > 0 ? { selectedPlaybooks } : {}),
-        ...(captainAssignments.length > 0 ? { captainAssignments } : {}),
+        voyageTitle,
+        objectiveId,
+        pipeline: selectedPipeline,
+        selectedPlaybooks,
+        stepAssignments,
+        multiTaskTitle: t('Multi-task voyage'),
       });
+      const missions = request.missions;
+      const voyage = await createVoyage(request);
       const missionCount = isMultiStage
         ? t('{{count}} pipeline stages', { count: selectedPipelineObj!.stages.length })
         : t('{{count}} mission(s)', { count: missions.length });
@@ -202,18 +171,9 @@ export default function Dispatch() {
 
       <div className="card" style={{ marginBottom: '1rem' }}>
         <div className="dispatch-form">
-          {((location.state as DispatchPrefillState | null)?.fromPlanning
-            || (location.state as DispatchPrefillState | null)?.fromWorkspace
-            || (location.state as DispatchPrefillState | null)?.fromIncident
-            || (location.state as DispatchPrefillState | null)?.fromObjective) && (
+          {dispatchPrefillNotice(location.state as DispatchPrefillState | null) && (
             <div className="alert" style={{ marginBottom: '1rem' }}>
-              {(location.state as DispatchPrefillState | null)?.fromObjective
-                ? t('Prefilled from a backlog item. Review the scoped draft below and dispatch when ready.')
-                : (location.state as DispatchPrefillState | null)?.fromPlanning
-                ? t('Prefilled from a planning session. Review the draft below and dispatch when ready.')
-                : (location.state as DispatchPrefillState | null)?.fromIncident
-                  ? t('Prefilled from an incident. Review the hotfix draft below and dispatch when ready.')
-                  : t('Prefilled from Workspace selection. Review the scoped draft below and dispatch when ready.')}
+              {t(dispatchPrefillNotice(location.state as DispatchPrefillState | null) ?? '')}
               {objectiveId && (
                 <button type="button" className="btn btn-sm" style={{ marginLeft: '0.75rem' }} onClick={() => navigate(`/backlog/${objectiveId}`)}>
                   {t('Open Backlog Item')}
@@ -271,7 +231,7 @@ export default function Dispatch() {
               <input aria-label={t('Higher priority missions are assigned first (default 100)')}
                 type="number"
                 value={priority}
-                onChange={(e) => setPriority(parseInt(e.target.value) || 100)}
+                onChange={(e) => setPriority(parseDispatchPriority(e.target.value))}
                 min={0}
                 max={1000}
                 title={t('Higher priority missions are assigned first (default 100)')}

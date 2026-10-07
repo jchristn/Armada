@@ -3,7 +3,7 @@
 > **Type:** implementation plan (work-tracking). Annotate task status and the progress log as you go; keep this
 > document in sync with what actually shipped.
 >
-> **Status:** In progress (W0, W1 and W5 done; W2 in progress)
+> **Status:** In progress (W0, W1, W2 and W5 done; W3 and W4 in progress; W2 Android verification pending)
 > **Built on:** React Native with Expo SDK 57 (TypeScript, Expo Router), in `src/Armada.Mobile`
 > **Parity baseline:** the web dashboard at `src/Armada.Dashboard` as of 2026-10-07 (the same surfaces the TUI parity
 > manifest tracks: page routes, hub tabs, server-calling API client functions, WebSocket events, Server-page settings)
@@ -148,10 +148,10 @@ selection) are recorded per entry in the manifest notes.
 - [x] W1.4 Notifications inbox and in-app toasts
 
 ### W2. Operations
-- [ ] W2.1 Home (status, KPIs, health, mission history chart, voyage progress, recent missions and signals)
-- [ ] W2.2 Missions hub and mission detail (diff, log, instructions, landing preview, land, retry, review)
-- [ ] W2.3 Voyages, voyage create (landing mode), voyage detail
-- [ ] W2.4 Dispatch hub (dispatch, fleet dispatch, from a vessel), Merge Queue, Docks, Signals, Events
+- [x] W2.1 Home (status, KPIs, health, mission history chart, voyage progress, recent missions and signals)
+- [x] W2.2 Missions hub and mission detail (diff, log, instructions, landing preview, land, retry, review)
+- [x] W2.3 Voyages, voyage create (landing mode), voyage detail
+- [x] W2.4 Dispatch hub (dispatch, fleet dispatch, from a vessel), Merge Queue, Docks, Signals, Events
 
 ### W3. Build
 - [ ] W3.1 Vessels hub, vessel detail, vessel form, branches, import wizard, View History (heatmap, timeline, jump
@@ -205,3 +205,4 @@ Milestone C: push, proxy, quality pass, store-ready builds.
 | 2026-10-07 | W0 | work/mobile-w0 | Expo SDK 57 app; dashboard client host-agnostic (configureClient); profiles, sign-in, Skip, biometric; adaptive shell + deep links + placeholders for all 85 routes; socket lifecycle, notifications, Approvals badge; 171 Jest, Maestro 3/3 on iOS and Android; parity.json 552 entries; CI mobile job; iOS scene plugin (remove on SDK 58) |
 | 2026-10-07 | W1 | work/mobile-w1 | Ask Armada (threads, streaming, / quick actions and forms, confirm/CLI/work cards, options), approvals center (/approvals, /inbox) with approvals/actions.ts for push, approval toasts, notification filter; shared lib extractions (askFormat, askCaptain, inboxKinds); Hermes timestamp and Android keyboard fixes; Jest 221; Maestro 5/5 iOS + Android; iPad split checked |
 | 2026-10-07 | W5.3/W5.4 | work/mobile-push-app | Push: permission sheet after sign-in, per-profile registration (pdv_ kept in keychain; re-register on token change; delete on sign-out/removal), category switches + test push, validated tap deep links, Approve/Deny with unlock + biometric via W1 decideApproval, badge; server adds data.deviceId. Proxy profiles: portal proof login, instance picker, X-Armada-Proxy-Session / Bearer / WS subprotocol with header fallback, expiry resumes with proxy password only. Dashboard configureClient({headers}). Jest 323; Maestro iPhone main+proxy+simctl push, iPad and Armada_Tablet proxy flows |
+| 2026-10-07 | W2 | work/mobile-w2 | Home, Missions hub and detail, Voyages and Create Voyage (landing mode), Dispatch, Merge Queue, Docks, Signals, Events; tablet split views; Home/mission/voyage/dispatch logic moved to dashboard lib/; Hermes relative-time fix; 436 Jest, 618 vitest, Maestro 6/6 on iPhone Air with a seeded Admiral, iPad split view checked by hand; parity 129 implemented; Android pending (verify in W6.3) |

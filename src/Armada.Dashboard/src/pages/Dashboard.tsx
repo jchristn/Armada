@@ -30,41 +30,16 @@ import FilterBar from '../components/shared/FilterBar';
 import MissionHistoryChart from '../components/MissionHistoryChart';
 import HealthKpiCards from '../components/vessels/health/HealthKpiCards';
 import { useLocale } from '../context/LocaleContext';
-
-interface VoyageProgress {
-  voyage: {
-    id: string;
-    title: string;
-    status: string;
-  };
-  totalMissions: number;
-  completedMissions: number;
-  failedMissions: number;
-  vesselIds: string[];
-}
-
-interface StatusData {
-  totalCaptains: number;
-  idleCaptains: number;
-  workingCaptains: number;
-  stalledCaptains: number;
-  activeVoyages: number;
-  memoryPressureDeferrals?: number;
-  missionsByStatus: Record<string, number>;
-  voyages: VoyageProgress[];
-  recentSignals: Array<{
-    id: string;
-    type: string;
-    payload?: string;
-    message?: string;
-    createdUtc: string;
-  }>;
-}
-
-function voyagePercent(vp: VoyageProgress): number {
-  if (!vp.totalMissions) return 0;
-  return Math.round((vp.completedMissions / vp.totalMissions) * 100);
-}
+import {
+  activeFleetActionRunsLink,
+  canRestartFromHome,
+  dashboardAlerts,
+  filterRecentMissions,
+  RECENT_MISSION_STATUSES,
+  totalMissionCount,
+  voyagePercent,
+  type DashboardStatusData,
+} from '../lib/dashboardStatus';
 
 export default function Dashboard() {
   const { subscribe } = useWebSocket();
@@ -76,7 +51,7 @@ export default function Dashboard() {
 
   const { isTenantAdmin } = useAuth();
   const [activeRuns, setActiveRuns] = useState<{ pending: number; running: number } | null>(null);
-  const [status, setStatus] = useState<StatusData | null>(null);
+  const [status, setStatus] = useState<DashboardStatusData | null>(null);
   const [recentMissions, setRecentMissions] = useState<MissionSummary[]>([]);
   const [vessels, setVessels] = useState<Vessel[]>([]);
   const [fleets, setFleets] = useState<Fleet[]>([]);
@@ -143,7 +118,7 @@ export default function Dashboard() {
         enumerateFleetActionRuns({ status: 'Running', pageSize: 1 }).catch(() => null),
       ]);
       setActiveRuns(pendingRuns && runningRuns ? { pending: pendingRuns.totalRecords, running: runningRuns.totalRecords } : null);
-      if (statusRes) setStatus(statusRes as unknown as StatusData);
+      if (statusRes) setStatus(statusRes as unknown as DashboardStatusData);
       if (missionRes) {
         setRecentMissions(missionRes.objects || []);
       }
@@ -179,78 +154,14 @@ export default function Dashboard() {
   const { seconds: refreshSeconds, setSeconds: setRefreshSeconds } = useAutoRefresh('dashboard', loadAll);
 
   // Compute alerts from status data
-  const alerts = useMemo(() => {
-    if (!status) return [];
-    const result: Array<{ level: 'error' | 'warning'; message: string; action?: string; link?: string }> = [];
-    const ms = status.missionsByStatus || {};
-    const stalledCount = status.stalledCaptains ?? 0;
-    const failedCount = (ms['Failed'] ?? 0);
-    const landingFailedCount = (ms['LandingFailed'] ?? 0);
-    const pendingCount = (ms['Pending'] ?? 0);
-    const idleCount = status.idleCaptains ?? 0;
-    const workingCount = status.workingCaptains ?? 0;
-    const totalCaptains = status.totalCaptains ?? 0;
+  const alerts = useMemo(() => dashboardAlerts(status), [status]);
 
-    if (stalledCount > 0) {
-      result.push({
-        level: 'error',
-        message: `${stalledCount} captain(s) stalled -- recovery attempts exhausted.`,
-        action: 'Stop and restart stalled captains to resume work.',
-        link: '/captains',
-      });
-    }
+  const totalMissions = useMemo(() => totalMissionCount(status), [status]);
 
-    if (failedCount > 0) {
-      result.push({
-        level: 'warning',
-        message: `${failedCount} mission(s) failed.`,
-        action: 'Review and restart failed missions.',
-        link: '/missions',
-      });
-    }
-
-    if (landingFailedCount > 0) {
-      result.push({
-        level: 'warning',
-        message: `${landingFailedCount} mission(s) failed to land -- work was produced but could not be merged.`,
-        action: 'Retry landing or restart these missions.',
-        link: '/missions',
-      });
-    }
-
-    if (pendingCount > 0 && idleCount > 0 && workingCount === 0) {
-      result.push({
-        level: 'warning',
-        message: `${pendingCount} pending mission(s) but no captains are working. ${idleCount} captain(s) idle.`,
-        action: 'Vessels may have concurrent mission limits blocking dispatch, or missions may be assigned to a vessel with an active mission.',
-      });
-    }
-
-    if (totalCaptains === 0 && pendingCount > 0) {
-      result.push({
-        level: 'error',
-        message: `${pendingCount} pending mission(s) but no captains exist.`,
-        action: 'Create a captain to start processing missions.',
-        link: '/captains',
-      });
-    }
-
-    return result;
-  }, [status]);
-
-  const totalMissions = useMemo(() => {
-    if (!status?.missionsByStatus) return 0;
-    return Object.values(status.missionsByStatus).reduce((sum, n) => sum + n, 0);
-  }, [status]);
-
-  const filteredRecentMissions = useMemo(() => {
-    return recentMissions.filter((m) => {
-      if (statusFilter && m.status !== statusFilter) return false;
-      if (vesselFilter && m.vesselId !== vesselFilter) return false;
-      if (captainFilter && m.captainId !== captainFilter) return false;
-      return true;
-    });
-  }, [recentMissions, statusFilter, vesselFilter, captainFilter]);
+  const filteredRecentMissions = useMemo(
+    () => filterRecentMissions(recentMissions, { status: statusFilter, vesselId: vesselFilter, captainId: captainFilter }),
+    [recentMissions, statusFilter, vesselFilter, captainFilter],
+  );
 
   const handleDeleteMission = async (id: string) => {
     try {
@@ -265,16 +176,7 @@ export default function Dashboard() {
     copyToClipboard(id);
   };
 
-  const missionStatuses = [
-    'Pending',
-    'Assigned',
-    'InProgress',
-    'Testing',
-    'Review',
-    'Complete',
-    'Failed',
-    'Cancelled',
-  ];
+  const missionStatuses = RECENT_MISSION_STATUSES;
 
   if (loading) {
     return (
@@ -421,7 +323,7 @@ export default function Dashboard() {
         </div>
         <div
           className="card clickable"
-          onClick={() => navigate(activeRuns && activeRuns.running === 0 && activeRuns.pending > 0 ? '/fleet-actions?tab=runs&status=Pending' : '/fleet-actions?tab=runs&status=Running')}
+          onClick={() => navigate(activeFleetActionRunsLink(activeRuns))}
           title={t('Click to view active fleet action runs')}
         >
           <div className="card-label">{t('Active fleet action runs')}</div>
@@ -633,7 +535,7 @@ export default function Dashboard() {
                         onClick: () =>
                           setJsonViewer({ open: true, title: `${t('Mission')}: ${m.title}`, data: m }),
                       },
-                      ...(m.status === 'Failed' || m.status === 'Cancelled' || m.status === 'LandingFailed' ? [{
+                      ...(canRestartFromHome(m.status) ? [{
                         label: 'Restart',
                         onClick: async () => { try { await restartMission(m.id); loadAll(); } catch { /* ignore */ } },
                       }] : []),

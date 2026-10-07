@@ -1,9 +1,10 @@
+/** Pure helpers of the readiness panel (vessel readiness shown on Dispatch, vessel pages, onboarding, and the app). */
 import type { VesselReadinessResult, VesselSetupChecklistItem, WorkflowInputReferenceProvider } from '../types/models';
 
 /** Overall tone of a vessel readiness result: errors block, warnings need attention. */
 export type ReadinessTone = 'ready' | 'warning' | 'error';
 
-export function getReadinessTone(readiness: VesselReadinessResult | null): ReadinessTone {
+export function readinessTone(readiness: VesselReadinessResult | null): ReadinessTone {
   if (!readiness) return 'warning';
   if (readiness.errorCount > 0) return 'error';
   if (readiness.warningCount > 0) return 'warning';
@@ -11,7 +12,7 @@ export function getReadinessTone(readiness: VesselReadinessResult | null): Readi
 }
 
 /** English label of the readiness tone (Unknown when there is no result). */
-export function getReadinessLabel(readiness: VesselReadinessResult | null): string {
+export function readinessLabel(readiness: VesselReadinessResult | null): string {
   if (!readiness) return 'Unknown';
   if (readiness.errorCount > 0) return 'Blocked';
   if (readiness.warningCount > 0) return 'Needs Attention';

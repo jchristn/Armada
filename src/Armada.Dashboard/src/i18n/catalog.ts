@@ -85,8 +85,26 @@ function formatNumber(locale: string, value: number): string {
   return new Intl.NumberFormat(locale).format(value);
 }
 
+/**
+ * Relative time text. Uses Intl.RelativeTimeFormat where the engine has it (browsers); engines without it (Hermes on
+ * React Native) get an English "5 minutes ago" / "in 5 minutes" instead of an exception.
+ */
 function formatRelative(locale: string, value: number, unit: Intl.RelativeTimeFormatUnit): string {
-  return new Intl.RelativeTimeFormat(locale, { numeric: 'auto' }).format(value, unit);
+  if (typeof Intl !== 'undefined' && typeof Intl.RelativeTimeFormat === 'function') {
+    return new Intl.RelativeTimeFormat(locale, { numeric: 'auto' }).format(value, unit);
+  }
+  const count = Math.abs(value);
+  if (count === 0 && unit === 'second') return 'now';
+  const words = `${count} ${unit}${count === 1 ? '' : 's'}`;
+  return value < 0 ? `${words} ago` : `in ${words}`;
+}
+
+/**
+ * Milliseconds for an ISO-8601 UTC timestamp. The server sends up to seven fractional digits, which some engines do
+ * not parse; the fraction is cut to milliseconds first.
+ */
+export function parseUtcMs(utc: string): number {
+  return new Date(utc.replace(/(\.\d{3})\d+/, '$1')).getTime();
 }
 
 /**
@@ -591,17 +609,17 @@ export async function fetchCatalog(url: string, init?: RequestInit): Promise<I18
 
 export function formatAbsoluteDateTime(locale: string, utc: string | null | undefined): string {
   if (!utc) return '';
-  return new Date(utc).toLocaleString(locale);
+  return new Date(parseUtcMs(utc)).toLocaleString(locale);
 }
 
 export function formatDateOnly(locale: string, utc: string | null | undefined): string {
   if (!utc) return '';
-  return new Date(utc).toLocaleDateString(locale);
+  return new Date(parseUtcMs(utc)).toLocaleDateString(locale);
 }
 
 export function formatRelativeFromUtc(locale: string, utc: string | null | undefined): string {
   if (!utc) return '-';
-  const then = new Date(utc).getTime();
+  const then = parseUtcMs(utc);
   const now = Date.now();
   const diffSeconds = Math.round((then - now) / 1000);
   const abs = Math.abs(diffSeconds);

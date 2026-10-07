@@ -13,7 +13,7 @@ import {
   saveWorkspaceFile,
 } from '@dashboard/api/client';
 import type { Vessel, VesselReadinessResult, WorkspaceFileResponse, WorkspaceStatusResult, WorkspaceTreeEntry } from '@dashboard/types/models';
-import { getReadinessLabel, getReadinessTone, readinessBranchSummary, readinessDriftSummary } from '@dashboard/lib/readiness';
+import { readinessLabel, readinessTone, readinessBranchSummary, readinessDriftSummary } from '@dashboard/lib/readiness';
 import {
   buildWorkspaceContextSnippet,
   buildWorkspaceDispatchDraft,
@@ -396,7 +396,7 @@ export function WorkspaceScreen({ vesselId, initialPanel = 'files' }: { vesselId
     filesBody = activePath && activeFile ? editor : fileList;
   }
 
-  const readinessTone = getReadinessTone(readiness);
+  const readinessState = readinessTone(readiness);
   return (
     <View style={[styles.flex, { backgroundColor: colors.background }]} testID="workspace">
       <Stack.Screen options={{ title: vessel?.name || t('Workspace') }} />
@@ -434,10 +434,10 @@ export function WorkspaceScreen({ vesselId, initialPanel = 'files' }: { vesselId
         {status && !loading && !status.hasWorkingDirectory ? <Banner tone="warning" title={status.error || t('This vessel does not have a usable working directory.')} /> : null}
         {loading && !status ? <LoadingState label={t('Loading Workspace...')} /> : null}
         <View style={styles.pad}>
-          <Disclosure title={`${t('Readiness')}: ${t(getReadinessLabel(readiness))}`} testID="workspace-readiness">
+          <Disclosure title={`${t('Readiness')}: ${t(readinessLabel(readiness))}`} testID="workspace-readiness">
             {readiness ? (
               <View style={styles.gap}>
-                <StatusBadge label={t(getReadinessLabel(readiness))} tone={readinessTone === 'ready' ? 'success' : readinessTone === 'error' ? 'failed' : 'warning'} />
+                <StatusBadge label={t(readinessLabel(readiness))} tone={readinessState === 'ready' ? 'success' : readinessState === 'error' ? 'failed' : 'warning'} />
                 {readinessBranchSummary(readiness) ? <AppText variant="caption">{readinessBranchSummary(readiness)}</AppText> : null}
                 {readinessDriftSummary(readiness) ? <AppText variant="caption">{readinessDriftSummary(readiness)}</AppText> : null}
                 <AppText variant="caption" muted>{t('{{done}} of {{total}} setup steps done', { done: readiness.setupChecklistSatisfiedCount, total: readiness.setupChecklistTotalCount })}</AppText>

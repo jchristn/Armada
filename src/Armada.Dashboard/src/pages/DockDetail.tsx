@@ -13,6 +13,7 @@ import CopyButton from '../components/shared/CopyButton';
 import ErrorModal from '../components/shared/ErrorModal';
 import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
+import { parseDockGitAnchors } from '../lib/dockAnchors';
 
 export default function DockDetail() {
   const { t, formatDateTime, formatRelativeTime } = useLocale();
@@ -146,9 +147,7 @@ export default function DockDetail() {
 
       {/* Git anchors resolved at provisioning */}
       {(() => {
-        if (!dock.gitAnchorsJson) return null;
-        let anchors: { startCommit?: string | null; targetBranch?: string | null; workingBranch?: string | null; recentPathCommits?: string[]; subjectTermsPresent?: string[] } | null = null;
-        try { anchors = JSON.parse(dock.gitAnchorsJson); } catch { anchors = null; }
+        const anchors = parseDockGitAnchors(dock.gitAnchorsJson);
         if (!anchors) return null;
         return (
           <div className="detail-card" style={{ marginTop: 16 }}>

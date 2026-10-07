@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { VesselReadinessResult, VesselSetupChecklistItem } from '../types/models';
 import {
   formatInputProvider,
-  getReadinessLabel,
-  getReadinessTone,
+  readinessLabel,
+  readinessTone,
   groupSetupChecklist,
   nextChecklistItem,
   readinessBranchSummary,
@@ -26,14 +26,14 @@ function readiness(over: Partial<VesselReadinessResult> = {}): VesselReadinessRe
 
 describe('readiness helpers', () => {
   it('derives tone and label from error and warning counts', () => {
-    expect(getReadinessTone(null)).toBe('warning');
-    expect(getReadinessLabel(null)).toBe('Unknown');
-    expect(getReadinessTone(readiness({ errorCount: 1, warningCount: 2 }))).toBe('error');
-    expect(getReadinessLabel(readiness({ errorCount: 1 }))).toBe('Blocked');
-    expect(getReadinessTone(readiness({ warningCount: 1 }))).toBe('warning');
-    expect(getReadinessLabel(readiness({ warningCount: 1 }))).toBe('Needs Attention');
-    expect(getReadinessTone(readiness())).toBe('ready');
-    expect(getReadinessLabel(readiness())).toBe('Ready');
+    expect(readinessTone(null)).toBe('warning');
+    expect(readinessLabel(null)).toBe('Unknown');
+    expect(readinessTone(readiness({ errorCount: 1, warningCount: 2 }))).toBe('error');
+    expect(readinessLabel(readiness({ errorCount: 1 }))).toBe('Blocked');
+    expect(readinessTone(readiness({ warningCount: 1 }))).toBe('warning');
+    expect(readinessLabel(readiness({ warningCount: 1 }))).toBe('Needs Attention');
+    expect(readinessTone(readiness())).toBe('ready');
+    expect(readinessLabel(readiness())).toBe('Ready');
   });
 
   it('names input providers', () => {

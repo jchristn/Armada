@@ -4,8 +4,8 @@ import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import type { LandingPreviewResult, ReadinessSeverity, VesselReadinessResult, VesselSetupChecklistItem } from '@dashboard/types/models';
 import {
   formatInputProvider,
-  getReadinessLabel,
-  getReadinessTone,
+  readinessLabel,
+  readinessTone,
   readinessBranchSummary,
   readinessDriftSummary,
 } from '@dashboard/lib/readiness';
@@ -88,7 +88,7 @@ export function ReadinessCard({ title, readiness, loading = false, emptyMessage,
   const { t } = useLocale();
   const router = useRouter();
   const { colors } = useTheme();
-  const tone = getReadinessTone(readiness);
+  const tone = readinessTone(readiness);
   const branchSummary = readinessBranchSummary(readiness);
   const drift = readinessDriftSummary(readiness);
   return (
@@ -107,7 +107,7 @@ export function ReadinessCard({ title, readiness, loading = false, emptyMessage,
               </AppText>
             ) : null}
           </View>
-          <StatusBadge label={t(getReadinessLabel(readiness))} tone={tone === 'ready' ? 'success' : tone === 'error' ? 'failed' : 'warning'} />
+          <StatusBadge label={t(readinessLabel(readiness))} tone={tone === 'ready' ? 'success' : tone === 'error' ? 'failed' : 'warning'} />
         </View>
         {loading ? (
           <View style={styles.row}><ActivityIndicator color={colors.primary} /><AppText muted>{t('Checking readiness...')}</AppText></View>

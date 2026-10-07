@@ -1,6 +1,6 @@
 import { StyleSheet, View } from 'react-native';
 import type { VesselReadinessResult } from '@dashboard/types/models';
-import { getReadinessLabel, getReadinessTone } from '@dashboard/lib/readiness';
+import { readinessLabel, readinessTone } from '@dashboard/lib/readiness';
 import { AppText, StatusBadge } from '../../components/ui';
 import { useLocale } from '../../i18n/LocaleContext';
 import { useTheme } from '../../theme/ThemeContext';
@@ -10,12 +10,12 @@ import { radius, spacing } from '../../theme/typography';
 export function ReadinessSummary({ readiness, loading }: { readiness: VesselReadinessResult | null; loading: boolean }) {
   const { t } = useLocale();
   const { colors } = useTheme();
-  const tone = getReadinessTone(readiness);
+  const tone = readinessTone(readiness);
   return (
     <View style={[styles.box, { borderColor: colors.border, backgroundColor: colors.surface }]} testID="planning-readiness">
       <View style={styles.head}>
         <AppText variant="label" style={styles.flex}>{t('Vessel Readiness')}</AppText>
-        {readiness ? <StatusBadge label={t(getReadinessLabel(readiness))} tone={tone === 'ready' ? 'success' : tone === 'warning' ? 'warning' : 'failed'} /> : null}
+        {readiness ? <StatusBadge label={t(readinessLabel(readiness))} tone={tone === 'ready' ? 'success' : tone === 'warning' ? 'warning' : 'failed'} /> : null}
       </View>
       {loading ? <AppText variant="caption" muted>{t('Checking readiness...')}</AppText> : null}
       {!loading && !readiness ? <AppText variant="caption" muted>{t('Select a vessel to inspect readiness.')}</AppText> : null}

@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import type { VesselReadinessResult } from '../../types/models';
-import { formatInputProvider, getReadinessLabel, getReadinessTone, readinessBranchSummary, readinessDriftSummary } from '../../lib/readiness';
+import { formatInputProvider, readinessBranchSummary, readinessDriftSummary, readinessLabel, readinessTone } from '../../lib/readiness';
 
 interface ReadinessPanelProps {
   title: string;
@@ -12,8 +12,8 @@ interface ReadinessPanelProps {
 
 export default function ReadinessPanel(props: ReadinessPanelProps) {
   const { title, readiness, loading = false, emptyMessage = 'No readiness data.', compact = false } = props;
-  const tone = getReadinessTone(readiness);
-  const label = getReadinessLabel(readiness);
+  const tone = readinessTone(readiness);
+  const label = readinessLabel(readiness);
   const branchSummary = readinessBranchSummary(readiness);
   const aheadBehindSummary = readinessDriftSummary(readiness);
 

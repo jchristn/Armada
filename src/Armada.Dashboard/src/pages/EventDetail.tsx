@@ -14,6 +14,7 @@ import ErrorModal from '../components/shared/ErrorModal';
 import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
 import { entityRoute } from '../lib/routing';
+import { formatEventPayload } from '../lib/eventPayload';
 
 export default function EventDetail() {
   const { t, formatDateTime, formatRelativeTime } = useLocale();
@@ -78,15 +79,7 @@ export default function EventDetail() {
   const entRoute = entityRoute(event.entityType, event.entityId);
 
   // Format payload
-  let payloadDisplay: string | null = null;
-  if (event.payload) {
-    try {
-      const parsed = JSON.parse(typeof event.payload === 'object' ? JSON.stringify(event.payload) : event.payload);
-      payloadDisplay = JSON.stringify(parsed, null, 2);
-    } catch {
-      payloadDisplay = String(event.payload);
-    }
-  }
+  const payloadDisplay = formatEventPayload(event.payload);
 
   return (
     <div>
