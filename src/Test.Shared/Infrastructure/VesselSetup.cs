@@ -24,6 +24,11 @@ namespace Test.Shared.Infrastructure
         /// </summary>
         public string BarePath { get; set; } = "";
 
+        /// <summary>
+        /// Path of the vessel's working checkout (a clone of the bare origin).
+        /// </summary>
+        public string WorkingDirectory { get; set; } = "";
+
         #endregion
     }
 }

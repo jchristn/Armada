@@ -58,13 +58,13 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
-            cases.Add(CaseAsync("local_merge_push_failure_sets_landing_failed", "LocalMerge: push after merge fails, LandingFailed and branch kept", TestTags.Negative, async () =>
+            cases.Add(CaseAsync("merge_and_push_push_failure_sets_landing_failed", "MergeAndPush: push after merge fails, LandingFailed and branch kept", TestTags.Negative, async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
                 {
                     StubGitService git = new StubGitService { ShouldThrowOnPush = true };
                     MissionLandingHandler handler = CreateHandler(testDb.Driver, git, new RecordingMergeQueueService());
-                    LandingTestEntitiesResult entities = await CreateEntitiesAsync(testDb.Driver, LandingModeEnum.LocalMerge, null, git).ConfigureAwait(false);
+                    LandingTestEntitiesResult entities = await CreateEntitiesAsync(testDb.Driver, LandingModeEnum.MergeAndPush, null, git).ConfigureAwait(false);
 
                     await handler.HandleMissionCompleteAsync(entities.Mission, entities.Dock).ConfigureAwait(false);
 
@@ -76,6 +76,207 @@ namespace Test.Shared.Suites.Services
                     AssertFalse(git.OperationCalls.Contains("delete-local-branch:" + entities.Dock.BranchName), "branch kept for retry");
                 }
             }));
+
+            cases.Add(CaseAsync("local_merge_does_not_push", "LocalMerge: merges into the working directory, never pushes, Complete and branch cleaned up", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    StubGitService git = new StubGitService();
+                    MissionLandingHandler handler = CreateHandler(testDb.Driver, git, new RecordingMergeQueueService());
+                    LandingTestEntitiesResult entities = await CreateEntitiesAsync(testDb.Driver, LandingModeEnum.LocalMerge, null, git).ConfigureAwait(false);
+
+                    await handler.HandleMissionCompleteAsync(entities.Mission, entities.Dock).ConfigureAwait(false);
+
+                    Mission? mission = await testDb.Driver.Missions.ReadAsync(entities.Mission.Id).ConfigureAwait(false);
+                    AssertEqual(MissionStatusEnum.Complete, mission!.Status);
+                    AssertEqual(1, git.MergeBranchCalls.Count, "merged once");
+                    AssertEqual(0, git.PushCalls.Count, "LocalMerge never pushes");
+                    AssertEqual(0, git.PrCalls.Count, "no pull request");
+                    AssertTrue(git.OperationCalls.Contains("delete-local-branch:" + entities.Dock.BranchName), "branch cleaned up after landing");
+                }
+            }));
+
+            cases.Add(CaseAsync("local_merge_unaffected_by_push_failure", "LocalMerge: a remote that would refuse a push does not fail the landing", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    StubGitService git = new StubGitService { ShouldThrowOnPush = true };
+                    MissionLandingHandler handler = CreateHandler(testDb.Driver, git, new RecordingMergeQueueService());
+                    LandingTestEntitiesResult entities = await CreateEntitiesAsync(testDb.Driver, LandingModeEnum.LocalMerge, null, git).ConfigureAwait(false);
+
+                    await handler.HandleMissionCompleteAsync(entities.Mission, entities.Dock).ConfigureAwait(false);
+
+                    Mission? mission = await testDb.Driver.Missions.ReadAsync(entities.Mission.Id).ConfigureAwait(false);
+                    AssertEqual(MissionStatusEnum.Complete, mission!.Status, "no push is attempted, so nothing can fail it");
+                    AssertNull(mission.FailureReason, "no failure reason");
+                    AssertEqual(1, git.MergeBranchCalls.Count, "merged once");
+                    AssertEqual(0, git.PushCalls.Count, "LocalMerge never pushes");
+                }
+            }));
+
+            cases.Add(CaseAsync("merge_and_push_merges_then_pushes", "MergeAndPush: merges into the working directory, pushes it, Complete and branch cleaned up", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    StubGitService git = new StubGitService();
+                    MissionLandingHandler handler = CreateHandler(testDb.Driver, git, new RecordingMergeQueueService());
+                    LandingTestEntitiesResult entities = await CreateEntitiesAsync(testDb.Driver, LandingModeEnum.MergeAndPush, null, git).ConfigureAwait(false);
+
+                    await handler.HandleMissionCompleteAsync(entities.Mission, entities.Dock).ConfigureAwait(false);
+
+                    Mission? mission = await testDb.Driver.Missions.ReadAsync(entities.Mission.Id).ConfigureAwait(false);
+                    AssertEqual(MissionStatusEnum.Complete, mission!.Status);
+                    AssertEqual(1, git.MergeBranchCalls.Count, "merged once");
+                    AssertEqual(1, git.PushCalls.Count, "pushed once");
+                    AssertEqual(entities.Vessel.WorkingDirectory, git.PushCalls[0], "pushes the working directory, not the mission worktree");
+                    AssertEqual(0, git.PrCalls.Count, "no pull request");
+                    AssertTrue(git.OperationCalls.Contains("delete-local-branch:" + entities.Dock.BranchName), "branch cleaned up after the push");
+                }
+            }));
+
+            cases.Add(CaseAsync("merge_and_push_merge_failure_does_not_push", "MergeAndPush: merge error sets LandingFailed, nothing pushed, branch kept", TestTags.Negative, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    StubGitService git = new StubGitService { ShouldThrowOnMergeLocal = true };
+                    MissionLandingHandler handler = CreateHandler(testDb.Driver, git, new RecordingMergeQueueService());
+                    LandingTestEntitiesResult entities = await CreateEntitiesAsync(testDb.Driver, LandingModeEnum.MergeAndPush, null, git).ConfigureAwait(false);
+
+                    await handler.HandleMissionCompleteAsync(entities.Mission, entities.Dock).ConfigureAwait(false);
+
+                    Mission? mission = await testDb.Driver.Missions.ReadAsync(entities.Mission.Id).ConfigureAwait(false);
+                    AssertEqual(MissionStatusEnum.LandingFailed, mission!.Status);
+                    AssertContains("Error merging locally: Simulated merge failure", mission.FailureReason ?? "");
+                    AssertEqual(0, git.PushCalls.Count, "nothing pushed after a failed merge");
+                    AssertFalse(git.OperationCalls.Contains("delete-local-branch:" + entities.Dock.BranchName), "branch kept for retry");
+                }
+            }));
+
+            foreach (LandingModeEnum localMode in new[] { LandingModeEnum.LocalMerge, LandingModeEnum.MergeAndPush })
+            {
+                LandingModeEnum mode = localMode;
+                cases.Add(CaseAsync(mode.ToString().ToLowerInvariant() + "_without_working_directory_stays_work_produced", mode + ": a vessel without a working directory is not merged or pushed and stays WorkProduced", TestTags.Negative, async () =>
+                {
+                    using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                    {
+                        StubGitService git = new StubGitService();
+                        MissionLandingHandler handler = CreateHandler(testDb.Driver, git, new RecordingMergeQueueService());
+                        LandingTestEntitiesResult entities = await CreateEntitiesAsync(testDb.Driver, mode, null, git).ConfigureAwait(false);
+                        entities.Vessel.WorkingDirectory = null;
+                        await testDb.Driver.Vessels.UpdateAsync(entities.Vessel).ConfigureAwait(false);
+
+                        await handler.HandleMissionCompleteAsync(entities.Mission, entities.Dock).ConfigureAwait(false);
+
+                        Mission? mission = await testDb.Driver.Missions.ReadAsync(entities.Mission.Id).ConfigureAwait(false);
+                        AssertEqual(MissionStatusEnum.WorkProduced, mission!.Status);
+                        AssertEqual(0, git.MergeBranchCalls.Count, "no merge");
+                        AssertEqual(0, git.PushCalls.Count, "no push");
+                    }
+                }));
+
+                cases.Add(CaseAsync(mode.ToString().ToLowerInvariant() + "_no_changes_completes_without_merge_or_push", mode + ": a mission with no diff completes without a merge or a push", TestTags.Positive, async () =>
+                {
+                    using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                    {
+                        StubGitService git = new StubGitService();
+                        MissionLandingHandler handler = CreateHandler(testDb.Driver, git, new RecordingMergeQueueService());
+                        LandingTestEntitiesResult entities = await CreateEntitiesAsync(testDb.Driver, mode, null, git).ConfigureAwait(false);
+                        entities.Mission.DiffSnapshot = null;
+                        await testDb.Driver.Missions.UpdateAsync(entities.Mission).ConfigureAwait(false);
+
+                        await handler.HandleMissionCompleteAsync(entities.Mission, entities.Dock).ConfigureAwait(false);
+
+                        Mission? mission = await testDb.Driver.Missions.ReadAsync(entities.Mission.Id).ConfigureAwait(false);
+                        AssertEqual(MissionStatusEnum.Complete, mission!.Status);
+                        AssertEqual(0, git.MergeBranchCalls.Count, "no merge");
+                        AssertEqual(0, git.PushCalls.Count, "no push");
+                    }
+                }));
+            }
+
+            cases.Add(CaseAsync("voyage_merge_and_push_overrides_vessel_local_merge", "Voyage MergeAndPush over vessel LocalMerge: merges and pushes", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    StubGitService git = new StubGitService();
+                    MissionLandingHandler handler = CreateHandler(testDb.Driver, git, new RecordingMergeQueueService());
+                    LandingTestEntitiesResult entities = await CreateEntitiesAsync(testDb.Driver, LandingModeEnum.LocalMerge, LandingModeEnum.MergeAndPush, git).ConfigureAwait(false);
+
+                    await handler.HandleMissionCompleteAsync(entities.Mission, entities.Dock).ConfigureAwait(false);
+
+                    Mission? mission = await testDb.Driver.Missions.ReadAsync(entities.Mission.Id).ConfigureAwait(false);
+                    AssertEqual(MissionStatusEnum.Complete, mission!.Status);
+                    AssertEqual(1, git.MergeBranchCalls.Count, "merged once");
+                    AssertEqual(1, git.PushCalls.Count, "the voyage's MergeAndPush pushes");
+                }
+            }));
+
+            cases.Add(CaseAsync("voyage_local_merge_overrides_vessel_merge_and_push", "Voyage LocalMerge over vessel MergeAndPush: merges without pushing", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    StubGitService git = new StubGitService();
+                    MissionLandingHandler handler = CreateHandler(testDb.Driver, git, new RecordingMergeQueueService());
+                    LandingTestEntitiesResult entities = await CreateEntitiesAsync(testDb.Driver, LandingModeEnum.MergeAndPush, LandingModeEnum.LocalMerge, git).ConfigureAwait(false);
+
+                    await handler.HandleMissionCompleteAsync(entities.Mission, entities.Dock).ConfigureAwait(false);
+
+                    Mission? mission = await testDb.Driver.Missions.ReadAsync(entities.Mission.Id).ConfigureAwait(false);
+                    AssertEqual(MissionStatusEnum.Complete, mission!.Status);
+                    AssertEqual(1, git.MergeBranchCalls.Count, "merged once");
+                    AssertEqual(0, git.PushCalls.Count, "the voyage's LocalMerge does not push");
+                }
+            }));
+
+            foreach (LandingModeEnum globalMode in new[] { LandingModeEnum.LocalMerge, LandingModeEnum.MergeAndPush })
+            {
+                LandingModeEnum mode = globalMode;
+                int expectedPushes = mode == LandingModeEnum.MergeAndPush ? 1 : 0;
+                cases.Add(CaseAsync("global_" + mode.ToString().ToLowerInvariant() + "_applies_when_vessel_unset", "Global LandingMode " + mode + " applies when the vessel and voyage leave it unset", TestTags.Positive, async () =>
+                {
+                    using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                    {
+                        StubGitService git = new StubGitService();
+                        ArmadaSettings settings = CreateSettings();
+                        settings.LandingMode = mode;
+                        settings.AutoPush = mode != LandingModeEnum.MergeAndPush;
+                        MissionLandingHandler handler = CreateHandler(testDb.Driver, git, new RecordingMergeQueueService(), settings);
+                        LandingTestEntitiesResult entities = await CreateEntitiesAsync(testDb.Driver, null, null, git).ConfigureAwait(false);
+
+                        await handler.HandleMissionCompleteAsync(entities.Mission, entities.Dock).ConfigureAwait(false);
+
+                        Mission? mission = await testDb.Driver.Missions.ReadAsync(entities.Mission.Id).ConfigureAwait(false);
+                        AssertEqual(MissionStatusEnum.Complete, mission!.Status);
+                        AssertEqual(1, git.MergeBranchCalls.Count, "merged once");
+                        AssertEqual(expectedPushes, git.PushCalls.Count, "the landing mode, not the legacy AutoPush flag, decides the push");
+                    }
+                }));
+            }
+
+            foreach (bool autoPush in new[] { true, false })
+            {
+                bool push = autoPush;
+                cases.Add(CaseAsync("legacy_unset_mode_auto_push_" + (push ? "true" : "false"), "No landing mode anywhere: local merge, push decided by AutoPush=" + push, TestTags.Positive, async () =>
+                {
+                    using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                    {
+                        StubGitService git = new StubGitService();
+                        ArmadaSettings settings = CreateSettings();
+                        settings.LandingMode = null;
+                        settings.AutoPush = push;
+                        settings.AutoCreatePullRequests = false;
+                        MissionLandingHandler handler = CreateHandler(testDb.Driver, git, new RecordingMergeQueueService(), settings);
+                        LandingTestEntitiesResult entities = await CreateEntitiesAsync(testDb.Driver, null, null, git).ConfigureAwait(false);
+
+                        await handler.HandleMissionCompleteAsync(entities.Mission, entities.Dock).ConfigureAwait(false);
+
+                        Mission? mission = await testDb.Driver.Missions.ReadAsync(entities.Mission.Id).ConfigureAwait(false);
+                        AssertEqual(MissionStatusEnum.Complete, mission!.Status);
+                        AssertEqual(1, git.MergeBranchCalls.Count, "merged once");
+                        AssertEqual(push ? 1 : 0, git.PushCalls.Count, "AutoPush decides the push");
+                    }
+                }));
+            }
 
             cases.Add(CaseAsync("pull_request_opened", "PullRequest: push and PR create set PullRequestOpen with the PR URL", TestTags.Positive, async () =>
             {
@@ -218,18 +419,24 @@ namespace Test.Shared.Suites.Services
 
         #region Private-Methods
 
-        private static MissionLandingHandler CreateHandler(DatabaseDriver db, StubGitService git, IMergeQueueService queue)
+        private static ArmadaSettings CreateSettings()
         {
-            LoggingModule logging = new LoggingModule();
-            logging.Settings.EnableConsole = false;
             ArmadaSettings settings = new ArmadaSettings();
             settings.DocksDirectory = Path.Combine(Path.GetTempPath(), "armada_test_docks_" + Guid.NewGuid().ToString("N"));
             settings.ReposDirectory = Path.Combine(Path.GetTempPath(), "armada_test_repos_" + Guid.NewGuid().ToString("N"));
+            return settings;
+        }
+
+        private static MissionLandingHandler CreateHandler(DatabaseDriver db, StubGitService git, IMergeQueueService queue, ArmadaSettings? settings = null)
+        {
+            LoggingModule logging = new LoggingModule();
+            logging.Settings.EnableConsole = false;
+            settings = settings ?? CreateSettings();
             IDockService docks = new DockService(logging, db, settings, git);
             return new MissionLandingHandler(logging, db, settings, git, queue, new MessageTemplateService(logging), null, docks, null);
         }
 
-        private static async Task<LandingTestEntitiesResult> CreateEntitiesAsync(DatabaseDriver db, LandingModeEnum vesselMode, LandingModeEnum? voyageMode, StubGitService git)
+        private static async Task<LandingTestEntitiesResult> CreateEntitiesAsync(DatabaseDriver db, LandingModeEnum? vesselMode, LandingModeEnum? voyageMode, StubGitService git)
         {
             string suffix = Guid.NewGuid().ToString("N").Substring(0, 12);
             Vessel vessel = new Vessel("landing-vessel-" + suffix, "https://github.com/test/repo.git");

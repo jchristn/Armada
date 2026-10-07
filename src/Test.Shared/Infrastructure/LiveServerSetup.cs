@@ -11,7 +11,7 @@ namespace Test.Shared.Infrastructure
     /// <summary>
     /// Setup helpers for tests against a live in-process server (<see cref="E2EServerFixture"/>) through
     /// <see cref="ArmadaClient"/>: an admin client, vessels backed by a local bare origin and a working checkout (so
-    /// LocalMerge landing runs for real), captains, a deployment pending approval, git queries, and a pump-friendly poll.
+    /// local landing, MergeAndPush by default, runs for real), captains, a deployment pending approval, git queries, and a pump-friendly poll.
     /// </summary>
     public static class LiveServerSetup
     {
@@ -32,12 +32,14 @@ namespace Test.Shared.Infrastructure
 
         /// <summary>
         /// Create a fleet and a vessel whose origin is a fresh local bare repository (branch main) with a working
-        /// checkout, landing with LocalMerge.
+        /// checkout, landing with MergeAndPush (merged into the checkout and pushed to the origin) unless another
+        /// landing mode is given.
         /// </summary>
         /// <param name="admin">Admin client.</param>
         /// <param name="label">Name prefix.</param>
+        /// <param name="landingMode">Vessel landing mode.</param>
         /// <returns>The setup.</returns>
-        public static async Task<VesselSetup> CreateVesselAsync(ArmadaClient admin, string label)
+        public static async Task<VesselSetup> CreateVesselAsync(ArmadaClient admin, string label, LandingModeEnum landingMode = LandingModeEnum.MergeAndPush)
         {
             if (admin == null) throw new ArgumentNullException(nameof(admin));
             string suffix = Guid.NewGuid().ToString("N").Substring(0, 6);
@@ -52,7 +54,7 @@ namespace Test.Shared.Infrastructure
             vessel.FleetId = fleet.Id;
             vessel.RepoUrl = bare;
             vessel.DefaultBranch = "main";
-            vessel.LandingMode = LandingModeEnum.LocalMerge;
+            vessel.LandingMode = landingMode;
             vessel.WorkingDirectory = working;
             Vessel created = (await admin.CreateVesselAsync(vessel).ConfigureAwait(false))!;
 
@@ -60,6 +62,7 @@ namespace Test.Shared.Infrastructure
             setup.Fleet = fleet;
             setup.Vessel = created;
             setup.BarePath = bare;
+            setup.WorkingDirectory = working;
             return setup;
         }
 
@@ -130,6 +133,17 @@ namespace Test.Shared.Infrastructure
         public static bool OriginHasStubCommit(string barePath)
         {
             Git(null, out string output, "--git-dir", barePath, "log", "main", "--name-only", "--format=%s");
+            return output.Contains("stub-captain-", StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// Whether the working checkout's main branch has a commit by the stub captain.
+        /// </summary>
+        /// <param name="workingDirectory">Working checkout.</param>
+        /// <returns>True when found.</returns>
+        public static bool CheckoutHasStubCommit(string workingDirectory)
+        {
+            Git(workingDirectory, out string output, "log", "main", "--name-only", "--format=%s");
             return output.Contains("stub-captain-", StringComparison.Ordinal);
         }
 

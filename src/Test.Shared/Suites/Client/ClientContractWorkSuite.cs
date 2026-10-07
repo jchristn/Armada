@@ -97,6 +97,28 @@ namespace Test.Shared.Suites.Client
                 AssertNotEqual(MissionStatusEnum.Failed, restarted!.Status, "restart re-queues the mission (dispatched on the next cycle)");
             }));
 
+            cases.Add(Case("local_merge_vs_merge_and_push", "LocalMerge merges into the checkout without pushing; MergeAndPush merges and pushes to the origin", async (c, fx) =>
+            {
+                await LiveServerSetup.CreateCaptainAsync(c, "contract-lander");
+
+                VesselSetup local = await LiveServerSetup.CreateVesselAsync(c, "localmerge", LandingModeEnum.LocalMerge);
+                Mission localMission = (await c.CreateMissionAsync(new Mission("Contract LocalMerge mission", "Add a file.") { VesselId = local.Vessel.Id }))!;
+                await WaitForStatusAsync(c, localMission.Id, MissionStatusEnum.Complete);
+                AssertTrue(LiveServerSetup.CheckoutHasStubCommit(local.WorkingDirectory), "LocalMerge: merged into the working checkout");
+                AssertFalse(LiveServerSetup.OriginHasStubCommit(local.BarePath), "LocalMerge: nothing pushed to the origin");
+                AssertEqual(0, LiveServerSetup.Git(local.WorkingDirectory, out string ahead, "rev-list", "--count", "origin/main..main"), "rev-list: " + ahead);
+                AssertTrue(Int32.TryParse(ahead.Trim(), out int aheadCount) && aheadCount > 0, "LocalMerge: the checkout's main is ahead of origin/main, not pushed (" + ahead.Trim() + ")");
+
+                VesselSetup pushed = await LiveServerSetup.CreateVesselAsync(c, "mergeandpush", LandingModeEnum.MergeAndPush);
+                Mission pushedMission = (await c.CreateMissionAsync(new Mission("Contract MergeAndPush mission", "Add a file.") { VesselId = pushed.Vessel.Id }))!;
+                await WaitForStatusAsync(c, pushedMission.Id, MissionStatusEnum.Complete);
+                AssertTrue(LiveServerSetup.CheckoutHasStubCommit(pushed.WorkingDirectory), "MergeAndPush: merged into the working checkout");
+                AssertTrue(LiveServerSetup.OriginHasStubCommit(pushed.BarePath), "MergeAndPush: pushed to the origin");
+                AssertEqual(0, LiveServerSetup.Git(null, out string originMain, "--git-dir", pushed.BarePath, "rev-parse", "main"), "origin rev-parse: " + originMain);
+                AssertEqual(0, LiveServerSetup.Git(pushed.WorkingDirectory, out string checkoutMain, "rev-parse", "main"), "checkout rev-parse: " + checkoutMain);
+                AssertEqual(checkoutMain.Trim(), originMain.Trim(), "MergeAndPush: the origin's main is the checkout's main");
+            }));
+
             cases.Add(Case("voyages", "Voyage create, get, detail, status; cancel and purge", async (c, fx) =>
             {
                 VesselSetup setup = await LiveServerSetup.CreateVesselAsync(c, "voyages");
