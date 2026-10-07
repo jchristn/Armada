@@ -4112,8 +4112,9 @@ category; the per-user rate limit and dedupe window apply (`Push` settings above
 **Payload.** `title` and `body` are short (at most 64 and 178 characters), single-line, and pass through the secret
 redactor; they never carry code, diffs, failure reasons, or tool input beyond a truncated summary (at most 60
 characters) of a CLI permission request. `data` is `{ "url": "/missions/msn_...", "kind": "failed", "entityId":
-"msn_...", "category": "MissionFailed" }`, plus `threadId` for the owner of an Ask proposal or thread permission
-request. `url` is a dashboard path (`/missions/{id}`, `/voyages/{id}`, `/captains/{id}`, `/deployments/{id}`,
+"msn_...", "category": "MissionFailed", "deviceId": "pdv_..." }`, plus `threadId` for the owner of an Ask proposal or
+thread permission request. `deviceId` is the registered device the message was built for, so an app signed in to more
+than one Admiral can tell which server a notification came from. `url` is a dashboard path (`/missions/{id}`, `/voyages/{id}`, `/captains/{id}`, `/deployments/{id}`,
 `/ask/{threadId}`, `/cli-permissions?request={id}`). `badge` is the recipient's pending approvals (mission reviews,
 deployment approvals, Ask proposals, and CLI permission requests in their inbox), `sound` is `default`, and recipients
 who may approve or deny an Ask proposal or CLI permission request get the iOS `categoryId` `armada_approve_deny`; the

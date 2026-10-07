@@ -461,7 +461,7 @@
       "status": "extension",
       "mobile": "src/app/(app)/(more)/preferences.tsx",
       "workstream": "W0.5",
-      "notes": "App preferences: theme, language, biometric unlock (device settings, not server settings)"
+      "notes": "App preferences: theme, language, push notifications for the connected server (device settings, not server settings)"
     },
     {
       "kind": "route",
@@ -1194,10 +1194,10 @@
     {
       "kind": "api",
       "key": "clearProxySessionInstance",
-      "status": "planned",
-      "mobile": "ProxyProfile",
+      "status": "implemented",
+      "mobile": "proxyApi.logoutInstance (AuthContext.proxyChangeInstance)",
       "workstream": "W5.4",
-      "notes": "Auth"
+      "notes": "Auth; \"Change Admiral\" on the sign-in screen clears the selected instance with the bearer proxy session"
     },
     {
       "kind": "api",
@@ -2362,10 +2362,10 @@
     {
       "kind": "api",
       "key": "getProxySessionContext",
-      "status": "planned",
-      "mobile": "ProxyProfile",
+      "status": "implemented",
+      "mobile": "proxyApi.sessionContext (AuthContext)",
       "workstream": "W5.4",
-      "notes": "Auth"
+      "notes": "Auth; checked on launch and on every 401 to tell an expired proxy session from an expired Admiral token"
     },
     {
       "kind": "api",
@@ -2970,10 +2970,10 @@
     {
       "kind": "api",
       "key": "logoutProxy",
-      "status": "planned",
-      "mobile": "ProxyProfile",
+      "status": "implemented",
+      "mobile": "proxyApi.logout (AuthContext.proxySignOut)",
       "workstream": "W5.4",
-      "notes": "Auth"
+      "notes": "Auth; \"Sign out of Armada.Proxy\" and profile deletion end the proxy session"
     },
     {
       "kind": "api",
@@ -3022,6 +3022,22 @@
       "mobile": "ProfileForm",
       "workstream": "W0.4",
       "notes": "unauthenticated health probe for a server profile's Test connection button"
+    },
+    {
+      "kind": "api",
+      "key": "mobile:proxyNativeSession",
+      "status": "extension",
+      "mobile": "src/proxy/proxyApi.ts (AuthContext, ProxySignIn)",
+      "workstream": "W5.4",
+      "notes": "Armada.Proxy sign-in for native clients: challenge + proof login, instances, and instance selection with a bearer proxy session (the dashboard uses the portal's cookie)"
+    },
+    {
+      "kind": "api",
+      "key": "mobile:pushDevices",
+      "status": "extension",
+      "mobile": "src/push/pushApi.ts (PushContext, Preferences)",
+      "workstream": "W5.3",
+      "notes": "this device's push registration: POST/PUT/DELETE /api/v1/push/devices and POST .../test (the dashboard has no push UI)"
     },
     {
       "kind": "api",

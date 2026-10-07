@@ -203,17 +203,30 @@ export interface ClientConfig {
   baseUrl?: string;
   /** Host services for file download and similar browser-only operations. */
   platform?: ClientPlatformAdapter | null;
+  /**
+   * Extra headers sent with every request to the server (null clears them). The mobile app sets
+   * `X-Armada-Proxy-Session` here when it reaches an Admiral through Armada.Proxy; the browser dashboard sets none.
+   * They never replace the client's own Content-Type or X-Token.
+   */
+  headers?: Record<string, string> | null;
 }
 
 // The client is host-agnostic: no import.meta, window, or document here. The host calls configureClient once at
 // startup (the dashboard from main.tsx with VITE_ARMADA_SERVER_URL; the mobile app per active server profile).
 let BASE_URL = '';
 let platformAdapter: ClientPlatformAdapter | null = null;
+let extraHeaders: Record<string, string> = {};
 
 /** Configure the API client for this host. Trailing slashes on the base URL are removed. */
 export function configureClient(config: ClientConfig): void {
   if (config.baseUrl !== undefined) BASE_URL = (config.baseUrl || '').replace(/\/+$/, '');
   if (config.platform !== undefined) platformAdapter = config.platform;
+  if (config.headers !== undefined) extraHeaders = { ...(config.headers ?? {}) };
+}
+
+/** Request headers: the host's extra headers first, then the client's own (which win on a name clash). */
+function withExtraHeaders(own: Record<string, string>): Record<string, string> {
+  return { ...extraHeaders, ...own };
 }
 
 /** The base URL the client currently sends requests to ('' for same origin). */
@@ -337,8 +350,9 @@ const PLANNING_CREATE_TIMEOUT_MS = 5 * 60 * 1000;
 const PLANNING_SUMMARIZE_TIMEOUT_MS = 3 * 60 * 1000;
 
 async function request<T>(method: string, path: string, body?: unknown, opts?: RequestOptions): Promise<T> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (authToken) headers['X-Token'] = authToken;
+  const own: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (authToken) own['X-Token'] = authToken;
+  const headers = withExtraHeaders(own);
 
   const controller = new AbortController();
   const timeoutMs = opts?.timeout ?? 30000;
@@ -1429,9 +1443,9 @@ export const rollbackServer = () => post<RebuildStatus>('/api/v1/server/rollback
  * sheet on mobile). The server endpoint is GET and returns binary.
  */
 export async function downloadBackup(): Promise<void> {
-  const headers: Record<string, string> = {};
-  if (authToken) headers['X-Token'] = authToken;
-  const res = await fetch(`${BASE_URL}/api/v1/backup`, { method: 'GET', headers });
+  const own: Record<string, string> = {};
+  if (authToken) own['X-Token'] = authToken;
+  const res = await fetch(`${BASE_URL}/api/v1/backup`, { method: 'GET', headers: withExtraHeaders(own) });
   if (res.status === 401) { onUnauthorized?.(); throw unauthorizedError(); }
   if (!res.ok) throw new Error(`Backup failed: ${res.status}`);
   const blob = await res.blob();
@@ -1444,11 +1458,11 @@ export async function downloadBackup(): Promise<void> {
 
 /** Upload a backup ZIP file to restore. Sends raw bytes with filename header. */
 export async function restoreBackup(file: UploadFile): Promise<Record<string, unknown>> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/octet-stream' };
-  if (authToken) headers['X-Token'] = authToken;
-  headers['X-Original-Filename'] = file.name;
+  const own: Record<string, string> = { 'Content-Type': 'application/octet-stream' };
+  if (authToken) own['X-Token'] = authToken;
+  own['X-Original-Filename'] = file.name;
   const bytes = await file.arrayBuffer();
-  const res = await fetch(`${BASE_URL}/api/v1/restore`, { method: 'POST', headers, body: bytes });
+  const res = await fetch(`${BASE_URL}/api/v1/restore`, { method: 'POST', headers: withExtraHeaders(own), body: bytes });
   if (res.status === 401) { onUnauthorized?.(); throw unauthorizedError(); }
   if (!res.ok) { const text = await res.text(); throw new Error(text || `Restore failed: ${res.status}`); }
   const json = await res.json();

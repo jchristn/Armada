@@ -1,0 +1,9 @@
+# Some Android emulator images show Gboard's one-time "Try out your stylus" tutorial over the first text field
+# that gets focus. Close it when it appears; elsewhere this does nothing.
+appId: ${APP_ID}
+---
+- runFlow:
+    when:
+      visible: "Try out your stylus"
+    commands:
+      - tapOn: "Cancel"

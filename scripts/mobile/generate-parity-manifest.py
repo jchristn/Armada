@@ -132,6 +132,10 @@ def generate(old):
         "server i18n catalog (/dashboard/i18n/armada.json) fetched after sign-in; the dashboard loads it from its own origin")
     add("api", "mobile:probeServer", "extension", "ProfileForm", "W0.4",
         "unauthenticated health probe for a server profile's Test connection button")
+    add("api", "mobile:pushDevices", "extension", "src/push/pushApi.ts (PushContext, Preferences)", "W5.3",
+        "this device's push registration: POST/PUT/DELETE /api/v1/push/devices and POST .../test (the dashboard has no push UI)")
+    add("api", "mobile:proxyNativeSession", "extension", "src/proxy/proxyApi.ts (AuthContext, ProxySignIn)", "W5.4",
+        "Armada.Proxy sign-in for native clients: challenge + proof login, instances, and instance selection with a bearer proxy session (the dashboard uses the portal's cookie)")
 
     entries.sort(key=lambda e: (TAB_ORDER.index(e["kind"]), e["key"]))
     return entries

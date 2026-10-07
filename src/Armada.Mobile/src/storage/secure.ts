@@ -33,3 +33,28 @@ export async function deleteToken(profileId: string): Promise<void> {
     // Already absent.
   }
 }
+
+/** Secure-store key for a Proxy profile's Armada.Proxy session token (separate from the Admiral token). */
+export function proxyTokenKey(profileId: string): string {
+  return `armada.proxy.${profileId.replace(/[^A-Za-z0-9._-]/g, '_')}`;
+}
+
+export async function readProxyToken(profileId: string): Promise<string | null> {
+  try {
+    return await SecureStore.getItemAsync(proxyTokenKey(profileId), OPTIONS);
+  } catch {
+    return null;
+  }
+}
+
+export async function writeProxyToken(profileId: string, token: string): Promise<void> {
+  await SecureStore.setItemAsync(proxyTokenKey(profileId), token, OPTIONS);
+}
+
+export async function deleteProxyToken(profileId: string): Promise<void> {
+  try {
+    await SecureStore.deleteItemAsync(proxyTokenKey(profileId), OPTIONS);
+  } catch {
+    // Already absent.
+  }
+}

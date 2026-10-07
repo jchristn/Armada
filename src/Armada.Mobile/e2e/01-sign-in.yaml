@@ -49,6 +49,19 @@ name: 01-sign-in
 - assertVisible: "Keep the default password?"
 - tapOn:
     id: "password-skip-confirm-confirm"
+# A fresh iOS install has not decided on notifications, so the one-time explanation sheet appears over Ask. (Maestro
+# grants Android runtime permissions at launch, so there notifications are already allowed and no sheet appears.)
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - extendedWaitUntil:
+          visible:
+            id: "push-prompt-later"
+          timeout: 20000
+      - takeScreenshot: push-prompt
+      - tapOn:
+          id: "push-prompt-later"
 - extendedWaitUntil:
     visible:
       id: "ask-screen"

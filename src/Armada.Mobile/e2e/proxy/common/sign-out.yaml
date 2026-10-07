@@ -1,0 +1,36 @@
+# Sign out on either layout: More, then Sign out on phones; the sidebar's Sign out on tablets.
+appId: ${APP_ID}
+---
+# Phone first: after the tablet branch signs out the sidebar is gone, which would trigger the phone branch.
+- runFlow:
+    when:
+      notVisible:
+        id: "sidebar"
+    commands:
+      - tapOn:
+          id: "tab-more"
+      - scrollUntilVisible:
+          element:
+            id: "sign-out"
+          direction: DOWN
+      - tapOn:
+          id: "sign-out"
+- runFlow:
+    when:
+      visible:
+        id: "sidebar"
+    commands:
+      # Scroll the sidebar itself (a plain scroll would move the content pane).
+      - repeat:
+          while:
+            notVisible:
+              id: "sidebar-sign-out"
+          times: 8
+          commands:
+            - swipe:
+                start: "8%, 85%"
+                end: "8%, 30%"
+      # Let the fling settle, or the tap lands on whatever has scrolled under it.
+      - waitForAnimationToEnd
+      - tapOn:
+          id: "sidebar-sign-out"

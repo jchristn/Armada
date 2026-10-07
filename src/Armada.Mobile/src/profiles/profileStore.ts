@@ -1,5 +1,5 @@
 import { PREF_KEYS, readPref, writePref } from '../storage/prefs';
-import { deleteToken } from '../storage/secure';
+import { deleteProxyToken, deleteToken } from '../storage/secure';
 import type { ServerProfile, ServerProfileDraft } from './types';
 
 /** Profiles and which one is active, as persisted. */
@@ -41,12 +41,16 @@ export function createProfile(draft: ServerProfileDraft, id: string, nowUtc: str
     lastTenantName: null,
     lastUserEmail: null,
     createdUtc: nowUtc,
+    proxyInstanceId: null,
   };
 }
 
-/** Apply a draft to an existing profile. Changing the URL drops the remembered tenant (it belonged to the old server). */
+/**
+ * Apply a draft to an existing profile. Changing the URL or the kind drops the remembered tenant and proxy instance
+ * (they belonged to the old server).
+ */
 export function updateProfile(profile: ServerProfile, draft: ServerProfileDraft): ServerProfile {
-  const urlChanged = profile.url !== draft.url;
+  const urlChanged = profile.url !== draft.url || profile.kind !== draft.kind;
   return {
     ...profile,
     name: draft.name.trim() || draft.url,
@@ -55,12 +59,14 @@ export function updateProfile(profile: ServerProfile, draft: ServerProfileDraft)
     biometricUnlock: draft.biometricUnlock,
     lastTenantId: urlChanged ? null : profile.lastTenantId,
     lastTenantName: urlChanged ? null : profile.lastTenantName,
+    proxyInstanceId: urlChanged ? null : profile.proxyInstanceId ?? null,
   };
 }
 
-/** Remove a profile and its stored token; the next remaining profile becomes active when it was the active one. */
+/** Remove a profile and its stored tokens; the next remaining profile becomes active when it was the active one. */
 export async function removeProfile(state: ProfileState, id: string): Promise<ProfileState> {
   await deleteToken(id);
+  await deleteProxyToken(id);
   const profiles = state.profiles.filter((p) => p.id !== id);
   const activeId = state.activeId === id ? profiles[0]?.id ?? null : state.activeId;
   return { profiles, activeId };

@@ -75,11 +75,13 @@ export interface LocaleProviderProps {
   children: ReactNode;
   /** Server base URL to fetch the live catalog from once signed in (null while signed out). */
   serverUrl: string | null;
+  /** Headers for the catalog request (the proxy session when the server is reached through Armada.Proxy). */
+  requestHeaders?: Record<string, string> | null;
   /** Injectable for tests. */
   bundledCatalog?: () => I18nCatalog;
 }
 
-export function LocaleProvider({ children, serverUrl, bundledCatalog = loadBundledCatalog }: LocaleProviderProps) {
+export function LocaleProvider({ children, serverUrl, requestHeaders = null, bundledCatalog = loadBundledCatalog }: LocaleProviderProps) {
   const [locale, setLocaleState] = useState(() => pickInitialLocale(null, deviceLocales(), null));
   const [catalog, setCatalog] = useState<I18nCatalog | null>(null);
   const [catalogSource, setCatalogSource] = useState<LocaleState['catalogSource']>('none');
@@ -106,17 +108,19 @@ export function LocaleProvider({ children, serverUrl, bundledCatalog = loadBundl
   }, [locale, bundledCatalog]);
 
   // After sign-in, prefer the connected server's catalog (same file the dashboard loads).
+  const headersKey = requestHeaders ? JSON.stringify(requestHeaders) : '';
   useEffect(() => {
     if (!serverUrl) return undefined;
     let cancelled = false;
-    void fetchCatalog(`${serverUrl}${CATALOG_PATH}`).then((loaded) => {
+    const headers = headersKey ? (JSON.parse(headersKey) as Record<string, string>) : null;
+    void fetchCatalog(`${serverUrl}${CATALOG_PATH}`, headers ? { headers } : undefined).then((loaded) => {
       if (cancelled || !loaded || !Array.isArray(loaded.supportedLocales) || !loaded.locales) return;
       catalogRef.current = loaded;
       setCatalog(loaded);
       setCatalogSource('server');
     });
     return () => { cancelled = true; };
-  }, [serverUrl]);
+  }, [serverUrl, headersKey]);
 
   const setLocale = useCallback((next: string) => {
     const normalized = normalizeLocale(next, catalogRef.current);

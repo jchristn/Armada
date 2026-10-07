@@ -5,6 +5,7 @@ import {
   getClientBaseUrl,
   getStatus,
   restoreBackup,
+  setAuthToken,
   type DownloadedFile,
 } from './client';
 
@@ -14,7 +15,8 @@ function jsonResponse(status: number, body: unknown, headers: Record<string, str
 
 describe('host-agnostic client configuration', () => {
   afterEach(() => {
-    configureClient({ baseUrl: '', platform: null });
+    configureClient({ baseUrl: '', platform: null, headers: null });
+    setAuthToken(null);
     vi.unstubAllGlobals();
   });
 
@@ -66,5 +68,31 @@ describe('host-agnostic client configuration', () => {
     expect(result).toEqual({ restored: true });
     const init = fetchMock.mock.calls[0][1] as RequestInit;
     expect((init.headers as Record<string, string>)['X-Original-Filename']).toBe('backup.zip');
+  });
+
+  it('sends configured extra headers on every request, and the client\'s own headers win a clash', async () => {
+    configureClient({ headers: { 'X-Armada-Proxy-Session': 'proxy-session', 'X-Token': 'host-should-not-win' } });
+    setAuthToken('admiral-token');
+    const fetchMock = vi.fn().mockImplementation(async () => jsonResponse(200, {}));
+    vi.stubGlobal('fetch', fetchMock);
+    await getStatus();
+    await restoreBackup({ name: 'b.zip', arrayBuffer: async () => new Uint8Array([1]).buffer });
+    for (const call of fetchMock.mock.calls) {
+      const headers = (call[1] as RequestInit).headers as Record<string, string>;
+      expect(headers['X-Armada-Proxy-Session']).toBe('proxy-session');
+      expect(headers['X-Token']).toBe('admiral-token');
+    }
+  });
+
+  it('headers: null clears the extra headers, and leaving the field out keeps them', async () => {
+    configureClient({ headers: { 'X-Armada-Proxy-Session': 'p' } });
+    configureClient({ baseUrl: 'https://proxy.example' });
+    const fetchMock = vi.fn().mockImplementation(async () => jsonResponse(200, {}));
+    vi.stubGlobal('fetch', fetchMock);
+    await getStatus();
+    expect(((fetchMock.mock.calls[0][1] as RequestInit).headers as Record<string, string>)['X-Armada-Proxy-Session']).toBe('p');
+    configureClient({ headers: null });
+    await getStatus();
+    expect(((fetchMock.mock.calls[1][1] as RequestInit).headers as Record<string, string>)['X-Armada-Proxy-Session']).toBeUndefined();
   });
 });
