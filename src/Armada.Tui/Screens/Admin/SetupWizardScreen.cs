@@ -390,7 +390,8 @@ namespace Armada.Tui.Screens.Admin
         {
             [""] = "Uses the Admiral-wide landing settings.",
             ["None"] = "Finished work stays on a branch for you to review. Choose Local Merge to land it automatically.",
-            ["LocalMerge"] = "Finished work is merged into the working directory and pushed to its origin remote, so the checkout needs one.",
+            ["LocalMerge"] = "Finished work is merged into the working directory. Nothing is pushed.",
+            ["MergeAndPush"] = "Finished work is merged into the working directory and pushed to its origin remote, so the checkout needs one.",
             ["PullRequest"] = "Finished work is pushed and opened as a pull request (needs the GitHub CLI).",
             ["MergeQueue"] = "Finished work is queued; processing the merge queue tests and merges it.",
         };
@@ -663,9 +664,11 @@ namespace Armada.Tui.Screens.Admin
             }
 
             string landing = LandingMode.Value ?? "";
-            if (landing == "LocalMerge" && WorkingDirectory.Value.Trim().Length == 0)
+            if ((landing == "LocalMerge" || landing == "MergeAndPush") && WorkingDirectory.Value.Trim().Length == 0)
             {
-                SetResult(SetupWizardResultKindEnum.Error, L("Local Merge needs a working directory to merge into."));
+                SetResult(SetupWizardResultKindEnum.Error, landing == "MergeAndPush"
+                    ? L("Merge and Push needs a working directory to merge into.")
+                    : L("Local Merge needs a working directory to merge into."));
                 return;
             }
 
@@ -1115,6 +1118,7 @@ namespace Armada.Tui.Screens.Admin
                 new SelectOption<string>("", L("Default")),
                 new SelectOption<string>("None", L("None (safest for setup)")),
                 new SelectOption<string>("LocalMerge", L("Local Merge")),
+                new SelectOption<string>("MergeAndPush", L("Merge and Push")),
                 new SelectOption<string>("PullRequest", L("Pull Request")),
                 new SelectOption<string>("MergeQueue", L("Merge Queue")),
             };

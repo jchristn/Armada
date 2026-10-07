@@ -18,7 +18,8 @@ namespace Armada.Tui.Screens.Build
         public static readonly IReadOnlyList<LandingModeInfo> All = new List<LandingModeInfo>
         {
             new LandingModeInfo("", "Default (use global setting)", "global default", "Uses the global default landing mode configured for the Admiral."),
-            new LandingModeInfo("LocalMerge", "Local Merge -- into your working directory", "local working dir", "Merges the mission branch directly into your local working directory. Requires the vessel to have a working directory and local path configured."),
+            new LandingModeInfo("LocalMerge", "Local Merge -- into your working directory, no push", "local, no push", "Merges the mission branch into the default branch in your local working directory. Nothing is pushed. Requires the vessel to have a working directory and local path configured."),
+            new LandingModeInfo("MergeAndPush", "Merge and Push -- local merge, then push to the remote", "local + push", "Merges the mission branch into the default branch in your local working directory, then pushes it to the working directory's remote. Requires the vessel to have a working directory and local path configured, and the working directory needs a remote."),
             new LandingModeInfo("PullRequest", "Pull Request -- push and open a PR", "opens a PR", "Pushes the mission branch and opens a pull request on the remote. The mission stays open until the PR is merged."),
             new LandingModeInfo("MergeQueue", "Merge Queue -- validated sequential merge", "merge queue", "Enqueues the mission branch for a validated merge. The merge queue runs tests and merges branches one at a time per vessel."),
             new LandingModeInfo("None", "None -- manual integration", "manual only", "No automatic landing. Work stays as WorkProduced and the branch is kept in the repository for you to integrate manually."),

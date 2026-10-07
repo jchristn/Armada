@@ -228,6 +228,37 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                 }
             }));
 
+            cases.Add(TuiCase.Sync(Suite, "merge_and_push", "Merge and Push is offered after Local Merge, needs a working directory, and is sent as MergeAndPush", () =>
+            {
+                StubHttpHandler stub = EmptyServer();
+                using (TuiTestHost host = TuiCase.SignedIn(140, 44, "/setup", stub))
+                {
+                    SetupWizardScreen screen = Current(host);
+                    AssertTrue(host.PumpUntil(() => !screen.Loading), "loaded");
+                    AssertEqual("|None|LocalMerge|MergeAndPush|PullRequest|MergeQueue", String.Join("|", screen.LandingMode.Options.Select(o => o.Value)), "landing options");
+                    AssertEqual("Merge and Push", screen.LandingMode.Options.First(o => o.Value == "MergeAndPush").Label, "short name");
+                    screen.GoTo(1);
+                    host.Press("ctrl+u").Type("Fleet A").Press("ctrl+s");
+                    AssertTrue(host.PumpUntil(() => screen.Current == 2), "vessel step");
+                    screen.VesselName.Value = "svc";
+                    screen.RepoUrl.Value = "/tmp/svc";
+                    screen.LandingMode.Choose(screen.LandingMode.Options.First(o => o.Value == "LocalMerge"));
+                    AssertTrue(host.WaitForText("Finished work is merged into the working directory. Nothing is pushed."), "LocalMerge hint says nothing is pushed\n" + host.Screen());
+                    screen.LandingMode.Choose(screen.LandingMode.Options.First(o => o.Value == "MergeAndPush"));
+                    AssertTrue(host.WaitForText("pushed to its origin remote"), "MergeAndPush hint\n" + host.Screen());
+                    host.Press("ctrl+s");
+                    AssertTrue(host.WaitForText("Merge and Push needs a working directory to merge into."), "MergeAndPush validation\n" + host.Screen());
+                    AssertEqual(0, stub.CountFor("POST", "/api/v1/vessels"), "no vessel post without a working directory");
+                    screen.WorkingDirectory.Value = "/work/svc";
+                    host.Press("ctrl+s");
+                    AssertTrue(host.PumpUntil(() => screen.Current == 3), "advanced to captain");
+                    AssertEqual(1, stub.CountFor("POST", "/api/v1/vessels"), "one vessel post");
+                    SetupWizardVesselBody vesselBody = stub.LastBody<SetupWizardVesselBody>("POST", "/api/v1/vessels");
+                    AssertEqual("MergeAndPush", vesselBody.LandingMode, "landing mode");
+                    AssertEqual("/work/svc", vesselBody.WorkingDirectory, "working directory");
+                }
+            }));
+
             cases.Add(TuiCase.Sync(Suite, "skip_setup", "Skip Setup sets the completed preference and lands on Missions", () =>
             {
                 using (TuiTestHost host = TuiCase.SignedIn(120, 40, "/setup", EmptyServer()))

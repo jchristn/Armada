@@ -15,6 +15,7 @@ import {
 } from '../api/client';
 import MuxRuntimeFields from './captains/MuxRuntimeFields';
 import { buildMuxRuntimeOptionsJson, EMPTY_MUX_CAPTAIN_FORM, isMuxRuntime, type MuxCaptainFormFields } from '../lib/mux';
+import { SETUP_LANDING_MODES, setupLandingModeHint, setupLandingWorkingDirectoryError } from '../lib/setupLanding';
 import type { Captain, DeploymentEnvironment, Fleet, Mission, Vessel, VesselReadinessResult, WorkflowProfile } from '../types/models';
 import { useLocale } from '../context/LocaleContext';
 import MissionFailureDetails, { FAILED_MISSION_STATUSES } from './shared/MissionFailureDetails';
@@ -118,7 +119,7 @@ const tooltips = {
   defaultBranch: 'Default branch Armada should branch from when creating mission worktrees.',
   repoUrl: 'Git clone URL or local repository path for the repository Armada will manage.',
   workingDirectory: 'Optional path to your local checkout, used for local landing and git status checks.',
-  landingMode: 'Controls how completed mission work is landed. None keeps the work on a branch for you to review; Local Merge merges it into the working directory and pushes it to that checkout\'s origin remote.',
+  landingMode: 'Controls how completed mission work is landed. None keeps the work on a branch for you to review; Local Merge merges it into the working directory without pushing; Merge and Push also pushes it to that checkout\'s origin remote.',
   enableModelContext: 'Allow captains to save useful repository knowledge back onto the vessel for future missions.',
   allowConcurrentMissions: 'Allow more than one mission to run on this vessel at the same time.',
   projectContext: 'Optional architecture, build, test, and dependency notes injected into captain prompts.',
@@ -136,14 +137,6 @@ const tooltips = {
 };
 
 const SETTLED_MISSION_STATUSES = new Set(['Complete', 'Failed', 'Cancelled', 'WorkProduced', 'LandingFailed', 'PullRequestOpen']);
-
-const landingModeHints: Record<string, string> = {
-  '': 'Uses the Admiral-wide landing settings.',
-  None: 'Finished work stays on a branch for you to review. Choose Local Merge to land it automatically.',
-  LocalMerge: 'Finished work is merged into the working directory and pushed to its origin remote, so the checkout needs one.',
-  PullRequest: 'Finished work is pushed and opened as a pull request (needs the GitHub CLI).',
-  MergeQueue: 'Finished work is queued; processing the merge queue tests and merges it.',
-};
 
 function upsertById<T extends { id: string }>(items: T[], item: T): T[] {
   const found = items.some((existing) => existing.id === item.id);
@@ -499,8 +492,9 @@ export default function SetupWizard({ onClose, onHighlightChange }: SetupWizardP
       setResult({ kind: 'error', message: t('Repository URL is required.') });
       return;
     }
-    if (vesselForm.landingMode === 'LocalMerge' && !vesselForm.workingDirectory.trim()) {
-      setResult({ kind: 'error', message: t('Local Merge needs a working directory to merge into.') });
+    const landingError = setupLandingWorkingDirectoryError(vesselForm.landingMode, vesselForm.workingDirectory);
+    if (landingError) {
+      setResult({ kind: 'error', message: t(landingError) });
       return;
     }
 
@@ -834,13 +828,9 @@ export default function SetupWizard({ onClose, onHighlightChange }: SetupWizardP
                 value={vesselForm.landingMode}
                 onChange={(event) => setVesselForm({ ...vesselForm, landingMode: event.target.value })}
               >
-                <option value="">{t('Default')}</option>
-                <option value="None">{t('None (safest for setup)')}</option>
-                <option value="LocalMerge">{t('Local Merge')}</option>
-                <option value="PullRequest">{t('Pull Request')}</option>
-                <option value="MergeQueue">{t('Merge Queue')}</option>
+                {SETUP_LANDING_MODES.map((m) => <option key={m.value || 'default'} value={m.value}>{t(m.label)}</option>)}
               </select>
-              <small className="text-dim">{t(landingModeHints[vesselForm.landingMode] || landingModeHints[''])}</small>
+              <small className="text-dim">{t(setupLandingModeHint(vesselForm.landingMode))}</small>
             </div>
           </div>
           <div className="wizard-form-grid">
