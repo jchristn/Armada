@@ -58,6 +58,7 @@ EXTENSION_ROUTES = {
     "/more": ("more", "more.tsx", "More tab root: CONFIGURATION, ACTIVITY, SYSTEM, and app settings (phone navigation)"),
     "/preferences": ("more", "preferences.tsx", "App preferences: theme, language, push notifications for the connected server (device settings, not server settings)"),
     "/profiles": ("more", "profiles.tsx", "Server profiles: saved Admirals, one active (TUI-style connections)"),
+    "/setup": ("more", "setup.tsx", "Setup wizard (the dashboard shows it as a modal over every page; mobile opens it from Settings > Server)"),
     "/notification-center": (None, "notification-center.tsx", "In-app notification history (the dashboard's bell menu), a modal over every tab"),
     "/sign-in": (None, "sign-in.tsx", "Sign-in, biometric unlock, and unreachable-server states (the dashboard shows LoginFlow in place)"),
     "/password-change": (None, "password-change.tsx", "Default-password change with Skip (the dashboard shows PasswordChangeRequired in place)"),

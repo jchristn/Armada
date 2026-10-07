@@ -18,7 +18,7 @@
     {
       "kind": "route",
       "key": "/activity",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(more)/activity.tsx",
       "workstream": "W4.3",
       "notes": ""
@@ -50,7 +50,7 @@
     {
       "kind": "route",
       "key": "/api-explorer",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(more)/api-explorer/index.tsx",
       "workstream": "W4.4",
       "notes": ""
@@ -58,7 +58,7 @@
     {
       "kind": "route",
       "key": "/api-explorer/:operationId",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(more)/api-explorer/[operationId].tsx",
       "workstream": "W4.4",
       "notes": ""
@@ -122,7 +122,7 @@
     {
       "kind": "route",
       "key": "/checks/:id",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(work)/checks/[id].tsx",
       "workstream": "W4.1",
       "notes": ""
@@ -130,7 +130,7 @@
     {
       "kind": "route",
       "key": "/cli-permissions",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(more)/cli-permissions.tsx",
       "workstream": "W4.4",
       "notes": ""
@@ -138,7 +138,7 @@
     {
       "kind": "route",
       "key": "/configuration",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(more)/configuration.tsx",
       "workstream": "W4.2",
       "notes": ""
@@ -154,7 +154,7 @@
     {
       "kind": "route",
       "key": "/delivery",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(work)/delivery.tsx",
       "workstream": "W4.1",
       "notes": ""
@@ -170,7 +170,7 @@
     {
       "kind": "route",
       "key": "/deployments/:id",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(work)/deployments/[id].tsx",
       "workstream": "W4.1",
       "notes": ""
@@ -218,7 +218,7 @@
     {
       "kind": "route",
       "key": "/environments/:id",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(work)/environments/[id].tsx",
       "workstream": "W4.1",
       "notes": ""
@@ -298,7 +298,7 @@
     {
       "kind": "route",
       "key": "/incidents/:id",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(work)/incidents/[id].tsx",
       "workstream": "W4.1",
       "notes": ""
@@ -306,7 +306,7 @@
     {
       "kind": "route",
       "key": "/jobs",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(more)/jobs.tsx",
       "workstream": "W4.3",
       "notes": ""
@@ -402,7 +402,7 @@
     {
       "kind": "route",
       "key": "/personas/:name",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(more)/personas/[name].tsx",
       "workstream": "W4.2",
       "notes": ""
@@ -418,7 +418,7 @@
     {
       "kind": "route",
       "key": "/pipelines/:name",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(more)/pipelines/[name].tsx",
       "workstream": "W4.2",
       "notes": ""
@@ -450,7 +450,7 @@
     {
       "kind": "route",
       "key": "/playbooks/:id",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(more)/playbooks/[id].tsx",
       "workstream": "W4.2",
       "notes": ""
@@ -482,7 +482,7 @@
     {
       "kind": "route",
       "key": "/project-profiles/:id",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(more)/project-profiles/[id].tsx",
       "workstream": "W4.2",
       "notes": ""
@@ -498,7 +498,7 @@
     {
       "kind": "route",
       "key": "/prompt-templates/:name",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(more)/prompt-templates/[name].tsx",
       "workstream": "W4.2",
       "notes": ""
@@ -506,7 +506,7 @@
     {
       "kind": "route",
       "key": "/prompt-templates/create",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(more)/prompt-templates/create.tsx",
       "workstream": "W4.2",
       "notes": ""
@@ -522,7 +522,7 @@
     {
       "kind": "route",
       "key": "/releases/:id",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(work)/releases/[id].tsx",
       "workstream": "W4.1",
       "notes": ""
@@ -530,7 +530,7 @@
     {
       "kind": "route",
       "key": "/releases/new",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(work)/releases/new.tsx",
       "workstream": "W4.1",
       "notes": ""
@@ -546,7 +546,7 @@
     {
       "kind": "route",
       "key": "/requests/:id",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(more)/requests/[id].tsx",
       "workstream": "W4.3",
       "notes": ""
@@ -562,7 +562,7 @@
     {
       "kind": "route",
       "key": "/runbooks/:id",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(work)/runbooks/[id].tsx",
       "workstream": "W4.1",
       "notes": ""
@@ -570,7 +570,7 @@
     {
       "kind": "route",
       "key": "/server",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(more)/server.tsx",
       "workstream": "W4.4",
       "notes": ""
@@ -582,6 +582,14 @@
       "mobile": "src/app/(app)/(more)/settings.tsx",
       "workstream": "W0.5",
       "notes": "redirect to /server"
+    },
+    {
+      "kind": "route",
+      "key": "/setup",
+      "status": "extension",
+      "mobile": "src/app/(app)/(more)/setup.tsx",
+      "workstream": "W4.4",
+      "notes": "Setup wizard (the dashboard shows it as a modal over every page; mobile opens it from Settings > Server)"
     },
     {
       "kind": "route",
@@ -618,7 +626,7 @@
     {
       "kind": "route",
       "key": "/skills/:id",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(more)/skills/[id].tsx",
       "workstream": "W4.2",
       "notes": ""
@@ -706,7 +714,7 @@
     {
       "kind": "route",
       "key": "/workflow-profiles/:id",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(more)/workflow-profiles/[id].tsx",
       "workstream": "W4.2",
       "notes": ""
@@ -738,7 +746,7 @@
     {
       "kind": "tab",
       "key": "Activity:events",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "/activity?source=events",
       "workstream": "W4.3",
       "notes": "Events"
@@ -746,7 +754,7 @@
     {
       "kind": "tab",
       "key": "Activity:history",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "/activity?source=history",
       "workstream": "W4.3",
       "notes": "All Activity"
@@ -754,7 +762,7 @@
     {
       "kind": "tab",
       "key": "Activity:requests",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "/activity?source=requests",
       "workstream": "W4.3",
       "notes": "API Requests"
@@ -762,7 +770,7 @@
     {
       "kind": "tab",
       "key": "Activity:signals",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "/activity?source=signals",
       "workstream": "W4.3",
       "notes": "Signals"
@@ -770,7 +778,7 @@
     {
       "kind": "tab",
       "key": "Activity:tokens",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "/activity?source=tokens",
       "workstream": "W4.3",
       "notes": "Token Usage"
@@ -794,7 +802,7 @@
     {
       "kind": "tab",
       "key": "CliPermissions:requests",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "/cli-permissions?tab=requests",
       "workstream": "W4.4",
       "notes": "Requests"
@@ -802,7 +810,7 @@
     {
       "kind": "tab",
       "key": "CliPermissions:rules",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "/cli-permissions?tab=rules",
       "workstream": "W4.4",
       "notes": "Rules"
@@ -810,7 +818,7 @@
     {
       "kind": "tab",
       "key": "Configuration:endpoints",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "/configuration?tab=endpoints",
       "workstream": "W4.2",
       "notes": "Endpoints"
@@ -818,7 +826,7 @@
     {
       "kind": "tab",
       "key": "Configuration:harbors",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "/configuration?tab=harbors",
       "workstream": "W4.2",
       "notes": "Harbors"
@@ -826,7 +834,7 @@
     {
       "kind": "tab",
       "key": "Configuration:memory",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "/configuration?tab=memory",
       "workstream": "W4.2",
       "notes": "Memory"
@@ -834,7 +842,7 @@
     {
       "kind": "tab",
       "key": "Configuration:personas",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "/configuration?tab=personas",
       "workstream": "W4.2",
       "notes": "Personas"
@@ -842,7 +850,7 @@
     {
       "kind": "tab",
       "key": "Configuration:pipelines",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "/configuration?tab=pipelines",
       "workstream": "W4.2",
       "notes": "Pipelines"
@@ -850,7 +858,7 @@
     {
       "kind": "tab",
       "key": "Configuration:playbooks",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "/configuration?tab=playbooks",
       "workstream": "W4.2",
       "notes": "Playbooks"
@@ -858,7 +866,7 @@
     {
       "kind": "tab",
       "key": "Configuration:project-profiles",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "/configuration?tab=project-profiles",
       "workstream": "W4.2",
       "notes": "Project Profiles"
@@ -866,7 +874,7 @@
     {
       "kind": "tab",
       "key": "Configuration:prompts",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "/configuration?tab=prompts",
       "workstream": "W4.2",
       "notes": "Prompts"
@@ -874,7 +882,7 @@
     {
       "kind": "tab",
       "key": "Configuration:skills",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "/configuration?tab=skills",
       "workstream": "W4.2",
       "notes": "Skills"
@@ -882,7 +890,7 @@
     {
       "kind": "tab",
       "key": "Configuration:workflow-profiles",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "/configuration?tab=workflow-profiles",
       "workstream": "W4.2",
       "notes": "Workflow Profiles"
@@ -890,7 +898,7 @@
     {
       "kind": "tab",
       "key": "DeliveryHub:checks",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "/delivery?tab=checks",
       "workstream": "W4.1",
       "notes": "Checks"
@@ -898,7 +906,7 @@
     {
       "kind": "tab",
       "key": "DeliveryHub:deployments",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "/delivery?tab=deployments",
       "workstream": "W4.1",
       "notes": "Deployments"
@@ -906,7 +914,7 @@
     {
       "kind": "tab",
       "key": "DeliveryHub:environments",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "/delivery?tab=environments",
       "workstream": "W4.1",
       "notes": "Environments"
@@ -914,7 +922,7 @@
     {
       "kind": "tab",
       "key": "DeliveryHub:incidents",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "/delivery?tab=incidents",
       "workstream": "W4.1",
       "notes": "Incidents"
@@ -922,7 +930,7 @@
     {
       "kind": "tab",
       "key": "DeliveryHub:releases",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "/delivery?tab=releases",
       "workstream": "W4.1",
       "notes": "Releases"
@@ -930,7 +938,7 @@
     {
       "kind": "tab",
       "key": "DeliveryHub:runbooks",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "/delivery?tab=runbooks",
       "workstream": "W4.1",
       "notes": "Runbooks"
@@ -994,7 +1002,7 @@
     {
       "kind": "tab",
       "key": "ServerHub:credentials",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "/server?tab=credentials",
       "workstream": "W4.4",
       "notes": "Credentials"
@@ -1002,7 +1010,7 @@
     {
       "kind": "tab",
       "key": "ServerHub:diagnostics",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "/server?tab=diagnostics",
       "workstream": "W4.4",
       "notes": "Diagnostics"
@@ -1010,7 +1018,7 @@
     {
       "kind": "tab",
       "key": "ServerHub:server",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "/server?tab=server",
       "workstream": "W4.4",
       "notes": "Server"
@@ -1018,7 +1026,7 @@
     {
       "kind": "tab",
       "key": "ServerHub:tenants",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "/server?tab=tenants",
       "workstream": "W4.4",
       "notes": "Tenants"
@@ -1026,7 +1034,7 @@
     {
       "kind": "tab",
       "key": "ServerHub:users",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "/server?tab=users",
       "workstream": "W4.4",
       "notes": "Users"
@@ -1090,8 +1098,8 @@
     {
       "kind": "api",
       "key": "approveDeployment",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/delivery/DeploymentsTab.tsx, DeploymentDetail.tsx",
       "workstream": "W4.1",
       "notes": "Deployments"
     },
@@ -1146,8 +1154,8 @@
     {
       "kind": "api",
       "key": "cancelJob",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/activity/JobsScreen.tsx",
       "workstream": "W4.3",
       "notes": "Background jobs"
     },
@@ -1234,32 +1242,32 @@
     {
       "kind": "api",
       "key": "createCliPermissionRule",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/system/CliPermissionsHub.tsx",
       "workstream": "W4.4",
       "notes": "CLI Tool Permissions page (requests and rules hub); Ask and the approvals center decide requests through decideCliPermissionRequest (W1.2)"
     },
     {
       "kind": "api",
       "key": "createCredential",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/system/CredentialsTab.tsx",
       "workstream": "W4.4",
       "notes": "Credentials (admin)"
     },
     {
       "kind": "api",
       "key": "createDeployment",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/delivery/DeploymentsTab.tsx, DeploymentDetail.tsx",
       "workstream": "W4.1",
       "notes": "Deployments"
     },
     {
       "kind": "api",
       "key": "createEnvironment",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/delivery/EnvironmentsTab.tsx, EnvironmentDetail.tsx",
       "workstream": "W4.1",
       "notes": "Environments"
     },
@@ -1282,24 +1290,24 @@
     {
       "kind": "api",
       "key": "createHarbor",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/HarborsTab",
       "workstream": "W4.2",
       "notes": "Harbors (host runners)"
     },
     {
       "kind": "api",
       "key": "createIncident",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/delivery/IncidentsTab.tsx, IncidentDetail.tsx",
       "workstream": "W4.1",
       "notes": "Incidents"
     },
     {
       "kind": "api",
       "key": "createMemory",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/MemoriesTab",
       "workstream": "W4.2",
       "notes": "Memories"
     },
@@ -1314,8 +1322,8 @@
     {
       "kind": "api",
       "key": "createModelEndpoint",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/EndpointsTab",
       "workstream": "W4.2",
       "notes": "Model endpoints (embedding/inference)"
     },
@@ -1338,16 +1346,16 @@
     {
       "kind": "api",
       "key": "createPersona",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/PersonasTab, PersonaDetail",
       "workstream": "W4.2",
       "notes": "Personas"
     },
     {
       "kind": "api",
       "key": "createPipeline",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/PipelinesTab, PipelineDetail",
       "workstream": "W4.2",
       "notes": "Pipelines"
     },
@@ -1362,64 +1370,64 @@
     {
       "kind": "api",
       "key": "createPlaybook",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/PlaybooksTab, PlaybookDetail",
       "workstream": "W4.2",
       "notes": "Playbooks"
     },
     {
       "kind": "api",
       "key": "createProjectProfile",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/ProjectProfilesTab, ProjectProfileDetail",
       "workstream": "W4.2",
       "notes": "Project profiles"
     },
     {
       "kind": "api",
       "key": "createPromptTemplate",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/PromptTemplatesTab, PromptTemplateDetail",
       "workstream": "W4.2",
       "notes": "Prompt Templates"
     },
     {
       "kind": "api",
       "key": "createRelease",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/delivery/ReleasesTab.tsx, ReleaseDetail.tsx",
       "workstream": "W4.1",
       "notes": "Releases"
     },
     {
       "kind": "api",
       "key": "createRunbook",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/delivery/RunbooksTab.tsx, RunbookDetail.tsx",
       "workstream": "W4.1",
       "notes": "Runbooks"
     },
     {
       "kind": "api",
       "key": "createSkill",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/SkillsTab, SkillDetail",
       "workstream": "W4.2",
       "notes": "Skills directory"
     },
     {
       "kind": "api",
       "key": "createTenant",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/system/TenantsTab.tsx",
       "workstream": "W4.4",
       "notes": "Tenants (admin)"
     },
     {
       "kind": "api",
       "key": "createUser",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/system/UsersTab.tsx",
       "workstream": "W4.4",
       "notes": "Users (admin)"
     },
@@ -1442,8 +1450,8 @@
     {
       "kind": "api",
       "key": "createWorkflowProfile",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/WorkflowProfilesTab, WorkflowProfileDetail",
       "workstream": "W4.2",
       "notes": "Workflow Profiles"
     },
@@ -1490,32 +1498,32 @@
     {
       "kind": "api",
       "key": "deleteCheckRun",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/delivery/CheckRunsTab.tsx, CheckRunDetail.tsx",
       "workstream": "W4.1",
       "notes": "Check Runs"
     },
     {
       "kind": "api",
       "key": "deleteCliPermissionRule",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/system/CliPermissionsHub.tsx",
       "workstream": "W4.4",
       "notes": "CLI Tool Permissions page (requests and rules hub); Ask and the approvals center decide requests through decideCliPermissionRequest (W1.2)"
     },
     {
       "kind": "api",
       "key": "deleteCredential",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/system/CredentialsTab.tsx",
       "workstream": "W4.4",
       "notes": "Credentials (admin)"
     },
     {
       "kind": "api",
       "key": "deleteDeployment",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/delivery/DeploymentsTab.tsx, DeploymentDetail.tsx",
       "workstream": "W4.1",
       "notes": "Deployments"
     },
@@ -1530,8 +1538,8 @@
     {
       "kind": "api",
       "key": "deleteEnvironment",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/delivery/EnvironmentsTab.tsx, EnvironmentDetail.tsx",
       "workstream": "W4.1",
       "notes": "Environments"
     },
@@ -1570,24 +1578,24 @@
     {
       "kind": "api",
       "key": "deleteHarbor",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/HarborsTab",
       "workstream": "W4.2",
       "notes": "Harbors (host runners)"
     },
     {
       "kind": "api",
       "key": "deleteIncident",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/delivery/IncidentsTab.tsx, IncidentDetail.tsx",
       "workstream": "W4.1",
       "notes": "Incidents"
     },
     {
       "kind": "api",
       "key": "deleteMemory",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/MemoriesTab",
       "workstream": "W4.2",
       "notes": "Memories"
     },
@@ -1610,8 +1618,8 @@
     {
       "kind": "api",
       "key": "deleteModelEndpoint",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/EndpointsTab",
       "workstream": "W4.2",
       "notes": "Model endpoints (embedding/inference)"
     },
@@ -1634,16 +1642,16 @@
     {
       "kind": "api",
       "key": "deletePersona",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/PersonasTab, PersonaDetail",
       "workstream": "W4.2",
       "notes": "Personas"
     },
     {
       "kind": "api",
       "key": "deletePipeline",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/PipelinesTab, PipelineDetail",
       "workstream": "W4.2",
       "notes": "Pipelines"
     },
@@ -1658,64 +1666,64 @@
     {
       "kind": "api",
       "key": "deletePlaybook",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/PlaybooksTab, PlaybookDetail",
       "workstream": "W4.2",
       "notes": "Playbooks"
     },
     {
       "kind": "api",
       "key": "deleteProjectProfile",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/ProjectProfilesTab, ProjectProfileDetail",
       "workstream": "W4.2",
       "notes": "Project profiles"
     },
     {
       "kind": "api",
       "key": "deleteRelease",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/delivery/ReleasesTab.tsx, ReleaseDetail.tsx",
       "workstream": "W4.1",
       "notes": "Releases"
     },
     {
       "kind": "api",
       "key": "deleteRequestHistoryByFilter",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/activity/RequestsTab.tsx, RequestDetail.tsx",
       "workstream": "W4.3",
       "notes": "Request History"
     },
     {
       "kind": "api",
       "key": "deleteRequestHistoryEntries",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/activity/RequestsTab.tsx, RequestDetail.tsx",
       "workstream": "W4.3",
       "notes": "Request History"
     },
     {
       "kind": "api",
       "key": "deleteRequestHistoryEntry",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/activity/RequestsTab.tsx, RequestDetail.tsx",
       "workstream": "W4.3",
       "notes": "Request History"
     },
     {
       "kind": "api",
       "key": "deleteRunbook",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/delivery/RunbooksTab.tsx, RunbookDetail.tsx",
       "workstream": "W4.1",
       "notes": "Runbooks"
     },
     {
       "kind": "api",
       "key": "deleteRunbookExecution",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/delivery/RunbooksTab.tsx, RunbookDetail.tsx",
       "workstream": "W4.1",
       "notes": "Runbooks"
     },
@@ -1730,24 +1738,24 @@
     {
       "kind": "api",
       "key": "deleteSkill",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/SkillsTab, SkillDetail",
       "workstream": "W4.2",
       "notes": "Skills directory"
     },
     {
       "kind": "api",
       "key": "deleteTenant",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/system/TenantsTab.tsx",
       "workstream": "W4.4",
       "notes": "Tenants (admin)"
     },
     {
       "kind": "api",
       "key": "deleteUser",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/system/UsersTab.tsx",
       "workstream": "W4.4",
       "notes": "Users (admin)"
     },
@@ -1770,8 +1778,8 @@
     {
       "kind": "api",
       "key": "deleteWorkflowProfile",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/WorkflowProfilesTab, WorkflowProfileDetail",
       "workstream": "W4.2",
       "notes": "Workflow Profiles"
     },
@@ -1786,8 +1794,8 @@
     {
       "kind": "api",
       "key": "denyDeployment",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/delivery/DeploymentsTab.tsx, DeploymentDetail.tsx",
       "workstream": "W4.1",
       "notes": "Deployments"
     },
@@ -1802,8 +1810,8 @@
     {
       "kind": "api",
       "key": "disableHarbor",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/HarborsTab",
       "workstream": "W4.2",
       "notes": "Harbors (host runners)"
     },
@@ -1818,8 +1826,8 @@
     {
       "kind": "api",
       "key": "dispatchMission",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/system/SetupWizard.tsx",
       "workstream": "W4.4",
       "notes": "called by the Setup wizard (W4.4); the Operations screens create missions with createMission and voyages with createVoyage"
     },
@@ -1834,16 +1842,16 @@
     {
       "kind": "api",
       "key": "downloadBackup",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx (Server*Sections)",
       "workstream": "W4.4",
       "notes": "Backup / Restore"
     },
     {
       "kind": "api",
       "key": "enableHarbor",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/HarborsTab",
       "workstream": "W4.2",
       "notes": "Harbors (host runners)"
     },
@@ -1882,18 +1890,18 @@
     {
       "kind": "api",
       "key": "enumerateDeployments",
-      "status": "planned",
+      "status": "not-applicable",
       "mobile": "",
       "workstream": "W4.1",
-      "notes": "Deployments"
+      "notes": "no dashboard page calls it; the Deployments tab uses listDeployments"
     },
     {
       "kind": "api",
       "key": "enumerateEnvironments",
-      "status": "planned",
+      "status": "not-applicable",
       "mobile": "",
       "workstream": "W4.1",
-      "notes": "Environments"
+      "notes": "no dashboard page calls it; the Environments tab uses listEnvironments"
     },
     {
       "kind": "api",
@@ -1922,18 +1930,18 @@
     {
       "kind": "api",
       "key": "enumerateHistoryTimeline",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/activity/HistoryTab.tsx",
       "workstream": "W4.3",
       "notes": "History"
     },
     {
       "kind": "api",
       "key": "enumerateIncidents",
-      "status": "planned",
+      "status": "not-applicable",
       "mobile": "",
       "workstream": "W4.1",
-      "notes": "Incidents"
+      "notes": "no dashboard page calls it; the Incidents tab uses listIncidents"
     },
     {
       "kind": "api",
@@ -1946,26 +1954,26 @@
     {
       "kind": "api",
       "key": "enumerateReleases",
-      "status": "planned",
+      "status": "not-applicable",
       "mobile": "",
       "workstream": "W4.1",
-      "notes": "Releases"
+      "notes": "no dashboard page calls it; the Releases tab uses listReleases"
     },
     {
       "kind": "api",
       "key": "enumerateRunbookExecutions",
-      "status": "planned",
+      "status": "not-applicable",
       "mobile": "",
       "workstream": "W4.1",
-      "notes": "Runbooks"
+      "notes": "no dashboard page calls it; runbook screens use listRunbookExecutions"
     },
     {
       "kind": "api",
       "key": "enumerateRunbooks",
-      "status": "planned",
+      "status": "not-applicable",
       "mobile": "",
       "workstream": "W4.1",
-      "notes": "Runbooks"
+      "notes": "no dashboard page calls it; the Runbooks tab uses listRunbooks"
     },
     {
       "kind": "api",
@@ -2058,32 +2066,32 @@
     {
       "kind": "api",
       "key": "getCheckRun",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/delivery/CheckRunsTab.tsx, CheckRunDetail.tsx",
       "workstream": "W4.1",
       "notes": "Check Runs"
     },
     {
       "kind": "api",
       "key": "getCliPermissionRequest",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/system/CliPermissionsHub.tsx",
       "workstream": "W4.4",
       "notes": "CLI Tool Permissions page (requests and rules hub); Ask and the approvals center decide requests through decideCliPermissionRequest (W1.2)"
     },
     {
       "kind": "api",
       "key": "getCliPermissionRule",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/system/CliPermissionsHub.tsx",
       "workstream": "W4.4",
       "notes": "CLI Tool Permissions page (requests and rules hub); Ask and the approvals center decide requests through decideCliPermissionRequest (W1.2)"
     },
     {
       "kind": "api",
       "key": "getDeployment",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/delivery/DeploymentsTab.tsx, DeploymentDetail.tsx",
       "workstream": "W4.1",
       "notes": "Deployments"
     },
@@ -2098,8 +2106,8 @@
     {
       "kind": "api",
       "key": "getDoctor",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/system/DiagnosticsTab.tsx",
       "workstream": "W4.4",
       "notes": "Server hub Diagnostics tab; Home links to /server?tab=diagnostics as the dashboard does"
     },
@@ -2114,8 +2122,8 @@
     {
       "kind": "api",
       "key": "getEnvironment",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/delivery/EnvironmentsTab.tsx, EnvironmentDetail.tsx",
       "workstream": "W4.1",
       "notes": "Environments"
     },
@@ -2170,8 +2178,8 @@
     {
       "kind": "api",
       "key": "getHarbor",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/HarborsTab",
       "workstream": "W4.2",
       "notes": "Harbors (host runners)"
     },
@@ -2194,24 +2202,24 @@
     {
       "kind": "api",
       "key": "getIncident",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/delivery/IncidentsTab.tsx, IncidentDetail.tsx",
       "workstream": "W4.1",
       "notes": "Incidents"
     },
     {
       "kind": "api",
       "key": "getJob",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/activity/JobsScreen.tsx",
       "workstream": "W4.3",
       "notes": "Background jobs"
     },
     {
       "kind": "api",
       "key": "getMemory",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/MemoriesTab",
       "workstream": "W4.2",
       "notes": "Memories"
     },
@@ -2282,8 +2290,8 @@
     {
       "kind": "api",
       "key": "getModelEndpoint",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/EndpointsTab",
       "workstream": "W4.2",
       "notes": "Model endpoints (embedding/inference)"
     },
@@ -2314,16 +2322,16 @@
     {
       "kind": "api",
       "key": "getPersona",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/PersonasTab, PersonaDetail",
       "workstream": "W4.2",
       "notes": "Personas"
     },
     {
       "kind": "api",
       "key": "getPipeline",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/PipelinesTab, PipelineDetail",
       "workstream": "W4.2",
       "notes": "Pipelines"
     },
@@ -2338,24 +2346,24 @@
     {
       "kind": "api",
       "key": "getPlaybook",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/PlaybooksTab, PlaybookDetail",
       "workstream": "W4.2",
       "notes": "Playbooks"
     },
     {
       "kind": "api",
       "key": "getProjectProfile",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/ProjectProfilesTab, ProjectProfileDetail",
       "workstream": "W4.2",
       "notes": "Project profiles"
     },
     {
       "kind": "api",
       "key": "getPromptTemplate",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/PromptTemplatesTab, PromptTemplateDetail",
       "workstream": "W4.2",
       "notes": "Prompt Templates"
     },
@@ -2370,64 +2378,64 @@
     {
       "kind": "api",
       "key": "getRebuildStatus",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx (Server*Sections)",
       "workstream": "W4.4",
       "notes": "Server"
     },
     {
       "kind": "api",
       "key": "getRelease",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/delivery/ReleasesTab.tsx, ReleaseDetail.tsx",
       "workstream": "W4.1",
       "notes": "Releases"
     },
     {
       "kind": "api",
       "key": "getReleaseGitHubPullRequests",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/delivery/ReleasesTab.tsx, ReleaseDetail.tsx",
       "workstream": "W4.1",
       "notes": "Releases"
     },
     {
       "kind": "api",
       "key": "getRequestHistoryEntry",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/activity/RequestsTab.tsx, RequestDetail.tsx",
       "workstream": "W4.3",
       "notes": "Request History"
     },
     {
       "kind": "api",
       "key": "getRequestHistorySummary",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/activity/RequestsTab.tsx, RequestDetail.tsx",
       "workstream": "W4.3",
       "notes": "Request History"
     },
     {
       "kind": "api",
       "key": "getRunbook",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/delivery/RunbooksTab.tsx, RunbookDetail.tsx",
       "workstream": "W4.1",
       "notes": "Runbooks"
     },
     {
       "kind": "api",
       "key": "getRunbookExecution",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/delivery/RunbooksTab.tsx, RunbookDetail.tsx",
       "workstream": "W4.1",
       "notes": "Runbooks"
     },
     {
       "kind": "api",
       "key": "getSettings",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx (Server*Sections)",
       "workstream": "W4.4",
       "notes": "Settings"
     },
@@ -2442,8 +2450,8 @@
     {
       "kind": "api",
       "key": "getSkill",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/SkillsTab, SkillDetail",
       "workstream": "W4.2",
       "notes": "Skills directory"
     },
@@ -2458,8 +2466,8 @@
     {
       "kind": "api",
       "key": "getTokenUsage",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/activity/TokenUsageTab.tsx",
       "workstream": "W4.3",
       "notes": "Activity hub Token Usage source"
     },
@@ -2562,8 +2570,8 @@
     {
       "kind": "api",
       "key": "getWorkflowProfile",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/WorkflowProfilesTab, WorkflowProfileDetail",
       "workstream": "W4.2",
       "notes": "Workflow Profiles"
     },
@@ -2610,18 +2618,18 @@
     {
       "kind": "api",
       "key": "healthCheckModelEndpoints",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/EndpointsTab",
       "workstream": "W4.2",
       "notes": "Model endpoints (embedding/inference)"
     },
     {
       "kind": "api",
       "key": "importCheckRun",
-      "status": "planned",
+      "status": "not-applicable",
       "mobile": "",
       "workstream": "W4.1",
-      "notes": "Check Runs"
+      "notes": "no dashboard page calls it (check runs are imported by CI through the REST API)"
     },
     {
       "kind": "api",
@@ -2666,40 +2674,40 @@
     {
       "kind": "api",
       "key": "listCheckRuns",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/delivery/CheckRunsTab.tsx, CheckRunDetail.tsx",
       "workstream": "W4.1",
       "notes": "Check Runs"
     },
     {
       "kind": "api",
       "key": "listCliPermissionRequests",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/system/CliPermissionsHub.tsx",
       "workstream": "W4.4",
       "notes": "CLI Tool Permissions page (requests and rules hub); Ask and the approvals center decide requests through decideCliPermissionRequest (W1.2)"
     },
     {
       "kind": "api",
       "key": "listCliPermissionRules",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/system/CliPermissionsHub.tsx",
       "workstream": "W4.4",
       "notes": "CLI Tool Permissions page (requests and rules hub); Ask and the approvals center decide requests through decideCliPermissionRequest (W1.2)"
     },
     {
       "kind": "api",
       "key": "listCredentials",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/system/CredentialsTab.tsx",
       "workstream": "W4.4",
       "notes": "Credentials (admin)"
     },
     {
       "kind": "api",
       "key": "listDeployments",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/delivery/DeploymentsTab.tsx, DeploymentDetail.tsx",
       "workstream": "W4.1",
       "notes": "Deployments"
     },
@@ -2714,8 +2722,8 @@
     {
       "kind": "api",
       "key": "listEnvironments",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/delivery/EnvironmentsTab.tsx, EnvironmentDetail.tsx",
       "workstream": "W4.1",
       "notes": "Environments"
     },
@@ -2738,40 +2746,40 @@
     {
       "kind": "api",
       "key": "listHarbors",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/HarborsTab",
       "workstream": "W4.2",
       "notes": "Harbors (host runners)"
     },
     {
       "kind": "api",
       "key": "listHistoryTimeline",
-      "status": "planned",
+      "status": "not-applicable",
       "mobile": "",
       "workstream": "W4.3",
-      "notes": "History"
+      "notes": "no dashboard page calls it; All Activity pages through enumerateHistoryTimeline (which can exclude GET requests)"
     },
     {
       "kind": "api",
       "key": "listIncidents",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/delivery/IncidentsTab.tsx, IncidentDetail.tsx",
       "workstream": "W4.1",
       "notes": "Incidents"
     },
     {
       "kind": "api",
       "key": "listJobs",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/activity/JobsScreen.tsx",
       "workstream": "W4.3",
       "notes": "Background jobs"
     },
     {
       "kind": "api",
       "key": "listMemories",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/MemoriesTab",
       "workstream": "W4.2",
       "notes": "Memories"
     },
@@ -2802,8 +2810,8 @@
     {
       "kind": "api",
       "key": "listModelEndpoints",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/EndpointsTab",
       "workstream": "W4.2",
       "notes": "Model endpoints (embedding/inference)"
     },
@@ -2834,16 +2842,16 @@
     {
       "kind": "api",
       "key": "listPersonas",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/PersonasTab, PersonaDetail",
       "workstream": "W4.2",
       "notes": "Personas"
     },
     {
       "kind": "api",
       "key": "listPipelines",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/PipelinesTab, PipelineDetail",
       "workstream": "W4.2",
       "notes": "Pipelines"
     },
@@ -2858,56 +2866,56 @@
     {
       "kind": "api",
       "key": "listPlaybooks",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/PlaybooksTab, PlaybookDetail",
       "workstream": "W4.2",
       "notes": "Playbooks"
     },
     {
       "kind": "api",
       "key": "listProjectProfiles",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/ProjectProfilesTab, ProjectProfileDetail",
       "workstream": "W4.2",
       "notes": "Project profiles"
     },
     {
       "kind": "api",
       "key": "listPromptTemplates",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/PromptTemplatesTab, PromptTemplateDetail",
       "workstream": "W4.2",
       "notes": "Prompt Templates"
     },
     {
       "kind": "api",
       "key": "listReleases",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/delivery/ReleasesTab.tsx, ReleaseDetail.tsx",
       "workstream": "W4.1",
       "notes": "Releases"
     },
     {
       "kind": "api",
       "key": "listRequestHistory",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/activity/RequestsTab.tsx, RequestDetail.tsx",
       "workstream": "W4.3",
       "notes": "Request History"
     },
     {
       "kind": "api",
       "key": "listRunbookExecutions",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/delivery/RunbooksTab.tsx, RunbookDetail.tsx",
       "workstream": "W4.1",
       "notes": "Runbooks"
     },
     {
       "kind": "api",
       "key": "listRunbooks",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/delivery/RunbooksTab.tsx, RunbookDetail.tsx",
       "workstream": "W4.1",
       "notes": "Runbooks"
     },
@@ -2922,24 +2930,24 @@
     {
       "kind": "api",
       "key": "listSkills",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/SkillsTab, SkillDetail",
       "workstream": "W4.2",
       "notes": "Skills directory"
     },
     {
       "kind": "api",
       "key": "listTenants",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/system/TenantsTab.tsx",
       "workstream": "W4.4",
       "notes": "Tenants (admin)"
     },
     {
       "kind": "api",
       "key": "listUsers",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/system/UsersTab.tsx",
       "workstream": "W4.4",
       "notes": "Users (admin)"
     },
@@ -2962,8 +2970,8 @@
     {
       "kind": "api",
       "key": "listWorkflowProfiles",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/WorkflowProfilesTab, WorkflowProfileDetail",
       "workstream": "W4.2",
       "notes": "Workflow Profiles"
     },
@@ -3042,16 +3050,16 @@
     {
       "kind": "api",
       "key": "previewPersonaPrompt",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/ProjectProfilesTab, ProjectProfileDetail",
       "workstream": "W4.2",
       "notes": "Project profiles"
     },
     {
       "kind": "api",
       "key": "previewWorkflowProfileForVessel",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/WorkflowProfilesTab, WorkflowProfileDetail",
       "workstream": "W4.2",
       "notes": "Workflow Profiles"
     },
@@ -3098,8 +3106,8 @@
     {
       "kind": "api",
       "key": "rebuildServer",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx (Server*Sections)",
       "workstream": "W4.4",
       "notes": "Server"
     },
@@ -3114,8 +3122,8 @@
     {
       "kind": "api",
       "key": "refreshRelease",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/delivery/ReleasesTab.tsx, ReleaseDetail.tsx",
       "workstream": "W4.1",
       "notes": "Releases"
     },
@@ -3154,32 +3162,32 @@
     {
       "kind": "api",
       "key": "resetPromptTemplate",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/PromptTemplatesTab, PromptTemplateDetail",
       "workstream": "W4.2",
       "notes": "Prompt Templates"
     },
     {
       "kind": "api",
       "key": "resetServer",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx (Server*Sections)",
       "workstream": "W4.4",
       "notes": "Server"
     },
     {
       "kind": "api",
       "key": "resolveProjectProfileForVessel",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/ProjectProfilesTab, ProjectProfileDetail",
       "workstream": "W4.2",
       "notes": "Project profiles"
     },
     {
       "kind": "api",
       "key": "resolveWorkflowProfile",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/WorkflowProfilesTab, WorkflowProfileDetail",
       "workstream": "W4.2",
       "notes": "Workflow Profiles"
     },
@@ -3202,24 +3210,24 @@
     {
       "kind": "api",
       "key": "restartServer",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx (Server*Sections)",
       "workstream": "W4.4",
       "notes": "Server"
     },
     {
       "kind": "api",
       "key": "restoreBackup",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx (Server*Sections)",
       "workstream": "W4.4",
       "notes": "Backup / Restore"
     },
     {
       "kind": "api",
       "key": "retryCheckRun",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/delivery/CheckRunsTab.tsx, CheckRunDetail.tsx",
       "workstream": "W4.1",
       "notes": "Check Runs"
     },
@@ -3234,16 +3242,16 @@
     {
       "kind": "api",
       "key": "rollbackDeployment",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/delivery/DeploymentsTab.tsx, DeploymentDetail.tsx",
       "workstream": "W4.1",
       "notes": "Deployments"
     },
     {
       "kind": "api",
       "key": "rollbackServer",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx (Server*Sections)",
       "workstream": "W4.4",
       "notes": "Server"
     },
@@ -3266,8 +3274,8 @@
     {
       "kind": "api",
       "key": "runCheck",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/delivery/CheckRunsTab.tsx, CheckRunDetail.tsx",
       "workstream": "W4.1",
       "notes": "Check Runs"
     },
@@ -3354,8 +3362,8 @@
     {
       "kind": "api",
       "key": "startRunbookExecution",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/delivery/RunbooksTab.tsx, RunbookDetail.tsx",
       "workstream": "W4.1",
       "notes": "Runbooks"
     },
@@ -3402,8 +3410,8 @@
     {
       "kind": "api",
       "key": "stopServer",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx (Server*Sections)",
       "workstream": "W4.4",
       "notes": "Server"
     },
@@ -3434,8 +3442,8 @@
     {
       "kind": "api",
       "key": "syncGitHubActions",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/delivery/DeploymentsTab.tsx, DeploymentDetail.tsx",
       "workstream": "W4.1",
       "notes": "Deployments"
     },
@@ -3482,32 +3490,32 @@
     {
       "kind": "api",
       "key": "updateCliPermissionRule",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/system/CliPermissionsHub.tsx",
       "workstream": "W4.4",
       "notes": "CLI Tool Permissions page (requests and rules hub); Ask and the approvals center decide requests through decideCliPermissionRequest (W1.2)"
     },
     {
       "kind": "api",
       "key": "updateCredential",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/system/CredentialsTab.tsx",
       "workstream": "W4.4",
       "notes": "Credentials (admin)"
     },
     {
       "kind": "api",
       "key": "updateDeployment",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/delivery/DeploymentsTab.tsx, DeploymentDetail.tsx",
       "workstream": "W4.1",
       "notes": "Deployments"
     },
     {
       "kind": "api",
       "key": "updateEnvironment",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/delivery/EnvironmentsTab.tsx, EnvironmentDetail.tsx",
       "workstream": "W4.1",
       "notes": "Environments"
     },
@@ -3530,24 +3538,24 @@
     {
       "kind": "api",
       "key": "updateHarbor",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/HarborsTab",
       "workstream": "W4.2",
       "notes": "Harbors (host runners)"
     },
     {
       "kind": "api",
       "key": "updateIncident",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/delivery/IncidentsTab.tsx, IncidentDetail.tsx",
       "workstream": "W4.1",
       "notes": "Incidents"
     },
     {
       "kind": "api",
       "key": "updateMemory",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/MemoriesTab",
       "workstream": "W4.2",
       "notes": "Memories"
     },
@@ -3562,8 +3570,8 @@
     {
       "kind": "api",
       "key": "updateModelEndpoint",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/EndpointsTab",
       "workstream": "W4.2",
       "notes": "Model endpoints (embedding/inference)"
     },
@@ -3578,96 +3586,96 @@
     {
       "kind": "api",
       "key": "updatePersona",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/PersonasTab, PersonaDetail",
       "workstream": "W4.2",
       "notes": "Personas"
     },
     {
       "kind": "api",
       "key": "updatePipeline",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/PipelinesTab, PipelineDetail",
       "workstream": "W4.2",
       "notes": "Pipelines"
     },
     {
       "kind": "api",
       "key": "updatePlaybook",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/PlaybooksTab, PlaybookDetail",
       "workstream": "W4.2",
       "notes": "Playbooks"
     },
     {
       "kind": "api",
       "key": "updateProjectProfile",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/ProjectProfilesTab, ProjectProfileDetail",
       "workstream": "W4.2",
       "notes": "Project profiles"
     },
     {
       "kind": "api",
       "key": "updatePromptTemplate",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/PromptTemplatesTab, PromptTemplateDetail",
       "workstream": "W4.2",
       "notes": "Prompt Templates"
     },
     {
       "kind": "api",
       "key": "updateRelease",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/delivery/ReleasesTab.tsx, ReleaseDetail.tsx",
       "workstream": "W4.1",
       "notes": "Releases"
     },
     {
       "kind": "api",
       "key": "updateRunbook",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/delivery/RunbooksTab.tsx, RunbookDetail.tsx",
       "workstream": "W4.1",
       "notes": "Runbooks"
     },
     {
       "kind": "api",
       "key": "updateRunbookExecution",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/delivery/RunbooksTab.tsx, RunbookDetail.tsx",
       "workstream": "W4.1",
       "notes": "Runbooks"
     },
     {
       "kind": "api",
       "key": "updateSettings",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx (Server*Sections)",
       "workstream": "W4.4",
       "notes": "Settings"
     },
     {
       "kind": "api",
       "key": "updateSkill",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/SkillsTab, SkillDetail",
       "workstream": "W4.2",
       "notes": "Skills directory"
     },
     {
       "kind": "api",
       "key": "updateTenant",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/system/TenantsTab.tsx",
       "workstream": "W4.4",
       "notes": "Tenants (admin)"
     },
     {
       "kind": "api",
       "key": "updateUser",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/system/UsersTab.tsx",
       "workstream": "W4.4",
       "notes": "Users (admin)"
     },
@@ -3682,40 +3690,40 @@
     {
       "kind": "api",
       "key": "updateWorkflowProfile",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/WorkflowProfilesTab, WorkflowProfileDetail",
       "workstream": "W4.2",
       "notes": "Workflow Profiles"
     },
     {
       "kind": "api",
       "key": "validateModelEndpoint",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/EndpointsTab",
       "workstream": "W4.2",
       "notes": "Model endpoints (embedding/inference)"
     },
     {
       "kind": "api",
       "key": "validateProjectProfile",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/ProjectProfilesTab, ProjectProfileDetail",
       "workstream": "W4.2",
       "notes": "Project profiles"
     },
     {
       "kind": "api",
       "key": "validateWorkflowProfile",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/WorkflowProfilesTab, WorkflowProfileDetail",
       "workstream": "W4.2",
       "notes": "Workflow Profiles"
     },
     {
       "kind": "api",
       "key": "verifyDeployment",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/delivery/DeploymentsTab.tsx, DeploymentDetail.tsx",
       "workstream": "W4.1",
       "notes": "Deployments"
     },
@@ -3954,488 +3962,352 @@
     {
       "kind": "setting",
       "key": "settings.admiralPort",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx",
       "workstream": "W4.4",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.dataDirectory",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx",
       "workstream": "W4.4",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.databasePath",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx",
       "workstream": "W4.4",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.docksDirectory",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx",
       "workstream": "W4.4",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.fleetActions.defaultTimeoutSeconds",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx",
       "workstream": "W4.4",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.fleetActions.maxConcurrency",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx",
       "workstream": "W4.4",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.fleetActions.maxOutputBytes",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx",
       "workstream": "W4.4",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.fleetActions.runRetentionDays",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx",
       "workstream": "W4.4",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.heartbeatIntervalSeconds",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx",
       "workstream": "W4.4",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.idleCaptainTimeoutSeconds",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx",
       "workstream": "W4.4",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.import.allowedRoots",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx",
       "workstream": "W4.4",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.import.categorizationTimeoutMinutes",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx",
       "workstream": "W4.4",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.import.excludedDirectoryNames",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx",
       "workstream": "W4.4",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.import.inlineBatchLimit",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx",
       "workstream": "W4.4",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.import.maxDepth",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx",
       "workstream": "W4.4",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.landingMode",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx",
       "workstream": "W4.4",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.logDirectory",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx",
       "workstream": "W4.4",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.maxCaptains",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx",
       "workstream": "W4.4",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.mcpPort",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx",
       "workstream": "W4.4",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.permissions",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx",
       "workstream": "W4.4",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.permissions.allowOwnerApproval",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx",
       "workstream": "W4.4",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.permissions.askDefaultPolicy",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx",
       "workstream": "W4.4",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.permissions.missionDefaultPolicy",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx",
       "workstream": "W4.4",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.permissions.promptTimeoutSeconds",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx",
       "workstream": "W4.4",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.planningSessionAbandonmentTimeoutMinutes",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx",
       "workstream": "W4.4",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.planningSessionInactivityTimeoutMinutes",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx",
       "workstream": "W4.4",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.planningSessionRetentionDays",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx",
       "workstream": "W4.4",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.rebuildSlotRetentionCount",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx",
       "workstream": "W4.4",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.remoteControl.allowInvalidCertificates",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx",
       "workstream": "W4.4",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.remoteControl.connectTimeoutSeconds",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx",
       "workstream": "W4.4",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.remoteControl.enabled",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx",
       "workstream": "W4.4",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.remoteControl.enrollmentToken",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx",
       "workstream": "W4.4",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.remoteControl.heartbeatIntervalSeconds",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx",
       "workstream": "W4.4",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.remoteControl.instanceId",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx",
       "workstream": "W4.4",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.remoteControl.password",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx",
       "workstream": "W4.4",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.remoteControl.reconnectBaseDelaySeconds",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx",
       "workstream": "W4.4",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.remoteControl.reconnectMaxDelaySeconds",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx",
       "workstream": "W4.4",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.remoteControl.tunnelUrl",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx",
       "workstream": "W4.4",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.reposDirectory",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
-      "workstream": "W4.4",
-      "notes": ""
-    },
-    {
-      "kind": "setting",
-      "key": "settings.repositoryHealth.dependencyCommandTimeoutSeconds",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
-      "workstream": "W4.4",
-      "notes": ""
-    },
-    {
-      "kind": "setting",
-      "key": "settings.repositoryHealth.dependencyMaxAgeHours",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx",
       "workstream": "W4.4",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.repositoryHealth.fetchBeforeEvaluate",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
-      "workstream": "W4.4",
-      "notes": ""
-    },
-    {
-      "kind": "setting",
-      "key": "settings.repositoryHealth.intervalMinutes",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
-      "workstream": "W4.4",
-      "notes": ""
-    },
-    {
-      "kind": "setting",
-      "key": "settings.repositoryHealth.maxConcurrency",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
-      "workstream": "W4.4",
-      "notes": ""
-    },
-    {
-      "kind": "setting",
-      "key": "settings.repositoryHealth.missionWindowDays",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx",
       "workstream": "W4.4",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.repositoryHealth.scoredCriteria",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
-      "workstream": "W4.4",
-      "notes": ""
-    },
-    {
-      "kind": "setting",
-      "key": "settings.repositoryHealth.staleBranchDays",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
-      "workstream": "W4.4",
-      "notes": ""
-    },
-    {
-      "kind": "setting",
-      "key": "settings.repositoryHealth.thresholds.behindFail",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
-      "workstream": "W4.4",
-      "notes": ""
-    },
-    {
-      "kind": "setting",
-      "key": "settings.repositoryHealth.thresholds.behindWarn",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
-      "workstream": "W4.4",
-      "notes": ""
-    },
-    {
-      "kind": "setting",
-      "key": "settings.repositoryHealth.thresholds.missionFailureFail",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
-      "workstream": "W4.4",
-      "notes": ""
-    },
-    {
-      "kind": "setting",
-      "key": "settings.repositoryHealth.thresholds.missionFailureWarn",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
-      "workstream": "W4.4",
-      "notes": ""
-    },
-    {
-      "kind": "setting",
-      "key": "settings.repositoryHealth.thresholds.staleBranchFail",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
-      "workstream": "W4.4",
-      "notes": ""
-    },
-    {
-      "kind": "setting",
-      "key": "settings.repositoryHealth.thresholds.staleBranchWarn",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx",
       "workstream": "W4.4",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.retention",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
-      "workstream": "W4.4",
-      "notes": ""
-    },
-    {
-      "kind": "setting",
-      "key": "settings.retention.askThreadArchiveAfterDays",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
-      "workstream": "W4.4",
-      "notes": ""
-    },
-    {
-      "kind": "setting",
-      "key": "settings.retention.askThreadDeleteAfterDays",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
-      "workstream": "W4.4",
-      "notes": ""
-    },
-    {
-      "kind": "setting",
-      "key": "settings.retention.cliPermissionRequestRetentionDays",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
-      "workstream": "W4.4",
-      "notes": ""
-    },
-    {
-      "kind": "setting",
-      "key": "settings.retention.importBatchRetentionDays",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
-      "workstream": "W4.4",
-      "notes": ""
-    },
-    {
-      "kind": "setting",
-      "key": "settings.retention.jobRetentionDays",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx",
       "workstream": "W4.4",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.selfVesselId",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx",
       "workstream": "W4.4",
       "notes": ""
     },
     {
       "kind": "setting",
       "key": "settings.stallThresholdMinutes",
-      "status": "planned",
-      "mobile": "ServerSettingsScreen",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx",
       "workstream": "W4.4",
       "notes": ""
     }
