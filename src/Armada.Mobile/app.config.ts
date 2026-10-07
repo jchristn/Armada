@@ -50,6 +50,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   plugins: [
     'expo-router',
+    './plugins/withSceneLifecycle',
     [
       'expo-splash-screen',
       {
