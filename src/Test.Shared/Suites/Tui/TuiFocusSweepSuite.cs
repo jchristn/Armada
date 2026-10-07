@@ -343,6 +343,7 @@ namespace Test.Shared.Suites.Tui
             routes.Add(new TuiFocusRoute("/vessels/health", 190, 55, TuiBuildHealthSuite.Stub));
             routes.Add(new TuiFocusRoute("/vessels/vsl_demo", 180, 60, TuiBuildVesselsSuite.Stub));
             routes.Add(new TuiFocusRoute("/vessels/vsl_demo/onboarding", 180, 60, TuiBuildVesselsSuite.Stub));
+            routes.Add(new TuiFocusRoute("/vessels/vsl_demo/history", 160, 50, TuiBuildVesselHistorySuite.Stub));
             routes.Add(new TuiFocusRoute("/fleets/flt_web", 160, 45, BuildStubs.Server));
             routes.Add(new TuiFocusRoute("/vessels/import", 170, 50, () => TuiBuildImportSuite.Stub(() => 0)));
             routes.Add(new TuiFocusRoute("/activity?source=history", 170, 44, TuiActivityHistorySuite.Stub));

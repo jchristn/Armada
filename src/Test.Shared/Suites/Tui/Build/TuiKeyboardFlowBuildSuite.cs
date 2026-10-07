@@ -37,6 +37,7 @@ namespace Test.Shared.Suites.Tui.Build
 
             cases.Add(TuiCase.Sync(Suite, "import_wizard", "Keyboard flow: /vessels/import from Vessels (I), paths, discover, review filter and selection, import, open a result, back", TuiBuildPageFlows.ImportWizard));
             cases.Add(TuiCase.Sync(Suite, "vessel_dispatch", "Keyboard flow: d on a Vessels row and on the vessel page opens Dispatch with the vessel pre-selected", TuiBuildPageFlows.VesselDispatch));
+            cases.Add(TuiCase.Sync(Suite, "vessel_history", "Keyboard flow: /vessels/:id/history from the vessel page (H), a heatmap day (arrows, Enter), the list (Tab), a commit (Enter), the date prompt (t), back", TuiBuildPageFlows.VesselHistory));
             cases.Add(TuiCase.Sync(Suite, "vessel_detail_onboarding", "Keyboard flow: /vessels/:id tabs, edit form, missions row, onboarding (g), next step, back", TuiBuildPageFlows.VesselDetailAndOnboarding));
             return new TestSuiteDescriptor(suiteId: Suite, displayName: "TUI keyboard flows per screen (Build)", cases: cases);
         }

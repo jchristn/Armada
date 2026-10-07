@@ -22,7 +22,7 @@ namespace Armada.Tui.Screens.Build
     /// created; the repository URL with the default branch, landing mode with its short label, sync (commits ahead
     /// and behind the remote, fetched per vessel in the background), and branch count; Import repositories (tenant
     /// admins) and + Vessel; bulk Run action (tenant admins), Delete Selected, and Clear selection; and the row menu
-    /// (Manage Branches, Manage Objectives, Manage Fleet, Open Workspace, View Detail, Build or Refine Context, Edit,
+    /// (Manage Branches, Manage Objectives, Manage Fleet, Open Workspace, View Detail, View History, Build or Refine Context, Edit,
     /// Duplicate, View JSON, Delete). Not thread-safe.
     /// </summary>
     public class VesselsScreen : OpsListScreen<Vessel>
@@ -136,6 +136,7 @@ namespace Armada.Tui.Screens.Build
             RowActions.Add(new OpsAction<Vessel>("fleet", "Manage Fleet", v => Context.Navigate("/fleets/" + Uri.EscapeDataString(v.FleetId!)), "f", v => !String.IsNullOrEmpty(v.FleetId)));
             RowActions.Add(new OpsAction<Vessel>("workspace", "Open Workspace", v => Context.Navigate("/workspace/" + Uri.EscapeDataString(v.Id)), "w"));
             RowActions.Add(new OpsAction<Vessel>("view", "View Detail", v => OpenRow(v), "o"));
+            RowActions.Add(new OpsAction<Vessel>("history", "View History", v => Context.Navigate(HistoryRoute(v.Id)), "H"));
             RowActions.Add(new OpsAction<Vessel>("context", "Build Context", v => BuildContextForm.Open(this, v, updated => Refresh()), "B", v => !BuildContextForm.IsRefine(v)));
             RowActions.Add(new OpsAction<Vessel>("refine-context", "Refine Context", v => BuildContextForm.Open(this, v, updated => Refresh()), "B", BuildContextForm.IsRefine));
             RowActions.Add(new OpsAction<Vessel>("edit", "Edit", v => VesselForm.Open(this, v, Fleets, Pipelines, x => Refresh()), "e"));
@@ -166,6 +167,17 @@ namespace Armada.Tui.Screens.Build
             q["vesselId"] = vessel.Id;
             if (!String.IsNullOrEmpty(vessel.FleetId)) q["fleetId"] = vessel.FleetId!;
             return "/dispatch" + RouteMatch.BuildQuery(q);
+        }
+
+        /// <summary>
+        /// A vessel's commit history route.
+        /// </summary>
+        /// <param name="vesselId">Vessel id.</param>
+        /// <returns>Route.</returns>
+        public static string HistoryRoute(string vesselId)
+        {
+            if (String.IsNullOrEmpty(vesselId)) throw new ArgumentNullException(nameof(vesselId));
+            return "/vessels/" + Uri.EscapeDataString(vesselId) + "/history";
         }
 
         /// <summary>
