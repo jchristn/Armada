@@ -31,8 +31,9 @@ import { useNotifications } from '../context/NotificationContext';
 import { useAuth } from '../context/AuthContext';
 import CliPermissionPolicySelect from '../components/cliPermissions/CliPermissionPolicySelect';
 import { policyLabel } from '../lib/cliPermissions';
-import { buildMuxRuntimeOptionsJson, EMPTY_MUX_CAPTAIN_FORM, isMuxRuntime, muxFormFromCaptain, parseMuxCaptainOptions, type MuxCaptainFormFields } from '../lib/mux';
-import { applyAutoApprove, autoApproveFromCaptain, supportsAutoApproveSwitch } from '../lib/captainApproval';
+import { EMPTY_MUX_CAPTAIN_FORM, isMuxRuntime, parseMuxCaptainOptions, type MuxCaptainFormFields } from '../lib/mux';
+import { supportsAutoApproveSwitch } from '../lib/captainApproval';
+import { buildCaptainPayload, captainDetailActions, captainFormError, captainFormErrorMessage, captainFormFromCaptain, cliPolicyChanged } from '../lib/captainForm';
 import { buildCaptainDuplicatePayload } from '../lib/duplicates';
 
 const RUNTIMES = ['ClaudeCode', 'Codex', 'Gemini', 'Cursor', 'Mux', 'OpenCode', 'Custom'];
@@ -120,19 +121,7 @@ export default function CaptainDetail() {
 
   function openEdit() {
     if (!captain) return;
-    setForm({
-      name: captain.name,
-      runtime: captain.runtime || 'ClaudeCode',
-      systemInstructions: captain.systemInstructions ?? '',
-      model: captain.model ?? '',
-      reasoningEffort: captain.reasoningEffort ?? '',
-      tier: captain.tier ?? '',
-      allowedPersonas: captain.allowedPersonas ?? '',
-      preferredPersona: captain.preferredPersona ?? '',
-      autoApprove: autoApproveFromCaptain(captain),
-      cliPermissionPolicy: captain.cliPermissionPolicy ?? null,
-      ...muxFormFromCaptain(captain),
-    });
+    setForm(captainFormFromCaptain(captain, { withPersonas: true, defaultRuntime: 'ClaudeCode' }) as CaptainDetailFormState);
     setShowForm(true);
   }
 
@@ -140,32 +129,14 @@ export default function CaptainDetail() {
     e.preventDefault();
     if (!captain) return;
     try {
-      if (isMuxRuntime(form.runtime) && !form.muxEndpoint.trim()) {
-        setError(t('Mux captains require a named Mux endpoint.'));
+      const formError = captainFormError(form);
+      if (formError) {
+        setError(t(captainFormErrorMessage(formError)));
         return;
       }
 
-      const payload = { ...form } as Record<string, unknown>;
-      if (!payload.systemInstructions) delete payload.systemInstructions;
-      payload.model = form.model.trim() ? form.model.trim() : null;
-      payload.reasoningEffort = form.reasoningEffort ? form.reasoningEffort : null;
-      payload.tier = form.tier ? form.tier : null;
-      if (!payload.allowedPersonas) delete payload.allowedPersonas;
-      if (!payload.preferredPersona) delete payload.preferredPersona;
-      payload.runtimeOptionsJson = applyAutoApprove(buildMuxRuntimeOptionsJson(form.runtime, form), form.autoApprove || !supportsAutoApproveSwitch(form.runtime));
-      delete payload.autoApprove;
-      delete payload.muxConfigDirectory;
-      delete payload.muxEndpoint;
-      delete payload.muxBaseUrl;
-      delete payload.muxAdapterType;
-      delete payload.muxTemperature;
-      delete payload.muxMaxTokens;
-      delete payload.muxSystemPromptPath;
-      delete payload.muxApprovalPolicy;
-      // Captain update keeps the stored CLI tool permission policy; it changes through its own (admin) endpoint.
-      delete payload.cliPermissionPolicy;
-      await updateCaptain(captain.id, payload);
-      if ((captain.cliPermissionPolicy ?? null) !== form.cliPermissionPolicy) {
+      await updateCaptain(captain.id, buildCaptainPayload(form));
+      if (cliPolicyChanged(captain, form)) {
         await setCaptainCliPermissionPolicy(captain.id, form.cliPermissionPolicy);
       }
       setShowForm(false);
@@ -302,13 +273,9 @@ export default function CaptainDetail() {
       { label: 'View Log', onClick: handleViewLog },
       { label: 'View JSON', onClick: () => setJsonData({ open: true, title: t('Captain: {{name}}', { name: captain.name }), data: captain }) },
     ];
-    if (captain.state === 'Working' || captain.state === 'Stalled') {
-      items.push({ label: 'Recall Captain', onClick: handleRecall });
-      items.push({ label: 'Stop Captain', danger: true, onClick: handleStop });
-    }
-    if (captain.state === 'Planning') {
-      items.push({ label: 'Stop Captain', danger: true, onClick: handleStop });
-    }
+    const lifecycle = captainDetailActions(captain.state);
+    if (lifecycle.recall) items.push({ label: 'Recall Captain', onClick: handleRecall });
+    if (lifecycle.stop) items.push({ label: 'Stop Captain', danger: true, onClick: handleStop });
     items.push({ label: 'Remove', danger: true, onClick: handleRemove });
     return items;
   }
