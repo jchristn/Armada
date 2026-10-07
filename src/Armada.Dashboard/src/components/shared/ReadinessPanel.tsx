@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
-import type { VesselReadinessResult, WorkflowInputReferenceProvider } from '../../types/models';
+import type { VesselReadinessResult } from '../../types/models';
+import { formatInputProvider, getReadinessLabel, getReadinessTone, readinessBranchSummary, readinessDriftSummary } from '../../lib/readiness';
 
 interface ReadinessPanelProps {
   title: string;
@@ -9,51 +10,12 @@ interface ReadinessPanelProps {
   compact?: boolean;
 }
 
-function getReadinessTone(readiness: VesselReadinessResult | null): 'ready' | 'warning' | 'error' {
-  if (!readiness) return 'warning';
-  if (readiness.errorCount > 0) return 'error';
-  if (readiness.warningCount > 0) return 'warning';
-  return 'ready';
-}
-
-function getReadinessLabel(readiness: VesselReadinessResult | null): string {
-  if (!readiness) return 'Unknown';
-  if (readiness.errorCount > 0) return 'Blocked';
-  if (readiness.warningCount > 0) return 'Needs Attention';
-  return 'Ready';
-}
-
-function formatInputProvider(provider: WorkflowInputReferenceProvider | string | null | undefined): string {
-  switch (provider) {
-    case 'EnvironmentVariable':
-      return 'Environment variable';
-    case 'FilePath':
-      return 'File path';
-    case 'DirectoryPath':
-      return 'Directory path';
-    case 'AwsSecretsManager':
-      return 'AWS Secrets Manager';
-    case 'AzureKeyVaultSecret':
-      return 'Azure Key Vault';
-    case 'HashiCorpVault':
-      return 'HashiCorp Vault';
-    case 'OnePassword':
-      return '1Password';
-    default:
-      return provider || 'Input';
-  }
-}
-
 export default function ReadinessPanel(props: ReadinessPanelProps) {
   const { title, readiness, loading = false, emptyMessage = 'No readiness data.', compact = false } = props;
   const tone = getReadinessTone(readiness);
   const label = getReadinessLabel(readiness);
-  const branchSummary = readiness?.currentBranch
-    ? `${readiness.currentBranch}${readiness.isDetachedHead ? ' (detached HEAD)' : ''}`
-    : null;
-  const aheadBehindSummary = readiness && (readiness.commitsAhead != null || readiness.commitsBehind != null)
-    ? `${readiness.commitsAhead ?? 0} ahead / ${readiness.commitsBehind ?? 0} behind`
-    : null;
+  const branchSummary = readinessBranchSummary(readiness);
+  const aheadBehindSummary = readinessDriftSummary(readiness);
 
   return (
     <div className={`card readiness-panel${compact ? ' compact' : ''}`}>
