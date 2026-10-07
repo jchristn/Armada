@@ -14,6 +14,7 @@ import BackgroundActivityIndicator from './shared/BackgroundActivityIndicator';
 import CommandPalette from './shared/CommandPalette';
 import { dashboardItem, askArmadaItem, navSections, DEFAULT_EXPANDED_SECTIONS, type NavItem } from './navConfig';
 import { useInboxCount } from '../lib/useInboxCount';
+import { serverHealthIndicator } from '../lib/dashboardStatus';
 
 type HealthStatus = 'healthy' | 'warning' | 'error' | 'unknown';
 
@@ -60,10 +61,7 @@ export default function Layout() {
       getHealth()
         .then((data) => {
           if (!mounted) return;
-          const status = String(data.status || data.Status || '').toLowerCase();
-          if (status === 'healthy' || status === 'ok') setHealthStatus('healthy');
-          else if (status === 'degraded' || status === 'warning') setHealthStatus('warning');
-          else setHealthStatus('error');
+          setHealthStatus(serverHealthIndicator(data));
         })
         .catch(() => {
           if (mounted) setHealthStatus('error');

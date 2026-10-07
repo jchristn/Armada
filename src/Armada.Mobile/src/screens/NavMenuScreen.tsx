@@ -1,26 +1,16 @@
 import { useRouter, type Href } from 'expo-router';
-import { StyleSheet, View } from 'react-native';
 import { useAuth } from '../auth/AuthContext';
 import { DefaultCredentialsBanner } from '../components/app/DefaultCredentialsBanner';
-import { AppText, Icon, ListRow, Screen, Section } from '../components/ui';
+import { ListRow, Screen, Section } from '../components/ui';
 import { useLocale } from '../i18n/LocaleContext';
-import { HOME_ITEM, PREFERENCES_ITEM, PROFILES_ITEM, sectionsForTab, type MobileNavItem } from '../navigation/navItems';
-import { routeByPattern } from '../navigation/routeMatch';
+import { PREFERENCES_ITEM, PROFILES_ITEM, sectionsForTab, type MobileNavItem } from '../navigation/navItems';
 import type { TabKey } from '../navigation/routeTypes';
-import { spacing } from '../theme/typography';
 
-/**
- * Root of the Work and More tabs on phones: the dashboard's nav sections for that tab, in dashboard order. Work
- * also leads with the Home overview (W2.1); More ends with the app's own settings and sign-out.
- */
-export function NavMenuScreen({ tab }: { tab: 'work' | 'more' }) {
+function NavRow({ item }: { item: MobileNavItem }) {
   const router = useRouter();
   const { t } = useLocale();
-  const { logout, activeProfile, user } = useAuth();
-
-  const row = (item: MobileNavItem) => (
+  return (
     <ListRow
-      key={item.key}
       testID={`nav-${item.to}`}
       icon={item.icon}
       title={t(item.label)}
@@ -28,19 +18,38 @@ export function NavMenuScreen({ tab }: { tab: 'work' | 'more' }) {
       onPress={() => router.push(item.to as Href)}
     />
   );
+}
+
+/** The dashboard's nav sections listed on a phone tab, in dashboard order (Work also ends Home with these). */
+export function NavSections({ tab }: { tab: TabKey }) {
+  const { t } = useLocale();
+  return (
+    <>
+      {sectionsForTab(tab).map((section) => (
+        <Section key={section.key} title={t(section.label)}>
+          {section.items.map((item) => <NavRow key={item.key} item={item} />)}
+        </Section>
+      ))}
+    </>
+  );
+}
+
+/**
+ * Root of the More tab on phones: the dashboard's nav sections for that tab, then the app's own settings and
+ * sign-out. (The Work tab's root is Home, which ends with the Work sections.)
+ */
+export function NavMenuScreen({ tab }: { tab: 'work' | 'more' }) {
+  const router = useRouter();
+  const { t } = useLocale();
+  const { logout, activeProfile, user } = useAuth();
 
   return (
     <Screen testID={`${tab}-menu`}>
       <DefaultCredentialsBanner />
-      {tab === 'work' ? <HomeSummary /> : null}
-      {sectionsForTab(tab as TabKey).map((section) => (
-        <Section key={section.key} title={t(section.label)}>
-          {section.items.map(row)}
-        </Section>
-      ))}
+      <NavSections tab={tab} />
       {tab === 'more' ? (
         <Section title={t('App')}>
-          {row(PREFERENCES_ITEM)}
+          <NavRow item={PREFERENCES_ITEM} />
           <ListRow
             testID="nav-/profiles"
             icon={PROFILES_ITEM.icon}
@@ -54,23 +63,3 @@ export function NavMenuScreen({ tab }: { tab: 'work' | 'more' }) {
     </Screen>
   );
 }
-
-/** Home (the dashboard's overview) until W2.1 brings status, KPIs, and recent activity to this tab. */
-function HomeSummary() {
-  const { t } = useLocale();
-  const route = routeByPattern(HOME_ITEM.to);
-  return (
-    <View style={styles.home} testID="home-summary">
-      <Icon name={HOME_ITEM.icon} size={28} color="primary" />
-      <View style={styles.flex}>
-        <AppText variant="heading" accessibilityRole="header">{t(HOME_ITEM.label)}</AppText>
-        <AppText muted>{t('Coming in {{workstream}}', { workstream: route?.workstream ?? 'W2.1' })}</AppText>
-      </View>
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  home: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginHorizontal: spacing.lg, marginBottom: spacing.xl },
-  flex: { flex: 1 },
-});
