@@ -16,7 +16,7 @@ namespace Armada.Tui.Screens.Build
 
     /// <summary>
     /// A vessel's page (W4.4, <c>/vessels/:id</c>), the dashboard's VesselDetail: Manage Objectives, Manage Fleet,
-    /// Onboarding, Run Check, Open Workspace, Health (the health inspector with Re-evaluate), and View History as buttons, plus Edit,
+    /// Onboarding, Run Check, Open Workspace, Health (the health inspector with Re-evaluate), and History as buttons, plus Edit,
     /// Duplicate, View JSON, and Delete; the Readiness and Landing Preview panels, every field (branch prefixes and
     /// policies, auto-approve, the auto-land and Definition-of-Done gates, the GitHub token state), the context
     /// blocks (project context, style guide, protected branches, dock boundary, model context), and the vessel's
@@ -132,7 +132,7 @@ namespace Armada.Tui.Screens.Build
             Action("run-check", "Run Check", RunCheck, "k", () => Vessel != null, true);
             Action("workspace", "Open Workspace", () => Context.Navigate("/workspace/" + Uri.EscapeDataString(VesselId)), "w", () => Vessel != null, true);
             Action("health", "Health", ShowHealth, "h", () => Vessel != null, true);
-            Action("history", "View History", () => Context.Navigate(VesselsScreen.HistoryRoute(VesselId)), "H", () => Vessel != null, true);
+            Action("history", "History", () => Context.Navigate(VesselsScreen.HistoryRoute(VesselId)), "H", () => Vessel != null, true);
             Action("edit", "Edit", Edit, "e", () => Vessel != null);
             Action("duplicate", "Duplicate", Duplicate, "u", () => Vessel != null);
             Action("json", "View JSON", () => ShowJson(Tr("Vessel: {{name}}", LocalizationArgs.Of("name", Vessel!.Name)), Vessel), "j", () => Vessel != null);

@@ -347,7 +347,7 @@ namespace Test.Shared.Suites.Tui.Build
                     host.Tui.Context.Navigate("/vessels/vsl_demo");
                     AssertTrue(host.WaitForText("Needs Attention"), "vessel page\n" + host.Screen());
                     VesselScreen page = (VesselScreen)host.Tui.Shell.Screen!;
-                    AssertTrue(page.ActionBar.Buttons.Any(b => b.Label == "View History" && b.Visible), "header button");
+                    AssertTrue(page.ActionBar.Buttons.Any(b => b.Label == "History" && b.Visible), "header button");
                     host.Press("H");
                     AssertTrue(host.PumpUntil(() => host.Tui.Context.Router.Current!.FullPath == Route), "H on the vessel page");
                     AssertTrue(host.WaitForText("42 commits in the last year"), "history loaded");
@@ -355,7 +355,7 @@ namespace Test.Shared.Suites.Tui.Build
                     AssertTrue(host.PumpUntil(() => host.Tui.Context.Router.Current!.FullPath == "/vessels/vsl_demo"), "Alt+Left returns to the vessel page");
                     AssertTrue(host.WaitForText("Needs Attention"), "vessel page again");
                     host.Press(".");
-                    AssertTrue(host.WaitForText("View History"), "action menu lists View History");
+                    AssertTrue(host.WaitForText("History"), "action menu lists History");
                 }
             }));
 
