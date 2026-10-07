@@ -3,7 +3,7 @@
 > **Type:** implementation plan (work-tracking). Annotate task status and the progress log as you go; keep this
 > document in sync with what actually shipped.
 >
-> **Status:** In progress (W0 in progress; W5.1 and W5.2 done)
+> **Status:** In progress (W0, W5.1 and W5.2 done; W1 next)
 > **Built on:** React Native with Expo SDK 57 (TypeScript, Expo Router), in `src/Armada.Mobile`
 > **Parity baseline:** the web dashboard at `src/Armada.Dashboard` as of 2026-10-07 (the same surfaces the TUI parity
 > manifest tracks: page routes, hub tabs, server-calling API client functions, WebSocket events, Server-page settings)
@@ -123,20 +123,20 @@ selection) are recorded per entry in the manifest notes.
 ## Workstreams and tasks
 
 ### W0. Foundation
-- [ ] W0.1 Expo app scaffold (SDK 57, Expo Router, TypeScript strict, Hermes, ESLint), Metro sharing of dashboard
+- [x] W0.1 Expo app scaffold (SDK 57, Expo Router, TypeScript strict, Hermes, ESLint), Metro sharing of dashboard
   modules, `configureClient()` refactor in the dashboard (dashboard tests stay green)
-- [ ] W0.2 Theme (light, dark, high contrast, system), typography with font scaling, shared UI kit (list rows,
+- [x] W0.2 Theme (light, dark, high contrast, system), typography with font scaling, shared UI kit (list rows,
   sections, status badges, empty/error/loading states, bottom sheet, confirm dialog, form fields, segmented control,
   search, swipe actions)
-- [ ] W0.3 i18n (bundled plus server catalog), locale picker
-- [ ] W0.4 Server profiles, secure storage, sign-in flows (direct password with tenant lookup, API key), password
+- [x] W0.3 i18n (bundled plus server catalog), locale picker
+- [x] W0.4 Server profiles, secure storage, sign-in flows (direct password with tenant lookup, API key), password
   change with Skip, sign-out, biometric unlock
-- [ ] W0.5 Adaptive navigation shell (phone tabs, tablet sidebar and split view), deep links
-- [ ] W0.6 WebSocket lifecycle (foreground/background, reconnect), notification center (in-app), Approvals badge
-- [ ] W0.7 Test infrastructure: Jest + React Native Testing Library with the shared API client mocked; Maestro E2E
+- [x] W0.5 Adaptive navigation shell (phone tabs, tablet sidebar and split view), deep links
+- [x] W0.6 WebSocket lifecycle (foreground/background, reconnect), notification center (in-app), Approvals badge
+- [x] W0.7 Test infrastructure: Jest + React Native Testing Library with the shared API client mocked; Maestro E2E
   flows against a throwaway Admiral on the iOS simulator and the Android emulator
-- [ ] W0.8 Parity manifest `src/Armada.Mobile/parity.json` and `scripts/mobile/generate-parity-manifest.py --check`
-- [ ] W0.9 CI: typecheck, lint, Jest, parity check on every push; EAS build profiles (development, preview,
+- [x] W0.8 Parity manifest `src/Armada.Mobile/parity.json` and `scripts/mobile/generate-parity-manifest.py --check`
+- [x] W0.9 CI: typecheck, lint, Jest, parity check on every push; EAS build profiles (development, preview,
   production) and `eas.json`; store metadata skeleton
 
 ### W1. Ask Armada and Approvals
@@ -202,3 +202,4 @@ Milestone C: push, proxy, quality pass, store-ready builds.
 | 2026-10-07 | orchestrator | plan | Plan written from the maintainer's decisions (Expo, full parity, direct + proxy + push, store-ready) |
 | 2026-10-07 | W5.2 | work/mobile-proxy | Proxy bearer sessions for native clients; proxy session cookie and header no longer enter the tunnel (F-38); sessions stored by SHA-256; Armada.Client ProxySessionToken; 46/46 proxy and 5/5 relay tests |
 | 2026-10-07 | W5.1 | work/mobile-push | S1+S2: push_devices (migration 79, 4 providers), /api/v1/push/devices, PushNotificationService over Expo (batched, retry, DeviceNotRegistered cleanup, rate limit, dedupe), Push settings with redacted token; DB parity OK on all four providers. Recipients: failures to owner only, approvals to owner and tenant admins; iOS category armada_approve_deny |
+| 2026-10-07 | W0 | work/mobile-w0 | Expo SDK 57 app; dashboard client host-agnostic (configureClient); profiles, sign-in, Skip, biometric; adaptive shell + deep links + placeholders for all 85 routes; socket lifecycle, notifications, Approvals badge; 171 Jest, Maestro 3/3 on iOS and Android; parity.json 552 entries; CI mobile job; iOS scene plugin (remove on SDK 58) |
