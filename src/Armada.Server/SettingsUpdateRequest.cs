@@ -125,5 +125,13 @@ namespace Armada.Server
         /// and PromptTimeoutSeconds is clamped to 10..3600. Applied live to the next launch.
         /// </summary>
         public CliPermissionSettings? Permissions { get; set; }
+
+        /// <summary>
+        /// Optional push notification settings update (Enabled, ExpoAccessToken, Categories, MaxPerUserPerMinute,
+        /// DedupeWindowSeconds). When supplied, replaces the full push object; omitted fields take their defaults and
+        /// out-of-range values are clamped. ExpoAccessToken sent back as the redacted value from GET keeps the stored
+        /// token. Applied live.
+        /// </summary>
+        public PushSettings? Push { get; set; }
     }
 }

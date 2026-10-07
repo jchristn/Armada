@@ -1655,7 +1655,26 @@ namespace Armada.Core.Database.Postgresql.Queries
                     @"CREATE INDEX IF NOT EXISTS idx_cli_permission_rules_tenant_scope ON cli_permission_rules(tenant_id, scope);",
                     @"ALTER TABLE captains ADD COLUMN IF NOT EXISTS cli_permission_policy TEXT NULL;",
                     @"ALTER TABLE ask_threads ADD COLUMN IF NOT EXISTS cli_permission_policy TEXT NULL;",
-                    @"ALTER TABLE ask_message_tool_calls ADD COLUMN IF NOT EXISTS permission_denied BOOLEAN NULL;")
+                    @"ALTER TABLE ask_message_tool_calls ADD COLUMN IF NOT EXISTS permission_denied BOOLEAN NULL;"),
+
+                new SchemaMigration(79, "Add push notification devices: push_devices table (one row per Expo push token, owned by a user)",
+                    @"CREATE TABLE IF NOT EXISTS push_devices (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        tenant_id TEXT,
+                        user_id TEXT,
+                        platform TEXT NOT NULL,
+                        expo_push_token TEXT NOT NULL,
+                        device_name TEXT,
+                        app_version TEXT,
+                        locale TEXT,
+                        categories TEXT NOT NULL,
+                        active BOOLEAN NOT NULL DEFAULT TRUE,
+                        created_utc TIMESTAMP NOT NULL,
+                        last_seen_utc TIMESTAMP NOT NULL,
+                        last_update_utc TIMESTAMP NOT NULL
+                    );",
+                    @"CREATE UNIQUE INDEX IF NOT EXISTS idx_push_devices_token ON push_devices(expo_push_token);",
+                    @"CREATE INDEX IF NOT EXISTS idx_push_devices_tenant_user ON push_devices(tenant_id, user_id);")
 
             };
         }

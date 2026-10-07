@@ -218,6 +218,7 @@ namespace Test.Shared.Suites.E2E
             logging.Settings.EnableConsole = false;
             ArmadaServer server = new ArmadaServer(logging, settings, quiet: true);
             server.RuntimeToolDiscoverySource = new RecordingRuntimeToolDiscoverySource();
+            server.PushTransport = new RecordingPushTransport();
             return server;
         }
 

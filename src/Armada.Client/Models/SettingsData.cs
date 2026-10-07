@@ -125,6 +125,11 @@ namespace Armada.Client.Models
         /// </summary>
         public Armada.Core.Settings.CliPermissionSettings? Permissions { get; set; } = null;
 
+        /// <summary>
+        /// Push notification settings (ExpoAccessToken redacted when set).
+        /// </summary>
+        public Armada.Core.Settings.PushSettings? Push { get; set; } = null;
+
         #endregion
 
         #region Constructors-and-Factories

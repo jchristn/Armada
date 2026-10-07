@@ -235,6 +235,11 @@ namespace Armada.Core.Database
         public ICliPermissionRuleMethods CliPermissionRules { get; protected set; } = null!;
 
         /// <summary>
+        /// Push notification device methods.
+        /// </summary>
+        public IPushDeviceMethods PushDevices { get; protected set; } = null!;
+
+        /// <summary>
         /// Fleet action definition operations.
         /// </summary>
         public IFleetActionMethods FleetActions { get; protected set; } = null!;

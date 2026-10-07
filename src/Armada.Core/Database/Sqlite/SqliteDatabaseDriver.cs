@@ -121,6 +121,7 @@ namespace Armada.Core.Database.Sqlite
             AskTrackedWork = new AskTrackedWorkMethods(this, _Settings, _Logging);
             CliPermissionRequests = new CliPermissionRequestMethods(this, _Settings, _Logging);
             CliPermissionRules = new CliPermissionRuleMethods(this, _Settings, _Logging);
+            PushDevices = new PushDeviceMethods(this, _Settings, _Logging);
             FleetActions = new FleetActionMethods(this, _Settings, _Logging);
             FleetActionRuns = new FleetActionRunMethods(this, _Settings, _Logging);
             FleetActionRunTargets = new FleetActionRunTargetMethods(this, _Settings, _Logging);
@@ -187,6 +188,7 @@ namespace Armada.Core.Database.Sqlite
             AskTrackedWork = new AskTrackedWorkMethods(this, _Settings, _Logging);
             CliPermissionRequests = new CliPermissionRequestMethods(this, _Settings, _Logging);
             CliPermissionRules = new CliPermissionRuleMethods(this, _Settings, _Logging);
+            PushDevices = new PushDeviceMethods(this, _Settings, _Logging);
             FleetActions = new FleetActionMethods(this, _Settings, _Logging);
             FleetActionRuns = new FleetActionRunMethods(this, _Settings, _Logging);
             FleetActionRunTargets = new FleetActionRunTargetMethods(this, _Settings, _Logging);

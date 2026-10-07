@@ -61,6 +61,13 @@ namespace Armada.Core.Authorization
             Add("PUT", "/api/v1/cli-permissions/rules/{id}", "CliPermission", ResourceOperationEnum.Update, PermissionLevel.TenantAdmin);
             Add("DELETE", "/api/v1/cli-permissions/rules/{id}", "CliPermission", ResourceOperationEnum.Delete, PermissionLevel.TenantAdmin);
 
+            // PushRoutes (owner / tenant admin / global admin scoping is checked per device by PushDeviceAccess)
+            Add("POST", "/api/v1/push/devices", "PushDevice", ResourceOperationEnum.Create, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/push/devices", "PushDevice", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("PUT", "/api/v1/push/devices/{id}", "PushDevice", ResourceOperationEnum.Update, PermissionLevel.Authenticated);
+            Add("DELETE", "/api/v1/push/devices/{id}", "PushDevice", ResourceOperationEnum.Delete, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/push/devices/{id}/test", "PushDevice", ResourceOperationEnum.Execute, PermissionLevel.Authenticated);
+
             // AuthRoutes
             Add("POST", "/api/v1/authenticate", "Session", ResourceOperationEnum.Execute, PermissionLevel.NoAuthRequired);
             Add("GET", "/api/v1/whoami", "Session", ResourceOperationEnum.Read, PermissionLevel.Authenticated);

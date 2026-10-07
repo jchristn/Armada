@@ -225,6 +225,11 @@ namespace Armada.Core
         public static readonly string CliPermissionRuleIdPrefix = "cpl_";
 
         /// <summary>
+        /// ID prefix for push notification devices (a mobile app installation registered for push).
+        /// </summary>
+        public static readonly string PushDeviceIdPrefix = "pdv_";
+
+        /// <summary>
         /// ID prefix for Ask Armada thread messages.
         /// </summary>
         public static readonly string AskMessageIdPrefix = "amg_";

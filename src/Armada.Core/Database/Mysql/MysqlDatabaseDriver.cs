@@ -73,6 +73,7 @@ namespace Armada.Core.Database.Mysql
             AskTrackedWork = new AskTrackedWorkMethods(_ConnectionString);
             CliPermissionRequests = new CliPermissionRequestMethods(_ConnectionString);
             CliPermissionRules = new CliPermissionRuleMethods(_ConnectionString);
+            PushDevices = new PushDeviceMethods(_ConnectionString);
             FleetActions = new FleetActionMethods(_ConnectionString);
             FleetActionRuns = new FleetActionRunMethods(_ConnectionString);
             FleetActionRunTargets = new FleetActionRunTargetMethods(_ConnectionString);
@@ -715,6 +716,11 @@ namespace Armada.Core.Database.Mysql
                     78,
                     "Add CLI tool permissions: cli_permission_requests and cli_permission_rules tables, cli_permission_policy on captains and ask_threads, and permission_denied on ask_message_tool_calls",
                     TableQueries.MigrationV78Statements
+                ),
+                new SchemaMigration(
+                    79,
+                    "Add push notification devices: push_devices table (one row per Expo push token, owned by a user)",
+                    TableQueries.MigrationV79Statements
                 )
             };
         }

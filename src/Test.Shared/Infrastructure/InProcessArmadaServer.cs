@@ -121,6 +121,7 @@ namespace Test.Shared.Infrastructure
 
             ArmadaServer server = new ArmadaServer(logging, Settings, quiet: true);
             server.RuntimeToolDiscoverySource = new RecordingRuntimeToolDiscoverySource();
+            server.PushTransport = new RecordingPushTransport();
             await server.StartAsync().ConfigureAwait(false);
             _StubAgents.InstallOn(server);
             _Server = server;

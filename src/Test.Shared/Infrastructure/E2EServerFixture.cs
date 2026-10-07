@@ -83,6 +83,11 @@ namespace Test.Shared.Infrastructure
         public RecordingRuntimeToolDiscoverySource RuntimeToolDiscovery { get; } = new RecordingRuntimeToolDiscoverySource();
 
         /// <summary>
+        /// Push transport double the server uses, so tests never call the Expo Push Service.
+        /// </summary>
+        public RecordingPushTransport PushTransport { get; } = new RecordingPushTransport();
+
+        /// <summary>
         /// Temp directory holding the server's database, logs, docks, and repos.
         /// </summary>
         public string TempDir { get; private set; } = "";
@@ -356,6 +361,7 @@ namespace Test.Shared.Infrastructure
             Stopwatch elapsed = Stopwatch.StartNew();
             _Server = new ArmadaServer(logging, settings, quiet: true);
             _Server.RuntimeToolDiscoverySource = RuntimeToolDiscovery;
+            _Server.PushTransport = PushTransport;
             try
             {
                 await _Server.StartAsync().ConfigureAwait(false);

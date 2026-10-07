@@ -47,6 +47,7 @@ camelizes REST responses.
   - [Captains](#captains)
   - [Ask](#ask)
   - [CLI Permissions](#cli-permissions)
+  - [Push Notifications](#push-notifications)
   - [Signals](#signals)
   - [Events](#events)
   - [Docks](#docks)
@@ -270,6 +271,8 @@ without a declaration requires a global admin. The complete per-route list is th
 | `/api/v1/cli-permissions/requests/{id}/decide` | POST | Authenticated | Checked per request: global admin, tenant admin of the request's tenant, or the owner when `Permissions.AllowOwnerApproval` is true (`403` otherwise); `AllowAndRemember` needs an admin |
 | `/api/v1/cli-permissions/rules` | GET | Authenticated | Caller's tenant plus rules for every tenant. `POST`, `PUT`, and `DELETE` (`.../rules/{id}`) are TenantAdmin (a tenant admin only within their tenant) |
 | `/api/v1/ask/threads/{id}/cli-permission-policy` | PUT | Authenticated | Thread owner only (`404` otherwise); `Bypass` requires a global or tenant admin (`403`) |
+| `/api/v1/push/devices` | GET, POST | Authenticated | Register for yourself (captain sessions get `403`); list your own devices, or (`userId`) another user's as a tenant admin of their tenant or a global admin (`403` otherwise) |
+| `/api/v1/push/devices/{id}` | PUT, DELETE | Authenticated | Owner, tenant admins of the device's tenant, global admins; `404` otherwise (also `POST .../test`) |
 | `/api/v1/missions` | GET, POST `.../enumerate` | Authenticated | Tenant-scoped reads. Every create, update, delete, and action route under the prefix is TenantAdmin |
 | `/api/v1/voyages` | GET, POST `.../enumerate` | Authenticated | Tenant-scoped reads. Every create, update, delete, and action route under the prefix is TenantAdmin |
 | `/api/v1/docks` | GET, POST `.../enumerate` | Authenticated | Tenant-scoped reads. Every create, update, delete, and action route under the prefix is TenantAdmin |
@@ -1178,6 +1181,13 @@ Returns current server settings including ports, agent configuration, system pat
     "MissionDefaultPolicy": "Bypass",
     "AllowOwnerApproval": false,
     "PromptTimeoutSeconds": 600
+  },
+  "Push": {
+    "Enabled": true,
+    "ExpoAccessToken": "********",
+    "Categories": ["AskProposal", "CliPermission", "MissionReview", "DeploymentApproval", "MissionFailed", "LandingFailed", "CaptainStalled", "VoyageFinished"],
+    "MaxPerUserPerMinute": 20,
+    "DedupeWindowSeconds": 300
   }
 }
 ```
@@ -1186,7 +1196,7 @@ Returns current server settings including ports, agent configuration, system pat
 
 #### PUT /api/v1/settings
 
-Accepts partial updates to editable server settings and saves them to `settings.json`. Editable top-level fields: `AdmiralPort`, `McpPort`, `MaxCaptains`, `HeartbeatIntervalSeconds`, `StallThresholdMinutes`, `IdleCaptainTimeoutSeconds`, `PlanningSessionInactivityTimeoutMinutes`, `PlanningSessionAbandonmentTimeoutMinutes`, `PlanningSessionRetentionDays`, `LandingMode` (the global landing mode: `LocalMerge`, `MergeAndPush`, `PullRequest`, `MergeQueue`, or `None`), `SelfVesselId`, `RebuildSlotRetentionCount`, `RemoteControl`, `Import`, `FleetActions`, `RepositoryHealth`, `Retention`, and `Permissions`; omitted fields are unchanged. When `RemoteControl` is supplied, it replaces the full `RemoteControl` settings object (send `Password` or `EnrollmentToken` as `********` to keep the stored value). When `Import` is supplied, it replaces the full `Import` (vessel import) settings object; see [Vessel Import](#vessel-import) for the fields and their ranges. When `FleetActions` is supplied, it replaces the full `FleetActions` object (omitted fields take their defaults; values are clamped: `MaxConcurrency` 1-32, `DefaultTimeoutSeconds` 5-7200, `MaxOutputBytes` 1024-1048576, `RunRetentionDays` 1-3650) and applies immediately.
+Accepts partial updates to editable server settings and saves them to `settings.json`. Editable top-level fields: `AdmiralPort`, `McpPort`, `MaxCaptains`, `HeartbeatIntervalSeconds`, `StallThresholdMinutes`, `IdleCaptainTimeoutSeconds`, `PlanningSessionInactivityTimeoutMinutes`, `PlanningSessionAbandonmentTimeoutMinutes`, `PlanningSessionRetentionDays`, `LandingMode` (the global landing mode: `LocalMerge`, `MergeAndPush`, `PullRequest`, `MergeQueue`, or `None`), `SelfVesselId`, `RebuildSlotRetentionCount`, `RemoteControl`, `Import`, `FleetActions`, `RepositoryHealth`, `Retention`, `Permissions`, and `Push`; omitted fields are unchanged. When `RemoteControl` is supplied, it replaces the full `RemoteControl` settings object (send `Password` or `EnrollmentToken` as `********` to keep the stored value). When `Import` is supplied, it replaces the full `Import` (vessel import) settings object; see [Vessel Import](#vessel-import) for the fields and their ranges. When `FleetActions` is supplied, it replaces the full `FleetActions` object (omitted fields take their defaults; values are clamped: `MaxConcurrency` 1-32, `DefaultTimeoutSeconds` 5-7200, `MaxOutputBytes` 1024-1048576, `RunRetentionDays` 1-3650) and applies immediately.
 
 **Permission:** AdminOnly
 
@@ -1220,6 +1230,19 @@ CLI tool permission settings (see [CLI Permissions](#cli-permissions) and [CAPTA
 | `MissionDefaultPolicy` | `Bypass` | Policy for missions when neither the vessel's `AutoApprove` override nor the captain (policy or explicit `autoApprove`) sets one. `Bypass` is the behavior before CLI tool permissions. |
 | `AllowOwnerApproval` | `false` | When true, the owner of the Ask thread or mission may allow once or deny its requests. Global admins and the tenant's tenant admins can always decide; remembering a decision as a rule always needs an admin. |
 | `PromptTimeoutSeconds` | 600 | Seconds a permission request waits before it expires and is denied. Clamped to 10..3600. |
+
+Push notification settings (see [Push Notifications](#push-notifications)): `GET /api/v1/settings` returns a `Push` object with
+`ExpoAccessToken` redacted as `********` when one is set, and when `Push` is supplied on PUT it replaces the whole object
+(omitted fields take their defaults; send `ExpoAccessToken` as `********` to keep the stored token, or empty to clear it).
+Changes apply live.
+
+| Field | Default | Effect |
+|-------|---------|--------|
+| `Enabled` | `true` | Whether pushes are sent. With no registered devices nothing is sent either way. |
+| `ExpoAccessToken` | `null` | Optional Expo access token, sent as a bearer token to the Expo Push Service when the Expo project has enhanced push security enabled. A secret: redacted on GET. |
+| `Categories` | every category | [PushCategoryEnum](#pushcategoryenum) values enabled on a newly registered device when the app does not choose. |
+| `MaxPerUserPerMinute` | 20 | Pushes per user per minute across their devices; further pushes in the minute are dropped and logged. Clamped to 1..600. |
+| `DedupeWindowSeconds` | 300 | A repeat push about the same item (same user, kind, and entity) inside the window is suppressed. Clamped to 0..86400 (0 disables). |
 
 ```json
 {
@@ -4060,6 +4083,66 @@ curl -X POST http://localhost:7890/api/v1/cli-permissions/rules \
 ```
 
 ---
+
+### Push Notifications
+
+The Armada mobile apps register their Expo push token so the Admiral can push the things that need a person: the same
+occurrences the inbox and the Approvals center show. Delivery goes out from the Admiral to the Expo Push Service
+(`https://exp.host/--/api/v2/push/send`, batches of at most 100), which relays to APNs and FCM, so it also works when
+the app reaches the Admiral through Armada.Proxy. Receipts are fetched about 15 minutes later; a device the push service
+reports as `DeviceNotRegistered` (on the ticket or the receipt) is deactivated until the app registers it again.
+Delivery runs on a background worker: it never blocks or fails the operation that raised it, and transient failures
+(HTTP 429 or 5xx, timeouts, connection errors) are retried with exponential backoff.
+
+| Kind (`data.kind`) | Category | When | Recipients (within the entity's tenant) |
+|---|---|---|---|
+| `ask_proposal` | `AskProposal` | An Ask proposal is created pending approval | The thread owner (actionable) |
+| `cli_permission` | `CliPermission` | A CLI permission request is raised (`cli_permission.requested`) | The owner and the tenant's admins (users of the tenant that are tenant admins or global admins); actionable for those who may decide (see [CLI Permissions](#cli-permissions)) |
+| `review` | `MissionReview` | A mission enters `Review` | The owner and the tenant's admins |
+| `deployment_approval` | `DeploymentApproval` | A deployment enters `PendingApproval` | The owner and the tenant's admins |
+| `failed` | `MissionFailed` | A mission enters `Failed` | The owner; the tenant's admins when the mission has no active owner |
+| `landing_failed` | `LandingFailed` | A mission enters `LandingFailed` | As `failed` |
+| `stalled_captain` | `CaptainStalled` | A captain becomes `Stalled` | As `failed` |
+| `voyage_finished` | `VoyageFinished` | A voyage becomes `Complete` or `Failed` | As `failed` |
+
+Each status is announced once per entry into it. Users of other tenants never receive a push about an entity, and
+inactive users and inactive devices are skipped. A device receives a push only when its `Categories` include the
+category; the per-user rate limit and dedupe window apply (`Push` settings above).
+
+**Payload.** `title` and `body` are short (at most 64 and 178 characters), single-line, and pass through the secret
+redactor; they never carry code, diffs, failure reasons, or tool input beyond a truncated summary (at most 60
+characters) of a CLI permission request. `data` is `{ "url": "/missions/msn_...", "kind": "failed", "entityId":
+"msn_...", "category": "MissionFailed" }`, plus `threadId` for the owner of an Ask proposal or thread permission
+request. `url` is a dashboard path (`/missions/{id}`, `/voyages/{id}`, `/captains/{id}`, `/deployments/{id}`,
+`/ask/{threadId}`, `/cli-permissions?request={id}`). `badge` is the recipient's pending approvals (mission reviews,
+deployment approvals, Ask proposals, and CLI permission requests in their inbox), `sound` is `default`, and recipients
+who may approve or deny an Ask proposal or CLI permission request get the iOS `categoryId` `armada_approve_deny`; the
+app performs the action through the existing approve, reject, and decide routes.
+
+| Method | Path | Body | Response |
+|---|---|---|---|
+| POST | `/api/v1/push/devices` | `PushDeviceRegisterRequest` | `201` [PushDevice](#pushdevice) for a new token, `200` when the token was known (refreshed, reactivated, and moved to the caller if another user had it); `400` invalid token, missing platform, or a field too long; `403` captain session |
+| GET | `/api/v1/push/devices` | | `200` `PushDevice[]`, oldest first: the caller's devices. Query `userId` (tenant admins: a user of their tenant; global admins: any user) and `tenantId` (global admins); `403` otherwise |
+| PUT | `/api/v1/push/devices/{id}` | `PushDeviceUpdateRequest` | `200` `PushDevice`; `400`; `404` when missing or not manageable by the caller |
+| DELETE | `/api/v1/push/devices/{id}` | | `204`; `404` |
+| POST | `/api/v1/push/devices/{id}/test` | | `200` [PushTestResult](#pushtestresult); `404` |
+
+`PushDeviceRegisterRequest`: `Platform` (`Ios` or `Android`, required), `ExpoPushToken` (`ExponentPushToken[...]` or
+`ExpoPushToken[...]`, required), `DeviceName` (at most 128 characters), `AppVersion` (64), `Locale` (35), `Categories`
+(null keeps the categories of a device you already registered and uses `Push.Categories` for a new or moved device).
+`PushDeviceUpdateRequest`: `DeviceName` and/or `Categories` (an empty list mutes the device); omitted fields are kept.
+A device can be managed by its owner, tenant admins of its tenant, and global admins. Deleting a user or tenant deletes
+its devices.
+
+```bash
+# Register (or refresh) this phone
+curl -X POST http://localhost:7890/api/v1/push/devices \
+  -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  -d '{"Platform": "Ios", "ExpoPushToken": "ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]", "DeviceName": "My iPhone", "AppVersion": "1.0.0", "Locale": "en-US"}'
+
+# Send a test notification
+curl -X POST http://localhost:7890/api/v1/push/devices/pdv_abc123/test -H "Authorization: Bearer <token>"
+```
 
 ### Signals
 
@@ -8637,6 +8720,53 @@ A permission prompt a CLI captain raised for one of its own tools (see [CLI Perm
 
 ---
 
+#### PushDevice
+
+A mobile app installation registered for push notifications (see [Push Notifications](#push-notifications)).
+
+```json
+{
+  "Id": "pdv_abc123",
+  "TenantId": "ten_abc123",
+  "UserId": "usr_abc123",
+  "Platform": "Ios",
+  "ExpoPushToken": "ExponentPushToken[****wxyz]",
+  "DeviceName": "My iPhone",
+  "AppVersion": "1.0.0",
+  "Locale": "en-US",
+  "Categories": ["AskProposal", "CliPermission"],
+  "Active": true,
+  "CreatedUtc": "2026-10-07T12:00:00Z",
+  "LastSeenUtc": "2026-10-07T12:00:00Z",
+  "LastUpdateUtc": "2026-10-07T12:00:00Z"
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `Id` | string | `pdv_` prefix |
+| `TenantId`, `UserId` | string? | Owner |
+| `Platform` | [PushPlatformEnum](#pushplatformenum) | |
+| `ExpoPushToken` | string | Masked in every response (prefix and the last four characters) |
+| `DeviceName`, `AppVersion`, `Locale` | string? | As registered |
+| `Categories` | [PushCategoryEnum](#pushcategoryenum)[] | Categories the device receives; empty mutes it |
+| `Active` | bool | False after the push service reported the device as not registered; registering again reactivates it |
+| `CreatedUtc`, `LastSeenUtc`, `LastUpdateUtc` | datetime | Creation, last registration, and last change (UTC) |
+
+---
+
+#### PushTestResult
+
+| Field | Type | Description |
+|---|---|---|
+| `DeviceId` | string | `pdv_` prefix |
+| `Status` | [PushTestStatusEnum](#pushteststatusenum) | Outcome |
+| `TicketId` | string? | Expo ticket id when accepted |
+| `Error` | [PushErrorCodeEnum](#pusherrorcodeenum)? | Error code reported by the push service |
+| `Message` | string? | Human-readable detail |
+
+---
+
 #### CliPermissionRule
 
 ```json
@@ -8852,6 +8982,31 @@ Ownership scope for Category B configuration entities (see [Data Scoping](#data-
 | `Bypass` | The runtime's own permission-bypass flag (for example `--dangerously-skip-permissions`) |
 
 ---
+
+#### PushPlatformEnum
+
+`Ios`, `Android`.
+
+#### PushCategoryEnum
+
+`AskProposal`, `CliPermission`, `MissionReview`, `DeploymentApproval`, `MissionFailed`, `LandingFailed`,
+`CaptainStalled`, `VoyageFinished` (see [Push Notifications](#push-notifications)).
+
+#### PushTestStatusEnum
+
+| Value | Meaning |
+|---|---|
+| `Sent` | Accepted by the Expo Push Service (final delivery is reported by a receipt later) |
+| `Disabled` | `Push.Enabled` is false |
+| `DeviceInactive` | The device is inactive; register it again from the app |
+| `DeviceNotRegistered` | The push service reported the device as not registered; it was deactivated |
+| `RateLimited` | The per-user rate limit was reached |
+| `Failed` | The push service rejected the message or could not be reached |
+
+#### PushErrorCodeEnum
+
+`DeviceNotRegistered`, `MessageTooBig`, `MessageRateExceeded`, `MismatchSenderId`, `InvalidCredentials`, `Unknown`
+(mapped from the Expo Push Service's `details.error`).
 
 #### CliPermissionRequestStatusEnum
 

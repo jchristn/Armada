@@ -1595,6 +1595,29 @@ namespace Armada.Core.Database.SqlServer.Queries
                     @"IF COL_LENGTH('captains', 'cli_permission_policy') IS NULL ALTER TABLE captains ADD cli_permission_policy NVARCHAR(64) NULL;",
                     @"IF COL_LENGTH('ask_threads', 'cli_permission_policy') IS NULL ALTER TABLE ask_threads ADD cli_permission_policy NVARCHAR(64) NULL;",
                     @"IF COL_LENGTH('ask_message_tool_calls', 'permission_denied') IS NULL ALTER TABLE ask_message_tool_calls ADD permission_denied BIT NULL;"
+                ),
+                new SchemaMigration(
+                    79,
+                    "Add push notification devices: push_devices table (one row per Expo push token, owned by a user)",
+                    @"
+                    IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'push_devices')
+                    CREATE TABLE push_devices (
+                        id NVARCHAR(64) NOT NULL PRIMARY KEY,
+                        tenant_id NVARCHAR(64),
+                        user_id NVARCHAR(64),
+                        platform NVARCHAR(32) NOT NULL,
+                        expo_push_token NVARCHAR(256) NOT NULL,
+                        device_name NVARCHAR(256),
+                        app_version NVARCHAR(64),
+                        locale NVARCHAR(64),
+                        categories NVARCHAR(1024) NOT NULL,
+                        active BIT NOT NULL CONSTRAINT DF_push_devices_active DEFAULT 1,
+                        created_utc DATETIME2 NOT NULL,
+                        last_seen_utc DATETIME2 NOT NULL,
+                        last_update_utc DATETIME2 NOT NULL
+                    );",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_push_devices_token') CREATE UNIQUE INDEX idx_push_devices_token ON push_devices(expo_push_token);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_push_devices_tenant_user') CREATE INDEX idx_push_devices_tenant_user ON push_devices(tenant_id, user_id);"
                 )
 
             };

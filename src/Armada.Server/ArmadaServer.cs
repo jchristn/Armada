@@ -74,6 +74,21 @@ namespace Armada.Server
         /// </summary>
         public Armada.Server.RuntimeTools.IRuntimeToolDiscoverySource? RuntimeToolDiscoverySource { get; set; } = null;
 
+        /// <summary>
+        /// Transport for push notifications to the mobile apps. Null (the default) uses
+        /// <see cref="Armada.Core.Services.Push.ExpoPushTransport"/> (the Expo Push Service). Set before
+        /// <see cref="StartAsync"/>; test hosts set a double so tests never call the real service.
+        /// </summary>
+        public Armada.Core.Services.Push.IPushTransport? PushTransport { get; set; } = null;
+
+        /// <summary>
+        /// The push notification service (populated by <see cref="StartAsync"/>).
+        /// </summary>
+        public Armada.Core.Services.Push.PushNotificationService? PushNotifications
+        {
+            get { return _PushNotifications; }
+        }
+
         #endregion
 
         #region Private-Members
@@ -146,6 +161,8 @@ namespace Armada.Server
         private Armada.Server.Ask.AskActionService _AskActions = null!;
         private Armada.Server.Ask.AskTurnCoordinator _AskTurns = null!;
         private CliPermissionService _CliPermissions = null!;
+        private Armada.Core.Services.Push.PushNotificationService? _PushNotifications = null;
+        private Armada.Core.Services.Push.PushDeviceService _PushDevices = null!;
         private Armada.Server.Ask.AskWorkTracker _AskTracker = null!;
         private CaptainChatService _CaptainChat = null!;
 
@@ -553,6 +570,16 @@ namespace Armada.Server
             _AgentLifecycle.SetCliPermissionService(_CliPermissions);
             _WebSocketHub.SetCliPermissionService(_CliPermissions);
             _AskThreads.SessionTokensAvailable = _SessionTokenService != null;
+
+            // Push notifications to the mobile apps: fed from the hub's broadcast points and new Ask proposals; delivery
+            // runs on a background worker and never blocks or fails the operation that raised it.
+            if (PushTransport == null) PushTransport = new Armada.Core.Services.Push.ExpoPushTransport();
+            _PushNotifications = new Armada.Core.Services.Push.PushNotificationService(_Database, _Settings, _Logging, PushTransport);
+            _PushDevices = new Armada.Core.Services.Push.PushDeviceService(_Database, _Settings, _Logging);
+            _WebSocketHub.SetPushNotificationService(_PushNotifications);
+            Armada.Core.Services.Push.PushNotificationService pushNotifications = _PushNotifications;
+            _AskThreads.OnProposalCreated = proposal => pushNotifications.OnAskProposalCreated(proposal);
+            _PushNotifications.Start();
             _AskTracker.ExpireProposals = async (CancellationToken expireToken) =>
             {
                 int expired = await _AskActions.ExpireDueAsync(expireToken).ConfigureAwait(false);
@@ -685,6 +712,7 @@ namespace Armada.Server
             _VesselHealthService?.Dispose();
             _TokenSource.Cancel();
             _AskTracker?.Stop();
+            _PushNotifications?.Dispose();
             _FleetActionRunner?.Stop();
             _RemoteTunnel?.StopAsync().GetAwaiter().GetResult();
             _RemoteDashboardRelay?.DisposeAsync().GetAwaiter().GetResult();
@@ -1136,6 +1164,10 @@ namespace Armada.Server
 
             // CLI tool permissions (requests, decisions, rules, captain and thread policies)
             new CliPermissionRoutes(_CliPermissions, _JsonOptions)
+                .Register(_App, authenticate, _AuthorizationService);
+
+            // Push notification devices (mobile apps)
+            new PushRoutes(_PushDevices, _PushNotifications!, _JsonOptions)
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Objectives

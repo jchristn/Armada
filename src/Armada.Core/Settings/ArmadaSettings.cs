@@ -750,6 +750,16 @@ namespace Armada.Core.Settings
         }
 
         /// <summary>
+        /// Push notification settings for the mobile apps (enabled, optional Expo access token, default categories,
+        /// per-user rate limit, dedupe window). Never null; setting null restores the defaults.
+        /// </summary>
+        public PushSettings Push
+        {
+            get => _Push;
+            set => _Push = value ?? new PushSettings();
+        }
+
+        /// <summary>
         /// The settings file these settings were loaded from or last saved to, used by <see cref="SaveAsync"/> when no
         /// path is given (and by backup and restore). Null means <see cref="DefaultSettingsPath"/>. Not persisted.
         /// </summary>
@@ -826,6 +836,7 @@ namespace Armada.Core.Settings
         private CliPermissionSettings _Permissions = new CliPermissionSettings();
         private RepositoryHealthSettings _RepositoryHealth = new RepositoryHealthSettings();
         private RetentionSettings _Retention = new RetentionSettings();
+        private PushSettings _Push = new PushSettings();
         private DatabaseSettings _Database = new DatabaseSettings();
         private bool _DatabasePathConfigured = false;
 
