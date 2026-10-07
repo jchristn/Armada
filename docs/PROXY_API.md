@@ -98,7 +98,42 @@ The proxy browser session is primarily cookie-backed:
 - attributes: `Path=/; HttpOnly; SameSite=Lax; Max-Age=<session lifetime>`, plus `Secure` when `secureCookie` is on or when `trustForwardedHeaders`
   is on and the request arrived with `X-Forwarded-Proto: https`
 
-For non-browser callers, the proxy still accepts `X-Armada-Proxy-Session`.
+Native clients (the mobile app, scripts, `Armada.Client` with `ProxySessionToken`) have no cookie jar. They take the
+`token` from the login response body and present it explicitly (see [Native Clients](#native-clients-bearer-sessions)).
+
+### Native Clients (Bearer Sessions)
+
+A proxy session token is the same server-side session whether it arrived as a cookie or explicitly: same 24 hour
+expiry, same logout invalidation, same selected deployment. The proxy session and the Armada (Admiral) session are two
+separate credentials, and each request location belongs to exactly one of them:
+
+| Route | Proxy session is read from (first present wins) | Belongs to the Admiral and is relayed untouched |
+| --- | --- | --- |
+| `/proxy-api/*` | `X-Armada-Proxy-Session`, then `Authorization: Bearer <proxy token>`, then the `armada_proxy_session` cookie | nothing (proxy-local routes are never relayed) |
+| `/api/v1/*` (relayed) | `X-Armada-Proxy-Session`, then the cookie | `Authorization`, `X-Token`, `X-Api-Key` |
+| `/ws` (relayed) | `X-Armada-Proxy-Session` on the upgrade, then a `Sec-WebSocket-Protocol` entry `armada-proxy-session.<base64url(token)>`, then the cookie | the query string (`?token=`), `armada-token.<base64url>` and `armada` subprotocol entries |
+| `/dashboard*` | `X-Armada-Proxy-Session`, then the cookie | n/a |
+
+Rules:
+
+- `Authorization: Bearer` is a proxy credential only on `/proxy-api/*`. On relayed routes it is always the Admiral's,
+  so an Admiral token is never treated as a proxy session and a proxy token sent there authenticates nothing (`401`).
+- The first location present is authoritative: an invalid `X-Armada-Proxy-Session` is `401` even if a valid cookie or
+  bearer is also sent.
+- The proxy never relays its own credential: `X-Armada-Proxy-Session` and `Cookie` are removed before a request enters
+  the tunnel, and `armada-proxy-session.*` entries are removed from the subprotocols relayed with a `/ws` open (the
+  Admiral also drops them).
+- base64url is RFC 4648 section 5 without padding (`+` to `-`, `/` to `_`, `=` removed).
+- Neither the proxy nor the Admiral echoes a selected subprotocol in the `101` response. Browsers fail such a connection,
+  so browsers use the cookie; .NET `ClientWebSocket`, OkHttp, and the React Native `WebSocket` accept it. React Native
+  can also set `X-Armada-Proxy-Session` on the upgrade through its `WebSocket(url, protocols, { headers })` option.
+- The selected deployment is bound to the proxy session server-side (as for the cookie), so one token selects one
+  deployment at a time; a client that needs two deployments at once signs in twice.
+- Bearer and header credentials are never attached by a browser automatically, so they add no CSRF exposure; the cookie
+  keeps `HttpOnly; SameSite=Lax`.
+
+The exact native request sequence (with the Admiral sign-in through the relay) is in
+[REMOTE_SERVER.md](REMOTE_SERVER.md#native-clients-through-armadaproxy).
 
 The browser never sends the raw shared password. It first requests a nonce and then submits a derived proof, the
 lowercase hex SHA-256 of `proxy-browser-login:proxy:<nonce>:<sha256hex(password)>` (the password is trimmed and
@@ -136,7 +171,9 @@ Response:
 }
 ```
 
-The response body still includes the token for compatibility, but browser callers normally rely on the `Set-Cookie` header instead.
+The response is sent with `Cache-Control: no-store`. Browser callers rely on the `Set-Cookie` header; native clients
+keep the body's `token` (in secure storage) and send it as described in
+[Native Clients](#native-clients-bearer-sessions).
 
 A wrong proof returns `401`. After `loginMaxFailures` failures from one client address within
 `loginFailureWindowSeconds`, every login from that address (even a correct one) returns `429 Too Many Requests` with a
@@ -148,7 +185,8 @@ a body that is not a JSON object returns `400`.
 
 ### `POST /proxy-api/v1/auth/logout`
 
-Invalidates the current proxy browser session, if any, and clears the session cookie. Returns `{ "success": true }`.
+Invalidates the current proxy session, if any (cookie, `X-Armada-Proxy-Session`, or `Authorization: Bearer`), and
+clears the session cookie. Returns `{ "success": true }`. The token is rejected everywhere afterwards.
 
 ### `GET /proxy-api/v1/status/health`
 
@@ -256,7 +294,8 @@ Behavior when session state is missing:
 - `/api/v1/*` without a selected deployment returns `409`
 - `/api/v1/*` when the selected deployment is no longer connected, or does not advertise `dashboard.http.relay`,
   returns `409`
-- `/ws` requires both an authenticated proxy session and a selected deployment
+- `/ws` requires both an authenticated proxy session and a selected deployment (the socket is closed with a policy
+  violation otherwise)
 - a request path that is not in canonical form returns `400`
 - a relayed request body larger than 8 MiB returns `413`
 - a relay that times out (`requestTimeoutSeconds`) returns `504`; an instance that disconnected returns `503`

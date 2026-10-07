@@ -278,6 +278,8 @@ namespace Armada.Client
                 request.Headers.TryAddWithoutValidation("X-Token", Options.Token);
             if (!String.IsNullOrEmpty(Options.ApiKey))
                 request.Headers.TryAddWithoutValidation("X-Api-Key", Options.ApiKey);
+            if (!String.IsNullOrEmpty(Options.ProxySessionToken))
+                request.Headers.TryAddWithoutValidation("X-Armada-Proxy-Session", Options.ProxySessionToken);
             return request;
         }
 

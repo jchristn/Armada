@@ -316,6 +316,9 @@ namespace Armada.Server
                 {
                     string trimmed = protocol.Trim();
                     if (trimmed.Length == 0) continue;
+                    // A proxy session entry is the proxy's credential, never the Admiral's; current proxies strip it
+                    // before relaying, and this keeps it out of the local /ws authentication if one ever arrives.
+                    if (trimmed.StartsWith(Constants.ProxySessionProtocolPrefix, StringComparison.OrdinalIgnoreCase)) continue;
                     try { localSocket.Options.AddSubProtocol(trimmed); }
                     catch (ArgumentException) { }
                 }

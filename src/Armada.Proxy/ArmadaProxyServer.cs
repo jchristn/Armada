@@ -49,13 +49,17 @@ namespace Armada.Proxy
         /// <summary>
         /// Instantiate.
         /// </summary>
-        public ArmadaProxyServer(LoggingModule logging, ProxySettings settings, bool quiet = false)
+        /// <param name="logging">Logging module.</param>
+        /// <param name="settings">Proxy settings.</param>
+        /// <param name="quiet">Suppress the startup banner log line.</param>
+        /// <param name="utcNow">Clock for proxy session and login challenge expiry; null uses the system clock.</param>
+        public ArmadaProxyServer(LoggingModule logging, ProxySettings settings, bool quiet = false, Func<DateTime>? utcNow = null)
         {
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
             _Settings = settings ?? throw new ArgumentNullException(nameof(settings));
             _Quiet = quiet;
             _Registry = new InstanceRegistry(_Settings);
-            _Auth = new ProxyAuthService(_Settings);
+            _Auth = new ProxyAuthService(_Settings, utcNow);
             _RoutePolicy = new ProxyRoutePolicyService();
             _LoginLimiter = new ProxyLoginRateLimiter(_Settings, ProxyLoginRateLimiter.DefaultStatePath(_Settings.DataDirectory));
             _WwwrootDirectory = Path.Combine(AppContext.BaseDirectory, "wwwroot");
@@ -250,6 +254,7 @@ namespace Armada.Proxy
 
                 _LoginLimiter.RecordSuccess(clientKey);
                 req.Http.Response.Headers.Add("Set-Cookie", BuildSessionCookie(session!.Token, session.ExpiresUtc, IsSecureRequest(req.Http)));
+                req.Http.Response.Headers.Add("Cache-Control", "no-store");
                 _Logging.Debug(_Header + "browser login accepted");
                 return new
                 {
@@ -261,7 +266,7 @@ namespace Armada.Proxy
 
             MapJsonPost(server, "/proxy-api/v1/auth/logout", (req) =>
             {
-                string? sessionToken = GetProxySessionToken(req.Http.Request.Headers);
+                string? sessionToken = ProxySessionCredentials.ResolveToken(req.Http.Request.Headers, ProxyCredentialScopeEnum.ProxyApi);
                 _Auth.Logout(sessionToken);
                 req.Http.Response.Headers.Add("Set-Cookie", BuildClearedSessionCookie(IsSecureRequest(req.Http)));
                 return new { success = true };
@@ -271,7 +276,7 @@ namespace Armada.Proxy
 
             MapJsonGet(server, "/proxy-api/v1/instances", (req) =>
             {
-                if (!TryGetBrowserSession(req.Http, out ProxyAuthService.ProxyBrowserSession? _))
+                if (!TryGetBrowserSession(req.Http, ProxyCredentialScopeEnum.ProxyApi, out ProxyAuthService.ProxyBrowserSession? _))
                 {
                     req.Http.Response.StatusCode = 401;
                     return new { error = "Proxy authentication required. Sign in again." };
@@ -287,7 +292,7 @@ namespace Armada.Proxy
 
             MapJsonGet(server, "/proxy-api/v1/session/context", (req) =>
             {
-                string? sessionToken = GetProxySessionToken(req.Http.Request.Headers);
+                string? sessionToken = ProxySessionCredentials.ResolveToken(req.Http.Request.Headers, ProxyCredentialScopeEnum.ProxyApi);
                 if (!_Auth.TryGetSession(sessionToken, out ProxyAuthService.ProxyBrowserSession? session))
                 {
                     req.Http.Response.StatusCode = 401;
@@ -299,7 +304,7 @@ namespace Armada.Proxy
 
             MapJsonPost(server, "/proxy-api/v1/session/instance", (req) =>
             {
-                string? sessionToken = GetProxySessionToken(req.Http.Request.Headers);
+                string? sessionToken = ProxySessionCredentials.ResolveToken(req.Http.Request.Headers, ProxyCredentialScopeEnum.ProxyApi);
                 if (!TryReadJsonBody(req, out ProxySelectInstanceRequest selectRequest, out string? bodyError))
                 {
                     req.Http.Response.StatusCode = 400;
@@ -337,7 +342,7 @@ namespace Armada.Proxy
 
             MapJsonPost(server, "/proxy-api/v1/session/logout-instance", (req) =>
             {
-                string? sessionToken = GetProxySessionToken(req.Http.Request.Headers);
+                string? sessionToken = ProxySessionCredentials.ResolveToken(req.Http.Request.Headers, ProxyCredentialScopeEnum.ProxyApi);
                 if (!_Auth.TrySetSelectedInstance(sessionToken, null, out ProxyAuthService.ProxyBrowserSession? session, out string? error))
                 {
                     req.Http.Response.StatusCode = 401;
@@ -382,7 +387,7 @@ namespace Armada.Proxy
                 Method = ctx.Request.Method.ToString().ToUpperInvariant(),
                 Path = NormalizePath(ctx.Request.Url.RawWithoutQuery),
                 QueryString = GetRawQueryString(ctx.Request.Url.RawWithQuery),
-                Headers = ExtractHeaders(ctx.Request.Headers),
+                Headers = ExtractRelayHeaders(ctx.Request.Headers),
                 ContentType = ctx.Request.ContentType,
                 BodyBase64 = requestBytes.Length > 0
                     ? Convert.ToBase64String(requestBytes)
@@ -455,7 +460,7 @@ namespace Armada.Proxy
 
         private async Task HandleDashboardWebSocketAsync(HttpContextBase ctx, WebSocketSession session)
         {
-            if (!TryGetBrowserSession(ctx, out ProxyAuthService.ProxyBrowserSession? browserSession))
+            if (!TryGetBrowserSession(ctx, ProxyCredentialScopeEnum.WebSocket, out ProxyAuthService.ProxyBrowserSession? browserSession))
             {
                 await CloseBrowserSessionAsync(session, WebSocketCloseStatus.PolicyViolation, "Proxy authentication required.").ConfigureAwait(false);
                 return;
@@ -494,7 +499,7 @@ namespace Armada.Proxy
                         ProxySocketId = proxySocketId,
                         Path = "/ws",
                         QueryString = GetRawQueryString(ctx.Request.Url.RawWithQuery),
-                        Subprotocols = ctx.Request.Headers.Get("Sec-WebSocket-Protocol")
+                        Subprotocols = ProxySessionCredentials.StripFromSubprotocols(ctx.Request.Headers.Get("Sec-WebSocket-Protocol"))
                     },
                     ctx.Token,
                     ResolveRequesterIp(ctx)).ConfigureAwait(false);
@@ -899,7 +904,7 @@ namespace Armada.Proxy
 
             if (IsRelayedApiPath(path))
             {
-                if (!TryGetBrowserSession(ctx, out ProxyAuthService.ProxyBrowserSession? browserSession))
+                if (!TryGetBrowserSession(ctx, ProxyCredentialScopeEnum.Relay, out ProxyAuthService.ProxyBrowserSession? browserSession))
                 {
                     await HandleMissingProxySessionAsync(ctx, path).ConfigureAwait(false);
                     return;
@@ -929,7 +934,7 @@ namespace Armada.Proxy
 
             if (IsDashboardPath(path))
             {
-                if (!TryGetBrowserSession(ctx, out ProxyAuthService.ProxyBrowserSession? browserSession))
+                if (!TryGetBrowserSession(ctx, ProxyCredentialScopeEnum.Relay, out ProxyAuthService.ProxyBrowserSession? browserSession))
                 {
                     await HandleMissingProxySessionAsync(ctx, path).ConfigureAwait(false);
                     return;
@@ -1090,7 +1095,7 @@ namespace Armada.Proxy
             };
         }
 
-        private static Dictionary<string, string> ExtractHeaders(NameValueCollection headers)
+        private static Dictionary<string, string> ExtractRelayHeaders(NameValueCollection headers)
         {
             Dictionary<string, string> results = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (string? key in headers.AllKeys)
@@ -1107,6 +1112,8 @@ namespace Armada.Proxy
                 }
             }
 
+            // The proxy session is the proxy's credential: it never travels through the tunnel to the Admiral.
+            ProxySessionCredentials.StripFromRelayHeaders(results);
             return results;
         }
 
@@ -1225,38 +1232,10 @@ namespace Armada.Proxy
             return new { error = "Too many failed sign-in attempts. Try again in " + retryAfterSeconds + " seconds." };
         }
 
-        private bool TryGetBrowserSession(HttpContextBase ctx, out ProxyAuthService.ProxyBrowserSession? session)
+        private bool TryGetBrowserSession(HttpContextBase ctx, ProxyCredentialScopeEnum scope, out ProxyAuthService.ProxyBrowserSession? session)
         {
-            string? sessionToken = GetProxySessionToken(ctx.Request.Headers);
+            string? sessionToken = ProxySessionCredentials.ResolveToken(ctx.Request.Headers, scope);
             return _Auth.TryGetSession(sessionToken, out session);
-        }
-
-        private static string? GetProxySessionToken(NameValueCollection headers)
-        {
-            string? headerToken = headers.Get(Constants.ProxySessionTokenHeader);
-            if (!String.IsNullOrWhiteSpace(headerToken))
-            {
-                return headerToken.Trim();
-            }
-
-            string? cookieHeader = headers.Get("Cookie");
-            if (String.IsNullOrWhiteSpace(cookieHeader))
-            {
-                return null;
-            }
-
-            foreach (string part in cookieHeader.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-            {
-                if (!part.StartsWith(Constants.ProxySessionCookieName + "=", StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                string candidate = part.Substring(Constants.ProxySessionCookieName.Length + 1).Trim();
-                return String.IsNullOrWhiteSpace(candidate) ? null : candidate;
-            }
-
-            return null;
         }
 
         private static bool HasSelectedInstance(ProxyAuthService.ProxyBrowserSession? session)

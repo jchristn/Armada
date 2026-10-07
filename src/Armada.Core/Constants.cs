@@ -514,6 +514,13 @@ namespace Armada.Core
         public static readonly string ProxySessionCookieName = "armada_proxy_session";
 
         /// <summary>
+        /// Prefix of a Sec-WebSocket-Protocol entry that carries an Armada.Proxy session token on a <c>/ws</c> upgrade,
+        /// as <c>armada-proxy-session.&lt;base64url(token)&gt;</c>. The proxy consumes and strips these entries; they are
+        /// never relayed to the Admiral.
+        /// </summary>
+        public static readonly string ProxySessionProtocolPrefix = "armada-proxy-session.";
+
+        /// <summary>
         /// Default tenant identifier.
         /// </summary>
         public static readonly string DefaultTenantId = "default";
