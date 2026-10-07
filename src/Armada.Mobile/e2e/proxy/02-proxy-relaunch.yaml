@@ -6,23 +6,14 @@ name: 02-proxy-relaunch
 - stopApp
 - launchApp
 - extendedWaitUntil:
-    visible:
-      id: "tab-ask"
+    visible: "Ask Armada"
     timeout: 30000
-- tapOn:
-    id: "tab-approvals"
+- runFlow: common/open-approvals.yaml
 - extendedWaitUntil:
     visible:
       id: "approvals-inbox"
     timeout: 20000
-- tapOn:
-    id: "tab-more"
-- scrollUntilVisible:
-    element:
-      id: "sign-out"
-    direction: DOWN
-- tapOn:
-    id: "sign-out"
+- runFlow: common/sign-out.yaml
 - extendedWaitUntil:
     visible:
       id: "proxy-instance-bar"

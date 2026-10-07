@@ -75,37 +75,32 @@ name: 01-proxy-sign-in
     id: "password-change-skip"
 - tapOn:
     id: "password-skip-confirm-confirm"
-# A fresh install has not decided on notifications: the one-time explanation sheet appears over Ask.
+# A fresh iOS install has not decided on notifications, so the one-time explanation sheet appears over Ask. (Maestro
+# grants Android runtime permissions at launch, so there notifications are already allowed and no sheet appears.)
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - extendedWaitUntil:
+          visible:
+            id: "push-prompt-later"
+          timeout: 20000
+      - takeScreenshot: push-prompt
+      - tapOn:
+          id: "push-prompt-later"
 - extendedWaitUntil:
-    visible:
-      id: "push-prompt-later"
+    visible: "Ask Armada"
     timeout: 20000
-- takeScreenshot: push-prompt
-- tapOn:
-    id: "push-prompt-later"
-- assertVisible: "Ask Armada"
 - takeScreenshot: proxy-ask
 # Approvals loads the inbox from the Admiral through the relay.
-- tapOn:
-    id: "tab-approvals"
+- runFlow: common/open-approvals.yaml
 - extendedWaitUntil:
     visible:
       id: "approvals-inbox"
     timeout: 20000
 - takeScreenshot: proxy-approvals
 # Preferences shows this device's push state for the proxied server.
-- tapOn:
-    id: "tab-more"
-- extendedWaitUntil:
-    visible:
-      id: "more-menu"
-    timeout: 10000
-- scrollUntilVisible:
-    element:
-      id: "nav-/preferences"
-    direction: DOWN
-- tapOn:
-    id: "nav-/preferences"
+- runFlow: common/open-preferences.yaml
 - scrollUntilVisible:
     element:
       id: "push-status"

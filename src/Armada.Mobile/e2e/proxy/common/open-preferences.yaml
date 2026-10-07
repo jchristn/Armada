@@ -1,0 +1,37 @@
+# Open Preferences on either layout: More, then Preferences on phones; the sidebar's APP section on tablets.
+appId: ${APP_ID}
+---
+- runFlow:
+    when:
+      visible:
+        id: "sidebar"
+    commands:
+      # Scroll the sidebar itself (a plain scroll would move the content pane).
+      - repeat:
+          while:
+            notVisible:
+              id: "sidebar-/preferences"
+          times: 8
+          commands:
+            - swipe:
+                start: "8%, 85%"
+                end: "8%, 30%"
+      - tapOn:
+          id: "sidebar-/preferences"
+- runFlow:
+    when:
+      notVisible:
+        id: "sidebar"
+    commands:
+      - tapOn:
+          id: "tab-more"
+      - extendedWaitUntil:
+          visible:
+            id: "more-menu"
+          timeout: 10000
+      - scrollUntilVisible:
+          element:
+            id: "nav-/preferences"
+          direction: DOWN
+      - tapOn:
+          id: "nav-/preferences"

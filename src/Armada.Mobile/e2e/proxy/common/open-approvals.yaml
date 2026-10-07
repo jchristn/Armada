@@ -1,0 +1,17 @@
+# Open Approvals on either layout: the bottom tab on phones, the sidebar entry on tablets.
+appId: ${APP_ID}
+---
+- runFlow:
+    when:
+      visible:
+        id: "sidebar"
+    commands:
+      - tapOn:
+          id: "sidebar-/approvals"
+- runFlow:
+    when:
+      notVisible:
+        id: "sidebar"
+    commands:
+      - tapOn:
+          id: "tab-approvals"
