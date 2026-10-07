@@ -9,8 +9,9 @@ import ConfirmDialog from '../components/shared/ConfirmDialog';
 import JsonViewer from '../components/shared/JsonViewer';
 import ScopeBadge from '../components/shared/ScopeBadge';
 import CopyButton from '../components/shared/CopyButton';
+import { MEMORY_TYPES } from '../lib/configuration';
 
-const TYPES: MemoryType[] = ['Episodic', 'Semantic', 'Procedural'];
+const TYPES = MEMORY_TYPES;
 
 /**
  * Memories management surface. Lists the durable agent memories the Recorder distills from voyages

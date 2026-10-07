@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNotifications } from '../context/NotificationContext';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { createPromptTemplate, getPromptTemplate, updatePromptTemplate, resetPromptTemplate } from '../api/client';
+import { PROMPT_TEMPLATE_CATEGORIES, PROMPT_TEMPLATE_PARAMETER_GROUPS } from '../lib/configuration';
 import type { PromptTemplate } from '../types/models';
 import ActionMenu from '../components/shared/ActionMenu';
 import PageHeader from '../components/shared/PageHeader';
@@ -15,67 +16,8 @@ import { useAuth } from '../context/AuthContext';
 import { canEdit as canEditScoped, type ScopeViewer } from '../lib/scoping';
 import { buildPromptTemplateDuplicatePayload } from '../lib/duplicates';
 
-interface ParameterInfo {
-  name: string;
-  description: string;
-}
-
-interface ParameterGroup {
-  label: string;
-  params: ParameterInfo[];
-}
-
-const PARAMETER_GROUPS: ParameterGroup[] = [
-  {
-    label: 'Mission Context',
-    params: [
-      { name: '{MissionId}', description: 'Mission identifier' },
-      { name: '{MissionTitle}', description: 'Mission title' },
-      { name: '{MissionDescription}', description: 'Full mission description' },
-      { name: '{MissionPersona}', description: 'Persona assigned to this mission' },
-      { name: '{VoyageId}', description: 'Parent voyage identifier' },
-      { name: '{BranchName}', description: 'Git branch for this mission' },
-    ],
-  },
-  {
-    label: 'Vessel Context',
-    params: [
-      { name: '{VesselId}', description: 'Vessel identifier' },
-      { name: '{VesselName}', description: 'Vessel display name' },
-      { name: '{DefaultBranch}', description: 'Default branch (e.g. main)' },
-      { name: '{ProjectContext}', description: 'User-supplied project description' },
-      { name: '{StyleGuide}', description: 'User-supplied style guide' },
-      { name: '{ModelContext}', description: 'Agent-accumulated context' },
-      { name: '{FleetId}', description: 'Parent fleet identifier' },
-    ],
-  },
-  {
-    label: 'Captain Context',
-    params: [
-      { name: '{CaptainId}', description: 'Captain identifier' },
-      { name: '{CaptainName}', description: 'Captain display name' },
-      { name: '{CaptainInstructions}', description: 'User-supplied captain instructions' },
-    ],
-  },
-  {
-    label: 'Pipeline Context',
-    params: [
-      { name: '{PersonaPrompt}', description: 'Resolved persona prompt text' },
-      { name: '{Diff}', description: 'Diff from the prior pipeline stage' },
-      { name: '{PreviousStageOutput}', description: 'Agent output from the prior pipeline stage' },
-      { name: '{SelectedPlaybooksMarkdown}', description: 'Rendered content of the selected playbooks' },
-      { name: '{ExistingClaudeMd}', description: "Contents of repo's existing CLAUDE.md" },
-    ],
-  },
-  {
-    label: 'System',
-    params: [
-      { name: '{Timestamp}', description: 'Current UTC timestamp' },
-    ],
-  },
-];
-
-const PROMPT_TEMPLATE_CATEGORY_OPTIONS = ['mission', 'persona', 'structure', 'commit', 'landing', 'agent', 'import'] as const;
+const PARAMETER_GROUPS = PROMPT_TEMPLATE_PARAMETER_GROUPS;
+const PROMPT_TEMPLATE_CATEGORY_OPTIONS = PROMPT_TEMPLATE_CATEGORIES;
 
 export default function PromptTemplateDetail() {
   const { t, formatDateTime } = useLocale();
