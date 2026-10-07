@@ -94,9 +94,10 @@ name: 01-proxy-sign-in
 - takeScreenshot: proxy-ask
 # Approvals loads the inbox from the Admiral through the relay.
 - runFlow: common/open-approvals.yaml
+# The inbox comes from the Admiral through the relay: the seeded deployment approval, or nothing left to decide
+# when an earlier flow already approved it.
 - extendedWaitUntil:
-    visible:
-      id: "approvals-inbox"
+    visible: "(Deploy to production: Release 2.3|You are all caught up.)"
     timeout: 20000
 - takeScreenshot: proxy-approvals
 # Preferences shows this device's push state for the proxied server.

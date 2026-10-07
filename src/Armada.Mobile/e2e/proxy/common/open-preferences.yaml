@@ -16,6 +16,8 @@ appId: ${APP_ID}
             - swipe:
                 start: "8%, 85%"
                 end: "8%, 30%"
+      # Let the fling settle, or the tap lands on whatever has scrolled under it.
+      - waitForAnimationToEnd
       - tapOn:
           id: "sidebar-/preferences"
 - runFlow:

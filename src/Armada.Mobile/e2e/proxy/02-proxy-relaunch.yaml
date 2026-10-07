@@ -9,9 +9,10 @@ name: 02-proxy-relaunch
     visible: "Ask Armada"
     timeout: 30000
 - runFlow: common/open-approvals.yaml
+# The inbox comes from the Admiral through the relay: the seeded deployment approval, or nothing left to decide
+# when an earlier flow already approved it.
 - extendedWaitUntil:
-    visible:
-      id: "approvals-inbox"
+    visible: "(Deploy to production: Release 2.3|You are all caught up.)"
     timeout: 20000
 - runFlow: common/sign-out.yaml
 - extendedWaitUntil:
