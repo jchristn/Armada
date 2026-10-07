@@ -327,7 +327,7 @@ export default function Vessels() {
                   <th className="sortable" onClick={() => table.handleSort('repoUrl')} title={t('Remote git repository URL')}>
                     {t('Repository')}{table.sortIcon('repoUrl')}
                   </th>
-                  <th title={t('How completed mission work is integrated (LocalMerge, PullRequest, MergeQueue, None)')}>{t('Landing Mode')}</th>
+                  <th title={t('How completed mission work is integrated (LocalMerge, MergeAndPush, PullRequest, MergeQueue, None)')}>{t('Landing Mode')}</th>
                   <th title={t('Commits ahead and behind the remote default branch')}>{t('Sync')}</th>
                   <th title={t('Number of branches in the vessel repository')}>{t('Branches')}</th>
                   <th className="text-right">{t('Actions')}</th>

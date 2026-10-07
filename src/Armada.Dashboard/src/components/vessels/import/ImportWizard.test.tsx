@@ -129,6 +129,21 @@ describe('ImportWizard', () => {
     expect(pushToast).toHaveBeenCalledWith('success', 'Import finished: 2 vessels created.');
   });
 
+  it('offers Merge and Push after Local Merge and sends it as the landing default', async () => {
+    vi.mocked(importVessels).mockResolvedValue({ batchId: 'vib_1', jobId: null, runsInBackground: false, batch: batch({ status: 'Completed', createdCount: 2 }), items: [] });
+    renderWizard();
+    await discoverTwoPaths();
+
+    const landing = screen.getByLabelText('Landing Mode') as HTMLSelectElement;
+    expect(Array.from(landing.options).map((o) => o.value)).toEqual(['', 'LocalMerge', 'MergeAndPush', 'PullRequest', 'MergeQueue', 'None']);
+    expect(within(landing).getByRole('option', { name: 'Merge and Push' })).toHaveValue('MergeAndPush');
+    fireEvent.change(landing, { target: { value: 'MergeAndPush' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Import 2 repositories' }));
+
+    await waitFor(() => expect(importVessels).toHaveBeenCalledTimes(1));
+    expect(onlyCallArgs(vi.mocked(importVessels))[0].Defaults).toEqual({ DefaultPipelineId: null, LandingMode: 'MergeAndPush' });
+  });
+
   it('polls a background import until the batch leaves Importing', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.mocked(importVessels).mockResolvedValue({

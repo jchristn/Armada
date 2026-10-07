@@ -75,7 +75,7 @@ namespace Test.Shared.Suites.Tui.Build
                     AssertTrue(host.WaitForText("3 branches"), "branch count\n" + host.Screen());
                     string frame = host.Screen();
                     TuiCase.Contains(frame, "in sync", "in sync");
-                    TuiCase.Contains(frame, "LocalMerge (local working dir)", "landing short label");
+                    TuiCase.Contains(frame, "LocalMerge (local, no push)", "landing short label");
                     TuiCase.Contains(frame, "Branch ", "default branch column");
                     TuiCase.Contains(frame, "Import repositories", "import button");
                     VesselsScreen screen = (VesselsScreen)((HubScreen)host.Tui.Shell.Screen!).Content;
@@ -110,7 +110,7 @@ namespace Test.Shared.Suites.Tui.Build
                     OpsFormDialog dialog = (OpsFormDialog)host.App.Modals.Top!;
                     ((InputField)Row(dialog, "Name")).Value = "NewRepo";
                     ((InputField)Row(dialog, "Repository URL")).Value = "https://x/new.git";
-                    TuiCase.Contains(host.Screen(), "Merges the mission branch directly", "landing mode description");
+                    TuiCase.Contains(host.Screen(), "Merges the mission branch into the default branch", "landing mode description");
                     host.Press("ctrl+s");
                     AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/vessels") == 1), "create");
                     StubRequest create = stub.Last("POST", "/api/v1/vessels");
@@ -134,6 +134,73 @@ namespace Test.Shared.Suites.Tui.Build
                     AssertEqual("Uses xunit.", update.ModelContext, "full record: model context");
                     AssertEqual("/work/DemoRepo", update.WorkingDirectory, "full record: working directory");
                     AssertEqual("main|release/*", String.Join("|", update.ProtectedBranchPatterns), "line list");
+                }
+            }));
+
+            cases.Add(TuiCase.Sync(Suite, "landing_mode_labels", "Local Merge says it does not push and Merge and Push follows it with its own labels", () =>
+            {
+                AssertEqual("|LocalMerge|MergeAndPush|PullRequest|MergeQueue|None", String.Join("|", LandingModeInfo.All.Select(m => m.Value)), "order");
+                LandingModeInfo local = LandingModeInfo.For("LocalMerge");
+                AssertEqual("Local Merge -- into your working directory, no push", local.Label, "LocalMerge label");
+                AssertEqual("local, no push", local.Short, "LocalMerge short");
+                AssertTrue(local.Description.Contains("Nothing is pushed."), "LocalMerge description says nothing is pushed: " + local.Description);
+                AssertFalse(local.Description.Contains("pushes"), "LocalMerge description does not claim to push: " + local.Description);
+                LandingModeInfo push = LandingModeInfo.For("MergeAndPush");
+                AssertEqual("MergeAndPush", push.Value, "MergeAndPush known");
+                AssertEqual("Merge and Push -- local merge, then push to the remote", push.Label, "MergeAndPush label");
+                AssertEqual("local + push", push.Short, "MergeAndPush short");
+                AssertTrue(push.Description.Contains("then pushes it to the working directory's remote"), "MergeAndPush description: " + push.Description);
+                foreach (string name in Enum.GetNames(typeof(LandingModeEnum)))
+                    AssertEqual(name, LandingModeInfo.For(name).Value, "every enum value has an entry: " + name);
+            }));
+
+            cases.Add(TuiCase.Sync(Suite, "merge_and_push", "A MergeAndPush vessel shows its short label and filter, and the form sends MergeAndPush on create and edit", () =>
+            {
+                StubHttpHandler stub = Stub();
+                stub.Json("GET", "/api/v1/vessels", "{\"Success\":true,\"PageNumber\":1,\"PageSize\":9999,\"TotalPages\":1,\"TotalRecords\":2,\"Objects\":[" + BuildStubs.Vessel("vsl_demo", "DemoRepo", "flt_web", "MergeAndPush") + "," + BuildStubs.Vessel("vsl_api", "ApiRepo", "flt_web", "PullRequest") + "]}");
+                stub.Json("POST", "/api/v1/vessels", "{\"Id\":\"vsl_new\",\"Name\":\"NewRepo\",\"RepoUrl\":\"https://x/new.git\",\"DefaultBranch\":\"main\",\"LandingMode\":\"MergeAndPush\"}");
+                stub.Json("PUT", "/api/v1/vessels/vsl_api", BuildStubs.Vessel("vsl_api", "ApiRepo", "flt_web", "MergeAndPush"));
+                using (TuiTestHost host = TuiCase.SignedIn(180, 50, "/vessels", stub))
+                {
+                    AssertTrue(host.WaitForText("DemoRepo"), "rows");
+                    TuiCase.Contains(host.Screen(), "MergeAndPush (local + push)", "MergeAndPush short label");
+                    VesselsScreen screen = (VesselsScreen)((HubScreen)host.Tui.Shell.Screen!).Content;
+                    screen.LandingFilter.Choose(screen.LandingFilter.Options.First(o => o.Value == "MergeAndPush"));
+                    AssertTrue(host.PumpUntil(() => !host.Screen().Contains("ApiRepo")), "MergeAndPush filter hides the PullRequest vessel");
+                    TuiCase.Contains(host.Screen(), "DemoRepo", "MergeAndPush vessel kept");
+                    screen.LandingFilter.Choose(screen.LandingFilter.Options.First(o => o.Value == ""));
+                    AssertTrue(host.WaitForText("ApiRepo"), "filter cleared");
+
+                    host.Press("n");
+                    AssertTrue(host.WaitForText("Create Vessel"), "form");
+                    OpsFormDialog dialog = (OpsFormDialog)host.App.Modals.Top!;
+                    ((InputField)Row(dialog, "Name")).Value = "NewRepo";
+                    ((InputField)Row(dialog, "Repository URL")).Value = "https://x/new.git";
+                    SelectField<string> landing = (SelectField<string>)Row(dialog, "Landing Mode");
+                    AssertEqual("LocalMerge", landing.Value, "new vessels still default to LocalMerge");
+                    AssertTrue(dialog.Form.Rows.First(r => r.Label == "Landing Mode").Hint!.Contains("Nothing is pushed."), "LocalMerge hint says nothing is pushed");
+                    landing.Choose(landing.Options.First(o => o.Value == "MergeAndPush"));
+                    AssertEqual("Merge and Push -- local merge, then push to the remote", landing.Selected!.Label, "MergeAndPush option label");
+                    AssertTrue(dialog.Form.Rows.First(r => r.Label == "Landing Mode").Hint!.Contains("then pushes it to the working directory's remote"), "MergeAndPush hint");
+                    host.Press("ctrl+s");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/vessels") == 1), "create");
+                    StubRequest create = stub.Last("POST", "/api/v1/vessels");
+                    AssertEqual(LandingModeEnum.MergeAndPush, create.BodyAs<Vessel>().LandingMode, "created landing mode");
+                    AssertTrue(create.Body.Contains("\"MergeAndPush\""), "sent as the enum name: " + create.Body);
+
+                    host.Press("home");
+                    AssertTrue(host.PumpUntil(() => screen.Grid.Current?.Id == "vsl_api" || screen.Grid.Current?.Id == "vsl_demo"), "cursor on a row");
+                    if (screen.Grid.Current?.Id != "vsl_api") host.Press("down");
+                    AssertEqual("vsl_api", screen.Grid.Current?.Id, "cursor on ApiRepo");
+                    host.Press("e");
+                    AssertTrue(host.WaitForText("Edit Vessel"), "edit form");
+                    dialog = (OpsFormDialog)host.App.Modals.Top!;
+                    landing = (SelectField<string>)Row(dialog, "Landing Mode");
+                    AssertEqual("PullRequest", landing.Value, "edit shows the stored mode");
+                    landing.Choose(landing.Options.First(o => o.Value == "MergeAndPush"));
+                    host.Press("ctrl+s");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("PUT", "/api/v1/vessels/vsl_api") == 1), "update");
+                    AssertEqual(LandingModeEnum.MergeAndPush, stub.LastBody<Vessel>("PUT", "/api/v1/vessels/vsl_api").LandingMode, "updated landing mode");
                 }
             }));
 

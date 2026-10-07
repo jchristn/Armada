@@ -305,6 +305,7 @@ namespace Armada.Tui.Screens.Build
             {
                 new SelectOption<string>("", Tr("Default (use global setting)")),
                 new SelectOption<string>("LocalMerge", Tr("Local Merge")),
+                new SelectOption<string>("MergeAndPush", Tr("Merge and Push")),
                 new SelectOption<string>("PullRequest", Tr("Pull Request")),
                 new SelectOption<string>("MergeQueue", Tr("Merge Queue")),
                 new SelectOption<string>("None", Tr("None")),

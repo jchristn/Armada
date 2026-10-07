@@ -11,7 +11,7 @@ namespace Test.Shared.Infrastructure
     /// <summary>
     /// Setup helpers for tests against a live in-process server (<see cref="E2EServerFixture"/>) through
     /// <see cref="ArmadaClient"/>: an admin client, vessels backed by a local bare origin and a working checkout (so
-    /// LocalMerge landing runs for real), captains, a deployment pending approval, git queries, and a pump-friendly poll.
+    /// MergeAndPush landing runs for real), captains, a deployment pending approval, git queries, and a pump-friendly poll.
     /// </summary>
     public static class LiveServerSetup
     {
@@ -32,7 +32,7 @@ namespace Test.Shared.Infrastructure
 
         /// <summary>
         /// Create a fleet and a vessel whose origin is a fresh local bare repository (branch main) with a working
-        /// checkout, landing with LocalMerge.
+        /// checkout, landing with MergeAndPush (merge into the checkout, then push to the origin).
         /// </summary>
         /// <param name="admin">Admin client.</param>
         /// <param name="label">Name prefix.</param>
@@ -52,7 +52,7 @@ namespace Test.Shared.Infrastructure
             vessel.FleetId = fleet.Id;
             vessel.RepoUrl = bare;
             vessel.DefaultBranch = "main";
-            vessel.LandingMode = LandingModeEnum.LocalMerge;
+            vessel.LandingMode = LandingModeEnum.MergeAndPush;
             vessel.WorkingDirectory = working;
             Vessel created = (await admin.CreateVesselAsync(vessel).ConfigureAwait(false))!;
 

@@ -175,6 +175,31 @@ namespace Test.Shared.Suites.Tui.Build
                 }
             }));
 
+            cases.Add(TuiCase.Sync(Suite, "merge_and_push_default", "The landing mode default offers Merge and Push after Local Merge and sends MergeAndPush", () =>
+            {
+                StubHttpHandler stub = Stub(() => 0);
+                using (TuiTestHost host = TuiCase.SignedIn(170, 50, "/vessels/import", stub))
+                {
+                    AssertTrue(host.WaitForText("Folders on the Admiral host, one per line"), "source");
+                    ImportWizard wizard = (ImportWizard)host.Tui.Shell.Screen!;
+                    wizard.PollMilliseconds = 50;
+                    AssertEqual("|LocalMerge|MergeAndPush|PullRequest|MergeQueue|None", String.Join("|", wizard.DefaultLanding.Options.Select(o => o.Value)), "landing options in order");
+                    AssertEqual("Merge and Push", wizard.DefaultLanding.Options.First(o => o.Value == "MergeAndPush").Label, "Merge and Push label");
+                    wizard.Scope.Focus(wizard.PasteArea);
+                    host.Type("/repos").Press("ctrl+s");
+                    AssertTrue(host.WaitForText("[2 Review]", 8000), "review\n" + host.Screen());
+                    host.Press("]");
+                    AssertTrue(host.WaitForText("Defaults for the new vessels"), "options\n" + host.Screen());
+                    wizard.DefaultLanding.Choose(wizard.DefaultLanding.Options.First(o => o.Value == "MergeAndPush"));
+                    host.Press("ctrl+s");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/vessels/import") == 1), "import call\n" + host.Screen());
+                    StubRequest importCall = stub.Last("POST", "/api/v1/vessels/import");
+                    Armada.Core.Models.VesselImportRequest import = importCall.BodyAs<Armada.Core.Models.VesselImportRequest>();
+                    AssertEqual(Armada.Core.Enums.LandingModeEnum.MergeAndPush, import.Defaults?.LandingMode, "import landing mode: " + importCall.Body);
+                    AssertTrue(importCall.Body.Contains("\"MergeAndPush\""), "sent as the enum name: " + importCall.Body);
+                }
+            }));
+
             return new TestSuiteDescriptor(suiteId: Suite, displayName: "TUI import wizard", cases: cases);
         }
 

@@ -33,6 +33,7 @@ interface ImportReviewStepProps {
 const LANDING_MODES: Array<{ value: string; label: string }> = [
   { value: '', label: 'Default (use global setting)' },
   { value: 'LocalMerge', label: 'Local Merge' },
+  { value: 'MergeAndPush', label: 'Merge and Push' },
   { value: 'PullRequest', label: 'Pull Request' },
   { value: 'MergeQueue', label: 'Merge Queue' },
   { value: 'None', label: 'None' },

@@ -33,6 +33,11 @@ namespace Test.Shared.Suites.Tui.Bodies
         public string? LandingMode { get; set; } = null;
 
         /// <summary>
+        /// Working directory as sent.
+        /// </summary>
+        public string? WorkingDirectory { get; set; } = null;
+
+        /// <summary>
         /// Model context flag.
         /// </summary>
         public bool? EnableModelContext { get; set; } = null;
