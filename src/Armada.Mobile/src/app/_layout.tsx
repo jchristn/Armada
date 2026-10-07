@@ -1,7 +1,7 @@
 import { Stack, ThemeProvider as NavigationThemeProvider, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useMemo, type ReactNode } from 'react';
 import { StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -13,6 +13,7 @@ import { navigationTheme } from '../navigation/navigationTheme';
 import { setSignedInForLinks } from '../navigation/pendingLink';
 import { ApprovalsProvider } from '../notifications/ApprovalsContext';
 import { NotificationProvider } from '../notifications/NotificationContext';
+import { createProxySocketFactory } from '../proxy/proxySocket';
 import { SocketProvider } from '../socket/SocketContext';
 import { ThemeProvider, useTheme } from '../theme/ThemeContext';
 
@@ -20,12 +21,19 @@ void SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
 /** Session-scoped services: language (with the server catalog once signed in), socket, notifications, badge. */
 function SessionProviders({ children }: { children: ReactNode }) {
-  const { status, activeProfile, sessionToken } = useAuth();
+  const { status, activeProfile, sessionToken, proxyToken, requestHeaders } = useAuth();
   const signedIn = status === 'signedIn';
   const serverUrl = signedIn ? activeProfile?.url ?? null : null;
+  const isProxy = activeProfile?.kind === 'Proxy';
+  // Through Armada.Proxy the socket also carries the proxy session (subprotocol, header fallback). One factory per
+  // proxy session, so the mode it learns survives reconnects.
+  const socketFactory = useMemo(
+    () => (isProxy && proxyToken ? createProxySocketFactory({ proxyToken: () => proxyToken }).factory : undefined),
+    [isProxy, proxyToken],
+  );
   return (
-    <LocaleProvider serverUrl={serverUrl}>
-      <SocketProvider serverUrl={serverUrl} token={signedIn ? sessionToken : null}>
+    <LocaleProvider serverUrl={serverUrl} requestHeaders={requestHeaders}>
+      <SocketProvider serverUrl={serverUrl} token={signedIn ? sessionToken : null} factory={socketFactory}>
         <NotificationProvider>
           <ApprovalsProvider enabled={signedIn}>{children}</ApprovalsProvider>
         </NotificationProvider>

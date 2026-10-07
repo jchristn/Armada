@@ -3,10 +3,10 @@ import { StyleSheet, Switch, View } from 'react-native';
 import { biometricsAvailable } from '../../auth/biometrics';
 import { useLocale } from '../../i18n/LocaleContext';
 import { normalizeServerUrl, type ServerUrlError } from '../../profiles/serverUrl';
-import type { ServerProfile, ServerProfileDraft } from '../../profiles/types';
+import type { ServerProfile, ServerProfileDraft, ServerProfileKind } from '../../profiles/types';
 import { useTheme } from '../../theme/ThemeContext';
 import { spacing } from '../../theme/typography';
-import { AppText, Button, TextField } from '../ui';
+import { AppText, Button, SegmentedControl, TextField } from '../ui';
 import { InsecureUrlWarning } from './InsecureUrlWarning';
 
 export interface ProfileFormProps {
@@ -26,12 +26,17 @@ function urlErrorText(t: (s: string) => string, error: ServerUrlError): string {
   }
 }
 
-/** True when an Admiral answers its unauthenticated health endpoint at `baseUrl` within the timeout. */
-export async function probeServer(baseUrl: string, timeoutMs = 8000): Promise<boolean> {
+/** The unauthenticated health endpoint of an Admiral, or of an Armada.Proxy. */
+export function healthPath(kind: ServerProfileKind): string {
+  return kind === 'Proxy' ? '/proxy-api/v1/status/health' : '/api/v1/status/health';
+}
+
+/** True when an Admiral (or, for `Proxy`, an Armada.Proxy) answers its health endpoint at `baseUrl` within the timeout. */
+export async function probeServer(baseUrl: string, timeoutMs = 8000, kind: ServerProfileKind = 'Direct'): Promise<boolean> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(`${baseUrl}/api/v1/status/health`, { signal: controller.signal });
+    const res = await fetch(`${baseUrl}${healthPath(kind)}`, { signal: controller.signal });
     return res.ok;
   } catch {
     return false;
@@ -40,12 +45,16 @@ export async function probeServer(baseUrl: string, timeoutMs = 8000): Promise<bo
   }
 }
 
-/** Add or edit a server profile: name, URL (with the plain-HTTP warning), connection test, biometric unlock. */
+/**
+ * Add or edit a server profile: connection kind (an Admiral directly, or through Armada.Proxy), name, URL (with the
+ * plain-HTTP warning), connection test, biometric unlock.
+ */
 export function ProfileForm({ profile, onSubmit, onCancel, submitLabel }: ProfileFormProps) {
   const { t } = useLocale();
   const { colors } = useTheme();
   const [name, setName] = useState(profile?.name ?? '');
   const [url, setUrl] = useState(profile?.url ?? '');
+  const [kind, setKind] = useState<ServerProfileKind>(profile?.kind ?? 'Direct');
   const [biometric, setBiometric] = useState(profile?.biometricUnlock ?? false);
   const [canBiometric, setCanBiometric] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -69,7 +78,7 @@ export function ProfileForm({ profile, onSubmit, onCancel, submitLabel }: Profil
     setBusy(true);
     try {
       // The health endpoint needs no sign-in; a plain fetch leaves the shared client's configuration alone.
-      if (!(await probeServer(normalized.url))) throw new Error('unreachable');
+      if (!(await probeServer(normalized.url, 8000, kind))) throw new Error('unreachable');
       setTestResult(t('Connected to the server.'));
       setError(null);
     } catch {
@@ -87,7 +96,7 @@ export function ProfileForm({ profile, onSubmit, onCancel, submitLabel }: Profil
     setError(null);
     setBusy(true);
     try {
-      await onSubmit({ name: name.trim() || normalized.url, url: normalized.url, kind: profile?.kind ?? 'Direct', biometricUnlock: biometric });
+      await onSubmit({ name: name.trim() || normalized.url, url: normalized.url, kind, biometricUnlock: biometric });
     } catch {
       setError(t('The server could not be saved.'));
     } finally {
@@ -97,6 +106,17 @@ export function ProfileForm({ profile, onSubmit, onCancel, submitLabel }: Profil
 
   return (
     <View>
+      <View style={styles.kind}>
+        <SegmentedControl
+          label={t('Connection')}
+          value={kind}
+          onChange={(next) => { setKind(next); setTestResult(null); setError(null); }}
+          options={[
+            { value: 'Direct', label: t('Admiral'), testID: 'profile-kind-direct' },
+            { value: 'Proxy', label: t('Armada.Proxy'), testID: 'profile-kind-proxy' },
+          ]}
+        />
+      </View>
       <TextField
         testID="profile-url"
         label={t('Server address')}
@@ -108,7 +128,9 @@ export function ProfileForm({ profile, onSubmit, onCancel, submitLabel }: Profil
         keyboardType="url"
         textContentType="URL"
         error={error}
-        hint={testResult ?? t('The Admiral URL, for example https://armada.example.com or http://192.168.1.20:7890')}
+        hint={testResult ?? (kind === 'Proxy'
+          ? t('The Armada.Proxy URL, for example https://proxy.example.com; you pick the Admiral after signing in')
+          : t('The Admiral URL, for example https://armada.example.com or http://192.168.1.20:7890'))}
       />
       {normalized.url ? <InsecureUrlWarning url={normalized.url} /> : null}
       <TextField
@@ -140,6 +162,7 @@ export function ProfileForm({ profile, onSubmit, onCancel, submitLabel }: Profil
 }
 
 const styles = StyleSheet.create({
+  kind: { marginBottom: spacing.md },
   switchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.lg },
   switchLabel: { flex: 1 },
   actions: { gap: spacing.sm },
