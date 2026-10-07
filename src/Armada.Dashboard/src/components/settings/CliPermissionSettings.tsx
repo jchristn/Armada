@@ -4,6 +4,7 @@ import type { CliPermissionPolicy, CliPermissionSettingsData } from '../../types
 import { useLocale } from '../../context/LocaleContext';
 import CliPermissionPolicySelect from '../cliPermissions/CliPermissionPolicySelect';
 import { PROMPT_TIMEOUT_RANGE } from '../../lib/cliPermissions';
+import { CLI_PERMISSION_DEFAULTS, validPromptTimeout } from '../../lib/settingsRanges';
 
 interface CliPermissionSettingsProps {
   permissions: CliPermissionSettingsData | null | undefined;
@@ -15,13 +16,7 @@ interface CliPermissionSettingsProps {
   notify: (severity: 'success' | 'error', message: string) => void;
 }
 
-/** Server defaults of the Permissions group (CliPermissionSettings). */
-export const CLI_PERMISSION_DEFAULTS: CliPermissionSettingsData = {
-  askDefaultPolicy: 'ApproveInArmada',
-  missionDefaultPolicy: 'Bypass',
-  allowOwnerApproval: false,
-  promptTimeoutSeconds: 600,
-};
+export { CLI_PERMISSION_DEFAULTS, validPromptTimeout } from '../../lib/settingsRanges';
 
 interface Draft {
   askDefaultPolicy: CliPermissionPolicy;
@@ -38,13 +33,6 @@ function toDraft(s: CliPermissionSettingsData | null | undefined): Draft {
     allowOwnerApproval: !!v.allowOwnerApproval,
     promptTimeoutSeconds: String(v.promptTimeoutSeconds),
   };
-}
-
-/** True when the timeout is a whole number of seconds from 10 to 3600. */
-export function validPromptTimeout(value: string): boolean {
-  if (!/^\d+$/.test(value.trim())) return false;
-  const n = Number(value);
-  return n >= PROMPT_TIMEOUT_RANGE.min && n <= PROMPT_TIMEOUT_RANGE.max;
 }
 
 /**
