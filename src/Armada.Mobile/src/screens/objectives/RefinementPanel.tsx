@@ -110,7 +110,7 @@ export function RefinementPanel({ objective, refinement, reference, pipelines, c
           key={session.id}
           testID={`objective-refine-session-${session.id}`}
           title={session.title}
-          subtitle={`${reference.captainNames.get(session.captainId) ?? session.captainId} · ${formatRelativeTime(session.lastUpdateUtc)}`}
+          subtitle={`${reference.captainNames.get(session.captainId) ?? session.captainId} \u00b7 ${formatRelativeTime(session.lastUpdateUtc)}`}
           selected={session.id === refinement.selectedSessionId}
           onPress={() => refinement.selectSession(session.id)}
           accessory={<StatusBadge label={session.status} tone={statusTone(session.status)} />}

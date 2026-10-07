@@ -185,7 +185,7 @@ export function ObjectivesList({ embedded = false, testID = 'objectives-list' }:
           vessels.length > 0 ? vessels.slice(0, 2).join(', ') + (vessels.length > 2 ? ` +${vessels.length - 2}` : '') : t('No vessel linked'),
           item.dueUtc ? `${t('Due')} ${formatRelativeTime(item.dueUtc)}` : null,
           formatRelativeTime(item.lastUpdateUtc),
-        ].filter(Boolean).join(' · ');
+        ].filter(Boolean).join(' \u00b7 ');
         return (
           <SwipeRow actions={rowActions(item)} testID={`objective-swipe-${item.title}`}>
             <ListRow
