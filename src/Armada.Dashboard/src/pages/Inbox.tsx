@@ -15,12 +15,8 @@ import { useLiveRefresh } from '../lib/useLiveRefresh';
 import { CLI_PERMISSION_EVENT_PREFIX, isPendingRequest } from '../lib/cliPermissions';
 import CliPermissionDecisionControls from '../components/cliPermissions/CliPermissionDecisionControls';
 import CliPermissionCountdown from '../components/cliPermissions/CliPermissionCountdown';
+import { APPROVAL_KINDS, CLI_PERMISSION_KIND, inboxActionLabel, inboxItemKey, splitInbox } from '../lib/inboxKinds';
 
-/** Inbox kind of a pending CLI tool permission request (InboxItemKinds.CliPermission). */
-const CLI_PERMISSION_KIND = 'cli_permission';
-
-/** Inbox kinds that wait on a decision from the user (approve or reject), as opposed to failures to fix. */
-const APPROVAL_KINDS: ReadonlySet<string> = new Set(['review', 'deployment_approval', 'ask_proposal', CLI_PERMISSION_KIND]);
 
 function severityColor(severity: InboxSeverity): string {
   if (severity === 'Critical') return 'var(--red)';
@@ -58,23 +54,14 @@ export default function Inbox() {
   // A CLI tool request appears or is decided elsewhere: reload so the row appears or disappears promptly.
   useLiveRefresh([CLI_PERMISSION_EVENT_PREFIX], () => { void load(); });
 
-  const approvals = useMemo(() => items.filter((i) => APPROVAL_KINDS.has(i.kind)), [items]);
-  const interventions = useMemo(() => items.filter((i) => !APPROVAL_KINDS.has(i.kind)), [items]);
-
-  function actionLabel(item: InboxItem): string {
-    if (item.kind === 'ask_proposal') return t('Open conversation');
-    if (item.kind === 'deployment_approval') return t('Open deployment');
-    if (item.kind === 'review') return t('Review mission');
-    if (item.kind === CLI_PERMISSION_KIND) return t('Open request');
-    return t('Open');
-  }
+  const { approvals, interventions } = useMemo(() => splitInbox(items), [items]);
 
   function renderItem(item: InboxItem, i: number) {
     const cli = item.kind === CLI_PERMISSION_KIND ? item.cliPermission ?? null : null;
     const decidable = !!cli && !!cli.canDecide && isPendingRequest(cli);
     return (
       <div
-        key={`${item.kind}:${item.entityId ?? i}`}
+        key={inboxItemKey(item, i)}
         className="card clickable"
         style={{ padding: '0.75rem 1rem', borderLeft: `3px solid ${severityColor(item.severity)}`, cursor: 'pointer' }}
         onClick={() => navigate(item.href)}
@@ -104,7 +91,7 @@ export default function Inbox() {
                 className="btn btn-sm"
                 onClick={(e) => { e.stopPropagation(); navigate(item.href); }}
               >
-                {actionLabel(item)}
+                {inboxActionLabel(t, item)}
               </button>
             )}
           </div>

@@ -1,4 +1,5 @@
 import type { AskTrackedWork, AskWorkSnapshot } from '../types/models';
+import type { Translate } from './deploymentApprovalLabel';
 
 /** Child statuses (missions and fleet action targets) that will not change again. */
 const TERMINAL_CHILD = new Set([
@@ -117,4 +118,16 @@ export function applySnapshotToWork(work: AskTrackedWork, snapshot: AskWorkSnaps
     completedUtc: snapshot.completedUtc ?? work.completedUtc,
     snapshot,
   };
+}
+
+/** Localized label for a tracked entity type; unknown types render as-is. */
+export function entityTypeLabel(t: Translate, entityType: string | null | undefined): string {
+  switch (entityType) {
+    case 'Voyage': return t('Voyage');
+    case 'Mission': return t('Mission');
+    case 'FleetActionRun': return t('Fleet action run');
+    case 'Job': return t('Background job');
+    case 'VesselImportBatch': return t('Vessel import');
+    default: return entityType ?? '';
+  }
 }

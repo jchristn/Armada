@@ -1,5 +1,6 @@
 # Maestro workspace for the Armada mobile app. scripts/mobile/run-e2e.sh starts a throwaway Admiral and passes
-# SERVER_URL (as the device reaches it) and APP_ID. The flows run in order: sign in, navigate, sign out.
+# SERVER_URL (as the device reaches it) and APP_ID, and seeds one deployment awaiting approval. The flows run in
+# order: sign in, navigate, Ask Armada, approvals, sign out.
 flows:
   - "0*.yaml"
 executionOrder:
@@ -7,4 +8,6 @@ executionOrder:
   flowsOrder:
     - 01-sign-in
     - 02-navigate
+    - 04-ask
+    - 05-approvals
     - 03-sign-out

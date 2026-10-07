@@ -40,7 +40,7 @@ import PlanningStartCard from '../components/planning/PlanningStartCard';
 import PlanningTranscriptCard from '../components/planning/PlanningTranscriptCard';
 import ReadinessPanel from '../components/shared/ReadinessPanel';
 import { applyToolEvent, type ToolEvent } from '../components/shared/ChatToolChips';
-import { randomThinkingMessage } from '../components/askThinkingMessages';
+import { randomThinkingMessage } from '../lib/askThinkingMessages';
 import { canCaptainStartPlanning } from '../lib/captains';
 import { mergeSessionDetail, newerOf } from '../lib/liveMerge';
 import {

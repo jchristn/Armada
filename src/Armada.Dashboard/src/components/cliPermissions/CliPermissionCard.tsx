@@ -3,15 +3,10 @@ import { Link } from 'react-router-dom';
 import type { CliPermissionRequest } from '../../types/models';
 import { useLocale } from '../../context/LocaleContext';
 import CopyButton from '../shared/CopyButton';
+import { prettyJson } from '../../lib/askFormat';
 import { decisionSourceText, isPendingRequest, requestStatusLabel } from '../../lib/cliPermissions';
 import CliPermissionCountdown from './CliPermissionCountdown';
 import CliPermissionDecisionControls from './CliPermissionDecisionControls';
-
-/** Pretty-print JSON text; fall back to the raw text. */
-function prettyJson(raw: string | null | undefined): string {
-  if (!raw) return '';
-  try { return JSON.stringify(JSON.parse(raw), null, 2); } catch { return raw; }
-}
 
 interface CliPermissionCardProps {
   request: CliPermissionRequest;

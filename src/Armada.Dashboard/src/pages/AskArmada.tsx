@@ -47,14 +47,15 @@ import AskConversationHeader from '../components/ask/AskConversationHeader';
 import AskWorkStrip from '../components/ask/AskWorkStrip';
 import AskMessageList, { type AskMessageListHandle } from '../components/ask/AskMessageList';
 import AskComposer, { type AskComposerHandle } from '../components/ask/AskComposer';
-import { randomThinkingMessage } from '../components/askThinkingMessages';
-import { randomGreeting } from '../components/askGreetings';
+import { randomThinkingMessage } from '../lib/askThinkingMessages';
+import { randomGreeting } from '../lib/askGreetings';
 import { parseAskEvent } from '../lib/askEvents';
 import { conversationReducer, initialConversation, isLocalMessage } from '../lib/askConversation';
 import { applyActivityEvent, applyThreadUpdate, sortThreads, type ThreadActivityMap, type ThreadListFilter } from '../lib/askThreads';
 import { DEFAULT_QUICK_ACTIONS, mergeQuickActions } from '../lib/askQuickActions';
 import { isWorkActive, workRoute } from '../lib/askWork';
 import { useFocusTrap } from '../lib/useFocusTrap';
+import { askCaptainAccess, instructionsDocUrl } from '../lib/askCaptain';
 import { fallbackReasonText, isPendingRequest, parseCliPermissionEvent } from '../lib/cliPermissions';
 
 const CAPTAIN_STORAGE_KEY = 'armada_ask_captain';
@@ -73,20 +74,6 @@ function writeStored(key: string, value: string) {
 
 function errorText(err: unknown, fallback: string): string {
   return err instanceof Error && err.message ? err.message : fallback;
-}
-
-// Per-runtime setup instructions on GitHub for connecting a captain to Armada over MCP.
-function instructionsDocUrl(runtime: string | null | undefined): string {
-  const files: Record<string, string> = {
-    ClaudeCode: 'INSTRUCTIONS_FOR_CLAUDE_CODE.md',
-    Codex: 'INSTRUCTIONS_FOR_CODEX.md',
-    Cursor: 'INSTRUCTIONS_FOR_CURSOR.md',
-    Gemini: 'INSTRUCTIONS_FOR_GEMINI.md',
-    Mux: 'INSTRUCTIONS_FOR_MUX.md',
-    OpenCode: 'INSTRUCTIONS_FOR_OPENCODE.md',
-  };
-  const file = (runtime && files[runtime]) || 'MCP_API.md';
-  return 'https://github.com/jchristn/Armada/blob/main/docs/' + file;
 }
 
 /**
@@ -513,14 +500,8 @@ export default function AskArmada() {
 
   // ---------------------------------------------------------------- render
 
-  // The server connects every supported runtime's captain to Armada's MCP tools for each thread turn with a
-  // thread-scoped token (askApprovalGated), so its own host MCP configuration does not matter here and its
-  // mutating Armada tool calls become approval cards. Older servers do not send the flag; fall back to the
-  // two runtimes they gated.
-  const serverProvidesMcp = tools?.askApprovalGated ?? (tools?.runtime === 'ApiEndpoint' || tools?.runtime === 'ClaudeCode');
-  const mcpMissing = !!activeCaptainId && tools != null && tools.armadaToolCount <= 0 && !serverProvidesMcp;
-  const ungated = !!activeCaptainId && tools != null && !serverProvidesMcp && !mcpMissing;
-  const noCaptain = !activeCaptainId;
+  // Whether the captain proposes actions as approval cards, runs Armada tools ungated, or is not connected (lib/askCaptain).
+  const { mcpMissing, ungated, noCaptain } = askCaptainAccess(activeCaptainId, tools);
 
   const emptyState = thread ? (
     <p className="text-dim">{t('Send the first message to begin.')}</p>
