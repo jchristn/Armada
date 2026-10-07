@@ -120,7 +120,7 @@ describe('environment detail', () => {
     await waitFor(() => expect(api.updateEnvironment).toHaveBeenCalledWith('env_1', expect.objectContaining({
       verificationDefinitions: [expect.objectContaining({ method: 'GET', path: '/ready', expectedStatusCode: 200, active: true })],
     })));
-    await waitFor(() => expect(screen.getByText('GET /ready → 200')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('GET /ready \u2192 200')).toBeTruthy());
   });
 
   it('new opens the create form prefilled from the link', async () => {

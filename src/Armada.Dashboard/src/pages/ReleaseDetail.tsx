@@ -25,23 +25,11 @@ import ErrorModal from '../components/shared/ErrorModal';
 import JsonViewer from '../components/shared/JsonViewer';
 import PageHeader from '../components/shared/PageHeader';
 import StatusBadge from '../components/shared/StatusBadge';
+import { joinList, RELEASE_STATUSES, splitList } from '../lib/deliveryForms';
 
 interface ReleasePrefillState {
   prefill?: ReleaseUpsertRequest;
   objectiveIds?: string[];
-}
-
-const RELEASE_STATUSES: ReleaseStatus[] = ['Draft', 'Candidate', 'Shipped', 'Failed', 'RolledBack'];
-
-function splitList(value: string): string[] {
-  return value
-    .split(/\r?\n|,/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function joinList(values: string[] | null | undefined): string {
-  return (values || []).join('\n');
 }
 
 export default function ReleaseDetail() {

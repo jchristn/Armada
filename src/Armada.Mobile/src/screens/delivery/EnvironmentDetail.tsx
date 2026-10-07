@@ -155,7 +155,7 @@ export function EnvironmentDetailView({ id, embedded, onDeleted, onChanged }: En
           <ResourceRow
             key={d.id}
             title={d.name}
-            subtitle={`${d.method} ${d.path} → ${d.expectedStatusCode ?? '-'}`}
+            subtitle={`${d.method} ${d.path} \u2192 ${d.expectedStatusCode ?? '-'}`}
             badge={{ label: d.active ? t('Active') : t('Inactive'), tone: d.active ? 'success' : 'cancelled' }}
             onPress={canManage ? () => setDefinition(d) : undefined}
             actions={canManage ? [{ key: 'remove', label: t('Remove'), icon: 'trash-outline', tone: 'danger', onPress: () => removeDefinition(d) }] : []}

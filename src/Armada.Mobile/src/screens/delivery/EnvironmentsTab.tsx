@@ -116,8 +116,8 @@ export function EnvironmentsTab() {
         <ResourceRow
           testID={`environment-row-${e.id}`}
           title={e.name}
-          subtitle={[e.kind, e.vesselId ? (vesselNames.get(e.vesselId) || e.vesselId) : null, e.baseUrl].filter(Boolean).join(' • ')}
-          badge={{ label: `${e.active ? t('Active') : t('Inactive')}${e.isDefault ? ` • ${t('Default target')}` : ''}`, tone: e.active ? 'success' : 'cancelled' }}
+          subtitle={[e.kind, e.vesselId ? (vesselNames.get(e.vesselId) || e.vesselId) : null, e.baseUrl].filter(Boolean).join(' \u2022 ')}
+          badge={{ label: `${e.active ? t('Active') : t('Inactive')}${e.isDefault ? ` \u2022 ${t('Default target')}` : ''}`, tone: e.active ? 'success' : 'cancelled' }}
           meta={e.requiresApproval ? t('Approval required') : formatRelativeTime(e.lastUpdateUtc)}
           selected={selection.selected === e.id}
           onPress={() => selection.open(e.id)}

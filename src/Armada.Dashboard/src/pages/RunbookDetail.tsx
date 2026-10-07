@@ -35,45 +35,10 @@ import JsonViewer from '../components/shared/JsonViewer';
 import StatusBadge from '../components/shared/StatusBadge';
 import { canEdit as canEditScoped, type ScopeViewer } from '../lib/scoping';
 import { buildRunbookDuplicatePayload } from '../lib/duplicates';
-
-const RUNBOOK_EXECUTION_STATUSES: RunbookExecutionStatus[] = ['Running', 'Completed', 'Cancelled'];
-const RUNBOOK_CHECK_TYPES: CheckRunType[] = [
-  'Build',
-  'UnitTest',
-  'IntegrationTest',
-  'E2ETest',
-  'Migration',
-  'SecurityScan',
-  'Performance',
-  'Deploy',
-  'Rollback',
-  'SmokeTest',
-  'HealthCheck',
-  'DeploymentVerification',
-  'RollbackVerification',
-  'Custom',
-];
+import { cloneExecution, createDefaultParameter, createDefaultStep, RUNBOOK_CHECK_TYPES, RUNBOOK_EXECUTION_STATUSES } from '../lib/deliveryForms';
 
 interface RunbookPageState {
   prefillExecution?: Partial<RunbookExecutionStartRequest>;
-}
-
-function createDefaultParameter(): RunbookParameter {
-  return {
-    name: 'parameter',
-    label: '',
-    description: '',
-    defaultValue: '',
-    required: false,
-  };
-}
-
-function createDefaultStep(): RunbookStep {
-  return {
-    id: `rbs_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-    title: 'Step',
-    instructions: '',
-  };
 }
 
 export default function RunbookDetail() {
@@ -845,11 +810,3 @@ export default function RunbookDetail() {
   );
 }
 
-function cloneExecution(execution: RunbookExecution): RunbookExecution {
-  return {
-    ...execution,
-    parameterValues: { ...execution.parameterValues },
-    completedStepIds: [...execution.completedStepIds],
-    stepNotes: { ...execution.stepNotes },
-  };
-}
