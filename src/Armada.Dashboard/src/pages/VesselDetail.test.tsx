@@ -127,3 +127,41 @@ describe('VesselDetail Dispatch', () => {
     expect(await screen.findByText('dispatch for vsl_1')).toBeInTheDocument();
   });
 });
+
+describe('VesselDetail View History', () => {
+  beforeEach(() => {
+    vi.mocked(listVessels).mockResolvedValue(page([vessel]) as never);
+    vi.mocked(listFleets).mockResolvedValue(page([{ id: 'flt_1', name: 'Main' }]) as never);
+    vi.mocked(listMissionSummaries).mockResolvedValue(page([]) as never);
+    vi.mocked(listPipelines).mockResolvedValue(page([]) as never);
+    vi.mocked(getVesselReadiness).mockResolvedValue(null as never);
+    vi.mocked(getVesselLandingPreview).mockResolvedValue(null as never);
+  });
+
+  function renderDetail() {
+    function HistoryProbe() {
+      return <div>history at {useLocation().pathname}</div>;
+    }
+    render(
+      <MemoryRouter initialEntries={['/vessels/vsl_1']}>
+        <Routes>
+          <Route path="/vessels/:id" element={<VesselDetail />} />
+          <Route path="/vessels/:id/history" element={<HistoryProbe />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+  }
+
+  it('the header button opens the vessel history', async () => {
+    renderDetail();
+    fireEvent.click(await screen.findByRole('button', { name: 'View History' }));
+    expect(await screen.findByText('history at /vessels/vsl_1/history')).toBeInTheDocument();
+  });
+
+  it('the action menu item opens the vessel history', async () => {
+    renderDetail();
+    fireEvent.click(await screen.findByRole('button', { name: 'Actions' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'View History' }));
+    expect(await screen.findByText('history at /vessels/vsl_1/history')).toBeInTheDocument();
+  });
+});

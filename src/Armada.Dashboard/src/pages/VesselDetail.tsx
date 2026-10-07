@@ -123,6 +123,11 @@ export default function VesselDetail() {
     navigate('/dispatch', { state: { fromVessel: true, vesselId: vessel.id } });
   }
 
+  function handleViewHistory() {
+    if (!vessel) return;
+    navigate(`/vessels/${vessel.id}/history`);
+  }
+
   function handleManageObjectives() {
     if (!vessel) return;
     const params = new URLSearchParams({ vesselId: vessel.id });
@@ -171,6 +176,9 @@ export default function VesselDetail() {
                 {t('Manage Fleet')}
               </button>
             )}
+            <button type="button" className="btn btn-sm" onClick={handleViewHistory}>
+              {t('View History')}
+            </button>
             <button type="button" className="btn btn-sm" onClick={() => navigate(`/vessels/${vessel.id}/onboarding`)}>
               {t('Onboarding')}
             </button>
@@ -184,6 +192,7 @@ export default function VesselDetail() {
             <ActionMenu id={`vessel-${vessel.id}`} items={[
               { label: 'Dispatch', onClick: handleDispatch },
               { label: 'Manage Objectives', onClick: handleManageObjectives },
+              { label: 'View History', onClick: handleViewHistory },
               { label: 'Manage Fleet', onClick: () => navigate(`/fleets/${vessel.fleetId}`), disabled: !vessel.fleetId },
               { label: 'Run Check', onClick: () => navigate('/checks', { state: { prefill: { vesselId: vessel.id, branchName: vessel.defaultBranch || '' } } }) },
               { label: 'Open Workspace', onClick: () => navigate(`/workspace/${vessel.id}`) },

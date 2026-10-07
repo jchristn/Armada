@@ -424,6 +424,7 @@ export default function Vessels() {
                       <ActionMenu id={`vessel-${v.id}`} items={[
                         { label: 'Dispatch', onClick: () => navigate('/dispatch', { state: { fromVessel: true, vesselId: v.id } }) },
                         { label: 'Manage Branches', onClick: () => setBranchesModal({ vesselId: v.id, vesselName: v.name }) },
+                        { label: 'View History', onClick: () => navigate(`/vessels/${v.id}/history`) },
                         { label: 'Manage Objectives', onClick: () => manageObjectives(v) },
                         { label: 'Manage Fleet', onClick: () => navigate(`/fleets/${v.fleetId}`), disabled: !v.fleetId },
                         { label: 'Open Workspace', onClick: () => navigate(`/workspace/${v.id}`) },

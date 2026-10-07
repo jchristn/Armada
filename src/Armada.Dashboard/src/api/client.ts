@@ -98,6 +98,10 @@ import type {
   HistoricalTimelineEntry,
   HistoricalTimelineQuery,
   VesselReadinessResult,
+  VesselCommitActivity,
+  VesselCommitActivityQuery,
+  VesselCommitPage,
+  VesselCommitQuery,
   LandingPreviewResult,
   MuxEndpointListResult,
   MuxEndpointShowResult,
@@ -721,6 +725,29 @@ export const pushVesselBranch = (id: string, branch: string) =>
 
 export const mergeVesselBranch = (id: string, source: string, target: string, push: boolean) =>
   post<{ vesselId: string; source: string; target: string; merged: boolean; pushed: boolean }>(`/api/v1/vessels/${id}/branches/merge`, { Source: source, Target: target, Push: push });
+
+// ==================== Vessel History ====================
+/** Per-day commit counts for a vessel branch (heatmap). A missing repo or branch returns 200 with `error` set. */
+export const getVesselCommitActivity = (id: string, params?: VesselCommitActivityQuery) => {
+  const query = new URLSearchParams();
+  if (params?.branch) query.set('branch', params.branch);
+  if (params?.from) query.set('from', params.from);
+  if (params?.to) query.set('to', params.to);
+  if (typeof params?.utcOffsetMinutes === 'number') query.set('utcOffsetMinutes', String(params.utcOffsetMinutes));
+  const suffix = query.toString().length > 0 ? `?${query.toString()}` : '';
+  return get<VesselCommitActivity>(`/api/v1/vessels/${encodeURIComponent(id)}/history/activity${suffix}`);
+};
+
+/** One page of a vessel's commit history, newest first. Pass `nextCursor` back as `cursor` for the next page. */
+export const getVesselCommits = (id: string, params?: VesselCommitQuery) => {
+  const query = new URLSearchParams();
+  if (params?.branch) query.set('branch', params.branch);
+  if (params?.before) query.set('before', params.before);
+  if (params?.cursor) query.set('cursor', params.cursor);
+  if (typeof params?.limit === 'number') query.set('limit', String(params.limit));
+  const suffix = query.toString().length > 0 ? `?${query.toString()}` : '';
+  return get<VesselCommitPage>(`/api/v1/vessels/${encodeURIComponent(id)}/history/commits${suffix}`);
+};
 
 // ==================== Workspace ====================
 function encodeWorkspaceQueryPath(path: string) {
