@@ -1,0 +1,181 @@
+# Signed in (state kept from 01), against the Admiral seeded by scripts/mobile/seed-e2e.py (fleet "E2E Fleet",
+# vessel "e2e-repo", voyage "Seeded voyage" with two Pending missions; no captains, so nothing runs): Home, the
+# missions list and a mission's detail tabs, creating a voyage with a landing mode, and dispatching to the vessel.
+appId: ${APP_ID}
+name: 02-operations
+---
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: "tab-ask"
+    timeout: 30000
+# Home: status, KPIs, voyage progress.
+- tapOn:
+    id: "tab-work"
+- extendedWaitUntil:
+    visible:
+      id: "home-screen"
+    timeout: 10000
+- assertVisible: "System Status"
+- assertVisible:
+    id: "home-kpi-missions"
+- scrollUntilVisible:
+    element: "Seeded voyage.*"
+    direction: DOWN
+- takeScreenshot: home
+# Missions list and detail.
+- scrollUntilVisible:
+    element:
+      id: "home-missions-all"
+    direction: DOWN
+    visibilityPercentage: 100
+    centerElement: true
+- tapOn:
+    id: "home-missions-all"
+- extendedWaitUntil:
+    visible:
+      id: "missions-list"
+    timeout: 10000
+- extendedWaitUntil:
+    visible: "Seeded mission one.*"
+    timeout: 10000
+- takeScreenshot: missions
+- tapOn: "Seeded mission one.*"
+- extendedWaitUntil:
+    visible:
+      id: "mission-detail"
+    timeout: 10000
+- assertVisible:
+    id: "mission-detail-title"
+- assertVisible: "Seeded mission one"
+- takeScreenshot: mission-detail
+- tapOn:
+    id: "mission-tab-instructions"
+- takeScreenshot: mission-instructions
+- tapOn:
+    id: "mission-tab-log"
+- extendedWaitUntil:
+    visible:
+      id: "mission-log"
+    timeout: 10000
+- tapOn:
+    id: "mission-tab-overview"
+# Create a voyage with an explicit landing mode.
+- tapOn:
+    id: "tab-work"
+- tapOn:
+    id: "tab-work"
+- extendedWaitUntil:
+    visible:
+      id: "home-screen"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "home-voyage"
+    direction: UP
+    visibilityPercentage: 100
+    centerElement: true
+- tapOn:
+    id: "home-voyage"
+- extendedWaitUntil:
+    visible:
+      id: "voyage-create"
+    timeout: 10000
+- tapOn:
+    id: "voyage-title"
+- inputText: "Mobile E2E voyage"
+- runFlow:
+    when:
+      visible: "Speed up your typing.*"
+    commands:
+      - tapOn: "Continue"
+- tapOn:
+    id: "voyage-vessel"
+- tapOn: "e2e-repo.*"
+- tapOn:
+    id: "voyage-landing-mode"
+- tapOn:
+    id: "voyage-landing-mode-option-PullRequest"
+- scrollUntilVisible:
+    element:
+      id: "voyage-mission-title-0"
+    direction: DOWN
+    visibilityPercentage: 100
+    centerElement: true
+- tapOn:
+    id: "voyage-mission-title-0"
+- inputText: "Mobile E2E mission"
+# Tapping outside the inputs dismisses the keyboard (keyboardShouldPersistTaps="handled").
+- tapOn: "Mission 1"
+- scrollUntilVisible:
+    element:
+      id: "voyage-create-submit"
+    direction: DOWN
+    visibilityPercentage: 100
+    centerElement: true
+- takeScreenshot: voyage-create
+- tapOn:
+    id: "voyage-create-submit"
+- extendedWaitUntil:
+    visible:
+      id: "voyage-detail"
+    timeout: 15000
+- assertVisible: "Mobile E2E voyage"
+- takeScreenshot: voyage-detail
+# Dispatch to the seeded vessel.
+- tapOn:
+    id: "tab-work"
+- tapOn:
+    id: "tab-work"
+- extendedWaitUntil:
+    visible:
+      id: "home-screen"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "home-dispatch"
+    direction: UP
+    visibilityPercentage: 100
+    centerElement: true
+- tapOn:
+    id: "home-dispatch"
+- extendedWaitUntil:
+    visible:
+      id: "dispatch-screen"
+    timeout: 10000
+- tapOn:
+    id: "dispatch-vessel"
+- tapOn: "e2e-repo.*"
+- scrollUntilVisible:
+    element:
+      id: "dispatch-prompt"
+    direction: DOWN
+    visibilityPercentage: 100
+    centerElement: true
+- tapOn:
+    id: "dispatch-prompt"
+- inputText: "Mobile E2E dispatched mission"
+- tapOn: "(?i)captain assignments"
+- runFlow:
+    when:
+      visible: "Speed up your typing.*"
+    commands:
+      - tapOn: "Continue"
+- scrollUntilVisible:
+    element:
+      id: "dispatch-submit"
+    direction: DOWN
+    visibilityPercentage: 100
+    centerElement: true
+- takeScreenshot: dispatch
+- tapOn:
+    id: "dispatch-submit"
+# Dispatch creates a voyage and opens it.
+- extendedWaitUntil:
+    visible:
+      id: "voyage-detail"
+    timeout: 15000
+- takeScreenshot: dispatched-voyage
+- tapOn:
+    id: "tab-work"
