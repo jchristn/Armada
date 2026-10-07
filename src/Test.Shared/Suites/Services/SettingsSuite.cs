@@ -44,7 +44,7 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(Constants.DefaultPlanningSessionInactivityTimeoutMinutes, settings.PlanningSessionInactivityTimeoutMinutes);
                 AssertEqual(Constants.DefaultPlanningSessionAbandonmentTimeoutMinutes, settings.PlanningSessionAbandonmentTimeoutMinutes);
                 AssertEqual(0, settings.PlanningSessionRetentionDays);
-                AssertFalse(settings.AutoCreatePullRequests);
+                AssertEqual(Armada.Core.Enums.LandingModeEnum.MergeAndPush, settings.LandingMode, "default landing mode");
                 AssertNull(settings.ApiKey);
             }));
 
@@ -132,6 +132,44 @@ namespace Test.Shared.Suites.Services
                 }
                 finally
                 {
+                    if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+                }
+            }));
+
+            cases.Add(CaseAsync("load_non_existent_file_lands_with_merge_and_push", "ArmadaSettings LoadAsync without a file uses MergeAndPush", TestTags.Positive, async () =>
+            {
+                ArmadaSettings settings = await ArmadaSettings.LoadAsync("/nonexistent/path/settings.json");
+                AssertEqual(Armada.Core.Enums.LandingModeEnum.MergeAndPush, settings.LandingMode);
+            }));
+
+            AddLandingModeLoadCase(cases, "load_landing_mode_unset_is_merge_and_push", "A settings file without landingMode or legacy flags lands with MergeAndPush", "", Armada.Core.Enums.LandingModeEnum.MergeAndPush);
+            AddLandingModeLoadCase(cases, "load_landing_mode_null_is_merge_and_push", "A settings file with landingMode null lands with MergeAndPush", "\"landingMode\":null,", Armada.Core.Enums.LandingModeEnum.MergeAndPush);
+            AddLandingModeLoadCase(cases, "load_legacy_auto_create_pull_requests_is_pull_request", "A pre-1.0.1 file with autoCreatePullRequests true and no landingMode keeps opening pull requests", "\"autoCreatePullRequests\":true,", Armada.Core.Enums.LandingModeEnum.PullRequest);
+            AddLandingModeLoadCase(cases, "load_legacy_auto_push_false_is_local_merge", "A pre-1.0.1 file with autoPush false and no landingMode keeps merging without pushing", "\"autoPush\":false,", Armada.Core.Enums.LandingModeEnum.LocalMerge);
+            AddLandingModeLoadCase(cases, "load_legacy_auto_push_true_is_merge_and_push", "A pre-1.0.1 file with autoPush true and no landingMode keeps merging and pushing", "\"autoPush\":true,\"autoCreatePullRequests\":false,", Armada.Core.Enums.LandingModeEnum.MergeAndPush);
+            AddLandingModeLoadCase(cases, "load_explicit_landing_mode_beats_legacy_flags", "An explicit landingMode wins over legacy flags in the same file", "\"landingMode\":\"LocalMerge\",\"autoCreatePullRequests\":true,", Armada.Core.Enums.LandingModeEnum.LocalMerge);
+            AddLandingModeLoadCase(cases, "load_explicit_merge_and_push", "An explicit landingMode MergeAndPush loads as MergeAndPush", "\"landingMode\":\"MergeAndPush\",", Armada.Core.Enums.LandingModeEnum.MergeAndPush);
+
+            cases.Add(CaseAsync("landing_mode_round_trip_save_load", "ArmadaSettings LandingMode survives save and load, and a saved file names it", TestTags.Positive, async () =>
+            {
+                string tempDir = Path.Combine(Path.GetTempPath(), "armada_settings_landing_" + Guid.NewGuid().ToString("N"));
+                string tempFile = Path.Combine(Path.GetTempPath(), "armada_test_settings_landing_" + Guid.NewGuid().ToString("N") + ".json");
+                try
+                {
+                    foreach (Armada.Core.Enums.LandingModeEnum mode in Enum.GetValues(typeof(Armada.Core.Enums.LandingModeEnum)))
+                    {
+                        ArmadaSettings original = new ArmadaSettings();
+                        original.DataDirectory = tempDir;
+                        original.LandingMode = mode;
+                        await original.SaveAsync(tempFile).ConfigureAwait(false);
+                        AssertContains("\"landingMode\": \"" + mode + "\"", await File.ReadAllTextAsync(tempFile).ConfigureAwait(false), "saved file names the mode");
+                        ArmadaSettings loaded = await ArmadaSettings.LoadAsync(tempFile).ConfigureAwait(false);
+                        AssertEqual(mode, loaded.LandingMode, "round trip " + mode);
+                    }
+                }
+                finally
+                {
+                    if (File.Exists(tempFile)) File.Delete(tempFile);
                     if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
                 }
             }));
@@ -418,6 +456,27 @@ namespace Test.Shared.Suites.Services
         #endregion
 
         #region Private-Methods
+
+        private static void AddLandingModeLoadCase(List<TestCaseDescriptor> cases, string caseId, string displayName, string landingJson, Armada.Core.Enums.LandingModeEnum expected)
+        {
+            cases.Add(CaseAsync(caseId, displayName, TestTags.Positive, async () =>
+            {
+                string tempDir = Path.Combine(Path.GetTempPath(), "armada_settings_landing_" + Guid.NewGuid().ToString("N"));
+                string tempFile = Path.Combine(Path.GetTempPath(), "armada_test_settings_landing_" + Guid.NewGuid().ToString("N") + ".json");
+                try
+                {
+                    string json = "{" + landingJson + "\"dataDirectory\":\"" + tempDir.Replace("\\", "\\\\") + "\"}";
+                    await File.WriteAllTextAsync(tempFile, json).ConfigureAwait(false);
+                    ArmadaSettings loaded = await ArmadaSettings.LoadAsync(tempFile).ConfigureAwait(false);
+                    AssertEqual(expected, loaded.LandingMode, "landing mode from " + json);
+                }
+                finally
+                {
+                    if (File.Exists(tempFile)) File.Delete(tempFile);
+                    if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+                }
+            }));
+        }
 
         private static TestCaseDescriptor Case(string caseId, string displayName, string tag, Action body)
         {

@@ -13,6 +13,11 @@ namespace Test.Shared.Suites.Tui.Bodies
         public int? MaxCaptains { get; set; } = null;
 
         /// <summary>
+        /// Global landing mode.
+        /// </summary>
+        public string? LandingMode { get; set; } = null;
+
+        /// <summary>
         /// Retention group.
         /// </summary>
         public ServerSettingsRetentionBody? Retention { get; set; } = null;

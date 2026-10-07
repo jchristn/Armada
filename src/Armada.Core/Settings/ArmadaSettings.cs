@@ -237,12 +237,13 @@ namespace Armada.Core.Settings
         }
 
         /// <summary>
-        /// Global landing mode for completed missions. Determines how work is integrated.
-        /// When set, takes precedence over the legacy boolean flags (AutoPush, AutoCreatePullRequests, AutoMergePullRequests).
+        /// Global (default) landing mode for completed missions. Default: MergeAndPush.
         /// Can be overridden per-vessel or per-voyage.
-        /// Resolution order: voyage.LandingMode > vessel.LandingMode > settings.LandingMode > derive from booleans.
+        /// Resolution order: voyage.LandingMode > vessel.LandingMode > settings.LandingMode > MergeAndPush.
+        /// A settings file without a landing mode (written before 1.0.1) is read with the mode its legacy autoPush and
+        /// autoCreatePullRequests flags described (see <see cref="LegacyLandingSettings"/>).
         /// </summary>
-        public LandingModeEnum? LandingMode { get; set; } = null;
+        public LandingModeEnum? LandingMode { get; set; } = LandingModeEnum.MergeAndPush;
 
         /// <summary>
         /// Global branch cleanup policy after successful landing.
@@ -251,22 +252,8 @@ namespace Armada.Core.Settings
         public BranchCleanupPolicyEnum BranchCleanupPolicy { get; set; } = BranchCleanupPolicyEnum.LocalOnly;
 
         /// <summary>
-        /// Whether to automatically push changes to the remote on mission completion.
-        /// Legacy setting — prefer LandingMode when possible.
-        /// </summary>
-        public bool AutoPush { get; set; } = true;
-
-        /// <summary>
-        /// Whether to automatically create pull requests on mission completion.
-        /// Legacy setting — prefer LandingMode when possible.
-        /// Requires AutoPush to be effective.
-        /// </summary>
-        public bool AutoCreatePullRequests { get; set; } = false;
-
-        /// <summary>
-        /// Whether to automatically merge pull requests after creation.
-        /// Legacy setting — prefer LandingMode when possible.
-        /// Requires AutoCreatePullRequests to be effective.
+        /// Whether to enable auto-merge on the pull requests the PullRequest landing mode opens.
+        /// A voyage's AutoMergePullRequests overrides it.
         /// </summary>
         public bool AutoMergePullRequests { get; set; } = false;
 
@@ -938,6 +925,8 @@ namespace Armada.Core.Settings
             string json = await File.ReadAllTextAsync(path).ConfigureAwait(false);
             ArmadaSettings? settings = JsonSerializer.Deserialize<ArmadaSettings>(json, _SerializerOptions);
             settings ??= new ArmadaSettings();
+            LegacyLandingSettings? legacy = JsonSerializer.Deserialize<LegacyLandingSettings>(json, _SerializerOptions);
+            if (legacy != null && !legacy.LandingMode.HasValue) settings.LandingMode = legacy.ResolveLandingMode();
             settings.SettingsFilePath = path;
             settings.NormalizePaths();
             return settings;

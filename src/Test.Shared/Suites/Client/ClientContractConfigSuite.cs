@@ -209,6 +209,15 @@ namespace Test.Shared.Suites.Client
                 settings.MaxCaptains = original;
                 await c.UpdateSettingsAsync(settings);
 
+                AssertEqual(LandingModeEnum.MergeAndPush, (await c.GetSettingsAsync())?.LandingMode, "the global landing mode defaults to MergeAndPush");
+                SettingsData landing = new SettingsData();
+                landing.LandingMode = LandingModeEnum.LocalMerge;
+                AssertEqual(LandingModeEnum.LocalMerge, (await c.UpdateSettingsAsync(landing))?.LandingMode, "PUT returns the new global landing mode");
+                AssertEqual(LandingModeEnum.LocalMerge, (await c.GetSettingsAsync())?.LandingMode, "GET reads it back");
+                AssertEqual(original, (await c.GetSettingsAsync())?.MaxCaptains ?? -1, "a landing-only PUT leaves other settings alone");
+                landing.LandingMode = LandingModeEnum.MergeAndPush;
+                AssertEqual(LandingModeEnum.MergeAndPush, (await c.UpdateSettingsAsync(landing))?.LandingMode, "restored");
+
                 ArmadaRawJson? openApi = await c.GetOpenApiDocumentAsync();
                 AssertNotNull(openApi, "OpenAPI document");
                 ClientOpenApiDocument openApiDocument = JsonHelper.Deserialize<ClientOpenApiDocument>(openApi!.Json);

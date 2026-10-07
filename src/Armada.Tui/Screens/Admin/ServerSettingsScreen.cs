@@ -15,6 +15,7 @@ namespace Armada.Tui.Screens.Admin
     using Armada.Tui.Input;
     using Armada.Tui.Modals;
     using Armada.Tui.Routing;
+    using Armada.Tui.Screens.Build;
     using Armada.Tui.Screens.Kit;
     using Armada.Tui.Services;
     using Armada.Tui.Widgets;
@@ -136,7 +137,7 @@ namespace Armada.Tui.Screens.Admin
         public InputField IdleCaptainTimeout { get; } = new InputField();
 
         /// <summary>Auto-create pull requests.</summary>
-        public ToggleField AutoCreatePr { get; } = new ToggleField();
+        public SelectField<string> DefaultLandingMode { get; } = new SelectField<string>();
 
         /// <summary>Planning idle timeout.</summary>
         public InputField PlanningInactivity { get; } = new InputField();
@@ -554,8 +555,11 @@ namespace Armada.Tui.Screens.Admin
             AddNumber(agent, "Heartbeat Interval (seconds)", HeartbeatInterval, "Health check interval, minimum 5 seconds", v => ServerSettingsRules.AtLeast(Context.Loc, v, 5, null));
             AddNumber(agent, "Stall Threshold (minutes)", StallThreshold, "Minutes before a captain is considered stalled", v => ServerSettingsRules.AtLeast(Context.Loc, v, 1, null));
             AddNumber(agent, "Idle Captain Timeout (seconds)", IdleCaptainTimeout, "Auto-remove idle captains after this many seconds (0 = disabled)", v => ServerSettingsRules.AtLeast(Context.Loc, v, 0, null));
-            AutoCreatePr.Caption = "Auto-Create Pull Requests";
-            AddTracked(agent, "Pull Requests", AutoCreatePr, "Automatically open pull requests when supported by the mission and vessel configuration.");
+            DefaultLandingMode.ModalHost = Context.Modals;
+            DefaultLandingMode.PickerTitle = "Default Landing Mode";
+            DefaultLandingMode.Options = LandingModeInfo.All.Where(m => m.Value.Length > 0).Select(m => new SelectOption<string>(m.Value, Context.Loc.T(m.Label))).ToList();
+            DefaultLandingMode.SetValue(nameof(LandingModeEnum.MergeAndPush));
+            AddTracked(agent, "Default Landing Mode", DefaultLandingMode, "How finished missions land when neither the vessel nor the voyage sets a landing mode (default Merge and Push).");
             AddButtons(agent);
 
             // Planning Session Settings.
@@ -930,7 +934,7 @@ namespace Armada.Tui.Screens.Admin
                 HeartbeatInterval.Value = Num(s.HeartbeatIntervalSeconds);
                 StallThreshold.Value = Num(s.StallThresholdMinutes);
                 IdleCaptainTimeout.Value = Num(s.IdleCaptainTimeoutSeconds);
-                AutoCreatePr.SetValue(s.AutoCreatePr ?? false, false);
+                DefaultLandingMode.SetValue((s.LandingMode ?? LandingModeEnum.MergeAndPush).ToString());
             });
             Apply("planning", force, () =>
             {
@@ -1258,7 +1262,7 @@ namespace Armada.Tui.Screens.Admin
                 d.HeartbeatIntervalSeconds = IntOf(HeartbeatInterval);
                 d.StallThresholdMinutes = IntOf(StallThreshold);
                 d.IdleCaptainTimeoutSeconds = IntOf(IdleCaptainTimeout);
-                d.AutoCreatePr = AutoCreatePr.Value;
+                d.LandingMode = Enum.TryParse<LandingModeEnum>(DefaultLandingMode.Value ?? "", out LandingModeEnum landingMode) ? landingMode : (LandingModeEnum?)null;
                 return d;
             }, "Agent settings saved");
         }

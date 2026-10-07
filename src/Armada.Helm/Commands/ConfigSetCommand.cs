@@ -82,13 +82,14 @@ namespace Armada.Helm.Commands
                     }
                     armadaSettings.StallThresholdMinutes = stallThreshold;
                     break;
-                case "autocreatepullrequests":
-                    if (!bool.TryParse(value, out bool autoPr))
+                case "landingmode":
+                    if (!Enum.TryParse<LandingModeEnum>(value.Trim(), true, out LandingModeEnum landingMode)
+                        || !Enum.IsDefined(typeof(LandingModeEnum), landingMode))
                     {
-                        AnsiConsole.MarkupLine("[red]Invalid boolean. Use true or false.[/]");
+                        AnsiConsole.MarkupLine("[red]Invalid landing mode. Use one of: " + String.Join(", ", Enum.GetNames(typeof(LandingModeEnum))) + ".[/]");
                         return 1;
                     }
-                    armadaSettings.AutoCreatePullRequests = autoPr;
+                    armadaSettings.LandingMode = landingMode;
                     break;
                 case "apikey":
                     armadaSettings.ApiKey = value;
@@ -160,7 +161,7 @@ namespace Armada.Helm.Commands
                     break;
                 default:
                     AnsiConsole.MarkupLine($"[red]Unknown configuration key:[/] [bold]{Markup.Escape(settings.Key)}[/]");
-                    AnsiConsole.MarkupLine("[dim]Valid keys: dataDirectory, databasePath, logDirectory, docksDirectory, reposDirectory, admiralPort, mcpPort, heartbeatIntervalSeconds, stallThresholdMinutes, autoCreatePullRequests, apiKey, defaultRuntime, notifications, terminalBell, idleCaptainTimeoutSeconds, maxCaptains, messageTemplates.enableCommitMetadata, messageTemplates.enablePrMetadata, messageTemplates.commitMessageTemplate, messageTemplates.prDescriptionTemplate, messageTemplates.mergeCommitTemplate[/]");
+                    AnsiConsole.MarkupLine("[dim]Valid keys: dataDirectory, databasePath, logDirectory, docksDirectory, reposDirectory, admiralPort, mcpPort, heartbeatIntervalSeconds, stallThresholdMinutes, landingMode, apiKey, defaultRuntime, notifications, terminalBell, idleCaptainTimeoutSeconds, maxCaptains, messageTemplates.enableCommitMetadata, messageTemplates.enablePrMetadata, messageTemplates.commitMessageTemplate, messageTemplates.prDescriptionTemplate, messageTemplates.mergeCommitTemplate[/]");
                     return 1;
             }
 

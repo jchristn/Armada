@@ -1036,7 +1036,7 @@ namespace Test.Shared.Suites.Services
                 throw new NotImplementedException();
             }
 
-            public Task<Voyage> DispatchVoyageAsync(string title, string description, string vesselId, List<MissionDescription> missionDescriptions, string? pipelineId, List<SelectedPlaybook>? selectedPlaybooks, string? captainOverridesJson = null, CancellationToken token = default)
+            public Task<Voyage> DispatchVoyageAsync(string title, string description, string vesselId, List<MissionDescription> missionDescriptions, string? pipelineId, List<SelectedPlaybook>? selectedPlaybooks, string? captainOverridesJson = null, LandingModeEnum? landingMode = null, CancellationToken token = default)
             {
                 throw new NotImplementedException();
             }

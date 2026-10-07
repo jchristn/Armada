@@ -5,6 +5,7 @@ namespace Armada.Helm.Commands
     using System.Threading;
     using Spectre.Console;
     using Spectre.Console.Cli;
+    using Armada.Core.Enums;
     using Armada.Core.Settings;
     using Armada.Helm.Infrastructure;
     using Armada.Helm.Rendering;
@@ -114,11 +115,20 @@ namespace Armada.Helm.Commands
                 armadaSettings.McpPort);
             armadaSettings.McpPort = mcpPort;
 
-            // Auto PR
-            bool autoPr = AnsiConsole.Confirm(
-                "[dodgerblue1]Auto-create pull requests on mission completion?[/]",
-                armadaSettings.AutoCreatePullRequests);
-            armadaSettings.AutoCreatePullRequests = autoPr;
+            // Default landing mode
+            LandingModeEnum currentLandingMode = armadaSettings.LandingMode ?? LandingModeEnum.MergeAndPush;
+            List<LandingModeEnum> landingChoices = new List<LandingModeEnum> { currentLandingMode };
+            foreach (LandingModeEnum choice in new[] { LandingModeEnum.MergeAndPush, LandingModeEnum.LocalMerge, LandingModeEnum.PullRequest, LandingModeEnum.MergeQueue, LandingModeEnum.None })
+            {
+                if (choice != currentLandingMode) landingChoices.Add(choice);
+            }
+
+            LandingModeEnum landingMode = AnsiConsole.Prompt(
+                new SelectionPrompt<LandingModeEnum>()
+                    .Title("[dodgerblue1]Default landing mode for finished missions[/]:")
+                    .AddChoices(landingChoices)
+                    .UseConverter(DescribeLandingMode));
+            armadaSettings.LandingMode = landingMode;
 
             // API key
             bool setApiKey = AnsiConsole.Confirm(
@@ -147,6 +157,25 @@ namespace Armada.Helm.Commands
             AnsiConsole.MarkupLine("  [green]armada vessel add[/]      Register a repository");
 
             return 0;
+        }
+
+        private static string DescribeLandingMode(LandingModeEnum mode)
+        {
+            switch (mode)
+            {
+                case LandingModeEnum.MergeAndPush:
+                    return "MergeAndPush - merge into your working directory, then push to its remote";
+                case LandingModeEnum.LocalMerge:
+                    return "LocalMerge - merge into your working directory, no push";
+                case LandingModeEnum.PullRequest:
+                    return "PullRequest - push the branch and open a pull request";
+                case LandingModeEnum.MergeQueue:
+                    return "MergeQueue - validated merge through the merge queue";
+                case LandingModeEnum.None:
+                    return "None - leave the branch for manual integration";
+                default:
+                    return mode.ToString();
+            }
         }
     }
 }

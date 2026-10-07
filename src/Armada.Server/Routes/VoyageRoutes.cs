@@ -159,6 +159,7 @@ namespace Armada.Server.Routes
                     voyage = new Voyage(voyageReq.Title, voyageReq.Description);
                     voyage.TenantId = ctx.TenantId;
                     voyage.UserId = ctx.UserId;
+                    voyage.LandingMode = voyageReq.LandingMode;
                     voyage = await _database.Voyages.CreateAsync(voyage).ConfigureAwait(false);
                     voyage.SelectedPlaybooks = voyageReq.SelectedPlaybooks ?? new List<SelectedPlaybook>();
                     if (voyage.SelectedPlaybooks.Count > 0)
@@ -185,7 +186,8 @@ namespace Armada.Server.Routes
                         missions,
                         pipelineId,
                         voyageReq.SelectedPlaybooks,
-                        overridesJson).ConfigureAwait(false);
+                        overridesJson,
+                        voyageReq.LandingMode).ConfigureAwait(false);
                 }
 
                 if (!String.IsNullOrWhiteSpace(voyageReq.ObjectiveId))

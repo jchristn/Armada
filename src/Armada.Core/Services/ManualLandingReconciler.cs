@@ -116,7 +116,7 @@ namespace Armada.Core.Services
             if (vessel == null) return false;
 
             Voyage? voyage = String.IsNullOrEmpty(mission.VoyageId) ? null : await _Database.Voyages.ReadAsync(mission.VoyageId, token).ConfigureAwait(false);
-            LandingModeEnum? effectiveMode = voyage?.LandingMode ?? vessel.LandingMode ?? _Settings.LandingMode;
+            LandingModeEnum effectiveMode = voyage?.LandingMode ?? vessel.LandingMode ?? _Settings.LandingMode ?? LandingModeEnum.MergeAndPush;
             if (effectiveMode != LandingModeEnum.None) return false;
 
             string? repoPath = ResolveRepoPath(vessel);

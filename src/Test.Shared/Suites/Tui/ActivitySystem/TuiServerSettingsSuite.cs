@@ -50,7 +50,7 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                     AssertEqual("7890", screen.AdmiralPort.Value, "admiral port");
                     AssertEqual("12", screen.MaxCaptains.Value, "max captains");
                     AssertEqual("vsl_self", screen.SelfVessel.Value, "self vessel");
-                    AssertTrue(screen.AutoCreatePr.Value, "auto pr");
+                    AssertEqual("PullRequest", screen.DefaultLandingMode.Value, "default landing mode");
                     AssertEqual("360", screen.HealthFields["intervalMinutes"].Value, "rh interval");
                     AssertTrue(screen.Criteria[Armada.Core.Enums.VesselHealthCriterionEnum.Branches].Value, "criterion on");
                     AssertFalse(screen.Criteria[Armada.Core.Enums.VesselHealthCriterionEnum.CommitRecency].Value, "criterion off");
@@ -79,6 +79,25 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                     AssertFalse(JsonShape.HasPropertyAnywhere(put.Body, "Retention"), "only the group: " + put.Body);
                     AssertTrue(host.WaitForText("Server configuration saved"), "toast");
                     AssertTrue(TuiToasts.WaitForSuccess(host, "Server configuration saved"), "success toast");
+                }
+            }));
+
+            cases.Add(TuiCase.Sync(Suite, "default_landing_mode_save", "Agent Settings offers every landing mode and saves the chosen default landing mode", () =>
+            {
+                StubHttpHandler stub = Stub();
+                using (TuiTestHost host = Open(stub, out ServerSettingsScreen screen))
+                {
+                    List<string> values = screen.DefaultLandingMode.Options.Select(o => o.Value).ToList();
+                    AssertEqual("LocalMerge,MergeAndPush,PullRequest,MergeQueue,None", String.Join(",", values), "every mode, no inherit entry");
+                    AssertFalse(screen.Groups["agent"].IsDirty, "clean before the change");
+                    screen.DefaultLandingMode.SetValue("MergeAndPush");
+                    AssertTrue(screen.Groups["agent"].IsDirty, "dirty after the change");
+                    screen.Form.Scope.Focus(screen.HeartbeatInterval);
+                    host.Press("ctrl+s");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("PUT", "/api/v1/settings") == 1), "PUT sent");
+                    StubRequest put = stub.Last("PUT", "/api/v1/settings");
+                    AssertEqual("MergeAndPush", put.BodyAs<ServerSettingsUpdateBody>().LandingMode, "landing mode sent: " + put.Body);
+                    AssertFalse(JsonShape.HasPropertyAnywhere(put.Body, "AutoCreatePr"), "the removed pull request toggle is not sent: " + put.Body);
                 }
             }));
 
@@ -328,7 +347,7 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
             StubHttpHandler stub = TuiFixtures.SignedInServer();
             stub.Json("GET", "/api/v1/status/health", "{\"Status\":\"healthy\",\"Version\":\"0.9.0\",\"Uptime\":\"1.02:03:04\",\"Timestamp\":\"2026-10-04T10:00:00Z\",\"StartUtc\":\"2026-10-03T08:00:00Z\",\"Ports\":{\"Admiral\":7890,\"Mcp\":7891},\"RemoteTunnel\":{\"Enabled\":false,\"State\":\"Disabled\"}}");
             string settings = "{\"AdmiralPort\":7890,\"McpPort\":7891,\"MaxCaptains\":12,\"HeartbeatIntervalSeconds\":30,\"StallThresholdMinutes\":10,\"IdleCaptainTimeoutSeconds\":0,"
-                + "\"PlanningSessionInactivityTimeoutMinutes\":30,\"PlanningSessionAbandonmentTimeoutMinutes\":240,\"PlanningSessionRetentionDays\":14,\"AutoCreatePr\":true,"
+                + "\"PlanningSessionInactivityTimeoutMinutes\":30,\"PlanningSessionAbandonmentTimeoutMinutes\":240,\"PlanningSessionRetentionDays\":14,\"LandingMode\":\"PullRequest\","
                 + "\"DataDirectory\":\"/data/armada\",\"DatabasePath\":\"/data/armada/armada.db\",\"LogDirectory\":\"/data/armada/logs\",\"DocksDirectory\":\"/data/armada/docks\",\"ReposDirectory\":\"/data/armada/repos\","
                 + "\"SelfVesselId\":\"vsl_self\",\"RebuildSlotRetentionCount\":3,"
                 + "\"RemoteControl\":{\"Enabled\":false,\"TunnelUrl\":\"https://proxy.example/tunnel\",\"Password\":\"armadaadmin\",\"ConnectTimeoutSeconds\":15,\"HeartbeatIntervalSeconds\":30,\"ReconnectBaseDelaySeconds\":5,\"ReconnectMaxDelaySeconds\":60,\"AllowInvalidCertificates\":false},"

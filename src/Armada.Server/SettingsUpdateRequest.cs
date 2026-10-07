@@ -72,9 +72,9 @@ namespace Armada.Server
         public int? PlanningSessionRetentionDays { get; set; }
 
         /// <summary>
-        /// Whether to auto-create pull requests on mission completion.
+        /// Global (default) landing mode for completed missions; vessels and voyages can override it.
         /// </summary>
-        public bool? AutoCreatePr { get; set; }
+        public Armada.Core.Enums.LandingModeEnum? LandingMode { get; set; }
 
         /// <summary>
         /// Identifier (vsl_ prefix) of the vessel holding Armada's own source, used by the "Rebuild Armada"

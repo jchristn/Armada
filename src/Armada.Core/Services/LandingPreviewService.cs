@@ -99,7 +99,7 @@ namespace Armada.Core.Services
             EvaluateBranchPolicyIssues(result);
             // The mode the landing handler will actually use: voyage, then vessel, then the Admiral default.
             Voyage? voyage = String.IsNullOrEmpty(mission.VoyageId) ? null : await _Database.Voyages.ReadAsync(mission.VoyageId, token).ConfigureAwait(false);
-            result.EffectiveLandingMode = voyage?.LandingMode ?? vessel.LandingMode ?? _Settings?.LandingMode;
+            result.EffectiveLandingMode = voyage?.LandingMode ?? vessel.LandingMode ?? _Settings?.LandingMode ?? LandingModeEnum.MergeAndPush;
             result.ManualLandingOnly = result.EffectiveLandingMode == LandingModeEnum.None;
             result.MissionStatus = mission.Status;
             bool landable = EvaluateMissionIssues(result, mission);

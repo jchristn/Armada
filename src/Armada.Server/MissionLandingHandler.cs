@@ -164,29 +164,13 @@ namespace Armada.Server
                 voyage = await _Database.Voyages.ReadAsync(mission.VoyageId).ConfigureAwait(false);
             }
 
-            // Resolve landing mode: voyage > vessel > global > derive from legacy booleans
-            LandingModeEnum? resolvedLandingMode = voyage?.LandingMode ?? vessel?.LandingMode ?? _Settings.LandingMode;
+            // Resolve landing mode: voyage > vessel > global > MergeAndPush
+            LandingModeEnum resolvedLandingMode = voyage?.LandingMode ?? vessel?.LandingMode ?? _Settings.LandingMode ?? LandingModeEnum.MergeAndPush;
 
-            // Resolve effective settings from landing mode or legacy booleans
-            bool effectivePush;
-            bool effectivePr;
-            bool effectiveMerge;
-
-            if (resolvedLandingMode.HasValue)
-            {
-                // Explicit landing mode takes precedence over boolean flags
-                effectivePr = resolvedLandingMode.Value == LandingModeEnum.PullRequest;
-                // LocalMerge merges without pushing; MergeAndPush merges and then pushes the working directory
-                effectivePush = effectivePr || resolvedLandingMode.Value == LandingModeEnum.MergeAndPush;
-                effectiveMerge = effectivePr && (voyage?.AutoMergePullRequests ?? _Settings.AutoMergePullRequests);
-            }
-            else
-            {
-                // Legacy boolean resolution: per-voyage override > global setting
-                effectivePush = voyage?.AutoPush ?? _Settings.AutoPush;
-                effectivePr = voyage?.AutoCreatePullRequests ?? _Settings.AutoCreatePullRequests;
-                effectiveMerge = voyage?.AutoMergePullRequests ?? _Settings.AutoMergePullRequests;
-            }
+            // LocalMerge merges without pushing; MergeAndPush merges and then pushes the working directory
+            bool effectivePr = resolvedLandingMode == LandingModeEnum.PullRequest;
+            bool effectivePush = resolvedLandingMode == LandingModeEnum.MergeAndPush;
+            bool effectiveMerge = effectivePr && (voyage?.AutoMergePullRequests ?? _Settings.AutoMergePullRequests);
 
             bool landingModeIsNone = resolvedLandingMode == LandingModeEnum.None;
             bool landingModeIsMergeQueue = resolvedLandingMode == LandingModeEnum.MergeQueue;
@@ -322,7 +306,7 @@ namespace Armada.Server
                     && !landingModeIsMergeQueue
                     && vessel != null && !String.IsNullOrEmpty(vessel.WorkingDirectory) && !String.IsNullOrEmpty(vessel.LocalPath))
                 {
-                    // Local merge runs for LocalMerge, MergeAndPush, and the legacy unset mode. An explicit None (manual landing)
+                    // Local merge runs for LocalMerge and MergeAndPush. An explicit None (manual landing)
                     // or MergeQueue must never merge into the user's working directory, even when one is configured.
                     // Check if the mission actually produced mergeable changes.
                     // Pipeline stages like Architect may complete without code changes (they output
@@ -470,7 +454,7 @@ namespace Armada.Server
                 }
                 else
                 {
-                    _Logging.Info(_Header + "mission " + mission.Id + " work produced — branch " + dock.BranchName + " available in bare repo (landing mode: " + (resolvedLandingMode?.ToString() ?? "not configured") + ")");
+                    _Logging.Info(_Header + "mission " + mission.Id + " work produced — branch " + dock.BranchName + " available in bare repo (landing mode: " + resolvedLandingMode + ")");
                     // No landing configured or LandingMode.None — mission stays as WorkProduced
                 }
             }

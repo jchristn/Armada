@@ -239,7 +239,6 @@ namespace Test.Shared.Suites.Services
                         StubGitService git = new StubGitService();
                         ArmadaSettings settings = CreateSettings();
                         settings.LandingMode = mode;
-                        settings.AutoPush = mode != LandingModeEnum.MergeAndPush;
                         MissionLandingHandler handler = CreateHandler(testDb.Driver, git, new RecordingMergeQueueService(), settings);
                         LandingTestEntitiesResult entities = await CreateEntitiesAsync(testDb.Driver, null, null, git).ConfigureAwait(false);
 
@@ -248,35 +247,71 @@ namespace Test.Shared.Suites.Services
                         Mission? mission = await testDb.Driver.Missions.ReadAsync(entities.Mission.Id).ConfigureAwait(false);
                         AssertEqual(MissionStatusEnum.Complete, mission!.Status);
                         AssertEqual(1, git.MergeBranchCalls.Count, "merged once");
-                        AssertEqual(expectedPushes, git.PushCalls.Count, "the landing mode, not the legacy AutoPush flag, decides the push");
+                        AssertEqual(expectedPushes, git.PushCalls.Count, "the global landing mode decides the push");
                     }
                 }));
             }
 
-            foreach (bool autoPush in new[] { true, false })
+            cases.Add(CaseAsync("default_settings_merge_and_push", "No landing mode on the vessel or voyage and default settings: merges and pushes (MergeAndPush)", TestTags.Positive, async () =>
             {
-                bool push = autoPush;
-                cases.Add(CaseAsync("legacy_unset_mode_auto_push_" + (push ? "true" : "false"), "No landing mode anywhere: local merge, push decided by AutoPush=" + push, TestTags.Positive, async () =>
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
                 {
-                    using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
-                    {
-                        StubGitService git = new StubGitService();
-                        ArmadaSettings settings = CreateSettings();
-                        settings.LandingMode = null;
-                        settings.AutoPush = push;
-                        settings.AutoCreatePullRequests = false;
-                        MissionLandingHandler handler = CreateHandler(testDb.Driver, git, new RecordingMergeQueueService(), settings);
-                        LandingTestEntitiesResult entities = await CreateEntitiesAsync(testDb.Driver, null, null, git).ConfigureAwait(false);
+                    StubGitService git = new StubGitService();
+                    MissionLandingHandler handler = CreateHandler(testDb.Driver, git, new RecordingMergeQueueService(), CreateSettings());
+                    LandingTestEntitiesResult entities = await CreateEntitiesAsync(testDb.Driver, null, null, git).ConfigureAwait(false);
 
-                        await handler.HandleMissionCompleteAsync(entities.Mission, entities.Dock).ConfigureAwait(false);
+                    await handler.HandleMissionCompleteAsync(entities.Mission, entities.Dock).ConfigureAwait(false);
 
-                        Mission? mission = await testDb.Driver.Missions.ReadAsync(entities.Mission.Id).ConfigureAwait(false);
-                        AssertEqual(MissionStatusEnum.Complete, mission!.Status);
-                        AssertEqual(1, git.MergeBranchCalls.Count, "merged once");
-                        AssertEqual(push ? 1 : 0, git.PushCalls.Count, "AutoPush decides the push");
-                    }
-                }));
-            }
+                    Mission? mission = await testDb.Driver.Missions.ReadAsync(entities.Mission.Id).ConfigureAwait(false);
+                    AssertEqual(MissionStatusEnum.Complete, mission!.Status);
+                    AssertEqual(1, git.MergeBranchCalls.Count, "merged once");
+                    AssertEqual(1, git.PushCalls.Count, "the MergeAndPush default pushes");
+                }
+            }));
+
+            cases.Add(CaseAsync("unset_global_falls_back_to_merge_and_push", "Global landing mode cleared to null: still merges and pushes (MergeAndPush is used when unset)", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    StubGitService git = new StubGitService();
+                    ArmadaSettings settings = CreateSettings();
+                    settings.LandingMode = null;
+                    MissionLandingHandler handler = CreateHandler(testDb.Driver, git, new RecordingMergeQueueService(), settings);
+                    LandingTestEntitiesResult entities = await CreateEntitiesAsync(testDb.Driver, null, null, git).ConfigureAwait(false);
+
+                    await handler.HandleMissionCompleteAsync(entities.Mission, entities.Dock).ConfigureAwait(false);
+
+                    Mission? mission = await testDb.Driver.Missions.ReadAsync(entities.Mission.Id).ConfigureAwait(false);
+                    AssertEqual(MissionStatusEnum.Complete, mission!.Status);
+                    AssertEqual(1, git.MergeBranchCalls.Count, "merged once");
+                    AssertEqual(1, git.PushCalls.Count, "MergeAndPush when nothing sets a landing mode");
+                    AssertEqual(0, git.PrCalls.Count, "no pull request");
+                }
+            }));
+
+            cases.Add(CaseAsync("voyage_legacy_flags_ignored", "A voyage's legacy AutoPush and AutoCreatePullRequests flags no longer change the landing", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    StubGitService git = new StubGitService();
+                    MissionLandingHandler handler = CreateHandler(testDb.Driver, git, new RecordingMergeQueueService());
+                    LandingTestEntitiesResult entities = await CreateEntitiesAsync(testDb.Driver, LandingModeEnum.LocalMerge, null, git).ConfigureAwait(false);
+                    Voyage voyage = new Voyage("legacy-flags-" + Guid.NewGuid().ToString("N").Substring(0, 8));
+                    voyage.AutoPush = true;
+                    voyage.AutoCreatePullRequests = true;
+                    voyage = await testDb.Driver.Voyages.CreateAsync(voyage).ConfigureAwait(false);
+                    entities.Mission.VoyageId = voyage.Id;
+                    await testDb.Driver.Missions.UpdateAsync(entities.Mission).ConfigureAwait(false);
+
+                    await handler.HandleMissionCompleteAsync(entities.Mission, entities.Dock).ConfigureAwait(false);
+
+                    Mission? mission = await testDb.Driver.Missions.ReadAsync(entities.Mission.Id).ConfigureAwait(false);
+                    AssertEqual(MissionStatusEnum.Complete, mission!.Status, "the vessel's LocalMerge applies");
+                    AssertEqual(1, git.MergeBranchCalls.Count, "merged once");
+                    AssertEqual(0, git.PushCalls.Count, "no push");
+                    AssertEqual(0, git.PrCalls.Count, "no pull request");
+                }
+            }));
 
             cases.Add(CaseAsync("pull_request_opened", "PullRequest: push and PR create set PullRequestOpen with the PR URL", TestTags.Positive, async () =>
             {

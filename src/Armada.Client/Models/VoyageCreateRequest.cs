@@ -55,6 +55,11 @@ namespace Armada.Client.Models
         /// </summary>
         public List<Armada.Core.Models.CaptainAssignmentOverride>? CaptainAssignments { get; set; } = null;
 
+        /// <summary>
+        /// Optional landing mode for this voyage's missions; null inherits the vessel's, then the global default.
+        /// </summary>
+        public Armada.Core.Enums.LandingModeEnum? LandingMode { get; set; } = null;
+
         #endregion
 
         #region Constructors-and-Factories

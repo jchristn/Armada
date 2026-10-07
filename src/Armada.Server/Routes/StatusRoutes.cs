@@ -507,8 +507,8 @@ namespace Armada.Server.Routes
                 if (body.PlanningSessionRetentionDays.HasValue)
                     _settings.PlanningSessionRetentionDays = body.PlanningSessionRetentionDays.Value;
 
-                if (body.AutoCreatePr.HasValue)
-                    _settings.AutoCreatePullRequests = body.AutoCreatePr.Value;
+                if (body.LandingMode.HasValue)
+                    _settings.LandingMode = body.LandingMode.Value;
 
                 if (body.SelfVesselId != null)
                     _settings.SelfVesselId = String.IsNullOrWhiteSpace(body.SelfVesselId) ? null : body.SelfVesselId.Trim();
@@ -656,7 +656,7 @@ namespace Armada.Server.Routes
                 PlanningSessionInactivityTimeoutMinutes = _settings.PlanningSessionInactivityTimeoutMinutes,
                 PlanningSessionAbandonmentTimeoutMinutes = _settings.PlanningSessionAbandonmentTimeoutMinutes,
                 PlanningSessionRetentionDays = _settings.PlanningSessionRetentionDays,
-                AutoCreatePr = _settings.AutoCreatePullRequests,
+                LandingMode = _settings.LandingMode ?? LandingModeEnum.MergeAndPush,
                 DataDirectory = _settings.DataDirectory,
                 DatabasePath = _settings.DatabasePath,
                 LogDirectory = _settings.LogDirectory,

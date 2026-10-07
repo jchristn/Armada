@@ -55,9 +55,10 @@ namespace Armada.Client.Models
         public int? PlanningSessionRetentionDays { get; set; } = null;
 
         /// <summary>
-        /// Automatically create pull requests.
+        /// Global (default) landing mode for completed missions (MergeAndPush unless changed); vessels and voyages can
+        /// override it.
         /// </summary>
-        public bool? AutoCreatePr { get; set; } = null;
+        public Armada.Core.Enums.LandingModeEnum? LandingMode { get; set; } = null;
 
         /// <summary>
         /// Data directory (read-only).

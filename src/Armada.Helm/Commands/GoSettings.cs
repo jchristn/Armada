@@ -53,45 +53,11 @@ namespace Armada.Helm.Commands
         public string? LogFile { get; set; }
 
         /// <summary>
-        /// Override AutoPush: push changes to remote.
+        /// Landing mode for this voyage (LocalMerge, MergeAndPush, PullRequest, MergeQueue, None); unset inherits the
+        /// vessel's landing mode, then the global default.
         /// </summary>
-        [Description("Push changes to remote (overrides config)")]
-        [CommandOption("--push")]
-        public bool? Push { get; set; }
-
-        /// <summary>
-        /// Override AutoPush: do not push.
-        /// </summary>
-        [Description("Do not push changes to remote")]
-        [CommandOption("--no-push")]
-        public bool NoPush { get; set; } = false;
-
-        /// <summary>
-        /// Override AutoCreatePullRequests: create a PR.
-        /// </summary>
-        [Description("Create a pull request (overrides config)")]
-        [CommandOption("--pr")]
-        public bool? Pr { get; set; }
-
-        /// <summary>
-        /// Override AutoCreatePullRequests: do not create PR.
-        /// </summary>
-        [Description("Do not create a pull request")]
-        [CommandOption("--no-pr")]
-        public bool NoPr { get; set; } = false;
-
-        /// <summary>
-        /// Override AutoMergePullRequests: auto-merge the PR.
-        /// </summary>
-        [Description("Auto-merge the pull request (overrides config)")]
-        [CommandOption("--merge")]
-        public bool? Merge { get; set; }
-
-        /// <summary>
-        /// Override AutoMergePullRequests: do not auto-merge.
-        /// </summary>
-        [Description("Do not auto-merge the pull request")]
-        [CommandOption("--no-merge")]
-        public bool NoMerge { get; set; } = false;
+        [Description("Landing mode for this voyage: LocalMerge, MergeAndPush, PullRequest, MergeQueue, or None (default: the vessel's, then the global default)")]
+        [CommandOption("--landing-mode")]
+        public string? LandingMode { get; set; }
     }
 }

@@ -72,5 +72,11 @@ namespace Armada.Server
         /// the voyage (including fan-out missions). Persisted to the voyage and resolved at assignment time.
         /// </summary>
         public List<CaptainAssignmentOverride>? CaptainAssignments { get; set; } = null;
+
+        /// <summary>
+        /// Optional landing mode for this voyage's missions (LocalMerge, MergeAndPush, PullRequest, MergeQueue, None).
+        /// Null inherits the vessel's landing mode, then the global default.
+        /// </summary>
+        public LandingModeEnum? LandingMode { get; set; } = null;
     }
 }

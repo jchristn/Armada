@@ -183,6 +183,32 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("every_landing_mode_round_trips", "Every LandingMode, including MergeAndPush, persists on vessels and voyages and serializes by name", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    foreach (LandingModeEnum mode in Enum.GetValues(typeof(LandingModeEnum)))
+                    {
+                        Vessel vessel = new Vessel("mode-" + mode, "https://github.com/test/repo.git");
+                        vessel.LandingMode = mode;
+                        await testDb.Driver.Vessels.CreateAsync(vessel);
+                        Vessel? readVessel = await testDb.Driver.Vessels.ReadAsync(vessel.Id);
+                        AssertEqual(mode, readVessel!.LandingMode, "vessel " + mode);
+
+                        Voyage voyage = new Voyage("mode-" + mode);
+                        voyage.LandingMode = mode;
+                        await testDb.Driver.Voyages.CreateAsync(voyage);
+                        Voyage? readVoyage = await testDb.Driver.Voyages.ReadAsync(voyage.Id);
+                        AssertEqual(mode, readVoyage!.LandingMode, "voyage " + mode);
+
+                        string json = System.Text.Json.JsonSerializer.Serialize(vessel);
+                        AssertContains("\"LandingMode\":\"" + mode + "\"", json, "serialized by name");
+                        Vessel? parsed = System.Text.Json.JsonSerializer.Deserialize<Vessel>(json);
+                        AssertEqual(mode, parsed!.LandingMode, "JSON round trip " + mode);
+                    }
+                }
+            }));
+
             // === PullRequestOpen Does Not Complete Voyage ===
 
             cases.Add(CaseAsync("voyage_with_pull_request_open_mission_does_not_complete", "Voyage with PullRequestOpen mission does not complete", TestTags.Positive, async () =>
@@ -434,7 +460,7 @@ namespace Test.Shared.Suites.Services
 
             cases.Add(CaseAsync("all_landing_mode_enum_values_exist", "All LandingMode enum values exist", TestTags.Positive, () =>
             {
-                string[] expected = new[] { "LocalMerge", "PullRequest", "MergeQueue", "None" };
+                string[] expected = new[] { "LocalMerge", "PullRequest", "MergeQueue", "None", "MergeAndPush" };
                 string[] actual = Enum.GetNames(typeof(LandingModeEnum));
                 AssertEqual(expected.Length, actual.Length, "LandingMode enum value count");
 

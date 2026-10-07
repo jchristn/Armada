@@ -173,7 +173,7 @@ namespace Armada.Core.Services
             List<SelectedPlaybook>? selectedPlaybooks,
             CancellationToken token = default)
         {
-            return await DispatchStandardVoyageAsync(title, description, vesselId, missionDescriptions, selectedPlaybooks, null, null, token).ConfigureAwait(false);
+            return await DispatchStandardVoyageAsync(title, description, vesselId, missionDescriptions, selectedPlaybooks, null, null, null, token).ConfigureAwait(false);
         }
 
         private async Task<Voyage> DispatchStandardVoyageAsync(
@@ -184,6 +184,7 @@ namespace Armada.Core.Services
             List<SelectedPlaybook>? selectedPlaybooks,
             PipelineStage? singleStagePolicy,
             string? captainOverridesJson,
+            LandingModeEnum? landingMode,
             CancellationToken token)
         {
             if (String.IsNullOrEmpty(title)) throw new ArgumentNullException(nameof(title));
@@ -206,6 +207,7 @@ namespace Armada.Core.Services
             voyage.UserId = vessel.UserId;
             voyage.Status = VoyageStatusEnum.Open;
             voyage.CaptainOverridesJson = captainOverridesJson;
+            voyage.LandingMode = landingMode;
             voyage = await _Database.Voyages.CreateAsync(voyage, token).ConfigureAwait(false);
             voyage.SelectedPlaybooks = ClonePlaybookSelections(selectedPlaybooks);
             if (voyage.SelectedPlaybooks.Count > 0)
@@ -267,7 +269,7 @@ namespace Armada.Core.Services
             string? pipelineId,
             CancellationToken token = default)
         {
-            return await DispatchVoyageAsync(title, description, vesselId, missionDescriptions, pipelineId, null, null, token).ConfigureAwait(false);
+            return await DispatchVoyageAsync(title, description, vesselId, missionDescriptions, pipelineId, null, null, null, token).ConfigureAwait(false);
         }
 
         /// <inheritdoc />
@@ -279,6 +281,7 @@ namespace Armada.Core.Services
             string? pipelineId,
             List<SelectedPlaybook>? selectedPlaybooks,
             string? captainOverridesJson = null,
+            LandingModeEnum? landingMode = null,
             CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(title)) throw new ArgumentNullException(nameof(title));
@@ -304,12 +307,12 @@ namespace Armada.Core.Services
             // If pipeline is single-stage Worker (or null), use the standard dispatch path
             if (pipeline == null)
             {
-                return await DispatchStandardVoyageAsync(title, description, vesselId, missionDescriptions, selectedPlaybooks, null, captainOverridesJson, token).ConfigureAwait(false);
+                return await DispatchStandardVoyageAsync(title, description, vesselId, missionDescriptions, selectedPlaybooks, null, captainOverridesJson, landingMode, token).ConfigureAwait(false);
             }
 
             if (pipeline.Stages.Count == 1 && pipeline.Stages[0].PersonaName == "Worker")
             {
-                return await DispatchStandardVoyageAsync(title, description, vesselId, missionDescriptions, selectedPlaybooks, pipeline.Stages[0], captainOverridesJson, token).ConfigureAwait(false);
+                return await DispatchStandardVoyageAsync(title, description, vesselId, missionDescriptions, selectedPlaybooks, pipeline.Stages[0], captainOverridesJson, landingMode, token).ConfigureAwait(false);
             }
 
             // Multi-stage pipeline: create voyage, then for each mission create a chain of persona stages.
@@ -320,6 +323,7 @@ namespace Armada.Core.Services
             voyage.UserId = vessel.UserId;
             voyage.Status = VoyageStatusEnum.Open;
             voyage.CaptainOverridesJson = captainOverridesJson;
+            voyage.LandingMode = landingMode;
             voyage = await _Database.Voyages.CreateAsync(voyage, token).ConfigureAwait(false);
             voyage.SelectedPlaybooks = ClonePlaybookSelections(selectedPlaybooks);
             if (voyage.SelectedPlaybooks.Count > 0)

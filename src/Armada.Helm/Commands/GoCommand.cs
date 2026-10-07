@@ -20,6 +20,20 @@ namespace Armada.Helm.Commands
         /// <inheritdoc />
         public override async Task<int> ExecuteAsync(CommandContext context, GoSettings settings, CancellationToken cancellationToken)
         {
+            LandingModeEnum? landingMode = null;
+            if (!String.IsNullOrWhiteSpace(settings.LandingMode))
+            {
+                if (!Enum.TryParse<LandingModeEnum>(settings.LandingMode.Trim(), true, out LandingModeEnum parsedMode)
+                    || !Enum.IsDefined(typeof(LandingModeEnum), parsedMode))
+                {
+                    AnsiConsole.MarkupLine("[red]Invalid --landing-mode:[/] " + Markup.Escape(settings.LandingMode)
+                        + ". Use one of: " + String.Join(", ", Enum.GetNames(typeof(LandingModeEnum))) + ".");
+                    return 1;
+                }
+
+                landingMode = parsedMode;
+            }
+
             // Step 1: Resolve vessel
             string? vesselId = await ResolveVesselIdAsync(settings).ConfigureAwait(false);
             if (vesselId == null) return 1;
@@ -58,19 +72,12 @@ namespace Armada.Helm.Commands
                 });
             }
 
-            // Resolve per-voyage overrides (--no-x takes precedence over --x)
-            bool? autoPush = settings.NoPush ? false : settings.Push;
-            bool? autoPr = settings.NoPr ? false : settings.Pr;
-            bool? autoMerge = settings.NoMerge ? false : settings.Merge;
-
             object body = new
             {
                 Title = String.IsNullOrWhiteSpace(settings.Prompt) ? tasks[0] : settings.Prompt.Trim(),
                 VesselId = vesselId,
                 Missions = missions,
-                AutoPush = autoPush,
-                AutoCreatePullRequests = autoPr,
-                AutoMergePullRequests = autoMerge
+                LandingMode = landingMode
             };
 
             Voyage? voyage = await PostAsync<Voyage>("/api/v1/voyages", body).ConfigureAwait(false);

@@ -5,6 +5,7 @@ namespace Armada.Helm.Commands
     using System.Threading;
     using Spectre.Console;
     using Spectre.Console.Cli;
+    using Armada.Core.Enums;
     using Armada.Core.Settings;
     using Armada.Helm.Infrastructure;
     using Armada.Helm.Rendering;
@@ -33,7 +34,7 @@ namespace Armada.Helm.Commands
             table.AddRow("mcpPort", armadaSettings.McpPort.ToString());
             table.AddRow("heartbeatIntervalSeconds", armadaSettings.HeartbeatIntervalSeconds.ToString());
             table.AddRow("stallThresholdMinutes", armadaSettings.StallThresholdMinutes.ToString());
-            table.AddRow("autoCreatePullRequests", armadaSettings.AutoCreatePullRequests.ToString());
+            table.AddRow("landingMode", (armadaSettings.LandingMode ?? LandingModeEnum.MergeAndPush).ToString());
             table.AddRow("apiKey", String.IsNullOrEmpty(armadaSettings.ApiKey) ? "[dim](not set)[/]" : "[dim]****[/]");
             table.AddRow("messageTemplates.enableCommitMetadata", armadaSettings.MessageTemplates.EnableCommitMetadata.ToString());
             table.AddRow("messageTemplates.enablePrMetadata", armadaSettings.MessageTemplates.EnablePrMetadata.ToString());

@@ -119,6 +119,36 @@ namespace Test.Shared.Suites.Client
                 AssertEqual(checkoutMain.Trim(), originMain.Trim(), "MergeAndPush: the origin's main is the checkout's main");
             }));
 
+            cases.Add(Case("voyage_landing_mode_overrides_vessel", "A voyage created with LandingMode LocalMerge lands its missions without pushing, over the vessel's MergeAndPush", async (c, fx) =>
+            {
+                await LiveServerSetup.CreateCaptainAsync(c, "contract-voyage-lander");
+                VesselSetup setup = await LiveServerSetup.CreateVesselAsync(c, "voyagelanding", LandingModeEnum.MergeAndPush);
+                VoyageCreateRequest create = new VoyageCreateRequest();
+                create.Title = "Contract LocalMerge voyage";
+                create.VesselId = setup.Vessel.Id;
+                create.LandingMode = LandingModeEnum.LocalMerge;
+                create.Missions.Add(new DispatchRequest { VesselId = setup.Vessel.Id, Title = "Voyage LocalMerge mission", Description = "Add a file." });
+                Voyage voyage = (await c.CreateVoyageAsync(create))!;
+                AssertEqual(LandingModeEnum.LocalMerge, voyage.LandingMode, "the create reply carries the voyage landing mode");
+                AssertEqual(LandingModeEnum.LocalMerge, (await c.GetVoyageAsync(voyage.Id))?.LandingMode, "persisted");
+                AssertTrue(await LiveServerSetup.WaitUntilAsync(async () => ((await c.GetVoyageDetailAsync(voyage.Id))?.Missions ?? new List<Mission>()).Any(m => m.Status == MissionStatusEnum.Complete), LiveTimeoutMs), "voyage mission landed");
+                AssertTrue(LiveServerSetup.CheckoutHasStubCommit(setup.WorkingDirectory), "merged into the working checkout");
+                AssertFalse(LiveServerSetup.OriginHasStubCommit(setup.BarePath), "the voyage's LocalMerge did not push");
+
+                VoyageCreateRequest bare = new VoyageCreateRequest();
+                bare.Title = "Contract bare voyage with a landing mode";
+                bare.VesselId = setup.Vessel.Id;
+                bare.LandingMode = LandingModeEnum.PullRequest;
+                Voyage bareVoyage = (await c.CreateVoyageAsync(bare))!;
+                AssertEqual(LandingModeEnum.PullRequest, (await c.GetVoyageAsync(bareVoyage.Id))?.LandingMode, "a bare voyage keeps its landing mode");
+
+                VoyageCreateRequest inherit = new VoyageCreateRequest();
+                inherit.Title = "Contract bare voyage inheriting";
+                inherit.VesselId = setup.Vessel.Id;
+                Voyage inheritVoyage = (await c.CreateVoyageAsync(inherit))!;
+                AssertNull((await c.GetVoyageAsync(inheritVoyage.Id))?.LandingMode, "no landing mode means inherit");
+            }));
+
             cases.Add(Case("voyages", "Voyage create, get, detail, status; cancel and purge", async (c, fx) =>
             {
                 VesselSetup setup = await LiveServerSetup.CreateVesselAsync(c, "voyages");

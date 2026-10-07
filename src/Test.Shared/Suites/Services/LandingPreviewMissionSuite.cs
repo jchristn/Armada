@@ -51,6 +51,58 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(LandingModeEnum.LocalMerge, preview.EffectiveLandingMode, "effective mode");
             }));
 
+            cases.Add(CaseAsync("local_merge_action_says_no_push", "Local Merge previews a merge into the working directory without a push", TestTags.Positive, async () =>
+            {
+                LandingPreviewResult preview = await PreviewAsync(MissionStatusEnum.WorkProduced, LandingModeEnum.LocalMerge, null).ConfigureAwait(false);
+                AssertEqual("Merge the branch into the target branch in the working directory, without pushing", preview.ExpectedLandingAction, "expected action");
+            }));
+
+            cases.Add(CaseAsync("work_produced_merge_and_push_ready", "A WorkProduced mission on a Merge and Push vessel is ready, and the preview says it pushes", TestTags.Positive, async () =>
+            {
+                LandingPreviewResult preview = await PreviewAsync(MissionStatusEnum.WorkProduced, LandingModeEnum.MergeAndPush, null).ConfigureAwait(false);
+                AssertTrue(preview.IsReadyToLand, "ready");
+                AssertFalse(preview.ManualLandingOnly, "automatic landing");
+                AssertEqual(LandingModeEnum.MergeAndPush, preview.EffectiveLandingMode, "effective mode");
+                AssertEqual("Merge the branch into the target branch in the working directory, then push it", preview.ExpectedLandingAction, "expected action");
+            }));
+
+            cases.Add(CaseAsync("unset_modes_use_merge_and_push_default", "With no landing mode on the vessel or voyage, the effective mode is the MergeAndPush default", TestTags.Positive, async () =>
+            {
+                LandingPreviewResult preview = await PreviewAsync(MissionStatusEnum.WorkProduced, null, null).ConfigureAwait(false);
+                AssertEqual(LandingModeEnum.MergeAndPush, preview.EffectiveLandingMode, "effective mode");
+                AssertFalse(preview.ManualLandingOnly, "automatic landing");
+            }));
+
+            cases.Add(CaseAsync("voyage_local_merge_overrides_vessel_merge_and_push", "A voyage's Local Merge overrides the vessel's Merge and Push in the preview", TestTags.Positive, async () =>
+            {
+                LandingPreviewResult preview = await PreviewAsync(MissionStatusEnum.WorkProduced, LandingModeEnum.MergeAndPush, LandingModeEnum.LocalMerge).ConfigureAwait(false);
+                AssertEqual(LandingModeEnum.LocalMerge, preview.EffectiveLandingMode, "effective mode from the voyage");
+            }));
+
+            foreach (LandingModeEnum localMode in new[] { LandingModeEnum.LocalMerge, LandingModeEnum.MergeAndPush })
+            {
+                LandingModeEnum mode = localMode;
+                cases.Add(CaseAsync("hotfix_protected_branch_warns_" + mode.ToString().ToLowerInvariant(), mode + " of a hotfix into a protected branch that requires pull requests warns", TestTags.Positive, async () =>
+                {
+                    LandingPreviewResult preview = await PreviewAsync(MissionStatusEnum.WorkProduced, mode, null, "hotfix/urgent", v =>
+                    {
+                        v.ProtectedBranchPatterns = new List<string> { "main" };
+                        v.RequirePullRequestForProtectedBranches = true;
+                    }).ConfigureAwait(false);
+                    AssertTrue(preview.Issues.Exists(i => i.Code == "hotfix_branch_local_merge_warning"), "hotfix local merge warning for " + mode);
+                }));
+            }
+
+            cases.Add(CaseAsync("hotfix_protected_branch_pull_request_no_local_merge_warning", "PullRequest of a hotfix into a protected branch has no local merge warning", TestTags.Negative, async () =>
+            {
+                LandingPreviewResult preview = await PreviewAsync(MissionStatusEnum.WorkProduced, LandingModeEnum.PullRequest, null, "hotfix/urgent", v =>
+                {
+                    v.ProtectedBranchPatterns = new List<string> { "main" };
+                    v.RequirePullRequestForProtectedBranches = true;
+                }).ConfigureAwait(false);
+                AssertFalse(preview.Issues.Exists(i => i.Code == "hotfix_branch_local_merge_warning"), "no local merge warning for PullRequest");
+            }));
+
             cases.Add(CaseAsync("landing_mode_none_manual_only", "Landing Mode None reports manual landing only and is not ready", TestTags.Negative, async () =>
             {
                 LandingPreviewResult preview = await PreviewAsync(MissionStatusEnum.WorkProduced, LandingModeEnum.None, null).ConfigureAwait(false);
@@ -79,7 +131,12 @@ namespace Test.Shared.Suites.Services
 
         #region Private-Methods
 
-        private static async Task<LandingPreviewResult> PreviewAsync(MissionStatusEnum status, LandingModeEnum vesselMode, LandingModeEnum? voyageMode)
+        private static Task<LandingPreviewResult> PreviewAsync(MissionStatusEnum status, LandingModeEnum? vesselMode, LandingModeEnum? voyageMode)
+        {
+            return PreviewAsync(status, vesselMode, voyageMode, "armada/preview", null);
+        }
+
+        private static async Task<LandingPreviewResult> PreviewAsync(MissionStatusEnum status, LandingModeEnum? vesselMode, LandingModeEnum? voyageMode, string branchName, Action<Vessel>? configureVessel)
         {
             using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
             {
@@ -90,11 +147,12 @@ namespace Test.Shared.Suites.Services
                 Vessel vessel = new Vessel("preview-vessel", "https://github.com/test/repo.git");
                 vessel.DefaultBranch = "main";
                 vessel.LandingMode = vesselMode;
+                configureVessel?.Invoke(vessel);
                 vessel = await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
 
                 Mission mission = new Mission("preview", "work");
                 mission.VesselId = vessel.Id;
-                mission.BranchName = "armada/preview";
+                mission.BranchName = branchName;
                 mission.Status = status;
                 if (voyageMode.HasValue)
                 {
