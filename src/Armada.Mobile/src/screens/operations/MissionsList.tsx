@@ -322,7 +322,7 @@ export function MissionsList({ onSelect, selectedId, onOpenTab }: MissionsListPr
           ].filter(Boolean).join(' - ');
           return (
             <View
-              style={[styles.row, { borderBottomColor: colors.border, backgroundColor: m.id === selectedId || checked ? colors.surfaceRaised : colors.surface }]}
+              style={[styles.row, { borderBottomColor: colors.border, backgroundColor: m.id === selectedId || checked ? colors.surfaceRaised : colors.surface }, m.id === selectedId ? { borderLeftWidth: 3, borderLeftColor: colors.primary } : null]}
             >
               <Pressable
                 style={({ pressed }) => [styles.rowMain, { opacity: pressed ? 0.7 : 1 }]}
