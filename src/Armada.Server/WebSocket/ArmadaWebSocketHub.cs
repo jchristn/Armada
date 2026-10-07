@@ -17,6 +17,7 @@ namespace Armada.Server.WebSocket
     using Armada.Core.Models;
     using Armada.Core.Services;
     using Armada.Core.Services.Interfaces;
+    using Armada.Core.Services.Push;
     using Armada.Core.Settings;
 
     /// <summary>
@@ -53,6 +54,7 @@ namespace Armada.Server.WebSocket
         private WebSocketCommandHandler _CommandHandler;
         private Func<string?, string?, string?, Task<AuthContext>>? _Authenticate;
         private ArmadaSettings? _Settings;
+        private PushNotificationService? _Push = null;
         private ConcurrentDictionary<Guid, WebSocketClientState> _Clients = new ConcurrentDictionary<Guid, WebSocketClientState>();
         private ConditionalWeakTable<HttpContextBase, AuthContext> _UpgradeIdentities = new ConditionalWeakTable<HttpContextBase, AuthContext>();
 
@@ -239,6 +241,17 @@ namespace Armada.Server.WebSocket
         }
 
         /// <summary>
+        /// Provide the push notification service fed from this hub's broadcast points (mission, voyage, captain, and
+        /// deployment changes, approval-needed, and CLI permission requests). Its hooks only enqueue, so a broadcast
+        /// never waits on or fails because of push delivery.
+        /// </summary>
+        /// <param name="service">Service, or null to stop feeding pushes.</param>
+        public void SetPushNotificationService(PushNotificationService? service)
+        {
+            _Push = service;
+        }
+
+        /// <summary>
         /// Provide the CLI permission service for the CLI permission WebSocket commands.
         /// </summary>
         /// <param name="service">Service, or null.</param>
@@ -258,6 +271,7 @@ namespace Armada.Server.WebSocket
         {
             if (String.IsNullOrEmpty(eventType)) throw new ArgumentNullException(nameof(eventType));
             if (request == null) return;
+            FeedPush(push => push.OnCliPermissionEvent(eventType, request));
             try
             {
                 string requestJson = JsonSerializer.Serialize(request, _JsonOptions);
@@ -351,6 +365,9 @@ namespace Armada.Server.WebSocket
                 voyageId = mission.VoyageId
             });
             RaiseEntityChanged("mission", mission.Id);
+            MissionStatusEnum? effective = null;
+            if (!String.IsNullOrEmpty(statusOverride) && Enum.TryParse<MissionStatusEnum>(statusOverride, true, out MissionStatusEnum parsed)) effective = parsed;
+            FeedPush(push => push.OnMissionChanged(mission, effective));
         }
 
         /// <summary>
@@ -368,6 +385,9 @@ namespace Armada.Server.WebSocket
                 status = statusOverride ?? voyage.Status.ToString()
             });
             RaiseEntityChanged("voyage", voyage.Id);
+            VoyageStatusEnum? effective = null;
+            if (!String.IsNullOrEmpty(statusOverride) && Enum.TryParse<VoyageStatusEnum>(statusOverride, true, out VoyageStatusEnum parsed)) effective = parsed;
+            FeedPush(push => push.OnVoyageChanged(voyage, effective));
         }
 
         /// <summary>
@@ -384,6 +404,7 @@ namespace Armada.Server.WebSocket
                 state = captain.State.ToString()
             });
             RaiseEntityChanged("captain", captain.Id);
+            FeedPush(push => push.OnCaptainChanged(captain));
         }
 
         /// <summary>
@@ -415,6 +436,7 @@ namespace Armada.Server.WebSocket
         {
             if (deployment == null) return;
             BroadcastToTenant(deployment.TenantId, "deployment.changed", deployment);
+            FeedPush(push => push.OnDeploymentChanged(deployment));
 
             BroadcastToTenant(deployment.TenantId, "deployment.progress", new
             {
@@ -485,6 +507,7 @@ namespace Armada.Server.WebSocket
                 voyageId = mission.VoyageId,
                 reviewRequestedUtc = mission.ReviewRequestedUtc
             });
+            FeedPush(push => push.OnMissionChanged(mission));
         }
 
         /// <summary>
@@ -501,6 +524,20 @@ namespace Armada.Server.WebSocket
         #endregion
 
         #region Private-Methods
+
+        private void FeedPush(Action<PushNotificationService> feed)
+        {
+            PushNotificationService? push = _Push;
+            if (push == null) return;
+            try
+            {
+                feed(push);
+            }
+            catch (Exception ex)
+            {
+                _Logging.Warn(_Header + "push hook error: " + ex.Message);
+            }
+        }
 
         private static bool IsUsable(AuthContext? auth)
         {

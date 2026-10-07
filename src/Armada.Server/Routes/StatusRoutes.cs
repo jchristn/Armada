@@ -526,6 +526,16 @@ namespace Armada.Server.Routes
                     _settings.Retention = body.Retention;
                 if (body.Permissions != null)
                     _settings.Permissions = body.Permissions;
+                if (body.Push != null)
+                {
+                    // The access token comes back from GET redacted; a redacted value keeps the stored token.
+                    PushSettings incomingPush = body.Push;
+                    if (incomingPush.ExpoAccessToken == _RedactedSecret)
+                        incomingPush.ExpoAccessToken = _settings.Push.ExpoAccessToken;
+                    else if (String.IsNullOrWhiteSpace(incomingPush.ExpoAccessToken))
+                        incomingPush.ExpoAccessToken = null;
+                    _settings.Push = incomingPush;
+                }
 
                 bool remoteControlChanged = body.RemoteControl != null;
                 if (remoteControlChanged)
@@ -643,6 +653,17 @@ namespace Armada.Server.Routes
             return copy;
         }
 
+        private static PushSettings RedactPush(PushSettings source)
+        {
+            PushSettings copy = new PushSettings();
+            copy.Enabled = source.Enabled;
+            copy.Categories = new List<PushCategoryEnum>(source.Categories);
+            copy.MaxPerUserPerMinute = source.MaxPerUserPerMinute;
+            copy.DedupeWindowSeconds = source.DedupeWindowSeconds;
+            copy.ExpoAccessToken = String.IsNullOrEmpty(source.ExpoAccessToken) ? null : _RedactedSecret;
+            return copy;
+        }
+
         private object BuildSettingsResponse()
         {
             return new
@@ -669,7 +690,8 @@ namespace Armada.Server.Routes
                 FleetActions = _settings.FleetActions,
                 RepositoryHealth = _settings.RepositoryHealth,
                 Retention = _settings.Retention,
-                Permissions = _settings.Permissions
+                Permissions = _settings.Permissions,
+                Push = RedactPush(_settings.Push)
             };
         }
 

@@ -552,6 +552,7 @@ namespace Armada.Server.Routes
                 await _database.Fleets.DeleteAsync(tenantId, fleet.Id).ConfigureAwait(false);
             foreach (Credential cred in await _database.Credentials.EnumerateAsync(tenantId).ConfigureAwait(false))
                 await _database.Credentials.DeleteAsync(tenantId, cred.Id).ConfigureAwait(false);
+            await _database.PushDevices.DeleteByTenantAsync(tenantId).ConfigureAwait(false);
             foreach (UserMaster user in await _database.Users.EnumerateAsync(tenantId).ConfigureAwait(false))
                 await _database.Users.DeleteAsync(tenantId, user.Id).ConfigureAwait(false);
             await _database.Tenants.DeleteAsync(tenantId).ConfigureAwait(false);
@@ -579,6 +580,7 @@ namespace Armada.Server.Routes
                 await _database.Fleets.DeleteAsync(tenantId, fleet.Id).ConfigureAwait(false);
             foreach (Credential cred in await _database.Credentials.EnumerateByUserAsync(tenantId, userId).ConfigureAwait(false))
                 await _database.Credentials.DeleteAsync(tenantId, cred.Id).ConfigureAwait(false);
+            await _database.PushDevices.DeleteByUserAsync(tenantId, userId).ConfigureAwait(false);
             await _database.Users.DeleteAsync(tenantId, userId).ConfigureAwait(false);
         }
     }
