@@ -6,9 +6,9 @@ import { useNotifications } from '../context/NotificationContext';
 import CopyButton from '../components/shared/CopyButton';
 import PageHeader from '../components/shared/PageHeader';
 import { formatBytes, parseJsonString, methodClass } from '../lib/format';
+import { getClientBaseUrl } from '../api/client';
 const RESPONSE_TABS = ['preview', 'body', 'headers', 'code'] as const;
 const CODE_TABS = ['curl', 'fetch', 'csharp'] as const;
-const BASE_URL = import.meta.env.VITE_ARMADA_SERVER_URL || '';
 
 type ResponseTab = typeof RESPONSE_TABS[number];
 type CodeTab = typeof CODE_TABS[number];
@@ -228,11 +228,12 @@ function getResponseText(response: ExplorerResponse | null, responseTab: Respons
 }
 
 function buildApiBaseForDisplay() {
-  return BASE_URL || window.location.origin;
+  return getClientBaseUrl() || window.location.origin;
 }
 
 function buildRequestUrl(path: string) {
-  return BASE_URL ? `${BASE_URL}${path}` : path;
+  const baseUrl = getClientBaseUrl();
+  return baseUrl ? `${baseUrl}${path}` : path;
 }
 
 function parseQueryString(queryString: string | null | undefined) {

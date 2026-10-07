@@ -2,22 +2,21 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { getInbox } from '../api/client';
 import type { InboxItem } from '../types/models';
 import { useWebSocket } from '../context/WebSocketContext';
+import {
+  INBOX_POLL_INTERVAL_MS,
+  shouldRefreshInboxOnSocket,
+  summarizeInbox,
+  type InboxCountState,
+} from './inboxSummary';
 
-const POLL_INTERVAL_MS = 20000;
-const WS_REFRESH_THROTTLE_MS = 4000;
-
-export interface InboxCountState {
-  items: InboxItem[];
-  count: number;
-  hasCritical: boolean;
-  hasWarning: boolean;
-}
+export type { InboxCountState };
 
 /**
  * Live "Needs You" attention count. Polls the consolidated inbox (missions in review, failed
  * landings/missions, failed merges, deployments awaiting approval, stalled captains) on an interval and
  * refreshes promptly (throttled) when WebSocket activity arrives, so the sidebar badge tracks work that
- * needs a human without the user opening the Needs You page.
+ * needs a human without the user opening the Needs You page. The counting rules live in lib/inboxSummary.ts,
+ * shared with the mobile app's Approvals badge.
  */
 export function useInboxCount(): InboxCountState {
   const { subscribe } = useWebSocket();
@@ -36,21 +35,16 @@ export function useInboxCount(): InboxCountState {
 
   useEffect(() => {
     void load();
-    const timer = window.setInterval(() => { void load(); }, POLL_INTERVAL_MS);
+    const timer = window.setInterval(() => { void load(); }, INBOX_POLL_INTERVAL_MS);
     return () => window.clearInterval(timer);
   }, [load]);
 
   useEffect(() => {
     return subscribe(() => {
-      if (Date.now() - lastLoadRef.current < WS_REFRESH_THROTTLE_MS) return;
+      if (!shouldRefreshInboxOnSocket(lastLoadRef.current, Date.now())) return;
       void load();
     });
   }, [subscribe, load]);
 
-  return {
-    items,
-    count: items.length,
-    hasCritical: items.some((item) => item.severity === 'Critical'),
-    hasWarning: items.some((item) => item.severity === 'Warning'),
-  };
+  return summarizeInbox(items);
 }

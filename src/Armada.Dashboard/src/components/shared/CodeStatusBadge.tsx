@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
 
-export type BadgeTone = 'pending' | 'running' | 'success' | 'failed' | 'warning' | 'cancelled' | 'skipped' | 'info';
-export type BadgeIcon = 'check' | 'x' | 'clock' | 'spinner' | 'skip' | 'stop' | 'alert' | 'info' | 'dot' | 'link' | 'lock';
+import type { BadgeIcon, BadgeTone } from '../../lib/badgeTypes';
+
+export type { BadgeIcon, BadgeTone };
 
 /** Maps a semantic tone onto the existing `.tag.<status>` color classes so badges match the rest of the UI. */
 const TONE_CLASS: Record<BadgeTone, string> = {

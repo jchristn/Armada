@@ -175,7 +175,51 @@ import type {
   CliPermissionRuleScope,
 } from '../types/models';
 
-const BASE_URL = import.meta.env.VITE_ARMADA_SERVER_URL || '';
+/**
+ * Host services the client cannot implement portably. The dashboard registers a browser adapter (anchor
+ * download); the mobile app registers one that writes the file and opens the share sheet.
+ */
+export interface ClientPlatformAdapter {
+  /** Hand a downloaded file to the user (browser download, share sheet, ...). */
+  saveFile: (file: DownloadedFile) => Promise<void>;
+}
+
+/** A binary response body plus the file name the server suggested. */
+export interface DownloadedFile {
+  filename: string;
+  contentType: string;
+  body: Blob;
+}
+
+/** A file to upload: a browser `File` satisfies it, and native hosts supply the same two members. */
+export interface UploadFile {
+  name: string;
+  arrayBuffer: () => Promise<ArrayBuffer>;
+}
+
+/** Host configuration for the shared API client. Fields left out keep their current value. */
+export interface ClientConfig {
+  /** Server origin prefixed to every path ('' means same origin, as when the Admiral serves the dashboard). */
+  baseUrl?: string;
+  /** Host services for file download and similar browser-only operations. */
+  platform?: ClientPlatformAdapter | null;
+}
+
+// The client is host-agnostic: no import.meta, window, or document here. The host calls configureClient once at
+// startup (the dashboard from main.tsx with VITE_ARMADA_SERVER_URL; the mobile app per active server profile).
+let BASE_URL = '';
+let platformAdapter: ClientPlatformAdapter | null = null;
+
+/** Configure the API client for this host. Trailing slashes on the base URL are removed. */
+export function configureClient(config: ClientConfig): void {
+  if (config.baseUrl !== undefined) BASE_URL = (config.baseUrl || '').replace(/\/+$/, '');
+  if (config.platform !== undefined) platformAdapter = config.platform;
+}
+
+/** The base URL the client currently sends requests to ('' for same origin). */
+export function getClientBaseUrl(): string {
+  return BASE_URL;
+}
 
 /**
  * Error thrown for non-2xx API responses. It is still an `Error` whose message is the server's message, so
@@ -351,7 +395,8 @@ async function request<T>(method: string, path: string, body?: unknown, opts?: R
     if (external?.aborted) {
       throw new RequestCancelledError();
     }
-    if (err instanceof DOMException && err.name === 'AbortError') {
+    // Checked by name, not `instanceof DOMException`: not every host defines DOMException (React Native does not).
+    if (isAbortError(err)) {
       throw new TimeoutError();
     }
     throw err;
@@ -359,6 +404,11 @@ async function request<T>(method: string, path: string, body?: unknown, opts?: R
     clearTimeout(timeoutId);
     if (external) external.removeEventListener('abort', onExternalAbort);
   }
+}
+
+/** True for the error fetch rejects with when its signal aborts (a DOMException in browsers, an Error elsewhere). */
+function isAbortError(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && (err as { name?: unknown }).name === 'AbortError';
 }
 
 function get<T>(path: string, opts?: RequestOptions) { return request<T>('GET', path, undefined, opts); }
@@ -1374,7 +1424,10 @@ export const getRebuildStatus = () => get<RebuildStatus>('/api/v1/server/rebuild
 export const rollbackServer = () => post<RebuildStatus>('/api/v1/server/rollback');
 
 // ==================== Backup / Restore ====================
-/** Download backup as a ZIP file blob. The server endpoint is GET and returns binary. */
+/**
+ * Download a backup ZIP and hand it to the host's platform adapter (a browser download in the dashboard, the share
+ * sheet on mobile). The server endpoint is GET and returns binary.
+ */
 export async function downloadBackup(): Promise<void> {
   const headers: Record<string, string> = {};
   if (authToken) headers['X-Token'] = authToken;
@@ -1385,18 +1438,12 @@ export async function downloadBackup(): Promise<void> {
   const disposition = res.headers.get('Content-Disposition') || '';
   const match = disposition.match(/filename="?([^"]+)"?/);
   const filename = match ? match[1] : `armada-backup-${new Date().toISOString().slice(0, 10)}.zip`;
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  if (!platformAdapter) throw new Error('No platform adapter is configured to save downloaded files.');
+  await platformAdapter.saveFile({ filename, contentType: res.headers.get('Content-Type') || 'application/zip', body: blob });
 }
 
 /** Upload a backup ZIP file to restore. Sends raw bytes with filename header. */
-export async function restoreBackup(file: File): Promise<Record<string, unknown>> {
+export async function restoreBackup(file: UploadFile): Promise<Record<string, unknown>> {
   const headers: Record<string, string> = { 'Content-Type': 'application/octet-stream' };
   if (authToken) headers['X-Token'] = authToken;
   headers['X-Original-Filename'] = file.name;

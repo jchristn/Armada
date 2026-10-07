@@ -12,6 +12,7 @@ const translate = (text: string, params?: Record<string, string | number | null 
 };
 
 vi.mock('../api/client', () => ({
+  getClientBaseUrl: () => '',
   listRequestHistory: vi.fn(),
   getRequestHistoryEntry: vi.fn(),
 }));

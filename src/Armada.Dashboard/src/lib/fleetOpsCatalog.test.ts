@@ -26,7 +26,7 @@ import fleetActionLabelsSource from './fleetActionLabels.ts?raw';
 import vesselImportLabelsSource from './vesselImportLabels.ts?raw';
 import dashboardSource from '../pages/Dashboard.tsx?raw';
 import vesselsSource from '../pages/Vessels.tsx?raw';
-import navConfigSource from '../components/navConfig.tsx?raw';
+import navModelSource from './navModel.ts?raw';
 import type { I18nCatalog } from '../i18n/runtime';
 
 const S = "'((?:[^'\\\\]|\\\\.)*)'";
@@ -85,7 +85,7 @@ const SHARED_PAGE_KEYS: Array<{ source: string; keys: string[] }> = [
     ],
   },
   {
-    source: navConfigSource,
+    source: navModelSource,
     keys: ['Fleet Actions', 'Run a command or mission across many vessels and watch each run'],
   },
 ];

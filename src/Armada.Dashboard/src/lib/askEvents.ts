@@ -8,7 +8,7 @@ import type {
   AskWorkSnapshot,
   WebSocketMessage,
 } from '../types/models';
-import type { ToolEventMessage } from '../components/shared/ChatToolChips';
+import type { ToolEventMessage } from './toolEvents';
 
 /**
  * Normalized Ask Armada WebSocket events. Every event carries the `threadId` it belongs to, so the page can route
