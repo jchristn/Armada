@@ -3,15 +3,13 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { listVessels, listFleets, listPipelines, createVessel, deleteVessel, getVesselGitStatus, getVesselBranches } from '../api/client';
 import BranchesModal from '../components/vessels/BranchesModal';
 import type { Fleet, Vessel, Pipeline } from '../types/models';
-import Pagination from '../components/shared/Pagination';
+import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
 import ActionMenu from '../components/shared/ActionMenu';
 import BuildContextModal from '../components/vessels/BuildContextModal';
 import StatusBadge from '../components/shared/StatusBadge';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import JsonViewer from '../components/shared/JsonViewer';
 import CopyButton from '../components/shared/CopyButton';
-import RefreshButton from '../components/shared/RefreshButton';
-import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
 import UserScopeFilter from '../components/shared/UserScopeFilter';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import PageHeader from '../components/shared/PageHeader';
@@ -212,6 +210,126 @@ export default function Vessels() {
     }
   }
 
+  function syncCell(v: Vessel) {
+    const gs = gitStatus[v.id];
+    if (!gs || (gs.ahead === null && gs.behind === null)) return <span className="text-dim">-</span>;
+    const ahead = gs.ahead ?? 0;
+    const behind = gs.behind ?? 0;
+    if (ahead === 0 && behind === 0) return <span className="git-sync-badge git-sync-even" title={t('Up to date with remote')}>{t('in sync')}</span>;
+    return (
+      <span className="git-sync-badges">
+        {ahead > 0 && <span className="git-sync-badge git-sync-ahead" title={t('{{count}} commit(s) ahead of remote -- needs push', { count: ahead })}>{ahead} {t('ahead')}</span>}
+        {behind > 0 && <span className="git-sync-badge git-sync-behind" title={t('{{count}} commit(s) behind remote -- needs pull', { count: behind })}>{behind} {t('behind')}</span>}
+      </span>
+    );
+  }
+
+  const columns: DataTableColumn<Vessel>[] = [
+    {
+      key: 'name', label: t('Name'), required: true, sortKey: 'name', headerTitle: t('Vessel name -- click to sort'),
+      filter: <input type="text" className="col-filter" aria-label={t('Filter vessels by name')} value={table.colFilters.name ?? ''} onChange={e => table.setColFilter('name', e.target.value)} placeholder={t('Search...')} />,
+      render: (v) => <strong>{v.name}</strong>,
+    },
+    {
+      key: 'id', label: t('ID'), required: true, cellClassName: 'mono text-dim table-id-cell',
+      render: (v) => (
+        <span className="id-display">
+          <span className="id-value" title={v.id}>{v.id}</span>
+          <CopyButton text={v.id} onClick={e => e.stopPropagation()} />
+        </span>
+      ),
+    },
+    {
+      key: 'fleet', label: t('Fleet'), sortKey: 'fleetId', headerTitle: t('Fleet -- click to sort'),
+      clearFilter: () => setFleetFilter(''),
+      filter: (
+        <select aria-label={t('Filter vessels by fleet')} className="col-filter" title={t('Filter vessels by fleet')} value={fleetFilter} onChange={e => { setFleetFilter(e.target.value); table.setPageNumber(1); }}>
+          <option value="">{t('All Fleets')}</option>
+          {fleets.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+        </select>
+      ),
+      render: (v) => v.fleetId ? (
+        <a href="#" onClick={e => { e.preventDefault(); e.stopPropagation(); navigate(`/fleets/${v.fleetId}`); }}>
+          {fleetName(v.fleetId)}
+        </a>
+      ) : '-',
+    },
+    {
+      key: 'repoUrl', label: t('Repository'), sortKey: 'repoUrl', headerTitle: t('Remote git repository URL'),
+      cellClassName: 'text-dim table-url-cell',
+      clearFilter: () => table.setColFilter('repoUrl', ''),
+      filter: <input type="text" className="col-filter" aria-label={t('Filter vessels by repository')} value={table.colFilters.repoUrl ?? ''} onChange={e => table.setColFilter('repoUrl', e.target.value)} placeholder={t('Search...')} />,
+      render: (v) => v.repoUrl ? (
+        <span className="id-display">
+          <span className="url-value" title={v.repoUrl}>{v.repoUrl}</span>
+          <CopyButton text={v.repoUrl} onClick={e => e.stopPropagation()} title="Copy URL" />
+        </span>
+      ) : '-',
+    },
+    {
+      key: 'defaultBranch', label: t('Branch'), sortKey: 'defaultBranch', headerTitle: t('Default branch'),
+      cellClassName: 'mono text-dim table-url-cell',
+      render: (v) => <span className="cell-one-line" title={v.defaultBranch || 'main'}>{v.defaultBranch || 'main'}</span>,
+    },
+    {
+      key: 'landingMode', label: t('Landing Mode'),
+      headerTitle: t('How completed mission work is integrated (LocalMerge, MergeAndPush, PullRequest, MergeQueue, None)'),
+      cellClassName: 'cell-nowrap',
+      clearFilter: () => setLandingModeFilter(''),
+      filter: (
+        <select aria-label={t('Filter vessels by landing mode')} className="col-filter" title={t('Filter vessels by landing mode')} value={landingModeFilter} onChange={e => { setLandingModeFilter(e.target.value); table.setPageNumber(1); }}>
+          <option value="">{t('All Modes')}</option>
+          {landingModes.filter(m => m.value).map(m => (
+            <option key={m.value} value={m.value} title={m.description}>{m.value} -- {m.short}</option>
+          ))}
+        </select>
+      ),
+      // One line: the mode (or "Default (global)"); the short summary and full explanation are in the tooltip.
+      render: (v) => {
+        const info = landingModeInfo(v.landingMode);
+        return (
+          <span className="cell-one-line" title={`${info.short} -- ${info.description}`}>
+            {v.landingMode || t('Default (global)')}
+          </span>
+        );
+      },
+    },
+    { key: 'sync', label: t('Sync'), headerTitle: t('Commits ahead and behind the remote default branch'), cellClassName: 'cell-nowrap', render: syncCell },
+    {
+      key: 'branches', label: t('Branches'), headerTitle: t('Number of branches in the vessel repository'), interactive: true,
+      render: (v) => {
+        const count = branchCounts[v.id];
+        return (
+          <button
+            className="btn btn-sm"
+            title={t('Manage branches')}
+            onClick={() => setBranchesModal({ vesselId: v.id, vesselName: v.name })}>
+            {count === null || count === undefined ? t('Branches') : t('{{count}} branches', { count })}
+          </button>
+        );
+      },
+    },
+    {
+      key: 'actions', label: t('Actions'), fixed: true, interactive: true, className: 'text-right',
+      render: (v) => (
+        <ActionMenu id={`vessel-${v.id}`} items={[
+          { label: 'Dispatch', onClick: () => navigate('/dispatch', { state: { fromVessel: true, vesselId: v.id } }) },
+          { label: 'Manage Branches', onClick: () => setBranchesModal({ vesselId: v.id, vesselName: v.name }) },
+          { label: 'View History', onClick: () => navigate(`/vessels/${v.id}/history`) },
+          { label: 'Manage Objectives', onClick: () => manageObjectives(v) },
+          { label: 'Manage Fleet', onClick: () => navigate(`/fleets/${v.fleetId}`), disabled: !v.fleetId },
+          { label: 'Open Workspace', onClick: () => navigate(`/workspace/${v.id}`) },
+          { label: 'View Detail', onClick: () => navigate(`/vessels/${v.id}`) },
+          { label: v.modelContext && v.modelContext.trim().length > 0 ? 'Refine Context' : 'Build Context', onClick: () => setBuildContextVessel(v) },
+          { label: 'Edit', onClick: () => openEdit(v) },
+          { label: 'Duplicate', onClick: () => void handleDuplicate(v) },
+          { label: 'View JSON', onClick: () => setJsonData({ open: true, title: `${t('Vessel')}: ${v.name}`, data: v }) },
+          { label: 'Delete', danger: true, onClick: () => handleDelete(v.id, v.name) },
+        ]} />
+      ),
+    },
+  ];
+
   return (
     <div>
       <PageHeader
@@ -220,8 +338,6 @@ export default function Vessels() {
         actions={(
           <>
             <UserScopeFilter value={userScope} onChange={setUserScope} />
-            <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
-            <RefreshButton onRefresh={load} title="Refresh vessel data" />
             {isTenantAdmin && (
               <button className="btn btn-sm" onClick={() => setImportOpen(true)} title={t('Discover and onboard many local repositories at once')}>
                 {t('Import repositories')}
@@ -276,19 +392,6 @@ export default function Vessels() {
         />
       )}
 
-      {loading && vessels.length === 0 && <p className="text-dim">{t('Loading...')}</p>}
-      {!loading && vessels.length === 0 && (
-        <div className="empty-state card" role="status">
-          <h4 className="empty-state-title">{t('No vessels configured.')}</h4>
-          <div className="empty-state-body text-dim">{t('Add a single repository with + Vessel, or import many existing local repositories at once.')}</div>
-          {isTenantAdmin && (
-            <div className="empty-state-actions">
-              <button className="btn btn-primary btn-sm" onClick={() => setImportOpen(true)}>{t('Import repositories')}</button>
-            </div>
-          )}
-        </div>
-      )}
-
       {table.selected.length > 0 && (
         <div className="bulk-bar" role="region" aria-label={t('Bulk actions')}>
           <span className="bulk-bar-count">{t('{count, plural, one {# vessel selected} other {# vessels selected}}', { count: table.selected.length })}</span>
@@ -304,148 +407,38 @@ export default function Vessels() {
         </div>
       )}
 
-      {vessels.length > 0 && (
-        <>
-          <Pagination pageNumber={table.currentPage} pageSize={table.pageSize} totalPages={table.totalPages}
-            totalRecords={table.sorted.length}
-            onPageChange={p => table.setPageNumber(p)} onPageSizeChange={s => { table.setPageSize(s); table.setPageNumber(1); }} />
-
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th className="col-checkbox">
-                    <input aria-label={t('Select all vessels')} type="checkbox" checked={table.allSelected} onChange={e => e.target.checked ? table.selectAll() : table.clearSelection()} title={t('Select all vessels')} />
-                  </th>
-                  <th className="sortable" onClick={() => table.handleSort('name')} title={t('Vessel name -- click to sort')}>
-                    {t('Name')}{table.sortIcon('name')}
-                  </th>
-                  <th>{t('ID')}</th>
-                  <th className="sortable" onClick={() => table.handleSort('fleetId')} title={t('Fleet -- click to sort')}>
-                    {t('Fleet')}{table.sortIcon('fleetId')}
-                  </th>
-                  <th className="sortable" onClick={() => table.handleSort('repoUrl')} title={t('Remote git repository URL')}>
-                    {t('Repository')}{table.sortIcon('repoUrl')}
-                  </th>
-                  <th title={t('How completed mission work is integrated (LocalMerge, MergeAndPush, PullRequest, MergeQueue, None)')}>{t('Landing Mode')}</th>
-                  <th title={t('Commits ahead and behind the remote default branch')}>{t('Sync')}</th>
-                  <th title={t('Number of branches in the vessel repository')}>{t('Branches')}</th>
-                  <th className="text-right">{t('Actions')}</th>
-                </tr>
-                <tr className="column-filter-row">
-                  <td></td>
-                  <td><input type="text" className="col-filter" value={table.colFilters.name ?? ''} onChange={e => table.setColFilter('name', e.target.value)} placeholder={t('Search...')} /></td>
-                  <td></td>
-                  <td>
-                    <select aria-label={t('Filter vessels by fleet')} className="col-filter" title={t('Filter vessels by fleet')} value={fleetFilter} onChange={e => { setFleetFilter(e.target.value); table.setPageNumber(1); }}>
-                      <option value="">{t('All Fleets')}</option>
-                      {fleets.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-                    </select>
-                  </td>
-                  <td><input type="text" className="col-filter" value={table.colFilters.repoUrl ?? ''} onChange={e => table.setColFilter('repoUrl', e.target.value)} placeholder={t('Search...')} /></td>
-                  <td>
-                    <select aria-label={t('Filter vessels by landing mode')} className="col-filter" title={t('Filter vessels by landing mode')} value={landingModeFilter} onChange={e => { setLandingModeFilter(e.target.value); table.setPageNumber(1); }}>
-                      <option value="">{t('All Modes')}</option>
-                      {landingModes.filter(m => m.value).map(m => (
-                        <option key={m.value} value={m.value} title={m.description}>{m.value} -- {m.short}</option>
-                      ))}
-                    </select>
-                  </td>
-                  <td></td>
-                  <td></td>
-                  <td></td>
-                </tr>
-              </thead>
-              <tbody>
-                {table.paginated.map(v => (
-                  <tr key={v.id} className="clickable" onClick={() => openEdit(v)}>
-                    <td className="col-checkbox" onClick={e => e.stopPropagation()}>
-                      <input aria-label={t('Select this vessel')} type="checkbox" checked={table.selected.includes(v.id)} onChange={() => table.toggleSelect(v.id)} title={t('Select this vessel')} />
-                    </td>
-                    <td><strong>{v.name}</strong></td>
-                    <td className="mono text-dim table-id-cell">
-                      <span className="id-display">
-                        <span className="id-value" title={v.id}>{v.id}</span>
-                        <CopyButton text={v.id} onClick={e => e.stopPropagation()} />
-                      </span>
-                    </td>
-                    <td>
-                      {v.fleetId ? (
-                        <a href="#" onClick={e => { e.preventDefault(); e.stopPropagation(); navigate(`/fleets/${v.fleetId}`); }}>
-                          {fleetName(v.fleetId)}
-                        </a>
-                      ) : '-'}
-                    </td>
-                    <td className="text-dim table-url-cell">
-                      {v.repoUrl ? (
-                        <span className="id-display">
-                          <span className="url-value" title={v.repoUrl}>{v.repoUrl}</span>
-                          <CopyButton text={v.repoUrl} onClick={e => e.stopPropagation()} title="Copy URL" />
-                        </span>
-                      ) : '-'}
-                      <span className="id-display mono cell-subline" title={t('Default branch')}>
-                        <span className="url-value" title={v.defaultBranch || 'main'}>{v.defaultBranch || 'main'}</span>
-                        <CopyButton text={v.defaultBranch || 'main'} onClick={e => e.stopPropagation()} title="Copy branch" />
-                      </span>
-                    </td>
-                    <td title={landingModeInfo(v.landingMode).description}>
-                      <div>{v.landingMode || t('Default')}</div>
-                      <div className="text-dim" style={{ fontSize: '0.75rem' }}>{landingModeInfo(v.landingMode).short}</div>
-                    </td>
-                    <td>
-                      {(() => {
-                        const gs = gitStatus[v.id];
-                        if (!gs || (gs.ahead === null && gs.behind === null)) return <span className="text-dim">-</span>;
-                        const ahead = gs.ahead ?? 0;
-                        const behind = gs.behind ?? 0;
-                        if (ahead === 0 && behind === 0) return <span className="git-sync-badge git-sync-even" title={t('Up to date with remote')}>{t('in sync')}</span>;
-                        return (
-                          <span className="git-sync-badges">
-                            {ahead > 0 && <span className="git-sync-badge git-sync-ahead" title={t('{{count}} commit(s) ahead of remote -- needs push', { count: ahead })}>{ahead} {t('ahead')}</span>}
-                            {behind > 0 && <span className="git-sync-badge git-sync-behind" title={t('{{count}} commit(s) behind remote -- needs pull', { count: behind })}>{behind} {t('behind')}</span>}
-                          </span>
-                        );
-                      })()}
-                    </td>
-                    <td onClick={e => e.stopPropagation()}>
-                      {(() => {
-                        const count = branchCounts[v.id];
-                        return (
-                          <button
-                            className="btn btn-sm"
-                            title={t('Manage branches')}
-                            onClick={() => setBranchesModal({ vesselId: v.id, vesselName: v.name })}>
-                            {count === null || count === undefined ? t('Branches') : t('{{count}} branches', { count })}
-                          </button>
-                        );
-                      })()}
-                    </td>
-                    <td className="text-right" onClick={e => e.stopPropagation()}>
-                      <ActionMenu id={`vessel-${v.id}`} items={[
-                        { label: 'Dispatch', onClick: () => navigate('/dispatch', { state: { fromVessel: true, vesselId: v.id } }) },
-                        { label: 'Manage Branches', onClick: () => setBranchesModal({ vesselId: v.id, vesselName: v.name }) },
-                        { label: 'View History', onClick: () => navigate(`/vessels/${v.id}/history`) },
-                        { label: 'Manage Objectives', onClick: () => manageObjectives(v) },
-                        { label: 'Manage Fleet', onClick: () => navigate(`/fleets/${v.fleetId}`), disabled: !v.fleetId },
-                        { label: 'Open Workspace', onClick: () => navigate(`/workspace/${v.id}`) },
-                        { label: 'View Detail', onClick: () => navigate(`/vessels/${v.id}`) },
-                        { label: v.modelContext && v.modelContext.trim().length > 0 ? 'Refine Context' : 'Build Context', onClick: () => setBuildContextVessel(v) },
-                        { label: 'Edit', onClick: () => openEdit(v) },
-                        { label: 'Duplicate', onClick: () => void handleDuplicate(v) },
-                        { label: 'View JSON', onClick: () => setJsonData({ open: true, title: `${t('Vessel')}: ${v.name}`, data: v }) },
-                        { label: 'Delete', danger: true, onClick: () => handleDelete(v.id, v.name) },
-                      ]} />
-                    </td>
-                  </tr>
-                ))}
-                {table.paginated.length === 0 && (
-                  <tr><td colSpan={9} className="text-dim">{t('No vessels match the current filters.')}</td></tr>
-                )}
-              </tbody>
-            </table>
+      <DataTable
+        tableKey="vessels"
+        columns={columns}
+        rows={table.paginated}
+        rowKey={(v) => v.id}
+        onRowClick={openEdit}
+        sort={table.sortState}
+        pagination={table.paginationProps}
+        autoRefresh={{ seconds: refreshSeconds, onChange: setRefreshSeconds }}
+        onRefresh={load}
+        refreshTitle="Refresh vessel data"
+        selection={{
+          isSelected: (v) => table.selected.includes(v.id),
+          onToggle: (v) => table.toggleSelect(v.id),
+          allSelected: table.allSelected,
+          onToggleAll: (checked) => (checked ? table.selectAll() : table.clearSelection()),
+          selectAllLabel: t('Select all vessels'),
+          rowLabel: () => t('Select this vessel'),
+        }}
+        emptyMessage={t('No vessels match the current filters.')}
+        placeholder={vessels.length > 0 ? undefined : loading ? <p className="text-dim">{t('Loading...')}</p> : (
+          <div className="empty-state card" role="status">
+            <h4 className="empty-state-title">{t('No vessels configured.')}</h4>
+            <div className="empty-state-body text-dim">{t('Add a single repository with + Vessel, or import many existing local repositories at once.')}</div>
+            {isTenantAdmin && (
+              <div className="empty-state-actions">
+                <button className="btn btn-primary btn-sm" onClick={() => setImportOpen(true)}>{t('Import repositories')}</button>
+              </div>
+            )}
           </div>
-        </>
-      )}
+        )}
+      />
 
       {branchesModal && (
         <BranchesModal
