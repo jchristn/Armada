@@ -14,8 +14,7 @@ import DataTable, { type DataTableColumn } from '../components/shared/DataTable'
 import PageHeader from '../components/shared/PageHeader';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import { buildEnvironmentDuplicatePayload } from '../lib/duplicates';
-
-const ENVIRONMENT_KINDS: EnvironmentKind[] = ['Development', 'Test', 'Staging', 'Production', 'CustomerHosted', 'Custom'];
+import { ENVIRONMENT_KINDS } from '../lib/environmentForm';
 
 export default function Environments() {
   const navigate = useNavigate();
