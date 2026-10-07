@@ -1,0 +1,59 @@
+# Fresh install: add the throwaway Admiral as a server, sign in as the seeded admin with the default password,
+# take the "Skip for now" path on the password-change screen (confirming the risk), and land on Ask Armada.
+appId: ${APP_ID}
+name: 01-sign-in
+---
+- launchApp:
+    clearState: true
+    clearKeychain: true
+- extendedWaitUntil:
+    visible:
+      id: "profile-url"
+    timeout: 60000
+- tapOn:
+    id: "profile-url"
+- runFlow: common/dismiss-keyboard-tips.yaml
+- tapOn:
+    id: "profile-url"
+- inputText: ${SERVER_URL}
+- pressKey: Enter
+- assertVisible:
+    id: "insecure-url-warning"
+- tapOn:
+    id: "profile-save"
+- extendedWaitUntil:
+    visible:
+      id: "sign-in-email"
+    timeout: 20000
+- takeScreenshot: sign-in
+- tapOn:
+    id: "sign-in-email"
+- inputText: "admin@armada"
+- pressKey: Enter
+- extendedWaitUntil:
+    visible:
+      id: "sign-in-password"
+    timeout: 20000
+- assertVisible: "Signing in as admin@armada to.*"
+- tapOn:
+    id: "sign-in-password"
+- inputText: "password"
+- pressKey: Enter
+- extendedWaitUntil:
+    visible:
+      id: "password-change-skip"
+    timeout: 20000
+- takeScreenshot: password-change
+- tapOn:
+    id: "password-change-skip"
+- assertVisible: "Keep the default password?"
+- tapOn:
+    id: "password-skip-confirm-confirm"
+- extendedWaitUntil:
+    visible:
+      id: "route-placeholder-title"
+    timeout: 20000
+- assertVisible:
+    id: "tab-ask"
+- assertVisible: "Ask Armada"
+- takeScreenshot: ask

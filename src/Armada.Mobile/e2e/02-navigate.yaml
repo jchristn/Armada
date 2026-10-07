@@ -1,0 +1,78 @@
+# Signed in (state kept from 01): walk the tabs, open a few dashboard routes, the notification center, and the
+# preferences; switch the theme.
+appId: ${APP_ID}
+name: 02-navigate
+---
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: "tab-ask"
+    timeout: 30000
+- tapOn:
+    id: "tab-work"
+- extendedWaitUntil:
+    visible:
+      id: "work-menu"
+    timeout: 10000
+- assertVisible: "OPERATIONS"
+- takeScreenshot: work
+- tapOn:
+    id: "nav-/missions"
+- extendedWaitUntil:
+    visible:
+      id: "route-placeholder-workstream"
+    timeout: 10000
+- assertVisible: "Coming in W2.2"
+# Tapping the active tab pops its stack to the root (works the same on iOS and Android).
+- tapOn:
+    id: "tab-work"
+- scrollUntilVisible:
+    element:
+      id: "nav-/vessels"
+    direction: DOWN
+- tapOn:
+    id: "nav-/vessels"
+- assertVisible: "Coming in W3.1"
+- tapOn:
+    id: "tab-work"
+- tapOn:
+    id: "tab-approvals"
+- extendedWaitUntil:
+    visible:
+      id: "approvals-inbox"
+    timeout: 10000
+- takeScreenshot: approvals
+- tapOn:
+    id: "header-notifications"
+- extendedWaitUntil:
+    visible: "No notifications"
+    timeout: 10000
+- takeScreenshot: notifications
+- tapOn:
+    id: "notifications-close"
+- tapOn:
+    id: "tab-more"
+- extendedWaitUntil:
+    visible:
+      id: "more-menu"
+    timeout: 10000
+- assertVisible: "CONFIGURATION"
+- scrollUntilVisible:
+    element:
+      id: "nav-/preferences"
+    direction: DOWN
+- tapOn:
+    id: "nav-/preferences"
+- extendedWaitUntil:
+    visible:
+      id: "theme-dark"
+    timeout: 10000
+- tapOn:
+    id: "theme-dark"
+- takeScreenshot: preferences-dark
+- tapOn:
+    id: "theme-system"
+- tapOn:
+    id: "tab-more"
+- assertVisible:
+    id: "more-menu"
