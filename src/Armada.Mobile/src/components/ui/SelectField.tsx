@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { FlatList, Keyboard, Pressable, StyleSheet, View } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
 import { MIN_TOUCH, radius, spacing } from '../../theme/typography';
 import { AppText } from './AppText';
@@ -57,7 +57,7 @@ export function SelectField({
         accessibilityHint={hint ?? undefined}
         accessibilityState={{ disabled: !!disabled }}
         disabled={disabled}
-        onPress={() => { setQuery(''); setOpen(true); }}
+        onPress={() => { Keyboard.dismiss(); setQuery(''); setOpen(true); }}
         style={[styles.box, { borderColor: error ? colors.danger : colors.border, backgroundColor: colors.surface, opacity: disabled ? 0.55 : 1 }]}
       >
         <AppText style={styles.flex} muted={!current || value === ''} numberOfLines={1}>{display}</AppText>
