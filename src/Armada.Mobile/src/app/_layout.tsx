@@ -14,10 +14,16 @@ import { setSignedInForLinks } from '../navigation/pendingLink';
 import { ApprovalsProvider } from '../notifications/ApprovalsContext';
 import { NotificationProvider } from '../notifications/NotificationContext';
 import { createProxySocketFactory } from '../proxy/proxySocket';
+import { PushPermissionPrompt } from '../push/PushPermissionPrompt';
+import { PushResponseHandler } from '../push/PushResponseHandler';
+import { PushProvider, createPushAuthHooks, defaultPushDeps } from '../push/PushContext';
 import { SocketProvider } from '../socket/SocketContext';
 import { ThemeProvider, useTheme } from '../theme/ThemeContext';
 
 void SplashScreen.preventAutoHideAsync().catch(() => undefined);
+
+// Ending a profile's session (sign-out, profile removed, server changed) removes this device's push registration.
+const pushAuthHooks = createPushAuthHooks(defaultPushDeps);
 
 /** Session-scoped services: language (with the server catalog once signed in), socket, notifications, badge. */
 function SessionProviders({ children }: { children: ReactNode }) {
@@ -35,7 +41,9 @@ function SessionProviders({ children }: { children: ReactNode }) {
     <LocaleProvider serverUrl={serverUrl} requestHeaders={requestHeaders}>
       <SocketProvider serverUrl={serverUrl} token={signedIn ? sessionToken : null} factory={socketFactory}>
         <NotificationProvider>
-          <ApprovalsProvider enabled={signedIn}>{children}</ApprovalsProvider>
+          <ApprovalsProvider enabled={signedIn}>
+            <PushProvider>{children}</PushProvider>
+          </ApprovalsProvider>
         </NotificationProvider>
       </SocketProvider>
     </LocaleProvider>
@@ -89,6 +97,8 @@ function RootNavigator() {
         </Stack.Protected>
       </Stack>
       {ready ? <ToastHost /> : null}
+      {ready ? <PushResponseHandler /> : null}
+      {ready ? <PushPermissionPrompt /> : null}
     </NavigationThemeProvider>
   );
 }
@@ -98,7 +108,7 @@ export default function RootLayout() {
     <GestureHandlerRootView style={styles.fill}>
       <SafeAreaProvider>
         <ThemeProvider>
-          <AuthProvider>
+          <AuthProvider hooks={pushAuthHooks}>
             <SessionProviders>
               <RootNavigator />
             </SessionProviders>

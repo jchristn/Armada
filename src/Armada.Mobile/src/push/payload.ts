@@ -57,7 +57,7 @@ function idOrNull(value: unknown, prefix?: string): string | null {
  * (a test push links to "/": it just opens the app).
  */
 export function appPathForPushLink(link: unknown): string | null {
-  if (typeof link !== 'string' || link.length > 2048 || isRootLink(link)) return null;
+  if (typeof link !== 'string' || link.length > 2048 || /[\u0000-\u001f\u007f]/.test(link) || isRootLink(link)) return null;
   const mapped = appPathFromLink(link);
   if (!mapped) return null;
   const pathOnly = mapped.split(/[?#]/)[0];

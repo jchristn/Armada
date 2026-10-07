@@ -120,4 +120,36 @@ profiles. Before the first cloud build the maintainer must:
 3. Fill in the `submit.production` placeholders in `eas.json` (Apple ID, App Store Connect app id, team id) and
    provide the Google Play service account key at `secrets/google-play-service-account.json` (ignored by git).
 
-Push notifications are declared (`expo-notifications` plugin) but registration and delivery arrive in W5.3.
+## Push notifications
+
+The app registers its Expo push token with each signed-in server (`POST /api/v1/push/devices`, see
+[REST_API.md](../../docs/REST_API.md#push-notifications)), keeps the returned `pdv_` device id per profile in secure
+storage, re-registers when the token changes, and deletes the device on sign-out and profile removal. Permission is
+asked from a one-time sheet after sign-in (or from Preferences), never at launch. Preferences lists the server's
+categories as switches and can send a test push. Taps open the pushed dashboard path after validating it; Approve and
+Deny (iOS category `armada_approve_deny`, Android action buttons) require an unlocked device and, for profiles with
+biometric unlock, Face ID / Touch ID / fingerprint before the decision is sent. The app badge is the Approvals count.
+
+Real delivery needs credentials the maintainer owns: an EAS project id (`ARMADA_MOBILE_EAS_PROJECT_ID`), an APNs key
+for iOS, and an FCM (Firebase) configuration for Android, all attached through `eas credentials`. Without the project
+id the app works normally and Preferences says that push is not configured for the build. To try a notification on the
+iOS simulator without any of that, push an APNs payload (Expo puts the data object under `body`):
+
+```bash
+cat > /tmp/armada-push.apns <<'JSON'
+{"Simulator Target Bundle": "com.armada.mobile",
+ "aps": {"alert": {"title": "Approval needed", "body": "Dispatch a mission"}, "category": "armada_approve_deny", "badge": 1},
+ "body": {"url": "/missions/msn_example", "kind": "failed", "entityId": "msn_example", "category": "MissionFailed"}}
+JSON
+xcrun simctl push booted com.armada.mobile /tmp/armada-push.apns
+```
+
+## Armada.Proxy profiles
+
+Choose **Armada.Proxy** when adding a server to reach an Admiral through a remote-access proxy: sign in with the
+proxy password (a challenge and SHA-256 proof, never the password itself), pick a connected Admiral, then sign in to
+that Admiral as usual. The proxy session token is kept in secure storage and sent as `X-Armada-Proxy-Session` on
+relayed requests, as `Authorization: Bearer` on `/proxy-api`, and on `/ws` as an `armada-proxy-session.<base64url>`
+subprotocol (falling back to the header if the subprotocol is refused). When the 24-hour proxy session ends, the app
+asks only for the proxy password and returns to the same Admiral with the stored Admiral session. The sequence is in
+[REMOTE_SERVER.md](../../docs/REMOTE_SERVER.md#native-clients-through-armadaproxy).

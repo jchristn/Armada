@@ -62,7 +62,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     'expo-secure-store',
     'expo-localization',
     ['expo-local-authentication', { faceIDPermission: 'Unlock your saved Armada sign-in with Face ID.' }],
-    // Declared now so native projects carry the entitlement and channel setup; registration and delivery are W5.3.
+    // Push entitlement (aps-environment) and the Android notification setup. Expo push tokens need the EAS project
+    // id above; without it the app runs normally and Preferences explains that push is not configured.
     ['expo-notifications', { color: '#2563eb' }],
     [
       'expo-build-properties',
