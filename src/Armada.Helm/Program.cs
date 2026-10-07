@@ -116,6 +116,8 @@ namespace Armada.Helm
             HelpRow("vessel add", "Register a new vessel");
             HelpRow("vessel remove <id|name>", "Decommission a vessel");
             HelpRow("vessel import <paths...> [--root <dir>]", "Discover repositories and import them as vessels");
+            HelpRow("vessel history <id|name>", "Commit history by day (--before, --all, --verbose)");
+            HelpRow("vessel history <id|name> --heatmap", "Commit activity heatmap for the last year (--from/--to)");
 
             HelpHeading("Captains (armada captain ...)");
             HelpRow("captain list", "List all captains (agents)");
@@ -325,6 +327,10 @@ namespace Armada.Helm
                     .WithExample("vessel", "import", "~/Code/my-repo", "--root", "~/Code", "--dry-run");
                 vessel.AddCommand<VesselRemoveCommand>("remove")
                     .WithDescription("Decommission a vessel (accepts name or ID)");
+                vessel.AddCommand<VesselHistoryCommand>("history")
+                    .WithDescription("Show a vessel's commit history or activity heatmap (accepts name or ID)")
+                    .WithExample("vessel", "history", "my-repo", "--before", "2026-01-01")
+                    .WithExample("vessel", "history", "my-repo", "--heatmap");
             });
 
             config.AddBranch("captain", captain =>

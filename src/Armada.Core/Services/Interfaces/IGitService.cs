@@ -1,5 +1,6 @@
 namespace Armada.Core.Services.Interfaces
 {
+    using System;
     using System.Collections.Generic;
     using Armada.Core.Models;
 
@@ -352,5 +353,55 @@ namespace Armada.Core.Services.Interfaces
         /// <param name="token">Cancellation token.</param>
         /// <returns>True for a bare repository; false for a working tree or a non-repository.</returns>
         Task<bool> IsBareRepositoryAsync(string path, CancellationToken token = default);
+
+        /// <summary>
+        /// Resolve a branch to the full SHA of its tip commit, trying refs/heads/{branch}, then
+        /// refs/remotes/origin/{branch}, then the name as given (a full commit id, a tag, HEAD). Works on bare
+        /// repositories as well as working trees.
+        /// </summary>
+        /// <param name="repoPath">Repository path.</param>
+        /// <param name="branch">Branch name or full commit id (see <see cref="Armada.Core.Services.GitRevisionNames"/>).</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The full commit SHA, or null when nothing resolves to a commit (unknown branch, empty repository).</returns>
+        /// <exception cref="ArgumentNullException">Thrown when repoPath or branch is null or empty.</exception>
+        /// <exception cref="ArgumentException">Thrown when branch is not a safe branch name or commit id.</exception>
+        Task<string?> ResolveBranchTipAsync(string repoPath, string branch, CancellationToken token = default);
+
+        /// <summary>
+        /// Per-day commit counts on a branch for the history heatmap. Counts come from one git log pass bounded by
+        /// --since/--until around the range; each commit is bucketed by its committer date shifted by the offset. Days
+        /// holds one zero-filled entry per day from fromDate to toDate inclusive. FirstCommitUtc is the oldest committer
+        /// date among the branch's root commits and the commits in the range; LastCommitUtc the newest among the tip
+        /// and the commits in the range. VesselId is left empty for the caller.
+        /// </summary>
+        /// <param name="repoPath">Repository path (bare repository or working tree).</param>
+        /// <param name="branch">Branch name (resolved as by <see cref="ResolveBranchTipAsync"/>).</param>
+        /// <param name="fromDate">First calendar day (time of day ignored).</param>
+        /// <param name="toDate">Last calendar day, inclusive (time of day ignored).</param>
+        /// <param name="utcOffsetMinutes">UTC offset in minutes to bucket days in (-840 to 840).</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The activity; Error is set (with zero-filled days) when the branch does not resolve.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when repoPath or branch is null or empty.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when toDate is before fromDate or the offset is out of range.</exception>
+        Task<VesselCommitActivity> GetCommitActivityAsync(string repoPath, string branch, DateTime fromDate, DateTime toDate, int utcOffsetMinutes, CancellationToken token = default);
+
+        /// <summary>
+        /// Read one page of history from a fixed tip commit, newest commit date first (git log --date-order), in one
+        /// git invocation: each commit with its changed files from --raw --numstat -z (renames detected, merge
+        /// commits diffed against their first parent, root commits against the empty tree), files capped at
+        /// <see cref="Armada.Core.Constants.VesselHistoryMaxFilesPerCommit"/>.
+        /// </summary>
+        /// <param name="repoPath">Repository path (bare repository or working tree).</param>
+        /// <param name="tipSha">Full SHA of the tip commit (from <see cref="ResolveBranchTipAsync"/>); pinning it keeps paging stable while the branch moves.</param>
+        /// <param name="untilUnixSeconds">Inclusive upper bound on committer dates in Unix seconds, or null for none.</param>
+        /// <param name="skip">Commits to skip (returned by earlier pages).</param>
+        /// <param name="limit">Page size, 1 or more.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The page; HasMore is true when older commits follow.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when repoPath or tipSha is null or empty.</exception>
+        /// <exception cref="ArgumentException">Thrown when tipSha is not a full commit id.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when skip is negative or limit is below 1.</exception>
+        /// <exception cref="InvalidOperationException">Thrown when git fails (for example the tip commit no longer exists).</exception>
+        Task<GitCommitLogPage> GetCommitLogAsync(string repoPath, string tipSha, long? untilUnixSeconds, int skip, int limit, CancellationToken token = default);
     }
 }

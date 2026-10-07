@@ -256,6 +256,31 @@ namespace Armada.Core
         public const long DefaultMinAvailableMemoryBytesForLaunch = 0;
 
         /// <summary>
+        /// Most changed files listed per commit in vessel history (VesselCommit.Files); the rest are counted only.
+        /// </summary>
+        public const int VesselHistoryMaxFilesPerCommit = 200;
+
+        /// <summary>
+        /// Default page size for vessel commit history.
+        /// </summary>
+        public const int VesselHistoryDefaultPageSize = 50;
+
+        /// <summary>
+        /// Largest page size for vessel commit history.
+        /// </summary>
+        public const int VesselHistoryMaxPageSize = 200;
+
+        /// <summary>
+        /// Longest vessel commit activity range, in days between From and To.
+        /// </summary>
+        public const int VesselHistoryMaxActivityRangeDays = 1830;
+
+        /// <summary>
+        /// Largest absolute UTC offset, in minutes, accepted for vessel commit activity bucketing (UTC-14 to UTC+14).
+        /// </summary>
+        public const int VesselHistoryMaxUtcOffsetMinutes = 840;
+
+        /// <summary>
         /// Fleet ID prefix.
         /// </summary>
         public static readonly string FleetIdPrefix = "flt_";
