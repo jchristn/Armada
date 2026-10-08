@@ -10,7 +10,10 @@ import ReleaseNewRoute from '../app/(app)/(work)/releases/new';
 import RunbookRoute from '../app/(app)/(work)/runbooks/[id]';
 import { checkPrefillFrom, draftReleaseLink } from '../screens/delivery/checkLinks';
 import { incidentPayload, linkIncidentValues, newIncidentValues } from '../screens/delivery/incidentForm';
+import { releasePrefillFrom } from '../screens/delivery/ReleaseDetail';
 import { executionPrefillFrom } from '../screens/delivery/runbookForm';
+import { releaseHref } from '../screens/objectives/objectiveLinks';
+import { vesselLinks } from '../screens/vessels/vesselLinks';
 import { emit, page, renderW4Routes, resetW4 } from '../test/w4';
 
 jest.mock('@dashboard/api/client', () => require('../test/w4Client').autoMockClient());
@@ -83,9 +86,42 @@ beforeEach(async () => {
   api.getReleaseGitHubPullRequests.mockResolvedValue([]);
 });
 
+function queryOf(href: string): Record<string, string> {
+  const query = href.slice(href.indexOf('?') + 1);
+  const out: Record<string, string> = {};
+  for (const part of query.split('&')) {
+    const [k, v = ''] = part.split('=');
+    out[decodeURIComponent(k)] = decodeURIComponent(v.replace(/\+/g, ' '));
+  }
+  return out;
+}
+
+describe('links built by W3 screens', () => {
+  it('a vessel Run Check link (/delivery?tab=checks&vesselId&branchName) reads back as a run-check prefill', () => {
+    const href = vesselLinks.runCheck({ id: 'vsl_9', defaultBranch: 'develop' });
+    expect(href.startsWith('/delivery?')).toBe(true);
+    expect(checkPrefillFrom(queryOf(href))).toEqual({ vesselId: 'vsl_9', branchName: 'develop' });
+  });
+
+  it('a Workspace Run Check link (branch and label params) reads back with the branch as branchName', () => {
+    expect(checkPrefillFrom({ tab: 'checks', vesselId: 'vsl_9', branch: 'feature/x', label: 'repo: lint' }))
+      .toEqual({ vesselId: 'vsl_9', branchName: 'feature/x', label: 'repo: lint' });
+  });
+
+  it('a backlog Draft Release link reads back as the release prefill and objective ids', () => {
+    const objective = { id: 'obj_1', title: 'Ship it', description: 'Do the thing', suggestedPipelineId: null, suggestedPlaybooks: [], acceptanceCriteria: [], nonGoals: [], rolloutConstraints: [], evidenceLinks: [], tags: [] } as never;
+    const href = releaseHref(objective, 'vsl_2');
+    expect(href.startsWith('/releases/new?')).toBe(true);
+    const params = queryOf(href);
+    expect(releasePrefillFrom(params)).toMatchObject({ vesselId: 'vsl_2', title: 'Ship it Release', summary: 'Do the thing', status: 'Draft', notes: expect.stringContaining('Backlog-derived release notes for Ship it') });
+    expect(params.objectiveIds).toBe('obj_1');
+  });
+});
+
 describe('link helpers', () => {
   it('reads run-check and runbook-execution prefills, and builds Draft Release links', () => {
-    expect(checkPrefillFrom({ tab: 'checks', vesselId: 'vsl_1' })).toBeNull();
+    expect(checkPrefillFrom({ tab: 'checks' })).toBeNull();
+    expect(checkPrefillFrom({ tab: 'checks', vesselId: 'vsl_1' })).toEqual({ vesselId: 'vsl_1' });
     expect(checkPrefillFrom({ run: '1', vesselId: 'vsl_1', type: 'Bogus', label: 'L' })).toEqual({ vesselId: 'vsl_1', label: 'L' });
     expect(checkPrefillFrom({ run: '1', type: 'HealthCheck' })).toEqual({ type: 'HealthCheck' });
     expect(executionPrefillFrom({ tab: 'runbooks' })).toBeNull();
