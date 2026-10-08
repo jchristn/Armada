@@ -14,7 +14,9 @@ namespace Armada.Server.Routes
     /// <see cref="ArgumentException"/> is 400, <see cref="UnauthorizedAccessException"/> is 403, and
     /// <see cref="InvalidOperationException"/> (a state conflict) is the status the route documents (400 or 409).
     /// A <see cref="DuplicateEntityException"/> (or a provider unique-constraint violation, translated so its text is
-    /// never returned) is always 409 with a <see cref="DuplicateEntityErrorDetail"/> in Data.
+    /// never returned) is always 409 with a <see cref="DuplicateEntityErrorDetail"/> in Data. A
+    /// <see cref="VesselCheckoutUnavailableException"/> (the vessel has no checkout on the Admiral host or any connected
+    /// Harbor) is always 409 with a <see cref="VesselCheckoutErrorDetail"/> in Data.
     /// </summary>
     public static class RouteErrorMapper
     {
@@ -47,6 +49,7 @@ namespace Armada.Server.Routes
         {
             if (ex == null) throw new ArgumentNullException(nameof(ex));
             if (UniqueConstraintViolation.Translate(ex) != null) return 409;
+            if (ex is VesselCheckoutUnavailableException) return 409;
             if (ex is KeyNotFoundException) return 404;
             if (ex is ArgumentException) return 400;
             if (ex is UnauthorizedAccessException) return 403;
@@ -85,6 +88,7 @@ namespace Armada.Server.Routes
             if (ex == null) throw new ArgumentNullException(nameof(ex));
             DuplicateEntityException? duplicate = UniqueConstraintViolation.Translate(ex);
             if (duplicate != null) return Conflict(req, duplicate);
+            if (ex is VesselCheckoutUnavailableException checkout) return CheckoutUnavailable(req, checkout);
             int statusCode = StatusCodeFor(ex, invalidOperationStatusCode);
             req.Http.Response.StatusCode = statusCode;
             return new ApiErrorResponse { Error = ResultFor(statusCode), Message = ex.Message };
@@ -104,6 +108,23 @@ namespace Armada.Server.Routes
             if (ex == null) throw new ArgumentNullException(nameof(ex));
             req.Http.Response.StatusCode = 409;
             return new ApiErrorResponse { Error = ApiResultEnum.Conflict, Message = ex.Message, Data = DuplicateEntityErrorDetail.FromException(ex) };
+        }
+
+        /// <summary>
+        /// Set a 409 status and build the error body for a vessel without a usable checkout: <c>Error</c> Conflict, the
+        /// exception's message (which says what to set), and a <see cref="VesselCheckoutErrorDetail"/> (Code
+        /// VesselCheckoutUnavailable) in <c>Data</c>.
+        /// </summary>
+        /// <param name="req">Request.</param>
+        /// <param name="ex">Exception.</param>
+        /// <returns>Error body.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when an argument is null.</exception>
+        public static ApiErrorResponse CheckoutUnavailable(ApiRequest req, VesselCheckoutUnavailableException ex)
+        {
+            if (req == null) throw new ArgumentNullException(nameof(req));
+            if (ex == null) throw new ArgumentNullException(nameof(ex));
+            req.Http.Response.StatusCode = 409;
+            return new ApiErrorResponse { Error = ApiResultEnum.Conflict, Message = ex.Message, Data = VesselCheckoutErrorDetail.FromException(ex) };
         }
 
         /// <summary>

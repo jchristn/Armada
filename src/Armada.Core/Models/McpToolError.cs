@@ -143,7 +143,10 @@ namespace Armada.Core.Models
         /// <see cref="UnauthorizedAccessException"/> Forbidden, <see cref="NotSupportedException"/> Unavailable, and
         /// anything else Failed. A <see cref="DuplicateEntityException"/>, or a provider unique-constraint violation
         /// (translated by <see cref="UniqueConstraintViolation"/> so its text is never returned), is Conflict with
-        /// <see cref="Code"/> <see cref="DuplicateEntityException.ErrorCode"/> unless a code is given.
+        /// <see cref="Code"/> <see cref="DuplicateEntityException.ErrorCode"/> unless a code is given. A
+        /// <see cref="VesselCheckoutUnavailableException"/> is Unavailable with <see cref="Code"/>
+        /// "VesselCheckoutUnavailable.&lt;reason&gt;" (for example VesselCheckoutUnavailable.NoHarborCheckout) and the message
+        /// that says what to set.
         /// </summary>
         /// <param name="ex">Exception.</param>
         /// <param name="code">Feature-specific detail code, or null.</param>
@@ -154,6 +157,8 @@ namespace Armada.Core.Models
             if (ex == null) throw new ArgumentNullException(nameof(ex));
             DuplicateEntityException? duplicate = UniqueConstraintViolation.Translate(ex);
             if (duplicate != null) return new McpToolError(McpToolErrorCodeEnum.Conflict, duplicate.Message, code ?? DuplicateEntityException.ErrorCode);
+            if (ex is VesselCheckoutUnavailableException checkout)
+                return new McpToolError(McpToolErrorCodeEnum.Unavailable, checkout.Message, code ?? (VesselCheckoutUnavailableException.ErrorCode + "." + checkout.Code));
             McpToolErrorCodeEnum category = McpToolErrorCodeEnum.Failed;
             if (ex is KeyNotFoundException) category = McpToolErrorCodeEnum.NotFound;
             else if (ex is ArgumentException) category = McpToolErrorCodeEnum.InvalidArgument;
