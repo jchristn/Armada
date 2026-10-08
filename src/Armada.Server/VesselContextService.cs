@@ -32,6 +32,13 @@ namespace Armada.Server
         /// </summary>
         public CaptainLaunchRouter? LaunchRouter { get; set; } = null;
 
+        /// <summary>
+        /// Chooses where the analysis dock is created, as for a mission dock: on a connected Harbor that can serve the
+        /// vessel (the captain then runs in that dock on the Harbor), or on the Admiral host. When the placement says to
+        /// wait, the build fails with the reason. Null always creates the dock on the Admiral host.
+        /// </summary>
+        public Func<DockPlacementRequest, Task<DockPlacement>>? PlaceDockAsync { get; set; } = null;
+
         #endregion
 
         #region Private-Members
@@ -122,11 +129,26 @@ namespace Armada.Server
 
             // Provision a worktree so the captain has the repository available to inspect. A unique branch keeps
             // this analysis isolated from any real work; the dock is always reclaimed in the finally block.
-            string branchName = "armada/context/" + Guid.NewGuid().ToString("N").Substring(0, 12);
-            Dock dock = await _Docks.ProvisionAsync(vessel, captain, branchName, null, token).ConfigureAwait(false)
-                ?? throw new DockProvisioningException(vessel.Id, branchName, "Could not provision a worktree for this vessel.");
+            string contextId = Guid.NewGuid().ToString("N").Substring(0, 12);
+            string branchName = "armada/context/" + contextId;
+            DockPlacement placement = PlaceDockAsync != null
+                ? await PlaceDockAsync(new DockPlacementRequest(captain, vessel)
+                {
+                    Purpose = "Model Context build for vessel " + vessel.Id,
+                    TenantId = vessel.TenantId,
+                    UserId = userId ?? vessel.UserId,
+                    BranchName = branchName
+                }).ConfigureAwait(false)
+                : DockPlacement.OnAdmiral("no dock placement is configured");
+            if (placement.Wait)
+                throw new HarborLaunchUnavailableException(null, true, "The Model Context for vessel " + vessel.Name + " cannot be built: " + placement.Reason + ".");
 
-            if (String.IsNullOrWhiteSpace(dock.WorktreePath) || !Directory.Exists(dock.WorktreePath))
+            Dock dock = placement.HarborId != null
+                ? await _Docks.ProvisionOnHarborAsync(vessel, captain, branchName, "context-" + contextId, placement.HarborId, token).ConfigureAwait(false)
+                : await _Docks.ProvisionAsync(vessel, captain, branchName, null, token).ConfigureAwait(false)
+                    ?? throw new DockProvisioningException(vessel.Id, branchName, "Could not provision a worktree for this vessel.");
+
+            if (String.IsNullOrWhiteSpace(dock.WorktreePath) || (!DockHostResolver.IsHarborDock(dock) && !Directory.Exists(dock.WorktreePath)))
             {
                 try { await _Docks.ReclaimAsync(dock.Id, vessel.TenantId, CancellationToken.None).ConfigureAwait(false); } catch { }
                 throw new InvalidOperationException("The provisioned worktree is missing on disk.");

@@ -578,6 +578,7 @@ namespace Armada.Server
                 EmitEventAsync,
                 _WebSocketHub);
             _PlanningSessions.LaunchRouter = _LaunchRouter;
+            _PlanningSessions.PlaceDockAsync = _AgentLifecycle.ResolveDockPlacementAsync;
             _ObjectiveRefinementSessions.LaunchRouter = _LaunchRouter;
 
             _CaptainTools = new CaptainToolService(
@@ -1198,6 +1199,7 @@ namespace Armada.Server
             // Vessels
             VesselContextService vesselContextService = new VesselContextService(_Database, _RuntimeFactory, _Docks, _PromptTemplateService, _Logging);
             vesselContextService.LaunchRouter = _LaunchRouter;
+            vesselContextService.PlaceDockAsync = _AgentLifecycle.ResolveDockPlacementAsync;
             new VesselRoutes(_Database, _VesselReadinessService, _LandingPreviewService, EmitEventAsync, _JsonOptions, _Docks, vesselContextService, _Git, _Settings, _VesselService, _ManualLandingReconciler, _VesselHosts)
                 .Register(_App, authenticate, _AuthorizationService);
 

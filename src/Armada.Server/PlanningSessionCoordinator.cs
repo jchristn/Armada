@@ -30,6 +30,14 @@ namespace Armada.Server
         /// </summary>
         public CaptainLaunchRouter? LaunchRouter { get; set; } = null;
 
+        /// <summary>
+        /// Chooses where a session's dock is created, as for a mission dock: on a connected Harbor that can serve the
+        /// vessel (the session's turns then run in that dock on the Harbor), or on the Admiral host. When the placement
+        /// says to wait (requireHarborForLaunch with no Harbor able to serve the vessel), the session is not created and
+        /// the error says why. Null always creates the dock on the Admiral host.
+        /// </summary>
+        public Func<DockPlacementRequest, Task<DockPlacement>>? PlaceDockAsync { get; set; } = null;
+
         #endregion
 
         #region Private-Members
@@ -151,7 +159,22 @@ namespace Armada.Server
             try
             {
                 string branchName = Constants.BranchPrefix + "planning/" + session.Id;
-                Dock? dock = await _Docks.ProvisionAsync(vessel, captain, branchName, session.Id, token).ConfigureAwait(false);
+                Dock? dock;
+                DockPlacement placement = PlaceDockAsync != null
+                    ? await PlaceDockAsync(new DockPlacementRequest(captain, vessel)
+                    {
+                        Purpose = "planning session " + session.Id,
+                        TenantId = tenantId,
+                        UserId = userId,
+                        BranchName = branchName
+                    }).ConfigureAwait(false)
+                    : DockPlacement.OnAdmiral("no dock placement is configured");
+                if (placement.Wait)
+                    throw new HarborLaunchUnavailableException(null, true, "The planning session for vessel " + vessel.Name + " cannot start: " + placement.Reason + ".");
+                if (placement.HarborId != null)
+                    dock = await _Docks.ProvisionOnHarborAsync(vessel, captain, branchName, session.Id, placement.HarborId, token).ConfigureAwait(false);
+                else
+                    dock = await _Docks.ProvisionAsync(vessel, captain, branchName, session.Id, token).ConfigureAwait(false);
                 if (dock == null)
                     throw new DockProvisioningException(vessel.Id, branchName, "Dock provisioning failed for planning session " + session.Id + ".");
 
