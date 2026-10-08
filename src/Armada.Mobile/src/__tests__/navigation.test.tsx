@@ -109,6 +109,23 @@ describe('deep links and dashboard paths', () => {
     takePendingLink();
   });
 
+  it('encoded traversal in an id never reaches a screen (or the API path it builds)', () => {
+    setSignedInForLinks(false);
+    for (const link of [
+      'armada://missions/..%2Fusers%2Fusr_x',
+      'armada://missions/%2E%2E',
+      'armada://missions/a%5Cb',
+      'https://admiral.example/dashboard/missions/msn_1%2F..%2F..%2Fusers',
+      '/missions/%E0%A4%A',
+    ]) {
+      expect(appPathFromLink(link)).toBeNull();
+      expect(redirectSystemPath({ path: link, initial: true })).toBeNull();
+    }
+    expect(takePendingLink()).toBeNull();
+    expect(matchRoute('/missions/..%2Fusers%2Fusr_x')).toBeNull();
+    expect(matchRoute('/missions/%E0%A4%A')).toBeNull();
+  });
+
   it('static segments win over parameters', () => {
     expect(matchRoute('/voyages/create')?.route.pattern).toBe('/voyages/create');
     expect(matchRoute('/voyages/vyg_1')?.route.pattern).toBe('/voyages/:id');

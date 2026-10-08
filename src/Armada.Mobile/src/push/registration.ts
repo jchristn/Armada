@@ -164,11 +164,18 @@ export async function reRegisterProfiles(
   return result;
 }
 
-/** The profile whose registration produced this device id, if any. */
+/**
+ * The profile whose registration produced this device id, if any. Null when no profile, or more than one, holds it:
+ * an id shared by two profiles (a stale record from before the server issued a new id on a change of owner) cannot
+ * say which user the push is for, so it is not trusted.
+ */
 export async function profileForDevice(store: RegistrationStore, profileIds: string[], deviceId: string): Promise<string | null> {
+  let match: string | null = null;
   for (const id of profileIds) {
     const record = await store.read(id);
-    if (record?.deviceId === deviceId) return id;
+    if (record?.deviceId !== deviceId) continue;
+    if (match !== null) return null;
+    match = id;
   }
-  return null;
+  return match;
 }
