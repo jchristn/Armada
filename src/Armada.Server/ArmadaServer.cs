@@ -40,6 +40,14 @@ namespace Armada.Server
         public Action? OnStopping { get; set; }
 
         /// <summary>
+        /// Replaces what an authorized <c>POST /api/v1/server/restart</c> does: when set, it runs instead of launching a
+        /// replacement process and stopping this one, and returns true when the restart started. The route still
+        /// requires a global admin before calling it. Null (the default) restarts for real. Tests set it so nothing
+        /// restarts.
+        /// </summary>
+        public Func<Task<bool>>? RestartOverride { get; set; } = null;
+
+        /// <summary>
         /// Factory the server creates captain runtimes from. End-to-end tests replace a runtime type through
         /// <see cref="AgentRuntimeFactory.Override"/> to run a scripted stub captain instead of a real agent CLI.
         /// </summary>
@@ -1150,7 +1158,7 @@ namespace Armada.Server
             // Status, health, doctor, settings, server control
             SlotManager slotManager = new SlotManager(Path.Combine(_Settings.DataDirectory, "bin"), retentionCount: _Settings.RebuildSlotRetentionCount);
             ServerRebuildService rebuildService = new ServerRebuildService(_Database, _Settings, slotManager, new LocalHostCommandExecutor(), _Logging, () => Stop(), _HarborConnectionManager);
-            new StatusRoutes(_Database, _Settings, _Admiral, () => Stop(), _StartUtc, _JsonOptions, _Logging, slotManager, rebuildService, _RemoteTunnel.GetStatus, _RemoteTunnel.ReloadAsync)
+            new StatusRoutes(_Database, _Settings, _Admiral, () => Stop(), _StartUtc, _JsonOptions, _Logging, slotManager, rebuildService, _RemoteTunnel.GetStatus, _RemoteTunnel.ReloadAsync, () => RestartOverride?.Invoke())
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Fleets

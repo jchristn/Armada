@@ -138,6 +138,26 @@ namespace Armada.Core.Hosting
         }
 
         /// <summary>
+        /// The mission or captain a log file belongs to, when it is that entity's own log: the path this layout gives
+        /// the entity (<see cref="MissionLogPath"/>, or captains/&lt;id&gt;.log) is exactly the file.
+        /// </summary>
+        /// <param name="category">Category the file was listed under.</param>
+        /// <param name="file">Full path.</param>
+        /// <returns>The entity ID, or null.</returns>
+        public string? EntityIdOf(LogCategoryEnum category, string file)
+        {
+            if (String.IsNullOrEmpty(file)) return null;
+            string stem = System.IO.Path.GetFileNameWithoutExtension(file);
+            if (category == LogCategoryEnum.Missions && stem.StartsWith(Constants.MissionIdPrefix, StringComparison.Ordinal)
+                && String.Equals(MissionLogPath(stem), file, StringComparison.Ordinal))
+                return stem;
+            if (category == LogCategoryEnum.Captains && stem.StartsWith(Constants.CaptainIdPrefix, StringComparison.Ordinal)
+                && String.Equals(System.IO.Path.Combine(CaptainsDirectory, stem + ".log"), file, StringComparison.Ordinal))
+                return stem;
+            return null;
+        }
+
+        /// <summary>
         /// List a category's files, newest first. Captain .current pointers are not logs and are left out.
         /// </summary>
         /// <param name="category">Category.</param>
@@ -167,7 +187,8 @@ namespace Armada.Core.Hosting
                         Path = file,
                         Name = name,
                         SizeBytes = info.Length,
-                        LastWriteUtc = info.LastWriteTimeUtc
+                        LastWriteUtc = info.LastWriteTimeUtc,
+                        EntityId = EntityIdOf(category, file)
                     });
                 }
                 catch (IOException)

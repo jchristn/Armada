@@ -34,6 +34,7 @@ namespace Armada.Server.Routes
         private readonly ServerRebuildService _rebuild;
         private readonly Func<RemoteTunnelStatus>? _getRemoteTunnelStatus;
         private readonly Func<Task>? _onRemoteControlSettingsChanged;
+        private readonly Func<Task<bool>?>? _restartOverride;
         private const string _HeaderRestart = "[ArmadaServer] restart: ";
 
         /// <summary>
@@ -50,6 +51,9 @@ namespace Armada.Server.Routes
         /// <param name="rebuild">Server self-rebuild service.</param>
         /// <param name="getRemoteTunnelStatus">Optional callback that returns the current remote tunnel status.</param>
         /// <param name="onRemoteControlSettingsChanged">Optional callback invoked after remote-control settings are updated.</param>
+        /// <param name="restartOverride">Optional: asked on each authorized restart request; when it returns a task, that
+        /// task restarts the Admiral instead of launching a replacement process (true when the restart started). Tests use
+        /// it so nothing restarts. Returning null keeps the real restart.</param>
         public StatusRoutes(
             DatabaseDriver database,
             ArmadaSettings settings,
@@ -61,7 +65,8 @@ namespace Armada.Server.Routes
             ISlotManager slots,
             ServerRebuildService rebuild,
             Func<RemoteTunnelStatus>? getRemoteTunnelStatus = null,
-            Func<Task>? onRemoteControlSettingsChanged = null)
+            Func<Task>? onRemoteControlSettingsChanged = null,
+            Func<Task<bool>?>? restartOverride = null)
         {
             _database = database;
             _settings = settings;
@@ -74,6 +79,7 @@ namespace Armada.Server.Routes
             _rebuild = rebuild;
             _getRemoteTunnelStatus = getRemoteTunnelStatus;
             _onRemoteControlSettingsChanged = onRemoteControlSettingsChanged;
+            _restartOverride = restartOverride;
         }
 
         /// <summary>
@@ -339,21 +345,17 @@ namespace Armada.Server.Routes
                     }
                 }
 
-                ReplacementCommand? replacement = await ResolveRestartCommandAsync().ConfigureAwait(false);
-                if (replacement == null || !ReplacementProcessLauncher.Launch(replacement, _logging, _HeaderRestart))
+                // Only a global admin reaches this point (AdminOnly in RouteAuthorizationRegistry).
+                Task<bool>? overridden = _restartOverride?.Invoke();
+                bool restarting = overridden != null
+                    ? await overridden.ConfigureAwait(false)
+                    : await RestartThisProcessAsync(_Header).ConfigureAwait(false);
+                if (!restarting)
                 {
                     req.Http.Response.StatusCode = 500;
                     return new ApiErrorResponse { Error = ApiResultEnum.InternalError, Message = "Unable to launch a replacement Admiral process; server was not restarted." };
                 }
 
-                _logging.Info(_Header + "restart requested via API; replacement process launched");
-                _ = Task.Run(async () =>
-                {
-                    // Give the replacement a moment to spawn and register the predecessor wait, then stop
-                    // this instance so the port frees for the replacement to bind.
-                    await Task.Delay(500).ConfigureAwait(false);
-                    _stopCallback();
-                });
                 return new { Status = "restarting" };
             },
             api => api
@@ -614,6 +616,27 @@ namespace Armada.Server.Routes
                 .WithSummary("Factory reset")
                 .WithDescription("Deletes database, logs, docks, and repos directories. Preserves settings file.")
                 .WithSecurity("ApiKey"));
+        }
+
+        /// <summary>
+        /// Launch a replacement Admiral process that waits for this one to exit, then stop this one so the port frees.
+        /// </summary>
+        /// <param name="header">Log header.</param>
+        /// <returns>True when the replacement was launched and this instance is stopping.</returns>
+        private async Task<bool> RestartThisProcessAsync(string header)
+        {
+            ReplacementCommand? replacement = await ResolveRestartCommandAsync().ConfigureAwait(false);
+            if (replacement == null || !ReplacementProcessLauncher.Launch(replacement, _logging, _HeaderRestart)) return false;
+
+            _logging.Info(header + "restart requested via API; replacement process launched");
+            _ = Task.Run(async () =>
+            {
+                // Give the replacement a moment to spawn and register the predecessor wait, then stop
+                // this instance so the port frees for the replacement to bind.
+                await Task.Delay(500).ConfigureAwait(false);
+                _stopCallback();
+            });
+            return true;
         }
 
         private async Task<ReplacementCommand?> ResolveRestartCommandAsync()
