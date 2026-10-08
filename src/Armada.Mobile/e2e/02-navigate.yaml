@@ -42,6 +42,11 @@ name: 02-navigate
       id: "nav-/vessels"
     direction: DOWN
     visibilityPercentage: 100
+# iOS counts a row the scroll view has clipped (under the tab bar) as visible; lift it clear before tapping.
+- swipe:
+    start: "50%, 60%"
+    end: "50%, 40%"
+    duration: 600
 - tapOn:
     id: "nav-/vessels"
 - extendedWaitUntil:
