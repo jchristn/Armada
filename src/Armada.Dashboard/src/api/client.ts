@@ -263,6 +263,31 @@ export class TimeoutError extends Error {
 }
 
 /**
+ * Error thrown when no HTTP response arrived: DNS failure, connection refused, TLS failure, or a request the operating
+ * system blocked. Hosts reject fetch with different classes for this (TypeError in browsers, FetchError under Expo),
+ * so the client normalizes them; callers detect it with `instanceof NetworkError`. The original error is `cause`.
+ */
+export class NetworkError extends Error {
+  cause: unknown;
+
+  constructor(message: string, cause: unknown) {
+    super(message);
+    this.name = 'NetworkError';
+    this.cause = cause;
+  }
+}
+
+/** fetch, with a rejection that is not an abort turned into a NetworkError. */
+async function fetchOrNetworkError(url: string, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, init);
+  } catch (err) {
+    if (init.signal?.aborted || isAbortError(err)) throw err;
+    throw new NetworkError(err instanceof Error ? err.message : String(err), err);
+  }
+}
+
+/**
  * Error thrown when the caller's own abort signal cancelled the request (for example the chat Stop button).
  * Its `name` stays 'AbortError' for compatibility with code that checks the conventional abort name.
  */
@@ -368,7 +393,7 @@ async function request<T>(method: string, path: string, body?: unknown, opts?: R
   }
 
   try {
-    const res = await fetch(`${BASE_URL}${path}`, {
+    const res = await fetchOrNetworkError(`${BASE_URL}${path}`, {
       method,
       headers,
       body: body ? JSON.stringify(body) : undefined,
@@ -409,8 +434,9 @@ async function request<T>(method: string, path: string, body?: unknown, opts?: R
     if (external?.aborted) {
       throw new RequestCancelledError();
     }
-    // Checked by name, not `instanceof DOMException`: not every host defines DOMException (React Native does not).
-    if (isAbortError(err)) {
+    // Our own timeout aborted the request. Checked on the signal (and by name, not `instanceof DOMException`): hosts
+    // reject an aborted fetch with different classes, and not every host defines DOMException (React Native does not).
+    if (controller.signal.aborted || isAbortError(err)) {
       throw new TimeoutError();
     }
     throw err;
@@ -436,7 +462,7 @@ async function proxyRequest<T>(method: string, path: string, body?: unknown): Pr
     headers['Content-Type'] = 'application/json';
   }
 
-  const res = await fetch(`${BASE_URL}${path}`, {
+  const res = await fetchOrNetworkError(`${BASE_URL}${path}`, {
     method,
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -1445,7 +1471,7 @@ export const rollbackServer = () => post<RebuildStatus>('/api/v1/server/rollback
 export async function downloadBackup(): Promise<void> {
   const own: Record<string, string> = {};
   if (authToken) own['X-Token'] = authToken;
-  const res = await fetch(`${BASE_URL}/api/v1/backup`, { method: 'GET', headers: withExtraHeaders(own) });
+  const res = await fetchOrNetworkError(`${BASE_URL}/api/v1/backup`, { method: 'GET', headers: withExtraHeaders(own) });
   if (res.status === 401) { onUnauthorized?.(); throw unauthorizedError(); }
   if (!res.ok) throw new Error(`Backup failed: ${res.status}`);
   const blob = await res.blob();
@@ -1462,7 +1488,7 @@ export async function restoreBackup(file: UploadFile): Promise<Record<string, un
   if (authToken) own['X-Token'] = authToken;
   own['X-Original-Filename'] = file.name;
   const bytes = await file.arrayBuffer();
-  const res = await fetch(`${BASE_URL}/api/v1/restore`, { method: 'POST', headers: withExtraHeaders(own), body: bytes });
+  const res = await fetchOrNetworkError(`${BASE_URL}/api/v1/restore`, { method: 'POST', headers: withExtraHeaders(own), body: bytes });
   if (res.status === 401) { onUnauthorized?.(); throw unauthorizedError(); }
   if (!res.ok) { const text = await res.text(); throw new Error(text || `Restore failed: ${res.status}`); }
   const json = await res.json();

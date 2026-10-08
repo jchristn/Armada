@@ -95,7 +95,7 @@ describe('sign-in', () => {
 
   it('a server that cannot be reached says so instead of a tenant lookup failure', async () => {
     const user = userEvent.setup();
-    api.lookupTenants.mockRejectedValue(new TypeError('Network request failed'));
+    api.lookupTenants.mockRejectedValue(new client.NetworkError('fetch failed: The resource could not be loaded', null));
     await renderSignIn();
     await user.type(screen.getByTestId('sign-in-email'), 'admin@armada');
     await user.press(screen.getByTestId('sign-in-continue'));

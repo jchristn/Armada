@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Image, StyleSheet, View } from 'react-native';
-import { ApiError, TimeoutError, authenticate, lookupTenants } from '@dashboard/api/client';
+import { ApiError, NetworkError, TimeoutError, authenticate, lookupTenants } from '@dashboard/api/client';
 import type { TenantListEntry } from '@dashboard/types/models';
 import { useAuth } from '../auth/AuthContext';
 import { InsecureUrlWarning } from '../components/app/InsecureUrlWarning';
@@ -20,9 +20,9 @@ type Mode = 'email' | 'apikey';
  * profile first signs in to Armada.Proxy and picks an Admiral instance; the Admiral sign-in then goes through the relay.
  */
 
-/** fetch rejects with a TypeError when no HTTP response arrives (DNS, refused, TLS, or blocked by the OS). */
+/** No HTTP response arrived (DNS, refused, TLS, blocked by the OS) or the request timed out. */
 function isConnectionError(err: unknown): boolean {
-  return err instanceof TypeError || err instanceof TimeoutError;
+  return err instanceof NetworkError || err instanceof TimeoutError;
 }
 
 export function SignInScreen() {

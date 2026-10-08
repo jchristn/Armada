@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   ApiError,
+  NetworkError,
   TimeoutError,
   getProxySessionContext,
   getWorkspaceTree,
@@ -54,6 +55,30 @@ describe('client error classification by status and class', () => {
     expect(error).toBeInstanceOf(TimeoutError);
     expect(error).not.toBeInstanceOf(ApiError);
     expect((error as Error).message).toBe('Request timed out');
+  });
+
+  it('a fetch that gets no response is a NetworkError whatever class the host rejects with', async () => {
+    class HostFetchError extends Error {}
+    for (const rejection of [new TypeError('Failed to fetch'), new HostFetchError('fetch failed: The resource could not be loaded')]) {
+      vi.stubGlobal('fetch', vi.fn().mockRejectedValue(rejection));
+      const error = await getWorkspaceTree('vsl_1').catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(NetworkError);
+      expect(error).not.toBeInstanceOf(ApiError);
+      expect((error as NetworkError).cause).toBe(rejection);
+    }
+  });
+
+  it('a timeout is a TimeoutError even when the host rejects the aborted fetch with its own error class', async () => {
+    vi.useFakeTimers();
+    class HostFetchError extends Error {}
+    vi.stubGlobal('fetch', vi.fn((_url: string, init: RequestInit) => new Promise((_resolve, reject) => {
+      init.signal?.addEventListener('abort', () => reject(new HostFetchError('fetch failed: cancelled')));
+    })));
+    const pending = getWorkspaceTree('vsl_1').catch((e: unknown) => e);
+    await vi.advanceTimersByTimeAsync(30000);
+    const error = await pending;
+    expect(error).toBeInstanceOf(TimeoutError);
+    expect(error).not.toBeInstanceOf(NetworkError);
   });
 
   it('proxy 404/401 are typed: session context is null and logout tolerates 404', async () => {
