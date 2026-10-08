@@ -1,0 +1,17 @@
+{
+  "comment": "Reviewed npm advisories that do not reach the shipped app (scripts/mobile/check-npm-audit.py, security review F-55). Each entry: the GHSA id, the package, where it is used, and why the app is not affected. Remove an entry as soon as a fixed version can be installed.",
+  "advisories": [
+    {
+      "id": "GHSA-vfj7-8cjw-p6xm",
+      "package": "braces",
+      "severity": "high",
+      "reason": "Build and test tooling only (micromatch under Metro's and Jest's file watching and haste maps). Glob patterns come from the project's own configuration, never from users, and the package is not in the app bundle. No fixed release exists (3.0.3 is the latest)."
+    },
+    {
+      "id": "GHSA-86w9-cpqp-85rv",
+      "package": "node-forge",
+      "severity": "high",
+      "reason": "Used by the Expo CLI (@expo/code-signing-certificates) on the developer machine for expo-updates code signing, which Armada does not use; not in the app bundle. No fixed release exists (1.4.0 is the latest)."
+    }
+  ]
+}

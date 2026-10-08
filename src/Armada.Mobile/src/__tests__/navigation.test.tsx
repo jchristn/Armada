@@ -109,7 +109,7 @@ describe('deep links and dashboard paths', () => {
     takePendingLink();
   });
 
-  it('encoded traversal in an id never reaches a screen (or the API path it builds)', () => {
+  it('encoded traversal, malformed percent-encoding, and oversized links never reach a screen or the router', () => {
     setSignedInForLinks(false);
     for (const link of [
       'armada://missions/..%2Fusers%2Fusr_x',
@@ -117,6 +117,9 @@ describe('deep links and dashboard paths', () => {
       'armada://missions/a%5Cb',
       'https://admiral.example/dashboard/missions/msn_1%2F..%2F..%2Fusers',
       '/missions/%E0%A4%A',
+      'armada://missions?tab=%E0%A4%A',
+      `armada://missions/msn_1?x=${'%E0%A4'.repeat(40)}%`,
+      `armada://missions/msn_1?x=${'a'.repeat(3000)}`,
     ]) {
       expect(appPathFromLink(link)).toBeNull();
       expect(redirectSystemPath({ path: link, initial: true })).toBeNull();
