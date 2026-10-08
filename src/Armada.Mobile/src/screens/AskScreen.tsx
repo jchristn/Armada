@@ -52,7 +52,8 @@ const HIGHLIGHT_MS = 2000;
 export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
   const { t } = useLocale();
   const { colors } = useTheme();
-  const { isTablet } = useLayout();
+  // Sidebar navigation (no header bell) vs. list and conversation side by side (pane width).
+  const { isTablet, split } = useLayout();
   const router = useRouter();
   const { isAdmin, isTenantAdmin } = useAuth();
   const { pushToast } = useNotifications();
@@ -317,7 +318,7 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
           title: thread?.title || t('Ask Armada'),
           headerRight: () => (
             <View style={styles.headerRow}>
-              {!isTablet ? (
+              {!split ? (
                 <IconButton icon="chatbubbles-outline" label={t('Show conversations')} badge={unreadElsewhere} onPress={() => setListOpen(true)} testID="ask-open-list" />
               ) : null}
               <IconButton icon="options-outline" label={t('More conversation actions')} onPress={() => setOptionsOpen(true)} testID="ask-open-options" />
@@ -328,7 +329,7 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
       />
       <SplitView master={threadList} detail={conversationPane} />
 
-      <Modal visible={listOpen && !isTablet} animationType="slide" presentationStyle="pageSheet" onRequestClose={onListBack}>
+      <Modal visible={listOpen && !split} animationType="slide" presentationStyle="pageSheet" onRequestClose={onListBack}>
         {/* A modal is a new native root: swipe actions in the list need their own gesture root. */}
         <GestureHandlerRootView style={styles.fill}>
         <SafeAreaView style={[styles.fill, { backgroundColor: colors.background }]} edges={['top', 'bottom', 'left', 'right']}>

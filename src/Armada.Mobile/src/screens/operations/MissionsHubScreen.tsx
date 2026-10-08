@@ -5,7 +5,6 @@ import { HubTabBar, useHubTab, type HubTab } from '../../components/app/HubTabs'
 import { useSplitSelection } from '../../components/app/useSplitSelection';
 import { EmptyState, IconButton, SplitView } from '../../components/ui';
 import { useLocale } from '../../i18n/LocaleContext';
-import { useLayout } from '../../navigation/useLayout';
 import { MergeEntryDetail } from './MergeEntryDetail';
 import { MergeQueueList } from './MergeQueueList';
 import { MissionDetail, type MissionDetailTab } from './MissionDetail';
@@ -27,18 +26,18 @@ const mergeRoute = (id: string) => `/merge-queue/${id}`;
 
 /**
  * The Missions hub (the dashboard's MissionsHub): Missions, Voyages, and the Merge Queue as tabs bound to ?tab=.
- * Phones push each item's own route; tablets show the selected item beside the list (split view). On the Voyages
+ * Narrow panes push each item's own route; wide ones show the selected item beside the list (split view). On the Voyages
  * tab the header's "+" opens Create Voyage (the Missions list has its own "+ Mission").
  */
-export function MissionsHubScreen() {
+export function MissionsHubScreen({ initialMissionTab = 'overview' }: { initialMissionTab?: MissionDetailTab } = {}) {
   const { t } = useLocale();
   const router = useRouter();
-  const { isTablet } = useLayout();
   const [tab, setTab] = useHubTab<MissionsHubTab>(TAB_KEYS, 'missions');
   const missions = useSplitSelection(missionRoute);
   const voyages = useSplitSelection(voyageRoute);
   const merges = useSplitSelection(mergeRoute);
-  const [missionTab, setMissionTab] = useState<MissionDetailTab>('overview');
+  const isTablet = missions.isTablet;
+  const [missionTab, setMissionTab] = useState<MissionDetailTab>(initialMissionTab);
 
   const selectMission = useCallback((id: string) => {
     setMissionTab('overview');
@@ -59,24 +58,28 @@ export function MissionsHubScreen() {
 
   let master;
   let detail;
+  let clear;
   if (tab === 'missions') {
     master = <MissionsList onSelect={selectMission} selectedId={missions.selectedId} onOpenTab={openMissionTab} />;
     detail = missions.selectedId
       ? <MissionDetail key={`${missions.selectedId}-${missionTab}`} id={missions.selectedId} embedded initialTab={missionTab} onDeleted={missions.clear} />
-      : <EmptyState icon="flag-outline" title={t('Select a mission')} />;
+      : isTablet ? <EmptyState icon="flag-outline" title={t('Select a mission')} /> : null;
+    clear = missions.clear;
   } else if (tab === 'voyages') {
     master = <VoyagesList onSelect={voyages.select} selectedId={voyages.selectedId} />;
-    detail = voyages.selectedId ? <VoyageDetail key={voyages.selectedId} id={voyages.selectedId} embedded /> : <EmptyState icon="boat-outline" title={t('Select a voyage')} />;
+    detail = voyages.selectedId ? <VoyageDetail key={voyages.selectedId} id={voyages.selectedId} embedded /> : isTablet ? <EmptyState icon="boat-outline" title={t('Select a voyage')} /> : null;
+    clear = voyages.clear;
   } else {
     master = <MergeQueueList onSelect={merges.select} selectedId={merges.selectedId} />;
-    detail = merges.selectedId ? <MergeEntryDetail key={merges.selectedId} id={merges.selectedId} embedded /> : <EmptyState icon="git-merge-outline" title={t('Select a merge queue entry')} />;
+    detail = merges.selectedId ? <MergeEntryDetail key={merges.selectedId} id={merges.selectedId} embedded /> : isTablet ? <EmptyState icon="git-merge-outline" title={t('Select a merge queue entry')} /> : null;
+    clear = merges.clear;
   }
 
   return (
     <View style={styles.fill} testID="missions-hub">
       <Stack.Screen options={{ title: t('Missions'), headerRight }} />
       <HubTabBar tabs={MISSIONS_HUB_TABS} active={tab} onChange={setTab} label={t('Mission sections')} testID="missions-hub" />
-      <SplitView master={master} detail={isTablet ? detail : null} />
+      <SplitView master={master} detail={detail} onBack={clear} backLabel={t('Back')} />
     </View>
   );
 }

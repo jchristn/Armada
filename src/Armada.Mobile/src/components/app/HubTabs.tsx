@@ -2,6 +2,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useLocale } from '../../i18n/LocaleContext';
+import { useInitialHubTab } from '../../navigation/listDetail';
 import { spacing } from '../../theme/typography';
 import { SegmentedControl } from '../ui';
 
@@ -23,7 +24,9 @@ export function activeHubTab<K extends string>(keys: readonly K[], value: string
 export function useHubTab<K extends string>(keys: readonly K[], fallback: K, param = 'tab'): [K, (key: K) => void] {
   const params = useLocalSearchParams<Record<string, string>>();
   const router = useRouter();
-  const active = activeHubTab(keys, params[param], fallback);
+  // A detail route opened as this hub (ListDetailRoute) names the tab that holds its item.
+  const routeTab = useInitialHubTab();
+  const active = activeHubTab(keys, params[param], activeHubTab(keys, routeTab ?? undefined, fallback));
   const setActive = useCallback((key: K) => router.setParams({ [param]: key }), [router, param]);
   return [active, setActive];
 }

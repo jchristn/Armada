@@ -12,6 +12,7 @@ import { ToastHost } from '../components/app/ToastHost';
 import { IconButton } from '../components/ui';
 import { LocaleProvider, useLocale } from '../i18n/LocaleContext';
 import { navigationTheme } from '../navigation/navigationTheme';
+import { SidebarPreferenceProvider } from '../navigation/SidebarPreferenceProvider';
 import { setSignedInForLinks } from '../navigation/pendingLink';
 import { ApprovalsProvider } from '../notifications/ApprovalsContext';
 import { combineAuthHooks } from '../lib/authHooks';
@@ -116,11 +117,13 @@ export default function RootLayout() {
     <GestureHandlerRootView style={styles.fill}>
       <SafeAreaProvider>
         <ThemeProvider>
-          <AuthProvider hooks={sessionAuthHooks}>
-            <SessionProviders>
-              <RootNavigator />
-            </SessionProviders>
-          </AuthProvider>
+          <SidebarPreferenceProvider>
+            <AuthProvider hooks={sessionAuthHooks}>
+              <SessionProviders>
+                <RootNavigator />
+              </SessionProviders>
+            </AuthProvider>
+          </SidebarPreferenceProvider>
           <PrivacyOverlay />
         </ThemeProvider>
       </SafeAreaProvider>

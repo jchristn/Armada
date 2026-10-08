@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { AppText } from '../components/ui';
 import { useTheme } from '../theme/ThemeContext';
 import { CHROME_MAX_FONT_SCALE, MIN_TOUCH, spacing } from '../theme/typography';
+import { useInitialHubTab } from '../navigation/listDetail';
 
 export interface HubTab<K extends string> {
   key: K;
@@ -13,8 +14,11 @@ export interface HubTab<K extends string> {
 export function useHubTab<K extends string>(tabs: HubTab<K>[], defaultKey: K): [K, (key: K) => void] {
   const params = useLocalSearchParams<{ tab?: string }>();
   const router = useRouter();
+  // A detail route opened as this hub (ListDetailRoute) names the tab that holds its item.
+  const routeTab = useInitialHubTab();
   const requested = typeof params.tab === 'string' ? params.tab : '';
-  const current = (tabs.find((t) => t.key === requested)?.key ?? defaultKey) as K;
+  const fallback = (tabs.find((t) => t.key === routeTab)?.key ?? defaultKey) as K;
+  const current = (tabs.find((t) => t.key === requested)?.key ?? fallback) as K;
   const select = (key: K) => router.setParams({ tab: key });
   return [current, select];
 }

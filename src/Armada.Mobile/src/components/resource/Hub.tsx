@@ -1,8 +1,9 @@
-import { Stack, useLocalSearchParams, useRouter, type Href } from 'expo-router';
-import { useCallback, useState, type ReactNode } from 'react';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocale } from '../../i18n/LocaleContext';
+import { useInitialHubTab, useListSelection } from '../../navigation/listDetail';
 import { useLayout } from '../../navigation/useLayout';
 import { useTheme } from '../../theme/ThemeContext';
 import { SplitView } from '../ui/SplitView';
@@ -46,7 +47,9 @@ export function HubScreen({ title, tabs, defaultKey, param = 'tab', label, testI
   const router = useRouter();
   const { t } = useLocale();
   const { colors } = useTheme();
-  const active = resolveHubTab(tabs, params[param], defaultKey);
+  // A detail route opened as its list (ListDetailRoute) names the hub tab that holds it.
+  const routeTab = useInitialHubTab();
+  const active = resolveHubTab(tabs, params[param], resolveHubTab(tabs, routeTab ?? undefined, defaultKey));
   const tab = tabs.find((candidate) => candidate.key === active);
   return (
     <SafeAreaView edges={['left', 'right']} style={[styles.fill, { backgroundColor: colors.background }]} testID={testID}>
@@ -64,31 +67,29 @@ export function HubScreen({ title, tabs, defaultKey, param = 'tab', label, testI
 }
 
 /**
- * List-detail selection. Tablets keep the selection and show it beside the list; phones push the item's own
- * route (the same URL the dashboard uses), so the detail screen and its deep link are one screen.
+ * List-detail selection (useListSelection): when the content pane fits both, the selection shows beside the list;
+ * otherwise selecting pushes the item's own route (the same URL the dashboard uses), so the detail screen and its
+ * deep link are one screen.
  */
 export function useSelection(pathFor: (id: string) => string) {
-  const { isTablet } = useLayout();
-  const router = useRouter();
-  const [selected, setSelected] = useState<string | null>(null);
-  const open = useCallback((id: string) => {
-    if (isTablet) setSelected(id);
-    else router.push(pathFor(id) as Href);
-  }, [isTablet, router, pathFor]);
-  const clear = useCallback(() => setSelected(null), []);
-  return { selected: isTablet ? selected : null, open, clear, isTablet };
+  const { selectedId, select, clear, split } = useListSelection(pathFor);
+  return { selected: selectedId, open: select, clear, isTablet: split };
 }
 
-/** A list with its selected item beside it on tablets (SplitView), and a hint when nothing is selected. */
-export function MasterDetail({ list, detail, emptyLabel }: { list: ReactNode; detail: ReactNode | null; emptyLabel?: string }) {
+/**
+ * A list with its selected item beside it when the pane is wide enough (SplitView) and a hint when nothing is
+ * selected; narrow panes show the list, or the selected item alone with a Back button after the window narrowed.
+ */
+export function MasterDetail({ list, detail, emptyLabel, onBack }: { list: ReactNode; detail: ReactNode | null; emptyLabel?: string; onBack?: () => void }) {
   const { t } = useLocale();
-  const { isTablet } = useLayout();
-  if (!isTablet) return <View style={styles.fill}>{list}</View>;
+  const { split } = useLayout();
   return (
     <SplitView
       masterWidth={420}
       master={list}
-      detail={detail ?? <EmptyState icon="albums-outline" title={emptyLabel ?? t('Select an item to see its details.')} />}
+      detail={detail ?? (split ? <EmptyState icon="albums-outline" title={emptyLabel ?? t('Select an item to see its details.')} /> : null)}
+      onBack={onBack}
+      backLabel={t('Back')}
     />
   );
 }

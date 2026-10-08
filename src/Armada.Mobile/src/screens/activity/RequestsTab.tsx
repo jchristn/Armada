@@ -235,6 +235,7 @@ export function RequestsTab() {
       <MasterDetail
         list={list}
         detail={selection.selected ? <RequestDetailView key={selection.selected} id={selection.selected} embedded onDeleted={() => { selection.clear(); void reloadAll(); }} /> : null}
+        onBack={selection.clear}
       />
       <FormSheet
         testID="requests-filter-form"

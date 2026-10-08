@@ -163,6 +163,7 @@ export function RunbooksTab() {
       <MasterDetail
         list={list}
         detail={selection.selected ? <RunbookDetailView key={selection.selected} id={selection.selected} prefill={prefill} embedded onDeleted={() => { selection.clear(); void reload(); }} onChanged={() => void reload()} /> : null}
+        onBack={selection.clear}
       />
       <FormSheet
         testID="runbook-form"
