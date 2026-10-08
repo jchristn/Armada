@@ -98,6 +98,21 @@ describe('Ask Armada', () => {
     expect(screen.getByTestId('ask-send')).toBeDisabled();
   });
 
+  it('a server without captains says so and links to Captains instead of leaving Send silently disabled', async () => {
+    api.listCaptains.mockResolvedValue({ objects: [] } as never);
+    await renderAsk();
+    expect(await screen.findByTestId('ask-no-captains')).toBeTruthy();
+    expect(screen.getByText('This server has no captains, so Ask Armada cannot answer yet. Quick actions still work.')).toBeTruthy();
+    expect(screen.queryByTestId('ask-choose-captain')).toBeNull();
+  });
+
+  it('with captains available, no captain notice is shown once one is selected', async () => {
+    await renderAsk();
+    await waitFor(() => expect(api.listCaptains).toHaveBeenCalled());
+    await waitFor(() => expect(screen.queryByTestId('ask-no-captains')).toBeNull());
+    expect(screen.queryByTestId('ask-choose-captain')).toBeNull();
+  });
+
   it('sending creates the conversation, shows the message at once, and streams the reply', async () => {
     api.createAskThread.mockResolvedValue(thread({ id: 'thr_new', title: 'New conversation' }));
     api.sendAskMessage.mockResolvedValue({ messageId: 'msg_10', turnId: 'turn_1' });
