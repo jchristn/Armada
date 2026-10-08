@@ -19,6 +19,7 @@ name: 09-w4
       id: "nav-/delivery"
     direction: DOWN
     visibilityPercentage: 100
+    timeout: 60000
 # Nudge it clear of the tab bar (the bottom edge counts as visible behind it).
 - swipe:
     start: "50%,60%"
@@ -124,6 +125,7 @@ name: 09-w4
     direction: DOWN
     visibilityPercentage: 100
     centerElement: true
+    timeout: 60000
 - tapOn:
     id: "request-row-.*"
     index: 0
@@ -142,6 +144,7 @@ name: 09-w4
       id: "nav-/server"
     direction: DOWN
     visibilityPercentage: 100
+    timeout: 60000
 # Nudge it clear of the tab bar (the bottom edge counts as visible behind it).
 - swipe:
     start: "50%,60%"
@@ -175,6 +178,7 @@ name: 09-w4
       id: "settings-agent-save"
     direction: DOWN
     visibilityPercentage: 100
+    timeout: 60000
 # Nudge it clear of the tab bar (the bottom edge counts as visible behind it).
 - swipe:
     start: "50%,60%"
@@ -193,7 +197,7 @@ name: 09-w4
     visibilityPercentage: 100
     # A long page: scroll faster (on Android each default-speed swipe moves it little and takes seconds).
     speed: 80
-    timeout: 90000
+    timeout: 180000
 # Nudge it clear of the tab bar (the bottom edge counts as visible behind it).
 - swipe:
     start: "50%,60%"

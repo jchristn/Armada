@@ -67,17 +67,22 @@ name: 01-a11y-labels
     timeout: 60000
     optional: true
 - takeScreenshot: a11y-home-voyages
-# Back to the top of Home (tapping the active tab pops and scrolls it), then down to the missions.
-- tapOn:
-    id: "tab-work"
-# Missions list: a row reads its title, status, and details; its menu button is its own control.
+# View All sits below the voyages; when there are none, the voyage search above scrolled past it to the end.
 - scrollUntilVisible:
     element:
       id: "home-missions-all"
     direction: DOWN
     visibilityPercentage: 100
     centerElement: true
-    timeout: 90000
+    timeout: 60000
+    optional: true
+- scrollUntilVisible:
+    element:
+      id: "home-missions-all"
+    direction: UP
+    visibilityPercentage: 100
+    centerElement: true
+    timeout: 60000
 - tapOn:
     id: "home-missions-all"
 - extendedWaitUntil:
