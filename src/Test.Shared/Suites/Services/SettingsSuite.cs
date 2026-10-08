@@ -142,6 +142,94 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(Armada.Core.Enums.LandingModeEnum.MergeAndPush, settings.LandingMode);
             }));
 
+            cases.Add(CaseAsync("write_back_adds_missing_settings_with_defaults", "ArmadaSettings WriteBack adds settings missing from an older file, nulls included, and keeps a backup", TestTags.Positive, async () =>
+            {
+                string tempDir = Path.Combine(Path.GetTempPath(), "armada_settings_writeback_" + Guid.NewGuid().ToString("N"));
+                string tempFile = Path.Combine(tempDir, "settings.json");
+                try
+                {
+                    Directory.CreateDirectory(tempDir);
+                    string original = "{\"dataDirectory\":\"" + tempDir.Replace("\\", "\\\\") + "\",\"harbor\":{\"requireAuth\":false}}";
+                    await File.WriteAllTextAsync(tempFile, original).ConfigureAwait(false);
+
+                    ArmadaSettings loaded = await ArmadaSettings.LoadAsync(tempFile).ConfigureAwait(false);
+                    AssertTrue(loaded.WriteBack(), "an older file is rewritten");
+
+                    string written = await File.ReadAllTextAsync(tempFile).ConfigureAwait(false);
+                    AssertContains("\"advertisedMcpBaseUrl\": \"http://localhost:" + Constants.DefaultMcpPort + "/mcp\"", written, "derived MCP URL is written");
+                    AssertContains("\"heartbeatTimeoutSeconds\": 45", written, "a missing nested setting is written with its default");
+                    AssertContains("\"gitHubToken\": null", written, "a null setting is written as null");
+                    AssertContains("\"requireAuth\": false", written, "a value from the file is kept");
+
+                    List<string> backups = Armada.Core.Hosting.SettingsFileStore.ListBackups(tempFile);
+                    AssertEqual(1, backups.Count, "one backup");
+                    AssertEqual(original, await File.ReadAllTextAsync(backups[0]).ConfigureAwait(false), "the backup holds the original file");
+
+                    ArmadaSettings reloaded = await ArmadaSettings.LoadAsync(tempFile).ConfigureAwait(false);
+                    AssertFalse(reloaded.WriteBack(), "a complete file is not rewritten");
+                    AssertEqual(1, Armada.Core.Hosting.SettingsFileStore.ListBackups(tempFile).Count, "no backup when nothing changed");
+                    AssertFalse(reloaded.Harbor.RequireAuth, "requireAuth survives the round trip");
+                    AssertNull(reloaded.GitHubToken, "null survives the round trip");
+                }
+                finally
+                {
+                    if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+                }
+            }));
+
+            cases.Add(CaseAsync("advertised_mcp_url_derived_from_port_and_hostname", "ArmadaSettings LoadAsync derives harbor.advertisedMcpBaseUrl from the MCP port and REST hostname, and keeps an explicit value", TestTags.Positive, async () =>
+            {
+                string tempDir = Path.Combine(Path.GetTempPath(), "armada_settings_mcpurl_" + Guid.NewGuid().ToString("N"));
+                string tempFile = Path.Combine(tempDir, "settings.json");
+                string dataDir = "\"dataDirectory\":\"" + tempDir.Replace("\\", "\\\\") + "\"";
+                try
+                {
+                    Directory.CreateDirectory(tempDir);
+                    await File.WriteAllTextAsync(tempFile, "{" + dataDir + ",\"mcpPort\":9101,\"rest\":{\"hostname\":\"10.1.2.3\"}}").ConfigureAwait(false);
+                    ArmadaSettings derived = await ArmadaSettings.LoadAsync(tempFile).ConfigureAwait(false);
+                    AssertEqual("http://10.1.2.3:9101/mcp", derived.Harbor.AdvertisedMcpBaseUrl, "derived from a specific hostname");
+
+                    await File.WriteAllTextAsync(tempFile, "{" + dataDir + ",\"mcpPort\":9101,\"rest\":{\"hostname\":\"*\"},\"harbor\":{\"advertisedMcpBaseUrl\":\"\"}}").ConfigureAwait(false);
+                    ArmadaSettings wildcard = await ArmadaSettings.LoadAsync(tempFile).ConfigureAwait(false);
+                    AssertEqual("http://localhost:9101/mcp", wildcard.Harbor.AdvertisedMcpBaseUrl, "an empty value is derived; all interfaces maps to localhost");
+
+                    await File.WriteAllTextAsync(tempFile, "{" + dataDir + ",\"harbor\":{\"advertisedMcpBaseUrl\":\"http://armada.example.com:8711/mcp\"}}").ConfigureAwait(false);
+                    ArmadaSettings explicitUrl = await ArmadaSettings.LoadAsync(tempFile).ConfigureAwait(false);
+                    AssertEqual("http://armada.example.com:8711/mcp", explicitUrl.Harbor.AdvertisedMcpBaseUrl, "an explicit value is kept");
+
+                    ArmadaSettings noFile = await ArmadaSettings.LoadAsync(Path.Combine(tempDir, "missing.json")).ConfigureAwait(false);
+                    AssertEqual("http://localhost:" + Constants.DefaultMcpPort + "/mcp", noFile.Harbor.AdvertisedMcpBaseUrl, "defaults without a file are derived too");
+                }
+                finally
+                {
+                    if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+                }
+            }));
+
+            cases.Add(Case("settings_file_store_save_in_place", "SettingsFileStore SaveInPlace overwrites the same file, keeps a backup, and skips identical content", TestTags.Positive, () =>
+            {
+                string tempDir = Path.Combine(Path.GetTempPath(), "armada_settings_inplace_" + Guid.NewGuid().ToString("N"));
+                string tempFile = Path.Combine(tempDir, "settings.json");
+                try
+                {
+                    AssertTrue(Armada.Core.Hosting.SettingsFileStore.SaveInPlace(tempFile, "{\"a\":1}"), "a new file is written");
+                    AssertEqual(0, Armada.Core.Hosting.SettingsFileStore.ListBackups(tempFile).Count, "no backup for a new file");
+
+                    AssertTrue(Armada.Core.Hosting.SettingsFileStore.SaveInPlace(tempFile, "{\"a\":2}"), "changed content is written");
+                    AssertEqual("{\"a\":2}", File.ReadAllText(tempFile), "new content");
+                    List<string> backups = Armada.Core.Hosting.SettingsFileStore.ListBackups(tempFile);
+                    AssertEqual(1, backups.Count, "one backup");
+                    AssertEqual("{\"a\":1}", File.ReadAllText(backups[0]), "backup holds the previous content");
+
+                    AssertFalse(Armada.Core.Hosting.SettingsFileStore.SaveInPlace(tempFile, "{\"a\":2}"), "identical content is not written");
+                    AssertEqual(1, Armada.Core.Hosting.SettingsFileStore.ListBackups(tempFile).Count, "no backup when nothing changed");
+                }
+                finally
+                {
+                    if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+                }
+            }));
+
             AddLandingModeLoadCase(cases, "load_landing_mode_unset_is_merge_and_push", "A settings file without landingMode or legacy flags lands with MergeAndPush", "", Armada.Core.Enums.LandingModeEnum.MergeAndPush);
             AddLandingModeLoadCase(cases, "load_landing_mode_null_is_merge_and_push", "A settings file with landingMode null lands with MergeAndPush", "\"landingMode\":null,", Armada.Core.Enums.LandingModeEnum.MergeAndPush);
             AddLandingModeLoadCase(cases, "load_legacy_auto_create_pull_requests_is_pull_request", "A pre-1.0.1 file with autoCreatePullRequests true and no landingMode keeps opening pull requests", "\"autoCreatePullRequests\":true,", Armada.Core.Enums.LandingModeEnum.PullRequest);

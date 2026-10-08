@@ -1069,17 +1069,24 @@ namespace Armada.Server
                 generatedSessionKey = true;
             }
 
-            if (!generatedApiKey && !generatedSessionKey) return;
+            // Settings built in code (no file) are only written when secrets were generated, as before. Settings loaded
+            // from a file are always written back, so properties added by an upgrade appear in it with their defaults.
+            bool loadedFromFile = !String.IsNullOrEmpty(_Settings.SettingsFilePath);
+            if (!generatedApiKey && !generatedSessionKey && !loadedFromFile) return;
 
             try
             {
-                await _Settings.SaveAsync().ConfigureAwait(false);
+                bool written = _Settings.WriteBack();
                 if (generatedApiKey) _Logging.Info(_Header + "generated local API key for CLI authentication and saved to settings");
                 if (generatedSessionKey) _Logging.Info(_Header + "generated session token encryption key and saved to settings");
+                if (written) _Logging.Info(_Header + "settings file " + _Settings.EffectiveSettingsFilePath + " rewritten with every current setting; the previous file is kept as a backup");
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "generated local secrets but could not persist settings (sign-ins will not survive a restart): " + ex.ToString());
+                if (generatedApiKey || generatedSessionKey)
+                    _Logging.Warn(_Header + "generated local secrets but could not persist settings (sign-ins will not survive a restart): " + ex.ToString());
+                else
+                    _Logging.Warn(_Header + "could not rewrite settings file " + _Settings.EffectiveSettingsFilePath + " with current settings: " + ex.Message);
             }
         }
 

@@ -89,6 +89,43 @@ namespace Armada.Core.Hosting
         }
 
         /// <summary>
+        /// Write <paramref name="content"/> over <paramref name="path"/> in place, keeping the previous version as a
+        /// backup. Use this instead of <see cref="Save"/> for a file that may be a single-file bind mount (Docker), which
+        /// cannot be replaced by a rename. Nothing is written when the file already holds exactly this content.
+        /// </summary>
+        /// <param name="path">Settings file.</param>
+        /// <param name="content">New content (UTF-8, no byte order mark).</param>
+        /// <param name="backupsKept">Backups to keep (0 keeps none).</param>
+        /// <param name="nowUtc">Timestamp for the backup name; null uses the current time.</param>
+        /// <returns>True when the file was written; false when it already held this content.</returns>
+        /// <exception cref="IOException">The file could not be written.</exception>
+        public static bool SaveInPlace(string path, string content, int backupsKept = DefaultBackupsKept, DateTime? nowUtc = null)
+        {
+            if (String.IsNullOrWhiteSpace(path)) throw new ArgumentNullException(nameof(path));
+            if (content == null) throw new ArgumentNullException(nameof(content));
+            if (backupsKept < 0) throw new ArgumentOutOfRangeException(nameof(backupsKept));
+
+            string full = Path.GetFullPath(path);
+            string directory = Path.GetDirectoryName(full) ?? throw new IOException("No directory for " + full);
+            Directory.CreateDirectory(directory);
+
+            byte[] bytes = new UTF8Encoding(false).GetBytes(content);
+            bool exists = File.Exists(full);
+            if (exists && ContentEquals(full, bytes)) return false;
+
+            if (exists && backupsKept > 0) File.Copy(full, BackupPath(full, nowUtc ?? DateTime.UtcNow), true);
+
+            using (FileStream stream = new FileStream(full, FileMode.Create, FileAccess.Write, FileShare.None))
+            {
+                stream.Write(bytes, 0, bytes.Length);
+                stream.Flush(true);
+            }
+
+            if (exists && backupsKept > 0) Prune(full, backupsKept);
+            return true;
+        }
+
+        /// <summary>
         /// The backups of a settings file, newest first.
         /// </summary>
         /// <param name="path">Settings file.</param>

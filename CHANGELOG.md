@@ -6,6 +6,11 @@ All notable changes to Armada are documented in this file.
 
 ## Unreleased
 
+### Settings files
+- The Admiral rewrites `settings.json` at startup with every current setting, so settings added by an upgrade appear in the file with their default values. Settings whose default is empty are written as `null` instead of being left out. Nothing is written when the file is already complete; otherwise the previous file is kept as `settings.json.bak-<timestamp>` (newest 5). The file is written in place, so a single-file Docker bind mount works; if it cannot be written (a read-only mount), the Admiral logs a warning and starts.
+- `harbor.advertisedMcpBaseUrl` now has a visible default: when empty, it is derived from `mcpPort` and `rest.hostname` (for example `http://localhost:7891/mcp`) and written to the file, so a split-mode Admiral shows the value to change instead of a missing key.
+- Harbor already rewrote its own `settings.json` at startup with every setting; unchanged.
+
 ### Mobile app for iOS and Android
 - New `src/Armada.Mobile` (Expo / React Native): Armada for iPhone, iPad, and Android phones and tablets, with every dashboard screen (Ask Armada, Approvals, Home, Missions, Voyages, Dispatch, Merge Queue, and the Build, Delivery, Configuration, Activity, and Server sections). It shares the dashboard's API client, types, helpers, and translations, so the two stay in step. See [docs/MOBILE.md](docs/MOBILE.md).
 - Connect directly (LAN or a public URL) or through Armada.Proxy (portal sign-in and instance picker); several server profiles.

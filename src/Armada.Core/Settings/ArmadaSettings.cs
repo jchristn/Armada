@@ -3,7 +3,9 @@ namespace Armada.Core.Settings
     using System.Text.Json;
     using System.Text.Json.Serialization;
     using Armada.Core.Enums;
+    using Armada.Core.Hosting;
     using Armada.Core.Models;
+    using Armada.Core.Services;
     using SyslogLogging;
 
     /// <summary>
@@ -931,13 +933,45 @@ namespace Armada.Core.Settings
                 ArmadaSettings defaults = new ArmadaSettings();
                 defaults.SettingsFilePath = path;
                 defaults.NormalizePaths();
+                defaults.ApplyDerivedDefaults();
                 return defaults;
             }
             string json = await File.ReadAllTextAsync(path).ConfigureAwait(false);
             ArmadaSettings settings = Parse(json);
             settings.SettingsFilePath = path;
             settings.NormalizePaths();
+            settings.ApplyDerivedDefaults();
             return settings;
+        }
+
+        /// <summary>
+        /// Rewrite the settings file with every current property, so settings added by an upgrade appear in the file
+        /// with their default values (null ones as null). Nothing is written when the file already holds exactly this
+        /// content; otherwise the previous file is kept as a backup (settings.json.bak-...). The file is written in
+        /// place, so a single-file Docker bind mount works.
+        /// </summary>
+        /// <param name="path">File path. Defaults to <see cref="EffectiveSettingsFilePath"/>.</param>
+        /// <returns>True when the file was written.</returns>
+        /// <exception cref="IOException">The file could not be written.</exception>
+        public bool WriteBack(string? path = null)
+        {
+            NormalizePaths();
+            path ??= EffectiveSettingsFilePath;
+            string json = JsonSerializer.Serialize(this, _SerializerOptions);
+            return SettingsFileStore.SaveInPlace(path, json);
+        }
+
+        /// <summary>
+        /// Fill settings whose default depends on other settings when the file leaves them empty:
+        /// <see cref="HarborServerSettings.AdvertisedMcpBaseUrl"/> becomes this Admiral's MCP URL from
+        /// <see cref="McpPort"/> and the REST hostname (http://localhost:7891/mcp when listening on all interfaces).
+        /// </summary>
+        public void ApplyDerivedDefaults()
+        {
+            if (_Harbor != null && String.IsNullOrWhiteSpace(_Harbor.AdvertisedMcpBaseUrl))
+            {
+                _Harbor.AdvertisedMcpBaseUrl = ArmadaMcpConfigBuilder.GetMcpUrl(McpPort, ArmadaMcpConfigBuilder.ClientHostFor(Rest?.Hostname));
+            }
         }
 
         /// <summary>
@@ -1035,7 +1069,7 @@ namespace Armada.Core.Settings
             PropertyNameCaseInsensitive = true,
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
             WriteIndented = true,
-            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+            DefaultIgnoreCondition = JsonIgnoreCondition.Never
         };
 
         #endregion
