@@ -10,7 +10,26 @@ function split(path: string): string[] {
   return path.split('/').filter(Boolean);
 }
 
-/** Find the dashboard route for an app path; static segments beat parameters (as in both routers). */
+/**
+ * Decode one path parameter, or null when it is malformed percent-encoding or decodes to something that is not a
+ * single path segment ('/', '\\', '.', '..', control characters). Screens put parameters into API paths, so an
+ * encoded '..%2F' must never become a traversal there.
+ */
+export function decodeParam(segment: string): string | null {
+  let value: string;
+  try {
+    value = decodeURIComponent(segment);
+  } catch {
+    return null;
+  }
+  if (!value || value === '.' || value === '..' || /[/\\\u0000-\u001f\u007f]/.test(value)) return null;
+  return value;
+}
+
+/**
+ * Find the dashboard route for an app path; static segments beat parameters (as in both routers). A parameter that
+ * does not decode to a single safe segment matches nothing (see decodeParam).
+ */
 export function matchRoute(path: string, routes: DashboardRoute[] = DASHBOARD_ROUTES): RouteMatch | null {
   const clean = path.split(/[?#]/)[0];
   const parts = split(clean);
@@ -24,7 +43,12 @@ export function matchRoute(path: string, routes: DashboardRoute[] = DASHBOARD_RO
     let ok = true;
     for (let i = 0; i < segs.length; i++) {
       if (segs[i].startsWith(':')) {
-        params[segs[i].slice(1)] = decodeURIComponent(parts[i]);
+        const value = decodeParam(parts[i]);
+        if (value === null) {
+          ok = false;
+          break;
+        }
+        params[segs[i].slice(1)] = value;
       } else if (segs[i] === parts[i]) {
         score += 1;
       } else {

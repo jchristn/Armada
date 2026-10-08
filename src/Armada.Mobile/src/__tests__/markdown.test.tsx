@@ -40,12 +40,14 @@ describe('Markdown (GitHub-flavored, like the dashboard)', () => {
     expect(screen.getByText('line1\nline2')).toBeTruthy();
   });
 
-  it('classifies links: app pages in the app, web and mail outside, anything else as text', () => {
+  it('classifies links: app pages in the app, web outside, anything else as text', () => {
     expect(linkTarget('/missions/msn_1')).toEqual({ kind: 'app', path: '/missions/msn_1' });
     expect(linkTarget('armada://voyages/vyg_1')).toEqual({ kind: 'app', path: '/voyages/vyg_1' });
     expect(linkTarget('https://admiral:7890/dashboard/captains/cpt_1')).toEqual({ kind: 'app', path: '/captains/cpt_1' });
     expect(linkTarget('https://github.com/x/y/pull/1')).toEqual({ kind: 'external', url: 'https://github.com/x/y/pull/1' });
-    expect(linkTarget('mailto:ops@example.com')).toEqual({ kind: 'external', url: 'mailto:ops@example.com' });
+    expect(linkTarget('mailto:ops@example.com')).toEqual({ kind: 'none' });
+    expect(linkTarget('sms:+15550100?body=pay')).toEqual({ kind: 'none' });
+    expect(linkTarget('https://github.com@evil.example/x')).toEqual({ kind: 'none' });
     expect(linkTarget('javascript:alert(1)')).toEqual({ kind: 'none' });
     expect(linkTarget('/missions/../server')).toEqual({ kind: 'none' });
     expect(linkTarget('')).toEqual({ kind: 'none' });

@@ -1,6 +1,6 @@
 import { Stack, useRouter, type Href } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { Linking, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import {
   approveMissionReview,
   deleteMission,
@@ -54,6 +54,7 @@ import { MissionFormSheet, type MissionFormValues } from './mission/MissionFormS
 import { MissionDiffTab, MissionInstructionsTab, MissionLogTab } from './mission/MissionTabs';
 import { ReviewSheet } from './mission/ReviewSheet';
 import { TransitionSheet } from './mission/TransitionSheet';
+import { externalUrl, openExternalUrl } from '../../lib/externalLinks';
 
 export const MISSION_DETAIL_TABS = ['overview', 'diff', 'log', 'instructions'] as const;
 export type MissionDetailTab = (typeof MISSION_DETAIL_TABS)[number];
@@ -346,7 +347,7 @@ export function MissionDetail({ id, embedded, initialTab = 'overview', onDeleted
         <KeyValueRow label={t('Branch Name')} value={mission.branchName} mono />
         <KeyValueRow label={t('Dock')} value={mission.dockId} mono onPress={mission.dockId ? () => open(`/docks/${mission.dockId}`) : undefined} />
         <KeyValueRow label={t('Process ID')} value={mission.processId} />
-        <KeyValueRow label={t('PR URL')} value={mission.prUrl} onPress={mission.prUrl ? () => void Linking.openURL(mission.prUrl ?? '') : undefined} />
+        <KeyValueRow label={t('PR URL')} value={mission.prUrl} onPress={externalUrl(mission.prUrl) ? () => void openExternalUrl(mission.prUrl) : undefined} />
         <KeyValueRow label={t('Commit Hash')} value={mission.commitHash} mono />
         {dateRow(t('Created'), mission.createdUtc)}
         {dateRow(t('Started'), mission.startedUtc)}

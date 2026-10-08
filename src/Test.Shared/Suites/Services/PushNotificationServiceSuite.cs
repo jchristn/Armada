@@ -67,7 +67,7 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(1, (await testDb.Driver.PushDevices.EnumerateAsync(new PushDeviceQuery()).ConfigureAwait(false)).Count, "one row");
             }));
 
-            cases.Add(CaseAsync("register_reowns_token", "A token registered by another user moves to the caller with fresh categories and fields", async () =>
+            cases.Add(CaseAsync("register_reowns_token", "A token registered by another user is registered afresh for the caller under a new id, with fresh categories and fields; the old device is deleted", async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
                 ArmadaSettings settings = new ArmadaSettings();
@@ -78,8 +78,10 @@ namespace Test.Shared.Suites.Services
                 PushDeviceRegistration first = await service.RegisterAsync(Auth("ten_a", "usr_a", false, false), firstRequest).ConfigureAwait(false);
 
                 PushDeviceRegistration moved = await service.RegisterAsync(Auth("ten_b", "usr_b", false, false), Register(token, null)).ConfigureAwait(false);
-                AssertFalse(moved.Created, "the row is reused");
-                AssertEqual(first.Device.Id, moved.Device.Id, "same id");
+                AssertTrue(moved.Created, "a new device for the new owner");
+                AssertTrue(moved.Device.Id != first.Device.Id, "a new id, so records of the old one no longer match: " + moved.Device.Id);
+                AssertNull(await testDb.Driver.PushDevices.ReadAsync(first.Device.Id).ConfigureAwait(false), "the old device is deleted");
+                AssertEqual(1, (await testDb.Driver.PushDevices.EnumerateAsync(new PushDeviceQuery()).ConfigureAwait(false)).Count, "one row for the token");
                 AssertEqual("ten_b", moved.Device.TenantId);
                 AssertEqual("usr_b", moved.Device.UserId);
                 AssertNull(moved.Device.DeviceName, "the previous owner's name is not carried over");

@@ -26,9 +26,12 @@ import type { PushCategory, PushTestResult } from './types';
 export interface PendingPushResponse {
   payload: PushPayload;
   action: PushResponseAction;
-  /** Profile the push came from (by device id), or null for the active profile. */
+  /** Profile the push came from (by device id), or null when the push names no device this app registered. */
   profileId: string | null;
-  /** False when the push names a device this app never registered: it may be opened, never acted on. */
+  /**
+   * True only when the push names a device this app registered with that profile's server. Untrusted pushes (no
+   * deviceId, or one this app never registered) may be opened, never acted on.
+   */
   trusted: boolean;
   receivedAt: number;
 }
@@ -168,12 +171,14 @@ export function PushProvider({ children, deps: injected, now = Date.now }: PushP
   const capture = useCallback(async (response: PushResponse) => {
     const payload = parsePushData(response.data);
     if (!payload) return;
+    // Only a push naming a device this app registered (for exactly one profile) may carry Approve / Deny. The server
+    // always sets deviceId, so a push without one did not come from an Admiral this app registered with (anyone
+    // holding the Expo token can send one when the Expo project has no access token): it may only open its link.
     let profileId: string | null = null;
-    let trusted = !payload.deviceId;
     if (payload.deviceId) {
       profileId = await profileForDevice(deps.store, profilesRef.current.map((p) => p.id), payload.deviceId);
-      trusted = !!profileId;
     }
+    const trusted = !!payload.deviceId && !!profileId;
     const next: PendingPushResponse = { payload, action: responseAction(response.actionIdentifier), profileId, trusted, receivedAt: now() };
     pendingRef.current = next;
     setPending(next);
