@@ -161,7 +161,7 @@ namespace Armada.Core.Hosting
 
         #region Private-Methods
 
-        private static List<LogFileEntry> ListFiles(string directory, bool harborLogsOnly, string? nameFilter, int maxResults)
+        private List<LogFileEntry> ListFiles(string directory, bool harborLogsOnly, string? nameFilter, int maxResults)
         {
             List<LogFileEntry> entries = new List<LogFileEntry>();
             if (!Directory.Exists(directory)) return entries;
@@ -182,7 +182,8 @@ namespace Armada.Core.Hosting
                         Path = file,
                         Name = name,
                         SizeBytes = info.Length,
-                        LastWriteUtc = info.LastWriteTimeUtc
+                        LastWriteUtc = info.LastWriteTimeUtc,
+                        EntityId = harborLogsOnly ? null : MissionIdOf(file)
                     });
                 }
                 catch (IOException)
@@ -194,6 +195,20 @@ namespace Armada.Core.Hosting
             entries.Sort((a, b) => b.LastWriteUtc.CompareTo(a.LastWriteUtc));
             if (maxResults > 0 && entries.Count > maxResults) entries.RemoveRange(maxResults, entries.Count - maxResults);
             return entries;
+        }
+
+        /// <summary>
+        /// The mission a job log belongs to, when the file is that mission's log (<see cref="MissionLogPath"/> of its
+        /// name is exactly the file); null for other job logs.
+        /// </summary>
+        /// <param name="file">Full path.</param>
+        /// <returns>The mission ID, or null.</returns>
+        public string? MissionIdOf(string file)
+        {
+            if (String.IsNullOrEmpty(file)) return null;
+            string stem = Path.GetFileNameWithoutExtension(file);
+            if (!stem.StartsWith(Constants.MissionIdPrefix, StringComparison.Ordinal)) return null;
+            return String.Equals(MissionLogPath(stem), file, StringComparison.Ordinal) ? stem : null;
         }
 
         private static bool IsHarborLogName(string name)

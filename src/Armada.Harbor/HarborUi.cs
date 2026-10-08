@@ -63,6 +63,57 @@ namespace Armada.Harbor
         }
 
         /// <summary>
+        /// Append a label and any control (an ID, a URL) to a <see cref="DetailGrid"/>.
+        /// </summary>
+        /// <typeparam name="T">Control type.</typeparam>
+        /// <param name="grid">Grid.</param>
+        /// <param name="label">Label.</param>
+        /// <param name="value">Value control.</param>
+        /// <returns>The value control.</returns>
+        public static T AddControlRow<T>(Grid grid, string label, T value) where T : Control
+        {
+            if (grid == null) throw new ArgumentNullException(nameof(grid));
+            if (value == null) throw new ArgumentNullException(nameof(value));
+            int row = grid.RowDefinitions.Count;
+            grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+
+            TextBlock labelBlock = new TextBlock { Text = label, FontWeight = FontWeight.SemiBold, VerticalAlignment = VerticalAlignment.Center };
+            Grid.SetRow(labelBlock, row);
+            Grid.SetColumn(labelBlock, 0);
+            grid.Children.Add(labelBlock);
+
+            if (value is CopyableIdText) value.HorizontalAlignment = HorizontalAlignment.Left;
+            Grid.SetRow(value, row);
+            Grid.SetColumn(value, 1);
+            grid.Children.Add(value);
+            return value;
+        }
+
+        /// <summary>
+        /// Append a label and a copyable ID (<see cref="CopyableIdText"/>) to a <see cref="DetailGrid"/>.
+        /// </summary>
+        /// <param name="grid">Grid.</param>
+        /// <param name="label">Label, also the ID's accessible name.</param>
+        /// <param name="id">ID, or null.</param>
+        /// <returns>The ID control, to update later.</returns>
+        public static CopyableIdText AddIdRow(Grid grid, string label, string? id)
+        {
+            return AddControlRow(grid, label, new CopyableIdText(id, label));
+        }
+
+        /// <summary>
+        /// Append a label and a read-only URL with Validate (<see cref="UrlTextBox"/>) to a <see cref="DetailGrid"/>.
+        /// </summary>
+        /// <param name="grid">Grid.</param>
+        /// <param name="label">Label, also the URL's accessible name.</param>
+        /// <param name="url">URL, or null.</param>
+        /// <returns>The URL control, to update later.</returns>
+        public static UrlTextBox AddUrlRow(Grid grid, string label, string? url)
+        {
+            return AddControlRow(grid, label, new UrlTextBox(url, label, true));
+        }
+
+        /// <summary>
         /// A section heading.
         /// </summary>
         /// <param name="text">Heading text.</param>

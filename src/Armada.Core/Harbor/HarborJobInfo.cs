@@ -82,9 +82,19 @@ namespace Armada.Core.Harbor
         /// <returns>Title.</returns>
         public string Title()
         {
+            if (Kind == HarborJobKindEnum.Mission && MissionId != null) return "Mission " + MissionId;
+            return KindName();
+        }
+
+        /// <summary>
+        /// What kind of job this is, without identifiers: "Mission", "Ask turn", "Planning session", and so on.
+        /// </summary>
+        /// <returns>Text.</returns>
+        public string KindName()
+        {
             switch (Kind)
             {
-                case HarborJobKindEnum.Mission: return MissionId != null ? "Mission " + MissionId : "Mission";
+                case HarborJobKindEnum.Mission: return "Mission";
                 case HarborJobKindEnum.AskTurn: return "Ask turn";
                 case HarborJobKindEnum.Planning: return "Planning session";
                 case HarborJobKindEnum.Refinement: return "Objective refinement";

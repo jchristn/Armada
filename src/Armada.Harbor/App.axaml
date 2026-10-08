@@ -186,6 +186,22 @@
       <Setter Property="Foreground" Value="{DynamicResource HarborTextBrush}" />
     </Style>
 
+    <!-- A small square icon button (the copy button next to an ID). -->
+    <Style Selector="Button.icon">
+      <Setter Property="Padding" Value="5" />
+      <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}" />
+    </Style>
+
+    <!-- NumericUpDown's spin buttons. Fluent draws them as square RepeatButtons flush against the inside of the rounded
+         ButtonSpinner border, and that Border does not clip its children to its corners. The right-hand button's fill
+         (the opaque ButtonBackground set above, and the hover and press fills) is a square that covers the border's
+         upper-right and lower-right arcs, so the boxes looked cut off at those corners. The RepeatButton template does not
+         pass CornerRadius to its ContentPresenter, so round that presenter's outer edge to the border's inner radius
+         (ControlCornerRadius 6 minus the 1px border): every fill then follows the corner. -->
+    <Style Selector="ButtonSpinner /template/ RepeatButton#PART_DecreaseButton /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="CornerRadius" Value="0,5,5,0" />
+    </Style>
+
     <!-- Monospace log and file text on a slightly recessed surface. -->
     <Style Selector="TextBox.mono">
       <Setter Property="FontFamily" Value="{DynamicResource HarborMonospaceFont}" />

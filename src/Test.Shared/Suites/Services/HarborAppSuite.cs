@@ -266,6 +266,38 @@ namespace Test.Shared.Suites.Services
                 AssertFalse(contents.Contains("Respond with OK.", StringComparison.Ordinal), "the prompt is not written to the log");
             }));
 
+            cases.Add(Case("log_entries_carry_their_ids", "A mission's or captain's own log carries its ID (shown copyable in Logs); other files do not", TestTags.Positive, () =>
+            {
+                string root = TestTemp.NewDirectory("harbor-app-log-ids");
+                HarborLogPaths harbor = new HarborLogPaths(Path.Combine(root, "harbor"));
+                Directory.CreateDirectory(harbor.JobsDirectory);
+                File.WriteAllText(harbor.MissionLogPath("msn_abc123"), "x\n");
+                File.WriteAllText(Path.Combine(harbor.JobsDirectory, "ask-cpt_abc-20261008T100000Z.log"), "x\n");
+                List<LogFileEntry> jobLogs = harbor.ListJobLogs();
+                AssertEqual("msn_abc123", jobLogs.Single(e => e.Name == "msn_abc123.log").EntityId);
+                AssertNull(jobLogs.Single(e => e.Name != "msn_abc123.log").EntityId, "an Ask turn's log is not one entity's log");
+
+                ArmadaLogPaths admiral = new ArmadaLogPaths(Path.Combine(root, "admiral"));
+                Directory.CreateDirectory(admiral.MissionsDirectory);
+                Directory.CreateDirectory(admiral.CaptainsDirectory);
+                File.WriteAllText(admiral.MissionLogPath("msn_def456"), "x\n");
+                File.WriteAllText(Path.Combine(admiral.CaptainsDirectory, "cpt_ghi789.log"), "x\n");
+                File.WriteAllText(Path.Combine(admiral.CaptainsDirectory, "notes.log"), "x\n");
+                AssertEqual("msn_def456", admiral.List(LogCategoryEnum.Missions).Single().EntityId);
+                List<LogFileEntry> captains = admiral.List(LogCategoryEnum.Captains);
+                AssertEqual("cpt_ghi789", captains.Single(e => e.Name == "cpt_ghi789.log").EntityId);
+                AssertNull(captains.Single(e => e.Name == "notes.log").EntityId);
+            }));
+
+            cases.Add(Case("job_kind_names", "A job's kind name carries no IDs; its title adds the mission ID", TestTags.Positive, () =>
+            {
+                HarborJobInfo mission = new HarborJobInfo { Kind = HarborJobKindEnum.Mission, MissionId = "msn_x" };
+                AssertEqual("Mission", mission.KindName());
+                AssertEqual("Mission msn_x", mission.Title());
+                AssertEqual("Ask turn", new HarborJobInfo { Kind = HarborJobKindEnum.AskTurn, CaptainId = "cpt_y" }.KindName());
+                AssertEqual("Ask turn", new HarborJobInfo { Kind = HarborJobKindEnum.AskTurn }.Title());
+            }));
+
             cases.Add(Case("settings_backups_list_and_restore", "Backups list newest first with their times; restoring one keeps the current version as a new backup", TestTags.Positive, () =>
             {
                 string directory = TestTemp.NewDirectory("harbor-app-backups");

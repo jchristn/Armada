@@ -26,7 +26,7 @@
         <Button Classes="subtle" Content="Status" Click="OnStatusClick"
                 ToolTip.Tip="Server health, workload, disk use, and logs" />
         <Button Classes="subtle" Content="Settings" Click="OnSettingsClick"
-                ToolTip.Tip="This computer's Harbor settings and the Admiral server's settings" />
+                ToolTip.Tip="This computer's Harbor settings and the Admiral's settings" />
       </StackPanel>
     </Grid>
 

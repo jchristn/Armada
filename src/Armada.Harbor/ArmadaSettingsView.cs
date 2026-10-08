@@ -13,10 +13,12 @@ namespace Armada.Harbor
     using Avalonia.Media;
 
     /// <summary>
-    /// The Admiral server tab of the Settings window: the Admiral's own settings (not this computer's). Live applies the common values through the REST API, so they take
-    /// effect at once and the Admiral rewrites its settings.json. File edits settings.json directly (every value,
-    /// including nested sections) on this machine; the Admiral reads it at startup, so those edits need a restart,
-    /// which this tab can request.
+    /// The Admiral tab of the Settings window: the Admiral's own settings (not this computer's). Live applies the common
+    /// values through the REST API, so they take effect at once and the Admiral rewrites its settings.json. File edits
+    /// settings.json directly (every value, including nested sections) on this machine; the Admiral reads it at startup,
+    /// so those edits need a restart, which this tab can request. Restarting requires administrator privileges: the tab
+    /// asks the Admiral (GET /api/v1/whoami) whether Harbor's credential is a global administrator and disables Restart
+    /// Admiral, with the reason, when it is not; the Admiral enforces the same requirement on the restart request.
     /// </summary>
     public class ArmadaSettingsView : UserControl
     {
@@ -42,6 +44,10 @@ namespace Armada.Harbor
         private SettingsData? _Loaded = null;
         private JsonFileEditorView? _FileEditor = null;
         private string? _FileEditorPath = null;
+        private readonly List<Button> _RestartButtons = new List<Button>();
+        private readonly TextBlock _PrivilegeNote = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 12 };
+        private AdminPrivilegeStatus _Privilege = new AdminPrivilegeStatus { Explanation = "Checking whether Harbor's credential is an administrator..." };
+        private bool _CheckingPrivilege = false;
 
         #endregion
 
@@ -79,6 +85,7 @@ namespace Armada.Harbor
                 _Session.Changed += OnSessionChanged;
                 RefreshFileTab();
                 if (_Loaded == null) _ = LoadLiveAsync();
+                _ = RefreshPrivilegeAsync();
             };
             DetachedFromVisualTree += (sender, args) => _Session.Changed -= OnSessionChanged;
         }
@@ -114,12 +121,13 @@ namespace Armada.Harbor
             apply.Classes.Add("accent");
             buttons.Children.Add(apply);
             buttons.Children.Add(HarborUi.Button("Reload", () => _ = LoadLiveAsync(), "Read the values from the Admiral again"));
-            buttons.Children.Add(HarborUi.Button("Restart Admiral", () => _ = RestartAdmiralAsync()));
+            buttons.Children.Add(RestartButton());
             StackPanel footer = new StackPanel { Spacing = 8 };
             footer.Children.Add(buttons);
+            footer.Children.Add(HarborUi.Secondary(_PrivilegeNote));
             footer.Children.Add(_LiveMessage);
 
-            return HarborUi.Page(intro, HarborUi.Card("Admiral server", form, null), footer);
+            return HarborUi.Page(intro, HarborUi.Card("Admiral settings", form, null), footer);
         }
 
         private void AddField(Grid form, string label, Control input, string? help)
@@ -289,7 +297,7 @@ namespace Armada.Harbor
             _FileBanner.Text = "The Admiral reads this file when it starts: saved changes take effect after a restart. Until then, a settings change from the dashboard or Change live rewrites this file from the running settings and discards edits made here.";
             Grid bannerRow = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), ColumnSpacing = 10 };
             bannerRow.Children.Add(HarborUi.Notice(_FileBanner));
-            Button restart = HarborUi.Button("Restart Admiral", () => _ = RestartAdmiralAsync());
+            Button restart = RestartButton();
             restart.VerticalAlignment = VerticalAlignment.Center;
             Grid.SetColumn(restart, 1);
             bannerRow.Children.Add(restart);
@@ -306,20 +314,115 @@ namespace Armada.Harbor
             _FileTab.Content = _FileEditor;
         }
 
-        private async Task OfferRestartAsync()
+        private Button RestartButton()
         {
-            bool restart = await HarborDialog.ConfirmAsync(TopLevel.GetTopLevel(this) as Window, "Restart the Admiral?",
-                "The Admiral reads settings.json when it starts. Restart it now to apply the saved changes? It is unavailable for a few seconds while it restarts.",
-                "Restart").ConfigureAwait(true);
-            if (restart) await RequestRestartAsync().ConfigureAwait(true);
+            Button button = HarborUi.Button("Restart Admiral", () => _ = RestartAdmiralAsync());
+            _RestartButtons.Add(button);
+            ApplyPrivilege();
+            return button;
         }
 
-        private async Task RestartAdmiralAsync()
+        /// <summary>
+        /// Ask the Admiral who Harbor's credential is, and enable Restart Admiral only for a global administrator.
+        /// </summary>
+        private async Task<AdminPrivilegeStatus> RefreshPrivilegeAsync()
         {
-            bool restart = await HarborDialog.ConfirmAsync(TopLevel.GetTopLevel(this) as Window, "Restart the Admiral?",
-                "Restart the Admiral at " + (_Session.RestBaseUrl ?? "?") + "? It is unavailable for a few seconds while it restarts.",
+            if (_CheckingPrivilege) return _Privilege;
+            _CheckingPrivilege = true;
+            try
+            {
+                using (ArmadaClient? client = _Session.CreateClient(5000))
+                {
+                    if (client == null)
+                    {
+                        _Privilege = new AdminPrivilegeStatus { State = AdminPrivilegeStateEnum.Unknown, Explanation = "The Admiral address in General is not a ws:// or wss:// address." };
+                    }
+                    else
+                    {
+                        try
+                        {
+                            _Privilege = AdminPrivilegeCheck.FromWhoAmI(await client.WhoamiAsync().ConfigureAwait(true));
+                        }
+                        catch (ArmadaApiException ex)
+                        {
+                            _Privilege = AdminPrivilegeCheck.FromError(ex.StatusCode, ex.Message);
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                _CheckingPrivilege = false;
+            }
+
+            ApplyPrivilege();
+            return _Privilege;
+        }
+
+        private void ApplyPrivilege()
+        {
+            string tip = _Privilege.IsAdmin
+                ? "Restart the Admiral (requires administrator privileges). " + _Privilege.Explanation
+                : "Requires administrator privileges. " + _Privilege.Explanation;
+            foreach (Button button in _RestartButtons)
+            {
+                button.IsEnabled = _Privilege.IsAdmin;
+                ToolTip.SetTip(button, tip);
+                // A disabled button shows no tooltip, so the reason is also written under the buttons.
+                ToolTip.SetShowOnDisabled(button, true);
+            }
+
+            _PrivilegeNote.Text = _Privilege.IsAdmin ? String.Empty : "Restart Admiral requires administrator privileges. " + _Privilege.Explanation;
+            _PrivilegeNote.IsVisible = !_Privilege.IsAdmin;
+        }
+
+        private async Task OfferRestartAsync()
+        {
+            // Offered after saving settings.json; only an administrator can act on it.
+            AdminPrivilegeStatus privilege = await RefreshPrivilegeAsync().ConfigureAwait(true);
+            if (!privilege.IsAdmin)
+            {
+                SetMessage(_LiveMessage, "Saved. The Admiral reads settings.json when it starts; restarting it requires administrator privileges. " + privilege.Explanation, false);
+                return;
+            }
+
+            await RestartAdmiralAsync("The Admiral reads settings.json when it starts. Restart it now to apply the saved changes?").ConfigureAwait(true);
+        }
+
+        private Task RestartAdmiralAsync()
+        {
+            return RestartAdmiralAsync("Restart the Admiral at " + (_Session.RestBaseUrl ?? "?") + "?");
+        }
+
+        private async Task RestartAdmiralAsync(string question)
+        {
+            Window? owner = TopLevel.GetTopLevel(this) as Window;
+            bool restart = await HarborDialog.ConfirmAsync(owner, "Restart the Admiral?",
+                RestartConfirmMessage(question, _Privilege),
                 "Restart").ConfigureAwait(true);
-            if (restart) await RequestRestartAsync().ConfigureAwait(true);
+            if (!restart) return;
+
+            // Confirm with the Admiral again just before restarting: the credential or the user may have changed.
+            AdminPrivilegeStatus privilege = await RefreshPrivilegeAsync().ConfigureAwait(true);
+            if (!privilege.IsAdmin)
+            {
+                await HarborDialog.ShowMessageAsync(owner, "Administrator privileges required", "This operation requires administrator privileges. " + privilege.Explanation).ConfigureAwait(true);
+                return;
+            }
+
+            await RequestRestartAsync().ConfigureAwait(true);
+        }
+
+        /// <summary>
+        /// The restart confirmation text.
+        /// </summary>
+        /// <param name="question">What is asked.</param>
+        /// <param name="privilege">Who Harbor is signed in as.</param>
+        /// <returns>Text.</returns>
+        public static string RestartConfirmMessage(string question, AdminPrivilegeStatus privilege)
+        {
+            return "This operation requires administrator privileges. " + (privilege?.Explanation ?? String.Empty) + "\n\n"
+                + question + " It is unavailable for a few seconds while it restarts, and the link reconnects when it is back.";
         }
 
         private async Task RequestRestartAsync()

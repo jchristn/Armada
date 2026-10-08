@@ -82,13 +82,18 @@ namespace Armada.Harbor
                 Tag = job.JobId
             };
 
-            StackPanel what = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-            what.Children.Add(new TextBlock { Text = job.Title(), FontWeight = FontWeight.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis });
-            if (job.CaptainId != null)
-            {
-                TextBlock captain = HarborUi.Secondary(new TextBlock { Text = "Captain " + job.CaptainId, FontSize = 11, TextTrimming = TextTrimming.CharacterEllipsis });
-                what.Children.Add(captain);
-            }
+            // What it is, then the IDs it carries, each copyable: the mission on the first line, the captain and the job
+            // below.
+            StackPanel what = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Spacing = 0 };
+            StackPanel title = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+            title.Children.Add(new TextBlock { Text = job.KindName(), FontWeight = FontWeight.SemiBold, VerticalAlignment = VerticalAlignment.Center });
+            if (!String.IsNullOrEmpty(job.MissionId)) title.Children.Add(new CopyableIdText(job.MissionId, "Mission ID"));
+            what.Children.Add(title);
+
+            WrapPanel ids = new WrapPanel { Orientation = Orientation.Horizontal, ItemSpacing = 12 };
+            if (!String.IsNullOrEmpty(job.CaptainId)) ids.Children.Add(Labeled("Captain", new CopyableIdText(job.CaptainId, "Captain ID")));
+            if (!String.IsNullOrEmpty(job.JobId)) ids.Children.Add(Labeled("Job", new CopyableIdText(job.JobId, "Job ID")));
+            if (ids.Children.Count > 0) what.Children.Add(ids);
 
             row.Children.Add(what);
 
@@ -116,6 +121,14 @@ namespace Armada.Harbor
             Grid.SetColumn(elapsed, 2);
             row.Children.Add(elapsed);
             return row;
+        }
+
+        private static StackPanel Labeled(string label, CopyableIdText id)
+        {
+            StackPanel panel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
+            panel.Children.Add(HarborUi.Secondary(new TextBlock { Text = label, FontSize = 11, VerticalAlignment = VerticalAlignment.Center }));
+            panel.Children.Add(id);
+            return panel;
         }
 
         #endregion
