@@ -36,11 +36,9 @@ name: 07-build-captains
     id: "captain-form-runtime"
 - tapOn:
     id: "captain-form-runtime-option-ClaudeCode"
-- scrollUntilVisible:
-    element:
-      id: "captain-form-save"
-    direction: DOWN
-    visibilityPercentage: 100
+# Save sits in the sheet's footer, reachable without scrolling the long form.
+- assertVisible:
+    id: "captain-form-footer"
 - takeScreenshot: captain-form
 - tapOn:
     id: "captain-form-save"

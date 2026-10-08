@@ -108,12 +108,11 @@ name: 02-operations
 - inputText: "Mobile E2E mission"
 # Tapping outside the inputs dismisses the keyboard (keyboardShouldPersistTaps="handled").
 - tapOn: "Mission 1"
-- scrollUntilVisible:
-    element:
-      id: "voyage-create-submit"
-    direction: DOWN
-    visibilityPercentage: 100
-    centerElement: true
+# Create Voyage sits in the form's footer: reachable wherever the form is scrolled, never behind the tab bar.
+- assertVisible:
+    id: "voyage-create-footer"
+- assertVisible:
+    id: "voyage-create-submit"
 - takeScreenshot: voyage-create
 - tapOn:
     id: "voyage-create-submit"
@@ -149,12 +148,9 @@ name: 02-operations
     visibilityPercentage: 100
     centerElement: true
 - assertVisible: "Mobile E2E dispatched mission"
-- scrollUntilVisible:
-    element:
-      id: "dispatch-submit"
-    direction: DOWN
-    visibilityPercentage: 100
-    centerElement: true
+# Dispatch sits in the form's footer, reachable without scrolling past the captain assignments.
+- assertVisible:
+    id: "dispatch-screen-footer"
 - takeScreenshot: dispatch
 - tapOn:
     id: "dispatch-submit"

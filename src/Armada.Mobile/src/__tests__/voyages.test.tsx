@@ -1,4 +1,4 @@
-import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react-native';
 import * as client from '@dashboard/api/client';
 import type { Mission, Voyage } from '@dashboard/types/models';
 import { VoyageCreateScreen } from '../screens/operations/VoyageCreateScreen';
@@ -152,6 +152,8 @@ describe('VoyageCreateScreen', () => {
 
   it('validates like the dashboard', async () => {
     await renderScreen(<VoyageCreateScreen />);
+    // Create Voyage stays in the screen's footer, reachable without scrolling the long form.
+    expect(within(screen.getByTestId('voyage-create-footer')).getByTestId('voyage-create-submit')).toBeTruthy();
     await fireEvent.press(screen.getByTestId('voyage-create-submit'));
     expect(await screen.findByText('Voyage title is required.')).toBeTruthy();
     await fireEvent.changeText(screen.getByTestId('voyage-title'), 'Docs sweep');

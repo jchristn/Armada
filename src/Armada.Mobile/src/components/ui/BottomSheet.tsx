@@ -5,6 +5,7 @@ import { useTheme } from '../../theme/ThemeContext';
 import { radius, spacing } from '../../theme/typography';
 import { AppText } from './AppText';
 import { IconButton } from './IconButton';
+import { StickyFooter } from './StickyFooter';
 
 export interface BottomSheetProps {
   open: boolean;
@@ -12,6 +13,8 @@ export interface BottomSheetProps {
   onClose: () => void;
   closeLabel: string;
   children: ReactNode;
+  /** The form's actions, kept below the scrolling body so a long form's Save is reachable without scrolling. */
+  footer?: ReactNode;
   testID?: string;
 }
 
@@ -19,7 +22,7 @@ export interface BottomSheetProps {
  * A modal sheet anchored to the bottom (the mobile form of the dashboard's modals). Built on the platform Modal:
  * screen readers stay inside it, Android back closes it, and the backdrop closes it.
  */
-export function BottomSheet({ open, title, onClose, closeLabel, children, testID }: BottomSheetProps) {
+export function BottomSheet({ open, title, onClose, closeLabel, children, footer, testID }: BottomSheetProps) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   return (
@@ -38,6 +41,7 @@ export function BottomSheet({ open, title, onClose, closeLabel, children, testID
             <IconButton icon="close" label={closeLabel} onPress={onClose} color="textMuted" testID={testID ? `${testID}-close` : undefined} />
           </View>
           <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.body}>{children}</ScrollView>
+          {footer ? <StickyFooter inset="sheet" testID={testID ? `${testID}-footer` : undefined}>{footer}</StickyFooter> : null}
         </View>
       </KeyboardAvoidingView>
     </Modal>

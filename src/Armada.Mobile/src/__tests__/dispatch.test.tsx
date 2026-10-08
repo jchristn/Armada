@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react-native';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react-native';
 import * as client from '@dashboard/api/client';
 import { DispatchHubScreen } from '../screens/operations/DispatchHubScreen';
 import { DispatchForm } from '../screens/operations/DispatchForm';
@@ -81,8 +81,27 @@ describe('Dispatch', () => {
     expect(mockRouter.push).toHaveBeenCalledWith('/voyages/vyg_9');
   });
 
+  it('keeps a long multi-line description while the vessel, pipeline, title, and step fields change', async () => {
+    const description = Array.from({ length: 30 }, (_v, i) => `Line ${i + 1}: ${'detail '.repeat(12).trim()}`).join('\n');
+    await renderScreen(<DispatchForm prefill={null} schedule={() => undefined} />);
+    await fireEvent.changeText(await screen.findByTestId('dispatch-prompt'), description);
+    await fireEvent.press(screen.getByTestId('dispatch-vessel'));
+    await fireEvent.press(await screen.findByTestId('dispatch-vessel-option-vsl_b'));
+    expect(screen.getByTestId('dispatch-prompt').props.value).toBe(description);
+    await fireEvent.press(screen.getByTestId('dispatch-pipeline'));
+    await fireEvent.press(await screen.findByTestId('dispatch-pipeline-option-Reviewed'));
+    await fireEvent.press(await screen.findByTestId('dispatch-tier-Judge'));
+    await fireEvent.press(await screen.findByTestId('dispatch-tier-Judge-option-Standard'));
+    await fireEvent.changeText(screen.getByTestId('dispatch-voyage-title'), 'Named voyage');
+    await fireEvent.changeText(screen.getByTestId('dispatch-priority'), '42');
+    expect(screen.getByTestId('dispatch-prompt').props.value).toBe(description);
+    expect(screen.getByTestId('dispatch-submit').props.accessibilityState.disabled).toBe(false);
+  });
+
   it('sends the pipeline, priority, title, playbooks, and per-step captains', async () => {
     await renderScreen(<DispatchForm prefill={null} schedule={() => undefined} />);
+    // Dispatch stays in the screen's footer, reachable without scrolling past the captain assignments.
+    expect(within(screen.getByTestId('dispatch-screen-footer')).getByTestId('dispatch-submit')).toBeTruthy();
     await fireEvent.press(await screen.findByTestId('dispatch-vessel'));
     await fireEvent.press(await screen.findByTestId('dispatch-vessel-option-vsl_b'));
     await fireEvent.press(screen.getByTestId('dispatch-pipeline'));

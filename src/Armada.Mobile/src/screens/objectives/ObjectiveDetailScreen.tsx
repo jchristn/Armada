@@ -1,6 +1,6 @@
 import { Stack, useRouter, type Href } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Linking, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, Linking, Platform, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   createBacklogItem,
@@ -17,7 +17,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { ActionRow, InfoRow, useActionRunner } from '../../build/fields';
 import { useLiveResource } from '../../build/useLiveResource';
 import { statusTone } from '../../components/ask/statusTone';
-import { AppText, Banner, Button, ConfirmDialog, ErrorState, ListRow, LoadingState, Section, StatusBadge } from '../../components/ui';
+import { AppText, Banner, Button, ConfirmDialog, ErrorState, FormActions, ListRow, LoadingState, Section, StatusBadge, StickyFooter } from '../../components/ui';
 import { useLocale } from '../../i18n/LocaleContext';
 import { useSocket } from '../../socket/SocketContext';
 import { useTheme } from '../../theme/ThemeContext';
@@ -153,118 +153,123 @@ export function ObjectiveDetailScreen({ id, embedded = false, prefillVesselId, r
   return (
     <SafeAreaView edges={embedded ? [] : ['left', 'right']} style={[styles.fill, { backgroundColor: colors.background }]} testID="objective-detail">
       {embedded ? null : <Stack.Screen options={{ title }} />}
-      <ScrollView
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
-        refreshControl={createMode ? undefined : <RefreshControl refreshing={item.refreshing} onRefresh={() => { setDirty(false); void item.refresh(); }} tintColor={colors.primary} />}
-      >
-        <View style={styles.column}>
-          {embedded ? <AppText variant="title" accessibilityRole="header" style={styles.heading}>{title}</AppText> : null}
-          {objective ? (
-            <View style={styles.tags}>
-              <StatusBadge label={objective.status} tone={statusTone(objective.status)} />
-              <Tags items={[objective.kind, objective.priority, objective.effort, objective.backlogState]} />
-            </View>
-          ) : null}
+      <KeyboardAvoidingView style={styles.fill} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          refreshControl={createMode ? undefined : <RefreshControl refreshing={item.refreshing} onRefresh={() => { setDirty(false); void item.refresh(); }} tintColor={colors.primary} />}
+        >
+          <View style={styles.column}>
+            {embedded ? <AppText variant="title" accessibilityRole="header" style={styles.heading}>{title}</AppText> : null}
+            {objective ? (
+              <View style={styles.tags}>
+                <StatusBadge label={objective.status} tone={statusTone(objective.status)} />
+                <Tags items={[objective.kind, objective.priority, objective.effort, objective.backlogState]} />
+              </View>
+            ) : null}
 
-          {!canManage ? <Banner tone="warning" title={t('You can view backlog items, but only tenant administrators can create or change them.')} /> : null}
+            {!canManage ? <Banner tone="warning" title={t('You can view backlog items, but only tenant administrators can create or change them.')} /> : null}
 
-          {objective ? (
-            <>
-              <ActionRow>
-                <Button label={t('History')} variant="secondary" icon="time-outline" onPress={() => router.push(historyHref(objective) as Href)} testID="objective-history" />
-                {objective.sourceProvider === 'GitHub' && primaryVesselId && gitHubNumber ? (
-                  <Button
-                    label={busy === 'github' ? t('Refreshing...') : t('Refresh GitHub')}
-                    variant="secondary"
-                    busy={busy === 'github'}
-                    onPress={() => void run('github', async () => {
-                      const refreshed = await importObjectiveFromGitHub({
-                        objectiveId: objective.id,
-                        vesselId: primaryVesselId,
-                        sourceType: objective.sourceType === 'PullRequest' ? 'PullRequest' : 'Issue',
-                        number: gitHubNumber,
-                      });
-                      hydrate(refreshed);
-                      return refreshed;
-                    }, t('Backlog item "{{title}}" refreshed from GitHub.', { title: objective.title }))}
-                    testID="objective-github-refresh"
-                  />
+            {objective ? (
+              <>
+                <ActionRow>
+                  <Button label={t('History')} variant="secondary" icon="time-outline" onPress={() => router.push(historyHref(objective) as Href)} testID="objective-history" />
+                  {objective.sourceProvider === 'GitHub' && primaryVesselId && gitHubNumber ? (
+                    <Button
+                      label={busy === 'github' ? t('Refreshing...') : t('Refresh GitHub')}
+                      variant="secondary"
+                      busy={busy === 'github'}
+                      onPress={() => void run('github', async () => {
+                        const refreshed = await importObjectiveFromGitHub({
+                          objectiveId: objective.id,
+                          vesselId: primaryVesselId,
+                          sourceType: objective.sourceType === 'PullRequest' ? 'PullRequest' : 'Issue',
+                          number: gitHubNumber,
+                        });
+                        hydrate(refreshed);
+                        return refreshed;
+                      }, t('Backlog item "{{title}}" refreshed from GitHub.', { title: objective.title }))}
+                      testID="objective-github-refresh"
+                    />
+                  ) : null}
+                  <Button label={t('Start Planning')} variant="secondary" disabled={!primaryVesselId} onPress={() => router.push(planningHref(objective, primaryFleetId, primaryVesselId) as Href)} accessibilityHint={t('Open a planning session for this backlog item using the linked vessel and suggested context.')} testID="objective-start-planning" />
+                  <Button label={t('Open In Dispatch')} variant="secondary" disabled={!primaryVesselId} onPress={() => router.push(dispatchHref(objective, primaryVesselId, reference.pipelines) as Href)} accessibilityHint={t('Create dispatch-ready implementation work from this backlog item.')} testID="objective-open-dispatch" />
+                  <Button label={t('Draft Release')} variant="secondary" disabled={!primaryVesselId} onPress={() => router.push(releaseHref(objective, primaryVesselId) as Href)} accessibilityHint={t('Draft release notes and release metadata from this backlog item.')} testID="objective-draft-release" />
+                  {canManage ? (
+                    <Button
+                      label={t('Duplicate')}
+                      variant="secondary"
+                      busy={busy === 'duplicate'}
+                      onPress={() => void run('duplicate', async () => {
+                        const created = await createBacklogItem(buildObjectiveDuplicatePayload(objective));
+                        openItem(created.id);
+                        return created;
+                      }, t('Backlog item "{{title}}" duplicated.', { title: objective.title }))}
+                      testID="objective-duplicate"
+                    />
+                  ) : null}
+                  <Button label={t('View JSON')} variant="ghost" onPress={() => setJsonOpen(true)} testID="objective-view-json" />
+                  {canManage ? <Button label={t('Delete')} variant="danger" onPress={() => setConfirmDelete(true)} testID="objective-delete" /> : null}
+                </ActionRow>
+
+                <StatGrid>
+                  <Stat label={t('Rank')} value={objective.rank} />
+                  <Stat label={t('Owner')} value={objective.owner || t('Unassigned')} />
+                  <Stat label={t('Refinement Sessions')} value={objective.refinementSessionIds.length} />
+                  <Stat label={t('Linked Releases')} value={objective.releaseIds.length} />
+                  <Stat label={t('Linked Incidents')} value={objective.incidentIds.length} />
+                  <Stat label={t('Last Updated')} value={formatRelativeTime(objective.lastUpdateUtc)} />
+                </StatGrid>
+
+                {objective.sourceProvider === 'GitHub' ? (
+                  <Section title={t('GitHub Source')}>
+                    <InfoRow label={t('Provider')} value={objective.sourceProvider} />
+                    <InfoRow label={t('Source Type')} value={objective.sourceType || t('Unknown source')} />
+                    <InfoRow label={t('Source')} value={objective.sourceId} />
+                    <InfoRow label={t('Last Source Update')} value={objective.sourceUpdatedUtc ? formatDateTime(objective.sourceUpdatedUtc) : null} />
+                    {objective.sourceUrl ? (
+                      <ListRow title={t('Source Link')} subtitle={objective.sourceUrl} icon="open-outline" onPress={() => void Linking.openURL(objective.sourceUrl!)} />
+                    ) : <InfoRow label={t('Source Link')} value={null} />}
+                  </Section>
                 ) : null}
-                <Button label={t('Start Planning')} variant="secondary" disabled={!primaryVesselId} onPress={() => router.push(planningHref(objective, primaryFleetId, primaryVesselId) as Href)} accessibilityHint={t('Open a planning session for this backlog item using the linked vessel and suggested context.')} testID="objective-start-planning" />
-                <Button label={t('Open In Dispatch')} variant="secondary" disabled={!primaryVesselId} onPress={() => router.push(dispatchHref(objective, primaryVesselId, reference.pipelines) as Href)} accessibilityHint={t('Create dispatch-ready implementation work from this backlog item.')} testID="objective-open-dispatch" />
-                <Button label={t('Draft Release')} variant="secondary" disabled={!primaryVesselId} onPress={() => router.push(releaseHref(objective, primaryVesselId) as Href)} accessibilityHint={t('Draft release notes and release metadata from this backlog item.')} testID="objective-draft-release" />
-                {canManage ? (
-                  <Button
-                    label={t('Duplicate')}
-                    variant="secondary"
-                    busy={busy === 'duplicate'}
-                    onPress={() => void run('duplicate', async () => {
-                      const created = await createBacklogItem(buildObjectiveDuplicatePayload(objective));
-                      openItem(created.id);
-                      return created;
-                    }, t('Backlog item "{{title}}" duplicated.', { title: objective.title }))}
-                    testID="objective-duplicate"
-                  />
-                ) : null}
-                <Button label={t('View JSON')} variant="ghost" onPress={() => setJsonOpen(true)} testID="objective-view-json" />
-                {canManage ? <Button label={t('Delete')} variant="danger" onPress={() => setConfirmDelete(true)} testID="objective-delete" /> : null}
-              </ActionRow>
 
-              <StatGrid>
-                <Stat label={t('Rank')} value={objective.rank} />
-                <Stat label={t('Owner')} value={objective.owner || t('Unassigned')} />
-                <Stat label={t('Refinement Sessions')} value={objective.refinementSessionIds.length} />
-                <Stat label={t('Linked Releases')} value={objective.releaseIds.length} />
-                <Stat label={t('Linked Incidents')} value={objective.incidentIds.length} />
-                <Stat label={t('Last Updated')} value={formatRelativeTime(objective.lastUpdateUtc)} />
-              </StatGrid>
+                <Banner tone="info" title={t('Refinement is lighter than planning: it uses a selected captain to sharpen the backlog item, but it does not imply repository mutation, dock provisioning, or dispatch by itself.')} />
+                {primaryVesselId
+                  ? <Banner tone="info" title={t('Primary vessel {{vessel}} is linked, so planning, dispatch, and release drafting can start from this backlog item.', { vessel: primaryVesselName })} />
+                  : <Banner tone="warning" title={t('This backlog item can be refined now, but it still needs a vessel before repository-aware planning or dispatch can start.')} />}
+              </>
+            ) : null}
 
-              {objective.sourceProvider === 'GitHub' ? (
-                <Section title={t('GitHub Source')}>
-                  <InfoRow label={t('Provider')} value={objective.sourceProvider} />
-                  <InfoRow label={t('Source Type')} value={objective.sourceType || t('Unknown source')} />
-                  <InfoRow label={t('Source')} value={objective.sourceId} />
-                  <InfoRow label={t('Last Source Update')} value={objective.sourceUpdatedUtc ? formatDateTime(objective.sourceUpdatedUtc) : null} />
-                  {objective.sourceUrl ? (
-                    <ListRow title={t('Source Link')} subtitle={objective.sourceUrl} icon="open-outline" onPress={() => void Linking.openURL(objective.sourceUrl!)} />
-                  ) : <InfoRow label={t('Source Link')} value={null} />}
-                </Section>
-              ) : null}
+            <ObjectiveForm form={form} onChange={change} reference={reference} objective={objective} canManage={canManage} />
+            {formError ? <Banner tone="danger" title={formError} /> : null}
 
-              <Banner tone="info" title={t('Refinement is lighter than planning: it uses a selected captain to sharpen the backlog item, but it does not imply repository mutation, dock provisioning, or dispatch by itself.')} />
-              {primaryVesselId
-                ? <Banner tone="info" title={t('Primary vessel {{vessel}} is linked, so planning, dispatch, and release drafting can start from this backlog item.', { vessel: primaryVesselName })} />
-                : <Banner tone="warning" title={t('This backlog item can be refined now, but it still needs a vessel before repository-aware planning or dispatch can start.')} />}
-            </>
-          ) : null}
+            {objective && armadaLinkGroups(objective).length > 0 ? (
+              <Section title={t('Armada Links')} footer={t('Armada records these automatically as planning, execution, release, deployment, and incident work references this backlog item.')}>
+                {armadaLinkGroups(objective).flatMap((group) => group.ids.map((linkId) => (
+                  <ListRow key={`${group.key}-${linkId}`} title={linkId} subtitle={t(group.label)} onPress={() => router.push(group.href(linkId) as Href)} testID={`objective-link-${group.key}-${linkId}`} />
+                )))}
+              </Section>
+            ) : null}
 
-          <ObjectiveForm form={form} onChange={change} reference={reference} objective={objective} canManage={canManage} />
-          {formError ? <Banner tone="danger" title={formError} /> : null}
-          {canManage ? (
-            <View style={styles.save}>
+            {objective ? (
+              <RefinementPanel objective={objective} refinement={refinement} reference={reference} pipelines={reference.pipelines} canManage={canManage} />
+            ) : null}
+          </View>
+        </ScrollView>
+        {/* Save stays reachable below the long form (and above the keyboard), wherever the page is scrolled. */}
+        {canManage ? (
+          <StickyFooter testID="objective-form-footer">
+            <FormActions>
               <Button
                 label={busy === 'save' ? t('Saving...') : createMode ? t('Create Backlog Item') : t('Save Changes')}
                 busy={busy === 'save'}
                 onPress={save}
                 testID="objective-form-save"
               />
-            </View>
-          ) : null}
-
-          {objective && armadaLinkGroups(objective).length > 0 ? (
-            <Section title={t('Armada Links')} footer={t('Armada records these automatically as planning, execution, release, deployment, and incident work references this backlog item.')}>
-              {armadaLinkGroups(objective).flatMap((group) => group.ids.map((linkId) => (
-                <ListRow key={`${group.key}-${linkId}`} title={linkId} subtitle={t(group.label)} onPress={() => router.push(group.href(linkId) as Href)} testID={`objective-link-${group.key}-${linkId}`} />
-              )))}
-            </Section>
-          ) : null}
-
-          {objective ? (
-            <RefinementPanel objective={objective} refinement={refinement} reference={reference} pipelines={reference.pipelines} canManage={canManage} />
-          ) : null}
-        </View>
-      </ScrollView>
+            </FormActions>
+          </StickyFooter>
+        ) : null}
+      </KeyboardAvoidingView>
       {objective ? (
         <ConfirmDialog
           open={confirmDelete}
@@ -297,5 +302,4 @@ const styles = StyleSheet.create({
   column: { width: '100%', maxWidth: 820, alignSelf: 'center' },
   heading: { marginHorizontal: spacing.lg, marginBottom: spacing.sm },
   tags: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm, marginHorizontal: spacing.lg, marginBottom: spacing.md },
-  save: { paddingHorizontal: spacing.lg, marginBottom: spacing.lg },
 });

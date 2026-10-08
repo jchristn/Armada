@@ -216,6 +216,8 @@ describe('backlog item', () => {
     api.createBacklogItem.mockResolvedValue(objective({ id: 'obj_new', title: 'New thing' }));
     const result = await renderAt('/backlog/new?vesselId=vsl_1');
     await waitFor(() => expect(screen.getByTestId('objective-form-title')).toBeTruthy());
+    // Save stays in a footer below the long form, reachable without scrolling.
+    expect(within(screen.getByTestId('objective-form-footer')).getByTestId('objective-form-save')).toBeTruthy();
     await fireEvent.press(screen.getByTestId('objective-form-save'));
     expect(screen.getByText('Backlog item title is required.')).toBeTruthy();
     expect(api.createBacklogItem).not.toHaveBeenCalled();

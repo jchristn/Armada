@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react-native';
 import { Slot, Stack } from 'expo-router';
 import { renderRouter } from 'expo-router/testing-library';
 import { Text } from 'react-native';
@@ -113,6 +113,8 @@ describe('Planning list', () => {
     await fireEvent.press(screen.getByTestId('planning-new'));
     await waitFor(() => expect(screen.getByTestId('planning-start-captain')).toBeTruthy());
     expect(screen.getByTestId('planning-start-submit')).toBeDisabled();
+    // Start stays in the sheet's footer, reachable without scrolling past readiness and playbooks.
+    expect(within(screen.getByTestId('planning-new-footer')).getByTestId('planning-start-submit')).toBeTruthy();
     await fireEvent.press(screen.getByTestId('planning-start-captain'));
     // Working captains cannot plan.
     expect(screen.getByTestId('planning-start-captain-option-cpt_2')).toBeDisabled();

@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
 import { createCaptain, listModelEndpoints, setCaptainCliPermissionPolicy, updateCaptain } from '@dashboard/api/client';
 import { supportsAutoApproveSwitch } from '@dashboard/lib/captainApproval';
 import {
@@ -20,12 +19,11 @@ import { SwitchField } from '../../build/fields';
 import { errorMessage } from '../../build/useLiveResource';
 import { useAuth } from '../../auth/AuthContext';
 import { CliPermissionPolicyField } from '../../components/cliPermissions/CliPermissionPolicyField';
-import { BottomSheet, Button, TextField } from '../../components/ui';
+import { BottomSheet, Button, FormActions, TextField } from '../../components/ui';
 import { Banner } from '../../components/ui/Banner';
 import { SelectField, type SelectOption } from '../../components/ui/SelectSheet';
 import { useLocale } from '../../i18n/LocaleContext';
 import { useNotifications } from '../../notifications/NotificationContext';
-import { spacing } from '../../theme/typography';
 import { MuxFields } from './MuxFields';
 
 export interface CaptainFormSheetProps {
@@ -97,7 +95,19 @@ export function CaptainFormSheet({ open, captain, onClose, onSaved }: CaptainFor
   }
 
   return (
-    <BottomSheet open={open} title={captain ? t('Edit Captain') : t('Create Captain')} onClose={onClose} closeLabel={t('Close')} testID="captain-form">
+    <BottomSheet
+      open={open}
+      title={captain ? t('Edit Captain') : t('Create Captain')}
+      onClose={onClose}
+      closeLabel={t('Close')}
+      testID="captain-form"
+      footer={(
+        <FormActions>
+          <Button label={t('Cancel')} variant="ghost" onPress={onClose} disabled={saving} testID="captain-form-cancel" />
+          <Button label={saving ? t('Saving...') : t('Save')} onPress={() => void save()} busy={saving} testID="captain-form-save" />
+        </FormActions>
+      )}
+    >
       {error ? <Banner tone="danger" title={error} testID="captain-form-error" /> : null}
       <TextField label={t('Name')} value={form.name} onChangeText={(v) => patch({ name: v })} autoCapitalize="none" testID="captain-form-name" />
       <SelectField label={t('Runtime')} value={form.runtime} options={runtimeOptions} onChange={(v) => patch({ runtime: v })} closeLabel={t('Close')} placeholder={t('Select runtime...')} testID="captain-form-runtime" />
@@ -170,12 +180,6 @@ export function CaptainFormSheet({ open, captain, onClose, onSaved }: CaptainFor
         numberOfLines={4}
         testID="captain-form-systemInstructions"
       />
-      <View style={styles.actions}>
-        <Button label={saving ? t('Saving...') : t('Save')} onPress={() => void save()} busy={saving} testID="captain-form-save" />
-        <Button label={t('Cancel')} variant="ghost" onPress={onClose} disabled={saving} testID="captain-form-cancel" />
-      </View>
     </BottomSheet>
   );
 }
-
-const styles = StyleSheet.create({ actions: { marginTop: spacing.sm } });

@@ -4,7 +4,7 @@ import { createPlanningSession, getVesselReadiness, TimeoutError } from '@dashbo
 import type { SelectedPlaybook, VesselReadinessResult } from '@dashboard/types/models';
 import { canCaptainStartPlanning } from '@dashboard/lib/captains';
 import { errorMessage } from '../../build/useLiveResource';
-import { AppText, Banner, BottomSheet, Button, TextField } from '../../components/ui';
+import { AppText, Banner, BottomSheet, Button, FormActions, TextField } from '../../components/ui';
 import { SelectField, type SelectOption } from '../../components/ui/SelectSheet';
 import { useLocale } from '../../i18n/LocaleContext';
 import { useNotifications } from '../../notifications/NotificationContext';
@@ -142,7 +142,24 @@ export function PlanningStartSheet({ open, onClose, catalog, prefill, onStarted,
   };
 
   return (
-    <BottomSheet open={open} title={t('Start Session')} onClose={onClose} closeLabel={t('Close')} testID="planning-new">
+    <BottomSheet
+      open={open}
+      title={t('Start Session')}
+      onClose={onClose}
+      closeLabel={t('Close')}
+      testID="planning-new"
+      footer={catalog.loading ? undefined : (
+        <FormActions>
+          <Button
+            label={creating ? t('Starting Planning Session...') : t('Start Planning Session')}
+            onPress={() => void start()}
+            disabled={!canStart}
+            busy={creating}
+            testID="planning-start-submit"
+          />
+        </FormActions>
+      )}
+    >
       <AppText muted style={styles.gap}>{t('Reserve a captain on a vessel, then use the transcript as the source of truth for a later dispatch.')}</AppText>
       <Banner tone="info" title={t('Planning sessions reserve the selected captain and dock for the duration of the session. The captain can inspect and modify the repository while you plan.')} />
       {error ? <Banner tone="danger" title={error} testID="planning-start-error" /> : null}
@@ -172,13 +189,6 @@ export function PlanningStartSheet({ open, onClose, catalog, prefill, onStarted,
               </AppText>
             </View>
           ) : null}
-          <Button
-            label={creating ? t('Starting Planning Session...') : t('Start Planning Session')}
-            onPress={() => void start()}
-            disabled={!canStart}
-            busy={creating}
-            testID="planning-start-submit"
-          />
           {catalog.vessels.length === 0 ? <AppText variant="caption" muted>{t('Create a vessel first so Armada has a repository context for planning.')}</AppText> : null}
         </View>
       )}
