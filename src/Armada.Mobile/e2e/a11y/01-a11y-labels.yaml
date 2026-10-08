@@ -59,12 +59,17 @@ name: 01-a11y-labels
     id: "mission-history-chart"
     text: "Mission History: .*total.*"
 - takeScreenshot: a11y-home-chart
-# Voyage progress is one element: title, status, percent.
+# Voyage progress is one element: title, status, percent (only while the seeded voyage is still open; the main
+# flows cancel open voyages).
 - scrollUntilVisible:
     element: "Seeded voyage, .*%"
     direction: DOWN
     timeout: 60000
+    optional: true
 - takeScreenshot: a11y-home-voyages
+# Back to the top of Home (tapping the active tab pops and scrolls it), then down to the missions.
+- tapOn:
+    id: "tab-work"
 # Missions list: a row reads its title, status, and details; its menu button is its own control.
 - scrollUntilVisible:
     element:
@@ -72,6 +77,7 @@ name: 01-a11y-labels
     direction: DOWN
     visibilityPercentage: 100
     centerElement: true
+    timeout: 90000
 - tapOn:
     id: "home-missions-all"
 - extendedWaitUntil:
@@ -94,11 +100,11 @@ name: 01-a11y-labels
           id: "missions-filters-sheet-close"
           text: "Close"
 - scrollUntilVisible:
-    element: "Seeded mission one, Pending.*"
+    element: "Seeded mission one, .*"
     direction: DOWN
     timeout: 60000
     centerElement: true
-- tapOn: "Seeded mission one, Pending.*"
+- tapOn: "Seeded mission one, .*"
 - extendedWaitUntil:
     visible:
       id: "mission-detail"
@@ -115,7 +121,7 @@ name: 01-a11y-labels
     element:
       id: "nav-/preferences"
     direction: DOWN
-    timeout: 60000
+    timeout: 90000
     centerElement: true
 - tapOn:
     id: "nav-/preferences"

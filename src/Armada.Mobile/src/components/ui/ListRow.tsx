@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View, type AccessibilityActionEvent, type AccessibilityActionInfo } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
-import { MIN_TOUCH, spacing } from '../../theme/typography';
+import { MIN_TOUCH, spacing, useLargeText } from '../../theme/typography';
 import { AppText } from './AppText';
 import { Icon, type IconName } from './Icon';
 import { IconButton } from './IconButton';
@@ -52,13 +52,15 @@ export function ListRow({
   accessibilityActions: extraActions, onAccessibilityAction: onExtraAction, testID,
 }: ListRowProps) {
   const { colors } = useTheme();
+  // Two subtitle lines keep lists scannable; at large text sizes two lines hold a few words, so the subtitle wraps.
+  const largeText = useLargeText();
   const value = spokenValue(accessibilityValue);
   const content = (
     <View style={styles.row}>
       {icon ? <Icon name={icon} color={destructive ? 'danger' : 'primary'} /> : null}
       <View style={styles.text}>
         <AppText variant="label" color={destructive ? 'danger' : 'text'}>{title}</AppText>
-        {subtitle ? <AppText variant="caption" muted numberOfLines={2}>{subtitle}</AppText> : null}
+        {subtitle ? <AppText variant="caption" muted numberOfLines={largeText ? undefined : 2}>{subtitle}</AppText> : null}
       </View>
       {accessory}
       {onPress ? <Icon name="chevron-forward" size={18} color="textMuted" /> : null}

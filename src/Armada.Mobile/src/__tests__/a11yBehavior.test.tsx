@@ -11,7 +11,7 @@ import * as RN from 'react-native';
 import { AccessibilityInfo } from 'react-native';
 import { TOAST_TIMEOUT_MS } from '@dashboard/lib/notificationEvents';
 import { ToastHost } from '../components/app/ToastHost';
-import { BottomSheet, Button, ConfirmDialog, ErrorState, KeyValueRow, KpiCard, KpiGrid, SegmentedControl, SelectField } from '../components/ui';
+import { BottomSheet, Button, ConfirmDialog, ErrorState, KeyValueRow, KpiCard, KpiGrid, ListRow, SegmentedControl, SelectField } from '../components/ui';
 import { BUTTON_MAX_FONT_SCALE } from '../theme/typography';
 import { LocaleProvider } from '../i18n/LocaleContext';
 import { NotificationProvider, SCREEN_READER_TOAST_FACTOR, useNotifications, type NotificationState } from '../notifications/NotificationContext';
@@ -208,6 +208,7 @@ describe('large text', () => {
       <KpiGrid><KpiCard label="Missions" value={3} /><KpiCard label="Captains" value={2} /></KpiGrid>
       <KeyValueRow testID="kv" label="Branch" value="armada/fix" />
       <Button label="+ Mission" onPress={() => undefined} testID="b" />
+      <ListRow testID="row" title="Fleet Actions" subtitle="Run a command or mission across many vessels at once." onPress={() => undefined} />
       <SegmentedControl label="Sections" value="a" onChange={() => undefined} options={[{ value: 'a', label: 'Overview' }, { value: 'b', label: 'Instructions' }]} />
     </Themed>);
   }
@@ -218,6 +219,7 @@ describe('large text', () => {
     expect(screen.queryByTestId('kpi-grid-stacked')).toBeNull();
     expect(RN.StyleSheet.flatten(screen.getByText('Branch').props.style).width).toBe(120);
     expect(screen.getByText('Instructions').props.adjustsFontSizeToFit).toBe(true);
+    expect(screen.getByText('Run a command or mission across many vessels at once.').props.numberOfLines).toBe(2);
   });
 
   it('at accessibility sizes KPI cards and key-value rows stack, and button labels stop growing at twice their size', async () => {
@@ -226,8 +228,12 @@ describe('large text', () => {
     expect(screen.getByTestId('kpi-grid-stacked')).toBeTruthy();
     expect(RN.StyleSheet.flatten(screen.getByText('Branch').props.style).width).toBeUndefined();
     expect(screen.getByText('+ Mission').props.maxFontSizeMultiplier).toBe(BUTTON_MAX_FONT_SCALE);
+    expect(screen.getByText('Run a command or mission across many vessels at once.').props.numberOfLines).toBeUndefined();
     // Segments wrap with whole, equally sized labels instead of shrinking some of them.
     expect(screen.getByText('Instructions').props.adjustsFontSizeToFit).toBeUndefined();
     expect(screen.getByText('Instructions').props.numberOfLines).toBeUndefined();
+    // "Instructions" is longer than a half row allows at this size: each segment gets a full row.
+    const segment = screen.getByRole('tab', { name: 'Instructions' });
+    expect(RN.StyleSheet.flatten(segment.props.style).flexBasis).toBe('100%');
   });
 });
