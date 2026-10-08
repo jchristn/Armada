@@ -40,6 +40,25 @@ namespace Armada.Core.Services
             set => _Time = value ?? throw new ArgumentNullException(nameof(Time));
         }
 
+        /// <summary>
+        /// Link counters kept across sessions (accepted sessions, reconnects), reported in every heartbeat. A Harbor runs
+        /// one client per session, so the owner of the reconnect loop sets the same instance on every session's client;
+        /// by default each client has its own, which reports no reconnects.
+        /// </summary>
+        public HarborLinkStatistics LinkStatistics
+        {
+            get => _LinkStatistics;
+            set => _LinkStatistics = value ?? throw new ArgumentNullException(nameof(LinkStatistics));
+        }
+
+        /// <summary>
+        /// Round-trip time of the most recent acknowledged heartbeat in the current session, in milliseconds, or null.
+        /// </summary>
+        public long? LastRoundTripMs
+        {
+            get { lock (_HeartbeatLock) return _LastRoundTripMs; }
+        }
+
         #endregion
 
         #region Private-Members
@@ -60,6 +79,12 @@ namespace Armada.Core.Services
         private Action? _OnConnected;
         private Channel<HarborMessage>? _Outbound;
         private TimeProvider _Time = TimeProvider.System;
+        private HarborLinkStatistics _LinkStatistics = new HarborLinkStatistics();
+        private readonly object _HeartbeatLock = new object();
+        private readonly Dictionary<long, long> _HeartbeatSentTimestamps = new Dictionary<long, long>();
+        private long _HeartbeatSequence = 0;
+        private long? _LastRoundTripMs = null;
+        private const int _MaxPendingHeartbeats = 8;
 
         #endregion
 
@@ -149,6 +174,7 @@ namespace Armada.Core.Services
             if (transport == null) throw new ArgumentNullException(nameof(transport));
 
             _OnConnected = onConnected;
+            ResetHeartbeatTiming();
             Channel<HarborMessage> outbound = Channel.CreateUnbounded<HarborMessage>();
             _Outbound = outbound;
 
@@ -228,8 +254,15 @@ namespace Armada.Core.Services
                 {
                     _Logging.Info(_Header + "handshake accepted; mcp=" + (ack.McpBaseUrl ?? "(none)"));
                     Log(HarborLogDirection.In, "Handshake accepted by Admiral. MCP=" + (ack.McpBaseUrl ?? "(none)"));
+                    _LinkStatistics.RecordAccepted(_Time.GetUtcNow().UtcDateTime);
                     _OnConnected?.Invoke();
                 }
+                return;
+            }
+
+            if (message is HarborHeartbeatAck heartbeatAck)
+            {
+                RecordHeartbeatAck(heartbeatAck.Sequence);
                 return;
             }
 
@@ -595,7 +628,14 @@ namespace Armada.Core.Services
             {
                 await foreach (HarborMessage message in outbound.Reader.ReadAllAsync(token).ConfigureAwait(false))
                 {
-                    await transport.SendAsync(HarborProtocol.Serialize(message), token).ConfigureAwait(false);
+                    string serialized = HarborProtocol.Serialize(message);
+
+                    // Time a heartbeat from when it goes to the socket, so output queued ahead of it does not count as
+                    // link latency.
+                    if (message is HarborHeartbeat heartbeat && heartbeat.Sequence.HasValue)
+                        RecordHeartbeatSent(heartbeat.Sequence.Value);
+
+                    await transport.SendAsync(serialized, token).ConfigureAwait(false);
                 }
             }
             catch (OperationCanceledException)
@@ -614,7 +654,7 @@ namespace Armada.Core.Services
                 try
                 {
                     await Task.Delay(_HeartbeatIntervalMs, token).ConfigureAwait(false);
-                    Enqueue(new HarborHeartbeat { LiveJobIds = SnapshotLiveJobs() });
+                    Enqueue(BuildHeartbeat());
                     LogEntry(new HarborLogEntry(HarborLogDirection.Out, "Heartbeat") { IsHeartbeat = true });
                 }
                 catch (OperationCanceledException)
@@ -626,6 +666,69 @@ namespace Armada.Core.Services
                     _Logging.Warn(_Header + "heartbeat failed: " + e.ToString());
                     break;
                 }
+            }
+        }
+
+        /// <summary>
+        /// The next heartbeat of this session: the live jobs, a new sequence number for the Admiral to acknowledge, the
+        /// round trip of the last acknowledged heartbeat, and the reconnect counters.
+        /// </summary>
+        /// <returns>The heartbeat.</returns>
+        internal HarborHeartbeat BuildHeartbeat()
+        {
+            long sequence;
+            long? lastRoundTrip;
+            lock (_HeartbeatLock)
+            {
+                _HeartbeatSequence++;
+                sequence = _HeartbeatSequence;
+                lastRoundTrip = _LastRoundTripMs;
+            }
+
+            return new HarborHeartbeat
+            {
+                LiveJobIds = SnapshotLiveJobs(),
+                Sequence = sequence,
+                LastRoundTripMs = lastRoundTrip,
+                ReconnectCount = _LinkStatistics.ReconnectCount,
+                LastReconnectUtc = _LinkStatistics.LastReconnectUtc
+            };
+        }
+
+        private void ResetHeartbeatTiming()
+        {
+            lock (_HeartbeatLock)
+            {
+                _HeartbeatSequence = 0;
+                _LastRoundTripMs = null;
+                _HeartbeatSentTimestamps.Clear();
+            }
+        }
+
+        private void RecordHeartbeatSent(long sequence)
+        {
+            lock (_HeartbeatLock)
+            {
+                _HeartbeatSentTimestamps[sequence] = _Time.GetTimestamp();
+
+                // Heartbeats the Admiral never acknowledged (an older Admiral, or a lost ack) must not pile up.
+                if (_HeartbeatSentTimestamps.Count > _MaxPendingHeartbeats)
+                {
+                    List<long> stale = new List<long>();
+                    foreach (long pending in _HeartbeatSentTimestamps.Keys)
+                        if (pending <= sequence - _MaxPendingHeartbeats) stale.Add(pending);
+                    foreach (long pending in stale) _HeartbeatSentTimestamps.Remove(pending);
+                }
+            }
+        }
+
+        private void RecordHeartbeatAck(long sequence)
+        {
+            lock (_HeartbeatLock)
+            {
+                if (!_HeartbeatSentTimestamps.TryGetValue(sequence, out long sent)) return;
+                _HeartbeatSentTimestamps.Remove(sequence);
+                _LastRoundTripMs = (long)Math.Round(_Time.GetElapsedTime(sent).TotalMilliseconds, MidpointRounding.AwayFromZero);
             }
         }
 

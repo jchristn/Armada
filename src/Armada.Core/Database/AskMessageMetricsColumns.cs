@@ -4,7 +4,7 @@ namespace Armada.Core.Database
     using Armada.Core.Models;
 
     /// <summary>
-    /// Maps the turn telemetry columns of <c>ask_messages</c> (migration v81: ttft_ms, first_text_ms, streaming_ms,
+    /// Maps the turn telemetry columns of <c>ask_messages</c> (migration v82: ttft_ms, first_text_ms, streaming_ms,
     /// tokens_per_second, input_tokens, output_tokens, cached_tokens, tokens_estimated, cost_usd, tool_call_count,
     /// tool_time_ms) to <see cref="AskMessage.Metrics"/>, identically for every database provider. The total time is the
     /// existing duration_ms column, and total tokens are derived (input plus output).
@@ -14,7 +14,7 @@ namespace Armada.Core.Database
         #region Public-Methods
 
         /// <summary>
-        /// Complete the metrics read from a row: null when the row has no telemetry (messages written before v81, user
+        /// Complete the metrics read from a row: null when the row has no telemetry (messages written before v82, user
         /// messages, cards), otherwise the stored values with the total time and total tokens filled in.
         /// </summary>
         /// <param name="stored">Values read from the telemetry columns.</param>

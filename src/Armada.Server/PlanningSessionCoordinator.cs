@@ -903,7 +903,8 @@ namespace Armada.Server
                     cachedTokens: telemetry.CachedTokens,
                     inputText: null,
                     outputText: assistantMessage.Content,
-                    token: CancellationToken.None).ConfigureAwait(false);
+                    token: CancellationToken.None,
+                    harborId: (runtime as RemoteAgentRuntime)?.HarborId).ConfigureAwait(false);
 
                 await _Database.PlanningSessionMessages.UpdateAsync(assistantMessage).ConfigureAwait(false);
                 BroadcastMessageUpdated(assistantMessage);

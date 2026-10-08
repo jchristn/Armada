@@ -155,6 +155,21 @@ namespace Armada.Core
         public static readonly string HarborIdPrefix = "hbr_";
 
         /// <summary>
+        /// Harbor job record ID prefix (one row per captain launch delegated to a Harbor).
+        /// </summary>
+        public static readonly string HarborJobIdPrefix = "hjb_";
+
+        /// <summary>
+        /// Harbor link-health sample ID prefix (one row per Harbor per minute of heartbeats).
+        /// </summary>
+        public static readonly string HarborLinkSampleIdPrefix = "hls_";
+
+        /// <summary>
+        /// Harbor link event ID prefix (connected, reconnecting, and disconnected transitions).
+        /// </summary>
+        public static readonly string HarborLinkEventIdPrefix = "hle_";
+
+        /// <summary>
         /// Memory (durable agent memory) ID prefix.
         /// </summary>
         public static readonly string MemoryIdPrefix = "mem_";

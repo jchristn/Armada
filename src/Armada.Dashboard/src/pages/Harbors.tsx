@@ -20,6 +20,7 @@ import DataTable, { type DataTableColumn } from '../components/shared/DataTable'
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import PageHeader from '../components/shared/PageHeader';
 import StatusBadge from '../components/shared/StatusBadge';
+import HarborMetricsPanel from '../components/harbors/HarborMetricsPanel';
 
 interface HarborForm {
   name: string;
@@ -48,8 +49,11 @@ export default function Harbors() {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<HarborForm>(EMPTY_FORM);
   const [detail, setDetail] = useState<{ open: boolean; harbor: Harbor | null }>({ open: false, harbor: null });
+  const [chartHarborId, setChartHarborId] = useState('');
 
   const canManage = isAdmin || isTenantAdmin;
+  // The page's chart section follows the chosen Harbor, or the first one listed.
+  const chartHarbor = harbors.find((h) => h.id === chartHarborId) ?? harbors[0] ?? null;
 
   function openCreate() {
     setEditing(null);
@@ -252,7 +256,7 @@ export default function Harbors() {
 
       {detail.open && detail.harbor && (
         <div className="modal-overlay" onClick={() => setDetail({ open: false, harbor: null })}>
-          <div className="modal modal-large" onClick={(e) => e.stopPropagation()}>
+          <div className="modal modal-large harbor-detail-modal" onClick={(e) => e.stopPropagation()}>
             <h3>{detail.harbor.name}</h3>
             <dl className="detail-list">
               <dt>{t('Status')}</dt>
@@ -276,6 +280,7 @@ export default function Harbors() {
                     ))}
               </dd>
             </dl>
+            <HarborMetricsPanel harborId={detail.harbor.id} />
             <div className="modal-actions">
               <button type="button" className="btn" onClick={() => setDetail({ open: false, harbor: null })}>{t('Close')}</button>
             </div>
@@ -327,6 +332,19 @@ export default function Harbors() {
         emptyMessage={emptyState}
         placeholder={harbors.length > 0 ? undefined : loading ? <p className="text-dim">{t('Loading...')}</p> : emptyState}
       />
+
+      {chartHarbor && (
+        <div className="harbor-metrics-page-section">
+          <div className="harbor-metrics-picker">
+            <label>{t('Charts for')}
+              <select aria-label={t('Harbor to chart')} value={chartHarbor.id} onChange={(e) => setChartHarborId(e.target.value)}>
+                {harbors.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
+              </select>
+            </label>
+          </div>
+          {!detail.open && <HarborMetricsPanel key={chartHarbor.id} harborId={chartHarbor.id} />}
+        </div>
+      )}
     </div>
   );
 }

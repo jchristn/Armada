@@ -1995,6 +1995,25 @@
       "experimental": true
     },
     {
+      "method": "GET",
+      "route": "/api/v1/harbors/{id}/metrics",
+      "auth": "Authenticated",
+      "resource": "Harbor:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "HarborMetrics",
+        "400": "",
+        "404": ""
+      },
+      "tags": [
+        "Experimental",
+        "Harbors"
+      ],
+      "summary": "[Experimental] Get a Harbor's metrics",
+      "experimental": true
+    },
+    {
       "method": "POST",
       "route": "/api/v1/harbors/{id}/probe",
       "auth": "TenantAdmin",
@@ -8429,6 +8448,25 @@
       "experimental": true
     },
     {
+      "name": "get_harbor_metrics",
+      "auth": "Authenticated",
+      "resource": "Harbor:Read",
+      "arguments": [
+        {
+          "name": "harborId",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "range",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "[Experimental] Charts for one Harbor over a window: jobs finished and failed per bucket (missions and other launches apart), slot usage (peak and average concurrent jobs against capacity), launch speed per runtime (median and p95 time to first output and total runtime), link health (connected, reconnecting, and down stretches and heartbeat round-trip times), and token usage by runtime and model. range is 1h (1-minute buckets), 24h (30-minute buckets, default), or 7d (3-hour buckets).",
+      "experimental": true
+    },
+    {
       "name": "get_memory",
       "auth": "Authenticated",
       "resource": "Memory:Read",
@@ -9716,6 +9754,11 @@
         },
         {
           "name": "fromUtc",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "harborId",
           "type": "string",
           "required": false
         },

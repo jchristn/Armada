@@ -345,6 +345,8 @@ namespace Armada.Harbor
             // Reads the live settings on every request, so repository edits apply without reconnecting.
             HarborDockManager dockManager = new HarborDockManager(() => _Settings.BuildDockSettings(), _Logging, executor);
             List<HarborCapability> capabilities = BuildCapabilities();
+            // One set of link counters across sessions, so heartbeats report this process's reconnects.
+            HarborLinkStatistics linkStatistics = new HarborLinkStatistics();
 
             while (!token.IsCancellationRequested)
             {
@@ -361,6 +363,7 @@ namespace Armada.Harbor
                         AppendLog,
                         jobRunner,
                         dockManager);
+                    client.LinkStatistics = linkStatistics;
                     _Client = client;
 
                     try
@@ -465,8 +468,11 @@ namespace Armada.Harbor
             Dispatcher.UIThread.Post(() =>
             {
                 _ActivityLog.Add(entry);
-                LogBox.Text = _ActivityLog.ToText();
-                LogBox.CaretIndex = LogBox.Text.Length;
+                string text = _ActivityLog.ToText();
+                LogBox.Text = text;
+                // Follow the newest line from its start: a caret at the very end also scrolls a long last line
+                // sideways, which cut the start off every line in view.
+                LogBox.CaretIndex = text.LastIndexOf('\n') + 1;
             });
         }
 

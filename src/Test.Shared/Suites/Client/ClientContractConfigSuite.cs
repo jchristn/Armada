@@ -128,7 +128,7 @@ namespace Test.Shared.Suites.Client
                 await c.DeleteWorkflowProfileAsync(createdWorkflow.Id);
             }));
 
-            cases.Add(Case("harbors_and_endpoints", "Harbor CRUD, enable and disable; model endpoint CRUD, validate, and health sweep", async (c, fx) =>
+            cases.Add(Case("harbors_and_endpoints", "Harbor CRUD, enable and disable, and metrics; model endpoint CRUD, validate, and health sweep", async (c, fx) =>
             {
                 string s = ClientContract.Suffix();
                 Harbor harbor = (await c.CreateHarborAsync(new Harbor { Name = "contract-harbor-" + s }))!;
@@ -137,6 +137,11 @@ namespace Test.Shared.Suites.Client
                 AssertTrue((await c.EnableHarborAsync(harbor.Id))?.Enabled ?? false, "enabled");
                 harbor.MaxConcurrentJobs = 3;
                 AssertEqual(3, (await c.UpdateHarborAsync(harbor.Id, harbor))?.MaxConcurrentJobs ?? 0, "update harbor");
+                HarborMetrics? metrics = await c.GetHarborMetricsAsync(harbor.Id, "1h");
+                AssertEqual(harbor.Id, metrics?.HarborId, "harbor metrics");
+                AssertEqual(60, metrics?.BucketCount ?? 0, "1h in 1-minute buckets");
+                AssertEqual(3, metrics?.Slots.MaxConcurrentJobs ?? 0, "capacity in the slot series");
+                AssertEqual("24h", (await c.GetHarborMetricsAsync(harbor.Id))?.Range, "24h by default");
                 await c.DeleteHarborAsync(harbor.Id);
 
                 ModelEndpoint endpoint = new ModelEndpoint();

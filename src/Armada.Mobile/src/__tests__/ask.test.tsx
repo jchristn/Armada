@@ -105,6 +105,29 @@ describe('Ask Armada', () => {
     expect(screen.getByTestId('ask-send')).toBeDisabled();
   });
 
+  it('the message box and the Send button share one height, and the hint stays on one line', async () => {
+    await renderAsk();
+    const layout = (height: number) => ({ nativeEvent: { layout: { x: 0, y: 0, width: 100, height } } });
+    const minHeight = (testID: string) => StyleSheet.flatten(screen.getByTestId(testID).props.style).minHeight;
+
+    // A Send button taller than the empty box (large text) raises the box to its height.
+    await act(async () => { fireEvent(screen.getByTestId('ask-send-wrap'), 'layout', layout(60)); });
+    expect(minHeight('ask-input')).toBe(60);
+    expect(minHeight('ask-send')).toBe(60);
+
+    // An empty box taller than the button raises the button to the box.
+    await act(async () => { fireEvent(screen.getByTestId('ask-input'), 'layout', layout(72)); });
+    expect(minHeight('ask-input')).toBe(72);
+    expect(minHeight('ask-send')).toBe(72);
+
+    // The hint is one line and goes away once something is typed; a long message does not raise the button.
+    expect(screen.getByTestId('ask-input-placeholder', { includeHiddenElements: true }).props.numberOfLines).toBe(1);
+    await fireEvent.changeText(screen.getByTestId('ask-input'), 'line one\nline two\nline three');
+    expect(screen.queryByTestId('ask-input-placeholder', { includeHiddenElements: true })).toBeNull();
+    await act(async () => { fireEvent(screen.getByTestId('ask-input'), 'layout', layout(120)); });
+    expect(minHeight('ask-send')).toBe(72);
+  });
+
   it('a server without captains says so and links to Captains instead of leaving Send silently disabled', async () => {
     api.listCaptains.mockResolvedValue({ objects: [] } as never);
     await renderAsk();

@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useSearchParams } from 'react-router-dom';
 import { getTokenUsage } from '../api/client';
 import type { TokenUsageSummaryResult } from '../types/models';
 import { useLocale } from '../context/LocaleContext';
@@ -38,6 +39,9 @@ function truncate(text: string, max: number): string {
 
 export default function TokenUsage() {
   const { t } = useLocale();
+  // ?harborId= (from a Harbor's charts) limits the page to captains run on that Harbor.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const harborId = searchParams.get('harborId') || '';
   const [timeRange, setTimeRange] = useState<TimeRangeValue>('day');
   const [metric, setMetric] = useState<Metric>('total');
   const [shape, setShape] = useState<Shape>('bars');
@@ -72,12 +76,12 @@ export default function TokenUsage() {
     const end = new Date();
     const start = new Date(end.getTime() - range.hours * 3600000);
     setLoading(true);
-    getTokenUsage({ fromUtc: start.toISOString(), toUtc: end.toISOString(), bucketMinutes: range.stepMinutes })
+    getTokenUsage({ fromUtc: start.toISOString(), toUtc: end.toISOString(), bucketMinutes: range.stepMinutes, harborId: harborId || undefined })
       .then((result) => { if (!cancelled) setData(result); })
       .catch(() => { if (!cancelled) setData(null); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [range.hours, range.stepMinutes, timeRange]);
+  }, [range.hours, range.stepMinutes, timeRange, harborId]);
 
   const bucketTimestamps = useMemo<number[]>(
     () => (data?.buckets || []).map(b => new Date(b.bucketStartUtc).getTime()),
@@ -149,8 +153,20 @@ export default function TokenUsage() {
   const modelBarX = labelW + 8, modelBarW = 800 - (labelW + 8) - valueW - 8;
   const modelChartHeight = titleBand + Math.max(1, byModel.length) * rowH + modelPadBot;
 
+  const clearHarbor = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete('harborId');
+    setSearchParams(next);
+  };
+
   return (
     <div className="token-usage-page">
+      {harborId && (
+        <div className="token-usage-filter-note">
+          <span>{t('Showing captains run on Harbor {{id}}', { id: harborId })}</span>
+          <button type="button" className="btn btn-sm" onClick={clearHarbor}>{t('Show all')}</button>
+        </div>
+      )}
       {/* Shared controls -- apply to both charts, live outside them. */}
       <div className="token-usage-controls">
         <div className="mission-history-time-tabs">

@@ -52,6 +52,11 @@ namespace Armada.Server.Mcp
         /// </summary>
         public string? CaptainId { get; set; } = null;
 
+        /// <summary>
+        /// Optional Harbor filter.
+        /// </summary>
+        public string? HarborId { get; set; } = null;
+
         #endregion
     }
 }

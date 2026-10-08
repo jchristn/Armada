@@ -69,6 +69,7 @@ namespace Armada.Server.Routes
                 .WithParameter(OpenApiParameterMetadata.Query("source", "Optional source filter (mission, chat, planning)", false))
                 .WithParameter(OpenApiParameterMetadata.Query("vesselId", "Optional vessel filter", false))
                 .WithParameter(OpenApiParameterMetadata.Query("captainId", "Optional captain filter", false))
+                .WithParameter(OpenApiParameterMetadata.Query("harborId", "Optional Harbor filter: usage of work that ran on this Harbor", false))
                 .WithParameter(OpenApiParameterMetadata.Query("tenantId", "Optional tenant filter (admin only)", false))
                 .WithParameter(OpenApiParameterMetadata.Query("userId", "Optional user filter (admin or tenant admin)", false))
                 .WithResponse(200, OpenApiJson.For<TokenUsageSummaryResult>("Token-usage summary"))
@@ -98,6 +99,7 @@ namespace Armada.Server.Routes
                 .WithParameter(OpenApiParameterMetadata.Query("source", "Optional source filter (mission, chat, planning)", false))
                 .WithParameter(OpenApiParameterMetadata.Query("vesselId", "Optional vessel filter", false))
                 .WithParameter(OpenApiParameterMetadata.Query("captainId", "Optional captain filter", false))
+                .WithParameter(OpenApiParameterMetadata.Query("harborId", "Optional Harbor filter: usage of work that ran on this Harbor", false))
                 .WithParameter(OpenApiParameterMetadata.Query("fromUtc", "Optional lower bound UTC timestamp", false))
                 .WithParameter(OpenApiParameterMetadata.Query("toUtc", "Optional upper bound UTC timestamp", false))
                 .WithResponse(200, OpenApiJson.For<EnumerationResult<TokenUsageRecord>>("Paginated token-usage records"))
@@ -167,6 +169,7 @@ namespace Armada.Server.Routes
             query.Source = NormalizeEmpty(req.Query.GetValueOrDefault("source"));
             query.VesselId = NormalizeEmpty(req.Query.GetValueOrDefault("vesselId"));
             query.CaptainId = NormalizeEmpty(req.Query.GetValueOrDefault("captainId"));
+            query.HarborId = NormalizeEmpty(req.Query.GetValueOrDefault("harborId"));
             query.TenantId = NormalizeEmpty(req.Query.GetValueOrDefault("tenantId"));
             query.UserId = NormalizeEmpty(req.Query.GetValueOrDefault("userId"));
 

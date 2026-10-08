@@ -19,8 +19,8 @@ namespace Armada.Harbor
         Repositories,
 
         /// <summary>
-        /// The Admiral server's settings (live through the API, or its settings.json file when it is on this computer).
+        /// The Admiral tab: the Admiral's own settings (live through the API, or its settings.json file when it is on this computer).
         /// </summary>
-        AdmiralServer
+        Admiral
     }
 }

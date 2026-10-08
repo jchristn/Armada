@@ -1627,6 +1627,65 @@ namespace Armada.Core.Database.SqlServer.Queries
                 ),
                 new SchemaMigration(
                     81,
+                    "Add Harbor metrics: harbor_jobs (one row per captain launch delegated to a Harbor), harbor_link_samples (per-minute heartbeat round trips and reconnects), harbor_link_events (link transitions), and harbor_id on token_usage",
+                    @"
+                    IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'harbor_jobs')
+                    CREATE TABLE harbor_jobs (
+                        id NVARCHAR(64) NOT NULL PRIMARY KEY,
+                        job_id NVARCHAR(64) NOT NULL,
+                        harbor_id NVARCHAR(64) NOT NULL,
+                        tenant_id NVARCHAR(64),
+                        kind NVARCHAR(32) NOT NULL,
+                        runtime NVARCHAR(64) NOT NULL,
+                        model NVARCHAR(256),
+                        mission_id NVARCHAR(64),
+                        captain_id NVARCHAR(64),
+                        launched_utc DATETIME2 NOT NULL,
+                        started_utc DATETIME2,
+                        first_output_utc DATETIME2,
+                        ended_utc DATETIME2,
+                        time_to_first_output_ms BIGINT,
+                        duration_ms BIGINT,
+                        exit_code INT,
+                        outcome NVARCHAR(32) NOT NULL,
+                        stop_requested BIT NOT NULL CONSTRAINT DF_harbor_jobs_stop_requested DEFAULT 0,
+                        created_utc DATETIME2 NOT NULL,
+                        last_update_utc DATETIME2 NOT NULL
+                    );",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_harbor_jobs_job') CREATE INDEX idx_harbor_jobs_job ON harbor_jobs(job_id);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_harbor_jobs_harbor_launched') CREATE INDEX idx_harbor_jobs_harbor_launched ON harbor_jobs(harbor_id, launched_utc);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_harbor_jobs_ended') CREATE INDEX idx_harbor_jobs_ended ON harbor_jobs(ended_utc);",
+                    @"
+                    IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'harbor_link_samples')
+                    CREATE TABLE harbor_link_samples (
+                        id NVARCHAR(64) NOT NULL PRIMARY KEY,
+                        harbor_id NVARCHAR(64) NOT NULL,
+                        bucket_start_utc DATETIME2 NOT NULL,
+                        heartbeat_count INT NOT NULL CONSTRAINT DF_harbor_link_samples_heartbeat_count DEFAULT 0,
+                        round_trip_count INT NOT NULL CONSTRAINT DF_harbor_link_samples_round_trip_count DEFAULT 0,
+                        round_trip_total_ms BIGINT NOT NULL CONSTRAINT DF_harbor_link_samples_round_trip_total_ms DEFAULT 0,
+                        round_trip_max_ms BIGINT,
+                        reconnect_count INT,
+                        last_reconnect_utc DATETIME2,
+                        created_utc DATETIME2 NOT NULL
+                    );",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_harbor_link_samples_harbor_bucket') CREATE INDEX idx_harbor_link_samples_harbor_bucket ON harbor_link_samples(harbor_id, bucket_start_utc);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_harbor_link_samples_bucket') CREATE INDEX idx_harbor_link_samples_bucket ON harbor_link_samples(bucket_start_utc);",
+                    @"
+                    IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'harbor_link_events')
+                    CREATE TABLE harbor_link_events (
+                        id NVARCHAR(64) NOT NULL PRIMARY KEY,
+                        harbor_id NVARCHAR(64) NOT NULL,
+                        event_type NVARCHAR(32) NOT NULL,
+                        occurred_utc DATETIME2 NOT NULL,
+                        detail NVARCHAR(1024)
+                    );",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_harbor_link_events_harbor_occurred') CREATE INDEX idx_harbor_link_events_harbor_occurred ON harbor_link_events(harbor_id, occurred_utc);",
+                    @"IF COL_LENGTH('token_usage', 'harbor_id') IS NULL ALTER TABLE token_usage ADD harbor_id NVARCHAR(64) NULL;",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_token_usage_harbor_created') CREATE INDEX idx_token_usage_harbor_created ON token_usage(harbor_id, created_utc);"
+                ),
+                new SchemaMigration(
+                    82,
                     "Add Ask turn telemetry to ask_messages: ttft_ms, first_text_ms, streaming_ms, tokens_per_second, input_tokens, output_tokens, cached_tokens, tokens_estimated, cost_usd, tool_call_count, and tool_time_ms (all nullable)",
                     @"IF COL_LENGTH('ask_messages', 'ttft_ms') IS NULL ALTER TABLE ask_messages ADD ttft_ms FLOAT NULL;",
                     @"IF COL_LENGTH('ask_messages', 'first_text_ms') IS NULL ALTER TABLE ask_messages ADD first_text_ms FLOAT NULL;",

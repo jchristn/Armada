@@ -692,7 +692,8 @@ namespace Armada.Server
                     cachedTokens: telemetry.CachedTokens,
                     inputText: prompt,
                     outputText: reply,
-                    token: token).ConfigureAwait(false);
+                    token: token,
+                    harborId: remoteRuntime?.HarborId).ConfigureAwait(false);
 
                 _Logging.Debug(_Header + "chat turn for captain " + captainId + " (" + captain.Runtime + "): " +
                     (response.Metrics.TotalMs?.ToString("F0") ?? "?") + "ms, exit " + (exitCode?.ToString() ?? "?"));

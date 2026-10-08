@@ -80,6 +80,9 @@ namespace Armada.Core.Database.SqlServer
             CliPermissionRequests = new CliPermissionRequestMethods(this, _Settings, _Logging);
             CliPermissionRules = new CliPermissionRuleMethods(this, _Settings, _Logging);
             PushDevices = new PushDeviceMethods(this, _Settings, _Logging);
+            HarborJobs = new HarborJobMethods(this, _Settings, _Logging);
+            HarborLinkSamples = new HarborLinkSampleMethods(this, _Settings, _Logging);
+            HarborLinkEvents = new HarborLinkEventMethods(this, _Settings, _Logging);
             FleetActions = new FleetActionMethods(this, _Settings, _Logging);
             FleetActionRuns = new FleetActionRunMethods(this, _Settings, _Logging);
             FleetActionRunTargets = new FleetActionRunTargetMethods(this, _Settings, _Logging);

@@ -194,7 +194,7 @@ namespace Test.Shared.Suites.Database
                 AssertEqual(0, afterRead!.UnreadCount, "unread reset");
             }));
 
-            cases.Add(CaseAsync("message_turn_metrics_roundtrip", "A reply's turn telemetry (migration 81) round-trips through create, update, read, and enumerate", TestTags.Positive, async () =>
+            cases.Add(CaseAsync("message_turn_metrics_roundtrip", "A reply's turn telemetry (migration 82) round-trips through create, update, read, and enumerate", TestTags.Positive, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
                 DatabaseDriver db = testDb.Driver;

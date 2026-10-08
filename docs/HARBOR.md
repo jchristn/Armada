@@ -102,7 +102,7 @@ The app has three windows, and every entry point opens the same ones:
   Copy, Clear, and All Logs; consecutive heartbeats collapse into one line with a count). **Dashboard**, **Status**, and
   **Settings** are in the header. Closing the window keeps Harbor running in the tray.
 - **Armada Harbor - Status**, with an **Overview** tab and a **Logs** tab.
-- **Armada Harbor - Settings**, with **General**, **Repositories**, and **Admiral server** tabs.
+- **Armada Harbor - Settings**, with **General**, **Repositories**, and **Admiral** tabs.
 
 The menus are in the macOS menu bar while a Harbor window is in front (the app menu is **Armada Harbor**); on Windows
 and Linux they are in a menu bar at the top of each Harbor window. The tray (menu bar) icon offers the windows and the
@@ -130,7 +130,26 @@ The Settings window:
 |---|---|
 | **General** | This machine's Harbor settings in `~/.armada-harbor/settings.json`: name and id, the connection to the Admiral (address, dashboard address, access key, secret, tenant and user ids), work (jobs at once, tools offered, heartbeat), and the color scheme (follow the system, light, or dark; applied at once and kept on Save). Save validates the values, writes the file atomically keeping the previous version as `settings.json.bak-<timestamp>`, and reconnects the link when a connection setting changed. |
 | **Repositories** | Where this machine keeps vessel checkouts and mission docks (see [Where docks live](#dock-affinity-and-routing)): **Vessel checkouts** (a vessel name or ID and its checkout folder, which must contain `.git`), **Root folders** searched for checkouts by remote URL, the **Docks folder** (default `~/.armada-harbor/docks`, not inside a checkout), and the **Clones folder** (default `~/.armada-harbor/repos`). Saved in `settings.json` as `Repositories`, `RepositoryRoots`, `DocksDirectory`, and `ReposDirectory`; validated on save and applied to new missions without reconnecting. |
-| **Admiral server** | The Admiral's own settings, not this machine's. **Change live**: the common Admiral settings (captain limits, heartbeat and stall timing, planning-session timeouts, landing mode, ports), read from and applied to the running Admiral through `GET`/`PUT /api/v1/settings`, so they take effect at once (ports after a restart). **Edit file (settings.json)**, when the Admiral is on this machine: its whole `settings.json` as JSON. Save refuses text the Admiral would not load (with the line and column of a syntax error, or the setting that is out of range), asks before overwriting a file that changed on disk, and keeps the previous version as a backup. The Admiral reads this file only at startup, so the tab offers **Restart Admiral** after a save. Until it restarts, a settings change made from the dashboard or Change live rewrites the file from the running settings and discards edits made here. |
+| **Admiral** | The Admiral's own settings, not this machine's. **Change live**: the common Admiral settings (captain limits, heartbeat and stall timing, planning-session timeouts, landing mode, ports), read from and applied to the running Admiral through `GET`/`PUT /api/v1/settings`, so they take effect at once (ports after a restart). **Edit file (settings.json)**, when the Admiral is on this machine: its whole `settings.json` as JSON. Save refuses text the Admiral would not load (with the line and column of a syntax error, or the setting that is out of range), asks before overwriting a file that changed on disk, and keeps the previous version as a backup. The Admiral reads this file only at startup, so the tab offers **Restart Admiral** after a save. Until it restarts, a settings change made from the dashboard or Change live rewrites the file from the running settings and discards edits made here. **Restart Admiral** requires administrator privileges (see below). |
+
+**IDs and URLs.** Every ID Harbor shows (the Harbor ID, mission, captain, and job IDs in Running now and Logs, tenant
+and user IDs in General, and the Harbor ID in Status and About) is in a fixed-width font with a copy button beside it;
+the button copies the ID and turns into a green check for about a second and a half. Every URL field (the Admiral
+address and dashboard address in General, the Admiral address, MCP URL, and REST address in Status, and the link URL
+in About) has a **Validate** button. It tests the URL from this computer, one stage at a time: DNS (skipped for an IP
+address), the TCP connection, TLS for `https://` and `wss://` (the certificate must be trusted and match the host),
+then an HTTP `GET` for `http(s)://` or a WebSocket upgrade for `ws(s)://`. It shows each stage with its time and a
+success or failure reason (for example "Connection refused ... nothing is listening on that port"). It never sends
+credentials: no access key, secret, API key, or cookie, and a user name or password in the URL is ignored. A server
+that answers 401 or 403 is reported as reachable and asking for credentials. The test gives up after 10 seconds, and
+Cancel stops it. The probe is `Armada.Core.Connectivity.UrlProbe`.
+
+**Restarting the Admiral requires an administrator.** Restart Admiral sends `POST /api/v1/server/restart`, which the
+Admiral allows only for a global administrator (the local API key, or a user with `IsAdmin`); a tenant administrator or
+an ordinary user gets 403 and nothing restarts. Harbor asks the Admiral up front (`GET /api/v1/whoami`) who its
+credential belongs to: when it is not an administrator, or the Admiral cannot be reached, the button is disabled and
+the reason is shown under it. The confirmation says "This operation requires administrator privileges", and Harbor
+checks again just before sending the request.
 
 **Restore Previous Version.** General and the Admiral's settings file each have **Restore Previous Version...**, which
 lists the kept versions of that file (newest first, with when each was replaced) and, after you confirm, puts the
@@ -178,9 +197,10 @@ that turns split mode on or off. Whenever at least one Harbor is connected, each
 `harbor.defaultMaxJobsPerHarbor` (4) is the capacity given to a Harbor that registers through its handshake without
 advertising `maxConcurrentJobs` (omitted, or not positive); an existing registration keeps its capacity in that case.
 The Harbor app always advertises its `MaxConcurrentJobs`, so the default matters only for other link clients.
-`harbor.heartbeatIntervalSeconds` (15) and `harbor.heartbeatTimeoutSeconds` (45) are reserved: accepted and validated
-but not enforced in 1.0. A Harbor is marked `Disconnected` when its link closes, not on a missed heartbeat, and nothing
-marks a Harbor `Degraded`.
+`harbor.heartbeatIntervalSeconds` (15) is reserved: accepted and validated but not read in 1.0.
+`harbor.heartbeatTimeoutSeconds` (45) is not a liveness check either: a Harbor is marked `Disconnected` when its link
+closes, not on a missed heartbeat, and nothing marks a Harbor `Degraded`. It is how long a closed link counts as
+reconnecting in the [Harbor metrics](#harbor-metrics) link timeline before it counts as down.
 
 ## Managing Harbors
 
@@ -193,12 +213,51 @@ connected Harbor over its link -- and are documented with request and response s
 everything else (`connectionStatus`, `lastSeenUtc`, `protocolVersion`, `osPlatform`, `architecture`) is
 reported by the link and preserved server-side.
 
-Over MCP, the tools are `get_harbor`, `create_harbor`, `update_harbor`, `delete_harbor`, and
+Over MCP, the tools are `get_harbor`, `get_harbor_metrics`, `create_harbor`, `update_harbor`, `delete_harbor`, and
 `set_harbor_enabled`, and the `enumerate` tool accepts an entityType of `harbors` for paginated browsing.
 See [MCP_API.md](MCP_API.md) for the tool schemas.
 
 Disabling a Harbor is a soft off-switch: it keeps its docks and any running work, but the router stops
-sending it new missions. Deleting a Harbor removes the registration entirely.
+sending it new missions. Deleting a Harbor removes the registration entirely, with its metrics.
+
+## Harbor metrics
+
+The Admiral keeps the numbers behind each Harbor's charts, so the dashboard, the mobile app, and any `Armada.Client`
+consumer show the same data. `GET /api/v1/harbors/{id}/metrics?range=1h|24h|7d` (MCP `get_harbor_metrics`,
+`ArmadaClient.GetHarborMetricsAsync`) returns, over one set of buckets (1h in 1-minute buckets, 24h in 30-minute
+buckets, the default, and 7d in 3-hour buckets, aligned to the UTC clock and ending with the bucket that holds now):
+
+| Series | What it shows | Source |
+|---|---|---|
+| `jobs` | Jobs finished and failed per bucket, by when they ended, with missions apart from every other launch (Ask turns and captain chat, planning, refinement, context builds). Succeeded and Stopped count as finished; Failed and Lost as failed. Also the number running now. | `harbor_jobs` |
+| `slots` | Peak and time-weighted average of concurrent jobs per bucket, against the Harbor's `maxConcurrentJobs`. A job holds a slot from its start until it ends. | `harbor_jobs` |
+| `launchSpeed` | Per runtime, over the jobs that ended in the window: count, median and p95 time to first output, median and p95 total runtime, and the median time to first output per bucket (a sparkline). | `harbor_jobs` |
+| `link` | A timeline of `Connected`, `Reconnecting`, `Down`, and `Unknown` stretches, the share of time connected, link drops in the window, heartbeat round trip per bucket (average and largest) and its median, and the reconnect count and last reconnect the Harbor reported. | `harbor_link_events`, `harbor_link_samples` |
+| `tokens` | Tokens per bucket and over the window by runtime and model, for captains that ran on this Harbor. Armada records token counts, not prices, so there is no cost series. | `token_usage` rows with this `harbor_id` |
+
+How the Admiral records them:
+
+- **Jobs.** Every captain launch the Admiral sends to a Harbor gets a `harbor_jobs` row: kind (`Mission`, `AskTurn`,
+  `Planning`, `Refinement`, `ContextBuild`, `Other`), runtime, model, mission, and captain, with the launch time. The
+  row is updated when the Harbor reports `started` and `exited` (exit code, the Harbor's measured runtime and time to
+  first output) or an `error` for the job (a refused launch fails). A job the Admiral asked to stop counts as Stopped.
+  A job launched over an earlier link that the Harbor no longer lists in its first heartbeat after a reconnect is Lost.
+- **Link.** Heartbeats report the round trip of the previous heartbeat and the Harbor's reconnect counters (see
+  [Link health in heartbeats](HARBOR_PROTOCOL.md#link-health-in-heartbeats)); the Admiral writes one sample per Harbor
+  per minute. A closed link counts as reconnecting for `harbor.heartbeatTimeoutSeconds` and as down after that. A Harbor
+  that predates the link-health fields still gets the timeline, but no round trips or reconnect counts.
+- **Tokens.** Token-usage records carry `harborId` for mission runs, captain chat and Ask turns, and planning turns that
+  ran on a Harbor. The Token Usage APIs (`GET /api/v1/token-usage/summary`, `GET /api/v1/token-usage`, MCP
+  `token_usage_summary`) filter by `harborId`, and the dashboard's Token Usage page takes `?harborId=`.
+
+Anyone who can read a Harbor can read its metrics (the same tenant scoping as `GET /api/v1/harbors/{id}`). Token usage
+follows the token-usage rules: an admin, a tenant admin, or the Harbor's owner sees every record on the Harbor in the
+tenant; another user sees only their own. Harbor metrics follow `retention.jobRetentionDays` (default 30 days; 0 keeps
+them): job records that ended, minute samples, and link events older than that are pruned, keeping each Harbor's latest
+link event so its timeline still knows the state it opens with. The 7d range needs at least 7 days of retention.
+
+The dashboard shows the charts on the Harbors page (pick a Harbor below the table) and in a Harbor's detail view, with
+a 1h/24h/7d selector; the mobile app shows them on the Harbor detail screen.
 
 ## Dock affinity and routing
 

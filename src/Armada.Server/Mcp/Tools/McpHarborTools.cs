@@ -23,8 +23,37 @@ namespace Armada.Server.Mcp.Tools
         /// </summary>
         /// <param name="register">Tool registration delegate.</param>
         /// <param name="harbors">Harbor service.</param>
-        public static void Register(RegisterToolDelegate register, HarborService harbors)
+        /// <param name="metrics">Harbor metrics service, for get_harbor_metrics (optional; without it the tool is not registered).</param>
+        public static void Register(RegisterToolDelegate register, HarborService harbors, HarborMetricsService? metrics = null)
         {
+            if (metrics != null)
+            {
+                register(
+                    "get_harbor_metrics",
+                    "Charts for one Harbor over a window: jobs finished and failed per bucket (missions and other launches apart), slot usage (peak and average concurrent jobs against capacity), launch speed per runtime (median and p95 time to first output and total runtime), link health (connected, reconnecting, and down stretches and heartbeat round-trip times), and token usage by runtime and model. range is 1h (1-minute buckets), 24h (30-minute buckets, default), or 7d (3-hour buckets).",
+                    new
+                    {
+                        type = "object",
+                        properties = new
+                        {
+                            harborId = new { type = "string", description = "Harbor ID (hbr_ prefix)" },
+                            range = new { type = "string", description = "Window: 1h, 24h (default), or 7d", @enum = new[] { "1h", "24h", "7d" } }
+                        },
+                        required = new[] { "harborId" }
+                    },
+                    async (args) =>
+                    {
+                        HarborMetricsArgs request = JsonSerializer.Deserialize<HarborMetricsArgs>(args!.Value, _JsonOptions)
+                            ?? throw new InvalidOperationException("Could not deserialize HarborMetricsArgs.");
+                        if (!Armada.Core.Metrics.HarborMetricsRanges.TryParse(request.Range, out Armada.Core.Enums.HarborMetricsRangeEnum range))
+                            return (object)McpToolError.InvalidArgument("range must be 1h, 24h, or 7d.");
+                        AuthContext auth = McpToolHelpers.ResolveCallerContext();
+                        HarborMetrics? result = await metrics.GetAsync(auth, request.HarborId, range).ConfigureAwait(false);
+                        if (result == null) return (object)McpToolError.NotFound("Harbor not found");
+                        return (object)result;
+                    });
+            }
+
             register(
                 "get_harbor",
                 "Inspect one registered Harbor (host runner) by ID, including its advertised capabilities and connection status.",

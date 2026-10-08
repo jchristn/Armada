@@ -74,6 +74,9 @@ namespace Armada.Core.Database.Mysql
             CliPermissionRequests = new CliPermissionRequestMethods(_ConnectionString);
             CliPermissionRules = new CliPermissionRuleMethods(_ConnectionString);
             PushDevices = new PushDeviceMethods(_ConnectionString);
+            HarborJobs = new HarborJobMethods(_ConnectionString);
+            HarborLinkSamples = new HarborLinkSampleMethods(_ConnectionString);
+            HarborLinkEvents = new HarborLinkEventMethods(_ConnectionString);
             FleetActions = new FleetActionMethods(_ConnectionString);
             FleetActionRuns = new FleetActionRunMethods(_ConnectionString);
             FleetActionRunTargets = new FleetActionRunTargetMethods(_ConnectionString);
@@ -729,8 +732,13 @@ namespace Armada.Core.Database.Mysql
                 ),
                 new SchemaMigration(
                     81,
-                    "Add Ask turn telemetry to ask_messages: ttft_ms, first_text_ms, streaming_ms, tokens_per_second, input_tokens, output_tokens, cached_tokens, tokens_estimated, cost_usd, tool_call_count, and tool_time_ms (all nullable)",
+                    "Add Harbor metrics: harbor_jobs (one row per captain launch delegated to a Harbor), harbor_link_samples (per-minute heartbeat round trips and reconnects), harbor_link_events (link transitions), and harbor_id on token_usage",
                     TableQueries.MigrationV81Statements
+                ),
+                new SchemaMigration(
+                    82,
+                    "Add Ask turn telemetry to ask_messages: ttft_ms, first_text_ms, streaming_ms, tokens_per_second, input_tokens, output_tokens, cached_tokens, tokens_estimated, cost_usd, tool_call_count, and tool_time_ms (all nullable)",
+                    TableQueries.MigrationV82Statements
                 )
             };
         }

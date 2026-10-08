@@ -2556,6 +2556,122 @@ export interface Harbor {
   lastUpdateUtc: string;
 }
 
+export type HarborMetricsRange = '1h' | '24h' | '7d';
+export type HarborLinkSegmentState = 'Unknown' | 'Connected' | 'Reconnecting' | 'Down';
+
+export interface HarborJobBucket {
+  bucketStartUtc: string;
+  missionsFinished: number;
+  missionsFailed: number;
+  interactiveFinished: number;
+  interactiveFailed: number;
+}
+
+export interface HarborJobMetrics {
+  buckets: HarborJobBucket[];
+  missionsFinished: number;
+  missionsFailed: number;
+  interactiveFinished: number;
+  interactiveFailed: number;
+  running: number;
+}
+
+export interface HarborConcurrencyBucket {
+  bucketStartUtc: string;
+  peak: number;
+  average: number;
+}
+
+export interface HarborSlotMetrics {
+  maxConcurrentJobs: number;
+  buckets: HarborConcurrencyBucket[];
+  peak: number;
+  average: number;
+}
+
+export interface HarborLaunchSpeed {
+  runtime: string;
+  jobCount: number;
+  firstOutputCount: number;
+  firstOutputMedianMs: number | null;
+  firstOutputP95Ms: number | null;
+  durationCount: number;
+  durationMedianMs: number | null;
+  durationP95Ms: number | null;
+  firstOutputMedianMsByBucket: (number | null)[];
+}
+
+export interface HarborLinkSegment {
+  state: HarborLinkSegmentState;
+  startUtc: string;
+  endUtc: string;
+}
+
+export interface HarborRoundTripBucket {
+  bucketStartUtc: string;
+  heartbeatCount: number;
+  sampleCount: number;
+  averageMs: number | null;
+  maxMs: number | null;
+}
+
+export interface HarborLinkMetrics {
+  segments: HarborLinkSegment[];
+  roundTrip: HarborRoundTripBucket[];
+  connectedPercent: number | null;
+  disconnects: number;
+  reconnectCount: number | null;
+  lastReconnectUtc: string | null;
+  roundTripMedianMs: number | null;
+}
+
+export interface HarborTokenSeries {
+  runtime: string;
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  cachedTokens: number;
+  totalTokens: number;
+}
+
+export interface HarborTokenBucket {
+  bucketStartUtc: string;
+  inputTokens: number;
+  outputTokens: number;
+  cachedTokens: number;
+  totalTokens: number;
+  series: HarborTokenSeries[];
+}
+
+export interface HarborTokenMetrics {
+  buckets: HarborTokenBucket[];
+  series: HarborTokenSeries[];
+  inputTokens: number;
+  outputTokens: number;
+  cachedTokens: number;
+  totalTokens: number;
+  recordCount: number;
+  estimatedCount: number;
+}
+
+/** GET /api/v1/harbors/{id}/metrics: every series shares the same buckets (fromUtc, bucketMinutes, bucketCount). */
+export interface HarborMetrics {
+  harborId: string;
+  harborName: string;
+  range: HarborMetricsRange;
+  fromUtc: string;
+  toUtc: string;
+  bucketMinutes: number;
+  bucketCount: number;
+  generatedUtc: string;
+  connectionStatus: HarborConnectionStatus;
+  jobs: HarborJobMetrics;
+  slots: HarborSlotMetrics;
+  launchSpeed: HarborLaunchSpeed[];
+  link: HarborLinkMetrics;
+  tokens: HarborTokenMetrics;
+}
+
 export type ModelEndpointKind = 'Embedding' | 'Inference';
 export type ModelProvider = 'Ollama' | 'OpenAI' | 'OpenAICompatible' | 'Anthropic' | 'Gemini' | 'VoyageAI' | 'AzureOpenAI' | 'VertexAI' | 'Bedrock';
 export type EndpointHealthStatus = 'Unknown' | 'Healthy' | 'Unhealthy';
