@@ -284,7 +284,21 @@ namespace Armada.Tui.Widgets
 
                 if (CanTakeFocus(_Children[i]))
                 {
-                    if (i == _Index) return false;
+                    if (i == _Index)
+                    {
+                        // Wrapped around to the child that already has focus: the only stop of a wrapping scope (the
+                        // shell when the sidebar and the dock are hidden, as at 80 columns). When it is a container,
+                        // Tab past its last stop re-enters it at its first (Shift+Tab: last), so traversal cycles
+                        // instead of sticking on the last stop.
+                        if (_Children[i] is IFocusContainer only)
+                        {
+                            only.FocusEdge(forward);
+                            return true;
+                        }
+
+                        return false;
+                    }
+
                     SetIndex(i);
                     // Enter a container at its first (or, going back, last) stop all the way down, so Tab and Shift+Tab
                     // retrace the same stops (TUIKit's IFocusContainer.FocusEdge).

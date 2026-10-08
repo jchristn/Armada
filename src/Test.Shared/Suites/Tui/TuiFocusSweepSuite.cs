@@ -369,7 +369,7 @@ namespace Test.Shared.Suites.Tui
         /// <param name="label">Route label for problems.</param>
         /// <param name="problems">Problems found.</param>
         /// <returns>1 when the route was audited, 0 when it was skipped.</returns>
-        private static int Audit(TuiTestHost host, string label, List<string> problems)
+        internal static int Audit(TuiTestHost host, string label, List<string> problems)
         {
             if (label.StartsWith("/vessels/import", StringComparison.Ordinal)) return 0;
             host.StartApp();

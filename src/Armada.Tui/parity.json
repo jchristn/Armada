@@ -2141,7 +2141,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.GetHarborMetricsAsync",
       "workstream": "W0.2",
-      "notes": "Harbors (host runners); client method only, the TUI Harbor charts are phase 2"
+      "notes": "Harbors (host runners) | used by HarborsScreen (Activity panel: jobs, slots, link strip, launch speed, tokens; r range, u Token Usage)"
     },
     {
       "kind": "api",
@@ -2429,7 +2429,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.GetTokenUsageAsync",
       "workstream": "W0.2",
-      "notes": "Missions | used by TokenUsageScreen"
+      "notes": "Missions | used by TokenUsageScreen (harborId filter from the Harbors screen, x clears it)"
     },
     {
       "kind": "api",

@@ -14,6 +14,7 @@ namespace Armada.Tui.Screens.Entities
     using Armada.Tui.Widgets;
     using TUIKit;
     using TUIKit.Input;
+    using TUIKit.Widgets;
 
     /// <summary>
     /// Base for the delivery and configuration list screens (the dashboard's list pages): an overview strip (KPIs), a
@@ -94,6 +95,7 @@ namespace Armada.Tui.Screens.Entities
 
         #region Private-Members
 
+        private const int _MinGridRows = 4;
         private bool _Built = false;
         private int _LoadCount = 0;
         private int _KpiGeneration = 0;
@@ -287,6 +289,30 @@ namespace Armada.Tui.Screens.Entities
                 SurfaceText.Draw(surface, 0, top, T(Notice!), Theme.Muted, width);
             }
 
+            IWidget? panel = DetailPanel;
+            if (panel != null && RegionStack.IsRegion(panel))
+            {
+                // A panel under the grid (the selected record's charts): its own focus region, with at least a few grid
+                // rows kept above it.
+                int left = stack.Remaining;
+                int panelRows = DetailPanelRows(width, left);
+                int gridRows = left - stack.Cost(Grid, 0) - 1 - panelRows;
+                if (gridRows < _MinGridRows)
+                {
+                    panelRows -= _MinGridRows - gridRows;
+                    gridRows = _MinGridRows;
+                }
+
+                if (panelRows >= 1)
+                {
+                    Rect above = stack.Place(Grid, gridRows);
+                    if (above.Height >= 2) Scope.RenderChild(surface, Grid, above);
+                    Rect below = stack.Fill(panel);
+                    if (below.Height >= 1) Scope.RenderChild(surface, panel, below);
+                    return;
+                }
+            }
+
             Rect grid = stack.Fill(Grid);
             if (grid.Height >= 2) Scope.RenderChild(surface, Grid, grid);
         }
@@ -294,6 +320,25 @@ namespace Armada.Tui.Screens.Entities
         #endregion
 
         #region Protected-Methods
+
+        /// <summary>
+        /// A panel shown under the grid (a focus region, added with <c>AddChild</c> after the grid), or null for none.
+        /// </summary>
+        protected virtual IWidget? DetailPanel
+        {
+            get { return null; }
+        }
+
+        /// <summary>
+        /// Rows to give <see cref="DetailPanel"/> out of the rows left under the filters (the grid keeps at least a few).
+        /// </summary>
+        /// <param name="width">Width.</param>
+        /// <param name="rowsLeft">Rows left for the grid and the panel.</param>
+        /// <returns>Rows.</returns>
+        protected virtual int DetailPanelRows(int width, int rowsLeft)
+        {
+            return 0;
+        }
 
         /// <summary>
         /// Stable id of a row.
