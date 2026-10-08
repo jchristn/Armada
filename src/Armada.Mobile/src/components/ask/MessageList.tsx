@@ -183,6 +183,9 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(funct
       onScroll={onScroll}
       scrollEventThrottle={64}
       onContentSizeChange={() => { if (stickRef.current) listRef.current?.scrollToEnd({ animated: false }); }}
+      // The viewport shrinks when the keyboard opens (and in landscape): a transcript following the newest message
+      // keeps its end in view, or a reply that arrived just before the keyboard finished opening sat under it.
+      onLayout={() => { if (stickRef.current) listRef.current?.scrollToEnd({ animated: false }); }}
       maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="interactive"
