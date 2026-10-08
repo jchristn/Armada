@@ -31,6 +31,15 @@ namespace Armada.Core.Services
             CancellationToken token);
 
         /// <summary>
+        /// The directory a launch request runs in on this host: the requested working directory, or the per-job scratch
+        /// directory when the request allows one and names no directory that exists here. Null when the request names
+        /// no working directory and does not allow scratch (such a launch is refused).
+        /// </summary>
+        /// <param name="request">The launch request from the Admiral.</param>
+        /// <returns>The directory the job runs in, or null.</returns>
+        string? ResolveWorkingDirectory(HarborLaunchRequest request);
+
+        /// <summary>
         /// Stop a running job, allowing a graceful window before a forced kill of the process tree.
         /// </summary>
         /// <param name="jobId">Job identifier to stop.</param>

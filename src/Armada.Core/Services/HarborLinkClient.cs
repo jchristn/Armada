@@ -212,7 +212,7 @@ namespace Armada.Core.Services
             if (message is HarborGitRequest git)
             {
                 Log(HarborLogDirection.In, "Work: " + git.Executable + " " + String.Join(" ", git.Arguments)
-                    + (String.IsNullOrEmpty(git.WorkingDirectory) ? "" : " (in " + git.WorkingDirectory + ")")
+                    + (String.IsNullOrEmpty(git.WorkingDirectory) ? " (in the Harbor's current directory)" : " (in " + git.WorkingDirectory + ")")
                     + " [req " + git.RequestId + "]");
 
                 HostCommandResult result = await _CommandExecutor.RunAsync(new HostCommandRequest
@@ -277,7 +277,7 @@ namespace Armada.Core.Services
                 Armed = armed,
                 Message = armed ? null : "Launch executable not found: " + deferred.LaunchExePath
             });
-            Log(HarborLogDirection.Out, "Deferred launch " + (armed ? "armed" : "declined") + " [req " + deferred.RequestId + "]");
+            Log(HarborLogDirection.Out, "Deferred launch " + (armed ? "armed" : "declined (launch executable not found: " + deferred.LaunchExePath + ")") + " [req " + deferred.RequestId + "]");
 
             if (!armed) return;
 
@@ -387,7 +387,7 @@ namespace Armada.Core.Services
 
         private async Task HandleLaunchAsync(HarborLaunchRequest launch, CancellationToken token)
         {
-            Log(HarborLogDirection.In, "Launch job " + launch.JobId + " (runtime " + launch.Runtime + ") in " + launch.WorkingDirectory);
+            Log(HarborLogDirection.In, "Launch job " + launch.JobId + " (runtime " + launch.Runtime + ") " + DescribeLaunchDirectory(launch));
 
             if (_JobRunner == null)
             {
@@ -515,6 +515,24 @@ namespace Armada.Core.Services
         private List<string> SnapshotLiveJobs()
         {
             lock (_JobLock) { return new List<string>(_LiveJobs); }
+        }
+
+        /// <summary>
+        /// Describe where a launch runs on this host, for the activity log: the requested working directory, the per-job
+        /// scratch directory the job runner creates (naming the requested path when it does not exist here), or that the
+        /// request names no working directory.
+        /// </summary>
+        private string DescribeLaunchDirectory(HarborLaunchRequest launch)
+        {
+            string requested = launch.WorkingDirectory ?? String.Empty;
+            string? resolved = _JobRunner != null ? _JobRunner.ResolveWorkingDirectory(launch) : (String.IsNullOrWhiteSpace(requested) ? null : requested);
+            if (String.IsNullOrWhiteSpace(resolved))
+                return "with no working directory";
+            if (String.Equals(resolved, requested, StringComparison.Ordinal))
+                return "in " + resolved;
+            if (String.IsNullOrWhiteSpace(requested))
+                return "in scratch directory " + resolved;
+            return "in scratch directory " + resolved + " (requested " + requested + " does not exist on this host)";
         }
 
         private void Log(HarborLogDirection direction, string message)

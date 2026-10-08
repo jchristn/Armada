@@ -119,17 +119,13 @@ namespace Armada.Runtimes
             // Working directory: the requested one, or (for interactive launches that allow it) a per-job scratch
             // directory owned by this Harbor when the request names none or names a path that does not exist here (the
             // Admiral's own paths are not valid on this host).
-            string workingDirectory = request.WorkingDirectory ?? String.Empty;
             string? scratchDirectory = null;
-            if (request.ScratchWorkingDirectory && (String.IsNullOrWhiteSpace(workingDirectory) || !Directory.Exists(workingDirectory)))
+            string workingDirectory = ResolveWorkingDirectory(request)
+                ?? throw new ArgumentException("The launch request has no working directory.");
+            if (UsesScratchDirectory(request))
             {
-                scratchDirectory = Path.Combine(_ScratchRoot, "scratch", SafeName(jobId));
+                scratchDirectory = workingDirectory;
                 Directory.CreateDirectory(scratchDirectory);
-                workingDirectory = scratchDirectory;
-            }
-            else if (String.IsNullOrWhiteSpace(workingDirectory))
-            {
-                throw new ArgumentException("The launch request has no working directory.");
             }
             else if (!Directory.Exists(workingDirectory))
             {
@@ -240,9 +236,28 @@ namespace Armada.Runtimes
                 await entry!.Runtime.StopAsync(entry.ProcessId, token).ConfigureAwait(false);
         }
 
+        /// <inheritdoc />
+        public string? ResolveWorkingDirectory(HarborLaunchRequest request)
+        {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            if (UsesScratchDirectory(request)) return Path.Combine(_ScratchRoot, "scratch", SafeName(request.JobId));
+            if (String.IsNullOrWhiteSpace(request.WorkingDirectory)) return null;
+            return request.WorkingDirectory;
+        }
+
         #endregion
 
         #region Private-Methods
+
+        /// <summary>
+        /// Whether a launch runs in a per-job scratch directory: the request allows one and names no directory that
+        /// exists on this host (the Admiral's own paths are not valid here).
+        /// </summary>
+        private static bool UsesScratchDirectory(HarborLaunchRequest request)
+        {
+            return request.ScratchWorkingDirectory
+                && (String.IsNullOrWhiteSpace(request.WorkingDirectory) || !Directory.Exists(request.WorkingDirectory));
+        }
 
         private void SendFinalMessage(string? finalMessageFilePath, Action<HarborOutputStreamEnum, string> onOutput)
         {

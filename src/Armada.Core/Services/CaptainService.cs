@@ -287,7 +287,10 @@ namespace Armada.Core.Services
                     {
                         _Logging.Warn(_Header + "recovery launch failed for captain " + captain.Id + ": " + ex.ToString());
                         string launchReason = "Auto-recovery failed while relaunching the agent: " + ex.Message;
-                        await FinalizeRecoveryFailureAsync(captain, mission, launchReason, MissionFailureKindEnum.StallRecoveryExhausted, token).ConfigureAwait(false);
+                        MissionFailureKindEnum launchKind = ex is HarborDockNotFoundException
+                            ? MissionFailureKindEnum.Infra
+                            : MissionFailureKindEnum.StallRecoveryExhausted;
+                        await FinalizeRecoveryFailureAsync(captain, mission, launchReason, launchKind, token).ConfigureAwait(false);
                     }
                 }
             }

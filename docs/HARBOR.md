@@ -207,6 +207,16 @@ when it exists on the Harbor host, and otherwise use scratch. Model Context buil
 API-endpoint captains still run in-process on the Admiral, and fleet categorization always runs on the Admiral, so it
 is refused while `requireHarborForLaunch` is on. See [CAPTAINS.md](CAPTAINS.md#where-interactive-turns-run).
 
+**Where docks live.** In 1.0 the Admiral creates every mission dock itself, under its own `docksDirectory` (for an
+Admiral in Docker, `/app/data/docks/...`). There is no Harbor-side clone or dock: a Harbor can run a mission only when it
+sees the Admiral's docks directory at the same path, which in practice means a Harbor on the Admiral's own machine.
+Before a mission launch goes to a Harbor, the Admiral asks it (`git -C <dock> rev-parse --git-dir`) whether the dock
+exists there. A Harbor that does not have it never receives the launch. With `requireHarborForLaunch` off the captain
+runs on the Admiral host, where the dock is; if the captain's CLI is not installed there, the mission fails (`Infra`)
+with a reason naming the Harbor, the dock path, and the missing CLI. With `requireHarborForLaunch` on the mission fails
+(`Infra`) with a reason naming the Harbor and the dock path. Either way it fails once instead of returning to Pending and
+being relaunched on every dispatch pass. Ask Armada turns and chat are unaffected: they run in Harbor scratch directories.
+
 A dock that is already pinned to a Harbor never moves to another Harbor. If that Harbor is offline or no longer
 registered, a relaunch runs on the Admiral host when `requireHarborForLaunch` is off (the dock's worktree is created on
 the Admiral, so the path is valid there; a warning names the pinned Harbor), and is refused when it is on.
