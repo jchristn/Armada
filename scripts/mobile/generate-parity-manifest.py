@@ -16,8 +16,8 @@ Check mode (CI on every push; writes nothing):
 
 fails when the committed manifest differs from what the generator would write (a dashboard surface was added or
 removed without regenerating), when an entry has an unknown status or no workstream, when a "not-applicable" or
-"extension" entry has no notes, or when an "implemented" route has no screen file. Planned entries are allowed
-until the release gate: from W6 on, CI adds --forbid-planned, which also fails on any entry still "planned".
+"extension" entry has no notes, or when an "implemented" route has no screen file. With --forbid-planned (CI and
+npm run parity:check since the W6 release gate) it also fails on any entry still "planned".
 """
 import json
 import os

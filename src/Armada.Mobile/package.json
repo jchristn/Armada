@@ -57,7 +57,7 @@
     "test": "jest",
     "test:ci": "jest --ci",
     "routes:check": "python3 ../../scripts/mobile/generate-route-screens.py --check",
-    "parity:check": "python3 ../../scripts/mobile/generate-parity-manifest.py --check",
+    "parity:check": "python3 ../../scripts/mobile/generate-parity-manifest.py --check --forbid-planned",
     "audit:check": "python3 ../../scripts/mobile/check-npm-audit.py",
     "doctor": "expo-doctor",
     "e2e": "../../scripts/mobile/run-e2e.sh"

@@ -140,8 +140,8 @@ jobs:
   # Mobile app (src/Armada.Mobile, Expo): typecheck, lint, Jest, and the
   # parity gate. The app shares modules with the dashboard (api/client.ts,
   # types, lib, i18n/catalog.ts), so a dashboard change runs this job too.
-  # Until W6 the parity check enforces a complete manifest; the W6 release
-  # gate adds --forbid-planned (MOBILE_APP_PLAN.md, Parity enforcement).
+  # The parity check enforces a complete manifest with no planned entries
+  # (--forbid-planned, MOBILE_APP_PLAN.md, Parity enforcement).
   # Native builds and Maestro E2E need simulators and run locally
   # (scripts/mobile/run-e2e.sh); EAS cloud builds are the maintainer's.
   # ------------------------------------------------------------------
@@ -175,7 +175,7 @@ jobs:
       - name: Route screens (every dashboard route has a screen)
         run: npm run routes:check
 
-      - name: Mobile parity manifest
+      - name: Mobile parity manifest (no planned entries)
         run: |
           python3 ../../scripts/mobile/test_parity_manifest.py
           npm run parity:check

@@ -2114,10 +2114,10 @@
     {
       "kind": "api",
       "key": "getEntity",
-      "status": "planned",
+      "status": "not-applicable",
       "mobile": "",
       "workstream": "W2.2",
-      "notes": "no dashboard page calls it; mapped when a screen needs a generic lookup"
+      "notes": "generic lookup with no caller: no dashboard page or mobile screen uses it; every screen calls its typed getter"
     },
     {
       "kind": "api",
