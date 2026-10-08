@@ -9,6 +9,7 @@ import {
   updateWorkflowProfile,
   validateWorkflowProfile,
 } from '../api/client';
+import { blankInputReference, blankWorkflowEnvironment, inputReferencePlaceholder, joinList, splitList } from '../lib/configuration';
 import type { Fleet, Vessel, WorkflowEnvironmentProfile, WorkflowInputReference, WorkflowProfile, WorkflowProfileValidationResult } from '../types/models';
 import { useAuth } from '../context/AuthContext';
 import { useLocale } from '../context/LocaleContext';
@@ -23,58 +24,10 @@ import { canEdit as canEditScoped, type ScopeViewer } from '../lib/scoping';
 import WorkflowCommandPreview from '../components/shared/WorkflowCommandPreview';
 import { buildWorkflowProfileDuplicatePayload } from '../lib/duplicates';
 
-function splitList(value: string): string[] {
-  return value
-    .split(/\r?\n|,/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
 
-function joinList(values: string[] | null | undefined): string {
-  return (values || []).join('\n');
-}
 
-function blankEnvironment(): WorkflowEnvironmentProfile {
-  return {
-    environmentName: 'dev',
-    deployCommand: null,
-    rollbackCommand: null,
-    smokeTestCommand: null,
-    healthCheckCommand: null,
-    deploymentVerificationCommand: null,
-    rollbackVerificationCommand: null,
-  };
-}
 
-function blankInputReference(): WorkflowInputReference {
-  return {
-    provider: 'EnvironmentVariable',
-    key: '',
-    environmentName: null,
-    description: null,
-  };
-}
 
-function inputReferencePlaceholder(input: WorkflowInputReference): string {
-  switch (input.provider) {
-    case 'EnvironmentVariable':
-      return 'AWS_PROFILE';
-    case 'FilePath':
-      return '/path/to/config.json';
-    case 'DirectoryPath':
-      return '/path/to/config-directory';
-    case 'AwsSecretsManager':
-      return 'prod/app/database-password';
-    case 'AzureKeyVaultSecret':
-      return 'kv://armada-prod/database-password';
-    case 'HashiCorpVault':
-      return 'secret/data/armada/prod/database';
-    case 'OnePassword':
-      return 'op://Engineering/Armada Prod/database-password';
-    default:
-      return 'Input reference';
-  }
-}
 
 export default function WorkflowProfileDetail() {
   const { id } = useParams<{ id: string }>();
@@ -655,7 +608,7 @@ export default function WorkflowProfileDetail() {
           <div className="detail-header" style={{ marginBottom: '0.75rem' }}>
             <h3>{t('Environment Commands')}</h3>
             {canManage && (
-              <button className="btn btn-sm" type="button" onClick={() => setEnvironments((current) => [...current, blankEnvironment()])}>
+              <button className="btn btn-sm" type="button" onClick={() => setEnvironments((current) => [...current, blankWorkflowEnvironment()])}>
                 + {t('Environment')}
               </button>
             )}

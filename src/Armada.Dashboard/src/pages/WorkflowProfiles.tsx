@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createWorkflowProfile, deleteWorkflowProfile, listFleets, listVessels, listWorkflowProfiles, updateWorkflowProfile } from '../api/client';
+import { countProfileCapabilities, splitList } from '../lib/configuration';
 import type { Fleet, Vessel, WorkflowProfile, ScopeEnum } from '../types/models';
 import { useAuth } from '../context/AuthContext';
 import { canEdit as canEditScoped, resolveCreateScope, type ScopeViewer } from '../lib/scoping';
@@ -19,34 +20,7 @@ import PageHeader from '../components/shared/PageHeader';
 import StatusBadge from '../components/shared/StatusBadge';
 import { buildWorkflowProfileDuplicatePayload } from '../lib/duplicates';
 
-function splitList(value: string): string[] {
-  return value
-    .split(/\r?\n|,/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
 
-function countProfileCapabilities(profile: WorkflowProfile): number {
-  const commands = [
-    profile.lintCommand,
-    profile.buildCommand,
-    profile.unitTestCommand,
-    profile.integrationTestCommand,
-    profile.e2eTestCommand,
-    profile.packageCommand,
-    profile.publishArtifactCommand,
-    profile.releaseVersioningCommand,
-    profile.changelogGenerationCommand,
-  ].filter((value) => !!value).length;
-
-  const environmentCommands = profile.environments.reduce((total, environment) => total
-    + (environment.deployCommand ? 1 : 0)
-    + (environment.rollbackCommand ? 1 : 0)
-    + (environment.smokeTestCommand ? 1 : 0)
-    + (environment.healthCheckCommand ? 1 : 0), 0);
-
-  return commands + environmentCommands;
-}
 
 export default function WorkflowProfiles() {
   const navigate = useNavigate();

@@ -19,22 +19,8 @@ import {
   formatSignedDurationDelta,
   formatSignedPercentageDelta,
   type CheckRunComparison,
-} from './checkRunComparison';
-
-function formatDuration(durationMs: number | null | undefined) {
-  if (durationMs == null) return '-';
-  if (durationMs < 1000) return `${Math.round(durationMs)} ms`;
-  if (durationMs >= 60_000) return `${(durationMs / 60_000).toFixed(durationMs % 60_000 === 0 ? 0 : 2)} min`;
-  return `${(durationMs / 1000).toFixed(durationMs % 1000 === 0 ? 0 : 2)} s`;
-}
-
-function formatMetric(metric: { covered: number | null; total: number | null; percentage: number | null } | null | undefined) {
-  if (!metric) return null;
-  const percentage = metric.percentage != null ? `${metric.percentage.toFixed(metric.percentage % 1 === 0 ? 0 : 2)}%` : null;
-  const counts = metric.covered != null && metric.total != null ? `${metric.covered}/${metric.total}` : null;
-  if (!percentage && !counts) return null;
-  return `${percentage || counts}${percentage && counts ? ` (${counts})` : ''}`;
-}
+} from '../lib/checkRunComparison';
+import { formatCheckDuration, formatCoverageMetric } from '../lib/deliveryForms';
 
 export default function CheckRunDetail() {
   const { id } = useParams<{ id: string }>();
@@ -215,7 +201,7 @@ export default function CheckRunDetail() {
           <span>{run.externalUrl ? <a href={run.externalUrl} target="_blank" rel="noopener noreferrer">{run.externalUrl}</a> : '-'}</span>
         </div>
         <div className="detail-field"><span className="detail-label">{t('Environment')}</span><span>{run.environmentName || '-'}</span></div>
-        <div className="detail-field"><span className="detail-label">{t('Duration')}</span><span>{formatDuration(run.durationMs)}</span></div>
+        <div className="detail-field"><span className="detail-label">{t('Duration')}</span><span>{formatCheckDuration(run.durationMs)}</span></div>
         <div className="detail-field"><span className="detail-label">{t('Mission ID')}</span><span>{run.missionId ? <Link to={`/missions/${run.missionId}`}>{run.missionId}</Link> : '-'}</span></div>
         <div className="detail-field"><span className="detail-label">{t('Voyage ID')}</span><span>{run.voyageId ? <Link to={`/voyages/${run.voyageId}`}>{run.voyageId}</Link> : '-'}</span></div>
         <div className="detail-field"><span className="detail-label">{t('Deployment ID')}</span><span>{run.deploymentId ? <Link to={`/deployments/${run.deploymentId}`}>{run.deploymentId}</Link> : '-'}</span></div>
@@ -284,7 +270,7 @@ export default function CheckRunDetail() {
                 <div className="detail-field"><span className="detail-label">{t('Failed')}</span><span>{run.testSummary.failed ?? '-'}</span></div>
                 <div className="detail-field"><span className="detail-label">{t('Skipped')}</span><span>{run.testSummary.skipped ?? '-'}</span></div>
                 <div className="detail-field"><span className="detail-label">{t('Total')}</span><span>{run.testSummary.total ?? '-'}</span></div>
-                <div className="detail-field"><span className="detail-label">{t('Test Duration')}</span><span>{formatDuration(run.testSummary.durationMs)}</span></div>
+                <div className="detail-field"><span className="detail-label">{t('Test Duration')}</span><span>{formatCheckDuration(run.testSummary.durationMs)}</span></div>
               </div>
             </div>
           )}
@@ -295,10 +281,10 @@ export default function CheckRunDetail() {
               <div className="detail-grid">
                 <div className="detail-field"><span className="detail-label">{t('Format')}</span><span>{run.coverageSummary.format || '-'}</span></div>
                 <div className="detail-field"><span className="detail-label">{t('Source')}</span><span className="mono">{run.coverageSummary.sourcePath || '-'}</span></div>
-                <div className="detail-field"><span className="detail-label">{t('Lines')}</span><span>{formatMetric(run.coverageSummary.lines) || '-'}</span></div>
-                <div className="detail-field"><span className="detail-label">{t('Branches')}</span><span>{formatMetric(run.coverageSummary.branches) || '-'}</span></div>
-                <div className="detail-field"><span className="detail-label">{t('Functions')}</span><span>{formatMetric(run.coverageSummary.functions) || '-'}</span></div>
-                <div className="detail-field"><span className="detail-label">{t('Statements')}</span><span>{formatMetric(run.coverageSummary.statements) || '-'}</span></div>
+                <div className="detail-field"><span className="detail-label">{t('Lines')}</span><span>{formatCoverageMetric(run.coverageSummary.lines) || '-'}</span></div>
+                <div className="detail-field"><span className="detail-label">{t('Branches')}</span><span>{formatCoverageMetric(run.coverageSummary.branches) || '-'}</span></div>
+                <div className="detail-field"><span className="detail-label">{t('Functions')}</span><span>{formatCoverageMetric(run.coverageSummary.functions) || '-'}</span></div>
+                <div className="detail-field"><span className="detail-label">{t('Statements')}</span><span>{formatCoverageMetric(run.coverageSummary.statements) || '-'}</span></div>
               </div>
             </div>
           )}

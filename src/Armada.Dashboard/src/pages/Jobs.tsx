@@ -6,8 +6,7 @@ import { useNotifications } from '../context/NotificationContext';
 import StatusBadge from '../components/shared/StatusBadge';
 import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
-
-const TERMINAL = ['Succeeded', 'Failed', 'Cancelled'];
+import { isJobTerminal } from '../lib/jobs';
 
 export default function Jobs() {
   const { t, formatDateTime, formatRelativeTime } = useLocale();
@@ -69,7 +68,7 @@ export default function Jobs() {
     },
     {
       key: 'actions', label: t('Actions'), header: '', fixed: true, interactive: true, className: 'text-right',
-      render: (job) => (!TERMINAL.includes(job.status) ? (
+      render: (job) => (!isJobTerminal(job.status) ? (
         <button type="button" className="btn btn-sm" onClick={() => handleCancel(job)}>{t('Cancel')}</button>
       ) : null),
     },

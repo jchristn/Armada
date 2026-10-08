@@ -34,26 +34,7 @@ import { useAutoRefresh } from '../lib/useAutoRefresh';
 import StatusBadge from '../components/shared/StatusBadge';
 import { buildEnvironmentOptions } from '../lib/deploymentEnvironments';
 import { sortByName } from '../lib/sortByName';
-
-const DEPLOYMENT_STATUSES: DeploymentStatus[] = [
-  'PendingApproval',
-  'Running',
-  'Succeeded',
-  'VerificationFailed',
-  'Failed',
-  'Denied',
-  'RollingBack',
-  'RolledBack',
-];
-
-const VERIFICATION_STATUSES: DeploymentVerificationStatus[] = [
-  'NotRun',
-  'Running',
-  'Passed',
-  'Failed',
-  'Partial',
-  'Skipped',
-];
+import { DEPLOYMENT_STATUSES, VERIFICATION_STATUSES } from '../lib/deliveryForms';
 
 export default function Deployments() {
   const navigate = useNavigate();

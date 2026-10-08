@@ -14,15 +14,7 @@ import DataTable, { type DataTableColumn } from '../components/shared/DataTable'
 import PageHeader from '../components/shared/PageHeader';
 import StatusBadge from '../components/shared/StatusBadge';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
-
-const RELEASE_STATUSES: ReleaseStatus[] = ['Draft', 'Candidate', 'Shipped', 'Failed', 'RolledBack'];
-
-function splitList(value: string): string[] {
-  return value
-    .split(/\r?\n|,/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
+import { RELEASE_STATUSES, splitList } from '../lib/deliveryForms';
 
 export default function Releases() {
   const navigate = useNavigate();

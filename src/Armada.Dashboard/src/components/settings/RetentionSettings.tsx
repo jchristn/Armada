@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { updateSettings } from '../../api/client';
 import type { RetentionSettingsData } from '../../types/models';
 import { useLocale } from '../../context/LocaleContext';
-import { rangeError } from './ImportFleetActionSettings';
+import { RETENTION_DEFAULTS, RETENTION_RANGE, validateRetentionDraft, type RetentionDraft, type RetentionField } from '../../lib/settingsRanges';
 
 interface RetentionSettingsProps {
   retention: RetentionSettingsData | null | undefined;
@@ -14,21 +14,7 @@ interface RetentionSettingsProps {
   notify: (severity: 'success' | 'error', message: string) => void;
 }
 
-/** Every retention field is a number of days; 0 means never. Mirrors the backend clamp (RetentionSettings). */
-export const RETENTION_RANGE = { key: 'days', min: 0, max: 3650 };
-
-export const RETENTION_DEFAULTS: RetentionSettingsData = {
-  askThreadArchiveAfterDays: 90,
-  askThreadDeleteAfterDays: 0,
-  jobRetentionDays: 30,
-  importBatchRetentionDays: 90,
-  cliPermissionRequestRetentionDays: 90,
-};
-
-type RetentionField = keyof RetentionSettingsData;
-type RetentionDraft = Record<RetentionField, string>;
-
-const FIELDS: RetentionField[] = ['askThreadArchiveAfterDays', 'askThreadDeleteAfterDays', 'jobRetentionDays', 'importBatchRetentionDays', 'cliPermissionRequestRetentionDays'];
+export { RETENTION_DEFAULTS, RETENTION_RANGE, validateRetentionDraft } from '../../lib/settingsRanges';
 
 function toDraft(s: RetentionSettingsData | null | undefined): RetentionDraft {
   const v = { ...RETENTION_DEFAULTS, ...(s ?? {}) };
@@ -39,16 +25,6 @@ function toDraft(s: RetentionSettingsData | null | undefined): RetentionDraft {
     importBatchRetentionDays: String(v.importBatchRetentionDays),
     cliPermissionRequestRetentionDays: String(v.cliPermissionRequestRetentionDays),
   };
-}
-
-/** Field errors for a draft: 'range' for a value that is not a whole number from 0 to 3650. */
-export function validateRetentionDraft(draft: RetentionDraft): Partial<Record<RetentionField, string>> {
-  const errors: Partial<Record<RetentionField, string>> = {};
-  for (const field of FIELDS) {
-    const error = rangeError(draft[field], RETENTION_RANGE);
-    if (error) errors[field] = error;
-  }
-  return errors;
 }
 
 /**

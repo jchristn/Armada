@@ -3,6 +3,7 @@ import { updateSettings } from '../../api/client';
 import type { FleetActionSettingsData, VesselImportSettingsData } from '../../types/models';
 import { useLocale } from '../../context/LocaleContext';
 import ListEditor from './ListEditor';
+import { FLEET_ACTION_RANGES, FLEET_DEFAULTS, IMPORT_DEFAULTS, IMPORT_RANGES, rangeError, type NumberField } from '../../lib/settingsRanges';
 
 interface ImportFleetActionSettingsProps {
   importSettings: VesselImportSettingsData | null | undefined;
@@ -15,42 +16,7 @@ interface ImportFleetActionSettingsProps {
   notify: (severity: 'success' | 'error', message: string) => void;
 }
 
-interface NumberField {
-  key: string;
-  min: number;
-  max: number;
-}
-
-/** Field ranges mirror the backend clamps (VesselImportSettings / FleetActionSettings). */
-export const IMPORT_RANGES: Record<'maxDepth' | 'inlineBatchLimit' | 'categorizationTimeoutMinutes', NumberField> = {
-  maxDepth: { key: 'maxDepth', min: 1, max: 16 },
-  inlineBatchLimit: { key: 'inlineBatchLimit', min: 1, max: 500 },
-  categorizationTimeoutMinutes: { key: 'categorizationTimeoutMinutes', min: 1, max: 240 },
-};
-
-export const FLEET_ACTION_RANGES: Record<keyof FleetActionSettingsData, NumberField> = {
-  maxConcurrency: { key: 'maxConcurrency', min: 1, max: 32 },
-  defaultTimeoutSeconds: { key: 'defaultTimeoutSeconds', min: 5, max: 7200 },
-  maxOutputBytes: { key: 'maxOutputBytes', min: 1024, max: 1048576 },
-  runRetentionDays: { key: 'runRetentionDays', min: 1, max: 3650 },
-};
-
-/** Returns an English error for an out-of-range or non-integer value, or '' when valid. */
-export function rangeError(value: string, range: NumberField): string {
-  const n = Number(value);
-  if (value.trim() === '' || !Number.isInteger(n) || n < range.min || n > range.max) return 'range';
-  return '';
-}
-
-const IMPORT_DEFAULTS: VesselImportSettingsData = {
-  allowedRoots: [],
-  maxDepth: 6,
-  excludedDirectoryNames: ['bin', 'obj', 'node_modules', 'dist', '.git', '.vs', 'packages', 'TestResults', '.armada', 'target', 'venv', '.venv', '__pycache__'],
-  inlineBatchLimit: 25,
-  categorizationTimeoutMinutes: 20,
-};
-
-const FLEET_DEFAULTS: FleetActionSettingsData = { maxConcurrency: 8, defaultTimeoutSeconds: 300, maxOutputBytes: 65536, runRetentionDays: 30 };
+export { FLEET_ACTION_RANGES, IMPORT_RANGES, rangeError } from '../../lib/settingsRanges';
 
 interface ImportDraft { allowedRoots: string[]; excludedDirectoryNames: string[]; maxDepth: string; inlineBatchLimit: string; categorizationTimeoutMinutes: string }
 interface FleetDraft { maxConcurrency: string; defaultTimeoutSeconds: string; maxOutputBytes: string; runRetentionDays: string }

@@ -19,6 +19,7 @@ import { useAutoRefresh } from '../lib/useAutoRefresh';
 import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
 import { buildPipelineDuplicatePayload } from '../lib/duplicates';
+import { formatStages } from '../lib/configuration';
 import { useResourceTable } from '../lib/useResourceTable';
 
 interface StageFormEntry {
@@ -28,11 +29,6 @@ interface StageFormEntry {
   reviewDenyAction: 'RetryStage' | 'FailPipeline';
 }
 
-function formatStages(stages: PipelineStage[]): string {
-  if (!stages || stages.length === 0) return '-';
-  const sorted = [...stages].sort((a, b) => a.order - b.order);
-  return sorted.map(s => `${s.personaName}${s.requiresReview ? ' [review]' : ''}`).join(' -> ');
-}
 
 export default function Pipelines() {
   const navigate = useNavigate();
