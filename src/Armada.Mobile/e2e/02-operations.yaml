@@ -20,9 +20,11 @@ name: 02-operations
 - assertVisible: "System Status"
 - assertVisible:
     id: "home-kpi-missions"
+# Home is long (status, KPIs, health, the history chart); on a loaded host each swipe can take seconds.
 - scrollUntilVisible:
     element: "Seeded voyage.*"
     direction: DOWN
+    timeout: 60000
 - takeScreenshot: home
 # Missions list and detail.
 - scrollUntilVisible:
