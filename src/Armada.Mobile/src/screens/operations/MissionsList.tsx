@@ -73,7 +73,7 @@ export interface MissionsListProps extends OperationsListProps {
  * and Create Mission.
  */
 export function MissionsList({ onSelect, selectedId, onOpenTab }: MissionsListProps) {
-  const { t, formatRelativeTime, formatDateTime } = useLocale();
+  const { t, formatRelativeTime } = useLocale();
   const { colors } = useTheme();
   const compactRows = useCompactRows();
   const { isAdmin, isTenantAdmin } = useAuth();
@@ -333,7 +333,7 @@ export function MissionsList({ onSelect, selectedId, onOpenTab }: MissionsListPr
                 testID={`mission-row-${m.id}`}
                 accessibilityRole={selecting ? 'checkbox' : 'button'}
                 accessibilityState={selecting ? { checked } : { selected: m.id === selectedId }}
-                accessibilityLabel={`${m.title}, ${t(m.status)}, ${subtitle}`}
+                accessibilityLabel={`${m.title}, ${t(m.status)}, ${subtitle}, ${formatRelativeTime(m.createdUtc)}`}
                 accessibilityHint={selecting ? undefined : t('Long press to select missions')}
                 onPress={() => (selecting ? toggle(m.id) : onSelect(m.id))}
                 onLongPress={() => (selecting ? toggle(m.id) : setSelection([m.id]))}
@@ -344,7 +344,7 @@ export function MissionsList({ onSelect, selectedId, onOpenTab }: MissionsListPr
                   <AppText variant="caption" muted numberOfLines={2}>{subtitle}</AppText>
                   <View style={styles.meta}>
                     <EntityStatusBadge status={m.status} />
-                    <AppText variant="caption" muted accessibilityLabel={formatDateTime(m.createdUtc)}>{formatRelativeTime(m.createdUtc)}</AppText>
+                    <AppText variant="caption" muted>{formatRelativeTime(m.createdUtc)}</AppText>
                   </View>
                 </View>
               </Pressable>

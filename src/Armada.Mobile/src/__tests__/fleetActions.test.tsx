@@ -10,6 +10,7 @@ import { RunActionSheet } from '../screens/fleetActions/RunActionSheet';
 import { tailLines } from '../screens/fleetActions/TargetDetailSheet';
 import { usePolling } from '../screens/fleetActions/usePolling';
 import { BuildProviders, page } from '../test/buildFixtures';
+import { rowActionTarget } from '../test/a11y';
 
 jest.mock('@dashboard/api/client', () => require('../test/buildClientMock').buildClientMockFactory());
 
@@ -97,7 +98,7 @@ describe('fleet action helpers', () => {
     function Probe() {
       const [on, setOn] = useState(true);
       usePolling(on, tick, 1000);
-      return <Text testID="stop" onPress={() => setOn(false)}>p</Text>;
+      return <Text testID="stop" accessibilityRole="button" onPress={() => setOn(false)}>p</Text>;
     }
     await render(<Probe />);
     await act(async () => { jest.advanceTimersByTime(2100); });
@@ -113,7 +114,7 @@ describe('Actions tab', () => {
     await render(<BuildProviders><FleetActionsTab /></BuildProviders>);
     await waitFor(() => expect(screen.getByTestId('fleet-action-row-Fast-forward')).toBeTruthy());
     expect(screen.getByTestId('fleet-action-row-Fix lint')).toBeTruthy();
-    await act(async () => { fireEvent(screen.getByTestId('fleet-action-swipe-Fast-forward'), 'accessibilityAction', { nativeEvent: { actionName: 'delete' } }); });
+    await act(async () => { fireEvent(rowActionTarget(screen.getByTestId('fleet-action-swipe-Fast-forward'), 'delete'), 'accessibilityAction', { nativeEvent: { actionName: 'delete' } }); });
     expect(screen.getByText('Hide built-in action')).toBeTruthy();
     await fireEvent.press(screen.getByTestId('fleet-action-delete-confirm-confirm'));
     await waitFor(() => expect(api.deleteFleetAction).toHaveBeenCalledWith('fac_1'));
@@ -216,7 +217,7 @@ describe('Runs tab and run detail', () => {
     await fireEvent.press(screen.getByTestId('fleet-action-runs-status-Failed'));
     await waitFor(() => expect(api.enumerateFleetActionRuns).toHaveBeenLastCalledWith({ pageNumber: 1, pageSize: 25, status: 'Failed', order: 'CreatedDescending' }));
 
-    await act(async () => { fireEvent(screen.getByTestId('fleet-action-run-swipe-far_1'), 'accessibilityAction', { nativeEvent: { actionName: 'cancel' } }); });
+    await act(async () => { fireEvent(rowActionTarget(screen.getByTestId('fleet-action-run-swipe-far_1'), 'cancel'), 'accessibilityAction', { nativeEvent: { actionName: 'cancel' } }); });
     await fireEvent.press(screen.getByTestId('fleet-action-run-cancel-confirm-confirm'));
     await waitFor(() => expect(api.cancelFleetActionRun).toHaveBeenCalledWith('far_1'));
 

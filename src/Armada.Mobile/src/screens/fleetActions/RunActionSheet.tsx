@@ -158,7 +158,7 @@ export function RunActionContent({ vesselIds, onClose, initialActionId, initialK
   if (step === 'confirm') {
     return (
       <View testID="run-action-confirm">
-        <AppText variant="heading">{mode === 'saved' ? selectedAction?.name : adHoc.name}</AppText>
+        <AppText variant="heading" accessibilityRole="header">{mode === 'saved' ? selectedAction?.name : adHoc.name}</AppText>
         {effectiveKind === 'Command' ? (
           <Banner
             tone="warning"

@@ -1,16 +1,37 @@
 import { Tabs } from 'expo-router/tabs';
 import { Sidebar } from '../../components/app/Sidebar';
-import { Icon, type IconName } from '../../components/ui';
+import { StyleSheet, View, type ColorValue } from 'react-native';
+import { AppText, CountBadge, Icon, type IconName } from '../../components/ui';
 import { useLocale } from '../../i18n/LocaleContext';
 import { useLayout } from '../../navigation/useLayout';
 import { useApprovals } from '../../notifications/ApprovalsContext';
 import { useTheme } from '../../theme/ThemeContext';
+import { CHROME_MAX_FONT_SCALE } from '../../theme/typography';
 
-function tabIcon(name: IconName, focusedName: IconName) {
+function tabIcon(name: IconName, focusedName: IconName, badge = 0) {
   function TabIcon({ focused, size }: { focused: boolean; size: number }) {
-    return <Icon name={focused ? focusedName : name} size={size} color={focused ? 'primary' : 'textMuted'} />;
+    return (
+      <View>
+        <Icon name={focused ? focusedName : name} size={size} color={focused ? 'primary' : 'textMuted'} />
+        {/* Our CountBadge caps its text growth like the label; the navigator's badge grows without limit and clips. */}
+        {badge > 0 ? <View style={styles.badge}><CountBadge count={badge} /></View> : null}
+      </View>
+    );
   }
   return TabIcon;
+}
+
+/**
+ * Tab labels grow with the text size up to the chrome cap (CHROME_MAX_FONT_SCALE): at the largest accessibility sizes
+ * uncapped labels were cut to "Ap..." and "Wo...". The full name is still spoken (the tab's accessibility label), and
+ * iOS shows it large in the Large Content Viewer on a long press.
+ */
+function TabLabel({ focused, color, children }: { focused: boolean; color: ColorValue; children: string }) {
+  return (
+    <AppText variant="caption" maxFontSizeMultiplier={CHROME_MAX_FONT_SCALE} numberOfLines={1} style={[styles.label, { color }, focused ? styles.focused : null]}>
+      {children}
+    </AppText>
+  );
 }
 
 /**
@@ -36,9 +57,7 @@ export default function AppTabsLayout() {
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textMuted,
         tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.border },
-        tabBarLabelStyle: { fontSize: 12 },
-        tabBarAllowFontScaling: true,
-        tabBarBadgeStyle: { backgroundColor: colors.badge, color: colors.badgeText },
+        tabBarLabel: TabLabel,
         sceneStyle: { backgroundColor: colors.background },
       }}
     >
@@ -52,8 +71,7 @@ export default function AppTabsLayout() {
           title: t('Approvals'),
           tabBarButtonTestID: 'tab-approvals',
           tabBarAccessibilityLabel: count > 0 ? `${t('Approvals')}, ${count}` : t('Approvals'),
-          tabBarBadge: count > 0 ? (count > 99 ? '99+' : count) : undefined,
-          tabBarIcon: tabIcon('checkmark-done-circle-outline', 'checkmark-done-circle'),
+          tabBarIcon: tabIcon('checkmark-done-circle-outline', 'checkmark-done-circle', count),
         }}
       />
       <Tabs.Screen
@@ -69,3 +87,9 @@ export default function AppTabsLayout() {
 }
 
 export const unstable_settings = { initialRouteName: '(ask)' };
+
+const styles = StyleSheet.create({
+  badge: { position: 'absolute', top: -6, right: -12 },
+  label: { fontSize: 12, lineHeight: 16 },
+  focused: { fontWeight: '600' },
+});

@@ -6,6 +6,7 @@ import { pipelineLabel } from '../screens/fleets/FleetFormSheet';
 import { FleetsTab } from '../screens/fleets/FleetsTab';
 import { filterFleets, vesselCounts, vesselsOfFleet } from '../screens/fleets/fleetData';
 import { BuildProviders, page } from '../test/buildFixtures';
+import { rowActionTarget } from '../test/a11y';
 
 jest.mock('@dashboard/api/client', () => require('../test/buildClientMock').buildClientMockFactory());
 
@@ -88,7 +89,7 @@ describe('Fleets tab', () => {
     await render(<BuildProviders><FleetsTab /></BuildProviders>);
     await waitFor(() => expect(screen.getByTestId('fleet-swipe-core')).toBeTruthy());
 
-    await act(async () => { fireEvent(screen.getByTestId('fleet-swipe-core'), 'accessibilityAction', { nativeEvent: { actionName: 'delete' } }); });
+    await act(async () => { fireEvent(rowActionTarget(screen.getByTestId('fleet-swipe-core'), 'delete'), 'accessibilityAction', { nativeEvent: { actionName: 'delete' } }); });
     expect(screen.getByText('Delete fleet "core"? This cannot be undone.')).toBeTruthy();
     await fireEvent.press(screen.getByTestId('fleet-delete-confirm-confirm'));
     await waitFor(() => expect(api.deleteFleet).toHaveBeenCalledWith('flt_1'));
@@ -107,7 +108,7 @@ describe('Fleets tab', () => {
     api.createFleet.mockResolvedValue(fleet({ id: 'flt_9', name: 'core (Copy)' }));
     await render(<BuildProviders><FleetsTab /></BuildProviders>);
     await waitFor(() => expect(screen.getByTestId('fleet-swipe-core')).toBeTruthy());
-    await act(async () => { fireEvent(screen.getByTestId('fleet-swipe-core'), 'accessibilityAction', { nativeEvent: { actionName: 'duplicate' } }); });
+    await act(async () => { fireEvent(rowActionTarget(screen.getByTestId('fleet-swipe-core'), 'duplicate'), 'accessibilityAction', { nativeEvent: { actionName: 'duplicate' } }); });
     await waitFor(() => expect(mockRouter.push).toHaveBeenCalledWith('/fleets/flt_9'));
     expect(api.createFleet.mock.calls[0][0]).toMatchObject({ name: 'core (Copy)' });
   });

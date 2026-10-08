@@ -182,7 +182,7 @@ export function VesselHealthTab() {
         {evaluation.running ? (
           <View style={styles.progress} accessibilityRole="progressbar" accessibilityLiveRegion="polite" testID="health-evaluating">
             <AppText variant="caption">{evaluation.activeJob ? t('Evaluating... {{percent}}%', { percent: formatCount(locale, evaluation.activeJob.progress ?? 0) }) : t('Evaluating...')}</AppText>
-            <View style={[styles.track, { backgroundColor: colors.border }]}>
+            <View style={[styles.track, { backgroundColor: colors.track }]}>
               <View style={[styles.bar, { backgroundColor: colors.primary, width: `${Math.max(3, Math.min(100, evaluation.activeJob?.progress ?? 0))}%` }]} />
             </View>
           </View>
@@ -245,6 +245,12 @@ export function VesselHealthTab() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={[row.vesselName || row.vesselId, statusLabel(t, row.overallStatus), divergence, meta].filter(Boolean).join(', ')}
+          accessibilityValue={{ text: [
+            `${t('Dependencies')}: ${statusLabel(t, row.dependencyStatus)}`,
+            `${t('Vulnerabilities')}: ${statusLabel(t, row.vulnerabilityStatus)}`,
+            `${t('Tests')}: ${statusLabel(t, row.testInfraStatus)}`,
+            `${t('CI')}: ${statusLabel(t, row.ciStatus)}`,
+          ].join(', ') }}
           accessibilityHint={t('Long press to select')}
           accessibilityState={{ selected: isSel }}
           onPress={() => (selecting ? toggleSelected(row.vesselId) : openDetail(row))}

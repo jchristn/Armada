@@ -142,6 +142,7 @@ export function SignalsList({ onSelect, selectedId }: OperationsListProps) {
             title={item.payload || item.id}
             subtitle={[`${captainLabel(item.fromCaptainId)} -> ${captainLabel(item.toCaptainId)}`, item.read ? t('Read') : t('Unread'), formatRelativeTime(item.createdUtc)].join(' - ')}
             accessory={<EntityStatusBadge status={item.type} />}
+            accessibilityValue={t(item.type)}
             selecting={selection.active}
             checked={selection.selected.includes(item.id)}
             highlighted={selectedId === item.id}

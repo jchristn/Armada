@@ -201,6 +201,7 @@ export function CaptainDetailScreen({ id, embedded, onRemoved }: CaptainDetailSc
                 title={currentMission.title}
                 subtitle={[currentMission.description, `${t('Branch')}: ${currentMission.branchName || '-'}`, `${t('Priority')}: ${currentMission.priority}`].filter(Boolean).join('\n')}
                 accessory={<StatusBadge label={currentMission.status} tone={statusTone(currentMission.status)} />}
+                accessibilityValue={currentMission.status}
                 onPress={() => router.push(`/missions/${currentMission.id}` as Href)}
               />
             </Section>
@@ -222,6 +223,7 @@ export function CaptainDetailScreen({ id, embedded, onRemoved }: CaptainDetailSc
                 title={m.title}
                 subtitle={[m.branchName, formatRelativeTime(m.completedUtc || m.createdUtc)].filter(Boolean).join(' \u00b7 ')}
                 accessory={<StatusBadge label={m.status} tone={statusTone(m.status)} />}
+                accessibilityValue={m.status}
                 onPress={() => router.push(`/missions/${m.id}` as Href)}
               />
             ))}

@@ -115,7 +115,7 @@ export function CaptainChat({ captainId, captainName, disabledReason }: { captai
           accessibilityLabel={t('Message the captain...')}
           editable={!busy && !disabledReason}
           multiline
-          style={[styles.input, typography.body, { color: colors.text, borderColor: colors.border, backgroundColor: colors.surface }]}
+          style={[styles.input, typography.body, { color: colors.text, borderColor: colors.control, backgroundColor: colors.surface }]}
         />
         {busy ? (
           <Button label={t('Stop')} variant="secondary" onPress={() => abortRef.current?.abort()} testID="captain-chat-stop" style={styles.noMargin} />

@@ -592,5 +592,5 @@ describe('Proxy profiles', () => {
 });
 
 function AppButton({ onPress }: { onPress: () => void }) {
-  return <Pressable testID="test-sign-out" onPress={onPress}><Text>Sign out</Text></Pressable>;
+  return <Pressable testID="test-sign-out" accessibilityRole="button" onPress={onPress}><Text>Sign out</Text></Pressable>;
 }

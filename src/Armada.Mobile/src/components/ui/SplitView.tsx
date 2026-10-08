@@ -1,5 +1,6 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
+import { focusElement } from '../../lib/accessibility';
 import { masterPaneWidth, splitFits, useLayout } from '../../navigation/useLayout';
 import { useTheme } from '../../theme/ThemeContext';
 import { spacing } from '../../theme/typography';
@@ -50,6 +51,14 @@ export function SplitView({ master, detail, masterWidth = 360, minWidth, onBack,
   const [masterMounted, setMasterMounted] = useState(!detailAlone);
   if (!detailAlone && !masterMounted) setMasterMounted(true);
   usePaneBack(detailAlone && !!onBack, onBack);
+  // When a selection replaces the list in a narrow pane, the row a screen reader was on disappears: focus moves to
+  // the Back button at the top of the detail, so VoiceOver and TalkBack users land where the new content starts.
+  const backRef = useRef<View | null>(null);
+  const wasAlone = useRef(detailAlone);
+  useEffect(() => {
+    if (detailAlone && !wasAlone.current && onBack) focusElement(backRef);
+    wasAlone.current = detailAlone;
+  }, [detailAlone, onBack]);
 
   return (
     <View
@@ -74,7 +83,7 @@ export function SplitView({ master, detail, masterWidth = 360, minWidth, onBack,
         <View style={styles.fill} testID={testID ? `${testID}-detail` : undefined}>
           {detailAlone && onBack ? (
             <View style={[styles.back, { borderBottomColor: colors.border }]}>
-              <Button label={backLabel ?? 'Back'} variant="ghost" icon="chevron-back" onPress={onBack} testID="split-view-back" />
+              <Button ref={backRef} label={backLabel ?? 'Back'} variant="ghost" icon="chevron-back" onPress={onBack} testID="split-view-back" />
             </View>
           ) : null}
           <PaneWidthContext.Provider value={detailWidth}>{detail}</PaneWidthContext.Provider>

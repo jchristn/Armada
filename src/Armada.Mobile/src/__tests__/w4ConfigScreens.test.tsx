@@ -11,6 +11,7 @@ import TemplateRoute from '../app/(app)/(more)/prompt-templates/[name]';
 import SkillRoute from '../app/(app)/(more)/skills/[id]';
 import WorkflowRoute from '../app/(app)/(more)/workflow-profiles/[id]';
 import { page, renderW4Routes, resetW4 } from '../test/w4';
+import { rowActionTarget } from '../test/a11y';
 
 jest.mock('@dashboard/api/client', () => require('../test/w4Client').autoMockClient());
 
@@ -146,7 +147,7 @@ describe('pipeline detail', () => {
     api.createVoyage.mockResolvedValue({ id: 'vyg_1' } as never);
     const h = await renderW4Routes(ROUTES, '/pipelines/Reviewed');
     await waitFor(() => expect(screen.getByTestId('pipeline-title')).toHaveTextContent('Reviewed'));
-    await act(async () => { await fireEvent(screen.getByTestId('pipeline-stage-1-swipe'), 'accessibilityAction', { nativeEvent: { actionName: 'up' } }); });
+    await act(async () => { await fireEvent(rowActionTarget(screen.getByTestId('pipeline-stage-1-swipe'), 'up'), 'accessibilityAction', { nativeEvent: { actionName: 'up' } }); });
     expect(api.updatePipeline).toHaveBeenCalledWith('Reviewed', { description: null, stages: [
       { personaName: 'Worker', isOptional: false, description: null, requiresReview: true, reviewDenyAction: 'RetryStage', order: 1 },
       { personaName: 'Architect', isOptional: false, description: null, requiresReview: false, reviewDenyAction: 'RetryStage', order: 2 },
@@ -227,7 +228,7 @@ describe('endpoints, harbors, memories', () => {
     api.disableHarbor.mockResolvedValue({ ...harbor, enabled: false });
     await renderW4Routes(ROUTES, '/configuration?tab=harbors');
     await waitFor(() => expect(screen.getByTestId('harbor-row-hbr_1')).toBeTruthy());
-    await act(async () => { await fireEvent(screen.getByTestId('harbor-row-hbr_1-swipe'), 'accessibilityAction', { nativeEvent: { actionName: 'toggle' } }); });
+    await act(async () => { await fireEvent(rowActionTarget(screen.getByTestId('harbor-row-hbr_1-swipe'), 'toggle'), 'accessibilityAction', { nativeEvent: { actionName: 'toggle' } }); });
     expect(api.disableHarbor).toHaveBeenCalledWith('hbr_1');
   });
 

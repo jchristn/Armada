@@ -32,7 +32,7 @@ export function SwitchField({ label, value, onChange, hint, disabled, testID }: 
           value={value}
           onValueChange={onChange}
           disabled={disabled}
-          trackColor={{ true: colors.primary, false: colors.border }}
+          trackColor={{ true: colors.primary, false: colors.control }}
         />
       </View>
       {hint ? <AppText variant="caption" muted>{hint}</AppText> : null}

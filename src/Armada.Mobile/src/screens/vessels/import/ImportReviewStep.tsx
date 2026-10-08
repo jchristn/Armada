@@ -116,16 +116,18 @@ export function ImportReviewStep(props: ImportReviewStepProps) {
           const can = selectable(c);
           const on = selected.includes(c.path);
           const badge = candidateStatusBadge(t, c.candidateStatus);
+          const origin = `${c.remoteUrl || t('(no origin)')} - ${c.defaultBranch || '-'}`;
+          const existing = c.candidateStatus === 'AlreadyOnboarded' && c.existingVesselId ? c.existingVesselId : null;
           return (
+            <View key={c.id || c.path} style={[styles.candidate, { borderBottomColor: colors.border, backgroundColor: on ? colors.surfaceRaised : colors.surface }]}>
             <Pressable
-              key={c.id || c.path}
               testID={`import-candidate-${c.proposedName}`}
               accessibilityRole="checkbox"
-              accessibilityLabel={`${c.proposedName}, ${badge.label}, ${c.path}`}
+              accessibilityLabel={`${c.proposedName}, ${badge.label}, ${c.path}, ${origin}`}
               accessibilityState={{ checked: on, disabled: !can }}
               disabled={!can}
               onPress={() => toggle(c.path)}
-              style={[styles.item, { borderBottomColor: colors.border, backgroundColor: on ? colors.surfaceRaised : colors.surface, opacity: can ? 1 : 0.65 }]}
+              style={[styles.item, { opacity: can ? 1 : 0.65 }]}
             >
               <Icon name={on ? 'checkbox' : 'square-outline'} color={on ? 'primary' : 'textMuted'} />
               <View style={styles.flex}>
@@ -134,14 +136,23 @@ export function ImportReviewStep(props: ImportReviewStepProps) {
                   <StatusBadge label={badge.label} tone={badge.tone} />
                 </View>
                 <AppText variant="caption" muted style={typography.mono} numberOfLines={2}>{c.path}</AppText>
-                <AppText variant="caption" muted numberOfLines={1}>{`${c.remoteUrl || t('(no origin)')} - ${c.defaultBranch || '-'}`}</AppText>
-                {c.candidateStatus === 'AlreadyOnboarded' && c.existingVesselId ? (
-                  <AppText variant="caption" color="primary" accessibilityRole="link" onPress={() => router.push(`/vessels/${encodeURIComponent(c.existingVesselId ?? '')}` as Href)}>
-                    {t('Open existing vessel')}
-                  </AppText>
-                ) : null}
+                <AppText variant="caption" muted numberOfLines={1}>{origin}</AppText>
               </View>
             </Pressable>
+            {/* Outside the checkbox: a link inside it would be unreachable for VoiceOver. */}
+            {existing ? (
+              <AppText
+                variant="caption"
+                color="primary"
+                accessibilityRole="link"
+                style={styles.existing}
+                onPress={() => router.push(`/vessels/${encodeURIComponent(existing)}` as Href)}
+                testID={`import-candidate-${c.proposedName}-existing`}
+              >
+                {t('Open existing vessel')}
+              </AppText>
+            ) : null}
+            </View>
           );
         })}
       </View>
@@ -236,6 +247,9 @@ const styles = StyleSheet.create({
   section: { marginHorizontal: spacing.lg, marginTop: spacing.xl, marginBottom: spacing.sm, textTransform: 'uppercase' },
   list: { borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, marginTop: spacing.sm },
   empty: { padding: spacing.lg },
-  item: { flexDirection: 'row', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, minHeight: MIN_TOUCH, borderBottomWidth: StyleSheet.hairlineWidth, alignItems: 'flex-start', borderRadius: radius.sm },
+  candidate: { borderBottomWidth: StyleSheet.hairlineWidth, borderRadius: radius.sm },
+  item: { flexDirection: 'row', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, minHeight: MIN_TOUCH, alignItems: 'flex-start' },
+  // Lines up with the candidate's text (after the checkbox icon) and keeps a full-size touch target.
+  existing: { marginLeft: spacing.lg + 22 + spacing.md, minHeight: MIN_TOUCH, textAlignVertical: 'center', paddingVertical: spacing.sm },
   head: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
 });

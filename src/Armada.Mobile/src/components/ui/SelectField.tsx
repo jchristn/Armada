@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { FlatList, Keyboard, Pressable, StyleSheet, View } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
 import { MIN_TOUCH, radius, spacing } from '../../theme/typography';
@@ -37,6 +37,7 @@ export function SelectField({
 }: SelectFieldProps) {
   const { colors } = useTheme();
   const [open, setOpen] = useState(false);
+  const fieldRef = useRef<View | null>(null);
   const [query, setQuery] = useState('');
   const all = useMemo(() => (allowEmpty ? [{ value: '', label: placeholder }, ...options] : options), [allowEmpty, placeholder, options]);
   const shown = useMemo(() => {
@@ -51,6 +52,7 @@ export function SelectField({
     <View style={styles.wrap}>
       <AppText variant="label">{label}</AppText>
       <Pressable
+        ref={fieldRef}
         testID={testID}
         accessibilityRole="button"
         accessibilityLabel={`${label}, ${display}`}
@@ -58,14 +60,14 @@ export function SelectField({
         accessibilityState={{ disabled: !!disabled }}
         disabled={disabled}
         onPress={() => { Keyboard.dismiss(); setQuery(''); setOpen(true); }}
-        style={[styles.box, { borderColor: error ? colors.danger : colors.border, backgroundColor: colors.surface, opacity: disabled ? 0.55 : 1 }]}
+        style={[styles.box, { borderColor: error ? colors.danger : colors.control, backgroundColor: colors.surface, opacity: disabled ? 0.55 : 1 }]}
       >
         <AppText style={styles.flex} muted={!current || value === ''} numberOfLines={1}>{display}</AppText>
         <Icon name="chevron-down" size={18} color="textMuted" />
       </Pressable>
       {error ? <AppText variant="caption" color="danger" accessibilityRole="alert">{error}</AppText> : null}
       {!error && hint ? <AppText variant="caption" muted>{hint}</AppText> : null}
-      <BottomSheet open={open} title={label} onClose={() => setOpen(false)} closeLabel={closeLabel} testID={testID ? `${testID}-sheet` : undefined}>
+      <BottomSheet open={open} title={label} onClose={() => setOpen(false)} closeLabel={closeLabel} returnFocusRef={fieldRef} testID={testID ? `${testID}-sheet` : undefined}>
         {all.length > 8 ? (
           <SearchField value={query} onChangeText={setQuery} placeholder={searchLabel ?? label} clearLabel={closeLabel} testID={testID ? `${testID}-search` : undefined} />
         ) : null}

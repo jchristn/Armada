@@ -219,6 +219,7 @@ export function RequestsTab() {
                   <AppText variant="caption" muted>{formatRelativeTime(entry.createdUtc)}</AppText>
                 </View>
               )}
+              accessibilityValue={[String(entry.statusCode), formatRelativeTime(entry.createdUtc)]}
               selected={isSelected || selection.selected === entry.id}
               accessibilityHint={t('Long press to select')}
               onPress={() => (selecting ? toggle(entry.id) : selection.open(entry.id))}

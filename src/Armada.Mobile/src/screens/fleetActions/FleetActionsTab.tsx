@@ -12,6 +12,7 @@ import { useLocale } from '../../i18n/LocaleContext';
 import { useNotifications } from '../../notifications/NotificationContext';
 import { spacing } from '../../theme/typography';
 import { JsonSheet, KindBadge } from './common';
+import { KIND_LABELS } from '@dashboard/lib/fleetActionLabels';
 import { FleetActionFormSheet } from './FleetActionFormSheet';
 import { NO_RUN_FLOW, RunFlowSheet, type RunFlow } from './RunFlowSheet';
 
@@ -137,6 +138,7 @@ export function FleetActionsTab() {
                 title={item.name}
                 subtitle={[item.description, facts].filter(Boolean).join('\n')}
                 accessory={<KindBadge kind={item.kind} />}
+                accessibilityValue={t(KIND_LABELS[item.kind])}
                 onPress={() => (isTenantAdmin ? setForm({ open: true, mode: 'edit', source: item }) : setJson(item))}
                 accessibilityHint={isTenantAdmin ? t('Edit') : t('View JSON')}
               />

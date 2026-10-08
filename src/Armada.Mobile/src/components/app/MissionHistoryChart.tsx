@@ -14,7 +14,7 @@ import type { Fleet, MissionHistorySummaryResult, Vessel } from '@dashboard/type
 import { useQuery } from '../../data/useQuery';
 import { useLocale } from '../../i18n/LocaleContext';
 import { useTheme } from '../../theme/ThemeContext';
-import { radius, spacing } from '../../theme/typography';
+import { CHROME_MAX_FONT_SCALE, radius, spacing, useLargeText } from '../../theme/typography';
 import { AppText, IconButton, SegmentedControl, SelectField } from '../ui';
 
 const CHART_HEIGHT = 160;
@@ -22,7 +22,8 @@ const CHART_HEIGHT = 160;
 /**
  * Mission History (the dashboard's MissionHistoryChart): completed, failed, and other missions per time bucket
  * over the last hour, day, week, or month, narrowed to a fleet or vessel. Touch and drag over the chart to read a
- * bucket. `refreshToken` reloads it with the rest of Home.
+ * bucket; screen-reader users get the totals as its label and step through the buckets with swipe up and down (an
+ * adjustable element), each read as text. `refreshToken` reloads it with the rest of Home.
  */
 export function MissionHistoryChart({ vessels, fleets, refreshToken }: { vessels: Vessel[]; fleets: Fleet[]; refreshToken: number }) {
   const { t } = useLocale();
@@ -32,6 +33,7 @@ export function MissionHistoryChart({ vessels, fleets, refreshToken }: { vessels
   const [vesselId, setVesselId] = useState('');
   const [hovered, setHovered] = useState<number | null>(null);
   const [width, setWidth] = useState(0);
+  const largeText = useLargeText();
 
   const filteredVessels = useMemo(() => (fleetId ? vessels.filter((v) => v.fleetId === fleetId) : vessels), [vessels, fleetId]);
   const effectiveVesselId = vesselId && filteredVessels.some((v) => v.id === vesselId) ? vesselId : '';
@@ -55,6 +57,14 @@ export function MissionHistoryChart({ vessels, fleets, refreshToken }: { vessels
     setHovered(Math.max(0, Math.min(buckets.length - 1, index)));
   };
 
+  const bucketText = (b: { timestampMs: number; complete: number; failed: number; other: number }) =>
+    `${formatTooltipTime(b.timestampMs)}: ${t('Complete')} ${b.complete}, ${t('Failed')} ${b.failed}${b.other > 0 ? `, ${t('Other')} ${b.other}` : ''}`;
+  const step = (delta: number) => {
+    if (buckets.length === 0) return;
+    const from = hovered ?? (delta > 0 ? -1 : buckets.length);
+    setHovered(Math.max(0, Math.min(buckets.length - 1, from + delta)));
+  };
+
   const summary = t('{{total}} total, {{complete}} complete, {{failed}} failed', {
     total: history?.totalCount ?? 0, complete: history?.completeCount ?? 0, failed: history?.failedCount ?? 0,
   });
@@ -71,8 +81,9 @@ export function MissionHistoryChart({ vessels, fleets, refreshToken }: { vessels
         onChange={(value) => { setRange(value); setHovered(null); }}
         options={MISSION_HISTORY_RANGES.map((r) => ({ value: r.value, label: t(r.label), testID: `mission-history-range-${r.value}` }))}
       />
-      <View style={styles.filters}>
-        <View style={styles.flex}>
+      {/* At large text sizes the two pickers stack so their values are not cut to "All...". */}
+      <View style={[styles.filters, largeText ? styles.stacked : null]}>
+        <View style={largeText ? null : styles.flex}>
           <SelectField
             label={t('Fleet')}
             value={fleetId}
@@ -84,7 +95,7 @@ export function MissionHistoryChart({ vessels, fleets, refreshToken }: { vessels
             testID="mission-history-fleet"
           />
         </View>
-        <View style={styles.flex}>
+        <View style={largeText ? null : styles.flex}>
           <SelectField
             label={t('Vessel')}
             value={effectiveVesselId}
@@ -112,8 +123,12 @@ export function MissionHistoryChart({ vessels, fleets, refreshToken }: { vessels
           <View
             testID="mission-history-chart"
             accessible
-            accessibilityRole="image"
+            accessibilityRole="adjustable"
             accessibilityLabel={`${t('Mission History')}: ${summary}`}
+            accessibilityValue={shown ? { text: bucketText(shown) } : undefined}
+            accessibilityHint={t('Swipe up or down to read each time period.')}
+            accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
+            onAccessibilityAction={(e) => step(e.nativeEvent.actionName === 'increment' ? 1 : -1)}
             onLayout={(e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width)}
             onStartShouldSetResponder={() => true}
             onMoveShouldSetResponder={() => true}
@@ -135,7 +150,7 @@ export function MissionHistoryChart({ vessels, fleets, refreshToken }: { vessels
           </View>
           <View style={styles.axis}>
             {labelIndexes.map((i) => (
-              <AppText key={i} variant="caption" muted>{formatBucketLabel(buckets[i].timestampMs, rangeDef.stepMinutes, rangeDef.hours)}</AppText>
+              <AppText key={i} variant="caption" muted maxFontSizeMultiplier={CHROME_MAX_FONT_SCALE} style={styles.axisLabel}>{formatBucketLabel(buckets[i].timestampMs, rangeDef.stepMinutes, rangeDef.hours)}</AppText>
             ))}
           </View>
           {shown ? (
@@ -180,14 +195,18 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center' },
   flex: { flex: 1 },
   filters: { flexDirection: 'row', gap: spacing.sm },
-  stats: { flexDirection: 'row', gap: spacing.lg, marginBottom: spacing.md },
+  stacked: { flexDirection: 'column' },
+  // Wraps at large text sizes instead of pushing "Failed" off the card.
+  stats: { flexDirection: 'row', flexWrap: 'wrap', columnGap: spacing.lg, rowGap: spacing.sm, marginBottom: spacing.md },
   stat: { alignItems: 'flex-start' },
   empty: { paddingVertical: spacing.xl, textAlign: 'center' },
   chart: { height: CHART_HEIGHT, flexDirection: 'row', alignItems: 'flex-end', gap: 1, borderBottomWidth: 1 },
   column: { flex: 1, justifyContent: 'flex-end', minWidth: 1 },
-  axis: { flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.xs },
+  // Axis labels are chart chrome: capped, and each may wrap in its third of the width instead of running together.
+  axis: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm, marginTop: spacing.xs },
+  axisLabel: { flexShrink: 1 },
   tooltip: { borderWidth: 1, borderRadius: radius.sm, padding: spacing.sm, marginTop: spacing.sm, gap: 2 },
-  legend: { flexDirection: 'row', gap: spacing.lg, marginTop: spacing.md },
+  legend: { flexDirection: 'row', flexWrap: 'wrap', columnGap: spacing.lg, rowGap: spacing.xs, marginTop: spacing.md },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   swatch: { width: 12, height: 12, borderRadius: 2 },
 });

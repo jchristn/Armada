@@ -44,7 +44,7 @@ export function DockDetail({ id, embedded }: OperationsDetailProps) {
     <Screen testID="dock-detail" refreshControl={<RefreshControl refreshing={query.refreshing} onRefresh={() => void query.refresh()} tintColor={colors.primary} />}>
       {embedded ? null : <Stack.Screen options={{ title }} />}
       <View style={styles.head}>
-        <AppText variant="heading" selectable>{dock.branchName || dock.id}</AppText>
+        <AppText variant="heading" accessibilityRole="header" selectable>{dock.branchName || dock.id}</AppText>
         <StatusBadge label={dock.active ? t('Active') : t('Inactive')} tone={dock.active ? 'success' : 'cancelled'} />
       </View>
       <DetailActions>

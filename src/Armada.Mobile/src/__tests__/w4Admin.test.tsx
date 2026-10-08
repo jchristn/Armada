@@ -5,6 +5,7 @@ import MoreLayout from '../app/(app)/(more)/_layout';
 import ServerRoute from '../app/(app)/(more)/server';
 import { userFormError, userFormValues, userPayload } from '../screens/system/UsersTab';
 import { page, renderW4Routes, resetW4 } from '../test/w4';
+import { rowActionTarget } from '../test/a11y';
 
 jest.mock('@dashboard/api/client', () => require('../test/w4Client').autoMockClient());
 
@@ -90,7 +91,7 @@ describe('Settings hub admin tabs', () => {
     api.deleteTenant.mockResolvedValue(undefined as never);
     await renderW4Routes(ROUTES, '/server?tab=tenants');
     await waitFor(() => expect(screen.getByTestId('tenant-row-ten_2')).toBeTruthy());
-    await fireEvent(screen.getByTestId('tenant-row-ten_2-swipe'), 'accessibilityAction', { nativeEvent: { actionName: 'delete' } });
+    await fireEvent(rowActionTarget(screen.getByTestId('tenant-row-ten_2-swipe'), 'delete'), 'accessibilityAction', { nativeEvent: { actionName: 'delete' } });
     await waitFor(() => expect(screen.getByTestId('tenant-confirm-typed')).toBeTruthy());
     expect(screen.getByText(/Are you sure you wish to delete: Acme/)).toBeTruthy();
     await act(async () => { await fireEvent.press(screen.getByTestId('tenant-confirm-confirm')); });

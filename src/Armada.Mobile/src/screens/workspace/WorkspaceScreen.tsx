@@ -365,7 +365,7 @@ export function WorkspaceScreen({ vesselId, initialPanel = 'files' }: { vesselId
           spellCheck={false}
           textAlignVertical="top"
           accessibilityLabel={activeFile.path}
-          style={[typography.mono, styles.editor, { color: colors.text, backgroundColor: colors.surface, borderColor: colors.border }]}
+          style={[typography.mono, styles.editor, { color: colors.text, backgroundColor: colors.surface, borderColor: colors.control }]}
           testID="workspace-editor-input"
         />
       ) : (

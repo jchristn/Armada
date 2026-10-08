@@ -94,7 +94,7 @@ export function MergeEntryDetail({ id, embedded }: OperationsDetailProps) {
     >
       {embedded ? null : <Stack.Screen options={{ title }} />}
       <View style={styles.head}>
-        <AppText variant="heading" selectable testID="merge-entry-title">{`${entry.branchName} -> ${entry.targetBranch}`}</AppText>
+        <AppText variant="heading" accessibilityRole="header" selectable testID="merge-entry-title">{`${entry.branchName} -> ${entry.targetBranch}`}</AppText>
         <EntityStatusBadge status={entry.status} testID="merge-entry-status" />
       </View>
       <DetailActions>

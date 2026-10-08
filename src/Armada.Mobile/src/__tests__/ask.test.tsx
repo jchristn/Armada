@@ -3,7 +3,7 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react-
 import { Slot } from 'expo-router';
 import { renderRouter } from 'expo-router/testing-library';
 import type { ReactNode } from 'react';
-import { Alert, AppState, Linking, StyleSheet, Text, type AlertButton } from 'react-native';
+import { AccessibilityInfo, Alert, AppState, Linking, StyleSheet, Text, type AlertButton } from 'react-native';
 import * as client from '@dashboard/api/client';
 import type { AskActionProposal, AskMessage, AskThread, CliPermissionRequest } from '@dashboard/types/models';
 import AskLayout from '../app/(app)/(ask)/_layout';
@@ -337,9 +337,13 @@ describe('Ask Armada', () => {
     api.getAskThread.mockResolvedValue({ thread: thread({ activeTurnId: 'turn_9' }), trackedWork: [] });
     await renderAsk('/ask/thr_1');
     await waitFor(() => expect(screen.getByTestId('ask-waiting')).toBeTruthy());
+    // The waiting line rotates; its spoken label does not, so TalkBack's live region speaks it once.
+    expect(screen.getByTestId('ask-waiting').props.accessibilityLabel).toBe('Thinking...');
     await emit('ask.turn', { threadId: 'thr_1', turnId: 'turn_9', state: 'failed', error: 'runtime not found' });
     await waitFor(() => expect(screen.getByTestId('ask-turn-error')).toBeTruthy());
     expect(screen.getByText('The captain turn failed: runtime not found')).toBeTruthy();
+    // VoiceOver has no live regions: the failure is announced, queued behind current speech.
+    expect(AccessibilityInfo.announceForAccessibilityWithOptions).toHaveBeenCalledWith('The captain turn failed: runtime not found', { queue: true });
   });
 
   it('links in captain replies open app pages in the app and web pages outside, after naming the real host', async () => {

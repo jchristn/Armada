@@ -41,7 +41,7 @@ export function CommitHeatmap({ activity, selectedDate, onSelectDate, rangeLabel
     return Array.from({ length: 7 }, (_, i) => short.format(new Date(WEEKDAY_REFERENCE_SUNDAY + i * 86400000)));
   }, [locale]);
 
-  const fill = (level: number) => (level === 0 ? colors.border : colors.success);
+  const fill = (level: number) => (level === 0 ? colors.track : colors.success);
   const describe = (date: string, count: number) =>
     t('{count, plural, =0 {No commits} one {# commit} other {# commits}} on {{date}}', {
       count,

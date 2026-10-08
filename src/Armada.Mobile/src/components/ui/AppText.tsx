@@ -1,3 +1,4 @@
+import type { Ref } from 'react';
 import { Text, type TextProps } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
 import { typography, type TypographyVariant } from '../../theme/typography';
@@ -8,6 +9,8 @@ export interface AppTextProps extends TextProps {
   /** A palette color name; defaults to `text` (or `textMuted` when `muted`). */
   color?: keyof Palette;
   muted?: boolean;
+  /** The native text (for moving screen-reader focus to it). */
+  ref?: Ref<Text>;
 }
 
 /** Text in the app's type scale and theme. Font scaling stays on (Dynamic Type / Android font size). */

@@ -63,7 +63,7 @@ export function VesselOnboardingScreen({ id }: { id: string }) {
         refreshControl={<RefreshControl refreshing={resource.refreshing} onRefresh={() => void resource.refresh()} tintColor={colors.primary} />}
       >
         <View style={styles.column}>
-          <AppText variant="heading" style={styles.pad}>{vessel.name}</AppText>
+          <AppText variant="heading" accessibilityRole="header" style={styles.pad}>{vessel.name}</AppText>
           <AppText muted style={styles.pad}>{t('Use this checklist to take the vessel from registration through workflow-ready onboarding.')}</AppText>
           <ActionRow>
             <Button label={t('Open Workspace')} variant="secondary" onPress={() => router.push(vesselLinks.workspace(vessel.id) as Href)} />

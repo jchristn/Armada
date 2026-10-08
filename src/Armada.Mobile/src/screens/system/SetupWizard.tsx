@@ -360,7 +360,7 @@ export function SetupWizard() {
   if (current === 0) {
     content = (
       <>
-        <AppText variant="heading">{t('Set up Armada by dispatching one first mission')}</AppText>
+        <AppText variant="heading" accessibilityRole="header">{t('Set up Armada by dispatching one first mission')}</AppText>
         <FieldCard title={t('What this wizard will do')}>
           <Field label={t('Pick a fleet')} value={t('Create or reuse the repository group Armada should organize work under.')} />
           <Field label={t('Register a vessel')} value={t('Provide the target git repository and optional project context, without leaving the wizard.')} />
@@ -374,7 +374,7 @@ export function SetupWizard() {
   } else if (current === 1) {
     content = (
       <>
-        <AppText variant="heading">{t('Choose the fleet for this setup')}</AppText>
+        <AppText variant="heading" accessibilityRole="header">{t('Choose the fleet for this setup')}</AppText>
         <AppText muted>{t('Fleets group related repositories. Use an existing fleet if Armada is already configured, or create a starter fleet now.')}</AppText>
         <ModeToggle value={fleetMode} onChange={setFleetMode} existingLabel={t('Use Existing')} existingDisabled={fleets.length === 0} testID="setup-fleet-mode" />
         {fleetMode === 'existing' ? (
@@ -391,7 +391,7 @@ export function SetupWizard() {
   } else if (current === 2) {
     content = (
       <>
-        <AppText variant="heading">{t('Register the vessel Armada will dispatch to')}</AppText>
+        <AppText variant="heading" accessibilityRole="header">{t('Register the vessel Armada will dispatch to')}</AppText>
         <AppText muted>{t('A vessel is a git repository. The setup mission will run against the vessel you choose here.')}</AppText>
         <Context label={t('Fleet')} value={activeFleet?.name ?? t('No fleet selected')} />
         <ModeToggle value={vesselMode} onChange={setVesselMode} existingLabel={t('Use Existing')} existingDisabled={vessels.length === 0} testID="setup-vessel-mode" />
@@ -416,7 +416,7 @@ export function SetupWizard() {
   } else if (current === 3) {
     content = (
       <>
-        <AppText variant="heading">{t('Prepare a captain for dispatch')}</AppText>
+        <AppText variant="heading" accessibilityRole="header">{t('Prepare a captain for dispatch')}</AppText>
         <AppText muted>{t('A captain is an AI runtime registered with Armada. Direct dispatch assigns work to an available captain, so this step ensures the pool has capacity.')}</AppText>
         <Context label={t('Vessel')} value={activeVessel?.name ?? t('No vessel selected')} />
         <ModeToggle value={captainMode} onChange={setCaptainMode} existingLabel={t('Use Existing Idle')} existingDisabled={idleCaptains.length === 0} testID="setup-captain-mode" />
@@ -468,7 +468,7 @@ export function SetupWizard() {
   } else if (current === 4) {
     content = (
       <>
-        <AppText variant="heading">{t('Dispatch the first mission')}</AppText>
+        <AppText variant="heading" accessibilityRole="header">{t('Dispatch the first mission')}</AppText>
         <AppText muted>{t('This uses Armada\'s direct mission dispatch path. It does not create a voyage from the setup wizard.')}</AppText>
         <FieldCard>
           <Field label={t('Fleet')} value={activeFleet?.name ?? '-'} />
@@ -486,7 +486,7 @@ export function SetupWizard() {
     const wait = (value: string | number) => (nextLoading ? t('Loading...') : String(value));
     content = (
       <>
-        <AppText variant="heading">{t('Mission dispatched, handoff ready')}</AppText>
+        <AppText variant="heading" accessibilityRole="header">{t('Mission dispatched, handoff ready')}</AppText>
         <AppText muted>{t('Armada can dispatch safely now. Use the handoff actions below to move this vessel into onboarding, backlog, planning, workspace, workflow-profile, environment, and first-check setup.')}</AppText>
         {warning ? <Banner tone="info" title={warning} /> : null}
         {mission ? (

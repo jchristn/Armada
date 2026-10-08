@@ -21,7 +21,7 @@ export function SearchField({ value, onChangeText, placeholder, clearLabel, test
   const { colors } = useTheme();
   const ownPlaceholder = Platform.OS === 'android';
   return (
-    <View style={[styles.box, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+    <View style={[styles.box, { backgroundColor: colors.surface, borderColor: colors.control }]}>
       <Icon name="search" size={18} color="textMuted" />
       <View style={styles.inputWrap}>
       <TextInput

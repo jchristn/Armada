@@ -1,4 +1,5 @@
-import { Pressable, StyleSheet, View } from 'react-native';
+import type { RefObject } from 'react';
+import { Pressable, StyleSheet, View, type HostInstance } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
 import { MIN_TOUCH, spacing } from '../../theme/typography';
 import { AppText } from './AppText';
@@ -15,17 +16,19 @@ export interface SheetAction {
 }
 
 /** A list of actions in a bottom sheet: the mobile form of the dashboard's row "..." menu. */
-export function ActionSheet({ open, title, actions, onClose, closeLabel, testID }: {
+export function ActionSheet({ open, title, actions, onClose, closeLabel, returnFocusRef, testID }: {
   open: boolean;
   title: string;
   actions: SheetAction[];
   onClose: () => void;
   closeLabel: string;
+  /** The control that opened the sheet: screen-reader focus returns to it when the sheet closes. */
+  returnFocusRef?: RefObject<HostInstance | null>;
   testID?: string;
 }) {
   const { colors } = useTheme();
   return (
-    <BottomSheet open={open} title={title} onClose={onClose} closeLabel={closeLabel} testID={testID}>
+    <BottomSheet open={open} title={title} onClose={onClose} closeLabel={closeLabel} returnFocusRef={returnFocusRef} testID={testID}>
       {actions.map((action) => (
         <Pressable
           key={action.key}

@@ -156,6 +156,8 @@ describe('Planning session', () => {
 
     await emit('planning-session.changed', { session: session({ status: 'Responding' }) });
     await waitFor(() => expect(screen.getByTestId('planning-thinking')).toBeTruthy());
+    // The thinking line rotates every few seconds; the live region's spoken label stays put.
+    expect(screen.getByTestId('planning-thinking').props.accessibilityLabel).toBe('Thinking...');
     expect(screen.getByTestId('planning-stop')).toBeTruthy();
     await emit('planning-session.message.created', { sessionId: 'pls_1', message: { ...reply, content: '' } });
     await emit('planning-session.tool', { sessionId: 'pls_1', messageId: 'pmg_2', phase: 'started', id: 'tc_1', name: 'Read' });

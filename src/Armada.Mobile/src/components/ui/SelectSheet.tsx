@@ -1,5 +1,5 @@
 import { Pressable, StyleSheet, View } from 'react-native';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTheme } from '../../theme/ThemeContext';
 import { MIN_TOUCH, radius, spacing } from '../../theme/typography';
 import { AppText } from './AppText';
@@ -35,12 +35,14 @@ export interface SelectFieldProps<T extends string> {
 export function SelectField<T extends string>({ label, value, options, onChange, closeLabel, placeholder, disabled, hint, error, testID }: SelectFieldProps<T>) {
   const { colors } = useTheme();
   const [open, setOpen] = useState(false);
+  const fieldRef = useRef<View | null>(null);
   const current = options.find((o) => o.value === value);
   const shown = current?.label ?? placeholder ?? '';
   return (
     <View style={styles.wrap}>
       <AppText variant="label">{label}</AppText>
       <Pressable
+        ref={fieldRef}
         testID={testID}
         accessibilityRole="button"
         accessibilityLabel={label}
@@ -48,14 +50,14 @@ export function SelectField<T extends string>({ label, value, options, onChange,
         accessibilityState={{ disabled: !!disabled }}
         disabled={disabled}
         onPress={() => setOpen(true)}
-        style={[styles.box, { borderColor: error ? colors.danger : colors.border, backgroundColor: colors.surface, opacity: disabled ? 0.55 : 1 }]}
+        style={[styles.box, { borderColor: error ? colors.danger : colors.control, backgroundColor: colors.surface, opacity: disabled ? 0.55 : 1 }]}
       >
         <AppText style={styles.value} muted={!current} numberOfLines={1}>{shown}</AppText>
         <Icon name="chevron-down" size={18} color="textMuted" />
       </Pressable>
       {error ? <AppText variant="caption" color="danger" accessibilityRole="alert">{error}</AppText> : null}
       {!error && hint ? <AppText variant="caption" muted>{hint}</AppText> : null}
-      <BottomSheet open={open} title={label} onClose={() => setOpen(false)} closeLabel={closeLabel} testID={testID ? `${testID}-sheet` : undefined}>
+      <BottomSheet open={open} title={label} onClose={() => setOpen(false)} closeLabel={closeLabel} returnFocusRef={fieldRef} testID={testID ? `${testID}-sheet` : undefined}>
         <View accessibilityRole="radiogroup">
           {options.map((option) => {
             const selected = option.value === value;

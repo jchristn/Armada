@@ -48,7 +48,7 @@ export function EventDetail({ id, embedded }: OperationsDetailProps) {
     <Screen testID="event-detail" refreshControl={<RefreshControl refreshing={query.refreshing} onRefresh={() => void query.refresh()} tintColor={colors.primary} />}>
       {embedded ? null : <Stack.Screen options={{ title }} />}
       <View style={styles.head}>
-        <AppText variant="heading" selectable testID="event-type">{event.eventType}</AppText>
+        <AppText variant="heading" accessibilityRole="header" selectable testID="event-type">{event.eventType}</AppText>
         {event.message ? <AppText selectable>{event.message}</AppText> : null}
       </View>
       <DetailActions>

@@ -4,7 +4,7 @@
  * the test configures it), so a screen under test can never reach the network. No app imports here: the mock factory
  * runs while the app modules that import the client are still loading.
  */
-const KEEP_REAL = new Set(['ApiError', 'TimeoutError', 'RequestCancelledError', 'isApiStatus', 'apiErrorCode', 'getClientBaseUrl']);
+const KEEP_REAL = new Set(['ApiError', 'TimeoutError', 'NetworkError', 'RequestCancelledError', 'isApiStatus', 'apiErrorCode', 'getClientBaseUrl']);
 
 export function autoMockClient(): Record<string, unknown> {
   const actual = jest.requireActual('@dashboard/api/client') as Record<string, unknown>;

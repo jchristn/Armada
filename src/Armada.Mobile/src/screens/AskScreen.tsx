@@ -24,6 +24,7 @@ import { useNotifications } from '../notifications/NotificationContext';
 import { useTheme } from '../theme/ThemeContext';
 import { spacing } from '../theme/typography';
 import { useModalBack } from '../components/ui/useModalBack';
+import { useReducedMotion } from '../lib/accessibility';
 import { MODAL_ORIENTATIONS } from '../components/ui/modalOrientations';
 
 /** The last conversation reopens once per app session (MOBILE_APP_PLAN.md design principle 1). */
@@ -54,6 +55,7 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
   const { colors } = useTheme();
   // Sidebar navigation (no header bell) vs. list and conversation side by side (pane width).
   const { isTablet, split } = useLayout();
+  const reduceMotion = useReducedMotion();
   const router = useRouter();
   const { isAdmin, isTenantAdmin } = useAuth();
   const { pushToast } = useNotifications();
@@ -166,7 +168,7 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
     <View style={styles.empty}><AppText muted>{t('Send the first message to begin.')}</AppText></View>
   ) : (
     <View style={styles.empty} testID="ask-empty">
-      <AppText variant="title" style={styles.center}>{greeting}</AppText>
+      <AppText variant="title" accessibilityRole="header" style={styles.center}>{greeting}</AppText>
       <AppText muted style={styles.center}>
         {activeCaptain
           ? t('Ask {{name}} anything about your fleet, or start work with a quick action.', { name: activeCaptain.name })
@@ -196,7 +198,7 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
       <View style={styles.aboveComposer} testID="ask-above-composer">
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={t('Captain: {{name}}. Change captain', { name: activeCaptain ? captainLabel(activeCaptain) : t('None') })}
+        accessibilityLabel={t('Captain: {{name}}. Change captain', { name: activeCaptain ? captainLabel(activeCaptain) : t('None (quick actions only)') })}
         disabled={conv.turnActive}
         onPress={() => setOptionsOpen(true)}
         style={[styles.captainBar, { borderBottomColor: colors.border, backgroundColor: colors.surface }]}
@@ -204,7 +206,7 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
       >
         <Icon name="person-circle-outline" size={18} color="textMuted" />
         <AppText variant="caption" muted>{t('Captain')}</AppText>
-        <AppText variant="body" numberOfLines={1} style={styles.fill} testID="ask-captain-bar-name">
+        <AppText variant="body" numberOfLines={2} style={styles.fill} testID="ask-captain-bar-name">
           {activeCaptain ? captainLabel(activeCaptain) : t('None (quick actions only)')}
         </AppText>
         <Icon name="chevron-down" size={16} color="textMuted" />
@@ -334,7 +336,7 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
       />
       <SplitView master={threadList} detail={conversationPane} />
 
-      <Modal supportedOrientations={MODAL_ORIENTATIONS} visible={listOpen && !split} animationType="slide" presentationStyle="pageSheet" onRequestClose={onListBack}>
+      <Modal supportedOrientations={MODAL_ORIENTATIONS} visible={listOpen && !split} animationType={reduceMotion ? 'fade' : 'slide'} presentationStyle="pageSheet" onRequestClose={onListBack}>
         {/* A modal is a new native root: swipe actions in the list need their own gesture root. */}
         <GestureHandlerRootView style={styles.fill}>
         <SafeAreaView style={[styles.fill, { backgroundColor: colors.background }]} edges={['top', 'bottom', 'left', 'right']}>

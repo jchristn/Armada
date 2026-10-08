@@ -14,7 +14,7 @@ import { useLocale } from '../../i18n/LocaleContext';
 import { useNotifications } from '../../notifications/NotificationContext';
 import { useTheme } from '../../theme/ThemeContext';
 import { MIN_TOUCH, spacing } from '../../theme/typography';
-import { JsonSheet, RunProgressBar, RunStatusBadge } from './common';
+import { JsonSheet, RunProgressBar, RunStatusBadge, runProgressSummary } from './common';
 import { FleetActionRunDetailView } from './FleetActionRunDetailView';
 import { StatusFilterSheet } from './StatusFilterSheet';
 import { usePolling } from './usePolling';
@@ -94,12 +94,14 @@ export function FleetActionRunsTab() {
         swipe.push({ key: 'json', label: t('View JSON'), icon: 'code-slash-outline', onPress: () => setJson(item) });
         const duration = formatDurationMs(t, locale, durationBetween(item.startedUtc, item.completedUtc, isRunActive(item.status)));
         const isSelected = selection.selectedId === item.id;
+        const caption = [t(KIND_LABELS[item.kind]), !item.actionId ? t('Ad hoc') : null, t('Created {{when}}', { when: formatRelativeTime(item.createdUtc) }), duration].filter(Boolean).join(' \u00b7 ');
         return (
           <SwipeRow actions={swipe} testID={`fleet-action-run-swipe-${item.id}`}>
             <Pressable
               testID={`fleet-action-run-row-${item.id}`}
               accessibilityRole="button"
               accessibilityLabel={`${item.actionName}, ${t(RUN_STATUS_META[item.status]?.label ?? item.status)}`}
+              accessibilityValue={{ text: `${caption}, ${runProgressSummary(t, item)}` }}
               accessibilityState={{ selected: isSelected }}
               onPress={() => selection.open(item.id)}
               style={({ pressed }) => [
@@ -115,9 +117,7 @@ export function FleetActionRunsTab() {
               </View>
               {/* Narrow panes (beside the run's detail) give the name the row's width and the status its own line. */}
               {compactRows ? <View style={styles.rowStatus} testID={`fleet-action-run-status-stacked-${item.id}`}><RunStatusBadge status={item.status} /></View> : null}
-              <AppText variant="caption" muted>
-                {[t(KIND_LABELS[item.kind]), !item.actionId ? t('Ad hoc') : null, t('Created {{when}}', { when: formatRelativeTime(item.createdUtc) }), duration].filter(Boolean).join(' \u00b7 ')}
-              </AppText>
+              <AppText variant="caption" muted>{caption}</AppText>
               <RunProgressBar run={item} compact />
             </Pressable>
           </SwipeRow>

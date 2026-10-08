@@ -1,7 +1,7 @@
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { AppText } from '../../../components/ui';
 import { useTheme } from '../../../theme/ThemeContext';
-import { CHROME_MAX_FONT_SCALE, radius, spacing } from '../../../theme/typography';
+import { CHROME_MAX_FONT_SCALE, radius, spacing, touchSlop } from '../../../theme/typography';
 
 export interface Chip<K extends string> {
   key: K;
@@ -39,6 +39,7 @@ export function ChipGroup<K extends string>({ chips, selected, onToggle, label, 
         accessibilityLabel={text}
         accessibilityState={{ checked: on }}
         onPress={() => onToggle(chip.key)}
+        hitSlop={touchSlop(36)}
         style={[styles.chip, { borderColor: on ? colors.primary : colors.border, backgroundColor: on ? colors.primary : colors.surface }]}
       >
         <AppText variant="caption" color={on ? 'primaryText' : 'text'} maxFontSizeMultiplier={CHROME_MAX_FONT_SCALE}>{text}</AppText>

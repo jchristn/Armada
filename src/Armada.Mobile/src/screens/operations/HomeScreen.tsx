@@ -37,7 +37,6 @@ import {
   Button,
   ErrorState,
   Icon,
-  IconButton,
   KpiCard,
   KpiGrid,
   ListRow,
@@ -175,7 +174,7 @@ export function HomeScreen() {
           <AppText muted>{t('Overview of fleet health, active missions, and recent activity.')}</AppText>
         </View>
       </View>
-      <View style={styles.healthRow} testID="home-health" accessible accessibilityLabel={`${t('Server')}: ${healthLabel}${version ? `, ${version}` : ''}`}>
+      <View style={styles.healthRow} testID="home-health" accessible accessibilityLabel={[`${t('Server')}: ${healthLabel}`, version ? `v${version}` : null, uptime ? t('Uptime: {{uptime}}', { uptime }) : null].filter(Boolean).join(', ')}>
         <StatusBadge label={healthLabel} tone={healthState === 'healthy' ? 'success' : healthState === 'warning' ? 'warning' : 'failed'} />
         {version ? <AppText variant="caption" muted>{`v${version}`}</AppText> : null}
         {uptime ? <AppText variant="caption" muted>{t('Uptime: {{uptime}}', { uptime })}</AppText> : null}
@@ -183,7 +182,7 @@ export function HomeScreen() {
       {query.error && !data ? <ErrorState title={t('Something went wrong')} message={query.error} retryLabel={t('Retry')} onRetry={() => void query.refresh()} /> : null}
 
       <View style={[styles.hero, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        <AppText variant="heading">{t('Ask Armada')}</AppText>
+        <AppText variant="heading" accessibilityRole="header">{t('Ask Armada')}</AppText>
         <AppText muted>{t('Ask about fleet state in plain language and dispatch work straight from the conversation.')}</AppText>
         <View style={styles.wrapRow}>
           <Button label={t('Ask Armada')} icon="chatbubbles-outline" onPress={() => go('/ask')} testID="home-ask" />
@@ -210,24 +209,31 @@ export function HomeScreen() {
                 <AppText variant="label">{alert.message}</AppText>
                 {alert.action ? <AppText variant="caption" muted>{alert.action}</AppText> : null}
               </View>
-              {alert.link ? <AppText variant="label" color="primary">{t('View')}</AppText> : null}
+              {/* The role already says it opens something; the word is for sighted users. */}
+              {alert.link ? <AppText variant="label" color="primary" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">{t('View')}</AppText> : null}
             </Pressable>
           ))}
         </View>
       ) : null}
 
       <KpiGrid>
-        <KpiCard label={t('Captains')} value={status?.totalCaptains ?? 0} onPress={() => go('/captains')} testID="home-kpi-captains">
+        <KpiCard label={t('Captains')} value={status?.totalCaptains ?? 0} onPress={() => go('/captains')} testID="home-kpi-captains"
+          accessibilityValue={[`${status?.idleCaptains ?? 0} idle`, `${status?.workingCaptains ?? 0} working`, (status?.stalledCaptains ?? 0) > 0 ? `${status?.stalledCaptains ?? 0} stalled` : null].filter(Boolean).join(', ')}
+        >
           <StatusBadge label={`${status?.idleCaptains ?? 0} idle`} tone="success" />
           <StatusBadge label={`${status?.workingCaptains ?? 0} working`} tone="running" />
           {(status?.stalledCaptains ?? 0) > 0 ? <StatusBadge label={`${status?.stalledCaptains ?? 0} stalled`} tone="warning" /> : null}
         </KpiCard>
-        <KpiCard label={t('Active Voyages')} value={status?.activeVoyages ?? 0} onPress={() => go('/missions?tab=voyages')} testID="home-kpi-voyages">
+        <KpiCard label={t('Active Voyages')} value={status?.activeVoyages ?? 0} onPress={() => go('/missions?tab=voyages')} testID="home-kpi-voyages"
+          accessibilityValue={(status?.memoryPressureDeferrals ?? 0) > 0 ? t('{{count}} deferred for memory pressure', { count: status?.memoryPressureDeferrals ?? 0 }) : undefined}
+        >
           {(status?.memoryPressureDeferrals ?? 0) > 0 ? (
             <StatusBadge label={t('{{count}} deferred for memory pressure', { count: status?.memoryPressureDeferrals ?? 0 })} tone="warning" />
           ) : null}
         </KpiCard>
-        <KpiCard label={t('Missions')} value={totalMissionCount(status)} onPress={() => go('/missions')} testID="home-kpi-missions">
+        <KpiCard label={t('Missions')} value={totalMissionCount(status)} onPress={() => go('/missions')} testID="home-kpi-missions"
+          accessibilityValue={Object.entries(ms).map(([key, value]) => `${value} ${t(key)}`).join(', ')}
+        >
           {Object.entries(ms).map(([key, value]) => <EntityStatusBadgeCount key={key} status={key} count={value} />)}
         </KpiCard>
         <KpiCard
@@ -235,6 +241,7 @@ export function HomeScreen() {
           value={data?.activeRuns ? (data.activeRuns.pending + data.activeRuns.running).toLocaleString() : '-'}
           onPress={() => go(activeFleetActionRunsLink(data?.activeRuns ?? null))}
           testID="home-kpi-fleet-actions"
+          accessibilityValue={data?.activeRuns ? [t('{{count}} running', { count: data.activeRuns.running.toLocaleString() }), t('{{count}} pending', { count: data.activeRuns.pending.toLocaleString() })].join(', ') : undefined}
         >
           {data?.activeRuns ? (
             <>
@@ -254,13 +261,15 @@ export function HomeScreen() {
 
       {data?.vesselHealth && data.vesselHealth.totalVessels > 0 ? (
         <KpiGrid>
-          <KpiCard label={t('Vessels failing health')} value={data.vesselHealth.fail} onPress={() => go(HEALTH_KPI_LINKS.failing)} testID="home-health-failing">
+          <KpiCard label={t('Vessels failing health')} value={data.vesselHealth.fail} onPress={() => go(HEALTH_KPI_LINKS.failing)} testID="home-health-failing"
+            accessibilityValue={t('{{count}} warn, {{unknown}} not evaluated', { count: data.vesselHealth.warn, unknown: data.vesselHealth.notEvaluated })}
+          >
             <AppText variant="caption" muted>{t('{{count}} warn, {{unknown}} not evaluated', { count: data.vesselHealth.warn, unknown: data.vesselHealth.notEvaluated })}</AppText>
           </KpiCard>
-          <KpiCard label={t('Outdated majors')} value={data.vesselHealth.outdatedMajorVessels} onPress={() => go(HEALTH_KPI_LINKS.outdatedMajors)} testID="home-health-outdated">
+          <KpiCard label={t('Outdated majors')} value={data.vesselHealth.outdatedMajorVessels} onPress={() => go(HEALTH_KPI_LINKS.outdatedMajors)} testID="home-health-outdated" accessibilityValue={t('Vessels with a dependency a major version behind')}>
             <AppText variant="caption" muted>{t('Vessels with a dependency a major version behind')}</AppText>
           </KpiCard>
-          <KpiCard label={t('High/critical vulnerabilities')} value={data.vesselHealth.highOrCriticalVulnerabilityVessels} onPress={() => go(HEALTH_KPI_LINKS.vulnerable)} testID="home-health-vulnerable">
+          <KpiCard label={t('High/critical vulnerabilities')} value={data.vesselHealth.highOrCriticalVulnerabilityVessels} onPress={() => go(HEALTH_KPI_LINKS.vulnerable)} testID="home-health-vulnerable" accessibilityValue={t('Vessels with a high or critical advisory')}>
             <AppText variant="caption" muted>{t('Vessels with a high or critical advisory')}</AppText>
           </KpiCard>
         </KpiGrid>
@@ -300,7 +309,9 @@ export function HomeScreen() {
             testID={`home-mission-${m.id}`}
             title={m.title}
             subtitle={`${lookups.vesselName(m.vesselId)} - ${lookups.captainName(m.captainId)} - ${formatRelativeTime(m.createdUtc)}`}
-            accessory={<View style={styles.rowEnd}><EntityStatusBadge status={m.status} /><IconButton icon="ellipsis-horizontal" label={t('Actions')} onPress={() => setRowMenu(m)} color="textMuted" testID={`home-mission-${m.id}-menu`} /></View>}
+            accessory={<EntityStatusBadge status={m.status} />}
+            accessibilityValue={t(m.status)}
+            menu={{ label: t('Actions'), onPress: () => setRowMenu(m), testID: `home-mission-${m.id}-menu` }}
             onPress={() => go(`/missions/${m.id}`)}
             onLongPress={() => setRowMenu(m)}
           />
@@ -316,6 +327,7 @@ export function HomeScreen() {
               title={sig.payload || sig.message || sig.type}
               subtitle={formatRelativeTime(sig.createdUtc)}
               accessory={<EntityStatusBadge status={sig.type} />}
+              accessibilityValue={t(sig.type)}
               onPress={() => go(`/signals/${sig.id}`)}
             />
           ))}
@@ -352,6 +364,7 @@ function VoyageProgressRow({ vp, vesselNames, onPress, onLongPress }: { vp: Voya
       testID={`home-voyage-${vp.voyage?.id}`}
       accessibilityRole="button"
       accessibilityLabel={`${vp.voyage?.title || vp.voyage?.id}, ${t(vp.voyage?.status ?? '')}, ${percent}%`}
+      accessibilityValue={{ text: [vesselNames, `${vp.completedMissions}/${vp.totalMissions} ${t('done')}${vp.failedMissions > 0 ? `, ${vp.failedMissions} ${t('failed')}` : ''}`].filter(Boolean).join(', ') }}
       onPress={onPress}
       onLongPress={onLongPress}
       style={({ pressed }) => [styles.voyage, { borderBottomColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
@@ -383,7 +396,6 @@ const styles = StyleSheet.create({
   sectionHead: { marginHorizontal: spacing.lg, marginBottom: spacing.sm },
   upper: { textTransform: 'uppercase' },
   toolbar: { flexDirection: 'row', gap: spacing.sm, marginHorizontal: spacing.md },
-  rowEnd: { flexDirection: 'row', alignItems: 'center' },
   voyage: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md, gap: spacing.xs, borderBottomWidth: StyleSheet.hairlineWidth },
   voyageHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   progressRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },

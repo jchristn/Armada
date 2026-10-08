@@ -248,6 +248,7 @@ export function VesselDetailView({ id, embedded, openEdit, onEditOpened, onDelet
                   title={m.title}
                   subtitle={[m.id, m.captainId, m.branchName].filter(Boolean).join(' \u00B7 ')}
                   accessory={<StatusBadge label={m.status} tone={statusTone(m.status)} />}
+                  accessibilityValue={m.status}
                   onPress={() => router.push(`/missions/${encodeURIComponent(m.id)}` as Href)}
                   testID={`vessel-mission-${m.id}`}
                 />

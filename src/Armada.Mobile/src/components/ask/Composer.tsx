@@ -120,7 +120,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           accessibilityLabel={t('Message')}
           accessibilityHint={placeholder}
           onChangeText={(value) => { setInput(value); setMenuDismissed(false); }}
-          style={[styles.input, typography.body, { color: colors.text, borderColor: colors.border, backgroundColor: colors.background }]}
+          style={[styles.input, typography.body, { color: colors.text, borderColor: colors.control, backgroundColor: colors.background }]}
         />
         {turnActive ? (
           <Button label={stopping ? t('Stopping...') : t('Stop')} variant="secondary" onPress={onStop} disabled={stopping} testID="ask-stop" style={styles.sendButton} />
@@ -137,7 +137,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             onValueChange={onShowThinkingChange}
             accessibilityLabel={t('Show thinking')}
             accessibilityHint={t('Ask the captain to include its reasoning, shown collapsed above each reply')}
-            trackColor={{ true: colors.primary, false: colors.border }}
+            trackColor={{ true: colors.primary, false: colors.control }}
           />
           <AppText variant="caption" muted>{t('Show thinking')}</AppText>
         </View>

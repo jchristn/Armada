@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useColorScheme } from 'react-native';
+import { useIncreasedContrast } from '../lib/accessibility';
 import { PREF_KEYS, readPref, writePref } from '../storage/prefs';
 import { THEME_PREFERENCES, isDarkTheme, palettes, resolveTheme, type Palette, type ThemeName, type ThemePreference } from './palette';
 
@@ -20,6 +21,7 @@ function isPreference(value: unknown): value is ThemePreference {
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const scheme = useColorScheme();
+  const increasedContrast = useIncreasedContrast();
   const [preference, setPreferenceState] = useState<ThemePreference>('system');
 
   useEffect(() => {
@@ -36,9 +38,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<ThemeState>(() => {
-    const name = resolveTheme(preference, scheme === 'dark' ? 'dark' : 'light');
+    const name = resolveTheme(preference, scheme === 'dark' ? 'dark' : 'light', increasedContrast);
     return { preference, setPreference, name, colors: palettes[name], dark: isDarkTheme(name) };
-  }, [preference, scheme, setPreference]);
+  }, [preference, scheme, increasedContrast, setPreference]);
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }

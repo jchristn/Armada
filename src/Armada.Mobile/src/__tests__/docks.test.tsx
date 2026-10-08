@@ -6,6 +6,7 @@ import { DocksList, filterDocks } from '../screens/operations/DocksList';
 import { page } from '../test/operationsClient';
 import { mockRouter, setMockParams } from '../test/routerMock';
 import { renderScreen } from '../test/screen';
+import { rowActionTarget } from '../test/a11y';
 
 jest.mock('@dashboard/api/client', () => require('../test/operationsClient').operationsClientMockFactory());
 jest.mock('expo-router', () => require('../test/routerMock').routerMockFactory());
@@ -47,7 +48,7 @@ describe('docks', () => {
     await renderScreen(<DocksList onSelect={onSelect} />);
     await fireEvent.press(await screen.findByTestId('dock-row-dck_1'));
     expect(onSelect).toHaveBeenCalledWith('dck_1');
-    await fireEvent(screen.getByTestId('dock-row-dck_1-swipe'), 'accessibilityAction', { nativeEvent: { actionName: 'delete' } });
+    await fireEvent(rowActionTarget(screen.getByTestId('dock-row-dck_1-swipe'), 'delete'), 'accessibilityAction', { nativeEvent: { actionName: 'delete' } });
     await fireEvent.press(await screen.findByTestId('dock-confirm-confirm'));
     await waitFor(() => expect(api.deleteDock).toHaveBeenCalledWith('dck_1'));
 

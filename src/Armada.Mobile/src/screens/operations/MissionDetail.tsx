@@ -47,7 +47,7 @@ import { useQuery } from '../../data/useQuery';
 import { useLocale } from '../../i18n/LocaleContext';
 import { useNotifications } from '../../notifications/NotificationContext';
 import { useTheme } from '../../theme/ThemeContext';
-import { spacing } from '../../theme/typography';
+import { spacing, useLargeText } from '../../theme/typography';
 import type { OperationsDetailProps } from './listTypes';
 import { AssignmentBlockerCard, LandingPreviewCard, PullRequestCard } from './mission/MissionCards';
 import { MissionFormSheet, type MissionFormValues } from './mission/MissionFormSheet';
@@ -81,6 +81,7 @@ export interface MissionDetailProps extends OperationsDetailProps {
  */
 export function MissionDetail({ id, embedded, initialTab = 'overview', onDeleted }: MissionDetailProps) {
   const { t, formatDateTime, formatRelativeTime } = useLocale();
+  const largeText = useLargeText();
   const { colors } = useTheme();
   const router = useRouter();
   const { pushToast } = useNotifications();
@@ -419,8 +420,9 @@ export function MissionDetail({ id, embedded, initialTab = 'overview', onDeleted
     <View style={styles.fill} testID="mission-detail">
       {!embedded ? <Stack.Screen options={{ title: mission.title }} /> : null}
       <View style={styles.header}>
-        <View style={styles.row}>
-          <AppText variant="heading" accessibilityRole="header" style={styles.flex} numberOfLines={3} testID="mission-detail-title">{mission.title}</AppText>
+        {/* At large text the title takes the full width above Actions instead of a word-broken half column. */}
+        <View style={[styles.row, largeText ? styles.stackedHead : null]}>
+          <AppText variant="heading" accessibilityRole="header" style={largeText ? null : styles.flex} numberOfLines={3} testID="mission-detail-title">{mission.title}</AppText>
           <Button label={t('Actions')} variant="secondary" icon="ellipsis-horizontal" onPress={() => setMenuOpen(true)} testID="mission-action-menu" style={styles.menuButton} />
         </View>
         <SegmentedControl<MissionDetailTab>
@@ -472,6 +474,7 @@ const styles = StyleSheet.create({
   fill: { flex: 1 },
   header: { paddingHorizontal: spacing.md, paddingTop: spacing.md, gap: spacing.sm },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  stackedHead: { flexDirection: 'column', alignItems: 'stretch' },
   flex: { flex: 1 },
   menuButton: { marginBottom: 0 },
   // A readable column when the mission has the whole window (a tablet or a phone in landscape); the diff and log

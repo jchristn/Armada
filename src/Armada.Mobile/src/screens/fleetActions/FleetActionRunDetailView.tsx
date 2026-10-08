@@ -221,8 +221,9 @@ export function FleetActionRunDetailView({ id, embedded, onChanged }: FleetActio
           return (
             <Pressable
               testID={`fleet-action-target-row-${item.vesselName}`}
-              accessibilityRole={clickable ? 'button' : undefined}
+              accessibilityRole={clickable ? 'button' : 'text'}
               accessibilityLabel={[item.vesselName, t(TARGET_STATUS_META[item.status]?.label ?? item.status), reason].filter(Boolean).join(', ')}
+              accessibilityValue={facts ? { text: facts } : undefined}
               accessibilityHint={clickable ? (run.kind === 'Mission' ? t('Open the voyage') : t('View output for {{name}}', { name: item.vesselName })) : undefined}
               disabled={!clickable}
               onPress={() => openTarget(item)}

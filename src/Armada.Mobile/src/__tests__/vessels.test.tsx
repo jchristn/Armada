@@ -16,6 +16,7 @@ import { VesselOnboardingScreen } from '../screens/vessels/VesselOnboardingScree
 import { VesselsTab } from '../screens/vessels/VesselsTab';
 import { syncParts, vesselLinks } from '../screens/vessels/vesselLinks';
 import { BuildProviders, deliver, buildSockets, page } from '../test/buildFixtures';
+import { rowActionTarget } from '../test/a11y';
 
 jest.mock('@dashboard/api/client', () => require('../test/buildClientMock').buildClientMockFactory());
 
@@ -172,7 +173,7 @@ describe('Vessels tab', () => {
     api.deleteVessel.mockResolvedValue(undefined);
     await render(<BuildProviders><VesselsTab /></BuildProviders>);
     await waitFor(() => expect(screen.getByTestId('vessel-swipe-web')).toBeTruthy());
-    await fireEvent(screen.getByTestId('vessel-swipe-web'), 'accessibilityAction', { nativeEvent: { actionName: 'delete' } });
+    await fireEvent(rowActionTarget(screen.getByTestId('vessel-swipe-web'), 'delete'), 'accessibilityAction', { nativeEvent: { actionName: 'delete' } });
     expect(screen.getByText('Delete vessel "web"? This cannot be undone.')).toBeTruthy();
     expect(api.deleteVessel).not.toHaveBeenCalled();
     await fireEvent.press(screen.getByTestId('vessel-delete-confirm-confirm'));
@@ -183,10 +184,10 @@ describe('Vessels tab', () => {
     api.createVessel.mockResolvedValue(vessel({ id: 'vsl_7', name: 'api (copy)' }));
     await render(<BuildProviders><VesselsTab /></BuildProviders>);
     await waitFor(() => expect(screen.getByTestId('vessel-swipe-api')).toBeTruthy());
-    await fireEvent(screen.getByTestId('vessel-swipe-api'), 'accessibilityAction', { nativeEvent: { actionName: 'more' } });
+    await fireEvent(rowActionTarget(screen.getByTestId('vessel-swipe-api'), 'more'), 'accessibilityAction', { nativeEvent: { actionName: 'more' } });
     await fireEvent.press(screen.getByTestId('vessel-action-history'));
     expect(mockRouter.push).toHaveBeenLastCalledWith('/vessels/vsl_1/history');
-    await fireEvent(screen.getByTestId('vessel-swipe-api'), 'accessibilityAction', { nativeEvent: { actionName: 'more' } });
+    await fireEvent(rowActionTarget(screen.getByTestId('vessel-swipe-api'), 'more'), 'accessibilityAction', { nativeEvent: { actionName: 'more' } });
     await fireEvent.press(screen.getByTestId('vessel-action-duplicate'));
     await waitFor(() => expect(mockRouter.push).toHaveBeenLastCalledWith('/vessels/vsl_7?edit=1'));
     expect(api.createVessel.mock.calls[0][0]).toMatchObject({ fleetId: 'flt_1', landingMode: 'LocalMerge' });

@@ -25,7 +25,7 @@ export function SwitchRow({ label, hint, value, onChange, disabled, testID }: {
         value={value}
         onValueChange={onChange}
         disabled={disabled}
-        trackColor={{ true: colors.primary, false: colors.border }}
+        trackColor={{ true: colors.primary, false: colors.control }}
       />
     </View>
   );

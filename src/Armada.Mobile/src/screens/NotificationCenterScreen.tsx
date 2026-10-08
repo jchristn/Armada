@@ -69,7 +69,7 @@ export function NotificationCenterScreen() {
               icon={item.read ? 'ellipse-outline' : 'ellipse'}
               accessory={<StatusBadge label={t(item.severity)} tone={item.severity} />}
               selected={item.id === selectedId}
-              accessibilityValue={item.read ? undefined : t('Unread')}
+              accessibilityValue={[t(item.severity), item.read ? null : t('Unread')]}
               onPress={() => open(item)}
             />
           </SwipeRow>

@@ -98,7 +98,7 @@ export function NotificationSettingsSection() {
                     disabled={busy !== null}
                     onValueChange={(value) => void toggle(category, value)}
                     accessibilityLabel={t(text.label)}
-                    trackColor={{ true: colors.primary, false: colors.border }}
+                    trackColor={{ true: colors.primary, false: colors.control }}
                   />
                 )}
               />

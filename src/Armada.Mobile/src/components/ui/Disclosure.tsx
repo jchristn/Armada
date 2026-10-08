@@ -42,7 +42,7 @@ export function Disclosure({ title, children, initiallyOpen = false, open, onTog
 }
 
 const styles = StyleSheet.create({
-  head: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, minHeight: MIN_TOUCH - 12 },
+  head: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, minHeight: MIN_TOUCH },
   title: { flex: 1, fontWeight: '600' },
   body: { paddingTop: spacing.xs },
 });

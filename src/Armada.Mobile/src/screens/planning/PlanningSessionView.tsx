@@ -26,6 +26,7 @@ import { PlanningMessageView } from './PlanningMessageView';
 import { planningDispatchHref } from './planningDispatch';
 import type { PlanningCatalog } from './usePlanningCatalog';
 import { usePlanningSession } from './usePlanningSession';
+import { useReducedMotion } from '../../lib/accessibility';
 
 export interface PlanningSessionViewProps {
   sessionId: string;
@@ -123,7 +124,8 @@ export function PlanningSessionView({ sessionId, catalog, embedded, initialCompo
     return () => clearInterval(timer);
   }, [responding]);
 
-  const scrollToEnd = useCallback(() => scrollRef.current?.scrollToEnd({ animated: true }), []);
+  const reduceMotion = useReducedMotion();
+  const scrollToEnd = useCallback(() => scrollRef.current?.scrollToEnd({ animated: !reduceMotion }), [reduceMotion]);
   const lastAssistantId = [...messages].reverse().find((m) => m.role.toLowerCase() === 'assistant')?.id;
   const busyTurn = responding || sending;
   const selectedMessage = messages.find((m) => m.id === selectedMessageId) ?? null;
@@ -272,7 +274,8 @@ export function PlanningSessionView({ sessionId, catalog, embedded, initialCompo
               />
             ))}
             {responding ? (
-              <View style={styles.thinkingRow} accessibilityLiveRegion="polite" testID="planning-thinking">
+              // The line rotates every few seconds; the row's spoken label stays put so it is announced once.
+              <View style={styles.thinkingRow} accessible accessibilityLabel={t('Thinking...')} accessibilityLiveRegion="polite" testID="planning-thinking">
                 <ActivityIndicator color={colors.primary} />
                 <AppText variant="caption" muted style={styles.flex}>{thinkingLine}</AppText>
               </View>
@@ -313,7 +316,7 @@ export function PlanningSessionView({ sessionId, catalog, embedded, initialCompo
             placeholder={t('Describe the problem, ask for a plan, or negotiate the next steps with the captain.')}
             placeholderTextColor={colors.textMuted}
             accessibilityLabel={t('Message')}
-            style={[styles.input, typography.body, { color: colors.text, borderColor: colors.border, backgroundColor: colors.background }]}
+            style={[styles.input, typography.body, { color: colors.text, borderColor: colors.control, backgroundColor: colors.background }]}
           />
           {responding ? (
             <Button label={t('Stop')} variant="danger" icon="stop" onPress={() => void stopTurn()} busy={busy === 'stopTurn'} testID="planning-stop" style={styles.sendButton} />

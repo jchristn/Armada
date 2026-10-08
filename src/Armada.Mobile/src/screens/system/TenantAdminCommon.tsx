@@ -128,7 +128,7 @@ export function AdminRow({ title, subtitle, badge, meta, onPress, onToggleSelect
       selected={selected}
       testID={testID}
       accessibilityHint={onToggleSelect ? t('Long press to select') : undefined}
-      accessibilityValue={badge?.label}
+      accessibilityValue={[badge?.label, meta]}
     />
   );
   if (actions.length === 0) return row;

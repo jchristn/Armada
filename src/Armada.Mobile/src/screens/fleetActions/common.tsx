@@ -5,7 +5,7 @@ import { runProgress } from '@dashboard/lib/fleetActionForm';
 import { CodeBlock } from '../../components/ask/CodeBlock';
 import { AppText, BottomSheet, Button, StatusBadge } from '../../components/ui';
 import { Disclosure } from '../../components/ui/Disclosure';
-import { useLocale } from '../../i18n/LocaleContext';
+import { useLocale, type Translate } from '../../i18n/LocaleContext';
 import { useTheme } from '../../theme/ThemeContext';
 import { radius, spacing } from '../../theme/typography';
 
@@ -29,6 +29,17 @@ export function TargetStatusBadge({ status }: { status: FleetActionTargetStatus 
 
 type ProgressRun = Pick<FleetActionRun, 'targetCount' | 'succeededCount' | 'failedCount' | 'skippedCount' | 'cancelledCount'>;
 
+/** "1 succeeded, 1 failed, 0 skipped of 4": the progress bar's text, also read with a run's row. */
+export function runProgressSummary(t: Translate, run: ProgressRun): string {
+  const { total } = runProgress(run);
+  return t('{{succeeded}} succeeded, {{failed}} failed, {{skipped}} skipped of {{total}}', {
+    succeeded: run.succeededCount.toLocaleString(),
+    failed: run.failedCount.toLocaleString(),
+    skipped: run.skippedCount.toLocaleString(),
+    total: total.toLocaleString(),
+  });
+}
+
 /**
  * Segmented progress (succeeded / failed / skipped / cancelled of total) with the same text summary as the
  * dashboard's RunProgress, so the numbers are readable without the colors.
@@ -38,17 +49,12 @@ export function RunProgressBar({ run, compact = false }: { run: ProgressRun; com
   const { colors } = useTheme();
   const { total, done, percent } = runProgress(run);
   const flex = (n: number) => (total > 0 ? n / total : 0);
-  const summary = t('{{succeeded}} succeeded, {{failed}} failed, {{skipped}} skipped of {{total}}', {
-    succeeded: run.succeededCount.toLocaleString(),
-    failed: run.failedCount.toLocaleString(),
-    skipped: run.skippedCount.toLocaleString(),
-    total: total.toLocaleString(),
-  });
+  const summary = runProgressSummary(t, run);
   const rest = Math.max(0, total - done);
   return (
     <View style={styles.progress}>
       <View
-        style={[styles.bar, { backgroundColor: colors.border }]}
+        style={[styles.bar, { backgroundColor: colors.track }]}
         accessible
         accessibilityRole="progressbar"
         accessibilityLabel={t('Targets finished')}

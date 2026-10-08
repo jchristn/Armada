@@ -51,7 +51,7 @@ function TargetBody({ runId, targetId, onClose }: { runId: string; targetId: str
 
   return (
     <View testID="fleet-action-target-body">
-      <AppText variant="heading">{d.vesselName}</AppText>
+      <AppText variant="heading" accessibilityRole="header">{d.vesselName}</AppText>
       <AppText variant="mono" muted selectable style={styles.gap}>{d.id}</AppText>
       {target.error ? <Banner tone="danger" title={target.error} /> : null}
       <View style={styles.gap}><TargetStatusBadge status={d.status} /></View>

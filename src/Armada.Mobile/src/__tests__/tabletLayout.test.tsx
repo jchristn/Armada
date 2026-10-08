@@ -110,8 +110,8 @@ function DraftList({ onSelect }: { onSelect: (id: string) => void }) {
   const [draft, setDraft] = useState('');
   return (
     <View>
-      <TextInput testID="draft" value={draft} onChangeText={setDraft} />
-      <Text testID="row-a" onPress={() => onSelect('a')}>a</Text>
+      <TextInput testID="draft" accessibilityLabel="Search" value={draft} onChangeText={setDraft} />
+      <Text testID="row-a" accessibilityRole="button" onPress={() => onSelect('a')}>a</Text>
     </View>
   );
 }
@@ -245,7 +245,7 @@ describe('detail routes open beside their list on wide windows', () => {
 });
 
 describe('rows adapt to their pane', () => {
-  const row = <ListRow title="A vessel with a long name" subtitle="https://github.com/example/repository" accessory={<StatusBadge label="in sync" tone="success" />} onPress={() => undefined} testID="row" />;
+  const row = <ListRow title="A vessel with a long name" subtitle="https://github.com/example/repository" accessory={<StatusBadge label="in sync" tone="success" />} accessibilityValue="in sync" onPress={() => undefined} testID="row" />;
 
   it('stack the badge under the text in a narrow list pane beside a detail', async () => {
     await setWindow(834, 1210);

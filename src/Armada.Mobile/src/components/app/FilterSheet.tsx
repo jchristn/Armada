@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useLocale } from '../../i18n/LocaleContext';
 import { spacing } from '../../theme/typography';
@@ -16,10 +16,12 @@ export function activeFilterCount(values: Record<string, string | null | undefin
 export function FilterButton({ count, onClear, children, testID }: { count: number; onClear: () => void; children: ReactNode; testID?: string }) {
   const { t } = useLocale();
   const [open, setOpen] = useState(false);
+  const buttonRef = useRef<View | null>(null);
   const id = testID ?? 'filters';
   return (
     <>
       <Button
+        ref={buttonRef}
         testID={id}
         variant="secondary"
         icon="filter-outline"
@@ -27,7 +29,7 @@ export function FilterButton({ count, onClear, children, testID }: { count: numb
         onPress={() => setOpen(true)}
         style={styles.button}
       />
-      <BottomSheet open={open} title={t('Filters')} onClose={() => setOpen(false)} closeLabel={t('Close')} testID={`${id}-sheet`}>
+      <BottomSheet open={open} title={t('Filters')} onClose={() => setOpen(false)} closeLabel={t('Close')} returnFocusRef={buttonRef} testID={`${id}-sheet`}>
         {children}
         <View style={styles.actions}>
           <Button label={t('Clear')} variant="ghost" onPress={onClear} disabled={count === 0} testID={`${id}-clear`} />
