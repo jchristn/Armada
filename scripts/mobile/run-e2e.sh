@@ -223,7 +223,8 @@ seed_admiral() {
   repo2="${DATA_DIR}/seed-repo-web"
   mkdir -p "$repo2"
   git -C "$repo2" init -q -b main
-  for day in 1 2 2 5 9; do
+  # Oldest first, so commit order and commit dates agree (git log lists by commit order).
+  for day in 9 5 2 2 1; do
     echo "change ${day} $RANDOM" >> "${repo2}/CHANGES.md"
     git -C "$repo2" add CHANGES.md
     stamp="$(python3 -c 'import datetime,sys; print((datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=int(sys.argv[1]))).strftime("%Y-%m-%dT12:00:00Z"))' "$day")"
@@ -235,7 +236,7 @@ seed_admiral() {
   vessel="$(curl -fsS -X POST "${base}/api/v1/vessels" -H "X-Token: ${token}" -H 'Content-Type: application/json' \
     -d "{\"name\":\"demo-api\",\"repoUrl\":\"${repo}\",\"defaultBranch\":\"main\",\"fleetId\":\"${fleet}\"}" | id_of)"
   curl -fsS -X POST "${base}/api/v1/vessels" -H "X-Token: ${token}" -H 'Content-Type: application/json' \
-    -d "{\"name\":\"demo-web\",\"repoUrl\":\"${repo2}\",\"localPath\":\"${repo2}\",\"defaultBranch\":\"main\",\"fleetId\":\"${fleet}\"}" >/dev/null
+    -d "{\"name\":\"demo-web\",\"repoUrl\":\"${repo2}\",\"localPath\":\"${repo2}\",\"workingDirectory\":\"${repo2}\",\"defaultBranch\":\"main\",\"fleetId\":\"${fleet}\"}" >/dev/null
   env="$(curl -fsS -X POST "${base}/api/v1/environments" -H "X-Token: ${token}" -H 'Content-Type: application/json' \
     -d "{\"vesselId\":\"${vessel}\",\"name\":\"production\",\"kind\":\"Production\",\"requiresApproval\":true}" | id_of)"
   curl -fsS -X POST "${base}/api/v1/deployments" -H "X-Token: ${token}" -H 'Content-Type: application/json' \
@@ -248,7 +249,7 @@ run_flows() {
   if [ "$PROXY_ONLY" != "1" ] && [ "$PUSH_SIM_ONLY" != "1" ]; then
     log "running Maestro flows on ${platform} (${device}) against ${server_url}"
     if ! maestro --device "$device" test "$FLOWS" \
-        -e SERVER_URL="$server_url" -e APP_ID="$APP_ID" -e PLATFORM="$platform" \
+        -e SERVER_URL="$server_url" -e HOST_SERVER_URL="http://127.0.0.1:${PORT}" -e APP_ID="$APP_ID" -e PLATFORM="$platform" \
         --format junit --output "${OUTPUT}/${platform}-report.xml" \
         --test-output-dir "${OUTPUT}/${platform}"; then
       STATUS=1
