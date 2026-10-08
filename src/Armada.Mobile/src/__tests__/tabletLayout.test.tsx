@@ -1,7 +1,9 @@
-import { act, fireEvent, screen } from '@testing-library/react-native';
+import * as fs from 'fs';
+import * as path from 'path';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 import { useState } from 'react';
-import { Dimensions, StyleSheet, Text, TextInput, View } from 'react-native';
-import { BottomSheet, ListRow, PaneWidthContext, SplitView, StatusBadge } from '../components/ui';
+import { DeviceEventEmitter, Dimensions, StyleSheet, Text, TextInput, View } from 'react-native';
+import { BottomSheet, KeyboardAvoidingPane, ListRow, PaneWidthContext, SplitView, StatusBadge } from '../components/ui';
 import { InitialSelectionContext, ListDetailRoute, useListSelection } from '../navigation/listDetail';
 import { mockRouter } from '../test/routerMock';
 import {
@@ -309,5 +311,54 @@ describe('the icon rail', () => {
     expect(screen.getByLabelText('Not encrypted')).toBeTruthy();
     expect(screen.queryByText('Not encrypted')).toBeNull();
     expect(screen.queryByText('Armada')).toBeNull();
+  });
+});
+
+describe('modals in landscape', () => {
+  function sources(dir: string): string[] {
+    return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) return entry.name === '__tests__' ? [] : sources(full);
+      return /\.tsx$/.test(entry.name) ? [full] : [];
+    });
+  }
+
+  it('every platform Modal allows every orientation (iOS rotated the app to portrait for a sheet)', () => {
+    const offenders = sources(path.join(__dirname, '..')).flatMap((file) => {
+      const text = fs.readFileSync(file, 'utf8');
+      const opens = text.match(/<Modal\b[^>]*/g) ?? [];
+      return opens.filter((open) => !open.includes('supportedOrientations={MODAL_ORIENTATIONS}')).map(() => path.basename(file));
+    });
+    expect(offenders).toEqual([]);
+  });
+
+  it('a sheet opened on a phone in landscape stays in landscape', async () => {
+    await setWindow(956, 440);
+    await renderWithProviders(<BottomSheet open title="Options" onClose={() => undefined} closeLabel="Close" testID="sheet"><Text>body</Text></BottomSheet>);
+    // The host Modal above the sheet carries the orientations iOS presents it in.
+    let node = screen.getByTestId('sheet').parent;
+    while (node && !node.props.supportedOrientations) node = node.parent;
+    expect(node?.props.supportedOrientations).toEqual(expect.arrayContaining(['landscape-left', 'landscape-right', 'portrait']));
+  });
+});
+
+describe('keyboard avoidance wherever the pane sits', () => {
+  it('offsets by the pane\'s measured place in the window (split pane, landscape), not a fixed header height', async () => {
+    const nativeMethods = jest.requireActual('@react-native/jest-preset/jest/MockNativeMethods').default as { measureInWindow: jest.Mock };
+    // The Ask conversation pane on an iPhone in landscape: below a 44 dp header, beside the thread list.
+    nativeMethods.measureInWindow.mockImplementation((callback: (x: number, y: number, w: number, h: number) => void) => callback(380, 44, 500, 396));
+    await renderWithProviders(<KeyboardAvoidingPane testID="pane"><Text>composer</Text></KeyboardAvoidingPane>);
+    await act(async () => {
+      fireEvent(screen.getByTestId('pane'), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 500, height: 396 } } });
+    });
+    await act(async () => {
+      fireEvent(screen.getByTestId('pane-avoider'), 'layout', { persist: () => undefined, nativeEvent: { layout: { x: 0, y: 0, width: 500, height: 396 } } });
+    });
+    // A 200 dp landscape keyboard (top at 240 of 440): the pane's bottom (44 + 396) must rise by exactly 200.
+    await act(async () => {
+      DeviceEventEmitter.emit('keyboardWillShow', { endCoordinates: { screenX: 0, screenY: 240, width: 956, height: 200 }, duration: 0, easing: 'keyboard' });
+    });
+    await waitFor(() => expect(StyleSheet.flatten(screen.getByTestId('pane-avoider').props.style).paddingBottom).toBe(200));
+    nativeMethods.measureInWindow.mockReset();
   });
 });

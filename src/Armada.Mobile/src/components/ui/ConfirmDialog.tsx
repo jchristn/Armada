@@ -6,6 +6,7 @@ import { AppText } from './AppText';
 import { Button } from './Button';
 import { TextField } from './TextField';
 import { useModalBack } from './useModalBack';
+import { MODAL_ORIENTATIONS } from './modalOrientations';
 
 export interface ConfirmDialogProps {
   open: boolean;
@@ -33,7 +34,7 @@ export function ConfirmDialog(props: ConfirmDialogProps) {
   // Android back closes the keyboard (the typed confirmation) first, then the dialog.
   const onBack = useModalBack(props.onCancel);
   return (
-    <Modal visible={props.open} transparent animationType="fade" onRequestClose={onBack} statusBarTranslucent>
+    <Modal supportedOrientations={MODAL_ORIENTATIONS} visible={props.open} transparent animationType="fade" onRequestClose={onBack} statusBarTranslucent>
       <View style={[styles.backdrop, { backgroundColor: colors.overlay }]}>
         {/* Mounted only while open, so the typed confirmation starts empty every time. */}
         {props.open ? <DialogCard {...props} /> : null}

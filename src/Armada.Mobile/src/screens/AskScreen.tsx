@@ -1,9 +1,8 @@
 import { Stack, useFocusEffect, useRouter, type Href } from 'expo-router';
-import { useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Linking, Modal, Pressable, StyleSheet, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Linking, Modal, Pressable, StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { HeaderHeightContext } from 'expo-router/react-navigation';
 import type { AskThread, AskTrackedWork, CaptainToolAccessResult } from '@dashboard/types/models';
 import { askCaptainAccess, instructionsDocUrl } from '@dashboard/lib/askCaptain';
 import { randomGreeting } from '@dashboard/lib/askGreetings';
@@ -18,13 +17,14 @@ import { ConversationOptionsSheet, captainLabel } from '../components/ask/Conver
 import { MessageList, type MessageListHandle } from '../components/ask/MessageList';
 import { ThreadList } from '../components/ask/ThreadList';
 import { WorkStrip } from '../components/ask/WorkStrip';
-import { AppText, Banner, BottomSheet, Button, ConfirmDialog, ErrorState, Icon, IconButton, LoadingState, SplitView, TextField } from '../components/ui';
+import { AppText, Banner, BottomSheet, Button, ConfirmDialog, ErrorState, Icon, IconButton, KeyboardAvoidingPane, LoadingState, SplitView, TextField } from '../components/ui';
 import { useLocale } from '../i18n/LocaleContext';
 import { useLayout } from '../navigation/useLayout';
 import { useNotifications } from '../notifications/NotificationContext';
 import { useTheme } from '../theme/ThemeContext';
 import { spacing } from '../theme/typography';
 import { useModalBack } from '../components/ui/useModalBack';
+import { MODAL_ORIENTATIONS } from '../components/ui/modalOrientations';
 
 /** The last conversation reopens once per app session (MOBILE_APP_PLAN.md design principle 1). */
 let restoredLastThread = false;
@@ -57,7 +57,6 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
   const router = useRouter();
   const { isAdmin, isTenantAdmin } = useAuth();
   const { pushToast } = useNotifications();
-  const headerHeight = useContext(HeaderHeightContext) ?? 0;
   const ask = useAsk();
   const {
     captains, captainsLoaded, captainNames, draftCaptainId, setDraftCaptainId, quickActions, showThinking, setShowThinking, loadCaptainTools,
@@ -190,7 +189,8 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
   );
 
   const conversationPane = (
-    <KeyboardAvoidingView style={styles.fill} behavior="padding" keyboardVerticalOffset={headerHeight}>
+    // Measures its own place in the window, so the composer clears the keyboard in a split pane and in landscape.
+    <KeyboardAvoidingPane testID="ask-conversation-pane">
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={t('Captain: {{name}}. Change captain', { name: activeCaptain ? captainLabel(activeCaptain) : t('None') })}
@@ -286,7 +286,7 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
         showThinking={showThinking}
         onShowThinkingChange={setShowThinking}
       />
-    </KeyboardAvoidingView>
+    </KeyboardAvoidingPane>
   );
 
   const threadList = (
@@ -329,7 +329,7 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
       />
       <SplitView master={threadList} detail={conversationPane} />
 
-      <Modal visible={listOpen && !split} animationType="slide" presentationStyle="pageSheet" onRequestClose={onListBack}>
+      <Modal supportedOrientations={MODAL_ORIENTATIONS} visible={listOpen && !split} animationType="slide" presentationStyle="pageSheet" onRequestClose={onListBack}>
         {/* A modal is a new native root: swipe actions in the list need their own gesture root. */}
         <GestureHandlerRootView style={styles.fill}>
         <SafeAreaView style={[styles.fill, { backgroundColor: colors.background }]} edges={['top', 'bottom', 'left', 'right']}>

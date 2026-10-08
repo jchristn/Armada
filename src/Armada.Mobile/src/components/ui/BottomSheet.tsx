@@ -8,6 +8,7 @@ import { AppText } from './AppText';
 import { IconButton } from './IconButton';
 import { StickyFooter } from './StickyFooter';
 import { useModalBack } from './useModalBack';
+import { MODAL_ORIENTATIONS } from './modalOrientations';
 
 export interface BottomSheetProps {
   open: boolean;
@@ -34,7 +35,7 @@ export function BottomSheet({ open, title, onClose, closeLabel, children, footer
   // Android back closes the keyboard first, then the sheet (one press used to drop the sheet and its text).
   const onBack = useModalBack(onClose);
   return (
-    <Modal visible={open} transparent animationType="slide" onRequestClose={onBack} statusBarTranslucent>
+    <Modal supportedOrientations={MODAL_ORIENTATIONS} visible={open} transparent animationType="slide" onRequestClose={onBack} statusBarTranslucent>
       {/* Padding on both platforms: with Android edge-to-edge the window no longer resizes for the keyboard. */}
       <KeyboardAvoidingView
         style={[styles.fill, centered ? styles.centeredHost : styles.bottomHost, { paddingLeft: insets.left, paddingRight: insets.right }]}

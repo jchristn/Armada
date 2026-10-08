@@ -8,6 +8,7 @@ import { AppText, IconButton, LoadingState } from '../ui';
 import { useLocale } from '../../i18n/LocaleContext';
 import { useTheme } from '../../theme/ThemeContext';
 import { spacing } from '../../theme/typography';
+import { MODAL_ORIENTATIONS } from '../ui/modalOrientations';
 
 export interface MissionOutputRequest {
   kind: 'diff' | 'log';
@@ -23,7 +24,7 @@ export function MissionOutputSheet({ request, onClose }: { request: MissionOutpu
   const { t } = useLocale();
   const { colors } = useTheme();
   return (
-    <Modal visible={request !== null} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+    <Modal supportedOrientations={MODAL_ORIENTATIONS} visible={request !== null} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <SafeAreaView style={[styles.fill, { backgroundColor: colors.background }]} edges={['top', 'bottom', 'left', 'right']}>
         <View style={[styles.header, { borderBottomColor: colors.border }]}>
           <AppText variant="heading" accessibilityRole="header" numberOfLines={1} style={styles.fill}>
