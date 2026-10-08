@@ -256,7 +256,7 @@ export function VesselHealthTab() {
           </View>
           {meta ? <AppText variant="caption" muted numberOfLines={2}>{meta}</AppText> : null}
           <View style={styles.badges}>
-            {measured ? <AppText variant="caption" accessibilityLabel={divergence ?? undefined}>{`↑${formatCount(locale, ahead)} ↓${formatCount(locale, behind)}`}</AppText> : null}
+            {measured ? <AppText variant="caption" accessibilityLabel={divergence ?? undefined}>{`\u2191${formatCount(locale, ahead)} \u2193${formatCount(locale, behind)}`}</AppText> : null}
             <HealthBadge status={row.dependencyStatus} prefix={t('Dependencies')} />
             <HealthBadge status={row.vulnerabilityStatus} prefix={t('Vulnerabilities')} />
             <HealthBadge status={row.testInfraStatus} prefix={t('Tests')} />

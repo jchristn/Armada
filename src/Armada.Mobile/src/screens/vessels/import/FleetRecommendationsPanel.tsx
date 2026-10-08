@@ -194,7 +194,7 @@ export function FleetRecommendationsPanel({ batch, items, recommendations, onCha
                         closeLabel={t('Close')}
                         hint={t('Move {{name}} to another fleet', { name })}
                       />
-                    ) : <AppText key={vesselId} variant="caption">{`• ${name}`}</AppText>;
+                    ) : <AppText key={vesselId} variant="caption">{`\u2022 ${name}`}</AppText>;
                   })}
                   {d.vesselIds.length === 0 ? <AppText variant="caption" muted>{t('No repositories. Move some here or remove this fleet.')}</AppText> : null}
                 </View>

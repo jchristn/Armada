@@ -117,7 +117,7 @@ export function ChangesPanel({ vesselId, onOpenDiff, onOpenFile }: { vesselId: s
         <View key={`${c.status}:${c.path}`} style={[styles.listRow, { borderBottomColor: colors.border }]} testID={`workspace-change-${c.path}`}>
           <View style={styles.rowWrap}>
             <StatusBadge label={c.status} tone={c.status.toLowerCase().includes('delete') ? 'failed' : c.status.toLowerCase().includes('add') || c.status.toLowerCase().includes('untracked') ? 'success' : 'warning'} />
-            <AppText variant="caption" style={[typography.mono, styles.flex]}>{c.originalPath ? `${c.originalPath} → ${c.path}` : c.path}</AppText>
+            <AppText variant="caption" style={[typography.mono, styles.flex]}>{c.originalPath ? `${c.originalPath} \u2192 ${c.path}` : c.path}</AppText>
           </View>
           <ActionRow>
             <Button label={t('Diff')} variant="ghost" onPress={() => onOpenDiff(c.path)} testID={`workspace-change-diff-${c.path}`} />
@@ -207,7 +207,7 @@ export function TerminalPanel({ vesselId }: { vesselId: string }) {
       const next: TerminalLine[] = [];
       if (result.stdout) next.push({ kind: 'stdout', text: result.stdout.replace(/\n+$/, '') });
       if (result.stderr) next.push({ kind: 'stderr', text: result.stderr.replace(/\n+$/, '') });
-      next.push({ kind: 'meta', text: `${result.timedOut ? t('timed out') : t('exit {{code}}', { code: result.exitCode })} · ${Math.round(result.durationMs)}ms` });
+      next.push({ kind: 'meta', text: `${result.timedOut ? t('timed out') : t('exit {{code}}', { code: result.exitCode })} \u00b7 ${Math.round(result.durationMs)}ms` });
       setLines((l) => [...l, ...next]);
     } catch (e) {
       setLines((l) => [...l, { kind: 'stderr', text: errorMessage(e) }]);

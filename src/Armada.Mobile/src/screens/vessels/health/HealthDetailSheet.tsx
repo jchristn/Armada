@@ -265,7 +265,7 @@ export function HealthDetailSheet(props: HealthDetailSheetProps) {
               <View key={d.id ?? `${d.projectPath}-${d.packageName}-${d.currentVersion}`} style={[styles.item, { borderColor: colors.border }]}>
                 <AppText variant="label" style={typography.mono}>{d.packageName}</AppText>
                 <AppText variant="caption" muted>{`${d.ecosystem}${d.projectPath ? ` - ${d.projectPath}` : ''}`}</AppText>
-                <AppText variant="caption" style={typography.mono}>{`${d.currentVersion || '-'}${d.latestVersion ? ` → ${d.latestVersion}` : ''}`}</AppText>
+                <AppText variant="caption" style={typography.mono}>{`${d.currentVersion || '-'}${d.latestVersion ? ` \u2192 ${d.latestVersion}` : ''}`}</AppText>
                 <View style={styles.itemHead}>
                   {d.drift && d.drift !== 'None' ? <AppText variant="caption" color="warning">{driftLabel(t, d.drift)}</AppText> : null}
                   {d.isVulnerable ? <AppText variant="caption" color="danger">{severityLabel(t, d.severity)}</AppText> : null}
