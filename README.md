@@ -737,7 +737,7 @@ The compose file refuses to start without `ARMADA_INITIAL_ADMIN_PASSWORD`, becau
 
 ### Harbor: run agents on your machine
 
-A Harbor (`Armada.Harbor`, a small tray app) is the host runner for split mode. You do not need it in Local mode. It runs on the machine that has your repositories, git credentials, and agent CLI logins, dials out to the Admiral (so it works from behind NAT and against a container's published port), and executes the work the Admiral routes to it. The app also has a **Manage** window for the Admiral's status, settings, logs, and backups.
+A Harbor (`Armada.Harbor`, a small tray app) is the host runner for split mode. You do not need it in Local mode. It runs on the machine that has your repositories, git credentials, and agent CLI logins, dials out to the Admiral (so it works from behind NAT and against a container's published port), and executes the work the Admiral routes to it. The main window shows whether it is connected, what is running on your machine now, and recent activity. A **Status** window shows the Admiral's health and workload and the logs (Harbor's own, the jobs run on your machine, and the Admiral's when it runs on the same machine), and a **Settings** window has this machine's Harbor settings (General), where your repositories are (Repositories), and the Admiral server's settings. See [docs/HARBOR.md](docs/HARBOR.md#managing-harbor-and-armada-from-the-app).
 
 **What runs on a Harbor today**
 
@@ -756,7 +756,7 @@ Split mode is **experimental** in 1.0 (decision D3 in [V1_READINESS.md](V1_READI
 | Linux | `.deb` / `.rpm` Harbor package (`armada-harbor`) | Run `armada-harbor --install-startup` as yourself |
 | From source | `scripts/<os>/run-harbor.sh` (or `scripts\windows\run-harbor.bat`); or `dotnet run --project src/Armada.Harbor` | -- |
 
-**Configure it.** On first run Harbor writes `~/.armada-harbor/settings.json` (`%USERPROFILE%\.armada-harbor\settings.json` on Windows); change it in the app (**Harbor > Harbor Settings...**), which validates, backs up, and reconnects. Keys are PascalCase and case-sensitive:
+**Configure it.** On first run Harbor writes `~/.armada-harbor/settings.json` (`%USERPROFILE%\.armada-harbor\settings.json` on Windows); change it in the app (**Settings > General**), which validates, backs up, and reconnects. Keys are PascalCase and case-sensitive:
 
 | Field | Description |
 |---|---|
