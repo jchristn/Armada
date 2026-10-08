@@ -66,6 +66,10 @@ namespace Test.Shared.Infrastructure
         /// <param name="runtimes">Runtime factory the Harbor launches captains with.</param>
         /// <param name="capabilities">Advertised capabilities (runtime names and host tools).</param>
         /// <param name="logging">Logging module.</param>
+        /// <param name="commands">Executor for the Harbor's git and gh commands; defaults to the real local one.</param>
+        /// <param name="jobs">Runner the Harbor launches captains with (wrapped for recording); defaults to a real
+        /// <see cref="LocalHarborJobRunner"/> over <paramref name="runtimes"/>.</param>
+        /// <param name="docks">Harbor-side dock manager, or null for a Harbor that predates Harbor-side docks.</param>
         /// <returns>The connected Harbor.</returns>
         public static async Task<InProcessHarbor> ConnectAsync(
             HarborConnectionManager manager,
@@ -74,14 +78,17 @@ namespace Test.Shared.Infrastructure
             string? userId,
             AgentRuntimeFactory runtimes,
             IEnumerable<string> capabilities,
-            LoggingModule logging)
+            LoggingModule logging,
+            IHostCommandExecutor? commands = null,
+            IHarborJobRunner? jobs = null,
+            HarborDockManager? docks = null)
         {
             string scratchRoot = TestTemp.NewDirectory("harbor_scratch");
-            RecordingHarborJobRunner runner = new RecordingHarborJobRunner(new LocalHarborJobRunner(logging, runtimes, scratchRoot));
+            RecordingHarborJobRunner runner = new RecordingHarborJobRunner(jobs ?? new LocalHarborJobRunner(logging, runtimes, scratchRoot));
             List<HarborCapability> advertised = new List<HarborCapability>();
             foreach (string name in capabilities) advertised.Add(new HarborCapability { Name = name, Available = true });
 
-            HarborLinkClient client = new HarborLinkClient(harborId, harborId, advertised, 4, new LocalHostCommandExecutor(), logging, 0, null, runner);
+            HarborLinkClient client = new HarborLinkClient(harborId, harborId, advertised, 4, commands ?? new LocalHostCommandExecutor(), logging, 0, null, runner, docks);
             LoopbackHarborTransport transport = new LoopbackHarborTransport(manager, harborId, tenantId, userId);
             InProcessHarbor harbor = new InProcessHarbor(harborId, runner, scratchRoot, transport);
 
