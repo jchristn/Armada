@@ -32,6 +32,7 @@ namespace Armada.Server.Routes
         private readonly ArmadaSettings? _settings;
         private readonly IVesselService _VesselService;
         private readonly ManualLandingReconciler? _ManualLandingReconciler;
+        private readonly VesselHostResolver? _Hosts;
 
         /// <summary>
         /// Instantiate.
@@ -47,6 +48,8 @@ namespace Armada.Server.Routes
         /// <param name="settings">Optional application settings for repository path resolution.</param>
         /// <param name="vesselService">Optional shared vessel creation service. Defaults to a new <see cref="VesselService"/>.</param>
         /// <param name="manualLandingReconciler">Optional reconciler that completes manual-landing missions after a branch merge.</param>
+        /// <param name="hosts">Optional resolver that finds a vessel's checkout on a connected Harbor when the Admiral has no
+        /// repository for it (git status and the branch, history, push, and merge routes then run on that Harbor).</param>
         public VesselRoutes(
             DatabaseDriver database,
             VesselReadinessService readiness,
@@ -58,9 +61,11 @@ namespace Armada.Server.Routes
             IGitService? git = null,
             ArmadaSettings? settings = null,
             IVesselService? vesselService = null,
-            ManualLandingReconciler? manualLandingReconciler = null)
+            ManualLandingReconciler? manualLandingReconciler = null,
+            VesselHostResolver? hosts = null)
         {
             _ManualLandingReconciler = manualLandingReconciler;
+            _Hosts = hosts;
             _database = database;
             _readiness = readiness ?? throw new ArgumentNullException(nameof(readiness));
             _landingPreview = landingPreview ?? throw new ArgumentNullException(nameof(landingPreview));
@@ -92,6 +97,28 @@ namespace Armada.Server.Routes
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// The repository a branch route works in: the Admiral-side repository (<see cref="ResolveRepoPath"/>) when there is
+        /// one, otherwise the vessel's checkout on a connected Harbor that can serve it, through that Harbor's git.
+        /// </summary>
+        /// <param name="vessel">Vessel.</param>
+        /// <param name="userId">The calling user (Harbor scoping), or null.</param>
+        /// <returns>The target; <see cref="VesselRepositoryTarget.Error"/> says why when there is none.</returns>
+        private async Task<VesselRepositoryTarget> ResolveRepositoryAsync(Vessel vessel, string? userId)
+        {
+            string? local = ResolveRepoPath(vessel);
+            if (local != null && _git != null) return new VesselRepositoryTarget(_git, local, null);
+
+            if (_Hosts != null)
+            {
+                VesselHostResolution resolution = await _Hosts.TryResolveAsync(vessel, userId).ConfigureAwait(false);
+                if (resolution.Host != null) return new VesselRepositoryTarget(resolution.Host.Git, resolution.Host.WorkingDirectory, null);
+                return new VesselRepositoryTarget(null, null, "No repository found for this vessel: " + resolution.Message);
+            }
+
+            return new VesselRepositoryTarget(null, null, "No repository found for this vessel");
         }
 
         /// <summary>
@@ -292,19 +319,29 @@ namespace Armada.Server.Routes
                         ? await _database.Vessels.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false)
                         : await _database.Vessels.ReadAsync(ctx.TenantId!, ctx.UserId!, id).ConfigureAwait(false);
                 if (vessel == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Vessel not found" }; }
-                if (String.IsNullOrEmpty(vessel.WorkingDirectory) || !Directory.Exists(vessel.WorkingDirectory))
-                    return (object)new { VesselId = id, CommitsAhead = (int?)null, CommitsBehind = (int?)null, Error = "No working directory configured or directory does not exist" };
+
+                // The working directory on the Admiral host, or the vessel's checkout on a connected Harbor.
+                IHostCommandExecutor commands = new LocalHostCommandExecutor();
+                string? workingDirectory = vessel.WorkingDirectory;
+                if (String.IsNullOrEmpty(workingDirectory) || !Directory.Exists(workingDirectory))
+                {
+                    VesselHostResolution? resolution = _Hosts != null ? await _Hosts.TryResolveAsync(vessel, ctx.UserId).ConfigureAwait(false) : null;
+                    if (resolution?.Host == null)
+                        return (object)new { VesselId = id, CommitsAhead = (int?)null, CommitsBehind = (int?)null, Error = resolution?.Message ?? "No working directory configured or directory does not exist" };
+                    commands = resolution.Host.Commands;
+                    workingDirectory = resolution.Host.WorkingDirectory;
+                }
 
                 try
                 {
                     string baseBranch = vessel.DefaultBranch ?? "main";
 
                     // Fetch latest from remote (silent, best-effort)
-                    try { await RunGitCommandAsync(vessel.WorkingDirectory, "fetch", "origin", "--quiet").ConfigureAwait(false); }
+                    try { await RunGitCommandAsync(commands, workingDirectory!, "fetch", "origin", "--quiet").ConfigureAwait(false); }
                     catch { /* ignore fetch failures -- offline or no remote */ }
 
-                    string aheadStr = await RunGitCommandAsync(vessel.WorkingDirectory, "rev-list", "--count", "origin/" + baseBranch + "..HEAD").ConfigureAwait(false);
-                    string behindStr = await RunGitCommandAsync(vessel.WorkingDirectory, "rev-list", "--count", "HEAD..origin/" + baseBranch).ConfigureAwait(false);
+                    string aheadStr = await RunGitCommandAsync(commands, workingDirectory!, "rev-list", "--count", "origin/" + baseBranch + "..HEAD").ConfigureAwait(false);
+                    string behindStr = await RunGitCommandAsync(commands, workingDirectory!, "rev-list", "--count", "HEAD..origin/" + baseBranch).ConfigureAwait(false);
 
                     int.TryParse(aheadStr.Trim(), out int ahead);
                     int.TryParse(behindStr.Trim(), out int behind);
@@ -342,13 +379,13 @@ namespace Armada.Server.Routes
                 if (vessel == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Vessel not found" }; }
                 if (_git == null) { req.Http.Response.StatusCode = 503; return new ApiStatusErrorResponse(ApiStatusErrorCodeEnum.ServiceUnavailable, "Git service is not available"); }
 
-                string? repoPath = ResolveRepoPath(vessel);
-                if (repoPath == null)
-                    return new BranchListResponse { VesselId = id, DefaultBranch = vessel.DefaultBranch ?? "main", Error = "No repository found for this vessel" };
+                VesselRepositoryTarget repo = await ResolveRepositoryAsync(vessel, ctx.UserId).ConfigureAwait(false);
+                if (!repo.Found)
+                    return new BranchListResponse { VesselId = id, DefaultBranch = vessel.DefaultBranch ?? "main", Error = repo.Error };
 
                 try
                 {
-                    IReadOnlyList<BranchInfo> branches = await _git.ListBranchesAsync(repoPath, vessel.DefaultBranch ?? "main").ConfigureAwait(false);
+                    IReadOnlyList<BranchInfo> branches = await repo.Git!.ListBranchesAsync(repo.Path!, vessel.DefaultBranch ?? "main").ConfigureAwait(false);
                     return new BranchListResponse
                     {
                         VesselId = id,
@@ -412,13 +449,13 @@ namespace Armada.Server.Routes
                 if ((to - from).TotalDays > Constants.VesselHistoryMaxActivityRangeDays)
                 { req.Http.Response.StatusCode = 400; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "The range from..to must be at most " + Constants.VesselHistoryMaxActivityRangeDays + " days" }; }
 
-                string? repoPath = ResolveRepoPath(vessel);
-                if (repoPath == null)
-                    return EmptyActivity(id, branch, from, to, offset, "No repository found for this vessel");
+                VesselRepositoryTarget repo = await ResolveRepositoryAsync(vessel, ctx.UserId).ConfigureAwait(false);
+                if (!repo.Found)
+                    return EmptyActivity(id, branch, from, to, offset, repo.Error ?? "No repository found for this vessel");
 
                 try
                 {
-                    VesselCommitActivity activity = await _git.GetCommitActivityAsync(repoPath, branch, from, to, offset).ConfigureAwait(false);
+                    VesselCommitActivity activity = await repo.Git!.GetCommitActivityAsync(repo.Path!, branch, from, to, offset).ConfigureAwait(false);
                     activity.VesselId = id;
                     return activity;
                 }
@@ -491,16 +528,16 @@ namespace Armada.Server.Routes
                 }
 
                 VesselCommitPage page = new VesselCommitPage { VesselId = id, Branch = branch };
-                string? repoPath = ResolveRepoPath(vessel);
-                if (repoPath == null)
+                VesselRepositoryTarget repo = await ResolveRepositoryAsync(vessel, ctx.UserId).ConfigureAwait(false);
+                if (!repo.Found)
                 {
-                    page.Error = "No repository found for this vessel";
+                    page.Error = repo.Error;
                     return page;
                 }
 
                 try
                 {
-                    string? tip = cursor != null ? cursor.Tip : await _git.ResolveBranchTipAsync(repoPath, branch).ConfigureAwait(false);
+                    string? tip = cursor != null ? cursor.Tip : await repo.Git!.ResolveBranchTipAsync(repo.Path!, branch).ConfigureAwait(false);
                     if (tip == null)
                     {
                         page.Error = "Branch " + branch + " was not found or has no commits";
@@ -508,7 +545,7 @@ namespace Armada.Server.Routes
                     }
 
                     int skip = cursor != null ? cursor.Skip : 0;
-                    GitCommitLogPage log = await _git.GetCommitLogAsync(repoPath, tip, until, skip, limit).ConfigureAwait(false);
+                    GitCommitLogPage log = await repo.Git!.GetCommitLogAsync(repo.Path!, tip, until, skip, limit).ConfigureAwait(false);
                     page.Commits = log.Commits;
                     if (log.HasMore)
                     {
@@ -557,12 +594,12 @@ namespace Armada.Server.Routes
                 BranchActionRequest pushBody = JsonSerializer.Deserialize<BranchActionRequest>(req.Http.Request.DataAsString, _jsonOptions) ?? new BranchActionRequest();
                 if (String.IsNullOrWhiteSpace(pushBody.Branch)) { req.Http.Response.StatusCode = 400; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Branch is required" }; }
 
-                string? repoPath = ResolveRepoPath(vessel);
-                if (repoPath == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "No repository found for this vessel" }; }
+                VesselRepositoryTarget repo = await ResolveRepositoryAsync(vessel, ctx.UserId).ConfigureAwait(false);
+                if (!repo.Found) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = repo.Error ?? "No repository found for this vessel" }; }
 
                 try
                 {
-                    await _git.PushLocalBranchAsync(repoPath, pushBody.Branch!).ConfigureAwait(false);
+                    await repo.Git!.PushLocalBranchAsync(repo.Path!, pushBody.Branch!).ConfigureAwait(false);
                     return new BranchPushResponse { VesselId = id, Branch = pushBody.Branch!, Pushed = true };
                 }
                 catch (Exception ex)
@@ -603,12 +640,12 @@ namespace Armada.Server.Routes
                 if (String.IsNullOrWhiteSpace(mergeBody.Source) || String.IsNullOrWhiteSpace(mergeBody.Target))
                 { req.Http.Response.StatusCode = 400; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Source and target are required" }; }
 
-                string? repoPath = ResolveRepoPath(vessel);
-                if (repoPath == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "No repository found for this vessel" }; }
+                VesselRepositoryTarget repo = await ResolveRepositoryAsync(vessel, ctx.UserId).ConfigureAwait(false);
+                if (!repo.Found) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = repo.Error ?? "No repository found for this vessel" }; }
 
                 try
                 {
-                    await _git.MergeBranchesAsync(repoPath, mergeBody.Source!, mergeBody.Target!, mergeBody.Push).ConfigureAwait(false);
+                    await repo.Git!.MergeBranchesAsync(repo.Path!, mergeBody.Source!, mergeBody.Target!, mergeBody.Push).ConfigureAwait(false);
 
                     // A manual-landing mission whose branch was just merged is done: complete it now rather than on the
                     // next health check, so its page shows Complete when the operator returns to it.
@@ -985,32 +1022,20 @@ namespace Armada.Server.Routes
         }
 
         /// <summary>
-        /// Run a git command and return stdout.
+        /// Run a git command on a host and return stdout.
         /// </summary>
-        private static async Task<string> RunGitCommandAsync(string workingDirectory, params string[] args)
+        private static async Task<string> RunGitCommandAsync(IHostCommandExecutor commands, string workingDirectory, params string[] args)
         {
-            ProcessStartInfo psi = new ProcessStartInfo("git")
+            HostCommandResult result = await commands.RunAsync(new HostCommandRequest
             {
+                Executable = "git",
                 WorkingDirectory = workingDirectory,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-            foreach (string arg in args) psi.ArgumentList.Add(arg);
-            Armada.Core.Services.GitProcessEnvironment.Apply(psi);
-
-            using (Process process = Process.Start(psi)!)
-            {
-                string output = await process.StandardOutput.ReadToEndAsync().ConfigureAwait(false);
-                await process.WaitForExitAsync().ConfigureAwait(false);
-                if (process.ExitCode != 0)
-                {
-                    string error = await process.StandardError.ReadToEndAsync().ConfigureAwait(false);
-                    throw new InvalidOperationException("git exited with code " + process.ExitCode + ": " + error.Trim());
-                }
-                return output;
-            }
+                Arguments = new List<string>(args),
+                TimeoutMs = 60000
+            }).ConfigureAwait(false);
+            if (result.TimedOut) throw new InvalidOperationException("git timed out");
+            if (result.ExitCode != 0) throw new InvalidOperationException("git exited with code " + result.ExitCode + ": " + result.StandardError.Trim());
+            return result.StandardOutput;
         }
 
         private static string? UnescapeQueryValue(string? value)

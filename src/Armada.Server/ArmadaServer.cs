@@ -319,6 +319,8 @@ namespace Armada.Server
             _CheckRunService.Hosts = _VesselHosts;
             _VesselReadinessService.Hosts = _VesselHosts;
             healthEvaluator.Hosts = _VesselHosts;
+            _ManualLandingReconciler.Hosts = _VesselHosts;
+            if (_FleetCategorizationService is FleetCategorizationService categorization) categorization.Hosts = _VesselHosts;
             _HarborMetricsService = new HarborMetricsService(_Database, _HarborService, _Settings.Harbor);
             _HarborLinkEndpoint = new HarborLinkEndpoint(
                 _HarborConnectionManager,
@@ -1196,7 +1198,7 @@ namespace Armada.Server
             // Vessels
             VesselContextService vesselContextService = new VesselContextService(_Database, _RuntimeFactory, _Docks, _PromptTemplateService, _Logging);
             vesselContextService.LaunchRouter = _LaunchRouter;
-            new VesselRoutes(_Database, _VesselReadinessService, _LandingPreviewService, EmitEventAsync, _JsonOptions, _Docks, vesselContextService, _Git, _Settings, _VesselService, _ManualLandingReconciler)
+            new VesselRoutes(_Database, _VesselReadinessService, _LandingPreviewService, EmitEventAsync, _JsonOptions, _Docks, vesselContextService, _Git, _Settings, _VesselService, _ManualLandingReconciler, _VesselHosts)
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Vessel import (bulk onboarding)

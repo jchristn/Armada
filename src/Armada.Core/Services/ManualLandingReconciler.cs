@@ -38,6 +38,13 @@ namespace Armada.Core.Services
         /// </summary>
         public Func<Mission, Task>? OnMissionReconciled { get; set; } = null;
 
+        /// <summary>
+        /// Finds the vessel's checkout on a connected Harbor when the Admiral has no repository for it (split mode): the
+        /// branch is then checked in the repository on the Harbor that had the mission's dock, or in the vessel's checkout
+        /// on a Harbor that can serve it. When null, only Admiral-side repositories are checked.
+        /// </summary>
+        public VesselHostResolver? Hosts { get; set; } = null;
+
         #endregion
 
         #region Constructors-and-Factories
@@ -119,17 +126,42 @@ namespace Armada.Core.Services
             LandingModeEnum effectiveMode = voyage?.LandingMode ?? vessel.LandingMode ?? _Settings.LandingMode ?? LandingModeEnum.MergeAndPush;
             if (effectiveMode != LandingModeEnum.None) return false;
 
+            IGitService git = _Git;
             string? repoPath = ResolveRepoPath(vessel);
+            if (repoPath == null && Hosts != null)
+            {
+                Dock? dock = String.IsNullOrEmpty(mission.DockId) ? null : await _Database.Docks.ReadAsync(mission.DockId, token).ConfigureAwait(false);
+                HarborConnectionManager? harbors = Hosts.Harbors;
+                if (DockHostResolver.IsHarborDock(dock) && harbors != null && harbors.IsConnected(dock!.HarborId!))
+                {
+                    git = new GitService(_Logging, new RemoteHostCommandExecutor(harbors, dock.HarborId!));
+                    repoPath = dock.RepositoryPath;
+                }
+                else
+                {
+                    VesselHostResolution resolution = await Hosts.TryResolveAsync(vessel, mission.UserId, token).ConfigureAwait(false);
+                    if (resolution.Host != null)
+                    {
+                        git = resolution.Host.Git;
+                        repoPath = resolution.Host.WorkingDirectory;
+                    }
+                    else
+                    {
+                        _Logging.Debug(_Header + "mission " + mission.Id + " not checked: " + resolution.Message);
+                    }
+                }
+            }
+
             if (repoPath == null) return false;
 
             string target = String.IsNullOrWhiteSpace(vessel.DefaultBranch) ? "main" : vessel.DefaultBranch!;
             string source = !String.IsNullOrEmpty(mission.CommitHash) ? mission.CommitHash! : "refs/heads/" + mission.BranchName;
 
-            bool? merged = await _Git.IsAncestorAsync(repoPath, source, "refs/heads/" + target, token).ConfigureAwait(false);
+            bool? merged = await git.IsAncestorAsync(repoPath, source, "refs/heads/" + target, token).ConfigureAwait(false);
             if (merged != true)
             {
                 // A repository that tracks the remote (a working clone) may only have the merge on origin.
-                bool? mergedOnRemote = await _Git.IsAncestorAsync(repoPath, source, "refs/remotes/origin/" + target, token).ConfigureAwait(false);
+                bool? mergedOnRemote = await git.IsAncestorAsync(repoPath, source, "refs/remotes/origin/" + target, token).ConfigureAwait(false);
                 if (mergedOnRemote != true) return false;
             }
 
