@@ -87,10 +87,9 @@ name: 09-w4
 - eraseText: 400
 - inputText: "Edited from the mobile E2E flow"
 - hideKeyboard
-- scrollUntilVisible:
-    element:
-      id: "persona-form-submit"
-    direction: DOWN
+# Save sits in the form sheet's footer, reachable without scrolling.
+- assertVisible:
+    id: "persona-form-footer"
 - tapOn:
     id: "persona-form-submit"
 - extendedWaitUntil:

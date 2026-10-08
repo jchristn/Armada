@@ -1,4 +1,4 @@
-import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react-native';
 import * as client from '@dashboard/api/client';
 import type { Persona, PromptTemplate } from '@dashboard/types/models';
 import MoreLayout from '../app/(app)/(more)/_layout';
@@ -50,6 +50,8 @@ describe('Configuration > Personas', () => {
     expect(screen.queryByTestId('persona-row-Architect-swipe-edit')).toBeNull();
     await fireEvent.press(screen.getByTestId('personas-create'));
     await waitFor(() => expect(screen.getByTestId('persona-form-name')).toBeTruthy());
+    // The resource form sheet keeps Save in its footer, reachable without scrolling a long form.
+    expect(within(screen.getByTestId('persona-form-footer')).getByTestId('persona-form-submit')).toBeTruthy();
     await fireEvent.changeText(screen.getByTestId('persona-form-name'), 'Reviewer');
     await act(async () => { await fireEvent.press(screen.getByTestId('persona-form-submit')); });
     expect(screen.getByTestId('persona-form-error')).toHaveTextContent('Prompt Template Name is required.');

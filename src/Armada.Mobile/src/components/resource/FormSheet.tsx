@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { useLocale } from '../../i18n/LocaleContext';
 import { errorText } from '../../resource/useLoad';
 import { spacing } from '../../theme/typography';
 import { AppText } from '../ui/AppText';
 import { BottomSheet } from '../ui/BottomSheet';
 import { Button } from '../ui/Button';
+import { FormActions } from '../ui/StickyFooter';
 import { SelectField, type SelectOption } from '../ui/SelectSheet';
 import { SwitchField } from '../ui/SwitchField';
 import { TextField } from '../ui/TextField';
@@ -88,19 +89,37 @@ export interface FormSheetProps {
  */
 export function FormSheet(props: FormSheetProps) {
   const { t } = useLocale();
+  const { body, actions } = useFormSheet(props);
   return (
-    <BottomSheet open={props.open} title={props.title} onClose={props.onClose} closeLabel={t('Close')} testID={props.testID}>
-      {/* Mounted only while open, so every opening starts from the caller's initial values. */}
-      {props.open ? <FormBody {...props} /> : null}
+    <BottomSheet
+      open={props.open}
+      title={props.title}
+      onClose={props.onClose}
+      closeLabel={t('Close')}
+      testID={props.testID}
+      // Save and Cancel stay below the scrolling fields, reachable without scrolling a long form.
+      footer={props.open ? actions : undefined}
+    >
+      {props.open ? body : null}
     </BottomSheet>
   );
 }
 
-function FormBody({ initial, fields, submitLabel, onSubmit, onClose, validate, onChange, testID }: FormSheetProps) {
+function useFormSheet({ open, initial, fields, submitLabel, onSubmit, onClose, validate, onChange, testID }: FormSheetProps) {
   const { t } = useLocale();
   const [values, setValues] = useState<FormValues>(initial);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  // Every opening starts from the caller's initial values (reset while rendering the opening, not in an effect).
+  const [shownOpen, setShownOpen] = useState(false);
+  if (open !== shownOpen) {
+    setShownOpen(open);
+    if (open) {
+      setValues(initial);
+      setSaving(false);
+      setError('');
+    }
+  }
 
   const set = (key: string, value: FormValue) => {
     setValues((prev) => {
@@ -134,7 +153,7 @@ function FormBody({ initial, fields, submitLabel, onSubmit, onClose, validate, o
     }
   }
 
-  return (
+  const body = (
     <>
       {current.map((f) => {
         const id = testID ? `${testID}-${f.key}` : undefined;
@@ -182,16 +201,18 @@ function FormBody({ initial, fields, submitLabel, onSubmit, onClose, validate, o
         }
       })}
       {error ? <AppText color="danger" accessibilityRole="alert" style={styles.error} testID={testID ? `${testID}-error` : undefined}>{error}</AppText> : null}
-      <View style={styles.actions}>
-        <Button label={t('Cancel')} variant="ghost" onPress={onClose} disabled={saving} />
-        <Button label={saving ? t('Saving...') : submitLabel} onPress={() => void submit()} busy={saving} testID={testID ? `${testID}-submit` : undefined} />
-      </View>
     </>
   );
+  const actions = (
+    <FormActions>
+      <Button label={t('Cancel')} variant="ghost" onPress={onClose} disabled={saving} />
+      <Button label={saving ? t('Saving...') : submitLabel} onPress={() => void submit()} busy={saving} testID={testID ? `${testID}-submit` : undefined} />
+    </FormActions>
+  );
+  return { body, actions };
 }
 
 const styles = StyleSheet.create({
   note: { marginBottom: spacing.md },
   error: { marginBottom: spacing.md },
-  actions: { flexDirection: 'row', justifyContent: 'flex-end', flexWrap: 'wrap', gap: spacing.sm },
 });

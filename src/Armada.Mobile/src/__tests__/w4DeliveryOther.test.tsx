@@ -1,4 +1,4 @@
-import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react-native';
 import * as client from '@dashboard/api/client';
 import type { CheckRun, Deployment, Incident, Release, Runbook, RunbookExecution } from '@dashboard/types/models';
 import WorkLayout from '../app/(app)/(work)/_layout';
@@ -216,6 +216,8 @@ describe('checks', () => {
     api.getCheckRun.mockResolvedValue(check({ id: 'chk_9', status: 'Passed' }));
     const h = await renderW4Routes(ROUTES, '/delivery?tab=checks&run=1&vesselId=vsl_1&label=production&type=Build');
     await waitFor(() => expect(screen.getByTestId('run-check-submit')).toBeTruthy());
+    // Run Check stays in the sheet's footer, reachable without scrolling past the preview and preflight.
+    expect(within(screen.getByTestId('run-check-footer')).getByTestId('run-check-submit')).toBeTruthy();
     await act(async () => { await fireEvent.press(screen.getByTestId('run-check-submit')); });
     expect(api.runCheck).toHaveBeenCalledWith(expect.objectContaining({ vesselId: 'vsl_1', type: 'Build', label: 'production', environmentName: null }));
     await waitFor(() => expect(h.getPathname()).toBe('/checks/chk_9'));
