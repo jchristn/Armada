@@ -114,9 +114,11 @@ name: 04-ask
     timeout: 10000
 - tapOn:
     id: "ask-input"
+# Maestro's hideKeyboard on iOS can leave a newline in the multi-line composer; start from an empty box.
+- eraseText: 20
 - inputText: "Back on Ask"
 - extendedWaitUntil:
-    visible: "Back on Ask"
+    visible: ".*Back on Ask"
     timeout: 10000
 - eraseText: 20
 - hideKeyboard
