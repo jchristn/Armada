@@ -137,6 +137,7 @@ If/when MCP-over-tunnel is added, this document will gain explicit routed-tool s
     - [purge_merge_entries](#purge_merge_entries)
   - **Harbors**
     - [get_harbor](#get_harbor)
+    - [get_harbor_metrics](#get_harbor_metrics)
     - [create_harbor](#create_harbor)
     - [update_harbor](#update_harbor)
     - [delete_harbor](#delete_harbor)
@@ -204,7 +205,7 @@ camelCase exceptions are the `inbox` envelope, `count`, `criticalCount`, `warnin
 envelopes, the `delete_cli_permission_rule` result, and the `cli_permission_prompt` answer). Unlike REST, MCP results keep null-valued properties. Enums are emitted as their
 names, as on REST. New tools, new optional arguments,
 and new result fields may be added in minor releases. Tools whose description starts with `[Experimental]` (the Harbor
-tools `get_harbor`, `create_harbor`, `update_harbor`, `delete_harbor`, `set_harbor_enabled`) are excluded from the
+tools `get_harbor`, `get_harbor_metrics`, `create_harbor`, `update_harbor`, `delete_harbor`, `set_harbor_enabled`) are excluded from the
 promise.
 
 Armada exposes a full MCP server that allows AI agents and MCP-compatible clients to interact with the Admiral orchestrator. MCP covers Armada's core orchestration and management surfaces directly from tool-calling clients:
@@ -361,7 +362,7 @@ handler is registered through the Ask gate, which checks that claim:
   `fleet_action_run_status`, `vessel_health`, `papercut_summary`, `token_usage_summary`, `search_memory`,
   `evaluate_autoland`, every `get_*` reader (`get_backlog_item`, `get_backlog_planning_session`,
   `get_backlog_refinement_session`, `get_captain`, `get_captain_log`, `get_captain_tools`, `get_check_run`,
-  `get_deployment`, `get_dock`, `get_fleet`, `get_harbor`, `get_memory`, `get_merge_entry`, `get_mission_diff`,
+  `get_deployment`, `get_dock`, `get_fleet`, `get_harbor`, `get_harbor_metrics`, `get_memory`, `get_merge_entry`, `get_mission_diff`,
   `get_mission_log`, `get_model_endpoint`, `get_objective`, `get_persona`, `get_pipeline`, `get_playbook`,
   `get_prompt_template`, `get_release`, `get_runbook`, `get_runbook_execution`, `get_vessel`), and the `list_*` readers
   (`list_backlog`, `list_backlog_refinement_sessions`, `list_objectives`, `list_prompt_templates`,
@@ -610,7 +611,8 @@ Counts are normalized across providers: `input` covers prompt tokens, `output` c
     "runtime": { "type": "string", "description": "Filter to one runtime (for example claudecode, codex, mux)" },
     "source": { "type": "string", "description": "Filter to one source: mission, chat, or planning" },
     "vesselId": { "type": "string", "description": "Filter to one vessel (vsl_ prefix)" },
-    "captainId": { "type": "string", "description": "Filter to one captain (cpt_ prefix)" }
+    "captainId": { "type": "string", "description": "Filter to one captain (cpt_ prefix)" },
+    "harborId": { "type": "string", "description": "Filter to work that ran on one Harbor (hbr_ prefix)" }
   }
 }
 ```
@@ -3506,7 +3508,7 @@ Returns `{ "Error": "entryIds is required and must not be empty", "ErrorCode": "
 
 ### get_harbor
 
-> **Experimental.** The Harbor tools below (`get_harbor`, `create_harbor`, `update_harbor`, `delete_harbor`,
+> **Experimental.** The Harbor tools below (`get_harbor`, `get_harbor_metrics`, `create_harbor`, `update_harbor`, `delete_harbor`,
 > `set_harbor_enabled`) belong to Harbor split mode, which is experimental for 1.0 and excluded from the compatibility
 > promise. Their descriptions start with `[Experimental]`.
 
@@ -3529,6 +3531,38 @@ Inspect one registered Harbor (host runner) by ID, including its advertised capa
 | `harborId` | string | Yes | Harbor ID (prefix `hbr_`) |
 
 **Response:** [Harbor](#harbor) object, or `{ "Error": "Harbor not found", "ErrorCode": "NotFound" }`.
+
+---
+
+### get_harbor_metrics
+
+Charts for one Harbor over a window, the same `HarborMetrics` that `GET /api/v1/harbors/{id}/metrics` returns: jobs
+finished and failed per bucket (missions and other launches apart), slot usage (peak and average concurrent jobs
+against capacity), launch speed per runtime (median and p95 time to first output and total runtime), link health
+(connected, reconnecting, and down stretches, and heartbeat round trips), and token usage by runtime and model. See
+[REST_API.md](REST_API.md#get-apiv1harborsidmetrics) for the response shape and [HARBOR.md](HARBOR.md#harbor-metrics)
+for how the numbers are recorded. Visibility and token scoping are the same as over REST.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "harborId": { "type": "string", "description": "Harbor ID (hbr_ prefix)" },
+    "range": { "type": "string", "description": "Window: 1h, 24h (default), or 7d", "enum": ["1h", "24h", "7d"] }
+  },
+  "required": ["harborId"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `harborId` | string | Yes | Harbor ID (prefix `hbr_`) |
+| `range` | string | No | `1h` (1-minute buckets), `24h` (30-minute buckets, default), or `7d` (3-hour buckets) |
+
+**Response:** `HarborMetrics`, or `{ "Error": "Harbor not found", "ErrorCode": "NotFound" }`, or an `InvalidArgument`
+error for an unknown range.
 
 ---
 

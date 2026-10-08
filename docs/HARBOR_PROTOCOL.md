@@ -58,6 +58,7 @@ Server to Harbor:
 | `dock` | `HarborDockRequest` | resolve a vessel's repository on the Harbor host, or create or remove a mission dock there |
 | `file` | `HarborFileRequest` | stat, read, or write a file in one of the Harbor's docks, or add a git exclude entry |
 | `deferredLaunch` | `HarborDeferredLaunchRequest` | arm a one-shot cutover: after the Admiral exits, launch a new slot, health-check it, and roll back on failure |
+| `heartbeatAck` | `HarborHeartbeatAck` | acknowledge a heartbeat that carries a `sequence`, so the Harbor can time the link's round trip |
 
 Harbor to server:
 
@@ -71,7 +72,7 @@ Harbor to server:
 | `dockResult` | `HarborDockResult` | the result of a dock request |
 | `fileResult` | `HarborFileResult` | the result of a file request |
 | `deferredLaunchAck` | `HarborDeferredLaunchAck` | confirm a deferred-launch instruction is armed |
-| `heartbeat` | `HarborHeartbeat` | liveness plus the set of jobs still running |
+| `heartbeat` | `HarborHeartbeat` | liveness, the set of jobs still running, and the Harbor's view of link health (round trip and reconnects) |
 | `error` | `HarborError` | a command could not be carried out, or a job failed abnormally |
 
 ## Identifiers
@@ -87,8 +88,32 @@ Connect and register:
 ```
 Harbor -> handshake { harborId, name, protocolVersion, osPlatform, architecture, capabilities, maxConcurrentJobs }
 Admiral -> handshakeAck { accepted: true, mcpBaseUrl }
-Harbor -> heartbeat { liveJobIds: [] }        (repeated on the heartbeat interval)
+Harbor -> heartbeat { liveJobIds: [], sequence: 1, lastRoundTripMs: null, reconnectCount: 0, lastReconnectUtc: null }
+Admiral -> heartbeatAck { sequence: 1 }
+Harbor -> heartbeat { liveJobIds: [], sequence: 2, lastRoundTripMs: 14, reconnectCount: 0, lastReconnectUtc: null }
+...                                            (repeated on the heartbeat interval)
 ```
+
+### Link health in heartbeats
+
+The heartbeat's link-health fields and the `heartbeatAck` message were added to protocol 1.0 additively, so the version
+stays `1.0`. All four heartbeat fields are optional: a Harbor that predates them omits them, and an Admiral that
+predates them ignores them.
+
+| Field | Meaning |
+|---|---|
+| `sequence` | Heartbeat number within this link session, starting at 1. When it is present the Admiral answers with `heartbeatAck { sequence }` as soon as it reads the heartbeat, before any other work. Without it the Admiral sends no acknowledgement, so a Harbor that predates `heartbeatAck` never receives one. |
+| `lastRoundTripMs` | Round-trip time of the most recent acknowledged heartbeat in this session, in milliseconds: from the Harbor writing that heartbeat to the socket (not from queueing it, so output queued ahead of it does not count) to the Harbor reading the matching `heartbeatAck`, timed on the Harbor's monotonic clock. Null on the first heartbeat of a session and while no acknowledgement has arrived. An acknowledgement that matches no recent heartbeat is ignored. |
+| `reconnectCount` | How many times this Harbor process re-established its link after its first accepted session. The Harbor app keeps the count across sessions (one `HarborLinkStatistics` shared by every session's `HarborLinkClient`). |
+| `lastReconnectUtc` | When this Harbor process last re-established its link (UTC, the Harbor's clock), or null when it has not reconnected. |
+
+The Admiral accumulates heartbeats per Harbor per minute (heartbeat count, round-trip count, total, and largest, and the
+latest reconnect counters) and writes one `harbor_link_samples` row per Harbor per minute. It also records the link's
+transitions in `harbor_link_events`: `Connected` when it accepts a handshake, `Reconnecting` when an open link closes,
+and `Disconnected` when the Harbor has not dialed back in within `harbor.heartbeatTimeoutSeconds` (default 45) of the
+close, dated at the end of that grace. At startup, before it accepts links, the Admiral closes any link a previous run
+left open (at the Harbor's last heartbeat, or at the end of the grace after a close). These feed the link-health series
+of `GET /api/v1/harbors/{id}/metrics`; see [Harbor metrics](HARBOR.md#harbor-metrics).
 
 Run a captain:
 
@@ -126,8 +151,8 @@ split reports both as `Stdout`). The Admiral's mission lifecycle reads both; cha
 
 `capabilities` is a list of `{ name, available, detail }` objects. A `handshake.maxConcurrentJobs` that is omitted or
 not positive means the Harbor advertises no capacity: a new registration gets `harbor.defaultMaxJobsPerHarbor` and an
-existing one keeps its capacity. The Admiral does not watch heartbeat timing: a Harbor is marked disconnected when its
-link closes. `kill.gracefulTimeoutMs` defaults to 10000. A
+existing one keeps its capacity. The Admiral does not watch heartbeat timing for liveness: a Harbor is marked
+disconnected when its link closes. `kill.gracefulTimeoutMs` defaults to 10000. A
 Harbor that cannot launch (for example a build without a job runner, a CLI that is not installed on the Harbor host, or
 a working directory that does not exist there) answers with `error { jobId, message }`; the Admiral fails that launch at
 once with the Harbor's message instead of waiting for `started`.
@@ -192,6 +217,8 @@ newer link.
 
 Messages are not buffered across a drop: `output` and `exited` events produced while the link is down are lost. The
 Admiral keeps its per-job listeners, so output a still-running job produces after the reconnect streams to the same
-`jobId` again. `heartbeat.liveJobIds` is recorded as the Harbor's in-flight count; it is not used to reconcile jobs
-that ended during the drop. A mission whose captain exited, or kept quiet, while the link was down is recovered by
+`jobId` again. `heartbeat.liveJobIds` is recorded as the Harbor's in-flight count; it is not used to reconcile the
+missions of jobs that ended during the drop. For the Harbor metrics only, the first heartbeat after a reconnect settles
+the Admiral's job records: a job launched over an earlier link that is not in `liveJobIds` is recorded as `Lost` (an
+`exited` that arrives later still wins). A mission whose captain exited, or kept quiet, while the link was down is recovered by
 stall detection; see [Harbor disconnects](HARBOR.md#harbor-disconnects).

@@ -1259,7 +1259,7 @@ Retention settings (see [UPGRADING.md](UPGRADING.md#data-retention)): `GET /api/
 |-------|---------|--------|
 | `AskThreadArchiveAfterDays` | 90 | Archive Ask threads with no activity (last message, or creation when empty) for this many days. Pinned threads are never archived. |
 | `AskThreadDeleteAfterDays` | 0 | Delete Ask threads (with messages, tool calls, proposals, and tracked work) inactive for this many days, archived or not. Pinned threads are never deleted. |
-| `JobRetentionDays` | 30 | Delete finished background jobs (Succeeded, Failed, Cancelled) older than this; the newest finished job of each kind and name per tenant is kept. |
+| `JobRetentionDays` | 30 | Delete finished background jobs (Succeeded, Failed, Cancelled) older than this; the newest finished job of each kind and name per tenant is kept. Harbor metrics (ended Harbor job records, link samples, and link events except each Harbor's latest) follow the same retention. |
 | `ImportBatchRetentionDays` | 90 | Delete finished vessel import batches (Completed, CompletedWithFailures, Failed) with their items and recommendations; imported vessels are not affected. |
 | `CliPermissionRequestRetentionDays` | 90 | Delete CLI permission requests that were allowed, denied, expired, or cancelled more than this many days ago. Pending requests are never deleted, and remembered rules are not affected. Deleting an Ask thread also deletes its requests. |
 
@@ -4910,6 +4910,69 @@ Read one Harbor.
 - Response: `200 OK` - `Harbor`
 - Errors: `404 Not Found`
 
+#### GET /api/v1/harbors/{id}/metrics
+
+Charts for one Harbor over a window, computed by the Admiral from what the Harbor link reported (see
+[Harbor metrics](HARBOR.md#harbor-metrics)). Every series has one entry per bucket over the same buckets.
+
+**Permission:** Authenticated. The caller must be able to read the Harbor (tenant scoping as for `GET /api/v1/harbors/{id}`).
+Token usage follows the token-usage scope: an admin, a tenant admin, or the Harbor's owner sees every record on the
+Harbor in the tenant; another user only their own.
+
+- Query: `range` = `1h` (60 one-minute buckets), `24h` (48 thirty-minute buckets, the default), or `7d` (56 three-hour buckets)
+- Response: `200 OK` - `HarborMetrics`
+- Errors: `400 Bad Request` (unknown range), `404 Not Found` (no such Harbor, or not visible to the caller)
+
+```json
+{
+  "HarborId": "hbr_...",
+  "HarborName": "Studio Mac",
+  "Range": "24h",
+  "FromUtc": "2026-10-07T21:00:00Z",
+  "ToUtc": "2026-10-08T21:00:00Z",
+  "BucketMinutes": 30,
+  "BucketCount": 48,
+  "GeneratedUtc": "2026-10-08T20:47:12Z",
+  "ConnectionStatus": "Connected",
+  "Jobs": {
+    "Buckets": [{ "BucketStartUtc": "...", "MissionsFinished": 1, "MissionsFailed": 0, "InteractiveFinished": 2, "InteractiveFailed": 0 }],
+    "MissionsFinished": 43, "MissionsFailed": 4, "InteractiveFinished": 70, "InteractiveFailed": 14, "Running": 1
+  },
+  "Slots": {
+    "MaxConcurrentJobs": 4,
+    "Buckets": [{ "BucketStartUtc": "...", "Peak": 2, "Average": 0.85 }],
+    "Peak": 3, "Average": 0.31
+  },
+  "LaunchSpeed": [{
+    "Runtime": "ClaudeCode", "JobCount": 42,
+    "FirstOutputCount": 42, "FirstOutputMedianMs": 3506, "FirstOutputP95Ms": 5091,
+    "DurationCount": 42, "DurationMedianMs": 74500, "DurationP95Ms": 630000,
+    "FirstOutputMedianMsByBucket": [null, 3400, 3650]
+  }],
+  "Link": {
+    "Segments": [{ "State": "Connected", "StartUtc": "...", "EndUtc": "..." }, { "State": "Reconnecting", "StartUtc": "...", "EndUtc": "..." }],
+    "RoundTrip": [{ "BucketStartUtc": "...", "HeartbeatCount": 120, "SampleCount": 120, "AverageMs": 18.4, "MaxMs": 312 }],
+    "ConnectedPercent": 97.1, "Disconnects": 3, "ReconnectCount": 3, "LastReconnectUtc": "...", "RoundTripMedianMs": 18
+  },
+  "Tokens": {
+    "Buckets": [{ "BucketStartUtc": "...", "InputTokens": 900, "OutputTokens": 300, "CachedTokens": 200, "TotalTokens": 1200,
+                  "Series": [{ "Runtime": "ClaudeCode", "Model": "claude-sonnet-4", "InputTokens": 900, "OutputTokens": 300, "CachedTokens": 200, "TotalTokens": 1200 }] }],
+    "Series": [{ "Runtime": "ClaudeCode", "Model": "claude-sonnet-4", "TotalTokens": 400336 }],
+    "InputTokens": 878800, "OutputTokens": 293000, "CachedTokens": 351500, "TotalTokens": 1171806,
+    "RecordCount": 129, "EstimatedCount": 50
+  }
+}
+```
+
+- `Jobs` counts a job in the bucket in which it ended; `Succeeded` and `Stopped` count as finished, `Failed` and `Lost`
+  as failed. Interactive means every launch that is not a mission (Ask turns and chat, planning, refinement, context
+  builds, other).
+- `Slots`: a job holds a slot from its start until it ends; `Average` is time-weighted (over the elapsed part of the
+  current bucket).
+- `Link.Segments` cover the window up to now; `Unknown` means no link event is recorded for that stretch.
+  `Reconnecting` lasts at most `harbor.heartbeatTimeoutSeconds`, after which the stretch is `Down`.
+- `Tokens` holds token counts only; Armada records no prices, so there is no cost series.
+
 #### PUT /api/v1/harbors/{id}
 
 Update one Harbor. Only `name`, `maxConcurrentJobs`, and `enabled` are updated; runtime state reported by the link is preserved server-side.
@@ -7661,7 +7724,9 @@ Return token usage aggregated into time buckets (each with a per-model breakdown
 
 **Permission:** Authenticated
 
-- Query: `fromUtc`, `toUtc`, `bucketMinutes`, `model`, `runtime`, `source`, `vesselId`, `captainId`, `tenantId`, `userId`
+- Query: `fromUtc`, `toUtc`, `bucketMinutes`, `model`, `runtime`, `source`, `vesselId`, `captainId`, `harborId`, `tenantId`, `userId`
+- `harborId` keeps the usage of work that ran on that Harbor (mission runs, chat and Ask turns, and planning turns
+  launched there)
 - Defaults: last 24 hours, 15-minute buckets
 - `source` is one of `mission`, `chat`, `planning`
 - Response: `200 OK` - `TokenUsageSummaryResult` (fields: `fromUtc`, `toUtc`, `bucketMinutes`, `recordCount`, `estimatedCount`, `inputTokens`, `outputTokens`, `cachedTokens`, `totalTokens`, `buckets[]`, `byModel[]`)
@@ -7672,7 +7737,7 @@ List token-usage records in the caller's scope.
 
 **Permission:** Authenticated
 
-- Query: `pageNumber`, `pageSize`, `model`, `runtime`, `source`, `vesselId`, `captainId`, `fromUtc`, `toUtc`
+- Query: `pageNumber`, `pageSize`, `model`, `runtime`, `source`, `vesselId`, `captainId`, `harborId`, `fromUtc`, `toUtc`
 - Response: `200 OK` - `EnumerationResult<TokenUsageRecord>`
 
 #### POST /api/v1/token-usage/delete/by-filter
