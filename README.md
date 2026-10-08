@@ -113,7 +113,7 @@ Open [Ask Armada](#ask-armada) and type "What failed overnight on my-api? Restar
 
 ### Agents on your machine, Admiral elsewhere (experimental)
 
-Run the Admiral in Docker or on a server and install the [Harbor](#harbor-run-agents-on-your-machine) tray app on your machine. The Harbor dials out to the Admiral, so it works from behind NAT. Today, Ask Armada turns, captain chat, and planning sessions run on the Harbor with your CLI logins; mission launches go to a Harbor only when it can see the Admiral's dock directory at the same path (in practice, a Harbor on the Admiral's own machine). Running missions in a checkout on a remote Harbor is in development.
+Run the Admiral in Docker or on a server and install the [Harbor](#harbor-run-agents-on-your-machine) tray app on your machine. The Harbor dials out to the Admiral, so it works from behind NAT. Ask Armada turns, captain chat, and planning sessions run on the Harbor with your CLI logins, and missions run in a worktree of the checkout you already have on that machine: the Harbor finds it from a path you set or by matching the vessel's remote URL under folders you list, falls back to its own clone, and does the commit and landing there.
 
 ### Let AI manage AI
 
@@ -742,7 +742,7 @@ A Harbor (`Armada.Harbor`, a small tray app) is the host runner for split mode. 
 **What runs on a Harbor today**
 
 - **Interactive turns:** Ask Armada turns and narrations, captain chat, planning and refinement turns, and vessel context builds run on an eligible connected Harbor, using your CLI logins. Chat turns use a scratch directory the Harbor creates.
-- **Missions:** in 1.0 the Admiral creates every mission dock under its own `docksDirectory`. A mission launches on a Harbor only when that Harbor sees the dock at the same path, which in practice means a Harbor on the Admiral's own machine; otherwise the captain runs on the Admiral host (or, with `requireHarborForLaunch` on, the mission fails with a reason naming the Harbor and dock path). Harbor-side docks in your own checkout are in development.
+- **Missions:** the Admiral picks a Harbor that can serve the vessel before it creates the dock. The dock is a worktree of your own checkout on the Harbor's machine (set per vessel in Harbor's Repositories settings, or found by remote URL under root folders you list), or of the Harbor's own clone when you have none, under `~/.armada-harbor/docks`. Instruction files, the commit, and landing (merge into your checkout, or push and open a pull request) run there; your working tree and current branch are not touched while the mission runs. When no connected Harbor can serve the vessel, the mission waits with a reason naming what to set (`requireHarborForLaunch` on) or runs on the Admiral host. Merge-queue landing and planning and vessel-context docks still run on the Admiral. See [docs/HARBOR.md](docs/HARBOR.md#dock-affinity-and-routing).
 - `ApiEndpoint` captains always run in-process on the Admiral.
 
 Split mode is **experimental** in 1.0 (decision D3 in [V1_READINESS.md](V1_READINESS.md)): the link, the Harbor REST routes and MCP tools, and the `harbor.*`, `deploymentMode`, and `requireHarborForLaunch` settings are outside the [compatibility promise](docs/COMPATIBILITY.md) and may change in a minor release.

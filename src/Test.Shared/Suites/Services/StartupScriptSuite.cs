@@ -73,8 +73,9 @@ namespace Test.Shared.Suites.Services
             cases.Add(Case("startup_docs_reference_scripted_workflow", "Startup Docs Reference Scripted Workflow", TestTags.Positive, () =>
             {
                 string root = FindRepositoryRoot();
-                string readmeContents = File.ReadAllText(Path.Combine(root, "README.md"));
-                string gettingStartedContents = File.ReadAllText(Path.Combine(root, "GETTING_STARTED.md"));
+                // Windows commands are written with backslashes (scripts\windows\install.bat); compare paths with either separator.
+                string readmeContents = File.ReadAllText(Path.Combine(root, "README.md")).Replace('\\', '/');
+                string gettingStartedContents = File.ReadAllText(Path.Combine(root, "GETTING_STARTED.md")).Replace('\\', '/');
                 string startupDocContents = File.ReadAllText(Path.Combine(root, "docs", "RUN_ON_STARTUP.md"));
 
                 AssertContains("docs/RUN_ON_STARTUP.md", readmeContents, "README should link to the run-on-startup guide");
