@@ -128,6 +128,21 @@ describe('Ask Armada', () => {
     expect(minHeight('ask-send')).toBe(72);
   });
 
+  it('measuring the composer reads each layout event before React Native releases it', async () => {
+    await renderAsk();
+    // React Native nulls nativeEvent once a handler returns. Queue the input's update first so the button's state
+    // updater is not computed eagerly inside its handler, then release both events before React renders.
+    const input = { nativeEvent: { layout: { x: 0, y: 0, width: 100, height: 64 } } } as { nativeEvent: unknown };
+    const button = { nativeEvent: { layout: { x: 0, y: 0, width: 100, height: 58 } } } as { nativeEvent: unknown };
+    await act(async () => {
+      fireEvent(screen.getByTestId('ask-input'), 'layout', input);
+      fireEvent(screen.getByTestId('ask-send-wrap'), 'layout', button);
+      input.nativeEvent = null;
+      button.nativeEvent = null;
+    });
+    expect(StyleSheet.flatten(screen.getByTestId('ask-send').props.style).minHeight).toBe(64);
+  });
+
   it('a server without captains says so and links to Captains instead of leaving Send silently disabled', async () => {
     api.listCaptains.mockResolvedValue({ objects: [] } as never);
     await renderAsk();
