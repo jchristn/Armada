@@ -150,6 +150,81 @@ namespace Armada.Core.Hosting
         }
 
         /// <summary>
+        /// The backups of a settings file with their times and sizes, newest first by time.
+        /// </summary>
+        /// <param name="path">Settings file.</param>
+        /// <returns>Backups.</returns>
+        public static List<SettingsBackupEntry> ListBackupEntries(string path)
+        {
+            List<SettingsBackupEntry> entries = new List<SettingsBackupEntry>();
+            string prefix = Path.GetFileName(Path.GetFullPath(path)) + BackupMarker;
+            foreach (string backup in ListBackups(path))
+            {
+                try
+                {
+                    FileInfo info = new FileInfo(backup);
+                    if (!info.Exists) continue;
+                    string stamp = info.Name.Substring(prefix.Length);
+                    DateTime taken;
+                    if (!DateTime.TryParseExact(stamp, "yyyyMMdd'T'HHmmssfff'Z'", CultureInfo.InvariantCulture,
+                        DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out taken))
+                    {
+                        taken = info.LastWriteTimeUtc;
+                    }
+
+                    entries.Add(new SettingsBackupEntry
+                    {
+                        Path = info.FullName,
+                        Name = info.Name,
+                        TakenUtc = taken,
+                        SizeBytes = info.Length
+                    });
+                }
+                catch (IOException)
+                {
+                    // Pruned between listing and stat.
+                }
+            }
+
+            // By time, so a backup whose name carries no readable time still sorts where its file time puts it.
+            entries.Sort((a, b) => b.TakenUtc.CompareTo(a.TakenUtc));
+            return entries;
+        }
+
+        /// <summary>
+        /// Put a backup back in place of the settings file. The restore is an ordinary <see cref="Save"/>: the current
+        /// file is kept as a new backup first, so a restore can itself be undone.
+        /// </summary>
+        /// <param name="path">Settings file.</param>
+        /// <param name="backupPath">One of the file's backups (see <see cref="ListBackups"/>).</param>
+        /// <param name="backupsKept">Backups to keep.</param>
+        /// <param name="nowUtc">Timestamp for the new backup's name; null uses the current time.</param>
+        /// <returns>The backup of the replaced version, or null when there was none (or it already matched).</returns>
+        /// <exception cref="ArgumentException">The backup is not one of this file's backups.</exception>
+        /// <exception cref="IOException">The backup could not be read or the file could not be written.</exception>
+        public static string? Restore(string path, string backupPath, int backupsKept = DefaultBackupsKept, DateTime? nowUtc = null)
+        {
+            if (String.IsNullOrWhiteSpace(path)) throw new ArgumentNullException(nameof(path));
+            if (String.IsNullOrWhiteSpace(backupPath)) throw new ArgumentNullException(nameof(backupPath));
+
+            string backup = Path.GetFullPath(backupPath);
+            bool known = false;
+            foreach (string candidate in ListBackups(path))
+            {
+                if (String.Equals(Path.GetFullPath(candidate), backup, StringComparison.Ordinal))
+                {
+                    known = true;
+                    break;
+                }
+            }
+
+            if (!known) throw new ArgumentException(backupPath + " is not a backup of " + path + ".", nameof(backupPath));
+
+            string content = File.ReadAllText(backup, new UTF8Encoding(false));
+            return Save(path, content, backupsKept, nowUtc);
+        }
+
+        /// <summary>
         /// The backup name for a file at a time: file.bak-yyyyMMddTHHmmssfffZ.
         /// </summary>
         /// <param name="path">Settings file.</param>

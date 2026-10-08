@@ -1175,6 +1175,7 @@ namespace Armada.Server
 
             CaptainLaunchContext launch = new CaptainLaunchContext(captain, "refinement session")
             {
+                Kind = Armada.Core.Harbor.HarborJobKindEnum.Refinement,
                 TenantId = session.TenantId,
                 UserId = session.UserId,
                 Vessel = vessel,

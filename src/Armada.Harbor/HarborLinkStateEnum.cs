@@ -24,8 +24,14 @@ namespace Armada.Harbor
         Connected,
 
         /// <summary>
-        /// The link dropped or could not be made; the loop retries on its own.
+        /// The link closed; the loop retries on its own.
         /// </summary>
-        Disconnected
+        Disconnected,
+
+        /// <summary>
+        /// The link could not be made (the Admiral is unreachable or refused the handshake); the loop retries on its
+        /// own.
+        /// </summary>
+        Error
     }
 }

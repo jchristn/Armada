@@ -15,7 +15,7 @@ namespace Armada.Harbor
 
     /// <summary>
     /// The Armada Harbor Avalonia application. Framework code-behind, so it is a partial class as Avalonia
-    /// requires. Owns the shared session, the main and management windows, the menus (macOS application menu, window
+    /// requires. Owns the shared session, the main, Status, and Settings windows, the menus (macOS application menu, window
     /// menu, tray menu), and the system tray icon, carries out the menu commands, and keeps the runner alive in the tray
     /// when the windows are closed.
     /// </summary>
@@ -37,6 +37,7 @@ namespace Armada.Harbor
                     case HarborLinkStateEnum.Connected: return "Connected to " + server;
                     case HarborLinkStateEnum.Connecting: return "Connecting to " + server + "...";
                     case HarborLinkStateEnum.Disconnected: return "Disconnected from " + server + " (retrying)";
+                    case HarborLinkStateEnum.Error: return "Cannot reach " + server + " (retrying)";
                     default: return "Not connected";
                 }
             }
@@ -57,7 +58,8 @@ namespace Armada.Harbor
         private HarborAppSettings? _Settings;
         private MainWindow? _Window;
         private HarborSession? _Session;
-        private ManagementWindow? _Manage;
+        private StatusWindow? _StatusWindow;
+        private SettingsWindow? _SettingsWindow;
         private AboutWindow? _About;
         private TrayIcon? _TrayIcon;
         private HarborMenuBuilder? _Menus;
@@ -136,9 +138,6 @@ namespace Armada.Harbor
         /// <returns>True when enabled.</returns>
         public bool CanExecute(HarborMenuCommandEnum command)
         {
-            LocalAdmiralInfo? admiral = _Session?.Admiral;
-            bool local = admiral != null && admiral.IsLocal;
-
             switch (command)
             {
                 case HarborMenuCommandEnum.ShowWindow:
@@ -148,13 +147,11 @@ namespace Armada.Harbor
                 case HarborMenuCommandEnum.Quit:
                     return true;
                 case HarborMenuCommandEnum.Settings:
-                case HarborMenuCommandEnum.HarborSettings:
                 case HarborMenuCommandEnum.Status:
-                case HarborMenuCommandEnum.ArmadaSettings:
+                case HarborMenuCommandEnum.Logs:
                 case HarborMenuCommandEnum.CopyHarborId:
                 case HarborMenuCommandEnum.OpenDashboard:
                 case HarborMenuCommandEnum.CopyDiagnostics:
-                case HarborMenuCommandEnum.OpenHarborLog:
                     return _Session != null;
                 case HarborMenuCommandEnum.Connect:
                     return _Window != null && !_Window.IsLinkRunning;
@@ -163,15 +160,6 @@ namespace Armada.Harbor
                     return _Window != null && _Window.IsLinkRunning;
                 case HarborMenuCommandEnum.CopyMcpUrl:
                     return !String.IsNullOrEmpty(_Window?.McpUrl);
-                case HarborMenuCommandEnum.TuiSettings:
-                case HarborMenuCommandEnum.Backups:
-                case HarborMenuCommandEnum.OpenDataFolder:
-                case HarborMenuCommandEnum.OpenAdmiralLog:
-                case HarborMenuCommandEnum.MissionLog:
-                case HarborMenuCommandEnum.LogBrowser:
-                    return local;
-                case HarborMenuCommandEnum.OpenLogsFolder:
-                    return local && Directory.Exists(admiral!.LogDirectory);
                 case HarborMenuCommandEnum.MinimizeWindow:
                 case HarborMenuCommandEnum.CloseWindow:
                     return _Window != null;
@@ -187,21 +175,10 @@ namespace Armada.Harbor
         /// <returns>Reason, or null.</returns>
         public string? DisabledReason(HarborMenuCommandEnum command)
         {
-            LocalAdmiralInfo? admiral = _Session?.Admiral;
             switch (command)
             {
-                case HarborMenuCommandEnum.TuiSettings:
-                case HarborMenuCommandEnum.Backups:
-                case HarborMenuCommandEnum.OpenDataFolder:
-                case HarborMenuCommandEnum.OpenAdmiralLog:
-                case HarborMenuCommandEnum.MissionLog:
-                case HarborMenuCommandEnum.LogBrowser:
-                case HarborMenuCommandEnum.OpenLogsFolder:
-                    if (admiral == null) return "Looking for the Armada data directory...";
-                    if (!admiral.IsLocal) return admiral.Reason;
-                    return "No log directory at " + admiral.LogDirectory + ".";
                 case HarborMenuCommandEnum.CopyMcpUrl:
-                    return "The Admiral advertises its MCP URL when the link connects.";
+                    return "The Admiral sends its MCP URL when the link connects.";
                 default:
                     return null;
             }
@@ -224,32 +201,13 @@ namespace Armada.Harbor
                     ShowAbout();
                     break;
                 case HarborMenuCommandEnum.Settings:
-                case HarborMenuCommandEnum.HarborSettings:
-                    ShowManage(ManagementTabEnum.Harbor);
+                    ShowSettings(SettingsTabEnum.General);
                     break;
                 case HarborMenuCommandEnum.Status:
-                    ShowManage(ManagementTabEnum.Status);
+                    ShowStatus(StatusTabEnum.Overview);
                     break;
-                case HarborMenuCommandEnum.ArmadaSettings:
-                    ShowManage(ManagementTabEnum.Armada);
-                    break;
-                case HarborMenuCommandEnum.TuiSettings:
-                    ShowManage(ManagementTabEnum.Tui);
-                    break;
-                case HarborMenuCommandEnum.Backups:
-                    ShowManage(ManagementTabEnum.Backups);
-                    break;
-                case HarborMenuCommandEnum.LogBrowser:
-                    ShowManage(ManagementTabEnum.Logs);
-                    break;
-                case HarborMenuCommandEnum.MissionLog:
-                    ShowManage(ManagementTabEnum.Logs)?.ShowMissionLookup();
-                    break;
-                case HarborMenuCommandEnum.OpenAdmiralLog:
-                    ShowManage(ManagementTabEnum.Logs)?.ShowNewestLog(false);
-                    break;
-                case HarborMenuCommandEnum.OpenHarborLog:
-                    ShowManage(ManagementTabEnum.Logs)?.ShowNewestLog(true);
+                case HarborMenuCommandEnum.Logs:
+                    ShowStatus(StatusTabEnum.Logs);
                     break;
                 case HarborMenuCommandEnum.Connect:
                     _Window?.Connect();
@@ -269,12 +227,6 @@ namespace Armada.Harbor
                 case HarborMenuCommandEnum.OpenHarborFolder:
                     Directory.CreateDirectory(HarborAppSettings.SettingsDirectory());
                     Report(PlatformShell.Open(HarborAppSettings.SettingsDirectory(), out string? harborError), "open the Harbor folder", harborError);
-                    break;
-                case HarborMenuCommandEnum.OpenDataFolder:
-                    Report(PlatformShell.Open(_Session!.Admiral!.DataDirectory, out string? dataError), "open the Armada data folder", dataError);
-                    break;
-                case HarborMenuCommandEnum.OpenLogsFolder:
-                    Report(PlatformShell.Open(_Session!.Admiral!.LogDirectory, out string? logsError), "open the logs folder", logsError);
                     break;
                 case HarborMenuCommandEnum.OpenDashboard:
                     Report(PlatformShell.Open(_Settings!.DashboardUrl, out string? dashboardError), "open the dashboard", dashboardError);
@@ -367,29 +319,57 @@ namespace Armada.Harbor
             _Window.Activate();
         }
 
-        private ManagementWindow? ShowManage(ManagementTabEnum tab)
+        private StatusWindow? ShowStatus(StatusTabEnum tab)
         {
             if (_Session == null) return null;
-            if (_Manage == null)
+            if (_StatusWindow == null)
             {
-                _Manage = new ManagementWindow(_Session);
-                NativeMenu? manageMenu = _Menus?.BuildWindowMenu();
-                if (manageMenu != null) NativeMenu.SetMenu(_Manage, manageMenu);
-                _Manage.Closed += (sender, args) =>
+                StatusWindow window = new StatusWindow(_Session);
+                NativeMenu? menu = _Menus?.BuildWindowMenu();
+                if (menu != null) NativeMenu.SetMenu(window, menu);
+                window.Closed += (sender, args) =>
                 {
-                    _Menus?.Release(manageMenu);
-                    _Manage = null;
+                    _Menus?.Release(menu);
+                    _StatusWindow = null;
                     HarborDialog.HideFromDockWhenNoWindows();
                 };
+                _StatusWindow = window;
             }
 
+            _StatusWindow.ShowTab(tab);
+            Present(_StatusWindow);
+            return _StatusWindow;
+        }
+
+        private SettingsWindow? ShowSettings(SettingsTabEnum tab)
+        {
+            if (_Session == null) return null;
+            if (_SettingsWindow == null)
+            {
+                SettingsWindow window = new SettingsWindow(_Session);
+                NativeMenu? menu = _Menus?.BuildWindowMenu();
+                if (menu != null) NativeMenu.SetMenu(window, menu);
+                window.Closed += (sender, args) =>
+                {
+                    _Menus?.Release(menu);
+                    _SettingsWindow = null;
+                    HarborDialog.HideFromDockWhenNoWindows();
+                };
+                _SettingsWindow = window;
+            }
+
+            _SettingsWindow.ShowTab(tab);
+            Present(_SettingsWindow);
+            return _SettingsWindow;
+        }
+
+        private static void Present(Window window)
+        {
             // On macOS a window only comes forward while the app is a regular (Dock) app.
             MacActivationPolicy.ShowInDock();
-            _Manage.ShowTab(tab);
-            _Manage.Show();
-            if (_Manage.WindowState == WindowState.Minimized) _Manage.WindowState = WindowState.Normal;
-            _Manage.Activate();
-            return _Manage;
+            window.Show();
+            if (window.WindowState == WindowState.Minimized) window.WindowState = WindowState.Normal;
+            window.Activate();
         }
 
         private void ShowAbout()
@@ -414,7 +394,8 @@ namespace Armada.Harbor
 
         private Window? ActiveWindow()
         {
-            if (_Manage != null && _Manage.IsActive) return _Manage;
+            if (_StatusWindow != null && _StatusWindow.IsActive) return _StatusWindow;
+            if (_SettingsWindow != null && _SettingsWindow.IsActive) return _SettingsWindow;
             if (_About != null && _About.IsActive) return _About;
             return _Window;
         }

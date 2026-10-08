@@ -8,6 +8,7 @@ namespace Armada.Harbor
     using System.Threading.Tasks;
     using Armada.Client;
     using Armada.Client.Models;
+    using Armada.Core.Harbor;
     using Armada.Core.Hosting;
     using Armada.Core.Models;
     using Avalonia;
@@ -15,8 +16,8 @@ namespace Armada.Harbor
     using Avalonia.Threading;
 
     /// <summary>
-    /// The Status tab: this Harbor and its link, the Admiral's health and workload (polled while the tab is shown),
-    /// and how much disk the Armada data directory uses.
+    /// The Overview tab of the Status window: this computer's Harbor and its link and running jobs, the Admiral's health
+    /// and workload (polled while the tab is shown), and how much disk the Armada data directory uses.
     /// </summary>
     public class StatusView : UserControl
     {
@@ -28,7 +29,8 @@ namespace Armada.Harbor
         private readonly SelectableTextBlock _HarborValue;
         private readonly SelectableTextBlock _LinkValue;
         private readonly SelectableTextBlock _McpValue;
-        private readonly SelectableTextBlock _JobsValue;
+        private readonly TextBlock _JobsValue;
+        private readonly JobListView _Jobs = new JobListView();
         private readonly SelectableTextBlock _HarborLogValue;
         private readonly SelectableTextBlock _RestValue;
         private readonly SelectableTextBlock _HealthValue;
@@ -39,6 +41,7 @@ namespace Armada.Harbor
         private readonly SelectableTextBlock _MissionsValue;
         private readonly SelectableTextBlock _VoyagesValue;
         private readonly StackPanel _UsagePanel;
+        private readonly StackPanel _UsageButtons;
         private readonly TextBlock _UsageNote;
         private readonly DispatcherTimer _Timer;
         private bool _Polling = false;
@@ -56,18 +59,23 @@ namespace Armada.Harbor
         {
             _Session = session ?? throw new ArgumentNullException(nameof(session));
 
-            StackPanel root = new StackPanel { Spacing = 14, Margin = new Thickness(4, 8, 12, 12) };
-
             Grid harbor = HarborUi.DetailGrid();
             _HarborValue = HarborUi.AddRow(harbor, "Harbor", null);
-            _LinkValue = HarborUi.AddRow(harbor, "Link", null);
+            _LinkValue = HarborUi.AddRow(harbor, "Connection", null);
             _McpValue = HarborUi.AddRow(harbor, "MCP URL", null);
-            _JobsValue = HarborUi.AddRow(harbor, "Running jobs", null);
             _HarborLogValue = HarborUi.AddRow(harbor, "Harbor log", null);
-            root.Children.Add(HarborUi.Card("Harbor", harbor, null));
+            StackPanel harborBody = new StackPanel { Spacing = 12 };
+            harborBody.Children.Add(harbor);
+            Grid jobsHeader = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
+            jobsHeader.Children.Add(new TextBlock { Text = "Running now", FontWeight = Avalonia.Media.FontWeight.SemiBold });
+            _JobsValue = HarborUi.Secondary(new TextBlock { FontSize = 12, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center });
+            Grid.SetColumn(_JobsValue, 1);
+            jobsHeader.Children.Add(_JobsValue);
+            harborBody.Children.Add(jobsHeader);
+            harborBody.Children.Add(_Jobs);
 
             Grid admiral = HarborUi.DetailGrid();
-            _RestValue = HarborUi.AddRow(admiral, "REST URL", null);
+            _RestValue = HarborUi.AddRow(admiral, "Address", null);
             _HealthValue = HarborUi.AddRow(admiral, "Health", "Checking...");
             _VersionValue = HarborUi.AddRow(admiral, "Version", null);
             _UptimeValue = HarborUi.AddRow(admiral, "Uptime", null);
@@ -75,10 +83,10 @@ namespace Armada.Harbor
             _CaptainsValue = HarborUi.AddRow(admiral, "Captains", null);
             _MissionsValue = HarborUi.AddRow(admiral, "Missions", null);
             _VoyagesValue = HarborUi.AddRow(admiral, "Active voyages", null);
-            root.Children.Add(HarborUi.Card("Admiral", admiral, null));
 
             StackPanel usageButtons = HarborUi.ButtonRow();
-            Button refresh = HarborUi.Button("Measure", () => _ = MeasureUsageAsync(), "Measure the size of each item in the data directory");
+            _UsageButtons = usageButtons;
+            Button refresh = HarborUi.Button("Measure Again", () => _ = MeasureUsageAsync(), "Measure the size of each item in the data directory");
             usageButtons.Children.Add(refresh);
             usageButtons.Children.Add(HarborUi.Button("Open Folder", OpenDataFolder));
             StackPanel usage = new StackPanel { Spacing = 8 };
@@ -86,9 +94,10 @@ namespace Armada.Harbor
             usage.Children.Add(_UsageNote);
             _UsagePanel = new StackPanel { Spacing = 4 };
             usage.Children.Add(_UsagePanel);
-            root.Children.Add(HarborUi.Card("Data Directory", usage, usageButtons));
-
-            Content = new ScrollViewer { Content = root, HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled };
+            Content = HarborUi.Page(
+                HarborUi.Card("This computer", harborBody, null),
+                HarborUi.Card("Admiral server", admiral, null),
+                HarborUi.Card("Armada data on this computer", usage, usageButtons));
 
             _Timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(_PollIntervalMs) };
             _Timer.Tick += (sender, args) => _ = PollAdmiralAsync();
@@ -123,19 +132,32 @@ namespace Armada.Harbor
         {
             HarborAppSettings settings = _Session.Settings;
             _HarborValue.Text = settings.Name + "  (" + settings.HarborId + ")";
-            _LinkValue.Text = _Session.Window.LinkState + "  " + settings.ServerLinkUrl;
-            _McpValue.Text = String.IsNullOrEmpty(_Session.Window.McpUrl) ? "-" : _Session.Window.McpUrl;
-            List<string> jobs = _Session.Window.LiveJobIds();
-            _JobsValue.Text = jobs.Count == 0
-                ? "None (capacity " + settings.MaxConcurrentJobs + ")"
-                : jobs.Count + " of " + settings.MaxConcurrentJobs + ": " + String.Join(", ", jobs);
-            string? harborLog = LocalAdmiralInfo.FindLatestLog(HarborAppSettings.LogDirectory(), MainWindow.HarborLogBaseName);
+            _LinkValue.Text = DescribeLink(_Session.Window.LinkState) + " - " + settings.ServerLinkUrl;
+            _McpValue.Text = String.IsNullOrEmpty(_Session.Window.McpUrl) ? "-  (sent by the Admiral when connected)" : _Session.Window.McpUrl;
+            List<HarborJobInfo> jobs = _Session.Window.LiveJobs();
+            _Jobs.Update(jobs, DateTime.UtcNow);
+            _JobsValue.Text = jobs.Count + " of " + settings.MaxConcurrentJobs + " slots in use";
+            string? harborLog = new HarborLogPaths(HarborAppSettings.LogDirectory()).FindLatestHarborLog();
             _HarborLogValue.Text = harborLog ?? HarborAppSettings.LogDirectory() + " (no log yet)";
-            _RestValue.Text = _Session.RestBaseUrl ?? "-  (the link URL is not a ws:// or wss:// URL)";
+            _RestValue.Text = _Session.RestBaseUrl ?? "-  (the Admiral address is not a ws:// or wss:// address)";
 
+            // Measuring and opening the folder apply only to an Admiral whose data is on this computer.
+            _UsageButtons.IsVisible = _Session.IsAdmiralLocal;
             if (_Session.Admiral == null) _UsageNote.Text = "Looking for the Armada data directory...";
             else if (!_Session.Admiral.IsLocal) _UsageNote.Text = _Session.Admiral.Reason;
             else _UsageNote.Text = _Session.Admiral.DataDirectory;
+        }
+
+        private static string DescribeLink(HarborLinkStateEnum state)
+        {
+            switch (state)
+            {
+                case HarborLinkStateEnum.Connected: return "Connected";
+                case HarborLinkStateEnum.Connecting: return "Connecting";
+                case HarborLinkStateEnum.Error: return "Error (retrying)";
+                case HarborLinkStateEnum.Disconnected: return "Disconnected (retrying)";
+                default: return "Disconnected";
+            }
         }
 
         private async Task PollAdmiralAsync()
@@ -149,7 +171,7 @@ namespace Armada.Harbor
                 {
                     if (client == null)
                     {
-                        _HealthValue.Text = "Unknown: no REST URL";
+                        _HealthValue.Text = "Unknown: the Admiral address is not a ws:// or wss:// address";
                         ClearAdmiral();
                         return;
                     }
@@ -161,7 +183,7 @@ namespace Armada.Harbor
                     }
                     catch (ArmadaApiException ex)
                     {
-                        _HealthValue.Text = "Unreachable: " + ex.Message;
+                        _HealthValue.Text = "Cannot reach the Admiral: " + ex.Message;
                         ClearAdmiral();
                         return;
                     }
@@ -185,8 +207,8 @@ namespace Armada.Harbor
                     {
                         string reason = ex.StatusCode == 401 || ex.StatusCode == 403
                             ? (_Session.IsAdmiralLocal
-                                ? "Not authorized: this Admiral's settings.json has no API key Harbor can use; set an access key in Harbor Settings."
-                                : "Not authorized: set an access key (an Armada credential) in Harbor Settings.")
+                                ? "Not authorized: this Admiral's settings.json has no API key Harbor can use; set an access key in Settings > General."
+                                : "Not authorized: set an access key (an Armada credential) in Settings > General.")
                             : ex.Message;
                         _CaptainsValue.Text = reason;
                         _MissionsValue.Text = "-";

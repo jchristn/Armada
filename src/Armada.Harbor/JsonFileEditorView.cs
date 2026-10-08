@@ -1,7 +1,6 @@
 namespace Armada.Harbor
 {
     using System;
-    using System.Collections.Generic;
     using System.IO;
     using System.Threading.Tasks;
     using Armada.Core.Hosting;
@@ -10,8 +9,8 @@ namespace Armada.Harbor
     using Avalonia.Media;
 
     /// <summary>
-    /// Edits a JSON settings file as text: validate, save atomically with a timestamped backup, revert, load a backup
-    /// into the editor, or hand the file to an external editor. Saving refuses invalid text and asks before
+    /// Edits a JSON settings file as text: validate, save atomically with a timestamped backup, revert, restore a previous
+    /// version, or hand the file to an external editor. Saving refuses invalid text and asks before
     /// overwriting a file that changed on disk since it was loaded.
     /// </summary>
     public class JsonFileEditorView : UserControl
@@ -35,7 +34,6 @@ namespace Armada.Harbor
         private readonly Func<string, string?> _Validate;
         private readonly TextBox _Editor;
         private readonly TextBlock _Message = new TextBlock { TextWrapping = TextWrapping.Wrap };
-        private readonly ComboBox _Backups = new ComboBox { MinWidth = 230, PlaceholderText = "Backups" };
         private DateTime _LoadedWriteUtc = DateTime.MinValue;
         private string _LoadedText = String.Empty;
 
@@ -60,10 +58,9 @@ namespace Armada.Harbor
                 AcceptsReturn = true,
                 AcceptsTab = true,
                 TextWrapping = TextWrapping.NoWrap,
-                FontFamily = new FontFamily(HarborUi.MonospaceFonts),
-                FontSize = 12,
                 VerticalContentAlignment = Avalonia.Layout.VerticalAlignment.Top
             };
+            _Editor.Classes.Add("mono");
 
             StackPanel top = new StackPanel { Spacing = 8 };
             if (header != null) top.Children.Add(header);
@@ -74,19 +71,20 @@ namespace Armada.Harbor
             buttons.Children.Add(save);
             buttons.Children.Add(HarborUi.Button("Validate", () => ShowValidation(true)));
             buttons.Children.Add(HarborUi.Button("Revert", () => _ = RevertAsync(), "Reload the file, discarding unsaved changes"));
+            buttons.Children.Add(HarborUi.Button("Restore Previous Version...", () => _ = RestorePreviousAsync(), "Choose a version this file had before an earlier save and put it back"));
             buttons.Children.Add(HarborUi.Button("Open File", OpenExternally, "Open in a text editor"));
             buttons.Children.Add(HarborUi.Button("Show in Folder", Reveal));
 
-            StackPanel backupRow = HarborUi.ButtonRow();
-            backupRow.Children.Add(_Backups);
-            backupRow.Children.Add(HarborUi.Button("Load Backup", LoadSelectedBackup, "Put the selected backup in the editor; Save to restore it"));
-
             StackPanel bottom = new StackPanel { Spacing = 6, Margin = new Thickness(0, 8, 0, 0) };
             bottom.Children.Add(_Message);
-            bottom.Children.Add(buttons);
-            bottom.Children.Add(backupRow);
+            bottom.Children.Add(new ScrollViewer
+            {
+                Content = buttons,
+                HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
+                VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled
+            });
 
-            DockPanel root = new DockPanel { Margin = new Thickness(4, 4, 12, 12) };
+            DockPanel root = new DockPanel();
             DockPanel.SetDock(top, Dock.Top);
             DockPanel.SetDock(bottom, Dock.Bottom);
             top.Margin = new Thickness(0, 0, 0, 8);
@@ -140,7 +138,6 @@ namespace Armada.Harbor
             }
 
             _Editor.Text = _LoadedText;
-            RefreshBackups();
         }
 
         #endregion
@@ -186,8 +183,7 @@ namespace Armada.Harbor
                 string? backup = SettingsFileStore.Save(FilePath, text);
                 _LoadedText = text;
                 _LoadedWriteUtc = File.GetLastWriteTimeUtc(FilePath);
-                SetMessage("Saved" + (backup != null ? "; the previous version is " + Path.GetFileName(backup) : "") + ".", false);
-                RefreshBackups();
+                SetMessage("Saved" + (backup != null ? ". The previous version is kept; Restore Previous Version puts it back" : "") + ".", false);
                 Saved?.Invoke(this, EventArgs.Empty);
             }
             catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
@@ -208,29 +204,51 @@ namespace Armada.Harbor
             Reload();
         }
 
-        private void RefreshBackups()
+        private async Task RestorePreviousAsync()
         {
-            List<string> names = new List<string>();
-            foreach (string backup in SettingsFileStore.ListBackups(FilePath)) names.Add(Path.GetFileName(backup));
-            _Backups.ItemsSource = names;
-            _Backups.IsEnabled = names.Count > 0;
-            _Backups.PlaceholderText = names.Count > 0 ? "Backups (" + names.Count + ")" : "No backups yet";
-        }
+            Window? owner = TopLevel.GetTopLevel(this) as Window;
+            SettingsBackupEntry? chosen = await RestoreVersionDialog.ChooseAsync(owner, FilePath).ConfigureAwait(true);
+            if (chosen == null) return;
 
-        private void LoadSelectedBackup()
-        {
-            if (_Backups.SelectedItem is not string name) return;
-            string? directory = Path.GetDirectoryName(FilePath);
-            if (directory == null) return;
+            string text;
             try
             {
-                _Editor.Text = File.ReadAllText(Path.Combine(directory, name));
-                SetMessage("Loaded " + name + " into the editor. Save to restore it.", false);
+                text = File.ReadAllText(chosen.Path);
             }
             catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
             {
-                SetMessage("Could not read the backup: " + ex.Message, true);
+                SetMessage("Could not read that version: " + ex.Message, true);
+                return;
             }
+
+            string? error = _Validate(text);
+            if (error != null)
+            {
+                SetMessage("That version is not valid, so it was not restored: " + error, true);
+                return;
+            }
+
+            string when = HarborUi.LocalTime(chosen.TakenUtc);
+            bool confirmed = await HarborDialog.ConfirmAsync(owner, "Restore this version?",
+                "Replace " + Path.GetFileName(FilePath) + " with the version saved before " + when + "?"
+                + (IsDirty ? " Your unsaved edits here are discarded." : "")
+                + " The current version is kept, so you can switch back.",
+                "Restore").ConfigureAwait(true);
+            if (!confirmed) return;
+
+            try
+            {
+                SettingsFileStore.Restore(FilePath, chosen.Path);
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is ArgumentException)
+            {
+                SetMessage("Could not restore: " + ex.Message, true);
+                return;
+            }
+
+            Reload();
+            SetMessage("Restored the version saved before " + when + ".", false);
+            Saved?.Invoke(this, EventArgs.Empty);
         }
 
         private void OpenExternally()
@@ -253,10 +271,7 @@ namespace Armada.Harbor
 
         private void SetMessage(string? text, bool isError)
         {
-            _Message.Text = text ?? String.Empty;
-            _Message.IsVisible = !String.IsNullOrEmpty(text);
-            if (isError) _Message.Foreground = new SolidColorBrush(Color.Parse("#ef4444"));
-            else HarborUi.Secondary(_Message);
+            HarborUi.SetMessage(_Message, text, isError);
         }
 
         #endregion

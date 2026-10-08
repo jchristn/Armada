@@ -2,6 +2,7 @@ namespace Armada.Server
 {
     using System;
     using System.Collections.Generic;
+    using Armada.Core.Harbor;
     using Armada.Core.Models;
 
     /// <summary>
@@ -54,6 +55,16 @@ namespace Armada.Server
         /// repository checkout (vessel context) sets false so a missing directory fails instead.
         /// </summary>
         public bool AllowScratchWorkingDirectory { get; set; } = true;
+
+        /// <summary>
+        /// What the launch is for. Sent to a Harbor that runs it, for its job list and logs.
+        /// </summary>
+        public HarborJobKindEnum Kind { get; set; } = HarborJobKindEnum.Other;
+
+        /// <summary>
+        /// The mission the launch runs, for a mission. Sent to a Harbor that runs it.
+        /// </summary>
+        public string? MissionId { get; set; } = null;
 
         /// <summary>
         /// Short name of the launch for logs and messages (for example "chat", "planning").

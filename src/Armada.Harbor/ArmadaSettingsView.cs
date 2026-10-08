@@ -13,7 +13,7 @@ namespace Armada.Harbor
     using Avalonia.Media;
 
     /// <summary>
-    /// The Armada tab: the Admiral's settings. Live applies the common values through the REST API, so they take
+    /// The Admiral server tab of the Settings window: the Admiral's own settings (not this computer's). Live applies the common values through the REST API, so they take
     /// effect at once and the Admiral rewrites its settings.json. File edits settings.json directly (every value,
     /// including nested sections) on this machine; the Admiral reads it at startup, so those edits need a restart,
     /// which this tab can request.
@@ -55,10 +55,24 @@ namespace Armada.Harbor
         {
             _Session = session ?? throw new ArgumentNullException(nameof(session));
 
-            _Tabs.Items.Add(new TabItem { Header = new TextBlock { Text = "Live", FontSize = 14 }, Content = BuildLiveTab() });
-            _FileTab = new TabItem { Header = new TextBlock { Text = "File (settings.json)", FontSize = 14 } };
+            _Tabs.Items.Add(new TabItem { Header = new TextBlock { Text = "Change live", FontSize = 14 }, Content = BuildLiveTab() });
+            _FileTab = new TabItem { Header = new TextBlock { Text = "Edit file (settings.json)", FontSize = 14 } };
             _Tabs.Items.Add(_FileTab);
-            Content = _Tabs;
+
+            TextBlock explanation = new TextBlock
+            {
+                Text = "These are the Admiral server's settings, not this computer's. Change live sends them through the Admiral's "
+                    + "API: they take effect at once and the Admiral saves them to its settings.json. When the Admiral runs on this "
+                    + "computer you can also edit that settings.json file directly; the Admiral reads it when it starts."
+            };
+            Border notice = HarborUi.Notice(explanation);
+            notice.Margin = new Thickness(20, 16, 20, 4);
+            DockPanel root = new DockPanel();
+            DockPanel.SetDock(notice, Dock.Top);
+            root.Children.Add(notice);
+            _Tabs.Margin = new Thickness(8, 0, 0, 0);
+            root.Children.Add(_Tabs);
+            Content = root;
 
             AttachedToVisualTree += (sender, args) =>
             {
@@ -80,9 +94,9 @@ namespace Armada.Harbor
 
         private Control BuildLiveTab()
         {
-            StackPanel root = new StackPanel { Spacing = 10, Margin = new Thickness(4, 8, 12, 12) };
-            root.Children.Add(HarborUi.Note("These values are read from and applied to the running Admiral through its API: they take effect immediately and the Admiral saves them to its settings.json. Port changes take effect after a restart. Nested sections (retention, permissions, push, remote control) are on the File tab."));
-            root.Children.Add(HarborUi.Secondary(_LiveState));
+            StackPanel intro = new StackPanel { Spacing = 6 };
+            intro.Children.Add(HarborUi.Note("Port changes take effect after the Admiral restarts. Nested sections (retention, permissions, push, remote control) are on Edit file."));
+            intro.Children.Add(HarborUi.Secondary(_LiveState));
 
             Grid form = new Grid { ColumnDefinitions = new ColumnDefinitions("310,*"), RowSpacing = 8 };
             AddField(form, "Max captains", _MaxCaptains, "0 means no limit.");
@@ -95,18 +109,17 @@ namespace Armada.Harbor
             AddField(form, "Landing mode", _LandingMode, "Default for completed missions; vessels and voyages can override it.");
             AddField(form, "Admiral port", _AdmiralPort, "Takes effect after a restart; Harbor's link URL must follow it.");
             AddField(form, "MCP port", _McpPort, "Takes effect after a restart.");
-            root.Children.Add(form);
-
             StackPanel buttons = HarborUi.ButtonRow();
             Button apply = HarborUi.Button("Apply", () => _ = ApplyLiveAsync());
             apply.Classes.Add("accent");
             buttons.Children.Add(apply);
             buttons.Children.Add(HarborUi.Button("Reload", () => _ = LoadLiveAsync(), "Read the values from the Admiral again"));
             buttons.Children.Add(HarborUi.Button("Restart Admiral", () => _ = RestartAdmiralAsync()));
-            root.Children.Add(buttons);
-            root.Children.Add(_LiveMessage);
+            StackPanel footer = new StackPanel { Spacing = 8 };
+            footer.Children.Add(buttons);
+            footer.Children.Add(_LiveMessage);
 
-            return new ScrollViewer { Content = root, HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled };
+            return HarborUi.Page(intro, HarborUi.Card("Admiral server", form, null), footer);
         }
 
         private void AddField(Grid form, string label, Control input, string? help)
@@ -151,7 +164,7 @@ namespace Armada.Harbor
             {
                 if (client == null)
                 {
-                    _LiveState.Text = "Harbor's link URL has no REST equivalent; fix it in Harbor Settings.";
+                    _LiveState.Text = "The Admiral address in General is not a ws:// or wss:// address; fix it there first.";
                     return;
                 }
 
@@ -257,17 +270,13 @@ namespace Armada.Harbor
             LocalAdmiralInfo? admiral = _Session.Admiral;
             if (admiral == null)
             {
-                _FileTab.Content = HarborUi.Note("Looking for the Armada data directory...");
+                _FileTab.Content = HarborUi.Page(HarborUi.Note("Looking for the Armada data directory..."));
                 return;
             }
 
             if (!admiral.IsLocal)
             {
-                _FileTab.Content = new StackPanel
-                {
-                    Margin = new Thickness(4, 8),
-                    Children = { HarborUi.Note(admiral.Reason + " Use the Live tab or the dashboard to change its settings.") }
-                };
+                _FileTab.Content = HarborUi.Page(HarborUi.Note(admiral.Reason + " Change live works over the network."));
                 _FileEditor = null;
                 _FileEditorPath = null;
                 return;
@@ -277,7 +286,7 @@ namespace Armada.Harbor
 
             StackPanel header = new StackPanel { Spacing = 6 };
             header.Children.Add(HarborUi.Note(admiral.SettingsFile));
-            _FileBanner.Text = "The Admiral reads this file when it starts: saved changes take effect after a restart. Until then, a settings change from the dashboard or the Live tab rewrites this file from the running settings and discards edits made here.";
+            _FileBanner.Text = "The Admiral reads this file when it starts: saved changes take effect after a restart. Until then, a settings change from the dashboard or Change live rewrites this file from the running settings and discards edits made here.";
             Grid bannerRow = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), ColumnSpacing = 10 };
             bannerRow.Children.Add(HarborUi.Notice(_FileBanner));
             Button restart = HarborUi.Button("Restart Admiral", () => _ = RestartAdmiralAsync());
@@ -287,6 +296,7 @@ namespace Armada.Harbor
             header.Children.Add(bannerRow);
 
             _FileEditor = new JsonFileEditorView(admiral.SettingsFile, SettingsTextValidator.ValidateArmadaSettings, header);
+            _FileEditor.Margin = new Thickness(20, 16, 20, 20);
             _FileEditor.Saved += (sender, args) =>
             {
                 _ = _Session.ResolveAdmiralAsync();
@@ -336,8 +346,8 @@ namespace Armada.Harbor
             if (ex.StatusCode == 401 || ex.StatusCode == 403)
             {
                 return _Session.IsAdmiralLocal
-                    ? "Not authorized. Harbor uses the API key from this Admiral's settings.json, or its own access key; neither was accepted. Set an admin access key in Harbor Settings."
-                    : "Not authorized. Set an admin access key (an Armada credential) in Harbor Settings.";
+                    ? "Not authorized. Harbor uses the API key from this Admiral's settings.json, or its own access key; neither was accepted. Set an admin access key in Settings > General."
+                    : "Not authorized. Set an admin access key (an Armada credential) in Settings > General.";
             }
 
             if (ex.StatusCode == 0) return "Could not reach the Admiral at " + _Session.RestBaseUrl + ": " + ex.Message;
@@ -351,10 +361,7 @@ namespace Armada.Harbor
 
         private static void SetMessage(TextBlock block, string? text, bool isError)
         {
-            block.Text = text ?? String.Empty;
-            block.IsVisible = !String.IsNullOrEmpty(text);
-            if (isError) block.Foreground = new SolidColorBrush(Color.Parse("#ef4444"));
-            else HarborUi.Secondary(block);
+            HarborUi.SetMessage(block, text, isError);
         }
 
         #endregion

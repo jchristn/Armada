@@ -95,7 +95,8 @@ Run a captain:
 ```
 Admiral -> launch { jobId, runtime, workingDirectory, model, prompt, promptViaStdin, arguments, environment,
                     inferenceEndpoint, autoApprove, mcpSessionToken,
-                    scratchWorkingDirectory, streamJsonOutput, showThinking, returnFinalMessage }
+                    scratchWorkingDirectory, streamJsonOutput, showThinking, returnFinalMessage,
+                    jobKind, missionId, captainId }
 Harbor  -> started { jobId, processId }
 Harbor  -> output  { jobId, stream: "Stdout", data }   (repeated; stream is "Stdout" or "Stderr")
 Admiral -> stdin   { jobId, data }                      (optional)
@@ -106,7 +107,9 @@ Harbor  -> exited  { jobId, exitCode, durationMs, timeToFirstTokenMs }
 
 The `launch` fields after `mcpSessionToken` were added for interactive launches (captain chat, Ask Armada turns,
 planning, refinement). They are additive and optional: each defaults to `false`, a Harbor that predates them ignores
-them, and the Admiral never sends anything a Harbor did not ask for, so the protocol version stays `1.0`.
+them, and the Admiral never sends anything a Harbor did not ask for, so the protocol version stays `1.0`. `jobKind`,
+`missionId`, and `captainId` came later on the same terms: optional strings (absent from an older Admiral) that only
+label the job on the Harbor.
 
 | Field | Meaning |
 |---|---|
@@ -114,6 +117,9 @@ them, and the Admiral never sends anything a Harbor did not ask for, so the prot
 | `streamJsonOutput` | Run a Claude Code captain with `--output-format stream-json --include-partial-messages` (chat streaming). Ignored for other runtimes. |
 | `showThinking` | Ask the runtime to surface the model's reasoning (Mux `--show-thinking`). |
 | `returnFinalMessage` | Have the runtime write its final-message artifact (Codex `--output-last-message`, Mux) to a Harbor-side file outside the working directory, and send its content back as one `output` message on the `FinalMessage` stream just before `exited`. |
+| `jobKind` | What the launch is for, as a string: `Mission`, `AskTurn`, `Planning`, `Refinement`, `ContextBuild`, or `Other`. Informational: the Harbor shows it in its job list and names its job logs with it. A value the Harbor does not know is treated as unknown, never refused. |
+| `missionId` | The mission a `Mission` launch runs. Informational. |
+| `captainId` | The captain the launch runs as. Informational. |
 
 A Harbor reports stdout lines on the `Stdout` stream and stderr lines on the `Stderr` stream (a Harbor that predates the
 split reports both as `Stdout`). The Admiral's mission lifecycle reads both; chat and planning read only `Stdout`.
