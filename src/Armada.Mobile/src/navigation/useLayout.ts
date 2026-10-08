@@ -9,7 +9,7 @@ export const COMPACT_MAX_WIDTH = 600;
 /** From this window width the full sidebar (icons and labels) shows by default; between the two it is a rail. */
 export const EXPANDED_MIN_WIDTH = 1024;
 /** The full sidebar. */
-export const SIDEBAR_WIDTH = 280;
+export const SIDEBAR_WIDTH = 248;
 /** The collapsed sidebar: icons only. */
 export const RAIL_WIDTH = 76;
 /**

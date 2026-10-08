@@ -1,5 +1,5 @@
 import { usePathname, useRouter, type Href } from 'expo-router';
-import { Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Image, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../auth/AuthContext';
 import { useLocale } from '../../i18n/LocaleContext';
@@ -152,14 +152,17 @@ export function Sidebar() {
   );
 }
 
+const SIDEBAR_ROW_HEIGHT = Platform.OS === 'ios' ? 44 : MIN_TOUCH;
+
 const styles = StyleSheet.create({
   wrap: { borderRightWidth: StyleSheet.hairlineWidth, height: '100%' },
-  brand: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.lg },
+  brand: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   logo: { width: 36, height: 36, borderRadius: radius.sm },
   flex: { flex: 1 },
-  section: { marginTop: spacing.lg },
-  sectionLabel: { paddingHorizontal: spacing.lg, marginBottom: spacing.xs },
-  item: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: MIN_TOUCH, paddingHorizontal: spacing.lg, borderLeftWidth: 3, borderLeftColor: 'transparent' },
+  section: { marginTop: spacing.sm },
+  sectionLabel: { paddingHorizontal: spacing.md, marginBottom: 2 },
+  // Rows stay a full touch target (44 pt on iOS, 48 dp on Android) with tighter spacing around them.
+  item: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: SIDEBAR_ROW_HEIGHT, paddingHorizontal: spacing.md, borderLeftWidth: 3, borderLeftColor: 'transparent' },
   label: { flex: 1 },
   railBrand: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.md },
   toggle: { width: MIN_TOUCH, height: MIN_TOUCH, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm },
