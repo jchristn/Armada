@@ -23,6 +23,15 @@ export const CHROME_MAX_FONT_SCALE = 1.6;
 /** Minimum touch target (Apple HIG 44 pt, Material 48 dp). */
 export const MIN_TOUCH = 48;
 
+/**
+ * Extra touch area for a compact control drawn shorter than MIN_TOUCH (a chip, a pill tab, a disclosure line), so
+ * the part a finger can hit still reaches MIN_TOUCH. Pass as the Pressable's hitSlop.
+ */
+export function touchSlop(drawnHeight: number): { top: number; bottom: number; left: number; right: number } {
+  const extra = Math.max(0, Math.ceil((MIN_TOUCH - drawnHeight) / 2));
+  return { top: extra, bottom: extra, left: 0, right: 0 };
+}
+
 export const spacing = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 };
 
 export const radius = { sm: 6, md: 10, lg: 16, pill: 999 };

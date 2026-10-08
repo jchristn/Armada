@@ -1,4 +1,6 @@
+import { useEffect } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { announce } from '../../lib/accessibility';
 import { useTheme } from '../../theme/ThemeContext';
 import { spacing } from '../../theme/typography';
 import { AppText } from './AppText';
@@ -38,10 +40,12 @@ export function ErrorState({ title, message, retryLabel, onRetry }: {
   retryLabel?: string;
   onRetry?: () => void;
 }) {
+  // Spoken once when the failure appears (VoiceOver has no live regions), without moving focus.
+  useEffect(() => { announce([title, message].filter(Boolean).join('. ')); }, [title, message]);
   return (
     <View style={styles.center} accessibilityRole="alert">
       <Icon name="alert-circle-outline" size={40} color="danger" />
-      <AppText variant="heading" style={styles.textCenter}>{title}</AppText>
+      <AppText variant="heading" accessibilityRole="header" style={styles.textCenter}>{title}</AppText>
       {message ? <AppText muted style={styles.textCenter}>{message}</AppText> : null}
       {retryLabel && onRetry ? <Button label={retryLabel} onPress={onRetry} /> : null}
     </View>

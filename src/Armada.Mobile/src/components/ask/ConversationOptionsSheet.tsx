@@ -72,7 +72,7 @@ export function ConversationOptionsSheet(props: ConversationOptionsProps) {
             onValueChange={onAutoApproveChange}
             accessibilityLabel={t('Auto-approve')}
             accessibilityHint={autoWarning}
-            trackColor={{ true: colors.warning, false: colors.border }}
+            trackColor={{ true: colors.warning, false: colors.control }}
           />
         </View>
       ) : null}

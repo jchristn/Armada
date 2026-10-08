@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
-import { CHROME_MAX_FONT_SCALE, MIN_TOUCH, radius, spacing } from '../../theme/typography';
+import { CHROME_MAX_FONT_SCALE, MIN_TOUCH, radius, spacing, touchSlop } from '../../theme/typography';
+import { useReducedMotion } from '../../lib/accessibility';
 import { AppText } from './AppText';
 
 export interface TabStripOption<T extends string> {
@@ -27,11 +28,12 @@ export function TabStrip<T extends string>({ options, value, onChange, label, te
   const { colors } = useTheme();
   const scrollRef = useRef<ScrollView | null>(null);
   const offsets = useRef<Record<string, number>>({});
+  const reduceMotion = useReducedMotion();
 
   useEffect(() => {
     const x = offsets.current[value];
-    if (x !== undefined) scrollRef.current?.scrollTo({ x: Math.max(0, x - spacing.lg), animated: true });
-  }, [value]);
+    if (x !== undefined) scrollRef.current?.scrollTo({ x: Math.max(0, x - spacing.lg), animated: !reduceMotion });
+  }, [value, reduceMotion]);
 
   return (
     <View style={[styles.wrap, { borderBottomColor: colors.border, backgroundColor: colors.surface }]}>
@@ -55,6 +57,7 @@ export function TabStrip<T extends string>({ options, value, onChange, label, te
               accessibilityState={{ selected }}
               onLayout={(e) => { offsets.current[option.value] = e.nativeEvent.layout.x; }}
               onPress={() => onChange(option.value)}
+              hitSlop={touchSlop(MIN_TOUCH - 8)}
               style={({ pressed }) => [
                 styles.tab,
                 { backgroundColor: selected ? colors.primary : pressed ? colors.background : 'transparent', borderColor: selected ? colors.primary : colors.border },

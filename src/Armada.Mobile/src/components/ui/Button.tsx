@@ -1,3 +1,4 @@
+import type { Ref } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
 import { MIN_TOUCH, radius, spacing } from '../../theme/typography';
@@ -17,15 +18,18 @@ export interface ButtonProps {
   accessibilityHint?: string;
   testID?: string;
   style?: StyleProp<ViewStyle>;
+  /** The native button (a sheet it opens returns screen-reader focus to it). */
+  ref?: Ref<View>;
 }
 
-export function Button({ label, onPress, variant = 'primary', disabled, busy, icon, accessibilityHint, testID, style }: ButtonProps) {
+export function Button({ label, onPress, variant = 'primary', disabled, busy, icon, accessibilityHint, testID, style, ref }: ButtonProps) {
   const { colors } = useTheme();
   const inactive = disabled || busy;
   const background = variant === 'primary' ? colors.primary : variant === 'danger' ? colors.danger : 'transparent';
   const foreground = variant === 'primary' ? 'primaryText' : variant === 'danger' ? 'dangerText' : 'primary';
   return (
     <Pressable
+      ref={ref}
       testID={testID}
       accessibilityRole="button"
       accessibilityLabel={label}

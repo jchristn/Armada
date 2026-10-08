@@ -51,7 +51,7 @@ export function ImportResultsStep({ batch, items, selectedCount, polling = false
       {polling ? (
         <View style={[styles.box, { borderColor: colors.info }]} accessibilityLiveRegion="polite" accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: 100, now: percent }}>
           <AppText>{t('{count, plural, one {Importing # repository in the background.} other {Importing # repositories in the background.}}', { count: selectedCount ?? 0 })}</AppText>
-          <View style={[styles.track, { backgroundColor: colors.border }]}><View style={[styles.bar, { width: `${percent}%`, backgroundColor: colors.primary }]} /></View>
+          <View style={[styles.track, { backgroundColor: colors.track }]}><View style={[styles.bar, { width: `${percent}%`, backgroundColor: colors.primary }]} /></View>
           <AppText variant="caption" muted>{`${t('{{processed}} of {{total}} processed', { processed, total: target })}${jobId ? ` - ${jobId}` : ''}`}</AppText>
           {jobId ? <AppText variant="caption" color="primary" accessibilityRole="link" onPress={() => router.push('/jobs' as Href)}>{t('Open the Jobs page')}</AppText> : null}
           <AppText variant="caption" muted>{t('You can leave this screen; the import keeps running and appears in the import history.')}</AppText>

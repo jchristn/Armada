@@ -54,7 +54,7 @@ export function RunProgressBar({ run, compact = false }: { run: ProgressRun; com
   return (
     <View style={styles.progress}>
       <View
-        style={[styles.bar, { backgroundColor: colors.border }]}
+        style={[styles.bar, { backgroundColor: colors.track }]}
         accessible
         accessibilityRole="progressbar"
         accessibilityLabel={t('Targets finished')}

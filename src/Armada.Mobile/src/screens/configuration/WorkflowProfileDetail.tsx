@@ -159,7 +159,7 @@ export function WorkflowProfileDetailView({ id, embedded, onDeleted, onChanged }
           <Field label={t('Available Check Types')} value={validation.availableCheckTypes.length > 0 ? validation.availableCheckTypes.join(', ') : t('None')} />
           {validation.errors.map((e, i) => <Field key={`e${i}`} label={t('Errors')} value={e} />)}
           {validation.warnings.map((w, i) => <Field key={`w${i}`} label={t('Warnings')} value={w} />)}
-          <AppText variant="subheading" muted style={resourceStyles.pad}>{t('Resolved Commands')}</AppText>
+          <AppText variant="subheading" accessibilityRole="header" muted style={resourceStyles.pad}>{t('Resolved Commands')}</AppText>
           <CommandPreviews previews={validation.commandPreviews} />
         </FieldCard>
       ) : null}

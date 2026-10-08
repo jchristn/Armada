@@ -8,6 +8,7 @@ import { AppText, IconButton, LoadingState } from '../ui';
 import { useLocale } from '../../i18n/LocaleContext';
 import { useTheme } from '../../theme/ThemeContext';
 import { spacing } from '../../theme/typography';
+import { useReducedMotion } from '../../lib/accessibility';
 
 export interface MissionOutputRequest {
   kind: 'diff' | 'log';
@@ -22,8 +23,9 @@ export interface MissionOutputRequest {
 export function MissionOutputSheet({ request, onClose }: { request: MissionOutputRequest | null; onClose: () => void }) {
   const { t } = useLocale();
   const { colors } = useTheme();
+  const reduceMotion = useReducedMotion();
   return (
-    <Modal visible={request !== null} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+    <Modal visible={request !== null} animationType={reduceMotion ? 'fade' : 'slide'} presentationStyle="pageSheet" onRequestClose={onClose}>
       <SafeAreaView style={[styles.fill, { backgroundColor: colors.background }]} edges={['top', 'bottom', 'left', 'right']}>
         <View style={[styles.header, { borderBottomColor: colors.border }]}>
           <AppText variant="heading" accessibilityRole="header" numberOfLines={1} style={styles.fill}>

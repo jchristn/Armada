@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
-import { MIN_TOUCH, radius, spacing } from '../../theme/typography';
+import { MIN_TOUCH, radius, spacing, touchSlop } from '../../theme/typography';
 import { AppText } from './AppText';
 
 export interface SegmentOption<T extends string> {
@@ -32,6 +32,7 @@ export function SegmentedControl<T extends string>({ options, value, onChange, l
             accessibilityLabel={option.label}
             accessibilityState={{ selected }}
             onPress={() => onChange(option.value)}
+            hitSlop={touchSlop(MIN_TOUCH - 6)}
             style={[styles.segment, selected ? { backgroundColor: colors.primary } : null]}
           >
             <AppText variant="label" color={selected ? 'primaryText' : 'text'} style={styles.label} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{option.label}</AppText>

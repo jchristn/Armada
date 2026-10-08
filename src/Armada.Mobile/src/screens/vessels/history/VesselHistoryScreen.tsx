@@ -19,9 +19,10 @@ import { AppText, Button, EmptyState, ErrorState, Icon, IconButton, LoadingState
 import { SelectField, type SelectOption } from '../../../components/ui/SelectSheet';
 import { useLocale } from '../../../i18n/LocaleContext';
 import { useTheme } from '../../../theme/ThemeContext';
-import { radius, spacing, typography } from '../../../theme/typography';
+import { radius, spacing, typography, touchSlop } from '../../../theme/typography';
 import { vesselLinks } from '../vesselLinks';
 import { CommitHeatmap } from './CommitHeatmap';
+import { useReducedMotion } from '../../../lib/accessibility';
 
 /** Commits requested per page (the dashboard's HISTORY_PAGE_SIZE). */
 export const HISTORY_PAGE_SIZE = 50;
@@ -62,6 +63,7 @@ function CommitRow({ commit, expanded, onToggle, selectedDay }: { commit: Vessel
         accessibilityState={{ expanded }}
         accessibilityLabel={`${commit.subject || t('(no message)')}, ${commit.authorName}, ${formatRelativeTime(commit.committedUtc)}`}
         onPress={onToggle}
+        hitSlop={touchSlop(32)}
         style={styles.commitHead}
         testID={`vessel-history-commit-${shortSha}`}
       >
@@ -112,6 +114,10 @@ export function VesselHistoryScreen({ id }: { id: string }) {
   const today = useMemo(() => todayIsoDate(), []);
   const utcOffsetMinutes = useMemo(() => browserUtcOffsetMinutes(), []);
   const listRef = useRef<FlatList<Row> | null>(null);
+  // Read by the load continuation: jumps to the list skip the animation under Reduce Motion.
+  const reduceMotion = useReducedMotion();
+  const reduceMotionRef = useRef(reduceMotion);
+  useEffect(() => { reduceMotionRef.current = reduceMotion; }, [reduceMotion]);
   const headerHeight = useRef(0);
   const scrollOnLoad = useRef(false);
 
@@ -218,7 +224,7 @@ export function VesselHistoryScreen({ id }: { id: string }) {
         setListLoaded(true);
         if (scrollOnLoad.current) {
           scrollOnLoad.current = false;
-          listRef.current?.scrollToOffset({ offset: headerHeight.current, animated: true });
+          listRef.current?.scrollToOffset({ offset: headerHeight.current, animated: !reduceMotionRef.current });
         }
       })
       .catch((e: unknown) => { if (gen === generation.current) setListError(errorMessage(e) || t('Failed to load commits.')); })

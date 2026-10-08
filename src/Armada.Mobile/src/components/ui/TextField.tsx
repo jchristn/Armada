@@ -26,7 +26,7 @@ export const TextField = forwardRef<TextInput, TextFieldProps>(function TextFiel
   return (
     <View style={styles.wrap}>
       <AppText variant="label" nativeID={testID ? `${testID}-label` : undefined}>{label}</AppText>
-      <View style={[styles.box, { borderColor: error ? colors.danger : focused ? colors.focus : colors.border, backgroundColor: colors.surface }]}>
+      <View style={[styles.box, { borderColor: error ? colors.danger : focused ? colors.focus : colors.control, backgroundColor: colors.surface }]}>
         <TextInput
           ref={ref}
           testID={testID}

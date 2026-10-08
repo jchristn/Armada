@@ -22,7 +22,8 @@ const CHART_HEIGHT = 160;
 /**
  * Mission History (the dashboard's MissionHistoryChart): completed, failed, and other missions per time bucket
  * over the last hour, day, week, or month, narrowed to a fleet or vessel. Touch and drag over the chart to read a
- * bucket. `refreshToken` reloads it with the rest of Home.
+ * bucket; screen-reader users get the totals as its label and step through the buckets with swipe up and down (an
+ * adjustable element), each read as text. `refreshToken` reloads it with the rest of Home.
  */
 export function MissionHistoryChart({ vessels, fleets, refreshToken }: { vessels: Vessel[]; fleets: Fleet[]; refreshToken: number }) {
   const { t } = useLocale();
@@ -53,6 +54,14 @@ export function MissionHistoryChart({ vessels, fleets, refreshToken }: { vessels
     if (!width || buckets.length === 0) return;
     const index = Math.floor((event.nativeEvent.locationX / width) * buckets.length);
     setHovered(Math.max(0, Math.min(buckets.length - 1, index)));
+  };
+
+  const bucketText = (b: { timestampMs: number; complete: number; failed: number; other: number }) =>
+    `${formatTooltipTime(b.timestampMs)}: ${t('Complete')} ${b.complete}, ${t('Failed')} ${b.failed}${b.other > 0 ? `, ${t('Other')} ${b.other}` : ''}`;
+  const step = (delta: number) => {
+    if (buckets.length === 0) return;
+    const from = hovered ?? (delta > 0 ? -1 : buckets.length);
+    setHovered(Math.max(0, Math.min(buckets.length - 1, from + delta)));
   };
 
   const summary = t('{{total}} total, {{complete}} complete, {{failed}} failed', {
@@ -112,8 +121,12 @@ export function MissionHistoryChart({ vessels, fleets, refreshToken }: { vessels
           <View
             testID="mission-history-chart"
             accessible
-            accessibilityRole="image"
+            accessibilityRole="adjustable"
             accessibilityLabel={`${t('Mission History')}: ${summary}`}
+            accessibilityValue={shown ? { text: bucketText(shown) } : undefined}
+            accessibilityHint={t('Swipe up or down to read each time period.')}
+            accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
+            onAccessibilityAction={(e) => step(e.nativeEvent.actionName === 'increment' ? 1 : -1)}
             onLayout={(e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width)}
             onStartShouldSetResponder={() => true}
             onMoveShouldSetResponder={() => true}

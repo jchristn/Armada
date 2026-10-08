@@ -4,7 +4,7 @@ import type { ToolEvent } from '@dashboard/lib/toolEvents';
 import { formatToolMs, prettyJson, toolResultPreview } from '@dashboard/lib/askFormat';
 import { useLocale } from '../../i18n/LocaleContext';
 import { useTheme } from '../../theme/ThemeContext';
-import { MIN_TOUCH, radius, spacing } from '../../theme/typography';
+import { MIN_TOUCH, radius, spacing, touchSlop } from '../../theme/typography';
 import { AppText } from '../ui/AppText';
 import { CodeBlock } from './CodeBlock';
 
@@ -33,6 +33,7 @@ function ToolChip({ tool, permissionDeniedNote }: { tool: ToolEvent; permissionD
           accessibilityValue={preview ? { text: preview } : undefined}
           accessibilityState={{ expanded: open }}
           onPress={() => setOpen((v) => !v)}
+          hitSlop={touchSlop(MIN_TOUCH - 8)}
           style={styles.summary}
         >
           <AppText variant="caption" style={{ color: tone, fontWeight: '700' }} importantForAccessibility="no">{glyph}</AppText>

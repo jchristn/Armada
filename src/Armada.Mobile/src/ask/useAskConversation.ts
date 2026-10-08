@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useLayoutEffect, useReducer, useRef, useState } from 'react';
-import { AccessibilityInfo } from 'react-native';
 import {
   ApiError,
   approveAskProposal,
@@ -21,6 +20,7 @@ import { randomThinkingMessage } from '@dashboard/lib/askThinkingMessages';
 import { useLocale } from '../i18n/LocaleContext';
 import { useNotifications } from '../notifications/NotificationContext';
 import { useSocket } from '../socket/SocketContext';
+import { announce as announceForScreenReader } from '../lib/accessibility';
 import { errorText, useAsk } from './AskContext';
 
 export const MESSAGE_PAGE_SIZE = 30;
@@ -84,7 +84,8 @@ export function useAskConversation({ threadId, onCreated, schedule = (fn, ms) =>
   const [waitingText, setWaitingText] = useState('');
   const tRef = useRef(t);
   useLayoutEffect(() => { tRef.current = t; }, [t]);
-  const announce = useCallback((text: string) => { AccessibilityInfo.announceForAccessibility(text); }, []);
+  // Queued on iOS, so a status change does not cut off the reply being read.
+  const announce = useCallback((text: string) => { announceForScreenReader(text); }, []);
 
   const fetchSnapshots = useCallback((id: string, work: AskTrackedWork[]) => {
     const missing = work.filter((w) => !convRef.current.snapshots[w.id] && !w.snapshot);
@@ -176,6 +177,7 @@ export function useAskConversation({ threadId, onCreated, schedule = (fn, ms) =>
     const tr = tRef.current;
 
     if (event.type === 'ask.turn' && event.state !== 'started') {
+      if (event.state === 'failed') announce(tr('The captain turn failed: {{reason}}', { reason: event.error ?? 'failed' }));
       void refreshLatest(event.threadId);
     } else if (event.type === 'ask.message' && event.message.role !== 'User') {
       const kind = String(event.message.kind);

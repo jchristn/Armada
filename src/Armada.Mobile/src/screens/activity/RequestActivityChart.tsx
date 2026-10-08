@@ -24,13 +24,15 @@ export function RequestActivityChart({ summary, rangeId }: { summary: RequestHis
   const bucket = buckets.find((b) => b.bucketStartUtc === picked) ?? null;
   return (
     <View testID="request-chart">
-      <View style={styles.plot} accessible accessibilityLabel={`${t('Requests')}: ${total}`}>
+      {/* The summary is its own element: the bars below are buttons, which a grouped plot would hide from VoiceOver. */}
+      <AppText variant="caption" muted testID="request-chart-summary">{`${t('Requests')}: ${total}`}</AppText>
+      <View style={styles.plot}>
         {buckets.map((b) => {
           const height = b.totalCount > 0 ? Math.max((b.totalCount / max) * 100, 6) : 2;
           const failure = b.totalCount > 0 ? (b.failureCount / b.totalCount) * 100 : 0;
           return (
-            <Pressable key={b.bucketStartUtc} style={styles.column} onPress={() => setPicked(b.bucketStartUtc)} accessibilityRole="button" accessibilityLabel={`${formatDateTime(b.bucketStartUtc)}: ${b.totalCount}`}>
-              <View style={[styles.bar, { height: `${height}%`, backgroundColor: b.totalCount > 0 ? colors.success : colors.border, opacity: picked === b.bucketStartUtc ? 1 : 0.85 }]}>
+            <Pressable key={b.bucketStartUtc} style={styles.column} onPress={() => setPicked(b.bucketStartUtc)} accessibilityRole="button" accessibilityLabel={`${formatDateTime(b.bucketStartUtc)}: ${t('{{count}} total', { count: b.totalCount })}, ${t('{{count}} failed', { count: b.failureCount })}`}>
+              <View style={[styles.bar, { height: `${height}%`, backgroundColor: b.totalCount > 0 ? colors.success : colors.track, opacity: picked === b.bucketStartUtc ? 1 : 0.85 }]}>
                 {failure > 0 ? <View style={{ height: `${failure}%`, backgroundColor: colors.danger }} /> : null}
               </View>
             </Pressable>

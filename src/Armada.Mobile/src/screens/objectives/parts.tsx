@@ -3,7 +3,7 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { AppText, BottomSheet, Icon } from '../../components/ui';
 import { useLocale } from '../../i18n/LocaleContext';
 import { useTheme } from '../../theme/ThemeContext';
-import { CHROME_MAX_FONT_SCALE, MIN_TOUCH, radius, spacing, typography } from '../../theme/typography';
+import { CHROME_MAX_FONT_SCALE, MIN_TOUCH, radius, spacing, typography, touchSlop } from '../../theme/typography';
 
 export interface PillOption<K extends string> {
   key: K;
@@ -28,6 +28,7 @@ export function PillRow<K extends string>({ options, value, onChange, label, tes
             accessibilityHint={o.description}
             accessibilityState={{ selected }}
             onPress={() => onChange(o.key)}
+            hitSlop={touchSlop(MIN_TOUCH - 8)}
             style={[styles.pill, { borderColor: selected ? colors.primary : colors.border, backgroundColor: selected ? colors.primary : colors.surface }]}
           >
             <AppText variant="caption" color={selected ? 'primaryText' : 'text'} maxFontSizeMultiplier={CHROME_MAX_FONT_SCALE}>{o.label}</AppText>

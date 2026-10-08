@@ -14,10 +14,14 @@ import {
 } from '@dashboard/lib/notificationEvents';
 import type { AuthHooks } from '../auth/AuthContext';
 import { useLocale } from '../i18n/LocaleContext';
+import { useScreenReaderEnabled } from '../lib/accessibility';
 import { useSocket } from '../socket/SocketContext';
 import { PREF_KEYS, readPref, removePref, writePref } from '../storage/prefs';
 
 export type { Notification, Severity };
+
+/** With VoiceOver or TalkBack on, toasts stay this many times longer (reading one and reaching it takes time). */
+export const SCREEN_READER_TOAST_FACTOR = 3;
 
 export interface Toast {
   id: number;
@@ -114,6 +118,9 @@ interface History {
 export function NotificationProvider({ children, scope = 'local', schedule = (fn, ms) => setTimeout(fn, ms) }: NotificationProviderProps) {
   const { subscribe } = useSocket();
   const { t } = useLocale();
+  const screenReader = useScreenReaderEnabled();
+  const screenReaderRef = useRef(screenReader);
+  useEffect(() => { screenReaderRef.current = screenReader; }, [screenReader]);
   const [history, setHistory] = useState<History>({ scope, items: [], loaded: false });
   const [toasts, setToasts] = useState<Toast[]>([]);
   const toastCounterRef = useRef(0);
@@ -161,7 +168,8 @@ export function NotificationProvider({ children, scope = 'local', schedule = (fn
   const pushToast = useCallback((severity: Severity, message: string, href: string | null = null) => {
     const id = ++toastCounterRef.current;
     setToasts((prev) => [...prev, { id, severity, message, href }]);
-    schedule(() => setToasts((prev) => prev.filter((toast) => toast.id !== id)), TOAST_TIMEOUT_MS);
+    const timeout = screenReaderRef.current ? TOAST_TIMEOUT_MS * SCREEN_READER_TOAST_FACTOR : TOAST_TIMEOUT_MS;
+    schedule(() => setToasts((prev) => prev.filter((toast) => toast.id !== id)), timeout);
   }, [schedule]);
 
   useEffect(() => subscribe((msg: WebSocketMessage) => {

@@ -182,7 +182,7 @@ export function VesselHealthTab() {
         {evaluation.running ? (
           <View style={styles.progress} accessibilityRole="progressbar" accessibilityLiveRegion="polite" testID="health-evaluating">
             <AppText variant="caption">{evaluation.activeJob ? t('Evaluating... {{percent}}%', { percent: formatCount(locale, evaluation.activeJob.progress ?? 0) }) : t('Evaluating...')}</AppText>
-            <View style={[styles.track, { backgroundColor: colors.border }]}>
+            <View style={[styles.track, { backgroundColor: colors.track }]}>
               <View style={[styles.bar, { backgroundColor: colors.primary, width: `${Math.max(3, Math.min(100, evaluation.activeJob?.progress ?? 0))}%` }]} />
             </View>
           </View>

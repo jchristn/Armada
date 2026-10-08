@@ -124,6 +124,17 @@ describe('Home', () => {
     await waitFor(() => expect(api.getMissionHistory).toHaveBeenLastCalledWith(expect.objectContaining({ bucketMinutes: 1 })));
   });
 
+  it('screen readers read the chart totals and step through its time buckets', async () => {
+    await renderScreen(<HomeScreen />);
+    const chart = await screen.findByTestId('mission-history-chart');
+    expect(chart.props.accessibilityRole).toBe('adjustable');
+    expect(chart.props.accessibilityLabel).toBe('Mission History: 3 total, 2 complete, 1 failed');
+    await fireEvent(chart, 'accessibilityAction', { nativeEvent: { actionName: 'increment' } });
+    expect(screen.getByTestId('mission-history-chart').props.accessibilityValue.text).toMatch(/Complete 2, Failed 1$/);
+    await fireEvent(screen.getByTestId('mission-history-chart'), 'accessibilityAction', { nativeEvent: { actionName: 'decrement' } });
+    expect(screen.getByTestId('mission-history-chart').props.accessibilityValue.text).toMatch(/Complete 2, Failed 1$/);
+  });
+
   it('tablets rely on the sidebar instead of the Work list', async () => {
     mockWindow.width = 1024;
     mockWindow.height = 1366;

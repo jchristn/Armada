@@ -4,7 +4,7 @@ import type { AskTrackedWork } from '@dashboard/types/models';
 import { entityTypeLabel, isWorkActive } from '@dashboard/lib/askWork';
 import { useLocale } from '../../i18n/LocaleContext';
 import { useTheme } from '../../theme/ThemeContext';
-import { MIN_TOUCH, radius, spacing } from '../../theme/typography';
+import { MIN_TOUCH, radius, spacing, touchSlop } from '../../theme/typography';
 import { AppText } from '../ui/AppText';
 import { Icon } from '../ui/Icon';
 import { StatusBadge } from '../ui/StatusBadge';
@@ -28,6 +28,7 @@ export function WorkStrip({ work, onSelect }: { work: AskTrackedWork[]; onSelect
         accessibilityLabel={`${t('Work in this conversation')}, ${countText}`}
         accessibilityState={{ expanded: open }}
         onPress={() => setOpen((v) => !v)}
+        hitSlop={touchSlop(MIN_TOUCH - 8)}
         style={styles.toggle}
       >
         <Icon name={open ? 'chevron-down' : 'chevron-forward'} size={16} color="textMuted" />
@@ -44,6 +45,7 @@ export function WorkStrip({ work, onSelect }: { work: AskTrackedWork[]; onSelect
               accessibilityLabel={t('Show the live card for {{title}}', { title: item.title || item.entityId })}
               accessibilityValue={{ text: [entityTypeLabel(t, item.entityType), item.status ? t(item.status) : null].filter(Boolean).join(', ') }}
               onPress={() => onSelect(item)}
+              hitSlop={touchSlop(MIN_TOUCH - 8)}
               style={[styles.chip, { borderColor: isWorkActive(item) ? colors.info : colors.border }]}
             >
               <AppText variant="caption" muted>{entityTypeLabel(t, item.entityType)}</AppText>

@@ -1,5 +1,7 @@
 import { useRouter, type Href } from 'expo-router';
+import { useEffect, useRef } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
+import { announce } from '../../lib/accessibility';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocale } from '../../i18n/LocaleContext';
 import { useNotifications } from '../../notifications/NotificationContext';
@@ -7,13 +9,25 @@ import { useTheme } from '../../theme/ThemeContext';
 import { radius, spacing } from '../../theme/typography';
 import { AppText, Icon, toneColor } from '../ui';
 
-/** Toasts for live events, stacked at the top; tap opens the item, the close button dismisses. Announced politely. */
+/**
+ * Toasts for live events, stacked at the top; tap opens the item, the close button dismisses. Each new toast is
+ * spoken once by VoiceOver and TalkBack (queued behind current speech, focus stays where it is); they also land in
+ * the notification center, so nothing is lost when one times out.
+ */
 export function ToastHost() {
   const { toasts, dismissToast } = useNotifications();
   const { colors } = useTheme();
   const { t } = useLocale();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const announced = useRef(0);
+  useEffect(() => {
+    for (const toast of toasts) {
+      if (toast.id <= announced.current) continue;
+      announced.current = toast.id;
+      announce(toast.message);
+    }
+  }, [toasts]);
   if (toasts.length === 0) return null;
   return (
     <View pointerEvents="box-none" style={[styles.host, { top: insets.top + spacing.sm }]}>
@@ -21,7 +35,6 @@ export function ToastHost() {
         <View
           key={toast.id}
           testID="toast"
-          accessibilityLiveRegion="polite"
           style={[styles.toast, { backgroundColor: colors.surfaceRaised, borderColor: colors[toneColor(toast.severity)] }]}
         >
           <Pressable

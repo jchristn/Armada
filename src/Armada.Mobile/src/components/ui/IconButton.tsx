@@ -1,3 +1,4 @@
+import type { Ref } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { MIN_TOUCH } from '../../theme/typography';
 import { CountBadge } from './CountBadge';
@@ -12,12 +13,15 @@ export interface IconButtonProps {
   badge?: number;
   color?: keyof Palette;
   testID?: string;
+  /** The native button (a sheet it opens returns screen-reader focus to it). */
+  ref?: Ref<View>;
 }
 
-export function IconButton({ icon, label, onPress, badge, color = 'primary', testID }: IconButtonProps) {
+export function IconButton({ icon, label, onPress, badge, color = 'primary', testID, ref }: IconButtonProps) {
   const spoken = badge ? `${label}, ${badge}` : label;
   return (
     <Pressable
+      ref={ref}
       testID={testID}
       accessibilityRole="button"
       accessibilityLabel={spoken}

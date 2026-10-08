@@ -9,7 +9,7 @@ import { AppText, Banner, Button, EmptyState, LoadingState, SearchField, StatusB
 import { useLocale } from '../../i18n/LocaleContext';
 import { useTheme } from '../../theme/ThemeContext';
 import type { Palette } from '../../theme/palette';
-import { MIN_TOUCH, radius, spacing, typography } from '../../theme/typography';
+import { MIN_TOUCH, radius, spacing, typography, touchSlop } from '../../theme/typography';
 
 /** Palette color of a diff line (the parser's classification; an added "+++ x" line inside a hunk is still an addition). */
 function diffColor(kind: UnifiedDiffLineKind): keyof Palette {
@@ -225,7 +225,7 @@ export function TerminalPanel({ vesselId }: { vesselId: string }) {
           ? <AppText muted>{t('Run a command in the vessel working tree (e.g. git status, ls, npm test).')}</AppText>
           : lines.map((line, i) => <AppText key={i} selectable color={color(line.kind)} style={typography.mono}>{line.text}</AppText>)}
       </View>
-      <View style={[styles.input, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+      <View style={[styles.input, { borderColor: colors.control, backgroundColor: colors.surface }]}>
         <AppText style={typography.mono}>$</AppText>
         <TextInput
           value={command}
@@ -249,7 +249,7 @@ export function TerminalPanel({ vesselId }: { vesselId: string }) {
       {history.length > 0 ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips} accessibilityLabel={t('Previous commands')}>
           {history.map((h) => (
-            <Pressable key={h} accessibilityRole="button" accessibilityLabel={h} onPress={() => setCommand(h)} style={[styles.chip, { borderColor: colors.border }]}>
+            <Pressable key={h} accessibilityRole="button" accessibilityLabel={h} onPress={() => setCommand(h)} hitSlop={touchSlop(36)} style={[styles.chip, { borderColor: colors.border }]}>
               <AppText variant="caption" style={typography.mono}>{h}</AppText>
             </Pressable>
           ))}

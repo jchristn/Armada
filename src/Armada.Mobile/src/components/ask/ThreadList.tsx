@@ -52,7 +52,7 @@ export function ThreadList(props: ThreadListProps) {
           value={includeArchived}
           onValueChange={onIncludeArchivedChange}
           accessibilityLabel={t('Show archived')}
-          trackColor={{ true: colors.primary, false: colors.border }}
+          trackColor={{ true: colors.primary, false: colors.control }}
           testID="ask-show-archived"
         />
         <AppText variant="caption" muted>{t('Show archived')}</AppText>

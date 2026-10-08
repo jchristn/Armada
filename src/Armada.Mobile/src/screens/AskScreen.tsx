@@ -25,6 +25,7 @@ import { useNotifications } from '../notifications/NotificationContext';
 import { useTheme } from '../theme/ThemeContext';
 import { spacing } from '../theme/typography';
 import { useModalBack } from '../components/ui/useModalBack';
+import { useReducedMotion } from '../lib/accessibility';
 
 /** The last conversation reopens once per app session (MOBILE_APP_PLAN.md design principle 1). */
 let restoredLastThread = false;
@@ -53,6 +54,7 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
   const { t } = useLocale();
   const { colors } = useTheme();
   const { isTablet } = useLayout();
+  const reduceMotion = useReducedMotion();
   const router = useRouter();
   const { isAdmin, isTenantAdmin } = useAuth();
   const { pushToast } = useNotifications();
@@ -166,7 +168,7 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
     <View style={styles.empty}><AppText muted>{t('Send the first message to begin.')}</AppText></View>
   ) : (
     <View style={styles.empty} testID="ask-empty">
-      <AppText variant="title" style={styles.center}>{greeting}</AppText>
+      <AppText variant="title" accessibilityRole="header" style={styles.center}>{greeting}</AppText>
       <AppText muted style={styles.center}>
         {activeCaptain
           ? t('Ask {{name}} anything about your fleet, or start work with a quick action.', { name: activeCaptain.name })
@@ -328,7 +330,7 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
       />
       <SplitView master={threadList} detail={conversationPane} />
 
-      <Modal visible={listOpen && !isTablet} animationType="slide" presentationStyle="pageSheet" onRequestClose={onListBack}>
+      <Modal visible={listOpen && !isTablet} animationType={reduceMotion ? 'fade' : 'slide'} presentationStyle="pageSheet" onRequestClose={onListBack}>
         {/* A modal is a new native root: swipe actions in the list need their own gesture root. */}
         <GestureHandlerRootView style={styles.fill}>
         <SafeAreaView style={[styles.fill, { backgroundColor: colors.background }]} edges={['top', 'bottom', 'left', 'right']}>

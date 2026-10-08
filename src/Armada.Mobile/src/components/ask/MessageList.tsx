@@ -8,6 +8,7 @@ import { useTheme } from '../../theme/ThemeContext';
 import { radius, spacing } from '../../theme/typography';
 import { AppText } from '../ui/AppText';
 import { Button } from '../ui/Button';
+import { useReducedMotion } from '../../lib/accessibility';
 import { Markdown } from './Markdown';
 import { MessageView, ThinkingBlock } from './MessageView';
 import { ToolChips } from './ToolChips';
@@ -61,6 +62,9 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(funct
   const { colors } = useTheme();
   const listRef = useRef<FlatList<AskMessage>>(null);
   const stickRef = useRef(true);
+  // Jumps (to a work card, to the newest message) scroll without animation under Reduce Motion.
+  const reduceMotion = useReducedMotion();
+  const animated = !reduceMotion;
   const deniedNote = permissionDeniedExplanation(t, cliResolution);
 
   const hosts = useMemo(() => workCardHosts(messages), [messages]);
@@ -77,8 +81,8 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(funct
 
   const scrollToIndex = useCallback((index: number) => {
     stickRef.current = false;
-    listRef.current?.scrollToIndex({ index, viewPosition: 0, animated: true });
-  }, []);
+    listRef.current?.scrollToIndex({ index, viewPosition: 0, animated });
+  }, [animated]);
 
   useImperativeHandle(ref, () => ({
     scrollToWork: (workId: string) => {
@@ -89,9 +93,9 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(funct
     },
     scrollToBottom: () => {
       stickRef.current = true;
-      listRef.current?.scrollToEnd({ animated: true });
+      listRef.current?.scrollToEnd({ animated });
     },
-  }), [indexOfWork, scrollToIndex]);
+  }), [indexOfWork, scrollToIndex, animated]);
 
   function onScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
@@ -152,9 +156,10 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(funct
           </View>
         </View>
       ) : null}
-      {showWaiting ? <AppText muted style={styles.waiting} testID="ask-waiting" accessibilityLiveRegion="polite">{waitingText || t('Thinking...')}</AppText> : null}
+      {/* The visible line rotates; the spoken label stays put so TalkBack says it once, not on every rotation. */}
+      {showWaiting ? <AppText muted style={styles.waiting} testID="ask-waiting" accessibilityLabel={t('Thinking...')} accessibilityLiveRegion="polite">{waitingText || t('Thinking...')}</AppText> : null}
       {turnError && !turnActive ? (
-        <View style={[styles.error, { borderColor: colors.danger }]} accessibilityRole="alert" testID="ask-turn-error">
+        <View style={[styles.error, { borderColor: colors.danger }]} accessibilityRole="alert" accessibilityLiveRegion="polite" testID="ask-turn-error">
           <AppText color="danger">{t('The captain turn failed: {{reason}}', { reason: turnError })}</AppText>
         </View>
       ) : null}
@@ -183,7 +188,7 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(funct
       keyboardDismissMode="interactive"
       onScrollToIndexFailed={(info) => {
         listRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false });
-        setTimeout(() => listRef.current?.scrollToIndex({ index: info.index, viewPosition: 0, animated: true }), 100);
+        setTimeout(() => listRef.current?.scrollToIndex({ index: info.index, viewPosition: 0, animated }), 100);
       }}
       initialNumToRender={20}
       windowSize={11}

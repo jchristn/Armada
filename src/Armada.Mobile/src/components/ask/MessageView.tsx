@@ -4,7 +4,7 @@ import type { AskActionProposal, AskMessage, CliPermissionRequest } from '@dashb
 import { formatTurnDuration, toolCallsToEvents } from '@dashboard/lib/askFormat';
 import { useLocale } from '../../i18n/LocaleContext';
 import { useTheme } from '../../theme/ThemeContext';
-import { radius, spacing } from '../../theme/typography';
+import { radius, spacing, touchSlop } from '../../theme/typography';
 import { CliPermissionCard } from '../cliPermissions/CliPermissionCard';
 import { AppText } from '../ui/AppText';
 import { Icon } from '../ui/Icon';
@@ -38,7 +38,7 @@ export function ThinkingBlock({ text, live }: { text: string; live?: boolean }) 
   const label = live ? t('Thinking\u2026') : t('Thinking');
   return (
     <View style={[styles.thinking, { borderLeftColor: colors.border }]}>
-      <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ expanded: open }} onPress={() => setOpen((v) => !v)} style={styles.thinkingHead}>
+      <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ expanded: open }} onPress={() => setOpen((v) => !v)} hitSlop={touchSlop(32)} style={styles.thinkingHead}>
         <Icon name={open ? 'chevron-down' : 'chevron-forward'} size={14} color="textMuted" />
         <AppText variant="caption" muted>{label}</AppText>
       </Pressable>
