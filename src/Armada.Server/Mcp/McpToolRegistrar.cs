@@ -232,7 +232,9 @@ namespace Armada.Server.Mcp
         /// <see cref="McpToolError"/> (via <see cref="McpToolError.FromException(Exception, string?)"/>, which maps by
         /// type) instead of an untyped isError result: <see cref="KeyNotFoundException"/> is NotFound,
         /// <see cref="ArgumentException"/> InvalidArgument, <see cref="UnauthorizedAccessException"/> Forbidden,
-        /// <see cref="NotSupportedException"/> Unavailable, and <see cref="InvalidOperationException"/> Conflict.
+        /// <see cref="NotSupportedException"/> Unavailable, and <see cref="InvalidOperationException"/> Conflict. A
+        /// <see cref="Armada.Core.Services.DuplicateEntityException"/>, or a provider unique-constraint violation that
+        /// escaped the database layer, is Conflict with Code DuplicateEntity and never carries provider text.
         /// Any other exception propagates unchanged, so the transport still reports it as a tool execution error.
         /// </summary>
         /// <param name="register">Inner registration delegate.</param>
@@ -272,6 +274,7 @@ namespace Armada.Server.Mcp
         {
             if (ex == null) return false;
             if (ex is OperationCanceledException) return false;
+            if (UniqueConstraintViolation.Translate(ex) != null) return true;
             return ex is KeyNotFoundException
                 || ex is ArgumentException
                 || ex is UnauthorizedAccessException

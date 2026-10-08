@@ -7,6 +7,7 @@ namespace Armada.Server.Mcp.Tools
     using ArmadaConstants = Armada.Core.Constants;
     using Armada.Core.Database;
     using Armada.Core.Models;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Registers MCP tools for persona CRUD operations.
@@ -57,6 +58,7 @@ namespace Armada.Server.Mcp.Tools
                     if (request.Description != null)
                         persona.Description = request.Description;
                     persona.DefaultCaptainId = request.DefaultCaptainId;
+                    await DuplicateEntityGuard.EnsurePersonaNameAvailableAsync(database, persona).ConfigureAwait(false);
                     persona = await database.Personas.CreateAsync(persona).ConfigureAwait(false);
                     return (object)persona;
                 });

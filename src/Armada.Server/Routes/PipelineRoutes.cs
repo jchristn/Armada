@@ -11,6 +11,7 @@ namespace Armada.Server.Routes
     using Armada.Core;
     using Armada.Core.Database;
     using Armada.Core.Models;
+    using Armada.Core.Services;
     using Armada.Core.Services.Interfaces;
 
     /// <summary>
@@ -130,6 +131,7 @@ namespace Armada.Server.Routes
                 pipeline.TenantId = ctx.TenantId;
                 pipeline.UserId = ctx.UserId;
                 pipeline.Scope = ScopedVisibility.ResolveCreateScope(ctx, pipeline.Scope);
+                await DuplicateEntityGuard.EnsurePipelineNameAvailableAsync(_database, pipeline).ConfigureAwait(false);
                 pipeline = await _database.Pipelines.CreateAsync(pipeline).ConfigureAwait(false);
                 req.Http.Response.StatusCode = 201;
                 return pipeline;
@@ -140,6 +142,7 @@ namespace Armada.Server.Routes
                 .WithDescription("Creates a new pipeline with stages defining the persona workflow.")
                 .WithRequestBody(OpenApiJson.BodyFor<Pipeline>("Pipeline data (Name, Description, Stages array)", true))
                 .WithResponse(201, OpenApiJson.For<Pipeline>("Created pipeline"))
+                .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("A pipeline with that name already exists (Data: DuplicateEntityErrorDetail)"))
                 .WithSecurity("ApiKey"));
 
             // Update pipeline by name

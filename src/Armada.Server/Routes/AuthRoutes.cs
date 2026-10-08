@@ -9,6 +9,7 @@ namespace Armada.Server.Routes
     using ArmadaConstants = Armada.Core.Constants;
     using Armada.Core.Database;
     using Armada.Core.Models;
+    using Armada.Core.Services;
     using Armada.Core.Services.Interfaces;
     using Armada.Core.Settings;
 
@@ -274,7 +275,16 @@ namespace Armada.Server.Routes
                 newUser.LastName = onbReq.LastName;
                 newUser.IsAdmin = false;
                 newUser.IsTenantAdmin = false;
-                await _database.Users.CreateAsync(newUser).ConfigureAwait(false);
+                try
+                {
+                    await _database.Users.CreateAsync(newUser).ConfigureAwait(false);
+                }
+                catch (DuplicateEntityException)
+                {
+                    // A concurrent registration of the same email won the unique index after the check above.
+                    req.Http.Response.StatusCode = 409;
+                    return (object)new OnboardingResult { Success = false, ErrorMessage = "Email already exists in this tenant" };
+                }
 
                 Credential newCred = new Credential(onbReq.TenantId, newUser.Id);
                 await _database.Credentials.CreateAsync(newCred).ConfigureAwait(false);

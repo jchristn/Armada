@@ -9,6 +9,7 @@ namespace Armada.Server.Routes
     using Armada.Core;
     using Armada.Core.Database;
     using Armada.Core.Models;
+    using Armada.Core.Services;
     using Armada.Core.Services.Interfaces;
 
     /// <summary>
@@ -104,6 +105,7 @@ namespace Armada.Server.Routes
                     ?? throw new InvalidOperationException("Request body could not be deserialized as Fleet.");
                 fleet.TenantId = ctx.TenantId;
                 fleet.UserId = ctx.UserId;
+                await DuplicateEntityGuard.EnsureFleetNameAvailableAsync(_database, fleet).ConfigureAwait(false);
                 fleet = await _database.Fleets.CreateAsync(fleet).ConfigureAwait(false);
                 req.Http.Response.StatusCode = 201;
                 return fleet;
@@ -114,6 +116,7 @@ namespace Armada.Server.Routes
                 .WithDescription("Creates a new fleet and returns it with an assigned ID.")
                 .WithRequestBody(OpenApiJson.BodyFor<Fleet>("Fleet data", true))
                 .WithResponse(201, OpenApiJson.For<Fleet>("Created fleet"))
+                .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("A fleet with that name already exists (Data: DuplicateEntityErrorDetail)"))
                 .WithSecurity("ApiKey"));
 
             app.Get("/api/v1/fleets/{id}", async (ApiRequest req) =>
@@ -165,6 +168,7 @@ namespace Armada.Server.Routes
                 Fleet updated = JsonSerializer.Deserialize<Fleet>(req.Http.Request.DataAsString, _jsonOptions)
                     ?? throw new InvalidOperationException("Request body could not be deserialized as Fleet.");
                 updated = EntityUpdateMerger.MergeFleet(existing, updated);
+                await DuplicateEntityGuard.EnsureFleetNameAvailableAsync(_database, updated).ConfigureAwait(false);
                 updated = await _database.Fleets.UpdateAsync(updated).ConfigureAwait(false);
                 return (object)updated;
             },
@@ -176,6 +180,7 @@ namespace Armada.Server.Routes
                 .WithRequestBody(OpenApiJson.BodyFor<Fleet>("Updated fleet data", true))
                 .WithResponse(200, OpenApiJson.For<Fleet>("Updated fleet"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("A fleet with that name already exists (Data: DuplicateEntityErrorDetail)"))
                 .WithSecurity("ApiKey"));
 
             app.Delete("/api/v1/fleets/{id}", async (ApiRequest req) =>

@@ -164,6 +164,7 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = 400;
                     return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = createValidationError.Message, Data = createValidationError };
                 }
+                await DuplicateEntityGuard.EnsureCaptainNameAvailableAsync(_database, captain).ConfigureAwait(false);
                 captain = await _database.Captains.CreateAsync(captain).ConfigureAwait(false);
                 req.Http.Response.StatusCode = 201;
                 return captain;
@@ -175,6 +176,7 @@ namespace Armada.Server.Routes
                 .WithRequestBody(OpenApiJson.BodyFor<Captain>("Captain data", true))
                 .WithResponse(201, OpenApiJson.For<Captain>("Created captain"))
                 .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("A captain with that name already exists (Data: DuplicateEntityErrorDetail)"))
                 .WithSecurity("ApiKey"));
 
             app.Get("/api/v1/captains/{id}", async (ApiRequest req) =>
@@ -253,6 +255,7 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = 400;
                     return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = updateValidationError.Message, Data = updateValidationError };
                 }
+                await DuplicateEntityGuard.EnsureCaptainNameAvailableAsync(_database, updated).ConfigureAwait(false);
                 updated = await _database.Captains.UpdateAsync(updated).ConfigureAwait(false);
                 return (object)updated;
             },
@@ -265,6 +268,7 @@ namespace Armada.Server.Routes
                 .WithResponse(200, OpenApiJson.For<Captain>("Updated captain"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("A captain with that name already exists (Data: DuplicateEntityErrorDetail)"))
                 .WithSecurity("ApiKey"));
 
             app.Post("/api/v1/captains/{id}/unquarantine", async (ApiRequest req) =>

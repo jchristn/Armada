@@ -85,10 +85,7 @@ namespace Armada.Server.Mcp.Tools
                     PlaybookService service = new PlaybookService(database, logging);
                     service.Validate(playbook);
 
-                    if (await database.Playbooks.ExistsByFileNameAsync(playbook.TenantId, playbook.FileName).ConfigureAwait(false))
-                    {
-                        return (object)McpToolError.Conflict("A playbook with that file name already exists.");
-                    }
+                    await DuplicateEntityGuard.EnsurePlaybookFileNameAvailableAsync(database, playbook).ConfigureAwait(false);
 
                     Playbook created = await database.Playbooks.CreateAsync(playbook).ConfigureAwait(false);
                     return (object)created;
@@ -132,11 +129,7 @@ namespace Armada.Server.Mcp.Tools
                     PlaybookService service = new PlaybookService(database, logging);
                     service.Validate(playbook);
 
-                    Playbook? duplicate = await database.Playbooks.ReadByFileNameAsync(playbook.TenantId ?? Constants.DefaultTenantId, playbook.FileName).ConfigureAwait(false);
-                    if (duplicate != null && !String.Equals(duplicate.Id, playbook.Id, StringComparison.Ordinal))
-                    {
-                        return (object)McpToolError.Conflict("A playbook with that file name already exists.");
-                    }
+                    await DuplicateEntityGuard.EnsurePlaybookFileNameAvailableAsync(database, playbook).ConfigureAwait(false);
 
                     Playbook updated = await database.Playbooks.UpdateAsync(playbook).ConfigureAwait(false);
                     return (object)updated;

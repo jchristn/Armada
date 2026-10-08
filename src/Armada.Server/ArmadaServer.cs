@@ -411,6 +411,9 @@ namespace Armada.Server
 
             _App = new Webserver(wsSettings, DashboardDefaultRouteAsync);
             _App.Events.Logger = (string message) => _Logging.Debug(_Header + message);
+            // A duplicate name/email/key (or a provider unique-constraint violation) escaping any API route is a typed
+            // 409 Conflict, never a 500 carrying provider text.
+            _App.Middleware.Add(RouteErrorMapper.DuplicateEntityMiddlewareAsync);
 
             _App.UseOpenApi(openApi =>
             {
