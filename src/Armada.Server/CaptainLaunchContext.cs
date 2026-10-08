@@ -1,6 +1,7 @@
 namespace Armada.Server
 {
     using System;
+    using System.Collections.Generic;
     using Armada.Core.Models;
 
     /// <summary>
@@ -41,6 +42,11 @@ namespace Armada.Server
         /// Harbor the launch's dock is pinned to, or null. A pinned launch goes to that Harbor or nowhere else.
         /// </summary>
         public string? PinnedHarborId { get; set; } = null;
+
+        /// <summary>
+        /// Harbors routing must not choose (already asked, and unable to serve the launch).
+        /// </summary>
+        public List<string> ExcludedHarborIds { get; set; } = new List<string>();
 
         /// <summary>
         /// Whether a launch routed to a Harbor may run in a Harbor-owned scratch directory when its working directory is

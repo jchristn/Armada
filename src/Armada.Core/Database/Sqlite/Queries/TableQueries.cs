@@ -1965,7 +1965,11 @@ namespace Armada.Core.Database.Sqlite.Queries
                         last_update_utc TEXT NOT NULL
                     );",
                     @"CREATE UNIQUE INDEX IF NOT EXISTS idx_push_devices_token ON push_devices(expo_push_token);",
-                    @"CREATE INDEX IF NOT EXISTS idx_push_devices_tenant_user ON push_devices(tenant_id, user_id);")
+                    @"CREATE INDEX IF NOT EXISTS idx_push_devices_tenant_user ON push_devices(tenant_id, user_id);"),
+
+                new SchemaMigration(80, "Add repository_path and checkout_path to docks: the repository a Harbor-side dock was created from and the user's checkout on that Harbor host",
+                    @"ALTER TABLE docks ADD COLUMN repository_path TEXT;",
+                    @"ALTER TABLE docks ADD COLUMN checkout_path TEXT;")
 
             };
         }

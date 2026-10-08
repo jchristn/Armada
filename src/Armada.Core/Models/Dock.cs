@@ -64,6 +64,20 @@ namespace Armada.Core.Models
         public string? WorktreePath { get; set; } = null;
 
         /// <summary>
+        /// For a dock created on a Harbor: the repository its worktree was added from, on that Harbor's host (the
+        /// user's checkout, or the Harbor's own bare clone). Mission branches live in this repository. Null for a dock
+        /// on the Admiral's host, whose repository is the vessel's LocalPath.
+        /// </summary>
+        public string? RepositoryPath { get; set; } = null;
+
+        /// <summary>
+        /// For a dock created on a Harbor from the user's checkout: that checkout's working directory on the Harbor
+        /// host. LocalMerge and MergeAndPush merge into it, and PullRequest landing pushes from it. Null when the dock
+        /// came from the Harbor's own clone or is on the Admiral's host.
+        /// </summary>
+        public string? CheckoutPath { get; set; } = null;
+
+        /// <summary>
         /// Branch name checked out in this worktree.
         /// </summary>
         public string? BranchName { get; set; } = null;

@@ -1618,6 +1618,12 @@ namespace Armada.Core.Database.SqlServer.Queries
                     );",
                     @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_push_devices_token') CREATE UNIQUE INDEX idx_push_devices_token ON push_devices(expo_push_token);",
                     @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_push_devices_tenant_user') CREATE INDEX idx_push_devices_tenant_user ON push_devices(tenant_id, user_id);"
+                ),
+                new SchemaMigration(
+                    80,
+                    "Add repository_path and checkout_path to docks: the repository a Harbor-side dock was created from and the user's checkout on that Harbor host",
+                    @"IF COL_LENGTH('docks', 'repository_path') IS NULL ALTER TABLE docks ADD repository_path NVARCHAR(MAX) NULL;",
+                    @"IF COL_LENGTH('docks', 'checkout_path') IS NULL ALTER TABLE docks ADD checkout_path NVARCHAR(MAX) NULL;"
                 )
 
             };

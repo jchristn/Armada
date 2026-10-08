@@ -397,6 +397,16 @@ namespace Armada.Server
                 Armada.Core.Services.HarborRoutingRequest request = new Armada.Core.Services.HarborRoutingRequest { RequestedRuntime = captain.Runtime.ToString() };
                 return await _HarborConnectionManager.HasEligibleHarborForUserAsync(mission.UserId, request).ConfigureAwait(false);
             };
+
+            // Split mode: a mission's dock goes on the Harbor routing picks for it (when that Harbor can serve the vessel),
+            // and every later operation on a Harbor-hosted dock (instruction files, git, landing, reclaim) runs there.
+            DockHostResolver dockHosts = new DockHostResolver(_Git, _Logging, _HarborConnectionManager);
+            if (dockService is DockService dockServiceImpl) dockServiceImpl.Hosts = dockHosts;
+            if (captainService is CaptainService captainServiceImpl) captainServiceImpl.DockHosts = dockHosts;
+            missionService.DockHosts = dockHosts;
+            missionService.ResolveDockPlacementAsync = _AgentLifecycle.ResolveDockPlacementAsync;
+            _MissionLanding.DockHosts = dockHosts;
+
             _Admiral.OnMissionComplete = _MissionLanding.HandleMissionCompleteAsync;
             _Admiral.OnVoyageComplete = _MissionLanding.HandleVoyageCompleteAsync;
             _Admiral.OnReconcilePullRequest = _MissionLanding.HandleReconcilePullRequestAsync;
