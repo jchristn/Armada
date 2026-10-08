@@ -406,12 +406,34 @@ When an MCP tool encounters an error, it returns a JSON object with a machine-re
 |---|---|
 | `NotFound` | The referenced entity does not exist or is not visible to the caller (including another tenant's entities) |
 | `InvalidArgument` | An argument is missing, malformed, or out of range |
-| `Conflict` | The entity's state does not allow the operation (for example deleting a working captain), or it already exists |
+| `Conflict` | The entity's state does not allow the operation (for example deleting a working captain), or it already exists (a value that must be unique is taken: `Code` `DuplicateEntity`, see below) |
 | `Forbidden` | The caller lacks the permission the operation needs |
 | `Unavailable` | A service the operation needs is not configured or not available (for example no saved diff) |
 | `Failed` | Any other failure |
 
 `Code` carries a feature-specific detail code where a tool has one (for example the vessel import codes such as `BatchNotFound` or `PathNotAllowed`), and `StatusCode` keeps the HTTP-equivalent status the fleet action tools have always returned. When a tool's service signals a missing entity, bad input, a state conflict, a missing permission, or an unavailable feature, the server maps the exception by type to the same JSON object (`NotFound`, `InvalidArgument`, `Conflict`, `Forbidden`, `Unavailable`). A call the tool authorization gate refuses (the caller lacks the tool's declared permission level) returns the same object with `ErrorCode` `Forbidden`. Any other unexpected handler error and calls refused by the per-client rate limit (`mcp.toolCallsPerSecond`, default 100 per second, 0 for no limit) come back as MCP tool results with `isError: true` instead.
+
+### Duplicate entities
+
+A create or update whose name, email, or file name is already taken returns `ErrorCode` `Conflict` with `Code`
+`DuplicateEntity` and a message naming the field:
+
+```json
+{
+  "Error": "A captain named 'claude-1' already exists.",
+  "ErrorCode": "Conflict",
+  "Code": "DuplicateEntity"
+}
+```
+
+The tools check before writing: `create_fleet` / `update_fleet`, `add_vessel` / `update_vessel`, `create_captain` /
+`update_captain` (names unique within the caller's tenant), `create_persona`, `create_pipeline` (names unique within the
+tenant), `create_prompt_template` (names unique on the server, built-in names included), and `create_playbook` /
+`update_playbook` (file names unique within the tenant). Any other unique-constraint violation the database reports on
+any tool (for example two concurrent creates of one name) is the same `Conflict` / `DuplicateEntity` with a generic
+message such as `A persona with the same name or ID already exists.`; database provider text is never returned. The
+REST equivalent is `409 Conflict` with `Data.Code` `DuplicateEntity` (see
+[REST_API.md](REST_API.md#duplicate-entities)).
 
 MCP tools do not return HTTP status codes (MCP uses JSON-RPC, not HTTP). The presence of an `ErrorCode` field (or a result with `isError: true`) indicates failure. On success, the response contains the requested data (entity object, status, list, etc.) without an `Error` field.
 
@@ -1506,7 +1528,7 @@ Register a new vessel (git repository) in a fleet.
 }
 ```
 
-**Response:** The newly created [Vessel](#vessel) object. `repoUrl` is required by the input schema. An unknown or invisible `fleetId` returns `{ "Error": "Fleet not found", "ErrorCode": "NotFound" }`. `LocalPath` is never set by this tool.
+**Response:** The newly created [Vessel](#vessel) object. `repoUrl` is required by the input schema. An unknown or invisible `fleetId` returns `{ "Error": "Fleet not found", "ErrorCode": "NotFound" }`. `LocalPath` is never set by this tool. A taken name returns `{ "Error": "A vessel named '...' already exists.", "ErrorCode": "Conflict", "Code": "DuplicateEntity" }`.
 
 ---
 
@@ -2134,7 +2156,7 @@ Create a new fleet (collection of repositories).
 }
 ```
 
-**Response:** [Fleet](#fleet) object.
+**Response:** [Fleet](#fleet) object. A taken name returns `{ "Error": "A fleet named '...' already exists.", "ErrorCode": "Conflict", "Code": "DuplicateEntity" }`.
 
 ---
 
@@ -2157,7 +2179,7 @@ Update an existing fleet's name or description.
 }
 ```
 
-**Response:** Updated [Fleet](#fleet) object, or `{ "Error": "Fleet not found", "ErrorCode": "NotFound" }`.
+**Response:** Updated [Fleet](#fleet) object, or `{ "Error": "Fleet not found", "ErrorCode": "NotFound" }`. A taken name returns `{ "Error": "A fleet named '...' already exists.", "ErrorCode": "Conflict", "Code": "DuplicateEntity" }`.
 
 ---
 
@@ -2279,7 +2301,7 @@ Update an existing vessel's properties.
 }
 ```
 
-**Response:** Updated [Vessel](#vessel) object, or `{ "Error": "Vessel not found", "ErrorCode": "NotFound" }`.
+**Response:** Updated [Vessel](#vessel) object, or `{ "Error": "Vessel not found", "ErrorCode": "NotFound" }`. A taken name returns `{ "Error": "A vessel named '...' already exists.", "ErrorCode": "Conflict", "Code": "DuplicateEntity" }`.
 
 The `autoLand*` and `definitionOfDone*` arguments are accepted by the handler but are not declared in the tool's advertised input schema, so they are not part of the frozen 1.0 surface in [API_SURFACE_1.0.md](API_SURFACE_1.0.md); prefer the REST vessel routes for those fields.
 
@@ -2778,7 +2800,7 @@ Register a new captain (AI agent).
 | `muxApprovalPolicy` | string | No | Optional Mux approval policy override (Mux runtime only) |
 | `autoApprove` | boolean | No | Whether the CLI captain runs with its auto-approve or permission-bypass flag (default `true`). `false` runs it without auto-approve where the runtime supports it (Claude Code acceptEdits, Codex workspace-write sandbox, Gemini auto_edit, Cursor without --force, OpenCode without --auto, Mux deny) |
 
-**Response:** [Captain](#captain) object. Invalid or unavailable models are returned as MCP tool errors. The Mux options apply only when `runtime` is `Mux`.
+**Response:** [Captain](#captain) object. Invalid or unavailable models are returned as MCP tool errors. A taken name returns `{ "Error": "A captain named '...' already exists.", "ErrorCode": "Conflict", "Code": "DuplicateEntity" }`. The Mux options apply only when `runtime` is `Mux`.
 
 ---
 
@@ -2876,7 +2898,7 @@ Update a captain's properties (name, runtime, model, tier, personas, Mux options
 | `muxApprovalPolicy` | string | No | Optional Mux approval policy override; empty string clears it (Mux runtime only) |
 | `autoApprove` | boolean | No | Whether the CLI captain runs with its auto-approve or permission-bypass flag. Omit to keep the current value |
 
-**Response:** Updated [Captain](#captain) object, or `{ "Error": "Captain not found", "ErrorCode": "NotFound" }`. Invalid or unavailable models are returned as MCP tool errors. The Mux options apply only when the captain's `runtime` is `Mux`.
+**Response:** Updated [Captain](#captain) object, or `{ "Error": "Captain not found", "ErrorCode": "NotFound" }`. A taken name returns `{ "Error": "A captain named '...' already exists.", "ErrorCode": "Conflict", "Code": "DuplicateEntity" }`. Invalid or unavailable models are returned as MCP tool errors. The Mux options apply only when the captain's `runtime` is `Mux`.
 
 ---
 
@@ -3191,7 +3213,7 @@ Create a new markdown playbook in the default tenant context used by MCP.
 }
 ```
 
-**Response:** [Playbook](#playbook) object, or an error such as `{ "Error": "A playbook with that file name already exists.", "ErrorCode": "Conflict" }`.
+**Response:** [Playbook](#playbook) object, or an error such as `{ "Error": "A playbook with file name 'x.md' already exists.", "ErrorCode": "Conflict", "Code": "DuplicateEntity" }`.
 
 ---
 
@@ -3215,7 +3237,7 @@ Update an existing playbook by ID.
 }
 ```
 
-**Response:** Updated [Playbook](#playbook) object, or `{ "Error": "Playbook not found: pbk_...", "ErrorCode": "NotFound" }`.
+**Response:** Updated [Playbook](#playbook) object, or `{ "Error": "Playbook not found: pbk_...", "ErrorCode": "NotFound" }`. A taken file name returns `ErrorCode` `Conflict` with `Code` `DuplicateEntity`.
 
 ---
 
@@ -4139,7 +4161,7 @@ Create a new prompt template.
 | `description` | string | No | Template description |
 | `active` | bool | No | Whether the template is active |
 
-**Response:** Created [PromptTemplate](#prompttemplate) object, or `{ "Error": "Template already exists: ...", "ErrorCode": "Conflict" }`.
+**Response:** Created [PromptTemplate](#prompttemplate) object, or `{ "Error": "A prompt template named '...' already exists.", "ErrorCode": "Conflict", "Code": "DuplicateEntity" }`.
 
 ---
 
@@ -4245,7 +4267,7 @@ Create a custom persona.
 | `promptTemplateName` | string | Yes | Name of the prompt template to use for this persona |
 | `defaultCaptainId` | string | No | Optional default (preferred) captain id (prefix `cpt_`) for this persona |
 
-**Response:** The newly created [Persona](#persona) object.
+**Response:** The newly created [Persona](#persona) object. A taken name returns `{ "Error": "A persona named '...' already exists.", "ErrorCode": "Conflict", "Code": "DuplicateEntity" }`.
 
 ---
 
@@ -4386,7 +4408,7 @@ Create a custom pipeline with stages.
 }
 ```
 
-**Response:** The newly created [Pipeline](#pipeline) object with stages.
+**Response:** The newly created [Pipeline](#pipeline) object with stages. A taken name returns `{ "Error": "A pipeline named '...' already exists.", "ErrorCode": "Conflict", "Code": "DuplicateEntity" }`.
 
 ---
 

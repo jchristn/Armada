@@ -9,6 +9,7 @@ namespace Armada.Server.Mcp.Tools
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Registers MCP tools for pipeline CRUD operations.
@@ -85,6 +86,7 @@ namespace Armada.Server.Mcp.Tools
                     }
                     pipeline.Stages = stages;
 
+                    await DuplicateEntityGuard.EnsurePipelineNameAvailableAsync(database, pipeline).ConfigureAwait(false);
                     pipeline = await database.Pipelines.CreateAsync(pipeline).ConfigureAwait(false);
                     return (object)pipeline;
                 });

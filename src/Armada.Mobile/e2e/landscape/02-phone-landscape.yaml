@@ -1,0 +1,82 @@
+# A phone in landscape: rail instead of the tab bar, Ask's composer with the keyboard up, a sheet, list and detail
+# side by side; rotating back to portrait keeps the open mission (alone, with Back) and restores the tab bar.
+appId: ${APP_ID}
+name: 02-phone-landscape
+---
+- launchApp
+- setOrientation: PORTRAIT
+- extendedWaitUntil:
+    visible:
+      id: "tab-ask"
+    timeout: 30000
+- setOrientation: LANDSCAPE_LEFT
+- extendedWaitUntil:
+    visible:
+      id: "sidebar"
+    timeout: 15000
+- assertNotVisible:
+    id: "tab-ask"
+- extendedWaitUntil:
+    visible:
+      id: "ask-input"
+    timeout: 15000
+- tapOn:
+    id: "ask-input"
+- runFlow: ../common/dismiss-keyboard-tips.yaml
+- inputText: "typed in landscape"
+- waitForAnimationToEnd:
+    timeout: 5000
+# The composer stays above the keyboard.
+- assertVisible:
+    id: "ask-input"
+- assertVisible: "typed in landscape"
+- takeScreenshot: phone-landscape-ask-keyboard
+- hideKeyboard
+- waitForAnimationToEnd:
+    timeout: 5000
+- tapOn:
+    id: "ask-open-options"
+- extendedWaitUntil:
+    visible:
+      id: "ask-options"
+    timeout: 10000
+- takeScreenshot: phone-landscape-sheet
+- tapOn:
+    id: "ask-options-close"
+# The rail scrolls in a 440 dp tall window; a link reaches Missions without scrolling it.
+- runFlow:
+    file: ../common/open-link.yaml
+    env:
+      LINK: "armada://missions"
+- extendedWaitUntil:
+    visible: "Seeded mission one.*"
+    timeout: 15000
+- tapOn: "Seeded mission one.*"
+- extendedWaitUntil:
+    visible:
+      id: "mission-detail-title"
+    timeout: 15000
+- assertVisible:
+    id: "split-view"
+- takeScreenshot: phone-landscape-missions
+- setOrientation: PORTRAIT
+- extendedWaitUntil:
+    visible:
+      id: "tab-ask"
+    timeout: 15000
+# Too narrow for both panes now: the mission stays open on its own, with Back to the list.
+- assertVisible:
+    id: "mission-detail-title"
+- assertVisible:
+    id: "split-view-back"
+- takeScreenshot: phone-portrait-after-rotation
+- tapOn:
+    id: "split-view-back"
+- extendedWaitUntil:
+    visible: "Seeded mission one.*"
+    timeout: 10000
+- tapOn:
+    id: "tab-ask"
+# The draft survives the rotations and the trip to Missions (Maestro's hideKeyboard on iOS can tap a suggestion
+# into it, so match the start).
+- assertVisible: "typed in landscape.*"

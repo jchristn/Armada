@@ -1,6 +1,6 @@
 import { Stack, useRouter, type Href } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Platform, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   deletePlanningSession,
@@ -16,7 +16,7 @@ import { getLatestAssistantMessage, resolveDispatchSeedUpdate, type DispatchSeed
 import { ActionRow, InfoRow, SwitchField, useActionRunner } from '../../build/fields';
 import { errorMessage } from '../../build/useLiveResource';
 import { statusTone } from '../../components/ask/statusTone';
-import { AppText, Banner, Button, ConfirmDialog, ErrorState, LoadingState, Section, StatusBadge, TextField } from '../../components/ui';
+import { AppText, Banner, Button, ConfirmDialog, ErrorState, KeyboardAvoidingPane, LoadingState, Section, StatusBadge, TextField } from '../../components/ui';
 import { Disclosure } from '../../components/ui/Disclosure';
 import { useLocale } from '../../i18n/LocaleContext';
 import { useNotifications } from '../../notifications/NotificationContext';
@@ -211,7 +211,8 @@ export function PlanningSessionView({ sessionId, catalog, embedded, initialCompo
   return (
     <SafeAreaView edges={embedded ? [] : ['bottom', 'left', 'right']} style={[styles.fill, { backgroundColor: colors.background }]} testID="planning-session">
       {!embedded ? <Stack.Screen options={{ title: current.title }} /> : null}
-      <KeyboardAvoidingView style={styles.fill} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={embedded ? 0 : 90}>
+      {/* Measures its own place in the window (a fixed 90 dp or 0 in the tablet pane left the composer under the keyboard). */}
+      <KeyboardAvoidingPane behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView ref={scrollRef} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" onContentSizeChange={scrollToEnd} testID="planning-transcript">
           <View style={styles.head}>
             <AppText variant="heading" accessibilityRole="header" style={styles.flex}>{current.title}</AppText>
@@ -323,7 +324,7 @@ export function PlanningSessionView({ sessionId, catalog, embedded, initialCompo
             <Button label={t('Send')} icon="send" onPress={() => void send()} disabled={!canSend} busy={sending} testID="planning-send" style={styles.sendButton} />
           )}
         </View>
-      </KeyboardAvoidingView>
+      </KeyboardAvoidingPane>
 
       <ConfirmDialog
         open={confirmEnd}

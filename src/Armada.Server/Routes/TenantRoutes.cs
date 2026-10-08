@@ -12,6 +12,7 @@ namespace Armada.Server.Routes
     using ArmadaConstants = Armada.Core.Constants;
     using Armada.Core.Database;
     using Armada.Core.Models;
+    using Armada.Core.Services;
     using Armada.Core.Services.Interfaces;
 
     /// <summary>
@@ -233,6 +234,7 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = 403;
                     return (object)new ApiErrorResponse { Error = ApiResultEnum.Forbidden, Message = "Forbidden" };
                 }
+                await DuplicateEntityGuard.EnsureUserEmailAvailableAsync(_database, user).ConfigureAwait(false);
                 user = await _database.Users.CreateAsync(user).ConfigureAwait(false);
                 Credential credential = new Credential(user.TenantId, user.Id)
                 {
@@ -243,7 +245,7 @@ namespace Armada.Server.Routes
                 req.Http.Response.StatusCode = 201;
                 return (object)UserMaster.Redact(user);
             },
-            api => api.WithTag("Users").WithSummary("Create user (admin only)").WithResponse(201, OpenApiJson.For<UserMaster>("Created user (password hash redacted)")).WithResponse(400, OpenApiResponseMetadata.BadRequest()));
+            api => api.WithTag("Users").WithSummary("Create user (admin only)").WithResponse(201, OpenApiJson.For<UserMaster>("Created user (password hash redacted)")).WithResponse(400, OpenApiResponseMetadata.BadRequest()).WithResponse(409, OpenApiJson.For<ApiErrorResponse>("A user with that email already exists in the tenant (Data: DuplicateEntityErrorDetail)")));
 
             app.Get("/api/v1/users/{id}", async (ApiRequest req) =>
             {
@@ -329,10 +331,11 @@ namespace Armada.Server.Routes
                     user.IsTenantAdmin = existing.IsTenantAdmin;
                     user.Active = existing.Active;
                 }
+                await DuplicateEntityGuard.EnsureUserEmailAvailableAsync(_database, user).ConfigureAwait(false);
                 user = await _database.Users.UpdateAsync(user).ConfigureAwait(false);
                 return (object)UserMaster.Redact(user);
             },
-            api => api.WithResponse(200, OpenApiResponseMetadata.Create("Successful response")).WithParameter(OpenApiParameterMetadata.Path("id", "User ID (usr_ prefix)")).WithTag("Users").WithSummary("Update user (admin only)").WithResponse(400, OpenApiResponseMetadata.BadRequest()).WithResponse(404, OpenApiResponseMetadata.NotFound()));
+            api => api.WithResponse(200, OpenApiResponseMetadata.Create("Successful response")).WithParameter(OpenApiParameterMetadata.Path("id", "User ID (usr_ prefix)")).WithTag("Users").WithSummary("Update user (admin only)").WithResponse(400, OpenApiResponseMetadata.BadRequest()).WithResponse(404, OpenApiResponseMetadata.NotFound()).WithResponse(409, OpenApiJson.For<ApiErrorResponse>("A user with that email already exists in the tenant (Data: DuplicateEntityErrorDetail)")));
 
             app.Delete("/api/v1/users/{id}", async (ApiRequest req) =>
             {

@@ -136,6 +136,7 @@ export function EnvironmentsTab() {
       <MasterDetail
         list={list}
         detail={selection.selected ? <EnvironmentDetailView key={selection.selected} id={selection.selected} embedded onDeleted={() => { selection.clear(); void reload(); }} onChanged={() => void reload()} /> : null}
+        onBack={selection.clear}
       />
       <FormSheet
         testID="environment-form"

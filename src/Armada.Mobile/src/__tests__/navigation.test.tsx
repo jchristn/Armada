@@ -16,8 +16,9 @@ import { redirectSystemPath } from '../app/+native-intent';
 import { DASHBOARD_ROUTES } from '../navigation/dashboardRoutes.generated';
 import { NAV_SECTIONS, activeNavKey, allNavItems, sectionsForTab } from '../navigation/navItems';
 import { matchRoute } from '../navigation/routeMatch';
+import { SidebarPreferenceProvider } from '../navigation/SidebarPreferenceProvider';
 import { TabStack } from '../navigation/TabStack';
-import { layoutFor, TABLET_MIN_WIDTH } from '../navigation/useLayout';
+import { COMPACT_MAX_WIDTH, layoutFor } from '../navigation/useLayout';
 import { ApprovalsProvider } from '../notifications/ApprovalsContext';
 import { NotificationProvider } from '../notifications/NotificationContext';
 import { RoutePlaceholder } from '../screens/RoutePlaceholder';
@@ -37,9 +38,9 @@ jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
 const APP_DIR = path.join(__dirname, '..', 'app');
 
 describe('adaptive layout switch', () => {
-  it('switches to the tablet layout at 768 dp', () => {
-    expect(layoutFor(767, 1024).isTablet).toBe(false);
-    expect(layoutFor(TABLET_MIN_WIDTH, 1024).isTablet).toBe(true);
+  it('switches to the sidebar layout at 600 dp', () => {
+    expect(layoutFor(COMPACT_MAX_WIDTH - 1, 1024).isTablet).toBe(false);
+    expect(layoutFor(COMPACT_MAX_WIDTH, 1024).isTablet).toBe(true);
     expect(layoutFor(1180, 820).landscape).toBe(true);
   });
 });
@@ -151,15 +152,17 @@ describe('deep links and dashboard paths', () => {
 function Providers({ children }: { children: ReactNode }) {
   return (
     <ThemeProvider>
-      <AuthProvider>
-        <LocaleProvider serverUrl={null}>
-          <SocketProvider serverUrl={null} token={null}>
-            <NotificationProvider>
-              <ApprovalsProvider enabled={false}>{children}</ApprovalsProvider>
-            </NotificationProvider>
-          </SocketProvider>
-        </LocaleProvider>
-      </AuthProvider>
+      <SidebarPreferenceProvider>
+        <AuthProvider>
+          <LocaleProvider serverUrl={null}>
+            <SocketProvider serverUrl={null} token={null}>
+              <NotificationProvider>
+                <ApprovalsProvider enabled={false}>{children}</ApprovalsProvider>
+              </NotificationProvider>
+            </SocketProvider>
+          </LocaleProvider>
+        </AuthProvider>
+      </SidebarPreferenceProvider>
     </ThemeProvider>
   );
 }
@@ -223,6 +226,35 @@ describe('adaptive shell', () => {
     expect(screen.getByTestId('sidebar')).toBeTruthy();
     expect(screen.queryByTestId('tab-ask')).toBeNull();
     for (const section of NAV_SECTIONS) expect(screen.getByText(section.label)).toBeTruthy();
+  });
+
+  it('an iPad mini in portrait (744 dp) gets the icon rail, not the phone tab bar', async () => {
+    setWindow(744, 1133);
+    await renderApp('/ask');
+    expect(screen.getByTestId('sidebar')).toBeTruthy();
+    expect(screen.queryByTestId('tab-ask')).toBeNull();
+    // Icons only: the section headings and item labels are not drawn, the items keep their spoken names.
+    expect(screen.queryByText(NAV_SECTIONS[0].label)).toBeNull();
+    expect(screen.getByLabelText('Approvals')).toBeTruthy();
+    expect(screen.getByTestId('sidebar-toggle')).toHaveProp('accessibilityLabel', 'Expand sidebar');
+  });
+
+  it('a phone in landscape gets the rail beside the content instead of the tab bar', async () => {
+    setWindow(956, 440);
+    await renderApp('/ask');
+    expect(screen.getByTestId('sidebar')).toBeTruthy();
+    expect(screen.queryByTestId('tab-ask')).toBeNull();
+  });
+
+  it('the sidebar toggle expands the rail and collapses the sidebar', async () => {
+    setWindow(744, 1133);
+    await renderApp('/ask');
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    await user.press(screen.getByTestId('sidebar-toggle'));
+    expect(screen.getByText(NAV_SECTIONS[0].label)).toBeTruthy();
+    expect(screen.getByTestId('sidebar-toggle')).toHaveProp('accessibilityLabel', 'Collapse sidebar');
+    await user.press(screen.getByTestId('sidebar-toggle'));
+    expect(screen.queryByText(NAV_SECTIONS[0].label)).toBeNull();
   });
 
   it('a deep link opens the matching screen with its parameters', async () => {

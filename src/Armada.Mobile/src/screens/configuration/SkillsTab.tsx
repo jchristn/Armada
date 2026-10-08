@@ -114,6 +114,7 @@ export function SkillsTab() {
       <MasterDetail
         list={list}
         detail={selection.selected ? <SkillDetailView key={selection.selected} id={selection.selected} embedded onDeleted={() => { selection.clear(); void reload(); }} onChanged={() => void reload()} /> : null}
+        onBack={selection.clear}
       />
       <FormSheet
         testID="skill-form"

@@ -12,6 +12,7 @@ export const PREF_KEYS = {
   activeProfile: 'armada.activeProfile',
   notifications: 'armada.notifications',
   passwordChangeSkipped: 'armada.passwordChangeSkipped',
+  sidebar: 'armada.sidebar',
 } as const;
 
 /** Read and parse a JSON preference; null when missing or unreadable. */

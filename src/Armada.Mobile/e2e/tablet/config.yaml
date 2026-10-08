@@ -1,0 +1,12 @@
+# Tablet and landscape checks (W6.2): scripts/mobile/run-e2e.sh --flows src/Armada.Mobile/e2e/tablet --device "<iPad>"
+# (or --platform android --avd Armada_Tablet) against the seeded throwaway Admiral. Runs on any iPad or Android tablet
+# in either orientation: the layout follows the window width (rail below 1024 dp, full sidebar from 1024 dp; list
+# and detail side by side when the pane beside the rail or sidebar is at least 640 dp).
+flows:
+  - "0*.yaml"
+executionOrder:
+  continueOnFailure: false
+  flowsOrder:
+    - 01-tablet-sign-in
+    - 02-tablet-list-detail
+    - 03-tablet-sheet-ask

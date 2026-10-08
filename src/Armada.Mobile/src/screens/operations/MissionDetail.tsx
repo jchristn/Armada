@@ -477,7 +477,9 @@ const styles = StyleSheet.create({
   stackedHead: { flexDirection: 'column', alignItems: 'stretch' },
   flex: { flex: 1 },
   menuButton: { marginBottom: 0 },
-  scroll: { paddingBottom: spacing.xxl },
+  // A readable column when the mission has the whole window (a tablet or a phone in landscape); the diff and log
+  // tabs keep the full width for long lines.
+  scroll: { paddingBottom: spacing.xxl, width: '100%', maxWidth: 820, alignSelf: 'center' },
   primaryActions: { paddingHorizontal: spacing.md, paddingBottom: spacing.sm },
   pad: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
   playbook: { gap: spacing.xs },

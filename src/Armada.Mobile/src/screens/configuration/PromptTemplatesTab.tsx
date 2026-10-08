@@ -114,6 +114,7 @@ export function PromptTemplatesTab() {
       <MasterDetail
         list={list}
         detail={selection.selected ? <PromptTemplateDetailView key={selection.selected} name={selection.selected} embedded onChanged={() => void reload()} /> : null}
+        onBack={selection.clear}
       />
       {dialog}
     </>

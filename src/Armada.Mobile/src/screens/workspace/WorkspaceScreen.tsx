@@ -60,7 +60,8 @@ type Prompt = { kind: 'file' | 'folder' | 'rename'; initial: string; target?: st
 export function WorkspaceScreen({ vesselId, initialPanel = 'files' }: { vesselId: string; initialPanel?: WorkspacePanel }) {
   const { t, formatDateTime } = useLocale();
   const { colors } = useTheme();
-  const { isTablet } = useLayout();
+  // Files and editor side by side (the pane's width, not the device).
+  const { split: isTablet } = useLayout();
   const { pushToast } = useNotifications();
   const router = useRouter();
   const [panel, setPanel] = useState<WorkspacePanel>(initialPanel);

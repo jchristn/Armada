@@ -1,0 +1,51 @@
+# A form sheet (Create Fleet) centered on the tablet, and Ask: a draft typed in the composer survives rotation.
+appId: ${APP_ID}
+name: 03-tablet-sheet-ask
+---
+- launchApp
+- setOrientation: PORTRAIT
+- extendedWaitUntil:
+    visible:
+      id: "sidebar"
+    timeout: 30000
+- runFlow:
+    file: ../common/open-link.yaml
+    env:
+      LINK: "armada://vessels?tab=fleets"
+- extendedWaitUntil:
+    visible:
+      id: "fleet-row-demo-fleet"
+    timeout: 15000
+- tapOn:
+    id: "fleets-list-new"
+- extendedWaitUntil:
+    visible:
+      id: "fleet-form-name"
+    timeout: 10000
+- takeScreenshot: tablet-portrait-form-sheet
+- setOrientation: LANDSCAPE_LEFT
+- extendedWaitUntil:
+    visible:
+      id: "fleet-form-name"
+    timeout: 10000
+- takeScreenshot: tablet-landscape-form-sheet
+- tapOn:
+    id: "fleet-form-close"
+- setOrientation: PORTRAIT
+- tapOn:
+    id: "sidebar-/ask"
+- extendedWaitUntil:
+    visible:
+      id: "ask-input"
+    timeout: 15000
+- tapOn:
+    id: "ask-input"
+- runFlow: ../common/dismiss-keyboard-tips.yaml
+- inputText: "draft kept across rotation"
+- setOrientation: LANDSCAPE_LEFT
+- extendedWaitUntil:
+    visible: "draft kept across rotation"
+    timeout: 10000
+- takeScreenshot: tablet-landscape-ask
+- setOrientation: PORTRAIT
+- assertVisible: "draft kept across rotation"

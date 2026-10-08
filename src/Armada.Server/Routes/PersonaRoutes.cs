@@ -11,6 +11,7 @@ namespace Armada.Server.Routes
     using Armada.Core;
     using Armada.Core.Database;
     using Armada.Core.Models;
+    using Armada.Core.Services;
     using Armada.Core.Services.Interfaces;
 
     /// <summary>
@@ -135,6 +136,7 @@ namespace Armada.Server.Routes
                 persona.TenantId = ctx.TenantId;
                 persona.UserId = ctx.UserId;
                 persona.Scope = ScopedVisibility.ResolveCreateScope(ctx, persona.Scope);
+                await DuplicateEntityGuard.EnsurePersonaNameAvailableAsync(_database, persona).ConfigureAwait(false);
                 persona = await _database.Personas.CreateAsync(persona).ConfigureAwait(false);
                 req.Http.Response.StatusCode = 201;
                 return persona;
@@ -146,6 +148,7 @@ namespace Armada.Server.Routes
                 .WithRequestBody(OpenApiJson.BodyFor<Persona>("Persona data (Name, Description, PromptTemplateName)", true))
                 .WithResponse(201, OpenApiJson.For<Persona>("Created persona"))
                 .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("A persona with that name already exists (Data: DuplicateEntityErrorDetail)"))
                 .WithSecurity("ApiKey"));
 
             // Update persona by name

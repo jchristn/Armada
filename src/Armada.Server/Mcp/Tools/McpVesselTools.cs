@@ -202,6 +202,7 @@ namespace Armada.Server.Mcp.Tools
                         vessel.DefinitionOfDoneTestCommand = request.DefinitionOfDoneTestCommand;
                     if (request.DefinitionOfDoneTimeoutSeconds.HasValue)
                         vessel.DefinitionOfDoneTimeoutSeconds = request.DefinitionOfDoneTimeoutSeconds.Value;
+                    await DuplicateEntityGuard.EnsureVesselNameAvailableAsync(database, vessel).ConfigureAwait(false);
                     vessel = await database.Vessels.UpdateAsync(vessel).ConfigureAwait(false);
                     return (object)vessel;
                 });

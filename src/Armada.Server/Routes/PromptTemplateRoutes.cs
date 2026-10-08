@@ -11,6 +11,7 @@ namespace Armada.Server.Routes
     using Armada.Core;
     using Armada.Core.Database;
     using Armada.Core.Models;
+    using Armada.Core.Services;
     using Armada.Core.Services.Interfaces;
 
     /// <summary>
@@ -138,11 +139,11 @@ namespace Armada.Server.Routes
                 template.CreatedUtc = DateTime.UtcNow;
                 template.LastUpdateUtc = DateTime.UtcNow;
 
+                // Template names resolve without a tenant (built-in names included), so a name taken anywhere is refused.
                 PromptTemplate? existing = await _database.PromptTemplates.ReadByNameAsync(template.Name).ConfigureAwait(false);
                 if (existing != null)
                 {
-                    req.Http.Response.StatusCode = 409;
-                    return new ApiErrorResponse { Error = ApiResultEnum.Conflict, Message = "Prompt template already exists" };
+                    return RouteErrorMapper.Conflict(req, DuplicateEntityGuard.NameTaken("PromptTemplate", "prompt template", template.Name));
                 }
 
                 PromptTemplate created = await _database.PromptTemplates.CreateAsync(template).ConfigureAwait(false);
@@ -156,7 +157,7 @@ namespace Armada.Server.Routes
                 .WithRequestBody(OpenApiJson.BodyFor<PromptTemplate>("Prompt template data (Name, Category, Description, Content)", true))
                 .WithResponse(201, OpenApiJson.For<PromptTemplate>("Created prompt template"))
                 .WithResponse(400, OpenApiResponseMetadata.BadRequest())
-                .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("Conflicts with the current state"))
+                .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("A prompt template with that name already exists (Data: DuplicateEntityErrorDetail)"))
                 .WithSecurity("ApiKey"));
 
             // Get prompt template by name

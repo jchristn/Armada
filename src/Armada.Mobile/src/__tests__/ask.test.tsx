@@ -1,9 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react-native';
 import { Slot } from 'expo-router';
 import { renderRouter } from 'expo-router/testing-library';
 import type { ReactNode } from 'react';
-import { AccessibilityInfo, Alert, AppState, Linking, Text, type AlertButton } from 'react-native';
+import { AccessibilityInfo, Alert, AppState, Linking, StyleSheet, Text, type AlertButton } from 'react-native';
 import * as client from '@dashboard/api/client';
 import type { AskActionProposal, AskMessage, AskThread, CliPermissionRequest } from '@dashboard/types/models';
 import AskLayout from '../app/(app)/(ask)/_layout';
@@ -104,6 +104,17 @@ describe('Ask Armada', () => {
     expect(await screen.findByTestId('ask-no-captains')).toBeTruthy();
     expect(screen.getByText('This server has no captains, so Ask Armada cannot answer yet. Quick actions still work.')).toBeTruthy();
     expect(screen.queryByTestId('ask-choose-captain')).toBeNull();
+  });
+
+  it('the composer stays outside the region the banners share, so a short window (landscape with the keyboard) cannot push it off screen', async () => {
+    api.listCaptains.mockResolvedValue({ objects: [] } as never);
+    await renderAsk();
+    expect(await screen.findByTestId('ask-no-captains')).toBeTruthy();
+    const above = screen.getByTestId('ask-above-composer');
+    expect(StyleSheet.flatten(above.props.style)).toMatchObject({ flex: 1, minHeight: 0, overflow: 'hidden' });
+    expect(within(above).getByTestId('ask-no-captains')).toBeTruthy();
+    expect(within(above).queryByTestId('ask-composer')).toBeNull();
+    expect(screen.getByTestId('ask-composer')).toBeTruthy();
   });
 
   it('with captains available, no captain notice is shown once one is selected', async () => {

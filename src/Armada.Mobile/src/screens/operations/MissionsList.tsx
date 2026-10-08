@@ -35,6 +35,7 @@ import { useNameLookups } from '../../data/useNameLookups';
 import { usePagedList } from '../../data/usePagedList';
 import { useLocale } from '../../i18n/LocaleContext';
 import { useNotifications } from '../../notifications/NotificationContext';
+import { useCompactRows } from '../../components/ui/paneWidth';
 import { useTheme } from '../../theme/ThemeContext';
 import { MIN_TOUCH, spacing } from '../../theme/typography';
 import type { OperationsListProps } from './listTypes';
@@ -74,6 +75,7 @@ export interface MissionsListProps extends OperationsListProps {
 export function MissionsList({ onSelect, selectedId, onOpenTab }: MissionsListProps) {
   const { t, formatRelativeTime } = useLocale();
   const { colors } = useTheme();
+  const compactRows = useCompactRows();
   const { isAdmin, isTenantAdmin } = useAuth();
   const { pushToast } = useNotifications();
   const names = useNameLookups({ vessels: true, captains: true });
@@ -347,10 +349,11 @@ export function MissionsList({ onSelect, selectedId, onOpenTab }: MissionsListPr
                 </View>
               </Pressable>
               {!selecting ? (
-                <>
+                // Narrow panes (a list beside its detail) stack the two buttons so the title keeps its width.
+                <View style={compactRows ? styles.rowButtonsStacked : styles.rowButtons} testID={compactRows ? `mission-row-buttons-stacked-${m.id}` : undefined}>
                   <IconButton icon="ellipsis-horizontal" label={t('Actions')} color="textMuted" onPress={() => setMenuFor(m)} testID={`mission-row-menu-${m.id}`} />
                   <IconButton icon="checkbox-outline" label={t('Select')} color="textMuted" onPress={() => setSelection([m.id])} testID={`mission-row-select-${m.id}`} />
-                </>
+                </View>
               ) : null}
             </View>
           );
@@ -394,4 +397,6 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', minHeight: MIN_TOUCH + 16, paddingLeft: spacing.lg, paddingRight: spacing.xs, borderBottomWidth: StyleSheet.hairlineWidth },
   rowMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm },
   meta: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: 2 },
+  rowButtons: { flexDirection: 'row' },
+  rowButtonsStacked: { flexDirection: 'column' },
 });

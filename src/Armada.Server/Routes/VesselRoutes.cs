@@ -179,6 +179,7 @@ namespace Armada.Server.Routes
                 .WithRequestBody(OpenApiJson.BodyFor<Vessel>("Vessel data", true))
                 .WithResponse(201, OpenApiJson.For<Vessel>("Created vessel"))
                 .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("A vessel with that name already exists (Data: DuplicateEntityErrorDetail)"))
                 .WithSecurity("ApiKey"));
 
             app.Get("/api/v1/vessels/{id}", async (ApiRequest req) =>
@@ -225,6 +226,7 @@ namespace Armada.Server.Routes
                 Vessel updated = JsonSerializer.Deserialize<Vessel>(req.Http.Request.DataAsString, _jsonOptions)
                     ?? throw new InvalidOperationException("Request body could not be deserialized as Vessel.");
                 updated = EntityUpdateMerger.MergeVessel(existing, updated);
+                await DuplicateEntityGuard.EnsureVesselNameAvailableAsync(_database, updated).ConfigureAwait(false);
                 updated = await _database.Vessels.UpdateAsync(updated).ConfigureAwait(false);
                 return (object)updated;
             },
@@ -236,6 +238,7 @@ namespace Armada.Server.Routes
                 .WithRequestBody(OpenApiJson.BodyFor<Vessel>("Updated vessel data", true))
                 .WithResponse(200, OpenApiJson.For<Vessel>("Updated vessel"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("A vessel with that name already exists (Data: DuplicateEntityErrorDetail)"))
                 .WithSecurity("ApiKey"));
 
             app.Patch<Vessel>("/api/v1/vessels/{id}/context", async (ApiRequest req) =>

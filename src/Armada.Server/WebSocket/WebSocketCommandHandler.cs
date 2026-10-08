@@ -132,6 +132,19 @@ namespace Armada.Server.WebSocket
         /// <returns>Command result or error.</returns>
         public async Task<object> HandleCommandAsync(string action, WebSocketCommand command, string rawBody, AuthContext? caller)
         {
+            try
+            {
+                return await DispatchCommandAsync(action, command, rawBody, caller).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (UniqueConstraintViolation.Translate(ex) != null)
+            {
+                // A taken name (or any unique value) is a Conflict reply for this action, never provider text.
+                return WebSocketCommandError.FromException(action, ex);
+            }
+        }
+
+        private async Task<object> DispatchCommandAsync(string action, WebSocketCommand command, string rawBody, AuthContext? caller)
+        {
             // Only the declared surface is dispatched; an action handled below but missing from WebSocketSurface is a bug
             // that the API contract test catches.
             if (!WebSocketSurface.IsCommandAction(action))
@@ -187,6 +200,7 @@ namespace Armada.Server.WebSocket
 
                 case "create_fleet":
                     Fleet newFleet = JsonSerializer.Deserialize<WebSocketDataCommand<Fleet>>(rawBody, _JsonOptions)?.Data!;
+                    await DuplicateEntityGuard.EnsureFleetNameAvailableAsync(_Database, newFleet).ConfigureAwait(false);
                     newFleet = await _Database.Fleets.CreateAsync(newFleet).ConfigureAwait(false);
                     return new { type = "command.result", action = "create_fleet", data = (object)newFleet };
 
@@ -201,6 +215,7 @@ namespace Armada.Server.WebSocket
                         if (updFleetBody == null)
                             return WebSocketCommandError.Create("update_fleet", WebSocketCommandErrorCodeEnum.InvalidArgument, "data is required");
                         Fleet updFleet = EntityUpdateMerger.MergeFleet(existFleet, updFleetBody);
+                        await DuplicateEntityGuard.EnsureFleetNameAvailableAsync(_Database, updFleet).ConfigureAwait(false);
                         updFleet = await _Database.Fleets.UpdateAsync(updFleet).ConfigureAwait(false);
                         return new { type = "command.result", action = "update_fleet", data = (object)updFleet };
                     }
@@ -232,6 +247,7 @@ namespace Armada.Server.WebSocket
                     if (String.IsNullOrEmpty(newVessel.RepoUrl))
                         return WebSocketCommandError.Create("create_vessel", WebSocketCommandErrorCodeEnum.InvalidArgument, "repoUrl is required when creating a vessel");
                     newVessel.NormalizeGitHubTokenOverride();
+                    await DuplicateEntityGuard.EnsureVesselNameAvailableAsync(_Database, newVessel).ConfigureAwait(false);
                     newVessel = await _Database.Vessels.CreateAsync(newVessel).ConfigureAwait(false);
                     return new { type = "command.result", action = "create_vessel", data = (object)newVessel };
 
@@ -246,6 +262,7 @@ namespace Armada.Server.WebSocket
                         if (updVesselBody == null)
                             return WebSocketCommandError.Create("update_vessel", WebSocketCommandErrorCodeEnum.InvalidArgument, "data is required");
                         Vessel updVessel = EntityUpdateMerger.MergeVessel(existVessel, updVesselBody);
+                        await DuplicateEntityGuard.EnsureVesselNameAvailableAsync(_Database, updVessel).ConfigureAwait(false);
                         updVessel = await _Database.Vessels.UpdateAsync(updVessel).ConfigureAwait(false);
                         return new { type = "command.result", action = "update_vessel", data = (object)updVessel };
                     }
@@ -814,6 +831,7 @@ namespace Armada.Server.WebSocket
 
                 case "create_captain":
                     Captain newCaptain = JsonSerializer.Deserialize<WebSocketDataCommand<Captain>>(rawBody, _JsonOptions)?.Data!;
+                    await DuplicateEntityGuard.EnsureCaptainNameAvailableAsync(_Database, newCaptain).ConfigureAwait(false);
                     newCaptain = await _Database.Captains.CreateAsync(newCaptain).ConfigureAwait(false);
                     return new { type = "command.result", action = "create_captain", data = (object)newCaptain };
 
@@ -829,6 +847,7 @@ namespace Armada.Server.WebSocket
                         if (updCptBody == null)
                             return WebSocketCommandError.Create("update_captain", WebSocketCommandErrorCodeEnum.InvalidArgument, "data is required");
                         Captain updCpt = EntityUpdateMerger.MergeCaptain(existCpt, updCptBody);
+                        await DuplicateEntityGuard.EnsureCaptainNameAvailableAsync(_Database, updCpt).ConfigureAwait(false);
                         updCpt = await _Database.Captains.UpdateAsync(updCpt).ConfigureAwait(false);
                         return new { type = "command.result", action = "update_captain", data = (object)updCpt };
                     }
@@ -1062,6 +1081,7 @@ namespace Armada.Server.WebSocket
 
                 case "create_persona":
                     Persona newPersona = JsonSerializer.Deserialize<WebSocketDataCommand<Persona>>(rawBody, _JsonOptions)?.Data!;
+                    await DuplicateEntityGuard.EnsurePersonaNameAvailableAsync(_Database, newPersona).ConfigureAwait(false);
                     newPersona = await _Database.Personas.CreateAsync(newPersona).ConfigureAwait(false);
                     return new { type = "command.result", action = "create_persona", data = (object)newPersona };
 
@@ -1123,6 +1143,7 @@ namespace Armada.Server.WebSocket
 
                 case "create_pipeline":
                     Pipeline newPipeline = JsonSerializer.Deserialize<WebSocketDataCommand<Pipeline>>(rawBody, _JsonOptions)?.Data!;
+                    await DuplicateEntityGuard.EnsurePipelineNameAvailableAsync(_Database, newPipeline).ConfigureAwait(false);
                     newPipeline = await _Database.Pipelines.CreateAsync(newPipeline).ConfigureAwait(false);
                     return new { type = "command.result", action = "create_pipeline", data = (object)newPipeline };
 

@@ -55,7 +55,8 @@ export function PlanningScreen({ initialSessionId = null }: { initialSessionId?:
   const { t, formatRelativeTime } = useLocale();
   const { colors } = useTheme();
   const router = useRouter();
-  const { isTablet } = useLayout();
+  // List and session side by side (the pane's width, not the device).
+  const { split: isTablet } = useLayout();
   const { pushToast } = useNotifications();
   const params = useLocalSearchParams<Record<string, string>>();
   const fromRoute = useMemo(() => prefillFromParams(params), [params]);
@@ -180,12 +181,13 @@ export function PlanningScreen({ initialSessionId = null }: { initialSessionId?:
 
   const detail = selectedId
     ? <PlanningSessionView key={selectedId} sessionId={selectedId} catalog={catalog} embedded initialComposer={drafts[selectedId] ?? null} onClosed={closeSelected} />
-    : <EmptyState icon="chatbubbles-outline" title={t('Current Session')} message={t('Choose an existing planning session from the table above, or start a new one to begin chatting with a captain.')} />;
+    : isTablet ? <EmptyState icon="chatbubbles-outline" title={t('Current Session')} message={t('Choose an existing planning session from the table above, or start a new one to begin chatting with a captain.')} /> : null;
 
   return (
     <View style={[styles.fill, { backgroundColor: colors.background }]}>
       <Stack.Screen options={{ title: t('Planning') }} />
-      {isTablet ? <SplitView master={list} detail={detail} masterWidth={420} /> : list}
+      {/* One tree for every width: a resize keeps the list's scroll and the open session (alone, with Back). */}
+      <SplitView master={list} detail={detail} masterWidth={420} onBack={() => setSelectedId(null)} backLabel={t('Back')} />
       <PlanningStartSheet
         open={startOpen}
         onClose={() => setStartOpen(false)}

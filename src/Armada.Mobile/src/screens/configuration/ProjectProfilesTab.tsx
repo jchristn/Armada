@@ -124,6 +124,7 @@ export function ProjectProfilesTab() {
       <MasterDetail
         list={list}
         detail={selection.selected ? <ProjectProfileDetailView key={selection.selected} id={selection.selected} embedded onDeleted={() => { selection.clear(); void reload(); }} onChanged={() => void reload()} /> : null}
+        onBack={selection.clear}
       />
       <FormSheet
         testID="project-form"

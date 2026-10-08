@@ -68,13 +68,13 @@ Base path `/api/v1`. Request and response bodies are PascalCase JSON; errors are
 | POST | `/api/v1/backlog/{id}/refinement-sessions` | TenantAdmin | `ObjectiveRefinementSessionCreateRequest` | 201 `ObjectiveRefinementSessionDetail`, 400, 404, 501 `ApiStatusErrorResponse` |  |
 | GET | `/api/v1/backup` | AdminOnly |  | 200, 400 |  |
 | GET | `/api/v1/captains` | Authenticated |  | 200 `EnumerationResult<Captain>` |  |
-| POST | `/api/v1/captains` | TenantAdmin | `Captain` | 201 `Captain`, 400 |  |
+| POST | `/api/v1/captains` | TenantAdmin | `Captain` | 201 `Captain`, 400, 409 `ApiErrorResponse` |  |
 | POST | `/api/v1/captains/delete/multiple` | TenantAdmin | `DeleteMultipleRequest` | 200 `DeleteMultipleResult`, 400 |  |
 | POST | `/api/v1/captains/enumerate` | Authenticated | `EnumerationQuery` (optional) |  |  |
 | POST | `/api/v1/captains/stop-all` | TenantAdmin |  |  |  |
 | DELETE | `/api/v1/captains/{id}` | TenantAdmin |  | 204, 404, 409 `Object` |  |
 | GET | `/api/v1/captains/{id}` | Authenticated |  | 200 `Captain`, 404 |  |
-| PUT | `/api/v1/captains/{id}` | TenantAdmin | `Captain` | 200 `Captain`, 400, 404 |  |
+| PUT | `/api/v1/captains/{id}` | TenantAdmin | `Captain` | 200 `Captain`, 400, 404, 409 `ApiErrorResponse` |  |
 | POST | `/api/v1/captains/{id}/chat` | TenantAdmin | `CaptainChatRequest` | 200 `CaptainChatResponse` |  |
 | PUT | `/api/v1/captains/{id}/cli-permission-policy` | TenantAdmin | `CliPermissionPolicyUpdateRequest` | 200 `Captain`, 403 `ApiErrorResponse`, 404 |  |
 | GET | `/api/v1/captains/{id}/log` | Authenticated |  | 200, 404 |  |
@@ -145,12 +145,12 @@ Base path `/api/v1`. Request and response bodies are PascalCase JSON; errors are
 | PUT | `/api/v1/fleet-actions/{id}` | TenantAdmin | `FleetActionUpsertRequest` | 200 `FleetAction`, 404 |  |
 | POST | `/api/v1/fleet-actions/{id}/run` | TenantAdmin | `FleetActionRunRequest` | 202 `FleetActionRunStartResult`, 404 |  |
 | GET | `/api/v1/fleets` | Authenticated |  | 200 `EnumerationResult<Fleet>` |  |
-| POST | `/api/v1/fleets` | TenantAdmin | `Fleet` | 201 `Fleet` |  |
+| POST | `/api/v1/fleets` | TenantAdmin | `Fleet` | 201 `Fleet`, 409 `ApiErrorResponse` |  |
 | POST | `/api/v1/fleets/delete/multiple` | TenantAdmin | `DeleteMultipleRequest` | 200 `DeleteMultipleResult`, 400 |  |
 | POST | `/api/v1/fleets/enumerate` | Authenticated | `EnumerationQuery` (optional) |  |  |
 | DELETE | `/api/v1/fleets/{id}` | TenantAdmin |  | 204, 404 |  |
 | GET | `/api/v1/fleets/{id}` | Authenticated |  | 200 `Fleet`, 404 |  |
-| PUT | `/api/v1/fleets/{id}` | TenantAdmin | `Fleet` | 200 `Fleet`, 404 |  |
+| PUT | `/api/v1/fleets/{id}` | TenantAdmin | `Fleet` | 200 `Fleet`, 404, 409 `ApiErrorResponse` |  |
 | GET | `/api/v1/harbors` | Authenticated |  | 200 `List<Harbor>` | experimental |
 | POST | `/api/v1/harbors` | Authenticated | `Harbor` | 201 `Harbor`, 400 | experimental |
 | DELETE | `/api/v1/harbors/{id}` | Authenticated |  | 204, 404 | experimental |
@@ -232,13 +232,13 @@ Base path `/api/v1`. Request and response bodies are PascalCase JSON; errors are
 | POST | `/api/v1/objectives/{id}/refinement-sessions` | TenantAdmin | `ObjectiveRefinementSessionCreateRequest` | 201 `ObjectiveRefinementSessionDetail`, 400, 404, 501 `ApiStatusErrorResponse` |  |
 | POST | `/api/v1/onboarding` | NoAuthRequired |  | 200, 400, 409 `ApiErrorResponse` |  |
 | GET | `/api/v1/personas` | Authenticated |  | 200 `EnumerationResult<Persona>` |  |
-| POST | `/api/v1/personas` | Authenticated | `Persona` | 201 `Persona`, 400 |  |
+| POST | `/api/v1/personas` | Authenticated | `Persona` | 201 `Persona`, 400, 409 `ApiErrorResponse` |  |
 | POST | `/api/v1/personas/enumerate` | Authenticated | `EnumerationQuery` (optional) |  |  |
 | DELETE | `/api/v1/personas/{name}` | Authenticated |  | 204, 400, 404 |  |
 | GET | `/api/v1/personas/{name}` | Authenticated |  | 200 `Persona`, 404 |  |
 | PUT | `/api/v1/personas/{name}` | Authenticated | `Persona` | 200 `Persona`, 400, 404 |  |
 | GET | `/api/v1/pipelines` | Authenticated |  | 200 `EnumerationResult<Pipeline>` |  |
-| POST | `/api/v1/pipelines` | Authenticated | `Pipeline` | 201 `Pipeline` |  |
+| POST | `/api/v1/pipelines` | Authenticated | `Pipeline` | 201 `Pipeline`, 409 `ApiErrorResponse` |  |
 | POST | `/api/v1/pipelines/enumerate` | Authenticated | `EnumerationQuery` (optional) |  |  |
 | DELETE | `/api/v1/pipelines/{name}` | Authenticated |  | 204, 400, 404 |  |
 | GET | `/api/v1/pipelines/{name}` | Authenticated |  | 200 `Pipeline`, 404 |  |
@@ -342,15 +342,15 @@ Base path `/api/v1`. Request and response bodies are PascalCase JSON; errors are
 | POST | `/api/v1/token-usage/delete/by-filter` | Authenticated | `TokenUsageQuery` (optional) | 200 `DeleteMultipleResult` |  |
 | GET | `/api/v1/token-usage/summary` | Authenticated |  | 200 `TokenUsageSummaryResult` |  |
 | GET | `/api/v1/users` | Authenticated |  |  |  |
-| POST | `/api/v1/users` | TenantAdmin |  | 201 `UserMaster`, 400 |  |
+| POST | `/api/v1/users` | TenantAdmin |  | 201 `UserMaster`, 400, 409 `ApiErrorResponse` |  |
 | DELETE | `/api/v1/users/{id}` | Authenticated |  | 200, 404 |  |
 | GET | `/api/v1/users/{id}` | Authenticated |  | 200, 404 |  |
-| PUT | `/api/v1/users/{id}` | Authenticated |  | 200, 400, 404 |  |
+| PUT | `/api/v1/users/{id}` | Authenticated |  | 200, 400, 404, 409 `ApiErrorResponse` |  |
 | POST | `/api/v1/vessel-health/enumerate` | Authenticated | `VesselHealthEnumerateRequest` (optional) | 200 `EnumerationResult<VesselHealth>`, 400 |  |
 | POST | `/api/v1/vessel-health/evaluate` | TenantAdmin | `VesselHealthEvaluateRequest` (optional) | 202 `VesselHealthEvaluationStart`, 400, 404, 409 `VesselHealthEvaluationStart` |  |
 | GET | `/api/v1/vessel-health/summary` | Authenticated |  | 200 `VesselHealthSummary` |  |
 | GET | `/api/v1/vessels` | Authenticated |  | 200 `EnumerationResult<Vessel>` |  |
-| POST | `/api/v1/vessels` | TenantAdmin | `Vessel` | 201 `Vessel`, 400 |  |
+| POST | `/api/v1/vessels` | TenantAdmin | `Vessel` | 201 `Vessel`, 400, 409 `ApiErrorResponse` |  |
 | POST | `/api/v1/vessels/delete/multiple` | TenantAdmin | `DeleteMultipleRequest` | 200 `DeleteMultipleResult`, 400 |  |
 | POST | `/api/v1/vessels/enumerate` | Authenticated | `EnumerationQuery` (optional) |  |  |
 | POST | `/api/v1/vessels/import` | TenantAdmin | `VesselImportRequest` | 200 `VesselImportResponse`, 202 `VesselImportResponse`, 400, 403 `ApiErrorResponse`, 404, 409 `ApiErrorResponse` |  |
@@ -363,7 +363,7 @@ Base path `/api/v1`. Request and response bodies are PascalCase JSON; errors are
 | POST | `/api/v1/vessels/import/discover` | TenantAdmin | `VesselDiscoveryRequest` | 200 `VesselImportDiscoverResponse`, 202 `VesselImportDiscoverResponse`, 400, 403 `ApiErrorResponse` |  |
 | DELETE | `/api/v1/vessels/{id}` | TenantAdmin |  | 204, 404 |  |
 | GET | `/api/v1/vessels/{id}` | Authenticated |  | 200 `Vessel`, 404 |  |
-| PUT | `/api/v1/vessels/{id}` | TenantAdmin | `Vessel` | 200 `Vessel`, 404 |  |
+| PUT | `/api/v1/vessels/{id}` | TenantAdmin | `Vessel` | 200 `Vessel`, 404, 409 `ApiErrorResponse` |  |
 | GET | `/api/v1/vessels/{id}/branches` | Authenticated |  | 200, 404, 503 `ApiStatusErrorResponse` |  |
 | POST | `/api/v1/vessels/{id}/branches/merge` | TenantAdmin |  | 200, 400, 404, 422 `ApiStatusErrorResponse`, 503 `ApiStatusErrorResponse` |  |
 | POST | `/api/v1/vessels/{id}/branches/push` | TenantAdmin |  | 200, 400, 404, 422 `ApiStatusErrorResponse`, 503 `ApiStatusErrorResponse` |  |

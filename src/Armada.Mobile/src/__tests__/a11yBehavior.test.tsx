@@ -11,7 +11,7 @@ import * as RN from 'react-native';
 import { AccessibilityInfo } from 'react-native';
 import { TOAST_TIMEOUT_MS } from '@dashboard/lib/notificationEvents';
 import { ToastHost } from '../components/app/ToastHost';
-import { BottomSheet, Button, ConfirmDialog, ErrorState, KeyValueRow, KpiCard, KpiGrid, ListRow, SegmentedControl, SelectField } from '../components/ui';
+import { BottomSheet, Button, ConfirmDialog, ErrorState, KeyValueRow, KpiCard, KpiGrid, ListRow, SegmentedControl, SelectField, SplitView } from '../components/ui';
 import { BUTTON_MAX_FONT_SCALE } from '../theme/typography';
 import { LocaleProvider } from '../i18n/LocaleContext';
 import { NotificationProvider, SCREEN_READER_TOAST_FACTOR, useNotifications, type NotificationState } from '../notifications/NotificationContext';
@@ -102,6 +102,15 @@ describe('focus in sheets and dialogs', () => {
     await fireEvent.press(screen.getByTestId('status-option-a'));
     expect(onChange).toHaveBeenCalledWith('a');
     await waitFor(() => expect(focusedTexts()).toEqual(['Status', 'status']));
+  });
+});
+
+describe('narrow list-detail panes', () => {
+  it('moves focus to Back when a selection replaces the list, so the reader lands on the new content', async () => {
+    const view = await render(<Themed><SplitView master={<RN.Text>list</RN.Text>} detail={null} onBack={() => undefined} backLabel="Back" /></Themed>);
+    expect(focusedTexts()).toEqual([]);
+    await view.rerender(<Themed><SplitView master={<RN.Text>list</RN.Text>} detail={<RN.Text>item</RN.Text>} onBack={() => undefined} backLabel="Back" /></Themed>);
+    expect(focusedTexts()).toEqual(['split-view-back']);
   });
 });
 

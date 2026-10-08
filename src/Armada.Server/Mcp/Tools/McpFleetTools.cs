@@ -8,6 +8,7 @@ namespace Armada.Server.Mcp.Tools
     using ArmadaConstants = Armada.Core.Constants;
     using Armada.Core.Database;
     using Armada.Core.Models;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Registers MCP tools for fleet CRUD operations.
@@ -74,6 +75,7 @@ namespace Armada.Server.Mcp.Tools
                     fleet.UserId = caller.UserId;
                     fleet.Name = request.Name;
                     fleet.Description = request.Description ?? "";
+                    await DuplicateEntityGuard.EnsureFleetNameAvailableAsync(database, fleet).ConfigureAwait(false);
                     fleet = await database.Fleets.CreateAsync(fleet).ConfigureAwait(false);
                     return (object)fleet;
                 });
@@ -106,6 +108,7 @@ namespace Armada.Server.Mcp.Tools
                         fleet.Description = request.Description;
                     if (request.DefaultPipelineId != null)
                         fleet.DefaultPipelineId = request.DefaultPipelineId;
+                    await DuplicateEntityGuard.EnsureFleetNameAvailableAsync(database, fleet).ConfigureAwait(false);
                     fleet = await database.Fleets.UpdateAsync(fleet).ConfigureAwait(false);
                     return (object)fleet;
                 });

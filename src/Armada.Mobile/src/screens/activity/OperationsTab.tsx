@@ -16,6 +16,7 @@ export function OperationsTab({ List, Detail, route }: {
     <MasterDetail
       list={<List onSelect={selection.open} selectedId={selection.selected} />}
       detail={selection.selected ? <Detail key={selection.selected} id={selection.selected} embedded /> : null}
+      onBack={selection.clear}
     />
   );
 }

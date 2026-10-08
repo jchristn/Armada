@@ -5,6 +5,7 @@ import { MIN_TOUCH, spacing, useLargeText } from '../../theme/typography';
 import { AppText } from './AppText';
 import { Icon, type IconName } from './Icon';
 import { IconButton } from './IconButton';
+import { useCompactRows } from './paneWidth';
 
 /** The row's "..." button: drawn beside the row (not inside it) so screen readers reach it as its own control. */
 export interface ListRowMenu {
@@ -55,14 +56,17 @@ export function ListRow({
   // Two subtitle lines keep lists scannable; at large text sizes two lines hold a few words, so the subtitle wraps.
   const largeText = useLargeText();
   const value = spokenValue(accessibilityValue);
+  // Narrow panes (a phone, or a list beside its detail) put the badge under the text so the title keeps its width.
+  const compact = useCompactRows();
   const content = (
     <View style={styles.row}>
       {icon ? <Icon name={icon} color={destructive ? 'danger' : 'primary'} /> : null}
       <View style={styles.text}>
-        <AppText variant="label" color={destructive ? 'danger' : 'text'}>{title}</AppText>
-        {subtitle ? <AppText variant="caption" muted numberOfLines={largeText ? undefined : 2}>{subtitle}</AppText> : null}
+        <AppText variant="label" color={destructive ? 'danger' : 'text'} numberOfLines={compact && !largeText ? 3 : undefined}>{title}</AppText>
+        {subtitle ? <AppText variant="caption" muted numberOfLines={largeText ? undefined : compact ? 3 : 2}>{subtitle}</AppText> : null}
+        {compact && accessory ? <View style={styles.stacked} testID={testID ? `${testID}-accessory-stacked` : undefined}>{accessory}</View> : null}
       </View>
-      {accessory}
+      {compact ? null : accessory}
       {onPress ? <Icon name="chevron-forward" size={18} color="textMuted" /> : null}
     </View>
   );
@@ -127,4 +131,5 @@ const styles = StyleSheet.create({
   fill: { flex: 1 },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   text: { flex: 1, gap: 2 },
+  stacked: { alignSelf: 'flex-start', marginTop: 2 },
 });

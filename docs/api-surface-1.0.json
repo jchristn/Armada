@@ -495,7 +495,8 @@
       "requestRequired": true,
       "responses": {
         "201": "Captain",
-        "400": ""
+        "400": "",
+        "409": "ApiErrorResponse"
       },
       "tags": [
         "Captains"
@@ -593,7 +594,8 @@
       "responses": {
         "200": "Captain",
         "400": "",
-        "404": ""
+        "404": "",
+        "409": "ApiErrorResponse"
       },
       "tags": [
         "Captains"
@@ -1774,7 +1776,8 @@
       "requestType": "Fleet",
       "requestRequired": true,
       "responses": {
-        "201": "Fleet"
+        "201": "Fleet",
+        "409": "ApiErrorResponse"
       },
       "tags": [
         "Fleets"
@@ -1856,7 +1859,8 @@
       "requestRequired": true,
       "responses": {
         "200": "Fleet",
-        "404": ""
+        "404": "",
+        "409": "ApiErrorResponse"
       },
       "tags": [
         "Fleets"
@@ -3252,7 +3256,8 @@
       "requestRequired": true,
       "responses": {
         "201": "Persona",
-        "400": ""
+        "400": "",
+        "409": "ApiErrorResponse"
       },
       "tags": [
         "Personas"
@@ -3351,7 +3356,8 @@
       "requestType": "Pipeline",
       "requestRequired": true,
       "responses": {
-        "201": "Pipeline"
+        "201": "Pipeline",
+        "409": "ApiErrorResponse"
       },
       "tags": [
         "Pipelines"
@@ -5076,7 +5082,8 @@
       "requestRequired": false,
       "responses": {
         "201": "UserMaster",
-        "400": ""
+        "400": "",
+        "409": "ApiErrorResponse"
       },
       "tags": [
         "Users"
@@ -5128,7 +5135,8 @@
       "responses": {
         "200": "",
         "400": "",
-        "404": ""
+        "404": "",
+        "409": "ApiErrorResponse"
       },
       "tags": [
         "Users"
@@ -5213,7 +5221,8 @@
       "requestRequired": true,
       "responses": {
         "201": "Vessel",
-        "400": ""
+        "400": "",
+        "409": "ApiErrorResponse"
       },
       "tags": [
         "Vessels"
@@ -5445,7 +5454,8 @@
       "requestRequired": true,
       "responses": {
         "200": "Vessel",
-        "404": ""
+        "404": "",
+        "409": "ApiErrorResponse"
       },
       "tags": [
         "Vessels"

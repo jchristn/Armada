@@ -70,6 +70,8 @@ export function EmbeddedSectionView({ hubTitle, workstream, param, sectionKey, s
       <SplitView
         master={list}
         detail={selection.selectedId ? <Detail key={selection.selectedId} id={selection.selectedId} embedded /> : (selection.isTablet ? <EmptyDetail /> : null)}
+        onBack={selection.clear}
+        backLabel={t('Back')}
       />
     </View>
   );

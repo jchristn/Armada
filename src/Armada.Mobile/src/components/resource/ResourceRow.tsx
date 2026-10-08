@@ -75,5 +75,5 @@ export function useConfirm(testID = 'confirm'): { confirm: (request: ConfirmRequ
 }
 
 const styles = StyleSheet.create({
-  accessory: { alignItems: 'flex-end', gap: spacing.xs, maxWidth: 160 },
+  accessory: { alignItems: 'flex-end', gap: spacing.xs, maxWidth: 160, flexShrink: 1 },
 });

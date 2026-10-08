@@ -8,6 +8,7 @@ namespace Armada.Server.Mcp.Tools
     using Armada.Core;
     using Armada.Core.Database;
     using Armada.Core.Models;
+    using Armada.Core.Services;
     using Armada.Core.Services.Interfaces;
 
     /// <summary>
@@ -115,7 +116,7 @@ namespace Armada.Server.Mcp.Tools
                     if (String.IsNullOrEmpty(request.Content)) return (object)McpToolError.InvalidArgument("content is required");
 
                     PromptTemplate? existing = await database.PromptTemplates.ReadByNameAsync(request.Name).ConfigureAwait(false);
-                    if (existing != null) return (object)McpToolError.Conflict("Template already exists: " + request.Name);
+                    if (existing != null) return (object)McpToolError.FromException(DuplicateEntityGuard.NameTaken("PromptTemplate", "prompt template", request.Name));
 
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     PromptTemplate template = new PromptTemplate(request.Name, request.Content);

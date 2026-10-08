@@ -15,7 +15,8 @@ import { spacing } from '../theme/typography';
 export function ProfilesScreen() {
   const { profiles, activeProfile, selectProfile, saveProfile, deleteProfile, forgetSavedPassword } = useAuth();
   const { t } = useLocale();
-  const { isTablet } = useLayout();
+  // List and editor side by side (the pane's width, not the device).
+  const { split: isTablet } = useLayout();
   const [editing, setEditing] = useState<ServerProfile | 'new' | null>(null);
   const [deleting, setDeleting] = useState<ServerProfile | null>(null);
 

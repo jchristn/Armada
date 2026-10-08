@@ -3,6 +3,7 @@ namespace Armada.Server.WebSocket
     using System;
     using System.Collections.Generic;
     using System.Text.Json;
+    using Armada.Core.Database;
     using Armada.Core.Enums;
 
     /// <summary>
@@ -62,7 +63,10 @@ namespace Armada.Server.WebSocket
         public static WebSocketCommandError FromException(string? action, Exception ex)
         {
             if (ex == null) throw new ArgumentNullException(nameof(ex));
-            return Create(action, CodeFor(ex), ex.Message);
+            // A provider unique-constraint violation that escaped the database layer is reported as a duplicate, never
+            // with the provider's own text.
+            Exception effective = (Exception?)UniqueConstraintViolation.Translate(ex) ?? ex;
+            return Create(action, CodeFor(effective), effective.Message);
         }
 
         #endregion

@@ -36,8 +36,10 @@ biometric unlock of stored credentials, share-sheet dispatch, and offline-tolera
 
 1. **Ask-first, like the TUI.** The app opens into Ask Armada with the last conversation. A persistent Approvals badge
    and the notification inbox are one tap away on every screen.
-2. **Adaptive layout.** Phones get a tab bar plus stack navigation; tablets (iPad, Android tablets, foldables) get a
-   sidebar with list-detail split views, mirroring the dashboard's navigation groups. Landscape and split-screen work.
+2. **Adaptive layout.** Layout follows the window width, not the device: a tab bar plus stack navigation under 600 dp,
+   an icon rail from 600 dp and the full sidebar from 1024 dp (mirroring the dashboard's navigation groups), and
+   list-detail split views when the content pane is at least 640 dp. Landscape, Split View, Stage Manager, and
+   foldables work.
 3. **Same server, same rules.** A thin client over the existing REST API and WebSocket. Server changes only where
    listed under "Server changes". The app hides or disables what the server would refuse (from `whoami`).
 4. **Share, do not fork.** The API client, models, i18n catalog, and the dashboard's pure logic (`src/lib`) are
@@ -176,7 +178,7 @@ selection) are recorded per entry in the manifest notes.
 
 ### W6. Quality and release readiness
 - [ ] W6.1 Accessibility pass (VoiceOver, TalkBack, font scaling, contrast)
-- [ ] W6.2 Tablet and landscape pass (iPad split view, Stage Manager, Android foldables)
+- [x] W6.2 Tablet and landscape pass (iPad split view, Stage Manager, Android foldables)
 - [x] W6.3 E2E suite green on both platforms; performance on large lists (virtualized lists, pagination)
 - [x] W6.4 Security review (token storage, ATS/cleartext, deep link validation, push payload content)
 - [ ] W6.5 Docs: `docs/MOBILE.md` (install, connect, push setup, building and store submission), README, CHANGELOG
@@ -211,3 +213,4 @@ Milestone C: push, proxy, quality pass, store-ready builds.
 | 2026-10-07 | Face ID | work/mobile-faceid | Saved password behind biometrics (Keychain/Keystore, current biometry set), Face ID sign-in with one auto-prompt, one-time offer sheet, Preferences and server-form settings, sign-out forget option, password change updates it; F-41 (biometric bypasses on retry and proxy re-sign-in) and F-50 (retired device after offline sign-out) fixed; Jest 631. Open: 06-build-vessels landing mode option and the proxy flow's Preferences tap fail on iOS (pre-existing) |
 | 2026-10-07 | W4 | work/mobile-w4 | Resource kit (live loads, lists, form sheets, hubs, tablet split); Delivery, Configuration (10 tabs, 8 detail routes), Activity (history, API requests, W2 events/signals, token usage, jobs), Settings (all sections incl. Default Landing Mode and Push with redacted secrets, diagnostics, tenants/users/credentials, rebuild), backup/restore per F-56, CLI Tool Permissions, API Explorer with replay, /setup wizard; 14 shared lib extractions; parity 524 implemented (1 planned: getEntity); Jest 782 after merge; Maestro iPhone 18 Pro 10/10, tablet flow on iPad mini (landscape) and Armada_Tablet. Parity scanners fixed to read lib/settingsRanges.ts |
 | 2026-10-08 | W6.3 Android | work/mobile-android | Full Maestro suite 10/10 on Armada_Phone after merging main; W2/W3/W4 screens walked on Android (W2 Android verification done). Fixed: back with the keyboard up in a sheet, back exits list selection, Recents privacy on Android 13+, one-line search placeholders, sticky Save footer in Screen/BottomSheet/FormSheet; Dispatch keeps long text. iOS flow failures root-caused to Maestro not clipping scrolled rows; new e2eFlows lint. Jest 800. Open: FLAG_SECURE decision, /setup deep link, raw server errors in sheets |
+| 2026-10-08 | W6.2 | work/mobile-tablet | Window-width layout: tabs under 600 dp, icon rail 600-1023 dp (toggle remembered), sidebar from 1024; split when the content pane is at least 640 dp; one shared list-detail selection; resize keeps selection, scroll, drafts, sheets; about 26 detail routes open beside their list on wide windows; pane-aware rows; form sheets on tablets; fixed sheets rotating iPhone to portrait and the Ask composer under the keyboard in landscape; Jest 848; Maestro iPad Pro 11, iPad mini, Armada_Tablet, iPhone 18 Pro Max landscape green, phone suite 10/10. Open: iPad hardware-key shortcuts and pointer hover (need a native module) |

@@ -35,9 +35,11 @@ function TabLabel({ focused, color, children }: { focused: boolean; color: Color
 }
 
 /**
- * The adaptive shell. Phones: bottom tabs (Ask, Approvals, Work, More), each with its own stack. Tablets (window
- * at least 768 dp wide): the same stacks behind the dashboard-style sidebar instead of the tab bar. The switch
- * follows the window, so iPad Split View and Android multi-window change layout live.
+ * The adaptive shell. Narrow windows (under 600 dp: phones in portrait, Slide Over, narrow Split View, folded
+ * foldables): bottom tabs (Ask, Approvals, Work, More), each with its own stack. Wider windows: the same stacks
+ * behind the dashboard-style sidebar (an icon rail below 1024 dp) instead of the tab bar. The switch follows the
+ * window (useLayout), so rotation, iPad Split View, Stage Manager, and Android multi-window re-layout live; the
+ * tab navigator and its stacks stay mounted, so nothing on screen is lost.
  */
 export default function AppTabsLayout() {
   const { isTablet } = useLayout();

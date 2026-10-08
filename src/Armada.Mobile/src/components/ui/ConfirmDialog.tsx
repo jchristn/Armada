@@ -7,6 +7,7 @@ import { Button } from './Button';
 import { TextField } from './TextField';
 import { useModalBack } from './useModalBack';
 import { useModalFocus } from './useModalFocus';
+import { MODAL_ORIENTATIONS } from './modalOrientations';
 
 export interface ConfirmDialogProps {
   open: boolean;
@@ -39,7 +40,7 @@ export function ConfirmDialog(props: ConfirmDialogProps) {
   const titleRef = useRef<Text | null>(null);
   const onShow = useModalFocus(props.open, titleRef, props.returnFocusRef);
   return (
-    <Modal visible={props.open} transparent animationType="fade" onRequestClose={onBack} onShow={onShow} statusBarTranslucent>
+    <Modal supportedOrientations={MODAL_ORIENTATIONS} visible={props.open} transparent animationType="fade" onRequestClose={onBack} onShow={onShow} statusBarTranslucent>
       <View style={[styles.backdrop, { backgroundColor: colors.overlay }]}>
         {/* Mounted only while open, so the typed confirmation starts empty every time. */}
         {props.open ? <DialogCard {...props} titleRef={titleRef} /> : null}

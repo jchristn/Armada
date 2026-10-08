@@ -1,9 +1,8 @@
 import { Stack, useFocusEffect, useRouter, type Href } from 'expo-router';
-import { useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Linking, Modal, Pressable, StyleSheet, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Linking, Modal, Pressable, StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { HeaderHeightContext } from 'expo-router/react-navigation';
 import type { AskThread, AskTrackedWork, CaptainToolAccessResult } from '@dashboard/types/models';
 import { askCaptainAccess, instructionsDocUrl } from '@dashboard/lib/askCaptain';
 import { randomGreeting } from '@dashboard/lib/askGreetings';
@@ -18,7 +17,7 @@ import { ConversationOptionsSheet, captainLabel } from '../components/ask/Conver
 import { MessageList, type MessageListHandle } from '../components/ask/MessageList';
 import { ThreadList } from '../components/ask/ThreadList';
 import { WorkStrip } from '../components/ask/WorkStrip';
-import { AppText, Banner, BottomSheet, Button, ConfirmDialog, ErrorState, Icon, IconButton, LoadingState, SplitView, TextField } from '../components/ui';
+import { AppText, Banner, BottomSheet, Button, ConfirmDialog, ErrorState, Icon, IconButton, KeyboardAvoidingPane, LoadingState, SplitView, TextField } from '../components/ui';
 import { useLocale } from '../i18n/LocaleContext';
 import { useLayout } from '../navigation/useLayout';
 import { useNotifications } from '../notifications/NotificationContext';
@@ -26,6 +25,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { spacing } from '../theme/typography';
 import { useModalBack } from '../components/ui/useModalBack';
 import { useReducedMotion } from '../lib/accessibility';
+import { MODAL_ORIENTATIONS } from '../components/ui/modalOrientations';
 
 /** The last conversation reopens once per app session (MOBILE_APP_PLAN.md design principle 1). */
 let restoredLastThread = false;
@@ -53,12 +53,12 @@ const HIGHLIGHT_MS = 2000;
 export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
   const { t } = useLocale();
   const { colors } = useTheme();
-  const { isTablet } = useLayout();
+  // Sidebar navigation (no header bell) vs. list and conversation side by side (pane width).
+  const { isTablet, split } = useLayout();
   const reduceMotion = useReducedMotion();
   const router = useRouter();
   const { isAdmin, isTenantAdmin } = useAuth();
   const { pushToast } = useNotifications();
-  const headerHeight = useContext(HeaderHeightContext) ?? 0;
   const ask = useAsk();
   const {
     captains, captainsLoaded, captainNames, draftCaptainId, setDraftCaptainId, quickActions, showThinking, setShowThinking, loadCaptainTools,
@@ -191,7 +191,11 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
   );
 
   const conversationPane = (
-    <KeyboardAvoidingView style={styles.fill} behavior="padding" keyboardVerticalOffset={headerHeight}>
+    // Measures its own place in the window, so the composer clears the keyboard in a split pane and in landscape.
+    <KeyboardAvoidingPane testID="ask-conversation-pane">
+      {/* Everything above the composer shares what is left and clips: on a phone in landscape with the keyboard up
+          (about 140 dp), the captain bar and banners alone used to push the composer under the keyboard. */}
+      <View style={styles.aboveComposer} testID="ask-above-composer">
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={t('Captain: {{name}}. Change captain', { name: activeCaptain ? captainLabel(activeCaptain) : t('None (quick actions only)') })}
@@ -269,6 +273,8 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
         />
       )}
 
+      </View>
+
       <Composer
         ref={composerRef}
         quickActions={quickActions}
@@ -287,7 +293,7 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
         showThinking={showThinking}
         onShowThinkingChange={setShowThinking}
       />
-    </KeyboardAvoidingView>
+    </KeyboardAvoidingPane>
   );
 
   const threadList = (
@@ -319,7 +325,7 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
           title: thread?.title || t('Ask Armada'),
           headerRight: () => (
             <View style={styles.headerRow}>
-              {!isTablet ? (
+              {!split ? (
                 <IconButton icon="chatbubbles-outline" label={t('Show conversations')} badge={unreadElsewhere} onPress={() => setListOpen(true)} testID="ask-open-list" />
               ) : null}
               <IconButton icon="options-outline" label={t('More conversation actions')} onPress={() => setOptionsOpen(true)} testID="ask-open-options" />
@@ -330,7 +336,7 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
       />
       <SplitView master={threadList} detail={conversationPane} />
 
-      <Modal visible={listOpen && !isTablet} animationType={reduceMotion ? 'fade' : 'slide'} presentationStyle="pageSheet" onRequestClose={onListBack}>
+      <Modal supportedOrientations={MODAL_ORIENTATIONS} visible={listOpen && !split} animationType={reduceMotion ? 'fade' : 'slide'} presentationStyle="pageSheet" onRequestClose={onListBack}>
         {/* A modal is a new native root: swipe actions in the list need their own gesture root. */}
         <GestureHandlerRootView style={styles.fill}>
         <SafeAreaView style={[styles.fill, { backgroundColor: colors.background }]} edges={['top', 'bottom', 'left', 'right']}>
@@ -398,6 +404,7 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
+  aboveComposer: { flex: 1, minHeight: 0, overflow: 'hidden' },
   center: { textAlign: 'center' },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md, padding: spacing.lg },
   quickRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: spacing.sm },

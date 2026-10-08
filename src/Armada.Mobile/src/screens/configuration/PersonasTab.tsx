@@ -128,6 +128,7 @@ export function PersonasTab() {
       <MasterDetail
         list={list}
         detail={selection.selected ? <PersonaDetailView key={selection.selected} name={selection.selected} embedded onDeleted={() => { selection.clear(); void reload(); }} onChanged={() => void reload()} /> : null}
+        onBack={selection.clear}
       />
       <FormSheet
         testID="persona-form"

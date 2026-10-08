@@ -38,10 +38,10 @@ jest.mock('expo-router', () => ({
 }));
 
 let mockTablet = false;
-jest.mock('../navigation/useLayout', () => ({
-  ...jest.requireActual('../navigation/useLayout'),
-  useLayout: () => ({ width: mockTablet ? 1024 : 390, height: 800, isTablet: mockTablet, landscape: false }),
-}));
+jest.mock('../navigation/useLayout', () => {
+  const actual = jest.requireActual('../navigation/useLayout');
+  return { ...actual, useLayout: () => actual.layoutFor(mockTablet ? 1024 : 390, 800) };
+});
 
 const api = client as jest.Mocked<typeof client>;
 const NOW = '2026-10-07T12:00:00Z';

@@ -54,6 +54,7 @@ namespace Armada.Core.Services
             }
 
             vessel.NormalizeGitHubTokenOverride();
+            await DuplicateEntityGuard.EnsureVesselNameAvailableAsync(_Database, vessel, token).ConfigureAwait(false);
             return await _Database.Vessels.CreateAsync(vessel, token).ConfigureAwait(false);
         }
 
