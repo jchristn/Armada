@@ -1,0 +1,160 @@
+# Tablet layout: sign in (the phone flow 01 asserts the tab bar, which tablets replace with the sidebar), then walk the
+# W4 hubs from the sidebar. Selecting a row keeps the list and shows the item beside it.
+appId: ${APP_ID}
+name: 01-w4-tablet
+---
+- launchApp:
+    clearState: true
+    clearKeychain: true
+- extendedWaitUntil:
+    visible:
+      id: "profile-url"
+    timeout: 60000
+- tapOn:
+    id: "profile-url"
+- runFlow: ../common/dismiss-keyboard-tips.yaml
+- tapOn:
+    id: "profile-url"
+- inputText: ${SERVER_URL}
+- pressKey: Enter
+- tapOn:
+    id: "profile-save"
+- extendedWaitUntil:
+    visible:
+      id: "sign-in-email"
+    timeout: 20000
+- tapOn:
+    id: "sign-in-email"
+- inputText: "admin@armada"
+- pressKey: Enter
+- extendedWaitUntil:
+    visible:
+      id: "sign-in-password"
+    timeout: 20000
+- tapOn:
+    id: "sign-in-password"
+- inputText: "password"
+- pressKey: Enter
+- extendedWaitUntil:
+    visible:
+      id: "password-change-skip"
+    timeout: 20000
+- tapOn:
+    id: "password-change-skip"
+- tapOn:
+    id: "password-skip-confirm-confirm"
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - extendedWaitUntil:
+          visible:
+            id: "push-prompt-later"
+          timeout: 20000
+      - tapOn:
+          id: "push-prompt-later"
+- extendedWaitUntil:
+    visible:
+      id: "sidebar"
+    timeout: 20000
+# Delivery: the deployment opens beside the list.
+- tapOn:
+    id: "sidebar-/delivery"
+- extendedWaitUntil:
+    visible:
+      id: "deployment-row-.*"
+    timeout: 15000
+- tapOn:
+    id: "deployment-row-.*"
+- extendedWaitUntil:
+    visible:
+      id: "deployment-title"
+    timeout: 10000
+- assertVisible:
+    id: "split-view"
+- assertVisible:
+    id: "deployments"
+- takeScreenshot: w4-tablet-delivery
+- tapOn:
+    id: "delivery-tab-environments"
+- extendedWaitUntil:
+    visible:
+      id: "environment-row-.*"
+    timeout: 15000
+- tapOn:
+    id: "environment-row-.*"
+- extendedWaitUntil:
+    visible:
+      id: "environment-title"
+    timeout: 10000
+- takeScreenshot: w4-tablet-environments
+# Configuration: a persona beside the list.
+- scrollUntilVisible:
+    element:
+      id: "sidebar-/configuration"
+    direction: DOWN
+- tapOn:
+    id: "sidebar-/configuration"
+- extendedWaitUntil:
+    visible:
+      id: "configuration-tab-personas"
+    timeout: 10000
+- tapOn:
+    id: "configuration-tab-personas"
+- extendedWaitUntil:
+    visible:
+      id: "persona-row-Architect"
+    timeout: 15000
+- tapOn:
+    id: "persona-row-Architect"
+- extendedWaitUntil:
+    visible:
+      id: "persona-title"
+    timeout: 10000
+- assertVisible:
+    id: "split-view"
+- takeScreenshot: w4-tablet-configuration
+# Activity: a request beside the list.
+- scrollUntilVisible:
+    element:
+      id: "sidebar-/activity"
+    direction: DOWN
+- tapOn:
+    id: "sidebar-/activity"
+- extendedWaitUntil:
+    visible:
+      id: "activity-tab-requests"
+    timeout: 10000
+- takeScreenshot: w4-tablet-activity-history
+- tapOn:
+    id: "activity-tab-requests"
+- extendedWaitUntil:
+    visible:
+      id: "request-row-.*"
+    timeout: 15000
+- scrollUntilVisible:
+    element:
+      id: "request-row-.*"
+    direction: DOWN
+    visibilityPercentage: 100
+    centerElement: true
+- tapOn:
+    id: "request-row-.*"
+    index: 0
+- extendedWaitUntil:
+    visible:
+      id: "request-title"
+    timeout: 10000
+- takeScreenshot: w4-tablet-activity-requests
+# Settings: the Server tab.
+- scrollUntilVisible:
+    element:
+      id: "sidebar-/server"
+    direction: DOWN
+- tapOn:
+    id: "sidebar-/server"
+- extendedWaitUntil:
+    visible:
+      id: "settings-server"
+    timeout: 15000
+- takeScreenshot: w4-tablet-settings

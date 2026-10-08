@@ -30,6 +30,7 @@ import { Field, FieldCard } from '../../components/resource/DetailParts';
 import { useConfirm } from '../../components/resource/ResourceRow';
 import { StatRow } from '../../components/resource/ResourceList';
 import { AppText } from '../../components/ui/AppText';
+import { Disclosure } from '../../components/ui/Disclosure';
 import { Banner } from '../../components/ui/Banner';
 import { BottomSheet } from '../../components/ui/BottomSheet';
 import { Button } from '../../components/ui/Button';
@@ -97,11 +98,13 @@ export function McpSection({ health, settings, proxyMode }: { health: HealthInfo
       {proxyMode ? (
         <Banner tone="warning" title={t('MCP bootstrap commands are only valid when connected directly to an Armada server origin. Armada.Proxy does not relay the MCP endpoint.')} />
       ) : MCP_CLIENTS.map((client) => (
+        // Collapsed per client: four clients' snippets would otherwise fill several phone screens.
         <View key={client.key} style={styles.client}>
-          <AppText variant="label">{client.title}</AppText>
-          <AppText variant="mono" muted selectable>{client.location}</AppText>
-          <CodeBlock title="HTTP" text={getMcpConfigHttp(client.key, rpcUrl)} />
-          <CodeBlock title="STDIO" text={getMcpConfigStdio(client.key)} />
+          <Disclosure title={client.title} testID={`settings-mcp-${client.key}`}>
+            <AppText variant="mono" muted selectable>{client.location}</AppText>
+            <CodeBlock title="HTTP" text={getMcpConfigHttp(client.key, rpcUrl)} />
+            <CodeBlock title="STDIO" text={getMcpConfigStdio(client.key)} />
+          </Disclosure>
         </View>
       ))}
     </SettingsSection>

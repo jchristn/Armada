@@ -1,0 +1,9 @@
+# W4 tablet-layout checks (iPad, Android tablets): scripts/mobile/run-e2e.sh --flows src/Armada.Mobile/e2e/w4-tablet
+# against the same seeded throwaway Admiral. Signs in, then opens the Delivery, Configuration, Activity, and Settings
+# hubs from the sidebar and checks that a selected item opens beside its list (split view), with screenshots.
+flows:
+  - "0*.yaml"
+executionOrder:
+  continueOnFailure: false
+  flowsOrder:
+    - 01-w4-tablet
