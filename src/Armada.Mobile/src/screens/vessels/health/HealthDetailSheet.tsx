@@ -1,6 +1,6 @@
 import { useRouter, type Href } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Linking, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { deleteVesselHealthOverride, getVesselHealth, setVesselHealthOverride } from '@dashboard/api/client';
 import type { VesselHealthCriterion, VesselHealthDetail, VesselHealthOverride, VesselHealthStatus } from '@dashboard/types/models';
 import {
@@ -24,6 +24,7 @@ import { useNotifications } from '../../../notifications/NotificationContext';
 import { useTheme } from '../../../theme/ThemeContext';
 import { radius, spacing, typography } from '../../../theme/typography';
 import { HealthBadge } from './HealthBadge';
+import { openExternalUrl } from '../../../lib/externalLinks';
 
 export type HealthDetailSection = 'summary' | 'findings' | 'dependencies' | 'overrides' | 'json';
 
@@ -270,7 +271,7 @@ export function HealthDetailSheet(props: HealthDetailSheetProps) {
                   {d.drift && d.drift !== 'None' ? <AppText variant="caption" color="warning">{driftLabel(t, d.drift)}</AppText> : null}
                   {d.isVulnerable ? <AppText variant="caption" color="danger">{severityLabel(t, d.severity)}</AppText> : null}
                   {d.advisoryUrl ? (
-                    <AppText variant="caption" color="primary" accessibilityRole="link" onPress={() => { if (d.advisoryUrl) void Linking.openURL(d.advisoryUrl); }}>{t('Advisory')}</AppText>
+                    <AppText variant="caption" color="primary" accessibilityRole="link" onPress={() => { void openExternalUrl(d.advisoryUrl); }}>{t('Advisory')}</AppText>
                   ) : null}
                 </View>
               </View>

@@ -1,6 +1,6 @@
 import { Stack, useRouter, type Href } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Linking, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   createBacklogItem,
@@ -28,6 +28,7 @@ import { JsonSheet, Stat, StatGrid, Tags } from './parts';
 import { RefinementPanel } from './RefinementPanel';
 import { useBacklogReference } from './useBacklogReference';
 import { useRefinement } from './useRefinement';
+import { confirmOpenExternalUrl, externalUrl } from '../../lib/externalLinks';
 
 export interface ObjectiveDetailScreenProps {
   /** Backlog item id, or 'new' to create one. */
@@ -227,7 +228,7 @@ export function ObjectiveDetailScreen({ id, embedded = false, prefillVesselId, r
                   <InfoRow label={t('Source')} value={objective.sourceId} />
                   <InfoRow label={t('Last Source Update')} value={objective.sourceUpdatedUtc ? formatDateTime(objective.sourceUpdatedUtc) : null} />
                   {objective.sourceUrl ? (
-                    <ListRow title={t('Source Link')} subtitle={objective.sourceUrl} icon="open-outline" onPress={() => void Linking.openURL(objective.sourceUrl!)} />
+                    <ListRow title={t('Source Link')} subtitle={objective.sourceUrl} icon="open-outline" onPress={externalUrl(objective.sourceUrl) ? () => { confirmOpenExternalUrl(objective.sourceUrl, t); } : undefined} />
                   ) : <InfoRow label={t('Source Link')} value={null} />}
                 </Section>
               ) : null}

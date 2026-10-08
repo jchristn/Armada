@@ -1,6 +1,6 @@
 import { useRouter, type Href } from 'expo-router';
 import type { ReactNode } from 'react';
-import { Linking, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import type { AskMissionSnapshot, AskTargetSnapshot, AskTrackedWork, AskWorkSnapshot } from '@dashboard/types/models';
 import { entityTypeLabel, isFailedChildStatus, isWorkActive, statusCounts, workProgress, workRoute } from '@dashboard/lib/askWork';
 import { useLocale } from '../../i18n/LocaleContext';
@@ -9,6 +9,7 @@ import { radius, spacing } from '../../theme/typography';
 import { AppText } from '../ui/AppText';
 import { StatusBadge } from '../ui/StatusBadge';
 import { statusTone } from './statusTone';
+import { openExternalUrl } from '../../lib/externalLinks';
 
 interface WorkCardProps {
   work: AskTrackedWork | null;
@@ -72,7 +73,7 @@ function MissionRow({ mission }: { mission: AskMissionSnapshot }) {
         {mission.branchName ? <Fact label={t('Branch')}><AppText variant="mono" numberOfLines={1}>{mission.branchName}</AppText></Fact> : null}
         {mission.prUrl ? (
           <Fact label={t('PR')}>
-            <AppText variant="caption" color="primary" accessibilityRole="link" onPress={() => void Linking.openURL(mission.prUrl as string).catch(() => undefined)}>
+            <AppText variant="caption" color="primary" accessibilityRole="link" onPress={() => void openExternalUrl(mission.prUrl)}>
               {t('Open pull request')}
             </AppText>
           </Fact>
