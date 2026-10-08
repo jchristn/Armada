@@ -158,7 +158,7 @@ namespace Armada.Runtimes
             if (JobLogs != null)
             {
                 jobLog = HarborJobLog.TryOpen(JobLogs, jobInfo, workingDirectory, out string? logError);
-                if (jobLog == null) _Logging.Warn("[LocalHarborJobRunner] could not open the log for job " + jobId + ": " + logError);
+                if (jobLog == null) _Logging.Warn("[LocalHarborJobRunner] could not open the log for job " + jobId + ": " + (logError ?? "unknown error").TrimEnd('.'));
             }
 
             Action<HarborOutputStreamEnum, string> report = (stream, line) =>

@@ -150,7 +150,7 @@ namespace Armada.Core.Hosting
         }
 
         /// <summary>
-        /// The backups of a settings file with their times and sizes, newest first.
+        /// The backups of a settings file with their times and sizes, newest first by time.
         /// </summary>
         /// <param name="path">Settings file.</param>
         /// <returns>Backups.</returns>
@@ -186,6 +186,8 @@ namespace Armada.Core.Hosting
                 }
             }
 
+            // By time, so a backup whose name carries no readable time still sorts where its file time puts it.
+            entries.Sort((a, b) => b.TakenUtc.CompareTo(a.TakenUtc));
             return entries;
         }
 

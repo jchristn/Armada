@@ -275,7 +275,9 @@ namespace Test.Shared.Suites.Services
                 SettingsFileStore.Save(file, "{ \"v\": 1 }", 5, first);
                 SettingsFileStore.Save(file, "{ \"v\": 2 }", 5, first);
                 SettingsFileStore.Save(file, "{ \"v\": 3 }", 5, second);
-                File.WriteAllText(Path.Combine(directory, "settings.json.bak-garbage"), "{}");
+                string garbage = Path.Combine(directory, "settings.json.bak-garbage");
+                File.WriteAllText(garbage, "{}");
+                File.SetLastWriteTimeUtc(garbage, new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
 
                 List<SettingsBackupEntry> backups = SettingsFileStore.ListBackupEntries(file);
                 AssertEqual(3, backups.Count, "two timestamped backups and one with an unreadable name");
@@ -285,6 +287,7 @@ namespace Test.Shared.Suites.Services
                 AssertEqual("{ \"v\": 2 }", File.ReadAllText(newest.Path), "the newest backup holds the version the last save replaced");
                 SettingsBackupEntry oldest = backups.First(b => b.TakenUtc == first);
                 AssertTrue(backups.IndexOf(newest) < backups.IndexOf(oldest), "newest first");
+                AssertEqual(Path.GetFullPath(garbage), backups[2].Path, "a name without a time sorts by its file time");
 
                 DateTime restoredAt = new DateTime(2026, 10, 8, 10, 0, 0, DateTimeKind.Utc);
                 string? kept = SettingsFileStore.Restore(file, oldest.Path, 5, restoredAt);
