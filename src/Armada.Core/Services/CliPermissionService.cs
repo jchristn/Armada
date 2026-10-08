@@ -59,6 +59,12 @@ namespace Armada.Core.Services
         /// </summary>
         public int WaitingCount => _Waiters.Count;
 
+        /// <summary>
+        /// A prompt whose request and Ask card took longer than this to set up is logged as a warning with its step
+        /// timings, so a slow store or card post shows up in the log.
+        /// </summary>
+        public static readonly TimeSpan SlowSetupThreshold = TimeSpan.FromSeconds(5);
+
         #endregion
 
         #region Private-Members
@@ -68,6 +74,7 @@ namespace Armada.Core.Services
         private readonly ArmadaSettings _Settings;
         private readonly LoggingModule _Logging;
         private readonly ConcurrentDictionary<string, TaskCompletionSource<bool>> _Waiters = new ConcurrentDictionary<string, TaskCompletionSource<bool>>(StringComparer.Ordinal);
+        private readonly ConcurrentDictionary<string, CliPermissionPromptProgress> _InFlight = new ConcurrentDictionary<string, CliPermissionPromptProgress>(StringComparer.Ordinal);
 
         #endregion
 
@@ -127,67 +134,110 @@ namespace Armada.Core.Services
             TimeSpan timeout = PromptTimeoutOverride ?? TimeSpan.FromSeconds(_Settings.Permissions.PromptTimeoutSeconds);
             request.ExpiresUtc = request.CreatedUtc.Add(timeout);
 
-            List<CliPermissionRule> rules = await _Database.CliPermissionRules.EnumerateApplicableAsync(context.TenantId, context.CaptainId, context.VesselId, token).ConfigureAwait(false);
-            CliPermissionMatchContext matchContext = new CliPermissionMatchContext
+            CliPermissionPromptProgress progress = new CliPermissionPromptProgress
             {
-                WorkingDirectory = context.WorkingDirectory,
-                HomeDirectory = SafeHome()
+                RequestId = request.Id,
+                ThreadId = request.ThreadId,
+                MissionId = request.MissionId,
+                ToolName = trimmedTool,
+                StartedUtc = request.CreatedUtc,
+                StageStartedUtc = request.CreatedUtc
             };
-            CliPermissionRuleEvaluation evaluation = CliPermissionRuleMatcher.Evaluate(rules, trimmedTool, input, matchContext);
-            if (evaluation.Action.HasValue)
-            {
-                bool allow = evaluation.Action.Value == CliPermissionRuleActionEnum.Allow;
-                request.Status = allow ? CliPermissionRequestStatusEnum.Allowed : CliPermissionRequestStatusEnum.Denied;
-                request.DecisionSource = allow ? CliPermissionDecisionSourceEnum.AllowRule : CliPermissionDecisionSourceEnum.DenyRule;
-                request.RuleId = evaluation.Rule?.Id;
-                request.DecidedUtc = request.CreatedUtc;
-                request.DecisionMessage = allow ? null : "Denied by Armada CLI permission rule " + (evaluation.Rule?.Pattern ?? "") + " (" + (evaluation.Rule?.Id ?? "") + ").";
-                request = await _Database.CliPermissionRequests.CreateAsync(request, token).ConfigureAwait(false);
-                _Logging.Info(_Header + request.ToolName + " for captain " + request.CaptainId + " " + request.Status + " by rule " + request.RuleId);
-                return new CliPermissionPromptOutcome { Allowed = allow, Message = request.DecisionMessage ?? String.Empty, Request = request };
-            }
-
-            TaskCompletionSource<bool> waiter = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-            _Waiters[request.Id] = waiter;
+            _InFlight[request.Id] = progress;
+            List<string> timings = new List<string>();
             try
             {
-                request = await _Database.CliPermissionRequests.CreateAsync(request, token).ConfigureAwait(false);
-                _Logging.Info(_Header + "waiting for a decision on " + request.Id + " (" + request.ToolName + ") for captain " + request.CaptainId);
-                await PostCardAsync(request).ConfigureAwait(false);
-                Announce(RequestedEvent, request);
-
-                TimeSpan remaining = request.ExpiresUtc - DateTime.UtcNow;
-                if (remaining < TimeSpan.Zero) remaining = TimeSpan.Zero;
-                Task delay = Task.Delay(remaining, token);
-                Task finished = await Task.WhenAny(waiter.Task, delay).ConfigureAwait(false);
-                if (finished != waiter.Task)
+                List<CliPermissionRule> rules = await _Database.CliPermissionRules.EnumerateApplicableAsync(context.TenantId, context.CaptainId, context.VesselId, token).ConfigureAwait(false);
+                CliPermissionMatchContext matchContext = new CliPermissionMatchContext
                 {
-                    bool cancelled = token.IsCancellationRequested;
-                    string message = cancelled
-                        ? "The permission request was cancelled before an approver decided."
-                        : "No approver decided within " + (int)Math.Ceiling(timeout.TotalSeconds) + " seconds; Armada denied the request. Ask an approver to allow it, or add an allow rule.";
-                    await _Database.CliPermissionRequests.TryDecideAsync(
-                        request.Id,
-                        cancelled ? CliPermissionRequestStatusEnum.Cancelled : CliPermissionRequestStatusEnum.Expired,
-                        cancelled ? CliPermissionDecisionSourceEnum.Cancelled : CliPermissionDecisionSourceEnum.Timeout,
-                        null, null, message, CancellationToken.None).ConfigureAwait(false);
+                    WorkingDirectory = context.WorkingDirectory,
+                    HomeDirectory = SafeHome()
+                };
+                CliPermissionRuleEvaluation evaluation = CliPermissionRuleMatcher.Evaluate(rules, trimmedTool, input, matchContext);
+                if (evaluation.Action.HasValue)
+                {
+                    bool allow = evaluation.Action.Value == CliPermissionRuleActionEnum.Allow;
+                    request.Status = allow ? CliPermissionRequestStatusEnum.Allowed : CliPermissionRequestStatusEnum.Denied;
+                    request.DecisionSource = allow ? CliPermissionDecisionSourceEnum.AllowRule : CliPermissionDecisionSourceEnum.DenyRule;
+                    request.RuleId = evaluation.Rule?.Id;
+                    request.DecidedUtc = request.CreatedUtc;
+                    request.DecisionMessage = allow ? null : "Denied by Armada CLI permission rule " + (evaluation.Rule?.Pattern ?? "") + " (" + (evaluation.Rule?.Id ?? "") + ").";
+                    request = await _Database.CliPermissionRequests.CreateAsync(request, token).ConfigureAwait(false);
+                    _Logging.Info(_Header + request.ToolName + " for captain " + request.CaptainId + " " + request.Status + " by rule " + request.RuleId);
+                    return new CliPermissionPromptOutcome { Allowed = allow, Message = request.DecisionMessage ?? String.Empty, Request = request };
                 }
+
+                TaskCompletionSource<bool> waiter = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                _Waiters[request.Id] = waiter;
+                try
+                {
+                    Advance(progress, CliPermissionPromptStageEnum.Storing, timings);
+                    request = await _Database.CliPermissionRequests.CreateAsync(request, token).ConfigureAwait(false);
+                    _Logging.Info(_Header + "waiting for a decision on " + request.Id + " (" + request.ToolName + ") for captain " + request.CaptainId);
+                    Advance(progress, CliPermissionPromptStageEnum.PostingCard, timings);
+                    await PostCardAsync(request, progress).ConfigureAwait(false);
+                    Advance(progress, CliPermissionPromptStageEnum.Announcing, timings);
+                    Announce(RequestedEvent, request);
+                    Advance(progress, CliPermissionPromptStageEnum.Waiting, timings);
+                    TimeSpan setup = DateTime.UtcNow - progress.StartedUtc;
+                    if (setup > SlowSetupThreshold)
+                        _Logging.Warn(_Header + "slow prompt setup for " + request.Id + " (" + request.ToolName + "): " + (int)setup.TotalMilliseconds + " ms before waiting (" + String.Join(", ", timings) + ")");
+
+                    TimeSpan remaining = request.ExpiresUtc - DateTime.UtcNow;
+                    if (remaining < TimeSpan.Zero) remaining = TimeSpan.Zero;
+                    Task delay = Task.Delay(remaining, token);
+                    Task finished = await Task.WhenAny(waiter.Task, delay).ConfigureAwait(false);
+                    Advance(progress, CliPermissionPromptStageEnum.Resolving, timings);
+                    if (finished != waiter.Task)
+                    {
+                        bool cancelled = token.IsCancellationRequested;
+                        string message = cancelled
+                            ? "The permission request was cancelled before an approver decided."
+                            : "No approver decided within " + (int)Math.Ceiling(timeout.TotalSeconds) + " seconds; Armada denied the request. Ask an approver to allow it, or add an allow rule.";
+                        await _Database.CliPermissionRequests.TryDecideAsync(
+                            request.Id,
+                            cancelled ? CliPermissionRequestStatusEnum.Cancelled : CliPermissionRequestStatusEnum.Expired,
+                            cancelled ? CliPermissionDecisionSourceEnum.Cancelled : CliPermissionDecisionSourceEnum.Timeout,
+                            null, null, message, CancellationToken.None).ConfigureAwait(false);
+                    }
+                }
+                finally
+                {
+                    _Waiters.TryRemove(request.Id, out TaskCompletionSource<bool>? _);
+                }
+
+                CliPermissionRequest final = await _Database.CliPermissionRequests.ReadAsync(request.Id, CancellationToken.None).ConfigureAwait(false) ?? request;
+                if (final.Status == CliPermissionRequestStatusEnum.Expired || final.Status == CliPermissionRequestStatusEnum.Cancelled)
+                {
+                    Announce(ResolvedEvent, final);
+                    await RefreshCardAsync(final).ConfigureAwait(false);
+                }
+
+                bool allowed = final.Status == CliPermissionRequestStatusEnum.Allowed;
+                string answer = allowed ? String.Empty : DenialMessage(final);
+                return new CliPermissionPromptOutcome { Allowed = allowed, Message = answer, Request = final };
             }
             finally
             {
-                _Waiters.TryRemove(request.Id, out TaskCompletionSource<bool>? _);
+                _InFlight.TryRemove(request.Id, out CliPermissionPromptProgress? _);
             }
+        }
 
-            CliPermissionRequest final = await _Database.CliPermissionRequests.ReadAsync(request.Id, CancellationToken.None).ConfigureAwait(false) ?? request;
-            if (final.Status == CliPermissionRequestStatusEnum.Expired || final.Status == CliPermissionRequestStatusEnum.Cancelled)
+        /// <summary>
+        /// Snapshots of the prompts still running in this process (diagnostics): each one's request, current step, and
+        /// how long it has been there, so a prompt that stalls before its request or Ask card appears shows the step it
+        /// is stuck in.
+        /// </summary>
+        /// <returns>Snapshots, oldest first; never null.</returns>
+        public List<CliPermissionPromptProgress> GetInFlightPrompts()
+        {
+            List<CliPermissionPromptProgress> list = new List<CliPermissionPromptProgress>();
+            foreach (CliPermissionPromptProgress progress in _InFlight.Values)
             {
-                Announce(ResolvedEvent, final);
-                await RefreshCardAsync(final).ConfigureAwait(false);
+                lock (progress) list.Add(progress.Clone());
             }
 
-            bool allowed = final.Status == CliPermissionRequestStatusEnum.Allowed;
-            string answer = allowed ? String.Empty : DenialMessage(final);
-            return new CliPermissionPromptOutcome { Allowed = allowed, Message = answer, Request = final };
+            return list.OrderBy(p => p.StartedUtc).ToList();
         }
 
         /// <summary>
@@ -597,13 +647,19 @@ namespace Armada.Core.Services
             return true;
         }
 
-        private async Task PostCardAsync(CliPermissionRequest request)
+        private async Task PostCardAsync(CliPermissionRequest request, CliPermissionPromptProgress progress)
         {
             if (AskThreads == null || String.IsNullOrEmpty(request.ThreadId)) return;
             try
             {
                 AskThread? thread = await AskThreads.ReadThreadInternalAsync(request.ThreadId!).ConfigureAwait(false);
-                if (thread == null) return;
+                if (thread == null)
+                {
+                    lock (progress) progress.CardError = "thread " + request.ThreadId + " not found";
+                    _Logging.Warn(_Header + "could not post the permission card for " + request.Id + ": thread " + request.ThreadId + " not found");
+                    return;
+                }
+
                 AskMessage card = new AskMessage();
                 card.Role = AskMessageRoleEnum.System;
                 card.Kind = AskMessageKindEnum.CliPermission;
@@ -612,10 +668,23 @@ namespace Armada.Core.Services
                 // The card links to the request through the request's message id; set it before the message is announced.
                 card = await AskThreads.AppendCliPermissionCardAsync(thread, card, request).ConfigureAwait(false);
                 request.MessageId = card.Id;
+                lock (progress) progress.MessageId = card.Id;
             }
             catch (Exception ex)
             {
+                lock (progress) progress.CardError = ex.GetType().Name + ": " + ex.Message;
                 _Logging.Warn(_Header + "could not post the permission card for " + request.Id + ": " + ex.Message);
+            }
+        }
+
+        private static void Advance(CliPermissionPromptProgress progress, CliPermissionPromptStageEnum stage, List<string> timings)
+        {
+            DateTime now = DateTime.UtcNow;
+            lock (progress)
+            {
+                timings.Add(progress.Stage + " " + (int)(now - progress.StageStartedUtc).TotalMilliseconds + " ms");
+                progress.Stage = stage;
+                progress.StageStartedUtc = now;
             }
         }
 

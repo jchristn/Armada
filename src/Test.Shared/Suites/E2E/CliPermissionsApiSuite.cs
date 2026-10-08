@@ -64,7 +64,7 @@ namespace Test.Shared.Suites.E2E
                     await mcp.InitializeAsync().ConfigureAwait(false);
                     Task<McpToolCallResult> call = mcp.CallToolResultAsync("cli_permission_prompt", "{\"tool_name\":\"Bash\",\"input\":{\"command\":\"git push origin main\",\"description\":\"Push\"},\"tool_use_id\":\"toolu_1\"}");
 
-                    CliPermissionRequest pending = await WaitForPendingAsync(a, thread.Id, call).ConfigureAwait(false);
+                    CliPermissionRequest pending = await WaitForPendingAsync(fx, a, thread, call).ConfigureAwait(false);
                     AssertFalse(call.IsCompleted, "the captain's call is waiting");
                     AssertEqual("Bash", pending.ToolName);
                     AssertEqual("git push origin main", pending.SummaryText);
@@ -115,7 +115,7 @@ namespace Test.Shared.Suites.E2E
                 {
                     await mcp.InitializeAsync().ConfigureAwait(false);
                     Task<McpToolCallResult> call = mcp.CallToolResultAsync("cli_permission_prompt", "{\"tool_name\":\"WebFetch\",\"input\":{\"url\":\"https://example.com/x\",\"prompt\":\"read\"}}");
-                    CliPermissionRequest pending = await WaitForPendingAsync(a, thread.Id, call).ConfigureAwait(false);
+                    CliPermissionRequest pending = await WaitForPendingAsync(fx, a, thread, call).ConfigureAwait(false);
 
                     AskThreadDetail detail = await JsonHelper.DeserializeAsync<AskThreadDetail>(await o.GetAsync("/api/v1/ask/threads/" + thread.Id).ConfigureAwait(false)).ConfigureAwait(false);
                     AssertEqual(pending.Id, detail.PendingCliPermissions.Single().Id, "pending list on the thread");
@@ -253,7 +253,7 @@ namespace Test.Shared.Suites.E2E
                     {
                         await mcp.InitializeAsync().ConfigureAwait(false);
                         Task<McpToolCallResult> call = mcp.CallToolResultAsync("cli_permission_prompt", "{\"tool_name\":\"Bash\",\"input\":{\"command\":\"npm test\"}}");
-                        CliPermissionRequest pending = await WaitForPendingAsync(o, thread.Id, call).ConfigureAwait(false);
+                        CliPermissionRequest pending = await WaitForPendingAsync(fx, o, thread, call).ConfigureAwait(false);
                         AssertTrue(pending.CanDecide, "the owner can decide with the setting on");
                         AssertFalse(pending.CanRemember, "but not remember");
                         AssertStatusCode(HttpStatusCode.Forbidden, await o.PostAsync("/api/v1/cli-permissions/requests/" + pending.Id + "/decide", JsonHelper.ToJsonContent(new { Decision = "AllowAndRemember" })).ConfigureAwait(false), "remember needs an admin");
@@ -283,7 +283,7 @@ namespace Test.Shared.Suites.E2E
                     await raw.SendAsync(McpPost(endpoint, session, "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}")).ConfigureAwait(false);
 
                     Task<HttpResponseMessage> call = raw.SendAsync(McpPost(endpoint, session, "{\"jsonrpc\":\"2.0\",\"id\":42,\"method\":\"tools/call\",\"params\":{\"name\":\"cli_permission_prompt\",\"arguments\":{\"tool_name\":\"Bash\",\"input\":{\"command\":\"terraform apply\"}}}}"));
-                    CliPermissionRequest pending = await WaitForPendingAsync(o, thread.Id, call).ConfigureAwait(false);
+                    CliPermissionRequest pending = await WaitForPendingAsync(fx, o, thread, call).ConfigureAwait(false);
                     AssertTrue(pending.ExpiresUtc > DateTime.UtcNow.AddMinutes(5), "the prompt timeout is minutes away");
                     AssertFalse(call.IsCompleted, "the call waits for a decision");
 
@@ -316,7 +316,7 @@ namespace Test.Shared.Suites.E2E
                 {
                     await mcp.InitializeAsync().ConfigureAwait(false);
                     Task<McpToolCallResult> call = mcp.CallToolResultAsync("cli_permission_prompt", "{\"tool_name\":\"Bash\",\"input\":{\"command\":\"make\"}}");
-                    CliPermissionRequest pending = await WaitForPendingAsync(o, thread.Id, call).ConfigureAwait(false);
+                    CliPermissionRequest pending = await WaitForPendingAsync(fx, o, thread, call).ConfigureAwait(false);
 
                     using (WebSocketTestClient tenantAdminSocket = await WebSocketTestClient.ConnectAsync(fx.RestPort, owner.BearerToken).ConfigureAwait(false))
                     {
@@ -351,17 +351,35 @@ namespace Test.Shared.Suites.E2E
             return tokens.CreateThreadScopedToken(owner.TenantId, owner.UserId, threadId, TimeSpan.FromMinutes(10)).Token!;
         }
 
-        private static async Task<CliPermissionRequest> WaitForPendingAsync(HttpClient client, string threadId, Task? call = null)
+        private static async Task<CliPermissionRequest> WaitForPendingAsync(E2EServerFixture fx, HttpClient client, AskThread thread, Task? call = null)
         {
             CliPermissionRequest? found = null;
+            CliPermissionWaitTrace trace = new CliPermissionWaitTrace();
             bool ok = await AskTestHarness.WaitUntilAsync(async () =>
             {
                 // The prompt call only returns once decided, so a call that has already finished failed: stop waiting
                 // and report why instead of timing out with no detail.
                 if (call != null && call.IsCompleted) return true;
-                HttpResponseMessage resp = await client.GetAsync("/api/v1/cli-permissions/requests?status=Pending&threadId=" + threadId).ConfigureAwait(false);
-                if (resp.StatusCode != HttpStatusCode.OK) return false;
+                System.Diagnostics.Stopwatch poll = System.Diagnostics.Stopwatch.StartNew();
+                HttpResponseMessage resp;
+                try
+                {
+                    resp = await client.GetAsync("/api/v1/cli-permissions/requests?status=Pending&threadId=" + thread.Id).ConfigureAwait(false);
+                }
+                catch (HttpRequestException ex)
+                {
+                    trace.RecordPollError(poll.ElapsedMilliseconds, ex);
+                    return false;
+                }
+
+                if (resp.StatusCode != HttpStatusCode.OK)
+                {
+                    trace.RecordPoll(resp.StatusCode, poll.ElapsedMilliseconds, null);
+                    return false;
+                }
+
                 List<CliPermissionRequest> rows = await JsonHelper.DeserializeAsync<List<CliPermissionRequest>>(resp).ConfigureAwait(false);
+                trace.RecordPoll(resp.StatusCode, poll.ElapsedMilliseconds, rows);
                 // Not the first Pending row: the request is listed before its Ask card is posted, and the callers read
                 // the card right after this returns (thread_prompt_denied_and_card failed with "Sequence contains no
                 // matching element" when it enumerated the messages in that gap).
@@ -373,7 +391,15 @@ namespace Test.Shared.Suites.E2E
                 string detail = call.Exception != null ? call.Exception.GetBaseException().ToString() : call.Status.ToString();
                 AssertTrue(false, "the prompt call ended before its request was pending: " + detail);
             }
-            AssertTrue(ok, "a pending request with its Ask card appeared");
+
+            if (!ok || found == null)
+            {
+                // Name the step that stalled: the polls, the server's prompts in flight, the stored rows, the thread pool,
+                // and the fixture's warnings.
+                string state = await trace.DescribeAsync(fx, thread, call).ConfigureAwait(false);
+                AssertTrue(false, "a pending request with its Ask card appeared within 15 s; state:" + Environment.NewLine + state);
+            }
+
             return found!;
         }
 
