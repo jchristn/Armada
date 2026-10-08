@@ -188,6 +188,13 @@ namespace Test.Shared.Suites.Services
                 CaptainChatMetrics m = recorder.Build("x", null);
                 AssertTrue(m.TimeToFirstTokenMs <= m.TotalMs && m.TimeToFirstTextMs <= m.TotalMs, "capped by the total");
                 AssertEqual(200.0, m.StreamingMs);
+
+                // Sub-millisecond times round to whole milliseconds, keeping first token <= total once the total is
+                // persisted as an integral duration.
+                clock.Advance(TimeSpan.FromTicks(4000));
+                CaptainChatMetrics rounded = recorder.Build("x", null);
+                AssertEqual(300.0, rounded.TotalMs, "300.4ms rounds to 300");
+                AssertTrue(rounded.TimeToFirstTextMs <= Math.Round(rounded.TotalMs!.Value), "first text within the rounded total");
             }));
 
             return new TestSuiteDescriptor(

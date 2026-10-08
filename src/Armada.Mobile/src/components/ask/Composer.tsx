@@ -93,7 +93,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   }
 
   function measureButton(event: LayoutChangeEvent) {
-    setButtonHeight((current) => Math.max(current, Math.ceil(event.nativeEvent.layout.height)));
+    // Read the height now: the updater runs after the handler returns, when React Native has already released the
+    // event (its nativeEvent is null then, which crashed the Release build on open).
+    const height = Math.ceil(event.nativeEvent.layout.height);
+    setButtonHeight((current) => Math.max(current, height));
   }
 
   const placeholder = noCaptain

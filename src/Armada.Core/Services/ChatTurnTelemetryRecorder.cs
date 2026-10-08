@@ -351,7 +351,9 @@ namespace Armada.Core.Services
         /// <returns>The metrics.</returns>
         public CaptainChatMetrics Build(string? reply, IEnumerable<AskMessageToolCall>? toolCalls)
         {
-            double totalMs = Elapsed.TotalMilliseconds;
+            // Whole milliseconds: an Ask reply persists the total as its integral duration_ms, and rounding every
+            // duration the same (monotonic) way keeps first token <= first text <= total after the round trip.
+            double totalMs = Math.Round(Elapsed.TotalMilliseconds);
             TimeSpan? firstOutput;
             TimeSpan? firstText;
             long? input;
@@ -368,9 +370,9 @@ namespace Armada.Core.Services
                 cost = _CostUsd;
             }
 
-            double? ttftMs = firstOutput.HasValue ? Math.Min(firstOutput.Value.TotalMilliseconds, totalMs) : (double?)null;
+            double? ttftMs = firstOutput.HasValue ? Math.Min(Math.Round(firstOutput.Value.TotalMilliseconds), totalMs) : (double?)null;
             CaptainChatMetrics metrics = ChatTurnMetricsBuilder.Build(totalMs, ttftMs, reply, output.HasValue ? ClampToInt(output.Value) : (int?)null);
-            metrics.TimeToFirstTextMs = firstText.HasValue ? Math.Min(firstText.Value.TotalMilliseconds, totalMs) : (double?)null;
+            metrics.TimeToFirstTextMs = firstText.HasValue ? Math.Min(Math.Round(firstText.Value.TotalMilliseconds), totalMs) : (double?)null;
             metrics.PromptTokens = input.HasValue ? ClampToInt(input.Value) : (int?)null;
             metrics.CachedTokens = cached.HasValue ? ClampToInt(cached.Value) : (int?)null;
             metrics.CostUsd = cost;
