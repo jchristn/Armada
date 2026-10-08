@@ -28,6 +28,8 @@ export function SearchField({ value, onChangeText, placeholder, clearLabel, test
         autoCorrect={false}
         returnKeyType="search"
         clearButtonMode="never"
+        // Android wraps a long placeholder onto a second line the one-line box then clips; keep it to one line.
+        numberOfLines={1}
         style={[styles.input, typography.body, { color: colors.text }]}
       />
       {value ? (
