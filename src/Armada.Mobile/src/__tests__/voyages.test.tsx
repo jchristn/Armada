@@ -217,6 +217,13 @@ describe('VoyageCreateScreen', () => {
 });
 
 describe('VoyageDetail', () => {
+  it('shows a connection error, not "not found", when the voyage cannot be loaded offline', async () => {
+    api.getVoyage.mockRejectedValue(new client.NetworkError('Network request failed', null));
+    await renderScreen(<VoyageDetail id="vyg_1" />);
+    expect(await screen.findByText('Cannot reach the server')).toBeTruthy();
+    expect(screen.queryByText('Voyage not found.')).toBeNull();
+  });
+
   it('shows the voyage, progress, landing mode, and missions, and links to them', async () => {
     api.getVoyage.mockResolvedValue({ voyage: voyage('vyg_1', 'Gateway hardening', { landingMode: 'PullRequest', captainOverridesJson: '[{"persona":"Judge","fallbackTier":"Premium"}]' }), missions: [mission('msn_1', 'Complete'), mission('msn_2', 'Failed')] } as never);
     await renderScreen(<VoyageDetail id="vyg_1" />);
