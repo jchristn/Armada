@@ -146,6 +146,11 @@ name: 09-w4
       id: "settings-landing-mode"
     direction: DOWN
     visibilityPercentage: 100
+# Nudge it clear of the tab bar (the bottom edge counts as visible behind it).
+- swipe:
+    start: "50%,60%"
+    end: "50%,40%"
+    duration: 600
 - tapOn:
     id: "settings-landing-mode"
 - tapOn:
@@ -156,6 +161,11 @@ name: 09-w4
       id: "settings-agent-save"
     direction: DOWN
     visibilityPercentage: 100
+# Nudge it clear of the tab bar (the bottom edge counts as visible behind it).
+- swipe:
+    start: "50%,60%"
+    end: "50%,40%"
+    duration: 600
 - tapOn:
     id: "settings-agent-save"
 - extendedWaitUntil:
@@ -168,6 +178,11 @@ name: 09-w4
     direction: DOWN
     visibilityPercentage: 100
     timeout: 90000
+# Nudge it clear of the tab bar (the bottom edge counts as visible behind it).
+- swipe:
+    start: "50%,60%"
+    end: "50%,40%"
+    duration: 600
 - tapOn:
     id: "settings-backup"
 - runFlow:
