@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { listPipelines, listPersonas, createPipeline, updatePipeline, deletePipeline } from '../api/client';
+import { listPipelines, listPersonas, createPipeline, updatePipeline, deletePipeline, apiErrorMessage } from '../api/client';
 import type { Pipeline, PipelineStage, ScopeEnum } from '../types/models';
 import { useAuth } from '../context/AuthContext';
 import { canEdit as canEditScoped, resolveCreateScope, type ScopeViewer } from '../lib/scoping';
@@ -152,7 +152,7 @@ export default function Pipelines() {
         ? t('Pipeline "{{name}}" saved.', { name: editing.name })
         : t('Pipeline "{{name}}" created.', { name: form.name }));
       load();
-    } catch { setError(t('Save failed.')); }
+    } catch (err: unknown) { setError(apiErrorMessage(err, t('Save failed.'))); }
   }
 
   function handleDelete(name: string) {

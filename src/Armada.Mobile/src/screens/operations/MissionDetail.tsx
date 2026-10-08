@@ -40,7 +40,7 @@ import {
   SegmentedControl,
   type SheetAction,
 } from '../../components/ui';
-import { errorMessage } from '../../data/errors';
+import { detailLoadError, errorMessage } from '../../data/errors';
 import { useLiveRefresh } from '../../data/useLiveRefresh';
 import { useNameLookups } from '../../data/useNameLookups';
 import { useQuery } from '../../data/useQuery';
@@ -137,10 +137,12 @@ export function MissionDetail({ id, embedded, initialTab = 'overview', onDeleted
 
   if (!mission) {
     if (missionQuery.loading) return <LoadingState label={t('Loading...')} />;
+    // Only a 404 means the mission is gone; a load that never reached the server is a connection error.
+    const failed = detailLoadError(t, missionQuery.failure, missionQuery.error, t('Mission not found.'), t('Failed to load mission.'));
     return (
       <ErrorState
-        title={t('Mission not found.')}
-        message={missionQuery.error}
+        title={failed.title}
+        message={failed.message}
         retryLabel={t('Retry')}
         onRetry={() => void missionQuery.refresh()}
       />

@@ -3,6 +3,7 @@ import {
   ApiError,
   NetworkError,
   TimeoutError,
+  apiErrorMessage,
   getProxySessionContext,
   getWorkspaceTree,
   isApiStatus,
@@ -88,5 +89,28 @@ describe('client error classification by status and class', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('', { status: 401 })));
     await expect(getProxySessionContext()).resolves.toBeNull();
     await expect(logoutProxy()).rejects.toSatisfy((e: unknown) => isApiStatus(e, 401));
+  });
+});
+
+describe('apiErrorMessage', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('returns the server message of a 409 DuplicateEntity response', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(409, {
+      Error: 'Conflict', Message: 'A fleet named core already exists',
+      Data: { Code: 'DuplicateEntity', EntityType: 'Fleet', Field: 'Name', Value: 'core' },
+    })));
+    const error = await getWorkspaceTree('vsl_1').catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect(apiErrorMessage(error, 'Save failed.')).toBe('A fleet named core already exists');
+  });
+
+  it('returns the fallback for errors that are not API responses', () => {
+    expect(apiErrorMessage(new NetworkError('Failed to fetch', null), 'Save failed.')).toBe('Save failed.');
+    expect(apiErrorMessage(new TimeoutError(), 'Save failed.')).toBe('Save failed.');
+    expect(apiErrorMessage(new Error('boom'), 'Save failed.')).toBe('Save failed.');
+    expect(apiErrorMessage(new ApiError('', 500, null), 'Save failed.')).toBe('Save failed.');
   });
 });

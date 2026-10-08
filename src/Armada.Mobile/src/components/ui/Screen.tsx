@@ -1,8 +1,9 @@
 import type { ReactElement, ReactNode } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View, type RefreshControlProps } from 'react-native';
+import { ScrollView, StyleSheet, View, type RefreshControlProps } from 'react-native';
 import { SafeAreaView, type Edge } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/ThemeContext';
 import { spacing } from '../../theme/typography';
+import { KeyboardAvoidingPane } from './KeyboardAvoidingPane';
 import { StickyFooter } from './StickyFooter';
 
 export interface ScreenProps {
@@ -27,14 +28,17 @@ export function Screen({ children, scroll = true, edges = ['bottom', 'left', 'ri
   const body = <View style={[styles.column, { maxWidth }]}>{children}</View>;
   return (
     <SafeAreaView testID={testID} edges={edges} style={[styles.fill, { backgroundColor: colors.background }]}>
-      <KeyboardAvoidingView style={styles.fill} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      {/* The pane measures its place in the window, so under a navigation header the footer still clears the
+          keyboard (a bare KeyboardAvoidingView compares its parent-relative layout with the keyboard and
+          under-lifts by the header's height, leaving the footer's actions behind the keyboard). */}
+      <KeyboardAvoidingPane testID={testID ? `${testID}-keyboard` : undefined}>
         {scroll ? (
           <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" refreshControl={refreshControl}>
             {body}
           </ScrollView>
         ) : body}
         {footer ? <StickyFooter maxWidth={maxWidth} testID={testID ? `${testID}-footer` : undefined}>{footer}</StickyFooter> : null}
-      </KeyboardAvoidingView>
+      </KeyboardAvoidingPane>
     </SafeAreaView>
   );
 }

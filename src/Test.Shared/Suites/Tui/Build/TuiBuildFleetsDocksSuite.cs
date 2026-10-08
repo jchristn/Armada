@@ -75,6 +75,26 @@ namespace Test.Shared.Suites.Tui.Build
                 }
             }));
 
+            cases.Add(TuiCase.Sync(Suite, "fleet_duplicate_name", "Create Fleet shows the server's 409 DuplicateEntity message and stays open", () =>
+            {
+                StubHttpHandler stub = BuildStubs.Server();
+                stub.On("POST", "/api/v1/fleets", b => StubHttpHandler.Response(System.Net.HttpStatusCode.Conflict,
+                    "{\"Error\":\"Conflict\",\"Message\":\"A fleet named Web already exists\",\"Data\":{\"Code\":\"DuplicateEntity\",\"EntityType\":\"Fleet\",\"Field\":\"Name\",\"Value\":\"Web\"}}"));
+                using (TuiTestHost host = TuiCase.SignedIn(160, 45, "/vessels?tab=fleets", stub))
+                {
+                    AssertTrue(host.WaitForText("Frontend repos"), "rows\n" + host.Screen());
+                    host.Press("n");
+                    AssertTrue(host.WaitForText("Create Fleet"), "create form");
+                    host.Type("Web");
+                    host.Press("ctrl+s");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/fleets") == 1), "create call");
+                    AssertTrue(host.WaitForText("A fleet named Web already exists"), "server message\n" + host.Screen());
+                    string frame = host.Screen();
+                    AssertFalse(frame.Contains("Save failed."), "no generic message\n" + frame);
+                    TuiCase.Contains(frame, "Create Fleet", "dialog stays open");
+                }
+            }));
+
             cases.Add(TuiCase.Sync(Suite, "fleet_detail", "The fleet page shows details and vessels and opens a vessel", () =>
             {
                 StubHttpHandler stub = BuildStubs.Server();

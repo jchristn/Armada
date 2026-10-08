@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { createCredential, deleteCredential, listCredentials, listTenants, listUsers, updateCredential } from '@dashboard/api/client';
+import { createCredential, deleteCredential, listCredentials, listTenants, listUsers, updateCredential, apiErrorMessage } from '@dashboard/api/client';
 import type { Credential, TenantMetadata } from '@dashboard/types/models';
 import { useAuth } from '../../auth/AuthContext';
 import { JsonSheet } from '../../components/resource/DetailParts';
@@ -189,8 +189,8 @@ export function CredentialsTab() {
               const created = await createCredential({ userId: str(v, 'userId'), tenantId: str(v, 'tenantId'), name: str(v, 'name') || null });
               setNewToken(created.bearerToken);
             }
-          } catch {
-            throw new Error(editingCredential ? t('Update failed.') : t('Create failed.'));
+          } catch (err: unknown) {
+            throw new Error(apiErrorMessage(err, editingCredential ? t('Update failed.') : t('Create failed.')));
           }
           pushToast('success', editingCredential
             ? t('Credential "{{name}}" saved.', { name: str(v, 'name') || editingCredential.id })

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { createVessel, updateVessel } from '../../api/client';
+import { createVessel, updateVessel, apiErrorMessage } from '../../api/client';
 import type { Fleet, Pipeline, Vessel } from '../../types/models';
 import { useLocale } from '../../context/LocaleContext';
 import {
@@ -45,8 +45,8 @@ export default function VesselFormModal({ vessel, fleets, pipelines, onClose, on
       if (vessel) await updateVessel(vessel.id, payload as Partial<Vessel>);
       else await createVessel(payload as Partial<Vessel>);
       onSaved(form.name, !editing);
-    } catch {
-      onError(t('Save failed.'));
+    } catch (err: unknown) {
+      onError(apiErrorMessage(err, t('Save failed.')));
     } finally {
       setSaving(false);
     }

@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { listFleets, listVessels, listPipelines, createFleet, updateFleet, deleteFleet } from '../api/client';
+import { listFleets, listVessels, listPipelines, createFleet, updateFleet, deleteFleet, apiErrorMessage } from '../api/client';
 import type { Fleet, Vessel, Pipeline } from '../types/models';
 import ActionMenu from '../components/shared/ActionMenu';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
@@ -69,7 +69,7 @@ export default function FleetDetail() {
       setShowForm(false);
       pushToast('success', t('Fleet "{{name}}" saved.', { name: form.name }));
       load();
-    } catch { setError(t('Save failed.')); }
+    } catch (err: unknown) { setError(apiErrorMessage(err, t('Save failed.'))); }
   }
 
   function handleDelete() {

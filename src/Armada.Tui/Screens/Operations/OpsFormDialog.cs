@@ -3,6 +3,7 @@ namespace Armada.Tui.Screens.Operations
     using System;
     using System.Collections.Generic;
     using System.Linq;
+    using Armada.Client;
     using Armada.Tui.Modals;
     using Armada.Tui.Services;
     using Armada.Tui.Text;
@@ -16,7 +17,7 @@ namespace Armada.Tui.Screens.Operations
     /// A modal form (the dashboard's create/edit/run modals): an optional intro, a <see cref="FormView"/> with the
     /// submit and cancel buttons, inline validation, and an error line. <c>Ctrl+S</c> or the submit button validates
     /// the fields and <see cref="Validate"/>, then calls <see cref="Submit"/>; the handler either finishes at once
-    /// (return true) or marks the dialog busy and later calls <see cref="Complete"/> or <see cref="Fail"/>.
+    /// (return true) or marks the dialog busy and later calls <see cref="Complete"/> or <see cref="Fail(string)"/>.
     /// <c>Esc</c> cancels. Not thread-safe.
     /// </summary>
     public class OpsFormDialog : ArmadaDialog
@@ -55,7 +56,7 @@ namespace Armada.Tui.Screens.Operations
 
         /// <summary>
         /// Submit handler; return true to close at once, or false when it will call <see cref="Complete"/> or
-        /// <see cref="Fail"/> later.
+        /// <see cref="Fail(string)"/> later.
         /// </summary>
         public Func<OpsFormDialog, bool>? Submit { get; set; } = null;
 
@@ -157,6 +158,30 @@ namespace Armada.Tui.Screens.Operations
             Busy = false;
             Error = message;
             Form.SaveButton.Label = _SubmitLabel;
+        }
+
+        /// <summary>
+        /// Finish a pending submit with the server's message for a failed call (for example the 409 DuplicateEntity
+        /// text "A fleet named X already exists"), or <paramref name="fallback"/> when no server response carried one
+        /// (a timeout, a connection failure, or a non-API exception). The dialog stays open.
+        /// </summary>
+        /// <param name="ex">The failure, or null.</param>
+        /// <param name="fallback">Translated message used when the failure has no server message.</param>
+        public void Fail(Exception? ex, string fallback)
+        {
+            Fail(ServerMessage(ex) ?? fallback);
+        }
+
+        /// <summary>
+        /// The server's message from a failed API call: the <see cref="ArmadaApiException"/> message when the server
+        /// responded, otherwise null.
+        /// </summary>
+        /// <param name="ex">The failure, or null.</param>
+        /// <returns>The server's message, or null.</returns>
+        public static string? ServerMessage(Exception? ex)
+        {
+            if (ex is ArmadaApiException api && !api.IsTransport && !String.IsNullOrEmpty(api.Message)) return api.Message;
+            return null;
         }
 
         /// <summary>

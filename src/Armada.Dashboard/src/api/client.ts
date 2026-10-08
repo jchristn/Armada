@@ -308,6 +308,15 @@ export function isApiStatus(err: unknown, status: number): boolean {
   return err instanceof ApiError && err.status === status;
 }
 
+/**
+ * The message to show for a failed request: the server's own message when the error is an ApiError that carries
+ * one (for example the 409 DuplicateEntity text "A fleet named X already exists"), otherwise the caller's
+ * fallback. Network, timeout, and other non-API errors get the fallback.
+ */
+export function apiErrorMessage(err: unknown, fallback: string): string {
+  return err instanceof ApiError && err.message ? err.message : fallback;
+}
+
 /** Read the machine-readable `code` from an API error's data payload, or null. */
 export function apiErrorCode(err: unknown): string | null {
   if (err instanceof ApiError && err.data && typeof err.data === 'object') {

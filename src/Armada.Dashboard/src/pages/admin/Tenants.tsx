@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
-import { listTenants, createTenant, updateTenant, deleteTenant } from '../../api/client';
+import { listTenants, createTenant, updateTenant, deleteTenant, apiErrorMessage } from '../../api/client';
 import type { TenantMetadata, TenantCreateRequest } from '../../types/models';
 import DataTable, { type DataTableColumn } from '../../components/shared/DataTable';
 import ActionMenu from '../../components/shared/ActionMenu';
@@ -139,7 +139,7 @@ export default function Tenants() {
         ? t('Tenant "{{name}}" saved.', { name: form.name })
         : t('Tenant "{{name}}" created.', { name: form.name }));
       load();
-    } catch { setError(t('Save failed.')); }
+    } catch (err: unknown) { setError(apiErrorMessage(err, t('Save failed.'))); }
   }
 
   function handleDelete(id: string, name: string) {

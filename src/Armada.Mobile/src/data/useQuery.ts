@@ -5,6 +5,11 @@ export interface QueryState<T> {
   data: T | null;
   /** The last load's error message (the previous data stays shown). */
   error: string | null;
+  /**
+   * What the last load threw, or null after a success: the typed error (ApiError with its status, NetworkError,
+   * TimeoutError) for screens that tell "not found" apart from "cannot reach the server".
+   */
+  failure: unknown;
   /** True until the first load settles. */
   loading: boolean;
   /** True while a pull-to-refresh is running. */
@@ -23,6 +28,7 @@ export interface QueryState<T> {
 export function useQuery<T>(load: () => Promise<T>, deps: readonly unknown[], fallbackError = 'Request failed.'): QueryState<T> {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<unknown>(null);
   // The deps the last settled load ran with: loading is true until a load for the current deps settles.
   const depsKey = JSON.stringify(deps);
   const [settledKey, setSettledKey] = useState<string | null>(null);
@@ -46,9 +52,11 @@ export function useQuery<T>(load: () => Promise<T>, deps: readonly unknown[], fa
       if (!mountedRef.current || seq !== seqRef.current) return;
       setData(result);
       setError(null);
+      setFailure(null);
     } catch (e) {
       if (!mountedRef.current || seq !== seqRef.current) return;
       setError(errorMessage(e, fallbackError));
+      setFailure(e);
     } finally {
       if (mountedRef.current && seq === seqRef.current) setSettledKey(key);
     }
@@ -70,5 +78,5 @@ export function useQuery<T>(load: () => Promise<T>, deps: readonly unknown[], fa
   }, deps);
 
   const loading = settledKey !== depsKey;
-  return { data, error, loading, refreshing, refresh, reload, setData };
+  return { data, error, failure, loading, refreshing, refresh, reload, setData };
 }

@@ -234,6 +234,33 @@ describe('Mission detail', () => {
     expect(screen.queryByTestId('mission-action-land')).toBeNull();
   });
 
+  it('shows a connection error, not "not found", when the mission cannot be loaded offline', async () => {
+    api.getMission.mockRejectedValue(new client.NetworkError('Network request failed', new TypeError('Network request failed')));
+    await renderScreen(<MissionDetail id="msn_1" />);
+    expect(await screen.findByText('Cannot reach the server')).toBeTruthy();
+    expect(screen.getByText('Could not reach the server. Check the address, the port, and your connection.')).toBeTruthy();
+    expect(screen.queryByText('Mission not found.')).toBeNull();
+
+    api.getMission.mockRejectedValue(new client.TimeoutError());
+    await fireEvent.press(screen.getByText('Retry'));
+    await waitFor(() => expect(api.getMission).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText('Cannot reach the server')).toBeTruthy();
+  });
+
+  it('shows "not found" only for a 404', async () => {
+    api.getMission.mockRejectedValue(new client.ApiError('Mission not found', 404, null));
+    await renderScreen(<MissionDetail id="msn_1" />);
+    expect(await screen.findByText('Mission not found.')).toBeTruthy();
+    expect(screen.queryByText('Cannot reach the server')).toBeNull();
+  });
+
+  it('shows a load failure with the server message for other errors', async () => {
+    api.getMission.mockRejectedValue(new client.ApiError('Database is locked', 500, null));
+    await renderScreen(<MissionDetail id="msn_1" />);
+    expect(await screen.findByText('Failed to load mission.')).toBeTruthy();
+    expect(screen.getByText('Database is locked')).toBeTruthy();
+  });
+
   it('keeps the overview in a readable column when it has the whole window', async () => {
     mockWindow.width = 1376;
     mockWindow.height = 1032;

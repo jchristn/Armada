@@ -18,6 +18,7 @@ import { useConfirm } from '../../components/app/useConfirm';
 import { ActionSheet, AppText, Button, EmptyState, ErrorState, ListRow, LoadingState, Screen, Section } from '../../components/ui';
 import { KeyValueRow } from '../../components/ui/KeyValueRow';
 import { ProgressBar } from '../../components/ui/ProgressBar';
+import { detailLoadError } from '../../data/errors';
 import { useLiveRefresh } from '../../data/useLiveRefresh';
 import { useNameLookups } from '../../data/useNameLookups';
 import { useQuery } from '../../data/useQuery';
@@ -83,10 +84,11 @@ export function VoyageDetail({ id, embedded }: OperationsDetailProps) {
   }
   if (query.loading) return <>{header}<LoadingState label={t('Loading...')} /></>;
   if (!query.data) {
+    const failed = detailLoadError(t, query.failure, query.error, t('Voyage not found.'), t('Failed to load voyage.'));
     return (
       <>
         {header}
-        <ErrorState title={t('Voyage not found.')} message={query.error} retryLabel={t('Retry')} onRetry={() => void query.refresh()} />
+        <ErrorState title={failed.title} message={failed.message} retryLabel={t('Retry')} onRetry={() => void query.refresh()} />
       </>
     );
   }

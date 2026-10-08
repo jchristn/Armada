@@ -10,6 +10,7 @@ import type {
   VesselCommitActivity,
   VesselReadinessResult,
 } from '@dashboard/types/models';
+import { ToastHost } from '../components/app/ToastHost';
 import { VesselHistoryScreen } from '../screens/vessels/history/VesselHistoryScreen';
 import { VesselDetailView } from '../screens/vessels/VesselDetailView';
 import { VesselOnboardingScreen } from '../screens/vessels/VesselOnboardingScreen';
@@ -167,6 +168,21 @@ describe('Vessels tab', () => {
     await fireEvent.press(screen.getByTestId('vessel-form-save'));
     await waitFor(() => expect(api.createVessel).toHaveBeenCalledTimes(2));
     expect(api.createVessel.mock.calls[1][0]).toMatchObject({ name: 'other', landingMode: null });
+  });
+
+  it('shows the server message when the create is rejected as a duplicate', async () => {
+    api.createVessel.mockRejectedValue(new client.ApiError('A vessel named api already exists in this fleet', 409,
+      { code: 'DuplicateEntity', entityType: 'Vessel', field: 'Name', value: 'api' }));
+    // ToastHost renders the error toast the form's onError pushes.
+    await render(<BuildProviders><VesselsTab /><ToastHost /></BuildProviders>);
+    await waitFor(() => expect(screen.getByTestId('vessel-row-api')).toBeTruthy());
+    await fireEvent.press(screen.getByTestId('vessels-list-new'));
+    await fireEvent.changeText(screen.getByTestId('vessel-form-name'), 'api');
+    await fireEvent.changeText(screen.getByTestId('vessel-form-repo-url'), 'https://git/api.git');
+    await fireEvent.press(screen.getByTestId('vessel-form-save'));
+    await waitFor(() => expect(api.createVessel).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText('A vessel named api already exists in this fleet')).toBeTruthy();
+    expect(screen.queryByText('Save failed.')).toBeNull();
   });
 
   it('deletes from the swipe action after confirmation', async () => {

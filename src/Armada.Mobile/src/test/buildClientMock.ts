@@ -7,7 +7,7 @@
  */
 /** Client exports that are not server calls; they keep their real implementation. */
 const PURE = new Set([
-  'configureClient', 'getClientBaseUrl', 'ApiError', 'TimeoutError', 'RequestCancelledError', 'isApiStatus', 'apiErrorCode',
+  'configureClient', 'getClientBaseUrl', 'ApiError', 'TimeoutError', 'RequestCancelledError', 'isApiStatus', 'apiErrorCode', 'apiErrorMessage',
   'setAuthToken', 'setOnUnauthorized', 'camelizeKeys',
 ]);
 

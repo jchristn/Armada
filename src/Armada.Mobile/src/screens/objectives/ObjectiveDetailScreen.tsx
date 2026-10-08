@@ -1,6 +1,6 @@
 import { Stack, useRouter, type Href } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Platform, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   createBacklogItem,
@@ -17,7 +17,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { ActionRow, InfoRow, useActionRunner } from '../../build/fields';
 import { useLiveResource } from '../../build/useLiveResource';
 import { statusTone } from '../../components/ask/statusTone';
-import { AppText, Banner, Button, ConfirmDialog, ErrorState, FormActions, ListRow, LoadingState, Section, StatusBadge, StickyFooter } from '../../components/ui';
+import { AppText, Banner, Button, ConfirmDialog, ErrorState, FormActions, KeyboardAvoidingPane, ListRow, LoadingState, Section, StatusBadge, StickyFooter } from '../../components/ui';
 import { useLocale } from '../../i18n/LocaleContext';
 import { useSocket } from '../../socket/SocketContext';
 import { useTheme } from '../../theme/ThemeContext';
@@ -154,7 +154,7 @@ export function ObjectiveDetailScreen({ id, embedded = false, prefillVesselId, r
   return (
     <SafeAreaView edges={embedded ? [] : ['left', 'right']} style={[styles.fill, { backgroundColor: colors.background }]} testID="objective-detail">
       {embedded ? null : <Stack.Screen options={{ title }} />}
-      <KeyboardAvoidingView style={styles.fill} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingPane>
         <ScrollView
           contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled"
@@ -270,7 +270,7 @@ export function ObjectiveDetailScreen({ id, embedded = false, prefillVesselId, r
             </FormActions>
           </StickyFooter>
         ) : null}
-      </KeyboardAvoidingView>
+      </KeyboardAvoidingPane>
       {objective ? (
         <ConfirmDialog
           open={confirmDelete}

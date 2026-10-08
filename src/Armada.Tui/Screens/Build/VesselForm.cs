@@ -211,7 +211,7 @@ namespace Armada.Tui.Screens.Build
                         d.Complete();
                         screen.Toast(NotificationSeverityEnum.Success, screen.Tr("Vessel \"{{name}}\" saved.", LocalizationArgs.Of("name", label)));
                         saved?.Invoke(r);
-                    }, null, ex => d.Fail(ex is ArmadaApiException api && !String.IsNullOrEmpty(api.Message) ? api.Message : screen.Tr("Save failed.")));
+                    }, null, ex => d.Fail(ex, screen.Tr("Save failed.")));
                 }
                 else
                 {
@@ -220,7 +220,7 @@ namespace Armada.Tui.Screens.Build
                         d.Complete();
                         screen.Toast(NotificationSeverityEnum.Success, screen.Tr("Vessel \"{{name}}\" created.", LocalizationArgs.Of("name", label)));
                         saved?.Invoke(r);
-                    }, null, ex => d.Fail(ex is ArmadaApiException api && !String.IsNullOrEmpty(api.Message) ? api.Message : screen.Tr("Save failed.")));
+                    }, null, ex => d.Fail(ex, screen.Tr("Save failed.")));
                 }
 
                 return false;

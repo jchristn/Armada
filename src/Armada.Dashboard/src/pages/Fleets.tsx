@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { listFleets, listVessels, listPipelines, createFleet, updateFleet, deleteFleet } from '../api/client';
+import { listFleets, listVessels, listPipelines, createFleet, updateFleet, deleteFleet, apiErrorMessage } from '../api/client';
 import type { Fleet, Vessel, Pipeline } from '../types/models';
 import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
 import ActionMenu from '../components/shared/ActionMenu';
@@ -117,7 +117,7 @@ export default function Fleets() {
         ? t('Fleet "{{name}}" saved.', { name: form.name })
         : t('Fleet "{{name}}" created.', { name: form.name }));
       load();
-    } catch { setError(t('Save failed.')); }
+    } catch (err: unknown) { setError(apiErrorMessage(err, t('Save failed.'))); }
   }
 
   function handleDelete(id: string, name: string) {
