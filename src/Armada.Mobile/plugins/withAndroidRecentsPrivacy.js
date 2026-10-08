@@ -4,6 +4,9 @@
 // overlay alone leaves the last screen (a conversation, a diff, a log) in Recents. Activity.setRecentsScreenshotEnabled
 // (false) (API 33+) makes Recents show a blank card for the app instead, without FLAG_SECURE, so the user's own
 // screenshots and screen sharing keep working. Older Android versions keep the overlay's best effort.
+// Limit (measured on API 36): opening Overview straight from the app animates the live window into the card, which
+// shows content until the card is redrawn; once the app is in the background (Home, another app) the card is blank.
+// Only FLAG_SECURE covers that live transition too, at the cost of the user's screenshots (a maintainer decision).
 const { withMainActivity } = require('expo/config-plugins');
 
 const MARKER = '// @armada recents-privacy';
