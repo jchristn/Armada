@@ -1,0 +1,9 @@
+# Sign in in portrait with the phone flow (it ends on Ask with the tab bar).
+appId: ${APP_ID}
+name: 01-landscape-sign-in
+---
+- launchApp:
+    clearState: true
+    clearKeychain: true
+- setOrientation: PORTRAIT
+- runFlow: ../01-sign-in.yaml

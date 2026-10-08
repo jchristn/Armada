@@ -10,10 +10,10 @@ import BacklogItemRoute from '../app/(app)/(work)/backlog/[id]';
 import { BuildProviders, buildSockets, page } from '../test/buildFixtures';
 
 jest.mock('@dashboard/api/client', () => require('../test/buildClientMock').buildClientMockFactory());
-jest.mock('../navigation/useLayout', () => ({
-  TABLET_MIN_WIDTH: 768,
-  layoutFor: (width: number, height: number) => ({ width, height, isTablet: true, landscape: true }),
-  useLayout: () => ({ width: 1180, height: 820, isTablet: true, landscape: true }),
+// An iPad in landscape (1180 x 820).
+jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
+  __esModule: true,
+  default: () => ({ width: 1180, height: 820, scale: 2, fontScale: 1 }),
 }));
 
 const api = client as jest.Mocked<typeof client>;

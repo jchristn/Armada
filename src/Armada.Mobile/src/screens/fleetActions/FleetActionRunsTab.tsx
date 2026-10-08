@@ -9,7 +9,7 @@ import { ListPane } from '../../build/ListPane';
 import { MasterDetail, useSelection } from '../../build/MasterDetail';
 import { usePagedList } from '../../build/usePagedList';
 import { useAuth } from '../../auth/AuthContext';
-import { AppText, Button, ConfirmDialog, Icon, SwipeRow, StatusBadge, type SwipeAction } from '../../components/ui';
+import { AppText, Button, ConfirmDialog, Icon, SwipeRow, StatusBadge, useCompactRows, type SwipeAction } from '../../components/ui';
 import { useLocale } from '../../i18n/LocaleContext';
 import { useNotifications } from '../../notifications/NotificationContext';
 import { useTheme } from '../../theme/ThemeContext';
@@ -36,6 +36,7 @@ export function runStatusParam(raw: string | string[] | undefined): FleetActionR
 export function FleetActionRunsTab() {
   const { t, locale, formatRelativeTime } = useLocale();
   const { colors } = useTheme();
+  const compactRows = useCompactRows();
   const { isTenantAdmin } = useAuth();
   const { pushToast } = useNotifications();
   const { run } = useActionRunner();
@@ -108,10 +109,12 @@ export function FleetActionRunsTab() {
               ]}
             >
               <View style={styles.rowHead}>
-                <AppText variant="label" style={styles.flex} numberOfLines={1}>{item.actionName}</AppText>
-                <RunStatusBadge status={item.status} />
+                <AppText variant="label" style={styles.flex} numberOfLines={compactRows ? 2 : 1}>{item.actionName}</AppText>
+                {compactRows ? null : <RunStatusBadge status={item.status} />}
                 <Icon name="chevron-forward" size={18} color="textMuted" />
               </View>
+              {/* Narrow panes (beside the run's detail) give the name the row's width and the status its own line. */}
+              {compactRows ? <View style={styles.rowStatus} testID={`fleet-action-run-status-stacked-${item.id}`}><RunStatusBadge status={item.status} /></View> : null}
               <AppText variant="caption" muted>
                 {[t(KIND_LABELS[item.kind]), !item.actionId ? t('Ad hoc') : null, t('Created {{when}}', { when: formatRelativeTime(item.createdUtc) }), duration].filter(Boolean).join(' \u00b7 ')}
               </AppText>
@@ -164,4 +167,5 @@ const styles = StyleSheet.create({
   noMargin: { marginBottom: 0 },
   row: { minHeight: MIN_TOUCH + 8, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, gap: spacing.xs, borderBottomWidth: StyleSheet.hairlineWidth },
   rowHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  rowStatus: { flexDirection: 'row' },
 });

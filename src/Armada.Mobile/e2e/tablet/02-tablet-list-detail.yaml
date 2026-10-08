@@ -1,0 +1,59 @@
+# List and detail: a mission opens beside the Missions list; rotating keeps the selection and the detail; a deep link
+# to a persona opens the Configuration hub's Personas list with the persona in the detail pane.
+appId: ${APP_ID}
+name: 02-tablet-list-detail
+---
+- launchApp
+- setOrientation: PORTRAIT
+- extendedWaitUntil:
+    visible:
+      id: "sidebar"
+    timeout: 30000
+- tapOn:
+    id: "sidebar-/missions"
+- extendedWaitUntil:
+    visible:
+      id: "missions-list"
+    timeout: 15000
+- extendedWaitUntil:
+    visible: "Seeded mission one.*"
+    timeout: 15000
+- tapOn: "Seeded mission one.*"
+- extendedWaitUntil:
+    visible:
+      id: "mission-detail-title"
+    timeout: 15000
+# The list stays beside the detail (no navigation), in portrait too.
+- assertVisible:
+    id: "split-view"
+- assertVisible:
+    id: "missions-list"
+- takeScreenshot: tablet-portrait-missions
+- setOrientation: LANDSCAPE_LEFT
+- extendedWaitUntil:
+    visible:
+      id: "mission-detail-title"
+    timeout: 15000
+- assertVisible:
+    id: "split-view"
+- assertVisible: "Seeded mission one"
+- takeScreenshot: tablet-landscape-missions
+- setOrientation: PORTRAIT
+- extendedWaitUntil:
+    visible:
+      id: "mission-detail-title"
+    timeout: 15000
+# A deep link lands with the list on the left.
+- runFlow:
+    file: ../common/open-link.yaml
+    env:
+      LINK: "armada://personas/Architect"
+- extendedWaitUntil:
+    visible:
+      id: "persona-title"
+    timeout: 15000
+- assertVisible:
+    id: "split-view"
+- assertVisible:
+    id: "persona-row-Architect"
+- takeScreenshot: tablet-portrait-deep-link

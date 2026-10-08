@@ -10,6 +10,7 @@ import { SwipeRow, type SwipeAction } from '../../components/ui/SwipeRow';
 import { useLocale } from '../../i18n/LocaleContext';
 import { useTheme } from '../../theme/ThemeContext';
 import { radius, spacing } from '../../theme/typography';
+import { MODAL_ORIENTATIONS } from '../../components/ui/modalOrientations';
 
 /**
  * Shared pieces of the Settings hub's admin tabs (Tenants, Users, Credentials): remote proxy mode (create, edit, and
@@ -60,7 +61,7 @@ export interface SecretOnceDialogProps {
 export function SecretOnceDialog({ open, title, message, email, emailLabel, secretLabel, secret, doneLabel, onClose, testID }: SecretOnceDialogProps) {
   const { colors } = useTheme();
   return (
-    <Modal visible={open} transparent animationType="fade" onRequestClose={() => undefined} statusBarTranslucent>
+    <Modal supportedOrientations={MODAL_ORIENTATIONS} visible={open} transparent animationType="fade" onRequestClose={() => undefined} statusBarTranslucent>
       <View style={[styles.backdrop, { backgroundColor: colors.overlay }]}>
         {open ? (
           <View testID={testID} accessibilityViewIsModal style={[styles.card, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}>

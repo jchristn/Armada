@@ -143,6 +143,7 @@ export function ApiExplorerListRoute() {
       <MasterDetail
         list={list}
         detail={selectedOperation && data ? <OperationView key={selectedOperation.id} operation={selectedOperation} spec={data.spec} embedded /> : null}
+        onBack={selection.clear}
       />
     </SafeAreaView>
   );

@@ -16,7 +16,8 @@ export function NotificationCenterScreen() {
   const { notifications, markRead, markAllRead, clearHistory } = useNotifications();
   const { t, formatRelativeTime, formatDateTime } = useLocale();
   const { colors } = useTheme();
-  const { isTablet } = useLayout();
+  // List and detail side by side (the pane's width, not the device).
+  const { split: isTablet } = useLayout();
   const router = useRouter();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);

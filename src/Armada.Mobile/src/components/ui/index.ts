@@ -24,3 +24,5 @@ export { KpiCard, KpiGrid } from './KpiCard';
 export { ProgressBar } from './ProgressBar';
 export { SelectField, type SelectOption } from './SelectField';
 export { SwitchRow } from './SwitchRow';
+export { COMPACT_ROW_WIDTH, PaneWidthContext, useCompactRows, usePaneWidth } from './paneWidth';
+export { KeyboardAvoidingPane } from './KeyboardAvoidingPane';

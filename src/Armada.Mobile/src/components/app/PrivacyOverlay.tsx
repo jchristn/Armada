@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { AppState, Image, Modal, StyleSheet, View, type AppStateStatus } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
+import { MODAL_ORIENTATIONS } from '../ui/modalOrientations';
 
 /** True for the app states in which the OS may take a snapshot of the screen (app switcher, Recents). */
 export function hidesContent(state: AppStateStatus): boolean {
@@ -25,7 +26,7 @@ export function PrivacyOverlay() {
   }, []);
 
   return (
-    <Modal visible={hidden} animationType="none" transparent={false} statusBarTranslucent onRequestClose={() => undefined}>
+    <Modal supportedOrientations={MODAL_ORIENTATIONS} visible={hidden} animationType="none" transparent={false} statusBarTranslucent onRequestClose={() => undefined}>
       <View testID="privacy-overlay" style={[styles.fill, { backgroundColor: colors.background }]}>
         <Image source={require('../../../assets/images/icon.png')} style={styles.logo} accessible={false} />
       </View>

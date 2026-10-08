@@ -126,6 +126,7 @@ export function CheckRunsTab() {
       <MasterDetail
         list={list}
         detail={selection.selected ? <CheckRunDetailView key={selection.selected} id={selection.selected} embedded onDeleted={() => { selection.clear(); void reload(); }} onChanged={() => void reload()} /> : null}
+        onBack={selection.clear}
       />
       <RunCheckSheet
         open={sheet !== null}

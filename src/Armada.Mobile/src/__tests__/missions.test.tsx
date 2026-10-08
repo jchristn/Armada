@@ -1,6 +1,8 @@
 import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 import * as client from '@dashboard/api/client';
 import type { Mission, MissionSummary } from '@dashboard/types/models';
+import { StyleSheet } from 'react-native';
+import MissionRoute from '../app/(app)/(work)/missions/[id]';
 import { MissionDetail, missionDetailTab } from '../screens/operations/MissionDetail';
 import { MissionsHubScreen } from '../screens/operations/MissionsHubScreen';
 import { missionServerFilters, userScopeLabel } from '../screens/operations/MissionsList';
@@ -43,6 +45,7 @@ function mission(overrides: Partial<Mission> = {}): Mission {
 beforeEach(() => {
   jest.clearAllMocks();
   mockWindow.width = 390;
+  mockWindow.height = 844;
   setMockParams({});
   api.listVessels.mockResolvedValue(page([{ id: 'vsl_1', name: 'api' }] as never));
   api.listCaptains.mockResolvedValue(page([]));
@@ -169,6 +172,43 @@ describe('Missions list', () => {
     expect(mockRouter.push).not.toHaveBeenCalled();
   });
 
+  it('shows the mission beside the list on an iPad mini in portrait (744 dp, rail beside the content)', async () => {
+    mockWindow.width = 744;
+    mockWindow.height = 1133;
+    api.listMissionSummaries.mockResolvedValue(page([summary('msn_1')]));
+    api.getMission.mockResolvedValue(mission());
+    await renderScreen(<MissionsHubScreen />);
+    expect(screen.getByTestId('split-view')).toBeTruthy();
+    await fireEvent.press(await screen.findByTestId('mission-row-msn_1'));
+    expect(await screen.findByTestId('mission-detail-title')).toHaveTextContent('Mission msn_1');
+    expect(mockRouter.push).not.toHaveBeenCalled();
+    // The list beside the detail is narrow: its row buttons stack so the title keeps its width.
+    expect(screen.getByTestId('mission-row-buttons-stacked-msn_1')).toBeTruthy();
+  });
+
+  it('a mission deep link on a tablet opens the Missions list with the mission in the detail pane', async () => {
+    mockWindow.width = 1194;
+    mockWindow.height = 834;
+    setMockParams({ id: 'msn_1', tab: 'log' });
+    api.listMissionSummaries.mockResolvedValue(page([summary('msn_1'), summary('msn_2')]));
+    api.getMission.mockResolvedValue(mission());
+    api.getMissionLog.mockResolvedValue({ lines: [], totalLines: 0 } as never);
+    await renderScreen(<MissionRoute />);
+    expect(screen.getByTestId('split-view')).toBeTruthy();
+    expect(await screen.findByTestId('mission-row-msn_2')).toBeTruthy();
+    expect(await screen.findByTestId('mission-detail-title')).toHaveTextContent('Mission msn_1');
+    expect(screen.getByTestId('mission-row-msn_1')).toHaveProp('accessibilityState', { selected: true });
+  });
+
+  it('a mission deep link on a phone opens the mission alone', async () => {
+    setMockParams({ id: 'msn_1' });
+    api.getMission.mockResolvedValue(mission());
+    await renderScreen(<MissionRoute />);
+    expect(await screen.findByTestId('mission-detail-title')).toHaveTextContent('Mission msn_1');
+    expect(screen.queryByTestId('split-view')).toBeNull();
+    expect(api.listMissionSummaries).not.toHaveBeenCalled();
+  });
+
   it('switches hub tabs through the route query', async () => {
     api.listMissionSummaries.mockResolvedValue(page([]));
     await renderScreen(<MissionsHubScreen />);
@@ -192,6 +232,15 @@ describe('Mission detail', () => {
     await act(async () => { socket.message({ type: 'mission.changed', data: { id: 'msn_1', status: 'Complete' } }); });
     await waitFor(() => expect(screen.getByText('Landed')).toBeTruthy());
     expect(screen.queryByTestId('mission-action-land')).toBeNull();
+  });
+
+  it('keeps the overview in a readable column when it has the whole window', async () => {
+    mockWindow.width = 1376;
+    mockWindow.height = 1032;
+    api.getMission.mockResolvedValue(mission());
+    await renderScreen(<MissionDetail id="msn_1" />);
+    expect(await screen.findByTestId('mission-detail-title')).toHaveTextContent('Mission msn_1');
+    expect(StyleSheet.flatten(screen.getByTestId('mission-overview').props.contentContainerStyle)).toMatchObject({ maxWidth: 820, alignSelf: 'center' });
   });
 
   it('resolves a review gate with each verdict', async () => {

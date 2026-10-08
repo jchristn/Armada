@@ -4,6 +4,7 @@ import { useTheme } from '../../theme/ThemeContext';
 import { MIN_TOUCH, spacing } from '../../theme/typography';
 import { AppText } from './AppText';
 import { Icon, type IconName } from './Icon';
+import { useCompactRows } from './paneWidth';
 
 export interface ListRowProps {
   title: string;
@@ -24,14 +25,17 @@ export interface ListRowProps {
 
 export function ListRow({ title, subtitle, icon, accessory, onPress, onLongPress, selected, destructive, accessibilityHint, accessibilityValue, testID }: ListRowProps) {
   const { colors } = useTheme();
+  // Narrow panes (a phone, or a list beside its detail) put the badge under the text so the title keeps its width.
+  const compact = useCompactRows();
   const content = (
     <View style={styles.row}>
       {icon ? <Icon name={icon} color={destructive ? 'danger' : 'primary'} /> : null}
       <View style={styles.text}>
-        <AppText variant="label" color={destructive ? 'danger' : 'text'}>{title}</AppText>
-        {subtitle ? <AppText variant="caption" muted numberOfLines={2}>{subtitle}</AppText> : null}
+        <AppText variant="label" color={destructive ? 'danger' : 'text'} numberOfLines={compact ? 3 : undefined}>{title}</AppText>
+        {subtitle ? <AppText variant="caption" muted numberOfLines={compact ? 3 : 2}>{subtitle}</AppText> : null}
+        {compact && accessory ? <View style={styles.stacked} testID={testID ? `${testID}-accessory-stacked` : undefined}>{accessory}</View> : null}
       </View>
-      {accessory}
+      {compact ? null : accessory}
       {onPress ? <Icon name="chevron-forward" size={18} color="textMuted" /> : null}
     </View>
   );
@@ -67,4 +71,5 @@ const styles = StyleSheet.create({
   base: { minHeight: MIN_TOUCH + 8, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, justifyContent: 'center', borderBottomWidth: StyleSheet.hairlineWidth },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   text: { flex: 1, gap: 2 },
+  stacked: { alignSelf: 'flex-start', marginTop: 2 },
 });

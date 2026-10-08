@@ -129,6 +129,7 @@ export function DeploymentsTab() {
       <MasterDetail
         list={list}
         detail={selection.selected ? <DeploymentDetailView key={selection.selected} id={selection.selected} embedded onDeleted={() => { selection.clear(); void reload(); }} onChanged={() => void reload()} /> : null}
+        onBack={selection.clear}
       />
       <FormSheet
         testID="deployment-form"

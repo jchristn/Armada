@@ -125,6 +125,7 @@ export function PipelinesTab() {
       <MasterDetail
         list={list}
         detail={selection.selected ? <PipelineDetailView key={selection.selected} name={selection.selected} embedded onDeleted={() => { selection.clear(); void reload(); }} onChanged={() => void reload()} /> : null}
+        onBack={selection.clear}
       />
       <FormSheet
         testID="pipeline-form"

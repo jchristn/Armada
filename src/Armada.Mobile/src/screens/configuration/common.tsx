@@ -79,13 +79,14 @@ export function profileScopeFields(t: Translate, values: FormValues, fleets: Fle
 }
 
 /**
- * Selection for records without their own route (endpoints, harbors, memories): tablets show the record beside the
- * list; phones show it in a sheet over the list.
+ * Selection for records without their own route (endpoints, harbors, memories): when list and detail fit side by
+ * side the record shows beside the list; narrower panes show it in a sheet over the list. `isTablet` is that
+ * side-by-side state (it follows the window, so a resize moves an open record between the pane and the sheet).
  */
 export function useLocalSelection() {
-  const { isTablet } = useLayout();
+  const { split } = useLayout();
   const [selected, setSelected] = useState<string | null>(null);
-  return { selected, open: setSelected, clear: () => setSelected(null), isTablet };
+  return { selected, open: setSelected, clear: () => setSelected(null), isTablet: split };
 }
 
 /** The body of an in-place detail: the tablet pane scrolls itself; inside the phone sheet the sheet scrolls. */
@@ -94,16 +95,18 @@ export function LocalBody({ inSheet, children, testID }: { inSheet: boolean; chi
   return <DetailBody embedded testID={testID}>{children}</DetailBody>;
 }
 
-/** A list with an in-place detail: beside it on tablets, in a bottom sheet on phones. */
+/**
+ * A list with an in-place detail: beside it when the pane fits both, in a bottom sheet otherwise. One tree for both,
+ * so resizing the window keeps the list (its scroll and search) and moves the open record between pane and sheet.
+ */
 export function LocalMasterDetail({ list, detail, title, open, onClose }: { list: ReactNode; detail: ReactNode | null; title: string; open: boolean; onClose: () => void }) {
   const { t } = useLocale();
-  const { isTablet } = useLayout();
-  if (isTablet) return <MasterDetail list={list} detail={open ? detail : null} />;
+  const { split } = useLayout();
   return (
     <>
-      <MasterDetail list={list} detail={null} />
-      <BottomSheet open={open} title={title} onClose={onClose} closeLabel={t('Close')} testID="config-detail-sheet">
-        {open ? detail : null}
+      <MasterDetail list={list} detail={split && open ? detail : null} />
+      <BottomSheet open={!split && open} title={title} onClose={onClose} closeLabel={t('Close')} testID="config-detail-sheet">
+        {!split && open ? detail : null}
       </BottomSheet>
     </>
   );

@@ -64,3 +64,11 @@ jest.mock('expo-notifications', () => ({
 }));
 
 jest.mock('expo-device', () => ({ deviceName: 'Test iPhone', modelName: 'iPhone', isDevice: false }));
+
+// React Native's Jest setup reports a 750 x 1334 window (an iPhone 6 in pixels, not dp), which the adaptive layout
+// (600 dp and up gets the sidebar) would treat as a small tablet. Tests run in a phone-sized window by default;
+// layout tests set their own size by mocking useWindowDimensions.
+require('react-native').Dimensions.set({
+  window: { width: 390, height: 844, scale: 3, fontScale: 1 },
+  screen: { width: 390, height: 844, scale: 3, fontScale: 1 },
+});
