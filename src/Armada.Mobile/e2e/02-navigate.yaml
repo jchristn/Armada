@@ -16,9 +16,11 @@ name: 02-navigate
       id: "home-screen"
     timeout: 10000
 # The group header first: centering Missions (the group's last row) scrolls the header off a phone screen.
+# Home is long; on a loaded host each emulator swipe can take seconds.
 - scrollUntilVisible:
     element: "OPERATIONS"
     direction: DOWN
+    timeout: 60000
 - assertVisible: "OPERATIONS"
 - takeScreenshot: work
 - scrollUntilVisible:
