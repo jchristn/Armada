@@ -150,6 +150,8 @@ namespace Armada.Server
                 _Logging.Info(_Header + "running " + context.Purpose + " for captain " + context.Captain.Id + " on Harbor " + decision.HarborId + " (" + decision.Reason + ")");
                 RemoteAgentRuntime remote = new RemoteAgentRuntime(_Harbors, decision.HarborId, context.Captain.Runtime, _EndpointResolver);
                 remote.UseScratchWorkingDirectory = context.AllowScratchWorkingDirectory;
+                remote.JobKind = context.Kind;
+                remote.MissionId = context.MissionId;
                 remote.OnProcessStarted += processId => _ActiveRemote[processId] = remote;
                 remote.OnProcessExited += (processId, exitCode) => _ActiveRemote.TryRemove(new KeyValuePair<int, RemoteAgentRuntime>(processId, remote));
                 return new CaptainLaunchTarget(remote, decision.HarborId, decision.Reason);

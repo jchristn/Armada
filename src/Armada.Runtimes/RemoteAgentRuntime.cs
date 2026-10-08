@@ -66,6 +66,16 @@ namespace Armada.Runtimes
         public bool StreamJsonOutput { get; set; } = false;
 
         /// <summary>
+        /// What the launch is for, sent to the Harbor for its job list and logs. Informational.
+        /// </summary>
+        public HarborJobKindEnum JobKind { get; set; } = HarborJobKindEnum.Other;
+
+        /// <summary>
+        /// The mission the launch runs, when it is a mission; sent to the Harbor for its job list and logs.
+        /// </summary>
+        public string? MissionId { get; set; } = null;
+
+        /// <summary>
         /// The Harbor this runtime launches on.
         /// </summary>
         public string HarborId => _HarborId;
@@ -152,7 +162,10 @@ namespace Armada.Runtimes
                 ScratchWorkingDirectory = UseScratchWorkingDirectory,
                 StreamJsonOutput = StreamJsonOutput && _RuntimeType == AgentRuntimeEnum.ClaudeCode,
                 ShowThinking = showThinking,
-                ReturnFinalMessage = _FinalMessageFilePath != null
+                ReturnFinalMessage = _FinalMessageFilePath != null,
+                JobKind = JobKind.ToString(),
+                MissionId = String.IsNullOrWhiteSpace(MissionId) ? null : MissionId,
+                CaptainId = captain != null && !String.IsNullOrWhiteSpace(captain.Id) ? captain.Id : null
             };
 
             // API-endpoint captains have no CLI on the Harbor; ship the resolved endpoint so the Harbor can

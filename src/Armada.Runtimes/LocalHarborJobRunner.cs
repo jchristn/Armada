@@ -6,6 +6,7 @@ namespace Armada.Runtimes
     using System.IO;
     using Armada.Core.Enums;
     using Armada.Core.Harbor;
+    using Armada.Core.Hosting;
     using Armada.Core.Services;
     using Armada.Runtimes.Interfaces;
     using SyslogLogging;
@@ -27,6 +28,15 @@ namespace Armada.Runtimes
 
         // Bound the final-message artifact sent back over the link.
         private const int _MaxFinalMessageChars = 1000000;
+
+        #endregion
+
+        #region Public-Members
+
+        /// <summary>
+        /// Where to write each job's output on this machine (the Harbor's jobs log directory), or null to write none.
+        /// </summary>
+        public HarborLogPaths? JobLogs { get; set; } = null;
 
         #endregion
 
@@ -142,6 +152,21 @@ namespace Armada.Runtimes
                 finalMessageFilePath = Path.Combine(finalDirectory, SafeName(jobId) + ".txt");
             }
 
+            // Keep the job's output on this machine too, so its log can be read here whether or not the Admiral is.
+            HarborJobInfo jobInfo = HarborJobInfo.FromLaunch(request, DateTime.UtcNow);
+            HarborJobLog? jobLog = null;
+            if (JobLogs != null)
+            {
+                jobLog = HarborJobLog.TryOpen(JobLogs, jobInfo, workingDirectory, out string? logError);
+                if (jobLog == null) _Logging.Warn("[LocalHarborJobRunner] could not open the log for job " + jobId + ": " + logError);
+            }
+
+            Action<HarborOutputStreamEnum, string> report = (stream, line) =>
+            {
+                jobLog?.WriteOutput(stream, line);
+                onOutput(stream, line);
+            };
+
             runtime.OnProcessStarted += processId =>
             {
                 _Jobs[jobId] = new JobEntry(runtime, processId);
@@ -152,19 +177,21 @@ namespace Armada.Runtimes
             // consumes both, while chat and planning read only stdout (CLI stderr banners stay out of a reply).
             if (runtime is BaseAgentRuntime split)
             {
-                split.OnStdoutReceived += (processId, line) => onOutput(HarborOutputStreamEnum.Stdout, line);
-                split.OnStderrReceived += (processId, line) => onOutput(HarborOutputStreamEnum.Stderr, line);
+                split.OnStdoutReceived += (processId, line) => report(HarborOutputStreamEnum.Stdout, line);
+                split.OnStderrReceived += (processId, line) => report(HarborOutputStreamEnum.Stderr, line);
             }
             else
             {
-                runtime.OnOutputReceived += (processId, line) => onOutput(HarborOutputStreamEnum.Stdout, line);
+                runtime.OnOutputReceived += (processId, line) => report(HarborOutputStreamEnum.Stdout, line);
             }
 
             runtime.OnProcessExited += (processId, exitCode) =>
             {
                 _Jobs.TryRemove(jobId, out JobEntry? _);
-                SendFinalMessage(finalMessageFilePath, onOutput);
+                SendFinalMessage(finalMessageFilePath, report);
                 TryDeleteDirectory(scratchDirectory);
+                jobLog?.WriteExit(exitCode ?? -1, DateTime.UtcNow, jobInfo.StartedUtc);
+                jobLog?.Dispose();
                 onExited(exitCode ?? -1);
             };
 
@@ -220,8 +247,10 @@ namespace Armada.Runtimes
                     showThinking: request.ShowThinking,
                     token: token).ConfigureAwait(false);
             }
-            catch
+            catch (Exception ex)
             {
+                jobLog?.WriteNote("launch failed: " + ex.Message);
+                jobLog?.Dispose();
                 TryDeleteDirectory(scratchDirectory);
                 TryDeleteFile(finalMessageFilePath);
                 throw;

@@ -208,6 +208,7 @@ namespace Armada.Server
             {
                 CaptainLaunchContext launch = new CaptainLaunchContext(captain, "Model Context build")
                 {
+                    Kind = Armada.Core.Harbor.HarborJobKindEnum.ContextBuild,
                     TenantId = vessel.TenantId,
                     UserId = userId,
                     Vessel = vessel,

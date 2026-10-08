@@ -41,6 +41,34 @@ namespace Armada.Core.Harbor
         public string WorkingDirectory { get; set; } = string.Empty;
 
         /// <summary>
+        /// What the launch is for: a <see cref="HarborJobKindEnum"/> member name (for example "Mission", "AskTurn").
+        /// Informational, for the Harbor's job list and logs. Kept as a string on the wire so a Harbor that does not
+        /// know a newer value still accepts the launch; read it through <see cref="JobKindType"/>. Null from an
+        /// Admiral that predates it.
+        /// </summary>
+        public string? JobKind { get; set; } = null;
+
+        /// <summary>
+        /// <see cref="JobKind"/> as a defined <see cref="HarborJobKindEnum"/> name (case-insensitive), or
+        /// <see cref="HarborJobKindEnum.Unknown"/> when it is empty or unknown. Not serialized.
+        /// </summary>
+        [JsonIgnore]
+        public HarborJobKindEnum JobKindType
+        {
+            get { return EnumNames.ParseOrNull<HarborJobKindEnum>(JobKind, true) ?? HarborJobKindEnum.Unknown; }
+        }
+
+        /// <summary>
+        /// The mission this launch runs, when it is a mission; informational. Null otherwise.
+        /// </summary>
+        public string? MissionId { get; set; } = null;
+
+        /// <summary>
+        /// The captain this launch runs as; informational. Null from an Admiral that predates it.
+        /// </summary>
+        public string? CaptainId { get; set; } = null;
+
+        /// <summary>
         /// Optional model identifier to pass to the runtime.
         /// </summary>
         public string? Model { get; set; } = null;

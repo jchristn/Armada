@@ -658,11 +658,17 @@ namespace Armada.Server
                         isolateLaunch = true;
                     }
                 }
-                else if (runtime is RemoteAgentRuntime remoteRuntime && missionToken != null)
+                else if (runtime is RemoteAgentRuntime remoteRuntime)
                 {
-                    // The Harbor binds the token against the MCP URL it was given in the handshake.
-                    remoteRuntime.McpSessionToken = missionToken;
-                    environment = null;
+                    // Tell the Harbor what it runs, for its job list and logs.
+                    remoteRuntime.JobKind = Armada.Core.Harbor.HarborJobKindEnum.Mission;
+                    remoteRuntime.MissionId = mission.Id;
+                    if (missionToken != null)
+                    {
+                        // The Harbor binds the token against the MCP URL it was given in the handshake.
+                        remoteRuntime.McpSessionToken = missionToken;
+                        environment = null;
+                    }
                 }
 
                 processId = await runtime.StartAsync(
@@ -1271,6 +1277,8 @@ namespace Armada.Server
             // The same routing every captain launch uses (missions and interactive launches alike).
             CaptainLaunchContext context = new CaptainLaunchContext(captain, "mission " + mission.Id)
             {
+                Kind = Armada.Core.Harbor.HarborJobKindEnum.Mission,
+                MissionId = mission.Id,
                 TenantId = mission.TenantId,
                 UserId = mission.UserId,
                 Vessel = vessel,

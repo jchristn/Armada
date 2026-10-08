@@ -54,7 +54,7 @@ namespace Armada.Core.Services
         private readonly LoggingModule _Logging;
         private readonly int _HeartbeatIntervalMs;
         private readonly Action<HarborLogEntry>? _OnLog;
-        private readonly HashSet<string> _LiveJobs = new HashSet<string>(StringComparer.Ordinal);
+        private readonly Dictionary<string, HarborJobInfo> _LiveJobs = new Dictionary<string, HarborJobInfo>(StringComparer.Ordinal);
         private readonly object _JobLock = new object();
         private Action? _OnConnected;
         private Channel<HarborMessage>? _Outbound;
@@ -111,6 +111,22 @@ namespace Armada.Core.Services
         public List<string> LiveJobIds()
         {
             return SnapshotLiveJobs();
+        }
+
+        /// <summary>
+        /// The jobs this Harbor is running now (what each is, its runtime, and when it started), oldest first.
+        /// </summary>
+        /// <returns>Copies of the live jobs.</returns>
+        public List<HarborJobInfo> LiveJobs()
+        {
+            List<HarborJobInfo> jobs = new List<HarborJobInfo>();
+            lock (_JobLock)
+            {
+                foreach (HarborJobInfo job in _LiveJobs.Values) jobs.Add(job.Clone());
+            }
+
+            jobs.Sort((a, b) => a.StartedUtc.CompareTo(b.StartedUtc));
+            return jobs;
         }
 
         /// <summary>
@@ -413,7 +429,7 @@ namespace Armada.Core.Services
                     McpBaseUrl,
                     processId =>
                     {
-                        AddLiveJob(launch.JobId);
+                        AddLiveJob(launch);
                         Enqueue(new HarborStarted { CorrelationId = launch.CorrelationId, JobId = launch.JobId, ProcessId = processId });
                         Log(HarborLogDirection.Out, "Started job " + launch.JobId + " (pid " + processId + ")");
                     },
@@ -502,9 +518,10 @@ namespace Armada.Core.Services
             return minutes + "m" + remainderSeconds + "s";
         }
 
-        private void AddLiveJob(string jobId)
+        private void AddLiveJob(HarborLaunchRequest launch)
         {
-            lock (_JobLock) { _LiveJobs.Add(jobId); }
+            HarborJobInfo job = HarborJobInfo.FromLaunch(launch, _Time.GetUtcNow().UtcDateTime);
+            lock (_JobLock) { _LiveJobs[launch.JobId] = job; }
         }
 
         private void RemoveLiveJob(string jobId)
@@ -514,7 +531,7 @@ namespace Armada.Core.Services
 
         private List<string> SnapshotLiveJobs()
         {
-            lock (_JobLock) { return new List<string>(_LiveJobs); }
+            lock (_JobLock) { return new List<string>(_LiveJobs.Keys); }
         }
 
         /// <summary>
