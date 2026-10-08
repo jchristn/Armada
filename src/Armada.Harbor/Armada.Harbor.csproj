@@ -22,6 +22,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Armada.Client\Armada.Client.csproj" />
     <ProjectReference Include="..\Armada.Core\Armada.Core.csproj" />
     <ProjectReference Include="..\Armada.Runtimes\Armada.Runtimes.csproj" />
   </ItemGroup>

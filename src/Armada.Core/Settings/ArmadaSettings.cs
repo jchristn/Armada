@@ -934,11 +934,27 @@ namespace Armada.Core.Settings
                 return defaults;
             }
             string json = await File.ReadAllTextAsync(path).ConfigureAwait(false);
+            ArmadaSettings settings = Parse(json);
+            settings.SettingsFilePath = path;
+            settings.NormalizePaths();
+            return settings;
+        }
+
+        /// <summary>
+        /// Parse settings JSON exactly as <see cref="LoadAsync"/> does (including the legacy landing fields), so an
+        /// editor can validate text before writing it. Property setters validate values, so out-of-range values throw.
+        /// </summary>
+        /// <param name="json">Settings JSON.</param>
+        /// <returns>Parsed settings. <see cref="SettingsFilePath"/> is not set.</returns>
+        /// <exception cref="JsonException">The text is not valid settings JSON.</exception>
+        /// <exception cref="ArgumentException">A value is out of range or missing.</exception>
+        public static ArmadaSettings Parse(string json)
+        {
+            if (json == null) throw new ArgumentNullException(nameof(json));
             ArmadaSettings? settings = JsonSerializer.Deserialize<ArmadaSettings>(json, _SerializerOptions);
             settings ??= new ArmadaSettings();
             LegacyLandingSettings? legacy = JsonSerializer.Deserialize<LegacyLandingSettings>(json, _SerializerOptions);
             if (legacy != null && !legacy.LandingMode.HasValue) settings.LandingMode = legacy.ResolveLandingMode();
-            settings.SettingsFilePath = path;
             settings.NormalizePaths();
             return settings;
         }

@@ -7,6 +7,7 @@ namespace Armada.Helm.Commands
     using Armada.Helm.Infrastructure;
     using Armada.Core;
     using Armada.Core.Enums;
+    using Armada.Core.Hosting;
     using Armada.Core.Models;
     using Armada.Core.Services;
     using Armada.Helm.Rendering;
@@ -90,30 +91,8 @@ namespace Armada.Helm.Commands
             }
             else
             {
-                string? logFile = null;
-
-                // Try per-mission log first
-                string missionLogPath = Path.Combine(Constants.DefaultDataDirectory, "logs", "missions", mission.Id + ".log");
-                if (File.Exists(missionLogPath))
-                {
-                    logFile = missionLogPath;
-                }
-                else if (!string.IsNullOrEmpty(mission.CaptainId))
-                {
-                    // Fallback to captain pointer or direct log
-                    string pointerPath = Path.Combine(Constants.DefaultDataDirectory, "logs", "captains", mission.CaptainId + ".current");
-                    if (File.Exists(pointerPath))
-                    {
-                        string target = File.ReadAllText(pointerPath).Trim();
-                        if (File.Exists(target)) logFile = target;
-                    }
-
-                    if (logFile == null)
-                    {
-                        string captainLog = Path.Combine(Constants.DefaultDataDirectory, "logs", "captains", mission.CaptainId + ".log");
-                        if (File.Exists(captainLog)) logFile = captainLog;
-                    }
-                }
+                // The mission's own log, else the current log of its captain.
+                string? logFile = ArmadaLogPaths.ForDefaultDataDirectory().ResolveMissionLog(mission.Id, mission.CaptainId);
 
                 if (logFile != null)
                 {

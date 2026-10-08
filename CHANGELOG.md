@@ -4,6 +4,18 @@ All notable changes to Armada are documented in this file.
 
 ---
 
+## Unreleased
+
+### Harbor: manage and monitor Harbor and Armada from the app
+- The macOS menu bar names the app **Armada Harbor** (it showed "Avalonia Application") and has real menus instead of Avalonia's default "About Avalonia" menu: Harbor, Armada, Logs, Window, and Help. Windows and Linux get the same menus in a menu bar inside the Harbor window, and the tray icon offers them too, with the link status at the top. Quit (including Command-Q) now quits instead of being cancelled by the window's close-to-tray behavior.
+- A **Manage** window with Status, Harbor, Armada, TUI, Logs, and Backups tabs: Admiral health and workload and data directory disk usage; a form for Harbor's own settings (validated, saved atomically with a backup, reconnecting when needed); the Admiral's settings live through the API or as the whole `settings.json` (validated as the Admiral loads it, with backups and an offer to restart the Admiral); the TUI's `tui.json`; a log browser and viewer that follows, filters by level, and opens a mission's log by id; and read-only lists of database and settings backups. File editors, logs, and backups are offered only when the linked Admiral runs on the same machine. See [Managing Harbor and Armada from the app](docs/HARBOR.md#managing-harbor-and-armada-from-the-app).
+- Harbor writes its own log to `~/.armada-harbor/logs/harbor.log.<date>`, and Help > Copy Diagnostics copies versions, paths, link state, and recent activity for a bug report.
+- About Armada Harbor shows Harbor's version, id, link URL, and paths.
+- The CLI's `armada log`, `armada mission show`, and `armada go` find mission and captain logs through the same shared code (`ArmadaLogPaths`) Harbor uses.
+- Tests: desktop shell commands per platform, local-Admiral detection and the REST URL and API key taken from the link URL and settings file, log layout and mission and captain log resolution, tailing and following a growing or truncated log, level filtering, atomic settings saves with backups, settings validation, and disk usage.
+
+---
+
 ## v1.0.1 (2026-10-07)
 
 Focus: a landing-mode fix that was missed in 1.0.0. **Check your landing modes when upgrading**; see [Upgrading from 1.0.0](docs/MERGING.md#upgrading-from-100-landing-modes-fixed-in-101).

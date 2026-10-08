@@ -1,0 +1,32 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Armada.Harbor.AboutWindow"
+        Width="520" SizeToContent="Height"
+        CanResize="False"
+        WindowStartupLocation="CenterScreen"
+        Icon="/Assets/logo.png"
+        Title="About Armada Harbor">
+  <StackPanel Margin="22" Spacing="16">
+
+    <StackPanel Orientation="Horizontal" Spacing="14">
+      <Image Source="/Assets/logo.png" Width="56" Height="56" VerticalAlignment="Center" />
+      <StackPanel VerticalAlignment="Center" Spacing="2">
+        <TextBlock Text="Armada Harbor" FontSize="22" FontWeight="Bold" />
+        <SelectableTextBlock x:Name="VersionText" Text="Version" FontSize="12"
+                             Foreground="{DynamicResource HarborSecondaryTextBrush}" />
+        <TextBlock Text="Host runner for captains, git, and worktrees" FontSize="12"
+                   Foreground="{DynamicResource HarborSecondaryTextBrush}" />
+      </StackPanel>
+    </StackPanel>
+
+    <Border BorderThickness="0,1,0,0" BorderBrush="{DynamicResource HarborBorderBrush}" Padding="0,14,0,0">
+      <Grid x:Name="DetailsGrid" ColumnDefinitions="128,*" RowSpacing="6" />
+    </Border>
+
+    <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right">
+      <Button Content="Copy Diagnostics" Click="OnCopyDiagnosticsClick" />
+      <Button Content="Close" Click="OnCloseClick" IsDefault="True" IsCancel="True" />
+    </StackPanel>
+
+  </StackPanel>
+</Window>

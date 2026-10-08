@@ -6,6 +6,7 @@ namespace Armada.Helm.Commands
     using Spectre.Console.Cli;
     using Armada.Core;
     using Armada.Core.Enums;
+    using Armada.Core.Hosting;
     using Armada.Core.Models;
     using Armada.Core.Services;
 
@@ -214,37 +215,12 @@ namespace Armada.Helm.Commands
                 // Find mission log path from the first mission
                 if (captainLogPath == null && detail.Missions != null)
                 {
+                    ArmadaLogPaths logPaths = ArmadaLogPaths.ForDefaultDataDirectory();
                     foreach (Mission m in detail.Missions)
                     {
-                        // Try per-mission log first
-                        string missionLogPath = Path.Combine(Constants.DefaultDataDirectory, "logs", "missions", m.Id + ".log");
-                        if (File.Exists(missionLogPath))
-                        {
-                            captainLogPath = missionLogPath;
-                            break;
-                        }
-
-                        // Fallback to captain log pointer
-                        if (!string.IsNullOrEmpty(m.CaptainId))
-                        {
-                            string pointerPath = Path.Combine(Constants.DefaultDataDirectory, "logs", "captains", m.CaptainId + ".current");
-                            if (File.Exists(pointerPath))
-                            {
-                                string target = File.ReadAllText(pointerPath).Trim();
-                                if (File.Exists(target))
-                                {
-                                    captainLogPath = target;
-                                    break;
-                                }
-                            }
-
-                            string candidatePath = Path.Combine(Constants.DefaultDataDirectory, "logs", "captains", m.CaptainId + ".log");
-                            if (File.Exists(candidatePath))
-                            {
-                                captainLogPath = candidatePath;
-                                break;
-                            }
-                        }
+                        // The mission's own log, else the current log of its captain.
+                        captainLogPath = logPaths.ResolveMissionLog(m.Id, m.CaptainId);
+                        if (captainLogPath != null) break;
                     }
                 }
 
