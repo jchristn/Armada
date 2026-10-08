@@ -19,6 +19,7 @@ import { useNotifications } from '../../notifications/NotificationContext';
 import { useTheme } from '../../theme/ThemeContext';
 import { CHROME_MAX_FONT_SCALE, MIN_TOUCH, radius, spacing } from '../../theme/typography';
 import { AppText, CountBadge, Icon } from '../ui';
+import { useSignOut } from './useSignOut';
 import { NotEncryptedIndicator } from './NotEncryptedIndicator';
 
 export const SIDEBAR_WIDTH = 280;
@@ -35,7 +36,8 @@ export function Sidebar() {
   const pathname = usePathname();
   const { count } = useApprovals();
   const { unreadCount } = useNotifications();
-  const { activeProfile, logout } = useAuth();
+  const { activeProfile } = useAuth();
+  const { signOut, signOutSheet } = useSignOut();
   const active = activeNavKey(pathname);
 
   const item = (entry: MobileNavItem, badge = 0) => {
@@ -91,12 +93,13 @@ export function Sidebar() {
           <AppText variant="subheading" muted accessibilityRole="header" maxFontSizeMultiplier={CHROME_MAX_FONT_SCALE} style={styles.sectionLabel}>{t('APP')}</AppText>
           {item(PREFERENCES_ITEM)}
           {item(PROFILES_ITEM)}
-          <Pressable testID="sidebar-sign-out" accessibilityRole="button" accessibilityLabel={t('Sign out')} onPress={() => void logout()} style={styles.item}>
+          <Pressable testID="sidebar-sign-out" accessibilityRole="button" accessibilityLabel={t('Sign out')} onPress={signOut} style={styles.item}>
             <Icon name="log-out-outline" size={20} color="danger" />
             <AppText variant="label" color="danger" style={styles.label}>{t('Sign out')}</AppText>
           </Pressable>
         </View>
       </ScrollView>
+      {signOutSheet}
     </View>
   );
 }

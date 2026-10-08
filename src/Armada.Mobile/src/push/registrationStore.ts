@@ -14,17 +14,47 @@ export function pushRecordKey(profileId: string): string {
   return `armada.push.${profileId.replace(/[^A-Za-z0-9._-]/g, '_')}`;
 }
 
+/** A device this app stopped using (signed out) whose server-side removal has not gone through yet. */
+export interface RetiredDevice {
+  profileId: string;
+  deviceId: string;
+}
+
 export interface RegistrationStore {
   read: (profileId: string) => Promise<PushRegistrationRecord | null>;
   write: (profileId: string, record: PushRegistrationRecord) => Promise<void>;
   remove: (profileId: string) => Promise<void>;
+  /**
+   * Devices to remove from their server at the next contact (sign-out could not reach it, or the token was already
+   * rejected). Optional: a store without them does not queue removals.
+   */
+  readRetired?: () => Promise<RetiredDevice[]>;
+  writeRetired?: (devices: RetiredDevice[]) => Promise<void>;
+}
+
+/** Secure-store key of the retired-device queue (device ids are not secret, but they sit with the push records). */
+export const RETIRED_DEVICES_KEY = 'armada.push.retired';
+
+const DEVICE_ID = /^pdv_[A-Za-z0-9_-]{1,96}$/;
+
+function parseRetired(raw: string | null): RetiredDevice[] {
+  if (!raw) return [];
+  try {
+    const value = JSON.parse(raw) as unknown;
+    if (!Array.isArray(value)) return [];
+    return value.filter((v): v is RetiredDevice => !!v && typeof v === 'object'
+      && typeof (v as RetiredDevice).profileId === 'string' && typeof (v as RetiredDevice).deviceId === 'string'
+      && DEVICE_ID.test((v as RetiredDevice).deviceId));
+  } catch {
+    return [];
+  }
 }
 
 function parse(raw: string | null): PushRegistrationRecord | null {
   if (!raw) return null;
   try {
     const value = JSON.parse(raw) as Partial<PushRegistrationRecord>;
-    if (typeof value.deviceId !== 'string' || !/^pdv_[A-Za-z0-9_-]{1,96}$/.test(value.deviceId)) return null;
+    if (typeof value.deviceId !== 'string' || !DEVICE_ID.test(value.deviceId)) return null;
     if (typeof value.expoPushToken !== 'string') return null;
     return {
       deviceId: value.deviceId,
@@ -54,6 +84,21 @@ export const secureRegistrationStore: RegistrationStore = {
       await SecureStore.deleteItemAsync(pushRecordKey(profileId), OPTIONS);
     } catch {
       // Already absent.
+    }
+  },
+  async readRetired() {
+    try {
+      return parseRetired(await SecureStore.getItemAsync(RETIRED_DEVICES_KEY, OPTIONS));
+    } catch {
+      return [];
+    }
+  },
+  async writeRetired(devices) {
+    try {
+      if (devices.length === 0) await SecureStore.deleteItemAsync(RETIRED_DEVICES_KEY, OPTIONS);
+      else await SecureStore.setItemAsync(RETIRED_DEVICES_KEY, JSON.stringify(devices), OPTIONS);
+    } catch {
+      // Best effort: the next sign-out or sign-in tries again.
     }
   },
 };

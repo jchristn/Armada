@@ -10,6 +10,8 @@ import { defaultPushNative, type PushNative, type PushResponse } from './nativeA
 import { parsePushData, responseAction, type PushPayload, type PushResponseAction } from './payload';
 import { pushApi as defaultPushApi } from './pushApi';
 import {
+  flushRetiredDevices,
+  isRetiredDevice,
   profileForDevice,
   registerDevice,
   reRegisterProfiles,
@@ -113,7 +115,8 @@ export function PushProvider({ children, deps: injected, now = Date.now }: PushP
   // Native setup once: foreground presentation, the Approve / Deny category, the Android channel.
   const labelsRef = useRef({ approve: t('Approve'), deny: t('Deny'), channel: t('Armada') });
   useEffect(() => {
-    deps.native.configurePresentation();
+    // Pushes for a device retired at sign-out (removal still pending on the server) are not shown in the foreground.
+    deps.native.configurePresentation((deviceId) => isRetiredDevice(deps.store, deviceId));
     void deps.native.registerCategory(labelsRef.current.approve, labelsRef.current.deny);
     void deps.native.ensureChannel(labelsRef.current.channel);
   }, [deps]);
@@ -133,14 +136,18 @@ export function PushProvider({ children, deps: injected, now = Date.now }: PushP
     return () => { cancelled = true; };
   }, []);
 
-  // Register on sign-in (and refresh on every return to a signed-in profile) once permission is granted.
+  // On sign-in: first finish removing devices retired while the server could not be reached (before registering,
+  // which may hand back the same row), then register (and refresh on every return) once permission is granted.
   const activeProfileId = activeProfileIdEarly;
   useEffect(() => {
-    if (!session || !activeProfileId || permission !== 'granted') return undefined;
+    if (!session || !activeProfileId) return undefined;
     let cancelled = false;
-    void registerDevice(deps, activeProfileId, session, userId).then((outcome) => {
+    void (async () => {
+      await flushRetiredDevices(deps, activeProfileId, session);
+      if (cancelled || permission !== 'granted') return;
+      const outcome = await registerDevice(deps, activeProfileId, session, userId);
       if (!cancelled) setRegistration({ profileId: activeProfileId, outcome });
-    });
+    })();
     return () => { cancelled = true; };
   }, [deps, session, activeProfileId, userId, permission]);
 
@@ -171,6 +178,8 @@ export function PushProvider({ children, deps: injected, now = Date.now }: PushP
   const capture = useCallback(async (response: PushResponse) => {
     const payload = parsePushData(response.data);
     if (!payload) return;
+    // A device this app signed out of (its server-side removal still pending): not handled at all.
+    if (payload.deviceId && await isRetiredDevice(deps.store, payload.deviceId)) return;
     // Only a push naming a device this app registered (for exactly one profile) may carry Approve / Deny. The server
     // always sets deviceId, so a push without one did not come from an Admiral this app registered with (anyone
     // holding the Expo token can send one when the Expo project has no access token): it may only open its link.

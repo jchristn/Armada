@@ -23,6 +23,23 @@ export interface ServerProfile {
    * re-sign-in returns to the same Admiral). Absent on profiles saved before W5.4.
    */
   proxyInstanceId?: string | null;
+  /**
+   * The account whose password is saved for Face ID / Touch ID / fingerprint sign-in, or null/absent when none is.
+   * Only this non-secret description lives here; the password itself is in the keychain / keystore behind biometrics
+   * (auth/savedCredentials.ts).
+   */
+  savedSignIn?: SavedSignInInfo | null;
+  /** Proxy profiles: the Armada.Proxy password is saved for biometric sign-in (the password is in the keychain). */
+  proxyPasswordSaved?: boolean;
+  /** The user answered "Not now" to the offer to save the password for biometric sign-in; it is not offered again. */
+  savePasswordOfferDeclined?: boolean;
+}
+
+/** Who a saved password signs in as (non-secret; the password is stored separately behind biometrics). */
+export interface SavedSignInInfo {
+  email: string;
+  tenantId: string;
+  tenantName: string | null;
 }
 
 export type ServerProfileKind = 'Direct' | 'Proxy';

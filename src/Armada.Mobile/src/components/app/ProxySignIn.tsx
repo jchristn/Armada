@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useAuth } from '../../auth/AuthContext';
+import { biometricName, useBiometricSupport } from '../../auth/biometrics';
 import { useLocale } from '../../i18n/LocaleContext';
 import { ProxyError, isSelectableInstance, type ProxyInstance } from '../../proxy/proxyApi';
 import { spacing } from '../../theme/typography';
 import { AppText, Banner, Button, Icon, ListRow, TextField } from '../ui';
+import { BiometricSignInCard, SavePasswordSwitch, useAutoPromptOnce } from './BiometricSignIn';
 
 function ErrorLine({ message }: { message: string }) {
   return (
@@ -32,22 +34,74 @@ function proxyErrorText(t: (s: string, v?: Record<string, string | number>) => s
   return t('The proxy could not complete the request.');
 }
 
-/** Step 1 for a Proxy profile: the Armada.Proxy password (the shared secret set on the proxy). */
+/**
+ * Step 1 for a Proxy profile: the Armada.Proxy password (the shared secret set on the proxy), or the password saved
+ * for Face ID / Touch ID / fingerprint sign-in.
+ */
 export function ProxyPortalForm() {
-  const { proxySignIn, proxyExpired } = useAuth();
+  const { proxySignIn, proxyExpired, activeProfile, signedOutByUser, readSavedProxyPassword, forgetSavedPassword } = useAuth();
   const { t } = useLocale();
+  const support = useBiometricSupport();
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
+  const [savePassword, setSavePassword] = useState(!!activeProfile?.proxyPasswordSaved);
+  const method = support ? biometricName(support.kind, t) : '';
+  const biometricReady = !!support?.canSavePassword && !!activeProfile?.proxyPasswordSaved;
+
+  useAutoPromptOnce(
+    biometricReady && !signedOutByUser && activeProfile ? `${activeProfile.id}:portal` : null,
+    () => { void biometricSubmit(); },
+  );
 
   async function submit() {
     setError('');
+    setNotice('');
     setBusy(true);
     try {
-      await proxySignIn(password);
+      await proxySignIn(password, {
+        password,
+        save: savePassword,
+        canSave: !!support?.canSavePassword,
+        prompt: t('Save your password for {{method}} sign-in', { method }),
+      });
       setPassword('');
     } catch (err) {
       setError(proxyErrorText(t, err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Read the saved proxy password (the OS prompts) and sign in to the proxy with it. */
+  async function biometricSubmit() {
+    if (!activeProfile || busy) return;
+    setError('');
+    setNotice('');
+    setBusy(true);
+    try {
+      const read = await readSavedProxyPassword(t('Sign in to {{name}}', { name: activeProfile.name }));
+      if (read.status === 'none') {
+        setSavePassword(false);
+        setNotice(t('Your saved password is no longer available ({{method}} settings changed). Sign in with your password.', { method }));
+        return;
+      }
+      if (read.status === 'failed') {
+        setNotice(t('{{method}} sign-in was cancelled. Sign in with your password.', { method }));
+        return;
+      }
+      try {
+        await proxySignIn(read.credentials.password);
+      } catch (err) {
+        if (err instanceof ProxyError && err.kind === 'unauthorized') {
+          await forgetSavedPassword(activeProfile.id, 'proxy');
+          setSavePassword(false);
+          setNotice(t('The saved password was not accepted, so it was removed from this device. Sign in with your password.'));
+        } else {
+          setError(proxyErrorText(t, err));
+        }
+      }
     } finally {
       setBusy(false);
     }
@@ -68,6 +122,22 @@ export function ProxyPortalForm() {
           {t('Sign in to Armada.Proxy, then choose the Admiral to connect to.')}
         </AppText>
         {error ? <ErrorLine message={error} /> : null}
+        {notice ? (
+          <View accessibilityRole="alert" accessibilityLiveRegion="polite" style={styles.error} testID="proxy-notice">
+            <Icon name="information-circle-outline" color="info" />
+            <AppText style={styles.flex}>{notice}</AppText>
+          </View>
+        ) : null}
+        {biometricReady && support ? (
+          <BiometricSignInCard
+            testID="proxy-biometric"
+            support={support}
+            title={t('Sign in with {{method}}', { method })}
+            subtitle={t('Armada.Proxy password')}
+            busy={busy}
+            onPress={() => void biometricSubmit()}
+          />
+        ) : null}
         <TextField
           testID="proxy-password"
           label={t('Proxy password')}
@@ -82,6 +152,7 @@ export function ProxyPortalForm() {
           returnKeyType="go"
           onSubmitEditing={() => { if (password.trim()) void submit(); }}
         />
+        <SavePasswordSwitch testID="proxy-save-password" support={support} value={savePassword} onChange={setSavePassword} />
         <Button testID="proxy-sign-in" label={busy ? t('Signing in...') : t('Sign in to proxy')} onPress={() => void submit()} busy={busy} disabled={!password.trim()} />
       </View>
     </View>

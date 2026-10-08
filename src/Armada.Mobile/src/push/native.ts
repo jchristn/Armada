@@ -81,10 +81,13 @@ export const nativePushEnvironment: PushEnvironment = {
  * Foreground presentation: approvals that need the user show a banner; everything else goes to the list only
  * (the in-app toasts already announce failures and status changes while the app is open).
  */
-export function configureForegroundPresentation(): void {
+export function configureForegroundPresentation(isRetired: (deviceId: string) => Promise<boolean> = async () => false): void {
   Notifications.setNotificationHandler({
     handleNotification: async (notification) => {
       const payload = parsePushData(notification.request.content.data);
+      if (payload?.deviceId && await isRetired(payload.deviceId)) {
+        return { shouldShowBanner: false, shouldShowList: false, shouldPlaySound: false, shouldSetBadge: false };
+      }
       const banner = !!payload && ACTIONABLE_KINDS.includes(payload.kind);
       return { shouldShowBanner: banner, shouldShowList: true, shouldPlaySound: banner, shouldSetBadge: true };
     },

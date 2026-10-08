@@ -13,7 +13,7 @@ import { spacing } from '../theme/typography';
  * Swipe a row to edit or delete; deleting asks for the typed word "delete", like the dashboard's destructive actions.
  */
 export function ProfilesScreen() {
-  const { profiles, activeProfile, selectProfile, saveProfile, deleteProfile } = useAuth();
+  const { profiles, activeProfile, selectProfile, saveProfile, deleteProfile, forgetSavedPassword } = useAuth();
   const { t } = useLocale();
   const { isTablet } = useLayout();
   const [editing, setEditing] = useState<ServerProfile | 'new' | null>(null);
@@ -56,8 +56,9 @@ export function ProfilesScreen() {
         </AppText>
         <ProfileForm
           key={editing === 'new' ? 'new' : editing.id}
-          profile={editing === 'new' ? null : editing}
+          profile={editing === 'new' ? null : profiles.find((p) => p.id === editing.id) ?? editing}
           submitLabel={t('Save')}
+          onForgetSavedPassword={editing === 'new' ? undefined : () => forgetSavedPassword(editing.id)}
           onCancel={() => setEditing(null)}
           onSubmit={async (draft) => {
             await saveProfile(draft, editing === 'new' ? undefined : editing.id);
