@@ -182,12 +182,17 @@ namespace Test.Shared.Suites.Tui.Build
                     landing.Choose(landing.Options.First(o => o.Value == "MergeAndPush"));
                     AssertEqual("Merge and Push -- local merge, then push to the remote", landing.Selected!.Label, "MergeAndPush option label");
                     AssertTrue(dialog.Form.Rows.First(r => r.Label == "Landing Mode").Hint!.Contains("then pushes it to the working directory's remote"), "MergeAndPush hint");
+                    int listsBeforeCreate = stub.CountFor("GET", "/api/v1/vessels");
                     host.Press("ctrl+s");
                     AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/vessels") == 1), "create");
                     StubRequest create = stub.Last("POST", "/api/v1/vessels");
                     AssertEqual(LandingModeEnum.MergeAndPush, create.BodyAs<Vessel>().LandingMode, "created landing mode");
                     AssertTrue(create.Body.Contains("\"MergeAndPush\""), "sent as the enum name: " + create.Body);
 
+                    // The keys below are for the grid: wait until the form has closed and the reload after the create
+                    // has landed. Pressed while the form was still open (the POST was seen, its result not yet applied)
+                    // they went to the form and the cursor stayed where it was.
+                    AssertTrue(host.PumpUntil(() => host.App.Modals.Top == null && stub.CountFor("GET", "/api/v1/vessels") > listsBeforeCreate && screen.Grid.State == GridStateEnum.Ready), "form closed and list reloaded");
                     host.Press("home");
                     AssertTrue(host.PumpUntil(() => screen.Grid.Current?.Id == "vsl_api" || screen.Grid.Current?.Id == "vsl_demo"), "cursor on a row");
                     if (screen.Grid.Current?.Id != "vsl_api") host.Press("down");
