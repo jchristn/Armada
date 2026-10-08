@@ -36,6 +36,7 @@ namespace Armada.Harbor
         private readonly TextBlock _ListNote = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 12 };
         private readonly TextBlock _FileTitle = new TextBlock { FontWeight = FontWeight.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis };
         private readonly TextBlock _FileInfo = new TextBlock { FontSize = 12, TextTrimming = TextTrimming.CharacterEllipsis };
+        private readonly CopyableIdText _FileId = new CopyableIdText(null, "ID") { HorizontalAlignment = HorizontalAlignment.Left, IsVisible = false };
         private readonly CheckBox _Follow = new CheckBox { Content = "Follow", IsChecked = true };
         private readonly ComboBox _Severity = new ComboBox { ItemsSource = new string[] { "All levels", "Info and up", "Warn and up", "Error and up" }, SelectedIndex = 0, MinWidth = 130 };
         private readonly TextBox _Find = new TextBox { Watermark = "Find", MinWidth = 160 };
@@ -74,7 +75,9 @@ namespace Armada.Harbor
             {
                 StackPanel item = new StackPanel { Spacing = 1 };
                 if (entry == null) return item;
-                item.Children.Add(new TextBlock { Text = entry.Name, TextTrimming = TextTrimming.CharacterEllipsis });
+                // A mission's or captain's own log shows its ID (copyable); other files show their name.
+                if (!String.IsNullOrEmpty(entry.EntityId)) item.Children.Add(new CopyableIdText(entry.EntityId, IdLabel(entry.EntityId)) { HorizontalAlignment = HorizontalAlignment.Left });
+                else item.Children.Add(new TextBlock { Text = entry.Name, TextTrimming = TextTrimming.CharacterEllipsis });
                 item.Children.Add(HarborUi.Secondary(new TextBlock
                 {
                     Text = DirectoryUsage.FormatBytes(entry.SizeBytes) + "  -  " + HarborUi.LocalTime(entry.LastWriteUtc),
@@ -85,7 +88,7 @@ namespace Armada.Harbor
             _Files.SelectionChanged += (sender, args) =>
             {
                 // Re-selecting the open file after a list refresh must not reload it.
-                if (_Files.SelectedItem is LogFileEntry entry && !String.Equals(entry.Path, _CurrentPath, StringComparison.Ordinal)) Open(entry.Path);
+                if (_Files.SelectedItem is LogFileEntry entry && !String.Equals(entry.Path, _CurrentPath, StringComparison.Ordinal)) Open(entry.Path, entry.EntityId);
             };
 
             Button openMission = HarborUi.Button("Open", () => _ = OpenMissionAsync(), "Open the log of a mission (msn_) or captain (cpt_)");
@@ -155,6 +158,7 @@ namespace Armada.Harbor
 
             StackPanel rightTop = new StackPanel { Spacing = 4, Margin = new Thickness(0, 0, 0, 6) };
             rightTop.Children.Add(_FileTitle);
+            rightTop.Children.Add(_FileId);
             rightTop.Children.Add(HarborUi.Secondary(_FileInfo));
             rightTop.Children.Add(toolbar);
 
@@ -293,12 +297,15 @@ namespace Armada.Harbor
             }
 
             _Files.SelectedItem = null;
-            Open(path);
+            Open(path, id);
         }
 
-        private void Open(string path)
+        private void Open(string path, string? entityId)
         {
             _CurrentPath = path;
+            _FileId.Id = entityId;
+            _FileId.Label = entityId == null ? "ID" : IdLabel(entityId);
+            _FileId.IsVisible = !String.IsNullOrEmpty(entityId);
             _Offset = 0;
             _Lines.Clear();
             _Partial = String.Empty;
@@ -420,9 +427,17 @@ namespace Armada.Harbor
             _Lines.Clear();
             _Partial = String.Empty;
             _FileTitle.Text = "No log selected";
+            _FileId.IsVisible = false;
             _FileInfo.Text = String.Empty;
             _Viewer.Text = message;
             UpdateTimer();
+        }
+
+        private static string IdLabel(string id)
+        {
+            if (id.StartsWith(Armada.Core.Constants.CaptainIdPrefix, StringComparison.Ordinal)) return "Captain ID";
+            if (id.StartsWith(Armada.Core.Constants.MissionIdPrefix, StringComparison.Ordinal)) return "Mission ID";
+            return "ID";
         }
 
         private void UpdateTimer()

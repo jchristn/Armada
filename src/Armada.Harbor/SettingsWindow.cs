@@ -7,7 +7,7 @@ namespace Armada.Harbor
 
     /// <summary>
     /// The Settings window ("Armada Harbor - Settings"): General (this computer's Harbor settings and the appearance),
-    /// Repositories (when that view is present), and Admiral server (the Admiral's own settings). The Settings menu
+    /// Repositories (when that view is present), and Admiral (the Admiral's own settings). The Settings menu
     /// items and button open it.
     /// </summary>
     public class SettingsWindow : Window
@@ -40,7 +40,7 @@ namespace Armada.Harbor
             Add(SettingsTabEnum.General, "General", new HarborSettingsView(session));
             Control? repositories = CreateRepositoriesView(session);
             if (repositories != null) Add(SettingsTabEnum.Repositories, "Repositories", repositories);
-            Add(SettingsTabEnum.AdmiralServer, "Admiral server", new ArmadaSettingsView(session));
+            Add(SettingsTabEnum.Admiral, "Admiral", new ArmadaSettingsView(session));
 
             _Tabs.Margin = new Thickness(12, 4, 0, 0);
             Content = _Tabs;

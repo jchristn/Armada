@@ -27,12 +27,16 @@ namespace Armada.Harbor
 
         private readonly HarborSession _Session;
         private readonly SelectableTextBlock _HarborValue;
+        private readonly CopyableIdText _HarborIdValue;
         private readonly SelectableTextBlock _LinkValue;
-        private readonly SelectableTextBlock _McpValue;
+        private readonly UrlTextBox _LinkUrlValue;
+        private readonly UrlTextBox _McpValue;
+        private readonly SelectableTextBlock _McpNote;
         private readonly TextBlock _JobsValue;
         private readonly JobListView _Jobs = new JobListView();
         private readonly SelectableTextBlock _HarborLogValue;
-        private readonly SelectableTextBlock _RestValue;
+        private readonly UrlTextBox _RestValue;
+        private readonly SelectableTextBlock _RestNote;
         private readonly SelectableTextBlock _HealthValue;
         private readonly SelectableTextBlock _VersionValue;
         private readonly SelectableTextBlock _UptimeValue;
@@ -61,8 +65,12 @@ namespace Armada.Harbor
 
             Grid harbor = HarborUi.DetailGrid();
             _HarborValue = HarborUi.AddRow(harbor, "Harbor", null);
+            _HarborIdValue = HarborUi.AddIdRow(harbor, "Harbor ID", null);
             _LinkValue = HarborUi.AddRow(harbor, "Connection", null);
-            _McpValue = HarborUi.AddRow(harbor, "MCP URL", null);
+            _LinkUrlValue = HarborUi.AddUrlRow(harbor, "Admiral address", null);
+            _McpValue = new UrlTextBox(null, "MCP URL", true);
+            _McpNote = HarborUi.Secondary(new SelectableTextBlock { Text = "- (sent by the Admiral when connected)", VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center });
+            HarborUi.AddControlRow(harbor, "MCP URL", Either(_McpValue, _McpNote));
             _HarborLogValue = HarborUi.AddRow(harbor, "Harbor log", null);
             StackPanel harborBody = new StackPanel { Spacing = 12 };
             harborBody.Children.Add(harbor);
@@ -75,7 +83,9 @@ namespace Armada.Harbor
             harborBody.Children.Add(_Jobs);
 
             Grid admiral = HarborUi.DetailGrid();
-            _RestValue = HarborUi.AddRow(admiral, "Address", null);
+            _RestValue = new UrlTextBox(null, "REST address", true);
+            _RestNote = HarborUi.Secondary(new SelectableTextBlock { Text = "- (the Admiral address is not a ws:// or wss:// address)", TextWrapping = Avalonia.Media.TextWrapping.Wrap });
+            HarborUi.AddControlRow(admiral, "Address", Either(_RestValue, _RestNote));
             _HealthValue = HarborUi.AddRow(admiral, "Health", "Checking...");
             _VersionValue = HarborUi.AddRow(admiral, "Version", null);
             _UptimeValue = HarborUi.AddRow(admiral, "Uptime", null);
@@ -123,6 +133,16 @@ namespace Armada.Harbor
 
         #region Private-Methods
 
+        private static Panel Either(Control first, Control second)
+        {
+            // One grid cell that shows whichever of the two is visible.
+            Panel panel = new Panel();
+            panel.Children.Add(first);
+            panel.Children.Add(second);
+            panel.HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch;
+            return panel;
+        }
+
         private void OnSessionChanged(object? sender, EventArgs e)
         {
             RefreshLocal();
@@ -131,15 +151,22 @@ namespace Armada.Harbor
         private void RefreshLocal()
         {
             HarborAppSettings settings = _Session.Settings;
-            _HarborValue.Text = settings.Name + "  (" + settings.HarborId + ")";
-            _LinkValue.Text = DescribeLink(_Session.Window.LinkState) + " - " + settings.ServerLinkUrl;
-            _McpValue.Text = String.IsNullOrEmpty(_Session.Window.McpUrl) ? "-  (sent by the Admiral when connected)" : _Session.Window.McpUrl;
+            _HarborValue.Text = settings.Name;
+            _HarborIdValue.Id = settings.HarborId;
+            _LinkValue.Text = DescribeLink(_Session.Window.LinkState);
+            _LinkUrlValue.Text = settings.ServerLinkUrl;
+            bool hasMcp = !String.IsNullOrEmpty(_Session.Window.McpUrl);
+            _McpValue.Text = _Session.Window.McpUrl;
+            _McpValue.IsVisible = hasMcp;
+            _McpNote.IsVisible = !hasMcp;
             List<HarborJobInfo> jobs = _Session.Window.LiveJobs();
             _Jobs.Update(jobs, DateTime.UtcNow);
             _JobsValue.Text = jobs.Count + " of " + settings.MaxConcurrentJobs + " slots in use";
             string? harborLog = new HarborLogPaths(HarborAppSettings.LogDirectory()).FindLatestHarborLog();
             _HarborLogValue.Text = harborLog ?? HarborAppSettings.LogDirectory() + " (no log yet)";
-            _RestValue.Text = _Session.RestBaseUrl ?? "-  (the Admiral address is not a ws:// or wss:// address)";
+            _RestValue.Text = _Session.RestBaseUrl;
+            _RestValue.IsVisible = _Session.RestBaseUrl != null;
+            _RestNote.IsVisible = _Session.RestBaseUrl == null;
 
             // Measuring and opening the folder apply only to an Admiral whose data is on this computer.
             _UsageButtons.IsVisible = _Session.IsAdmiralLocal;

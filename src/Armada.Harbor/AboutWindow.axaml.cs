@@ -43,37 +43,40 @@ namespace Armada.Harbor
 
             VersionText.Text = "Version " + HarborDiagnostics.Version();
 
-            List<string[]> rows = new List<string[]>
-            {
-                new string[] { "Harbor", settings.Name },
-                new string[] { "Harbor ID", settings.HarborId },
-                new string[] { "Link URL", settings.ServerLinkUrl },
-                new string[] { "Harbor settings", HarborAppSettings.DefaultPath() },
-                new string[] { "Armada data", admiral == null ? "-" : admiral.DataDirectory + (admiral.IsLocal ? "" : " (not available: " + admiral.Reason.TrimEnd('.') + ")") },
-                new string[] { ".NET", RuntimeInformation.FrameworkDescription },
-                new string[] { "OS", RuntimeInformation.OSDescription }
-            };
-
-            for (int i = 0; i < rows.Count; i++)
-            {
-                DetailsGrid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
-
-                TextBlock label = new TextBlock { Text = rows[i][0], FontWeight = Avalonia.Media.FontWeight.SemiBold, VerticalAlignment = VerticalAlignment.Top };
-                Grid.SetRow(label, i);
-                Grid.SetColumn(label, 0);
-                DetailsGrid.Children.Add(label);
-
-                SelectableTextBlock value = new SelectableTextBlock { Text = rows[i][1], TextWrapping = Avalonia.Media.TextWrapping.Wrap };
-                value.Bind(SelectableTextBlock.ForegroundProperty, value.GetResourceObservable("HarborSecondaryTextBrush"));
-                Grid.SetRow(value, i);
-                Grid.SetColumn(value, 1);
-                DetailsGrid.Children.Add(value);
-            }
+            AddText("Harbor", settings.Name);
+            AddValue("Harbor ID", new CopyableIdText(settings.HarborId, "Harbor ID") { HorizontalAlignment = HorizontalAlignment.Left });
+            AddValue("Link URL", new UrlTextBox(settings.ServerLinkUrl, "Link URL", true));
+            AddText("Harbor settings", HarborAppSettings.DefaultPath());
+            AddText("Armada data", admiral == null ? "-" : admiral.DataDirectory + (admiral.IsLocal ? "" : " (not available: " + admiral.Reason.TrimEnd('.') + ")"));
+            AddText(".NET", RuntimeInformation.FrameworkDescription);
+            AddText("OS", RuntimeInformation.OSDescription);
         }
 
         #endregion
 
         #region Private-Methods
+
+        private void AddText(string label, string value)
+        {
+            SelectableTextBlock text = new SelectableTextBlock { Text = value, TextWrapping = Avalonia.Media.TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
+            text.Bind(SelectableTextBlock.ForegroundProperty, text.GetResourceObservable("HarborSecondaryTextBrush"));
+            AddValue(label, text);
+        }
+
+        private void AddValue(string label, Control value)
+        {
+            int row = DetailsGrid.RowDefinitions.Count;
+            DetailsGrid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+
+            TextBlock labelBlock = new TextBlock { Text = label, FontWeight = Avalonia.Media.FontWeight.SemiBold, VerticalAlignment = VerticalAlignment.Center };
+            Grid.SetRow(labelBlock, row);
+            Grid.SetColumn(labelBlock, 0);
+            DetailsGrid.Children.Add(labelBlock);
+
+            Grid.SetRow(value, row);
+            Grid.SetColumn(value, 1);
+            DetailsGrid.Children.Add(value);
+        }
 
         private void OnCopyDiagnosticsClick(object? sender, RoutedEventArgs e)
         {

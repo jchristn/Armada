@@ -21,11 +21,11 @@ namespace Armada.Harbor
 
         private readonly HarborSession _Session;
         private readonly TextBox _Name = new TextBox();
-        private readonly SelectableTextBlock _HarborId;
-        private readonly TextBox _LinkUrl = new TextBox();
-        private readonly TextBox _DashboardUrl = new TextBox();
-        private readonly TextBox _TenantId = new TextBox { Watermark = "None" };
-        private readonly TextBox _UserId = new TextBox { Watermark = "None" };
+        private readonly CopyableIdText _HarborId = new CopyableIdText(null, "Harbor ID");
+        private readonly UrlTextBox _LinkUrl = new UrlTextBox(null, "Admiral address");
+        private readonly UrlTextBox _DashboardUrl = new UrlTextBox(null, "Dashboard address");
+        private readonly CopyableIdText _TenantId = new CopyableIdText(null, "Tenant ID", true);
+        private readonly CopyableIdText _UserId = new CopyableIdText(null, "User ID", true);
         private readonly TextBox _AccessKey = new TextBox { PasswordChar = '\u2022', Watermark = "None: no sign-in (same-computer Admiral only)" };
         private readonly TextBox _Secret = new TextBox { PasswordChar = '\u2022', Watermark = "None" };
         private readonly CheckBox _ShowSecrets = new CheckBox { Content = "Show" };
@@ -50,8 +50,11 @@ namespace Armada.Harbor
 
             Grid identity = Form();
             AddField(identity, "Name", _Name, "How this computer appears on the Admiral's Harbors page.");
-            _HarborId = HarborUi.Secondary(new SelectableTextBlock { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 6, 0, 0) });
+            _HarborId.HorizontalAlignment = HorizontalAlignment.Left;
+            _HarborId.Margin = new Thickness(0, 2, 0, 0);
             AddField(identity, "Harbor ID", _HarborId, null);
+            _TenantId.Input.Watermark = "None";
+            _UserId.Input.Watermark = "None";
 
             Grid connection = Form();
             AddField(connection, "Admiral address", _LinkUrl, "Where this computer connects to the Admiral: ws://host:7890/v1.0/harbor/connect (wss:// over TLS).");
@@ -152,11 +155,11 @@ namespace Armada.Harbor
         {
             _Loading = true;
             _Name.Text = settings.Name;
-            _HarborId.Text = settings.HarborId;
+            _HarborId.Id = settings.HarborId;
             _LinkUrl.Text = settings.ServerLinkUrl;
             _DashboardUrl.Text = settings.DashboardUrl;
-            _TenantId.Text = settings.TenantId;
-            _UserId.Text = settings.UserId;
+            _TenantId.Id = settings.TenantId;
+            _UserId.Id = settings.UserId;
             _AccessKey.Text = settings.AccessKey;
             _Secret.Text = settings.Secret;
             _Capabilities.Text = String.Join(", ", settings.Capabilities ?? new List<string>());
@@ -174,8 +177,8 @@ namespace Armada.Harbor
             edited.Name = (_Name.Text ?? String.Empty).Trim();
             edited.ServerLinkUrl = (_LinkUrl.Text ?? String.Empty).Trim();
             edited.DashboardUrl = (_DashboardUrl.Text ?? String.Empty).Trim();
-            edited.TenantId = (_TenantId.Text ?? String.Empty).Trim();
-            edited.UserId = (_UserId.Text ?? String.Empty).Trim();
+            edited.TenantId = (_TenantId.Id ?? String.Empty).Trim();
+            edited.UserId = (_UserId.Id ?? String.Empty).Trim();
             edited.AccessKey = (_AccessKey.Text ?? String.Empty).Trim();
             edited.Secret = (_Secret.Text ?? String.Empty).Trim();
             edited.Capabilities = (_Capabilities.Text ?? String.Empty)

@@ -102,7 +102,7 @@ The app has three windows, and every entry point opens the same ones:
   Copy, Clear, and All Logs; consecutive heartbeats collapse into one line with a count). **Dashboard**, **Status**, and
   **Settings** are in the header. Closing the window keeps Harbor running in the tray.
 - **Armada Harbor - Status**, with an **Overview** tab and a **Logs** tab.
-- **Armada Harbor - Settings**, with **General**, **Repositories**, and **Admiral server** tabs.
+- **Armada Harbor - Settings**, with **General**, **Repositories**, and **Admiral** tabs.
 
 The menus are in the macOS menu bar while a Harbor window is in front (the app menu is **Armada Harbor**); on Windows
 and Linux they are in a menu bar at the top of each Harbor window. The tray (menu bar) icon offers the windows and the
@@ -130,7 +130,26 @@ The Settings window:
 |---|---|
 | **General** | This machine's Harbor settings in `~/.armada-harbor/settings.json`: name and id, the connection to the Admiral (address, dashboard address, access key, secret, tenant and user ids), work (jobs at once, tools offered, heartbeat), and the color scheme (follow the system, light, or dark; applied at once and kept on Save). Save validates the values, writes the file atomically keeping the previous version as `settings.json.bak-<timestamp>`, and reconnects the link when a connection setting changed. |
 | **Repositories** | Where this machine keeps vessel checkouts and mission docks (see [Where docks live](#dock-affinity-and-routing)): **Vessel checkouts** (a vessel name or ID and its checkout folder, which must contain `.git`), **Root folders** searched for checkouts by remote URL, the **Docks folder** (default `~/.armada-harbor/docks`, not inside a checkout), and the **Clones folder** (default `~/.armada-harbor/repos`). Saved in `settings.json` as `Repositories`, `RepositoryRoots`, `DocksDirectory`, and `ReposDirectory`; validated on save and applied to new missions without reconnecting. |
-| **Admiral server** | The Admiral's own settings, not this machine's. **Change live**: the common Admiral settings (captain limits, heartbeat and stall timing, planning-session timeouts, landing mode, ports), read from and applied to the running Admiral through `GET`/`PUT /api/v1/settings`, so they take effect at once (ports after a restart). **Edit file (settings.json)**, when the Admiral is on this machine: its whole `settings.json` as JSON. Save refuses text the Admiral would not load (with the line and column of a syntax error, or the setting that is out of range), asks before overwriting a file that changed on disk, and keeps the previous version as a backup. The Admiral reads this file only at startup, so the tab offers **Restart Admiral** after a save. Until it restarts, a settings change made from the dashboard or Change live rewrites the file from the running settings and discards edits made here. |
+| **Admiral** | The Admiral's own settings, not this machine's. **Change live**: the common Admiral settings (captain limits, heartbeat and stall timing, planning-session timeouts, landing mode, ports), read from and applied to the running Admiral through `GET`/`PUT /api/v1/settings`, so they take effect at once (ports after a restart). **Edit file (settings.json)**, when the Admiral is on this machine: its whole `settings.json` as JSON. Save refuses text the Admiral would not load (with the line and column of a syntax error, or the setting that is out of range), asks before overwriting a file that changed on disk, and keeps the previous version as a backup. The Admiral reads this file only at startup, so the tab offers **Restart Admiral** after a save. Until it restarts, a settings change made from the dashboard or Change live rewrites the file from the running settings and discards edits made here. **Restart Admiral** requires administrator privileges (see below). |
+
+**IDs and URLs.** Every ID Harbor shows (the Harbor ID, mission, captain, and job IDs in Running now and Logs, tenant
+and user IDs in General, and the Harbor ID in Status and About) is in a fixed-width font with a copy button beside it;
+the button copies the ID and turns into a green check for about a second and a half. Every URL field (the Admiral
+address and dashboard address in General, the Admiral address, MCP URL, and REST address in Status, and the link URL
+in About) has a **Validate** button. It tests the URL from this computer, one stage at a time: DNS (skipped for an IP
+address), the TCP connection, TLS for `https://` and `wss://` (the certificate must be trusted and match the host),
+then an HTTP `GET` for `http(s)://` or a WebSocket upgrade for `ws(s)://`. It shows each stage with its time and a
+success or failure reason (for example "Connection refused ... nothing is listening on that port"). It never sends
+credentials: no access key, secret, API key, or cookie, and a user name or password in the URL is ignored. A server
+that answers 401 or 403 is reported as reachable and asking for credentials. The test gives up after 10 seconds, and
+Cancel stops it. The probe is `Armada.Core.Connectivity.UrlProbe`.
+
+**Restarting the Admiral requires an administrator.** Restart Admiral sends `POST /api/v1/server/restart`, which the
+Admiral allows only for a global administrator (the local API key, or a user with `IsAdmin`); a tenant administrator or
+an ordinary user gets 403 and nothing restarts. Harbor asks the Admiral up front (`GET /api/v1/whoami`) who its
+credential belongs to: when it is not an administrator, or the Admiral cannot be reached, the button is disabled and
+the reason is shown under it. The confirmation says "This operation requires administrator privileges", and Harbor
+checks again just before sending the request.
 
 **Restore Previous Version.** General and the Admiral's settings file each have **Restore Previous Version...**, which
 lists the kept versions of that file (newest first, with when each was replaced) and, after you confirm, puts the
