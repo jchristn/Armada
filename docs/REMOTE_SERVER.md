@@ -381,6 +381,8 @@ In the Harbor app's settings ([HARBOR.md](HARBOR.md#installing-and-running-the-h
 |---|---|
 | `ServerLinkUrl` | `wss://armada.example.com/v1.0/harbor/connect` (or `ws://<host>:7890/v1.0/harbor/connect` without TLS) |
 | `AccessKey` | a bearer token of the user whose missions this Harbor should run |
+| `Repositories` / `RepositoryRoots` | where this machine has each vessel's checkout: named per vessel, or found under root folders by remote URL (Harbor > Settings > Repositories) |
+| `DocksDirectory` / `ReposDirectory` | where the Harbor creates mission docks and its own clones (defaults `~/.armada-harbor/docks` and `~/.armada-harbor/repos`) |
 
 On the Admiral (`settings.json`):
 
@@ -399,6 +401,11 @@ On the Admiral (`settings.json`):
 - `requireHarborForLaunch: true` keeps missions Pending until an eligible Harbor owned by the mission's user is
   connected, instead of running them on the Admiral host.
 - A Harbor's owner comes only from its `AccessKey`; see [HARBOR.md](HARBOR.md) and [HARBOR_PROTOCOL.md](HARBOR_PROTOCOL.md).
+- Missions routed to a Harbor get their dock on the Harbor's machine, as a worktree of your checkout there (or of a
+  clone the Harbor makes when it has none), and land there: the Admiral's `docksDirectory` and `reposDirectory` (for
+  example `/app/data/docks` in Docker) are not used for them, and the vessel needs no working directory on the server.
+  LocalMerge and MergeAndPush land into the Harbor machine's checkout; a vessel the Harbor serves from its own clone
+  needs PullRequest landing. See [Where docks live](HARBOR.md#dock-affinity-and-routing).
 
 Verified here: the Harbor link upgrades to a WebSocket through the TLS proxy (`101`). The Harbor app itself, and a
 Harbor mission end to end, were **not run here**. With `harbor.requireAuth: true` a Harbor without a credential is

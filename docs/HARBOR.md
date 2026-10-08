@@ -112,6 +112,7 @@ The settings, status, logs, and backups open in one **Manage** window with these
 |---|---|
 | **Status** | This Harbor (link state, MCP URL, running jobs, its log file), the Admiral's health, version, uptime, and ports (refreshed every 5 seconds while shown), captains, missions, and voyages, and the disk used by each item in the Armada data directory. |
 | **Harbor** | A form for `~/.armada-harbor/settings.json`. Save validates the values, writes the file atomically keeping the previous version as `settings.json.bak-<timestamp>`, and reconnects the link when a link setting changed. |
+| **Repositories** | Where this machine keeps vessel checkouts and mission docks (see [Where docks live](#dock-affinity-and-routing)): **Vessel checkouts** (a vessel name or ID and its checkout folder, which must contain `.git`), **Root folders** searched for checkouts by remote URL, the **Docks folder** (default `~/.armada-harbor/docks`, not inside a checkout), and the **Clones folder** (default `~/.armada-harbor/repos`). Saved in `settings.json` as `Repositories`, `RepositoryRoots`, `DocksDirectory`, and `ReposDirectory`; validated on save and applied to new missions without reconnecting. |
 | **Armada** | **Live**: the common Admiral settings (captain limits, heartbeat and stall timing, planning-session timeouts, landing mode, ports), read from and applied to the running Admiral through `GET`/`PUT /api/v1/settings`, so they take effect at once (ports after a restart). **File**: the Admiral's whole `settings.json` as JSON. Save refuses text the Admiral would not load (with the line and column of a syntax error, or the setting that is out of range), asks before overwriting a file that changed on disk, and keeps the previous version as a backup. The Admiral reads this file only at startup, so the tab offers **Restart Admiral** after a save. Until it restarts, a settings change made from the dashboard or the Live tab rewrites the file from the running settings and discards edits made here. |
 | **TUI** | The terminal UI's `tui.json`, as JSON, with the same validation and backups. Close `armada tui` before editing it; it saves this file when you change a preference there. |
 | **Logs** | Browse the Admiral's log, mission and captain session logs, diffs, instructions, final messages, dock logs, and Harbor's own log, or open a mission (`msn_`) or captain (`cpt_`) log by id. The viewer shows the last 256 KB of a file, follows it as it grows, filters the Admiral's and Harbor's logs by level (continuation lines such as stack traces stay with their line), and finds text. |
@@ -207,19 +208,54 @@ when it exists on the Harbor host, and otherwise use scratch. Model Context buil
 API-endpoint captains still run in-process on the Admiral, and fleet categorization always runs on the Admiral, so it
 is refused while `requireHarborForLaunch` is on. See [CAPTAINS.md](CAPTAINS.md#where-interactive-turns-run).
 
-**Where docks live.** In 1.0 the Admiral creates every mission dock itself, under its own `docksDirectory` (for an
-Admiral in Docker, `/app/data/docks/...`). There is no Harbor-side clone or dock: a Harbor can run a mission only when it
-sees the Admiral's docks directory at the same path, which in practice means a Harbor on the Admiral's own machine.
-Before a mission launch goes to a Harbor, the Admiral asks it (`git -C <dock> rev-parse --git-dir`) whether the dock
-exists there. A Harbor that does not have it never receives the launch. With `requireHarborForLaunch` off the captain
-runs on the Admiral host, where the dock is; if the captain's CLI is not installed there, the mission fails (`Infra`)
-with a reason naming the Harbor, the dock path, and the missing CLI. With `requireHarborForLaunch` on the mission fails
-(`Infra`) with a reason naming the Harbor and the dock path. Either way it fails once instead of returning to Pending and
-being relaunched on every dispatch pass. Ask Armada turns and chat are unaffected: they run in Harbor scratch directories.
+**Where docks live.** A mission routed to a Harbor gets its dock (a git worktree) on that Harbor's machine, and the whole
+mission runs there. The Admiral picks the Harbor *before* it creates the dock: routing (above) chooses a Harbor, and
+the Admiral asks it whether it can serve the vessel. The Harbor answers from its own settings, because each machine
+keeps code in different places:
+
+1. **A checkout named for the vessel** in Harbor > Settings > Repositories (vessel name or ID, and the checkout's
+   folder).
+2. **A checkout discovered under a root folder** listed there (searched three folders deep): one whose remote URL names
+   the vessel's repository URL. `https://`, `ssh://`, and `git@host:owner/repo` forms match each other; a `.git`
+   suffix, a user or port, and case do not matter.
+3. **Otherwise its own bare clone** of the vessel's repository URL, under `~/.armada-harbor/repos/<vessel>.git`
+   (fetched before each new dock).
+
+The dock is a worktree of that repository under the Harbor's docks folder, `~/.armada-harbor/docks/<vessel>/<mission>`
+by default, never inside your code folder. Creating it from your checkout only fetches `origin` and adds the mission
+branch (with no upstream) and the worktree: your checkout's files, index, current branch, and configuration are not
+touched. The mission branch lives in your repository. Armada also adds its instruction file name (for example
+`CLAUDE.md`) and `.armada/playbooks/` to the repository's `.git/info/exclude`, which git shares between a checkout and
+its worktrees.
+
+Everything after that runs on the Harbor too: the mission's instruction file and playbooks, the captain, the
+Definition-of-Done gate (through `/bin/sh -lc`), diff and commit capture, landing, and removing the dock (`git worktree
+remove`, then `prune`). Landing uses your checkout as the vessel's working directory on that machine: **LocalMerge**
+merges the mission branch into it, **MergeAndPush** then pushes it, and **PullRequest** pushes the branch and runs `gh`
+from the dock. As with a working directory on the Admiral, a merge into a checkout with uncommitted changes is refused
+(the mission becomes `LandingFailed` and the branch is kept). A vessel served from the Harbor's own clone has no
+checkout to merge into, so LocalMerge and MergeAndPush leave the work on the branch (`WorkProduced`); use PullRequest
+landing or map the vessel to a checkout. MergeQueue landing still runs on the Admiral and does not see Harbor-side
+branches.
+
+If no connected eligible Harbor can serve the vessel, the earlier behavior applies: with `requireHarborForLaunch` on the
+mission waits (Pending) and the Admiral logs why, for example "Harbor Mac (hbr_...) cannot serve vessel app: it has no
+checkout of vessel app, and the vessel has no repository URL to clone; set the checkout's path in Harbor > Settings >
+Repositories or add a root folder that contains it"; with it off the dock is created on the Admiral host, under its own
+`docksDirectory`. A Harbor that cannot create a dock (for example a clone it has no credentials for) fails provisioning
+with its reason, and the mission returns to Pending.
+
+A dock on a Harbor stays there: later pipeline stages, retries, and rework on the same branch wait for that Harbor,
+and a dock on a Harbor never runs on the Admiral host or another Harbor. Harbors from before Harbor-side docks (they do
+not advertise the `harbor-docks` capability) are never asked; with only such Harbors the dock is created on the Admiral,
+and before a launch goes to a Harbor the Admiral asks it (`git -C <dock> rev-parse --git-dir`) whether the dock exists
+there. A Harbor that does not have it never receives the launch; with `requireHarborForLaunch` off the captain runs on
+the Admiral host, and otherwise (or with the captain's CLI missing there) the mission fails once (`Infra`) with a reason
+naming the Harbor and the dock path. Ask Armada turns and chat are unaffected: they run in Harbor scratch directories.
 
 A dock that is already pinned to a Harbor never moves to another Harbor. If that Harbor is offline or no longer
-registered, a relaunch runs on the Admiral host when `requireHarborForLaunch` is off (the dock's worktree is created on
-the Admiral, so the path is valid there; a warning names the pinned Harbor), and is refused when it is on.
+registered, a relaunch of a dock created on the Admiral runs on the Admiral host when `requireHarborForLaunch` is off (a
+warning names the pinned Harbor) and is refused when it is on; a dock created on the Harbor waits for it.
 
 ## Harbor disconnects
 
