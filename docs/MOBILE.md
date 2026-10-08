@@ -51,8 +51,9 @@ The Admiral must be reachable from the phone:
 - The Admiral refuses to listen beyond loopback while the default credentials are in use: change the admin password
   first.
 - On macOS, allow incoming connections for the Admiral when the firewall asks.
-- Plain `http://` works on a LAN and the app warns about it on every such profile. Use `https://` for anything that
-  leaves your network.
+- Plain `http://` works (on a LAN or through a public host name such as a dynamic DNS name), and the app warns
+  about it on every such profile: the password and session token travel unencrypted. Use `https://` for anything
+  that leaves your network.
 
 ### Through Armada.Proxy (away from your network)
 

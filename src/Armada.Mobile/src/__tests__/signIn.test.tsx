@@ -93,6 +93,24 @@ describe('sign-in', () => {
     expect(within(await screen.findByTestId('sign-in-error')).getByText('No tenants found for this email.')).toBeTruthy();
   });
 
+  it('a server that cannot be reached says so instead of a tenant lookup failure', async () => {
+    const user = userEvent.setup();
+    api.lookupTenants.mockRejectedValue(new client.NetworkError('fetch failed: The resource could not be loaded', null));
+    await renderSignIn();
+    await user.type(screen.getByTestId('sign-in-email'), 'admin@armada');
+    await user.press(screen.getByTestId('sign-in-continue'));
+    expect(within(await screen.findByTestId('sign-in-error')).getByText('Could not reach the server. Check the address, the port, and your connection.')).toBeTruthy();
+  });
+
+  it('a server error during tenant lookup keeps the lookup message', async () => {
+    const user = userEvent.setup();
+    api.lookupTenants.mockRejectedValue(new client.ApiError('boom', 500, null));
+    await renderSignIn();
+    await user.type(screen.getByTestId('sign-in-email'), 'admin@armada');
+    await user.press(screen.getByTestId('sign-in-continue'));
+    expect(within(await screen.findByTestId('sign-in-error')).getByText('Failed to look up tenants.')).toBeTruthy();
+  });
+
   it('rate limiting (429) has its own message, by status not text', async () => {
     const user = userEvent.setup();
     api.lookupTenants.mockResolvedValue({ tenants: [{ id: 'ten_1', name: 'Default' }] });
