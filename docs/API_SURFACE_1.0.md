@@ -30,7 +30,7 @@ administrator).
 | WebSocket commands | 61 | 0 |
 | WebSocket event types | 67 | 0 |
 | CLI commands | 63 | 0 |
-| Settings keys | 186 | 12 |
+| Settings keys | 187 | 12 |
 
 ## REST API
 
@@ -869,6 +869,7 @@ install with the home directory written as `~`; defaults are not frozen (see COM
 | `push.dedupeWindowSeconds` | int | `300` |  |
 | `push.enabled` | bool | `true` |  |
 | `push.expoAccessToken` | string | `null` |  |
+| `push.maxDevicesPerUser` | int | `10` |  |
 | `push.maxPerUserPerMinute` | int | `20` |  |
 | `rebuildSlotRetentionCount` | int | `3` | experimental |
 | `rebuildSupervisorHarborId` | string | `null` | experimental |

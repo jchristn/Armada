@@ -128,7 +128,7 @@ namespace Armada.Server
 
         /// <summary>
         /// Optional push notification settings update (Enabled, ExpoAccessToken, Categories, MaxPerUserPerMinute,
-        /// DedupeWindowSeconds). When supplied, replaces the full push object; omitted fields take their defaults and
+        /// DedupeWindowSeconds, MaxDevicesPerUser). When supplied, replaces the full push object; omitted fields take their defaults and
         /// out-of-range values are clamped. ExpoAccessToken sent back as the redacted value from GET keeps the stored
         /// token. Applied live.
         /// </summary>

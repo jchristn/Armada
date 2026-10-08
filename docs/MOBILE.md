@@ -53,15 +53,18 @@ The Admiral must be reachable from the phone:
   first.
 - On macOS, allow incoming connections for the Admiral when the firewall asks.
 - Plain `http://` works (on a LAN or through a public host name such as a dynamic DNS name), and the app warns
-  about it on every such profile: the password and session token travel unencrypted. Use `https://` for anything
-  that leaves your network.
+  about it on every such profile: the password and session token travel unencrypted. While you are signed in over
+  `http://` a small **Not encrypted** mark stays in the header (in the sidebar on a tablet); tap it for what that
+  exposes. Use `https://` for anything that leaves your network.
 
 ### Through Armada.Proxy (away from your network)
 
 Choose **Armada.Proxy** when adding a server to reach an Admiral that is not directly reachable:
 
-1. Enter the proxy's URL and its password. The app proves it knows the password with a challenge; the password
-   itself is never sent.
+1. Enter the proxy's URL and its password. The app proves it knows the password with a challenge, so the password
+   itself is not sent. Over `http://` that is not enough: someone who can watch the exchange can guess the password
+   offline from the challenge and the proof (a fast, unsalted hash), and everything after it (the proxy session, your
+   Admiral password and token) travels in plain text anyway. Use an `https://` proxy address.
 2. Pick one of the Admirals connected to the proxy.
 3. Sign in to that Admiral as usual.
 
@@ -111,10 +114,19 @@ The Admiral can notify your phone about the things that need a person, the same 
 - Each signed-in server registers the device separately. Preferences shows whether this device receives
   notifications from the current server, a switch for each category, and **Send a test notification**.
 - Tapping a notification opens the matching screen. Ask proposals and CLI permission requests carry **Approve** and
-  **Deny** buttons; they require an unlocked device and, when biometric unlock is on for the profile, Face ID, Touch
-  ID, or a fingerprint before the decision is sent.
+  **Deny** buttons, which require an unlocked device. **Deny** is sent at once (after Face ID, Touch ID, or a
+  fingerprint when biometric unlock is on for the profile). **Approve** never decides from the notification, whose
+  text is only a short summary (a long command is cut): it opens the app to the full request (the whole command or
+  the proposal's arguments, who asked, where) with the Approvals center's controls, and you approve there.
+- Only a notification that names a device this app registered with that server can approve or deny anything; any
+  other notification just opens its (validated) link.
 - The app icon badge is your number of pending approvals.
-- Notification text is short and never contains code, diffs, failure details, or secrets.
+- Notification text is short (titles up to 64 characters, bodies up to 178) and passes the Admiral's secret
+  redactor, but it is not content-free: it names missions, voyages, captains, and tools, and a CLI permission
+  request includes the start of the command (at most 60 characters). It travels through the Expo Push Service and
+  Apple or Google and shows on the lock screen; to keep it off the lock screen, set notification previews to "When
+  Unlocked" (iOS) or hide sensitive content on the lock screen (Android). It never contains diffs, failure details,
+  or full tool input.
 
 Notifications are delivered through the Expo Push Service, which relays to Apple (APNs) and Google (FCM), so they
 also work when the app reaches the Admiral through Armada.Proxy. The Admiral needs outbound HTTPS access to
@@ -132,6 +144,13 @@ in `GET`/`PUT /api/v1/settings`):
 | `categories` | all | The categories a newly registered device receives |
 | `maxPerUserPerMinute` | `20` | Per-user rate limit |
 | `dedupeWindowSeconds` | `300` | Identical notifications within the window are sent once |
+| `maxDevicesPerUser` | `10` | Active devices per user; registering one more deactivates that user's least recently seen device |
+
+For production, turn on **enhanced push security** for the Expo project and set `expoAccessToken`: without it,
+anyone who learns a device's Expo push token can send that device notifications that look like the Admiral's (the
+app never acts on one that does not name a device it registered, but it can still be shown). A phone's push token
+belongs to one user at a time: when another account registers the same phone, the previous registration is deleted
+and the new one gets a new device id.
 
 The device API (`/api/v1/push/devices`) and the payload format are documented in
 [REST_API.md](REST_API.md#push-notifications).
@@ -155,6 +174,20 @@ The device API (`/api/v1/push/devices`) and the payload format are documented in
   global admins, and deleting a user or tenant deletes its devices.
 - Admin-only screens follow the same role rules as the dashboard; secrets such as stored credentials and
   `expoAccessToken` are never shown in full.
+- Biometric unlock is an app lock, not hardware-bound encryption of the session: session tokens are stored with
+  "after first unlock, this device only" protection (so push cleanup can run in the background), and the app asks
+  for Face ID, Touch ID, or a fingerprint before it uses them. On a jailbroken, rooted, or instrumented device the
+  stored tokens can be read without it.
+- While the app is not in the foreground it is covered by a plain screen, so the app switcher (iOS) and Recents
+  (Android) show no conversation, code, or log. On Android the Recents thumbnail can be taken before the cover is
+  drawn; the app does not set FLAG_SECURE, because that would also block your own screenshots and screen sharing.
+- The notification center's history is kept per server profile and user, is never shown to another user or for
+  another server, and is deleted when you sign out or remove the profile.
+- Links from the server (pull requests, advisories, an objective's source link, links in captain replies) open
+  outside the app only when they are `http://` or `https://` (no other app schemes, no `user@host` addresses); links in
+  captain replies and objective source links first show the destination host and ask before leaving the app.
+- Armada.Proxy sessions are kept only in secure storage: the app logs in to the proxy without a cookie and never
+  sends or stores cookies for the proxy.
 
 ## Building and store submission
 
@@ -199,7 +232,7 @@ notifications are not available.
 | "Server unreachable" | The phone and the Admiral are on the same network, `rest.hostname` is not `localhost`, the firewall allows the port, and the URL includes the port |
 | The Admiral will not start on a LAN address | Change the default admin password first (or set `AllowDefaultCredentialsOnNetwork`, not recommended) |
 | No notifications | Preferences says the device receives notifications from this server; the category switch is on; iOS or Android notification permission is granted; `push.enabled` is true; the Admiral can reach `exp.host`; the build has an EAS project id |
-| Approve or Deny on a notification does nothing | Unlock the device; complete the biometric prompt; the notification must come from a server this app is signed in to |
+| Approve or Deny on a notification does nothing | Unlock the device; complete the biometric prompt; the notification must come from a server this app is signed in to. Approve opens the request for you to approve in the app; if the request was already decided the app says so |
 | Asked for the proxy password again | The 24-hour proxy session ended; the Admiral sign-in is kept |
 | **Sign in with Face ID** is gone and the app asks for the password | A face or fingerprint was added on the device, or the server rejected the saved password; sign in once with the switch on to save it again |
 | No **Save password and use Face ID** switch | Set up Face ID, Touch ID, or a strong (class 3) fingerprint on the device; Android face unlock that is not class 3 cannot protect a keystore key |

@@ -56,11 +56,23 @@ namespace Armada.Core.Settings
             set => _DedupeWindowSeconds = value < 0 ? 0 : (value > 86400 ? 86400 : value);
         }
 
+        /// <summary>
+        /// Maximum active devices per user. Registering (or reactivating) a device beyond the cap deactivates the user's
+        /// least recently seen active devices, so one account cannot multiply every push by registering many tokens.
+        /// Default 10, clamped to 1..100.
+        /// </summary>
+        public int MaxDevicesPerUser
+        {
+            get => _MaxDevicesPerUser;
+            set => _MaxDevicesPerUser = value < 1 ? 1 : (value > 100 ? 100 : value);
+        }
+
         #endregion
 
         #region Private-Members
 
         private List<PushCategoryEnum> _Categories = AllCategories();
+        private int _MaxDevicesPerUser = 10;
         private int _MaxPerUserPerMinute = 20;
         private int _DedupeWindowSeconds = 300;
 

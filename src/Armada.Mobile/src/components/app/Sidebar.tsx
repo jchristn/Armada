@@ -20,6 +20,7 @@ import { useTheme } from '../../theme/ThemeContext';
 import { CHROME_MAX_FONT_SCALE, MIN_TOUCH, radius, spacing } from '../../theme/typography';
 import { AppText, CountBadge, Icon } from '../ui';
 import { useSignOut } from './useSignOut';
+import { NotEncryptedIndicator } from './NotEncryptedIndicator';
 
 export const SIDEBAR_WIDTH = 280;
 
@@ -72,6 +73,7 @@ export function Sidebar() {
         <View style={styles.flex}>
           <AppText variant="heading" maxFontSizeMultiplier={CHROME_MAX_FONT_SCALE}>Armada</AppText>
           {activeProfile ? <AppText variant="caption" muted numberOfLines={1}>{activeProfile.name}</AppText> : null}
+          <NotEncryptedIndicator />
         </View>
       </View>
       <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + spacing.lg }}>

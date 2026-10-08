@@ -58,7 +58,7 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
   const headerHeight = useContext(HeaderHeightContext) ?? 0;
   const ask = useAsk();
   const {
-    captains, captainNames, draftCaptainId, setDraftCaptainId, quickActions, showThinking, setShowThinking, loadCaptainTools,
+    captains, captainsLoaded, captainNames, draftCaptainId, setDraftCaptainId, quickActions, showThinking, setShowThinking, loadCaptainTools,
     threads, listLoading, listError, search, setSearch, includeArchived, setIncludeArchived, listHasMore, loadMoreThreads,
     reloadThreads, activity, setOpenThreadId, lastThreadId, lastThreadLoaded, updateThread, changeCliPolicy, summarize, deleteThread,
   } = ask;
@@ -195,6 +195,17 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
       ) : null}
       {thread?.cliPermission?.fallbackReason ? (
         <Banner tone="info" title={fallbackReasonText(t, thread.cliPermission.fallbackReason) ?? ''} testID="ask-cli-fallback-note" />
+      ) : null}
+      {noCaptain && captainsLoaded ? (
+        captains.length === 0 ? (
+          <Pressable accessibilityRole="link" onPress={() => router.push('/captains' as Href)} testID="ask-no-captains">
+            <Banner tone="warning" title={t('This server has no captains, so Ask Armada cannot answer yet. Quick actions still work.')} message={t('Add a captain')} />
+          </Pressable>
+        ) : (
+          <Pressable accessibilityRole="button" onPress={() => setOptionsOpen(true)} testID="ask-choose-captain">
+            <Banner tone="info" title={t('Choose a captain to chat with in this conversation.')} message={t('Choose a captain')} />
+          </Pressable>
+        )
       ) : null}
       {mcpMissing ? (
         <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(instructionsDocUrl(activeCaptain?.runtime)).catch(() => undefined)}>

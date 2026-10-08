@@ -1,18 +1,20 @@
 import { useRouter, type Href } from 'expo-router';
 import { lexer, type Token, type Tokens } from 'marked';
 import { memo, useMemo, type ReactNode } from 'react';
-import { Linking, ScrollView, StyleSheet, Text, View, type TextStyle } from 'react-native';
+import { ScrollView, StyleSheet, Text, View, type TextStyle } from 'react-native';
 import { appPathFromLink } from '../../navigation/deepLinks';
 import { useTheme } from '../../theme/ThemeContext';
 import { radius, spacing, typography } from '../../theme/typography';
 import type { Palette } from '../../theme/palette';
+import { useLocale } from '../../i18n/LocaleContext';
+import { confirmOpenExternalUrl, externalUrl } from '../../lib/externalLinks';
 
 /**
  * GitHub-flavored Markdown for captain replies, summaries, and milestones: the mobile form of the dashboard's
  * Markdown component (react-markdown + remark-gfm). Headings, paragraphs, emphasis, code spans and blocks, lists
  * (including task lists), block quotes, tables, rules, and links. Raw HTML is dropped, as react-markdown drops it.
  * Links to Armada pages (relative paths, armada:// links, or dashboard URLs on any host) open in the app; other
- * http(s) and mailto links open outside it; anything else is shown as text.
+ * http(s) links open outside it after a confirmation that names the destination host; anything else is shown as text.
  */
 
 const ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: '\u00a0', '#39': "'" };
@@ -37,11 +39,13 @@ export function decodeEntities(text: string): string {
 /** Where a Markdown link goes: an in-app path, an external URL, or nowhere (rendered as plain text). */
 export type LinkTarget = { kind: 'app'; path: string } | { kind: 'external'; url: string } | { kind: 'none' };
 
-/** Classify a link. Dashboard URLs and app paths stay in the app; http(s) and mailto open outside. */
+/**
+ * Classify a link. Dashboard URLs and app paths stay in the app; http(s) links open outside it (after the user saw
+ * the destination host, since the link text can say anything); every other scheme is shown as text.
+ */
 export function linkTarget(href: string | null | undefined): LinkTarget {
   const value = (href ?? '').trim();
   if (!value) return { kind: 'none' };
-  if (/^mailto:/i.test(value)) return { kind: 'external', url: value };
   if (/^armada:/i.test(value) || value.startsWith('/')) {
     const path = appPathFromLink(value);
     return path ? { kind: 'app', path } : { kind: 'none' };
@@ -51,7 +55,8 @@ export function linkTarget(href: string | null | undefined): LinkTarget {
       const path = appPathFromLink(value);
       if (path) return { kind: 'app', path };
     }
-    return { kind: 'external', url: value };
+    const url = externalUrl(value);
+    return url ? { kind: 'external', url } : { kind: 'none' };
   }
   return { kind: 'none' };
 }
@@ -265,6 +270,7 @@ export interface MarkdownProps {
 /** Render Markdown text as native views. Parsing is memoized per text. */
 export const Markdown = memo(function Markdown({ children, preserveLineBreaks = false, testID }: MarkdownProps) {
   const { colors } = useTheme();
+  const { t } = useLocale();
   const router = useRouter();
   const tokens = useMemo(() => {
     try {
@@ -279,7 +285,7 @@ export const Markdown = memo(function Markdown({ children, preserveLineBreaks = 
     preserveLineBreaks,
     onLink: (target) => {
       if (target.kind === 'app') router.push(target.path as Href);
-      else if (target.kind === 'external') void Linking.openURL(target.url).catch(() => undefined);
+      else if (target.kind === 'external') confirmOpenExternalUrl(target.url, t);
     },
   };
 

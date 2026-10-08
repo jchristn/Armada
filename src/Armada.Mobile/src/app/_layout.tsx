@@ -7,13 +7,15 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from '../auth/AuthContext';
 import { SavePasswordOfferSheet } from '../components/app/SavePasswordOfferSheet';
+import { PrivacyOverlay } from '../components/app/PrivacyOverlay';
 import { ToastHost } from '../components/app/ToastHost';
 import { IconButton } from '../components/ui';
 import { LocaleProvider, useLocale } from '../i18n/LocaleContext';
 import { navigationTheme } from '../navigation/navigationTheme';
 import { setSignedInForLinks } from '../navigation/pendingLink';
 import { ApprovalsProvider } from '../notifications/ApprovalsContext';
-import { NotificationProvider } from '../notifications/NotificationContext';
+import { combineAuthHooks } from '../lib/authHooks';
+import { NotificationProvider, createNotificationAuthHooks, notificationScope } from '../notifications/NotificationContext';
 import { createProxySocketFactory } from '../proxy/proxySocket';
 import { PushPermissionPrompt } from '../push/PushPermissionPrompt';
 import { PushResponseHandler } from '../push/PushResponseHandler';
@@ -23,13 +25,16 @@ import { ThemeProvider, useTheme } from '../theme/ThemeContext';
 
 void SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
-// Ending a profile's session (sign-out, profile removed, server changed) removes this device's push registration.
-const pushAuthHooks = createPushAuthHooks(defaultPushDeps);
+// Ending a profile's session (sign-out, profile removed, server changed) forgets its notification history and
+// removes this device's push registration.
+const sessionAuthHooks = combineAuthHooks(createNotificationAuthHooks(), createPushAuthHooks(defaultPushDeps));
 
 /** Session-scoped services: language (with the server catalog once signed in), socket, notifications, badge. */
 function SessionProviders({ children }: { children: ReactNode }) {
-  const { status, activeProfile, sessionToken, proxyToken, requestHeaders } = useAuth();
+  const { status, activeProfile, sessionToken, proxyToken, requestHeaders, user } = useAuth();
   const signedIn = status === 'signedIn';
+  const userId = user?.user?.id ?? null;
+  const historyScope = signedIn && activeProfile && userId ? notificationScope(activeProfile.id, userId) : null;
   const serverUrl = signedIn ? activeProfile?.url ?? null : null;
   const isProxy = activeProfile?.kind === 'Proxy';
   // Through Armada.Proxy the socket also carries the proxy session (subprotocol, header fallback). One factory per
@@ -41,7 +46,7 @@ function SessionProviders({ children }: { children: ReactNode }) {
   return (
     <LocaleProvider serverUrl={serverUrl} requestHeaders={requestHeaders}>
       <SocketProvider serverUrl={serverUrl} token={signedIn ? sessionToken : null} factory={socketFactory}>
-        <NotificationProvider>
+        <NotificationProvider scope={historyScope}>
           <ApprovalsProvider enabled={signedIn}>
             <PushProvider>{children}</PushProvider>
           </ApprovalsProvider>
@@ -111,11 +116,12 @@ export default function RootLayout() {
     <GestureHandlerRootView style={styles.fill}>
       <SafeAreaProvider>
         <ThemeProvider>
-          <AuthProvider hooks={pushAuthHooks}>
+          <AuthProvider hooks={sessionAuthHooks}>
             <SessionProviders>
               <RootNavigator />
             </SessionProviders>
           </AuthProvider>
+          <PrivacyOverlay />
         </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

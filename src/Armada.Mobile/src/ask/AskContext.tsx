@@ -45,6 +45,8 @@ export function errorText(err: unknown, fallback: string): string {
 
 export interface AskState {
   captains: Captain[];
+  /** True once the captain list has loaded (or failed to), so an empty list means the server has none. */
+  captainsLoaded: boolean;
   captainNames: Record<string, string>;
   /** Captain for a conversation that does not exist yet (remembered on the device, like the dashboard). */
   draftCaptainId: string;
@@ -99,6 +101,7 @@ export function AskProvider({ children }: { children: ReactNode }) {
   const { pushToast } = useNotifications();
 
   const [captains, setCaptains] = useState<Captain[]>([]);
+  const [captainsLoaded, setCaptainsLoaded] = useState(false);
   const [draftCaptainId, setDraftCaptainIdState] = useState('');
   const [quickActions, setQuickActions] = useState<AskQuickAction[]>(DEFAULT_QUICK_ACTIONS);
   const [showThinking, setShowThinkingState] = useState(false);
@@ -172,7 +175,8 @@ export function AskProvider({ children }: { children: ReactNode }) {
         setCaptains(list);
         setDraftCaptainIdState((current) => (current && list.some((c) => c.id === current) ? current : list[0]?.id ?? ''));
       })
-      .catch(() => setCaptains([]));
+      .catch(() => setCaptains([]))
+      .finally(() => setCaptainsLoaded(true));
     getAskQuickActions()
       .then((catalog) => setQuickActions(mergeQuickActions(catalog)))
       .catch(() => setQuickActions(DEFAULT_QUICK_ACTIONS));
@@ -298,13 +302,13 @@ export function AskProvider({ children }: { children: ReactNode }) {
   const captainNames = useMemo(() => Object.fromEntries(captains.map((c) => [c.id, c.name])), [captains]);
 
   const value = useMemo<AskState>(() => ({
-    captains, captainNames, draftCaptainId, setDraftCaptainId, quickActions, showThinking, setShowThinking, loadCaptainTools,
+    captains, captainsLoaded, captainNames, draftCaptainId, setDraftCaptainId, quickActions, showThinking, setShowThinking, loadCaptainTools,
     threads, listLoading, listError, search, setSearch, includeArchived, setIncludeArchived, listHasMore,
     loadMoreThreads: () => { void loadThreads(listPage + 1); },
     reloadThreads: () => { void loadThreads(1); },
     activity, openThreadId, setOpenThreadId, lastThreadId, lastThreadLoaded, markRead, upsertThread, updateThread,
     changeCliPolicy, summarize, deleteThread, reportError,
-  }), [captains, captainNames, draftCaptainId, setDraftCaptainId, quickActions, showThinking, setShowThinking, loadCaptainTools,
+  }), [captains, captainsLoaded, captainNames, draftCaptainId, setDraftCaptainId, quickActions, showThinking, setShowThinking, loadCaptainTools,
     threads, listLoading, listError, search, includeArchived, listHasMore, loadThreads, listPage, activity, openThreadId,
     setOpenThreadId, lastThreadId, lastThreadLoaded, markRead, upsertThread, updateThread, changeCliPolicy, summarize,
     deleteThread, reportError]);

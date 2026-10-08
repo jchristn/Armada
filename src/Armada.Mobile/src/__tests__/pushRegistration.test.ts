@@ -254,12 +254,20 @@ describe('push registration lifecycle', () => {
     expect(await profileForDevice(store, ['prf_a', 'prf_b'], b)).toBe('prf_b');
     expect(await profileForDevice(store, ['prf_a', 'prf_b'], 'pdv_unknown')).toBeNull();
   });
+
+  it('a device id held by two profiles names neither (it cannot say which user the push is for)', async () => {
+    const { deps, store } = setup();
+    await registerDevice(deps, 'prf_a', SESSION, 'usr_1');
+    store.data.set('prf_b', { ...store.data.get('prf_a')!, userId: 'usr_2' });
+    const shared = store.data.get('prf_a')!.deviceId;
+    expect(await profileForDevice(store, ['prf_a', 'prf_b'], shared)).toBeNull();
+  });
 });
 
 describe('push API wire format', () => {
   function recorder(status = 200, body: unknown = {}) {
-    const calls: { url: string; init: { method: string; headers: Record<string, string>; body?: string } }[] = [];
-    const fetchImpl = jest.fn(async (url: string, init: { method: string; headers: Record<string, string>; body?: string }) => {
+    const calls: { url: string; init: { method: string; headers: Record<string, string>; body?: string; credentials?: string } }[] = [];
+    const fetchImpl = jest.fn(async (url: string, init: { method: string; headers: Record<string, string>; body?: string; credentials?: 'omit' }) => {
       calls.push({ url, init });
       return { status, ok: status >= 200 && status < 300, text: async () => (status === 204 ? '' : JSON.stringify(body)) };
     });
@@ -276,6 +284,7 @@ describe('push API wire format', () => {
     expect(calls[0].init.method).toBe('POST');
     expect(calls[0].init.headers['X-Token']).toBe('A1');
     expect(calls[0].init.headers['X-Armada-Proxy-Session']).toBe('P1');
+    expect(calls[0].init.credentials).toBe('omit');
     expect(JSON.parse(calls[0].init.body!)).toEqual({ Platform: 'Android', ExpoPushToken: 'ExponentPushToken[x]', DeviceName: 'Pixel', AppVersion: '1.0.0', Locale: 'de-DE', Categories: null });
   });
 

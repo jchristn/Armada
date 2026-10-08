@@ -660,6 +660,7 @@ namespace Armada.Server.Routes
             copy.Categories = new List<PushCategoryEnum>(source.Categories);
             copy.MaxPerUserPerMinute = source.MaxPerUserPerMinute;
             copy.DedupeWindowSeconds = source.DedupeWindowSeconds;
+            copy.MaxDevicesPerUser = source.MaxDevicesPerUser;
             copy.ExpoAccessToken = String.IsNullOrEmpty(source.ExpoAccessToken) ? null : _RedactedSecret;
             return copy;
         }

@@ -5,7 +5,7 @@ import * as client from '@dashboard/api/client';
 import type { InboxItem } from '@dashboard/types/models';
 import { LocaleProvider } from '../i18n/LocaleContext';
 import { ApprovalsProvider, useApprovals, type ApprovalsState } from '../notifications/ApprovalsContext';
-import { NotificationProvider, notificationHref, useNotifications, type NotificationState } from '../notifications/NotificationContext';
+import { NOTIFICATION_HISTORY_PREFIX, NotificationProvider, notificationHref, useNotifications, type NotificationState } from '../notifications/NotificationContext';
 import { SocketProvider } from '../socket/SocketContext';
 import { PREF_KEYS } from '../storage/prefs';
 import { socketFactory, type FakeSocket } from '../test/fakeSocket';
@@ -83,7 +83,9 @@ describe('notification center', () => {
   it('history persists on the device', async () => {
     const sockets = await mount();
     await act(async () => { sockets[0].message({ type: 'incident.changed', data: { id: 'inc_1', title: 'Outage', status: 'Open' } }); });
-    await waitFor(async () => expect(JSON.parse((await AsyncStorage.getItem(PREF_KEYS.notifications)) ?? '[]')).toHaveLength(1));
+    // Stored under the provider's scope (one profile and user; 'local' when none is given), not one global key.
+    await waitFor(async () => expect(JSON.parse((await AsyncStorage.getItem(`${NOTIFICATION_HISTORY_PREFIX}local`)) ?? '[]')).toHaveLength(1));
+    expect(await AsyncStorage.getItem(PREF_KEYS.notifications)).toBeNull();
   });
 
   it('links notifications to their item', () => {

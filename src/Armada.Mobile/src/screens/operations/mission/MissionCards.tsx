@@ -1,9 +1,10 @@
-import { Linking, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { assignmentBlockerTitle, type MissionLandingState } from '@dashboard/lib/missionActions';
 import type { GitHubPullRequestDetail, LandingPreviewResult, MissionAssignmentBlocker } from '@dashboard/types/models';
 import { AppText, Button, KeyValueRow, ListRow, Section, StatusBadge } from '../../../components/ui';
 import { useLocale } from '../../../i18n/LocaleContext';
 import { spacing } from '../../../theme/typography';
+import { openExternalUrl } from '../../../lib/externalLinks';
 
 const pad = { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm };
 
@@ -98,7 +99,7 @@ export function PullRequestCard({ prUrl, detail, loading, onRefresh }: {
   return (
     <Section title={t('GitHub Pull Request')}>
       <View style={[pad, styles.buttons]}>
-        <Button label={t('Open GitHub')} variant="secondary" icon="open-outline" onPress={() => void Linking.openURL(prUrl)} />
+        <Button label={t('Open GitHub')} variant="secondary" icon="open-outline" onPress={() => void openExternalUrl(prUrl)} />
         <Button label={loading ? t('Refreshing...') : t('Refresh')} variant="ghost" icon="refresh" disabled={loading} onPress={onRefresh} />
       </View>
       {loading ? <View style={pad}><AppText muted>{t('Loading GitHub pull-request evidence...')}</AppText></View> : null}

@@ -17,6 +17,13 @@ namespace Armada.Proxy.Models
         /// </summary>
         public string? ProofSha256 { get; set; } = null;
 
+        /// <summary>
+        /// Whether the response sets the <c>armada_proxy_session</c> cookie. Null or true (browsers): it does. False
+        /// (native clients, which send the returned token as a header): no cookie is set, so the session is held only
+        /// where the client keeps the token.
+        /// </summary>
+        public bool? SetCookie { get; set; } = null;
+
         #endregion
     }
 }

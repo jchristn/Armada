@@ -32,7 +32,7 @@ export async function storedSessionFor(profile: ServerProfile): Promise<ServerSe
   return sessionFor(profile, token, proxyToken);
 }
 
-export type SessionFetch = (url: string, init: { method: string; headers: Record<string, string>; body?: string; signal?: AbortSignal }) => Promise<{
+export type SessionFetch = (url: string, init: { method: string; headers: Record<string, string>; body?: string; signal?: AbortSignal; credentials?: 'omit' }) => Promise<{
   status: number;
   ok: boolean;
   text: () => Promise<string>;
@@ -56,6 +56,8 @@ export async function sessionRequest<T>(
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),
       signal: controller.signal,
+      // Credentials are the headers above; never a cookie from the platform cookie jar.
+      credentials: 'omit',
     });
     const text = await res.text().catch(() => '');
     if (!res.ok) {

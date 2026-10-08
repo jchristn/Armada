@@ -4,6 +4,8 @@ namespace Armada.Proxy.Services
     using System.Security.Cryptography;
     using System.Text;
     using Armada.Core;
+    using Armada.Proxy.Enums;
+    using Armada.Proxy.Models;
     using Armada.Proxy.Settings;
 
     /// <summary>
@@ -48,6 +50,57 @@ namespace Armada.Proxy.Services
             public DateTime ExpiresUtc { get; set; }
         }
 
+        #region Public-Members
+
+        /// <summary>
+        /// Default for <see cref="MaxPendingChallenges"/>.
+        /// </summary>
+        public const int DefaultMaxPendingChallenges = 4096;
+
+        /// <summary>
+        /// Default for <see cref="MaxPendingChallengesPerAddress"/>.
+        /// </summary>
+        public const int DefaultMaxPendingChallengesPerAddress = 16;
+
+        /// <summary>
+        /// Most unused, unexpired login challenges held at once across all clients. Challenges are unauthenticated, so
+        /// the store is bounded; beyond it <see cref="CreateChallenge(string?)"/> refuses with
+        /// <see cref="ProxyChallengeRefusalEnum.GlobalLimit"/>. Minimum 1.
+        /// </summary>
+        public int MaxPendingChallenges
+        {
+            get => _MaxPendingChallenges;
+            set => _MaxPendingChallenges = value < 1 ? 1 : value;
+        }
+
+        /// <summary>
+        /// Most unused, unexpired login challenges one client address may hold; beyond it
+        /// <see cref="CreateChallenge(string?)"/> refuses with <see cref="ProxyChallengeRefusalEnum.AddressLimit"/>.
+        /// A sign-in uses one challenge and consumes it, so a real client never comes near. Minimum 1.
+        /// </summary>
+        public int MaxPendingChallengesPerAddress
+        {
+            get => _MaxPendingChallengesPerAddress;
+            set => _MaxPendingChallengesPerAddress = value < 1 ? 1 : value;
+        }
+
+        /// <summary>
+        /// Number of unused, unexpired login challenges currently held.
+        /// </summary>
+        public int PendingChallengeCount
+        {
+            get
+            {
+                lock (_ChallengeLock)
+                {
+                    RemoveExpiredChallenges(_UtcNow());
+                    return _Challenges.Count;
+                }
+            }
+        }
+
+        #endregion
+
         #region Constructors-and-Factories
 
         /// <summary>
@@ -64,14 +117,35 @@ namespace Armada.Proxy.Services
         #region Public-Methods
 
         /// <summary>
-        /// Issue a one-time browser login challenge.
+        /// Issue a one-time browser login challenge. The store of outstanding challenges is bounded (they expire after
+        /// at least 30 seconds, and a login consumes its challenge).
         /// </summary>
-        public ProxyAuthChallenge CreateChallenge()
+        /// <param name="clientKey">The requesting client's address (for the per-address limit), or null.</param>
+        /// <returns>The challenge.</returns>
+        /// <exception cref="ProxyChallengeLimitException">The address or the proxy holds too many outstanding challenges.</exception>
+        public ProxyAuthChallenge CreateChallenge(string? clientKey = null)
         {
-            CleanupExpired();
+            CleanupExpiredSessions();
+            string client = String.IsNullOrWhiteSpace(clientKey) ? String.Empty : clientKey.Trim();
+            DateTime nowUtc = _UtcNow();
+            DateTime expiresUtc = nowUtc.AddSeconds(Math.Max(30, _Settings.HandshakeTimeoutSeconds));
             string nonce = RemoteTunnelAuth.CreateNonce();
-            DateTime expiresUtc = _UtcNow().AddSeconds(Math.Max(30, _Settings.HandshakeTimeoutSeconds));
-            _Challenges[nonce] = expiresUtc;
+            lock (_ChallengeLock)
+            {
+                RemoveExpiredChallenges(nowUtc);
+                if (_Challenges.Count >= _MaxPendingChallenges)
+                {
+                    throw new ProxyChallengeLimitException(ProxyChallengeRefusalEnum.GlobalLimit, SecondsUntilFirstExpiry(nowUtc, null));
+                }
+
+                if (client.Length > 0 && _Challenges.Values.Count(c => String.Equals(c.ClientKey, client, StringComparison.Ordinal)) >= _MaxPendingChallengesPerAddress)
+                {
+                    throw new ProxyChallengeLimitException(ProxyChallengeRefusalEnum.AddressLimit, SecondsUntilFirstExpiry(nowUtc, client));
+                }
+
+                _Challenges[nonce] = new ProxyPendingChallenge(expiresUtc, client);
+            }
+
             return new ProxyAuthChallenge
             {
                 Nonce = nonce,
@@ -87,7 +161,7 @@ namespace Armada.Proxy.Services
             session = null;
             error = null;
 
-            CleanupExpired();
+            CleanupExpiredSessions();
 
             string normalizedNonce = (nonce ?? String.Empty).Trim().ToLowerInvariant();
             string normalizedProof = (proofSha256 ?? String.Empty).Trim().ToLowerInvariant();
@@ -97,13 +171,13 @@ namespace Armada.Proxy.Services
                 return false;
             }
 
-            if (!_Challenges.TryRemove(normalizedNonce, out DateTime challengeExpiresUtc))
+            if (!_Challenges.TryRemove(normalizedNonce, out ProxyPendingChallenge? challenge))
             {
                 error = "Login challenge is missing or already used.";
                 return false;
             }
 
-            if (challengeExpiresUtc <= _UtcNow())
+            if (challenge.ExpiresUtc <= _UtcNow())
             {
                 error = "Login challenge has expired.";
                 return false;
@@ -146,7 +220,7 @@ namespace Armada.Proxy.Services
         public bool TryGetSession(string? sessionToken, out ProxyBrowserSession? session)
         {
             session = null;
-            CleanupExpired();
+            CleanupExpiredSessions();
 
             string normalizedToken = (sessionToken ?? String.Empty).Trim();
             if (String.IsNullOrWhiteSpace(normalizedToken))
@@ -210,7 +284,10 @@ namespace Armada.Proxy.Services
 
         private readonly ProxySettings _Settings;
         private readonly Func<DateTime> _UtcNow;
-        private readonly ConcurrentDictionary<string, DateTime> _Challenges = new ConcurrentDictionary<string, DateTime>(StringComparer.Ordinal);
+        private readonly ConcurrentDictionary<string, ProxyPendingChallenge> _Challenges = new ConcurrentDictionary<string, ProxyPendingChallenge>(StringComparer.Ordinal);
+        private readonly object _ChallengeLock = new object();
+        private int _MaxPendingChallenges = DefaultMaxPendingChallenges;
+        private int _MaxPendingChallengesPerAddress = DefaultMaxPendingChallengesPerAddress;
         // Keyed by the SHA-256 of the token, so a lookup compares digests of the presented value rather than the raw
         // secret (no timing signal about a real token's prefix) and the raw tokens are not held as dictionary keys.
         private readonly ConcurrentDictionary<string, ProxyBrowserSession> _Sessions = new ConcurrentDictionary<string, ProxyBrowserSession>(StringComparer.Ordinal);
@@ -219,17 +296,33 @@ namespace Armada.Proxy.Services
 
         #region Private-Methods
 
-        private void CleanupExpired()
+        private void RemoveExpiredChallenges(DateTime nowUtc)
         {
-            DateTime nowUtc = _UtcNow();
-
-            foreach (KeyValuePair<string, DateTime> challenge in _Challenges.ToArray())
+            foreach (KeyValuePair<string, ProxyPendingChallenge> challenge in _Challenges.ToArray())
             {
-                if (challenge.Value <= nowUtc)
+                if (challenge.Value.ExpiresUtc <= nowUtc)
                 {
-                    _Challenges.TryRemove(challenge.Key, out DateTime _);
+                    _Challenges.TryRemove(challenge.Key, out ProxyPendingChallenge? _);
                 }
             }
+        }
+
+        private int SecondsUntilFirstExpiry(DateTime nowUtc, string? clientKey)
+        {
+            DateTime? first = null;
+            foreach (ProxyPendingChallenge challenge in _Challenges.Values)
+            {
+                if (clientKey != null && !String.Equals(challenge.ClientKey, clientKey, StringComparison.Ordinal)) continue;
+                if (first == null || challenge.ExpiresUtc < first.Value) first = challenge.ExpiresUtc;
+            }
+
+            if (first == null) return 1;
+            return (int)Math.Ceiling((first.Value - nowUtc).TotalSeconds);
+        }
+
+        private void CleanupExpiredSessions()
+        {
+            DateTime nowUtc = _UtcNow();
 
             foreach (KeyValuePair<string, ProxyBrowserSession> session in _Sessions.ToArray())
             {
