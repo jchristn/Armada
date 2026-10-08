@@ -93,6 +93,12 @@ namespace Armada.Core.Protocol
         public double? DurationMs { get; set; } = null;
 
         /// <summary>
+        /// Total cost of the run in US dollars on a result event, or null.
+        /// </summary>
+        [JsonPropertyName("total_cost_usd")]
+        public double? TotalCostUsd { get; set; } = null;
+
+        /// <summary>
         /// Token usage on a result event, or null.
         /// </summary>
         [JsonPropertyName("usage")]

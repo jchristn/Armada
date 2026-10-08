@@ -1678,7 +1678,20 @@ namespace Armada.Core.Database.Postgresql.Queries
 
                 new SchemaMigration(80, "Add repository_path and checkout_path to docks: the repository a Harbor-side dock was created from and the user's checkout on that Harbor host",
                     @"ALTER TABLE docks ADD COLUMN IF NOT EXISTS repository_path TEXT;",
-                    @"ALTER TABLE docks ADD COLUMN IF NOT EXISTS checkout_path TEXT;")
+                    @"ALTER TABLE docks ADD COLUMN IF NOT EXISTS checkout_path TEXT;"),
+
+                new SchemaMigration(81, "Add Ask turn telemetry to ask_messages: ttft_ms, first_text_ms, streaming_ms, tokens_per_second, input_tokens, output_tokens, cached_tokens, tokens_estimated, cost_usd, tool_call_count, and tool_time_ms (all nullable)",
+                    @"ALTER TABLE ask_messages ADD COLUMN IF NOT EXISTS ttft_ms DOUBLE PRECISION NULL;",
+                    @"ALTER TABLE ask_messages ADD COLUMN IF NOT EXISTS first_text_ms DOUBLE PRECISION NULL;",
+                    @"ALTER TABLE ask_messages ADD COLUMN IF NOT EXISTS streaming_ms DOUBLE PRECISION NULL;",
+                    @"ALTER TABLE ask_messages ADD COLUMN IF NOT EXISTS tokens_per_second DOUBLE PRECISION NULL;",
+                    @"ALTER TABLE ask_messages ADD COLUMN IF NOT EXISTS input_tokens BIGINT NULL;",
+                    @"ALTER TABLE ask_messages ADD COLUMN IF NOT EXISTS output_tokens BIGINT NULL;",
+                    @"ALTER TABLE ask_messages ADD COLUMN IF NOT EXISTS cached_tokens BIGINT NULL;",
+                    @"ALTER TABLE ask_messages ADD COLUMN IF NOT EXISTS tokens_estimated BOOLEAN NULL;",
+                    @"ALTER TABLE ask_messages ADD COLUMN IF NOT EXISTS cost_usd DOUBLE PRECISION NULL;",
+                    @"ALTER TABLE ask_messages ADD COLUMN IF NOT EXISTS tool_call_count BIGINT NULL;",
+                    @"ALTER TABLE ask_messages ADD COLUMN IF NOT EXISTS tool_time_ms DOUBLE PRECISION NULL;")
 
             };
         }

@@ -766,10 +766,10 @@ namespace Armada.Server
                 TaskCompletionSource<int?> exitSource = new TaskCompletionSource<int?>(TaskCreationOptions.RunContinuationsAsynchronously);
                 object outputLock = new object();
                 StringBuilder output = new StringBuilder();
-                // Turn timing is measured on the monotonic clock: a wall-clock difference grows by however long the
-                // host slept during the turn (or goes negative on a backward NTP step).
-                Stopwatch turnTimer = Stopwatch.StartNew();
-                TimeSpan? firstOutputAfter = null;
+                // Turn telemetry is recorded by the same component as Ask Armada turns, on the monotonic clock: a
+                // wall-clock difference grows by however long the host slept during the turn (or goes negative on a
+                // backward NTP step).
+                Armada.Core.Services.ChatTurnTelemetryRecorder telemetry = new Armada.Core.Services.ChatTurnTelemetryRecorder();
 
                 bool isMux = captain.Runtime == AgentRuntimeEnum.Mux;
 
@@ -801,13 +801,13 @@ namespace Armada.Server
                     // For Mux, parse the structured protocol events: stream assistant_text into the reply and
                     // surface tool-call activity to the transcript. Other runtimes stream plain text lines.
                     // Subscribing to stdout-only keeps CLI stderr banners out of the captured transcript.
+                    telemetry.ObserveLine(captain.Runtime, line);
                     string? delta = ExtractPlanningStreamText(isMux, isClaudeStream, session.Id, assistantMessage.Id, line);
                     if (String.IsNullOrEmpty(delta)) return;
 
                     string updatedContent;
                     lock (outputLock)
                     {
-                        if (firstOutputAfter == null) firstOutputAfter = turnTimer.Elapsed;
                         if (isMux || isClaudeStream)
                         {
                             // Mux assistant_text and Claude text_delta events are partial tokens: append raw
@@ -885,9 +885,10 @@ namespace Armada.Server
 
                 assistantMessage.Content = finalContent.Trim();
                 assistantMessage.LastUpdateUtc = DateTime.UtcNow;
-                assistantMessage.Metrics = BuildTurnMetrics(turnTimer.Elapsed, firstOutputAfter, assistantMessage.Content);
+                assistantMessage.Metrics = telemetry.Build(assistantMessage.Content, null);
 
-                // Best-effort token accounting for the planning turn (output estimated from the reply).
+                // Best-effort token accounting for the planning turn: the runtime's reported usage where it has one
+                // (Claude Code's result event), otherwise output estimated from the reply.
                 await Armada.Core.Services.TokenUsageCapture.CaptureAsync(
                     _Database, _Logging, "planning",
                     model: captain.Model,
@@ -897,9 +898,9 @@ namespace Armada.Server
                     vesselId: String.IsNullOrEmpty(session.VesselId) ? null : session.VesselId,
                     captainId: captain.Id,
                     sourceId: session.Id,
-                    inputTokens: null,
-                    outputTokens: null,
-                    cachedTokens: null,
+                    inputTokens: telemetry.InputTokens,
+                    outputTokens: telemetry.OutputTokens,
+                    cachedTokens: telemetry.CachedTokens,
                     inputText: null,
                     outputText: assistantMessage.Content,
                     token: CancellationToken.None).ConfigureAwait(false);
@@ -1586,27 +1587,6 @@ namespace Armada.Server
         {
             if (String.IsNullOrEmpty(value) || value!.Length <= max) return value;
             return value.Substring(0, max) + "... (truncated)";
-        }
-
-        /// <summary>
-        /// Build per-turn statistics for a planning reply from wall-clock timing and a character-based
-        /// token estimate. Planning drives a runtime CLI rather than a direct model client, so exact
-        /// provider token usage is not available here; time to first token and total time are measured
-        /// directly, and tokens (and tokens/sec) are estimated from the reply length (~3.5 chars/token).
-        /// </summary>
-        /// <param name="total">How long the turn took, on the monotonic clock.</param>
-        /// <param name="firstOutputAfter">How long after launch the first non-protocol output line arrived, if any.</param>
-        /// <param name="content">The final reply text.</param>
-        /// <returns>The per-turn metrics.</returns>
-        private static CaptainChatMetrics BuildTurnMetrics(TimeSpan total, TimeSpan? firstOutputAfter, string content)
-        {
-            double totalMs = total.TotalMilliseconds;
-            double? ttftMs = firstOutputAfter.HasValue
-                ? Math.Min(firstOutputAfter.Value.TotalMilliseconds, totalMs)
-                : (double?)null;
-
-            // Use the shared builder so planning-session and Ask Armada metrics are computed identically.
-            return Armada.Core.Services.ChatTurnMetricsBuilder.Build(totalMs, ttftMs, content, null);
         }
 
         /// <summary>

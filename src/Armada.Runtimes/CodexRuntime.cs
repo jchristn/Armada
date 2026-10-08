@@ -40,6 +40,14 @@ namespace Armada.Runtimes
         /// </summary>
         public string ApprovalMode { get; set; } = "full-auto";
 
+        /// <summary>
+        /// When true, run 'codex exec --json' so stdout carries one typed JSONL event per line (items as they start and
+        /// complete, and turn.completed with the turn's token usage). Used by interactive chat turns so the server can
+        /// record per-turn telemetry and tool calls; missions leave this false so their output stays human-readable.
+        /// The final message is still written to the --output-last-message file.
+        /// </summary>
+        public bool JsonOutput { get; set; } = false;
+
         #endregion
 
         #region Private-Members
@@ -96,6 +104,8 @@ namespace Armada.Runtimes
             // start there ("Not inside a trusted directory") without this flag. Mission worktrees are repositories, so
             // the flag changes nothing for them.
             args.Add("--skip-git-repo-check");
+
+            if (JsonOutput) args.Add("--json");
 
             if (!CaptainRuntimeOptions.GetAutoApprove(captain))
             {

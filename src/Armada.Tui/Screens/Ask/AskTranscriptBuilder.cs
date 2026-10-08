@@ -275,7 +275,12 @@ namespace Armada.Tui.Screens.Ask
                 .Append('|').Append(message.DurationMs?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "")
                 .Append('|').Append(message.ThinkingText?.Length ?? -1).Append(':').Append(message.ThinkingText?.GetHashCode() ?? 0)
                 .Append('|').Append(view.ExpandedTools.Contains(message.Id) ? 'T' : 't')
-                .Append(view.ExpandedThinking.Contains(message.Id) ? 'K' : 'k');
+                .Append(view.ExpandedThinking.Contains(message.Id) ? 'K' : 'k')
+                .Append(view.ExpandedStats.Contains(message.Id) ? 'S' : 's');
+            if (message.Metrics != null)
+            {
+                foreach (AskTurnStatistic row in AskTurnStatistics.Rows(message)) sb.Append("|s").Append(row.Key).Append('=').Append(row.Value);
+            }
             if (cliRequest != null)
             {
                 CliPermissionRequest request = cliRequest;
@@ -424,8 +429,11 @@ namespace Armada.Tui.Screens.Ask
                 StyledText head = StyledText.From(name, theme.Success.WithAttribute(CellAttributes.Bold, true));
                 if (message.DurationMs != null) head = head.Append(StyledText.From("  " + AskTurnMetrics.FormatDuration(message.DurationMs), theme.Muted));
                 lines.Add(Header(head, when, theme, w));
-                if (conv.Metrics.TryGetValue(message.Id, out AskTurnMetrics? metrics))
+                // The server's recorded turn statistics (i toggles them); a reply without them keeps the line the TUI
+                // measured while the turn streamed in this session.
+                if (message.Metrics == null && conv.Metrics.TryGetValue(message.Id, out AskTurnMetrics? metrics))
                     lines.Add(StyledText.From("  " + metrics.Describe(loc.T("first token"), loc.T("tok/s"), loc.T("tokens"), loc.T("total")), theme.Muted));
+                if (view.ExpandedStats.Contains(block.Key)) lines.AddRange(Statistics(message, theme, loc, w));
                 if (!String.IsNullOrWhiteSpace(message.ThinkingText)) lines.AddRange(Thinking(message.ThinkingText!, view.ExpandedThinking.Contains(block.Key), false, theme, loc, w));
                 if (proposal != null) AddConfirmCard(block, lines, proposal, false, view, ask, theme, loc, nowUtc, w);
                 lines.AddRange(Markdown(text, w));
@@ -460,6 +468,37 @@ namespace Armada.Tui.Screens.Ask
             if (!stream.Finished && text.Length > 0) block.Lines.Add(StyledText.From("_", theme.Accent));
             block.Lines.Add(StyledText.Empty);
             return block;
+        }
+
+        /// <summary>
+        /// The turn statistics panel of a captain reply: a heading, then one "label  value" pair per row, two pairs to a
+        /// line when the width allows (the mobile app's two-column grid).
+        /// </summary>
+        private static List<StyledText> Statistics(AskMessage message, ArmadaTheme theme, LocalizationService loc, int w)
+        {
+            List<StyledText> lines = new List<StyledText>();
+            List<AskTurnStatistic> rows = AskTurnStatistics.Rows(message);
+            if (rows.Count < 1) return lines;
+            lines.Add(StyledText.From("  " + loc.T("Turn statistics"), theme.Muted.WithAttribute(CellAttributes.Bold, true)));
+            int labelWidth = rows.Max(r => TextCells.Width(loc.T(r.Label)));
+            int valueWidth = rows.Max(r => TextCells.Width(r.Value));
+            int cell = labelWidth + 2 + valueWidth;
+            int perLine = w >= 4 + (cell * 2) + 4 ? 2 : 1;
+            for (int i = 0; i < rows.Count; i += perLine)
+            {
+                StyledText line = StyledText.From("  ", theme.Muted);
+                for (int j = i; j < Math.Min(rows.Count, i + perLine); j++)
+                {
+                    string label = loc.T(rows[j].Label);
+                    if (j > i) line = line.Append(StyledText.From("    ", theme.Muted));
+                    line = line.Append(StyledText.From(label + new String(' ', labelWidth - TextCells.Width(label) + 2), theme.Muted));
+                    line = line.Append(StyledText.From(rows[j].Value.PadLeft(valueWidth), theme.Text));
+                }
+
+                lines.Add(line);
+            }
+
+            return lines;
         }
 
         private static List<StyledText> Thinking(string thinking, bool expanded, bool live, ArmadaTheme theme, LocalizationService loc, int w)

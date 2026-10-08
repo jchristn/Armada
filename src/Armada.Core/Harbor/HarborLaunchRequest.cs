@@ -123,8 +123,10 @@ namespace Armada.Core.Harbor
         public bool ScratchWorkingDirectory { get; set; } = false;
 
         /// <summary>
-        /// Whether a Claude Code captain runs in streaming-JSON output mode (one typed event per stdout line), as the
-        /// Admiral uses for chat turns so the reply streams token by token. Ignored by other runtimes. Default false.
+        /// Whether a Claude Code captain runs in streaming-JSON output mode, or a Codex captain in 'codex exec --json' mode
+        /// (one typed event per stdout line), as the Admiral uses for chat turns so the reply streams token by token and
+        /// the turn's telemetry (usage, tool calls) can be read. Ignored by other runtimes. Default false. A Harbor that
+        /// predates Codex support ignores it for Codex and runs plain text, which the Admiral also reads.
         /// </summary>
         public bool StreamJsonOutput { get; set; } = false;
 

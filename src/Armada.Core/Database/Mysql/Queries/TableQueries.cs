@@ -2004,6 +2004,24 @@ namespace Armada.Core.Database.Mysql.Queries
         };
 
         /// <summary>
+        /// Migration 81: Ask turn telemetry columns on ask_messages (all nullable).
+        /// </summary>
+        public static readonly string[] MigrationV81Statements = new string[]
+        {
+            @"ALTER TABLE ask_messages ADD COLUMN ttft_ms DOUBLE NULL;",
+            @"ALTER TABLE ask_messages ADD COLUMN first_text_ms DOUBLE NULL;",
+            @"ALTER TABLE ask_messages ADD COLUMN streaming_ms DOUBLE NULL;",
+            @"ALTER TABLE ask_messages ADD COLUMN tokens_per_second DOUBLE NULL;",
+            @"ALTER TABLE ask_messages ADD COLUMN input_tokens BIGINT NULL;",
+            @"ALTER TABLE ask_messages ADD COLUMN output_tokens BIGINT NULL;",
+            @"ALTER TABLE ask_messages ADD COLUMN cached_tokens BIGINT NULL;",
+            @"ALTER TABLE ask_messages ADD COLUMN tokens_estimated TINYINT(1) NULL;",
+            @"ALTER TABLE ask_messages ADD COLUMN cost_usd DOUBLE NULL;",
+            @"ALTER TABLE ask_messages ADD COLUMN tool_call_count BIGINT NULL;",
+            @"ALTER TABLE ask_messages ADD COLUMN tool_time_ms DOUBLE NULL;"
+        };
+
+        /// <summary>
         /// Index DDL statements for all tables.
         /// </summary>
         public static readonly string[] Indexes = new string[]

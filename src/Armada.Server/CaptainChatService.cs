@@ -268,9 +268,15 @@ namespace Armada.Server
                 // Claude Code streams token-by-token only in streaming-JSON mode; enable it for chat so the
                 // reply renders incrementally and we can read a clean final message + metrics from the
                 // terminal "result" event instead of scraping human-readable --print output.
+                // Codex likewise runs 'codex exec --json' so its items (reply, reasoning, tool calls) and the turn's token
+                // usage arrive as typed events. On a Harbor both ride the launch's StreamJsonOutput flag.
                 if (runtime is ClaudeCodeRuntime claudeRuntime)
                 {
                     claudeRuntime.StreamJsonOutput = true;
+                }
+                else if (runtime is CodexRuntime codexRuntime)
+                {
+                    codexRuntime.JsonOutput = true;
                 }
                 else if (remoteRuntime != null)
                 {
@@ -281,27 +287,24 @@ namespace Armada.Server
                 object outputLock = new object();
                 StringBuilder output = new StringBuilder();
                 StringBuilder thinking = new StringBuilder();
-                // Turn timing is measured on the monotonic clock: a wall-clock difference grows by however long the
-                // host slept during the turn (or goes negative on a backward NTP step).
-                System.Diagnostics.Stopwatch turnTimer = System.Diagnostics.Stopwatch.StartNew();
-                TimeSpan? firstOutputAfter = null;
+                // Per-turn telemetry (time to first output and first text, total time, the usage and cost the runtime
+                // reports), recorded from the captain's own output as it arrives, on the monotonic clock: a wall-clock
+                // difference grows by however long the host slept during the turn (or goes negative on a backward NTP
+                // step). A turn on a Harbor streams the same lines back over the link, so it is recorded the same way.
+                Armada.Core.Services.ChatTurnTelemetryRecorder telemetry = new Armada.Core.Services.ChatTurnTelemetryRecorder();
 
-                // Per-turn telemetry harvested from the captain's own output. Mux emits JSONL protocol
-                // events (run_started/assistant_text/run_completed) carrying model, duration, and token
-                // estimates; CLI runtimes that only stream text still yield wall-clock timing.
                 bool isMux = captain.Runtime == AgentRuntimeEnum.Mux;
                 bool isOpenCode = captain.Runtime == AgentRuntimeEnum.OpenCode;
                 bool isClaude = captain.Runtime == AgentRuntimeEnum.ClaudeCode;
-                double? reportedDurationMs = null;
-                int? reportedTokens = null;
+                bool isCodex = captain.Runtime == AgentRuntimeEnum.Codex;
                 string? reportedModel = null;
                 string? claudeFinalReply = null;
-                
+
                 // The in-process (ApiEndpoint) runtime reports tool activity on a typed channel; its stdout carries only the
                 // model's reply text, so reply text can never spoof a tool card and no diagnostic line leaks into the answer.
                 if (runtime is ApiAgentRuntime apiRuntime)
                 {
-                    apiRuntime.OnToolEvent += (pid, toolEvent) => emitTool(new CaptainToolActivity
+                    apiRuntime.OnToolEvent += (pid, toolEvent) => { telemetry.MarkOutput(); emitTool(new CaptainToolActivity
                     {
                         Phase = toolEvent.Phase == ApiRuntimeToolPhaseEnum.Completed ? "completed" : "started",
                         Id = toolEvent.Id,
@@ -311,7 +314,7 @@ namespace Armada.Server
                         ElapsedMs = toolEvent.ElapsedMs,
                         Result = toolEvent.Result,
                         PermissionDenied = toolEvent.PermissionDenied
-                    });
+                    }); };
                 }
 
                 // CLI tool permissions for the in-process (API-endpoint) runtime: its built-in shell tool is gated here,
@@ -332,9 +335,9 @@ namespace Armada.Server
                             // its plain reply lines instead of dropping them.
                             if (remoteRuntime != null && !String.IsNullOrEmpty(line) && !line.TrimStart().StartsWith("{", StringComparison.Ordinal))
                             {
+                                telemetry.ObservePlainText(line);
                                 lock (outputLock)
                                 {
-                                    if (firstOutputAfter == null) firstOutputAfter = turnTimer.Elapsed;
                                     if (output.Length < _MaxOutputChars) output.Append(line).Append('\n');
                                 }
                                 emitChunk(line + "\n");
@@ -342,12 +345,12 @@ namespace Armada.Server
                             return;
                         }
 
+                        telemetry.ObserveClaude(claudeEvent);
                         string? deltaText = claudeEvent.TextDelta;
                         if (!String.IsNullOrEmpty(deltaText))
                         {
                             lock (outputLock)
                             {
-                                if (firstOutputAfter == null) firstOutputAfter = turnTimer.Elapsed;
                                 if (output.Length < _MaxOutputChars) output.Append(deltaText);
                             }
                             emitChunk(deltaText!);
@@ -383,8 +386,6 @@ namespace Armada.Server
                             lock (outputLock)
                             {
                                 if (claudeEvent.Result != null) claudeFinalReply = claudeEvent.Result;
-                                if (claudeEvent.DurationMs.HasValue) reportedDurationMs = claudeEvent.DurationMs.Value;
-                                if (claudeEvent.Usage?.OutputTokens != null) reportedTokens = ClampToInt(claudeEvent.Usage.OutputTokens.Value);
                             }
                         }
 
@@ -395,23 +396,18 @@ namespace Armada.Server
                     {
                         // Telemetry and live text from the typed Mux event. The final reply still comes from the
                         // final-message artifact; assistant_text carries the streamed deltas.
+                        telemetry.ObserveMux(muxEvent);
                         string? deltaText = null;
                         lock (outputLock)
                         {
                             if (!String.IsNullOrEmpty(muxEvent.Model)) reportedModel = muxEvent.Model;
                             if (muxEvent.EventType == MuxProtocolEvent.AssistantText)
                             {
-                                if (firstOutputAfter == null) firstOutputAfter = turnTimer.Elapsed;
                                 deltaText = muxEvent.Text;
                                 // Accumulate streamed assistant text so a reply survives even if the final-message
                                 // artifact (reply.txt) is not written.
                                 if (!String.IsNullOrEmpty(deltaText) && output.Length < _MaxOutputChars)
                                     output.Append(deltaText);
-                            }
-                            else if (muxEvent.EventType == MuxProtocolEvent.RunCompleted)
-                            {
-                                if (muxEvent.DurationMs.HasValue) reportedDurationMs = muxEvent.DurationMs.Value;
-                                if (muxEvent.FinalEstimatedTokens.HasValue) reportedTokens = ClampToInt(muxEvent.FinalEstimatedTokens.Value);
                             }
                         }
 
@@ -452,6 +448,7 @@ namespace Armada.Server
                     {
                         // OpenCode --format json streams typed events with a nested part. Surface assistant text and
                         // tool-call chips; the raw JSON envelope never leaks.
+                        telemetry.ObserveOpenCode(openCodeEvent);
                         OpenCodePart? part = openCodeEvent.Part;
                         if (openCodeEvent.Type == OpenCodeStreamEvent.TypeText)
                         {
@@ -460,7 +457,6 @@ namespace Armada.Server
                             {
                                 lock (outputLock)
                                 {
-                                    if (firstOutputAfter == null) firstOutputAfter = turnTimer.Elapsed;
                                     if (output.Length < _MaxOutputChars) output.Append(deltaText);
                                 }
                                 emitChunk(deltaText!);
@@ -502,9 +498,18 @@ namespace Armada.Server
                         return;
                     }
 
+                    if (isCodex && CodexStreamEvent.TryParse(line, out CodexStreamEvent? codexEvent) && codexEvent != null)
+                    {
+                        // codex exec --json: a completed agent message is reply text, reasoning is thinking, and command
+                        // and MCP tool items become tool-call chips. The raw JSON envelope never leaks into the reply.
+                        telemetry.ObserveCodex(codexEvent);
+                        ObserveCodexItem(codexEvent, showThinking, outputLock, output, thinking, emitChunk, emitThinking, emitTool);
+                        return;
+                    }
+
+                    telemetry.ObservePlainText(line);
                     lock (outputLock)
                     {
-                        if (firstOutputAfter == null) firstOutputAfter = turnTimer.Elapsed;
                         if (output.Length < _MaxOutputChars)
                         {
                             output.Append(line);
@@ -650,20 +655,14 @@ namespace Armada.Server
                     }
                 }
 
-                // Keep all timing on one monotonic base so time-to-first-token never exceeds total and
-                // streaming always resolves. reportedDurationMs is captain-internal and, being on a
-                // different base than our timer, is used only as a fallback total.
-                double measuredMs = turnTimer.Elapsed.TotalMilliseconds;
-                double totalMs = measuredMs > 0 ? measuredMs : (reportedDurationMs ?? measuredMs);
-                double? ttftMs = firstOutputAfter.HasValue
-                    ? Math.Min(firstOutputAfter.Value.TotalMilliseconds, totalMs)
-                    : (double?)null;
-
-                // Only Claude Code reports a real completion-token count (output_tokens from its "result"
-                // event). Mux's reportedTokens is finalEstimatedTokens -- a whole-context estimate, not the
-                // reply -- so it is NOT passed here; the shared builder estimates completion tokens from the
-                // reply text instead, matching planning-session metrics.
-                int? realCompletionTokens = isClaude ? reportedTokens : null;
+                // All timing is on the recorder's one monotonic base, so time to first token never exceeds the total
+                // and streaming always resolves. Real token counts come only from a runtime's own usage report (Claude
+                // Code's result event, Codex's turn.completed, OpenCode's step_finish); otherwise the shared builder
+                // estimates completion tokens from the reply, matching planning-session metrics. (Mux's
+                // finalEstimatedTokens is a whole-context estimate, not the reply, and is never used.)
+                List<AskMessageToolCall> finishedToolCalls = toolCalls.ToList();
+                CaptainChatMetrics metrics = telemetry.Build(reply, finishedToolCalls);
+                long? realOutputTokens = telemetry.OutputTokens;
 
                 string thinkingText;
                 lock (outputLock) thinkingText = thinking.ToString().Trim();
@@ -675,10 +674,10 @@ namespace Armada.Server
                     Thinking = String.IsNullOrEmpty(thinkingText) ? null : thinkingText,
                     Model = !String.IsNullOrEmpty(reportedModel) ? reportedModel
                         : (String.IsNullOrEmpty(captain.Model) ? captain.Runtime.ToString() : captain.Model),
-                    Metrics = Armada.Core.Services.ChatTurnMetricsBuilder.Build(totalMs, ttftMs, reply, realCompletionTokens),
+                    Metrics = metrics,
                 };
 
-                // Best-effort token accounting: real output tokens for Claude Code, estimated otherwise.
+                // Best-effort token accounting: the runtime's reported usage where it has one, estimated otherwise.
                 await Armada.Core.Services.TokenUsageCapture.CaptureAsync(
                     _Database, _Logging, "chat",
                     model: response.Model,
@@ -688,9 +687,9 @@ namespace Armada.Server
                     vesselId: null,
                     captainId: captain.Id,
                     sourceId: captain.CurrentMissionId,
-                    inputTokens: null,
-                    outputTokens: realCompletionTokens.HasValue ? (long?)realCompletionTokens.Value : null,
-                    cachedTokens: null,
+                    inputTokens: telemetry.InputTokens,
+                    outputTokens: realOutputTokens,
+                    cachedTokens: telemetry.CachedTokens,
                     inputText: prompt,
                     outputText: reply,
                     token: token).ConfigureAwait(false);
@@ -698,7 +697,7 @@ namespace Armada.Server
                 _Logging.Debug(_Header + "chat turn for captain " + captainId + " (" + captain.Runtime + "): " +
                     (response.Metrics.TotalMs?.ToString("F0") ?? "?") + "ms, exit " + (exitCode?.ToString() ?? "?"));
 
-                return new CaptainChatTurnResult { Response = response, ToolCalls = toolCalls.ToList() };
+                return new CaptainChatTurnResult { Response = response, ToolCalls = finishedToolCalls };
             }
             catch (OperationCanceledException)
             {
@@ -761,11 +760,71 @@ namespace Armada.Server
             }
         }
 
-        private static int ClampToInt(long value)
+        /// <summary>
+        /// Surface one 'codex exec --json' item: a completed agent message is reply text (several messages are joined by
+        /// a blank line), completed reasoning is thinking when the turn shows thinking, and command executions and MCP
+        /// tool calls are tool-call chips (started, then completed with their status and exit code).
+        /// </summary>
+        private static void ObserveCodexItem(
+            CodexStreamEvent evt,
+            bool showThinking,
+            object outputLock,
+            StringBuilder output,
+            StringBuilder thinking,
+            Action<string> emitChunk,
+            Action<string> emitThinking,
+            Action<CaptainToolActivity> emitTool)
         {
-            if (value > Int32.MaxValue) return Int32.MaxValue;
-            if (value < Int32.MinValue) return Int32.MinValue;
-            return (int)value;
+            CodexStreamItem? item = evt.Item;
+            if (item == null) return;
+            bool started = evt.Type == CodexStreamEvent.TypeItemStarted;
+            bool completed = evt.Type == CodexStreamEvent.TypeItemCompleted;
+
+            if (item.Type == CodexStreamItem.TypeAgentMessage)
+            {
+                if (!completed || String.IsNullOrEmpty(item.Text)) return;
+                string delta;
+                lock (outputLock)
+                {
+                    delta = output.Length > 0 ? "\n\n" + item.Text : item.Text!;
+                    if (output.Length < _MaxOutputChars) output.Append(delta);
+                }
+
+                emitChunk(delta);
+                return;
+            }
+
+            if (item.Type == CodexStreamItem.TypeReasoning)
+            {
+                if (!completed || !showThinking || String.IsNullOrEmpty(item.Text)) return;
+                string delta;
+                lock (outputLock)
+                {
+                    delta = thinking.Length > 0 ? "\n\n" + item.Text : item.Text!;
+                    if (thinking.Length < _MaxOutputChars) thinking.Append(delta);
+                }
+
+                emitThinking(delta);
+                return;
+            }
+
+            bool isCommand = item.Type == CodexStreamItem.TypeCommandExecution;
+            bool isMcp = item.Type == CodexStreamItem.TypeMcpToolCall;
+            if (!isCommand && !isMcp) return;
+            if (!started && !completed) return;
+
+            string name = isCommand
+                ? "shell"
+                : (String.IsNullOrEmpty(item.Server) ? (item.Tool ?? "tool") : item.Server + "." + (item.Tool ?? "tool"));
+            bool failed = String.Equals(item.Status, "failed", StringComparison.Ordinal) || (item.ExitCode.HasValue && item.ExitCode.Value != 0);
+            emitTool(new CaptainToolActivity
+            {
+                Phase = completed ? "completed" : "started",
+                Id = item.Id,
+                Name = name,
+                Arguments = isCommand ? Truncate(item.Command, 4000) : null,
+                Ok = completed ? !failed : (bool?)null
+            });
         }
 
 

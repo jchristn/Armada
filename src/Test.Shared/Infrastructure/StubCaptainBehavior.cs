@@ -2,6 +2,7 @@ namespace Test.Shared.Infrastructure
 {
     using System;
     using System.Collections.Concurrent;
+    using System.Collections.Generic;
     using System.Threading.Tasks;
 
     /// <summary>
@@ -17,6 +18,12 @@ namespace Test.Shared.Infrastructure
         /// Thread-scoped turn script returning the reply text. Default replies "Done." without calling tools.
         /// </summary>
         public Func<StubCaptainTurn, Task<string>> OnTurn { get; set; } = turn => Task.FromResult("Done.");
+
+        /// <summary>
+        /// Stdout lines a thread-scoped turn writes, given the turn and the reply <see cref="OnTurn"/> returned (for
+        /// example Claude Code stream-json events with a result usage block). Null writes the reply's own lines.
+        /// </summary>
+        public Func<StubCaptainTurn, string, List<string>>? TurnOutput { get; set; } = null;
 
         /// <summary>
         /// Reply to a prompt that is neither a thread-scoped turn nor a mission (planning, refinement, vessel context,

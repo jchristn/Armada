@@ -61,7 +61,8 @@ namespace Armada.Runtimes
         public bool UseScratchWorkingDirectory { get; set; } = false;
 
         /// <summary>
-        /// Whether a Claude Code captain runs in streaming-JSON output mode on the Harbor (chat turns).
+        /// Whether a Claude Code captain runs in streaming-JSON output mode, or a Codex captain in 'codex exec --json'
+        /// mode, on the Harbor (chat turns). Other runtimes ignore it.
         /// </summary>
         public bool StreamJsonOutput { get; set; } = false;
 
@@ -160,7 +161,7 @@ namespace Armada.Runtimes
                 AutoApprove = captain != null ? CaptainRuntimeOptions.GetAutoApprove(captain) : (bool?)null,
                 McpSessionToken = String.IsNullOrEmpty(McpSessionToken) ? null : McpSessionToken,
                 ScratchWorkingDirectory = UseScratchWorkingDirectory,
-                StreamJsonOutput = StreamJsonOutput && _RuntimeType == AgentRuntimeEnum.ClaudeCode,
+                StreamJsonOutput = StreamJsonOutput && (_RuntimeType == AgentRuntimeEnum.ClaudeCode || _RuntimeType == AgentRuntimeEnum.Codex),
                 ShowThinking = showThinking,
                 ReturnFinalMessage = _FinalMessageFilePath != null,
                 JobKind = JobKind.ToString(),

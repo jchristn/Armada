@@ -4,8 +4,8 @@ namespace Armada.Tui.Screens.Ask
     using System.Collections.Generic;
 
     /// <summary>
-    /// Per-view display choices for the Ask transcript: which tool chips, thinking sections, and argument blocks are
-    /// expanded, and which work card is highlighted after the work strip jumps to it. <see cref="Version"/> increases on
+    /// Per-view display choices for the Ask transcript: which tool chips, thinking sections, turn statistics, and argument
+    /// blocks are expanded, and which work card is highlighted after the work strip jumps to it. <see cref="Version"/> increases on
     /// every change so the layout cache can tell.
     /// </summary>
     public class AskViewState
@@ -21,6 +21,11 @@ namespace Armada.Tui.Screens.Ask
         /// Block keys whose thinking section is expanded.
         /// </summary>
         public HashSet<string> ExpandedThinking { get; } = new HashSet<string>(StringComparer.Ordinal);
+
+        /// <summary>
+        /// Block keys of captain replies whose turn statistics panel is open (<c>i</c>).
+        /// </summary>
+        public HashSet<string> ExpandedStats { get; } = new HashSet<string>(StringComparer.Ordinal);
 
         /// <summary>
         /// Proposal ids whose arguments (and result) are expanded.

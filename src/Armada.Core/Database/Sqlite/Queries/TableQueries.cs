@@ -1969,7 +1969,20 @@ namespace Armada.Core.Database.Sqlite.Queries
 
                 new SchemaMigration(80, "Add repository_path and checkout_path to docks: the repository a Harbor-side dock was created from and the user's checkout on that Harbor host",
                     @"ALTER TABLE docks ADD COLUMN repository_path TEXT;",
-                    @"ALTER TABLE docks ADD COLUMN checkout_path TEXT;")
+                    @"ALTER TABLE docks ADD COLUMN checkout_path TEXT;"),
+
+                new SchemaMigration(81, "Add Ask turn telemetry to ask_messages: ttft_ms, first_text_ms, streaming_ms, tokens_per_second, input_tokens, output_tokens, cached_tokens, tokens_estimated, cost_usd, tool_call_count, and tool_time_ms (all nullable)",
+                    @"ALTER TABLE ask_messages ADD COLUMN ttft_ms REAL;",
+                    @"ALTER TABLE ask_messages ADD COLUMN first_text_ms REAL;",
+                    @"ALTER TABLE ask_messages ADD COLUMN streaming_ms REAL;",
+                    @"ALTER TABLE ask_messages ADD COLUMN tokens_per_second REAL;",
+                    @"ALTER TABLE ask_messages ADD COLUMN input_tokens INTEGER;",
+                    @"ALTER TABLE ask_messages ADD COLUMN output_tokens INTEGER;",
+                    @"ALTER TABLE ask_messages ADD COLUMN cached_tokens INTEGER;",
+                    @"ALTER TABLE ask_messages ADD COLUMN tokens_estimated INTEGER;",
+                    @"ALTER TABLE ask_messages ADD COLUMN cost_usd REAL;",
+                    @"ALTER TABLE ask_messages ADD COLUMN tool_call_count INTEGER;",
+                    @"ALTER TABLE ask_messages ADD COLUMN tool_time_ms REAL;")
 
             };
         }

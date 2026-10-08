@@ -114,7 +114,7 @@ label the job on the Harbor.
 | Field | Meaning |
 |---|---|
 | `scratchWorkingDirectory` | When `workingDirectory` is empty or does not exist on the Harbor host, run the job in a per-job scratch directory the Harbor creates (under its temporary directory, `armada-harbor/scratch/<jobId>`) and removes when the job ends. Without it the working directory must exist; a missing one fails the launch. Missions never set it. |
-| `streamJsonOutput` | Run a Claude Code captain with `--output-format stream-json --include-partial-messages` (chat streaming). Ignored for other runtimes. |
+| `streamJsonOutput` | Run a Claude Code captain with `--output-format stream-json --include-partial-messages`, or a Codex captain with `codex exec --json` (chat turns: streaming and per-turn telemetry). Ignored for other runtimes; a Harbor that predates the Codex case runs Codex in plain text, which the Admiral also reads. |
 | `showThinking` | Ask the runtime to surface the model's reasoning (Mux `--show-thinking`). |
 | `returnFinalMessage` | Have the runtime write its final-message artifact (Codex `--output-last-message`, Mux) to a Harbor-side file outside the working directory, and send its content back as one `output` message on the `FinalMessage` stream just before `exited`. |
 | `jobKind` | What the launch is for, as a string: `Mission`, `AskTurn`, `Planning`, `Refinement`, `ContextBuild`, or `Other`. Informational: the Harbor shows it in its job list and names its job logs with it. A value the Harbor does not know is treated as unknown, never refused. |

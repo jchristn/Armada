@@ -6,6 +6,14 @@ All notable changes to Armada are documented in this file.
 
 ## Unreleased
 
+### Ask Armada: per-turn telemetry
+- Every captain reply in Ask Armada now records the turn's telemetry, as the Planning chat shows it: time to first token (the first output of any kind) and to the first visible text, streaming time, total time, tool call count and tool time, input, output, and cached tokens, cost, and tokens per second. It is recorded for every runtime, whether the turn runs on the Admiral or on a Harbor. Token counts and cost come from the runtime's own report where it has one: Claude Code (stream-json result: input, output, cache, cost), Codex (usage: input, cached, output), and OpenCode (tokens and cost). Other runtimes get timing, tool time, and an estimated output count.
+- One recorder in Core (`ChatTurnTelemetryRecorder`) now measures Ask, captain chat, and Planning turns, on the monotonic clock. Planning replies gain the reported input tokens and cost too.
+- Codex chat and Ask turns run `codex exec --json`, so their command and MCP tool calls show as tool chips. A Harbor that predates this runs Codex in plain text as before, and the reply still works.
+- Dashboard: each Ask reply has the Planning chat's (i) turn statistics popover. Mobile: the reply's (i) panel shows the full set, and older replies keep the total and tool rows. TUI: `i` on a selected reply shows its statistics, and the status bar offers `i Statistics`.
+- API: `AskMessage.Metrics` (`CaptainChatMetrics`, which gains `TimeToFirstTextMs`, `CachedTokens`, `CostUsd`, `TokensEstimated`, `ToolCallCount`, and `ToolTimeMs`) on REST responses and `ask.message` events.
+- Database: migration 81 adds nullable telemetry columns to `ask_messages` on all four providers.
+
 ### Harbor: mission docks on the Harbor's machine
 - In split mode a mission routed to a Harbor gets its dock on that Harbor's machine, and the whole mission runs there: dock creation, instruction files, the captain, the Definition-of-Done gate, diff capture, landing, and dock removal. Before, every dock was created on the Admiral (for an Admiral in Docker, under `/app/data/docks`), so a Harbor on another machine could not run missions.
 - The Admiral chooses the Harbor before it creates the dock and asks it whether it can serve the vessel. The Harbor uses the checkout named for the vessel in Harbor's Settings > Repositories, else a checkout under a root folder whose remote matches the vessel's repository URL (https and ssh forms match; `.git` and case do not matter), else its own bare clone under `~/.armada-harbor/repos`. A Harbor that cannot serve the vessel is skipped; if none can, the mission waits with `requireHarborForLaunch` on (the reason names the Harbor and the setting to change) and otherwise runs on the Admiral as before.

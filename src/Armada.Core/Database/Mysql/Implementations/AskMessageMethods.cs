@@ -20,9 +20,9 @@ namespace Armada.Core.Database.Mysql.Implementations
         #region Private-Members
 
         private static readonly string _Insert = @"INSERT INTO ask_messages
-            (id, tenant_id, user_id, thread_id, sequence, role, kind, content_text, thinking_text, proposal_id, tracked_work_id, captain_id, duration_ms, created_utc, last_update_utc)
+            (id, tenant_id, user_id, thread_id, sequence, role, kind, content_text, thinking_text, proposal_id, tracked_work_id, captain_id, duration_ms, ttft_ms, first_text_ms, streaming_ms, tokens_per_second, input_tokens, output_tokens, cached_tokens, tokens_estimated, cost_usd, tool_call_count, tool_time_ms, created_utc, last_update_utc)
             VALUES
-            (@id, @tenant_id, @user_id, @thread_id, @sequence, @role, @kind, @content_text, @thinking_text, @proposal_id, @tracked_work_id, @captain_id, @duration_ms, @created_utc, @last_update_utc);";
+            (@id, @tenant_id, @user_id, @thread_id, @sequence, @role, @kind, @content_text, @thinking_text, @proposal_id, @tracked_work_id, @captain_id, @duration_ms, @ttft_ms, @first_text_ms, @streaming_ms, @tokens_per_second, @input_tokens, @output_tokens, @cached_tokens, @tokens_estimated, @cost_usd, @tool_call_count, @tool_time_ms, @created_utc, @last_update_utc);";
 
         private readonly string _ConnectionString;
         private readonly SemaphoreSlim? _WriteLock;
@@ -107,7 +107,7 @@ namespace Armada.Core.Database.Mysql.Implementations
             await MysqlCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (MySqlConnection conn, MySqlTransaction tx) =>
             {
                 await MysqlCommandHelper.ExecuteAsync(conn, tx,
-                    "UPDATE ask_messages SET kind = @kind, content_text = @content_text, thinking_text = @thinking_text, proposal_id = @proposal_id, tracked_work_id = @tracked_work_id, captain_id = @captain_id, duration_ms = @duration_ms, last_update_utc = @last_update_utc WHERE tenant_id = @tenant_id AND id = @id;",
+                    "UPDATE ask_messages SET kind = @kind, content_text = @content_text, thinking_text = @thinking_text, proposal_id = @proposal_id, tracked_work_id = @tracked_work_id, captain_id = @captain_id, duration_ms = @duration_ms, ttft_ms = @ttft_ms, first_text_ms = @first_text_ms, streaming_ms = @streaming_ms, tokens_per_second = @tokens_per_second, input_tokens = @input_tokens, output_tokens = @output_tokens, cached_tokens = @cached_tokens, tokens_estimated = @tokens_estimated, cost_usd = @cost_usd, tool_call_count = @tool_call_count, tool_time_ms = @tool_time_ms, last_update_utc = @last_update_utc WHERE tenant_id = @tenant_id AND id = @id;",
                     cmd =>
                     {
                         MysqlCommandHelper.Add(cmd, "@kind", message.Kind.ToString());
@@ -117,6 +117,7 @@ namespace Armada.Core.Database.Mysql.Implementations
                         MysqlCommandHelper.Add(cmd, "@tracked_work_id", message.TrackedWorkId);
                         MysqlCommandHelper.Add(cmd, "@captain_id", message.CaptainId);
                         MysqlCommandHelper.Add(cmd, "@duration_ms", message.DurationMs);
+                        BindMetrics(cmd, message);
                         MysqlCommandHelper.AddDate(cmd, "@last_update_utc", message.LastUpdateUtc);
                         MysqlCommandHelper.Add(cmd, "@tenant_id", message.TenantId);
                         MysqlCommandHelper.Add(cmd, "@id", message.Id);
@@ -169,8 +170,25 @@ namespace Armada.Core.Database.Mysql.Implementations
             MysqlCommandHelper.Add(cmd, "@tracked_work_id", message.TrackedWorkId);
             MysqlCommandHelper.Add(cmd, "@captain_id", message.CaptainId);
             MysqlCommandHelper.Add(cmd, "@duration_ms", message.DurationMs);
+            BindMetrics(cmd, message);
             MysqlCommandHelper.AddDate(cmd, "@created_utc", message.CreatedUtc);
             MysqlCommandHelper.AddDate(cmd, "@last_update_utc", message.LastUpdateUtc);
+        }
+
+        private static void BindMetrics(MySqlCommand cmd, AskMessage message)
+        {
+            CaptainChatMetrics? m = message.Metrics;
+            MysqlCommandHelper.Add(cmd, "@ttft_ms", m?.TimeToFirstTokenMs);
+            MysqlCommandHelper.Add(cmd, "@first_text_ms", m?.TimeToFirstTextMs);
+            MysqlCommandHelper.Add(cmd, "@streaming_ms", m?.StreamingMs);
+            MysqlCommandHelper.Add(cmd, "@tokens_per_second", m?.TokensPerSecond);
+            MysqlCommandHelper.Add(cmd, "@input_tokens", m?.PromptTokens);
+            MysqlCommandHelper.Add(cmd, "@output_tokens", m?.CompletionTokens);
+            MysqlCommandHelper.Add(cmd, "@cached_tokens", m?.CachedTokens);
+            MysqlCommandHelper.Add(cmd, "@tokens_estimated", m?.TokensEstimated);
+            MysqlCommandHelper.Add(cmd, "@cost_usd", m?.CostUsd);
+            MysqlCommandHelper.Add(cmd, "@tool_call_count", m?.ToolCallCount);
+            MysqlCommandHelper.Add(cmd, "@tool_time_ms", m?.ToolTimeMs);
         }
 
         private static AskMessage FromReader(MySqlDataReader reader)
@@ -189,6 +207,19 @@ namespace Armada.Core.Database.Mysql.Implementations
             message.TrackedWorkId = MysqlCommandHelper.ReadString(reader["tracked_work_id"]);
             message.CaptainId = MysqlCommandHelper.ReadString(reader["captain_id"]);
             message.DurationMs = MysqlCommandHelper.ReadNullableLong(reader["duration_ms"]);
+            CaptainChatMetrics stored = new CaptainChatMetrics();
+            stored.TimeToFirstTokenMs = MysqlCommandHelper.ReadNullableDouble(reader["ttft_ms"]);
+            stored.TimeToFirstTextMs = MysqlCommandHelper.ReadNullableDouble(reader["first_text_ms"]);
+            stored.StreamingMs = MysqlCommandHelper.ReadNullableDouble(reader["streaming_ms"]);
+            stored.TokensPerSecond = MysqlCommandHelper.ReadNullableDouble(reader["tokens_per_second"]);
+            stored.PromptTokens = MysqlCommandHelper.ReadNullableInt(reader["input_tokens"]);
+            stored.CompletionTokens = MysqlCommandHelper.ReadNullableInt(reader["output_tokens"]);
+            stored.CachedTokens = MysqlCommandHelper.ReadNullableInt(reader["cached_tokens"]);
+            stored.TokensEstimated = MysqlCommandHelper.ReadNullableBool(reader["tokens_estimated"]);
+            stored.CostUsd = MysqlCommandHelper.ReadNullableDouble(reader["cost_usd"]);
+            stored.ToolCallCount = MysqlCommandHelper.ReadNullableInt(reader["tool_call_count"]);
+            stored.ToolTimeMs = MysqlCommandHelper.ReadNullableDouble(reader["tool_time_ms"]);
+            message.Metrics = AskMessageMetricsColumns.FromColumns(stored, message.DurationMs);
             message.CreatedUtc = MysqlCommandHelper.ReadDate(reader["created_utc"]);
             message.LastUpdateUtc = MysqlCommandHelper.ReadDate(reader["last_update_utc"]);
             return message;

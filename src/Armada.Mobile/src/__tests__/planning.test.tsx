@@ -219,7 +219,8 @@ describe('Planning session', () => {
     await act(async () => { fireEvent.press(toggle); });
     const panel = screen.getByTestId('planning-msg-2-stats');
     const spoken = within(panel).getAllByLabelText(/: /).map((cell) => cell.props.accessibilityLabel);
-    expect(spoken).toEqual(['time to first token: 640ms', 'streaming: 3.25s', 'tokens/sec: 64.6', 'tokens: 210', 'total: 3.89s']);
+    // The runtime reported input tokens, so the token rows name output and input separately.
+    expect(spoken).toEqual(['time to first token: 640ms', 'streaming: 3.25s', 'tokens/sec: 64.6', 'output tokens: 210', 'input tokens: 900', 'total: 3.89s']);
     expect(screen.getByTestId('planning-msg-2-stats-toggle').props.accessibilityState).toMatchObject({ expanded: true });
     await act(async () => { fireEvent.press(screen.getByTestId('planning-msg-2-stats-toggle')); });
     expect(screen.queryByTestId('planning-msg-2-stats')).toBeNull();

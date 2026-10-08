@@ -60,6 +60,7 @@ All rows carry `tenant_id`, `user_id` (owner), `created_utc`, `last_update_utc`.
 |---|---|---|
 | `ask_threads` | `ath_` | `title`, `captain_id` (nullable), `auto_approve` (bool, default false), `summary_text` (nullable), `summary_utc`, `pinned` (bool), `archived` (bool), `last_message_utc`, `message_count`, `unread_count` (updates posted while the user was not viewing) |
 | `ask_messages` | `amg_` | `thread_id`, `sequence` (int, per thread, monotonic), `role` (`User`, `Assistant`, `System`), `kind` (`Text`, `ActionProposal`, `ActionResult`, `WorkUpdate`, `Summary`, `Error`), `content_text`, `thinking_text` (nullable), `proposal_id` (nullable), `tracked_work_id` (nullable), `captain_id` (nullable), `duration_ms` (nullable) |
+| `ask_messages` (migration v81) | | turn telemetry of captain replies, all nullable: `ttft_ms`, `first_text_ms`, `streaming_ms`, `tokens_per_second`, `input_tokens`, `output_tokens`, `cached_tokens`, `tokens_estimated`, `cost_usd`, `tool_call_count`, `tool_time_ms` (the total is `duration_ms`); read and written as `AskMessage.Metrics` (see "Turn telemetry") |
 | `ask_message_tool_calls` | `atc_` | `message_id`, `thread_id`, `call_id`, `tool_name`, `arguments_text`, `result_text`, `ok` (nullable bool), `elapsed_ms` |
 | `ask_action_proposals` | `aap_` | `thread_id`, `message_id`, `tool_name`, `arguments_text`, `summary_text` (one-line human description), `source` (`Captain`, `QuickAction`), `status` (`Pending`, `Approved`, `Rejected`, `Expired`, `Executed`, `Failed`), `result_text`, `error_text`, `decided_by_user_id`, `decided_utc`, `executed_utc` |
 | `ask_tracked_work` | `atw_` | `thread_id`, `entity_type` (`Voyage`, `Mission`, `FleetActionRun`, `Job`, `VesselImportBatch`), `entity_id`, `title`, `status` (latest known status string), `state` (`Active`, `Succeeded`, `Failed`, `Cancelled`), `snapshot_hash` (to detect changes), `last_change_utc`, `completed_utc`; unique `(thread_id, entity_type, entity_id)` |
@@ -95,6 +96,35 @@ untouched).
    `list_*` readers (for example `get_vessel`, `get_mission_diff`, `get_captain_log`, `list_objectives`). The
    `mcp__armada__` prefix Claude Code adds is ignored. Everything not on the list, including any new tool until
    it is added deliberately, is treated as state-changing.
+
+### Turn telemetry
+
+Every captain reply carries the telemetry of the turn that wrote it (`AskMessage.Metrics`, a `CaptainChatMetrics`),
+the same set the Planning chat shows. `ChatTurnTelemetryRecorder` (`src/Armada.Core/Services`) records it as the
+runtime's output arrives, and Ask, captain chat, and Planning turns all use it. A turn on a Harbor streams the same
+stdout lines back over the link, so it is recorded the same way. All durations are on the monotonic clock.
+
+| Field | Meaning |
+|---|---|
+| `TimeToFirstTokenMs` | time to the first output of any kind: a reasoning block, a tool call, or reply text |
+| `TimeToFirstTextMs` | time to the first visible reply text (shown only when it differs) |
+| `StreamingMs` | total minus time to first token |
+| `TotalMs` | the whole turn (also `DurationMs`) |
+| `ToolCallCount`, `ToolTimeMs` | completed tool calls and the sum of their times (a call without a runtime-reported time is timed from its start event to its completion) |
+| `PromptTokens`, `CompletionTokens`, `CachedTokens`, `TotalTokens`, `CostUsd` | input (cached included), output, cache reads, their sum, and cost, where the runtime reports them |
+| `TokensEstimated` | true when the output tokens are estimated from the reply (about 3.5 characters a token) |
+| `TokensPerSecond` | output tokens over the streaming window |
+
+Usage per runtime: Claude Code's stream-json `result` event (input, output, cache read and creation, `total_cost_usd`);
+Codex, which chat turns now run as `codex exec --json` (on a Harbor through the launch's `streamJsonOutput`), reports
+`turn.completed` usage (input, cached input, output) and its command and MCP tool items become tool-call chips;
+OpenCode's `step_finish` parts (tokens and cost, summed across steps). Mux (its `finalEstimatedTokens` is a
+whole-context estimate, not the reply), Gemini, Cursor, and the API endpoint runtime report no per-turn usage, so
+their replies carry timing, tool time, and an estimated output count.
+
+The dashboard shows the set behind the reply header's (i) (`ChatMetricsInfo`), the mobile app in the reply's (i)
+panel, and the TUI under the selected reply with `i`; all three fall back to the total and the tool calls for replies
+without telemetry.
 
 ### Proposals and execution
 
@@ -251,6 +281,8 @@ default.
 - Composer: `/` opens the quick-action menu; each quick action opens an inline form (vessel picker and
   mission list for `/dispatch`, action + vessel picker for `/fleet-action`, etc.). Typing plain text sends
   to the captain. Stop button cancels a running turn.
+- Each captain reply has the Planning chat's (i) turn statistics popover next to its duration (see "Turn
+  telemetry").
 - All updates arrive over the scoped WebSocket; the page also reconciles by refetching on reconnect.
   All strings go through the i18n runtime with catalog entries for every locale.
 
@@ -260,7 +292,8 @@ default.
 header with the Auto-approve toggle, streaming transcript with confirm cards (`a` approve, `r` reject) and
 live work cards, and a composer with `/` quick actions and inline Dispatch and Fleet action forms. The Ask
 dock (`Ctrl+J`) follows the active thread from any screen, and the Approvals center (`Ctrl+A`) lists pending
-proposals next to mission reviews and deployment approvals. See `docs/TUI.md`.
+proposals next to mission reviews and deployment approvals. With a captain reply selected, the status bar shows
+`i Statistics`, and `i` opens or closes its turn statistics under the reply header. See `docs/TUI.md`.
 
 CLI tool permissions in the TUI: the header's CLI tools line shows the thread policy and the effective one (`p`
 changes it; Bypass only for admins, after the warning). Permission cards have clickable **[Allow once]**, **[Allow and
@@ -355,6 +388,7 @@ archived or deleted.
 | 2026-10-04 | backend agent | P5.1 | REST_API.md, MCP_API.md, WEBSOCKET_API.md, Postman "Ask Threads" folder, CHANGELOG. README Ask section left for the dashboard merge. |
 | 2026-10-04 | orchestrator | P5.2 | Integration run through the real dashboard (Playwright, Chromium, 1512 px) against a throwaway server (ports 57890/57891) with a real Claude Code captain and a temp repo with a bare origin, vessel `LocalMerge` with auto-land on. Three conversations: (1) captain proposed `dispatch`, confirm card in about 6 s, approved, mission ran, landing failed because the first temp repo had no `origin` (test setup; the thread reported it correctly, including a captain-written explanation); (2) same flow in a new conversation through "Mission landed" and "voyage complete", commit verified on origin; (3) after fixes, order verified and rename, summarize, and delete exercised. Fixed during integration: the "not connected to Armada over MCP" banner was shown for Claude Code captains even though the server connects them per turn; the captain's reply was persisted when the turn ended, so a confirm card approved while the captain was still writing (and the resulting updates) sorted above the reply; the reply's position is now reserved when the turn starts. Full suite 2889/2889, dashboard 218/218. |
 | 2026-10-05 | cli-permissions agent | -- | CLI tool permissions in Ask: turns resolve `Refuse` / `ApproveInArmada` / `Bypass` (thread, captain, `Ask.CaptainAutoApprove` legacy mapping, `Permissions.AskDefaultPolicy` default `ApproveInArmada`); Claude Code permission prompts become `CliPermission` cards decided by admins (owners when `Permissions.AllowOwnerApproval`); `[x!]` explanations from typed permission denials; CLI tools control in the conversation header; narrations and summaries never prompt. Migration 78. |
+| 2026-10-08 | ask-telemetry agent | -- | Per-turn telemetry on Ask replies: `ChatTurnTelemetryRecorder` in Core, shared by Ask, captain chat, and Planning turns (Admiral host and Harbor); migration 81 on all four providers; Codex chat turns run `codex exec --json` for usage and tool calls; dashboard (i) popover on every reply, the mobile (i) panel with the full set, and `i` in the TUI. |
 
 ## UI assumptions (dashboard, 2026-10-04)
 

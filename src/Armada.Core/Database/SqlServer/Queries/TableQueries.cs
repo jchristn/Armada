@@ -1624,6 +1624,21 @@ namespace Armada.Core.Database.SqlServer.Queries
                     "Add repository_path and checkout_path to docks: the repository a Harbor-side dock was created from and the user's checkout on that Harbor host",
                     @"IF COL_LENGTH('docks', 'repository_path') IS NULL ALTER TABLE docks ADD repository_path NVARCHAR(MAX) NULL;",
                     @"IF COL_LENGTH('docks', 'checkout_path') IS NULL ALTER TABLE docks ADD checkout_path NVARCHAR(MAX) NULL;"
+                ),
+                new SchemaMigration(
+                    81,
+                    "Add Ask turn telemetry to ask_messages: ttft_ms, first_text_ms, streaming_ms, tokens_per_second, input_tokens, output_tokens, cached_tokens, tokens_estimated, cost_usd, tool_call_count, and tool_time_ms (all nullable)",
+                    @"IF COL_LENGTH('ask_messages', 'ttft_ms') IS NULL ALTER TABLE ask_messages ADD ttft_ms FLOAT NULL;",
+                    @"IF COL_LENGTH('ask_messages', 'first_text_ms') IS NULL ALTER TABLE ask_messages ADD first_text_ms FLOAT NULL;",
+                    @"IF COL_LENGTH('ask_messages', 'streaming_ms') IS NULL ALTER TABLE ask_messages ADD streaming_ms FLOAT NULL;",
+                    @"IF COL_LENGTH('ask_messages', 'tokens_per_second') IS NULL ALTER TABLE ask_messages ADD tokens_per_second FLOAT NULL;",
+                    @"IF COL_LENGTH('ask_messages', 'input_tokens') IS NULL ALTER TABLE ask_messages ADD input_tokens BIGINT NULL;",
+                    @"IF COL_LENGTH('ask_messages', 'output_tokens') IS NULL ALTER TABLE ask_messages ADD output_tokens BIGINT NULL;",
+                    @"IF COL_LENGTH('ask_messages', 'cached_tokens') IS NULL ALTER TABLE ask_messages ADD cached_tokens BIGINT NULL;",
+                    @"IF COL_LENGTH('ask_messages', 'tokens_estimated') IS NULL ALTER TABLE ask_messages ADD tokens_estimated BIT NULL;",
+                    @"IF COL_LENGTH('ask_messages', 'cost_usd') IS NULL ALTER TABLE ask_messages ADD cost_usd FLOAT NULL;",
+                    @"IF COL_LENGTH('ask_messages', 'tool_call_count') IS NULL ALTER TABLE ask_messages ADD tool_call_count BIGINT NULL;",
+                    @"IF COL_LENGTH('ask_messages', 'tool_time_ms') IS NULL ALTER TABLE ask_messages ADD tool_time_ms FLOAT NULL;"
                 )
 
             };

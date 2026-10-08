@@ -98,6 +98,14 @@ namespace Armada.Core.Models
         public long? DurationMs { get; set; } = null;
 
         /// <summary>
+        /// Telemetry of the captain turn that wrote this reply (time to first token and to first text, streaming,
+        /// total, tool calls and tool time, input, output, and cached tokens, cost, tokens per second), or null for
+        /// user messages, cards, and replies written before the server recorded it. Persisted in nullable columns of
+        /// the message (migration v81).
+        /// </summary>
+        public CaptainChatMetrics? Metrics { get; set; } = null;
+
+        /// <summary>
         /// UTC creation time.
         /// </summary>
         public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;

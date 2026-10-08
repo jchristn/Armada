@@ -49,10 +49,12 @@ namespace Armada.Core.Services
                 : (double?)null;
             metrics.StreamingMs = streamingMs;
 
-            int completionTokens = reportedCompletionTokens.HasValue && reportedCompletionTokens.Value >= 0
-                ? reportedCompletionTokens.Value
+            bool reported = reportedCompletionTokens.HasValue && reportedCompletionTokens.Value >= 0;
+            int completionTokens = reported
+                ? reportedCompletionTokens!.Value
                 : (int)Math.Round((reply?.Length ?? 0) / _CharsPerToken);
             metrics.CompletionTokens = completionTokens;
+            metrics.TokensEstimated = !reported;
 
             // Generation throughput: completion tokens produced across the streaming (post-first-token)
             // window, not the whole turn -- otherwise long reasoning/tool time before the first token

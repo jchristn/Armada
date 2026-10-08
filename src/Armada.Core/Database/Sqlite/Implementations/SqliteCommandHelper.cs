@@ -221,6 +221,15 @@ namespace Armada.Core.Database.Sqlite.Implementations
         }
 
         /// <summary>
+        /// Read a nullable double-precision column.
+        /// </summary>
+        internal static double? ReadNullableDouble(object value)
+        {
+            if (value == null || value == DBNull.Value) return null;
+            return Convert.ToDouble(value, System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        /// <summary>
         /// Parse an enum stored by name, with a fallback for null or unrecognized values.
         /// </summary>
         internal static TEnum ReadEnum<TEnum>(object value, TEnum fallback) where TEnum : struct

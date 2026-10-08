@@ -726,6 +726,11 @@ namespace Armada.Core.Database.Mysql
                     80,
                     "Add repository_path and checkout_path to docks: the repository a Harbor-side dock was created from and the user's checkout on that Harbor host",
                     TableQueries.MigrationV80Statements
+                ),
+                new SchemaMigration(
+                    81,
+                    "Add Ask turn telemetry to ask_messages: ttft_ms, first_text_ms, streaming_ms, tokens_per_second, input_tokens, output_tokens, cached_tokens, tokens_estimated, cost_usd, tool_call_count, and tool_time_ms (all nullable)",
+                    TableQueries.MigrationV81Statements
                 )
             };
         }
