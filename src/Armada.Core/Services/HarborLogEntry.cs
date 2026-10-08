@@ -22,6 +22,11 @@ namespace Armada.Core.Services
         public HarborLogDirection Direction { get; set; } = HarborLogDirection.Info;
 
         /// <summary>
+        /// True for a link heartbeat, so the activity log can collapse a run of them into one line.
+        /// </summary>
+        public bool IsHeartbeat { get; set; } = false;
+
+        /// <summary>
         /// The message. Never contains secrets. Never null (null becomes empty). Harbor log lines never end with a
         /// period: surrounding whitespace and a trailing period are removed on set (an ellipsis is kept), which also
         /// covers messages that end with an exception's own text.

@@ -31,6 +31,39 @@ namespace Test.Shared.Suites.Services
         {
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
 
+            cases.Add(CaseAsync("activity_log_collapses_heartbeat_runs", "The activity log collapses consecutive heartbeats into one line with the count and the run's first time", TestTags.Positive, () =>
+            {
+                DateTime start = new DateTime(2026, 10, 8, 16, 35, 31, DateTimeKind.Utc);
+                string first = start.ToLocalTime().ToString("HH:mm:ss");
+                HarborActivityLog log = new HarborActivityLog(100);
+                log.Add(new HarborLogEntry(HarborLogDirection.In, "Handshake accepted") { TimestampUtc = start.AddSeconds(-5) });
+                log.Add(new HarborLogEntry(HarborLogDirection.Out, "Heartbeat") { IsHeartbeat = true, TimestampUtc = start });
+                AssertEqual(2, log.Count, "a single heartbeat is its own line");
+                AssertEqual(first + " -> Heartbeat", log.Recent(1)[0], "a single heartbeat has no count");
+
+                log.Add(new HarborLogEntry(HarborLogDirection.Out, "Heartbeat") { IsHeartbeat = true, TimestampUtc = start.AddSeconds(15) });
+                log.Add(new HarborLogEntry(HarborLogDirection.Out, "Heartbeat") { IsHeartbeat = true, TimestampUtc = start.AddSeconds(30) });
+                AssertEqual(2, log.Count, "the run stays on one line");
+                AssertEqual(start.AddSeconds(30).ToLocalTime().ToString("HH:mm:ss") + " -> Heartbeat (3 since " + first + ")", log.Recent(1)[0]);
+
+                log.Add(new HarborLogEntry(HarborLogDirection.In, "Launch job j1") { TimestampUtc = start.AddSeconds(31) });
+                log.Add(new HarborLogEntry(HarborLogDirection.Out, "Heartbeat") { IsHeartbeat = true, TimestampUtc = start.AddSeconds(45) });
+                AssertEqual(4, log.Count, "other activity ends the run; the next heartbeat starts a new line");
+                AssertEqual(start.AddSeconds(45).ToLocalTime().ToString("HH:mm:ss") + " -> Heartbeat", log.Recent(1)[0]);
+
+                HarborActivityLog small = new HarborActivityLog(2);
+                small.Add(new HarborLogEntry(HarborLogDirection.Info, "a"));
+                small.Add(new HarborLogEntry(HarborLogDirection.Info, "b"));
+                small.Add(new HarborLogEntry(HarborLogDirection.Info, "c"));
+                AssertEqual(2, small.Count, "bounded");
+                AssertContains(" b", small.Recent(2)[0], "oldest dropped");
+
+                log.Clear();
+                AssertEqual(0, log.Count, "cleared");
+                AssertEqual("", log.ToText());
+                return Task.CompletedTask;
+            }));
+
             cases.Add(CaseAsync("opens_with_handshake_and_runs_git", "Client handshakes then executes a git request", TestTags.Positive, async () =>
             {
                 FakeTransport transport = new FakeTransport();

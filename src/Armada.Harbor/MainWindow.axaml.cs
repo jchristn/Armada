@@ -73,7 +73,7 @@ namespace Armada.Harbor
 
         private readonly HarborAppSettings _Settings;
         private readonly LoggingModule _Logging;
-        private readonly List<string> _LogLines = new List<string>();
+        private readonly HarborActivityLog _ActivityLog = new HarborActivityLog(_MaxLogLines);
         private CancellationTokenSource? _RunCts;
         private HarborLinkStateEnum _LinkState = HarborLinkStateEnum.Idle;
         private string? _McpUrl = null;
@@ -189,8 +189,7 @@ namespace Armada.Harbor
         /// <returns>Copy of the lines.</returns>
         public List<string> RecentActivity(int maxLines)
         {
-            int count = Math.Min(Math.Max(maxLines, 0), _LogLines.Count);
-            return _LogLines.GetRange(_LogLines.Count - count, count);
+            return _ActivityLog.Recent(maxLines);
         }
 
         #endregion
@@ -310,7 +309,7 @@ namespace Armada.Harbor
 
         private void OnClearLogClick(object? sender, RoutedEventArgs e)
         {
-            _LogLines.Clear();
+            _ActivityLog.Clear();
             LogBox.Text = string.Empty;
         }
 
@@ -438,15 +437,11 @@ namespace Armada.Harbor
 
         private void AppendLog(HarborLogEntry entry)
         {
-            string line = entry.ToString();
             _Logging.Info("[Harbor] " + (entry.Direction == HarborLogDirection.Info ? "" : entry.Direction + " ") + entry.Message);
             Dispatcher.UIThread.Post(() =>
             {
-                _LogLines.Add(line);
-                if (_LogLines.Count > _MaxLogLines)
-                    _LogLines.RemoveRange(0, _LogLines.Count - _MaxLogLines);
-
-                LogBox.Text = string.Join("\n", _LogLines);
+                _ActivityLog.Add(entry);
+                LogBox.Text = _ActivityLog.ToText();
                 LogBox.CaretIndex = LogBox.Text.Length;
             });
         }
