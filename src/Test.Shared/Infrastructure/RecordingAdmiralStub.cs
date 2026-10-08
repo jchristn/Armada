@@ -43,13 +43,20 @@ namespace Test.Shared.Infrastructure
         /// <summary>
         /// Start the stub on a free loopback port.
         /// </summary>
-        public RecordingAdmiralStub()
+        public RecordingAdmiralStub() : this(null)
         {
-            int port = TestPorts.Reserve(1)[0];
+        }
+
+        /// <summary>
+        /// Start the stub on a free loopback port, running a hook with each reserved port just before binding it.
+        /// </summary>
+        /// <param name="beforeStart">Hook run between reserving a port and binding it; null for none.</param>
+        public RecordingAdmiralStub(Action<int>? beforeStart)
+        {
+            // The listener binds through TestPorts so a port taken after it was reserved is replaced by a fresh one
+            // instead of failing the case with "Address already in use".
+            _Listener = TestPorts.StartHttpListener(p => new[] { "http://127.0.0.1:" + p + "/" }, out int port, beforeStart);
             BaseUrl = "http://127.0.0.1:" + port;
-            _Listener = new HttpListener();
-            _Listener.Prefixes.Add(BaseUrl + "/");
-            _Listener.Start();
             _Loop = Task.Run(() => ListenAsync(_Cancellation.Token));
         }
 

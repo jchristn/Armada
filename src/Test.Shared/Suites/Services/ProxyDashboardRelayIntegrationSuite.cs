@@ -587,11 +587,6 @@ namespace Test.Shared.Suites.Services
             return logging;
         }
 
-        private static int ReservePort()
-        {
-            return TestPorts.Reserve(1)[0];
-        }
-
         private static TestCaseDescriptor CaseAsync(string caseId, string displayName, string tag, Func<Task> body)
         {
             return new TestCaseDescriptor(
@@ -718,7 +713,6 @@ namespace Test.Shared.Suites.Services
             {
                 EnsureStaticProxyAssets();
 
-                int port = ReservePort();
                 string password = "proxy-smoke-password";
                 string dataDirectory = Path.Combine(Path.GetTempPath(), "armada-proxy-smoke-" + Guid.NewGuid().ToString("N"));
                 Directory.CreateDirectory(dataDirectory);
@@ -726,7 +720,6 @@ namespace Test.Shared.Suites.Services
                 ProxySettings settings = new ProxySettings
                 {
                     Hostname = "127.0.0.1",
-                    Port = port,
                     Password = password,
                     DataDirectory = dataDirectory,
                     LogDirectory = Path.Combine(dataDirectory, "logs")
@@ -735,8 +728,22 @@ namespace Test.Shared.Suites.Services
                 settings.InitializeDirectories();
 
                 LoggingModule logging = CreateLogging();
-                ArmadaProxyServer proxy = new ArmadaProxyServer(logging, settings, quiet: true, utcNow: utcNow);
-                await proxy.StartAsync().ConfigureAwait(false);
+                ArmadaProxyServer proxy = await TestPorts.StartOnFreePortsAsync(1, async ports =>
+                {
+                    settings.Port = ports[0];
+                    ArmadaProxyServer candidate = new ArmadaProxyServer(logging, settings, quiet: true, utcNow: utcNow);
+                    try
+                    {
+                        await candidate.StartAsync().ConfigureAwait(false);
+                        return candidate;
+                    }
+                    catch
+                    {
+                        candidate.Dispose();
+                        throw;
+                    }
+                }).ConfigureAwait(false);
+                int port = settings.Port;
 
                 FakeTunnelClient tunnel = new FakeTunnelClient(port, password, "smoke-instance", tunnelCapabilities);
                 await tunnel.ConnectAsync().ConfigureAwait(false);
