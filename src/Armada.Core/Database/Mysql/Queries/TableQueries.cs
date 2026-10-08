@@ -2004,6 +2004,62 @@ namespace Armada.Core.Database.Mysql.Queries
         };
 
         /// <summary>
+        /// Migration 81: Harbor metrics (harbor_jobs, harbor_link_samples, harbor_link_events) and harbor_id on token_usage.
+        /// </summary>
+        public static readonly string[] MigrationV81Statements = new string[]
+        {
+            @"CREATE TABLE IF NOT EXISTS harbor_jobs (
+                id VARCHAR(64) NOT NULL PRIMARY KEY,
+                job_id VARCHAR(64) NOT NULL,
+                harbor_id VARCHAR(64) NOT NULL,
+                tenant_id VARCHAR(64),
+                kind VARCHAR(32) NOT NULL,
+                runtime VARCHAR(64) NOT NULL,
+                model VARCHAR(256),
+                mission_id VARCHAR(64),
+                captain_id VARCHAR(64),
+                launched_utc DATETIME(6) NOT NULL,
+                started_utc DATETIME(6),
+                first_output_utc DATETIME(6),
+                ended_utc DATETIME(6),
+                time_to_first_output_ms BIGINT,
+                duration_ms BIGINT,
+                exit_code INT,
+                outcome VARCHAR(32) NOT NULL,
+                stop_requested TINYINT(1) NOT NULL DEFAULT 0,
+                created_utc DATETIME(6) NOT NULL,
+                last_update_utc DATETIME(6) NOT NULL
+            );",
+            "CREATE INDEX idx_harbor_jobs_job ON harbor_jobs(job_id);",
+            "CREATE INDEX idx_harbor_jobs_harbor_launched ON harbor_jobs(harbor_id, launched_utc);",
+            "CREATE INDEX idx_harbor_jobs_ended ON harbor_jobs(ended_utc);",
+            @"CREATE TABLE IF NOT EXISTS harbor_link_samples (
+                id VARCHAR(64) NOT NULL PRIMARY KEY,
+                harbor_id VARCHAR(64) NOT NULL,
+                bucket_start_utc DATETIME(6) NOT NULL,
+                heartbeat_count INT NOT NULL DEFAULT 0,
+                round_trip_count INT NOT NULL DEFAULT 0,
+                round_trip_total_ms BIGINT NOT NULL DEFAULT 0,
+                round_trip_max_ms BIGINT,
+                reconnect_count INT,
+                last_reconnect_utc DATETIME(6),
+                created_utc DATETIME(6) NOT NULL
+            );",
+            "CREATE INDEX idx_harbor_link_samples_harbor_bucket ON harbor_link_samples(harbor_id, bucket_start_utc);",
+            "CREATE INDEX idx_harbor_link_samples_bucket ON harbor_link_samples(bucket_start_utc);",
+            @"CREATE TABLE IF NOT EXISTS harbor_link_events (
+                id VARCHAR(64) NOT NULL PRIMARY KEY,
+                harbor_id VARCHAR(64) NOT NULL,
+                event_type VARCHAR(32) NOT NULL,
+                occurred_utc DATETIME(6) NOT NULL,
+                detail VARCHAR(1024)
+            );",
+            "CREATE INDEX idx_harbor_link_events_harbor_occurred ON harbor_link_events(harbor_id, occurred_utc);",
+            @"ALTER TABLE token_usage ADD COLUMN harbor_id VARCHAR(64);",
+            "CREATE INDEX idx_token_usage_harbor_created ON token_usage(harbor_id, created_utc);"
+        };
+
+        /// <summary>
         /// Index DDL statements for all tables.
         /// </summary>
         public static readonly string[] Indexes = new string[]

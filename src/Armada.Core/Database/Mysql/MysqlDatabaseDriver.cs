@@ -74,6 +74,9 @@ namespace Armada.Core.Database.Mysql
             CliPermissionRequests = new CliPermissionRequestMethods(_ConnectionString);
             CliPermissionRules = new CliPermissionRuleMethods(_ConnectionString);
             PushDevices = new PushDeviceMethods(_ConnectionString);
+            HarborJobs = new HarborJobMethods(_ConnectionString);
+            HarborLinkSamples = new HarborLinkSampleMethods(_ConnectionString);
+            HarborLinkEvents = new HarborLinkEventMethods(_ConnectionString);
             FleetActions = new FleetActionMethods(_ConnectionString);
             FleetActionRuns = new FleetActionRunMethods(_ConnectionString);
             FleetActionRunTargets = new FleetActionRunTargetMethods(_ConnectionString);
@@ -726,6 +729,11 @@ namespace Armada.Core.Database.Mysql
                     80,
                     "Add repository_path and checkout_path to docks: the repository a Harbor-side dock was created from and the user's checkout on that Harbor host",
                     TableQueries.MigrationV80Statements
+                ),
+                new SchemaMigration(
+                    81,
+                    "Add Harbor metrics: harbor_jobs (one row per captain launch delegated to a Harbor), harbor_link_samples (per-minute heartbeat round trips and reconnects), harbor_link_events (link transitions), and harbor_id on token_usage",
+                    TableQueries.MigrationV81Statements
                 )
             };
         }

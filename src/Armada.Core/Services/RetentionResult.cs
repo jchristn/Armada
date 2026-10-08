@@ -31,11 +31,16 @@ namespace Armada.Core.Services
         public int CliPermissionRequestsDeleted { get; set; } = 0;
 
         /// <summary>
-        /// Total rows (threads, jobs, batches, CLI permission requests) affected.
+        /// Harbor metrics rows (job records, link samples, link events) deleted.
+        /// </summary>
+        public int HarborMetricsDeleted { get; set; } = 0;
+
+        /// <summary>
+        /// Total rows (threads, jobs, batches, CLI permission requests, Harbor metrics) affected.
         /// </summary>
         public int Total
         {
-            get { return AskThreadsArchived + AskThreadsDeleted + JobsDeleted + ImportBatchesDeleted + CliPermissionRequestsDeleted; }
+            get { return AskThreadsArchived + AskThreadsDeleted + JobsDeleted + ImportBatchesDeleted + CliPermissionRequestsDeleted + HarborMetricsDeleted; }
         }
     }
 }

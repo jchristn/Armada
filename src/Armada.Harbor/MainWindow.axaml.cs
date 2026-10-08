@@ -345,6 +345,8 @@ namespace Armada.Harbor
             // Reads the live settings on every request, so repository edits apply without reconnecting.
             HarborDockManager dockManager = new HarborDockManager(() => _Settings.BuildDockSettings(), _Logging, executor);
             List<HarborCapability> capabilities = BuildCapabilities();
+            // One set of link counters across sessions, so heartbeats report this process's reconnects.
+            HarborLinkStatistics linkStatistics = new HarborLinkStatistics();
 
             while (!token.IsCancellationRequested)
             {
@@ -361,6 +363,7 @@ namespace Armada.Harbor
                         AppendLog,
                         jobRunner,
                         dockManager);
+                    client.LinkStatistics = linkStatistics;
                     _Client = client;
 
                     try

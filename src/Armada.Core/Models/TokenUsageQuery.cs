@@ -45,6 +45,11 @@ namespace Armada.Core.Models
         public string? CaptainId { get; set; } = null;
 
         /// <summary>
+        /// Harbor filter: records of work that ran on this Harbor.
+        /// </summary>
+        public string? HarborId { get; set; } = null;
+
+        /// <summary>
         /// Lower bound on creation timestamp.
         /// </summary>
         public DateTime? FromUtc { get; set; } = null;

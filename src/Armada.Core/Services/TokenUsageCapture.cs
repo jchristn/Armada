@@ -61,6 +61,7 @@ namespace Armada.Core.Services
         /// <param name="inputText">Text used to estimate input tokens when inputTokens is null.</param>
         /// <param name="outputText">Text used to estimate output tokens when outputTokens is null.</param>
         /// <param name="token">Cancellation token.</param>
+        /// <param name="harborId">Harbor the work ran on, or null when it ran on the Admiral host.</param>
         public static async Task CaptureAsync(
             DatabaseDriver database,
             LoggingModule logging,
@@ -77,7 +78,8 @@ namespace Armada.Core.Services
             long? cachedTokens,
             string? inputText,
             string? outputText,
-            CancellationToken token = default)
+            CancellationToken token = default,
+            string? harborId = null)
         {
             try
             {
@@ -140,6 +142,7 @@ namespace Armada.Core.Services
                     SourceId = sourceId,
                     VesselId = vesselId,
                     CaptainId = captainId,
+                    HarborId = String.IsNullOrWhiteSpace(harborId) ? null : harborId,
                     InputTokens = input,
                     OutputTokens = output,
                     CachedTokens = cached,

@@ -37,6 +37,7 @@ namespace Armada.Core.Authorization
             Add("get_dock", "Dock", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("get_fleet", "Fleet", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("get_harbor", "Harbor", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("get_harbor_metrics", "Harbor", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("get_memory", "Memory", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("get_merge_entry", "MergeQueue", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("get_mission_diff", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);

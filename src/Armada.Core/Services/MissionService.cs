@@ -1332,7 +1332,8 @@ namespace Armada.Core.Services
                         cachedTokens: null,
                         inputText: mission.Description,
                         outputText: agentOutput,
-                        token: token).ConfigureAwait(false);
+                        token: token,
+                        harborId: mission.AssignedHarborId).ConfigureAwait(false);
                 }
             }
 

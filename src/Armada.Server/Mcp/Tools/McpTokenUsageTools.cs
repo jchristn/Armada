@@ -46,7 +46,8 @@ namespace Armada.Server.Mcp.Tools
                         runtime = new { type = "string", description = "Filter to one runtime (for example claudecode, codex, mux)" },
                         source = new { type = "string", description = "Filter to one source: mission, chat, or planning" },
                         vesselId = new { type = "string", description = "Filter to one vessel (vsl_ prefix)" },
-                        captainId = new { type = "string", description = "Filter to one captain (cpt_ prefix)" }
+                        captainId = new { type = "string", description = "Filter to one captain (cpt_ prefix)" },
+                        harborId = new { type = "string", description = "Filter to work that ran on one Harbor (hbr_ prefix)" }
                     },
                     required = new string[] { }
                 },
@@ -85,6 +86,7 @@ namespace Armada.Server.Mcp.Tools
                     query.Source = String.IsNullOrWhiteSpace(request.Source) ? null : request.Source;
                     query.VesselId = String.IsNullOrWhiteSpace(request.VesselId) ? null : request.VesselId;
                     query.CaptainId = String.IsNullOrWhiteSpace(request.CaptainId) ? null : request.CaptainId;
+                    query.HarborId = String.IsNullOrWhiteSpace(request.HarborId) ? null : request.HarborId;
 
                     // Same scoping as GET /api/v1/token-usage/summary: a global admin sees every tenant, a tenant admin
                     // their tenant, and a regular user their own usage.

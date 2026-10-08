@@ -1,0 +1,206 @@
+namespace Armada.Core.Database.Sqlite.Implementations
+{
+    using System;
+    using System.Collections.Generic;
+    using System.Linq;
+    using System.Threading;
+    using System.Threading.Tasks;
+    using Microsoft.Data.Sqlite;
+    using Armada.Core.Database;
+    using Armada.Core.Database.Interfaces;
+    using Armada.Core.Enums;
+    using Armada.Core.Harbor;
+    using Armada.Core.Models;
+    using Armada.Core.Settings;
+    using SyslogLogging;
+
+    /// <summary>
+    /// SQLite implementation of Harbor job record persistence.
+    /// </summary>
+    public class HarborJobMethods : IHarborJobMethods
+    {
+        #region Private-Members
+
+        private static readonly string _Insert = @"INSERT INTO harbor_jobs
+            (id, job_id, harbor_id, tenant_id, kind, runtime, model, mission_id, captain_id, launched_utc, started_utc, first_output_utc, ended_utc,
+             time_to_first_output_ms, duration_ms, exit_code, outcome, stop_requested, created_utc, last_update_utc)
+            VALUES
+            (@id, @job_id, @harbor_id, @tenant_id, @kind, @runtime, @model, @mission_id, @captain_id, @launched_utc, @started_utc, @first_output_utc, @ended_utc,
+             @time_to_first_output_ms, @duration_ms, @exit_code, @outcome, @stop_requested, @created_utc, @last_update_utc);";
+
+        private static readonly string _Update = @"UPDATE harbor_jobs SET
+            job_id = @job_id, harbor_id = @harbor_id, tenant_id = @tenant_id, kind = @kind, runtime = @runtime, model = @model,
+            mission_id = @mission_id, captain_id = @captain_id, launched_utc = @launched_utc, started_utc = @started_utc,
+            first_output_utc = @first_output_utc, ended_utc = @ended_utc, time_to_first_output_ms = @time_to_first_output_ms,
+            duration_ms = @duration_ms, exit_code = @exit_code, outcome = @outcome, stop_requested = @stop_requested,
+            last_update_utc = @last_update_utc
+            WHERE id = @id;";
+
+        private readonly string _ConnectionString;
+        private readonly SemaphoreSlim? _WriteLock;
+
+        #endregion
+
+        #region Constructors-and-Factories
+
+        /// <summary>
+        /// Instantiate.
+        /// </summary>
+        /// <param name="driver">SQLite database driver.</param>
+        /// <param name="settings">Database settings.</param>
+        /// <param name="logging">Logging module.</param>
+        /// <exception cref="ArgumentNullException">Thrown when any argument is null.</exception>
+        public HarborJobMethods(SqliteDatabaseDriver driver, DatabaseSettings settings, LoggingModule logging)
+        {
+            if (driver == null) throw new ArgumentNullException(nameof(driver));
+            if (settings == null) throw new ArgumentNullException(nameof(settings));
+            if (logging == null) throw new ArgumentNullException(nameof(logging));
+            _ConnectionString = driver.ConnectionString;
+            _WriteLock = driver.WriteLock;
+        }
+
+        #endregion
+
+        #region Public-Methods
+
+        /// <inheritdoc />
+        public async Task<HarborJobRecord> CreateAsync(HarborJobRecord record, CancellationToken token = default)
+        {
+            if (record == null) throw new ArgumentNullException(nameof(record));
+            if (String.IsNullOrEmpty(record.JobId)) throw new ArgumentException("JobId is required.", nameof(record));
+            if (String.IsNullOrEmpty(record.HarborId)) throw new ArgumentException("HarborId is required.", nameof(record));
+            record.LastUpdateUtc = DateTime.UtcNow;
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
+            {
+                await SqliteCommandHelper.ExecuteAsync(conn, tx, _Insert, cmd => Bind(cmd, record), token).ConfigureAwait(false);
+            }, token).ConfigureAwait(false);
+            return record;
+        }
+
+        /// <inheritdoc />
+        public async Task<HarborJobRecord> UpdateAsync(HarborJobRecord record, CancellationToken token = default)
+        {
+            if (record == null) throw new ArgumentNullException(nameof(record));
+            record.LastUpdateUtc = DateTime.UtcNow;
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
+            {
+                await SqliteCommandHelper.ExecuteAsync(conn, tx, _Update, cmd => Bind(cmd, record), token).ConfigureAwait(false);
+            }, token).ConfigureAwait(false);
+            return record;
+        }
+
+        /// <inheritdoc />
+        public async Task<HarborJobRecord?> ReadByJobIdAsync(string jobId, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(jobId)) throw new ArgumentNullException(nameof(jobId));
+            List<HarborJobRecord> rows = await SqliteCommandHelper.QueryAsync(_ConnectionString,
+                "SELECT * FROM harbor_jobs WHERE job_id = @job_id ORDER BY created_utc DESC" + SqliteCommandHelper.Page(0, 1) + ";",
+                cmd => SqliteCommandHelper.Add(cmd, "@job_id", jobId), FromReader, token).ConfigureAwait(false);
+            return rows.FirstOrDefault();
+        }
+
+        /// <inheritdoc />
+        public async Task<List<HarborJobRecord>> EnumerateAsync(string harborId, DateTime fromUtc, DateTime toUtc, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(harborId)) throw new ArgumentNullException(nameof(harborId));
+            return await SqliteCommandHelper.QueryAsync(_ConnectionString,
+                "SELECT * FROM harbor_jobs WHERE harbor_id = @harbor_id AND launched_utc < @to_utc AND (ended_utc IS NULL OR ended_utc >= @from_utc) ORDER BY launched_utc ASC, id ASC;",
+                cmd =>
+                {
+                    SqliteCommandHelper.Add(cmd, "@harbor_id", harborId);
+                    SqliteCommandHelper.AddDate(cmd, "@from_utc", fromUtc);
+                    SqliteCommandHelper.AddDate(cmd, "@to_utc", toUtc);
+                }, FromReader, token).ConfigureAwait(false);
+        }
+
+        /// <inheritdoc />
+        public async Task<List<HarborJobRecord>> EnumerateOpenAsync(string harborId, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(harborId)) throw new ArgumentNullException(nameof(harborId));
+            return await SqliteCommandHelper.QueryAsync(_ConnectionString,
+                "SELECT * FROM harbor_jobs WHERE harbor_id = @harbor_id AND ended_utc IS NULL ORDER BY launched_utc ASC, id ASC;",
+                cmd => SqliteCommandHelper.Add(cmd, "@harbor_id", harborId), FromReader, token).ConfigureAwait(false);
+        }
+
+        /// <inheritdoc />
+        public async Task<int> DeleteEndedBeforeAsync(DateTime cutoffUtc, CancellationToken token = default)
+        {
+            int deleted = 0;
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
+            {
+                deleted = await SqliteCommandHelper.ExecuteAsync(conn, tx, "DELETE FROM harbor_jobs WHERE ended_utc IS NOT NULL AND ended_utc < @cutoff;",
+                    cmd => SqliteCommandHelper.AddDate(cmd, "@cutoff", cutoffUtc), token).ConfigureAwait(false);
+            }, token).ConfigureAwait(false);
+            return deleted;
+        }
+
+        /// <inheritdoc />
+        public async Task<int> DeleteByHarborAsync(string harborId, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(harborId)) throw new ArgumentNullException(nameof(harborId));
+            int deleted = 0;
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
+            {
+                deleted = await SqliteCommandHelper.ExecuteAsync(conn, tx, "DELETE FROM harbor_jobs WHERE harbor_id = @harbor_id;",
+                    cmd => SqliteCommandHelper.Add(cmd, "@harbor_id", harborId), token).ConfigureAwait(false);
+            }, token).ConfigureAwait(false);
+            return deleted;
+        }
+
+        #endregion
+
+        #region Private-Methods
+
+        private static void Bind(SqliteCommand cmd, HarborJobRecord record)
+        {
+            SqliteCommandHelper.Add(cmd, "@id", record.Id);
+            SqliteCommandHelper.Add(cmd, "@job_id", record.JobId);
+            SqliteCommandHelper.Add(cmd, "@harbor_id", record.HarborId);
+            SqliteCommandHelper.Add(cmd, "@tenant_id", record.TenantId);
+            SqliteCommandHelper.Add(cmd, "@kind", record.Kind.ToString());
+            SqliteCommandHelper.Add(cmd, "@runtime", record.Runtime ?? String.Empty);
+            SqliteCommandHelper.Add(cmd, "@model", record.Model);
+            SqliteCommandHelper.Add(cmd, "@mission_id", record.MissionId);
+            SqliteCommandHelper.Add(cmd, "@captain_id", record.CaptainId);
+            SqliteCommandHelper.AddDate(cmd, "@launched_utc", record.LaunchedUtc);
+            SqliteCommandHelper.AddDate(cmd, "@started_utc", record.StartedUtc);
+            SqliteCommandHelper.AddDate(cmd, "@first_output_utc", record.FirstOutputUtc);
+            SqliteCommandHelper.AddDate(cmd, "@ended_utc", record.EndedUtc);
+            SqliteCommandHelper.Add(cmd, "@time_to_first_output_ms", record.TimeToFirstOutputMs);
+            SqliteCommandHelper.Add(cmd, "@duration_ms", record.DurationMs);
+            SqliteCommandHelper.Add(cmd, "@exit_code", record.ExitCode);
+            SqliteCommandHelper.Add(cmd, "@outcome", record.Outcome.ToString());
+            SqliteCommandHelper.Add(cmd, "@stop_requested", record.StopRequested);
+            SqliteCommandHelper.AddDate(cmd, "@created_utc", record.CreatedUtc);
+            SqliteCommandHelper.AddDate(cmd, "@last_update_utc", record.LastUpdateUtc);
+        }
+
+        private static HarborJobRecord FromReader(SqliteDataReader reader)
+        {
+            HarborJobRecord record = new HarborJobRecord();
+            record.Id = reader["id"].ToString()!;
+            record.JobId = reader["job_id"]?.ToString() ?? String.Empty;
+            record.HarborId = reader["harbor_id"]?.ToString() ?? String.Empty;
+            record.TenantId = SqliteCommandHelper.ReadString(reader["tenant_id"]);
+            record.Kind = SqliteCommandHelper.ReadEnum(reader["kind"], HarborJobKindEnum.Unknown);
+            record.Runtime = SqliteCommandHelper.ReadString(reader["runtime"]) ?? String.Empty;
+            record.Model = SqliteCommandHelper.ReadString(reader["model"]);
+            record.MissionId = SqliteCommandHelper.ReadString(reader["mission_id"]);
+            record.CaptainId = SqliteCommandHelper.ReadString(reader["captain_id"]);
+            record.LaunchedUtc = SqliteCommandHelper.ReadDate(reader["launched_utc"]);
+            record.StartedUtc = SqliteCommandHelper.ReadNullableDate(reader["started_utc"]);
+            record.FirstOutputUtc = SqliteCommandHelper.ReadNullableDate(reader["first_output_utc"]);
+            record.EndedUtc = SqliteCommandHelper.ReadNullableDate(reader["ended_utc"]);
+            record.TimeToFirstOutputMs = SqliteCommandHelper.ReadNullableLong(reader["time_to_first_output_ms"]);
+            record.DurationMs = SqliteCommandHelper.ReadNullableLong(reader["duration_ms"]);
+            record.ExitCode = SqliteCommandHelper.ReadNullableInt(reader["exit_code"]);
+            record.Outcome = SqliteCommandHelper.ReadEnum(reader["outcome"], HarborJobOutcomeEnum.Running);
+            record.StopRequested = SqliteCommandHelper.ReadBool(reader["stop_requested"], false);
+            record.CreatedUtc = SqliteCommandHelper.ReadDate(reader["created_utc"]);
+            record.LastUpdateUtc = SqliteCommandHelper.ReadDate(reader["last_update_utc"]);
+            return record;
+        }
+
+        #endregion
+    }
+}

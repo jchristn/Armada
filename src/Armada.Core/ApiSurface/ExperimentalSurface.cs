@@ -41,6 +41,7 @@ namespace Armada.Core.ApiSurface
         private static readonly HashSet<string> _Tools = new HashSet<string>(StringComparer.Ordinal)
         {
             "get_harbor",
+            "get_harbor_metrics",
             "create_harbor",
             "update_harbor",
             "delete_harbor",

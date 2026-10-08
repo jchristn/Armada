@@ -142,6 +142,8 @@ namespace Armada.Server
         private HistoricalTimelineService _HistoricalTimelineService = null!;
         private ModelEndpointService _ModelEndpointService = null!;
         private HarborService _HarborService = null!;
+        private HarborMetricsRecorder _HarborMetricsRecorder = null!;
+        private HarborMetricsService _HarborMetricsService = null!;
         private HarborConnectionManager _HarborConnectionManager = null!;
         private CaptainLaunchRouter _LaunchRouter = null!;
         private HarborLinkEndpoint _HarborLinkEndpoint = null!;
@@ -299,6 +301,9 @@ namespace Armada.Server
                 ? ArmadaMcpConfigBuilder.GetMcpUrl(_Settings.McpPort, ArmadaMcpConfigBuilder.ClientHostFor(_Settings.Rest.Hostname))
                 : _Settings.Harbor.AdvertisedMcpBaseUrl!;
             _HarborConnectionManager = new HarborConnectionManager(_HarborService, _Logging, harborMcpUrl);
+            _HarborMetricsRecorder = new HarborMetricsRecorder(_Database, _Logging, _Settings.Harbor);
+            _HarborConnectionManager.Metrics = _HarborMetricsRecorder;
+            _HarborMetricsService = new HarborMetricsService(_Database, _HarborService, _Settings.Harbor);
             _HarborLinkEndpoint = new HarborLinkEndpoint(
                 _HarborConnectionManager,
                 _Settings.Harbor,
@@ -620,6 +625,11 @@ namespace Armada.Server
             _App.WebSocket(_Settings.Harbor.LinkPath, _HarborLinkEndpoint.HandleWebSocketAsync);
             _Logging.Debug(_Header + "Harbor link route registered at " + _Settings.Harbor.LinkPath);
 
+            // A Harbor link cannot outlive the Admiral: before the listener accepts links, close any link state a previous
+            // run left open.
+            int settled = await _HarborMetricsRecorder.ReconcileOnStartupAsync(_TokenSource.Token).ConfigureAwait(false);
+            if (settled > 0) _Logging.Debug(_Header + "recorded " + settled + " Harbor link(s) as disconnected while the Admiral was stopped");
+
             // Watson 7 StartAsync is long-running; Start() binds and returns after
             // scheduling the accept loop.
             _App.Start(_TokenSource.Token);
@@ -728,6 +738,16 @@ namespace Armada.Server
             catch (Exception ex)
             {
                 _Logging.Warn(_Header + "error stopping agent processes on shutdown: " + ex.ToString());
+            }
+
+            // Keep the Harbors' last minute of heartbeat samples.
+            try
+            {
+                _HarborMetricsRecorder?.FlushAsync(CancellationToken.None).GetAwaiter().GetResult();
+            }
+            catch (Exception ex)
+            {
+                _Logging.Warn(_Header + "error writing Harbor link samples on shutdown: " + ex.Message);
             }
 
             _VesselHealthService?.Dispose();
@@ -1218,7 +1238,7 @@ namespace Armada.Server
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Harbors (host runners)
-            new HarborRoutes(_HarborService, _HarborConnectionManager, _Database)
+            new HarborRoutes(_HarborService, _HarborConnectionManager, _Database, _HarborMetricsService)
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Structured check runs
@@ -1944,6 +1964,10 @@ namespace Armada.Server
                     // Drive the merge queue so auto-enqueued entries land without a manual trigger.
                     try { await _MergeQueue.ProcessQueueAsync(token).ConfigureAwait(false); }
                     catch (Exception mqEx) { _Logging.Warn(_Header + "merge queue processing error: " + mqEx.Message); }
+
+                    // Harbor metrics: links closed past the reconnect grace become disconnects; idle minute samples are written.
+                    try { await _HarborMetricsRecorder.SweepAsync(token).ConfigureAwait(false); }
+                    catch (Exception harborEx) when (!(harborEx is OperationCanceledException)) { _Logging.Warn(_Header + "harbor metrics sweep error: " + harborEx.Message); }
 
                     // Reap background jobs whose worker died so they do not hang in Running.
                     try { await _JobService.MaintainAsync(token).ConfigureAwait(false); }

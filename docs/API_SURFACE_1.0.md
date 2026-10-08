@@ -24,8 +24,8 @@ administrator).
 
 | Surface | Total | Experimental |
 |---|---|---|
-| REST routes | 368 | 11 |
-| MCP tools | 155 | 5 |
+| REST routes | 369 | 12 |
+| MCP tools | 156 | 6 |
 | WebSocket endpoints | 2 | 1 |
 | WebSocket commands | 61 | 0 |
 | WebSocket event types | 67 | 0 |
@@ -158,6 +158,7 @@ Base path `/api/v1`. Request and response bodies are PascalCase JSON; errors are
 | PUT | `/api/v1/harbors/{id}` | Authenticated | `Harbor` | 200 `Harbor`, 400, 404 | experimental |
 | POST | `/api/v1/harbors/{id}/disable` | Authenticated |  | 200 `Harbor`, 404 | experimental |
 | POST | `/api/v1/harbors/{id}/enable` | Authenticated |  | 200 `Harbor`, 404 | experimental |
+| GET | `/api/v1/harbors/{id}/metrics` | Authenticated |  | 200 `HarborMetrics`, 400, 404 | experimental |
 | POST | `/api/v1/harbors/{id}/probe` | TenantAdmin | `HarborProbeRequest` (optional) | 200 `HostCommandResult`, 404, 409 `ApiErrorResponse` | experimental |
 | GET | `/api/v1/history` | Authenticated |  | 200 `EnumerationResult<HistoricalTimelineEntry>` |  |
 | POST | `/api/v1/history/enumerate` | Authenticated | `HistoricalTimelineQuery` (optional) | 200 `EnumerationResult<HistoricalTimelineEntry>` |  |
@@ -488,6 +489,7 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `get_dock` | Authenticated | `dockId*: string` |  |
 | `get_fleet` | Authenticated | `fleetId*: string` |  |
 | `get_harbor` | Authenticated | `harborId*: string` | experimental |
+| `get_harbor_metrics` | Authenticated | `harborId*: string`, `range: string` | experimental |
 | `get_memory` | Authenticated | `memoryId*: string` |  |
 | `get_merge_entry` | Authenticated | `entryId*: string` |  |
 | `get_mission_diff` | Authenticated | `missionId*: string` |  |
@@ -546,7 +548,7 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `stop_captain` | TenantAdmin | `captainId*: string` |  |
 | `stop_server` | AdminOnly |  |  |
 | `summarize_backlog_refinement_session` | TenantAdmin | `messageId: string`, `sessionId*: string` |  |
-| `token_usage_summary` | Authenticated | `bucketMinutes: number`, `captainId: string`, `fromUtc: string`, `model: string`, `runtime: string`, `sinceHours: integer`, `source: string`, `toUtc: string`, `vesselId: string` |  |
+| `token_usage_summary` | Authenticated | `bucketMinutes: number`, `captainId: string`, `fromUtc: string`, `harborId: string`, `model: string`, `runtime: string`, `sinceHours: integer`, `source: string`, `toUtc: string`, `vesselId: string` |  |
 | `transition_mission_status` | TenantAdmin | `missionId*: string`, `status*: string` |  |
 | `unstick_dock` | TenantAdmin | `dockId*: string` |  |
 | `update_backlog_item` | TenantAdmin | `acceptanceCriteria: array<string>`, `backlogState: string`, `blockedByObjectiveIds: array<string>`, `category: string`, `checkRunIds: array<string>`, `deploymentIds: array<string>`, `description: string`, `dueUtc: string`, `effort: string`, `evidenceLinks: array<string>`, `fleetIds: array<string>`, `incidentIds: array<string>`, `kind: string`, `missionIds: array<string>`, `nonGoals: array<string>`, `objectiveId*: string`, `owner: string`, `parentObjectiveId: string`, `planningSessionIds: array<string>`, `priority: string`, `rank: integer`, `refinementSessionIds: array<string>`, `refinementSummary: string`, `releaseIds: array<string>`, `rolloutConstraints: array<string>`, `status: string`, `suggestedPipelineId: string`, `tags: array<string>`, `targetVersion: string`, `title: string`, `vesselIds: array<string>`, `voyageIds: array<string>` |  |

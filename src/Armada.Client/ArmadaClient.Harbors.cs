@@ -41,6 +41,19 @@ namespace Armada.Client
         }
 
         /// <summary>
+        /// Dashboard <c>getHarborMetrics</c>: GET `/api/v1/harbors/${encodeURIComponent(id)}/metrics?range=${encodeURIComponent(range)}`.
+        /// </summary>
+        /// <param name="id">id.</param>
+        /// <param name="range">Window: 1h, 24h (the default), or 7d.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The response.</returns>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        public Task<HarborMetrics?> GetHarborMetricsAsync(string id, string range = "24h", CancellationToken token = default)
+        {
+            return GetAsync<HarborMetrics>($"/api/v1/harbors/{E(id)}/metrics?range={E(range)}", null, token);
+        }
+
+        /// <summary>
         /// Dashboard <c>createHarbor</c>: POST '/api/v1/harbors'.
         /// </summary>
         /// <param name="data">data.</param>

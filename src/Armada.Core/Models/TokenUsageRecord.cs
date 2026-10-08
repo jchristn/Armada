@@ -67,6 +67,11 @@ namespace Armada.Core.Models
         public string? CaptainId { get; set; } = null;
 
         /// <summary>
+        /// Harbor the work ran on, or null when it ran on the Admiral host (or the record predates Harbor attribution).
+        /// </summary>
+        public string? HarborId { get; set; } = null;
+
+        /// <summary>
         /// Input (prompt) tokens consumed. Clamped to be non-negative.
         /// </summary>
         public long InputTokens
