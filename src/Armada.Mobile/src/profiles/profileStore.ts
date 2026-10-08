@@ -1,5 +1,6 @@
 import { PREF_KEYS, readPref, writePref } from '../storage/prefs';
 import { deleteProxyToken, deleteToken } from '../storage/secure';
+import { deleteSavedCredentials } from '../auth/savedCredentials';
 import type { ServerProfile, ServerProfileDraft } from './types';
 
 /** Profiles and which one is active, as persisted. */
@@ -42,12 +43,15 @@ export function createProfile(draft: ServerProfileDraft, id: string, nowUtc: str
     lastUserEmail: null,
     createdUtc: nowUtc,
     proxyInstanceId: null,
+    savedSignIn: null,
+    proxyPasswordSaved: false,
+    savePasswordOfferDeclined: false,
   };
 }
 
 /**
- * Apply a draft to an existing profile. Changing the URL or the kind drops the remembered tenant and proxy instance
- * (they belonged to the old server).
+ * Apply a draft to an existing profile. Changing the URL or the kind drops the remembered tenant, proxy instance, and
+ * saved passwords (they belonged to the old server; the caller deletes the saved credentials themselves).
  */
 export function updateProfile(profile: ServerProfile, draft: ServerProfileDraft): ServerProfile {
   const urlChanged = profile.url !== draft.url || profile.kind !== draft.kind;
@@ -60,13 +64,19 @@ export function updateProfile(profile: ServerProfile, draft: ServerProfileDraft)
     lastTenantId: urlChanged ? null : profile.lastTenantId,
     lastTenantName: urlChanged ? null : profile.lastTenantName,
     proxyInstanceId: urlChanged ? null : profile.proxyInstanceId ?? null,
+    savedSignIn: urlChanged ? null : profile.savedSignIn ?? null,
+    proxyPasswordSaved: urlChanged ? false : profile.proxyPasswordSaved ?? false,
   };
 }
 
-/** Remove a profile and its stored tokens; the next remaining profile becomes active when it was the active one. */
+/**
+ * Remove a profile, its stored tokens, and its saved passwords; the next remaining profile becomes active when it was
+ * the active one.
+ */
 export async function removeProfile(state: ProfileState, id: string): Promise<ProfileState> {
   await deleteToken(id);
   await deleteProxyToken(id);
+  await deleteSavedCredentials(id);
   const profiles = state.profiles.filter((p) => p.id !== id);
   const activeId = state.activeId === id ? profiles[0]?.id ?? null : state.activeId;
   return { profiles, activeId };

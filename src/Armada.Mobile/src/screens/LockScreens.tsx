@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useAuth } from '../auth/AuthContext';
+import { useSignOut } from '../components/app/useSignOut';
 import { AppText, Button, Icon, Screen } from '../components/ui';
 import { useLocale } from '../i18n/LocaleContext';
 import { spacing } from '../theme/typography';
 
-/** Biometric unlock of the stored session (profiles with "Require Face ID / fingerprint"). */
+/** Biometric unlock of the stored session (profiles with "Unlock with Face ID", the app lock). */
 export function UnlockScreen() {
-  const { unlock, logout, activeProfile } = useAuth();
+  const { unlock, activeProfile } = useAuth();
+  const { signOut, signOutSheet } = useSignOut();
   const { t } = useLocale();
   const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -35,15 +37,17 @@ export function UnlockScreen() {
         <AppText muted style={styles.text}>{activeProfile?.name ?? ''}</AppText>
         {failed ? <AppText color="danger" accessibilityRole="alert">{t('Unlock failed or was cancelled.')}</AppText> : null}
         <Button testID="unlock-button" label={t('Unlock')} icon="finger-print-outline" onPress={() => void attempt()} busy={busy} />
-        <Button label={t('Sign out')} variant="ghost" onPress={() => void logout()} />
+        <Button label={t('Sign out')} variant="ghost" onPress={signOut} />
       </View>
+      {signOutSheet}
     </Screen>
   );
 }
 
 /** The stored session could not be checked because the server did not answer. */
 export function UnreachableScreen() {
-  const { retry, logout, activeProfile } = useAuth();
+  const { retry, activeProfile } = useAuth();
+  const { signOut, signOutSheet } = useSignOut();
   const { t } = useLocale();
   const [busy, setBusy] = useState(false);
   return (
@@ -53,8 +57,9 @@ export function UnreachableScreen() {
         <AppText variant="heading" accessibilityRole="header">{t('Cannot reach the server')}</AppText>
         <AppText muted style={styles.text}>{activeProfile?.url ?? ''}</AppText>
         <Button testID="unreachable-retry" label={t('Retry')} onPress={async () => { setBusy(true); await retry(); setBusy(false); }} busy={busy} />
-        <Button label={t('Sign out')} variant="ghost" onPress={() => void logout()} />
+        <Button label={t('Sign out')} variant="ghost" onPress={signOut} />
       </View>
+      {signOutSheet}
     </Screen>
   );
 }

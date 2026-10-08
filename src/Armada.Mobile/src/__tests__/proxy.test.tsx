@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
+import * as LocalAuthentication from 'expo-local-authentication';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { createHash } from 'crypto';
 import type { ReactNode } from 'react';
@@ -440,5 +441,56 @@ describe('Proxy profiles', () => {
     expect(hooks.onSessionEnding).toHaveBeenCalledWith(expect.objectContaining({ id }), expect.objectContaining({ token: 'A1' }));
     expect(proxy.logout).toHaveBeenCalledWith('P1');
     expect(secureStore.size).toBe(0);
+  });
+});
+
+describe('Proxy profiles with biometric unlock', () => {
+  beforeEach(async () => {
+    await AsyncStorage.clear();
+    secureStore.clear();
+    jest.clearAllMocks();
+    proxy = mockProxy();
+    hooks = { onSessionEnding: jest.fn(async () => undefined) };
+    api.whoami.mockResolvedValue(ME);
+  });
+
+  /** Signed in through the proxy with biometric unlock on; then the proxy session is gone (expired or logged out). */
+  async function proxySessionGone() {
+    const first = await mount();
+    await act(async () => { await first.result.current.saveProfile({ ...PROXY_DRAFT, biometricUnlock: true }); });
+    await act(async () => { await first.result.current.proxySignIn('pw'); });
+    await act(async () => { await first.result.current.proxySelectInstance('armada-1'); });
+    await act(async () => { await first.result.current.login('A1', { method: 'token' }); });
+    const id = first.result.current.activeProfile!.id;
+    await first.unmount();
+    secureStore.delete(proxyTokenKey(id));
+    const second = await mount();
+    expect(second.result.current.proxyStage).toBe('portal');
+    expect(secureStore.get(tokenKey(id))).toBe('A1');
+    return second;
+  }
+
+  it('a proxy re-sign-in does not resume the stored Admiral session without the biometric check', async () => {
+    const { result } = await proxySessionGone();
+    (LocalAuthentication.authenticateAsync as jest.Mock).mockClear();
+    await act(async () => { await result.current.proxySignIn('pw'); });
+    expect(result.current.status).toBe('locked');
+    expect(result.current.sessionToken).toBeNull();
+    (LocalAuthentication.authenticateAsync as jest.Mock).mockResolvedValueOnce({ success: false, error: 'user_cancel' });
+    await act(async () => { await result.current.unlock('Unlock', 'Cancel'); });
+    expect(result.current.status).toBe('locked');
+    await act(async () => { await result.current.unlock('Unlock', 'Cancel'); });
+    expect(result.current.status).toBe('signedIn');
+    expect(result.current.sessionToken).toBe('A1');
+  });
+
+  it('picking the instance again after a proxy re-sign-in also needs the biometric check', async () => {
+    const { result } = await proxySessionGone();
+    proxy.selectInstance.mockRejectedValueOnce(new ProxyError('conflict', 409, 'not connected'));
+    await act(async () => { await result.current.proxySignIn('pw'); });
+    expect(result.current.proxyStage).toBe('instance');
+    await act(async () => { await result.current.proxySelectInstance('armada-1'); });
+    expect(result.current.status).toBe('locked');
+    expect(result.current.sessionToken).toBeNull();
   });
 });

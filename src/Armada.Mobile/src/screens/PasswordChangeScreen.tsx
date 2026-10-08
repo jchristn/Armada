@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { changePassword } from '@dashboard/api/client';
 import { useAuth } from '../auth/AuthContext';
+import { useSignOut } from '../components/app/useSignOut';
 import { AppText, Button, ConfirmDialog, Screen, TextField } from '../components/ui';
 import { useLocale } from '../i18n/LocaleContext';
 import { spacing } from '../theme/typography';
@@ -12,7 +13,8 @@ import { spacing } from '../theme/typography';
  * the risk; the default credentials banner stays visible until the password changes.
  */
 export function PasswordChangeScreen() {
-  const { refresh, logout, skipPasswordChange } = useAuth();
+  const { refresh, skipPasswordChange, updateSavedPassword } = useAuth();
+  const { signOut, signOutSheet } = useSignOut();
   const { t } = useLocale();
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
@@ -38,6 +40,8 @@ export function PasswordChangeScreen() {
     setBusy(true);
     try {
       await changePassword({ CurrentPassword: current, NewPassword: next });
+      // A password saved for Face ID sign-in would be rejected from now on: replace it with the new one.
+      await updateSavedPassword(next);
       await refresh();
     } catch {
       setError(t('Password change failed. Check the current password and try again.'));
@@ -59,7 +63,7 @@ export function PasswordChangeScreen() {
         <TextField testID="password-confirm" label={t('Confirm new password')} value={confirm} onChangeText={setConfirm} secret textContentType="newPassword" autoComplete="new-password" revealLabel={t('Show password')} hideLabel={t('Hide password')} />
         <Button testID="password-change-submit" label={busy ? t('Saving...') : t('Change password')} onPress={() => void submit()} busy={busy} disabled={!current || !next || !confirm} />
         <Button testID="password-change-skip" label={t('Skip for now')} variant="ghost" onPress={() => setConfirmSkip(true)} />
-        <Button testID="password-change-sign-out" label={t('Sign out')} variant="ghost" onPress={() => void logout()} />
+        <Button testID="password-change-sign-out" label={t('Sign out')} variant="ghost" onPress={signOut} />
       </View>
       <ConfirmDialog
         testID="password-skip-confirm"
@@ -72,6 +76,7 @@ export function PasswordChangeScreen() {
         onConfirm={() => { setConfirmSkip(false); void skipPasswordChange(); }}
         onCancel={() => setConfirmSkip(false)}
       />
+      {signOutSheet}
     </Screen>
   );
 }

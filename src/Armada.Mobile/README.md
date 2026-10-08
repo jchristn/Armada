@@ -125,7 +125,10 @@ profiles. Before the first cloud build the maintainer must:
 
 The app registers its Expo push token with each signed-in server (`POST /api/v1/push/devices`, see
 [REST_API.md](../../docs/REST_API.md#push-notifications)), keeps the returned `pdv_` device id per profile in secure
-storage, re-registers when the token changes, and deletes the device on sign-out and profile removal. Permission is
+storage, re-registers when the token changes, and deletes the device on sign-out and profile removal. A deletion that
+cannot reach the server (or has no session left) queues the device as retired (`armada.push.retired` in secure
+storage): pushes naming it are not presented in the foreground or handled, and `PushProvider` retries the deletion on
+the next sign-in to that profile before registering again. Permission is
 asked from a one-time sheet after sign-in (or from Preferences), never at launch. Preferences lists the server's
 categories as switches and can send a test push. Taps open the pushed dashboard path after validating it; Approve and
 Deny (iOS category `armada_approve_deny`, Android action buttons) require an unlocked device and, for profiles with
@@ -144,6 +147,29 @@ cat > /tmp/armada-push.apns <<'JSON'
 JSON
 xcrun simctl push booted com.armada.mobile /tmp/armada-push.apns
 ```
+
+## Saved passwords and Face ID sign-in
+
+`src/auth/savedCredentials.ts` stores a profile's sign-in (email, tenant id, tenant name, password) and a Proxy
+profile's proxy password with expo-secure-store `requireAuthentication: true` under the `armada.signin` keychain
+service (iOS: `biometryCurrentSet`, `WHEN_PASSCODE_SET_THIS_DEVICE_ONLY`; Android: an auth-bound Keystore key). Items
+are deleted before they are written, so iOS adds a new item without a prompt instead of updating the protected one;
+Android prompts to encrypt. A read resolves `ok`, `none` (absent, or invalidated by a biometric change; the profile
+flag is cleared), or `failed` (cancelled; the item stays). Profiles keep only non-secret flags (`savedSignIn`,
+`proxyPasswordSaved`, `savePasswordOfferDeclined`). `AuthContext.login` and `proxySignIn` take a `PasswordToRemember`
+and save, forget, or hold the password in memory for the one-time offer sheet (`SavePasswordOfferSheet`, mounted at
+the root once the app is ready). `useSignOut` is the sign-out entry point for every button.
+
+The app lock ("Unlock with Face ID") guards every path that resumes a stored session: launch, return after 5 minutes
+in the background (from `signedIn` and `unreachable`), Retry on the unreachable screen (skips the prompt only when it
+was passed in the current foreground), and a proxy re-sign-in or instance pick that would reuse the stored Admiral
+token (`enterAdmiralChecked`). A password or API key sign-in counts as passing it.
+
+Testing: Jest covers the flows with the secure-store and local-authentication mocks in `jest.setup.js`
+(`src/__tests__/savedPassword.test.tsx`). Maestro cannot complete a biometric prompt, and the iOS Simulator reads
+`requireAuthentication` items without one; check the prompt on a real device. To see the UI on the simulator, enroll
+Face ID with **Features > Face ID > Enrolled** and answer the app-lock prompt with **Matching Face** / **Non-matching
+Face**. The e2e flows run with Face ID not enrolled, so the switch and the offer sheet do not appear there.
 
 ## Armada.Proxy profiles
 

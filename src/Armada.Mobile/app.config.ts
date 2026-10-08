@@ -13,6 +13,8 @@ const EAS_PROJECT_ID: string | undefined = process.env.ARMADA_MOBILE_EAS_PROJECT
 // Kept in step with the Armada release (no independent app versioning).
 const VERSION = '1.0.0';
 const SPLASH_BACKGROUND = '#111827';
+// One Face ID purpose string for the app lock (expo-local-authentication) and saved passwords (expo-secure-store).
+const FACE_ID_USAGE = 'Armada uses Face ID to unlock the app and to sign in with the password you saved on this device.';
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
@@ -37,7 +39,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       // only ATS key: iOS ignores it when NSAllowsLocalNetworking (or another NSAllows* exception) is also present.
       NSAppTransportSecurity: { NSAllowsArbitraryLoads: true },
       NSLocalNetworkUsageDescription: 'Armada connects to your Admiral server on the local network.',
-      NSFaceIDUsageDescription: 'Unlock your saved Armada sign-in with Face ID.',
+      NSFaceIDUsageDescription: FACE_ID_USAGE,
     },
   },
   android: {
@@ -62,9 +64,12 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         imageWidth: 160,
       },
     ],
-    'expo-secure-store',
+    // Saved passwords use requireAuthentication: a Keychain item bound to the current biometric set on iOS (needs
+    // NSFaceIDUsageDescription), an auth-bound Keystore key on Android (USE_BIOMETRIC above). Android Auto Backup
+    // excludes the secure store, so nothing protected is restored onto another device.
+    ['expo-secure-store', { faceIDPermission: FACE_ID_USAGE }],
     'expo-localization',
-    ['expo-local-authentication', { faceIDPermission: 'Unlock your saved Armada sign-in with Face ID.' }],
+    ['expo-local-authentication', { faceIDPermission: FACE_ID_USAGE }],
     // Push entitlement (aps-environment) and the Android notification setup. Expo push tokens need the EAS project
     // id above; without it the app runs normally and Preferences explains that push is not configured.
     ['expo-notifications', { color: '#2563eb' }],

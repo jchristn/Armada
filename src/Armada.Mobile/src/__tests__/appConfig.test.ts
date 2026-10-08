@@ -4,7 +4,18 @@
  */
 const appConfig = require('../../app.config');
 
-type ExpoConfigLike = { ios?: { infoPlist?: { NSAppTransportSecurity?: Record<string, unknown> } } };
+type PluginEntry = string | [string, Record<string, unknown>];
+type ExpoConfigLike = {
+  ios?: { infoPlist?: { NSAppTransportSecurity?: Record<string, unknown>; NSFaceIDUsageDescription?: string } };
+  android?: { permissions?: string[] };
+  plugins?: PluginEntry[];
+};
+
+function pluginOptions(config: ExpoConfigLike, name: string): Record<string, unknown> | null {
+  const entry = (config.plugins ?? []).find((p) => (typeof p === 'string' ? p : p[0]) === name);
+  if (!entry) return null;
+  return typeof entry === 'string' ? {} : entry[1];
+}
 
 function resolveConfig(): ExpoConfigLike {
   const exported = appConfig.default ?? appConfig;
@@ -15,5 +26,14 @@ describe('app config', () => {
   it('allows plain HTTP to any host on iOS with NSAllowsArbitraryLoads as the only ATS key', () => {
     const ats = resolveConfig().ios?.infoPlist?.NSAppTransportSecurity;
     expect(ats).toEqual({ NSAllowsArbitraryLoads: true });
+  });
+
+  it('declares Face ID for saved passwords (secure store) and the app lock, and biometrics on Android', () => {
+    const config = resolveConfig();
+    const usage = config.ios?.infoPlist?.NSFaceIDUsageDescription;
+    expect(usage).toBeTruthy();
+    expect(pluginOptions(config, 'expo-secure-store')).toEqual({ faceIDPermission: usage });
+    expect(pluginOptions(config, 'expo-local-authentication')).toEqual({ faceIDPermission: usage });
+    expect(config.android?.permissions).toContain('USE_BIOMETRIC');
   });
 });

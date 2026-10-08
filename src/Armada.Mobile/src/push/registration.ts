@@ -1,7 +1,7 @@
 import { ApiError } from '@dashboard/api/client';
 import type { ServerSession } from '../api/serverSession';
 import type { PushApi } from './pushApi';
-import type { RegistrationStore } from './registrationStore';
+import type { RegistrationStore, RetiredDevice } from './registrationStore';
 import type { PushCategory, PushPlatform, PushRegistrationRecord } from './types';
 
 /**
@@ -10,8 +10,9 @@ import type { PushCategory, PushPlatform, PushRegistrationRecord } from './types
  * - register on sign-in (and on every return to a signed-in profile): POST the Expo push token; the server answers
  *   with the device (`pdv_`), whose id is kept because the server masks the token in every response;
  * - re-register when the Expo token changes, and remove the stale device the old token left behind;
- * - remove the device on sign-out and when the profile is deleted (best effort: a server that cannot be reached
- *   still loses the local record, and the push service prunes a dead token by itself);
+ * - remove the device on sign-out and when the profile is deleted. When the server cannot be reached (or the token
+ *   was already rejected) the device is queued as retired: the removal is retried at the next contact with that
+ *   server (before registering again), and pushes naming a retired device are neither shown nor handled;
  * - category changes go to PUT on the stored device id.
  *
  * Registration never prompts for permission; the prompt is a separate, user-initiated step.
@@ -91,21 +92,67 @@ export async function registerDevice(
       registeredUtc: deps.env.nowUtc(),
     };
     await deps.store.write(profileId, record);
+    // The server may hand back a row that was retired earlier (same push token): it is in use again.
+    await dropRetired(deps.store, (r) => r.deviceId === device.id);
     return { state: 'registered', record };
   } catch (err) {
     return { state: 'error', status: statusOf(err) };
   }
 }
 
+async function dropRetired(store: RegistrationStore, match: (r: RetiredDevice) => boolean): Promise<void> {
+  if (!store.readRetired || !store.writeRetired) return;
+  const list = await store.readRetired();
+  const kept = list.filter((r) => !match(r));
+  if (kept.length !== list.length) await store.writeRetired(kept);
+}
+
+/** Whether a push names a device this app retired (signed out) and has not yet removed from its server. */
+export async function isRetiredDevice(store: RegistrationStore, deviceId: string): Promise<boolean> {
+  if (!store.readRetired) return false;
+  return (await store.readRetired()).some((r) => r.deviceId === deviceId);
+}
+
+/**
+ * Retry the removal of this profile's retired devices now that its server can be reached with `session`. A removal
+ * that succeeds (or finds the device gone, 404) leaves the queue; any other failure stays for the next contact.
+ */
+export async function flushRetiredDevices(deps: RegistrationDeps, profileId: string, session: ServerSession): Promise<void> {
+  if (!deps.store.readRetired || !deps.store.writeRetired) return;
+  const list = await deps.store.readRetired();
+  if (!list.some((r) => r.profileId === profileId)) return;
+  const kept: RetiredDevice[] = [];
+  for (const entry of list) {
+    if (entry.profileId !== profileId) { kept.push(entry); continue; }
+    try {
+      await deps.api.remove(session, entry.deviceId);
+    } catch (err) {
+      // 404: gone. 403: another account's device (this server's user changed); the client cannot remove it.
+      const status = statusOf(err);
+      if (status !== 404 && status !== 403) kept.push(entry);
+    }
+  }
+  await deps.store.writeRetired(kept);
+}
+
 /** Remove this device from the profile's server (when a session is available) and forget the local record. */
 export async function unregisterDevice(deps: RegistrationDeps, profileId: string, session: ServerSession | null): Promise<void> {
   const existing = await deps.store.read(profileId);
   if (!existing) return;
+  let removed = false;
   if (session) {
     try {
       await deps.api.remove(session, existing.deviceId);
-    } catch {
-      // 404 (already removed) or unreachable: nothing more to do from here.
+      removed = true;
+    } catch (err) {
+      // 404: already removed. Anything else (unreachable, rejected): retry at the next contact.
+      removed = statusOf(err) === 404;
+    }
+  }
+  if (!removed && deps.store.readRetired && deps.store.writeRetired) {
+    const list = await deps.store.readRetired();
+    if (!list.some((r) => r.deviceId === existing.deviceId)) {
+      await deps.store.writeRetired([...list, { profileId, deviceId: existing.deviceId }]);
     }
   }
   await deps.store.remove(profileId);

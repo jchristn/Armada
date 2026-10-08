@@ -202,6 +202,35 @@ describe('biometric unlock', () => {
     expect(result.current.status).toBe('locked');
   });
 
+  it('an unreachable session locks after a long stay in the background, and Retry then needs the biometric check', async () => {
+    await (await signedInBiometric()).unmount();
+    const { result } = await mount();
+    expect(result.current.status).toBe('locked');
+    api.whoami.mockRejectedValueOnce(new client.NetworkError('fetch failed', null));
+    await act(async () => { await result.current.unlock('Unlock', 'Cancel'); });
+    expect(result.current.status).toBe('unreachable');
+
+    await act(async () => { appStateHandlers.forEach((h) => h('background')); });
+    clock += LOCK_AFTER_BACKGROUND_MS;
+    await act(async () => { appStateHandlers.forEach((h) => h('active')); });
+    expect(result.current.status).toBe('locked');
+    await act(async () => { await result.current.retry(); });
+    expect(result.current.status).toBe('locked');
+    expect(result.current.sessionToken).toBeNull();
+  });
+
+  it('Retry from unreachable skips the prompt only within the foreground that passed it', async () => {
+    await (await signedInBiometric()).unmount();
+    const { result } = await mount();
+    api.whoami.mockRejectedValueOnce(new client.NetworkError('fetch failed', null));
+    await act(async () => { await result.current.unlock('Unlock', 'Cancel'); });
+    expect(result.current.status).toBe('unreachable');
+    const prompts = (LocalAuthentication.authenticateAsync as jest.Mock).mock.calls.length;
+    await act(async () => { await result.current.retry(); });
+    expect(result.current.status).toBe('signedIn');
+    expect((LocalAuthentication.authenticateAsync as jest.Mock).mock.calls.length).toBe(prompts);
+  });
+
   it('locks again after a long stay in the background, not after a short one', async () => {
     const { result } = await signedInBiometric();
     expect(result.current.status).toBe('signedIn');

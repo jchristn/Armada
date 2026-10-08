@@ -1,19 +1,21 @@
-import { useEffect, useState } from 'react';
-import { StyleSheet, Switch, View } from 'react-native';
-import { biometricsAvailable } from '../../auth/biometrics';
+import { useState } from 'react';
+import { StyleSheet, View } from 'react-native';
+import { biometricName, useBiometricSupport } from '../../auth/biometrics';
 import { useLocale } from '../../i18n/LocaleContext';
 import { normalizeServerUrl, type ServerUrlError } from '../../profiles/serverUrl';
 import type { ServerProfile, ServerProfileDraft, ServerProfileKind } from '../../profiles/types';
-import { useTheme } from '../../theme/ThemeContext';
 import { spacing } from '../../theme/typography';
-import { AppText, Button, SegmentedControl, TextField } from '../ui';
+import { Button, SegmentedControl, SwitchRow, TextField } from '../ui';
 import { InsecureUrlWarning } from './InsecureUrlWarning';
+import { SavedPasswordRow } from './SignInSecurity';
 
 export interface ProfileFormProps {
   profile?: ServerProfile | null;
   onSubmit: (draft: ServerProfileDraft) => Promise<void>;
   onCancel?: () => void;
   submitLabel: string;
+  /** Editing a saved profile: forget its saved password (shown with the saved-password status). */
+  onForgetSavedPassword?: () => Promise<void>;
 }
 
 function urlErrorText(t: (s: string) => string, error: ServerUrlError): string {
@@ -47,25 +49,18 @@ export async function probeServer(baseUrl: string, timeoutMs = 8000, kind: Serve
 
 /**
  * Add or edit a server profile: connection kind (an Admiral directly, or through Armada.Proxy), name, URL (with the
- * plain-HTTP warning), connection test, biometric unlock.
+ * plain-HTTP warning), connection test, the biometric app lock, and (editing) the saved password for biometric sign-in.
  */
-export function ProfileForm({ profile, onSubmit, onCancel, submitLabel }: ProfileFormProps) {
+export function ProfileForm({ profile, onSubmit, onCancel, submitLabel, onForgetSavedPassword }: ProfileFormProps) {
   const { t } = useLocale();
-  const { colors } = useTheme();
+  const support = useBiometricSupport();
   const [name, setName] = useState(profile?.name ?? '');
   const [url, setUrl] = useState(profile?.url ?? '');
   const [kind, setKind] = useState<ServerProfileKind>(profile?.kind ?? 'Direct');
   const [biometric, setBiometric] = useState(profile?.biometricUnlock ?? false);
-  const [canBiometric, setCanBiometric] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    void biometricsAvailable().then((ok) => { if (!cancelled) setCanBiometric(ok); });
-    return () => { cancelled = true; };
-  }, []);
 
   const normalized = normalizeServerUrl(url);
 
@@ -140,17 +135,22 @@ export function ProfileForm({ profile, onSubmit, onCancel, submitLabel }: Profil
         onChangeText={setName}
         placeholder={t('My Admiral')}
       />
-      {canBiometric ? (
-        <View style={styles.switchRow}>
-          <AppText style={styles.switchLabel}>{t('Require Face ID, Touch ID, or fingerprint to unlock')}</AppText>
-          <Switch
-            testID="profile-biometric"
-            value={biometric}
-            onValueChange={setBiometric}
-            accessibilityLabel={t('Require Face ID, Touch ID, or fingerprint to unlock')}
-            trackColor={{ true: colors.primary, false: colors.border }}
-          />
-        </View>
+      {support?.enrolled ? (
+        <SwitchRow
+          testID="profile-biometric"
+          label={t('Unlock with {{method}}', { method: biometricName(support.kind, t) })}
+          hint={t('Asks for {{method}} when Armada opens and after 5 minutes in the background.', { method: biometricName(support.kind, t) })}
+          value={biometric}
+          onChange={setBiometric}
+        />
+      ) : null}
+      {profile && onForgetSavedPassword && support && (support.canSavePassword || profile.savedSignIn || profile.proxyPasswordSaved) ? (
+        <SavedPasswordRow
+          testID="profile-saved-password"
+          profile={profile}
+          method={biometricName(support.kind, t)}
+          onForget={onForgetSavedPassword}
+        />
       ) : null}
       <View style={styles.actions}>
         <Button label={t('Test connection')} variant="secondary" onPress={() => void testConnection()} disabled={busy} testID="profile-test" />
@@ -163,7 +163,5 @@ export function ProfileForm({ profile, onSubmit, onCancel, submitLabel }: Profil
 
 const styles = StyleSheet.create({
   kind: { marginBottom: spacing.md },
-  switchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.lg },
-  switchLabel: { flex: 1 },
   actions: { gap: spacing.sm },
 });

@@ -3,6 +3,8 @@ import { Image, StyleSheet, View } from 'react-native';
 import { ApiError, NetworkError, TimeoutError, authenticate, lookupTenants } from '@dashboard/api/client';
 import type { TenantListEntry } from '@dashboard/types/models';
 import { useAuth } from '../auth/AuthContext';
+import { biometricName, useBiometricSupport } from '../auth/biometrics';
+import { BiometricSignInCard, SavePasswordSwitch, useAutoPromptOnce } from '../components/app/BiometricSignIn';
 import { InsecureUrlWarning } from '../components/app/InsecureUrlWarning';
 import { LocalePicker } from '../components/app/LocalePicker';
 import { ProfileForm } from '../components/app/ProfileForm';
@@ -25,9 +27,20 @@ function isConnectionError(err: unknown): boolean {
   return err instanceof NetworkError || err instanceof TimeoutError;
 }
 
+/** The server refused the email and password (as opposed to being unreachable or limiting attempts). */
+class PasswordRejectedError extends Error {}
+
+function isPasswordRejected(err: unknown): boolean {
+  return err instanceof PasswordRejectedError || (err instanceof ApiError && (err.status === 401 || err.status === 403));
+}
+
 export function SignInScreen() {
-  const { activeProfile, profiles, login, saveProfile, selectProfile, proxyStage } = useAuth();
+  const {
+    activeProfile, profiles, login, saveProfile, selectProfile, proxyStage, signedOutByUser, readSavedPassword,
+    forgetSavedPassword,
+  } = useAuth();
   const { t } = useLocale();
+  const support = useBiometricSupport();
   const [mode, setMode] = useState<Mode>(activeProfile?.signInMethod === 'token' ? 'apikey' : 'email');
   const [step, setStep] = useState<Step>('email');
   const [email, setEmail] = useState(activeProfile?.lastEmail ?? '');
@@ -39,6 +52,18 @@ export function SignInScreen() {
   const [busy, setBusy] = useState(false);
   const [serversOpen, setServersOpen] = useState(false);
   const [addingServer, setAddingServer] = useState(false);
+  const [savePassword, setSavePassword] = useState(!!activeProfile?.savedSignIn);
+  const [notice, setNotice] = useState('');
+
+  const savedSignIn = activeProfile?.savedSignIn ?? null;
+  const biometricReady = !!support?.canSavePassword && !!savedSignIn && mode === 'email'
+    && (proxyStage === null || proxyStage === 'admiral');
+  // Prompt by itself once when the screen opens for a profile with a saved password (launch, expired session), not
+  // right after the user signed out on purpose.
+  useAutoPromptOnce(
+    biometricReady && !signedOutByUser && activeProfile ? `${activeProfile.id}:${proxyStage ?? 'direct'}` : null,
+    () => { void biometricSignIn(); },
+  );
 
   if (!activeProfile) {
     return (
@@ -78,20 +103,78 @@ export function SignInScreen() {
     }
   }
 
+  /** Back to the password step for the saved account, with a message saying why. */
+  function passwordFallback(message: string) {
+    if (savedSignIn) {
+      setEmail(savedSignIn.email);
+      setTenant({ id: savedSignIn.tenantId, name: savedSignIn.tenantName ?? savedSignIn.tenantId });
+      setStep('password');
+    }
+    setPassword('');
+    setNotice(message);
+  }
+
+  /** Face ID / Touch ID / fingerprint sign-in: read the saved password (the OS prompts), then sign in with it. */
+  async function biometricSignIn() {
+    if (!activeProfile || !savedSignIn || busy) return;
+    const method = support ? biometricName(support.kind, t) : '';
+    setError('');
+    setNotice('');
+    setBusy(true);
+    try {
+      const read = await readSavedPassword(t('Sign in to {{name}}', { name: activeProfile.name }));
+      if (read.status === 'none') {
+        setSavePassword(false);
+        passwordFallback(t('Your saved password is no longer available ({{method}} settings changed). Sign in with your password.', { method }));
+        return;
+      }
+      if (read.status === 'failed') {
+        passwordFallback(t('{{method}} sign-in was cancelled. Sign in with your password.', { method }));
+        return;
+      }
+      const creds = read.credentials;
+      try {
+        const result = await authenticate({ email: creds.email, password: creds.password, tenantId: creds.tenantId });
+        if (!result.success || !result.token) throw new PasswordRejectedError('Authentication failed.');
+        await login(result.token, { method: 'password', email: creds.email, tenantId: creds.tenantId, tenantName: creds.tenantName });
+      } catch (err) {
+        if (isPasswordRejected(err)) {
+          await forgetSavedPassword(activeProfile.id, 'admiral');
+          setSavePassword(false);
+          passwordFallback(t('The saved password was not accepted, so it was removed from this device. Sign in with your password.'));
+        } else {
+          setError(signInErrorText(err));
+        }
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function signInErrorText(err: unknown): string {
+    return err instanceof ApiError && err.status === 429
+      ? t('Too many failed sign-in attempts. Wait a few minutes and try again.')
+      : isConnectionError(err)
+        ? t('Could not reach the server. Check the address, the port, and your connection.')
+        : t('Authentication failed.');
+  }
+
   async function submitPassword() {
     if (!tenant) return;
     setError('');
+    setNotice('');
     setBusy(true);
     try {
       const result = await authenticate({ email: email.trim(), password, tenantId: tenant.id });
       if (!result.success || !result.token) throw new Error('Authentication failed.');
-      await login(result.token, { method: 'password', email: email.trim(), tenantId: tenant.id, tenantName: tenant.name });
+      const method = support ? biometricName(support.kind, t) : '';
+      await login(
+        result.token,
+        { method: 'password', email: email.trim(), tenantId: tenant.id, tenantName: tenant.name },
+        { password, save: savePassword, canSave: !!support?.canSavePassword, prompt: t('Save your password for {{method}} sign-in', { method }) },
+      );
     } catch (err) {
-      setError(err instanceof ApiError && err.status === 429
-        ? t('Too many failed sign-in attempts. Wait a few minutes and try again.')
-        : isConnectionError(err)
-          ? t('Could not reach the server. Check the address, the port, and your connection.')
-          : t('Authentication failed.'));
+      setError(signInErrorText(err));
     } finally {
       setBusy(false);
     }
@@ -112,6 +195,7 @@ export function SignInScreen() {
   function switchMode(next: Mode) {
     setMode(next);
     setError('');
+    setNotice('');
   }
 
   return (
@@ -150,6 +234,26 @@ export function SignInScreen() {
             <Icon name="alert-circle" color="danger" />
             <AppText color="danger" style={styles.flex}>{error}</AppText>
           </View>
+        ) : null}
+
+        {notice ? (
+          <View accessibilityRole="alert" accessibilityLiveRegion="polite" style={styles.error} testID="sign-in-notice">
+            <Icon name="information-circle-outline" color="info" />
+            <AppText style={styles.flex}>{notice}</AppText>
+          </View>
+        ) : null}
+
+        {biometricReady && support && savedSignIn ? (
+          <BiometricSignInCard
+            testID="sign-in-biometric"
+            support={support}
+            title={t('Sign in with {{method}}', { method: biometricName(support.kind, t) })}
+            subtitle={savedSignIn.tenantName
+              ? t('{{email}} on {{tenant}}', { email: savedSignIn.email, tenant: savedSignIn.tenantName })
+              : savedSignIn.email}
+            busy={busy}
+            onPress={() => void biometricSignIn()}
+          />
         ) : null}
 
         {mode === 'apikey' ? (
@@ -237,6 +341,7 @@ export function SignInScreen() {
               returnKeyType="go"
               onSubmitEditing={() => { if (password) void submitPassword(); }}
             />
+            <SavePasswordSwitch testID="sign-in-save-password" support={support} value={savePassword} onChange={setSavePassword} />
             <Button testID="sign-in-submit" label={busy ? t('Signing in...') : t('Sign In')} onPress={() => void submitPassword()} busy={busy} disabled={!password} />
             <Button label={t('Back')} variant="ghost" onPress={() => { setStep('email'); setPassword(''); }} />
           </>
