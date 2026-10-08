@@ -168,6 +168,12 @@ namespace Test.Shared.Infrastructure
                     }
 
                     string head = await ReadHeadAsync(stream, _Stop.Token).ConfigureAwait(false);
+
+                    // A peer that closed without sending anything made no request. Over TLS 1.3 the server's handshake
+                    // completes before the client checks the certificate, so a client that rejects it arrives here with
+                    // nothing read (seen on Linux).
+                    if (head.Length == 0) return;
+
                     Requests.Enqueue(head);
                     _FirstRequest.TrySetResult(head);
                     await _Script(stream, head, _Stop.Token).ConfigureAwait(false);
