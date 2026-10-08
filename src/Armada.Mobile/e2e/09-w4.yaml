@@ -189,6 +189,8 @@ name: 09-w4
       id: "settings-backup"
     direction: DOWN
     visibilityPercentage: 100
+    # A long page: scroll faster (on Android each default-speed swipe moves it little and takes seconds).
+    speed: 80
     timeout: 90000
 # Nudge it clear of the tab bar (the bottom edge counts as visible behind it).
 - swipe:
