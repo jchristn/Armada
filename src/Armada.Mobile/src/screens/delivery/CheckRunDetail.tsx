@@ -1,6 +1,5 @@
 import { Stack, useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { useState } from 'react';
-import { Linking } from 'react-native';
 import { deleteCheckRun, getCheckRun, getVessel, getWorkflowProfile, listCheckRuns, retryCheckRun } from '@dashboard/api/client';
 import type { CheckRun, Vessel, WorkflowProfile } from '@dashboard/types/models';
 import { formatCheckDuration, formatCoverageMetric } from '@dashboard/lib/deliveryForms';
@@ -14,7 +13,7 @@ import { resourceStyles } from '../../components/resource/styles';
 import { AppText } from '../../components/ui/AppText';
 import { Button } from '../../components/ui/Button';
 import { StatusBadge } from '../../components/ui/StatusBadge';
-import { isWebUrl, openWebUrl } from '../../resource/links';
+import { confirmOpenExternalUrl, externalUrl } from '../../lib/externalLinks';
 import { useLocale } from '../../i18n/LocaleContext';
 import { useNotifications } from '../../notifications/NotificationContext';
 import { statusBadge } from '../../resource/status';
@@ -116,7 +115,7 @@ export function CheckRunDetailView({ id, embedded, onDeleted, onChanged }: Check
         <Field label={t('Source')} value={run.source} />
         <Field label={t('Provider')} value={run.providerName} />
         <Field label={t('External ID')} value={run.externalId} mono />
-        <Field label={t('External URL')} value={run.externalUrl} onPress={isWebUrl(run.externalUrl) ? () => openWebUrl(run.externalUrl, Linking.openURL) : undefined} />
+        <Field label={t('External URL')} value={run.externalUrl} onPress={externalUrl(run.externalUrl) ? () => { confirmOpenExternalUrl(run.externalUrl, t); } : undefined} />
         <Field label={t('Environment')} value={run.environmentName} />
         <Field label={t('Duration')} value={formatCheckDuration(run.durationMs)} />
         <Field label={t('Mission ID')} value={run.missionId} mono onPress={run.missionId ? () => go(`/missions/${run.missionId}`) : undefined} />
