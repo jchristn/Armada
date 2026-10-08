@@ -14,7 +14,7 @@ import type { Fleet, MissionHistorySummaryResult, Vessel } from '@dashboard/type
 import { useQuery } from '../../data/useQuery';
 import { useLocale } from '../../i18n/LocaleContext';
 import { useTheme } from '../../theme/ThemeContext';
-import { radius, spacing, useLargeText } from '../../theme/typography';
+import { CHROME_MAX_FONT_SCALE, radius, spacing, useLargeText } from '../../theme/typography';
 import { AppText, IconButton, SegmentedControl, SelectField } from '../ui';
 
 const CHART_HEIGHT = 160;
@@ -150,7 +150,7 @@ export function MissionHistoryChart({ vessels, fleets, refreshToken }: { vessels
           </View>
           <View style={styles.axis}>
             {labelIndexes.map((i) => (
-              <AppText key={i} variant="caption" muted>{formatBucketLabel(buckets[i].timestampMs, rangeDef.stepMinutes, rangeDef.hours)}</AppText>
+              <AppText key={i} variant="caption" muted maxFontSizeMultiplier={CHROME_MAX_FONT_SCALE} style={styles.axisLabel}>{formatBucketLabel(buckets[i].timestampMs, rangeDef.stepMinutes, rangeDef.hours)}</AppText>
             ))}
           </View>
           {shown ? (
@@ -202,9 +202,11 @@ const styles = StyleSheet.create({
   empty: { paddingVertical: spacing.xl, textAlign: 'center' },
   chart: { height: CHART_HEIGHT, flexDirection: 'row', alignItems: 'flex-end', gap: 1, borderBottomWidth: 1 },
   column: { flex: 1, justifyContent: 'flex-end', minWidth: 1 },
-  axis: { flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.xs },
+  // Axis labels are chart chrome: capped, and each may wrap in its third of the width instead of running together.
+  axis: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm, marginTop: spacing.xs },
+  axisLabel: { flexShrink: 1 },
   tooltip: { borderWidth: 1, borderRadius: radius.sm, padding: spacing.sm, marginTop: spacing.sm, gap: 2 },
-  legend: { flexDirection: 'row', gap: spacing.lg, marginTop: spacing.md },
+  legend: { flexDirection: 'row', flexWrap: 'wrap', columnGap: spacing.lg, rowGap: spacing.xs, marginTop: spacing.md },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   swatch: { width: 12, height: 12, borderRadius: 2 },
 });
