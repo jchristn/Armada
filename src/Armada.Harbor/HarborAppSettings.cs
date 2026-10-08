@@ -5,6 +5,7 @@ namespace Armada.Harbor
     using System.IO;
     using System.Text.Json;
     using Armada.Core;
+    using Armada.Core.Hosting;
 
     /// <summary>
     /// Configuration for the Harbor host runner: where to reach the Admiral, the dashboard URL to open, the
@@ -117,30 +118,111 @@ namespace Armada.Harbor
         }
 
         /// <summary>
-        /// Persist the settings to the default path. Best-effort; failures are swallowed.
+        /// Persist the settings to the default path. Best-effort; failures are swallowed (used at startup, where
+        /// there is nobody to tell). Editors use <see cref="TrySave"/>.
         /// </summary>
         public void Save()
         {
+            TrySave(out string? _);
+        }
+
+        /// <summary>
+        /// Persist the settings to the default path atomically, keeping the previous file as a backup.
+        /// </summary>
+        /// <param name="error">Why the save failed, or null.</param>
+        /// <returns>True when saved.</returns>
+        public bool TrySave(out string? error)
+        {
             try
             {
-                string path = DefaultPath();
-                string? directory = Path.GetDirectoryName(path);
-                if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
-                File.WriteAllText(path, JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true }));
+                SettingsFileStore.Save(DefaultPath(), JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true }), 3);
+                error = null;
+                return true;
             }
-            catch
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is NotSupportedException)
             {
+                error = ex.Message;
+                return false;
             }
         }
 
-        #endregion
+        /// <summary>
+        /// Check the settings for values Harbor cannot run with.
+        /// </summary>
+        /// <returns>One message per problem; empty when valid.</returns>
+        public List<string> Validate()
+        {
+            List<string> errors = new List<string>();
+            if (string.IsNullOrWhiteSpace(Name)) errors.Add("Name is required.");
+            if (!Uri.TryCreate(ServerLinkUrl, UriKind.Absolute, out Uri? link) || (link.Scheme != "ws" && link.Scheme != "wss"))
+                errors.Add("Link URL must be an absolute ws:// or wss:// URL, for example ws://127.0.0.1:7890/v1.0/harbor/connect.");
+            if (!Uri.TryCreate(DashboardUrl, UriKind.Absolute, out Uri? dashboard) || (dashboard.Scheme != Uri.UriSchemeHttp && dashboard.Scheme != Uri.UriSchemeHttps))
+                errors.Add("Dashboard URL must be an absolute http:// or https:// URL.");
+            if (HeartbeatIntervalMs < 0) errors.Add("Heartbeat interval cannot be negative (0 turns heartbeats off).");
+            if (HeartbeatIntervalMs > 0 && HeartbeatIntervalMs < 1000) errors.Add("Heartbeat interval must be at least 1000 ms, or 0 to turn heartbeats off.");
+            if (MaxConcurrentJobs < 1 || MaxConcurrentJobs > 64) errors.Add("Maximum concurrent jobs must be between 1 and 64.");
+            if (!string.IsNullOrWhiteSpace(Secret) && string.IsNullOrWhiteSpace(AccessKey)) errors.Add("A secret needs an access key.");
+            return errors;
+        }
 
-        #region Private-Methods
+        /// <summary>
+        /// A copy of these settings, for an editor to change without touching the live ones.
+        /// </summary>
+        /// <returns>The copy.</returns>
+        public HarborAppSettings Clone()
+        {
+            HarborAppSettings copy = new HarborAppSettings();
+            copy.CopyFrom(this);
+            return copy;
+        }
 
-        private static string DefaultPath()
+        /// <summary>
+        /// Overwrite every value with another instance's.
+        /// </summary>
+        /// <param name="other">Source.</param>
+        public void CopyFrom(HarborAppSettings other)
+        {
+            if (other == null) throw new ArgumentNullException(nameof(other));
+            ServerLinkUrl = other.ServerLinkUrl;
+            DashboardUrl = other.DashboardUrl;
+            HarborId = other.HarborId;
+            Name = other.Name;
+            UserId = other.UserId;
+            TenantId = other.TenantId;
+            Capabilities = new List<string>(other.Capabilities ?? new List<string>());
+            Appearance = other.Appearance;
+            HeartbeatIntervalMs = other.HeartbeatIntervalMs;
+            MaxConcurrentJobs = other.MaxConcurrentJobs;
+            AccessKey = other.AccessKey;
+            Secret = other.Secret;
+        }
+
+        /// <summary>
+        /// The Harbor settings file: settings.json in <see cref="SettingsDirectory"/>.
+        /// </summary>
+        /// <returns>Full path.</returns>
+        public static string DefaultPath()
+        {
+            return Path.Combine(SettingsDirectory(), "settings.json");
+        }
+
+        /// <summary>
+        /// Harbor's own log folder (logs/ in <see cref="SettingsDirectory"/>).
+        /// </summary>
+        /// <returns>Full path.</returns>
+        public static string LogDirectory()
+        {
+            return Path.Combine(SettingsDirectory(), "logs");
+        }
+
+        /// <summary>
+        /// The Harbor settings folder (~/.armada-harbor).
+        /// </summary>
+        /// <returns>Full path.</returns>
+        public static string SettingsDirectory()
         {
             string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            return Path.Combine(home, ".armada-harbor", "settings.json");
+            return Path.Combine(home, ".armada-harbor");
         }
 
         #endregion

@@ -42,6 +42,12 @@ namespace Armada.Runtimes
         public event Action<int, string>? OnStdoutReceived;
 
         /// <summary>
+        /// Event raised only when the agent writes a line to stderr (every such line is also raised on
+        /// <see cref="OnOutputReceived"/>). A Harbor uses it to report stdout and stderr on separate streams.
+        /// </summary>
+        public event Action<int, string>? OnStderrReceived;
+
+        /// <summary>
         /// Event raised immediately after the agent process starts and a PID is available.
         /// </summary>
         public event Action<int>? OnProcessStarted;
@@ -131,6 +137,10 @@ namespace Armada.Runtimes
         // inside Process.Start (an agent that had already exited made Start throw "Broken pipe", escaping the guarded
         // prompt write), and every prompt the agent read began with a stray U+FEFF.
         private static readonly UTF8Encoding _StdinEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+
+        // Process start failures meaning "not found": ENOENT (2) on Unix; ERROR_FILE_NOT_FOUND (2), ERROR_PATH_NOT_FOUND (3)
+        // and ERROR_DIRECTORY (267, an invalid working directory) on Windows.
+        private static readonly int[] _NotFoundErrors = new int[] { 2, 3, 267 };
 
         #endregion
 
@@ -352,6 +362,9 @@ namespace Armada.Runtimes
                     try { OnOutputReceived?.Invoke(launchedPid, e.Data); }
                     catch { }
 
+                    try { OnStderrReceived?.Invoke(launchedPid, e.Data); }
+                    catch { }
+
                     RaiseProviderErrorIfAny(launchedPid, e.Data, false);
                 }
             };
@@ -405,7 +418,21 @@ namespace Armada.Runtimes
             };
             process.EnableRaisingEvents = true;
 
-            bool started = process.Start();
+            bool started;
+            try
+            {
+                started = process.Start();
+            }
+            catch (System.ComponentModel.Win32Exception startFailure) when (IsNotFoundError(startFailure.NativeErrorCode))
+            {
+                // "File not found" is reported for a missing executable and for a missing working directory alike; tell
+                // them apart so the caller can say which one (the CLI not installed on this host, or a bad directory).
+                logWriter?.Dispose();
+                if (!Directory.Exists(workingDirectory))
+                    throw new DirectoryNotFoundException("The working directory '" + workingDirectory + "' does not exist on this host.", startFailure);
+                throw new Armada.Core.Services.AgentRuntimeNotInstalledException(RuntimeType, command, startFailure);
+            }
+
             if (!started)
                 throw new InvalidOperationException("Failed to start agent process: " + command);
             launchedPid = process.Id;
@@ -566,6 +593,14 @@ namespace Armada.Runtimes
         #endregion
 
         #region Private-Methods
+
+        /// <summary>
+        /// Whether a process-start error code means the executable or the working directory was not found.
+        /// </summary>
+        private static bool IsNotFoundError(int nativeErrorCode)
+        {
+            return Array.IndexOf(_NotFoundErrors, nativeErrorCode) >= 0;
+        }
 
         /// <summary>
         /// Get the command to execute for this runtime.

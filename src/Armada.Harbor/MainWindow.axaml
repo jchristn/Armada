@@ -6,6 +6,9 @@
         CanResize="True"
         Icon="/Assets/logo.png"
         Title="Armada Harbor">
+  <DockPanel>
+  <!-- Draws the window's menu (set by App) on Windows and Linux; hides itself on macOS, where the menu is in the menu bar. -->
+  <NativeMenuBar DockPanel.Dock="Top" />
   <DockPanel Margin="18">
 
     <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto">
@@ -28,11 +31,14 @@
       </StackPanel>
     </Grid>
 
-    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="10" Margin="0,14,0,0">
+    <WrapPanel DockPanel.Dock="Bottom" Orientation="Horizontal" ItemSpacing="10" LineSpacing="8" Margin="0,14,0,0">
       <Button x:Name="ConnectButton" Content="Connect" Click="OnConnectClick" />
       <Button x:Name="DisconnectButton" Content="Disconnect" Click="OnDisconnectClick" IsEnabled="False" />
       <Button Content="Dashboard" Click="OnOpenDashboardClick" />
-    </StackPanel>
+      <Button Content="Status" Click="OnStatusClick" ToolTip.Tip="Harbor, link, and Admiral status" />
+      <Button Content="Settings" Click="OnSettingsClick" ToolTip.Tip="Harbor and Armada settings" />
+      <Button Content="Logs" Click="OnLogsClick" ToolTip.Tip="Browse and follow Armada and Harbor logs" />
+    </WrapPanel>
 
     <Grid RowDefinitions="Auto,Auto,Auto,*" Margin="0,18,0,0">
 
@@ -82,5 +88,6 @@
 
     </Grid>
 
+  </DockPanel>
   </DockPanel>
 </Window>

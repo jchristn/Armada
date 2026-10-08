@@ -85,6 +85,33 @@ namespace Armada.Core.Harbor
         /// </summary>
         public string? McpSessionToken { get; set; } = null;
 
+        /// <summary>
+        /// Whether the job may run in a Harbor-owned scratch directory. When true and <see cref="WorkingDirectory"/> is
+        /// empty or does not exist on the Harbor host, the Harbor creates a per-job scratch directory, runs the job
+        /// there, and removes it when the job ends. Interactive launches (chat turns, planning, refinement) set it,
+        /// because the Admiral's own paths do not exist on the Harbor host. Default false (missions): the working
+        /// directory must exist. Added in 1.0 additively; an older Harbor ignores it.
+        /// </summary>
+        public bool ScratchWorkingDirectory { get; set; } = false;
+
+        /// <summary>
+        /// Whether a Claude Code captain runs in streaming-JSON output mode (one typed event per stdout line), as the
+        /// Admiral uses for chat turns so the reply streams token by token. Ignored by other runtimes. Default false.
+        /// </summary>
+        public bool StreamJsonOutput { get; set; } = false;
+
+        /// <summary>
+        /// Whether the runtime is asked to surface the model's reasoning (for example Mux --show-thinking). Default false.
+        /// </summary>
+        public bool ShowThinking { get; set; } = false;
+
+        /// <summary>
+        /// Whether the Harbor captures the runtime's final-message artifact (for example Codex --output-last-message) and
+        /// sends it back as an <c>output</c> message on the <see cref="HarborOutputStreamEnum.FinalMessage"/> stream just
+        /// before <c>exited</c>. Default false.
+        /// </summary>
+        public bool ReturnFinalMessage { get; set; } = false;
+
         #endregion
     }
 }

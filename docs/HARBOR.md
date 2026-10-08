@@ -68,9 +68,11 @@ described in [OPERATIONS.md](OPERATIONS.md#harbor---install-startup---uninstall-
 
 On first run the app writes a settings file to `~/.armada-harbor/settings.json` (on Windows,
 `%USERPROFILE%\.armada-harbor\settings.json`), generating a Harbor id and defaulting the name to the machine
-name. Edit that file (with Harbor stopped; it rewrites the file on startup) to point the Harbor at your Admiral and to
-describe what the host can do. Keys are PascalCase and case-sensitive: a camelCase key is ignored and replaced
-with the default when Harbor saves.
+name. Change these settings in the app (**Harbor > Harbor Settings...**, see
+[Managing Harbor and Armada from the app](#managing-harbor-and-armada-from-the-app)), which validates them, keeps a
+backup of the previous file, and reconnects when a link setting changes. To edit the file by hand, use **Open File** on
+that tab and then **Reload from File**, or edit it with Harbor stopped (it rewrites the file on startup). Keys are
+PascalCase and case-sensitive: a camelCase key is ignored and replaced with the default when Harbor saves.
 
 | Field | Description |
 |---|---|
@@ -88,6 +90,45 @@ with the default when Harbor saves.
 A Harbor does not have to be pre-registered: it self-registers on its first handshake. Pre-registering is
 useful when you want to reserve a name and capacity, or set routing preferences, before the host connects. A Harbor id
 that is already registered to a different tenant or user is refused.
+
+### Managing Harbor and Armada from the app
+
+Everything below is in the app's menus. On macOS they are in the menu bar while a Harbor window is in front (the app
+menu is **Armada Harbor**); on Windows and Linux they are in a menu bar at the top of the Harbor window. The tray (menu
+bar) icon offers the same Harbor, Armada, and Logs menus, with the link status at the top, so nothing needs the
+window open. The window's **Status**, **Settings**, and **Logs** buttons open the same places.
+
+| Menu | Items |
+|---|---|
+| **Armada Harbor** (macOS) | About Armada Harbor, Settings... (Cmd+,), and the standard Hide and Quit |
+| **Harbor** | Connect, Disconnect, Reconnect, Harbor Settings..., Copy Harbor ID, Copy MCP URL, Open Harbor Folder (on Windows and Linux also Settings... and Quit) |
+| **Armada** | Status..., Armada Settings..., TUI Settings..., Backups..., Open Data Folder, Open Dashboard |
+| **Logs** | Admiral Log (Today), Harbor Log, Mission Log..., Log Browser..., Open Logs Folder |
+| **Help** | Armada Documentation, Copy Diagnostics (versions, paths, link state, recent activity; credentials are reported only as configured or not), and About on Windows and Linux |
+
+The settings, status, logs, and backups open in one **Manage** window with these tabs:
+
+| Tab | What it does |
+|---|---|
+| **Status** | This Harbor (link state, MCP URL, running jobs, its log file), the Admiral's health, version, uptime, and ports (refreshed every 5 seconds while shown), captains, missions, and voyages, and the disk used by each item in the Armada data directory. |
+| **Harbor** | A form for `~/.armada-harbor/settings.json`. Save validates the values, writes the file atomically keeping the previous version as `settings.json.bak-<timestamp>`, and reconnects the link when a link setting changed. |
+| **Armada** | **Live**: the common Admiral settings (captain limits, heartbeat and stall timing, planning-session timeouts, landing mode, ports), read from and applied to the running Admiral through `GET`/`PUT /api/v1/settings`, so they take effect at once (ports after a restart). **File**: the Admiral's whole `settings.json` as JSON. Save refuses text the Admiral would not load (with the line and column of a syntax error, or the setting that is out of range), asks before overwriting a file that changed on disk, and keeps the previous version as a backup. The Admiral reads this file only at startup, so the tab offers **Restart Admiral** after a save. Until it restarts, a settings change made from the dashboard or the Live tab rewrites the file from the running settings and discards edits made here. |
+| **TUI** | The terminal UI's `tui.json`, as JSON, with the same validation and backups. Close `armada tui` before editing it; it saves this file when you change a preference there. |
+| **Logs** | Browse the Admiral's log, mission and captain session logs, diffs, instructions, final messages, dock logs, and Harbor's own log, or open a mission (`msn_`) or captain (`cpt_`) log by id. The viewer shows the last 256 KB of a file, follows it as it grows, filters the Admiral's and Harbor's logs by level (continuation lines such as stack traces stay with their line), and finds text. |
+| **Backups** | Read-only lists of the Admiral's database backups (`backups/` in the data directory, such as the ones taken before each schema migration) and of the settings backups the editors keep. Harbor does not restore or delete backups. |
+
+**Which Admiral's files.** The Armada data directory is `ARMADA_DATA_DIR`, or `~/.armada`. Harbor treats it as the
+linked Admiral's only when the link URL points at this machine (`localhost` or a loopback address) and the directory
+exists. Otherwise (a Harbor linked to an Admiral on another host) the data folder, file editors, logs, and backups are
+unavailable and say so; Status and the Armada **Live** tab still work over the network.
+
+**Authorization.** Status and the Live tab call the Admiral's REST API at the link URL's host and port (`ws://` becomes
+`http://`, `wss://` becomes `https://`). For a same-machine Admiral, Harbor uses the local API key from its
+`settings.json`; otherwise it uses the Harbor's `AccessKey`. Reading and changing settings and restarting need an admin
+credential, the captain and mission counts need any credential, and the health line needs none.
+
+**Harbor's log.** The link, the job runner, and the activity log are written to `~/.armada-harbor/logs/harbor.log.<date>`
+(one file per day, like the Admiral's `admiral.log.<date>`).
 
 ### Admiral settings
 

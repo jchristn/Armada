@@ -1059,12 +1059,16 @@ namespace Test.Shared.Suites.Services
                 HashSet<string> expected = new HashSet<string>(StringComparer.Ordinal);
                 foreach (string name in MissionPromptBuilder.TemplateParameterNames) expected.Add("{" + name + "}");
 
-                string tsx = File.ReadAllText(Path.Combine(DashboardSource.Src(), "pages", "PromptTemplateDetail.tsx"));
-                int start = tsx.IndexOf("PARAMETER_GROUPS", StringComparison.Ordinal);
-                int end = tsx.IndexOf("PROMPT_TEMPLATE_CATEGORY_OPTIONS", StringComparison.Ordinal);
-                AssertTrue(start >= 0 && end > start, "PARAMETER_GROUPS block not found");
+                // The panel's groups are defined in lib/configuration.ts (shared with the mobile app) and rendered by
+                // pages/PromptTemplateDetail.tsx.
+                string ts = File.ReadAllText(Path.Combine(DashboardSource.Src(), "lib", "configuration.ts"));
+                int start = ts.IndexOf("export const PROMPT_TEMPLATE_PARAMETER_GROUPS", StringComparison.Ordinal);
+                int end = start >= 0 ? ts.IndexOf("\n];", start, StringComparison.Ordinal) : -1;
+                AssertTrue(start >= 0 && end > start, "PROMPT_TEMPLATE_PARAMETER_GROUPS block not found in lib/configuration.ts");
+                string page = File.ReadAllText(Path.Combine(DashboardSource.Src(), "pages", "PromptTemplateDetail.tsx"));
+                AssertTrue(page.Contains("PROMPT_TEMPLATE_PARAMETER_GROUPS", StringComparison.Ordinal), "PromptTemplateDetail.tsx no longer renders PROMPT_TEMPLATE_PARAMETER_GROUPS");
                 HashSet<string> dashboard = new HashSet<string>(StringComparer.Ordinal);
-                foreach (Match match in Regex.Matches(tsx.Substring(start, end - start), "name:\\s*'(\\{[A-Za-z0-9]+\\})'"))
+                foreach (Match match in Regex.Matches(ts.Substring(start, end - start), "name:\\s*'(\\{[A-Za-z0-9]+\\})'"))
                 {
                     dashboard.Add(match.Groups[1].Value);
                 }

@@ -26,8 +26,11 @@ namespace Armada.Runtimes
         /// <inheritdoc />
         public bool SupportsResume => false;
 
-        /// <inheritdoc />
-        public bool SupportsPlanningSessions => false;
+        /// <summary>
+        /// Whether the runtime type can run planning sessions; a Harbor runs the same CLI, so the answer is the runtime
+        /// type's (see <see cref="AgentRuntimeCapabilities.SupportsPlanningSessions"/>).
+        /// </summary>
+        public bool SupportsPlanningSessions => AgentRuntimeCapabilities.SupportsPlanningSessions(_RuntimeType);
 
         /// <inheritdoc />
         public event Action<int, string>? OnOutputReceived;
@@ -50,6 +53,23 @@ namespace Armada.Runtimes
         /// </summary>
         public string? McpSessionToken { get; set; } = null;
 
+        /// <summary>
+        /// Whether the launch may run in a Harbor-owned scratch directory when its working directory is empty or does
+        /// not exist on the Harbor host (see <see cref="HarborLaunchRequest.ScratchWorkingDirectory"/>). Interactive
+        /// launches (chat, planning, refinement) set it; missions leave it false.
+        /// </summary>
+        public bool UseScratchWorkingDirectory { get; set; } = false;
+
+        /// <summary>
+        /// Whether a Claude Code captain runs in streaming-JSON output mode on the Harbor (chat turns).
+        /// </summary>
+        public bool StreamJsonOutput { get; set; } = false;
+
+        /// <summary>
+        /// The Harbor this runtime launches on.
+        /// </summary>
+        public string HarborId => _HarborId;
+
         #endregion
 
         #region Private-Members
@@ -64,6 +84,8 @@ namespace Armada.Runtimes
         private TaskCompletionSource<int>? _StartedTcs;
         private StreamWriter? _LogWriter;
         private readonly object _LogLock = new object();
+        private string? _FinalMessageFilePath = null;
+        private int _Finished = 0;
 
         #endregion
 
@@ -104,8 +126,11 @@ namespace Armada.Runtimes
             bool showThinking = false,
             CancellationToken token = default)
         {
+            if (String.IsNullOrEmpty(workingDirectory) && !UseScratchWorkingDirectory) throw new ArgumentNullException(nameof(workingDirectory));
             _JobId = Guid.NewGuid().ToString("N");
             _StartedTcs = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _FinalMessageFilePath = String.IsNullOrEmpty(finalMessageFilePath) ? null : finalMessageFilePath;
+            Interlocked.Exchange(ref _Finished, 0);
 
             // Mirror the captain's streamed output into the Admiral-side mission log file so live-follow
             // (which tails this file) and the stored log read identically to a local run. The captain process
@@ -116,14 +141,18 @@ namespace Armada.Runtimes
             {
                 JobId = _JobId,
                 Runtime = _RuntimeType.ToString(),
-                WorkingDirectory = workingDirectory,
+                WorkingDirectory = workingDirectory ?? String.Empty,
                 Model = model,
                 Prompt = prompt,
                 PromptViaStdin = true,
                 Arguments = new List<string>(),
                 Environment = environment ?? new Dictionary<string, string>(),
                 AutoApprove = captain != null ? CaptainRuntimeOptions.GetAutoApprove(captain) : (bool?)null,
-                McpSessionToken = String.IsNullOrEmpty(McpSessionToken) ? null : McpSessionToken
+                McpSessionToken = String.IsNullOrEmpty(McpSessionToken) ? null : McpSessionToken,
+                ScratchWorkingDirectory = UseScratchWorkingDirectory,
+                StreamJsonOutput = StreamJsonOutput && _RuntimeType == AgentRuntimeEnum.ClaudeCode,
+                ShowThinking = showThinking,
+                ReturnFinalMessage = _FinalMessageFilePath != null
             };
 
             // API-endpoint captains have no CLI on the Harbor; ship the resolved endpoint so the Harbor can
@@ -149,10 +178,20 @@ namespace Armada.Runtimes
 
             await _Manager.LaunchAsync(_HarborId, request, this, token).ConfigureAwait(false);
 
-            Task delay = Task.Delay(_StartTimeoutMs, token);
-            Task finished = await Task.WhenAny(_StartedTcs.Task, delay).ConfigureAwait(false);
-            if (finished != _StartedTcs.Task)
-                throw new TimeoutException("Harbor " + _HarborId + " did not start job " + _JobId + " within the timeout.");
+            using (CancellationTokenSource waitCts = CancellationTokenSource.CreateLinkedTokenSource(token))
+            {
+                Task delay = Task.Delay(_StartTimeoutMs, waitCts.Token);
+                Task finished = await Task.WhenAny(_StartedTcs.Task, delay).ConfigureAwait(false);
+                waitCts.Cancel();
+                if (finished != _StartedTcs.Task)
+                {
+                    // The caller gave up (or the Harbor never answered): make sure the job does not start later unowned.
+                    try { await _Manager.KillJobAsync(_HarborId, _JobId, 10000, CancellationToken.None).ConfigureAwait(false); }
+                    catch { }
+                    if (token.IsCancellationRequested) throw new OperationCanceledException(token);
+                    throw new TimeoutException("Harbor " + _HarborId + " did not start job " + _JobId + " within the timeout.");
+                }
+            }
 
             return await _StartedTcs.Task.ConfigureAwait(false);
         }
@@ -160,6 +199,24 @@ namespace Armada.Runtimes
         /// <inheritdoc />
         public async Task StopAsync(int processId, CancellationToken token = default)
         {
+            // This instance launched the job: stop it by its job id, which cannot collide with another Harbor's process
+            // id. Otherwise (a runtime created only to stop a process) resolve the job from the process id.
+            if (!String.IsNullOrEmpty(_JobId) && processId == _ProcessId && _ProcessId != 0)
+            {
+                _Manager.UnregisterProcessId(processId);
+                try
+                {
+                    await _Manager.KillJobAsync(_HarborId, _JobId, 10000, token).ConfigureAwait(false);
+                }
+                finally
+                {
+                    // The kill drops this job's listener, so the Harbor's own exit report never arrives: report the exit
+                    // here, as a local process kill would, so a caller waiting for it (a planning turn) finishes.
+                    OnExited(-1);
+                }
+                return;
+            }
+
             await _Manager.KillByProcessIdAsync(processId, 10000, token).ConfigureAwait(false);
         }
 
@@ -181,7 +238,15 @@ namespace Armada.Runtimes
         /// <inheritdoc />
         public void OnOutput(HarborOutputStreamEnum stream, string data)
         {
-            WriteLog(data);
+            if (stream == HarborOutputStreamEnum.FinalMessage)
+            {
+                // The runtime's final-message artifact, captured on the Harbor: write it where a local run would have,
+                // so callers read it the same way. It is not captain output.
+                WriteFinalMessage(data);
+                return;
+            }
+
+            WriteLog(stream == HarborOutputStreamEnum.Stderr ? "[stderr] " + data : data);
             OnOutputReceived?.Invoke(_ProcessId, data);
             if (stream == HarborOutputStreamEnum.Stdout)
                 OnStdoutReceived?.Invoke(_ProcessId, data);
@@ -202,9 +267,25 @@ namespace Armada.Runtimes
         /// <inheritdoc />
         public void OnExited(int exitCode)
         {
+            if (Interlocked.Exchange(ref _Finished, 1) == 1) return;
             _Manager.UnregisterProcessId(_ProcessId);
             CloseLog();
             OnProcessExited?.Invoke(_ProcessId, exitCode);
+        }
+
+        /// <inheritdoc />
+        public void OnFailed(string message)
+        {
+            HarborJobFailedException failure = new HarborJobFailedException(_HarborId, _JobId, message);
+            WriteLog("Harbor " + _HarborId + " reported a failure: " + message);
+            if (_StartedTcs != null && _StartedTcs.TrySetException(failure))
+            {
+                CloseLog();
+                return;
+            }
+
+            // The job had already started: report it as ended so nobody waits for an exit that will never come.
+            OnExited(-1);
         }
 
         #endregion
@@ -230,6 +311,21 @@ namespace Armada.Runtimes
             {
                 // A logging failure must never block the launch; live-follow simply shows less.
                 _LogWriter = null;
+            }
+        }
+
+        private void WriteFinalMessage(string data)
+        {
+            if (_FinalMessageFilePath == null) return;
+            try
+            {
+                string? directory = Path.GetDirectoryName(_FinalMessageFilePath);
+                if (!String.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
+                File.WriteAllText(_FinalMessageFilePath, data ?? String.Empty);
+            }
+            catch
+            {
+                // The final message is optional; callers fall back to the streamed output.
             }
         }
 

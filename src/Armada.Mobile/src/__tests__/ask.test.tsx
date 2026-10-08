@@ -113,6 +113,13 @@ describe('Ask Armada', () => {
     expect(screen.queryByTestId('ask-choose-captain')).toBeNull();
   });
 
+  it('the conversation shows its captain at the top, and tapping it opens the captain picker', async () => {
+    await renderAsk();
+    await waitFor(() => expect(screen.getByTestId('ask-captain-bar-name')).toHaveTextContent(/Ada/));
+    await act(async () => { fireEvent.press(screen.getByTestId('ask-captain-bar')); });
+    expect(await screen.findByTestId('ask-captain')).toBeTruthy();
+  });
+
   it('sending creates the conversation, shows the message at once, and streams the reply', async () => {
     api.createAskThread.mockResolvedValue(thread({ id: 'thr_new', title: 'New conversation' }));
     api.sendAskMessage.mockResolvedValue({ messageId: 'msg_10', turnId: 'turn_1' });

@@ -5,6 +5,7 @@ namespace Armada.Helm.Commands
     using Spectre.Console;
     using Spectre.Console.Cli;
     using Armada.Core;
+    using Armada.Core.Hosting;
     using Armada.Core.Models;
     using Armada.Core.Services;
     using Armada.Helm.Infrastructure;
@@ -133,8 +134,9 @@ namespace Armada.Helm.Commands
 
         private async Task<string?> ResolveLogFileAsync(string identifier)
         {
-            string missionLogDir = Path.Combine(Constants.DefaultDataDirectory, "logs", "missions");
-            string captainLogDir = Path.Combine(Constants.DefaultDataDirectory, "logs", "captains");
+            ArmadaLogPaths logPaths = ArmadaLogPaths.ForDefaultDataDirectory();
+            string missionLogDir = logPaths.MissionsDirectory;
+            string captainLogDir = logPaths.CaptainsDirectory;
 
             // 1. Direct mission ID (msn_ prefix)
             if (identifier.StartsWith("msn_"))
@@ -146,7 +148,7 @@ namespace Armada.Helm.Commands
             // 2. Direct captain ID (cpt_ prefix) — check .current pointer first, then .log
             if (identifier.StartsWith("cpt_"))
             {
-                return ResolveCaptainLog(captainLogDir, identifier);
+                return logPaths.ResolveCaptainLog(identifier);
             }
 
             // 3. Captain name match — look up via API
@@ -162,7 +164,7 @@ namespace Armada.Helm.Commands
 
                     if (captain != null)
                     {
-                        string? captainLog = ResolveCaptainLog(captainLogDir, captain.Id);
+                        string? captainLog = logPaths.ResolveCaptainLog(captain.Id);
                         if (captainLog != null) return captainLog;
                     }
                 }
@@ -200,23 +202,6 @@ namespace Armada.Helm.Commands
                 if (matches.Length > 0)
                     return matches.OrderByDescending(f => File.GetLastWriteTimeUtc(f)).First();
             }
-
-            return null;
-        }
-
-        private string? ResolveCaptainLog(string captainLogDir, string captainId)
-        {
-            // Check .current pointer (points to the current mission's log)
-            string pointerFile = Path.Combine(captainLogDir, captainId + ".current");
-            if (File.Exists(pointerFile))
-            {
-                string target = File.ReadAllText(pointerFile).Trim();
-                if (File.Exists(target)) return target;
-            }
-
-            // Fallback to legacy captain log
-            string directLog = Path.Combine(captainLogDir, captainId + ".log");
-            if (File.Exists(directLog)) return directLog;
 
             return null;
         }

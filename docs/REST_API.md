@@ -3881,9 +3881,25 @@ Send a chat turn directly to a captain's configured model (Mux/Ollama endpoints)
   "Model": "gpt-oss:20b",
   "Metrics": {},
   "Error": null,
+  "ErrorCode": null,
   "Thinking": null
 }
 ```
+
+The turn runs where a mission for the same captain would: on a connected, eligible Harbor (its output and final message
+stream back over the link) or, when there is none and `requireHarborForLaunch` is off, on the Admiral host. ApiEndpoint
+captains always run in-process on the Admiral. See [CAPTAINS.md](CAPTAINS.md#where-interactive-turns-run).
+
+A failed turn returns `200` with `Success: false`, the reason in `Error`, and, for failures a client can act on,
+`ErrorCode` (`CaptainChatErrorCodeEnum`):
+
+| ErrorCode | Meaning |
+|---|---|
+| `HarborRequired` | `requireHarborForLaunch` is on and no eligible Harbor owned by the caller is connected ("No Harbor is connected to run this captain"); nothing ran on the Admiral host |
+| `RuntimeNotInstalled` | The runtime's CLI is not installed on the Admiral host (and no Harbor ran the turn) |
+| `HarborLaunchFailed` | The chosen Harbor could not start the captain; `Error` names the Harbor and carries its reason (for example the CLI is not installed there) |
+
+Ask Armada turns fail the same way: the reason becomes the turn's error message in the thread.
 
 
 #### Ask Armada threads

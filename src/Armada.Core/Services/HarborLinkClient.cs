@@ -105,6 +105,15 @@ namespace Armada.Core.Services
         #region Public-Methods
 
         /// <summary>
+        /// Identifiers of the jobs this Harbor is running now.
+        /// </summary>
+        /// <returns>Snapshot of the live job identifiers.</returns>
+        public List<string> LiveJobIds()
+        {
+            return SnapshotLiveJobs();
+        }
+
+        /// <summary>
         /// Run one link session over the given transport: connect, handshake, then handle messages until the
         /// transport closes or cancellation is requested.
         /// </summary>

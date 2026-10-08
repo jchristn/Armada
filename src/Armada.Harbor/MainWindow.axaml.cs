@@ -3,6 +3,7 @@ namespace Armada.Harbor
     using System;
     using System.Collections.Generic;
     using System.Diagnostics;
+    using System.IO;
     using System.Net.WebSockets;
     using System.Threading;
     using System.Threading.Tasks;
@@ -23,6 +24,44 @@ namespace Armada.Harbor
     /// </summary>
     public partial class MainWindow : Window
     {
+        #region Public-Members
+
+        /// <summary>
+        /// Base name of Harbor's log file in <see cref="HarborAppSettings.LogDirectory"/> (daily files append a date).
+        /// </summary>
+        public const string HarborLogBaseName = "harbor.log";
+
+        /// <summary>
+        /// Raised on the UI thread when the link state, the link loop, or the MCP URL changes.
+        /// </summary>
+        public event EventHandler? StateChanged;
+
+        /// <summary>
+        /// Current link state.
+        /// </summary>
+        public HarborLinkStateEnum LinkState
+        {
+            get { return _LinkState; }
+        }
+
+        /// <summary>
+        /// True while the link loop runs (connecting, connected, or retrying).
+        /// </summary>
+        public bool IsLinkRunning
+        {
+            get { return _RunCts != null; }
+        }
+
+        /// <summary>
+        /// MCP base URL the Admiral advertised at the last handshake, or null.
+        /// </summary>
+        public string? McpUrl
+        {
+            get { return _McpUrl; }
+        }
+
+        #endregion
+
         #region Private-Members
 
         private const int _MaxLogLines = 500;
@@ -36,6 +75,9 @@ namespace Armada.Harbor
         private readonly LoggingModule _Logging;
         private readonly List<string> _LogLines = new List<string>();
         private CancellationTokenSource? _RunCts;
+        private HarborLinkStateEnum _LinkState = HarborLinkStateEnum.Idle;
+        private string? _McpUrl = null;
+        private HarborLinkClient? _Client = null;
 
         #endregion
 
@@ -57,13 +99,9 @@ namespace Armada.Harbor
             _Settings = settings ?? throw new ArgumentNullException(nameof(settings));
             InitializeComponent();
 
-            _Logging = new LoggingModule();
-            _Logging.Settings.EnableConsole = false;
-
-            HarborNameText.Text = _Settings.Name + "  (" + _Settings.HarborId + ")";
-            ServerText.Text = _Settings.ServerLinkUrl;
-            SetStatus("Idle", _Gray);
-            AppearanceBox.SelectedIndex = (int)_Settings.Appearance;
+            _Logging = CreateLogging();
+            RefreshSettingsDisplay();
+            SetLinkState(HarborLinkStateEnum.Idle);
 
             Closing += OnWindowClosing;
             Opened += OnWindowOpened;
@@ -82,12 +120,89 @@ namespace Armada.Harbor
             StartConnecting(true);
         }
 
+        /// <summary>
+        /// Start the link loop at the operator's request. Does nothing when it is already running.
+        /// </summary>
+        public void Connect()
+        {
+            StartConnecting(false);
+        }
+
+        /// <summary>
+        /// Stop the link loop at the operator's request. Does nothing when it is not running.
+        /// </summary>
+        public void Disconnect()
+        {
+            if (_RunCts == null) return;
+            StopConnecting();
+            SetDetail("Disconnected by operator.");
+            AppendInfo("Disconnected by operator");
+        }
+
+        /// <summary>
+        /// Drop the current link (if any) and dial again.
+        /// </summary>
+        public void Reconnect()
+        {
+            if (_RunCts != null)
+            {
+                StopConnecting();
+                AppendInfo("Reconnect requested");
+            }
+
+            StartConnecting(false);
+        }
+
+        /// <summary>
+        /// Add an informational line to the activity log (menu command results and failures).
+        /// </summary>
+        /// <param name="message">Message.</param>
+        public void ReportActivity(string message)
+        {
+            if (!string.IsNullOrWhiteSpace(message)) AppendInfo(message);
+        }
+
+        /// <summary>
+        /// Show the current settings (name, link URL) after they were edited.
+        /// </summary>
+        public void RefreshSettingsDisplay()
+        {
+            HarborNameText.Text = _Settings.Name + "  (" + _Settings.HarborId + ")";
+            ServerText.Text = _Settings.ServerLinkUrl;
+            if (AppearanceBox.SelectedIndex != (int)_Settings.Appearance) AppearanceBox.SelectedIndex = (int)_Settings.Appearance;
+        }
+
+        /// <summary>
+        /// Identifiers of the jobs running on this Harbor now; empty when not linked.
+        /// </summary>
+        /// <returns>Job identifiers.</returns>
+        public List<string> LiveJobIds()
+        {
+            HarborLinkClient? client = _Client;
+            return client != null ? client.LiveJobIds() : new List<string>();
+        }
+
+        /// <summary>
+        /// The most recent activity log lines, oldest first.
+        /// </summary>
+        /// <param name="maxLines">Maximum number of lines.</param>
+        /// <returns>Copy of the lines.</returns>
+        public List<string> RecentActivity(int maxLines)
+        {
+            int count = Math.Min(Math.Max(maxLines, 0), _LogLines.Count);
+            return _LogLines.GetRange(_LogLines.Count - count, count);
+        }
+
         #endregion
 
         #region Private-Methods
 
         private void OnWindowClosing(object? sender, WindowClosingEventArgs e)
         {
+            // Quitting (the menu's Quit, Command-Q, logging out) must be allowed to close the window, or the shutdown is
+            // cancelled.
+            if (e.CloseReason == WindowCloseReason.ApplicationShutdown || e.CloseReason == WindowCloseReason.OSShutdown) return;
+
             // Keep the runner alive in the tray instead of exiting; the tray "Quit" item shuts the app down.
             e.Cancel = true;
             Hide();
@@ -117,7 +232,7 @@ namespace Armada.Harbor
 
         private void OnConnectClick(object? sender, RoutedEventArgs e)
         {
-            StartConnecting(false);
+            Connect();
         }
 
         private void StartConnecting(bool automatic)
@@ -128,17 +243,22 @@ namespace Armada.Harbor
             DisconnectButton.IsEnabled = true;
             AppendInfo(automatic ? "Auto-connecting on startup" : "Connect requested");
             _ = RunLoopAsync(_RunCts.Token);
+            RaiseStateChanged();
         }
 
-        private void OnDisconnectClick(object? sender, RoutedEventArgs e)
+        private void StopConnecting()
         {
             _RunCts?.Cancel();
             _RunCts = null;
             ConnectButton.IsEnabled = true;
             DisconnectButton.IsEnabled = false;
-            SetStatus("Idle", _Gray);
-            SetDetail("Disconnected by operator.");
-            AppendInfo("Disconnected by operator");
+            SetLinkState(HarborLinkStateEnum.Idle);
+            RaiseStateChanged();
+        }
+
+        private void OnDisconnectClick(object? sender, RoutedEventArgs e)
+        {
+            Disconnect();
         }
 
         private void OnOpenDashboardClick(object? sender, RoutedEventArgs e)
@@ -151,6 +271,28 @@ namespace Armada.Harbor
             {
                 SetDetail("Could not open dashboard: " + ex.Message);
             }
+        }
+
+        private void OnStatusClick(object? sender, RoutedEventArgs e)
+        {
+            RunMenuCommand(HarborMenuCommandEnum.Status);
+        }
+
+        private void OnSettingsClick(object? sender, RoutedEventArgs e)
+        {
+            RunMenuCommand(HarborMenuCommandEnum.Settings);
+        }
+
+        private void OnLogsClick(object? sender, RoutedEventArgs e)
+        {
+            // The Admiral's log when it is on this machine, else Harbor's own.
+            if (Application.Current is App app && app.CanExecute(HarborMenuCommandEnum.OpenAdmiralLog)) app.Execute(HarborMenuCommandEnum.OpenAdmiralLog);
+            else RunMenuCommand(HarborMenuCommandEnum.OpenHarborLog);
+        }
+
+        private static void RunMenuCommand(HarborMenuCommandEnum command)
+        {
+            if (Application.Current is App app) app.Execute(command);
         }
 
         private async void OnCopyLogClick(object? sender, RoutedEventArgs e)
@@ -192,19 +334,22 @@ namespace Armada.Harbor
                         _Settings.HeartbeatIntervalMs,
                         AppendLog,
                         jobRunner);
+                    _Client = client;
 
                     try
                     {
-                        SetStatus("Connecting...", _Amber);
+                        SetLinkState(HarborLinkStateEnum.Connecting);
                         SetDetail("Dialing " + _Settings.ServerLinkUrl + " ...");
                         await client.RunSessionAsync(transport, token, () =>
                         {
-                            SetStatus("Connected", _Green);
+                            SetLinkState(HarborLinkStateEnum.Connected);
                             SetDetail("Linked to " + _Settings.ServerLinkUrl + ". Awaiting work.");
                             SetMcp(client.McpBaseUrl);
                         }).ConfigureAwait(false);
 
-                        SetStatus("Disconnected", _Red);
+                        // A session ended by Disconnect or Reconnect must not report over the state they set.
+                        if (token.IsCancellationRequested) break;
+                        SetLinkState(HarborLinkStateEnum.Disconnected);
                         SetDetail("The link closed. Retrying in 3 seconds...");
                         AppendInfo("Link closed; retrying in 3s");
                     }
@@ -214,7 +359,8 @@ namespace Armada.Harbor
                     }
                     catch (Exception ex)
                     {
-                        SetStatus("Disconnected", _Red);
+                        if (token.IsCancellationRequested) break;
+                        SetLinkState(HarborLinkStateEnum.Disconnected);
                         SetDetail(DescribeConnectError(ex));
                         AppendInfo("Connect failed: " + ex.Message);
                     }
@@ -222,6 +368,7 @@ namespace Armada.Harbor
                     SetMcp(client.McpBaseUrl);
                 }
 
+                _Client = null;
                 if (token.IsCancellationRequested) break;
                 try
                 {
@@ -292,6 +439,7 @@ namespace Armada.Harbor
         private void AppendLog(HarborLogEntry entry)
         {
             string line = entry.ToString();
+            _Logging.Info("[Harbor] " + (entry.Direction == HarborLogDirection.Info ? "" : entry.Direction + " ") + entry.Message);
             Dispatcher.UIThread.Post(() =>
             {
                 _LogLines.Add(line);
@@ -303,13 +451,60 @@ namespace Armada.Harbor
             });
         }
 
-        private void SetStatus(string status, IBrush color)
+        private static LoggingModule CreateLogging()
+        {
+            // Harbor's log: the link client, the job runner, and the activity log, in daily files under
+            // ~/.armada-harbor/logs (harbor.log.yyyyMMdd), like the Admiral's admiral.log.
+            LoggingModule logging = new LoggingModule();
+            logging.Settings.EnableConsole = false;
+            try
+            {
+                Directory.CreateDirectory(HarborAppSettings.LogDirectory());
+                logging.Settings.MinimumSeverity = Severity.Info;
+                logging.Settings.FileLogging = FileLoggingMode.FileWithDate;
+                logging.Settings.LogFilename = Path.Combine(HarborAppSettings.LogDirectory(), HarborLogBaseName);
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+            {
+                // No log folder: run without a file log rather than not at all.
+                logging.Settings.FileLogging = FileLoggingMode.Disabled;
+            }
+
+            return logging;
+        }
+
+        private void SetLinkState(HarborLinkStateEnum state)
         {
             Dispatcher.UIThread.Post(() =>
             {
-                StatusText.Text = status;
-                StatusDot.Fill = color;
+                _LinkState = state;
+                switch (state)
+                {
+                    case HarborLinkStateEnum.Connecting:
+                        StatusText.Text = "Connecting...";
+                        StatusDot.Fill = _Amber;
+                        break;
+                    case HarborLinkStateEnum.Connected:
+                        StatusText.Text = "Connected";
+                        StatusDot.Fill = _Green;
+                        break;
+                    case HarborLinkStateEnum.Disconnected:
+                        StatusText.Text = "Disconnected";
+                        StatusDot.Fill = _Red;
+                        break;
+                    default:
+                        StatusText.Text = "Idle";
+                        StatusDot.Fill = _Gray;
+                        break;
+                }
+
+                RaiseStateChanged();
             });
+        }
+
+        private void RaiseStateChanged()
+        {
+            StateChanged?.Invoke(this, EventArgs.Empty);
         }
 
         private void SetDetail(string detail)
@@ -319,7 +514,13 @@ namespace Armada.Harbor
 
         private void SetMcp(string? mcp)
         {
-            Dispatcher.UIThread.Post(() => McpText.Text = string.IsNullOrEmpty(mcp) ? "-" : mcp);
+            Dispatcher.UIThread.Post(() =>
+            {
+                McpText.Text = string.IsNullOrEmpty(mcp) ? "-" : mcp;
+                if (string.Equals(_McpUrl, mcp, StringComparison.Ordinal)) return;
+                _McpUrl = mcp;
+                RaiseStateChanged();
+            });
         }
 
         #endregion

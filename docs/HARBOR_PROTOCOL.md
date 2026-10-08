@@ -90,19 +90,37 @@ Run a captain:
 
 ```
 Admiral -> launch { jobId, runtime, workingDirectory, model, prompt, promptViaStdin, arguments, environment,
-                    inferenceEndpoint, autoApprove, mcpSessionToken }
+                    inferenceEndpoint, autoApprove, mcpSessionToken,
+                    scratchWorkingDirectory, streamJsonOutput, showThinking, returnFinalMessage }
 Harbor  -> started { jobId, processId }
 Harbor  -> output  { jobId, stream: "Stdout", data }   (repeated; stream is "Stdout" or "Stderr")
 Admiral -> stdin   { jobId, data }                      (optional)
 Admiral -> kill    { jobId, gracefulTimeoutMs }         (optional)
+Harbor  -> output  { jobId, stream: "FinalMessage", data }   (once, only when returnFinalMessage was set)
 Harbor  -> exited  { jobId, exitCode, durationMs, timeToFirstTokenMs }
 ```
+
+The `launch` fields after `mcpSessionToken` were added for interactive launches (captain chat, Ask Armada turns,
+planning, refinement). They are additive and optional: each defaults to `false`, a Harbor that predates them ignores
+them, and the Admiral never sends anything a Harbor did not ask for, so the protocol version stays `1.0`.
+
+| Field | Meaning |
+|---|---|
+| `scratchWorkingDirectory` | When `workingDirectory` is empty or does not exist on the Harbor host, run the job in a per-job scratch directory the Harbor creates (under its temporary directory, `armada-harbor/scratch/<jobId>`) and removes when the job ends. Without it the working directory must exist; a missing one fails the launch. Missions never set it. |
+| `streamJsonOutput` | Run a Claude Code captain with `--output-format stream-json --include-partial-messages` (chat streaming). Ignored for other runtimes. |
+| `showThinking` | Ask the runtime to surface the model's reasoning (Mux `--show-thinking`). |
+| `returnFinalMessage` | Have the runtime write its final-message artifact (Codex `--output-last-message`, Mux) to a Harbor-side file outside the working directory, and send its content back as one `output` message on the `FinalMessage` stream just before `exited`. |
+
+A Harbor reports stdout lines on the `Stdout` stream and stderr lines on the `Stderr` stream (a Harbor that predates the
+split reports both as `Stdout`). The Admiral's mission lifecycle reads both; chat and planning read only `Stdout`.
 
 `capabilities` is a list of `{ name, available, detail }` objects. A `handshake.maxConcurrentJobs` that is omitted or
 not positive means the Harbor advertises no capacity: a new registration gets `harbor.defaultMaxJobsPerHarbor` and an
 existing one keeps its capacity. The Admiral does not watch heartbeat timing: a Harbor is marked disconnected when its
 link closes. `kill.gracefulTimeoutMs` defaults to 10000. A
-Harbor that cannot launch (for example a build without a job runner) answers with `error { jobId, message }`.
+Harbor that cannot launch (for example a build without a job runner, a CLI that is not installed on the Harbor host, or
+a working directory that does not exist there) answers with `error { jobId, message }`; the Admiral fails that launch at
+once with the Harbor's message instead of waiting for `started`.
 
 Delegate a git operation:
 

@@ -454,12 +454,9 @@ namespace Test.Shared.Suites.E2E
             public FakeGitHubServer(string expectedToken)
             {
                 ExpectedToken = expectedToken ?? throw new ArgumentNullException(nameof(expectedToken));
-                Port = GetAvailablePort();
-                _Listener = new HttpListener();
-                _Listener.Prefixes.Add("http://localhost:" + Port + "/");
-                _Listener.Prefixes.Add("http://127.0.0.1:" + Port + "/");
+                _Listener = TestPorts.StartHttpListener(p => new[] { "http://localhost:" + p + "/", "http://127.0.0.1:" + p + "/" }, out int port);
+                Port = port;
                 _TokenSource = new CancellationTokenSource();
-                _Listener.Start();
                 _ListenerTask = Task.Run(ListenAsync);
             }
 
@@ -605,11 +602,6 @@ namespace Test.Shared.Suites.E2E
             private static string EscapeJson(string value)
             {
                 return value.Replace("\\", "\\\\").Replace("\"", "\\\"");
-            }
-
-            private static int GetAvailablePort()
-            {
-                return TestPorts.Reserve(1)[0];
             }
         }
 

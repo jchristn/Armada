@@ -20,6 +20,18 @@ namespace Armada.Server
     /// </summary>
     public class PlanningSessionCoordinator
     {
+        #region Public-Members
+
+        /// <summary>
+        /// Routes planning turns and summaries to a connected, eligible Harbor or to the Admiral host with the policy
+        /// missions use (dock affinity, the vessel's preferred Harbor and required capabilities, requireHarborForLaunch).
+        /// On a Harbor the turn runs in the dock's path when it exists there, otherwise in a Harbor scratch directory, and
+        /// its context file is inlined into the prompt. Null always runs on the Admiral host.
+        /// </summary>
+        public CaptainLaunchRouter? LaunchRouter { get; set; } = null;
+
+        #endregion
+
         #region Private-Members
 
         private sealed class TurnState
@@ -327,8 +339,7 @@ namespace Armada.Server
                 {
                     try
                     {
-                        Armada.Runtimes.Interfaces.IAgentRuntime runtime = CreatePlanningRuntime(captain);
-                        await runtime.StopAsync(session.ProcessId.Value, token).ConfigureAwait(false);
+                        await StopPlanningProcessAsync(captain, session.ProcessId.Value, token).ConfigureAwait(false);
                     }
                     catch (Exception ex)
                     {
@@ -463,7 +474,7 @@ namespace Armada.Server
                 PlanningSessionSummaryResponse draft = BuildFallbackSummary(session, sourceMessage, request.Title);
                 try
                 {
-                    string runtimeOutput = await RunRuntimePromptAsync(session, captain, vessel, prompt, logFilePath, finalMessageFilePath, token).ConfigureAwait(false);
+                    string runtimeOutput = await RunRuntimePromptAsync(session, captain, vessel, prompt, promptFilePath, logFilePath, finalMessageFilePath, token).ConfigureAwait(false);
 
                     if (TryParseSummaryResponse(runtimeOutput, out PlanningSessionSummaryResponse? parsed) && parsed != null)
                     {
@@ -667,8 +678,7 @@ namespace Armada.Server
                         {
                             try
                             {
-                                Armada.Runtimes.Interfaces.IAgentRuntime runtime = CreatePlanningRuntime(captain);
-                                await runtime.StopAsync(session.ProcessId.Value, token).ConfigureAwait(false);
+                                await StopPlanningProcessAsync(captain, session.ProcessId.Value, token).ConfigureAwait(false);
                             }
                             catch
                             {
@@ -750,7 +760,9 @@ namespace Armada.Server
                 string logFilePath = Path.Combine(turnDir, "session.log");
                 string finalMessageFilePath = Path.Combine(turnDir, "final-" + assistantMessage.Id + ".txt");
 
-                Armada.Runtimes.Interfaces.IAgentRuntime runtime = CreatePlanningRuntime(captain);
+                Armada.Runtimes.Interfaces.IAgentRuntime runtime = await CreatePlanningRuntimeAsync(session, captain, vessel, dock.HarborId, CancellationToken.None).ConfigureAwait(false);
+                if (runtime is RemoteAgentRuntime)
+                    prompt = InlinePromptFile(prompt, promptFilePath);
                 TaskCompletionSource<int?> exitSource = new TaskCompletionSource<int?>(TaskCreationOptions.RunContinuationsAsynchronously);
                 object outputLock = new object();
                 StringBuilder output = new StringBuilder();
@@ -768,6 +780,10 @@ namespace Armada.Server
                 if (isClaudeStream && runtime is ClaudeCodeRuntime claudePlanningRuntime)
                 {
                     claudePlanningRuntime.StreamJsonOutput = true;
+                }
+                else if (isClaudeStream && runtime is RemoteAgentRuntime remotePlanningRuntime)
+                {
+                    remotePlanningRuntime.StreamJsonOutput = true;
                 }
                 _ActiveTurns.TryGetValue(session.Id, out TurnState? currentTurn);
                 bool showThinking = currentTurn?.ShowThinking ?? false;
@@ -1131,11 +1147,17 @@ namespace Armada.Server
             Captain captain,
             Vessel vessel,
             string prompt,
+            string promptFilePath,
             string logFilePath,
             string finalMessageFilePath,
             CancellationToken token)
         {
-            Armada.Runtimes.Interfaces.IAgentRuntime runtime = CreatePlanningRuntime(captain);
+            string? pinnedHarborId = null;
+            if (session.DockId != null)
+                pinnedHarborId = (await RequireDockAsync(session.DockId, token).ConfigureAwait(false)).HarborId;
+            Armada.Runtimes.Interfaces.IAgentRuntime runtime = await CreatePlanningRuntimeAsync(session, captain, vessel, pinnedHarborId, token).ConfigureAwait(false);
+            if (runtime is RemoteAgentRuntime)
+                prompt = InlinePromptFile(prompt, promptFilePath);
             TaskCompletionSource<int?> exitSource = new TaskCompletionSource<int?>(TaskCreationOptions.RunContinuationsAsynchronously);
             StringBuilder output = new StringBuilder();
             object outputLock = new object();
@@ -1387,8 +1409,7 @@ namespace Armada.Server
                 {
                     try
                     {
-                        Armada.Runtimes.Interfaces.IAgentRuntime runtime = CreatePlanningRuntime(captain);
-                        await runtime.StopAsync(session.ProcessId.Value, CancellationToken.None).ConfigureAwait(false);
+                        await StopPlanningProcessAsync(captain, session.ProcessId.Value, CancellationToken.None).ConfigureAwait(false);
                     }
                     catch (Exception ex)
                     {
@@ -1586,6 +1607,53 @@ namespace Armada.Server
 
             // Use the shared builder so planning-session and Ask Armada metrics are computed identically.
             return Armada.Core.Services.ChatTurnMetricsBuilder.Build(totalMs, ttftMs, content, null);
+        }
+
+        /// <summary>
+        /// Create the runtime of a planning turn or summary: on the Harbor the router picks (the dock's Harbor when the
+        /// dock is pinned), or on the Admiral host.
+        /// </summary>
+        private async Task<Armada.Runtimes.Interfaces.IAgentRuntime> CreatePlanningRuntimeAsync(PlanningSession session, Captain captain, Vessel vessel, string? pinnedHarborId, CancellationToken token)
+        {
+            if (LaunchRouter == null) return CreatePlanningRuntime(captain);
+            if (!captain.SupportsPlanningSessions)
+                throw new InvalidOperationException(captain.PlanningSessionSupportReason ?? "This captain runtime is not supported for planning sessions.");
+
+            CaptainLaunchContext launch = new CaptainLaunchContext(captain, "planning session")
+            {
+                TenantId = session.TenantId,
+                UserId = session.UserId,
+                Vessel = vessel,
+                PinnedHarborId = pinnedHarborId,
+                AllowScratchWorkingDirectory = true
+            };
+            Armada.Runtimes.Interfaces.IAgentRuntime runtime = (await LaunchRouter.SelectAsync(launch, token).ConfigureAwait(false)).Runtime;
+            if (!runtime.SupportsPlanningSessions)
+                throw new InvalidOperationException("Runtime " + runtime.Name + " does not currently support planning sessions.");
+            return runtime;
+        }
+
+        /// <summary>
+        /// Stop a planning turn's process, on its Harbor when it runs on one.
+        /// </summary>
+        private async Task StopPlanningProcessAsync(Captain captain, int processId, CancellationToken token)
+        {
+            if (LaunchRouter != null)
+            {
+                await LaunchRouter.StopAsync(captain.Runtime, processId, token).ConfigureAwait(false);
+                return;
+            }
+
+            Armada.Runtimes.Interfaces.IAgentRuntime runtime = CreatePlanningRuntime(captain);
+            await runtime.StopAsync(processId, token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Inline the Admiral-side context file into the prompt of a turn that runs on a Harbor, which cannot read it.
+        /// </summary>
+        private static string InlinePromptFile(string prompt, string promptFilePath)
+        {
+            return CaptainLaunchRouter.InlinePromptFile(prompt, promptFilePath);
         }
 
         private Armada.Runtimes.Interfaces.IAgentRuntime CreatePlanningRuntime(Captain captain)

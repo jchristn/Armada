@@ -1,17 +1,23 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             x:Class="Armada.Harbor.App">
+             x:Class="Armada.Harbor.App"
+             Name="Armada Harbor">
   <Application.Resources>
     <ResourceDictionary>
       <ResourceDictionary.ThemeDictionaries>
-        <!-- Secondary text (values, activity log, subtitle): grey that stays readable in each scheme. -->
+        <!-- Secondary text (values, activity log, subtitle): grey that stays readable in each scheme. Help text under
+             form fields is smaller and dimmer still. Cards (Status sections) sit slightly above the window background. -->
         <ResourceDictionary x:Key="Light">
           <SolidColorBrush x:Key="HarborSecondaryTextBrush" Color="#4B5563" />
+          <SolidColorBrush x:Key="HarborHelpTextBrush" Color="#6B7280" />
           <SolidColorBrush x:Key="HarborBorderBrush" Color="#D1D5DB" />
+          <SolidColorBrush x:Key="HarborCardBrush" Color="#F9FAFB" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="Dark">
           <SolidColorBrush x:Key="HarborSecondaryTextBrush" Color="#9CA3AF" />
+          <SolidColorBrush x:Key="HarborHelpTextBrush" Color="#6B7280" />
           <SolidColorBrush x:Key="HarborBorderBrush" Color="#4B5563" />
+          <SolidColorBrush x:Key="HarborCardBrush" Color="#111318" />
         </ResourceDictionary>
       </ResourceDictionary.ThemeDictionaries>
     </ResourceDictionary>

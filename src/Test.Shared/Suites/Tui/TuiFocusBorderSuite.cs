@@ -3,7 +3,10 @@ namespace Test.Shared.Suites.Tui
     using System;
     using System.Collections.Generic;
     using System.Linq;
+    using Armada.Core.Models;
+    using Armada.Tui.Screens;
     using Armada.Tui.Screens.Ask;
+    using Armada.Tui.Screens.Operations;
     using Armada.Tui.Shell;
     using Armada.Tui.Theming;
     using Armada.Tui.Widgets;
@@ -232,9 +235,13 @@ namespace Test.Shared.Suites.Tui
 
             cases.Add(TuiCase.Sync(Suite, "layout_stable", "Moving focus changes only border cells: the content does not move", () =>
             {
-                using (TuiTestHost host = TuiCase.SignedIn(120, 40, "/missions"))
+                // Compare two settled frames: "Missions" is in the sidebar and the hub tabs before the list loads, so
+                // waiting for that text let the first frame show "Loading..." and the second the loaded list.
+                StubHttpHandler stub = TuiFixtures.SignedInServer();
+                stub.Json("GET", "/api/v1/missions/summaries", "{\"Success\":true,\"Objects\":[],\"TotalRecords\":0}");
+                using (TuiTestHost host = TuiCase.SignedIn(120, 40, "/missions", stub))
                 {
-                    host.WaitForText("Missions");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("GET", "/api/v1/missions/summaries") > 0 && MissionsGrid(host)?.State == GridStateEnum.Ready), "missions list loaded\n" + host.Screen());
                     ShellView shell = host.Tui.Shell;
                     string mainFocused = Body(host);
                     Rect inner = shell.LastLayout!.MainInner;
@@ -294,6 +301,13 @@ namespace Test.Shared.Suites.Tui
             RegionFrame? region = shell.LastRegions.FirstOrDefault(r => ReferenceEquals(r.Widget, widget));
             if (region == null) throw new AssertionException("no region for " + widget.GetType().Name);
             return region.Box;
+        }
+
+        private static ArmadaGrid<MissionSummary>? MissionsGrid(TuiTestHost host)
+        {
+            HubScreen? hub = host.Tui.Shell.Screen as HubScreen;
+            MissionsScreen? screen = hub?.Content as MissionsScreen;
+            return screen?.Grid;
         }
 
         private static CellBuffer Render(TuiTestHost host)

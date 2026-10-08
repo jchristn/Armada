@@ -423,8 +423,21 @@ namespace Test.Shared.Suites.Services
             {
                 RunningProxy running = new RunningProxy();
                 running.Settings = settings;
-                running.Proxy = new ArmadaProxyServer(CreateLogging(), settings, quiet: true);
-                await running.Proxy.StartAsync().ConfigureAwait(false);
+                running.Proxy = await TestPorts.StartOnFreePortsAsync(1, async ports =>
+                {
+                    settings.Port = ports[0];
+                    ArmadaProxyServer candidate = new ArmadaProxyServer(CreateLogging(), settings, quiet: true);
+                    try
+                    {
+                        await candidate.StartAsync().ConfigureAwait(false);
+                        return candidate;
+                    }
+                    catch
+                    {
+                        candidate.Dispose();
+                        throw;
+                    }
+                }).ConfigureAwait(false);
                 HttpClientHandler handler = new HttpClientHandler
                 {
                     AllowAutoRedirect = false,

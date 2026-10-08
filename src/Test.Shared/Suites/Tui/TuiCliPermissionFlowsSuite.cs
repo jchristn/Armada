@@ -4,6 +4,7 @@ namespace Test.Shared.Suites.Tui
     using System.Collections.Generic;
     using System.Linq;
     using System.Net;
+    using System.Threading;
     using Armada.Client;
     using Armada.Client.Models;
     using Armada.Client.Socket;
@@ -55,7 +56,7 @@ namespace Test.Shared.Suites.Tui
                 using (TuiTestHost host = TuiCase.SignedIn(170, 48, "/cli-permissions?tab=rules", stub))
                 {
                     CliPermissionRulesScreen screen = Content<CliPermissionRulesScreen>(host);
-                    AssertTrue(host.WaitForText("Bash(git status:*)"), "rule listed\n" + host.Screen());
+                    AssertTrue(WaitForRules(host, screen), "rule listed\n" + host.Screen());
                     string frame = host.Screen();
                     TuiCase.Contains(frame, "Requests", "requests tab");
                     TuiCase.Contains(frame, "Vessel web", "vessel target by name");
@@ -73,7 +74,7 @@ namespace Test.Shared.Suites.Tui
                 using (TuiTestHost host = TuiCase.SignedIn(170, 48, "/cli-permissions?tab=rules", stub))
                 {
                     CliPermissionRulesScreen screen = Content<CliPermissionRulesScreen>(host);
-                    AssertTrue(host.WaitForText("Bash(git status:*)"), "loaded");
+                    AssertTrue(WaitForRules(host, screen), "loaded");
                     AssertTrue(host.PumpUntil(() => screen.Vessels.Count == 1 && screen.Captains.Count == 1), "pickers loaded");
                     host.Press("n");
                     AssertTrue(host.PumpUntil(() => host.App.Modals.Top is FormModal), "form");
@@ -113,7 +114,7 @@ namespace Test.Shared.Suites.Tui
                 using (TuiTestHost host = TuiCase.SignedIn(170, 48, "/cli-permissions?tab=rules", stub))
                 {
                     CliPermissionRulesScreen screen = Content<CliPermissionRulesScreen>(host);
-                    AssertTrue(host.WaitForText("Bash(git status:*)"), "loaded");
+                    AssertTrue(WaitForRules(host, screen), "loaded");
                     screen.Grid.MoveCursor(screen.Grid.Rows.ToList().FindIndex(r => r.Id == "cpl_1"));
                     host.Press("enter");
                     AssertTrue(host.PumpUntil(() => host.App.Modals.Top is FormModal), "edit form");
@@ -151,7 +152,7 @@ namespace Test.Shared.Suites.Tui
                 using (TuiTestHost host = TuiCase.SignedIn(170, 48, "/cli-permissions?tab=rules", stub))
                 {
                     CliPermissionRulesScreen screen = Content<CliPermissionRulesScreen>(host);
-                    AssertTrue(host.WaitForText("Bash(git status:*)"), "loaded");
+                    AssertTrue(WaitForRules(host, screen), "loaded");
                     AssertFalse(screen.CanEdit, "read-only");
                     TuiCase.NotContains(host.Screen(), "+ Rule", "no create button");
                     host.Press("n");
@@ -160,6 +161,50 @@ namespace Test.Shared.Suites.Tui
                     AssertNull(screen.OpenForm(null), "form refused");
                     AssertNull(screen.ConfirmDelete(screen.Items[0]), "delete refused");
                     AssertEqual(0, stub.CountFor("POST", RulesPath) + stub.CountFor("DELETE", RulesPath + "/cpl_1"), "nothing sent");
+                }
+            }));
+
+            cases.Add(TuiCase.Sync(Suite, "rules_wait_for_rows_not_header_example", "Rules tests wait for the rows: the header's example pattern is on screen while the list is still loading, and a user who is not an admin gets no create control before or after it loads", () =>
+            {
+                // Regression (full net10.0 run under load): the Rules cases waited for "Bash(git status:*)" in the frame,
+                // but the header help quotes that pattern as its example, so the wait passed before the list loaded and
+                // the case then read an empty grid (Items[0], the edit form for a missing row). Hold the list to force it.
+                StubHttpHandler stub = RulesStub();
+                NotAdmin(stub);
+                string rulesJson = ArmadaJson.Serialize(Rules());
+                using (ManualResetEventSlim releaseRules = new ManualResetEventSlim(false))
+                {
+                    stub.On("GET", RulesPath, body =>
+                    {
+                        releaseRules.Wait(TimeSpan.FromSeconds(30));
+                        return StubHttpHandler.Response(HttpStatusCode.OK, rulesJson);
+                    });
+
+                    using (TuiTestHost host = TuiCase.SignedIn(170, 48, "/cli-permissions?tab=rules", stub))
+                    {
+                        try
+                        {
+                            CliPermissionRulesScreen screen = Content<CliPermissionRulesScreen>(host);
+                            AssertTrue(host.PumpUntil(() => stub.CountFor("GET", RulesPath) == 1), "list call held");
+                            AssertTrue(host.WaitForText("Bash(git status:*)"), "the header example is on screen while the list is held\n" + host.Screen());
+                            AssertFalse(RulesShown(screen), "not loaded while held");
+                            AssertEqual(0, screen.Items.Count, "no rules yet");
+                            AssertFalse(screen.CanEdit, "role known before the list loads");
+                            TuiCase.NotContains(host.Screen(), "+ Rule", "no create button while loading");
+                            host.Press("n");
+                            AssertFalse(host.App.Modals.Top is FormModal, "no form while loading");
+
+                            releaseRules.Set();
+                            AssertTrue(WaitForRules(host, screen), "loaded after release\n" + host.Screen());
+                            TuiCase.Contains(host.Screen(), "no pushes", "rows rendered");
+                            TuiCase.NotContains(host.Screen(), "+ Rule", "no create button after the load");
+                            AssertNull(screen.ConfirmDelete(screen.Items[0]), "delete refused");
+                        }
+                        finally
+                        {
+                            releaseRules.Set();
+                        }
+                    }
                 }
             }));
 
@@ -777,11 +822,7 @@ namespace Test.Shared.Suites.Tui
         private static StubHttpHandler RulesStub()
         {
             StubHttpHandler stub = TuiFixtures.SignedInServer();
-            List<CliPermissionRule> rules = new List<CliPermissionRule>
-            {
-                new CliPermissionRule { Id = "cpl_1", TenantId = "ten_default", Pattern = "Bash(git status:*)", Action = CliPermissionRuleActionEnum.Allow, Scope = CliPermissionRuleScopeEnum.Vessel, VesselId = "vsl_1", CreatedUtc = DateTime.UtcNow.AddHours(-1) },
-                new CliPermissionRule { Id = "cpl_2", TenantId = null, Pattern = "Bash(git push:*)", Action = CliPermissionRuleActionEnum.Deny, Scope = CliPermissionRuleScopeEnum.Global, Description = "no pushes", CreatedUtc = DateTime.UtcNow.AddHours(-2) },
-            };
+            List<CliPermissionRule> rules = Rules();
             stub.Json("GET", RulesPath, ArmadaJson.Serialize(rules));
             stub.Json("POST", RulesPath, ArmadaJson.Serialize(rules[0]));
             stub.Json("PUT", RulesPath + "/cpl_1", ArmadaJson.Serialize(rules[0]));
@@ -790,6 +831,15 @@ namespace Test.Shared.Suites.Tui
             stub.Json("GET", "/api/v1/captains", "{\"Objects\":[{\"Id\":\"cpt_1\",\"Name\":\"claude-1\",\"Runtime\":\"ClaudeCode\"}],\"TotalRecords\":1}");
             stub.Json("GET", "/api/v1/cli-permissions/requests", "[]");
             return stub;
+        }
+
+        private static List<CliPermissionRule> Rules()
+        {
+            return new List<CliPermissionRule>
+            {
+                new CliPermissionRule { Id = "cpl_1", TenantId = "ten_default", Pattern = "Bash(git status:*)", Action = CliPermissionRuleActionEnum.Allow, Scope = CliPermissionRuleScopeEnum.Vessel, VesselId = "vsl_1", CreatedUtc = DateTime.UtcNow.AddHours(-1) },
+                new CliPermissionRule { Id = "cpl_2", TenantId = null, Pattern = "Bash(git push:*)", Action = CliPermissionRuleActionEnum.Deny, Scope = CliPermissionRuleScopeEnum.Global, Description = "no pushes", CreatedUtc = DateTime.UtcNow.AddHours(-2) },
+            };
         }
 
         private static StubHttpHandler SettingsStub()
@@ -832,6 +882,20 @@ namespace Test.Shared.Suites.Tui
             stub.Json("GET", "/api/v1/missions/summaries", "{\"Success\":true,\"Objects\":[],\"TotalRecords\":0}");
             stub.Json("GET", "/api/v1/model-endpoints", "[]");
             return stub;
+        }
+
+        /// <summary>
+        /// True once the Rules grid shows the two stubbed rules. The frame text alone does not say so: the screen's
+        /// header help quotes Bash(git status:*) as its example pattern, so that text is on screen before the load.
+        /// </summary>
+        private static bool RulesShown(CliPermissionRulesScreen screen)
+        {
+            return screen.Grid.State == GridStateEnum.Ready && screen.Grid.Rows.Count == 2 && screen.Items.Count == 2;
+        }
+
+        private static bool WaitForRules(TuiTestHost host, CliPermissionRulesScreen screen)
+        {
+            return host.PumpUntil(() => RulesShown(screen));
         }
 
         private static void NotAdmin(StubHttpHandler stub)
