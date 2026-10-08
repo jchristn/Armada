@@ -22,4 +22,7 @@ module.exports = {
     'node_modules/(?!((jest-)?react-native|@react-native(-community)?|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|react-native-.*|@react-native-async-storage/.*|standard-navigation|marked))',
   ],
   clearMocks: true,
+  // Tests wait on conditions, never on time. The timeout only guards against a hang: Jest's 5 s default acted as a
+  // speed threshold for suites that mount the whole app (the first test pays the module load) on slow CI runners.
+  testTimeout: 60000,
 };
