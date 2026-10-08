@@ -561,6 +561,44 @@ describe('Ask Armada conversation list actions', () => {
     await waitFor(() => expect(screen.getByTestId('ask-empty')).toBeTruthy());
   });
 
+  it('while the phone list is open, every sheet and dialog it opens is presented from inside it (iOS: a screen presenting the list cannot present another modal; that left the composer unable to take focus)', async () => {
+    await openList();
+    type HostNode = { props: Record<string, unknown>; parent: HostNode | null; children: (HostNode | string)[] };
+    /** Visible Modal hosts (they carry the Modal's props) other than the list's own page sheet. */
+    const otherModals = (): HostNode[] => {
+      const out: HostNode[] = [];
+      const walk = (n: HostNode | string) => {
+        if (typeof n === 'string') return;
+        if (n.props.animationType !== undefined && n.props.presentationStyle !== 'pageSheet') out.push(n);
+        n.children.forEach(walk);
+      };
+      walk(screen.root as unknown as HostNode);
+      return out;
+    };
+    const insideList = (node: HostNode) => {
+      for (let p = node.parent; p; p = p.parent) if (p.props.testID === 'ask-list-sheet') return true;
+      return false;
+    };
+    const check = () => {
+      const modals = otherModals();
+      expect(modals.length).toBeGreaterThan(0);
+      for (const modal of modals) expect(insideList(modal)).toBe(true);
+    };
+    await longPress('thr_2');
+    check();
+    await act(async () => { await fireEvent.press(screen.getByTestId('ask-action-delete')); });
+    check();
+    await act(async () => { await fireEvent.press(screen.getByTestId('ask-delete-confirm-cancel')); });
+    await swipeAction('thr_1', 'delete');
+    check();
+    await act(async () => { await fireEvent.press(screen.getByTestId('ask-delete-confirm-cancel')); });
+    // Nothing is left open behind the list, and the composer still takes text once the list closes.
+    expect(otherModals()).toHaveLength(0);
+    await act(async () => { await fireEvent.press(screen.getByTestId('ask-close-list')); });
+    expect(otherModals()).toHaveLength(0);
+    expect(screen.getByTestId('ask-input').props.editable).not.toBe(false);
+  });
+
   it('Pin, Archive, Rename, and Summarize reach the server with the dashboard payloads and update the list', async () => {
     api.updateAskThread.mockImplementation(async (id, patch) => thread({ id, title: id === 'thr_2' ? 'Deploy plan' : 'Fleet status', ...(patch as Partial<AskThread>) }));
     api.summarizeAskThread.mockResolvedValue(undefined);

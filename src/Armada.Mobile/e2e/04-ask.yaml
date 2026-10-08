@@ -1,6 +1,7 @@
 # Signed in (state kept from 01): Ask Armada against the throwaway Admiral. The seeded server has no captains, so
 # plain messages are disabled and quick actions still work: run /status from the / menu (creates the conversation
-# and posts its action result), find it in the conversation list, rename it from the options sheet, and delete it.
+# and posts its action result), find it in the conversation list, rename it from the options sheet, start a delete
+# from the list and cancel it, leave Ask and come back and type, and delete it from the options sheet.
 appId: ${APP_ID}
 name: 04-ask
 ---
@@ -76,10 +77,49 @@ name: 04-ask
           visible:
             id: "ask-thread-list"
           timeout: 10000
-      - assertVisible: "Mobile E2E"
+      # The row reads its title and time together.
+      - assertVisible: "Mobile E2E.*"
       - takeScreenshot: ask-thread-list
+      # Delete from the row menu asks inside the list (it used to ask from the screen behind the list: on iOS
+      # nothing appeared, and afterwards the composer could not take focus). Cancel keeps the conversation.
+      - longPressOn: "Mobile E2E.*"
+      - extendedWaitUntil:
+          visible:
+            id: "ask-action-delete"
+          timeout: 10000
+      - tapOn:
+          id: "ask-action-delete"
+      - extendedWaitUntil:
+          visible:
+            id: "ask-delete-confirm"
+          timeout: 10000
+      - tapOn:
+          id: "ask-delete-confirm-cancel"
       - tapOn:
           id: "ask-close-list"
+# Leave Ask, come back, and type: the composer must still take text.
+- tapOn:
+    id: "tab-work"
+- waitForAnimationToEnd:
+    timeout: 5000
+- tapOn:
+    id: "tab-more"
+- waitForAnimationToEnd:
+    timeout: 5000
+- tapOn:
+    id: "tab-ask"
+- extendedWaitUntil:
+    visible:
+      id: "ask-input"
+    timeout: 10000
+- tapOn:
+    id: "ask-input"
+- inputText: "Back on Ask"
+- extendedWaitUntil:
+    visible: "Back on Ask"
+    timeout: 10000
+- eraseText: 20
+- hideKeyboard
 - tapOn:
     id: "ask-open-options"
 - extendedWaitUntil:
