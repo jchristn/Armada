@@ -138,6 +138,8 @@ namespace Test.Shared.Suites.Tui
         {
             StubHttpHandler stub = TuiEntityFixtures.Server();
             stub.Json("GET", "/api/v1/harbors", "[" + Harbor("hbr_1", "build-box", "Connected", true) + "," + Harbor("hbr_2", "old-box", "Disconnected", false) + "]");
+            stub.Json("GET", "/api/v1/harbors/hbr_1/metrics", HarborMetricsFixture.Json("hbr_1"));
+            stub.Json("GET", "/api/v1/harbors/hbr_2/metrics", HarborMetricsFixture.Json("hbr_2"));
             return stub;
         }
 

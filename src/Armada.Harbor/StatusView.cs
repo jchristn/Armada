@@ -16,8 +16,9 @@ namespace Armada.Harbor
     using Avalonia.Threading;
 
     /// <summary>
-    /// The Overview tab of the Status window: this computer's Harbor and its link and running jobs, the Admiral's health
-    /// and workload (polled while the tab is shown), and how much disk the Armada data directory uses.
+    /// The Overview tab of the Status window: this computer's Harbor and its link and running jobs, the last 24 hours of
+    /// this Harbor in three small charts (jobs, slot usage, link health), the Admiral's health and workload (polled while
+    /// the tab is shown), and how much disk the Armada data directory uses.
     /// </summary>
     public class StatusView : UserControl
     {
@@ -104,8 +105,11 @@ namespace Armada.Harbor
             usage.Children.Add(_UsageNote);
             _UsagePanel = new StackPanel { Spacing = 4 };
             usage.Children.Add(_UsagePanel);
+            Button openActivity = HarborUi.Button("Open Activity", OpenActivity, "Show this Harbor's charts over the last hour, 24 hours, or 7 days");
+            openActivity.Classes.Add("subtle");
             Content = HarborUi.Page(
                 HarborUi.Card("This computer", harborBody, null),
+                HarborUi.Card("Last 24 hours", new HarborDayStripView(_Session), openActivity),
                 HarborUi.Card("Admiral server", admiral, null),
                 HarborUi.Card("Armada data on this computer", usage, usageButtons));
 
@@ -329,6 +333,11 @@ namespace Armada.Harbor
                 Grid.SetColumn(cell, i);
                 grid.Children.Add(cell);
             }
+        }
+
+        private void OpenActivity()
+        {
+            if (TopLevel.GetTopLevel(this) is StatusWindow window) window.ShowTab(StatusTabEnum.Activity);
         }
 
         private void OpenDataFolder()

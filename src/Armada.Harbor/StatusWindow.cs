@@ -6,8 +6,9 @@ namespace Armada.Harbor
     using Avalonia.Controls;
 
     /// <summary>
-    /// The Status window ("Armada Harbor - Status"): an Overview tab (this Harbor and its link, the Admiral's health and
-    /// workload, and data directory disk usage) and a Logs tab. The Status and Logs menu items and buttons open it on
+    /// The Status window ("Armada Harbor - Status"): an Overview tab (this Harbor and its link, the last 24 hours in
+    /// three small charts, the Admiral's health and workload, and data directory disk usage), an Activity tab (this
+    /// Harbor's charts over 1h, 24h, or 7d), and a Logs tab. The Status and Logs menu items and buttons open it on
     /// the matching tab.
     /// </summary>
     public class StatusWindow : Window
@@ -40,6 +41,7 @@ namespace Armada.Harbor
 
             _Logs = new LogBrowserView(session);
             Add(StatusTabEnum.Overview, "Overview", new StatusView(session));
+            Add(StatusTabEnum.Activity, "Activity", new HarborActivityView(session));
             Add(StatusTabEnum.Logs, "Logs", _Logs);
 
             _Tabs.Margin = new Thickness(12, 4, 0, 0);

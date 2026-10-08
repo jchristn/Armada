@@ -16,7 +16,8 @@ namespace Armada.Tui.Screens.Activity
     /// hour, day, week, month), metric (total by model, or by token type), shape (stacked bars or lines), totals
     /// (total, input, output, cached) with the estimated-records note, a "Usage over time" chart and a "Usage by
     /// model" chart. The dashboard copies each chart as an image; the TUI copies a text table of each chart and
-    /// exports the buckets as CSV to a file. Not thread-safe.
+    /// exports the buckets as CSV to a file. <c>?harborId=</c> (from the Harbors screen's <c>u</c>) limits the page to
+    /// captains run on that Harbor, with a line that says so; <c>x</c> shows every Harbor again. Not thread-safe.
     /// </summary>
     public class TokenUsageScreen : StackScreen
     {
@@ -68,6 +69,11 @@ namespace Armada.Tui.Screens.Activity
         public TokenUsageSummaryResult? Data { get; private set; } = null;
 
         /// <summary>
+        /// Harbor the page is limited to (from <c>?harborId=</c>), or empty for every Harbor.
+        /// </summary>
+        public string HarborId { get; private set; } = "";
+
+        /// <summary>
         /// True while loading.
         /// </summary>
         public bool Loading { get; private set; } = false;
@@ -85,7 +91,7 @@ namespace Armada.Tui.Screens.Activity
         {
             get
             {
-                return new List<KeyValuePair<string, string>>
+                List<KeyValuePair<string, string>> hints = new List<KeyValuePair<string, string>>
                 {
                     new KeyValuePair<string, string>("h/d/w/m", "Range"),
                     new KeyValuePair<string, string>("t", "Metric"),
@@ -93,6 +99,8 @@ namespace Armada.Tui.Screens.Activity
                     new KeyValuePair<string, string>("y", "Copy"),
                     new KeyValuePair<string, string>("e", "Export CSV"),
                 };
+                if (HarborId.Length > 0) hints.Insert(0, new KeyValuePair<string, string>("x", "All Harbors"));
+                return hints;
             }
         }
 
@@ -101,6 +109,7 @@ namespace Armada.Tui.Screens.Activity
         #region Private-Members
 
         private readonly TextBlock _Note = new TextBlock("", t => t.Muted);
+        private readonly TextBlock _HarborNote = new TextBlock("", t => t.Accent);
 
         #endregion
 
@@ -120,6 +129,9 @@ namespace Armada.Tui.Screens.Activity
             Header.AddButton("Export CSV", ExportCsv, "e");
             Header.AddButton("Refresh", Load, "F5");
             AddFixed(Header, w => Header.HeightFor(w));
+            HarborId = route.Query.TryGetValue("harborId", out string? harborId) && !String.IsNullOrWhiteSpace(harborId) ? harborId.Trim() : "";
+            _HarborNote.Translate = false;
+            AddFixed(_HarborNote, w => HarborId.Length > 0 ? 1 : 0);
 
             RangeField.ModalHost = context.Modals;
             RangeField.PickerTitle = "Range";
@@ -181,6 +193,9 @@ namespace Armada.Tui.Screens.Activity
                 commands.Add(new ArmadaCommand(ScreenKey + ".range-" + r.Key, r.Label, CommandMenuEnum.Actions, () => SetRange(captured.Key), r.Key.Substring(0, 1)));
             }
 
+            ArmadaCommand allHarbors = new ArmadaCommand(ScreenKey + ".all-harbors", "Show every Harbor (clear the Harbor filter)", CommandMenuEnum.Actions, ClearHarbor, "x");
+            allHarbors.IsEnabled = () => HarborId.Length > 0;
+            commands.Add(allHarbors);
             commands.Add(new ArmadaCommand(ScreenKey + ".metric", "Toggle metric (total / by token type)", CommandMenuEnum.Actions, () => SetMetric(MetricField.Value == "byType" ? "total" : "byType"), "t"));
             commands.Add(new ArmadaCommand(ScreenKey + ".shape", "Toggle stacked bars / lines", CommandMenuEnum.Actions, () => SetShape(ShapeField.Value == "lines" ? "bars" : "lines"), "b"));
             commands.Add(new ArmadaCommand(ScreenKey + ".copy", "Copy chart", CommandMenuEnum.Actions, CopyTimeChart, "y"));
@@ -197,6 +212,16 @@ namespace Armada.Tui.Screens.Activity
         {
             SelectOption<string>? option = RangeField.Options.FirstOrDefault(o => o.Value == key);
             if (option != null) RangeField.Choose(option);
+        }
+
+        /// <summary>
+        /// Show every Harbor again (drop the <c>?harborId=</c> filter) and reload.
+        /// </summary>
+        public void ClearHarbor()
+        {
+            if (HarborId.Length == 0) return;
+            HarborId = "";
+            Load();
         }
 
         /// <summary>
@@ -231,6 +256,7 @@ namespace Armada.Tui.Screens.Activity
             q.FromUtc = end.AddHours(-r.Hours);
             q.ToUtc = end;
             q.BucketMinutes = r.StepMinutes;
+            q.HarborId = HarborId.Length > 0 ? HarborId : null;
             return q;
         }
 
@@ -319,6 +345,9 @@ namespace Armada.Tui.Screens.Activity
                 new KpiCard("Output", TokenUsageFormat.Tokens(data?.OutputTokens ?? 0), t => t.Success),
                 new KpiCard("Cached", TokenUsageFormat.Tokens(data?.CachedTokens ?? 0), t => t.Warning),
             });
+            _HarborNote.Text = HarborId.Length > 0
+                ? Context.Loc.T("Showing captains run on Harbor {{id}}", LocalizationArgs.Of("id", HarborId)) + "   x " + Context.Loc.T("All Harbors")
+                : "";
             _Note.Text = data != null && data.EstimatedCount > 0
                 ? Context.Loc.T("{{estimated}} of {{total}} records estimated", LocalizationArgs.Of("estimated", data.EstimatedCount, "total", data.RecordCount))
                 : "";

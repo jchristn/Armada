@@ -121,7 +121,8 @@ The Status window:
 
 | Tab | What it does |
 |---|---|
-| **Overview** | This computer (Harbor name and id, connection, MCP URL, Harbor's log file, and the jobs running now), the Admiral server's health, version, uptime, and ports (refreshed every 5 seconds while shown), captains, missions, and voyages, and, when the Admiral is on this machine, the disk used by each item in the Armada data directory. |
+| **Overview** | This computer (Harbor name and id, connection, MCP URL, Harbor's log file, and the jobs running now), **Last 24 hours** (three small charts of this Harbor from the Admiral: jobs, slot usage against the capacity, and link health, each with a one-line caption; **Open Activity** opens the full charts; refreshed every 60 seconds while shown), the Admiral server's health, version, uptime, and ports (refreshed every 5 seconds while shown), captains, missions, and voyages, and, when the Admiral is on this machine, the disk used by each item in the Armada data directory. |
+| **Activity** | This Harbor's charts from the Admiral (see [Harbor metrics](#harbor-metrics)) over the last hour, 24 hours, or 7 days: totals (finished, failed, running, peak slots, share of time connected, median round trip), **Jobs over time** (stacked bars: missions finished and failed, interactive finished and failed), **Slot usage** (peak and average concurrent jobs against a dashed line at the capacity), **Link health** (a strip of connected, reconnecting, and down stretches, disconnects, the reconnects Harbor reported, and the heartbeat round trip), **Launch speed** (per runtime: jobs, median and p95 time to first output and total runtime, and a trend sparkline), and **Token usage** (totals, and tokens by runtime and model, with the five largest named and the rest as Other). Refreshes every 30 seconds while the tab is shown and stops when it is hidden. |
 | **Logs** | Always: **Harbor** (Harbor's own log) and **Jobs on this machine** (the output of every job this Harbor ran, see below). When the Admiral runs on this machine, also its groups: **Admiral: Server log**, Missions, Captains, Diffs, Instructions, Final messages, and Docks. **Open a mission's log** takes a mission (`msn_`) id, or a captain (`cpt_`) id for a local Admiral: the Admiral's log when it is local (it holds the whole transcript), else this machine's job log. The viewer shows the last 256 KB of a file, follows it as it grows, filters by level (continuation lines such as stack traces stay with their line), and finds text. |
 
 The Settings window:
@@ -257,7 +258,24 @@ them): job records that ended, minute samples, and link events older than that a
 link event so its timeline still knows the state it opens with. The 7d range needs at least 7 days of retention.
 
 The dashboard shows the charts on the Harbors page (pick a Harbor below the table) and in a Harbor's detail view, with
-a 1h/24h/7d selector; the mobile app shows them on the Harbor detail screen.
+a 1h/24h/7d selector; the mobile app shows them on the Harbor detail screen; the TUI shows them under the Harbors
+table for the selected Harbor (see [TUI.md](TUI.md)).
+
+**In the Harbor app.** The Status window's Overview shows the last 24 hours in three small charts and its Activity tab
+shows every series (see [the Status window](#managing-harbor-and-armada-from-the-app)). Harbor asks the Admiral for its
+own ID with its own credential (the local Admiral's API key when the Admiral is on this machine, else the access key in
+Settings > General). The charts are drawn by the app itself and follow the light and dark color scheme; hovering a bar,
+point, or stretch shows its time and values, and each chart's accessible name summarizes what it shows (for example
+"Jobs over time, last 24 hours: Missions finished 51, Missions failed 5, ..."). When the Admiral cannot answer, the tab
+says why and keeps the last charts it had:
+
+| Situation | What Harbor says |
+|---|---|
+| 401 | The Admiral did not accept Harbor's credential; set an access key (for a local Admiral: its `settings.json` has no API key Harbor can use). |
+| 403 | The credential may not read this Harbor; use an access key of the Harbor's owner or a tenant administrator. |
+| 404, and the Admiral knows the Harbor | The Admiral needs updating: it is older than this Harbor and has no metrics endpoint. |
+| 404, and the Admiral does not know the Harbor | The Harbor has not connected to this Admiral yet. |
+| No connection, timeout, 502, 503, 504 | Cannot reach the Admiral; the charts load again when it is back. |
 
 ## Dock affinity and routing
 
