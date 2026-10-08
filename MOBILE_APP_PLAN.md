@@ -3,7 +3,7 @@
 > **Type:** implementation plan (work-tracking). Annotate task status and the progress log as you go; keep this
 > document in sync with what actually shipped.
 >
-> **Status:** In progress (W0-W5 done; W6: security fixes, accessibility, tablet, and Android pass done; parity gate and docs remaining)
+> **Status:** Feature-complete (W0-W6 done; parity gate on in CI; store submission is the maintainer's)
 > **Built on:** React Native with Expo SDK 57 (TypeScript, Expo Router), in `src/Armada.Mobile`
 > **Parity baseline:** the web dashboard at `src/Armada.Dashboard` as of 2026-10-07 (the same surfaces the TUI parity
 > manifest tracks: page routes, hub tabs, server-calling API client functions, WebSocket events, Server-page settings)
@@ -181,7 +181,7 @@ selection) are recorded per entry in the manifest notes.
 - [x] W6.2 Tablet and landscape pass (iPad split view, Stage Manager, Android foldables)
 - [x] W6.3 E2E suite green on both platforms; performance on large lists (virtualized lists, pagination)
 - [x] W6.4 Security review (token storage, ATS/cleartext, deep link validation, push payload content)
-- [ ] W6.5 Docs: `docs/MOBILE.md` (install, connect, push setup, building and store submission), README, CHANGELOG
+- [x] W6.5 Docs: `docs/MOBILE.md` (install, connect, push setup, building and store submission), README, CHANGELOG
 
 ## Parity enforcement
 
@@ -215,3 +215,4 @@ Milestone C: push, proxy, quality pass, store-ready builds.
 | 2026-10-08 | W6.3 Android | work/mobile-android | Full Maestro suite 10/10 on Armada_Phone after merging main; W2/W3/W4 screens walked on Android (W2 Android verification done). Fixed: back with the keyboard up in a sheet, back exits list selection, Recents privacy on Android 13+, one-line search placeholders, sticky Save footer in Screen/BottomSheet/FormSheet; Dispatch keeps long text. iOS flow failures root-caused to Maestro not clipping scrolled rows; new e2eFlows lint. Jest 800. Open: FLAG_SECURE decision, /setup deep link, raw server errors in sheets |
 | 2026-10-08 | W6.2 | work/mobile-tablet | Window-width layout: tabs under 600 dp, icon rail 600-1023 dp (toggle remembered), sidebar from 1024; split when the content pane is at least 640 dp; one shared list-detail selection; resize keeps selection, scroll, drafts, sheets; about 26 detail routes open beside their list on wide windows; pane-aware rows; form sheets on tablets; fixed sheets rotating iPhone to portrait and the Ask composer under the keyboard in landscape; Jest 848; Maestro iPad Pro 11, iPad mini, Armada_Tablet, iPhone 18 Pro Max landscape green, phone suite 10/10. Open: iPad hardware-key shortcuts and pointer hover (need a native module) |
 | 2026-10-08 | W6.1 | work/mobile-a11y | Jest a11y audit after every test plus a sweep of all 60 route files (empty and offline); swipe actions moved onto the focused row (they were unreachable on devices); rows speak status, time and counts; menus beside rows; focus to sheet and dialog titles and back to openers; queued announcements for toasts, errors and failed Ask turns; Reduce Motion; control and track contrast tokens with a test of every color pair in 3 themes; Increase Contrast honored in dark mode; 48 dp touch areas; large-text layouts (tab labels, buttons, KPIs, key-value rows, segments, chart); Maestro a11y flow at default size and XXXL / 2.0. Jest 1116; Android flows 01-09 green; iOS green except 02-operations, which fails the same way on main |
+| 2026-10-08 | W6.5 | main | Parity gate: getEntity marked not-applicable (no caller), `--forbid-planned` in CI and `npm run parity:check` (524 implemented, 19 not-applicable, 12 extension, none planned); README "Mobile App" section and project table row; CHANGELOG Unreleased entry; docs/MOBILE.md linked. Not built: share-sheet dispatch and offline reading of the last loaded data (named in the overview, no workstream item) |
