@@ -1,0 +1,11 @@
+# Phone landscape checks (W6.2): scripts/mobile/run-e2e.sh --flows src/Armada.Mobile/e2e/landscape --device
+# "iPhone 18 Pro Max" (or --platform android) against the seeded throwaway Admiral. A phone in landscape is wider than
+# 600 dp, so it gets the icon rail beside the content (with the Dynamic Island side kept clear) instead of the tab
+# bar, and list-detail screens show both panes; rotating back restores the tab bar without losing what was open.
+flows:
+  - "0*.yaml"
+executionOrder:
+  continueOnFailure: false
+  flowsOrder:
+    - 01-landscape-sign-in
+    - 02-phone-landscape

@@ -1,0 +1,66 @@
+# Tablet sign-in: the same steps as the phone flow 01, which asserts the tab bar that tablets replace with the sidebar
+# (or its icon rail). Ends on Ask with the sidebar showing.
+appId: ${APP_ID}
+name: 01-tablet-sign-in
+---
+- launchApp:
+    clearState: true
+    clearKeychain: true
+- setOrientation: PORTRAIT
+- extendedWaitUntil:
+    visible:
+      id: "profile-url"
+    timeout: 60000
+- tapOn:
+    id: "profile-url"
+- runFlow: ../common/dismiss-keyboard-tips.yaml
+- tapOn:
+    id: "profile-url"
+- inputText: ${SERVER_URL}
+- pressKey: Enter
+- tapOn:
+    id: "profile-save"
+- extendedWaitUntil:
+    visible:
+      id: "sign-in-email"
+    timeout: 20000
+- tapOn:
+    id: "sign-in-email"
+- inputText: "admin@armada"
+- pressKey: Enter
+- extendedWaitUntil:
+    visible:
+      id: "sign-in-password"
+    timeout: 20000
+- tapOn:
+    id: "sign-in-password"
+- inputText: "password"
+- pressKey: Enter
+- extendedWaitUntil:
+    visible:
+      id: "password-change-skip"
+    timeout: 20000
+- tapOn:
+    id: "password-change-skip"
+- tapOn:
+    id: "password-skip-confirm-confirm"
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - extendedWaitUntil:
+          visible:
+            id: "push-prompt-later"
+          timeout: 20000
+      - tapOn:
+          id: "push-prompt-later"
+- extendedWaitUntil:
+    visible:
+      id: "ask-screen"
+    timeout: 20000
+# Every tablet width in either orientation gets the sidebar or its rail; the phone tab bar never shows.
+- assertVisible:
+    id: "sidebar"
+- assertNotVisible:
+    id: "tab-ask"
+- takeScreenshot: tablet-portrait-ask

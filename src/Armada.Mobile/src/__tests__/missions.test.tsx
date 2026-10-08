@@ -1,6 +1,7 @@
 import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 import * as client from '@dashboard/api/client';
 import type { Mission, MissionSummary } from '@dashboard/types/models';
+import { StyleSheet } from 'react-native';
 import MissionRoute from '../app/(app)/(work)/missions/[id]';
 import { MissionDetail, missionDetailTab } from '../screens/operations/MissionDetail';
 import { MissionsHubScreen } from '../screens/operations/MissionsHubScreen';
@@ -231,6 +232,15 @@ describe('Mission detail', () => {
     await act(async () => { socket.message({ type: 'mission.changed', data: { id: 'msn_1', status: 'Complete' } }); });
     await waitFor(() => expect(screen.getByText('Landed')).toBeTruthy());
     expect(screen.queryByTestId('mission-action-land')).toBeNull();
+  });
+
+  it('keeps the overview in a readable column when it has the whole window', async () => {
+    mockWindow.width = 1376;
+    mockWindow.height = 1032;
+    api.getMission.mockResolvedValue(mission());
+    await renderScreen(<MissionDetail id="msn_1" />);
+    expect(await screen.findByTestId('mission-detail-title')).toHaveTextContent('Mission msn_1');
+    expect(StyleSheet.flatten(screen.getByTestId('mission-overview').props.contentContainerStyle)).toMatchObject({ maxWidth: 820, alignSelf: 'center' });
   });
 
   it('resolves a review gate with each verdict', async () => {

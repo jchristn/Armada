@@ -1,0 +1,75 @@
+# A phone in landscape: rail instead of the tab bar, Ask's composer with the keyboard up, a sheet, list and detail
+# side by side; rotating back to portrait keeps the open mission (alone, with Back) and restores the tab bar.
+appId: ${APP_ID}
+name: 02-phone-landscape
+---
+- launchApp
+- setOrientation: PORTRAIT
+- extendedWaitUntil:
+    visible:
+      id: "tab-ask"
+    timeout: 30000
+- setOrientation: LANDSCAPE_LEFT
+- extendedWaitUntil:
+    visible:
+      id: "sidebar"
+    timeout: 15000
+- assertNotVisible:
+    id: "tab-ask"
+- extendedWaitUntil:
+    visible:
+      id: "ask-input"
+    timeout: 15000
+- tapOn:
+    id: "ask-input"
+- runFlow: ../common/dismiss-keyboard-tips.yaml
+- inputText: "typed in landscape"
+- waitForAnimationToEnd:
+    timeout: 5000
+# The composer stays above the keyboard.
+- assertVisible:
+    id: "ask-input"
+- assertVisible: "typed in landscape"
+- takeScreenshot: phone-landscape-ask-keyboard
+- hideKeyboard
+- tapOn:
+    id: "ask-open-options"
+- extendedWaitUntil:
+    visible:
+      id: "ask-options"
+    timeout: 10000
+- takeScreenshot: phone-landscape-sheet
+- tapOn:
+    id: "ask-options-close"
+- tapOn:
+    id: "sidebar-/missions"
+- extendedWaitUntil:
+    visible: "Seeded mission one.*"
+    timeout: 15000
+- tapOn: "Seeded mission one.*"
+- extendedWaitUntil:
+    visible:
+      id: "mission-detail-title"
+    timeout: 15000
+- assertVisible:
+    id: "split-view"
+- takeScreenshot: phone-landscape-missions
+- setOrientation: PORTRAIT
+- extendedWaitUntil:
+    visible:
+      id: "tab-ask"
+    timeout: 15000
+# Too narrow for both panes now: the mission stays open on its own, with Back to the list.
+- assertVisible:
+    id: "mission-detail-title"
+- assertVisible:
+    id: "split-view-back"
+- takeScreenshot: phone-portrait-after-rotation
+- tapOn:
+    id: "split-view-back"
+- extendedWaitUntil:
+    visible: "Seeded mission one.*"
+    timeout: 10000
+- tapOn:
+    id: "tab-ask"
+- assertVisible: "typed in landscape"
