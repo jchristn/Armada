@@ -363,6 +363,36 @@ describe('notification taps and actions', () => {
     expect(probe.auth!.sessionToken).toBe('A1');
   });
 
+  it('a sign-out that cannot reach the server retires the device: its pushes are ignored, and the next sign-in removes it first', async () => {
+    await mountApp();
+    await signIn();
+    const deviceId = await registeredDeviceId();
+    pushApi.remove.mockRejectedValueOnce(new client.NetworkError('fetch failed', null));
+    await act(async () => { await probe.auth!.logout(); });
+    expect(probe.auth!.status).toBe('signedOut');
+
+    // Foreground presentation is suppressed for the retired device and kept for others.
+    const isRetired = (native.configurePresentation as jest.Mock).mock.calls[0][0] as (id: string) => Promise<boolean>;
+    expect(await isRetired(deviceId)).toBe(true);
+    expect(await isRetired('pdv_other')).toBe(false);
+
+    // A tap on one of its notifications is not handled at all (no link kept for later, no action).
+    await act(async () => { native.respond({ data: askData(deviceId), actionIdentifier: ACTION_APPROVE }); });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(probe.push!.pending).toBeNull();
+    expect(takePendingLink()).toBeNull();
+    expect(actions.approveAskProposal).not.toHaveBeenCalled();
+
+    // Next sign-in to that server: the retired device is removed before this device registers again.
+    pushApi.remove.mockClear();
+    pushApi.register.mockClear();
+    await act(async () => { await probe.auth!.login('A1', { method: 'token' }); });
+    await waitFor(() => expect(pushApi.register).toHaveBeenCalled());
+    expect(pushApi.remove).toHaveBeenCalledWith(SESSION_A, deviceId);
+    expect(pushApi.remove.mock.invocationCallOrder[0]).toBeLessThan(pushApi.register.mock.invocationCallOrder[0]);
+    expect(await isRetired(deviceId)).toBe(false);
+  });
+
   it('while signed out a tap keeps only the link for after sign-in; an action is dropped', async () => {
     await mountApp();
     await signIn();

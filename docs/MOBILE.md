@@ -78,7 +78,7 @@ up on the device; the labels use the device's own method.
 | Setting | What it does |
 |---|---|
 | **Saved password for Face ID sign-in** | Signs you in with Face ID after you sign out or your session expires, instead of typing the password |
-| **Unlock with Face ID** | Locks the app while you stay signed in: asks for Face ID when Armada opens and after 5 minutes in the background |
+| **Unlock with Face ID** | Locks the app while you stay signed in: asks for Face ID when Armada opens and after 5 minutes in the background (also while the server is unreachable, and before a stored session is resumed after an Armada.Proxy sign-in) |
 
 Saving the password:
 
@@ -147,6 +147,10 @@ The device API (`/api/v1/push/devices`) and the payload format are documented in
 - Notification taps and deep links are validated before they navigate: only known app routes and Armada-shaped
   ids are accepted, and an Approve or Deny on a notification is only sent for a device this app registered with
   that server.
+- Signing out removes this device's push registration from the server. If the server cannot be reached then (or
+  the session had already expired), the device is remembered as retired: its notifications are no longer shown while
+  the app is open or acted on, and the removal is retried the next time you sign in to that server. Notifications
+  delivered while the app is closed can still appear until then.
 - Push device tokens are masked in every API response; a device is managed by its owner, the tenant's admins, and
   global admins, and deleting a user or tenant deletes its devices.
 - Admin-only screens follow the same role rules as the dashboard; secrets such as stored credentials and

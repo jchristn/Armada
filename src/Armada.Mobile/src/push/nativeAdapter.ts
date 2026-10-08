@@ -22,7 +22,8 @@ export interface Subscription {
 /** The native notification surface the push provider needs; tests supply a fake. */
 export interface PushNative {
   environment: PushEnvironment;
-  configurePresentation: () => void;
+  /** `isRetired`: pushes naming a retired (signed-out) device are not presented while the app is open. */
+  configurePresentation: (isRetired: (deviceId: string) => Promise<boolean>) => void;
   registerCategory: (approveLabel: string, denyLabel: string) => Promise<void>;
   ensureChannel: (name: string) => Promise<void>;
   requestPermission: () => Promise<PermissionState>;

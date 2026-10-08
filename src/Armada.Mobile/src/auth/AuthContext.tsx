@@ -243,6 +243,11 @@ export function AuthProvider({ children, now = Date.now, hooks, proxyClientFacto
   const backgroundSinceRef = useRef<number | null>(null);
   const userRef = useRef<WhoAmIResult | null>(null);
   const pendingOfferRef = useRef<PendingOffer | null>(null);
+  /**
+   * The profile whose biometric lock the user satisfied in this foreground (a biometric unlock, or a sign-in with a
+   * password or key just now). Paths that resume a stored session for a biometric profile without it lock instead.
+   */
+  const lockSatisfiedRef = useRef<string | null>(null);
 
   const activeProfile = useMemo(
     () => profileState.profiles.find((p) => p.id === profileState.activeId) ?? null,
@@ -342,8 +347,23 @@ export function AuthProvider({ children, now = Date.now, hooks, proxyClientFacto
     }
   }, [setSession]);
 
+  /**
+   * Resume the stored Admiral session after a proxy sign-in or instance pick. The proxy password is shared, so it
+   * does not stand in for the profile's biometric lock: a stored Admiral token of a biometric profile is locked
+   * until the user unlocks (or signs in to the Admiral again).
+   */
+  const enterAdmiralChecked = useCallback(async (profile: ServerProfile) => {
+    if (profile.biometricUnlock && lockSatisfiedRef.current !== profile.id && await readToken(profile.id)) {
+      setProxyStage(null);
+      setStatus('locked');
+      return;
+    }
+    await enterAdmiral(profile);
+  }, [enterAdmiral]);
+
   /** The proxy session ended: forget it (the Admiral token stays, so a proxy re-sign-in resumes the session). */
   const proxySessionEnded = useCallback(async (profile: ServerProfile) => {
+    lockSatisfiedRef.current = null;
     clearSession();
     await deleteProxyToken(profile.id);
     setProxyToken(null);
@@ -431,6 +451,7 @@ export function AuthProvider({ children, now = Date.now, hooks, proxyClientFacto
         : token ? sessionFor(profile, token, proxyTokenRef.current) : await storedSessionFor(profile);
       await runHook(() => hooksRef.current?.onSessionEnding?.(profile, session) ?? Promise.resolve());
     }
+    lockSatisfiedRef.current = null;
     clearSession();
     clearOffer();
     setProxyStage(profile?.kind === 'Proxy' ? (proxyTokenRef.current ? 'admiral' : 'portal') : null);
@@ -512,8 +533,12 @@ export function AuthProvider({ children, now = Date.now, hooks, proxyClientFacto
       const since = backgroundSinceRef.current;
       backgroundSinceRef.current = null;
       const profile = activeProfileRef.current;
-      if (since === null || !profile?.biometricUnlock || statusRef.current !== 'signedIn') return;
-      if (now() - since >= LOCK_AFTER_BACKGROUND_MS) {
+      if (since === null || now() - since < LOCK_AFTER_BACKGROUND_MS) return;
+      // A long absence ends any earlier biometric check, whatever the state.
+      lockSatisfiedRef.current = null;
+      if (!profile?.biometricUnlock) return;
+      // 'unreachable' keeps the stored session too: lock it, or Retry would resume it without a check.
+      if (statusRef.current === 'signedIn' || statusRef.current === 'unreachable') {
         clearSession();
         setStatus('locked');
       }
@@ -568,6 +593,8 @@ export function AuthProvider({ children, now = Date.now, hooks, proxyClientFacto
     setUser(me);
     setProxyStage(null);
     setSignedOutByUser(false);
+    // The user just proved who they are with a password or key: no biometric prompt on top in this foreground.
+    lockSatisfiedRef.current = profile.id;
     setStatus('signedIn');
   }, [addToOffer, persist, setSession]);
 
@@ -646,13 +673,16 @@ export function AuthProvider({ children, now = Date.now, hooks, proxyClientFacto
   const unlock = useCallback(async (promptMessage: string, cancelLabel: string) => {
     const ok = await authenticateBiometric(promptMessage, cancelLabel);
     if (!ok) return false;
+    lockSatisfiedRef.current = activeProfileRef.current?.id ?? null;
     await restore(activeProfileRef.current, true);
     return true;
   }, [restore]);
 
   const retry = useCallback(async () => {
     setStatus('loading');
-    await restore(activeProfileRef.current, true);
+    const profile = activeProfileRef.current;
+    // Skip the lock only when it was satisfied in this foreground; otherwise a biometric profile goes to 'locked'.
+    await restore(profile, !!profile && lockSatisfiedRef.current === profile.id);
   }, [restore]);
 
   const saveProfile = useCallback(async (draft: ServerProfileDraft, id?: string) => {
@@ -704,6 +734,7 @@ export function AuthProvider({ children, now = Date.now, hooks, proxyClientFacto
     const next = { ...state, activeId: id };
     await persist(next);
     setSignedOutByUser(false);
+    lockSatisfiedRef.current = null;
     setStatus('loading');
     await restore(next.profiles.find((p) => p.id === id) ?? null, false);
   }, [persist, restore]);
@@ -744,9 +775,10 @@ export function AuthProvider({ children, now = Date.now, hooks, proxyClientFacto
       setStatus('signedOut');
       return;
     }
-    // Same instance as before: a still-valid Admiral token resumes the session without a second sign-in.
-    await enterAdmiral(profile);
-  }, [addToOffer, enterAdmiral, forgetSavedPassword, patchProfile, requireProxyProfile, setProxyToken]);
+    // Same instance as before: a still-valid Admiral token resumes the session without a second sign-in (after the
+    // biometric check for a profile that has one).
+    await enterAdmiralChecked(profile);
+  }, [addToOffer, enterAdmiralChecked, forgetSavedPassword, patchProfile, requireProxyProfile, setProxyToken]);
 
   const proxyListInstances = useCallback(async () => {
     const profile = requireProxyProfile();
@@ -782,8 +814,8 @@ export function AuthProvider({ children, now = Date.now, hooks, proxyClientFacto
       const state = profileStateRef.current;
       await persist({ ...state, profiles: state.profiles.map((p) => (p.id === profile.id ? updated : p)) });
     }
-    await enterAdmiral(updated);
-  }, [enterAdmiral, persist, proxySessionEnded, requireProxyProfile]);
+    await enterAdmiralChecked(updated);
+  }, [enterAdmiralChecked, persist, proxySessionEnded, requireProxyProfile]);
 
   const proxyChangeInstance = useCallback(async () => {
     const profile = requireProxyProfile();

@@ -1,7 +1,9 @@
-import { ApiError } from '@dashboard/api/client';
+import { ApiError, NetworkError } from '@dashboard/api/client';
 import type { ServerSession } from '../api/serverSession';
 import { createPushApi, type PushApi } from '../push/pushApi';
 import {
+  flushRetiredDevices,
+  isRetiredDevice,
   profileForDevice,
   registerDevice,
   reRegisterProfiles,
@@ -12,19 +14,23 @@ import {
   type RegistrationDeps,
   type TokenResult,
 } from '../push/registration';
-import type { RegistrationStore } from '../push/registrationStore';
+import type { RegistrationStore, RetiredDevice } from '../push/registrationStore';
 import { PUSH_CATEGORIES, type PushCategory, type PushDevice, type PushRegistrationRecord } from '../push/types';
 
 const SESSION: ServerSession = { baseUrl: 'https://admiral.example', token: 'A1', headers: null };
 
-function memoryStore(): RegistrationStore & { data: Map<string, PushRegistrationRecord> } {
+function memoryStore(): RegistrationStore & { data: Map<string, PushRegistrationRecord>; retired: RetiredDevice[] } {
   const data = new Map<string, PushRegistrationRecord>();
-  return {
+  const store = {
     data,
-    read: async (id) => data.get(id) ?? null,
-    write: async (id, record) => { data.set(id, record); },
-    remove: async (id) => { data.delete(id); },
+    retired: [] as RetiredDevice[],
+    read: async (id: string) => data.get(id) ?? null,
+    write: async (id: string, record: PushRegistrationRecord) => { data.set(id, record); },
+    remove: async (id: string) => { data.delete(id); },
+    readRetired: async () => [...store.retired],
+    writeRetired: async (list: RetiredDevice[]) => { store.retired = [...list]; },
   };
+  return store;
 }
 
 let deviceCounter = 0;
@@ -152,6 +158,56 @@ describe('push registration lifecycle', () => {
     api.remove.mockRejectedValueOnce(new ApiError('Not found', 404, null));
     await unregisterDevice(deps, 'prf_a', SESSION);
     expect(store.data.has('prf_a')).toBe(false);
+  });
+
+  it('a sign-out that cannot reach the server retires the device; the next contact removes it', async () => {
+    const { deps, api, store } = setup();
+    await registerDevice(deps, 'prf_a', SESSION, 'usr_1');
+    const id = store.data.get('prf_a')!.deviceId;
+    api.remove.mockRejectedValueOnce(new NetworkError('fetch failed', null));
+    await unregisterDevice(deps, 'prf_a', SESSION);
+    expect(store.data.has('prf_a')).toBe(false);
+    expect(store.retired).toEqual([{ profileId: 'prf_a', deviceId: id }]);
+    expect(await isRetiredDevice(store, id)).toBe(true);
+
+    // Still unreachable: the removal stays queued.
+    api.remove.mockRejectedValueOnce(new NetworkError('fetch failed', null));
+    await flushRetiredDevices(deps, 'prf_a', SESSION);
+    expect(store.retired).toHaveLength(1);
+
+    api.remove.mockClear();
+    await flushRetiredDevices(deps, 'prf_b', SESSION);
+    expect(api.remove).not.toHaveBeenCalled();
+    await flushRetiredDevices(deps, 'prf_a', SESSION);
+    expect(api.remove).toHaveBeenCalledWith(SESSION, id);
+    expect(store.retired).toEqual([]);
+    expect(await isRetiredDevice(store, id)).toBe(false);
+  });
+
+  it('a sign-out after the token was rejected (no session) retires the device too; 404 does not', async () => {
+    const { deps, api, store } = setup();
+    await registerDevice(deps, 'prf_a', SESSION, 'usr_1');
+    const id = store.data.get('prf_a')!.deviceId;
+    await unregisterDevice(deps, 'prf_a', null);
+    expect(store.retired).toEqual([{ profileId: 'prf_a', deviceId: id }]);
+    api.remove.mockRejectedValueOnce(new ApiError('Not found', 404, null));
+    await flushRetiredDevices(deps, 'prf_a', SESSION);
+    expect(store.retired).toEqual([]);
+
+    await registerDevice(deps, 'prf_a', SESSION, 'usr_1');
+    api.remove.mockRejectedValueOnce(new ApiError('Not found', 404, null));
+    await unregisterDevice(deps, 'prf_a', SESSION);
+    expect(store.retired).toEqual([]);
+  });
+
+  it('a re-registration that gets a retired row back takes it off the queue', async () => {
+    const { deps, api, store } = setup();
+    await registerDevice(deps, 'prf_a', SESSION, 'usr_1');
+    const id = store.data.get('prf_a')!.deviceId;
+    await unregisterDevice(deps, 'prf_a', null);
+    api.register.mockResolvedValueOnce({ id, platform: 'Ios', expoPushToken: 'x', categories: [...PUSH_CATEGORIES], active: true } as PushDevice);
+    await registerDevice(deps, 'prf_a', SESSION, 'usr_1');
+    expect(store.retired).toEqual([]);
   });
 
   it('category changes PUT to the stored device', async () => {
