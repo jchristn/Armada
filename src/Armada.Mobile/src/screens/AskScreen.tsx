@@ -14,11 +14,11 @@ import { useAsk } from '../ask/AskContext';
 import { useAskConversation } from '../ask/useAskConversation';
 import { HeaderActions } from '../components/app/HeaderActions';
 import { Composer, type ComposerHandle } from '../components/ask/Composer';
-import { ConversationOptionsSheet } from '../components/ask/ConversationOptionsSheet';
+import { ConversationOptionsSheet, captainLabel } from '../components/ask/ConversationOptionsSheet';
 import { MessageList, type MessageListHandle } from '../components/ask/MessageList';
 import { ThreadList } from '../components/ask/ThreadList';
 import { WorkStrip } from '../components/ask/WorkStrip';
-import { AppText, Banner, BottomSheet, Button, ConfirmDialog, ErrorState, IconButton, LoadingState, SplitView, TextField } from '../components/ui';
+import { AppText, Banner, BottomSheet, Button, ConfirmDialog, ErrorState, Icon, IconButton, LoadingState, SplitView, TextField } from '../components/ui';
 import { useLocale } from '../i18n/LocaleContext';
 import { useLayout } from '../navigation/useLayout';
 import { useNotifications } from '../notifications/NotificationContext';
@@ -187,6 +187,21 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
 
   const conversationPane = (
     <KeyboardAvoidingView style={styles.fill} behavior="padding" keyboardVerticalOffset={headerHeight}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={t('Captain: {{name}}. Change captain', { name: activeCaptain ? captainLabel(activeCaptain) : t('None') })}
+        disabled={conv.turnActive}
+        onPress={() => setOptionsOpen(true)}
+        style={[styles.captainBar, { borderBottomColor: colors.border, backgroundColor: colors.surface }]}
+        testID="ask-captain-bar"
+      >
+        <Icon name="person-circle-outline" size={18} color="textMuted" />
+        <AppText variant="caption" muted>{t('Captain')}</AppText>
+        <AppText variant="body" numberOfLines={1} style={styles.fill} testID="ask-captain-bar-name">
+          {activeCaptain ? captainLabel(activeCaptain) : t('None (quick actions only)')}
+        </AppText>
+        <Icon name="chevron-down" size={16} color="textMuted" />
+      </Pressable>
       {ungated ? (
         <Banner tone="warning" title={t('Actions from this captain run without approval cards.')} message={t('This runtime uses its own Armada connection, so anything it does through Armada tools happens immediately.')} testID="ask-ungated-note" />
       ) : null}
@@ -383,5 +398,6 @@ const styles = StyleSheet.create({
   quickRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: spacing.sm },
   quickButton: { marginBottom: 0 },
   headerRow: { flexDirection: 'row', alignItems: 'center' },
+  captainBar: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, minHeight: 44 },
   modalHead: { flexDirection: 'row', alignItems: 'center', paddingLeft: spacing.lg, paddingRight: spacing.xs, borderBottomWidth: StyleSheet.hairlineWidth },
 });
