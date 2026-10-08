@@ -1,93 +1,84 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:Armada.Harbor"
         x:Class="Armada.Harbor.MainWindow"
-        Width="713" Height="660"
-        MinWidth="540" MinHeight="520"
+        Width="720" Height="700"
+        MinWidth="560" MinHeight="560"
         CanResize="True"
         Icon="/Assets/logo.png"
         Title="Armada Harbor">
   <DockPanel>
   <!-- Draws the window's menu (set by App) on Windows and Linux; hides itself on macOS, where the menu is in the menu bar. -->
   <NativeMenuBar DockPanel.Dock="Top" />
-  <DockPanel Margin="18">
+  <Grid RowDefinitions="Auto,Auto,Auto,*" RowSpacing="14" Margin="20,14,20,20">
 
-    <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto">
-      <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="14">
-        <Image Source="/Assets/logo.png" Width="42" Height="42" VerticalAlignment="Center" />
-        <StackPanel VerticalAlignment="Center">
-          <TextBlock Text="Armada Harbor" FontSize="22" FontWeight="Bold" />
-          <TextBlock Text="Host runner for captains, git, and worktrees"
-                     FontSize="12" Foreground="{DynamicResource HarborSecondaryTextBrush}" TextWrapping="Wrap" MaxWidth="460" />
-        </StackPanel>
+    <!-- Who this is, and the secondary places to go. -->
+    <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto">
+      <Image Grid.Column="0" Source="/Assets/logo.png" Width="30" Height="30" VerticalAlignment="Center" />
+      <StackPanel Grid.Column="1" Margin="10,0,8,0" VerticalAlignment="Center" Spacing="0">
+        <TextBlock Text="Armada Harbor" FontSize="15" FontWeight="SemiBold" />
+        <TextBlock x:Name="MachineText" Classes="dim" FontSize="12" Text="Runs Armada's agents on this computer"
+                   TextTrimming="CharacterEllipsis" />
       </StackPanel>
-      <StackPanel Grid.Column="1" VerticalAlignment="Top" Spacing="2">
-        <TextBlock Text="Appearance" FontSize="11" Foreground="{DynamicResource HarborSecondaryTextBrush}" />
-        <ComboBox x:Name="AppearanceBox" Width="104" SelectionChanged="OnAppearanceChanged"
-                  ToolTip.Tip="Color scheme: follow the system, or always light or dark">
-          <ComboBoxItem Content="System" />
-          <ComboBoxItem Content="Light" />
-          <ComboBoxItem Content="Dark" />
-        </ComboBox>
+      <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+        <Button Classes="subtle" Content="Dashboard" Click="OnOpenDashboardClick"
+                ToolTip.Tip="Open the Armada dashboard in your browser" />
+        <Button Classes="subtle" Content="Status" Click="OnStatusClick"
+                ToolTip.Tip="Server health, workload, disk use, and logs" />
+        <Button Classes="subtle" Content="Settings" Click="OnSettingsClick"
+                ToolTip.Tip="This computer's Harbor settings and the Admiral server's settings" />
       </StackPanel>
     </Grid>
 
-    <WrapPanel DockPanel.Dock="Bottom" Orientation="Horizontal" ItemSpacing="10" LineSpacing="8" Margin="0,14,0,0">
-      <Button x:Name="ConnectButton" Content="Connect" Click="OnConnectClick" />
-      <Button x:Name="DisconnectButton" Content="Disconnect" Click="OnDisconnectClick" IsEnabled="False" />
-      <Button Content="Dashboard" Click="OnOpenDashboardClick" />
-      <Button Content="Status" Click="OnStatusClick" ToolTip.Tip="Harbor, link, and Admiral status" />
-      <Button Content="Settings" Click="OnSettingsClick" ToolTip.Tip="Harbor and Armada settings" />
-      <Button Content="Logs" Click="OnLogsClick" ToolTip.Tip="Browse and follow Armada and Harbor logs" />
-    </WrapPanel>
-
-    <Grid RowDefinitions="Auto,Auto,Auto,*" Margin="0,18,0,0">
-
-      <Grid Grid.Row="0" ColumnDefinitions="96,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="6">
-        <TextBlock Grid.Row="0" Grid.Column="0" Text="Harbor" FontWeight="SemiBold" />
-        <SelectableTextBlock Grid.Row="0" Grid.Column="1" x:Name="HarborNameText" Text="-" TextWrapping="Wrap"
-                             Foreground="{DynamicResource HarborSecondaryTextBrush}" />
-        <TextBlock Grid.Row="1" Grid.Column="0" Text="Server" FontWeight="SemiBold" />
-        <SelectableTextBlock Grid.Row="1" Grid.Column="1" x:Name="ServerText" Text="-" TextWrapping="Wrap"
-                             Foreground="{DynamicResource HarborSecondaryTextBrush}" />
-        <TextBlock Grid.Row="2" Grid.Column="0" Text="MCP URL" FontWeight="SemiBold" />
-        <SelectableTextBlock Grid.Row="2" Grid.Column="1" x:Name="McpText" Text="-" TextWrapping="Wrap"
-                             Foreground="{DynamicResource HarborSecondaryTextBrush}" />
-      </Grid>
-
-      <Border Grid.Row="1" BorderThickness="0,1,0,0" BorderBrush="{DynamicResource HarborBorderBrush}"
-              Margin="0,14,0,0" Padding="0,14,0,0">
-        <StackPanel Orientation="Horizontal" Spacing="8">
-          <Ellipse x:Name="StatusDot" Width="11" Height="11" VerticalAlignment="Center" Fill="Gray" />
-          <TextBlock x:Name="StatusText" Text="Idle" FontWeight="SemiBold" VerticalAlignment="Center" />
+    <!-- The connection: the main thing this window is about. -->
+    <Border Grid.Row="1" Classes="card" Padding="20,18">
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+        <StackPanel Grid.Column="0" Spacing="4">
+          <StackPanel Orientation="Horizontal" Spacing="12">
+            <Ellipse x:Name="StatusDot" Width="14" Height="14" VerticalAlignment="Center"
+                     Fill="{DynamicResource HarborIdleBrush}" />
+            <TextBlock x:Name="StatusText" Text="Disconnected" FontSize="26" FontWeight="SemiBold"
+                       VerticalAlignment="Center" />
+          </StackPanel>
+          <SelectableTextBlock x:Name="ServerText" Classes="dim" FontSize="14" Text="-" TextWrapping="Wrap" />
+          <SelectableTextBlock x:Name="DetailText" Classes="dim" FontSize="12" TextWrapping="Wrap" MaxLines="4"
+                               Margin="0,6,0,0"
+                               Text="Not connected. Connect to start taking work from the Admiral." />
         </StackPanel>
-      </Border>
+        <Button Grid.Column="1" x:Name="ConnectButton" Classes="accent" Content="Connect"
+                MinWidth="128" MinHeight="38" FontSize="15" Padding="18,6" VerticalAlignment="Top"
+                HorizontalContentAlignment="Center" VerticalContentAlignment="Center" Click="OnConnectToggleClick" />
+      </Grid>
+    </Border>
 
-      <Border Grid.Row="2" BorderBrush="{DynamicResource HarborBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="10" Margin="0,10,0,0" MaxHeight="120">
-        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-          <SelectableTextBlock x:Name="DetailText" TextWrapping="Wrap"
-                               Text="Not connected. Click Connect to dial the Admiral." />
-        </ScrollViewer>
-      </Border>
-
-      <Grid Grid.Row="3" RowDefinitions="Auto,*" Margin="0,16,0,0">
-        <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto">
-          <TextBlock Grid.Column="0" Text="Activity Log" FontWeight="SemiBold" VerticalAlignment="Center" />
-          <Button Grid.Column="1" Content="Copy" Click="OnCopyLogClick" Margin="0,0,6,0" />
-          <Button Grid.Column="2" Content="Clear" Click="OnClearLogClick" />
+    <!-- What is running on this computer right now. -->
+    <Border Grid.Row="2" Classes="card">
+      <StackPanel Spacing="8">
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBlock Grid.Column="0" Classes="title" Text="Running now" VerticalAlignment="Center" />
+          <TextBlock Grid.Column="1" x:Name="JobsCountText" Classes="dim" FontSize="12" VerticalAlignment="Center" />
         </Grid>
-        <Border Grid.Row="1" BorderBrush="{DynamicResource HarborBorderBrush}" BorderThickness="1" CornerRadius="6" Margin="0,6,0,0">
-          <TextBox x:Name="LogBox" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap"
-                   FontFamily="Consolas, Menlo, monospace" FontSize="12"
-                   Background="Transparent" BorderThickness="0"
-                   Foreground="{DynamicResource HarborSecondaryTextBrush}"
-                   VerticalContentAlignment="Top"
-                   VerticalAlignment="Stretch" HorizontalAlignment="Stretch"
-                   Text="" />
-        </Border>
+        <local:JobListView x:Name="JobsList" MaxHeight="168" />
+      </StackPanel>
+    </Border>
+
+    <!-- What the link has been doing. -->
+    <Border Grid.Row="3" Classes="card">
+      <Grid RowDefinitions="Auto,*" RowSpacing="8">
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="6">
+          <TextBlock Grid.Column="0" Classes="title" Text="Activity" VerticalAlignment="Center" />
+          <Button Grid.Column="1" Content="Copy" Click="OnCopyLogClick" ToolTip.Tip="Copy the activity to the clipboard" />
+          <Button Grid.Column="2" Content="Clear" Click="OnClearLogClick" ToolTip.Tip="Clear this list (the log files are kept)" />
+          <Button Grid.Column="3" Content="All Logs" Click="OnLogsClick" ToolTip.Tip="Harbor's log, the logs of jobs run here, and the Admiral's logs" />
+        </Grid>
+        <TextBox Grid.Row="1" x:Name="LogBox" Classes="mono" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap"
+                 Foreground="{DynamicResource HarborSecondaryTextBrush}"
+                 VerticalContentAlignment="Top"
+                 VerticalAlignment="Stretch" HorizontalAlignment="Stretch"
+                 Text="" />
       </Grid>
+    </Border>
 
-    </Grid>
-
-  </DockPanel>
+  </Grid>
   </DockPanel>
 </Window>

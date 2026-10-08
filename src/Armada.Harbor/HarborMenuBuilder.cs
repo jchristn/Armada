@@ -2,14 +2,15 @@ namespace Armada.Harbor
 {
     using System;
     using System.Collections.Generic;
+    using Armada.Core.Hosting;
     using Avalonia.Controls;
     using Avalonia.Input;
 
     /// <summary>
-    /// Builds the Harbor menus from one definition: the macOS application menu, the window menu (the macOS menu bar,
-    /// or the in-window menu bar on Windows and Linux), and the tray menu. A native menu item can belong to only one
-    /// menu, so each call builds fresh items; the builder remembers them all so <see cref="Refresh"/> can update
-    /// enabled state and the tray status line everywhere at once.
+    /// Builds the native Harbor menus from one definition (<see cref="HarborMenuLayout"/>): the macOS application menu,
+    /// the window menu (the macOS menu bar, or the in-window menu bar on Windows and Linux), and the tray menu. A native
+    /// menu item can belong to only one menu, so each call builds fresh items; the builder remembers them all so
+    /// <see cref="Refresh"/> can update enabled state and the tray status line everywhere at once.
     /// </summary>
     public class HarborMenuBuilder
     {
@@ -20,7 +21,6 @@ namespace Armada.Harbor
         private readonly List<NativeMenuItem> _CommandItems = new List<NativeMenuItem>();
         private readonly Dictionary<NativeMenuItem, HarborMenuCommandEnum> _Commands = new Dictionary<NativeMenuItem, HarborMenuCommandEnum>();
         private readonly List<NativeMenuItem> _StatusItems = new List<NativeMenuItem>();
-        private bool _BuildingTray = false;
 
         #endregion
 
@@ -47,53 +47,25 @@ namespace Armada.Harbor
         /// <returns>The menu.</returns>
         public NativeMenu BuildApplicationMenu()
         {
-            NativeMenu menu = new NativeMenu();
-            menu.Items.Add(Item("About Armada Harbor", HarborMenuCommandEnum.About));
-            menu.Items.Add(new NativeMenuItemSeparator());
-            menu.Items.Add(Item("Settings...", HarborMenuCommandEnum.Settings, Key.OemComma));
-            return menu;
+            return Build(HarborMenuLayout.ApplicationMenu(), false);
         }
 
         /// <summary>
-        /// The window's menu bar: Harbor, Armada, Logs, (Window on macOS), Help. On Windows and Linux, where there is
-        /// no application menu, Settings and Quit go in the Harbor menu and About goes in Help.
+        /// The window's menu bar (see <see cref="HarborMenuLayout.WindowMenu"/>).
         /// </summary>
         /// <returns>The menu.</returns>
         public NativeMenu BuildWindowMenu()
         {
-            NativeMenu menu = new NativeMenu();
-            menu.Items.Add(Submenu("Harbor", BuildHarborMenu(!_IsMacOS)));
-            menu.Items.Add(Submenu("Armada", BuildArmadaMenu()));
-            menu.Items.Add(Submenu("Logs", BuildLogsMenu()));
-            if (_IsMacOS) menu.Items.Add(Submenu("Window", BuildWindowControlMenu()));
-            menu.Items.Add(Submenu("Help", BuildHelpMenu(!_IsMacOS)));
-            return menu;
+            return Build(HarborMenuLayout.WindowMenu(_IsMacOS), false);
         }
 
         /// <summary>
-        /// The tray (menu bar extra) menu: link status, the window, the Harbor, Armada, and Logs submenus, About, and
-        /// Quit.
+        /// The tray (menu bar extra) menu (see <see cref="HarborMenuLayout.TrayMenu"/>).
         /// </summary>
         /// <returns>The menu.</returns>
         public NativeMenu BuildTrayMenu()
         {
-            NativeMenu menu = new NativeMenu();
-            _BuildingTray = true;
-
-            NativeMenuItem status = new NativeMenuItem { Header = _Host.StatusLine, IsEnabled = false };
-            _StatusItems.Add(status);
-            menu.Items.Add(status);
-            menu.Items.Add(new NativeMenuItemSeparator());
-
-            menu.Items.Add(Item("Open Armada Harbor", HarborMenuCommandEnum.ShowWindow));
-            menu.Items.Add(Submenu("Harbor", BuildHarborMenu(false)));
-            menu.Items.Add(Submenu("Armada", BuildArmadaMenu()));
-            menu.Items.Add(Submenu("Logs", BuildLogsMenu()));
-            menu.Items.Add(new NativeMenuItemSeparator());
-            menu.Items.Add(Item("About Armada Harbor", HarborMenuCommandEnum.About));
-            menu.Items.Add(Item("Quit Armada Harbor", HarborMenuCommandEnum.Quit));
-            _BuildingTray = false;
-            return menu;
+            return Build(HarborMenuLayout.TrayMenu(), true);
         }
 
         /// <summary>
@@ -138,85 +110,58 @@ namespace Armada.Harbor
 
         #region Private-Methods
 
-        private NativeMenu BuildHarborMenu(bool includeAppItems)
+        private NativeMenu Build(List<HarborMenuEntry> entries, bool tray)
         {
             NativeMenu menu = new NativeMenu();
-            menu.Items.Add(Item("Connect", HarborMenuCommandEnum.Connect));
-            menu.Items.Add(Item("Disconnect", HarborMenuCommandEnum.Disconnect));
-            menu.Items.Add(Item("Reconnect", HarborMenuCommandEnum.Reconnect, Key.R));
-            menu.Items.Add(new NativeMenuItemSeparator());
-            menu.Items.Add(Item("Harbor Settings...", HarborMenuCommandEnum.HarborSettings));
-            if (includeAppItems) menu.Items.Add(Item("Settings...", HarborMenuCommandEnum.Settings, Key.OemComma));
-            menu.Items.Add(new NativeMenuItemSeparator());
-            menu.Items.Add(Item("Copy Harbor ID", HarborMenuCommandEnum.CopyHarborId));
-            menu.Items.Add(Item("Copy MCP URL", HarborMenuCommandEnum.CopyMcpUrl));
-            menu.Items.Add(Item("Open Harbor Folder", HarborMenuCommandEnum.OpenHarborFolder));
-            if (includeAppItems)
+            foreach (HarborMenuEntry entry in entries)
             {
-                menu.Items.Add(new NativeMenuItemSeparator());
-                menu.Items.Add(Item("Quit", HarborMenuCommandEnum.Quit, Key.Q));
+                if (entry.IsSeparator)
+                {
+                    menu.Items.Add(new NativeMenuItemSeparator());
+                }
+                else if (entry.IsStatusLine)
+                {
+                    NativeMenuItem status = new NativeMenuItem { Header = _Host.StatusLine, IsEnabled = false };
+                    _StatusItems.Add(status);
+                    menu.Items.Add(status);
+                }
+                else if (entry.Children != null)
+                {
+                    menu.Items.Add(new NativeMenuItem { Header = entry.Header, Menu = Build(entry.Children, tray) });
+                }
+                else if (entry.Command.HasValue)
+                {
+                    // Tray items get no shortcut: shortcuts work only while a Harbor window is focused.
+                    menu.Items.Add(Item(entry.Header, entry.Command.Value, tray ? HarborMenuKeyEnum.None : entry.Key));
+                }
             }
 
             return menu;
         }
 
-        private NativeMenu BuildArmadaMenu()
+        private static Key? ToKey(HarborMenuKeyEnum key)
         {
-            NativeMenu menu = new NativeMenu();
-            menu.Items.Add(Item("Status...", HarborMenuCommandEnum.Status));
-            menu.Items.Add(new NativeMenuItemSeparator());
-            menu.Items.Add(Item("Armada Settings...", HarborMenuCommandEnum.ArmadaSettings));
-            menu.Items.Add(Item("TUI Settings...", HarborMenuCommandEnum.TuiSettings));
-            menu.Items.Add(Item("Backups...", HarborMenuCommandEnum.Backups));
-            menu.Items.Add(new NativeMenuItemSeparator());
-            menu.Items.Add(Item("Open Data Folder", HarborMenuCommandEnum.OpenDataFolder));
-            menu.Items.Add(Item("Open Dashboard", HarborMenuCommandEnum.OpenDashboard, Key.D));
-            return menu;
-        }
-
-        private NativeMenu BuildLogsMenu()
-        {
-            NativeMenu menu = new NativeMenu();
-            menu.Items.Add(Item("Admiral Log (Today)", HarborMenuCommandEnum.OpenAdmiralLog, Key.L));
-            menu.Items.Add(Item("Harbor Log", HarborMenuCommandEnum.OpenHarborLog));
-            menu.Items.Add(Item("Mission Log...", HarborMenuCommandEnum.MissionLog));
-            menu.Items.Add(Item("Log Browser...", HarborMenuCommandEnum.LogBrowser));
-            menu.Items.Add(new NativeMenuItemSeparator());
-            menu.Items.Add(Item("Open Logs Folder", HarborMenuCommandEnum.OpenLogsFolder));
-            return menu;
-        }
-
-        private NativeMenu BuildWindowControlMenu()
-        {
-            NativeMenu menu = new NativeMenu();
-            menu.Items.Add(Item("Minimize", HarborMenuCommandEnum.MinimizeWindow, Key.M));
-            menu.Items.Add(Item("Close", HarborMenuCommandEnum.CloseWindow, Key.W));
-            menu.Items.Add(new NativeMenuItemSeparator());
-            menu.Items.Add(Item("Armada Harbor", HarborMenuCommandEnum.ShowWindow));
-            return menu;
-        }
-
-        private NativeMenu BuildHelpMenu(bool includeAbout)
-        {
-            NativeMenu menu = new NativeMenu();
-            menu.Items.Add(Item("Armada Documentation", HarborMenuCommandEnum.Documentation));
-            menu.Items.Add(Item("Copy Diagnostics", HarborMenuCommandEnum.CopyDiagnostics));
-            if (includeAbout)
+            switch (key)
             {
-                menu.Items.Add(new NativeMenuItemSeparator());
-                menu.Items.Add(Item("About Armada Harbor", HarborMenuCommandEnum.About));
+                case HarborMenuKeyEnum.Comma: return Key.OemComma;
+                case HarborMenuKeyEnum.D: return Key.D;
+                case HarborMenuKeyEnum.I: return Key.I;
+                case HarborMenuKeyEnum.L: return Key.L;
+                case HarborMenuKeyEnum.M: return Key.M;
+                case HarborMenuKeyEnum.Q: return Key.Q;
+                case HarborMenuKeyEnum.R: return Key.R;
+                case HarborMenuKeyEnum.W: return Key.W;
+                default: return null;
             }
-
-            return menu;
         }
 
-        private NativeMenuItem Item(string header, HarborMenuCommandEnum command, Key? key = null)
+        private NativeMenuItem Item(string header, HarborMenuCommandEnum command, HarborMenuKeyEnum shortcut)
         {
             NativeMenuItem item = new NativeMenuItem { Header = header };
-            if (key.HasValue && !_BuildingTray)
+            Key? key = ToKey(shortcut);
+            if (key.HasValue)
             {
-                // Command on macOS, Control elsewhere. Tray items get none: the shortcuts work only while a Harbor
-                // window is focused, so showing them in the tray would mislead.
+                // Command on macOS, Control elsewhere.
                 item.Gesture = new KeyGesture(key.Value, _IsMacOS ? KeyModifiers.Meta : KeyModifiers.Control);
             }
 
@@ -230,11 +175,6 @@ namespace Armada.Harbor
             item.IsEnabled = _Host.CanExecute(command);
             if (!item.IsEnabled) item.ToolTip = _Host.DisabledReason(command);
             return item;
-        }
-
-        private static NativeMenuItem Submenu(string header, NativeMenu menu)
-        {
-            return new NativeMenuItem { Header = header, Menu = menu };
         }
 
         #endregion

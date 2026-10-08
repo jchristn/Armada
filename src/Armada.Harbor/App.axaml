@@ -4,26 +4,201 @@
              Name="Armada Harbor">
   <Application.Resources>
     <ResourceDictionary>
+      <!-- Design tokens, matching the Armada dashboard (src/Armada.Dashboard/src/index.css): page, card, hover, border,
+           text, dim text, accent, status colors, inputs, and the 8px radius. Fluent's own keys are overridden below so
+           stock controls (accent buttons, inputs, tabs) pick up the same colors. -->
+      <CornerRadius x:Key="ControlCornerRadius">6</CornerRadius>
+      <CornerRadius x:Key="OverlayCornerRadius">8</CornerRadius>
+      <CornerRadius x:Key="HarborCardCornerRadius">8</CornerRadius>
+      <FontFamily x:Key="HarborMonospaceFont">Cascadia Code, SF Mono, Menlo, Consolas, monospace</FontFamily>
+
       <ResourceDictionary.ThemeDictionaries>
-        <!-- Secondary text (values, activity log, subtitle): grey that stays readable in each scheme. Help text under
-             form fields is smaller and dimmer still. Cards (Status sections) sit slightly above the window background. -->
         <ResourceDictionary x:Key="Light">
-          <SolidColorBrush x:Key="HarborSecondaryTextBrush" Color="#4B5563" />
-          <SolidColorBrush x:Key="HarborHelpTextBrush" Color="#6B7280" />
-          <SolidColorBrush x:Key="HarborBorderBrush" Color="#D1D5DB" />
-          <SolidColorBrush x:Key="HarborCardBrush" Color="#F9FAFB" />
+          <!-- Dashboard light: bg #f8fafc, card #fff, hover #f1f5f9, border #e2e8f0, text #1e293b, dim #5b6b80. -->
+          <SolidColorBrush x:Key="HarborWindowBrush" Color="#F8FAFC" />
+          <SolidColorBrush x:Key="HarborCardBrush" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="HarborHoverBrush" Color="#F1F5F9" />
+          <SolidColorBrush x:Key="HarborBorderBrush" Color="#E2E8F0" />
+          <SolidColorBrush x:Key="HarborTextBrush" Color="#1E293B" />
+          <SolidColorBrush x:Key="HarborSecondaryTextBrush" Color="#5B6B80" />
+          <SolidColorBrush x:Key="HarborHelpTextBrush" Color="#64748B" />
+          <SolidColorBrush x:Key="HarborAccentBrush" Color="#2563EB" />
+          <SolidColorBrush x:Key="HarborAccentSoftBrush" Color="#DBEAFE" />
+          <SolidColorBrush x:Key="HarborAccentSoftTextBrush" Color="#1D4ED8" />
+          <SolidColorBrush x:Key="HarborSuccessBrush" Color="#15803D" />
+          <SolidColorBrush x:Key="HarborWarningBrush" Color="#B45309" />
+          <SolidColorBrush x:Key="HarborDangerBrush" Color="#C81E1E" />
+          <SolidColorBrush x:Key="HarborIdleBrush" Color="#64748B" />
+          <SolidColorBrush x:Key="HarborLogBrush" Color="#F8FAFC" />
+          <SolidColorBrush x:Key="HarborInputBrush" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="HarborInputBorderBrush" Color="#CBD5E1" />
+
+          <Color x:Key="SystemAccentColor">#2563EB</Color>
+          <Color x:Key="SystemAccentColorDark1">#1D4ED8</Color>
+          <Color x:Key="SystemAccentColorDark2">#1E40AF</Color>
+          <Color x:Key="SystemAccentColorDark3">#1E3A8A</Color>
+          <Color x:Key="SystemAccentColorLight1">#3B82F6</Color>
+          <Color x:Key="SystemAccentColorLight2">#60A5FA</Color>
+          <Color x:Key="SystemAccentColorLight3">#93C5FD</Color>
+          <SolidColorBrush x:Key="AccentButtonBackground" Color="#2563EB" />
+          <SolidColorBrush x:Key="AccentButtonBackgroundPointerOver" Color="#1D4ED8" />
+          <SolidColorBrush x:Key="AccentButtonBackgroundPressed" Color="#1E40AF" />
+          <SolidColorBrush x:Key="AccentButtonForeground" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="AccentButtonForegroundPointerOver" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="AccentButtonForegroundPressed" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="ButtonBackground" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#F1F5F9" />
+          <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#E2E8F0" />
+          <SolidColorBrush x:Key="ButtonForeground" Color="#1E293B" />
+          <SolidColorBrush x:Key="ButtonForegroundPointerOver" Color="#1E293B" />
+          <SolidColorBrush x:Key="ButtonForegroundPressed" Color="#1E293B" />
+          <SolidColorBrush x:Key="ButtonBorderBrush" Color="#CBD5E1" />
+          <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="#94A3B8" />
+          <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="#94A3B8" />
+          <SolidColorBrush x:Key="TextControlBackground" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="TextControlBorderBrush" Color="#CBD5E1" />
+          <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="#94A3B8" />
+          <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="#2563EB" />
+          <SolidColorBrush x:Key="ComboBoxBackground" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="ComboBoxBackgroundPointerOver" Color="#F1F5F9" />
+          <SolidColorBrush x:Key="ComboBoxBorderBrush" Color="#CBD5E1" />
+          <SolidColorBrush x:Key="ComboBoxBorderBrushPointerOver" Color="#94A3B8" />
+          <SolidColorBrush x:Key="TabItemHeaderSelectedPipeFill" Color="#2563EB" />
+          <SolidColorBrush x:Key="TextControlBackgroundDisabled" Color="#F1F5F9" />
+          <SolidColorBrush x:Key="TextControlBorderBrushDisabled" Color="#E2E8F0" />
+          <SolidColorBrush x:Key="TextControlForegroundDisabled" Color="#94A3B8" />
+          <SolidColorBrush x:Key="ButtonBackgroundDisabled" Color="#F1F5F9" />
+          <SolidColorBrush x:Key="ButtonBorderBrushDisabled" Color="#E2E8F0" />
+          <SolidColorBrush x:Key="ButtonForegroundDisabled" Color="#94A3B8" />
+          <SolidColorBrush x:Key="RepeatButtonBackgroundDisabled" Color="#F1F5F9" />
+          <SolidColorBrush x:Key="ComboBoxBackgroundDisabled" Color="#F1F5F9" />
+          <SolidColorBrush x:Key="ComboBoxBorderBrushDisabled" Color="#E2E8F0" />
+          <SolidColorBrush x:Key="TabItemHeaderForegroundSelected" Color="#1E293B" />
+          <SolidColorBrush x:Key="TabItemHeaderForegroundUnselected" Color="#5B6B80" />
+          <SolidColorBrush x:Key="TabItemHeaderForegroundUnselectedPointerOver" Color="#1E293B" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="Dark">
-          <SolidColorBrush x:Key="HarborSecondaryTextBrush" Color="#9CA3AF" />
-          <SolidColorBrush x:Key="HarborHelpTextBrush" Color="#6B7280" />
-          <SolidColorBrush x:Key="HarborBorderBrush" Color="#4B5563" />
-          <SolidColorBrush x:Key="HarborCardBrush" Color="#111318" />
+          <!-- Dashboard dark: bg #080d1a, card #111827, hover/border #1e293b, text #f1f5f9, dim #94a3b8. -->
+          <SolidColorBrush x:Key="HarborWindowBrush" Color="#080D1A" />
+          <SolidColorBrush x:Key="HarborCardBrush" Color="#111827" />
+          <SolidColorBrush x:Key="HarborHoverBrush" Color="#1E293B" />
+          <SolidColorBrush x:Key="HarborBorderBrush" Color="#1E293B" />
+          <SolidColorBrush x:Key="HarborTextBrush" Color="#F1F5F9" />
+          <SolidColorBrush x:Key="HarborSecondaryTextBrush" Color="#94A3B8" />
+          <SolidColorBrush x:Key="HarborHelpTextBrush" Color="#8B9AB0" />
+          <SolidColorBrush x:Key="HarborAccentBrush" Color="#60A5FA" />
+          <SolidColorBrush x:Key="HarborAccentSoftBrush" Color="#172554" />
+          <SolidColorBrush x:Key="HarborAccentSoftTextBrush" Color="#93C5FD" />
+          <SolidColorBrush x:Key="HarborSuccessBrush" Color="#22C55E" />
+          <SolidColorBrush x:Key="HarborWarningBrush" Color="#FBBF24" />
+          <SolidColorBrush x:Key="HarborDangerBrush" Color="#F87171" />
+          <SolidColorBrush x:Key="HarborIdleBrush" Color="#94A3B8" />
+          <SolidColorBrush x:Key="HarborLogBrush" Color="#0D1117" />
+          <SolidColorBrush x:Key="HarborInputBrush" Color="#111827" />
+          <SolidColorBrush x:Key="HarborInputBorderBrush" Color="#334155" />
+
+          <Color x:Key="SystemAccentColor">#2563EB</Color>
+          <Color x:Key="SystemAccentColorDark1">#1D4ED8</Color>
+          <Color x:Key="SystemAccentColorDark2">#1E40AF</Color>
+          <Color x:Key="SystemAccentColorDark3">#1E3A8A</Color>
+          <Color x:Key="SystemAccentColorLight1">#3B82F6</Color>
+          <Color x:Key="SystemAccentColorLight2">#60A5FA</Color>
+          <Color x:Key="SystemAccentColorLight3">#93C5FD</Color>
+          <SolidColorBrush x:Key="AccentButtonBackground" Color="#2563EB" />
+          <SolidColorBrush x:Key="AccentButtonBackgroundPointerOver" Color="#1D4ED8" />
+          <SolidColorBrush x:Key="AccentButtonBackgroundPressed" Color="#1E40AF" />
+          <SolidColorBrush x:Key="AccentButtonForeground" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="AccentButtonForegroundPointerOver" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="AccentButtonForegroundPressed" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="ButtonBackground" Color="#111827" />
+          <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#1E293B" />
+          <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#273449" />
+          <SolidColorBrush x:Key="ButtonForeground" Color="#F1F5F9" />
+          <SolidColorBrush x:Key="ButtonForegroundPointerOver" Color="#F1F5F9" />
+          <SolidColorBrush x:Key="ButtonForegroundPressed" Color="#F1F5F9" />
+          <SolidColorBrush x:Key="ButtonBorderBrush" Color="#334155" />
+          <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="#475569" />
+          <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="#475569" />
+          <SolidColorBrush x:Key="TextControlBackground" Color="#111827" />
+          <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#111827" />
+          <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="#111827" />
+          <SolidColorBrush x:Key="TextControlBorderBrush" Color="#334155" />
+          <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="#475569" />
+          <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="#60A5FA" />
+          <SolidColorBrush x:Key="ComboBoxBackground" Color="#111827" />
+          <SolidColorBrush x:Key="ComboBoxBackgroundPointerOver" Color="#1E293B" />
+          <SolidColorBrush x:Key="ComboBoxBorderBrush" Color="#334155" />
+          <SolidColorBrush x:Key="ComboBoxBorderBrushPointerOver" Color="#475569" />
+          <SolidColorBrush x:Key="TabItemHeaderSelectedPipeFill" Color="#60A5FA" />
+          <SolidColorBrush x:Key="TextControlBackgroundDisabled" Color="#0F172A" />
+          <SolidColorBrush x:Key="TextControlBorderBrushDisabled" Color="#1E293B" />
+          <SolidColorBrush x:Key="TextControlForegroundDisabled" Color="#64748B" />
+          <SolidColorBrush x:Key="ButtonBackgroundDisabled" Color="#0F172A" />
+          <SolidColorBrush x:Key="ButtonBorderBrushDisabled" Color="#1E293B" />
+          <SolidColorBrush x:Key="ButtonForegroundDisabled" Color="#64748B" />
+          <SolidColorBrush x:Key="RepeatButtonBackgroundDisabled" Color="#0F172A" />
+          <SolidColorBrush x:Key="ComboBoxBackgroundDisabled" Color="#0F172A" />
+          <SolidColorBrush x:Key="ComboBoxBorderBrushDisabled" Color="#1E293B" />
+          <SolidColorBrush x:Key="TabItemHeaderForegroundSelected" Color="#F1F5F9" />
+          <SolidColorBrush x:Key="TabItemHeaderForegroundUnselected" Color="#94A3B8" />
+          <SolidColorBrush x:Key="TabItemHeaderForegroundUnselectedPointerOver" Color="#F1F5F9" />
         </ResourceDictionary>
       </ResourceDictionary.ThemeDictionaries>
     </ResourceDictionary>
   </Application.Resources>
   <Application.Styles>
     <FluentTheme />
+
+    <Style Selector="Window">
+      <Setter Property="Background" Value="{DynamicResource HarborWindowBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource HarborTextBrush}" />
+    </Style>
+
+    <!-- A section of a page: a bordered card a step above the window background, as in the dashboard. -->
+    <Style Selector="Border.card">
+      <Setter Property="Background" Value="{DynamicResource HarborCardBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource HarborBorderBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="{DynamicResource HarborCardCornerRadius}" />
+      <Setter Property="Padding" Value="16,14" />
+    </Style>
+
+    <Style Selector="TextBlock.title">
+      <Setter Property="FontSize" Value="15" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="TextBlock.dim, SelectableTextBlock.dim">
+      <Setter Property="Foreground" Value="{DynamicResource HarborSecondaryTextBrush}" />
+    </Style>
+
+    <!-- Secondary header actions: quiet until hovered, so the primary (accent) action stands out. -->
+    <Style Selector="Button.subtle">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="Foreground" Value="{DynamicResource HarborSecondaryTextBrush}" />
+      <Setter Property="Padding" Value="10,5" />
+    </Style>
+    <Style Selector="Button.subtle:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource HarborHoverBrush}" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="Foreground" Value="{DynamicResource HarborTextBrush}" />
+    </Style>
+
+    <!-- Monospace log and file text on a slightly recessed surface. -->
+    <Style Selector="TextBox.mono">
+      <Setter Property="FontFamily" Value="{DynamicResource HarborMonospaceFont}" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="Background" Value="{DynamicResource HarborLogBrush}" />
+    </Style>
+    <Style Selector="TextBox.mono:pointerover /template/ Border#PART_BorderElement">
+      <Setter Property="Background" Value="{DynamicResource HarborLogBrush}" />
+    </Style>
+    <Style Selector="TextBox.mono:focus /template/ Border#PART_BorderElement">
+      <Setter Property="Background" Value="{DynamicResource HarborLogBrush}" />
+    </Style>
+
     <!-- Fluent collapses scroll bars to a thin line until hovered, which is hard to grab with a mouse; keep them full
          width wherever content scrolls. TextBox and ListBox pass the attached value to their inner ScrollViewer. -->
     <Style Selector="ScrollViewer">
@@ -34,6 +209,7 @@
     </Style>
     <Style Selector="ListBox">
       <Setter Property="ScrollViewer.AllowAutoHide" Value="False" />
+      <Setter Property="Background" Value="{DynamicResource HarborCardBrush}" />
     </Style>
   </Application.Styles>
 </Application>

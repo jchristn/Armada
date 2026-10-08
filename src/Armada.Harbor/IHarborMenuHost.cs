@@ -1,5 +1,7 @@
 namespace Armada.Harbor
 {
+    using Armada.Core.Hosting;
+
     /// <summary>
     /// Carries out the commands in the Harbor menus and reports which are available right now.
     /// </summary>

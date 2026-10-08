@@ -15,19 +15,20 @@ namespace Armada.Harbor
     using Avalonia.Threading;
 
     /// <summary>
-    /// The Logs tab: browse the Admiral's logs (its own log, mission and captain sessions, diffs, instructions, final
-    /// messages, dock logs) and Harbor's log, open a mission's log by ID, and view any of them. The viewer reads only
-    /// the end of a file, can follow it as it grows, filter Admiral and Harbor logs by severity, and find text.
+    /// The Logs tab of the Status window: browse Harbor's own log and the logs of jobs run on this computer (always), and
+    /// the Admiral's logs (its own log, mission and captain sessions, diffs, instructions, final messages, dock logs)
+    /// when the Admiral runs on this computer; open a mission's log by ID; and view any of them. The viewer reads only
+    /// the end of a file, can follow it as it grows, filter by severity, and find text.
     /// </summary>
     public class LogBrowserView : UserControl
     {
         #region Private-Members
 
-        private const string _HarborCategory = "Harbor";
         private const int _MaxViewerLines = 5000;
         private const int _ListLimit = 500;
 
         private readonly HarborSession _Session;
+        private readonly HarborLogPaths _HarborLogs = new HarborLogPaths(HarborAppSettings.LogDirectory());
         private readonly ComboBox _Category = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch };
         private readonly TextBox _NameFilter = new TextBox { Watermark = "Filter by name" };
         private readonly TextBox _MissionId = new TextBox { Watermark = "msn_... or cpt_..." };
@@ -48,6 +49,7 @@ namespace Armada.Harbor
         private bool _StartedMidFile = false;
         private bool _Attached = false;
         private string? _ListedLogDirectory = null;
+        private bool _UpdatingSources = false;
 
         #endregion
 
@@ -61,12 +63,11 @@ namespace Armada.Harbor
         {
             _Session = session ?? throw new ArgumentNullException(nameof(session));
 
-            List<string> categories = new List<string>();
-            foreach (LogCategoryEnum category in Enum.GetValues(typeof(LogCategoryEnum))) categories.Add(CategoryLabel(category));
-            categories.Add(_HarborCategory);
-            _Category.ItemsSource = categories;
-            _Category.SelectedIndex = 0;
-            _Category.SelectionChanged += (sender, args) => RefreshList();
+            RefreshSources();
+            _Category.SelectionChanged += (sender, args) =>
+            {
+                if (!_UpdatingSources) RefreshList();
+            };
             _NameFilter.TextChanged += (sender, args) => RefreshList();
 
             _Files.ItemTemplate = new FuncDataTemplate<LogFileEntry>((entry, scope) =>
@@ -98,9 +99,9 @@ namespace Armada.Harbor
             missionRow.Children.Add(openMission);
 
             StackPanel leftTop = new StackPanel { Spacing = 6 };
-            leftTop.Children.Add(new TextBlock { Text = "Mission or captain", FontWeight = FontWeight.SemiBold });
+            leftTop.Children.Add(new TextBlock { Text = "Open a mission's log", FontWeight = FontWeight.SemiBold });
             leftTop.Children.Add(missionRow);
-            leftTop.Children.Add(new TextBlock { Text = "Browse", FontWeight = FontWeight.SemiBold, Margin = new Thickness(0, 6, 0, 0) });
+            leftTop.Children.Add(new TextBlock { Text = "Browse", FontWeight = FontWeight.SemiBold, Margin = new Thickness(0, 8, 0, 0) });
             leftTop.Children.Add(_Category);
             leftTop.Children.Add(_NameFilter);
             leftTop.Children.Add(HarborUi.Secondary(_ListNote));
@@ -110,29 +111,30 @@ namespace Armada.Harbor
             leftBottom.Children.Add(HarborUi.Button("Refresh", RefreshList));
             leftBottom.Children.Add(HarborUi.Button("Open Folder", OpenCategoryFolder));
 
-            DockPanel left = new DockPanel { Margin = new Thickness(0, 0, 10, 0) };
+            DockPanel left = new DockPanel();
             DockPanel.SetDock(leftTop, Dock.Top);
             DockPanel.SetDock(leftBottom, Dock.Bottom);
             leftTop.Margin = new Thickness(0, 0, 0, 6);
             left.Children.Add(leftTop);
             left.Children.Add(leftBottom);
-            left.Children.Add(new Border
+            Border filesBorder = new Border
             {
                 Child = _Files,
                 BorderThickness = new Thickness(1),
-                CornerRadius = new CornerRadius(6)
-            });
-            ((Border)left.Children[2]).Bind(Border.BorderBrushProperty, left.GetResourceObservable("HarborBorderBrush"));
+                CornerRadius = new CornerRadius(6),
+                ClipToBounds = true
+            };
+            filesBorder.Bind(Border.BorderBrushProperty, filesBorder.GetResourceObservable("HarborBorderBrush"));
+            left.Children.Add(filesBorder);
 
             _Viewer = new TextBox
             {
                 IsReadOnly = true,
                 AcceptsReturn = true,
                 TextWrapping = TextWrapping.NoWrap,
-                FontFamily = new FontFamily(HarborUi.MonospaceFonts),
-                FontSize = 12,
                 VerticalContentAlignment = VerticalAlignment.Top
             };
+            _Viewer.Classes.Add("mono");
 
             _Follow.IsCheckedChanged += (sender, args) => UpdateTimer();
             _Severity.SelectionChanged += (sender, args) => Render(true);
@@ -141,7 +143,8 @@ namespace Armada.Harbor
                 if (args.Key == Avalonia.Input.Key.Enter) FindNext();
             };
 
-            StackPanel toolbar = HarborUi.ButtonRow();
+            // Wraps instead of scrolling, so every action stays visible in a narrow window.
+            WrapPanel toolbar = new WrapPanel { Orientation = Orientation.Horizontal, ItemSpacing = 8, LineSpacing = 6 };
             toolbar.Children.Add(_Follow);
             toolbar.Children.Add(_Severity);
             toolbar.Children.Add(_Find);
@@ -153,20 +156,25 @@ namespace Armada.Harbor
             StackPanel rightTop = new StackPanel { Spacing = 4, Margin = new Thickness(0, 0, 0, 6) };
             rightTop.Children.Add(_FileTitle);
             rightTop.Children.Add(HarborUi.Secondary(_FileInfo));
-            rightTop.Children.Add(new ScrollViewer { Content = toolbar, HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto, VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled });
+            rightTop.Children.Add(toolbar);
 
             DockPanel right = new DockPanel();
             DockPanel.SetDock(rightTop, Dock.Top);
             right.Children.Add(rightTop);
             right.Children.Add(_Viewer);
 
-            Grid root = new Grid { ColumnDefinitions = new ColumnDefinitions("280,4,*"), Margin = new Thickness(4, 4, 12, 12) };
-            root.Children.Add(left);
+            Border leftCard = new Border { Child = left };
+            leftCard.Classes.Add("card");
+            Border rightCard = new Border { Child = right };
+            rightCard.Classes.Add("card");
+
+            Grid root = new Grid { ColumnDefinitions = new ColumnDefinitions("300,12,*"), Margin = new Thickness(20, 16, 20, 20) };
+            root.Children.Add(leftCard);
             GridSplitter splitter = new GridSplitter { ResizeDirection = GridResizeDirection.Columns, Background = Brushes.Transparent };
             Grid.SetColumn(splitter, 1);
             root.Children.Add(splitter);
-            Grid.SetColumn(right, 2);
-            root.Children.Add(right);
+            Grid.SetColumn(rightCard, 2);
+            root.Children.Add(rightCard);
             Content = root;
 
             _FollowTimer.Tick += (sender, args) => _ = PollAsync();
@@ -174,6 +182,7 @@ namespace Armada.Harbor
             {
                 _Attached = true;
                 _Session.Changed += OnSessionChanged;
+                RefreshSources();
                 RefreshList();
                 UpdateTimer();
             };
@@ -188,100 +197,54 @@ namespace Armada.Harbor
 
         #endregion
 
-        #region Public-Methods
-
-        /// <summary>
-        /// Put the cursor in the mission box (Logs > Mission Log).
-        /// </summary>
-        public void FocusMissionLookup()
-        {
-            Dispatcher.UIThread.Post(() => _MissionId.Focus());
-        }
-
-        /// <summary>
-        /// Show a category, optionally opening its newest file.
-        /// </summary>
-        /// <param name="harbor">True for Harbor's log, false for the Admiral's.</param>
-        /// <param name="openNewest">Open the newest file.</param>
-        public void ShowLog(bool harbor, bool openNewest)
-        {
-            _Category.SelectedItem = harbor ? _HarborCategory : CategoryLabel(LogCategoryEnum.Admiral);
-            RefreshList();
-            if (openNewest && _Files.ItemCount > 0) _Files.SelectedIndex = 0;
-        }
-
-        #endregion
-
         #region Private-Methods
 
         private void OnSessionChanged(object? sender, EventArgs e)
         {
-            // Link state changes often (every retry); only a new log location changes the list.
+            // Link state changes often (every retry); only a new Admiral log location changes the sources and list.
             string? logDirectory = _Session.Admiral?.IsLocal == true ? _Session.Admiral.LogDirectory : null;
             if (String.Equals(logDirectory, _ListedLogDirectory, StringComparison.Ordinal)) return;
+            RefreshSources();
             RefreshList();
         }
 
-        private static string CategoryLabel(LogCategoryEnum category)
+        private void RefreshSources()
         {
-            switch (category)
+            // Harbor's own log and the jobs run here are always offered; the Admiral's groups only when it is local.
+            List<LogSource> sources = LogSourceCatalog.Discover(_HarborLogs, _Session.Admiral);
+            string? selected = (_Category.SelectedItem as LogSource)?.Label;
+            _UpdatingSources = true;
+            try
             {
-                case LogCategoryEnum.Admiral: return "Admiral";
-                case LogCategoryEnum.Missions: return "Missions";
-                case LogCategoryEnum.Captains: return "Captains";
-                case LogCategoryEnum.Diffs: return "Diffs";
-                case LogCategoryEnum.Instructions: return "Instructions";
-                case LogCategoryEnum.FinalMessages: return "Final messages";
-                case LogCategoryEnum.Docks: return "Docks";
-                default: return category.ToString();
+                _Category.ItemsSource = sources;
+                LogSource? again = sources.FirstOrDefault(source => source.Label == selected);
+                _Category.SelectedItem = again ?? sources[0];
             }
-        }
-
-        private bool TryGetCategory(out LogCategoryEnum category)
-        {
-            category = LogCategoryEnum.Admiral;
-            if (_Category.SelectedItem is not string label || label == _HarborCategory) return false;
-            foreach (LogCategoryEnum candidate in Enum.GetValues(typeof(LogCategoryEnum)))
+            finally
             {
-                if (CategoryLabel(candidate) == label)
-                {
-                    category = candidate;
-                    return true;
-                }
+                _UpdatingSources = false;
             }
-
-            return false;
-        }
-
-        private bool IsHarborSelected
-        {
-            get { return _Category.SelectedItem is string label && label == _HarborCategory; }
         }
 
         private void RefreshList()
         {
-            string? filter = _NameFilter.Text;
-            List<LogFileEntry> entries;
-            _ListedLogDirectory = _Session.Admiral?.IsLocal == true ? _Session.Admiral.LogDirectory : null;
-
-            if (IsHarborSelected)
+            LocalAdmiralInfo? admiral = _Session.Admiral;
+            _ListedLogDirectory = admiral?.IsLocal == true ? admiral.LogDirectory : null;
+            if (_Category.SelectedItem is not LogSource source)
             {
-                entries = ListHarborLogs(filter);
-                _ListNote.Text = HarborAppSettings.LogDirectory();
+                _Files.ItemsSource = null;
+                return;
             }
-            else
-            {
-                LocalAdmiralInfo? admiral = _Session.Admiral;
-                if (admiral == null || !admiral.IsLocal || !TryGetCategory(out LogCategoryEnum category))
-                {
-                    _Files.ItemsSource = null;
-                    _ListNote.Text = admiral == null ? "Looking for the Armada data directory..." : admiral.Reason;
-                    return;
-                }
 
-                entries = admiral.Logs.List(category, filter, _ListLimit);
-                _ListNote.Text = admiral.Logs.DirectoryFor(category) + (entries.Count >= _ListLimit ? "  (newest " + _ListLimit + "; filter to narrow)" : "");
-            }
+            List<LogFileEntry> entries = LogSourceCatalog.List(source, _HarborLogs, admiral, _NameFilter.Text, _ListLimit);
+            _ListNote.Text = source.Directory + (entries.Count >= _ListLimit ? "  (newest " + _ListLimit + "; filter to narrow)" : "");
+            if (source.Kind == LogSourceEnum.HarborJobs && entries.Count == 0)
+                _ListNote.Text += "\nNo jobs have run on this computer yet.";
+            else if (entries.Count == 0)
+                _ListNote.Text += "\nNo files.";
+
+            if (admiral != null && !admiral.IsLocal)
+                _ListNote.Text += "\nThe Admiral's own logs are on its machine; open them from the dashboard.";
 
             string? selected = (_Files.SelectedItem as LogFileEntry)?.Path;
             _Files.ItemsSource = entries;
@@ -290,58 +253,32 @@ namespace Armada.Harbor
                 LogFileEntry? again = entries.FirstOrDefault(e => e.Path == selected);
                 if (again != null) _Files.SelectedItem = again;
             }
-
-            if (entries.Count == 0) _ListNote.Text += "\nNo files.";
-        }
-
-        private static List<LogFileEntry> ListHarborLogs(string? filter)
-        {
-            List<LogFileEntry> entries = new List<LogFileEntry>();
-            string directory = HarborAppSettings.LogDirectory();
-            if (!Directory.Exists(directory)) return entries;
-            foreach (string file in Directory.EnumerateFiles(directory, MainWindow.HarborLogBaseName + "*"))
-            {
-                string name = Path.GetFileName(file);
-                if (!String.IsNullOrWhiteSpace(filter) && name.IndexOf(filter.Trim(), StringComparison.OrdinalIgnoreCase) < 0) continue;
-                FileInfo info = new FileInfo(file);
-                entries.Add(new LogFileEntry { Path = file, Name = name, SizeBytes = info.Length, LastWriteUtc = info.LastWriteTimeUtc });
-            }
-
-            entries.Sort((a, b) => b.LastWriteUtc.CompareTo(a.LastWriteUtc));
-            return entries;
         }
 
         private async Task OpenMissionAsync()
         {
             string id = (_MissionId.Text ?? String.Empty).Trim();
             LocalAdmiralInfo? admiral = _Session.Admiral;
-            if (id.Length == 0 || admiral == null || !admiral.IsLocal) return;
+            if (id.Length == 0) return;
 
-            ArmadaLogPaths logs = admiral.Logs;
-            string? path = null;
-            if (id.StartsWith("cpt_", StringComparison.OrdinalIgnoreCase))
+            // The Admiral's log when it is on this computer (it holds the whole transcript), else this computer's job log.
+            string? path = LogSourceCatalog.ResolveLog(id, _HarborLogs, admiral);
+            if (path == null && admiral != null && admiral.IsLocal && !id.StartsWith(Armada.Core.Constants.CaptainIdPrefix, StringComparison.OrdinalIgnoreCase))
             {
-                path = logs.ResolveCaptainLog(id);
-            }
-            else
-            {
-                path = logs.ResolveMissionLog(id);
-                if (path == null)
+                // No session log of its own yet: follow the captain running it, which needs the mission record.
+                ArmadaLogPaths logs = admiral.Logs;
+                using (ArmadaClient? client = _Session.CreateClient())
                 {
-                    // No session log of its own yet: follow the captain running it, which needs the mission record.
-                    using (ArmadaClient? client = _Session.CreateClient())
+                    if (client != null)
                     {
-                        if (client != null)
+                        try
                         {
-                            try
-                            {
-                                Armada.Core.Models.Mission? mission = await client.GetMissionAsync(id).ConfigureAwait(true);
-                                if (mission != null) path = logs.ResolveMissionLog(mission.Id, mission.CaptainId);
-                            }
-                            catch (ArmadaApiException)
-                            {
-                                // Unknown mission or no access: report below.
-                            }
+                            Armada.Core.Models.Mission? mission = await client.GetMissionAsync(id).ConfigureAwait(true);
+                            if (mission != null) path = logs.ResolveMissionLog(mission.Id, mission.CaptainId);
+                        }
+                        catch (ArmadaApiException)
+                        {
+                            // Unknown mission or no access: report below.
                         }
                     }
                 }
@@ -349,7 +286,9 @@ namespace Armada.Harbor
 
             if (path == null)
             {
-                ShowNothing("No log found for " + id + ".");
+                ShowNothing("No log found for " + id + "." + (admiral != null && !admiral.IsLocal
+                    ? " Only missions run on this computer have a log here; the Admiral's logs are on its machine."
+                    : ""));
                 return;
             }
 
@@ -537,19 +476,10 @@ namespace Armada.Harbor
 
         private void OpenCategoryFolder()
         {
-            string? directory = null;
-            if (IsHarborSelected)
-            {
-                directory = HarborAppSettings.LogDirectory();
-                Directory.CreateDirectory(directory);
-            }
-            else if (_Session.Admiral != null && _Session.Admiral.IsLocal && TryGetCategory(out LogCategoryEnum category))
-            {
-                directory = _Session.Admiral.Logs.DirectoryFor(category);
-            }
-
-            if (directory == null || !Directory.Exists(directory)) return;
-            if (!PlatformShell.Open(directory, out string? error)) _ListNote.Text = "Could not open: " + error;
+            if (_Category.SelectedItem is not LogSource source) return;
+            if (source.Kind != LogSourceEnum.Admiral) Directory.CreateDirectory(source.Directory);
+            if (!Directory.Exists(source.Directory)) return;
+            if (!PlatformShell.Open(source.Directory, out string? error)) _ListNote.Text = "Could not open: " + error;
         }
 
         #endregion

@@ -118,6 +118,28 @@ namespace Armada.Harbor
         }
 
         /// <summary>
+        /// Read settings from a file (such as a backup) exactly as written, without defaults for an identity.
+        /// </summary>
+        /// <param name="path">Settings file.</param>
+        /// <param name="error">Why it could not be read, or null.</param>
+        /// <returns>The settings, or null when the file could not be read or is not Harbor settings JSON.</returns>
+        public static HarborAppSettings? TryLoadFile(string path, out string? error)
+        {
+            if (string.IsNullOrWhiteSpace(path)) throw new ArgumentNullException(nameof(path));
+            try
+            {
+                HarborAppSettings? loaded = JsonSerializer.Deserialize<HarborAppSettings>(File.ReadAllText(path));
+                error = loaded == null ? "the file is empty" : null;
+                return loaded;
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is JsonException)
+            {
+                error = ex.Message;
+                return null;
+            }
+        }
+
+        /// <summary>
         /// Persist the settings to the default path. Best-effort; failures are swallowed (used at startup, where
         /// there is nobody to tell). Editors use <see cref="TrySave"/>.
         /// </summary>

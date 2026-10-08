@@ -17,7 +17,7 @@ namespace Armada.Harbor
         /// <summary>
         /// Monospace font stack for logs and JSON.
         /// </summary>
-        public const string MonospaceFonts = "Consolas, Menlo, monospace";
+        public const string MonospaceFonts = "Cascadia Code, SF Mono, Menlo, Consolas, monospace";
 
         #endregion
 
@@ -69,7 +69,9 @@ namespace Armada.Harbor
         /// <returns>The heading.</returns>
         public static TextBlock Heading(string text)
         {
-            return new TextBlock { Text = text, FontSize = 15, FontWeight = FontWeight.Bold, Margin = new Thickness(0, 6, 0, 2) };
+            TextBlock heading = new TextBlock { Text = text, Margin = new Thickness(0, 2, 0, 2) };
+            heading.Classes.Add("title");
+            return heading;
         }
 
         /// <summary>
@@ -96,38 +98,78 @@ namespace Armada.Harbor
         }
 
         /// <summary>
-        /// A card: a titled, bordered, slightly raised panel that sets one section of a page apart from the next.
+        /// A card: a titled, bordered panel a step above the window background that sets one section of a page apart
+        /// from the next (styled by the "card" class in App.axaml).
         /// </summary>
-        /// <param name="title">Card title.</param>
+        /// <param name="title">Card title, or null for none.</param>
         /// <param name="body">Card content.</param>
         /// <param name="headerActions">Controls at the right of the title (buttons), or null.</param>
         /// <returns>The card.</returns>
-        public static Border Card(string title, Control body, Control? headerActions)
+        public static Border Card(string? title, Control body, Control? headerActions)
         {
             if (body == null) throw new ArgumentNullException(nameof(body));
 
-            Grid header = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), Margin = new Thickness(0, 0, 0, 10) };
-            header.Children.Add(new TextBlock { Text = title, FontSize = 15, FontWeight = FontWeight.Bold, VerticalAlignment = VerticalAlignment.Center });
-            if (headerActions != null)
+            StackPanel content = new StackPanel();
+            if (title != null || headerActions != null)
             {
-                Grid.SetColumn(headerActions, 1);
-                header.Children.Add(headerActions);
+                Grid header = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), Margin = new Thickness(0, 0, 0, 10) };
+                if (title != null)
+                {
+                    TextBlock heading = new TextBlock { Text = title, VerticalAlignment = VerticalAlignment.Center };
+                    heading.Classes.Add("title");
+                    header.Children.Add(heading);
+                }
+
+                if (headerActions != null)
+                {
+                    Grid.SetColumn(headerActions, 1);
+                    header.Children.Add(headerActions);
+                }
+
+                content.Children.Add(header);
             }
 
-            StackPanel content = new StackPanel();
-            content.Children.Add(header);
             content.Children.Add(body);
 
-            Border card = new Border
-            {
-                BorderThickness = new Thickness(1),
-                CornerRadius = new CornerRadius(8),
-                Padding = new Thickness(16, 12, 16, 14),
-                Child = content
-            };
-            card.Bind(Border.BorderBrushProperty, card.GetResourceObservable("HarborBorderBrush"));
-            card.Bind(Border.BackgroundProperty, card.GetResourceObservable("HarborCardBrush"));
+            Border card = new Border { Child = content };
+            card.Classes.Add("card");
             return card;
+        }
+
+        /// <summary>
+        /// A tab header. A text block keeps the header's font size from reaching the tab's content.
+        /// </summary>
+        /// <param name="text">Header text.</param>
+        /// <returns>The header.</returns>
+        public static TextBlock TabHeader(string text)
+        {
+            return new TextBlock { Text = text, FontSize = 15 };
+        }
+
+        /// <summary>
+        /// The page layout every tab uses: a scrolling column of cards with consistent spacing.
+        /// </summary>
+        /// <param name="sections">Cards and notes, top to bottom.</param>
+        /// <returns>The page.</returns>
+        public static ScrollViewer Page(params Control[] sections)
+        {
+            StackPanel column = new StackPanel { Spacing = 14, Margin = new Thickness(20, 16, 20, 20) };
+            foreach (Control section in sections) column.Children.Add(section);
+            return new ScrollViewer { Content = column, HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled };
+        }
+
+        /// <summary>
+        /// Color a message block as an error (red that stays readable in light and dark) or as ordinary secondary text.
+        /// </summary>
+        /// <param name="block">Message block.</param>
+        /// <param name="text">Text, or null to hide the block.</param>
+        /// <param name="isError">True for an error.</param>
+        public static void SetMessage(TextBlock block, string? text, bool isError)
+        {
+            if (block == null) throw new ArgumentNullException(nameof(block));
+            block.Text = text ?? String.Empty;
+            block.IsVisible = !String.IsNullOrEmpty(text);
+            block.Bind(TextBlock.ForegroundProperty, block.GetResourceObservable(isError ? "HarborDangerBrush" : "HarborSecondaryTextBrush"));
         }
 
         /// <summary>
@@ -141,12 +183,14 @@ namespace Armada.Harbor
             text.TextWrapping = TextWrapping.Wrap;
             Border border = new Border
             {
-                BorderThickness = new Thickness(1),
-                CornerRadius = new CornerRadius(6),
-                Padding = new Thickness(10, 8),
+                BorderThickness = new Thickness(3, 0, 0, 0),
+                CornerRadius = new CornerRadius(4),
+                Padding = new Thickness(12, 8),
                 Child = text
             };
-            border.Bind(Border.BorderBrushProperty, border.GetResourceObservable("HarborBorderBrush"));
+            border.Bind(Border.BorderBrushProperty, border.GetResourceObservable("HarborAccentBrush"));
+            border.Bind(Border.BackgroundProperty, border.GetResourceObservable("HarborAccentSoftBrush"));
+            text.Bind(TextBlock.ForegroundProperty, text.GetResourceObservable("HarborTextBrush"));
             return border;
         }
 
