@@ -31,6 +31,8 @@ jest.mock('expo-router', () => ({
   ...jest.requireActual('expo-router'),
   useRouter: () => mockRouter,
   useLocalSearchParams: () => ({}),
+  // Rendered outside a navigator: focus effects (hardware back in selection mode) do not run.
+  useFocusEffect: () => undefined,
   Stack: { Screen: () => null },
 }));
 
@@ -145,6 +147,8 @@ describe('Vessels tab', () => {
     await render(<BuildProviders><VesselsTab /></BuildProviders>);
     await waitFor(() => expect(screen.getByTestId('vessel-row-api')).toBeTruthy());
     await fireEvent.press(screen.getByTestId('vessels-list-new'));
+    // Save stays in the sheet's footer (disabled until name and repository are set), reachable without scrolling.
+    expect(within(screen.getByTestId('vessel-form-footer')).getByTestId('vessel-form-save')).toBeDisabled();
     await fireEvent.changeText(screen.getByTestId('vessel-form-name'), 'new');
     await fireEvent.changeText(screen.getByTestId('vessel-form-repo-url'), 'https://git/new.git');
     await fireEvent.press(screen.getByTestId('vessel-form-landing-mode'));

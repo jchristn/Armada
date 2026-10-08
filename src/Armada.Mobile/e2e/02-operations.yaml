@@ -20,9 +20,11 @@ name: 02-operations
 - assertVisible: "System Status"
 - assertVisible:
     id: "home-kpi-missions"
+# Home is long (status, KPIs, health, the history chart); on a loaded host each swipe can take seconds.
 - scrollUntilVisible:
     element: "Seeded voyage.*"
     direction: DOWN
+    timeout: 60000
 - takeScreenshot: home
 # Missions list and detail.
 - scrollUntilVisible:
@@ -108,12 +110,11 @@ name: 02-operations
 - inputText: "Mobile E2E mission"
 # Tapping outside the inputs dismisses the keyboard (keyboardShouldPersistTaps="handled").
 - tapOn: "Mission 1"
-- scrollUntilVisible:
-    element:
-      id: "voyage-create-submit"
-    direction: DOWN
-    visibilityPercentage: 100
-    centerElement: true
+# Create Voyage sits in the form's footer: reachable wherever the form is scrolled, never behind the tab bar.
+- assertVisible:
+    id: "voyage-create-footer"
+- assertVisible:
+    id: "voyage-create-submit"
 - takeScreenshot: voyage-create
 - tapOn:
     id: "voyage-create-submit"
@@ -149,12 +150,9 @@ name: 02-operations
     visibilityPercentage: 100
     centerElement: true
 - assertVisible: "Mobile E2E dispatched mission"
-- scrollUntilVisible:
-    element:
-      id: "dispatch-submit"
-    direction: DOWN
-    visibilityPercentage: 100
-    centerElement: true
+# Dispatch sits in the form's footer, reachable without scrolling past the captain assignments.
+- assertVisible:
+    id: "dispatch-screen-footer"
 - takeScreenshot: dispatch
 - tapOn:
     id: "dispatch-submit"

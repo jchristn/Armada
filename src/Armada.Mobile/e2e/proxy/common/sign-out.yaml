@@ -13,6 +13,11 @@ appId: ${APP_ID}
           element:
             id: "sign-out"
           direction: DOWN
+      # iOS counts a row the scroll view has clipped (under the tab bar) as visible; lift it clear before tapping.
+      - swipe:
+          start: "50%, 60%"
+          end: "50%, 40%"
+          duration: 600
       - tapOn:
           id: "sign-out"
 - runFlow:

@@ -13,7 +13,7 @@ import type { Pipeline, Vessel } from '@dashboard/types/models';
 import { Stack, useRouter, type Href } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { AppText, Banner, Button, IconButton, Screen, Section, TextField } from '../../components/ui';
+import { AppText, Banner, Button, FormActions, IconButton, Screen, Section, TextField } from '../../components/ui';
 import { SelectField } from '../../components/ui/SelectField';
 import { useLocale } from '../../i18n/LocaleContext';
 import { useNotifications } from '../../notifications/NotificationContext';
@@ -77,7 +77,15 @@ export function VoyageCreateScreen() {
   }
 
   return (
-    <Screen testID="voyage-create">
+    <Screen
+      testID="voyage-create"
+      footer={(
+        <FormActions>
+          <Button testID="voyage-create-cancel" label={t('Cancel')} variant="ghost" onPress={() => router.back()} />
+          <Button testID="voyage-create-submit" label={submitting ? t('Creating...') : t('Create Voyage')} busy={submitting} onPress={() => void submit()} />
+        </FormActions>
+      )}
+    >
       <Stack.Screen options={{ title: t('Create Voyage') }} />
       {error ? <Banner tone="danger" title={error} testID="voyage-create-error" /> : null}
 
@@ -185,11 +193,6 @@ export function VoyageCreateScreen() {
           />
         </View>
       </Section>
-
-      <View style={styles.actions}>
-        <Button testID="voyage-create-cancel" label={t('Cancel')} variant="ghost" onPress={() => router.back()} />
-        <Button testID="voyage-create-submit" label={submitting ? t('Creating...') : t('Create Voyage')} busy={submitting} onPress={() => void submit()} />
-      </View>
     </Screen>
   );
 }
@@ -200,5 +203,4 @@ const styles = StyleSheet.create({
   missionHead: { flexDirection: 'row', alignItems: 'center' },
   flex: { flex: 1 },
   center: { textAlign: 'center', padding: spacing.lg },
-  actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm, paddingHorizontal: spacing.md, paddingBottom: spacing.xl },
 });

@@ -63,6 +63,11 @@ name: 01-enable-notifications
     element:
       id: "nav-/preferences"
     direction: DOWN
+# iOS counts a row the scroll view has clipped (under the tab bar) as visible; lift it clear before tapping.
+- swipe:
+    start: "50%, 60%"
+    end: "50%, 40%"
+    duration: 600
 - tapOn:
     id: "nav-/preferences"
 - scrollUntilVisible:

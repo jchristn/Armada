@@ -24,12 +24,23 @@ export function DispatchHubScreen() {
   const prefill = dispatchPrefillFromParams(params);
   // A new draft link remounts the form so its fields start from that draft.
   const draftKey = JSON.stringify(prefill);
+  const title = <Stack.Screen options={{ title: t('Dispatch') }} />;
+  const tabBar = <HubTabBar tabs={TABS} active={tab} onChange={setTab} label={t('Dispatch sections')} testID="dispatch" />;
+  // The Dispatch tab is a scrolling form with its Dispatch button in a footer; the Backlog tab is a virtualized list
+  // of its own, so the screen does not scroll around it.
+  if (tab === 'dispatch') {
+    return (
+      <>
+        {title}
+        <DispatchForm key={draftKey} prefill={prefill} header={tabBar} />
+      </>
+    );
+  }
   return (
-    // The Backlog tab is a virtualized list of its own, so the screen does not scroll around it.
-    <Screen testID="dispatch-screen" scroll={tab === 'dispatch'}>
-      <Stack.Screen options={{ title: t('Dispatch') }} />
-      <HubTabBar tabs={TABS} active={tab} onChange={setTab} label={t('Dispatch sections')} testID="dispatch" />
-      {tab === 'dispatch' ? <DispatchForm key={draftKey} prefill={prefill} /> : <ObjectivesList embedded testID="dispatch-backlog" />}
+    <Screen testID="dispatch-screen" scroll={false}>
+      {title}
+      {tabBar}
+      <ObjectivesList embedded testID="dispatch-backlog" />
     </Screen>
   );
 }

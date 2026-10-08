@@ -30,6 +30,8 @@ jest.mock('expo-router', () => ({
   ...jest.requireActual('expo-router'),
   useRouter: () => mockRouter,
   useLocalSearchParams: () => ({}),
+  // Rendered outside a navigator: focus effects (hardware back in selection mode) do not run.
+  useFocusEffect: () => undefined,
   Stack: { Screen: () => null },
 }));
 
@@ -107,6 +109,8 @@ describe('Captains tab', () => {
     await render(<BuildProviders><CaptainsTab /></BuildProviders>);
     await waitFor(() => expect(screen.getByTestId('captain-row-Ada')).toBeTruthy());
     await fireEvent.press(screen.getByTestId('captains-list-new'));
+    // Save stays in the sheet's footer, reachable without scrolling the long form.
+    expect(within(screen.getByTestId('captain-form-footer')).getByTestId('captain-form-save')).toBeTruthy();
     await act(async () => { fireEvent.changeText(screen.getByTestId('captain-form-name'), 'Neo'); });
     await fireEvent.press(screen.getByTestId('captain-form-runtime'));
     await fireEvent.press(screen.getByTestId('captain-form-runtime-option-Mux'));

@@ -8,6 +8,7 @@ export { Icon, type IconName } from './Icon';
 export { IconButton } from './IconButton';
 export { ListRow } from './ListRow';
 export { Screen } from './Screen';
+export { FormActions, StickyFooter } from './StickyFooter';
 export { SearchField } from './SearchField';
 export { Section } from './Section';
 export { SegmentedControl } from './SegmentedControl';

@@ -19,6 +19,7 @@ import { useNotifications } from '../../notifications/NotificationContext';
 import { spacing } from '../../theme/typography';
 import type { OperationsListProps } from './listTypes';
 import { DEFAULT_VOYAGE_SORT, filterAndSortVoyages, VOYAGE_STATUSES, type VoyageSort } from './voyage/voyageListFilters';
+import { useHardwareBack } from '../../navigation/useHardwareBack';
 
 const SORTS: { value: VoyageSort; label: string }[] = [
   { value: 'createdUtc:desc', label: 'Newest first' },
@@ -61,6 +62,7 @@ export function VoyagesList({ onSelect, selectedId }: OperationsListProps) {
   const rows = useMemo(() => filterAndSortVoyages(list.items, { search, status, sort }), [list.items, search, status, sort]);
   const shownState = useMemo(() => ({ ...list, items: rows }), [list, rows]);
   const selecting = selected.length > 0;
+  useHardwareBack(selecting, () => setSelected([]));
   const toggle = (id: string) => setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
 
   const handleCancel = (v: Voyage) => confirm({

@@ -18,6 +18,7 @@ import { MIN_TOUCH, radius, spacing } from '../../../theme/typography';
 import { HealthBadge } from './HealthBadge';
 import { HealthDetailSheet, type HealthDetailSection } from './HealthDetailSheet';
 import { HealthFilterSheet, activeFilterCount } from './HealthFilterSheet';
+import { useHardwareBack } from '../../../navigation/useHardwareBack';
 
 const NAME_DEBOUNCE_MS = 350;
 
@@ -147,6 +148,7 @@ export function VesselHealthTab() {
   const noneEvaluated = !!s && s.totalVessels > 0 && s.notEvaluated === s.totalVessels;
   const noVessels = !list.loading && !list.error && list.totalRecords === 0 && !filtered && (s ? s.totalVessels === 0 : true);
   const selecting = selected.length > 0;
+  useHardwareBack(selecting, () => setSelected([]));
   const toggleSelected = (id: string) => setSelected((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
   const openDetail = (row: VesselHealth, section: HealthDetailSection = 'summary') =>
     setDetail({ vesselId: row.vesselId, vesselName: row.vesselName ?? row.vesselId, section });

@@ -7,6 +7,7 @@ import { FieldCard } from '../../components/resource/DetailParts';
 import { AppText } from '../../components/ui/AppText';
 import { BottomSheet } from '../../components/ui/BottomSheet';
 import { Button } from '../../components/ui/Button';
+import { FormActions } from '../../components/ui/StickyFooter';
 import { SelectField } from '../../components/ui/SelectSheet';
 import { TextField } from '../../components/ui/TextField';
 import { useLocale } from '../../i18n/LocaleContext';
@@ -24,17 +25,21 @@ export interface RunCheckSheetProps {
   onRan: (run: CheckRun) => void;
 }
 
-/** The dashboard's Run Check modal as a sheet: mounted only while open so each opening starts from the prefill. */
+/**
+ * The dashboard's Run Check modal as a sheet. Each opening remounts the form (a new key), so it starts from the
+ * prefill; closing keeps it mounted so the sheet animates out.
+ */
 export function RunCheckSheet(props: RunCheckSheetProps) {
-  const { t } = useLocale();
-  return (
-    <BottomSheet open={props.open} title={t('Run Check')} onClose={props.onClose} closeLabel={t('Close')} testID="run-check">
-      {props.open ? <RunCheckBody {...props} /> : null}
-    </BottomSheet>
-  );
+  const [session, setSession] = useState(0);
+  const [shownOpen, setShownOpen] = useState(props.open);
+  if (props.open !== shownOpen) {
+    setShownOpen(props.open);
+    if (props.open) setSession((n) => n + 1);
+  }
+  return <RunCheckForm key={session} {...props} />;
 }
 
-function RunCheckBody({ prefill, vessels, profiles, onClose, onRan }: RunCheckSheetProps) {
+function RunCheckForm({ open, prefill, vessels, profiles, onClose, onRan }: RunCheckSheetProps) {
   const { t } = useLocale();
   const p = prefill ?? {};
   const [vesselId, setVesselId] = useState(p.vesselId || '');
@@ -56,17 +61,17 @@ function RunCheckBody({ prefill, vessels, profiles, onClose, onRan }: RunCheckSh
 
   const previewKey = `${vesselId}|${workflowProfileId}`;
   useEffect(() => {
-    if (!vesselId) return undefined;
+    if (!open || !vesselId) return undefined;
     let cancelled = false;
     previewWorkflowProfileForVessel(vesselId, workflowProfileId || undefined)
       .then((value) => { if (!cancelled) setPreviewState({ key: previewKey, value }); })
       .catch(() => { if (!cancelled) setPreviewState({ key: previewKey, value: null }); });
     return () => { cancelled = true; };
-  }, [previewKey, vesselId, workflowProfileId]);
+  }, [open, previewKey, vesselId, workflowProfileId]);
 
   const readinessKey = `${vesselId}|${workflowProfileId}|${type}|${environmentName}|${commandOverride.trim().length === 0}`;
   useEffect(() => {
-    if (!vesselId) return undefined;
+    if (!open || !vesselId) return undefined;
     let cancelled = false;
     getVesselReadiness(vesselId, {
       workflowProfileId: workflowProfileId || null,
@@ -77,7 +82,7 @@ function RunCheckBody({ prefill, vessels, profiles, onClose, onRan }: RunCheckSh
       .then((value) => { if (!cancelled) setReadinessState({ key: readinessKey, value }); })
       .catch(() => { if (!cancelled) setReadinessState({ key: readinessKey, value: null }); });
     return () => { cancelled = true; };
-  }, [readinessKey, commandOverride, environmentName, type, vesselId, workflowProfileId]);
+  }, [open, readinessKey, commandOverride, environmentName, type, vesselId, workflowProfileId]);
 
   const resolving = !!vesselId && previewState.key !== previewKey;
   const loadingReadiness = !!vesselId && readinessState.key !== readinessKey;
@@ -125,7 +130,7 @@ function RunCheckBody({ prefill, vessels, profiles, onClose, onRan }: RunCheckSh
   }
 
   const close = t('Close');
-  return (
+  const body = (
     <>
       <SelectField label={t('Vessel')} value={vesselId} options={recordOptions(vessels, t('Select a vessel...'))} onChange={setVesselId} closeLabel={close} testID="run-check-vessel" />
       <SelectField label={t('Workflow Profile')} value={workflowProfileId} options={recordOptions(profiles, t('Resolved default'))} onChange={setWorkflowProfileId} closeLabel={close} />
@@ -176,16 +181,29 @@ function RunCheckBody({ prefill, vessels, profiles, onClose, onRan }: RunCheckSh
         </View>
       </FieldCard>
       {error ? <AppText color="danger" accessibilityRole="alert" testID="run-check-error">{error}</AppText> : null}
-      <View style={styles.actions}>
-        <Button label={t('Cancel')} variant="ghost" onPress={onClose} disabled={running} />
-        <Button label={running ? t('Running...') : t('Run Check')} onPress={() => void submit()} busy={running} disabled={runBlocked} testID="run-check-submit" />
-      </View>
     </>
+  );
+  return (
+    <BottomSheet
+      open={open}
+      title={t('Run Check')}
+      onClose={onClose}
+      closeLabel={t('Close')}
+      testID="run-check"
+      // Run Check stays below the long form (preview, preflight), reachable without scrolling.
+      footer={open ? (
+        <FormActions>
+          <Button label={t('Cancel')} variant="ghost" onPress={onClose} disabled={running} />
+          <Button label={running ? t('Running...') : t('Run Check')} onPress={() => void submit()} busy={running} disabled={runBlocked} testID="run-check-submit" />
+        </FormActions>
+      ) : undefined}
+    >
+      {open ? body : null}
+    </BottomSheet>
   );
 }
 
 const styles = StyleSheet.create({
   block: { gap: spacing.xs, marginBottom: spacing.lg },
   pad: { padding: spacing.md, gap: spacing.xs },
-  actions: { flexDirection: 'row', justifyContent: 'flex-end', flexWrap: 'wrap', gap: spacing.sm },
 });

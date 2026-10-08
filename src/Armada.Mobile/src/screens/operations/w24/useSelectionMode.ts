@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import { useHardwareBack } from '../../../navigation/useHardwareBack';
 
 /** Pure: toggles an id in a selection. */
 export function toggleId(selected: readonly string[], id: string): string[] {
@@ -7,7 +8,7 @@ export function toggleId(selected: readonly string[], id: string): string[] {
 
 /**
  * Bulk selection for lists (the dashboard's row checkboxes): a long press starts selecting, taps then toggle rows,
- * and selection ends when nothing is selected or the user cancels.
+ * and selection ends when nothing is selected, the user cancels, or (Android) the user presses back.
  */
 export function useSelectionMode() {
   const [selected, setSelected] = useState<string[]>([]);
@@ -27,6 +28,7 @@ export function useSelectionMode() {
     setSelected([]);
     setActive(false);
   }, []);
+  useHardwareBack(active, clear);
   const selectAll = useCallback((ids: string[]) => {
     setActive(true);
     setSelected(ids);

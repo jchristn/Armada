@@ -36,4 +36,22 @@ describe('app config', () => {
     expect(pluginOptions(config, 'expo-local-authentication')).toEqual({ faceIDPermission: usage });
     expect(config.android?.permissions).toContain('USE_BIOMETRIC');
   });
+
+  it('keeps app content out of the Android Recents thumbnail without blocking screenshots', () => {
+    expect(resolveConfig().plugins).toContain('./plugins/withAndroidRecentsPrivacy');
+    const { addRecentsPrivacy } = require('../../plugins/withAndroidRecentsPrivacy');
+    const template = [
+      'import android.os.Build',
+      'class MainActivity : ReactActivity() {',
+      '  override fun onCreate(savedInstanceState: Bundle?) {',
+      '    super.onCreate(null)',
+      '  }',
+      '}',
+    ].join('\n');
+    const patched: string = addRecentsPrivacy(template);
+    expect(patched).toMatch(/super\.onCreate\(null\)\n.*\n\s*if \(Build\.VERSION\.SDK_INT >= Build\.VERSION_CODES\.TIRAMISU\) \{\n\s*setRecentsScreenshotEnabled\(false\)/);
+    expect(patched).not.toContain('FLAG_SECURE');
+    expect(addRecentsPrivacy(patched)).toBe(patched);
+    expect(() => addRecentsPrivacy('class MainActivity {}')).toThrow(/template changed/);
+  });
 });

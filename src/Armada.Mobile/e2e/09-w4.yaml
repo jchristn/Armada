@@ -86,11 +86,13 @@ name: 09-w4
     id: "persona-form-description"
 - eraseText: 400
 - inputText: "Edited from the mobile E2E flow"
+# On Android this is a back press: it must close only the keyboard, not the sheet with the edit in it.
 - hideKeyboard
-- scrollUntilVisible:
-    element:
-      id: "persona-form-submit"
-    direction: DOWN
+- assertVisible:
+    id: "persona-form-description"
+# Save sits in the form sheet's footer, reachable without scrolling.
+- assertVisible:
+    id: "persona-form-footer"
 - tapOn:
     id: "persona-form-submit"
 - extendedWaitUntil:
@@ -187,6 +189,8 @@ name: 09-w4
       id: "settings-backup"
     direction: DOWN
     visibilityPercentage: 100
+    # A long page: scroll faster (on Android each default-speed swipe moves it little and takes seconds).
+    speed: 80
     timeout: 90000
 # Nudge it clear of the tab bar (the bottom edge counts as visible behind it).
 - swipe:

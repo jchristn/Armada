@@ -49,16 +49,9 @@ name: 08-build-planning
 - runFlow: common/dismiss-keyboard-tips.yaml
 - inputText: "Mobile E2E backlog item"
 - pressKey: Enter
-# A long form: scroll faster and allow more time than the default.
-- scrollUntilVisible:
-    element:
-      id: "objective-form-save"
-    direction: DOWN
-    visibilityPercentage: 100
-    speed: 80
-    timeout: 60000
-# Save is the last control on the page; one more scroll lifts it clear of the tab bar.
-- scroll
+# A long form, but Save sits in a footer above the tab bar: reachable without scrolling.
+- assertVisible:
+    id: "objective-form-footer"
 - takeScreenshot: objective-form
 - tapOn:
     id: "objective-form-save"

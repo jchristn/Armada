@@ -38,11 +38,13 @@ name: 06-build-vessels
     visible:
       id: "vessel-form-name"
     timeout: 10000
+# Centered: on iOS a select the sheet has scrolled under its footer still counts as visible.
 - scrollUntilVisible:
     element:
       id: "vessel-form-landing-mode"
     direction: DOWN
     visibilityPercentage: 100
+    centerElement: true
 - tapOn:
     id: "vessel-form-landing-mode"
 - extendedWaitUntil:
@@ -52,11 +54,9 @@ name: 06-build-vessels
 - takeScreenshot: vessel-landing-modes
 - tapOn:
     id: "vessel-form-landing-mode-option-PullRequest"
-- scrollUntilVisible:
-    element:
-      id: "vessel-form-save"
-    direction: DOWN
-    visibilityPercentage: 100
+# Save sits in the sheet's footer, reachable without scrolling the long form.
+- assertVisible:
+    id: "vessel-form-footer"
 - takeScreenshot: vessel-form
 - tapOn:
     id: "vessel-form-save"
@@ -77,6 +77,11 @@ name: 06-build-vessels
       id: "vessel-detail-history"
     direction: UP
     visibilityPercentage: 100
+# iOS counts a row under the translucent header as visible; bring it down clear before tapping.
+- swipe:
+    start: "50%, 40%"
+    end: "50%, 60%"
+    duration: 600
 - tapOn:
     id: "vessel-detail-history"
 - extendedWaitUntil:

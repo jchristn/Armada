@@ -3,6 +3,7 @@ import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View, type Refr
 import { SafeAreaView, type Edge } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/ThemeContext';
 import { spacing } from '../../theme/typography';
+import { StickyFooter } from './StickyFooter';
 
 export interface ScreenProps {
   children: ReactNode;
@@ -14,9 +15,14 @@ export interface ScreenProps {
   testID?: string;
   /** Centers content in a readable column on wide screens. */
   maxWidth?: number;
+  /**
+   * A form's actions (usually FormActions with Cancel and the primary action), kept below the scrolling content so
+   * they are reachable without scrolling, above the tab bar and the keyboard.
+   */
+  footer?: ReactNode;
 }
 
-export function Screen({ children, scroll = true, edges = ['bottom', 'left', 'right'], refreshControl, testID, maxWidth = 720 }: ScreenProps) {
+export function Screen({ children, scroll = true, edges = ['bottom', 'left', 'right'], refreshControl, testID, maxWidth = 720, footer }: ScreenProps) {
   const { colors } = useTheme();
   const body = <View style={[styles.column, { maxWidth }]}>{children}</View>;
   return (
@@ -27,6 +33,7 @@ export function Screen({ children, scroll = true, edges = ['bottom', 'left', 'ri
             {body}
           </ScrollView>
         ) : body}
+        {footer ? <StickyFooter maxWidth={maxWidth} testID={testID ? `${testID}-footer` : undefined}>{footer}</StickyFooter> : null}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

@@ -15,14 +15,20 @@ name: 02-navigate
     visible:
       id: "home-screen"
     timeout: 10000
+# The group header first: centering Missions (the group's last row) scrolls the header off a phone screen.
+# Home is long; on a loaded host each emulator swipe can take seconds.
+- scrollUntilVisible:
+    element: "OPERATIONS"
+    direction: DOWN
+    timeout: 60000
+- assertVisible: "OPERATIONS"
+- takeScreenshot: work
 - scrollUntilVisible:
     element:
       id: "nav-/missions"
     direction: DOWN
     visibilityPercentage: 100
     centerElement: true
-- assertVisible: "OPERATIONS"
-- takeScreenshot: work
 - tapOn:
     id: "nav-/missions"
 - extendedWaitUntil:
@@ -38,6 +44,11 @@ name: 02-navigate
       id: "nav-/vessels"
     direction: DOWN
     visibilityPercentage: 100
+# iOS counts a row the scroll view has clipped (under the tab bar) as visible; lift it clear before tapping.
+- swipe:
+    start: "50%, 60%"
+    end: "50%, 40%"
+    duration: 600
 - tapOn:
     id: "nav-/vessels"
 - extendedWaitUntil:

@@ -56,6 +56,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   plugins: [
     'expo-router',
     './plugins/withSceneLifecycle',
+    // Recents shows no app content on Android 13+ (PrivacyOverlay draws too late there); screenshots still work.
+    './plugins/withAndroidRecentsPrivacy',
     [
       'expo-splash-screen',
       {

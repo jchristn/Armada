@@ -16,6 +16,7 @@ import { JsonSheet } from '../fleetActions/common';
 import { FleetDetailView } from './FleetDetailView';
 import { FleetFormSheet } from './FleetFormSheet';
 import { filterFleets, loadFleetData, vesselCounts } from './fleetData';
+import { useHardwareBack } from '../../navigation/useHardwareBack';
 
 type Confirm = { kind: 'one'; fleet: Fleet } | { kind: 'bulk'; ids: string[] } | null;
 
@@ -40,6 +41,7 @@ export function FleetsTab() {
   const fleets = useMemo(() => filterFleets(data.data?.fleets ?? [], search), [data.data, search]);
   const counts = useMemo(() => vesselCounts(data.data?.vessels ?? []), [data.data]);
   const selecting = selected !== null;
+  useHardwareBack(selecting, () => setSelected(null));
 
   const toggle = (id: string) => setSelected((s) => {
     const list = s ?? [];

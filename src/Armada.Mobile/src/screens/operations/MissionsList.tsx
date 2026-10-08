@@ -41,6 +41,7 @@ import type { OperationsListProps } from './listTypes';
 import type { MissionDetailTab } from './MissionDetail';
 import { MissionFormSheet, type MissionFormValues } from './mission/MissionFormSheet';
 import { TransitionSheet } from './mission/TransitionSheet';
+import { useHardwareBack } from '../../navigation/useHardwareBack';
 
 /** The dashboard Missions page's auto-refresh fallback (the socket is the primary source of updates). */
 export const MISSIONS_POLL_MS = 30000;
@@ -246,6 +247,7 @@ export function MissionsList({ onSelect, selectedId, onOpenTab }: MissionsListPr
   }
 
   const selecting = selection !== null;
+  useHardwareBack(selecting, () => setSelection(null));
   const header = (
     <View style={styles.header}>
       <SearchField value={search} onChangeText={setSearch} placeholder={t('Search missions')} clearLabel={t('Clear')} testID="missions-search" />
