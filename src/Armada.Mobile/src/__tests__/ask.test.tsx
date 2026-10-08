@@ -248,6 +248,34 @@ describe('Ask Armada', () => {
     expect(screen.getByTestId('ask-send')).toBeTruthy();
   });
 
+  it('a captain reply shows its turn duration and, behind an (i), its turn statistics with tool calls and tool time', async () => {
+    api.enumerateAskMessages.mockResolvedValue({
+      messages: [
+        message({}),
+        message({
+          id: 'msg_2', sequence: 2, role: 'Assistant', contentText: 'All quiet.', captainId: 'cpt_1', durationMs: 6400,
+          toolCalls: [
+            { callId: 'c1', toolName: 'armada_status', ok: true, resultText: '{}', elapsedMs: 420 },
+            { callId: 'c2', toolName: 'armada_enumerate', ok: true, resultText: '[]', elapsedMs: 1830 },
+          ],
+        }),
+        message({ id: 'msg_3', sequence: 3, role: 'Assistant', contentText: 'No timing here.', captainId: 'cpt_1' }),
+      ],
+      hasMore: false,
+    });
+    await renderAsk('/ask/thr_1');
+    await waitFor(() => expect(screen.getByText('All quiet.')).toBeTruthy());
+    // The dashboard's header duration and per-tool times stay where they were.
+    expect(screen.getByLabelText('Turn duration 6.4s')).toBeTruthy();
+    expect(screen.getByTestId('tool-chip-c2').props.accessibilityLabel).toContain('1.83s');
+    expect(screen.queryByTestId('ask-msg-3-stats-toggle')).toBeNull();
+
+    await act(async () => { fireEvent.press(screen.getByTestId('ask-msg-2-stats-toggle')); });
+    const panel = screen.getByTestId('ask-msg-2-stats');
+    expect(within(panel).getAllByLabelText(/: /).map((cell) => cell.props.accessibilityLabel)).toEqual(['total: 6.40s', 'tool calls: 2', 'tool time: 2.25s']);
+    expect(screen.getByTestId('ask-msg-2-stats-toggle').props.accessibilityState).toMatchObject({ expanded: true });
+  });
+
   it('a failed send drops the optimistic message and reports the error', async () => {
     api.createAskThread.mockResolvedValue(thread({ id: 'thr_new' }));
     api.sendAskMessage.mockRejectedValue(new Error('captain offline'));

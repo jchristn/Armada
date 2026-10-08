@@ -2,6 +2,7 @@ import { memo, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import type { AskActionProposal, AskMessage, CliPermissionRequest } from '@dashboard/types/models';
 import { formatTurnDuration, toolCallsToEvents } from '@dashboard/lib/askFormat';
+import { askTurnStatistics } from '@dashboard/lib/chatMetrics';
 import { useLocale } from '../../i18n/LocaleContext';
 import { useTheme } from '../../theme/ThemeContext';
 import { radius, spacing, touchSlop } from '../../theme/typography';
@@ -11,6 +12,7 @@ import { Icon } from '../ui/Icon';
 import { ConfirmCard } from './ConfirmCard';
 import { Markdown } from './Markdown';
 import { ToolChips } from './ToolChips';
+import { TurnStatsPanel, TurnStatsToggle } from './TurnStats';
 
 export interface MessageViewProps {
   message: AskMessage;
@@ -50,11 +52,13 @@ export function ThinkingBlock({ text, live }: { text: string; live?: boolean }) 
 /**
  * One persisted message, rendered by kind (the dashboard's AskMessageView): text (Markdown for the captain, plain
  * for the user), tool chips, confirm cards, CLI permission cards, action results, milestone updates, summaries,
- * and errors.
+ * and errors. A captain reply also has its turn statistics behind an (i) in its header (total time, tool calls, tool
+ * time: what the Admiral records for an Ask turn, which the dashboard shows as the turn duration and on the chips).
  */
 export const MessageView = memo(function MessageView({ message, proposal, captainName, proposalBusy, onApprove, onReject, workCard, onShowWork, cliRequest, onCliDecided, permissionDeniedNote }: MessageViewProps) {
   const { t, formatRelativeTime } = useLocale();
   const { colors } = useTheme();
+  const [statsOpen, setStatsOpen] = useState(false);
   const kind = String(message.kind || 'Text');
   const role = String(message.role || 'Assistant');
   const text = message.contentText ?? '';
@@ -165,6 +169,7 @@ export const MessageView = memo(function MessageView({ message, proposal, captai
 
   // Assistant text (and any unknown kind): tool chips, optional thinking, Markdown body.
   const tools = toolCallsToEvents(message.toolCalls);
+  const stats = askTurnStatistics(t, message);
   return (
     <View style={styles.block} testID={testID}>
       <ToolChips tools={tools} permissionDeniedNote={permissionDeniedNote} />
@@ -173,7 +178,9 @@ export const MessageView = memo(function MessageView({ message, proposal, captai
           <AppText variant="caption" muted style={styles.bold}>{captainName || t('Captain')}</AppText>
           {message.durationMs != null ? <AppText variant="caption" muted accessibilityLabel={`${t('Turn duration')} ${formatTurnDuration(message.durationMs)}`}>{formatTurnDuration(message.durationMs)}</AppText> : null}
           <AppText variant="caption" muted>{when}</AppText>
+          {stats.length > 0 ? <TurnStatsToggle open={statsOpen} onToggle={() => setStatsOpen((v) => !v)} testID={`${testID}-stats-toggle`} /> : null}
         </View>
+        {statsOpen && stats.length > 0 ? <TurnStatsPanel rows={stats} testID={`${testID}-stats`} /> : null}
         {message.thinkingText && message.thinkingText.trim() ? <ThinkingBlock text={message.thinkingText} /> : null}
         {proposal ? <ConfirmCard proposal={proposal} onApprove={onApprove} onReject={onReject} busy={proposalBusy} /> : null}
         <Markdown>{text}</Markdown>

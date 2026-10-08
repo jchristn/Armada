@@ -77,7 +77,7 @@
       "status": "implemented",
       "mobile": "src/app/(app)/(ask)/ask/index.tsx",
       "workstream": "W1.1",
-      "notes": "two mobile routes: /ask and /ask/:threadId (AskScreen); phones open the conversation list as a sheet, tablets split list and conversation; /ask reopens the last conversation once per app session"
+      "notes": "two mobile routes: /ask and /ask/:threadId (AskScreen); phones open the conversation list as a sheet, tablets split list and conversation; /ask reopens the last conversation once per app session; the captain picker is an inline dropdown under the captain bar; replies show the turn duration and tool times (as AskMessageView and the tool chips do) plus an (i) Turn statistics panel with the same numbers (shared lib/chatMetrics)"
     },
     {
       "kind": "route",
@@ -437,7 +437,7 @@
       "status": "implemented",
       "mobile": "src/app/(app)/(work)/planning/[id].tsx",
       "workstream": "W3.3",
-      "notes": "PlanningSessionScreen: own route on phones, beside the list on tablets"
+      "notes": "PlanningSessionScreen: own route on phones, beside the list on tablets; replies have the (i) Turn statistics of the dashboard's ChatMetricsInfo (time to first token, streaming, tokens/sec, tokens, total, tool calls, tool time; shared lib/chatMetrics)"
     },
     {
       "kind": "route",
