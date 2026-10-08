@@ -5,6 +5,7 @@ namespace Test.Shared.Suites.Services
     using System.IO;
     using System.Threading;
     using System.Threading.Tasks;
+    using Armada.Core;
     using Armada.Core.Enums;
     using Armada.Core.Harbor;
     using Armada.Core.Models;
@@ -215,6 +216,118 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(0, scenario.LocalLaunches, "nothing ran on the Admiral host");
             }));
 
+            cases.Add(CaseAsync("dock_present_on_harbor_is_probed_then_delegated", "Before a mission launch goes to a Harbor, the Harbor confirms the dock exists on its host; a Harbor that shares the Admiral's filesystem runs it", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                using Scenario scenario = new Scenario(testDb);
+                List<HarborLaunchRequest> launches = new List<HarborLaunchRequest>();
+                List<HarborGitRequest> probes = new List<HarborGitRequest>();
+                await scenario.LinkAsync("hbr_shared_fs", "usr_p", launches, true, probes).ConfigureAwait(false);
+
+                Dock dock = scenario.NewDock(null);
+                Mission mission = scenario.NewMission("usr_p");
+                await scenario.Handler.HandleLaunchAgentAsync(scenario.Captain, mission, dock).ConfigureAwait(false);
+
+                AssertEqual(1, probes.Count, "the Harbor was asked for the dock once");
+                AssertEqual(dock.WorktreePath, probes[0].Arguments[1], "the probe names the dock's worktree");
+                AssertEqual(1, launches.Count, "launched on the Harbor");
+                AssertEqual(dock.WorktreePath, launches[0].WorkingDirectory);
+                AssertEqual("hbr_shared_fs", dock.HarborId, "the dock is pinned to the Harbor that runs it");
+                AssertEqual(0, scenario.LocalLaunches, "nothing ran on the Admiral host");
+            }));
+
+            cases.Add(CaseAsync("dock_missing_on_harbor_runs_on_admiral_without_policy", "With requireHarborForLaunch off, a mission whose dock does not exist on the chosen Harbor runs on the Admiral host, where the dock is, and is never sent to the Harbor", TestTags.Negative, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                using Scenario scenario = new Scenario(testDb);
+                List<HarborLaunchRequest> launches = new List<HarborLaunchRequest>();
+                List<HarborGitRequest> probes = new List<HarborGitRequest>();
+                await scenario.LinkAsync("hbr_remote_fs", "usr_q", launches, false, probes).ConfigureAwait(false);
+
+                Dock dock = scenario.NewDock(null);
+                Mission mission = scenario.NewMission("usr_q");
+                int processId = await scenario.Handler.HandleLaunchAgentAsync(scenario.Captain, mission, dock).ConfigureAwait(false);
+
+                AssertTrue(processId > 0, "the local runtime reported a process id");
+                AssertEqual(1, probes.Count, "the Harbor was asked for the dock");
+                AssertEqual(0, launches.Count, "the Harbor never received a launch into a path it does not have");
+                AssertEqual(1, scenario.LocalLaunches, "ran on the Admiral host");
+                AssertNull(dock.HarborId, "the dock is not pinned to a Harbor that does not have it");
+                AssertNull(mission.AssignedHarborId, "the mission is not assigned to that Harbor");
+            }));
+
+            cases.Add(CaseAsync("dock_missing_on_harbor_is_refused_under_policy", "With requireHarborForLaunch on, a mission whose dock does not exist on the user's Harbor is refused with HarborDockNotFoundException naming the Harbor and the path", TestTags.Negative, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                using Scenario scenario = new Scenario(testDb);
+                scenario.Settings.RequireHarborForLaunch = true;
+                List<HarborLaunchRequest> launches = new List<HarborLaunchRequest>();
+                await scenario.LinkAsync("hbr_remote_policy", "usr_r", launches, false, new List<HarborGitRequest>()).ConfigureAwait(false);
+
+                Dock dock = scenario.NewDock(null);
+                HarborDockNotFoundException refused = await CatchDockNotFoundAsync(
+                    () => scenario.Handler.HandleLaunchAgentAsync(scenario.Captain, scenario.NewMission("usr_r"), dock)).ConfigureAwait(false);
+
+                AssertEqual("hbr_remote_policy", refused.HarborId);
+                AssertEqual(dock.WorktreePath, refused.WorktreePath);
+                AssertContains(dock.WorktreePath!, refused.Message, "the message names the missing path");
+                AssertContains("requireHarborForLaunch", refused.Message, "the message names the setting");
+                AssertEqual(0, launches.Count, "the Harbor never received the launch");
+                AssertEqual(0, scenario.LocalLaunches, "nothing ran on the Admiral host");
+            }));
+
+            cases.Add(CaseAsync("dispatch_fails_mission_once_when_harbor_lacks_dock_under_policy", "Dispatching a mission whose dock the user's Harbor does not have fails it as Infra with the reason, instead of returning it to Pending and relaunching every cycle", TestTags.Negative, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                using Scenario scenario = new Scenario(testDb);
+                scenario.Settings.RequireHarborForLaunch = true;
+                List<HarborLaunchRequest> launches = new List<HarborLaunchRequest>();
+                await scenario.LinkAsync("hbr_remote_dispatch", Constants.DefaultUserId, launches, false, new List<HarborGitRequest>()).ConfigureAwait(false);
+                Vessel vessel = await scenario.CreateVesselAsync().ConfigureAwait(false);
+                Captain captain = await scenario.CreateIdleCaptainAsync().ConfigureAwait(false);
+                Mission mission = await scenario.CreatePendingMissionAsync(vessel, Constants.DefaultUserId).ConfigureAwait(false);
+
+                bool assigned = await scenario.Missions.TryAssignAsync(mission, vessel).ConfigureAwait(false);
+
+                Mission? failed = await testDb.Driver.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
+                Captain? released = await testDb.Driver.Captains.ReadAsync(captain.Id).ConfigureAwait(false);
+                AssertFalse(assigned, "the mission was not assigned");
+                AssertEqual(MissionStatusEnum.Failed, failed!.Status, "the mission failed instead of returning to Pending");
+                AssertEqual(MissionFailureKindEnum.Infra, failed.FailureKind);
+                AssertContains("hbr_remote_dispatch", failed.FailureReason ?? String.Empty, "the reason names the Harbor");
+                AssertContains(scenario.Settings.DocksDirectory, failed.FailureReason ?? String.Empty, "the reason names the Admiral's docks directory");
+                AssertEqual(CaptainStateEnum.Idle, released!.State, "the captain is released");
+                AssertEqual(0, launches.Count, "the Harbor never received a launch");
+                AssertEqual(0, scenario.LocalLaunches, "nothing ran on the Admiral host");
+
+                List<Dock> docks = await testDb.Driver.Docks.EnumerateByVesselAsync(vessel.Id).ConfigureAwait(false);
+                foreach (Dock dock in docks)
+                    AssertFalse(dock.Active, "the provisioned dock was reclaimed");
+            }));
+
+            cases.Add(CaseAsync("dispatch_fails_mission_when_harbor_lacks_dock_and_admiral_lacks_cli", "With requireHarborForLaunch off, a mission whose dock the Harbor does not have and whose CLI is not installed on the Admiral host fails as Infra with both reasons", TestTags.Negative, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                using Scenario scenario = new Scenario(testDb);
+                scenario.LocalCliMissing = true;
+                List<HarborLaunchRequest> launches = new List<HarborLaunchRequest>();
+                await scenario.LinkAsync("hbr_remote_nocli", Constants.DefaultUserId, launches, false, new List<HarborGitRequest>()).ConfigureAwait(false);
+                Vessel vessel = await scenario.CreateVesselAsync().ConfigureAwait(false);
+                Captain captain = await scenario.CreateIdleCaptainAsync().ConfigureAwait(false);
+                Mission mission = await scenario.CreatePendingMissionAsync(vessel, Constants.DefaultUserId).ConfigureAwait(false);
+
+                bool assigned = await scenario.Missions.TryAssignAsync(mission, vessel).ConfigureAwait(false);
+
+                Mission? failed = await testDb.Driver.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
+                AssertFalse(assigned, "the mission was not assigned");
+                AssertEqual(MissionStatusEnum.Failed, failed!.Status, "the mission failed instead of returning to Pending");
+                AssertEqual(MissionFailureKindEnum.Infra, failed.FailureKind);
+                AssertContains("hbr_remote_nocli", failed.FailureReason ?? String.Empty, "the reason names the Harbor");
+                AssertContains("ClaudeCode CLI", failed.FailureReason ?? String.Empty, "the reason names the missing CLI");
+                AssertEqual(0, launches.Count, "the Harbor never received a launch");
+                AssertEqual(CaptainStateEnum.Idle, (await testDb.Driver.Captains.ReadAsync(captain.Id).ConfigureAwait(false))!.State, "the captain is released");
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
                 displayName: "Harbor dock affinity and requireHarborForLaunch at launch (experimental split mode)",
@@ -237,6 +350,20 @@ namespace Test.Shared.Suites.Services
             }
 
             throw new InvalidOperationException("Expected the launch to be refused with HarborLaunchUnavailableException, but it ran.");
+        }
+
+        private static async Task<HarborDockNotFoundException> CatchDockNotFoundAsync(Func<Task<int>> launch)
+        {
+            try
+            {
+                await launch().ConfigureAwait(false);
+            }
+            catch (HarborDockNotFoundException ex)
+            {
+                return ex;
+            }
+
+            throw new InvalidOperationException("Expected the launch to be refused with HarborDockNotFoundException, but it ran.");
         }
 
         private static TestCaseDescriptor CaseAsync(string caseId, string displayName, string tag, Func<Task> body)
@@ -287,6 +414,14 @@ namespace Test.Shared.Suites.Services
 
             public AgentLifecycleHandler Handler { get; }
 
+            public MissionService Missions { get; }
+
+            /// <summary>
+            /// When true, the captain's CLI is not installed on the Admiral host: a local launch fails with
+            /// <see cref="AgentRuntimeNotInstalledException"/>.
+            /// </summary>
+            public bool LocalCliMissing { get; set; } = false;
+
             public Captain Captain { get; } = new Captain("affinity-launch-captain", AgentRuntimeEnum.ClaudeCode);
 
             public string WorktreePath { get; }
@@ -313,6 +448,8 @@ namespace Test.Shared.Suites.Services
                 AgentRuntimeFactory runtimeFactory = new AgentRuntimeFactory(Logging);
                 runtimeFactory.Override(AgentRuntimeEnum.ClaudeCode, () =>
                 {
+                    if (LocalCliMissing)
+                        return new ClaudeCodeRuntime(Logging) { ExecutablePath = Path.Combine(WorktreePath, "missing-cli", "claude") };
                     Interlocked.Increment(ref _LocalLaunches);
                     return new StubCaptainRuntime(Logging, behavior);
                 });
@@ -321,8 +458,8 @@ namespace Test.Shared.Suites.Services
                 DirCreatingGitService git = new DirCreatingGitService();
                 IDockService docks = new DockService(Logging, db.Driver, Settings, git);
                 Captains = new CaptainService(Logging, db.Driver, Settings, git, docks);
-                MissionService missions = new MissionService(Logging, db.Driver, Settings, docks, Captains, git: git);
-                Admiral = new AdmiralService(Logging, db.Driver, Settings, Captains, missions, new VoyageService(Logging, db.Driver), docks);
+                Missions = new MissionService(Logging, db.Driver, Settings, docks, Captains, git: git);
+                Admiral = new AdmiralService(Logging, db.Driver, Settings, Captains, Missions, new VoyageService(Logging, db.Driver), docks);
 
                 Handler = new AgentLifecycleHandler(
                     Logging, db.Driver, Settings, runtimeFactory, Admiral, new MessageTemplateService(Logging), null, null,
@@ -370,10 +507,35 @@ namespace Test.Shared.Suites.Services
                 await _Db.Driver.Captains.UpdateAsync(captain).ConfigureAwait(false);
             }
 
-            public async Task LinkAsync(string harborId, string? userId, List<HarborLaunchRequest> launches)
+            public Task LinkAsync(string harborId, string? userId, List<HarborLaunchRequest> launches)
+            {
+                return LinkAsync(harborId, userId, launches, true, new List<HarborGitRequest>());
+            }
+
+            /// <summary>
+            /// Link a fake Harbor. It answers a dock probe (<c>git -C path rev-parse --git-dir</c>) with exit 0 when it
+            /// shares the Admiral's filesystem and the path exists, and with exit 128 otherwise (a Harbor on another
+            /// machine, which never has the Admiral's docks).
+            /// </summary>
+            public async Task LinkAsync(string harborId, string? userId, List<HarborLaunchRequest> launches, bool sharesAdmiralFilesystem, List<HarborGitRequest> probes)
             {
                 HarborSendDelegate send = async (message, token) =>
                 {
+                    if (message is HarborGitRequest git)
+                    {
+                        lock (probes) probes.Add(git);
+                        string path = git.Arguments.Count > 1 ? git.Arguments[1] : String.Empty;
+                        bool present = sharesAdmiralFilesystem && Directory.Exists(path);
+                        HarborGitResult result = new HarborGitResult
+                        {
+                            RequestId = git.RequestId,
+                            ExitCode = present ? 0 : 128,
+                            StandardError = present ? String.Empty : "fatal: cannot change to '" + path + "': No such file or directory"
+                        };
+                        await Manager.OnMessageAsync(harborId, result, token).ConfigureAwait(false);
+                        return;
+                    }
+
                     if (message is HarborLaunchRequest launch)
                     {
                         lock (launches) launches.Add(launch);
@@ -405,9 +567,36 @@ namespace Test.Shared.Suites.Services
                 return new Dock { BranchName = "armada/affinity", WorktreePath = WorktreePath, HarborId = harborId };
             }
 
+            public async Task<Vessel> CreateVesselAsync()
+            {
+                string suffix = Guid.NewGuid().ToString("N").Substring(0, 8);
+                Vessel vessel = new Vessel("dock-probe-vessel-" + suffix, "https://github.com/test/repo.git");
+                vessel.LocalPath = Path.Combine(Settings.ReposDirectory, vessel.Name + ".git");
+                vessel.DefaultBranch = "main";
+                return await _Db.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
+            }
+
+            public async Task<Captain> CreateIdleCaptainAsync()
+            {
+                Captain captain = new Captain("dock-probe-captain-" + Guid.NewGuid().ToString("N").Substring(0, 8), AgentRuntimeEnum.ClaudeCode);
+                captain.State = CaptainStateEnum.Idle;
+                return await _Db.Driver.Captains.CreateAsync(captain).ConfigureAwait(false);
+            }
+
+            public async Task<Mission> CreatePendingMissionAsync(Vessel vessel, string userId)
+            {
+                Mission mission = new Mission("Run Test.Automated", "Run the test suite");
+                mission.VesselId = vessel.Id;
+                mission.UserId = userId;
+                mission.Status = MissionStatusEnum.Pending;
+                return await _Db.Driver.Missions.CreateAsync(mission).ConfigureAwait(false);
+            }
+
             public void Dispose()
             {
                 try { Directory.Delete(WorktreePath, true); } catch { }
+                try { Directory.Delete(Settings.DocksDirectory, true); } catch { }
+                try { Directory.Delete(Settings.ReposDirectory, true); } catch { }
                 try { Directory.Delete(Settings.LogDirectory, true); } catch { }
             }
         }

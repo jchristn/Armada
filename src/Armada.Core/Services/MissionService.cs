@@ -634,6 +634,42 @@ namespace Armada.Core.Services
 
                     _Logging.Info(_Header + "launched agent process " + processId + " for captain " + captain.Id);
                 }
+                catch (HarborDockNotFoundException dockMissing)
+                {
+                    // The Harbor chosen for the mission does not have its dock, and the mission cannot run on the Admiral
+                    // host either. Returning it to Pending would provision a new dock and launch into the same missing path
+                    // on every dispatch cycle, so the mission fails with the actionable reason instead.
+                    _Logging.Warn(_Header + "mission " + mission.Id + " failed at launch: " + dockMissing.Message);
+                    await _Captains.ReleaseAsync(captain, token).ConfigureAwait(false);
+
+                    mission.Status = MissionStatusEnum.Failed;
+                    mission.FailureKind = MissionFailureKindEnum.Infra;
+                    mission.FailureReason = dockMissing.Message;
+                    mission.DockId = null;
+                    mission.ProcessId = null;
+                    mission.CompletedUtc = DateTime.UtcNow;
+                    mission.LastUpdateUtc = DateTime.UtcNow;
+                    await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+                    ArmadaMetrics.MissionsFailed.Add(1);
+
+                    try
+                    {
+                        await _Docks.ReclaimAsync(dock.Id, token: token).ConfigureAwait(false);
+                    }
+                    catch (Exception reclaimEx)
+                    {
+                        _Logging.Warn(_Header + "failed to reclaim dock " + dock.Id +
+                            " after launch failure for mission " + mission.Id + ": " + reclaimEx.Message);
+                    }
+
+                    Signal failedSignal = new Signal(SignalTypeEnum.Error, "Mission " + mission.Id + " failed: " + dockMissing.Message);
+                    failedSignal.TenantId = mission.TenantId;
+                    failedSignal.UserId = mission.UserId;
+                    failedSignal.FromCaptainId = captain.Id;
+                    await _Database.Signals.CreateAsync(failedSignal, token).ConfigureAwait(false);
+
+                    return false;
+                }
                 catch (Exception ex)
                 {
                     _Logging.Warn(_Header + "failed to launch agent for captain " + captain.Id + ": " + ex.ToString());

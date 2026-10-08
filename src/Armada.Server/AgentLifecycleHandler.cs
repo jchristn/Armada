@@ -97,6 +97,29 @@ namespace Armada.Server
             public string MissionId { get; set; } = String.Empty;
         }
 
+        /// <summary>
+        /// Where a mission launch runs, and, when it fell back to the Admiral host because the chosen Harbor does not
+        /// have the mission's dock, which Harbor that was and why.
+        /// </summary>
+        private sealed class LaunchExecutorResolution
+        {
+            public IHostProcessExecutor Executor { get; set; }
+
+            public string? DockMissingHarborId { get; set; } = null;
+
+            public string? DockMissingReason { get; set; } = null;
+
+            public LaunchExecutorResolution(IHostProcessExecutor executor)
+            {
+                Executor = executor;
+            }
+        }
+
+        /// <summary>
+        /// How long to wait for a Harbor to confirm that a mission's dock exists on its host before a launch.
+        /// </summary>
+        private const int _HarborDockProbeTimeoutMs = 15000;
+
         private System.Collections.Concurrent.ConcurrentDictionary<string, PendingLaunchInfo> _PendingLaunches = new System.Collections.Concurrent.ConcurrentDictionary<string, PendingLaunchInfo>();
 
         /// <summary>
@@ -511,8 +534,8 @@ namespace Armada.Server
         public async Task<int> HandleLaunchAgentAsync(Captain captain, Mission mission, Dock dock)
         {
             _Logging.Info(_Header + "launching " + captain.Runtime + " agent for captain " + captain.Id);
-            IHostProcessExecutor executor = await ResolveLaunchExecutorAsync(captain, mission, dock).ConfigureAwait(false);
-            Armada.Runtimes.Interfaces.IAgentRuntime runtime = executor.CreateRuntime(captain.Runtime);
+            LaunchExecutorResolution resolution = await ResolveLaunchExecutorAsync(captain, mission, dock).ConfigureAwait(false);
+            Armada.Runtimes.Interfaces.IAgentRuntime runtime = resolution.Executor.CreateRuntime(captain.Runtime);
             string launchKey = captain.Id + ":" + mission.Id;
             _PendingLaunches[launchKey] = new PendingLaunchInfo
             {
@@ -653,10 +676,22 @@ namespace Armada.Server
                     isolateLaunch: isolateLaunch,
                     mcpPort: _Settings.McpPort).ConfigureAwait(false);
             }
-            catch
+            catch (Exception ex)
             {
                 _PendingLaunches.TryRemove(launchKey, out _);
                 _MissionFinalMessageFiles.TryRemove(mission.Id, out _);
+
+                // The launch fell back to the Admiral host only because the Harbor does not have the dock, and the
+                // Admiral host cannot run the runtime either: the mission cannot run anywhere until a setting changes.
+                if (ex is AgentRuntimeNotInstalledException notInstalled && resolution.DockMissingReason != null && resolution.DockMissingHarborId != null)
+                {
+                    string message = resolution.DockMissingReason
+                        + " The launch fell back to the Admiral host, where the " + notInstalled.Runtime + " CLI ('" + notInstalled.Executable + "') is not installed."
+                        + " Install that CLI on the Admiral host, or run the Admiral on the Harbor's machine.";
+                    _Logging.Warn(_Header + message);
+                    throw new HarborDockNotFoundException(resolution.DockMissingHarborId, dock.WorktreePath ?? String.Empty, message, notInstalled);
+                }
+
                 throw;
             }
 
@@ -1217,8 +1252,12 @@ namespace Armada.Server
         /// available; otherwise it falls back to the Admiral host (the worktree is created on the Admiral) with a
         /// warning. When requireHarborForLaunch is on, the launch is refused with
         /// <see cref="HarborLaunchUnavailableException"/> instead of running on the Admiral host.
+        /// Docks are provisioned on the Admiral host, so before a launch goes to a Harbor the Harbor is asked whether
+        /// the dock's worktree exists there. A Harbor that does not have it never receives the launch: with the policy
+        /// off the launch runs on the Admiral host (where the dock is); with it on the launch is refused with
+        /// <see cref="HarborDockNotFoundException"/>, which fails the mission, because retrying cannot help.
         /// </summary>
-        private async Task<IHostProcessExecutor> ResolveLaunchExecutorAsync(Captain captain, Mission mission, Dock dock)
+        private async Task<LaunchExecutorResolution> ResolveLaunchExecutorAsync(Captain captain, Mission mission, Dock dock)
         {
             string? pinnedHarborId = String.IsNullOrWhiteSpace(dock.HarborId) ? null : dock.HarborId;
 
@@ -1243,13 +1282,84 @@ namespace Armada.Server
             CaptainLaunchDecision decision = await router.DecideAsync(context).ConfigureAwait(false);
             if (decision.HarborId != null && _HarborConnections != null)
             {
+                string worktreePath = dock.WorktreePath ?? String.Empty;
+                Armada.Core.Harbor.HarborGitResult? probe = await ProbeDockOnHarborAsync(decision.HarborId, worktreePath).ConfigureAwait(false);
+                if (probe == null)
+                {
+                    // The Harbor did not answer: a transient condition, handled like an unavailable Harbor.
+                    string unconfirmed = "Harbor " + decision.HarborId + " did not confirm that dock " + worktreePath + " exists on its host";
+                    if (decision.HarborRequired) throw HarborUnavailable(mission, pinnedHarborId, true, unconfirmed);
+                    return new LaunchExecutorResolution(LocalFallback(mission, pinnedHarborId, unconfirmed));
+                }
+
+                if (probe.ExitCode != 0)
+                {
+                    string missing = BuildDockMissingReason(mission, decision.HarborId, worktreePath, probe);
+                    if (decision.HarborRequired)
+                    {
+                        string refused = missing + " requireHarborForLaunch is on, so the mission will not run on the Admiral host either."
+                            + " Run the Admiral on the Harbor's machine, or turn requireHarborForLaunch off and install the "
+                            + captain.Runtime + " CLI on the Admiral host so missions run there.";
+                        _Logging.Warn(_Header + refused);
+                        throw new HarborDockNotFoundException(decision.HarborId, worktreePath, refused);
+                    }
+
+                    _Logging.Warn(_Header + missing + " Running the captain on the Admiral host, where the dock is.");
+                    LaunchExecutorResolution fallback = new LaunchExecutorResolution(_HostProcessExecutor);
+                    fallback.DockMissingHarborId = decision.HarborId;
+                    fallback.DockMissingReason = missing;
+                    return fallback;
+                }
+
                 await RecordHarborAffinityAsync(mission, dock, decision.HarborId).ConfigureAwait(false);
                 _Logging.Info(_Header + "delegating captain launch to Harbor " + decision.HarborId + " (" + decision.Reason + ")");
-                return new Armada.Runtimes.RemoteHostProcessExecutor(_HarborConnections, decision.HarborId, _EndpointResolver);
+                return new LaunchExecutorResolution(new Armada.Runtimes.RemoteHostProcessExecutor(_HarborConnections, decision.HarborId, _EndpointResolver));
             }
 
             if (decision.HarborRequired) throw HarborUnavailable(mission, pinnedHarborId, true, decision.Reason);
-            return LocalFallback(mission, pinnedHarborId, decision.Reason);
+            return new LaunchExecutorResolution(LocalFallback(mission, pinnedHarborId, decision.Reason));
+        }
+
+        /// <summary>
+        /// Ask a Harbor whether a dock's worktree exists on its host (<c>git -C path rev-parse --git-dir</c>). Returns the
+        /// result (exit 0 when the worktree is there), or null when the Harbor did not answer or its link closed.
+        /// </summary>
+        private async Task<Armada.Core.Harbor.HarborGitResult?> ProbeDockOnHarborAsync(string harborId, string worktreePath)
+        {
+            if (_HarborConnections == null) return null;
+            if (String.IsNullOrWhiteSpace(worktreePath))
+                return new Armada.Core.Harbor.HarborGitResult { ExitCode = 1, StandardError = "the dock has no worktree path" };
+
+            Armada.Core.Harbor.HarborGitRequest request = new Armada.Core.Harbor.HarborGitRequest
+            {
+                RequestId = Guid.NewGuid().ToString("N"),
+                Executable = "git",
+                WorkingDirectory = String.Empty,
+                Arguments = new List<string> { "-C", worktreePath, "rev-parse", "--git-dir" }
+            };
+
+            try
+            {
+                return await _HarborConnections.SendGitAsync(harborId, request, _HarborDockProbeTimeoutMs).ConfigureAwait(false);
+            }
+            catch (InvalidOperationException ex)
+            {
+                _Logging.Warn(_Header + "could not ask Harbor " + harborId + " for dock " + worktreePath + ": " + ex.Message);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Describe a dock that does not exist on the Harbor chosen for its mission, and what makes a Harbor able to run it.
+        /// </summary>
+        private string BuildDockMissingReason(Mission mission, string harborId, string worktreePath, Armada.Core.Harbor.HarborGitResult probe)
+        {
+            string detail = (probe.StandardError ?? String.Empty).Trim();
+            return "Mission " + mission.Id + " cannot run on Harbor " + harborId + ": its dock " + worktreePath
+                + " is a git worktree on the Admiral host and does not exist on that Harbor's host"
+                + (detail.Length > 0 ? " (" + detail + ")" : String.Empty) + "."
+                + " Docks are created on the Admiral host, so a Harbor can run missions only when it sees the Admiral's docks directory ("
+                + _Settings.DocksDirectory + ") at the same path, for example a Harbor on the Admiral's own machine.";
         }
 
         /// <summary>

@@ -83,6 +83,12 @@ namespace Test.Shared.Infrastructure
             return _Inner.StopAsync(jobId, gracefulTimeoutMs, token);
         }
 
+        /// <inheritdoc />
+        public string? ResolveWorkingDirectory(HarborLaunchRequest request)
+        {
+            return _Inner.ResolveWorkingDirectory(request);
+        }
+
         /// <summary>
         /// Snapshot of the launch requests received.
         /// </summary>

@@ -2,11 +2,13 @@ namespace Test.Shared.Suites.Services
 {
     using System;
     using System.Collections.Generic;
+    using System.IO;
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Core.Harbor;
     using Armada.Core.Models;
     using Armada.Core.Services;
+    using Armada.Runtimes;
     using SyslogLogging;
     using Test.Shared.Infrastructure;
     using Touchstone.Core;
@@ -155,6 +157,54 @@ namespace Test.Shared.Suites.Services
                 AssertTrue(exited.TimeToFirstTokenMs!.Value >= 2000 && exited.TimeToFirstTokenMs.Value <= exited.DurationMs.Value, "first output is the monotonic 2 s: " + exited.TimeToFirstTokenMs.Value);
             }));
 
+            cases.Add(CaseAsync("launch_log_names_where_the_job_runs", "The Launch job log line names the directory the job runs in: the scratch directory Harbor creates (and the requested path it replaces), the requested directory, or that there is none", TestTags.Positive, async () =>
+            {
+                string scratchRoot = Path.Combine(Path.GetTempPath(), "armada_lc_scratch_" + Guid.NewGuid().ToString("N"));
+                string existing = Path.Combine(Path.GetTempPath(), "armada_lc_wd_" + Guid.NewGuid().ToString("N"));
+                Directory.CreateDirectory(existing);
+                try
+                {
+                    LoggingModule logging = CreateLogging();
+                    ResolvingJobRunner runner = new ResolvingJobRunner(new LocalHarborJobRunner(logging, new AgentRuntimeFactory(logging), scratchRoot));
+                    FakeTransport transport = new FakeTransport();
+                    transport.Enqueue(HarborProtocol.Serialize(new HarborLaunchRequest { JobId = "job-chat", Runtime = "ClaudeCode", WorkingDirectory = "", ScratchWorkingDirectory = true }));
+                    transport.Enqueue(HarborProtocol.Serialize(new HarborLaunchRequest { JobId = "job-plan", Runtime = "ClaudeCode", WorkingDirectory = "/app/data/docks/PrettyId/msn_x", ScratchWorkingDirectory = true }));
+                    transport.Enqueue(HarborProtocol.Serialize(new HarborLaunchRequest { JobId = "job-dock", Runtime = "ClaudeCode", WorkingDirectory = existing }));
+                    transport.Enqueue(HarborProtocol.Serialize(new HarborLaunchRequest { JobId = "job-none", Runtime = "ClaudeCode", WorkingDirectory = "" }));
+                    List<string> lines = new List<string>();
+                    HarborLinkClient client = new HarborLinkClient("hbr_lc7", "Rig", new List<HarborCapability>(), 4, new StubExecutor(new HostCommandResult()), logging, 0,
+                        entry => { lock (lines) lines.Add(entry.Message); }, runner);
+
+                    await client.RunSessionAsync(transport, CancellationToken.None).ConfigureAwait(false);
+
+                    AssertTrue(lines.Contains("Launch job job-chat (runtime ClaudeCode) in scratch directory " + Path.Combine(scratchRoot, "scratch", "job-chat")), "a chat turn names its scratch directory");
+                    AssertTrue(lines.Contains("Launch job job-plan (runtime ClaudeCode) in scratch directory " + Path.Combine(scratchRoot, "scratch", "job-plan")
+                        + " (requested /app/data/docks/PrettyId/msn_x does not exist on this host)"), "a replaced Admiral path is named");
+                    AssertTrue(lines.Contains("Launch job job-dock (runtime ClaudeCode) in " + existing), "a dock launch names its directory");
+                    AssertTrue(lines.Contains("Launch job job-none (runtime ClaudeCode) with no working directory"), "a launch with none says so");
+                    foreach (string line in lines)
+                        AssertFalse(line.EndsWith(" in", StringComparison.Ordinal) || line.EndsWith(" in ", StringComparison.Ordinal), "no truncated line: " + line);
+                }
+                finally
+                {
+                    try { Directory.Delete(existing, true); } catch { }
+                    try { Directory.Delete(scratchRoot, true); } catch { }
+                }
+            }));
+
+            cases.Add(CaseAsync("git_work_log_names_current_directory", "A git request with no working directory says it runs in the Harbor's current directory", TestTags.Positive, async () =>
+            {
+                FakeTransport transport = new FakeTransport();
+                transport.Enqueue(HarborProtocol.Serialize(new HarborGitRequest { RequestId = "req-probe", WorkingDirectory = "", Arguments = new List<string> { "-C", "/app/data/docks/x", "rev-parse", "--git-dir" } }));
+                List<string> lines = new List<string>();
+                HarborLinkClient client = new HarborLinkClient("hbr_lc8", "Rig", new List<HarborCapability>(), 4, new StubExecutor(new HostCommandResult { ExitCode = 128 }), CreateLogging(), 0,
+                    entry => { lock (lines) lines.Add(entry.Message); });
+
+                await client.RunSessionAsync(transport, CancellationToken.None).ConfigureAwait(false);
+
+                AssertTrue(lines.Contains("Work: git -C /app/data/docks/x rev-parse --git-dir (in the Harbor's current directory) [req req-probe]"), "the work line names where it runs");
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: "Services.HarborLinkClient",
                 displayName: "Harbor Link Client",
@@ -247,6 +297,30 @@ namespace Test.Shared.Suites.Services
             }
 
             public Task StopAsync(string jobId, int gracefulTimeoutMs, CancellationToken token) => Task.CompletedTask;
+
+            public string? ResolveWorkingDirectory(HarborLaunchRequest request) => String.IsNullOrWhiteSpace(request.WorkingDirectory) ? null : request.WorkingDirectory;
+        }
+
+        /// <summary>
+        /// Resolves working directories with a real <see cref="LocalHarborJobRunner"/> but starts nothing: each job
+        /// starts and exits at once.
+        /// </summary>
+        private sealed class ResolvingJobRunner : IHarborJobRunner
+        {
+            private readonly LocalHarborJobRunner _Resolver;
+
+            public ResolvingJobRunner(LocalHarborJobRunner resolver) => _Resolver = resolver;
+
+            public Task StartAsync(HarborLaunchRequest request, string? mcpBaseUrl, Action<int> onStarted, Action<HarborOutputStreamEnum, string> onOutput, Action<int> onExited, CancellationToken token)
+            {
+                onStarted(4343);
+                onExited(0);
+                return Task.CompletedTask;
+            }
+
+            public Task StopAsync(string jobId, int gracefulTimeoutMs, CancellationToken token) => Task.CompletedTask;
+
+            public string? ResolveWorkingDirectory(HarborLaunchRequest request) => _Resolver.ResolveWorkingDirectory(request);
         }
 
         private sealed class StubExecutor : IHostCommandExecutor
