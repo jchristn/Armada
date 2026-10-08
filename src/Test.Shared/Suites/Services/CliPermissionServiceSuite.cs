@@ -97,7 +97,89 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(CliPermissionRequestStatusEnum.Denied, outcome.Request!.Status);
             }));
 
-            cases.Add(Case("timeout_denies", "With no decision before the timeout the prompt is denied as Expired", async () =>
+            cases.Add(Case("in_flight_prompts_name_the_stalled_step", "A prompt whose store is held up is reported in flight at Storing, then at Waiting with its card once it proceeds, and is gone once decided", async () =>
+            {
+                using AskTestHarness h = await AskTestHarness.CreateAsync().ConfigureAwait(false);
+                CliPermissionService svc = Service(h);
+                AskThread thread = await NewThreadAsync(h, "usr_cpo9").ConfigureAwait(false);
+                AssertEqual(0, svc.GetInFlightPrompts().Count, "nothing in flight before the prompt");
+
+                // Hold the SQLite in-process write lock (the gate every locked write queues on) so the prompt stalls while
+                // storing its request, the way a long writer stalls it on a busy server.
+                Armada.Core.Database.Sqlite.SqliteDatabaseDriver? sqlite = h.Db.Driver as Armada.Core.Database.Sqlite.SqliteDatabaseDriver;
+                Task<CliPermissionPromptOutcome> prompt;
+                if (sqlite != null)
+                {
+                    await sqlite.WriteLock.WaitAsync().ConfigureAwait(false);
+                    try
+                    {
+                        prompt = svc.PromptAsync(ThreadContext(thread, null), "Bash", BashInput);
+                        CliPermissionPromptProgress? stalled = null;
+                        bool atStoring = await AskTestHarness.WaitUntilAsync(() =>
+                        {
+                            stalled = svc.GetInFlightPrompts().SingleOrDefault();
+                            return Task.FromResult(stalled != null && stalled.Stage == CliPermissionPromptStageEnum.Storing);
+                        }, 10000).ConfigureAwait(false);
+                        AssertTrue(atStoring, "the stalled prompt is reported at Storing (" + stalled?.Describe(DateTime.UtcNow) + ")");
+                        AssertEqual(thread.Id, stalled!.ThreadId);
+                        AssertNull(stalled.MessageId, "no card yet");
+                        AssertEqual(0, (await h.Db.Driver.CliPermissionRequests.EnumerateAsync(new CliPermissionRequestQuery { ThreadId = thread.Id }).ConfigureAwait(false)).Count, "nothing stored while the write is held");
+                        AssertFalse(prompt.IsCompleted, "the prompt waits for the store");
+                    }
+                    finally
+                    {
+                        sqlite.WriteLock.Release();
+                    }
+                }
+                else
+                {
+                    prompt = svc.PromptAsync(ThreadContext(thread, null), "Bash", BashInput);
+                }
+
+                CliPermissionRequest pending = await WaitForPendingAsync(h, thread.Id).ConfigureAwait(false);
+                CliPermissionPromptProgress? waiting = null;
+                bool atWaiting = await AskTestHarness.WaitUntilAsync(() =>
+                {
+                    waiting = svc.GetInFlightPrompts().SingleOrDefault();
+                    return Task.FromResult(waiting != null && waiting.Stage == CliPermissionPromptStageEnum.Waiting);
+                }, 10000).ConfigureAwait(false);
+                AssertTrue(atWaiting, "the prompt is reported at Waiting (" + waiting?.Describe(DateTime.UtcNow) + ")");
+                AssertEqual(pending.Id, waiting!.RequestId);
+                AssertEqual(pending.MessageId, waiting.MessageId, "the card is recorded");
+                AssertNull(waiting.CardError);
+
+                await svc.DecideAsync(TenantAdmin("usr_cpa9"), pending.Id, new CliPermissionDecisionRequest { Decision = CliPermissionDecisionEnum.AllowOnce }).ConfigureAwait(false);
+                AssertTrue((await prompt.ConfigureAwait(false)).Allowed, "allowed");
+                AssertEqual(0, svc.GetInFlightPrompts().Count, "nothing in flight once decided");
+            }));
+
+            cases.Add(Case("in_flight_prompt_reports_a_failed_card", "A prompt whose Ask card cannot be posted still waits, and the in-flight report says why the card is missing", async () =>
+            {
+                using AskTestHarness h = await AskTestHarness.CreateAsync().ConfigureAwait(false);
+                CliPermissionService svc = Service(h);
+                AskThread thread = await NewThreadAsync(h, "usr_cpo10").ConfigureAwait(false);
+                CliPermissionPromptContext context = ThreadContext(thread, null);
+                context.ThreadId = "ath_missing_" + Guid.NewGuid().ToString("N").Substring(0, 8);
+
+                Task<CliPermissionPromptOutcome> prompt = svc.PromptAsync(context, "Bash", BashInput);
+                CliPermissionPromptProgress? waiting = null;
+                bool atWaiting = await AskTestHarness.WaitUntilAsync(() =>
+                {
+                    waiting = svc.GetInFlightPrompts().SingleOrDefault();
+                    return Task.FromResult(waiting != null && waiting.Stage == CliPermissionPromptStageEnum.Waiting);
+                }, 10000).ConfigureAwait(false);
+                AssertTrue(atWaiting, "the prompt is reported at Waiting (" + waiting?.Describe(DateTime.UtcNow) + ")");
+                AssertNull(waiting!.MessageId, "no card");
+                AssertNotNull(waiting.CardError, "the reason the card is missing");
+                AssertContains("not found", waiting.CardError!);
+                AssertFalse(prompt.IsCompleted, "the prompt still waits for a decision");
+
+                await svc.DecideAsync(TenantAdmin("usr_cpa10"), waiting.RequestId, new CliPermissionDecisionRequest { Decision = CliPermissionDecisionEnum.Deny }).ConfigureAwait(false);
+                AssertFalse((await prompt.ConfigureAwait(false)).Allowed, "denied");
+                AssertEqual(0, svc.GetInFlightPrompts().Count, "nothing in flight once decided");
+            }));
+
+            cases.Add(Case("timeout_denies","With no decision before the timeout the prompt is denied as Expired", async () =>
             {
                 using AskTestHarness h = await AskTestHarness.CreateAsync().ConfigureAwait(false);
                 CliPermissionService svc = Service(h);

@@ -97,6 +97,15 @@ namespace Armada.Server
             get { return _PushNotifications; }
         }
 
+        /// <summary>
+        /// The CLI permission service (populated by <see cref="StartAsync"/>); exposes the prompts in flight for
+        /// diagnostics.
+        /// </summary>
+        public CliPermissionService? CliPermissions
+        {
+            get { return _CliPermissions; }
+        }
+
         #endregion
 
         #region Private-Members
