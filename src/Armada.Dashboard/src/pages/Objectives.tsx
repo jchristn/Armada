@@ -21,17 +21,22 @@ import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
 import BacklogGroupPills from '../components/backlog/BacklogGroupPills';
 import {
+  applyBacklogReorder,
   BACKLOG_GROUPS,
-  getBacklogGroup,
-  getPriorityWeight,
+  backlogRankSwap,
+  countBacklogGroups,
+  filterBacklog,
+  hasActiveBacklogFilters,
   OBJECTIVE_BACKLOG_STATES,
   OBJECTIVE_EFFORTS,
   OBJECTIVE_KINDS,
   OBJECTIVE_PRIORITIES,
   OBJECTIVE_STATUSES,
+  sortBacklog,
+  type BacklogFilters,
   type BacklogGroupKey,
   type BacklogSortKey,
-} from '../components/backlog/backlogUtils';
+} from '../lib/backlogUtils';
 import ActionMenu from '../components/shared/ActionMenu';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import ErrorModal from '../components/shared/ErrorModal';
@@ -127,108 +132,43 @@ export default function Objectives() {
   const fleetMap = useMemo(() => new Map(fleets.map((fleet) => [fleet.id, fleet.name])), [fleets]);
   const vesselMap = useMemo(() => new Map(vessels.map((vessel) => [vessel.id, vessel.name])), [vessels]);
 
-  const groupCounts = useMemo(() => {
-    const counts: Record<BacklogGroupKey, number> = {
-      all: objectives.length,
-      inbox: 0,
-      planning: 0,
-      dispatch: 0,
-      blocked: 0,
-    };
-    objectives.forEach((objective) => {
-      const group = getBacklogGroup(objective);
-      counts[group] += 1;
-    });
-    return counts;
-  }, [objectives]);
+  const groupCounts = useMemo(() => countBacklogGroups(objectives), [objectives]);
 
-  const filteredObjectives = useMemo(() => {
-    const normalizedSearch = search.trim().toLowerCase();
-    return objectives.filter((objective) => {
-      if (groupFilter !== 'all' && getBacklogGroup(objective) !== groupFilter) return false;
-      if (statusFilter !== 'all' && objective.status !== statusFilter) return false;
-      if (kindFilter !== 'all' && objective.kind !== kindFilter) return false;
-      if (priorityFilter !== 'all' && objective.priority !== priorityFilter) return false;
-      if (backlogStateFilter !== 'all' && objective.backlogState !== backlogStateFilter) return false;
-      if (effortFilter !== 'all' && objective.effort !== effortFilter) return false;
-      if (fleetFilter !== 'all' && !objective.fleetIds.includes(fleetFilter)) return false;
-      if (vesselFilter !== 'all' && !objective.vesselIds.includes(vesselFilter)) return false;
-      if (ownerFilter.trim() && !(objective.owner || '').toLowerCase().includes(ownerFilter.trim().toLowerCase())) return false;
-      if (targetVersionFilter.trim() && !(objective.targetVersion || '').toLowerCase().includes(targetVersionFilter.trim().toLowerCase())) return false;
-      if (colFilters.title && !(objective.title || '').toLowerCase().includes(colFilters.title.toLowerCase())) return false;
-      if (!normalizedSearch) return true;
-
-      return (
-        objective.title.toLowerCase().includes(normalizedSearch)
-        || (objective.description || '').toLowerCase().includes(normalizedSearch)
-        || (objective.owner || '').toLowerCase().includes(normalizedSearch)
-        || (objective.category || '').toLowerCase().includes(normalizedSearch)
-        || (objective.targetVersion || '').toLowerCase().includes(normalizedSearch)
-        || (objective.refinementSummary || '').toLowerCase().includes(normalizedSearch)
-        || objective.tags.some((tag) => tag.toLowerCase().includes(normalizedSearch))
-        || objective.acceptanceCriteria.some((criteria) => criteria.toLowerCase().includes(normalizedSearch))
-        || objective.id.toLowerCase().includes(normalizedSearch)
-      );
-    });
-  }, [
+  const filters = useMemo<BacklogFilters>(() => ({
+    search,
+    status: statusFilter,
+    kind: kindFilter,
+    priority: priorityFilter,
+    backlogState: backlogStateFilter,
+    effort: effortFilter,
+    fleetId: fleetFilter,
+    vesselId: vesselFilter,
+    owner: ownerFilter,
+    targetVersion: targetVersionFilter,
+    group: groupFilter,
+    title: colFilters.title,
+    sortBy,
+  }), [
     backlogStateFilter,
     colFilters,
     effortFilter,
     fleetFilter,
     groupFilter,
     kindFilter,
-    objectives,
     ownerFilter,
     priorityFilter,
     search,
+    sortBy,
     statusFilter,
     targetVersionFilter,
     vesselFilter,
   ]);
 
-  const orderedObjectives = useMemo(() => {
-    const sorted = [...filteredObjectives];
-    sorted.sort((left, right) => {
-      if (sortBy === 'priority') {
-        const priorityDelta = getPriorityWeight(left.priority) - getPriorityWeight(right.priority);
-        if (priorityDelta !== 0) return priorityDelta;
-        return left.rank - right.rank;
-      }
+  const filteredObjectives = useMemo(() => filterBacklog(objectives, filters), [objectives, filters]);
 
-      if (sortBy === 'due') {
-        const leftDue = left.dueUtc ? new Date(left.dueUtc).getTime() : Number.MAX_SAFE_INTEGER;
-        const rightDue = right.dueUtc ? new Date(right.dueUtc).getTime() : Number.MAX_SAFE_INTEGER;
-        if (leftDue !== rightDue) return leftDue - rightDue;
-        return left.rank - right.rank;
-      }
+  const orderedObjectives = useMemo(() => sortBacklog(filteredObjectives, sortBy), [filteredObjectives, sortBy]);
 
-      if (sortBy === 'updated') {
-        const updatedDelta = new Date(right.lastUpdateUtc).getTime() - new Date(left.lastUpdateUtc).getTime();
-        if (updatedDelta !== 0) return updatedDelta;
-        return left.rank - right.rank;
-      }
-
-      const rankDelta = left.rank - right.rank;
-      if (rankDelta !== 0) return rankDelta;
-      return getPriorityWeight(left.priority) - getPriorityWeight(right.priority);
-    });
-    return sorted;
-  }, [filteredObjectives, sortBy]);
-
-  const hasActiveFilters = (
-    search.trim().length > 0
-    || statusFilter !== 'all'
-    || kindFilter !== 'all'
-    || priorityFilter !== 'all'
-    || backlogStateFilter !== 'all'
-    || effortFilter !== 'all'
-    || fleetFilter !== 'all'
-    || vesselFilter !== 'all'
-    || ownerFilter.trim().length > 0
-    || targetVersionFilter.trim().length > 0
-    || groupFilter !== 'all'
-    || sortBy !== 'rank'
-  );
+  const hasActiveFilters = hasActiveBacklogFilters(filters);
 
   const blockedCount = objectives.filter((objective) => objective.status === 'Blocked' || objective.blockedByObjectiveIds.length > 0).length;
   const planningReadyCount = objectives.filter((objective) => objective.backlogState === 'ReadyForPlanning').length;
@@ -258,25 +198,12 @@ export default function Objectives() {
   }
 
   async function handleMoveRank(objectiveId: string, direction: -1 | 1) {
-    const ranked = [...objectives].sort((left, right) => left.rank - right.rank);
-    const index = ranked.findIndex((objective) => objective.id === objectiveId);
-    const neighborIndex = index + direction;
-    if (index < 0 || neighborIndex < 0 || neighborIndex >= ranked.length) return;
-
-    const current = ranked[index];
-    const neighbor = ranked[neighborIndex];
+    const request = backlogRankSwap(objectives, objectiveId, direction);
+    if (!request) return;
 
     try {
-      const updated = await reorderBacklog({
-        items: [
-          { objectiveId: current.id, rank: neighbor.rank },
-          { objectiveId: neighbor.id, rank: current.rank },
-        ],
-      });
-      setObjectives((existing) => existing.map((objective) => {
-        const match = updated.find((item) => item.id === objective.id);
-        return match || objective;
-      }));
+      const updated = await reorderBacklog(request);
+      setObjectives((existing) => applyBacklogReorder(existing, updated));
       pushToast('success', t('Backlog ranking updated.'));
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : t('Failed to reorder backlog.'));

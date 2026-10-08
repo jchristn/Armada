@@ -1,0 +1,10 @@
+# Open an app link (LINK, for example armada://vessels) and accept iOS's "Open in ...?" prompt for the app's own
+# custom scheme. Android opens it directly.
+appId: ${APP_ID}
+---
+- openLink: ${LINK}
+- runFlow:
+    when:
+      visible: "Open in .*"
+    commands:
+      - tapOn: "Open"

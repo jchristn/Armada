@@ -120,11 +120,11 @@ describe('Dispatch', () => {
     expect(await screen.findByText('Failed: vessel is busy')).toBeTruthy();
   });
 
-  it('hub: Dispatch by default, Backlog tab points to W3.3', async () => {
+  it('hub: Dispatch by default, Backlog tab embeds the backlog list', async () => {
     setMockParams({ tab: 'backlog' });
     await renderScreen(<DispatchHubScreen />);
-    expect(await screen.findByTestId('dispatch-backlog-pending')).toBeTruthy();
-    expect(screen.getByText('Coming in W3.3')).toBeTruthy();
+    expect(await screen.findByTestId('dispatch-backlog')).toBeTruthy();
+    expect(screen.queryByTestId('dispatch-form')).toBeNull();
     await fireEvent.press(screen.getByTestId('dispatch-tab-dispatch'));
     expect(mockRouter.setParams).toHaveBeenCalledWith({ tab: 'dispatch' });
   });

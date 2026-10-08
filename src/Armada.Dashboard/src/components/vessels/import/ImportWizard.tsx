@@ -29,12 +29,12 @@ import BrowseTree from './BrowseTree';
 import ImportReviewStep, { type ImportDefaults } from './ImportReviewStep';
 import ImportResultsStep from './ImportResultsStep';
 import ImportHistory from './ImportHistory';
-import ImportCategorizationOptions, { EMPTY_CATEGORIZATION, validateCategorization, type CategorizationOptions } from './ImportCategorizationOptions';
+import ImportCategorizationOptions from './ImportCategorizationOptions';
+import { EMPTY_CATEGORIZATION, IMPORT_POLL_MS, parseMaxDepth, parsePastedPaths, validateCategorization, type CategorizationOptions } from '../../../lib/vesselImport';
+
+export { IMPORT_POLL_MS, parsePastedPaths } from '../../../lib/vesselImport';
 import FleetRecommendationsPanel from './FleetRecommendationsPanel';
 import { importErrorLabel, isBatchBusy } from '../../../lib/vesselImportLabels';
-
-/** Poll interval for background discovery, import, and fleet categorization, in milliseconds. */
-export const IMPORT_POLL_MS = 2000;
 
 export interface ImportWizardProps {
   open: boolean;
@@ -51,19 +51,6 @@ export interface ImportWizardProps {
 
 type Step = 'source' | 'discovering' | 'review' | 'results' | 'history' | 'batch';
 type SourceTab = 'paste' | 'browse';
-
-/** Split pasted text into trimmed, non-empty, de-duplicated lines. */
-export function parsePastedPaths(text: string): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const raw of text.split(/\r?\n/)) {
-    const line = raw.trim().replace(/^["']|["']$/g, '');
-    if (!line || seen.has(line)) continue;
-    seen.add(line);
-    out.push(line);
-  }
-  return out;
-}
 
 /**
  * Bulk import wizard: Source (paste paths or browse the Admiral host) -> Review (candidate table, selection,
@@ -127,8 +114,7 @@ export default function ImportWizard({ open, onClose, onImported, initialView = 
 
   const pasted = parsePastedPaths(pasteText);
   const sourcePaths = sourceTab === 'paste' ? pasted : browseSelected;
-  const depthNumber = maxDepth.trim() === '' ? null : Number(maxDepth);
-  const depthInvalid = depthNumber !== null && (!Number.isInteger(depthNumber) || depthNumber < 1 || depthNumber > 16);
+  const { value: depthNumber, invalid: depthInvalid } = parseMaxDepth(maxDepth);
 
   const stopPolling = useCallback(() => {
     if (pollTimer.current !== null) {

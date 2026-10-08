@@ -90,26 +90,26 @@
     {
       "kind": "route",
       "key": "/backlog/:id",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(work)/backlog/[id].tsx",
       "workstream": "W3.3",
-      "notes": ""
+      "notes": "ObjectiveDetailScreen; new creates; ?vesselId= and ?refinementSessionId="
     },
     {
       "kind": "route",
       "key": "/captains",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(work)/captains/index.tsx",
       "workstream": "W3.2",
-      "notes": ""
+      "notes": "CaptainsHubScreen: Captains and Docks tabs; tablets split list and detail"
     },
     {
       "kind": "route",
       "key": "/captains/:id",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(work)/captains/[id].tsx",
       "workstream": "W3.2",
-      "notes": ""
+      "notes": "CaptainDetailScreen: captain chat panel, CLI permission policy in place, tool access, log"
     },
     {
       "kind": "route",
@@ -242,18 +242,18 @@
     {
       "kind": "route",
       "key": "/fleet-actions",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(work)/fleet-actions/index.tsx",
       "workstream": "W3.2",
-      "notes": ""
+      "notes": "FleetActionsScreen; ?run=new and ?run=new&vessels=<ids> start the run flow"
     },
     {
       "kind": "route",
       "key": "/fleet-actions/runs/:id",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(work)/fleet-actions/runs/[id].tsx",
       "workstream": "W3.2",
-      "notes": ""
+      "notes": "FleetActionRunDetailView; 5-second polling while active"
     },
     {
       "kind": "route",
@@ -266,10 +266,10 @@
     {
       "kind": "route",
       "key": "/fleets/:id",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(work)/fleets/[id].tsx",
       "workstream": "W3.2",
-      "notes": ""
+      "notes": "FleetDetailView: edit, duplicate, View JSON, delete; vessels open /vessels/:id"
     },
     {
       "kind": "route",
@@ -370,18 +370,18 @@
     {
       "kind": "route",
       "key": "/objectives",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(work)/objectives/index.tsx",
       "workstream": "W3.3",
-      "notes": ""
+      "notes": "ObjectivesList (backlog): filters in a sheet, swipe row actions, split view on tablets; embeddable for the Dispatch Backlog tab"
     },
     {
       "kind": "route",
       "key": "/objectives/:id",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(work)/objectives/[id].tsx",
       "workstream": "W3.3",
-      "notes": ""
+      "notes": "ObjectiveDetailScreen (same page as /backlog/:id)"
     },
     {
       "kind": "route",
@@ -426,18 +426,18 @@
     {
       "kind": "route",
       "key": "/planning",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(work)/planning/index.tsx",
       "workstream": "W3.3",
-      "notes": ""
+      "notes": "PlanningScreen: session list, start session in a sheet, iPad split view; ?new=1 plus prefill params"
     },
     {
       "kind": "route",
       "key": "/planning/:id",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(work)/planning/[id].tsx",
       "workstream": "W3.3",
-      "notes": ""
+      "notes": "PlanningSessionScreen: own route on phones, beside the list on tablets"
     },
     {
       "kind": "route",
@@ -626,50 +626,50 @@
     {
       "kind": "route",
       "key": "/vessels",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(work)/vessels/index.tsx",
       "workstream": "W3.1",
-      "notes": ""
+      "notes": "VesselsHubScreen: Vessels, Health, Fleets, Workspace tabs (?tab=)"
     },
     {
       "kind": "route",
       "key": "/vessels/:id",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(work)/vessels/[id]/index.tsx",
       "workstream": "W3.1",
-      "notes": ""
+      "notes": "VesselDetailView; the same view sits beside the list on tablets; ?edit=1 opens the form"
     },
     {
       "kind": "route",
       "key": "/vessels/:id/history",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(work)/vessels/[id]/history.tsx",
       "workstream": "W3.1",
-      "notes": ""
+      "notes": "VesselHistoryScreen: horizontally scrolling heatmap, timeline with endless scroll, jump to date as a yyyy-mm-dd field"
     },
     {
       "kind": "route",
       "key": "/vessels/:id/onboarding",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(work)/vessels/[id]/onboarding.tsx",
       "workstream": "W3.1",
-      "notes": ""
+      "notes": "VesselOnboardingScreen"
     },
     {
       "kind": "route",
       "key": "/vessels/health",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(work)/vessels/health.tsx",
       "workstream": "W3.1",
-      "notes": ""
+      "notes": "VesselsHubScreen on its Health tab"
     },
     {
       "kind": "route",
       "key": "/vessels/import",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(work)/vessels/import.tsx",
       "workstream": "W3.1",
-      "notes": ""
+      "notes": "full-screen import wizard; ?batch= and ?view=history"
     },
     {
       "kind": "route",
@@ -722,18 +722,18 @@
     {
       "kind": "route",
       "key": "/workspace/:vesselId",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(work)/workspace/[vesselId]/index.tsx",
       "workstream": "W3.1",
-      "notes": ""
+      "notes": "Workspace: drill-down file browser, editor; split files and editor on tablets"
     },
     {
       "kind": "route",
       "key": "/workspace/:vesselId/:panel",
-      "status": "planned",
+      "status": "implemented",
       "mobile": "src/app/(app)/(work)/workspace/[vesselId]/[panel].tsx",
       "workstream": "W3.1",
-      "notes": ""
+      "notes": "panels files, search, changes, diff, terminal"
     },
     {
       "kind": "tab",
@@ -778,18 +778,18 @@
     {
       "kind": "tab",
       "key": "CaptainsHub:captains",
-      "status": "planned",
-      "mobile": "/captains?tab=captains",
+      "status": "implemented",
+      "mobile": "src/screens/captains/CaptainsTab.tsx",
       "workstream": "W3.2",
-      "notes": "Captains"
+      "notes": "swipe actions and a long-press sheet replace the row menu; long press starts bulk selection"
     },
     {
       "kind": "tab",
       "key": "CaptainsHub:docks",
-      "status": "planned",
-      "mobile": "/captains?tab=docks",
+      "status": "implemented",
+      "mobile": "src/screens/captains/DocksTab.tsx",
       "workstream": "W3.2",
-      "notes": "Docks"
+      "notes": "paged list with delete and bulk delete; rows open /docks/:id (W2)"
     },
     {
       "kind": "tab",
@@ -938,10 +938,10 @@
     {
       "kind": "tab",
       "key": "DispatchHub:backlog",
-      "status": "planned",
-      "mobile": "DispatchHubScreen",
+      "status": "implemented",
+      "mobile": "src/screens/operations/DispatchHubScreen.tsx",
       "workstream": "W3.3",
-      "notes": "Backlog (Objectives) arrives with W3.3; the tab shows a note and opens the web dashboard meanwhile"
+      "notes": "embeds the backlog list (screens/objectives/ObjectivesList, embedded)"
     },
     {
       "kind": "tab",
@@ -954,18 +954,18 @@
     {
       "kind": "tab",
       "key": "FleetActions:actions",
-      "status": "planned",
-      "mobile": "/fleet-actions?tab=actions",
+      "status": "implemented",
+      "mobile": "src/screens/fleetActions/FleetActionsTab.tsx",
       "workstream": "W3.2",
       "notes": "Actions"
     },
     {
       "kind": "tab",
       "key": "FleetActions:runs",
-      "status": "planned",
-      "mobile": "/fleet-actions?tab=runs",
+      "status": "implemented",
+      "mobile": "src/screens/fleetActions/FleetActionRunsTab.tsx",
       "workstream": "W3.2",
-      "notes": "Runs"
+      "notes": "status filter in a sheet; split view on tablets"
     },
     {
       "kind": "tab",
@@ -1034,50 +1034,50 @@
     {
       "kind": "tab",
       "key": "VesselsHub:fleets",
-      "status": "planned",
-      "mobile": "/vessels?tab=fleets",
+      "status": "implemented",
+      "mobile": "src/screens/fleets/FleetsTab.tsx",
       "workstream": "W3.1",
-      "notes": "Fleets"
+      "notes": "swipe actions in place of the row menu; long press for bulk delete; split view on tablets"
     },
     {
       "kind": "tab",
       "key": "VesselsHub:health",
-      "status": "planned",
-      "mobile": "/vessels?tab=health",
+      "status": "implemented",
+      "mobile": "src/screens/vessels/health/VesselHealthTab.tsx",
       "workstream": "W3.1",
-      "notes": "Health"
+      "notes": "filters in a sheet, detail sheet with overrides and evaluate"
     },
     {
       "kind": "tab",
       "key": "VesselsHub:vessels",
-      "status": "planned",
-      "mobile": "/vessels?tab=vessels",
+      "status": "implemented",
+      "mobile": "src/screens/vessels/VesselsTab.tsx",
       "workstream": "W3.1",
-      "notes": "Vessels"
+      "notes": "swipe and menu actions, long-press bulk select, filters and sort in a sheet, split view on tablets"
     },
     {
       "kind": "tab",
       "key": "VesselsHub:workspace",
-      "status": "planned",
-      "mobile": "/vessels?tab=workspace",
+      "status": "implemented",
+      "mobile": "src/screens/workspace/WorkspaceTab.tsx",
       "workstream": "W3.1",
-      "notes": "Workspace"
+      "notes": "vessel picker with recent vessels"
     },
     {
       "kind": "api",
       "key": "applyFleetRecommendations",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/vessels/import",
       "workstream": "W3.1",
       "notes": "Vessel Import"
     },
     {
       "kind": "api",
       "key": "applyObjectiveRefinementSummary",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/objectives/useRefinement.ts",
       "workstream": "W3.3",
-      "notes": "Objectives"
+      "notes": "objective refinement panel"
     },
     {
       "kind": "api",
@@ -1114,16 +1114,16 @@
     {
       "kind": "api",
       "key": "browseVesselImport",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/vessels/import",
       "workstream": "W3.1",
       "notes": "Vessel Import"
     },
     {
       "kind": "api",
       "key": "buildVesselContext",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/vessels",
       "workstream": "W3.1",
       "notes": "Vessels"
     },
@@ -1138,8 +1138,8 @@
     {
       "kind": "api",
       "key": "cancelFleetActionRun",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/fleetActions",
       "workstream": "W3.2",
       "notes": "Fleet Actions"
     },
@@ -1170,8 +1170,8 @@
     {
       "kind": "api",
       "key": "categorizeVesselImport",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/vessels/import",
       "workstream": "W3.1",
       "notes": "Vessel Import"
     },
@@ -1186,8 +1186,8 @@
     {
       "kind": "api",
       "key": "chatWithCaptain",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/captains/CaptainChat.tsx",
       "workstream": "W3.2",
       "notes": "captain chat panel on the captain detail page (not part of Ask Armada threads)"
     },
@@ -1210,24 +1210,24 @@
     {
       "kind": "api",
       "key": "createBacklogItem",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/objectives",
       "workstream": "W3.3",
-      "notes": "Objectives"
+      "notes": "Objectives (backlog)"
     },
     {
       "kind": "api",
       "key": "createBacklogRefinementSession",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/objectives/useRefinement.ts",
       "workstream": "W3.3",
-      "notes": "Objectives"
+      "notes": "objective refinement panel"
     },
     {
       "kind": "api",
       "key": "createCaptain",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/captains",
       "workstream": "W3.2",
       "notes": "Captains"
     },
@@ -1266,16 +1266,16 @@
     {
       "kind": "api",
       "key": "createFleet",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/fleets",
       "workstream": "W3.2",
-      "notes": "Fleets"
+      "notes": "Fleets (the detail reads the fleet from listFleets, as the dashboard does)"
     },
     {
       "kind": "api",
       "key": "createFleetAction",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/fleetActions",
       "workstream": "W3.2",
       "notes": "Fleet Actions"
     },
@@ -1322,18 +1322,18 @@
     {
       "kind": "api",
       "key": "createObjective",
-      "status": "planned",
+      "status": "not-applicable",
       "mobile": "",
       "workstream": "W3.3",
-      "notes": "Objectives"
+      "notes": "no dashboard page calls it: the backlog pages use the /backlog aliases of the same server resource (listBacklog, getBacklogItem, ...), and so does the app"
     },
     {
       "kind": "api",
       "key": "createObjectiveRefinementSession",
-      "status": "planned",
+      "status": "not-applicable",
       "mobile": "",
       "workstream": "W3.3",
-      "notes": "Objectives"
+      "notes": "no dashboard page calls it: the backlog pages use the /backlog aliases of the same server resource (listBacklog, getBacklogItem, ...), and so does the app"
     },
     {
       "kind": "api",
@@ -1354,8 +1354,8 @@
     {
       "kind": "api",
       "key": "createPlanningSession",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/planning",
       "workstream": "W3.3",
       "notes": "Planning Sessions"
     },
@@ -1426,8 +1426,8 @@
     {
       "kind": "api",
       "key": "createVessel",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/vessels",
       "workstream": "W3.1",
       "notes": "Vessels"
     },
@@ -1450,8 +1450,8 @@
     {
       "kind": "api",
       "key": "createWorkspaceDirectory",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/workspace",
       "workstream": "W3.1",
       "notes": "Workspace"
     },
@@ -1474,16 +1474,16 @@
     {
       "kind": "api",
       "key": "deleteBacklogItem",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/objectives",
       "workstream": "W3.3",
-      "notes": "Objectives"
+      "notes": "Objectives (backlog)"
     },
     {
       "kind": "api",
       "key": "deleteCaptain",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/captains",
       "workstream": "W3.2",
       "notes": "Captains"
     },
@@ -1546,26 +1546,26 @@
     {
       "kind": "api",
       "key": "deleteFleet",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/fleets",
       "workstream": "W3.2",
-      "notes": "Fleets"
+      "notes": "Fleets (the detail reads the fleet from listFleets, as the dashboard does)"
     },
     {
       "kind": "api",
       "key": "deleteFleetAction",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/fleetActions",
       "workstream": "W3.2",
       "notes": "Fleet Actions"
     },
     {
       "kind": "api",
       "key": "deleteFleetsBatch",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/fleets",
       "workstream": "W3.2",
-      "notes": "Fleets"
+      "notes": "Fleets (the detail reads the fleet from listFleets, as the dashboard does)"
     },
     {
       "kind": "api",
@@ -1618,18 +1618,18 @@
     {
       "kind": "api",
       "key": "deleteObjective",
-      "status": "planned",
+      "status": "not-applicable",
       "mobile": "",
       "workstream": "W3.3",
-      "notes": "Objectives"
+      "notes": "no dashboard page calls it: the backlog pages use the /backlog aliases of the same server resource (listBacklog, getBacklogItem, ...), and so does the app"
     },
     {
       "kind": "api",
       "key": "deleteObjectiveRefinementSession",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/objectives/useRefinement.ts",
       "workstream": "W3.3",
-      "notes": "Objectives"
+      "notes": "objective refinement panel"
     },
     {
       "kind": "api",
@@ -1650,8 +1650,8 @@
     {
       "kind": "api",
       "key": "deletePlanningSession",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/planning",
       "workstream": "W3.3",
       "notes": "Planning Sessions"
     },
@@ -1754,16 +1754,16 @@
     {
       "kind": "api",
       "key": "deleteVessel",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/vessels",
       "workstream": "W3.1",
       "notes": "Vessels"
     },
     {
       "kind": "api",
       "key": "deleteVesselHealthOverride",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/vessels/health",
       "workstream": "W3.1",
       "notes": "Vessel Health"
     },
@@ -1778,8 +1778,8 @@
     {
       "kind": "api",
       "key": "deleteWorkspaceEntry",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/workspace",
       "workstream": "W3.1",
       "notes": "Workspace"
     },
@@ -1810,8 +1810,8 @@
     {
       "kind": "api",
       "key": "discoverVesselImport",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/vessels/import",
       "workstream": "W3.1",
       "notes": "Vessel Import"
     },
@@ -1826,8 +1826,8 @@
     {
       "kind": "api",
       "key": "dispatchPlanningSession",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/planning",
       "workstream": "W3.3",
       "notes": "Planning Sessions"
     },
@@ -1874,10 +1874,10 @@
     {
       "kind": "api",
       "key": "enumerateBacklog",
-      "status": "planned",
+      "status": "not-applicable",
       "mobile": "",
       "workstream": "W3.3",
-      "notes": "Objectives"
+      "notes": "no dashboard page calls it: the backlog pages use the /backlog aliases of the same server resource (listBacklog, getBacklogItem, ...), and so does the app"
     },
     {
       "kind": "api",
@@ -1898,24 +1898,24 @@
     {
       "kind": "api",
       "key": "enumerateFleetActionRunTargets",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/fleetActions",
       "workstream": "W3.2",
       "notes": "Fleet Actions"
     },
     {
       "kind": "api",
       "key": "enumerateFleetActionRuns",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/fleetActions",
       "workstream": "W3.2",
       "notes": "Fleet Actions"
     },
     {
       "kind": "api",
       "key": "enumerateFleetActions",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/fleetActions",
       "workstream": "W3.2",
       "notes": "Fleet Actions"
     },
@@ -1938,10 +1938,10 @@
     {
       "kind": "api",
       "key": "enumerateObjectives",
-      "status": "planned",
+      "status": "not-applicable",
       "mobile": "",
       "workstream": "W3.3",
-      "notes": "Objectives"
+      "notes": "no dashboard page calls it: the backlog pages use the /backlog aliases of the same server resource (listBacklog, getBacklogItem, ...), and so does the app"
     },
     {
       "kind": "api",
@@ -1970,34 +1970,34 @@
     {
       "kind": "api",
       "key": "enumerateVesselHealth",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/vessels/health",
       "workstream": "W3.1",
       "notes": "Vessel Health"
     },
     {
       "kind": "api",
       "key": "enumerateVesselImportBatches",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/vessels/import",
       "workstream": "W3.1",
       "notes": "Vessel Import"
     },
     {
       "kind": "api",
       "key": "evaluateVesselHealth",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/vessels/health/VesselHealthTab.tsx",
       "workstream": "W3.1",
-      "notes": "Vessel Health"
+      "notes": "Vessel Health (through the shared lib/health/useHealthEvaluation)"
     },
     {
       "kind": "api",
       "key": "execWorkspaceCommand",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/workspace",
       "workstream": "W3.1",
-      "notes": "Workspace terminal"
+      "notes": "Workspace"
     },
     {
       "kind": "api",
@@ -2026,32 +2026,32 @@
     {
       "kind": "api",
       "key": "getBacklogItem",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/objectives",
       "workstream": "W3.3",
-      "notes": "Objectives"
+      "notes": "Objectives (backlog)"
     },
     {
       "kind": "api",
       "key": "getCaptain",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/captains",
       "workstream": "W3.2",
       "notes": "Captains"
     },
     {
       "kind": "api",
       "key": "getCaptainLog",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/captains",
       "workstream": "W3.2",
       "notes": "Captains"
     },
     {
       "kind": "api",
       "key": "getCaptainTools",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/captains",
       "workstream": "W3.2",
       "notes": "Captains"
     },
@@ -2130,40 +2130,40 @@
     {
       "kind": "api",
       "key": "getFleet",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/fleets",
       "workstream": "W3.2",
-      "notes": "Fleets"
+      "notes": "Fleets (the detail reads the fleet from listFleets, as the dashboard does)"
     },
     {
       "kind": "api",
       "key": "getFleetAction",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/fleetActions",
       "workstream": "W3.2",
       "notes": "Fleet Actions"
     },
     {
       "kind": "api",
       "key": "getFleetActionRun",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/fleetActions",
       "workstream": "W3.2",
       "notes": "Fleet Actions"
     },
     {
       "kind": "api",
       "key": "getFleetActionRunTarget",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/fleetActions",
       "workstream": "W3.2",
       "notes": "Fleet Actions"
     },
     {
       "kind": "api",
       "key": "getFleetCategorizationDefaultPrompt",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/vessels/import",
       "workstream": "W3.1",
       "notes": "Vessel Import"
     },
@@ -2290,26 +2290,26 @@
     {
       "kind": "api",
       "key": "getMuxEndpoint",
-      "status": "planned",
+      "status": "not-applicable",
       "mobile": "",
       "workstream": "W3.1",
-      "notes": "Vessel Health"
+      "notes": "no dashboard page calls it; the captain form lists Mux endpoints with listMuxEndpoints"
     },
     {
       "kind": "api",
       "key": "getObjective",
-      "status": "planned",
+      "status": "not-applicable",
       "mobile": "",
       "workstream": "W3.3",
-      "notes": "Objectives"
+      "notes": "no dashboard page calls it: the backlog pages use the /backlog aliases of the same server resource (listBacklog, getBacklogItem, ...), and so does the app"
     },
     {
       "kind": "api",
       "key": "getObjectiveRefinementSession",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/objectives/useRefinement.ts",
       "workstream": "W3.3",
-      "notes": "Objectives"
+      "notes": "objective refinement panel"
     },
     {
       "kind": "api",
@@ -2330,8 +2330,8 @@
     {
       "kind": "api",
       "key": "getPlanningSession",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/planning",
       "workstream": "W3.3",
       "notes": "Planning Sessions"
     },
@@ -2466,80 +2466,80 @@
     {
       "kind": "api",
       "key": "getVessel",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/vessels",
       "workstream": "W3.1",
       "notes": "Vessels"
     },
     {
       "kind": "api",
       "key": "getVesselBranches",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/vessels",
       "workstream": "W3.1",
       "notes": "Vessels"
     },
     {
       "kind": "api",
       "key": "getVesselCommitActivity",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/vessels",
       "workstream": "W3.1",
-      "notes": "Vessel History"
+      "notes": "Vessels"
     },
     {
       "kind": "api",
       "key": "getVesselCommits",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/vessels",
       "workstream": "W3.1",
-      "notes": "Vessel History"
+      "notes": "Vessels"
     },
     {
       "kind": "api",
       "key": "getVesselGitStatus",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/vessels",
       "workstream": "W3.1",
       "notes": "Vessels"
     },
     {
       "kind": "api",
       "key": "getVesselHealth",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/vessels/health",
       "workstream": "W3.1",
       "notes": "Vessel Health"
     },
     {
       "kind": "api",
       "key": "getVesselHealthSummary",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/vessels/health",
       "workstream": "W3.1",
       "notes": "Vessel Health"
     },
     {
       "kind": "api",
       "key": "getVesselImportBatch",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/vessels/import",
       "workstream": "W3.1",
       "notes": "Vessel Import"
     },
     {
       "kind": "api",
       "key": "getVesselLandingPreview",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/vessels",
       "workstream": "W3.1",
       "notes": "Vessels"
     },
     {
       "kind": "api",
       "key": "getVesselReadiness",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/vessels",
       "workstream": "W3.1",
       "notes": "Vessels"
     },
@@ -2570,40 +2570,40 @@
     {
       "kind": "api",
       "key": "getWorkspaceChanges",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/workspace",
       "workstream": "W3.1",
       "notes": "Workspace"
     },
     {
       "kind": "api",
       "key": "getWorkspaceDiff",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/workspace",
       "workstream": "W3.1",
-      "notes": "Workspace diff (review)"
+      "notes": "Workspace"
     },
     {
       "kind": "api",
       "key": "getWorkspaceFile",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/workspace",
       "workstream": "W3.1",
       "notes": "Workspace"
     },
     {
       "kind": "api",
       "key": "getWorkspaceStatus",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/workspace",
       "workstream": "W3.1",
       "notes": "Workspace"
     },
     {
       "kind": "api",
       "key": "getWorkspaceTree",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/workspace",
       "workstream": "W3.1",
       "notes": "Workspace"
     },
@@ -2626,40 +2626,40 @@
     {
       "kind": "api",
       "key": "importObjectiveFromGitHub",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/objectives",
       "workstream": "W3.3",
-      "notes": "Objectives"
+      "notes": "Objectives (backlog)"
     },
     {
       "kind": "api",
       "key": "importVessels",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/vessels/import",
       "workstream": "W3.1",
       "notes": "Vessel Import"
     },
     {
       "kind": "api",
       "key": "listBacklog",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/objectives",
       "workstream": "W3.3",
-      "notes": "Objectives"
+      "notes": "Objectives (backlog)"
     },
     {
       "kind": "api",
       "key": "listBacklogRefinementSessions",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/objectives/useRefinement.ts",
       "workstream": "W3.3",
-      "notes": "Objectives"
+      "notes": "objective refinement panel"
     },
     {
       "kind": "api",
       "key": "listCaptains",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/captains",
       "workstream": "W3.2",
       "notes": "Captains"
     },
@@ -2730,10 +2730,10 @@
     {
       "kind": "api",
       "key": "listFleets",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/fleets",
       "workstream": "W3.2",
-      "notes": "Fleets"
+      "notes": "Fleets (the detail reads the fleet from listFleets, as the dashboard does)"
     },
     {
       "kind": "api",
@@ -2810,18 +2810,18 @@
     {
       "kind": "api",
       "key": "listMuxEndpoints",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/captains/MuxFields.tsx",
       "workstream": "W3.1",
-      "notes": "Vessel Health"
+      "notes": "captain form Mux endpoint picker"
     },
     {
       "kind": "api",
       "key": "listObjectiveRefinementSessions",
-      "status": "planned",
+      "status": "not-applicable",
       "mobile": "",
       "workstream": "W3.3",
-      "notes": "Objectives"
+      "notes": "no dashboard page calls it: the backlog pages use the /backlog aliases of the same server resource (listBacklog, getBacklogItem, ...), and so does the app"
     },
     {
       "kind": "api",
@@ -2829,7 +2829,7 @@
       "status": "planned",
       "mobile": "",
       "workstream": "W3.3",
-      "notes": "Objectives"
+      "notes": "called by Release detail and History (W4.1, W4.3), not by the backlog screens"
     },
     {
       "kind": "api",
@@ -2850,8 +2850,8 @@
     {
       "kind": "api",
       "key": "listPlanningSessions",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/planning",
       "workstream": "W3.3",
       "notes": "Planning Sessions"
     },
@@ -2946,8 +2946,8 @@
     {
       "kind": "api",
       "key": "listVessels",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/vessels",
       "workstream": "W3.1",
       "notes": "Vessels"
     },
@@ -3002,8 +3002,8 @@
     {
       "kind": "api",
       "key": "mergeVesselBranch",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/vessels",
       "workstream": "W3.1",
       "notes": "Vessels"
     },
@@ -3090,8 +3090,8 @@
     {
       "kind": "api",
       "key": "pushVesselBranch",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/vessels",
       "workstream": "W3.1",
       "notes": "Vessels"
     },
@@ -3106,8 +3106,8 @@
     {
       "kind": "api",
       "key": "recallCaptain",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/captains",
       "workstream": "W3.2",
       "notes": "Captains"
     },
@@ -3130,26 +3130,26 @@
     {
       "kind": "api",
       "key": "renameWorkspaceEntry",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/workspace",
       "workstream": "W3.1",
       "notes": "Workspace"
     },
     {
       "kind": "api",
       "key": "reorderBacklog",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/objectives",
       "workstream": "W3.3",
-      "notes": "Objectives"
+      "notes": "Objectives (backlog)"
     },
     {
       "kind": "api",
       "key": "reorderObjectives",
-      "status": "planned",
+      "status": "not-applicable",
       "mobile": "",
       "workstream": "W3.3",
-      "notes": "Objectives"
+      "notes": "no dashboard page calls it: the backlog pages use the /backlog aliases of the same server resource (listBacklog, getBacklogItem, ...), and so does the app"
     },
     {
       "kind": "api",
@@ -3186,10 +3186,10 @@
     {
       "kind": "api",
       "key": "restartCaptain",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/captains/useCaptainActions.ts",
       "workstream": "W3.1",
-      "notes": "Vessel Health"
+      "notes": "captain long-press menu"
     },
     {
       "kind": "api",
@@ -3250,8 +3250,8 @@
     {
       "kind": "api",
       "key": "runAdHocFleetAction",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/fleetActions",
       "workstream": "W3.2",
       "notes": "Fleet Actions"
     },
@@ -3274,24 +3274,24 @@
     {
       "kind": "api",
       "key": "runFleetAction",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/fleetActions",
       "workstream": "W3.2",
       "notes": "Fleet Actions"
     },
     {
       "kind": "api",
       "key": "saveWorkspaceFile",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/workspace",
       "workstream": "W3.1",
       "notes": "Workspace"
     },
     {
       "kind": "api",
       "key": "searchWorkspace",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/workspace",
       "workstream": "W3.1",
       "notes": "Workspace"
     },
@@ -3306,16 +3306,16 @@
     {
       "kind": "api",
       "key": "sendObjectiveRefinementMessage",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/objectives/useRefinement.ts",
       "workstream": "W3.3",
-      "notes": "Objectives"
+      "notes": "objective refinement panel"
     },
     {
       "kind": "api",
       "key": "sendPlanningSessionMessage",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/planning",
       "workstream": "W3.3",
       "notes": "Planning Sessions"
     },
@@ -3338,16 +3338,16 @@
     {
       "kind": "api",
       "key": "setCaptainCliPermissionPolicy",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/captains/CaptainDetailScreen.tsx",
       "workstream": "W3.2",
       "notes": "captain CLI permission policy on the captain pages"
     },
     {
       "kind": "api",
       "key": "setVesselHealthOverride",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/vessels/health",
       "workstream": "W3.1",
       "notes": "Vessel Health"
     },
@@ -3362,40 +3362,40 @@
     {
       "kind": "api",
       "key": "stopAllCaptains",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/captains",
       "workstream": "W3.2",
       "notes": "Captains"
     },
     {
       "kind": "api",
       "key": "stopCaptain",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/captains",
       "workstream": "W3.2",
       "notes": "Captains"
     },
     {
       "kind": "api",
       "key": "stopObjectiveRefinementSession",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/objectives/useRefinement.ts",
       "workstream": "W3.3",
-      "notes": "Objectives"
+      "notes": "objective refinement panel"
     },
     {
       "kind": "api",
       "key": "stopPlanningSession",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/planning",
       "workstream": "W3.3",
       "notes": "Planning Sessions"
     },
     {
       "kind": "api",
       "key": "stopPlanningTurn",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/planning",
       "workstream": "W3.3",
       "notes": "Planning Sessions"
     },
@@ -3418,16 +3418,16 @@
     {
       "kind": "api",
       "key": "summarizeObjectiveRefinementSession",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/objectives/useRefinement.ts",
       "workstream": "W3.3",
-      "notes": "Objectives"
+      "notes": "objective refinement panel"
     },
     {
       "kind": "api",
       "key": "summarizePlanningSession",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/planning",
       "workstream": "W3.3",
       "notes": "Planning Sessions"
     },
@@ -3450,8 +3450,8 @@
     {
       "kind": "api",
       "key": "unquarantineCaptain",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/captains",
       "workstream": "W3.2",
       "notes": "Captains"
     },
@@ -3466,16 +3466,16 @@
     {
       "kind": "api",
       "key": "updateBacklogItem",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/objectives",
       "workstream": "W3.3",
-      "notes": "Objectives"
+      "notes": "Objectives (backlog)"
     },
     {
       "kind": "api",
       "key": "updateCaptain",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/captains",
       "workstream": "W3.2",
       "notes": "Captains"
     },
@@ -3514,16 +3514,16 @@
     {
       "kind": "api",
       "key": "updateFleet",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/fleets",
       "workstream": "W3.2",
-      "notes": "Fleets"
+      "notes": "Fleets (the detail reads the fleet from listFleets, as the dashboard does)"
     },
     {
       "kind": "api",
       "key": "updateFleetAction",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/fleetActions",
       "workstream": "W3.2",
       "notes": "Fleet Actions"
     },
@@ -3570,10 +3570,10 @@
     {
       "kind": "api",
       "key": "updateObjective",
-      "status": "planned",
+      "status": "not-applicable",
       "mobile": "",
       "workstream": "W3.3",
-      "notes": "Objectives"
+      "notes": "no dashboard page calls it: the backlog pages use the /backlog aliases of the same server resource (listBacklog, getBacklogItem, ...), and so does the app"
     },
     {
       "kind": "api",
@@ -3674,8 +3674,8 @@
     {
       "kind": "api",
       "key": "updateVessel",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/vessels",
       "workstream": "W3.1",
       "notes": "Vessels"
     },
@@ -3826,50 +3826,50 @@
     {
       "kind": "event",
       "key": "objective-refinement-session.applied",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/objectives/useRefinement.ts",
       "workstream": "W3.3",
-      "notes": ""
+      "notes": "live refinement transcript, summary, apply, session list"
     },
     {
       "kind": "event",
       "key": "objective-refinement-session.changed",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/objectives/useRefinement.ts",
       "workstream": "W3.3",
-      "notes": ""
+      "notes": "live refinement transcript, summary, apply, session list"
     },
     {
       "kind": "event",
       "key": "objective-refinement-session.deleted",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/objectives/useRefinement.ts",
       "workstream": "W3.3",
-      "notes": ""
+      "notes": "live refinement transcript, summary, apply, session list"
     },
     {
       "kind": "event",
       "key": "objective-refinement-session.message.created",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/objectives/useRefinement.ts",
       "workstream": "W3.3",
-      "notes": ""
+      "notes": "live refinement transcript, summary, apply, session list"
     },
     {
       "kind": "event",
       "key": "objective-refinement-session.message.updated",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/objectives/useRefinement.ts",
       "workstream": "W3.3",
-      "notes": ""
+      "notes": "live refinement transcript, summary, apply, session list"
     },
     {
       "kind": "event",
       "key": "objective-refinement-session.summary.created",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/objectives/useRefinement.ts",
       "workstream": "W3.3",
-      "notes": ""
+      "notes": "live refinement transcript, summary, apply, session list"
     },
     {
       "kind": "event",
@@ -3882,66 +3882,66 @@
     {
       "kind": "event",
       "key": "planning-session.changed",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/planning/PlanningScreen.tsx",
       "workstream": "W3.3",
-      "notes": ""
+      "notes": "list reloads; the open session updates in place"
     },
     {
       "kind": "event",
       "key": "planning-session.deleted",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/planning/PlanningScreen.tsx",
       "workstream": "W3.3",
-      "notes": ""
+      "notes": "list reloads; the open session updates in place"
     },
     {
       "kind": "event",
       "key": "planning-session.dispatch.created",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/planning/PlanningScreen.tsx",
       "workstream": "W3.3",
-      "notes": ""
+      "notes": "list reloads; the open session updates in place"
     },
     {
       "kind": "event",
       "key": "planning-session.message.created",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/planning/usePlanningSession.ts",
       "workstream": "W3.3",
-      "notes": ""
+      "notes": "live transcript and dispatch draft"
     },
     {
       "kind": "event",
       "key": "planning-session.message.updated",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/planning/usePlanningSession.ts",
       "workstream": "W3.3",
-      "notes": ""
+      "notes": "live transcript and dispatch draft"
     },
     {
       "kind": "event",
       "key": "planning-session.summary.created",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/planning/usePlanningSession.ts",
       "workstream": "W3.3",
-      "notes": ""
+      "notes": "live transcript and dispatch draft"
     },
     {
       "kind": "event",
       "key": "planning-session.thinking",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/planning/usePlanningSession.ts",
       "workstream": "W3.3",
-      "notes": ""
+      "notes": "live transcript and dispatch draft"
     },
     {
       "kind": "event",
       "key": "planning-session.tool",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/planning/usePlanningSession.ts",
       "workstream": "W3.3",
-      "notes": ""
+      "notes": "live transcript and dispatch draft"
     },
     {
       "kind": "event",

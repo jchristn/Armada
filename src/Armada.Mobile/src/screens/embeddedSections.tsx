@@ -5,8 +5,6 @@ import { useSplitSelection } from '../components/app/useSplitSelection';
 import { AppText, Button, SplitView } from '../components/ui';
 import { useLocale } from '../i18n/LocaleContext';
 import { spacing } from '../theme/typography';
-import { DockDetail } from './operations/DockDetail';
-import { DocksList } from './operations/DocksList';
 import { EventDetail } from './operations/EventDetail';
 import { EventsList } from './operations/EventsList';
 import type { OperationsDetailProps, OperationsListProps } from './operations/listTypes';
@@ -29,18 +27,12 @@ export interface EmbeddedHub {
 }
 
 /**
- * Placeholder hubs that already serve some of their sections. The dashboard shows the Docks list as the Captains
- * hub tab (/captains?tab=docks, W3.2) and Signals and Events as Activity sources (/activity?source=..., W4.3); W2.4
- * built those lists first, so the hub placeholders serve them until W3.2 and W4.3 replace the hub screens (which
- * then embed the same list components).
+ * Placeholder hubs that already serve some of their sections. The dashboard shows Signals and Events as Activity
+ * sources (/activity?source=..., W4.3); W2.4 built those lists first, so the hub placeholder serves them until W4.3
+ * replaces the hub screen (which then embeds the same list components). The Captains hub (W3.2) embeds the Docks
+ * list in its Docks tab.
  */
 export const EMBEDDED_SECTIONS: Record<string, EmbeddedHub> = {
-  '/captains': {
-    param: 'tab',
-    sections: {
-      docks: { label: 'Docks', List: DocksList, Detail: DockDetail, route: (id) => `/docks/${id}` },
-    },
-  },
   '/activity': {
     param: 'source',
     sections: {

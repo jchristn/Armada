@@ -24,6 +24,8 @@ import fleetActionsPageSource from '../pages/FleetActions.tsx?raw';
 import runDetailSource from '../pages/FleetActionRunDetail.tsx?raw';
 import fleetActionLabelsSource from './fleetActionLabels.ts?raw';
 import vesselImportLabelsSource from './vesselImportLabels.ts?raw';
+import fleetActionFormSource from './fleetActionForm.ts?raw';
+import vesselImportSource from './vesselImport.ts?raw';
 import dashboardSource from '../pages/Dashboard.tsx?raw';
 import vesselsSource from '../pages/Vessels.tsx?raw';
 import navModelSource from './navModel.ts?raw';
@@ -51,6 +53,8 @@ const FEATURE_SOURCES = [
   actionFormSource, runsTableSource, actionsTableSource, runActionSource, runProgressSource, targetDrawerSource,
   templateHelpSource, vesselPickerSource, settingsSource, listEditorSource, dialogShellSource, stateBlocksSource,
   fleetActionsPageSource, runDetailSource,
+  // Pure logic moved out of the components above into shared lib modules (used by the mobile app too).
+  fleetActionFormSource, vesselImportSource,
 ];
 const LABEL_SOURCES = [fleetActionLabelsSource, vesselImportLabelsSource];
 

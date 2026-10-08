@@ -5,30 +5,7 @@ import type { Vessel, VesselReadinessResult, VesselSetupChecklistItem } from '..
 import { useLocale } from '../context/LocaleContext';
 import ErrorModal from '../components/shared/ErrorModal';
 import ReadinessPanel from '../components/shared/ReadinessPanel';
-
-interface ChecklistGroup {
-  key: string;
-  title: string;
-  codes: string[];
-}
-
-const CHECKLIST_GROUPS: ChecklistGroup[] = [
-  {
-    key: 'repository',
-    title: 'Repository Basics',
-    codes: ['working_directory', 'repository_context', 'default_branch', 'toolchains'],
-  },
-  {
-    key: 'workflow',
-    title: 'Workflow Profile',
-    codes: ['workflow_profile', 'workflow_profile_valid', 'required_inputs'],
-  },
-  {
-    key: 'delivery',
-    title: 'Delivery Readiness',
-    codes: ['deployment_environments', 'branch_policy', 'deploy_workflow'],
-  },
-];
+import { groupSetupChecklist, nextChecklistItem as findNextChecklistItem } from '../lib/readiness';
 
 export default function VesselOnboarding() {
   const { id } = useParams<{ id: string }>();
@@ -67,17 +44,9 @@ export default function VesselOnboarding() {
     return () => { mounted = false; };
   }, [vesselId, t]);
 
-  const groupedChecklist = useMemo(() => {
-    const items = readiness?.setupChecklist || [];
-    return CHECKLIST_GROUPS.map((group) => ({
-      ...group,
-      items: items.filter((item) => group.codes.includes(item.code)),
-    })).filter((group) => group.items.length > 0);
-  }, [readiness]);
+  const groupedChecklist = useMemo(() => groupSetupChecklist(readiness), [readiness]);
 
-  const nextChecklistItem = useMemo(() => {
-    return (readiness?.setupChecklist || []).find((item) => !item.isSatisfied) || null;
-  }, [readiness]);
+  const nextChecklistItem = useMemo(() => findNextChecklistItem(readiness), [readiness]);
 
   function renderChecklistItem(item: VesselSetupChecklistItem) {
     return (

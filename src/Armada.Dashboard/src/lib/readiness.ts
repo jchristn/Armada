@@ -1,6 +1,7 @@
-/** Pure helpers of the readiness panel (vessel readiness shown on Dispatch, vessel pages, and the app). */
-import type { VesselReadinessResult, WorkflowInputReferenceProvider } from '../types/models';
+/** Pure helpers of the readiness panel (vessel readiness shown on Dispatch, vessel pages, onboarding, and the app). */
+import type { VesselReadinessResult, VesselSetupChecklistItem, WorkflowInputReferenceProvider } from '../types/models';
 
+/** Overall tone of a vessel readiness result: errors block, warnings need attention. */
 export type ReadinessTone = 'ready' | 'warning' | 'error';
 
 export function readinessTone(readiness: VesselReadinessResult | null): ReadinessTone {
@@ -10,7 +11,7 @@ export function readinessTone(readiness: VesselReadinessResult | null): Readines
   return 'ready';
 }
 
-/** English label for the readiness pill. */
+/** English label of the readiness tone (Unknown when there is no result). */
 export function readinessLabel(readiness: VesselReadinessResult | null): string {
   if (!readiness) return 'Unknown';
   if (readiness.errorCount > 0) return 'Blocked';
@@ -18,7 +19,7 @@ export function readinessLabel(readiness: VesselReadinessResult | null): string 
   return 'Ready';
 }
 
-/** English name of a workflow input provider. */
+/** Display name of the provider of a workflow input a readiness issue is about. */
 export function formatInputProvider(provider: WorkflowInputReferenceProvider | string | null | undefined): string {
   switch (provider) {
     case 'EnvironmentVariable':
@@ -38,4 +39,63 @@ export function formatInputProvider(provider: WorkflowInputReferenceProvider | s
     default:
       return provider || 'Input';
   }
+}
+
+/** "main (detached HEAD)" for the readiness branch, or null when unknown. */
+export function readinessBranchSummary(readiness: VesselReadinessResult | null): string | null {
+  return readiness?.currentBranch
+    ? `${readiness.currentBranch}${readiness.isDetachedHead ? ' (detached HEAD)' : ''}`
+    : null;
+}
+
+/** "2 ahead / 1 behind" for the readiness remote drift, or null when neither count is known. */
+export function readinessDriftSummary(readiness: VesselReadinessResult | null): string | null {
+  return readiness && (readiness.commitsAhead != null || readiness.commitsBehind != null)
+    ? `${readiness.commitsAhead ?? 0} ahead / ${readiness.commitsBehind ?? 0} behind`
+    : null;
+}
+
+/** A titled group of onboarding checklist items (by item code). */
+export interface ChecklistGroup {
+  key: string;
+  /** English title, translated at render time. */
+  title: string;
+  codes: string[];
+}
+
+/** The vessel onboarding page's checklist sections. */
+export const CHECKLIST_GROUPS: ChecklistGroup[] = [
+  {
+    key: 'repository',
+    title: 'Repository Basics',
+    codes: ['working_directory', 'repository_context', 'default_branch', 'toolchains'],
+  },
+  {
+    key: 'workflow',
+    title: 'Workflow Profile',
+    codes: ['workflow_profile', 'workflow_profile_valid', 'required_inputs'],
+  },
+  {
+    key: 'delivery',
+    title: 'Delivery Readiness',
+    codes: ['deployment_environments', 'branch_policy', 'deploy_workflow'],
+  },
+];
+
+export interface ChecklistGroupItems extends ChecklistGroup {
+  items: VesselSetupChecklistItem[];
+}
+
+/** The setup checklist split into CHECKLIST_GROUPS, dropping empty groups. */
+export function groupSetupChecklist(readiness: VesselReadinessResult | null): ChecklistGroupItems[] {
+  const items = readiness?.setupChecklist || [];
+  return CHECKLIST_GROUPS.map((group) => ({
+    ...group,
+    items: items.filter((item) => group.codes.includes(item.code)),
+  })).filter((group) => group.items.length > 0);
+}
+
+/** The first unsatisfied checklist item (the next recommended onboarding step), or null. */
+export function nextChecklistItem(readiness: VesselReadinessResult | null): VesselSetupChecklistItem | null {
+  return (readiness?.setupChecklist || []).find((item) => !item.isSatisfied) || null;
 }

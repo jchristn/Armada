@@ -1,5 +1,6 @@
 import { fireEvent, screen } from '@testing-library/react-native';
 import * as client from '@dashboard/api/client';
+import { CaptainsHubScreen } from '../screens/captains/CaptainsHubScreen';
 import { EMBEDDED_SECTIONS, embeddedSectionFor } from '../screens/embeddedSections';
 import { RoutePlaceholder } from '../screens/RoutePlaceholder';
 import { page } from '../test/operationsClient';
@@ -36,24 +37,22 @@ beforeEach(() => {
   api.getSignal.mockResolvedValue({ id: 'sig_1', type: 'Mail', payload: 'hi', fromCaptainId: null, toCaptainId: null, read: false, createdUtc: '2026-10-07T10:00:00Z', tenantId: null });
 });
 
-describe('placeholder hubs serve the sections already built', () => {
+describe('hubs serve the sections already built', () => {
   it('maps hub queries to sections', () => {
-    expect(embeddedSectionFor('/captains', { tab: 'docks' })?.key).toBe('docks');
+    // The Captains hub is a real screen now; its Docks tab embeds the list itself.
+    expect(embeddedSectionFor('/captains', { tab: 'docks' })).toBeNull();
     expect(embeddedSectionFor('/activity', { source: ['signals'] })?.key).toBe('signals');
     expect(embeddedSectionFor('/activity', { source: 'history' })).toBeNull();
     expect(embeddedSectionFor('/vessels', { tab: 'docks' })).toBeNull();
     expect(Object.keys(EMBEDDED_SECTIONS['/activity'].sections)).toEqual(['events', 'signals']);
   });
 
-  it('/captains?tab=docks renders the Docks list; a row pushes the dock on phones', async () => {
+  it('/captains?tab=docks shows the Docks list in the Captains hub; a row pushes the dock on phones', async () => {
     setMockParams({ tab: 'docks' });
-    await renderScreen(<RoutePlaceholder pattern="/captains" />);
-    expect(await screen.findByTestId('embedded-section-docks')).toBeTruthy();
-    expect(screen.getByTestId('embedded-section-note')).toHaveTextContent('Docks in Captains; the rest of Captains is coming in W3.2');
+    await renderScreen(<CaptainsHubScreen />);
+    expect(await screen.findByTestId('docks-list')).toBeTruthy();
     await fireEvent.press(await screen.findByTestId('dock-row-dck_1'));
     expect(mockRouter.push).toHaveBeenCalledWith('/docks/dck_1');
-    await fireEvent.press(screen.getByTestId('embedded-section-back'));
-    expect(mockRouter.setParams).toHaveBeenCalledWith({ tab: '' });
   });
 
   it('on tablets the detail opens beside the list', async () => {
