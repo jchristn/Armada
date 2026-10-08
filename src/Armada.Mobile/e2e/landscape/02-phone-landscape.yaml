@@ -32,6 +32,8 @@ name: 02-phone-landscape
 - assertVisible: "typed in landscape"
 - takeScreenshot: phone-landscape-ask-keyboard
 - hideKeyboard
+- waitForAnimationToEnd:
+    timeout: 5000
 - tapOn:
     id: "ask-open-options"
 - extendedWaitUntil:
@@ -41,8 +43,11 @@ name: 02-phone-landscape
 - takeScreenshot: phone-landscape-sheet
 - tapOn:
     id: "ask-options-close"
-- tapOn:
-    id: "sidebar-/missions"
+# The rail scrolls in a 440 dp tall window; a link reaches Missions without scrolling it.
+- runFlow:
+    file: ../common/open-link.yaml
+    env:
+      LINK: "armada://missions"
 - extendedWaitUntil:
     visible: "Seeded mission one.*"
     timeout: 15000

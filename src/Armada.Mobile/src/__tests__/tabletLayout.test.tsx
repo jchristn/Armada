@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, screen } from '@testing-library/react-native';
 import { useState } from 'react';
 import { DeviceEventEmitter, Dimensions, StyleSheet, Text, TextInput, View } from 'react-native';
 import { BottomSheet, KeyboardAvoidingPane, ListRow, PaneWidthContext, SplitView, StatusBadge } from '../components/ui';
@@ -22,6 +22,7 @@ import { Sidebar } from '../components/app/Sidebar';
 import { ApprovalsProvider } from '../notifications/ApprovalsContext';
 import { NotificationProvider } from '../notifications/NotificationContext';
 import { SocketProvider } from '../socket/SocketContext';
+import { keyboardOverlap } from '../components/ui/KeyboardAvoidingPane';
 import { renderWithProviders } from '../test/render';
 
 jest.mock('@dashboard/api/client', () => require('../test/mockClient').clientMockFactory());
@@ -343,22 +344,34 @@ describe('modals in landscape', () => {
 });
 
 describe('keyboard avoidance wherever the pane sits', () => {
-  it('offsets by the pane\'s measured place in the window (split pane, landscape), not a fixed header height', async () => {
+  it('lifts by the pane\'s overlap with the keyboard, measured in the window, and follows later frame changes', async () => {
     const nativeMethods = jest.requireActual('@react-native/jest-preset/jest/MockNativeMethods').default as { measureInWindow: jest.Mock };
-    // The Ask conversation pane on an iPhone in landscape: below a 44 dp header, beside the thread list.
+    // The Ask conversation pane on an iPhone in landscape: below a 44 dp header, beside the thread list, 396 dp tall.
     nativeMethods.measureInWindow.mockImplementation((callback: (x: number, y: number, w: number, h: number) => void) => callback(380, 44, 500, 396));
     await renderWithProviders(<KeyboardAvoidingPane testID="pane"><Text>composer</Text></KeyboardAvoidingPane>);
+    const lift = () => StyleSheet.flatten(screen.getByTestId('pane-avoider').props.style).paddingBottom;
+    expect(lift()).toBe(0);
+    // The keyboard shows (top at 260), then the predictive bar raises it to 216 dp (top at 224).
     await act(async () => {
-      fireEvent(screen.getByTestId('pane'), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 500, height: 396 } } });
+      DeviceEventEmitter.emit('keyboardWillShow', { endCoordinates: { screenX: 0, screenY: 260, width: 956, height: 180 }, duration: 0, easing: 'keyboard' });
     });
+    expect(lift()).toBe(180);
     await act(async () => {
-      fireEvent(screen.getByTestId('pane-avoider'), 'layout', { persist: () => undefined, nativeEvent: { layout: { x: 0, y: 0, width: 500, height: 396 } } });
+      DeviceEventEmitter.emit('keyboardWillChangeFrame', { endCoordinates: { screenX: 0, screenY: 224, width: 956, height: 216 }, duration: 0, easing: 'keyboard' });
     });
-    // A 200 dp landscape keyboard (top at 240 of 440): the pane's bottom (44 + 396) must rise by exactly 200.
+    expect(lift()).toBe(216);
     await act(async () => {
-      DeviceEventEmitter.emit('keyboardWillShow', { endCoordinates: { screenX: 0, screenY: 240, width: 956, height: 200 }, duration: 0, easing: 'keyboard' });
+      DeviceEventEmitter.emit('keyboardWillHide', { endCoordinates: { screenX: 0, screenY: 440, width: 956, height: 0 }, duration: 0, easing: 'keyboard' });
     });
-    await waitFor(() => expect(StyleSheet.flatten(screen.getByTestId('pane-avoider').props.style).paddingBottom).toBe(200));
+    expect(lift()).toBe(0);
     nativeMethods.measureInWindow.mockReset();
+  });
+});
+
+describe('keyboardOverlap', () => {
+  it('is how far the pane bottom reaches below the keyboard top, never negative', () => {
+    expect(keyboardOverlap(44, 396, 224)).toBe(216);
+    expect(keyboardOverlap(0, 300, 500)).toBe(0);
+    expect(keyboardOverlap(44, 396, null)).toBe(0);
   });
 });
