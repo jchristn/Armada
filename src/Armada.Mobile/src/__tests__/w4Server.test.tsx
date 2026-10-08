@@ -9,7 +9,7 @@ import { intOr, mergePush, pushPayload, remoteControlPayload, secretDraft, secre
 import { page, renderW4Routes, resetW4 } from '../test/w4';
 
 jest.mock('@dashboard/api/client', () => require('../test/w4Client').autoMockClient());
-jest.mock('../platform/files', () => ({ ensureNativePlatform: jest.fn(), pickBackupFile: jest.fn() }));
+jest.mock('../platform/files', () => ({ ensureNativePlatform: jest.fn(), pickBackupFile: jest.fn(), reauthenticateForExport: jest.fn(async () => true) }));
 
 const api = client as jest.Mocked<typeof client>;
 const platform = files as jest.Mocked<typeof files>;
@@ -130,21 +130,57 @@ describe('Settings > Server', () => {
     expect(api.updateSettings).toHaveBeenCalledWith({ remoteControl: expect.objectContaining({ enabled: true }) });
   });
 
-  it('backs up through the share sheet and restores a picked file after confirmation', async () => {
+  it('backup warns about the secrets inside, re-authenticates the owner, then shares (F-56)', async () => {
     api.downloadBackup.mockResolvedValue(undefined);
-    const file = { name: 'armada-backup.zip', arrayBuffer: async () => new ArrayBuffer(4) };
-    platform.pickBackupFile.mockResolvedValue(file);
-    api.restoreBackup.mockResolvedValue({} as never);
+    platform.reauthenticateForExport.mockResolvedValue(true);
     await renderW4Routes(ROUTES, '/server');
     await waitFor(() => expect(screen.getByTestId('settings-backup')).toBeTruthy());
-    await act(async () => { await fireEvent.press(screen.getByTestId('settings-backup')); });
+    await fireEvent.press(screen.getByTestId('settings-backup'));
+    await waitFor(() => expect(screen.getByText(/receives all of that/)).toBeTruthy());
+    expect(platform.reauthenticateForExport).not.toHaveBeenCalled();
+    expect(api.downloadBackup).not.toHaveBeenCalled();
+    await act(async () => { await fireEvent.press(screen.getByTestId('settings-backup-confirm-confirm')); });
+    expect(platform.reauthenticateForExport).toHaveBeenCalled();
     expect(platform.ensureNativePlatform).toHaveBeenCalled();
     expect(api.downloadBackup).toHaveBeenCalled();
+  });
+
+  it('backup is not exported when the owner is not verified', async () => {
+    platform.reauthenticateForExport.mockResolvedValue(false);
+    await renderW4Routes(ROUTES, '/server');
+    await waitFor(() => expect(screen.getByTestId('settings-backup')).toBeTruthy());
+    await fireEvent.press(screen.getByTestId('settings-backup'));
+    await act(async () => { await fireEvent.press(screen.getByTestId('settings-backup-confirm-confirm')); });
+    expect(platform.reauthenticateForExport).toHaveBeenCalled();
+    expect(api.downloadBackup).not.toHaveBeenCalled();
+  });
+
+  it('restore names the server, needs `restore` typed, and deletes the picked copy (F-56)', async () => {
+    const file = { name: 'armada-backup.zip', arrayBuffer: async () => new ArrayBuffer(4) };
+    const dispose = jest.fn();
+    platform.pickBackupFile.mockResolvedValue({ file, dispose });
+    api.restoreBackup.mockResolvedValue({} as never);
+    await renderW4Routes(ROUTES, '/server');
+    await waitFor(() => expect(screen.getByTestId('settings-restore')).toBeTruthy());
     await act(async () => { await fireEvent.press(screen.getByTestId('settings-restore')); });
-    await waitFor(() => expect(screen.getByText('Restore the database from "armada-backup.zip"? The current data is replaced by the backup.')).toBeTruthy());
-    expect(api.restoreBackup).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByText('Restore the database of Test (http://h:1) from "armada-backup.zip"? The current data is replaced by the backup.')).toBeTruthy());
+    expect(screen.getByTestId('settings-restore-confirm-confirm')).toBeDisabled();
+    await fireEvent.changeText(screen.getByTestId('settings-restore-confirm-typed'), 'restore');
     await act(async () => { await fireEvent.press(screen.getByTestId('settings-restore-confirm-confirm')); });
     expect(api.restoreBackup).toHaveBeenCalledWith(file);
+    expect(dispose).toHaveBeenCalled();
+  });
+
+  it('a cancelled restore uploads nothing and still deletes the picked copy', async () => {
+    const dispose = jest.fn();
+    platform.pickBackupFile.mockResolvedValue({ file: { name: 'b.zip', arrayBuffer: async () => new ArrayBuffer(1) }, dispose });
+    await renderW4Routes(ROUTES, '/server');
+    await waitFor(() => expect(screen.getByTestId('settings-restore')).toBeTruthy());
+    await act(async () => { await fireEvent.press(screen.getByTestId('settings-restore')); });
+    await waitFor(() => expect(screen.getByTestId('settings-restore-confirm-cancel')).toBeTruthy());
+    await fireEvent.press(screen.getByTestId('settings-restore-confirm-cancel'));
+    expect(api.restoreBackup).not.toHaveBeenCalled();
+    expect(dispose).toHaveBeenCalled();
   });
 
   it('rebuilds the chosen ref and factory-resets only after confirmation', async () => {

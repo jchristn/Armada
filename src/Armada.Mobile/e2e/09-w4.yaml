@@ -195,6 +195,15 @@ name: 09-w4
     duration: 600
 - tapOn:
     id: "settings-backup"
+# The warning that the share target receives every secret in the backup (F-56); then owner re-authentication, which
+# passes on a simulator with no passcode.
+- extendedWaitUntil:
+    visible:
+      id: "settings-backup-confirm-confirm"
+    timeout: 10000
+- takeScreenshot: w4-backup-warning
+- tapOn:
+    id: "settings-backup-confirm-confirm"
 - runFlow:
     when:
       platform: iOS

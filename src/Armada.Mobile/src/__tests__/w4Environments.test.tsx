@@ -5,7 +5,7 @@ import WorkLayout from '../app/(app)/(work)/_layout';
 import DeliveryRoute from '../app/(app)/(work)/delivery';
 import EnvironmentRoute from '../app/(app)/(work)/environments/[id]';
 import { resolveHubTab } from '../components/resource/Hub';
-import { prefillQuery } from '../resource/links';
+import { isWebUrl, openWebUrl, prefillQuery } from '../resource/links';
 import { environmentPayload, newEnvironmentValues } from '../screens/delivery/environmentForm';
 import { page, renderW4Routes, resetW4 } from '../test/w4';
 
@@ -44,6 +44,18 @@ describe('hub tabs', () => {
     expect(resolveHubTab(tabs, 'b', 'a')).toBe('a');
     expect(resolveHubTab(tabs, ['c', 'a'], 'a')).toBe('c');
     expect(resolveHubTab(tabs, undefined, 'b')).toBe('a');
+  });
+
+  it('opens only http(s) server-supplied URLs (F-47)', () => {
+    const open = jest.fn(async () => undefined);
+    for (const bad of ['javascript:alert(1)', 'tel:123', 'file:///etc/passwd', 'armada://server', 'ftp://x', '', null, undefined]) {
+      expect(isWebUrl(bad)).toBe(false);
+      openWebUrl(bad, open);
+    }
+    expect(open).not.toHaveBeenCalled();
+    openWebUrl(' https://github.com/o/r/pull/1 ', open);
+    expect(open).toHaveBeenCalledWith('https://github.com/o/r/pull/1');
+    expect(isWebUrl('http://ci.example/run/5')).toBe(true);
   });
 
   it('builds prefill links without blanks', () => {

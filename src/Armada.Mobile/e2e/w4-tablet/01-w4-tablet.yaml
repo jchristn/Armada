@@ -55,6 +55,17 @@ name: 01-w4-tablet
           id: "push-prompt-later"
 - extendedWaitUntil:
     visible:
+      id: "ask-screen"
+    timeout: 20000
+# An iPad mini is 744 dp wide in portrait (the phone layout starts below 768); landscape gives it the sidebar.
+- runFlow:
+    when:
+      notVisible:
+        id: "sidebar"
+    commands:
+      - setOrientation: LANDSCAPE_LEFT
+- extendedWaitUntil:
+    visible:
       id: "sidebar"
     timeout: 20000
 # Delivery: the deployment opens beside the list.
@@ -89,10 +100,17 @@ name: 01-w4-tablet
     timeout: 10000
 - takeScreenshot: w4-tablet-environments
 # Configuration: a persona beside the list.
-- scrollUntilVisible:
-    element:
-      id: "sidebar-/configuration"
-    direction: DOWN
+# The sidebar scrolls on its own (scrollUntilVisible scrolls the content pane).
+- repeat:
+    times: 6
+    while:
+      notVisible:
+        id: "sidebar-/configuration"
+    commands:
+      - swipe:
+          from:
+            id: "sidebar"
+          direction: UP
 - tapOn:
     id: "sidebar-/configuration"
 - extendedWaitUntil:
@@ -115,10 +133,17 @@ name: 01-w4-tablet
     id: "split-view"
 - takeScreenshot: w4-tablet-configuration
 # Activity: a request beside the list.
-- scrollUntilVisible:
-    element:
-      id: "sidebar-/activity"
-    direction: DOWN
+# The sidebar scrolls on its own (scrollUntilVisible scrolls the content pane).
+- repeat:
+    times: 6
+    while:
+      notVisible:
+        id: "sidebar-/activity"
+    commands:
+      - swipe:
+          from:
+            id: "sidebar"
+          direction: UP
 - tapOn:
     id: "sidebar-/activity"
 - extendedWaitUntil:
@@ -130,14 +155,19 @@ name: 01-w4-tablet
     id: "activity-tab-requests"
 - extendedWaitUntil:
     visible:
-      id: "request-row-.*"
+      id: "activity-requests"
     timeout: 15000
-- scrollUntilVisible:
-    element:
-      id: "request-row-.*"
-    direction: DOWN
-    visibilityPercentage: 100
-    centerElement: true
+# The rows sit under the summary and chart in the list pane; scroll that pane (not the screen center).
+- repeat:
+    times: 8
+    while:
+      notVisible:
+        id: "request-row-.*"
+    commands:
+      - swipe:
+          from:
+            id: "activity-requests"
+          direction: UP
 - tapOn:
     id: "request-row-.*"
     index: 0
@@ -147,10 +177,17 @@ name: 01-w4-tablet
     timeout: 10000
 - takeScreenshot: w4-tablet-activity-requests
 # Settings: the Server tab.
-- scrollUntilVisible:
-    element:
-      id: "sidebar-/server"
-    direction: DOWN
+# The sidebar scrolls on its own (scrollUntilVisible scrolls the content pane).
+- repeat:
+    times: 6
+    while:
+      notVisible:
+        id: "sidebar-/server"
+    commands:
+      - swipe:
+          from:
+            id: "sidebar"
+          direction: UP
 - tapOn:
     id: "sidebar-/server"
 - extendedWaitUntil:
@@ -158,3 +195,4 @@ name: 01-w4-tablet
       id: "settings-server"
     timeout: 15000
 - takeScreenshot: w4-tablet-settings
+- setOrientation: PORTRAIT

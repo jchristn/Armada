@@ -14,6 +14,7 @@ import { resourceStyles } from '../../components/resource/styles';
 import { AppText } from '../../components/ui/AppText';
 import { Button } from '../../components/ui/Button';
 import { StatusBadge } from '../../components/ui/StatusBadge';
+import { isWebUrl, openWebUrl } from '../../resource/links';
 import { useLocale } from '../../i18n/LocaleContext';
 import { useNotifications } from '../../notifications/NotificationContext';
 import { statusBadge } from '../../resource/status';
@@ -115,7 +116,7 @@ export function CheckRunDetailView({ id, embedded, onDeleted, onChanged }: Check
         <Field label={t('Source')} value={run.source} />
         <Field label={t('Provider')} value={run.providerName} />
         <Field label={t('External ID')} value={run.externalId} mono />
-        <Field label={t('External URL')} value={run.externalUrl} onPress={run.externalUrl ? () => void Linking.openURL(run.externalUrl!) : undefined} />
+        <Field label={t('External URL')} value={run.externalUrl} onPress={isWebUrl(run.externalUrl) ? () => openWebUrl(run.externalUrl, Linking.openURL) : undefined} />
         <Field label={t('Environment')} value={run.environmentName} />
         <Field label={t('Duration')} value={formatCheckDuration(run.durationMs)} />
         <Field label={t('Mission ID')} value={run.missionId} mono onPress={run.missionId ? () => go(`/missions/${run.missionId}`) : undefined} />

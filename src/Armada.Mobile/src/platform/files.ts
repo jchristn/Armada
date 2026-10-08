@@ -1,5 +1,6 @@
 import { configureClient, type ClientPlatformAdapter, type DownloadedFile, type UploadFile } from '@dashboard/api/client';
 import * as DocumentPicker from 'expo-document-picker';
+import * as LocalAuthentication from 'expo-local-authentication';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 
@@ -26,18 +27,51 @@ function blobToBase64(blob: Blob): Promise<string> {
   });
 }
 
-/** Mobile platform services for the shared API client: a downloaded file is written to the cache and shared. */
+/** Deletes a file, ignoring a file that is already gone (cleanup must never mask the real outcome). */
+export function deleteQuietly(file: { exists: boolean; delete: () => void } | null | undefined): void {
+  try {
+    if (file?.exists) file.delete();
+  } catch {
+    // best effort: the cache is purged by the OS too
+  }
+}
+
+/**
+ * Mobile platform services for the shared API client: a downloaded file is written to the app's cache, handed to
+ * the share sheet, and deleted when the share sheet closes (success, cancel, or error), so a backup ZIP (the whole
+ * database and settings, secrets included) does not stay on the device (security review F-56).
+ */
 export const nativePlatform: ClientPlatformAdapter = {
   saveFile: async (file: DownloadedFile) => {
     const base64 = await blobToBase64(file.body);
     const target = new File(Paths.cache, safeFileName(file.filename, 'armada-download.bin'));
-    if (target.exists) target.delete();
-    target.create();
-    target.write(base64, { encoding: 'base64' });
-    if (!(await Sharing.isAvailableAsync())) throw new Error(`Saved to ${target.uri}; sharing is not available on this device.`);
-    await Sharing.shareAsync(target.uri, { mimeType: file.contentType, UTI: 'public.zip-archive', dialogTitle: file.filename });
+    try {
+      if (target.exists) target.delete();
+      target.create();
+      target.write(base64, { encoding: 'base64' });
+      if (!(await Sharing.isAvailableAsync())) throw new Error('Sharing is not available on this device.');
+      await Sharing.shareAsync(target.uri, { mimeType: file.contentType, UTI: 'public.zip-archive', dialogTitle: file.filename });
+    } finally {
+      deleteQuietly(target);
+    }
   },
 };
+
+/**
+ * Re-authenticates the device owner before a backup leaves the device (F-56): Face ID / Touch ID / fingerprint, or
+ * the device passcode. A device with no screen lock at all has nothing to verify against and passes (the warning
+ * confirmation before it is then the only gate). Cancel and errors resolve false.
+ */
+export async function reauthenticateForExport(promptMessage: string, cancelLabel: string): Promise<boolean> {
+  try {
+    const level = await LocalAuthentication.getEnrolledLevelAsync();
+    if (level === LocalAuthentication.SecurityLevel.NONE) return true;
+    const result = await LocalAuthentication.authenticateAsync({ promptMessage, cancelLabel, disableDeviceFallback: false });
+    return result.success;
+  } catch {
+    return false;
+  }
+}
 
 let registered = false;
 
@@ -48,11 +82,18 @@ export function ensureNativePlatform(): void {
   registered = true;
 }
 
+/** A picked backup: the upload for restoreBackup plus cleanup of the picker's cache copy. */
+export interface PickedBackup {
+  file: UploadFile;
+  /** Deletes the copy the document picker left in the cache (call when the restore is done or abandoned). */
+  dispose: () => void;
+}
+
 /**
- * Lets the user pick a backup ZIP with the system document picker. Resolves to an UploadFile for restoreBackup,
- * or null when the user cancelled.
+ * Lets the user pick a backup ZIP with the system document picker. Resolves to the upload and its cleanup, or null
+ * when the user cancelled.
  */
-export async function pickBackupFile(): Promise<UploadFile | null> {
+export async function pickBackupFile(): Promise<PickedBackup | null> {
   const result = await DocumentPicker.getDocumentAsync({
     type: ['application/zip', 'application/x-zip-compressed', 'application/octet-stream'],
     copyToCacheDirectory: true,
@@ -61,5 +102,8 @@ export async function pickBackupFile(): Promise<UploadFile | null> {
   if (result.canceled || !result.assets || result.assets.length === 0) return null;
   const asset = result.assets[0];
   const picked = new File(asset.uri);
-  return { name: asset.name || 'armada-backup.zip', arrayBuffer: () => picked.arrayBuffer() };
+  return {
+    file: { name: asset.name || 'armada-backup.zip', arrayBuffer: () => picked.arrayBuffer() },
+    dispose: () => deleteQuietly(picked),
+  };
 }

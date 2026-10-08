@@ -34,7 +34,7 @@ import { StatusBadge } from '../../components/ui/StatusBadge';
 import { TextField } from '../../components/ui/TextField';
 import { useLocale } from '../../i18n/LocaleContext';
 import { useNotifications } from '../../notifications/NotificationContext';
-import { param } from '../../resource/links';
+import { openWebUrl, param } from '../../resource/links';
 import { errorText, useLoad } from '../../resource/useLoad';
 import { useTheme } from '../../theme/ThemeContext';
 import { spacing } from '../../theme/typography';
@@ -117,8 +117,8 @@ export function ApiExplorerListRoute() {
           <AppText muted style={resourceStyles.pad}>{t('Browse the live OpenAPI document, execute authenticated requests, inspect responses, and replay captured traffic.')}</AppText>
           {replay?.error ? <AppText color="danger" accessibilityRole="alert" style={resourceStyles.pad} testID="api-replay-error">{replay.error}</AppText> : null}
           <ActionBar>
-            <Button label={t('OpenAPI JSON')} variant="secondary" icon="open-outline" style={resourceStyles.action} onPress={() => void Linking.openURL(serverUrl('/openapi.json'))} />
-            <Button label={t('Swagger')} variant="secondary" icon="open-outline" style={resourceStyles.action} onPress={() => void Linking.openURL(serverUrl('/swagger'))} />
+            <Button label={t('OpenAPI JSON')} variant="secondary" icon="open-outline" style={resourceStyles.action} onPress={() => openWebUrl(serverUrl('/openapi.json'), Linking.openURL)} />
+            <Button label={t('Swagger')} variant="secondary" icon="open-outline" style={resourceStyles.action} onPress={() => openWebUrl(serverUrl('/swagger'), Linking.openURL)} />
           </ActionBar>
         </>
       )}

@@ -34,11 +34,13 @@ import { Disclosure } from '../../components/ui/Disclosure';
 import { Banner } from '../../components/ui/Banner';
 import { BottomSheet } from '../../components/ui/BottomSheet';
 import { Button } from '../../components/ui/Button';
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import { SelectField } from '../../components/ui/SelectSheet';
 import { TextField } from '../../components/ui/TextField';
+import { useAuth } from '../../auth/AuthContext';
 import { useLocale } from '../../i18n/LocaleContext';
 import { useNotifications } from '../../notifications/NotificationContext';
-import { ensureNativePlatform, pickBackupFile } from '../../platform/files';
+import { ensureNativePlatform, pickBackupFile, reauthenticateForExport, type PickedBackup } from '../../platform/files';
 import { errorText } from '../../resource/useLoad';
 import { useTheme } from '../../theme/ThemeContext';
 import { radius, spacing } from '../../theme/typography';
@@ -125,15 +127,30 @@ export function PathsSection({ settings }: { settings: MobileServerSettings }) {
   );
 }
 
-/** Database Backup (admins): Backup Now opens the share sheet; Restore picks a ZIP with the document picker. */
+/**
+ * Database Backup (global admins, as the server enforces). A backup is the whole database and settings, secrets
+ * included, so (security review F-56) Backup Now first warns that the share target receives them, then asks the
+ * device owner to re-authenticate (biometrics or passcode), then shares the ZIP and deletes it from the cache when
+ * the share sheet closes. Restore picks a ZIP with the document picker and needs the word `restore` typed into a
+ * confirmation that names the server; the picker's copy is deleted afterwards.
+ */
 export function BackupSection({ proxyMode, onRestored }: { proxyMode: boolean; onRestored: () => void }) {
   const { t } = useLocale();
   const { pushToast } = useNotifications();
+  const { activeProfile } = useAuth();
   const [backingUp, setBackingUp] = useState(false);
   const [restoring, setRestoring] = useState(false);
-  const { confirm, dialog } = useConfirm('settings-restore-confirm');
+  const [exportWarning, setExportWarning] = useState(false);
+  const [pending, setPending] = useState<PickedBackup | null>(null);
+  const serverName = activeProfile ? `${activeProfile.name} (${activeProfile.url})` : t('this server');
 
   async function backup() {
+    setExportWarning(false);
+    const verified = await reauthenticateForExport(t('Confirm it is you to export the Armada backup'), t('Cancel'));
+    if (!verified) {
+      pushToast('warning', t('Backup cancelled: the device owner was not verified.'));
+      return;
+    }
     setBackingUp(true);
     try {
       ensureNativePlatform();
@@ -146,53 +163,76 @@ export function BackupSection({ proxyMode, onRestored }: { proxyMode: boolean; o
     }
   }
 
-  async function restore() {
-    let file;
+  async function pick() {
+    let picked: PickedBackup | null;
     try {
-      file = await pickBackupFile();
+      picked = await pickBackupFile();
     } catch (e: unknown) {
       pushToast('error', t('Restore failed: {{message}}', { message: errorText(e, t('Unknown error')) }));
       return;
     }
-    if (!file) return;
-    const picked = file;
-    confirm({
-      title: t('Restore from Backup'),
-      message: t('Restore the database from "{{name}}"? The current data is replaced by the backup.', { name: picked.name }),
-      confirmLabel: t('Restore from Backup'),
-      danger: true,
-      onConfirm: async () => {
-        setRestoring(true);
-        try {
-          await restoreBackup(picked);
-          pushToast('success', t('Restore completed successfully. Server restart recommended.'));
-          onRestored();
-        } catch (e: unknown) {
-          pushToast('error', t('Restore failed: {{message}}', { message: errorText(e, t('Unknown error')) }));
-        } finally {
-          setRestoring(false);
-        }
-      },
-    });
+    if (picked) setPending(picked);
+  }
+
+  function cancelRestore() {
+    pending?.dispose();
+    setPending(null);
+  }
+
+  async function restore(picked: PickedBackup) {
+    setPending(null);
+    setRestoring(true);
+    try {
+      await restoreBackup(picked.file);
+      pushToast('success', t('Restore completed successfully. Server restart recommended.'));
+      onRestored();
+    } catch (e: unknown) {
+      pushToast('error', t('Restore failed: {{message}}', { message: errorText(e, t('Unknown error')) }));
+    } finally {
+      picked.dispose();
+      setRestoring(false);
+    }
   }
 
   return (
     <SettingsSection title={t('Database Backup')}>
       {proxyMode ? <Banner tone="warning" title={t('Backup download remains available through the proxy relay, but restore is blocked remotely by proxy policy.')} /> : null}
       <View style={styles.row}>
-        <Button label={backingUp ? t('Backing up...') : t('Backup Now')} icon="share-outline" busy={backingUp} onPress={() => void backup()} accessibilityHint={t('Create a backup ZIP of the database and download it')} style={styles.button} testID="settings-backup" />
+        <Button label={backingUp ? t('Backing up...') : t('Backup Now')} icon="share-outline" busy={backingUp} onPress={() => setExportWarning(true)} accessibilityHint={t('Create a backup ZIP of the database and download it')} style={styles.button} testID="settings-backup" />
         <Button
           label={t('Restore from Backup')}
           variant="danger"
           busy={restoring}
           disabled={proxyMode}
-          onPress={() => void restore()}
+          onPress={() => void pick()}
           accessibilityHint={proxyMode ? t('Restore from Backup is blocked in proxy mode') : t('Restore the database from a backup ZIP file')}
           style={styles.button}
           testID="settings-restore"
         />
       </View>
-      {dialog}
+      <ConfirmDialog
+        open={exportWarning}
+        title={t('Backup Now')}
+        message={t('The backup contains the whole database and settings, including password hashes, credential tokens, push tokens, Ask history, and server secrets. Whatever you share it with (an app, a cloud folder, a person) receives all of that. You will be asked to confirm it is you.')}
+        confirmLabel={t('Continue')}
+        cancelLabel={t('Cancel')}
+        onConfirm={() => void backup()}
+        onCancel={() => setExportWarning(false)}
+        testID="settings-backup-confirm"
+      />
+      <ConfirmDialog
+        open={pending !== null}
+        title={t('Restore from Backup')}
+        message={t('Restore the database of {{server}} from "{{name}}"? The current data is replaced by the backup.', { server: serverName, name: pending?.file.name ?? '' })}
+        confirmLabel={t('Restore from Backup')}
+        cancelLabel={t('Cancel')}
+        danger
+        typedConfirmation="restore"
+        typedLabel={t('Type `restore` into the confirmation box to continue.')}
+        onConfirm={() => { if (pending) void restore(pending); }}
+        onCancel={cancelRestore}
+        testID="settings-restore-confirm"
+      />
     </SettingsSection>
   );
 }

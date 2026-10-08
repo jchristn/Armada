@@ -18,7 +18,7 @@ import { Button } from '../../components/ui/Button';
 import { StatusBadge } from '../../components/ui/StatusBadge';
 import { useLocale } from '../../i18n/LocaleContext';
 import { useNotifications } from '../../notifications/NotificationContext';
-import { param, prefillQuery } from '../../resource/links';
+import { openWebUrl, param, prefillQuery } from '../../resource/links';
 import { ALL, useNameMap, useReference, useVessels } from '../../resource/lookups';
 import { statusBadge } from '../../resource/status';
 import { errorText, useLoad, useReloadOnFocus } from '../../resource/useLoad';
@@ -210,7 +210,7 @@ export function ReleaseDetailView({ id, embedded, onDeleted, onChanged }: Releas
             subtitle={`${pr.repository} #${pr.number} \u2022 ${t('Checks')}: ${pr.checks.length} \u2022 ${t('Reviews')}: ${pr.reviews.length} \u2022 ${t('Reviewers')}: ${pr.requestedReviewers.length > 0 ? pr.requestedReviewers.join(', ') : '-'}`}
             badge={statusBadge(t, pr.state)}
             meta={`${t(pr.reviewStatus)}${pr.updatedUtc ? ` \u2022 ${formatRelativeTime(pr.updatedUtc)}` : ''}`}
-            onPress={() => void Linking.openURL(pr.url)}
+            onPress={() => openWebUrl(pr.url, Linking.openURL)}
           />
         ))}
       </FieldCard>
