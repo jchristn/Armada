@@ -1,0 +1,86 @@
+# Signed in, with the captain from 07: Planning (the session list and the start sheet with the captain and vessel
+# pickers; no session is started, which would launch a real agent), then the backlog: create an item through the
+# form, see its page, and find it in the list.
+appId: ${APP_ID}
+name: 08-build-planning
+---
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: "tab-ask"
+    timeout: 30000
+- runFlow:
+    file: common/open-link.yaml
+    env:
+      LINK: "armada://planning"
+- extendedWaitUntil:
+    visible:
+      id: "planning-list"
+    timeout: 15000
+- takeScreenshot: planning
+- tapOn:
+    id: "planning-new"
+- extendedWaitUntil:
+    visible:
+      id: "planning-start-captain"
+    timeout: 10000
+- assertVisible:
+    id: "planning-start-vessel"
+- takeScreenshot: planning-start
+- tapOn:
+    id: "planning-new-close"
+# Backlog: a new item through the form.
+- runFlow:
+    file: common/open-link.yaml
+    env:
+      LINK: "armada://objectives"
+- extendedWaitUntil:
+    visible:
+      id: "objectives-list"
+    timeout: 15000
+- tapOn:
+    id: "objectives-list-new"
+- extendedWaitUntil:
+    visible:
+      id: "objective-form-title"
+    timeout: 15000
+- tapOn:
+    id: "objective-form-title"
+- runFlow: common/dismiss-keyboard-tips.yaml
+- inputText: "Mobile E2E backlog item"
+- pressKey: Enter
+# A long form: scroll faster and allow more time than the default.
+- scrollUntilVisible:
+    element:
+      id: "objective-form-save"
+    direction: DOWN
+    visibilityPercentage: 100
+    speed: 80
+    timeout: 60000
+# Save is the last control on the page; one more scroll lifts it clear of the tab bar.
+- scroll
+- takeScreenshot: objective-form
+- tapOn:
+    id: "objective-form-save"
+- extendedWaitUntil:
+    visible: "Mobile E2E backlog item"
+    timeout: 15000
+- assertVisible:
+    id: "objective-detail"
+- takeScreenshot: objective-detail
+- scrollUntilVisible:
+    element:
+      id: "objective-refine-captain"
+    direction: DOWN
+    speed: 80
+    timeout: 60000
+- takeScreenshot: objective-refinement
+- runFlow:
+    file: common/open-link.yaml
+    env:
+      LINK: "armada://objectives"
+- extendedWaitUntil:
+    visible:
+      id: "objective-row-Mobile E2E backlog item"
+    timeout: 15000
+- takeScreenshot: objectives

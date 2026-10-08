@@ -32,15 +32,18 @@ name: 02-navigate
 # Tapping the active tab pops its stack to the root (works the same on iOS and Android).
 - tapOn:
     id: "tab-work"
+# Vessels is near the end of the list, so it cannot be scrolled to the center; fully visible is enough.
 - scrollUntilVisible:
     element:
       id: "nav-/vessels"
     direction: DOWN
     visibilityPercentage: 100
-    centerElement: true
 - tapOn:
     id: "nav-/vessels"
-- assertVisible: "Coming in W3.1"
+- extendedWaitUntil:
+    visible:
+      id: "vessels-hub"
+    timeout: 10000
 - tapOn:
     id: "tab-work"
 - tapOn:

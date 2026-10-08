@@ -38,6 +38,7 @@ import {
   runStatusBadge,
   targetStatusBadge,
 } from '../lib/fleetActionLabels';
+import { definitionFromRun } from '../lib/fleetActionForm';
 
 /** Refresh cadence while a run is active, in seconds. */
 export const RUN_DETAIL_REFRESH_SECONDS = 5;
@@ -165,15 +166,7 @@ export default function FleetActionRunDetail() {
           actionId = null;
         }
       }
-      const definition: FleetActionUpsertRequest | null = actionId ? null : {
-        Name: run.actionName,
-        Kind: run.kind,
-        CommandText: run.commandText,
-        PromptTemplate: run.promptTemplate,
-        PipelineId: run.pipelineId,
-        TimeoutSeconds: run.timeoutSeconds,
-        RequiresCleanWorkingTree: run.requiresCleanWorkingTree,
-      };
+      const definition: FleetActionUpsertRequest | null = actionId ? null : definitionFromRun(run);
       setRerun({ vesselIds, actionId, definition });
     } catch (err: unknown) {
       setRunError(err instanceof Error ? err.message : t('Failed to load failed targets.'));

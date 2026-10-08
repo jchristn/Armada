@@ -6,8 +6,9 @@
 #   2. starts a throwaway Admiral on 127.0.0.1 with ARMADA_DATA_DIR in a temp directory (never ~/.armada) and
 #      ports from --port (default 44010; MCP is port+1; Prometheus is off). It keeps the default admin password,
 #      which the Admiral allows on loopback, so the flows exercise the "Skip for now" password-change path. It
-#      seeds, through the REST API, a vessel (a local git repo in the temp directory), an environment that requires
-#      approval, and one deployment waiting for it (the approvals flow approves it);
+#      seeds, through the REST API, a fleet with two vessels (local git repos in the temp directory, one with commits
+#      on several days), an environment that requires approval, and one deployment waiting for it (the approvals flow
+#      approves it);
 #   3. builds and installs a Release build of the app (JS bundle embedded, no Metro) unless --no-app-build;
 #   3b. seeds Operations data (scripts/mobile/seed-e2e.py: a fleet, a vessel on a local bare repository, and a
 #      voyage with two missions that stay Pending, since there are no captains);
@@ -206,9 +207,11 @@ JSON
   exit 1
 }
 
-# Seed what the flows need through the REST API, as the default admin: one deployment awaiting approval.
+# Seed what the flows need through the REST API, as the default admin: one deployment awaiting approval, and for the
+# Build flows a fleet holding the vessel plus a second vessel whose repository has commits on several days (View
+# History). No captain is seeded: the Ask flow expects none, and the Build flows create one through the app.
 seed_admiral() {
-  local base="http://127.0.0.1:${PORT}" token repo vessel env
+  local base="http://127.0.0.1:${PORT}" token repo repo2 fleet vessel env day stamp
   token="$(curl -fsS -X POST "${base}/api/v1/authenticate" -H 'Content-Type: application/json' \
     -d '{"email":"admin@armada","password":"password","tenantId":"default"}' | python3 -c 'import json,sys; print(json.load(sys.stdin)["Token"])')"
   repo="${DATA_DIR}/seed-repo"
@@ -217,14 +220,28 @@ seed_admiral() {
   echo "seed" > "${repo}/README.md"
   git -C "$repo" add README.md
   git -C "$repo" -c user.email=e2e@armada -c user.name=e2e commit -qm seed
+  repo2="${DATA_DIR}/seed-repo-web"
+  mkdir -p "$repo2"
+  git -C "$repo2" init -q -b main
+  # Oldest first, so commit order and commit dates agree (git log lists by commit order).
+  for day in 9 5 2 2 1; do
+    echo "change ${day} $RANDOM" >> "${repo2}/CHANGES.md"
+    git -C "$repo2" add CHANGES.md
+    stamp="$(python3 -c 'import datetime,sys; print((datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=int(sys.argv[1]))).strftime("%Y-%m-%dT12:00:00Z"))' "$day")"
+    GIT_AUTHOR_DATE="$stamp" GIT_COMMITTER_DATE="$stamp" git -C "$repo2" -c user.email=e2e@armada -c user.name=e2e commit -qm "Change from ${day} days ago"
+  done
   id_of() { python3 -c 'import json,sys; print(json.load(sys.stdin)["Id"])'; }
+  fleet="$(curl -fsS -X POST "${base}/api/v1/fleets" -H "X-Token: ${token}" -H 'Content-Type: application/json' \
+    -d '{"name":"demo-fleet","description":"Fleet seeded for the mobile E2E flows"}' | id_of)"
   vessel="$(curl -fsS -X POST "${base}/api/v1/vessels" -H "X-Token: ${token}" -H 'Content-Type: application/json' \
-    -d "{\"name\":\"demo-api\",\"repoUrl\":\"${repo}\",\"defaultBranch\":\"main\"}" | id_of)"
+    -d "{\"name\":\"demo-api\",\"repoUrl\":\"${repo}\",\"defaultBranch\":\"main\",\"fleetId\":\"${fleet}\"}" | id_of)"
+  curl -fsS -X POST "${base}/api/v1/vessels" -H "X-Token: ${token}" -H 'Content-Type: application/json' \
+    -d "{\"name\":\"demo-web\",\"repoUrl\":\"${repo2}\",\"localPath\":\"${repo2}\",\"workingDirectory\":\"${repo2}\",\"defaultBranch\":\"main\",\"fleetId\":\"${fleet}\"}" >/dev/null
   env="$(curl -fsS -X POST "${base}/api/v1/environments" -H "X-Token: ${token}" -H 'Content-Type: application/json' \
     -d "{\"vesselId\":\"${vessel}\",\"name\":\"production\",\"kind\":\"Production\",\"requiresApproval\":true}" | id_of)"
   curl -fsS -X POST "${base}/api/v1/deployments" -H "X-Token: ${token}" -H 'Content-Type: application/json' \
     -d "{\"vesselId\":\"${vessel}\",\"environmentId\":\"${env}\",\"title\":\"Release 2.3\",\"autoExecute\":false}" >/dev/null
-  log "seeded a deployment awaiting approval (vessel ${vessel}, environment ${env})"
+  log "seeded fleet ${fleet}, vessels demo-api (${vessel}) and demo-web, and a deployment awaiting approval (environment ${env})"
 }
 
 run_flows() {
@@ -232,7 +249,7 @@ run_flows() {
   if [ "$PROXY_ONLY" != "1" ] && [ "$PUSH_SIM_ONLY" != "1" ]; then
     log "running Maestro flows on ${platform} (${device}) against ${server_url}"
     if ! maestro --device "$device" test "$FLOWS" \
-        -e SERVER_URL="$server_url" -e APP_ID="$APP_ID" -e PLATFORM="$platform" \
+        -e SERVER_URL="$server_url" -e HOST_SERVER_URL="http://127.0.0.1:${PORT}" -e APP_ID="$APP_ID" -e PLATFORM="$platform" \
         --format junit --output "${OUTPUT}/${platform}-report.xml" \
         --test-output-dir "${OUTPUT}/${platform}"; then
       STATUS=1

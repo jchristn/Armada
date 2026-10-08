@@ -1,0 +1,146 @@
+# Signed in (state kept from 01), against the seeded Admiral (fleet "demo-fleet" with vessels "demo-api" and
+# "demo-web"; demo-web's repository has commits on several days): the Vessels hub and its tabs, a vessel's page,
+# editing its landing mode in the vessel form, View History, the Health tab, a fleet's page, and the workspace.
+appId: ${APP_ID}
+name: 06-build-vessels
+---
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: "tab-ask"
+    timeout: 30000
+- runFlow:
+    file: common/open-link.yaml
+    env:
+      LINK: "armada://vessels"
+- extendedWaitUntil:
+    visible:
+      id: "vessels-list"
+    timeout: 15000
+- extendedWaitUntil:
+    visible:
+      id: "vessel-row-demo-web"
+    timeout: 15000
+- assertVisible:
+    id: "vessel-row-demo-api"
+- takeScreenshot: vessels
+# Vessel page, then the landing mode through the vessel form.
+- tapOn:
+    id: "vessel-row-demo-web"
+- extendedWaitUntil:
+    visible:
+      id: "vessel-detail"
+    timeout: 15000
+- takeScreenshot: vessel-detail
+- tapOn:
+    id: "vessel-detail-edit"
+- extendedWaitUntil:
+    visible:
+      id: "vessel-form-name"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "vessel-form-landing-mode"
+    direction: DOWN
+    visibilityPercentage: 100
+- tapOn:
+    id: "vessel-form-landing-mode"
+- extendedWaitUntil:
+    visible:
+      id: "vessel-form-landing-mode-option-PullRequest"
+    timeout: 10000
+- takeScreenshot: vessel-landing-modes
+- tapOn:
+    id: "vessel-form-landing-mode-option-PullRequest"
+- scrollUntilVisible:
+    element:
+      id: "vessel-form-save"
+    direction: DOWN
+    visibilityPercentage: 100
+- takeScreenshot: vessel-form
+- tapOn:
+    id: "vessel-form-save"
+- extendedWaitUntil:
+    notVisible:
+      id: "vessel-form-save"
+    timeout: 15000
+- scrollUntilVisible:
+    element:
+      id: "vessel-detail-landing-mode"
+    direction: DOWN
+    visibilityPercentage: 100
+# The row is one accessible element ("Landing Mode: PullRequest").
+- assertVisible: ".*Landing Mode.*PullRequest.*"
+# View History: heatmap and timeline from the seeded commits.
+- scrollUntilVisible:
+    element:
+      id: "vessel-detail-history"
+    direction: UP
+    visibilityPercentage: 100
+- tapOn:
+    id: "vessel-detail-history"
+- extendedWaitUntil:
+    visible:
+      id: "vessel-heatmap"
+    timeout: 20000
+- extendedWaitUntil:
+    visible: "5 commits in the last year"
+    timeout: 20000
+- scrollUntilVisible:
+    element: "Change from 1 days ago.*"
+    direction: DOWN
+- takeScreenshot: vessel-history
+# Health tab.
+- runFlow:
+    file: common/open-link.yaml
+    env:
+      LINK: "armada://vessels/health"
+- extendedWaitUntil:
+    visible:
+      id: "vessel-health"
+    timeout: 15000
+- takeScreenshot: vessel-health
+# Fleets tab and a fleet's page with its vessels.
+- tapOn:
+    id: "hub-tab-fleets"
+- extendedWaitUntil:
+    visible:
+      id: "fleet-row-demo-fleet"
+    timeout: 15000
+- takeScreenshot: fleets
+- tapOn:
+    id: "fleet-row-demo-fleet"
+- extendedWaitUntil:
+    visible:
+      id: "fleet-detail"
+    timeout: 15000
+- scrollUntilVisible:
+    element:
+      id: "fleet-vessel-demo-web"
+    direction: DOWN
+    visibilityPercentage: 100
+- takeScreenshot: fleet-detail
+# Workspace: pick the vessel, browse its files.
+- runFlow:
+    file: common/open-link.yaml
+    env:
+      LINK: "armada://vessels?tab=workspace"
+- extendedWaitUntil:
+    visible:
+      id: "workspace-tab"
+    timeout: 15000
+- extendedWaitUntil:
+    visible:
+      id: "workspace-open-demo-web"
+    timeout: 15000
+- tapOn:
+    id: "workspace-open-demo-web"
+- extendedWaitUntil:
+    visible:
+      id: "workspace"
+    timeout: 15000
+- scrollUntilVisible:
+    element: ".*CHANGES.md.*"
+    direction: DOWN
+    timeout: 20000
+- takeScreenshot: workspace

@@ -23,9 +23,18 @@ import CodeStatusBadge from '../shared/CodeStatusBadge';
 import TemplateVariableHelp from './TemplateVariableHelp';
 import { KIND_DESCRIPTIONS, KIND_LABELS } from '../../lib/fleetActionLabels';
 import { findUnknownTemplateVariables, renderTemplatePreview } from '../../lib/fleetActionTemplate';
+import {
+  MAX_RUN_VESSELS,
+  adHocFromDefinition,
+  buildAdHocDefinition,
+  buildSavedRunRequest,
+  emptyAdHoc,
+  validateRunInputs,
+  type AdHocRunForm,
+  type RunMode,
+} from '../../lib/fleetActionForm';
 
-/** Largest target set the server accepts in one run. */
-export const MAX_RUN_VESSELS = 500;
+export { MAX_RUN_VESSELS, validateRunInputs };
 
 export interface RunActionModalProps {
   /** Whether the modal is shown. */
@@ -44,66 +53,9 @@ export interface RunActionModalProps {
   onStarted?: (result: FleetActionRunStartResult) => void;
 }
 
-type Mode = 'saved' | 'adhoc';
+type Mode = RunMode;
 type Step = 'configure' | 'confirm';
-
-interface AdHocForm {
-  name: string;
-  kind: FleetActionKind;
-  commandText: string;
-  promptTemplate: string;
-  pipelineId: string;
-  timeoutSeconds: string;
-  requiresCleanWorkingTree: boolean;
-}
-
-interface FieldErrors {
-  [field: string]: string;
-}
-
-function parseIntStrict(value: string): number | null {
-  if (!/^\s*\d+\s*$/.test(value)) return null;
-  return parseInt(value, 10);
-}
-
-/**
- * Validate the run modal inputs. Exported for unit tests; returns field -> English message (callers translate).
- */
-export function validateRunInputs(args: {
-  vesselCount: number;
-  mode: Mode;
-  action: FleetAction | null;
-  concurrency: string;
-  adHoc: AdHocForm;
-}): FieldErrors {
-  const errors: FieldErrors = {};
-  if (args.vesselCount < 1) errors.vessels = 'Select at least one vessel.';
-  else if (args.vesselCount > MAX_RUN_VESSELS) errors.vessels = 'A run can target at most 500 vessels.';
-
-  const c = parseIntStrict(args.concurrency);
-  if (c === null || c < 1 || c > 32) errors.concurrency = 'Concurrency must be a whole number from 1 to 32.';
-
-  if (args.mode === 'saved') {
-    if (!args.action) errors.action = 'Choose an action.';
-    return errors;
-  }
-
-  const name = args.adHoc.name.trim();
-  if (!name) errors.name = 'Name is required.';
-  else if (name.length > 200) errors.name = 'Name must be 200 characters or fewer.';
-  const body = args.adHoc.kind === 'Command' ? args.adHoc.commandText : args.adHoc.promptTemplate;
-  if (!body.trim()) errors.body = args.adHoc.kind === 'Command' ? 'Command text is required.' : 'Prompt template is required.';
-  else if (findUnknownTemplateVariables(body).length > 0) errors.body = 'unknown-variables';
-  if (args.adHoc.kind === 'Command') {
-    const timeout = parseIntStrict(args.adHoc.timeoutSeconds);
-    if (timeout === null || timeout < 5 || timeout > 7200) errors.timeout = 'Timeout must be a whole number of seconds from 5 to 7200.';
-  }
-  return errors;
-}
-
-function emptyAdHoc(kind: FleetActionKind): AdHocForm {
-  return { name: '', kind, commandText: '', promptTemplate: '', pipelineId: '', timeoutSeconds: '300', requiresCleanWorkingTree: kind === 'Command' };
-}
+type AdHocForm = AdHocRunForm;
 
 /**
  * Reusable "Run fleet action" modal. Given selected vessel ids it lets the operator pick a saved action or
@@ -140,15 +92,7 @@ export default function RunActionModal({ open, vesselIds, onClose, initialAction
     setSelectedActionId(initialActionId ?? '');
     if (initialDefinition) {
       setMode('adhoc');
-      setAdHoc({
-        name: initialDefinition.Name ?? '',
-        kind: initialDefinition.Kind ?? 'Command',
-        commandText: initialDefinition.CommandText ?? '',
-        promptTemplate: initialDefinition.PromptTemplate ?? '',
-        pipelineId: initialDefinition.PipelineId ?? '',
-        timeoutSeconds: String(initialDefinition.TimeoutSeconds ?? 300),
-        requiresCleanWorkingTree: initialDefinition.RequiresCleanWorkingTree ?? (initialDefinition.Kind !== 'Mission'),
-      });
+      setAdHoc(adHocFromDefinition(initialDefinition));
     } else {
       setMode('saved');
       setAdHoc(emptyAdHoc(initialKind ?? 'Command'));
@@ -226,21 +170,10 @@ export default function RunActionModal({ open, vesselIds, onClose, initialAction
     try {
       let result: FleetActionRunStartResult;
       if (mode === 'saved' && selectedAction) {
-        const request: FleetActionRunRequest = { VesselIds: vesselIds, Concurrency: c };
-        if (selectedAction.kind === 'Command' && cleanTreeOverride !== null && cleanTreeOverride !== selectedAction.requiresCleanWorkingTree) {
-          request.Overrides = { RequiresCleanWorkingTree: cleanTreeOverride };
-        }
+        const request: FleetActionRunRequest = buildSavedRunRequest(vesselIds, c, selectedAction, cleanTreeOverride);
         result = await runFleetAction(selectedAction.id, request);
       } else {
-        const definition: FleetActionUpsertRequest = {
-          Name: adHoc.name.trim(),
-          Kind: adHoc.kind,
-          CommandText: adHoc.kind === 'Command' ? adHoc.commandText : null,
-          PromptTemplate: adHoc.kind === 'Mission' ? adHoc.promptTemplate : null,
-          PipelineId: adHoc.kind === 'Mission' && adHoc.pipelineId ? adHoc.pipelineId : null,
-          TimeoutSeconds: adHoc.kind === 'Command' ? parseInt(adHoc.timeoutSeconds, 10) : null,
-          RequiresCleanWorkingTree: adHoc.kind === 'Command' ? adHoc.requiresCleanWorkingTree : false,
-        };
+        const definition: FleetActionUpsertRequest = buildAdHocDefinition(adHoc);
         result = await runAdHocFleetAction({ VesselIds: vesselIds, Concurrency: c, Definition: definition });
       }
       pushToast('success', t('{count, plural, one {Fleet action started on # vessel.} other {Fleet action started on # vessels.}}', { count: result.targetCount }));

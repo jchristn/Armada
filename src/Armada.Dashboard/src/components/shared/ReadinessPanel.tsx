@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import type { VesselReadinessResult } from '../../types/models';
-import { formatInputProvider, readinessLabel, readinessTone } from '../../lib/readiness';
+import { formatInputProvider, readinessBranchSummary, readinessDriftSummary, readinessLabel, readinessTone } from '../../lib/readiness';
 
 interface ReadinessPanelProps {
   title: string;
@@ -14,12 +14,8 @@ export default function ReadinessPanel(props: ReadinessPanelProps) {
   const { title, readiness, loading = false, emptyMessage = 'No readiness data.', compact = false } = props;
   const tone = readinessTone(readiness);
   const label = readinessLabel(readiness);
-  const branchSummary = readiness?.currentBranch
-    ? `${readiness.currentBranch}${readiness.isDetachedHead ? ' (detached HEAD)' : ''}`
-    : null;
-  const aheadBehindSummary = readiness && (readiness.commitsAhead != null || readiness.commitsBehind != null)
-    ? `${readiness.commitsAhead ?? 0} ahead / ${readiness.commitsBehind ?? 0} behind`
-    : null;
+  const branchSummary = readinessBranchSummary(readiness);
+  const aheadBehindSummary = readinessDriftSummary(readiness);
 
   return (
     <div className={`card readiness-panel${compact ? ' compact' : ''}`}>

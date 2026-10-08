@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { listCaptains, createCaptain, updateCaptain, deleteCaptain, stopCaptain, recallCaptain, stopAllCaptains, restartCaptain, getCaptainTools, listModelEndpoints, setCaptainCliPermissionPolicy } from '../api/client';
-import type { CliPermissionPolicy, ModelEndpoint } from '../types/models';
+import type { ModelEndpoint } from '../types/models';
 import type { Captain, CaptainToolAccessResult } from '../types/models';
 import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
 import ActionMenu from '../components/shared/ActionMenu';
@@ -21,24 +21,13 @@ import { useNotifications } from '../context/NotificationContext';
 import { useAuth } from '../context/AuthContext';
 import CliPermissionPolicySelect from '../components/cliPermissions/CliPermissionPolicySelect';
 import { canCaptainStartPlanning } from '../lib/captains';
-import { buildMuxRuntimeOptionsJson, EMPTY_MUX_CAPTAIN_FORM, isMuxRuntime, muxFormFromCaptain, type MuxCaptainFormFields } from '../lib/mux';
-import { applyAutoApprove, autoApproveFromCaptain, supportsAutoApproveSwitch } from '../lib/captainApproval';
+import { isMuxRuntime } from '../lib/mux';
+import { supportsAutoApproveSwitch } from '../lib/captainApproval';
+import { buildCaptainCreatePayload, buildCaptainPayload, captainFormError, captainFormErrorMessage, captainFormFromCaptain, cliPolicyChanged, emptyCaptainForm, type CaptainFormState } from '../lib/captainForm';
 import { buildCaptainDuplicatePayload } from '../lib/duplicates';
 
 type SortDir = 'asc' | 'desc';
 type SortField = 'name' | 'runtime' | 'state' | 'createdUtc';
-type CaptainFormState = {
-  name: string;
-  runtime: string;
-  systemInstructions: string;
-  model: string;
-  modelEndpointId: string;
-  reasoningEffort: string;
-  tier: string;
-  autoApprove: boolean;
-  /** CLI tool permission policy; null inherits. Saved through its own endpoint on edit. */
-  cliPermissionPolicy: CliPermissionPolicy | null;
-} & MuxCaptainFormFields;
 
 export default function Captains() {
   const navigate = useNavigate();
@@ -53,7 +42,7 @@ export default function Captains() {
   // Modal state
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Captain | null>(null);
-  const [form, setForm] = useState<CaptainFormState>({ name: '', runtime: '', systemInstructions: '', model: '', modelEndpointId: '', reasoningEffort: '', tier: '', autoApprove: true, cliPermissionPolicy: null, ...EMPTY_MUX_CAPTAIN_FORM });
+  const [form, setForm] = useState<CaptainFormState>(emptyCaptainForm());
   const [saving, setSaving] = useState(false);
   const [inferenceEndpoints, setInferenceEndpoints] = useState<ModelEndpoint[]>([]);
 
@@ -159,24 +148,13 @@ export default function Captains() {
 
   // CRUD
   function openCreate() {
-    setForm({ name: '', runtime: '', systemInstructions: '', model: '', modelEndpointId: '', reasoningEffort: '', tier: '', autoApprove: true, cliPermissionPolicy: null, ...EMPTY_MUX_CAPTAIN_FORM });
+    setForm(emptyCaptainForm());
     setEditing(null);
     setShowForm(true);
   }
 
   function openEdit(c: Captain) {
-    setForm({
-      name: c.name,
-      runtime: c.runtime,
-      systemInstructions: c.systemInstructions ?? '',
-      model: c.model ?? '',
-      modelEndpointId: c.modelEndpointId ?? '',
-      reasoningEffort: c.reasoningEffort ?? '',
-      tier: c.tier ?? '',
-      autoApprove: autoApproveFromCaptain(c),
-      cliPermissionPolicy: c.cliPermissionPolicy ?? null,
-      ...muxFormFromCaptain(c),
-    });
+    setForm(captainFormFromCaptain(c, { withEndpoint: true }));
     setEditing(c);
     setShowForm(true);
   }
@@ -185,43 +163,20 @@ export default function Captains() {
     e.preventDefault();
     if (saving) return;
     try {
-      if (isMuxRuntime(form.runtime) && !form.muxEndpoint.trim()) {
-        setError(t('Mux captains require a named Mux endpoint.'));
-        return;
-      }
-
-      if (form.runtime === 'ApiEndpoint' && !form.modelEndpointId) {
-        setError(t('API-endpoint captains require an inference endpoint. Select one, or add it under Configuration > Endpoints.'));
+      const formError = captainFormError(form);
+      if (formError) {
+        setError(t(captainFormErrorMessage(formError)));
         return;
       }
 
       setSaving(true);
-      const payload = { ...form } as Record<string, unknown>;
-      if (!payload.systemInstructions) delete payload.systemInstructions;
-      payload.model = form.model.trim() ? form.model.trim() : null;
-      payload.modelEndpointId = form.runtime === 'ApiEndpoint' ? (form.modelEndpointId || null) : null;
-      payload.reasoningEffort = form.reasoningEffort ? form.reasoningEffort : null;
-      payload.tier = form.tier ? form.tier : null;
-      payload.runtimeOptionsJson = applyAutoApprove(buildMuxRuntimeOptionsJson(form.runtime, form), form.autoApprove || !supportsAutoApproveSwitch(form.runtime));
-      delete payload.autoApprove;
-      delete payload.muxConfigDirectory;
-      delete payload.muxEndpoint;
-      delete payload.muxBaseUrl;
-      delete payload.muxAdapterType;
-      delete payload.muxTemperature;
-      delete payload.muxMaxTokens;
-      delete payload.muxSystemPromptPath;
-      delete payload.muxApprovalPolicy;
-      // Captain update keeps the stored CLI tool permission policy; it changes through its own (admin) endpoint.
-      delete payload.cliPermissionPolicy;
       if (editing) {
-        await updateCaptain(editing.id, payload);
-        if ((editing.cliPermissionPolicy ?? null) !== form.cliPermissionPolicy) {
+        await updateCaptain(editing.id, buildCaptainPayload(form));
+        if (cliPolicyChanged(editing, form)) {
           await setCaptainCliPermissionPolicy(editing.id, form.cliPermissionPolicy);
         }
       } else {
-        if (form.cliPermissionPolicy) payload.cliPermissionPolicy = form.cliPermissionPolicy;
-        await createCaptain(payload);
+        await createCaptain(buildCaptainCreatePayload(form));
       }
       setShowForm(false);
       pushToast('success', editing

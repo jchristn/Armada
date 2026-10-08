@@ -22,6 +22,9 @@ Focus: a landing-mode fix that was missed in 1.0.0. **Check your landing modes w
 - Auto-refresh and refresh moved into the table toolbar row with the record count and pager, instead of a separate line.
 - Denser rows: Vessels shows Repository on one truncated line (full URL on hover) with the branch in its own column, and Landing Mode on one line ("Default (global)"); names, statuses, badges, and dates no longer wrap, and stacked two-line cells across the Delivery, Configuration, Activity, and detail tables were split into one-line cells with tooltips or optional columns.
 
+### Fixes
+- Agent prompts sent on stdin no longer start with a UTF-8 byte order mark. The stdin encoding emitted one, and because .NET writes it while starting the process, an agent CLI that exited before reading its prompt made the launch throw `Broken pipe` instead of reporting the exit (seen as an intermittent Harbor launch failure on macOS). Regression tests check the exact prompt bytes and an agent that exits without reading a 1 MiB prompt.
+
 ---
 
 ## v1.0.0 (2026-10-05)

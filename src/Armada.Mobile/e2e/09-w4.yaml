@@ -1,0 +1,197 @@
+# Signed in (state kept from 01; 05 approved the seeded deployment "Release 2.3"): the W4 screens on a phone.
+# Delivery: the deployment in the Deployments tab and its detail. Configuration: edit the Architect persona's
+# description. Activity: the API Requests source and a request's detail. Settings: change the Default Landing Mode
+# and save it, then back up through the share sheet.
+appId: ${APP_ID}
+name: 09-w4
+---
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: "tab-ask"
+    timeout: 30000
+# Delivery: a deployment and its detail.
+- tapOn:
+    id: "tab-work"
+- scrollUntilVisible:
+    element:
+      id: "nav-/delivery"
+    direction: DOWN
+- tapOn:
+    id: "nav-/delivery"
+- extendedWaitUntil:
+    visible:
+      id: "delivery-tab-deployments"
+    timeout: 10000
+- extendedWaitUntil:
+    visible: "Release 2.3.*"
+    timeout: 15000
+- takeScreenshot: w4-delivery-deployments
+- tapOn:
+    id: "deployment-row-.*"
+- extendedWaitUntil:
+    visible:
+      id: "deployment-title"
+    timeout: 10000
+- assertVisible: "Release 2.3"
+- takeScreenshot: w4-deployment-detail
+- tapOn:
+    id: "tab-work"
+# Configuration: edit a persona.
+- tapOn:
+    id: "tab-more"
+- extendedWaitUntil:
+    visible:
+      id: "more-menu"
+    timeout: 10000
+- tapOn:
+    id: "nav-/configuration"
+- extendedWaitUntil:
+    visible:
+      id: "configuration-tab-workflow-profiles"
+    timeout: 10000
+# The tab strip scrolls sideways; bring the Personas tab into view.
+- repeat:
+    times: 4
+    while:
+      notVisible:
+        id: "configuration-tab-personas"
+    commands:
+      - swipe:
+          from:
+            id: "configuration-tabs"
+          direction: LEFT
+- tapOn:
+    id: "configuration-tab-personas"
+- extendedWaitUntil:
+    visible:
+      id: "persona-row-Architect"
+    timeout: 15000
+- tapOn:
+    id: "persona-row-Architect"
+- extendedWaitUntil:
+    visible:
+      id: "persona-edit"
+    timeout: 10000
+- tapOn:
+    id: "persona-edit"
+- tapOn:
+    id: "persona-form-description"
+- eraseText: 400
+- inputText: "Edited from the mobile E2E flow"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: "persona-form-submit"
+    direction: DOWN
+- tapOn:
+    id: "persona-form-submit"
+- extendedWaitUntil:
+    visible: ".*Edited from the mobile E2E flow.*"
+    timeout: 10000
+- takeScreenshot: w4-persona-edited
+- tapOn:
+    id: "tab-more"
+# Activity: API requests and one request's detail.
+- tapOn:
+    id: "tab-more"
+- tapOn:
+    id: "nav-/activity"
+- extendedWaitUntil:
+    visible:
+      id: "activity-tab-requests"
+    timeout: 10000
+- takeScreenshot: w4-activity-history
+- tapOn:
+    id: "activity-tab-requests"
+- extendedWaitUntil:
+    visible:
+      id: "request-row-.*"
+    timeout: 15000
+- takeScreenshot: w4-activity-requests
+- scrollUntilVisible:
+    element:
+      id: "request-row-.*"
+    direction: DOWN
+    visibilityPercentage: 100
+    centerElement: true
+- tapOn:
+    id: "request-row-.*"
+    index: 0
+- extendedWaitUntil:
+    visible:
+      id: "request-title"
+    timeout: 10000
+- takeScreenshot: w4-request-detail
+- tapOn:
+    id: "tab-more"
+# Settings: Default Landing Mode, save, and backup through the share sheet.
+- tapOn:
+    id: "tab-more"
+- scrollUntilVisible:
+    element:
+      id: "nav-/server"
+    direction: DOWN
+    visibilityPercentage: 100
+    centerElement: true
+- tapOn:
+    id: "nav-/server"
+- extendedWaitUntil:
+    visible:
+      id: "settings-server"
+    timeout: 15000
+- scrollUntilVisible:
+    element:
+      id: "settings-landing-mode"
+    direction: DOWN
+    visibilityPercentage: 100
+- tapOn:
+    id: "settings-landing-mode"
+- tapOn:
+    id: "settings-landing-mode-option-LocalMerge"
+- assertVisible: "Local Merge.*"
+- scrollUntilVisible:
+    element:
+      id: "settings-agent-save"
+    direction: DOWN
+    visibilityPercentage: 100
+- tapOn:
+    id: "settings-agent-save"
+- extendedWaitUntil:
+    visible: ".*Agent settings saved.*"
+    timeout: 10000
+- takeScreenshot: w4-settings-saved
+- scrollUntilVisible:
+    element:
+      id: "settings-backup"
+    direction: DOWN
+    visibilityPercentage: 100
+    timeout: 90000
+- tapOn:
+    id: "settings-backup"
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - extendedWaitUntil:
+          visible: "Save to Files"
+          timeout: 20000
+      - takeScreenshot: w4-backup-share-sheet
+      - tapOn:
+          point: "50%,10%"
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - extendedWaitUntil:
+          visible: ".*armada-backup.*|Share|.*zip.*"
+          timeout: 20000
+      - takeScreenshot: w4-backup-share-sheet
+      - back
+- extendedWaitUntil:
+    visible:
+      id: "settings-server"
+    timeout: 10000
+- tapOn:
+    id: "tab-more"

@@ -7,7 +7,6 @@ import {
   categorizeVesselImport,
 } from '../../../api/client';
 import type {
-  FleetRecommendationApplyRequest,
   FleetRecommendationApplyResult,
   VesselImportBatch,
   VesselImportFleetRecommendation,
@@ -18,66 +17,9 @@ import { useNotifications } from '../../../context/NotificationContext';
 import CodeStatusBadge from '../../shared/CodeStatusBadge';
 import ConfirmDialog from '../../shared/ConfirmDialog';
 import { categorizationBadge, importErrorLabel } from '../../../lib/vesselImportLabels';
+import { UNCATEGORIZED_FLEET, buildApplyPayload, newFleetDraft, toDrafts, moveVessel, validateDrafts, type FleetDraft } from '../../../lib/vesselImport';
 
-/** Name of the bucket the server fills with vessels the captain did not assign; it is never created as a fleet. */
-export const UNCATEGORIZED_FLEET = 'Uncategorized';
-
-/** One editable fleet card. */
-export interface FleetDraft {
-  key: string;
-  name: string;
-  description: string;
-  rationale: string;
-  vesselIds: string[];
-  appliedFleetId: string | null;
-}
-
-let draftCounter = 0;
-
-/** Turn stored recommendations into editable drafts. */
-export function toDrafts(recommendations: VesselImportFleetRecommendation[]): FleetDraft[] {
-  return recommendations.map((r) => ({
-    key: r.id || `draft-${draftCounter++}`,
-    name: r.name,
-    description: r.description ?? '',
-    rationale: r.rationale ?? '',
-    vesselIds: [...r.vesselIds],
-    appliedFleetId: r.appliedFleetId,
-  }));
-}
-
-/** Move a vessel from whichever draft holds it to the target draft. */
-export function moveVessel(drafts: FleetDraft[], vesselId: string, targetKey: string): FleetDraft[] {
-  return drafts.map((d) => {
-    const without = d.vesselIds.filter((id) => id !== vesselId);
-    return d.key === targetKey ? { ...d, vesselIds: [...without, vesselId] } : { ...d, vesselIds: without };
-  });
-}
-
-/** Validation errors per draft key (English source strings). */
-export function validateDrafts(drafts: FleetDraft[]): Record<string, string> {
-  const errors: Record<string, string> = {};
-  const seen = new Map<string, string>();
-  for (const d of drafts) {
-    const name = d.name.trim();
-    if (d.vesselIds.length === 0) continue;
-    if (!name) { errors[d.key] = 'Give this fleet a name.'; continue; }
-    if (name.length > 256) { errors[d.key] = 'Fleet names must be 256 characters or fewer.'; continue; }
-    const lower = name.toLowerCase();
-    if (seen.has(lower)) errors[d.key] = 'Another fleet already uses this name.';
-    else seen.set(lower, d.key);
-  }
-  return errors;
-}
-
-/** Request body for the apply endpoint: fleets without vessels are dropped and names trimmed. */
-export function buildApplyPayload(drafts: FleetDraft[]): FleetRecommendationApplyRequest {
-  return {
-    Fleets: drafts
-      .filter((d) => d.vesselIds.length > 0)
-      .map((d) => ({ Name: d.name.trim(), Description: d.description.trim() || null, VesselIds: [...d.vesselIds] })),
-  };
-}
+export { UNCATEGORIZED_FLEET, toDrafts, moveVessel, validateDrafts, buildApplyPayload, type FleetDraft } from '../../../lib/vesselImport';
 
 interface FleetRecommendationsPanelProps {
   batch: VesselImportBatch;
@@ -132,7 +74,7 @@ export default function FleetRecommendationsPanel({ batch, items, recommendation
   }
 
   function addFleet() {
-    setDrafts((ds) => [...ds, { key: `new-${draftCounter++}`, name: '', description: '', rationale: '', vesselIds: [], appliedFleetId: null }]);
+    setDrafts((ds) => [...ds, newFleetDraft()]);
   }
 
   async function retry() {

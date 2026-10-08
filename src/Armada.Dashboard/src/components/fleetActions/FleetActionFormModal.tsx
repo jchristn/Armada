@@ -6,6 +6,7 @@ import DialogShell from '../shared/DialogShell';
 import TemplateVariableHelp from './TemplateVariableHelp';
 import { KIND_DESCRIPTIONS, KIND_LABELS } from '../../lib/fleetActionLabels';
 import { findUnknownTemplateVariables } from '../../lib/fleetActionTemplate';
+import { buildActionUpsertPayload, formFromAction, validateActionForm, type FleetActionFormState } from '../../lib/fleetActionForm';
 
 export interface FleetActionFormModalProps {
   open: boolean;
@@ -19,54 +20,9 @@ export interface FleetActionFormModalProps {
   onSaved: (action: FleetAction) => void;
 }
 
-interface FormState {
-  name: string;
-  description: string;
-  kind: FleetActionKind;
-  commandText: string;
-  promptTemplate: string;
-  pipelineId: string;
-  persona: string;
-  timeoutSeconds: string;
-  defaultConcurrency: string;
-  requiresCleanWorkingTree: boolean;
-}
+type FormState = FleetActionFormState;
 
-export function formFromAction(source: FleetAction | null | undefined, mode: 'create' | 'edit', defaultTimeout: number, copySuffix: string): FormState {
-  if (!source) {
-    return {
-      name: '', description: '', kind: 'Command', commandText: '', promptTemplate: '', pipelineId: '', persona: '',
-      timeoutSeconds: String(defaultTimeout), defaultConcurrency: '4', requiresCleanWorkingTree: true,
-    };
-  }
-  return {
-    name: mode === 'create' ? `${source.name} ${copySuffix}`.slice(0, 200) : source.name,
-    description: source.description ?? '',
-    kind: source.kind,
-    commandText: source.commandText ?? '',
-    promptTemplate: source.promptTemplate ?? '',
-    pipelineId: source.pipelineId ?? '',
-    persona: source.persona ?? '',
-    timeoutSeconds: String(source.timeoutSeconds || defaultTimeout),
-    defaultConcurrency: String(source.defaultConcurrency || 4),
-    requiresCleanWorkingTree: source.requiresCleanWorkingTree,
-  };
-}
-
-/** Validate the action form; returns field -> English message (callers translate). */
-export function validateActionForm(form: FormState): Record<string, string> {
-  const errors: Record<string, string> = {};
-  const name = form.name.trim();
-  if (!name) errors.name = 'Name is required.';
-  else if (name.length > 200) errors.name = 'Name must be 200 characters or fewer.';
-  const body = form.kind === 'Command' ? form.commandText : form.promptTemplate;
-  if (!body.trim()) errors.body = form.kind === 'Command' ? 'Command text is required.' : 'Prompt template is required.';
-  const timeout = Number(form.timeoutSeconds);
-  if (form.kind === 'Command' && (!Number.isInteger(timeout) || timeout < 5 || timeout > 7200)) errors.timeout = 'Timeout must be a whole number of seconds from 5 to 7200.';
-  const concurrency = Number(form.defaultConcurrency);
-  if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 32) errors.concurrency = 'Concurrency must be a whole number from 1 to 32.';
-  return errors;
-}
+export { formFromAction, validateActionForm };
 
 /** Purpose-built create/edit form for a fleet action (no raw JSON editing). */
 export default function FleetActionFormModal({ open, mode, source, defaultTimeoutSeconds = 300, onClose, onSaved }: FleetActionFormModalProps) {
@@ -110,20 +66,7 @@ export default function FleetActionFormModal({ open, mode, source, defaultTimeou
     if (Object.keys(errors).length > 0 || unknownVars.length > 0) return;
     setSaving(true);
     setServerError('');
-    // On update an empty string clears an optional field; on create we omit it (null).
-    const clearValue = mode === 'edit' ? '' : null;
-    const payload: FleetActionUpsertRequest = {
-      Name: form.name.trim(),
-      Description: form.description.trim() || clearValue,
-      Kind: form.kind,
-      CommandText: form.kind === 'Command' ? form.commandText : null,
-      PromptTemplate: form.kind === 'Mission' ? form.promptTemplate : null,
-      PipelineId: form.kind === 'Mission' && form.pipelineId ? form.pipelineId : clearValue,
-      Persona: form.kind === 'Mission' && form.persona ? form.persona : clearValue,
-      TimeoutSeconds: form.kind === 'Command' ? Number(form.timeoutSeconds) : null,
-      DefaultConcurrency: Number(form.defaultConcurrency),
-      RequiresCleanWorkingTree: form.kind === 'Command' ? form.requiresCleanWorkingTree : false,
-    };
+    const payload: FleetActionUpsertRequest = buildActionUpsertPayload(form, mode);
     try {
       const saved = mode === 'edit' && source
         ? await updateFleetAction(source.id, payload)

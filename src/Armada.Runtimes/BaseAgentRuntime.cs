@@ -126,6 +126,12 @@ namespace Armada.Runtimes
         private static int _GracefulStopTimeoutMs = 10000;
         private static int _OutputDrainTimeoutMs = 5000;
 
+        // UTF-8 without a byte order mark for the agent's stdin. Encoding.UTF8 emits a BOM preamble, and Process.Start
+        // builds the stdin writer with AutoFlush, whose setter flushes immediately: the BOM was written to the pipe
+        // inside Process.Start (an agent that had already exited made Start throw "Broken pipe", escaping the guarded
+        // prompt write), and every prompt the agent read began with a stray U+FEFF.
+        private static readonly UTF8Encoding _StdinEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+
         #endregion
 
         #region Constructors-and-Factories
@@ -241,7 +247,7 @@ namespace Armada.Runtimes
                 RedirectStandardInput = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
-                StandardInputEncoding = Encoding.UTF8,
+                StandardInputEncoding = _StdinEncoding,
                 StandardOutputEncoding = Encoding.UTF8,
                 StandardErrorEncoding = Encoding.UTF8,
                 CreateNoWindow = true

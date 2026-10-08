@@ -13,6 +13,16 @@ module.exports = defineConfig([
     files: ['*.js'],
     languageOptions: { globals: { ...globals.node, ...globals.jest } },
   },
+  // Maestro runScript files run in Maestro's JavaScript engine: it provides http, json, output, and maestro, and the
+  // flow's env values (HOST_SERVER_URL, ...) as globals.
+  {
+    files: ['e2e/scripts/**/*.js'],
+    languageOptions: {
+      sourceType: 'script',
+      globals: { http: 'readonly', json: 'readonly', output: 'writable', maestro: 'readonly', HOST_SERVER_URL: 'readonly' },
+    },
+    rules: { 'no-var': 'off' },
+  },
   {
     files: ['**/*.{ts,tsx}'],
     rules: {

@@ -5,8 +5,6 @@ import { useSplitSelection } from '../components/app/useSplitSelection';
 import { AppText, Button, SplitView } from '../components/ui';
 import { useLocale } from '../i18n/LocaleContext';
 import { spacing } from '../theme/typography';
-import { DockDetail } from './operations/DockDetail';
-import { DocksList } from './operations/DocksList';
 import type { OperationsDetailProps, OperationsListProps } from './operations/listTypes';
 
 /** A list built ahead of the hub that hosts it on the dashboard (for example Docks before the Captains hub). */
@@ -25,19 +23,11 @@ export interface EmbeddedHub {
 }
 
 /**
- * Placeholder hubs that already serve some of their sections. The dashboard shows the Docks list as the Captains
- * hub tab (/captains?tab=docks, W3.2); W2.4 built that list first, so the hub placeholder serves it until W3.2
- * replaces the hub screen (which then embeds the same list component). The Activity hub (W4.3) embeds the Events
- * and Signals lists itself.
+ * Placeholder hubs that already serve some of their sections. None remain: the Captains hub (W3.2) embeds the Docks
+ * list in its Docks tab, and the Activity hub (W4.3) embeds the Events and Signals lists. Kept so a later list built
+ * ahead of its hub can be served the same way.
  */
-export const EMBEDDED_SECTIONS: Record<string, EmbeddedHub> = {
-  '/captains': {
-    param: 'tab',
-    sections: {
-      docks: { label: 'Docks', List: DocksList, Detail: DockDetail, route: (id) => `/docks/${id}` },
-    },
-  },
-};
+export const EMBEDDED_SECTIONS: Record<string, EmbeddedHub> = {};
 
 /** Pure: the embedded section a placeholder route and its query select, if any. */
 export function embeddedSectionFor(pattern: string, params: Record<string, string | string[] | undefined>): { key: string; section: EmbeddedSection } | null {

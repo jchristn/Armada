@@ -54,16 +54,23 @@ import {
   OBJECTIVE_KINDS,
   OBJECTIVE_PRIORITIES,
   OBJECTIVE_STATUSES,
-  parseSuggestedPlaybooks,
   splitList,
-} from '../components/backlog/backlogUtils';
+} from '../lib/backlogUtils';
 import {
   getLatestAssistantRefinementMessage,
   mergeCaptainState,
   removeRefinementSession,
   upsertRefinementMessage,
   upsertRefinementSession,
-} from '../components/backlog/refinementUtils';
+} from '../lib/backlogRefinement';
+import {
+  createEmptyTagEntry,
+  objectivePayloadFromForm,
+  parseTagEntries,
+  replacePrimaryLinkedId,
+  toDateTimeLocalValue,
+  type TagEntry,
+} from '../lib/backlogForm';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import ErrorModal from '../components/shared/ErrorModal';
 import JsonViewer from '../components/shared/JsonViewer';
@@ -73,77 +80,6 @@ import { buildObjectiveDuplicatePayload } from '../lib/duplicates';
 import { refinementSummaryFromEvent } from '../lib/refinementSummary';
 import { mergeSessionDetail, newerOf } from '../lib/liveMerge';
 import { sortByName } from '../lib/sortByName';
-
-function toDateTimeLocalValue(value: string | null | undefined): string {
-  if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
-  const year = date.getFullYear();
-  const month = `${date.getMonth() + 1}`.padStart(2, '0');
-  const day = `${date.getDate()}`.padStart(2, '0');
-  const hours = `${date.getHours()}`.padStart(2, '0');
-  const minutes = `${date.getMinutes()}`.padStart(2, '0');
-  return `${year}-${month}-${day}T${hours}:${minutes}`;
-}
-
-function toIsoOrNull(value: string): string | null {
-  if (!value.trim()) return null;
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
-}
-
-interface TagEntry {
-  key: string;
-  value: string;
-}
-
-function createEmptyTagEntry(): TagEntry {
-  return { key: '', value: '' };
-}
-
-function parseTagEntry(raw: string): TagEntry {
-  const trimmed = raw.trim();
-  if (!trimmed) return createEmptyTagEntry();
-
-  const separatorIndex = [trimmed.indexOf(':'), trimmed.indexOf('=')]
-    .filter((index) => index > 0)
-    .sort((left, right) => left - right)[0] ?? -1;
-  if (separatorIndex < 1) {
-    return { key: trimmed, value: '' };
-  }
-
-  return {
-    key: trimmed.slice(0, separatorIndex).trim(),
-    value: trimmed.slice(separatorIndex + 1).trim(),
-  };
-}
-
-function parseTagEntries(tags: string[]): TagEntry[] {
-  const rows = tags
-    .map(parseTagEntry)
-    .filter((entry) => entry.key || entry.value);
-
-  return rows.length > 0 ? rows : [createEmptyTagEntry()];
-}
-
-function serializeTagEntries(entries: TagEntry[]): string[] {
-  return entries
-    .map((entry) => {
-      const key = entry.key.trim();
-      const value = entry.value.trim();
-      if (!key && !value) return '';
-      if (!value) return key;
-      return `${key}:${value}`;
-    })
-    .filter((entry): entry is string => entry.length > 0);
-}
-
-function replacePrimaryLinkedId(currentValue: string, nextId: string): string {
-  if (!nextId) return '';
-
-  const existing = splitList(currentValue).filter((id, index) => index > 0 && id !== nextId);
-  return joinList([nextId, ...existing]);
-}
 
 function renderRouteLinks(ids: string[], prefix: string | ((id: string) => string), labelMap?: Map<string, string>) {
   if (ids.length < 1) return <span className="text-dim">None</span>;
@@ -384,41 +320,12 @@ export default function ObjectiveDetail() {
   }
 
   function buildPayload(): ObjectiveUpsertRequest {
-    const parsedRank = Number.parseInt(rank, 10);
-    return {
-      title: title.trim() || null,
-      description: description.trim() || null,
-      status,
-      kind,
-      category: category.trim() || null,
-      priority,
-      rank: Number.isFinite(parsedRank) ? parsedRank : null,
-      backlogState,
-      effort,
-      owner: owner.trim() || null,
-      targetVersion: targetVersion.trim() || null,
-      dueUtc: toIsoOrNull(dueUtc),
-      parentObjectiveId: parentObjectiveId.trim() || null,
-      blockedByObjectiveIds,
-      refinementSummary: refinementSummary.trim() || null,
-      suggestedPipelineId: suggestedPipelineId.trim() || null,
-      suggestedPlaybooks: parseSuggestedPlaybooks(suggestedPlaybooks),
-      tags: serializeTagEntries(tagEntries),
-      acceptanceCriteria: splitList(acceptanceCriteria),
-      nonGoals: splitList(nonGoals),
-      rolloutConstraints: splitList(rolloutConstraints),
-      evidenceLinks: splitList(evidenceLinks),
-      fleetIds: splitList(fleetIds),
-      vesselIds: splitList(vesselIds),
-      planningSessionIds: splitList(planningSessionIds),
-      refinementSessionIds: splitList(refinementSessionIds),
-      voyageIds: splitList(voyageIds),
-      missionIds: splitList(missionIds),
-      checkRunIds: splitList(checkRunIds),
-      releaseIds: splitList(releaseIds),
-      deploymentIds: splitList(deploymentIds),
-      incidentIds: splitList(incidentIds),
-    };
+    return objectivePayloadFromForm({
+      title, description, status, kind, category, priority, rank, backlogState, effort, owner, targetVersion, dueUtc,
+      parentObjectiveId, blockedByObjectiveIds, refinementSummary, suggestedPipelineId, suggestedPlaybooks, tagEntries,
+      acceptanceCriteria, nonGoals, rolloutConstraints, evidenceLinks, fleetIds, vesselIds, planningSessionIds,
+      refinementSessionIds, voyageIds, missionIds, checkRunIds, releaseIds, deploymentIds, incidentIds,
+    });
   }
 
   function updateTagEntry(index: number, field: keyof TagEntry, value: string) {

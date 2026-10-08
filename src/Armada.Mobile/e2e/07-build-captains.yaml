@@ -1,0 +1,109 @@
+# Signed in: create a captain through the captain form (the seeded Admiral has none, which the Ask flow relies on;
+# this flow runs after it), open its page (CLI permission policy, tool access, chat), the Docks tab, and Fleet
+# Actions (actions and runs).
+appId: ${APP_ID}
+name: 07-build-captains
+---
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: "tab-ask"
+    timeout: 30000
+# Nothing may run once a captain exists: cancel the voyages the Operations flows seeded and dispatched.
+- runScript:
+    file: scripts/cancel-open-voyages.js
+- runFlow:
+    file: common/open-link.yaml
+    env:
+      LINK: "armada://captains"
+- extendedWaitUntil:
+    visible:
+      id: "captains-list"
+    timeout: 15000
+- tapOn:
+    id: "captains-list-new"
+- extendedWaitUntil:
+    visible:
+      id: "captain-form-name"
+    timeout: 10000
+- tapOn:
+    id: "captain-form-name"
+- runFlow: common/dismiss-keyboard-tips.yaml
+- inputText: "e2e-captain"
+# Return ends editing and closes the keyboard (it would cover Save).
+- pressKey: Enter
+- tapOn:
+    id: "captain-form-runtime"
+- tapOn:
+    id: "captain-form-runtime-option-ClaudeCode"
+- scrollUntilVisible:
+    element:
+      id: "captain-form-save"
+    direction: DOWN
+    visibilityPercentage: 100
+- takeScreenshot: captain-form
+- tapOn:
+    id: "captain-form-save"
+# Creating a captain opens its page (the dashboard does the same).
+- extendedWaitUntil:
+    visible:
+      id: "captain-detail"
+    timeout: 15000
+- assertVisible: "Idle"
+- scrollUntilVisible:
+    element:
+      id: "captain-cli-policy"
+    direction: DOWN
+    visibilityPercentage: 100
+- takeScreenshot: captain-detail
+- scrollUntilVisible:
+    element:
+      id: "captain-tools"
+    direction: DOWN
+    visibilityPercentage: 100
+- scrollUntilVisible:
+    element:
+      id: "captain-chat-input"
+    direction: DOWN
+    visibilityPercentage: 100
+- takeScreenshot: captain-chat
+# The new captain in the list, then the Docks tab of the Captains hub.
+- runFlow:
+    file: common/open-link.yaml
+    env:
+      LINK: "armada://captains"
+- extendedWaitUntil:
+    visible:
+      id: "captain-row-e2e-captain"
+    timeout: 15000
+- takeScreenshot: captains
+- runFlow:
+    file: common/open-link.yaml
+    env:
+      LINK: "armada://captains?tab=docks"
+- extendedWaitUntil:
+    visible:
+      id: "docks-list"
+    timeout: 15000
+- takeScreenshot: docks
+# Fleet Actions: the built-in actions, then the runs tab.
+- runFlow:
+    file: common/open-link.yaml
+    env:
+      LINK: "armada://fleet-actions"
+- extendedWaitUntil:
+    visible:
+      id: "fleet-actions-list"
+    timeout: 15000
+- extendedWaitUntil:
+    visible:
+      id: "fleet-action-row-Build"
+    timeout: 15000
+- takeScreenshot: fleet-actions
+- tapOn:
+    id: "hub-tab-runs"
+- extendedWaitUntil:
+    visible:
+      id: "fleet-action-runs-list"
+    timeout: 15000
+- takeScreenshot: fleet-action-runs
