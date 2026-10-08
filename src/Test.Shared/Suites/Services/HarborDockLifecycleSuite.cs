@@ -231,8 +231,15 @@ namespace Test.Shared.Suites.Services
                 AssertTrue(finished, "the mission finished");
                 AssertEqual(MissionStatusEnum.Complete, done!.Status, done.FailureReason);
 
-                List<Dock> docks = await s.Db.Driver.Docks.EnumerateByVesselAsync(vessel.Id).ConfigureAwait(false);
+                // The dock is reclaimed after landing marks the mission Complete.
+                List<Dock> docks = new List<Dock>();
+                bool released = await WaitUntilAsync(async () =>
+                {
+                    docks = await s.Db.Driver.Docks.EnumerateByVesselAsync(vessel.Id).ConfigureAwait(false);
+                    return docks.Count == 1 && !docks[0].Active;
+                }).ConfigureAwait(false);
                 AssertEqual(1, docks.Count, "one dock");
+                AssertTrue(released, "the dock was released");
                 Dock dock = docks[0];
                 AssertEqual("hbr_e2e_docks", dock.HarborId);
                 AssertEqual(PathCanonicalizer.Canonicalize(git.Checkout), PathCanonicalizer.Canonicalize(dock.CheckoutPath!), "the discovered checkout");
@@ -246,7 +253,6 @@ namespace Test.Shared.Suites.Services
 
                 AssertTrue(await HarborDockGitFixture.TreeHasFileAsync(git.Checkout, "refs/heads/main", CommittingHarborJobRunner.WorkFile).ConfigureAwait(false), "landed into the user's checkout");
                 AssertFalse(Directory.Exists(dock.WorktreePath!), "the dock was reclaimed on the Harbor");
-                AssertFalse(dock.Active, "the dock was released");
                 string exclude = await File.ReadAllTextAsync(Path.Combine(git.Checkout, ".git", "info", "exclude")).ConfigureAwait(false);
                 AssertTrue(new List<string>(exclude.Split('\n')).Contains("CLAUDE.md"), "the instruction file was excluded in the repository the dock belonged to");
 
