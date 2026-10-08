@@ -63,8 +63,8 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 using (NpgsqlCommand cmd = new NpgsqlCommand())
                 {
                     cmd.Connection = conn;
-                    cmd.CommandText = @"INSERT INTO docks (id, tenant_id, user_id, vessel_id, captain_id, worktree_path, harbor_id, branch_name, active, state, lease_expires_utc, owner_token, git_anchors_json, created_utc, last_update_utc)
-                        VALUES (@id, @tenant_id, @user_id, @vessel_id, @captain_id, @worktree_path, @harbor_id, @branch_name, @active, @state, @lease_expires_utc, @owner_token, @git_anchors_json, @created_utc, @last_update_utc);";
+                    cmd.CommandText = @"INSERT INTO docks (id, tenant_id, user_id, vessel_id, captain_id, worktree_path, harbor_id, branch_name, active, state, lease_expires_utc, owner_token, git_anchors_json, repository_path, checkout_path, created_utc, last_update_utc)
+                        VALUES (@id, @tenant_id, @user_id, @vessel_id, @captain_id, @worktree_path, @harbor_id, @branch_name, @active, @state, @lease_expires_utc, @owner_token, @git_anchors_json, @repository_path, @checkout_path, @created_utc, @last_update_utc);";
                     cmd.Parameters.AddWithValue("@id", dock.Id);
                     cmd.Parameters.AddWithValue("@tenant_id", (object?)dock.TenantId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@user_id", (object?)dock.UserId ?? DBNull.Value);
@@ -78,6 +78,8 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     cmd.Parameters.AddWithValue("@lease_expires_utc", dock.LeaseExpiresUtc.HasValue ? (object)dock.LeaseExpiresUtc.Value : DBNull.Value);
                     cmd.Parameters.AddWithValue("@owner_token", (object?)dock.OwnerToken ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@git_anchors_json", (object?)dock.GitAnchorsJson ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@repository_path", (object?)dock.RepositoryPath ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@checkout_path", (object?)dock.CheckoutPath ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@created_utc", dock.CreatedUtc);
                     cmd.Parameters.AddWithValue("@last_update_utc", dock.LastUpdateUtc);
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
@@ -146,6 +148,8 @@ namespace Armada.Core.Database.Postgresql.Implementations
                         lease_expires_utc = @lease_expires_utc,
                         owner_token = @owner_token,
                         git_anchors_json = @git_anchors_json,
+                            repository_path = @repository_path,
+                            checkout_path = @checkout_path,
                         last_update_utc = @last_update_utc
                         WHERE id = @id;";
                     cmd.Parameters.AddWithValue("@id", dock.Id);
@@ -161,6 +165,8 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     cmd.Parameters.AddWithValue("@lease_expires_utc", dock.LeaseExpiresUtc.HasValue ? (object)dock.LeaseExpiresUtc.Value : DBNull.Value);
                     cmd.Parameters.AddWithValue("@owner_token", (object?)dock.OwnerToken ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@git_anchors_json", (object?)dock.GitAnchorsJson ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@repository_path", (object?)dock.RepositoryPath ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@checkout_path", (object?)dock.CheckoutPath ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@last_update_utc", dock.LastUpdateUtc);
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 }
@@ -740,6 +746,8 @@ namespace Armada.Core.Database.Postgresql.Implementations
             try { dock.LeaseExpiresUtc = NullableDateTime(reader["lease_expires_utc"]); } catch { }
             try { dock.OwnerToken = NullableString(reader["owner_token"]); } catch { }
             try { dock.GitAnchorsJson = NullableString(reader["git_anchors_json"]); } catch { }
+            try { dock.RepositoryPath = NullableString(reader["repository_path"]); } catch { }
+            try { dock.CheckoutPath = NullableString(reader["checkout_path"]); } catch { }
             dock.CreatedUtc = DateTime.SpecifyKind((DateTime)reader["created_utc"], DateTimeKind.Utc);
             dock.LastUpdateUtc = DateTime.SpecifyKind((DateTime)reader["last_update_utc"], DateTimeKind.Utc);
             return dock;

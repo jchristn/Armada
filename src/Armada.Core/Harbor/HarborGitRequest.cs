@@ -31,6 +31,12 @@ namespace Armada.Core.Harbor
         /// </summary>
         public List<string> Arguments { get; set; } = new List<string>();
 
+        /// <summary>
+        /// How long the Harbor lets the command run before it kills it, in milliseconds; 0 (the default, and what a
+        /// sender that predates the field means) lets it run until it exits.
+        /// </summary>
+        public int TimeoutMs { get; set; } = 0;
+
         #endregion
     }
 }

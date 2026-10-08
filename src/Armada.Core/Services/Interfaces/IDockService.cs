@@ -21,6 +21,22 @@ namespace Armada.Core.Services.Interfaces
         Task<Dock?> ProvisionAsync(Vessel vessel, Captain captain, string branchName, string? missionId = null, CancellationToken token = default);
 
         /// <summary>
+        /// Have a Harbor create a mission dock on its own host: a git worktree of the vessel's checkout there (or of the
+        /// Harbor's own clone) under the Harbor's docks directory. The dock records the Harbor and the repository on that
+        /// host, so every later operation on it runs on that Harbor.
+        /// </summary>
+        /// <param name="vessel">Vessel.</param>
+        /// <param name="captain">Captain.</param>
+        /// <param name="branchName">Mission branch.</param>
+        /// <param name="missionId">Mission identifier (the dock folder name).</param>
+        /// <param name="harborId">Harbor to create the dock on.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The dock.</returns>
+        /// <exception cref="Armada.Core.Services.DockProvisioningException">Thrown when the Harbor could not create the dock;
+        /// the message says why and what to change.</exception>
+        Task<Dock> ProvisionOnHarborAsync(Vessel vessel, Captain captain, string branchName, string missionId, string harborId, CancellationToken token = default);
+
+        /// <summary>
         /// Reclaim a dock by removing the worktree.
         /// </summary>
         /// <param name="dockId">Dock identifier.</param>

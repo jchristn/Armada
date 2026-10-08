@@ -11,7 +11,9 @@ namespace Armada.Core.Services
     using Armada.Core.Services.Interfaces;
 
     /// <summary>
-    /// Git operations via the git CLI.
+    /// Git operations via the git CLI. By default git and gh run as processes on this machine; constructed with an
+    /// <see cref="IHostCommandExecutor"/> they run through it instead (for a Harbor-hosted dock, on the Harbor's machine),
+    /// so the same operations serve docks wherever they live.
     /// </summary>
     public class GitService : IGitService
     {
@@ -28,6 +30,7 @@ namespace Armada.Core.Services
 
         private string _Header = "[GitService] ";
         private LoggingModule _Logging;
+        private IHostCommandExecutor? _Commands = null;
 
         #endregion
 
@@ -40,6 +43,19 @@ namespace Armada.Core.Services
         public GitService(LoggingModule logging)
         {
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
+        }
+
+        /// <summary>
+        /// Instantiate with an executor that runs every git and gh command (for example on a Harbor's machine). Paths
+        /// passed to this instance are paths on that machine; it never touches this machine's filesystem.
+        /// </summary>
+        /// <param name="logging">Logging module.</param>
+        /// <param name="commands">Executor for git and gh commands.</param>
+        public GitService(LoggingModule logging, IHostCommandExecutor commands)
+        {
+            _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
+            _Commands = commands ?? throw new ArgumentNullException(nameof(commands));
+            _Header = "[GitService remote] ";
         }
 
         #endregion
@@ -136,7 +152,7 @@ namespace Armada.Core.Services
             {
                 try
                 {
-                    if (Directory.Exists(worktreePath))
+                    if (_Commands != null || Directory.Exists(worktreePath))
                     {
                         await RunGitAsync(repoPath, "worktree", "remove", "--force", worktreePath).ConfigureAwait(false);
                     }
@@ -635,7 +651,7 @@ namespace Armada.Core.Services
         {
             if (String.IsNullOrEmpty(path)) return false;
 
-            if (!Directory.Exists(path)) return false;
+            if (_Commands == null && !Directory.Exists(path)) return false;
             try
             {
                 GitProcessResult result = await ExecuteProcessAsync(path, "git", token, "rev-parse", "--git-dir").ConfigureAwait(false);
@@ -783,7 +799,7 @@ namespace Armada.Core.Services
             finally
             {
                 try { await RunGitAsync(repoPath, "worktree", "remove", "--force", worktreePath).ConfigureAwait(false); } catch { }
-                try { if (Directory.Exists(worktreePath)) Directory.Delete(worktreePath, true); } catch { }
+                try { if (_Commands == null && Directory.Exists(worktreePath)) Directory.Delete(worktreePath, true); } catch { }
             }
         }
 
@@ -1019,7 +1035,7 @@ namespace Armada.Core.Services
         public async Task<bool> IsBareRepositoryAsync(string path, CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(path)) return false;
-            if (!Directory.Exists(path)) return false;
+            if (_Commands == null && !Directory.Exists(path)) return false;
             GitProcessResult result = await ExecuteProcessAsync(path, "git", token, "rev-parse", "--is-bare-repository").ConfigureAwait(false);
             return result.Succeeded && String.Equals(result.StandardOutput.Trim(), "true", StringComparison.Ordinal);
         }
@@ -1517,8 +1533,26 @@ namespace Armada.Core.Services
         /// Run a git or gh process and return its exit code and output without throwing on a non-zero exit.
         /// Launches with LC_ALL=C. Throws <see cref="TimeoutException"/> after 120 seconds.
         /// </summary>
-        private static async Task<GitProcessResult> ExecuteProcessAsync(string? workingDirectory, string command, CancellationToken token, params string[] args)
+        private async Task<GitProcessResult> ExecuteProcessAsync(string? workingDirectory, string command, CancellationToken token, params string[] args)
         {
+            if (_Commands != null)
+            {
+                HostCommandResult remote = await _Commands.RunAsync(new HostCommandRequest
+                {
+                    Executable = command,
+                    WorkingDirectory = workingDirectory ?? String.Empty,
+                    Arguments = new List<string>(args),
+                    TimeoutMs = 120000
+                }, token).ConfigureAwait(false);
+                if (remote.TimedOut) throw new TimeoutException(command + " timed out after 120 seconds: " + remote.StandardError.Trim());
+                return new GitProcessResult
+                {
+                    ExitCode = remote.ExitCode,
+                    StandardOutput = remote.StandardOutput,
+                    StandardError = remote.StandardError
+                };
+            }
+
             ProcessStartInfo startInfo = new ProcessStartInfo
             {
                 FileName = command,

@@ -1674,7 +1674,11 @@ namespace Armada.Core.Database.Postgresql.Queries
                         last_update_utc TIMESTAMP NOT NULL
                     );",
                     @"CREATE UNIQUE INDEX IF NOT EXISTS idx_push_devices_token ON push_devices(expo_push_token);",
-                    @"CREATE INDEX IF NOT EXISTS idx_push_devices_tenant_user ON push_devices(tenant_id, user_id);")
+                    @"CREATE INDEX IF NOT EXISTS idx_push_devices_tenant_user ON push_devices(tenant_id, user_id);"),
+
+                new SchemaMigration(80, "Add repository_path and checkout_path to docks: the repository a Harbor-side dock was created from and the user's checkout on that Harbor host",
+                    @"ALTER TABLE docks ADD COLUMN IF NOT EXISTS repository_path TEXT;",
+                    @"ALTER TABLE docks ADD COLUMN IF NOT EXISTS checkout_path TEXT;")
 
             };
         }

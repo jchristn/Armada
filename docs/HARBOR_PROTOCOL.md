@@ -55,6 +55,8 @@ Server to Harbor:
 | `stdin` | `HarborStdinRequest` | write to a running captain's stdin |
 | `kill` | `HarborKillRequest` | terminate a captain (graceful window, then kill tree) |
 | `git` | `HarborGitRequest` | run a git/gh command in a working directory |
+| `dock` | `HarborDockRequest` | resolve a vessel's repository on the Harbor host, or create or remove a mission dock there |
+| `file` | `HarborFileRequest` | stat, read, or write a file in one of the Harbor's docks, or add a git exclude entry |
 | `deferredLaunch` | `HarborDeferredLaunchRequest` | arm a one-shot cutover: after the Admiral exits, launch a new slot, health-check it, and roll back on failure |
 
 Harbor to server:
@@ -66,6 +68,8 @@ Harbor to server:
 | `output` | `HarborOutput` | a chunk of stdout or stderr for a job |
 | `exited` | `HarborExited` | a captain process exited (exit code, plus optional `durationMs` and `timeToFirstTokenMs`) |
 | `gitResult` | `HarborGitResult` | the result of a git/gh request |
+| `dockResult` | `HarborDockResult` | the result of a dock request |
+| `fileResult` | `HarborFileResult` | the result of a file request |
 | `deferredLaunchAck` | `HarborDeferredLaunchAck` | confirm a deferred-launch instruction is armed |
 | `heartbeat` | `HarborHeartbeat` | liveness plus the set of jobs still running |
 | `error` | `HarborError` | a command could not be carried out, or a job failed abnormally |
@@ -125,9 +129,38 @@ once with the Harbor's message instead of waiting for `started`.
 Delegate a git operation:
 
 ```
-Admiral -> git       { requestId, executable: "git", workingDirectory, arguments: ["worktree","add", ...] }
-Harbor  -> gitResult { requestId, exitCode, standardOutput, standardError }
+Admiral -> git       { requestId, executable: "git", workingDirectory, arguments: ["worktree","add", ...], timeoutMs }
+Harbor  -> gitResult { requestId, exitCode, standardOutput, standardError, timedOut }
 ```
+
+`timeoutMs` (the Harbor stops the command after it; 0 or absent means the Harbor's default of 120 seconds) and
+`timedOut` are additive. A command that cannot start on the Harbor (a working directory that does not exist there, a
+missing executable) is answered with a failed `gitResult` (`exitCode` -1, the reason in `standardError`).
+
+Harbor-side mission docks (only with a Harbor that advertises the `harbor-docks` capability):
+
+```
+Admiral -> dock       { requestId, operation: "Resolve", vesselId, vesselName, repoUrl, defaultBranch }
+Harbor  -> dockResult { requestId, success, message, source: "Mapped"|"Discovered"|"Clone"|"None",
+                        repositoryPath, checkoutPath }
+Admiral -> dock       { requestId, operation: "Provision", vesselId, vesselName, repoUrl, defaultBranch, branchName, dockName }
+Harbor  -> dockResult { requestId, success, message, source, repositoryPath, checkoutPath, worktreePath, headCommit }
+Admiral -> dock       { requestId, operation: "Reclaim", vesselId, vesselName, worktreePath, repositoryPath }
+Harbor  -> dockResult { requestId, success, message, worktreePath }
+Admiral -> file       { requestId, operation: "Stat"|"Read"|"Write"|"AddGitExclude", path, content }
+Harbor  -> fileResult { requestId, success, exists, isDirectory, content, message }
+```
+
+The Harbor decides where repositories and docks live on its machine (see
+[HARBOR.md](HARBOR.md#dock-affinity-and-routing)): `Resolve` reports the checkout named for the vessel in its settings,
+a checkout under its root folders whose remote matches `repoUrl`, or the bare clone it would make; `success: false`
+(source `None`) carries a `message` saying which Harbor setting to change. `Provision` creates the dock under the
+Harbor's docks folder as `<vessel>/<dockName>` and returns its path and HEAD commit. `Reclaim` and every `file`
+operation refuse paths outside the docks folder; `AddGitExclude` takes a dock path and adds `content` to the git exclude
+file of the repository the dock belongs to. After `Provision` the Admiral sends ordinary `git` requests (with the
+Harbor's paths) for everything else it does with the dock, and `launch` with the dock as the working directory. These
+messages are additive: the Admiral sends them only to a Harbor that advertised `harbor-docks`, so the protocol version
+stays `1.0`.
 
 Delegate a rebuild cutover (health-gated rollback):
 
@@ -147,7 +180,7 @@ during the actual cutover is irrelevant. See [SERVER_REBUILD.md](SERVER_REBUILD.
 ## Reconnection
 
 If the link drops while jobs are running, the captain processes keep running on the Harbor. The Admiral marks the
-Harbor disconnected and fails any `git` or `deferredLaunch` request still waiting for its reply. The Harbor app
+Harbor disconnected and fails any `git`, `dock`, `file`, or `deferredLaunch` request still waiting for its reply. The Harbor app
 reconnects every 3 seconds and re-sends `handshake`; a close from an older, superseded socket does not disconnect the
 newer link.
 

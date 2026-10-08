@@ -35,6 +35,8 @@ namespace Armada.Core.Services
         private readonly ConcurrentDictionary<string, HarborConnection> _Connections = new ConcurrentDictionary<string, HarborConnection>(StringComparer.Ordinal);
         private readonly ConcurrentDictionary<string, TaskCompletionSource<HarborGitResult>> _PendingGit = new ConcurrentDictionary<string, TaskCompletionSource<HarborGitResult>>(StringComparer.Ordinal);
         private readonly ConcurrentDictionary<string, TaskCompletionSource<HarborDeferredLaunchAck>> _PendingDeferredLaunch = new ConcurrentDictionary<string, TaskCompletionSource<HarborDeferredLaunchAck>>(StringComparer.Ordinal);
+        private readonly ConcurrentDictionary<string, TaskCompletionSource<HarborDockResult>> _PendingDock = new ConcurrentDictionary<string, TaskCompletionSource<HarborDockResult>>(StringComparer.Ordinal);
+        private readonly ConcurrentDictionary<string, TaskCompletionSource<HarborFileResult>> _PendingFile = new ConcurrentDictionary<string, TaskCompletionSource<HarborFileResult>>(StringComparer.Ordinal);
         private readonly ConcurrentDictionary<string, string> _PendingOwners = new ConcurrentDictionary<string, string>(StringComparer.Ordinal);
         private readonly ConcurrentDictionary<string, IHarborJobListener> _JobListeners = new ConcurrentDictionary<string, IHarborJobListener>(StringComparer.Ordinal);
         private readonly ConcurrentDictionary<int, HarborJobHandle> _JobsByProcessId = new ConcurrentDictionary<int, HarborJobHandle>();
@@ -113,6 +115,8 @@ namespace Armada.Core.Services
 
             HarborConnection connection = new HarborConnection(handshake.HarborId, tenantId, userId, send);
             connection.SetLiveJobs(null);
+            connection.HostsDocks = HasAvailableCapability(handshake.Capabilities, HarborProtocol.DockCapability);
+            connection.Name = handshake.Name;
             _Connections[handshake.HarborId] = connection;
 
             _Logging.Info(_Header + "harbor " + handshake.HarborId + " linked (" + handshake.Name + ")");
@@ -153,6 +157,20 @@ namespace Armada.Core.Services
             {
                 if (_PendingGit.TryRemove(gitResult.RequestId, out TaskCompletionSource<HarborGitResult>? pending))
                     pending.TrySetResult(gitResult);
+                return;
+            }
+
+            if (message is HarborDockResult dockResult)
+            {
+                if (_PendingDock.TryRemove(dockResult.RequestId, out TaskCompletionSource<HarborDockResult>? pendingDock))
+                    pendingDock.TrySetResult(dockResult);
+                return;
+            }
+
+            if (message is HarborFileResult fileResult)
+            {
+                if (_PendingFile.TryRemove(fileResult.RequestId, out TaskCompletionSource<HarborFileResult>? pendingFile))
+                    pendingFile.TrySetResult(fileResult);
                 return;
             }
 
@@ -242,6 +260,70 @@ namespace Armada.Core.Services
                 _PendingGit.TryRemove(request.RequestId, out TaskCompletionSource<HarborGitResult>? _);
                 _PendingOwners.TryRemove(request.RequestId, out string? _);
             }
+        }
+
+        /// <summary>
+        /// Send a dock request (resolve a vessel's repository, create or remove a dock) to a connected Harbor and await
+        /// its result. Returns null when the Harbor does not reply within the timeout.
+        /// </summary>
+        /// <param name="harborId">Target Harbor identifier.</param>
+        /// <param name="request">Dock request (its RequestId correlates the reply).</param>
+        /// <param name="timeoutMs">Timeout in milliseconds; values below 1 mean wait indefinitely.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The result, or null on timeout.</returns>
+        /// <exception cref="InvalidOperationException">Thrown when the Harbor is not connected, does not create docks, or its
+        /// link closes before it replies.</exception>
+        public async Task<HarborDockResult?> SendDockAsync(string harborId, HarborDockRequest request, int timeoutMs, CancellationToken token = default)
+        {
+            if (String.IsNullOrWhiteSpace(harborId)) throw new ArgumentNullException(nameof(harborId));
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            if (String.IsNullOrWhiteSpace(request.RequestId)) throw new ArgumentException("Dock request is missing a request id.");
+            HarborConnection connection = RequireDockHost(harborId);
+            return await SendAndWaitAsync(harborId, connection, request, request.RequestId, _PendingDock, timeoutMs, token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Send a file request (stat, read, or write a file in one of the Harbor's docks, or add a git exclude entry) to a
+        /// connected Harbor and await its result. Returns null when the Harbor does not reply within the timeout.
+        /// </summary>
+        /// <param name="harborId">Target Harbor identifier.</param>
+        /// <param name="request">File request (its RequestId correlates the reply).</param>
+        /// <param name="timeoutMs">Timeout in milliseconds; values below 1 mean wait indefinitely.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The result, or null on timeout.</returns>
+        /// <exception cref="InvalidOperationException">Thrown when the Harbor is not connected, does not create docks, or its
+        /// link closes before it replies.</exception>
+        public async Task<HarborFileResult?> SendFileAsync(string harborId, HarborFileRequest request, int timeoutMs, CancellationToken token = default)
+        {
+            if (String.IsNullOrWhiteSpace(harborId)) throw new ArgumentNullException(nameof(harborId));
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            if (String.IsNullOrWhiteSpace(request.RequestId)) throw new ArgumentException("File request is missing a request id.");
+            HarborConnection connection = RequireDockHost(harborId);
+            return await SendAndWaitAsync(harborId, connection, request, request.RequestId, _PendingFile, timeoutMs, token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// A Harbor as people know it, for messages: "Name (id)" while it is connected, else its identifier.
+        /// </summary>
+        /// <param name="harborId">Harbor identifier.</param>
+        /// <returns>The description.</returns>
+        public string Describe(string harborId)
+        {
+            if (!String.IsNullOrWhiteSpace(harborId) && _Connections.TryGetValue(harborId, out HarborConnection? connection)
+                && !String.IsNullOrWhiteSpace(connection!.Name) && !String.Equals(connection.Name, harborId, StringComparison.Ordinal))
+                return connection.Name + " (" + harborId + ")";
+            return harborId ?? String.Empty;
+        }
+
+        /// <summary>
+        /// Whether a connected Harbor creates mission docks on its own host (it advertised
+        /// <see cref="HarborProtocol.DockCapability"/>).
+        /// </summary>
+        /// <param name="harborId">Harbor identifier.</param>
+        /// <returns>True when connected and hosting docks.</returns>
+        public bool HostsDocks(string harborId)
+        {
+            return !String.IsNullOrWhiteSpace(harborId) && _Connections.TryGetValue(harborId, out HarborConnection? connection) && connection!.HostsDocks;
         }
 
         /// <summary>
@@ -566,6 +648,58 @@ namespace Armada.Core.Services
 
         #region Private-Methods
 
+        private static bool HasAvailableCapability(List<HarborCapability>? capabilities, string name)
+        {
+            if (capabilities == null) return false;
+            foreach (HarborCapability capability in capabilities)
+                if (capability != null && capability.Available && String.Equals(capability.Name, name, StringComparison.OrdinalIgnoreCase)) return true;
+            return false;
+        }
+
+        private HarborConnection RequireDockHost(string harborId)
+        {
+            if (!_Connections.TryGetValue(harborId, out HarborConnection? connection))
+                throw new InvalidOperationException("Harbor " + harborId + " is not connected.");
+            if (!connection!.HostsDocks)
+                throw new InvalidOperationException("Harbor " + harborId + " does not create mission docks on its host (it predates Harbor-side docks); update it.");
+            return connection;
+        }
+
+        private async Task<TResult?> SendAndWaitAsync<TResult>(
+            string harborId,
+            HarborConnection connection,
+            HarborMessage request,
+            string requestId,
+            ConcurrentDictionary<string, TaskCompletionSource<TResult>> pending,
+            int timeoutMs,
+            CancellationToken token) where TResult : class
+        {
+            TaskCompletionSource<TResult> completion = new TaskCompletionSource<TResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+            pending[requestId] = completion;
+            _PendingOwners[requestId] = harborId;
+
+            try
+            {
+                await connection.SendAsync(request, token).ConfigureAwait(false);
+
+                if (timeoutMs < 1)
+                    return await completion.Task.WaitAsync(token).ConfigureAwait(false);
+
+                Task delay = Task.Delay(timeoutMs, token);
+                Task finished = await Task.WhenAny(completion.Task, delay).ConfigureAwait(false);
+                if (finished == completion.Task)
+                    return await completion.Task.ConfigureAwait(false);
+
+                token.ThrowIfCancellationRequested();
+                return null;
+            }
+            finally
+            {
+                pending.TryRemove(requestId, out TaskCompletionSource<TResult>? _);
+                _PendingOwners.TryRemove(requestId, out string? _);
+            }
+        }
+
         private int FailPendingRequests(string harborId)
         {
             int failed = 0;
@@ -575,6 +709,8 @@ namespace Armada.Core.Services
                 InvalidOperationException reason = new InvalidOperationException("Harbor " + harborId + " disconnected before replying to request " + owner.Key + ".");
                 if (_PendingGit.TryGetValue(owner.Key, out TaskCompletionSource<HarborGitResult>? git) && git.TrySetException(reason)) failed++;
                 if (_PendingDeferredLaunch.TryGetValue(owner.Key, out TaskCompletionSource<HarborDeferredLaunchAck>? deferred) && deferred.TrySetException(reason)) failed++;
+                if (_PendingDock.TryGetValue(owner.Key, out TaskCompletionSource<HarborDockResult>? dock) && dock.TrySetException(reason)) failed++;
+                if (_PendingFile.TryGetValue(owner.Key, out TaskCompletionSource<HarborFileResult>? file) && file.TrySetException(reason)) failed++;
             }
             return failed;
         }

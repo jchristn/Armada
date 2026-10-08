@@ -40,6 +40,8 @@ namespace Armada.Core.Services
             if (!String.IsNullOrWhiteSpace(request.ExistingHarborId))
             {
                 Harbor? owner = FindById(candidates, request.ExistingHarborId!);
+                if (owner != null && IsExcluded(request, owner.Id))
+                    return HarborRoutingDecision.None("The Harbor that owns this mission's dock (" + owner.Id + ") cannot take it.");
                 if (owner == null)
                     return HarborRoutingDecision.None("The Harbor that owns this dock (" + request.ExistingHarborId + ") is no longer registered.");
                 if (!isConnected(owner.Id))
@@ -51,6 +53,7 @@ namespace Armada.Core.Services
             foreach (Harbor harbor in candidates)
             {
                 if (!harbor.Enabled) continue;
+                if (IsExcluded(request, harbor.Id)) continue;
                 if (!isConnected(harbor.Id)) continue;
                 if (!HasCapabilities(harbor, request)) continue;
                 if (inFlight(harbor.Id) >= harbor.MaxConcurrentJobs) continue;
@@ -96,6 +99,14 @@ namespace Armada.Core.Services
 
         #region Private-Methods
 
+        private static bool IsExcluded(HarborRoutingRequest request, string harborId)
+        {
+            if (request.ExcludedHarborIds == null) return false;
+            foreach (string excluded in request.ExcludedHarborIds)
+                if (String.Equals(excluded, harborId, StringComparison.Ordinal)) return true;
+            return false;
+        }
+
         private static Harbor? FindById(IReadOnlyList<Harbor> harbors, string id)
         {
             foreach (Harbor harbor in harbors)
@@ -134,7 +145,7 @@ namespace Armada.Core.Services
             int connectedCapable = 0;
             foreach (Harbor harbor in candidates)
             {
-                if (!harbor.Enabled || !isConnected(harbor.Id)) continue;
+                if (!harbor.Enabled || !isConnected(harbor.Id) || IsExcluded(request, harbor.Id)) continue;
                 connected++;
                 if (HasCapabilities(harbor, request)) connectedCapable++;
             }

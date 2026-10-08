@@ -304,6 +304,11 @@ namespace Test.Shared.Suites.Services
                 throw new NotImplementedException();
             }
 
+            public Task<Dock> ProvisionOnHarborAsync(Vessel vessel, Captain captain, string branchName, string missionId, string harborId, CancellationToken token = default)
+            {
+                throw new NotImplementedException();
+            }
+
             public Task ReclaimAsync(string dockId, string? tenantId = null, CancellationToken token = default)
             {
                 ReclaimCalls++;

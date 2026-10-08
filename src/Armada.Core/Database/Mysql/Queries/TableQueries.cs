@@ -1995,6 +1995,15 @@ namespace Armada.Core.Database.Mysql.Queries
         };
 
         /// <summary>
+        /// Migration 80: repository_path and checkout_path on docks (Harbor-side docks).
+        /// </summary>
+        public static readonly string[] MigrationV80Statements = new string[]
+        {
+            @"ALTER TABLE docks ADD COLUMN repository_path TEXT;",
+            @"ALTER TABLE docks ADD COLUMN checkout_path TEXT;"
+        };
+
+        /// <summary>
         /// Index DDL statements for all tables.
         /// </summary>
         public static readonly string[] Indexes = new string[]

@@ -20,6 +20,12 @@ namespace Armada.Core.Services
         /// <inheritdoc />
         public Func<Captain, Mission, Dock, Task<int>>? OnLaunchAgent { get; set; }
 
+        /// <summary>
+        /// Where docks live. Recovery checks a Harbor-hosted dock on its Harbor through this; without it every dock is
+        /// checked on this machine.
+        /// </summary>
+        public DockHostResolver? DockHosts { get; set; }
+
         #endregion
 
         #region Private-Members
@@ -204,10 +210,15 @@ namespace Armada.Core.Services
                     return;
                 }
 
-                bool worktreeAccessible = false;
+                // A Harbor-hosted dock is checked (and repaired) on its Harbor. While that Harbor is offline the dock
+                // cannot be checked; the relaunch below decides (it waits for the Harbor rather than moving the dock).
+                bool harborDock = DockHosts != null && DockHostResolver.IsHarborDock(dock);
+                bool harborOffline = harborDock && (DockHosts!.Harbors == null || !DockHosts.Harbors.IsConnected(dock.HarborId!));
+                IGitService dockGit = harborDock && !harborOffline ? DockHosts!.ForDock(dock).Git : _Git;
+                bool worktreeAccessible = harborOffline;
                 try
                 {
-                    worktreeAccessible = await _Git.IsRepositoryAsync(dock.WorktreePath, token).ConfigureAwait(false);
+                    if (!harborOffline) worktreeAccessible = await dockGit.IsRepositoryAsync(dock.WorktreePath, token).ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
@@ -220,8 +231,8 @@ namespace Armada.Core.Services
                 {
                     try
                     {
-                        await _Git.RepairWorktreeAsync(dock.WorktreePath, token).ConfigureAwait(false);
-                        worktreeAccessible = await _Git.IsRepositoryAsync(dock.WorktreePath, token).ConfigureAwait(false);
+                        await dockGit.RepairWorktreeAsync(dock.WorktreePath, token).ConfigureAwait(false);
+                        worktreeAccessible = await dockGit.IsRepositoryAsync(dock.WorktreePath, token).ConfigureAwait(false);
                     }
                     catch (Exception ex)
                     {

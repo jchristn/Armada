@@ -12,6 +12,16 @@ namespace Armada.Core.Services
     /// </summary>
     public class DockService : IDockService
     {
+        #region Public-Members
+
+        /// <summary>
+        /// Where docks live. Required to create or work on Harbor-hosted docks; without it every dock is on the Admiral's
+        /// host.
+        /// </summary>
+        public DockHostResolver? Hosts { get; set; } = null;
+
+        #endregion
+
         #region Private-Members
 
         private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, SemaphoreSlim> _RepoProvisionLocks =
@@ -263,6 +273,67 @@ namespace Armada.Core.Services
         }
 
         /// <inheritdoc />
+        public async Task<Dock> ProvisionOnHarborAsync(Vessel vessel, Captain captain, string branchName, string missionId, string harborId, CancellationToken token = default)
+        {
+            if (vessel == null) throw new ArgumentNullException(nameof(vessel));
+            if (captain == null) throw new ArgumentNullException(nameof(captain));
+            if (String.IsNullOrEmpty(branchName)) throw new ArgumentNullException(nameof(branchName));
+            if (String.IsNullOrEmpty(missionId)) throw new ArgumentNullException(nameof(missionId));
+            if (String.IsNullOrEmpty(harborId)) throw new ArgumentNullException(nameof(harborId));
+
+            HarborConnectionManager? harbors = Hosts?.Harbors;
+            if (harbors == null)
+                throw new DockProvisioningException(vessel.Id, branchName, "Harbor delegation is not available on this Admiral, so no dock can be created on Harbor " + harborId + ".");
+
+            string harbor = harbors.Describe(harborId);
+            HarborDockClient client = new HarborDockClient(harbors);
+            Armada.Core.Harbor.HarborDockResult? result;
+            try
+            {
+                result = await client.ProvisionAsync(harborId, vessel, branchName, missionId, token).ConfigureAwait(false);
+            }
+            catch (InvalidOperationException ex)
+            {
+                throw new DockProvisioningException(vessel.Id, branchName, "Harbor " + harbor + " could not create a dock for vessel " + vessel.Name + ": " + ex.Message);
+            }
+
+            if (result == null)
+                throw new DockProvisioningException(vessel.Id, branchName, "Harbor " + harbor + " did not finish creating a dock for vessel " + vessel.Name
+                    + " within " + (client.ProvisionTimeoutMs / 1000) + " seconds.");
+            if (!result.Success || String.IsNullOrWhiteSpace(result.WorktreePath) || String.IsNullOrWhiteSpace(result.RepositoryPath))
+                throw new DockProvisioningException(vessel.Id, branchName, "Harbor " + harbor + " could not create a dock for vessel " + vessel.Name + ": "
+                    + (result.Message ?? "it did not say why") + ".");
+
+            Dock dock = new Dock(vessel.Id);
+            dock.TenantId = vessel.TenantId;
+            dock.UserId = vessel.UserId;
+            dock.CaptainId = captain.Id;
+            dock.HarborId = harborId;
+            dock.WorktreePath = result.WorktreePath;
+            dock.RepositoryPath = result.RepositoryPath;
+            dock.CheckoutPath = result.CheckoutPath;
+            dock.BranchName = branchName;
+            dock = await _Database.Docks.CreateAsync(dock, token).ConfigureAwait(false);
+
+            if (!String.IsNullOrEmpty(result.HeadCommit))
+            {
+                try
+                {
+                    await PersistDockStartCommitAsync(dock.Id, result.HeadCommit, token).ConfigureAwait(false);
+                }
+                catch (Exception metadataEx)
+                {
+                    _Logging.Warn(_Header + "unable to persist dock start commit for " + dock.Id + ": " + metadataEx.Message);
+                }
+            }
+
+            ArmadaMetrics.DocksProvisioned.Add(1);
+            _Logging.Info(_Header + "provisioned dock " + dock.Id + " on Harbor " + harbor + " at " + dock.WorktreePath
+                + " (" + result.Source + " repository " + dock.RepositoryPath + ")");
+            return dock;
+        }
+
+        /// <inheritdoc />
         public async Task ReclaimAsync(string dockId, string? tenantId = null, CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(dockId)) throw new ArgumentNullException(nameof(dockId));
@@ -281,7 +352,11 @@ namespace Armada.Core.Services
                 return;
             }
 
-            if (!String.IsNullOrEmpty(dock.WorktreePath))
+            if (DockHostResolver.IsHarborDock(dock))
+            {
+                await RemoveHarborDockAsync(dock, token).ConfigureAwait(false);
+            }
+            else if (!String.IsNullOrEmpty(dock.WorktreePath))
             {
                 try
                 {
@@ -332,7 +407,8 @@ namespace Armada.Core.Services
 
             if (!String.IsNullOrEmpty(dock.WorktreePath))
             {
-                await _Git.RepairWorktreeAsync(dock.WorktreePath, token).ConfigureAwait(false);
+                IGitService git = DockHostResolver.IsHarborDock(dock) && Hosts != null ? Hosts.ForDock(dock).Git : _Git;
+                await git.RepairWorktreeAsync(dock.WorktreePath, token).ConfigureAwait(false);
                 _Logging.Info(_Header + "repaired dock " + dockId);
             }
         }
@@ -424,7 +500,11 @@ namespace Armada.Core.Services
         /// </summary>
         private async Task CleanupWorktreeAsync(Dock dock, CancellationToken token)
         {
-            if (!String.IsNullOrEmpty(dock.WorktreePath))
+            if (DockHostResolver.IsHarborDock(dock))
+            {
+                await RemoveHarborDockAsync(dock, token).ConfigureAwait(false);
+            }
+            else if (!String.IsNullOrEmpty(dock.WorktreePath))
             {
                 try
                 {
@@ -440,6 +520,37 @@ namespace Armada.Core.Services
             }
 
             TryDeleteDockStartCommitFile(dock.Id);
+        }
+
+        /// <summary>
+        /// Have the dock's Harbor remove its worktree. Best-effort: a Harbor that is offline or cannot remove it leaves
+        /// the folder behind (logged), and the dock is still released.
+        /// </summary>
+        private async Task RemoveHarborDockAsync(Dock dock, CancellationToken token)
+        {
+            HarborConnectionManager? harbors = Hosts?.Harbors;
+            if (harbors == null)
+            {
+                _Logging.Warn(_Header + "dock " + dock.Id + " is on Harbor " + dock.HarborId + ", but Harbor delegation is not available; its worktree " + dock.WorktreePath + " stays on that Harbor");
+                return;
+            }
+
+            string harbor = harbors.Describe(dock.HarborId!);
+            try
+            {
+                Vessel? vessel = await _Database.Vessels.ReadAsync(dock.VesselId, token).ConfigureAwait(false);
+                Armada.Core.Harbor.HarborDockResult? result = await new HarborDockClient(harbors).ReclaimAsync(dock, vessel, token).ConfigureAwait(false);
+                if (result == null)
+                    _Logging.Warn(_Header + "Harbor " + harbor + " did not confirm removing dock " + dock.Id + " at " + dock.WorktreePath);
+                else if (!result.Success)
+                    _Logging.Warn(_Header + "Harbor " + harbor + " could not remove dock " + dock.Id + " at " + dock.WorktreePath + ": " + result.Message);
+                else
+                    _Logging.Info(_Header + "reclaimed dock " + dock.Id + " on Harbor " + harbor + " at " + dock.WorktreePath);
+            }
+            catch (InvalidOperationException ex)
+            {
+                _Logging.Warn(_Header + "could not remove dock " + dock.Id + " on Harbor " + harbor + " (" + ex.Message + "); its worktree " + dock.WorktreePath + " stays on that Harbor");
+            }
         }
 
         private async Task PersistDockStartCommitAsync(string dockId, string headCommit, CancellationToken token)

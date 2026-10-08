@@ -36,6 +36,11 @@ namespace Armada.Harbor
         /// <summary>
         /// The Admiral's database backups.
         /// </summary>
-        Backups
+        Backups,
+
+        /// <summary>
+        /// Where this machine keeps vessel checkouts, mission docks, and the Harbor's own clones.
+        /// </summary>
+        Repositories
     }
 }
