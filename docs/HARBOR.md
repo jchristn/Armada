@@ -140,7 +140,7 @@ that turns split mode on or off. Whenever at least one Harbor is connected, each
 |---|---|---|
 | `harbor.linkPath` | `/v1.0/harbor/connect` | WebSocket path Harbors connect to, on the REST port. Restart required. |
 | `harbor.requireAuth` | `false` | When true, every Harbor must present a credential. When false, a Harbor without a credential is still accepted only if the Admiral listens on a loopback hostname and the Harbor connects from loopback. |
-| `harbor.advertisedMcpBaseUrl` | `null` | MCP URL sent to Harbors in `handshakeAck` so captains can call home. Null advertises the Admiral's own MCP URL, which is right in Local mode; in split mode set a URL the Harbor host can reach. |
+| `harbor.advertisedMcpBaseUrl` | `null` | MCP URL sent to Harbors in `handshakeAck` so captains can call home. Null advertises the Admiral's own MCP URL, which is right in Local mode; in split mode set a URL the Harbor host can reach. Ask turns and other interactive launches on a Harbor also bind their token to this URL, so it must be a plain `http://host:port/mcp` URL the Harbor host can reach (for an Admiral in Docker, use the published host port, not the container's 7891). Left null with a Harbor on another machine, captains get the Admiral's `localhost` URL and report that the Armada MCP server failed to connect. |
 | `requireHarborForLaunch` | `false` | When true, a mission is assigned only while an eligible Harbor owned by the mission's user is connected; it stays Pending otherwise and never runs on the Admiral host or another user's Harbor. A Harbor's owner comes only from its `AccessKey` credential: a credential-less loopback Harbor has no owner and never counts for a mission that has a user. |
 | `deploymentMode` | `Local` | `Local` or `Split`. Reserved and informational in 1.0: nothing reads it. Routing to a Harbor happens whenever one is connected; `requireHarborForLaunch` is what keeps captains off the Admiral host. |
 
@@ -197,6 +197,15 @@ depends on `requireHarborForLaunch`:
   Pending and is retried on each dispatch pass. Routing then considers only that user's Harbors, so a launch never
   lands on a shared Harbor or another user's Harbor, and if none can take it at launch time the launch is refused and
   the mission returns to Pending.
+
+Interactive launches use the same routing: Ask Armada turns and narrations, direct captain chat, planning and
+refinement turns, and vessel Model Context builds. With an eligible Harbor connected, the CLI runs on that Harbor and
+its output streams back over the link. With `requireHarborForLaunch` on and none of the user's Harbors connected, the
+turn fails with "No Harbor is connected to run this captain" and nothing runs on the Admiral host. Chat turns run in a
+per-job scratch directory the Harbor creates and removes. Planning and refinement turns use the dock's or vessel's path
+when it exists on the Harbor host, and otherwise use scratch. Model Context builds require the path to exist.
+API-endpoint captains still run in-process on the Admiral, and fleet categorization always runs on the Admiral, so it
+is refused while `requireHarborForLaunch` is on. See [CAPTAINS.md](CAPTAINS.md#where-interactive-turns-run).
 
 A dock that is already pinned to a Harbor never moves to another Harbor. If that Harbor is offline or no longer
 registered, a relaunch runs on the Admiral host when `requireHarborForLaunch` is off (the dock's worktree is created on
