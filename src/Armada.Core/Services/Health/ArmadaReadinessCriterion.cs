@@ -63,7 +63,9 @@ namespace Armada.Core.Services.Health
                 "VesselHealth",
                 null,
                 "Vessel Health");
-            VesselReadinessResult result = await _Readiness.EvaluateAsync(auth, context.Vessel, null, null, null, true, token).ConfigureAwait(false);
+            VesselReadinessResult result = context.Host != null
+                ? await _Readiness.EvaluateAsync(auth, context.Vessel, context.Host, null, null, null, true, token).ConfigureAwait(false)
+                : await _Readiness.EvaluateAsync(auth, context.Vessel, null, null, null, true, token).ConfigureAwait(false);
             context.Health.ReadinessErrorCount = result.ErrorCount;
             return Grade(result.ErrorCount, result.WarningCount);
         }

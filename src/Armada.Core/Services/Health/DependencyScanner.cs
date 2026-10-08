@@ -101,6 +101,9 @@ namespace Armada.Core.Services.Health
             int timeout = context.Settings.DependencyCommandTimeoutSeconds;
             DependencyScanResult merged = new DependencyScanResult();
 
+            // A checkout on a Harbor is scanned there, with the Harbor's dotnet and npm.
+            DependencyToolRunner runner = context.Host != null ? new DependencyToolRunner(context.Host.Commands) : _Runner;
+
             foreach (string target in ResolveNuGetTargets(inventory, _MaxSolutionTargets, _MaxProjectTargets))
             {
                 token.ThrowIfCancellationRequested();
@@ -110,7 +113,7 @@ namespace Armada.Core.Services.Health
                     "list", Path.Combine(root, target.Replace('/', Path.DirectorySeparatorChar)), "package",
                     mode == DependencyScanModeEnum.Outdated ? "--outdated" : "--vulnerable", "--format", "json"
                 };
-                DependencyToolResult result = await _Runner.RunAsync(_DotnetExecutable, args, root, timeout, token).ConfigureAwait(false);
+                DependencyToolResult result = await runner.RunAsync(_DotnetExecutable, args, root, timeout, token).ConfigureAwait(false);
                 DependencyScanResult part = DotnetListParser.Interpret(result, mode, root, timeout, ResolveCoveredProjects(inventory, root, target));
                 Absorb(merged, part);
                 if (part.ErrorCode == VesselHealthDetailCodes.ToolMissing) break;
@@ -125,7 +128,7 @@ namespace Armada.Core.Services.Health
                 List<string> args = mode == DependencyScanModeEnum.Outdated
                     ? new List<string> { "outdated", "--json" }
                     : new List<string> { "audit", "--json" };
-                DependencyToolResult result = await _Runner.RunAsync(_NpmExecutable, args, workingDirectory, timeout, token).ConfigureAwait(false);
+                DependencyToolResult result = await runner.RunAsync(_NpmExecutable, args, workingDirectory, timeout, token).ConfigureAwait(false);
                 DependencyScanResult part = mode == DependencyScanModeEnum.Outdated
                     ? NpmOutputParser.InterpretOutdated(result, manifest, timeout)
                     : NpmOutputParser.InterpretAudit(result, manifest, timeout);

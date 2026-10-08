@@ -16,7 +16,8 @@ namespace Armada.Core.Services.Health
 
     /// <summary>
     /// Evaluates one vessel against every registered criterion and persists the result. The evaluator picks the path
-    /// (the working directory when it exists and is a git checkout, otherwise the bare clone), optionally fetches, runs
+    /// (the working directory when it exists and is a git checkout, otherwise the bare clone, otherwise a checkout on a
+    /// connected Harbor, where git and the dependency tools then run), optionally fetches, runs
     /// each criterion with timing and exception isolation, skips the slow dependency and vulnerability checks while the
     /// manifest hash is unchanged and the previous results are younger than DependencyMaxAgeHours (unless forced),
     /// applies manual overrides to produce the effective status columns, rolls them up into the overall status, and
@@ -40,6 +41,12 @@ namespace Armada.Core.Services.Health
         /// The criteria this evaluator runs, in order. Never null.
         /// </summary>
         public IReadOnlyList<IVesselHealthCriterion> Criteria => _Criteria;
+
+        /// <summary>
+        /// Finds a checkout on a connected Harbor when the vessel has neither a working directory nor a bare clone on the
+        /// Admiral host. When null, only the Admiral host is considered.
+        /// </summary>
+        public VesselHostResolver? Hosts { get; set; } = null;
 
         #endregion
 
@@ -272,6 +279,23 @@ namespace Armada.Core.Services.Health
                 return;
             }
 
+            if (Hosts != null)
+            {
+                VesselHostResolution resolution = await Hosts.TryResolveAsync(context.Vessel, null, token).ConfigureAwait(false);
+                if (resolution.Host != null && resolution.Host.IsHarbor)
+                {
+                    context.Host = resolution.Host;
+                    context.Git = resolution.Host.Git;
+                    context.EvaluatedPath = resolution.Host.WorkingDirectory;
+                    context.IsBare = false;
+                    context.RepositoryAvailable = true;
+                    return;
+                }
+
+                if (resolution.Message != null)
+                    _Logging.Debug(_Header + "no checkout of " + context.Vessel.Id + " to evaluate: " + resolution.Message);
+            }
+
             context.EvaluatedPath = !String.IsNullOrWhiteSpace(workingDirectory) ? workingDirectory : localPath;
             context.RepositoryAvailable = false;
         }
@@ -281,8 +305,8 @@ namespace Armada.Core.Services.Health
             using Activity? span = VesselHealthTelemetry.StartSpan("stage:Fetch");
             try
             {
-                if (context.IsBare) await _Git.FetchAsync(context.EvaluatedPath!, token).ConfigureAwait(false);
-                else await _Git.FetchRemotesAsync(context.EvaluatedPath!, token).ConfigureAwait(false);
+                if (context.IsBare) await context.Git.FetchAsync(context.EvaluatedPath!, token).ConfigureAwait(false);
+                else await context.Git.FetchRemotesAsync(context.EvaluatedPath!, token).ConfigureAwait(false);
             }
             catch (InvalidOperationException ex)
             {

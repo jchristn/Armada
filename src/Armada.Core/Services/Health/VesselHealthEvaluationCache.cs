@@ -58,8 +58,9 @@ namespace Armada.Core.Services.Health
             {
                 _Inventory = new RepositoryFileInventory();
             }
-            else if (context.IsBare)
+            else if (context.IsBare || context.Host != null)
             {
+                // A bare clone has no files to walk, and a checkout on a Harbor is not on this disk: use git's index.
                 IReadOnlyList<string> tracked = await context.Git.ListTrackedFilesAsync(context.EvaluatedPath, token).ConfigureAwait(false);
                 _Inventory = RepositoryFileInventory.FromTrackedFiles(tracked, context.ExcludedDirectoryNames);
             }
