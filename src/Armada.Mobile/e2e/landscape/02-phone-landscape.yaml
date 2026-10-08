@@ -77,4 +77,6 @@ name: 02-phone-landscape
     timeout: 10000
 - tapOn:
     id: "tab-ask"
-- assertVisible: "typed in landscape"
+# The draft survives the rotations and the trip to Missions (Maestro's hideKeyboard on iOS can tap a suggestion
+# into it, so match the start).
+- assertVisible: "typed in landscape.*"

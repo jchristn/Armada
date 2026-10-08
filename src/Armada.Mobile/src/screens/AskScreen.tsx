@@ -191,6 +191,9 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
   const conversationPane = (
     // Measures its own place in the window, so the composer clears the keyboard in a split pane and in landscape.
     <KeyboardAvoidingPane testID="ask-conversation-pane">
+      {/* Everything above the composer shares what is left and clips: on a phone in landscape with the keyboard up
+          (about 140 dp), the captain bar and banners alone used to push the composer under the keyboard. */}
+      <View style={styles.aboveComposer} testID="ask-above-composer">
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={t('Captain: {{name}}. Change captain', { name: activeCaptain ? captainLabel(activeCaptain) : t('None') })}
@@ -267,6 +270,8 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
           cliResolution={thread?.cliPermission ?? null}
         />
       )}
+
+      </View>
 
       <Composer
         ref={composerRef}
@@ -397,6 +402,7 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
+  aboveComposer: { flex: 1, minHeight: 0, overflow: 'hidden' },
   center: { textAlign: 'center' },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md, padding: spacing.lg },
   quickRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: spacing.sm },
