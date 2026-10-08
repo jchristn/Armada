@@ -24,5 +24,16 @@
   </Application.Resources>
   <Application.Styles>
     <FluentTheme />
+    <!-- Fluent collapses scroll bars to a thin line until hovered, which is hard to grab with a mouse; keep them full
+         width wherever content scrolls. TextBox and ListBox pass the attached value to their inner ScrollViewer. -->
+    <Style Selector="ScrollViewer">
+      <Setter Property="AllowAutoHide" Value="False" />
+    </Style>
+    <Style Selector="TextBox">
+      <Setter Property="ScrollViewer.AllowAutoHide" Value="False" />
+    </Style>
+    <Style Selector="ListBox">
+      <Setter Property="ScrollViewer.AllowAutoHide" Value="False" />
+    </Style>
   </Application.Styles>
 </Application>
