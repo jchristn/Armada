@@ -124,7 +124,8 @@ export function Sidebar() {
           <Icon name={collapsed ? 'chevron-forward' : 'chevron-back'} size={18} color="textMuted" />
         </Pressable>
       </View>
-      {collapsed ? <NotEncryptedIndicator /> : null}
+      {/* Icon only in the rail (the words do not fit in its width); the spoken name stays. */}
+      {collapsed ? <View style={styles.railCenter}><NotEncryptedIndicator compact /></View> : null}
       <ScrollView testID="sidebar-scroll" contentContainerStyle={{ paddingBottom: insets.bottom + spacing.lg }}>
         {item(ASK_ITEM)}
         {item(APPROVALS_ITEM, count)}
@@ -163,6 +164,7 @@ const styles = StyleSheet.create({
   railBrand: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.md },
   toggle: { width: MIN_TOUCH, height: MIN_TOUCH, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm },
   railSection: { marginTop: spacing.sm },
+  railCenter: { alignItems: 'center' },
   railDivider: { height: StyleSheet.hairlineWidth, marginHorizontal: spacing.md, marginBottom: spacing.sm },
   railItem: { alignItems: 'center', justifyContent: 'center', minHeight: MIN_TOUCH + 4, borderLeftWidth: 3, borderLeftColor: 'transparent' },
   railBadge: { position: 'absolute', top: 2, right: 8 },

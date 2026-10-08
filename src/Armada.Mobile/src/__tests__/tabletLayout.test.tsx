@@ -15,9 +15,15 @@ import {
   masterPaneWidth,
   navModeFor,
 } from '../navigation/useLayout';
+import * as auth from '../auth/AuthContext';
+import { Sidebar } from '../components/app/Sidebar';
+import { ApprovalsProvider } from '../notifications/ApprovalsContext';
+import { NotificationProvider } from '../notifications/NotificationContext';
+import { SocketProvider } from '../socket/SocketContext';
 import { renderWithProviders } from '../test/render';
 
-jest.mock('expo-router', () => require('../test/routerMock').routerMockFactory());
+jest.mock('@dashboard/api/client', () => require('../test/mockClient').clientMockFactory());
+jest.mock('expo-router', () => ({ ...require('../test/routerMock').routerMockFactory(), usePathname: () => '/ask' }));
 
 // The window drives every layout decision. Tests change it the way the platform does (rotation, Split View, Stage
 // Manager): Dimensions emits a change and every component reading the window re-renders on its own.
@@ -279,5 +285,29 @@ describe('sheets', () => {
     expect(StyleSheet.flatten(screen.getByTestId('sheet').props.style).borderRadius).toBeUndefined();
     await setWindow(956, 440);
     expect(StyleSheet.flatten(screen.getByTestId('sheet').props.style).borderRadius).toBeUndefined();
+  });
+});
+
+describe('the icon rail', () => {
+  const realUseAuth = auth.useAuth;
+  afterEach(() => jest.restoreAllMocks());
+
+  it('shows the not-encrypted mark as an icon (the words do not fit) and keeps its spoken name', async () => {
+    jest.spyOn(auth, 'useAuth').mockImplementation(() => ({
+      ...realUseAuth(),
+      status: 'signedIn',
+      activeProfile: { id: 'prf_1', name: 'Admiral', url: 'http://203.0.113.7:7890', kind: 'Direct', biometricUnlock: false },
+    } as auth.AuthState));
+    await setWindow(744, 1133);
+    await renderWithProviders(
+      <SocketProvider serverUrl={null} token={null}>
+        <NotificationProvider schedule={() => 0}>
+          <ApprovalsProvider enabled={false}><Sidebar /></ApprovalsProvider>
+        </NotificationProvider>
+      </SocketProvider>,
+    );
+    expect(screen.getByLabelText('Not encrypted')).toBeTruthy();
+    expect(screen.queryByText('Not encrypted')).toBeNull();
+    expect(screen.queryByText('Armada')).toBeNull();
   });
 });
