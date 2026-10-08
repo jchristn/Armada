@@ -10,9 +10,12 @@ import { Button } from '../ui/Button';
 import { Icon } from '../ui/Icon';
 import { SearchField } from '../ui/SearchField';
 import { SwipeRow } from '../ui/SwipeRow';
+import { DeleteConversationDialog } from './DeleteConversationDialog';
 import { ThreadActionsSheet, type ThreadActions } from './ThreadActionsSheet';
 
-export interface ThreadListProps extends ThreadActions {
+export interface ThreadListProps extends Omit<ThreadActions, 'onDelete'> {
+  /** Deletes a conversation the user has confirmed (the list asks first, in its own dialog). */
+  onDelete: (thread: AskThread) => void;
   threads: AskThread[];
   selectedId: string | null;
   activity: ThreadActivityMap;
@@ -32,16 +35,20 @@ export interface ThreadListProps extends ThreadActions {
 /**
  * The conversation list (the dashboard's AskThreadList): server-side search, New conversation, pinned first,
  * unread badges, a live "working" marker while tracked work runs, "Replying..." during a captain turn. Swipe a row
- * for Pin / Archive / Delete, or long-press it (or use the screen-reader actions) for every action.
+ * for Pin / Archive / Delete, or long-press it (or use the screen-reader actions) for every action. Delete asks for
+ * confirmation in a dialog the list owns, so the dialog is presented from wherever the list is (the phone list is a
+ * modal of its own).
  */
 export function ThreadList(props: ThreadListProps) {
   const {
     threads, selectedId, activity, loading, error, search, onSearchChange, includeArchived, onIncludeArchivedChange,
-    hasMore, onLoadMore, onRetry, onSelect, onNew, ...actions
+    hasMore, onLoadMore, onRetry, onSelect, onNew, onDelete, ...rest
   } = props;
   const { t, formatRelativeTime } = useLocale();
   const { colors } = useTheme();
   const [menuThread, setMenuThread] = useState<AskThread | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<AskThread | null>(null);
+  const actions: ThreadActions = { ...rest, onDelete: setDeleteTarget };
 
   const header = (
     <View style={styles.top}>
@@ -94,7 +101,8 @@ export function ThreadList(props: ThreadListProps) {
           const selected = thread.id === selectedId;
           const title = thread.title || t('New conversation');
           const status = working ? t('Working') : replying ? t('Replying...') : '';
-          const spoken = [title, thread.pinned ? t('Pinned') : '', unread > 0 ? t('{{count}} unread', { count: unread }) : '', status, thread.archived ? t('Archived') : '']
+          const when = thread.lastMessageUtc ? formatRelativeTime(thread.lastMessageUtc) : '';
+          const spoken = [title, thread.pinned ? t('Pinned') : '', unread > 0 ? t('{{count}} unread', { count: unread }) : '', status, thread.archived ? t('Archived') : '', when]
             .filter(Boolean).join(', ');
           return (
             <SwipeRow
@@ -132,7 +140,7 @@ export function ThreadList(props: ThreadListProps) {
                   {working ? <View style={[styles.dot, { backgroundColor: colors.info }]} /> : null}
                   {status ? <AppText variant="caption" color="info">{status}</AppText> : null}
                   {thread.archived ? <AppText variant="caption" muted>{t('Archived')}</AppText> : null}
-                  <AppText variant="caption" muted style={styles.time}>{thread.lastMessageUtc ? formatRelativeTime(thread.lastMessageUtc) : ''}</AppText>
+                  <AppText variant="caption" muted style={styles.time}>{when}</AppText>
                 </View>
               </Pressable>
             </SwipeRow>
@@ -140,6 +148,11 @@ export function ThreadList(props: ThreadListProps) {
         }}
       />
       <ThreadActionsSheet thread={menuThread} onClose={() => setMenuThread(null)} actions={actions} />
+      <DeleteConversationDialog
+        target={deleteTarget}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={(target) => { setDeleteTarget(null); onDelete(target); }}
+      />
     </View>
   );
 }

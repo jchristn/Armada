@@ -13,7 +13,7 @@ import { ASK_PREF_KEYS } from '../ask/AskContext';
 import { AuthProvider } from '../auth/AuthContext';
 import { LocaleProvider } from '../i18n/LocaleContext';
 import { ApprovalsProvider } from '../notifications/ApprovalsContext';
-import { NotificationProvider } from '../notifications/NotificationContext';
+import { NotificationProvider, useNotifications } from '../notifications/NotificationContext';
 import { resetAskSessionForTests } from '../screens/AskScreen';
 import { SocketProvider } from '../socket/SocketContext';
 import { socketFactory, type FakeSocket } from '../test/fakeSocket';
@@ -38,6 +38,12 @@ function proposal(over: Partial<AskActionProposal> = {}): AskActionProposal {
 
 let sockets: FakeSocket[] = [];
 
+/** The toasts on screen, as text (the app shows them through ToastHost). */
+function ToastProbe() {
+  const { toasts } = useNotifications();
+  return <>{toasts.map((toast) => <Text key={toast.id} testID={`toast-${toast.severity}`}>{toast.message}</Text>)}</>;
+}
+
 function Providers({ children }: { children: ReactNode }) {
   const { sockets: list, factory } = socketFactory();
   sockets = list;
@@ -48,6 +54,7 @@ function Providers({ children }: { children: ReactNode }) {
           <SocketProvider serverUrl="http://h:1" token="tok" factory={factory}>
             <NotificationProvider>
               <ApprovalsProvider enabled={false}>{children}</ApprovalsProvider>
+              <ToastProbe />
             </NotificationProvider>
           </SocketProvider>
         </LocaleProvider>
@@ -370,5 +377,133 @@ describe('Ask Armada', () => {
     expect(app.getPathname()).toBe('/missions/msn_5');
     open.mockRestore();
     alert.mockRestore();
+  });
+});
+
+describe('Ask Armada conversation list actions', () => {
+  const two = () => [thread(), thread({ id: 'thr_2', title: 'Deploy plan', lastMessageUtc: '2026-10-06T12:00:00Z' })];
+
+  async function openList() {
+    api.enumerateAskThreads.mockResolvedValue({ objects: two(), totalPages: 1 } as never);
+    await renderAsk();
+    await act(async () => { await fireEvent.press(screen.getByTestId('ask-open-list')); });
+    await waitFor(() => expect(screen.getByTestId('ask-thread-row-thr_2')).toBeTruthy());
+  }
+
+  async function longPress(id: string) {
+    await act(async () => { await fireEvent(screen.getByTestId(`ask-thread-row-${id}`), 'longPress'); });
+    expect(screen.getByTestId('ask-thread-actions')).toBeTruthy();
+  }
+
+  async function swipeAction(id: string, action: string) {
+    await act(async () => { await fireEvent(screen.getByTestId(`ask-thread-row-${id}`), 'accessibilityAction', { nativeEvent: { actionName: action } }); });
+  }
+
+  /** The delete dialog must be inside the phone list's own modal: iOS cannot present it from the screen behind. */
+  function expectDialogInsideList() {
+    const sheet = screen.getByTestId('ask-list-sheet');
+    expect(within(sheet).getByTestId('ask-delete-confirm')).toBeTruthy();
+    expect(screen.getAllByTestId('ask-delete-confirm')).toHaveLength(1);
+  }
+
+  it('Delete from the row menu confirms inside the list, deletes on the server, and drops the row', async () => {
+    api.deleteAskThread.mockResolvedValue(undefined);
+    await openList();
+    await longPress('thr_2');
+    await act(async () => { await fireEvent.press(screen.getByTestId('ask-action-delete')); });
+    expect(screen.queryByTestId('ask-thread-actions')).toBeNull();
+    expectDialogInsideList();
+    expect(api.deleteAskThread).not.toHaveBeenCalled();
+    await act(async () => { await fireEvent.press(screen.getByTestId('ask-delete-confirm-confirm')); });
+    expect(api.deleteAskThread).toHaveBeenCalledWith('thr_2');
+    await waitFor(() => expect(screen.queryByTestId('ask-thread-row-thr_2')).toBeNull());
+    expect(screen.getByTestId('ask-thread-row-thr_1')).toBeTruthy();
+    expect(screen.getByTestId('toast-success')).toHaveTextContent('Conversation deleted.');
+    expect(screen.queryByTestId('ask-delete-confirm')).toBeNull();
+  });
+
+  it('the swipe Delete confirms inside the list too; Cancel deletes nothing', async () => {
+    api.deleteAskThread.mockResolvedValue(undefined);
+    await openList();
+    await swipeAction('thr_2', 'delete');
+    expectDialogInsideList();
+    await act(async () => { await fireEvent.press(screen.getByTestId('ask-delete-confirm-cancel')); });
+    expect(api.deleteAskThread).not.toHaveBeenCalled();
+    expect(screen.getByTestId('ask-thread-row-thr_2')).toBeTruthy();
+    await swipeAction('thr_2', 'delete');
+    await act(async () => { await fireEvent.press(screen.getByTestId('ask-delete-confirm-confirm')); });
+    expect(api.deleteAskThread).toHaveBeenCalledWith('thr_2');
+    await waitFor(() => expect(screen.queryByTestId('ask-thread-row-thr_2')).toBeNull());
+  });
+
+  it('a failed delete keeps the row and reports the server error', async () => {
+    api.deleteAskThread.mockRejectedValue(new Error('Conversation is locked'));
+    await openList();
+    await swipeAction('thr_2', 'delete');
+    await act(async () => { await fireEvent.press(screen.getByTestId('ask-delete-confirm-confirm')); });
+    expect(api.deleteAskThread).toHaveBeenCalledWith('thr_2');
+    await waitFor(() => expect(screen.getByTestId('toast-error')).toHaveTextContent('Conversation is locked'));
+    expect(screen.getByTestId('ask-thread-row-thr_2')).toBeTruthy();
+  });
+
+  it('deleting the open conversation from the list returns to a new conversation', async () => {
+    api.deleteAskThread.mockResolvedValue(undefined);
+    api.enumerateAskThreads.mockResolvedValue({ objects: two(), totalPages: 1 } as never);
+    api.enumerateAskMessages.mockResolvedValue({ messages: [message({ contentText: 'open one' })], hasMore: false });
+    await renderAsk('/ask/thr_1');
+    await waitFor(() => expect(screen.getByText('open one')).toBeTruthy());
+    await act(async () => { await fireEvent.press(screen.getByTestId('ask-open-list')); });
+    await swipeAction('thr_1', 'delete');
+    await act(async () => { await fireEvent.press(screen.getByTestId('ask-delete-confirm-confirm')); });
+    expect(api.deleteAskThread).toHaveBeenCalledWith('thr_1');
+    await waitFor(() => expect(screen.getByTestId('ask-empty')).toBeTruthy());
+  });
+
+  it('Pin, Archive, Rename, and Summarize reach the server with the dashboard payloads and update the list', async () => {
+    api.updateAskThread.mockImplementation(async (id, patch) => thread({ id, title: id === 'thr_2' ? 'Deploy plan' : 'Fleet status', ...(patch as Partial<AskThread>) }));
+    api.summarizeAskThread.mockResolvedValue(undefined);
+    await openList();
+
+    // Pin (swipe): the pinned row moves to the top.
+    await swipeAction('thr_2', 'pin');
+    expect(api.updateAskThread).toHaveBeenLastCalledWith('thr_2', { pinned: true });
+    await waitFor(() => expect(screen.getByTestId('ask-thread-row-thr_2').props.accessibilityLabel).toContain('Pinned'));
+    const rows = screen.getAllByTestId(/^ask-thread-row-/).map((r) => r.props.testID);
+    expect(rows).toEqual(['ask-thread-row-thr_2', 'ask-thread-row-thr_1']);
+
+    // Rename (row menu, inline field).
+    await longPress('thr_2');
+    await act(async () => { await fireEvent.press(screen.getByTestId('ask-action-rename')); });
+    await fireEvent.changeText(screen.getByTestId('ask-rename-input'), 'Release plan');
+    await act(async () => { await fireEvent.press(screen.getByTestId('ask-rename-save')); });
+    expect(api.updateAskThread).toHaveBeenLastCalledWith('thr_2', { title: 'Release plan' });
+    await waitFor(() => expect(screen.getByText('Release plan')).toBeTruthy());
+
+    // Summarize (row menu).
+    await longPress('thr_1');
+    await act(async () => { await fireEvent.press(screen.getByTestId('ask-action-summarize')); });
+    expect(api.summarizeAskThread).toHaveBeenCalledWith('thr_1');
+    expect(screen.getByTestId('toast-info')).toHaveTextContent('Summarizing "Fleet status". The summary will appear in the conversation.');
+
+    // Archive (row menu): hidden while archived conversations are not shown.
+    await longPress('thr_1');
+    await act(async () => { await fireEvent.press(screen.getByTestId('ask-action-archive')); });
+    expect(api.updateAskThread).toHaveBeenLastCalledWith('thr_1', { archived: true });
+    await waitFor(() => expect(screen.queryByTestId('ask-thread-row-thr_1')).toBeNull());
+  });
+
+  it('a failed update keeps the row as it was and reports the error', async () => {
+    api.updateAskThread.mockRejectedValue(new Error('Forbidden'));
+    await openList();
+    await swipeAction('thr_2', 'archive');
+    expect(api.updateAskThread).toHaveBeenCalledWith('thr_2', { archived: true });
+    await waitFor(() => expect(screen.getByTestId('toast-error')).toHaveTextContent('Forbidden'));
+    expect(screen.getByTestId('ask-thread-row-thr_2')).toBeTruthy();
+  });
+
+  it('Show archived reloads the list from the server with archived conversations', async () => {
+    await openList();
+    await act(async () => { await fireEvent(screen.getByTestId('ask-show-archived'), 'valueChange', true); });
+    await waitFor(() => expect(api.enumerateAskThreads).toHaveBeenLastCalledWith(expect.objectContaining({ pageNumber: 1, includeArchived: true })));
   });
 });

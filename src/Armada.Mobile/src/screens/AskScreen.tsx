@@ -14,10 +14,11 @@ import { useAskConversation } from '../ask/useAskConversation';
 import { HeaderActions } from '../components/app/HeaderActions';
 import { Composer, type ComposerHandle } from '../components/ask/Composer';
 import { ConversationOptionsSheet, captainLabel } from '../components/ask/ConversationOptionsSheet';
+import { DeleteConversationDialog } from '../components/ask/DeleteConversationDialog';
 import { MessageList, type MessageListHandle } from '../components/ask/MessageList';
 import { ThreadList } from '../components/ask/ThreadList';
 import { WorkStrip } from '../components/ask/WorkStrip';
-import { AppText, Banner, BottomSheet, Button, ConfirmDialog, ErrorState, Icon, IconButton, KeyboardAvoidingPane, LoadingState, SplitView, TextField } from '../components/ui';
+import { AppText, Banner, BottomSheet, Button, ErrorState, Icon, IconButton, KeyboardAvoidingPane, LoadingState, SplitView, TextField } from '../components/ui';
 import { useLocale } from '../i18n/LocaleContext';
 import { useLayout } from '../navigation/useLayout';
 import { useNotifications } from '../notifications/NotificationContext';
@@ -142,10 +143,7 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
     setTimeout(() => composerRef.current?.focus(), 0);
   }
 
-  async function confirmDelete() {
-    const target = deleteTarget;
-    setDeleteTarget(null);
-    if (!target) return;
+  async function deleteConversation(target: AskThread) {
     if (await deleteThread(target) && target.id === conv.threadId) setThreadId(null);
   }
 
@@ -313,6 +311,7 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
       onSelect={selectThread}
       onNew={newConversation}
       {...threadActions}
+      onDelete={(th) => void deleteConversation(th)}
     />
   );
 
@@ -338,7 +337,7 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
 
       <Modal supportedOrientations={MODAL_ORIENTATIONS} visible={listOpen && !split} animationType={reduceMotion ? 'fade' : 'slide'} presentationStyle="pageSheet" onRequestClose={onListBack}>
         {/* A modal is a new native root: swipe actions in the list need their own gesture root. */}
-        <GestureHandlerRootView style={styles.fill}>
+        <GestureHandlerRootView style={styles.fill} testID="ask-list-sheet">
         <SafeAreaView style={[styles.fill, { backgroundColor: colors.background }]} edges={['top', 'bottom', 'left', 'right']}>
           <View style={[styles.modalHead, { borderBottomColor: colors.border }]}>
             <AppText variant="heading" accessibilityRole="header" style={styles.fill}>{t('Conversations')}</AppText>
@@ -387,16 +386,11 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
         <Button label={t('Rename')} disabled={!renameValue.trim()} onPress={commitRename} testID="ask-rename-confirm" />
       </BottomSheet>
 
-      <ConfirmDialog
-        open={!!deleteTarget}
-        title={t('Delete conversation')}
-        message={t('Delete "{{title}}"? Its messages and action history are removed. Work it started keeps running and stays visible on the normal pages.', { title: deleteTarget?.title || t('New conversation') })}
-        confirmLabel={t('Delete')}
-        cancelLabel={t('Cancel')}
-        danger
-        onConfirm={() => void confirmDelete()}
+      {/* The options sheet's Delete; the conversation list confirms its own deletes (see DeleteConversationDialog). */}
+      <DeleteConversationDialog
+        target={deleteTarget}
         onCancel={() => setDeleteTarget(null)}
-        testID="ask-delete-confirm"
+        onConfirm={(target) => { setDeleteTarget(null); void deleteConversation(target); }}
       />
     </SafeAreaView>
   );
