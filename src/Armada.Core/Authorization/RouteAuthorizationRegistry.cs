@@ -167,6 +167,7 @@ namespace Armada.Core.Authorization
             Add("GET", "/api/v1/harbors", "Harbor", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("POST", "/api/v1/harbors", "Harbor", ResourceOperationEnum.Create, PermissionLevel.Authenticated);
             Add("GET", "/api/v1/harbors/{id}", "Harbor", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/harbors/{id}/metrics", "Harbor", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("PUT", "/api/v1/harbors/{id}", "Harbor", ResourceOperationEnum.Update, PermissionLevel.Authenticated);
             Add("DELETE", "/api/v1/harbors/{id}", "Harbor", ResourceOperationEnum.Delete, PermissionLevel.Authenticated);
             Add("POST", "/api/v1/harbors/{id}/enable", "Harbor", ResourceOperationEnum.Execute, PermissionLevel.Authenticated);

@@ -426,6 +426,33 @@ namespace Armada.Core.Database
         }
 
         /// <summary>
+        /// Harbor job record methods (captain launches delegated to a Harbor).
+        /// </summary>
+        public IHarborJobMethods HarborJobs
+        {
+            get => _HarborJobs;
+            protected set => _HarborJobs = DuplicateEntityTranslationProxy.Wrap(value);
+        }
+
+        /// <summary>
+        /// Harbor link-health sample methods.
+        /// </summary>
+        public IHarborLinkSampleMethods HarborLinkSamples
+        {
+            get => _HarborLinkSamples;
+            protected set => _HarborLinkSamples = DuplicateEntityTranslationProxy.Wrap(value);
+        }
+
+        /// <summary>
+        /// Harbor link event methods.
+        /// </summary>
+        public IHarborLinkEventMethods HarborLinkEvents
+        {
+            get => _HarborLinkEvents;
+            protected set => _HarborLinkEvents = DuplicateEntityTranslationProxy.Wrap(value);
+        }
+
+        /// <summary>
         /// Fleet action definition operations.
         /// </summary>
         public IFleetActionMethods FleetActions
@@ -538,6 +565,9 @@ namespace Armada.Core.Database
         private ICliPermissionRequestMethods _CliPermissionRequests = null!;
         private ICliPermissionRuleMethods _CliPermissionRules = null!;
         private IPushDeviceMethods _PushDevices = null!;
+        private IHarborJobMethods _HarborJobs = null!;
+        private IHarborLinkSampleMethods _HarborLinkSamples = null!;
+        private IHarborLinkEventMethods _HarborLinkEvents = null!;
         private IFleetActionMethods _FleetActions = null!;
         private IFleetActionRunMethods _FleetActionRuns = null!;
         private IFleetActionRunTargetMethods _FleetActionRunTargets = null!;

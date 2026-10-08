@@ -14,7 +14,7 @@ namespace Armada.Core.Services
     /// <summary>
     /// Applies <see cref="RetentionSettings"/> (V1 readiness W3.4): archives and optionally deletes inactive Ask
     /// threads, deletes old finished background jobs (always keeping the newest of each kind and name per tenant), deletes
-    /// old finished vessel import batches, and deletes old decided CLI tool permission requests. Works on every database provider through the driver interfaces. The
+    /// old finished vessel import batches, deletes old decided CLI tool permission requests, and deletes old Harbor metrics (on the job retention). Works on every database provider through the driver interfaces. The
     /// Admiral calls <see cref="PruneAsync"/> on the health-check loop's slow cadence. Settings are read on every
     /// call, so changes apply live. Not designed for concurrent calls.
     /// </summary>
@@ -79,10 +79,14 @@ namespace Armada.Core.Services
             try { result.CliPermissionRequestsDeleted = await PruneCliPermissionRequestsAsync(token).ConfigureAwait(false); }
             catch (Exception ex) when (!(ex is OperationCanceledException)) { _Logging.Warn(_Header + "CLI permission request pruning error: " + ex.Message); }
 
+            try { result.HarborMetricsDeleted = await PruneHarborMetricsAsync(token).ConfigureAwait(false); }
+            catch (Exception ex) when (!(ex is OperationCanceledException)) { _Logging.Warn(_Header + "Harbor metrics pruning error: " + ex.Message); }
+
             if (result.Total > 0)
             {
                 _Logging.Info(_Header + "archived " + result.AskThreadsArchived + " and deleted " + result.AskThreadsDeleted + " Ask thread(s); deleted " +
-                    result.JobsDeleted + " job(s), " + result.ImportBatchesDeleted + " import batch(es), and " + result.CliPermissionRequestsDeleted + " CLI permission request(s)");
+                    result.JobsDeleted + " job(s), " + result.ImportBatchesDeleted + " import batch(es), " + result.CliPermissionRequestsDeleted + " CLI permission request(s), and " +
+                    result.HarborMetricsDeleted + " Harbor metrics row(s)");
             }
 
             return result;
@@ -183,6 +187,34 @@ namespace Armada.Core.Services
                 if (FinishedUtc(job) >= cutoff) continue;
                 await _Database.Jobs.DeleteAsync(job.Id, token).ConfigureAwait(false);
                 deleted++;
+            }
+
+            return deleted;
+        }
+
+        /// <summary>
+        /// Delete Harbor metrics older than <see cref="RetentionSettings.JobRetentionDays"/> days (they follow the finished
+        /// job retention): records of Harbor jobs that ended before the cutoff, link-health samples from before it, and
+        /// link events from before it except each Harbor's latest one, which the link timeline opens with.
+        /// </summary>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Rows deleted.</returns>
+        public async Task<int> PruneHarborMetricsAsync(CancellationToken token = default)
+        {
+            int days = _Settings.Retention.JobRetentionDays;
+            if (days <= 0) return 0;
+
+            DateTime cutoff = _Clock().AddDays(-days);
+            int deleted = await _Database.HarborJobs.DeleteEndedBeforeAsync(cutoff, token).ConfigureAwait(false);
+            deleted += await _Database.HarborLinkSamples.DeleteBeforeAsync(cutoff, token).ConfigureAwait(false);
+
+            List<string> harborIds = await _Database.HarborLinkEvents.EnumerateHarborIdsAsync(token).ConfigureAwait(false);
+            foreach (string harborId in harborIds)
+            {
+                token.ThrowIfCancellationRequested();
+                HarborLinkEvent? latestBeforeCutoff = await _Database.HarborLinkEvents.ReadLatestBeforeAsync(harborId, cutoff, token).ConfigureAwait(false);
+                if (latestBeforeCutoff == null) continue;
+                deleted += await _Database.HarborLinkEvents.DeleteBeforeAsync(harborId, latestBeforeCutoff.OccurredUtc, token).ConfigureAwait(false);
             }
 
             return deleted;

@@ -53,10 +53,10 @@ namespace Armada.Core.Database.Sqlite.Implementations
                 using (SqliteCommand cmd = conn.CreateCommand())
                 {
                     cmd.CommandText = @"INSERT INTO token_usage (
-                            id, tenant_id, user_id, model, runtime, source, source_id, vessel_id, captain_id,
+                            id, tenant_id, user_id, model, runtime, source, source_id, vessel_id, captain_id, harbor_id,
                             input_tokens, output_tokens, cached_tokens, total_tokens, estimated, created_utc
                         ) VALUES (
-                            @id, @tenant_id, @user_id, @model, @runtime, @source, @source_id, @vessel_id, @captain_id,
+                            @id, @tenant_id, @user_id, @model, @runtime, @source, @source_id, @vessel_id, @captain_id, @harbor_id,
                             @input_tokens, @output_tokens, @cached_tokens, @total_tokens, @estimated, @created_utc
                         );";
                     BindRecord(cmd, record);
@@ -207,6 +207,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             cmd.Parameters.AddWithValue("@source_id", (object?)record.SourceId ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@vessel_id", (object?)record.VesselId ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@captain_id", (object?)record.CaptainId ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@harbor_id", (object?)record.HarborId ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@input_tokens", record.InputTokens);
             cmd.Parameters.AddWithValue("@output_tokens", record.OutputTokens);
             cmd.Parameters.AddWithValue("@cached_tokens", record.CachedTokens);
@@ -228,6 +229,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
                 SourceId = NullableString(reader["source_id"]),
                 VesselId = NullableString(reader["vessel_id"]),
                 CaptainId = NullableString(reader["captain_id"]),
+                HarborId = NullableString(reader["harbor_id"]),
                 InputTokens = Convert.ToInt64(reader["input_tokens"]),
                 OutputTokens = Convert.ToInt64(reader["output_tokens"]),
                 CachedTokens = Convert.ToInt64(reader["cached_tokens"]),
@@ -287,6 +289,11 @@ namespace Armada.Core.Database.Sqlite.Implementations
             {
                 conditions.Add("captain_id = @captain_id");
                 parameters.Add(new SqliteParameter("@captain_id", query.CaptainId));
+            }
+            if (!string.IsNullOrWhiteSpace(query.HarborId))
+            {
+                conditions.Add("harbor_id = @harbor_id");
+                parameters.Add(new SqliteParameter("@harbor_id", query.HarborId));
             }
             if (query.FromUtc.HasValue)
             {

@@ -24,6 +24,12 @@ namespace Armada.Core.Services
         /// </summary>
         public IReadOnlyCollection<string> ConnectedHarborIds => new List<string>(_Connections.Keys);
 
+        /// <summary>
+        /// Recorder for the Harbor metrics (job lifecycle, link transitions, heartbeat round trips), or null to record
+        /// nothing.
+        /// </summary>
+        public HarborMetricsRecorder? Metrics { get; set; } = null;
+
         #endregion
 
         #region Private-Members
@@ -120,6 +126,7 @@ namespace Armada.Core.Services
             _Connections[handshake.HarborId] = connection;
 
             _Logging.Info(_Header + "harbor " + handshake.HarborId + " linked (" + handshake.Name + ")");
+            if (Metrics != null) await Metrics.OnLinkConnectedAsync(handshake.HarborId, token).ConfigureAwait(false);
             return new HarborHandshakeAck
             {
                 CorrelationId = handshake.CorrelationId,
@@ -145,9 +152,24 @@ namespace Armada.Core.Services
             {
                 if (_Connections.TryGetValue(harborId, out HarborConnection? connection))
                 {
-                    connection.LastSeenUtc = DateTime.UtcNow;
+                    // Acknowledge first, before any database work, so the Harbor's round-trip time measures the link.
+                    if (heartbeat.Sequence.HasValue)
+                    {
+                        try
+                        {
+                            await connection!.SendAsync(new HarborHeartbeatAck { Sequence = heartbeat.Sequence.Value }, token).ConfigureAwait(false);
+                        }
+                        catch (Exception e) when (!(e is OperationCanceledException))
+                        {
+                            _Logging.Debug(_Header + "could not acknowledge heartbeat of harbor " + harborId + ": " + e.Message);
+                        }
+                    }
+
+                    connection!.LastSeenUtc = DateTime.UtcNow;
                     connection.SetLiveJobs(heartbeat.LiveJobIds);
                 }
+
+                if (Metrics != null) await Metrics.OnHeartbeatAsync(harborId, heartbeat, token).ConfigureAwait(false);
 
                 await _Harbors.MarkConnectionAsync(harborId, HarborConnectionStatusEnum.Connected, true, token).ConfigureAwait(false);
                 return;
@@ -183,6 +205,7 @@ namespace Armada.Core.Services
 
             if (message is HarborStarted started)
             {
+                if (Metrics != null) await Metrics.OnStartedAsync(started.JobId, token).ConfigureAwait(false);
                 if (_JobListeners.TryGetValue(started.JobId, out IHarborJobListener? startListener))
                     startListener.OnStarted(started.ProcessId);
                 return;
@@ -190,6 +213,7 @@ namespace Armada.Core.Services
 
             if (message is HarborOutput output)
             {
+                Metrics?.OnOutput(output.JobId);
                 if (_JobListeners.TryGetValue(output.JobId, out IHarborJobListener? outputListener))
                     outputListener.OnOutput(output.Stream, output.Data);
                 return;
@@ -197,6 +221,7 @@ namespace Armada.Core.Services
 
             if (message is HarborExited exited)
             {
+                if (Metrics != null) await Metrics.OnExitedAsync(exited, token).ConfigureAwait(false);
                 if (_JobListeners.TryRemove(exited.JobId, out IHarborJobListener? exitListener))
                     exitListener.OnExited(exited.ExitCode);
                 return;
@@ -209,6 +234,8 @@ namespace Armada.Core.Services
 
                 // A job-scoped error ends the job (the Harbor could not launch it): tell its listener at once so the
                 // launch fails with the Harbor's reason instead of waiting out the start timeout.
+                if (!String.IsNullOrEmpty(error.JobId) && Metrics != null)
+                    await Metrics.OnLaunchFailedAsync(error.JobId!, token).ConfigureAwait(false);
                 if (!String.IsNullOrEmpty(error.JobId) && _JobListeners.TryRemove(error.JobId!, out IHarborJobListener? failedListener))
                     failedListener.OnFailed(String.IsNullOrEmpty(error.Message) ? "The Harbor could not run the job." : error.Message);
                 return;
@@ -391,6 +418,9 @@ namespace Armada.Core.Services
                 throw new InvalidOperationException("Harbor " + harborId + " is not connected.");
 
             _JobListeners[request.JobId] = listener;
+
+            // Record before sending, so a Harbor that starts the job at once finds the record.
+            if (Metrics != null) await Metrics.OnLaunchAsync(harborId, connection!.TenantId, request, token).ConfigureAwait(false);
             try
             {
                 await connection!.SendAsync(request, token).ConfigureAwait(false);
@@ -398,6 +428,7 @@ namespace Armada.Core.Services
             catch
             {
                 _JobListeners.TryRemove(request.JobId, out IHarborJobListener? _);
+                if (Metrics != null) await Metrics.OnLaunchFailedAsync(request.JobId, CancellationToken.None).ConfigureAwait(false);
                 throw;
             }
         }
@@ -415,6 +446,7 @@ namespace Armada.Core.Services
             if (String.IsNullOrWhiteSpace(harborId)) throw new ArgumentNullException(nameof(harborId));
             if (String.IsNullOrWhiteSpace(jobId)) throw new ArgumentNullException(nameof(jobId));
             _JobListeners.TryRemove(jobId, out IHarborJobListener? _);
+            Metrics?.OnStopRequested(jobId);
             if (!_Connections.TryGetValue(harborId, out HarborConnection? connection)) return;
             await connection!.SendAsync(new HarborKillRequest { JobId = jobId, GracefulTimeoutMs = gracefulTimeoutMs }, token).ConfigureAwait(false);
         }
@@ -594,18 +626,21 @@ namespace Armada.Core.Services
                 return;
             }
 
+            bool removed;
             if (current != null && link != null)
             {
-                _Connections.TryRemove(new KeyValuePair<string, HarborConnection>(harborId, current));
+                removed = _Connections.TryRemove(new KeyValuePair<string, HarborConnection>(harborId, current));
             }
             else
             {
-                _Connections.TryRemove(harborId, out HarborConnection? _);
+                removed = _Connections.TryRemove(harborId, out HarborConnection? _);
             }
 
             int failed = FailPendingRequests(harborId);
             _Logging.Info(_Header + "harbor " + harborId + " link closed" + (failed > 0 ? "; failed " + failed + " pending request(s)" : ""));
             await _Harbors.MarkConnectionAsync(harborId, HarborConnectionStatusEnum.Disconnected, false, token).ConfigureAwait(false);
+            // Only a link that was open closes: a repeated close of a Harbor that is already gone is not another drop.
+            if (removed && Metrics != null) await Metrics.OnLinkClosedAsync(harborId, token).ConfigureAwait(false);
         }
 
         /// <summary>

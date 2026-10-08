@@ -176,6 +176,11 @@ namespace Armada.Core.Services
 
             _Logging.Info(_Header + "deleting harbor " + id);
             await _Database.Harbors.DeleteAsync(id, token).ConfigureAwait(false);
+
+            // Its metrics go with it.
+            await _Database.HarborJobs.DeleteByHarborAsync(id, token).ConfigureAwait(false);
+            await _Database.HarborLinkSamples.DeleteByHarborAsync(id, token).ConfigureAwait(false);
+            await _Database.HarborLinkEvents.DeleteByHarborAsync(id, token).ConfigureAwait(false);
         }
 
         /// <summary>

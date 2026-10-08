@@ -167,6 +167,7 @@ fills a disk.
 | Captain log files | `maxLogFileSizeBytes`, `maxLogFileCount` (rotation) | 10 MB, 5 files |
 | Inactive Ask threads (pinned threads are kept) | `retention.askThreadArchiveAfterDays`, `retention.askThreadDeleteAfterDays` (0 disables each) | archive after 90 days; never delete |
 | Finished background jobs (the newest of each kind is kept) | `retention.jobRetentionDays` (0 disables) | 30 days |
+| Harbor metrics: ended Harbor job records, per-minute link samples, and link events (each Harbor's latest event is kept) | `retention.jobRetentionDays` (0 disables) | 30 days |
 | Finished vessel import batches | `retention.importBatchRetentionDays` (0 disables) | 90 days |
 | Decided, expired, or cancelled CLI permission requests (pending ones are kept; a deleted Ask thread takes its requests with it) | `retention.cliPermissionRequestRetentionDays` (0 disables) | 90 days |
 | Pre-migration database backups | `database.migrationBackupRetentionCount` | 5 |

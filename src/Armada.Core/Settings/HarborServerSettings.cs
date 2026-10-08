@@ -45,8 +45,8 @@ namespace Armada.Core.Settings
         }
 
         /// <summary>
-        /// Reserved: how long without a heartbeat before a Harbor would be marked Degraded, in seconds. Clamped to
-        /// [5, 7200]; defaults to 45. Accepted and validated but not enforced in 1.0: a Harbor is marked
+        /// How long a Harbor whose link closed counts as reconnecting before its link-health timeline (Harbor metrics)
+        /// counts it as down, in seconds. Clamped to [5, 7200]; defaults to 45. Not a liveness check: a Harbor is marked
         /// Disconnected when its link closes, never on a missed heartbeat, and nothing sets Degraded (a Harbor may
         /// legitimately run with heartbeats disabled). Missions on a Harbor that stops responding are recovered by
         /// stall detection.

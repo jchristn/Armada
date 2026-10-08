@@ -1969,7 +1969,58 @@ namespace Armada.Core.Database.Sqlite.Queries
 
                 new SchemaMigration(80, "Add repository_path and checkout_path to docks: the repository a Harbor-side dock was created from and the user's checkout on that Harbor host",
                     @"ALTER TABLE docks ADD COLUMN repository_path TEXT;",
-                    @"ALTER TABLE docks ADD COLUMN checkout_path TEXT;")
+                    @"ALTER TABLE docks ADD COLUMN checkout_path TEXT;"),
+
+                new SchemaMigration(81, "Add Harbor metrics: harbor_jobs (one row per captain launch delegated to a Harbor), harbor_link_samples (per-minute heartbeat round trips and reconnects), harbor_link_events (link transitions), and harbor_id on token_usage",
+                    @"CREATE TABLE IF NOT EXISTS harbor_jobs (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        job_id TEXT NOT NULL,
+                        harbor_id TEXT NOT NULL,
+                        tenant_id TEXT,
+                        kind TEXT NOT NULL,
+                        runtime TEXT NOT NULL,
+                        model TEXT,
+                        mission_id TEXT,
+                        captain_id TEXT,
+                        launched_utc TEXT NOT NULL,
+                        started_utc TEXT,
+                        first_output_utc TEXT,
+                        ended_utc TEXT,
+                        time_to_first_output_ms INTEGER,
+                        duration_ms INTEGER,
+                        exit_code INTEGER,
+                        outcome TEXT NOT NULL,
+                        stop_requested INTEGER NOT NULL DEFAULT 0,
+                        created_utc TEXT NOT NULL,
+                        last_update_utc TEXT NOT NULL
+                    );",
+                    @"CREATE INDEX IF NOT EXISTS idx_harbor_jobs_job ON harbor_jobs(job_id);",
+                    @"CREATE INDEX IF NOT EXISTS idx_harbor_jobs_harbor_launched ON harbor_jobs(harbor_id, launched_utc);",
+                    @"CREATE INDEX IF NOT EXISTS idx_harbor_jobs_ended ON harbor_jobs(ended_utc);",
+                    @"CREATE TABLE IF NOT EXISTS harbor_link_samples (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        harbor_id TEXT NOT NULL,
+                        bucket_start_utc TEXT NOT NULL,
+                        heartbeat_count INTEGER NOT NULL DEFAULT 0,
+                        round_trip_count INTEGER NOT NULL DEFAULT 0,
+                        round_trip_total_ms INTEGER NOT NULL DEFAULT 0,
+                        round_trip_max_ms INTEGER,
+                        reconnect_count INTEGER,
+                        last_reconnect_utc TEXT,
+                        created_utc TEXT NOT NULL
+                    );",
+                    @"CREATE INDEX IF NOT EXISTS idx_harbor_link_samples_harbor_bucket ON harbor_link_samples(harbor_id, bucket_start_utc);",
+                    @"CREATE INDEX IF NOT EXISTS idx_harbor_link_samples_bucket ON harbor_link_samples(bucket_start_utc);",
+                    @"CREATE TABLE IF NOT EXISTS harbor_link_events (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        harbor_id TEXT NOT NULL,
+                        event_type TEXT NOT NULL,
+                        occurred_utc TEXT NOT NULL,
+                        detail TEXT
+                    );",
+                    @"CREATE INDEX IF NOT EXISTS idx_harbor_link_events_harbor_occurred ON harbor_link_events(harbor_id, occurred_utc);",
+                    @"ALTER TABLE token_usage ADD COLUMN harbor_id TEXT;",
+                    @"CREATE INDEX IF NOT EXISTS idx_token_usage_harbor_created ON token_usage(harbor_id, created_utc);")
 
             };
         }

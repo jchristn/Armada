@@ -20,6 +20,7 @@ namespace Armada.Server.Routes
         private readonly HarborService _Harbors;
         private readonly HarborConnectionManager _Connections;
         private readonly Armada.Core.Database.DatabaseDriver? _Database;
+        private readonly HarborMetricsService? _Metrics;
         private static readonly JsonSerializerOptions _BodyJsonOptions = new JsonSerializerOptions
         {
             PropertyNameCaseInsensitive = true,
@@ -33,11 +34,13 @@ namespace Armada.Server.Routes
         /// <param name="harbors">Harbor service.</param>
         /// <param name="connections">Harbor connection manager (for the connectivity probe).</param>
         /// <param name="database">Database driver, for command audit records (optional).</param>
-        public HarborRoutes(HarborService harbors, HarborConnectionManager connections, Armada.Core.Database.DatabaseDriver? database = null)
+        /// <param name="metrics">Harbor metrics service (optional; without it the metrics route answers 404).</param>
+        public HarborRoutes(HarborService harbors, HarborConnectionManager connections, Armada.Core.Database.DatabaseDriver? database = null, HarborMetricsService? metrics = null)
         {
             _Harbors = harbors ?? throw new ArgumentNullException(nameof(harbors));
             _Connections = connections ?? throw new ArgumentNullException(nameof(connections));
             _Database = database;
+            _Metrics = metrics;
         }
 
         /// <summary>
@@ -112,6 +115,38 @@ namespace Armada.Server.Routes
                 .WithDescription("Returns one Harbor by ID.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Harbor ID (hbr_ prefix)"))
                 .WithResponse(200, OpenApiJson.For<Harbor>("Harbor"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithSecurity("ApiKey"));
+
+            app.Get("/api/v1/harbors/{id}/metrics", async (ApiRequest req) =>
+            {
+                AuthContext? ctx = await AuthorizeAsync(req, authenticate, authz).ConfigureAwait(false);
+                if (ctx == null) return BuildAuthError(req);
+
+                string? rangeText = req.Query.GetValueOrDefault("range");
+                if (!Armada.Core.Metrics.HarborMetricsRanges.TryParse(rangeText, out HarborMetricsRangeEnum range))
+                {
+                    req.Http.Response.StatusCode = 400;
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "range must be 1h, 24h, or 7d." };
+                }
+
+                HarborMetrics? metrics = _Metrics == null ? null : await _Metrics.GetAsync(ctx, req.Parameters["id"], range).ConfigureAwait(false);
+                if (metrics == null)
+                {
+                    req.Http.Response.StatusCode = 404;
+                    return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Harbor not found" };
+                }
+
+                return metrics;
+            },
+            api => api
+                .WithTag("Harbors")
+                .WithSummary("Get a Harbor's metrics")
+                .WithDescription("Returns charts for one Harbor over a window: jobs finished and failed per bucket (missions and other launches apart), slot usage (peak and average concurrent jobs against its capacity), launch speed per runtime (median and p95 time to first output and total runtime), link health (connected, reconnecting, and down stretches, and heartbeat round-trip times), and token usage by runtime and model. range is 1h (1-minute buckets), 24h (30-minute buckets, the default), or 7d (3-hour buckets).")
+                .WithParameter(OpenApiParameterMetadata.Path("id", "Harbor ID (hbr_ prefix)"))
+                .WithParameter(OpenApiParameterMetadata.Query("range", "Window: 1h, 24h (default), or 7d", false))
+                .WithResponse(200, OpenApiJson.For<HarborMetrics>("Harbor metrics"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
 
