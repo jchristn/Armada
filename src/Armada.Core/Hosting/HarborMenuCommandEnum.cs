@@ -1,16 +1,17 @@
-namespace Armada.Harbor
+namespace Armada.Core.Hosting
 {
     using System.Text.Json.Serialization;
 
     /// <summary>
     /// Every command the Harbor menus offer. The macOS menu bar, the in-window menu on Windows and Linux, and the tray
-    /// menu are all built from these, so each surface offers the same commands with the same enabled state.
+    /// menu are all built from these (see <see cref="HarborMenuLayout"/>), so each surface offers the same commands with
+    /// the same enabled state, and each opens the same windows.
     /// </summary>
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum HarborMenuCommandEnum
     {
         /// <summary>
-        /// Show and focus the Harbor window.
+        /// Show and focus the main Harbor window.
         /// </summary>
         ShowWindow,
 
@@ -20,9 +21,19 @@ namespace Armada.Harbor
         About,
 
         /// <summary>
-        /// Open settings (Harbor and Armada).
+        /// Open the Settings window.
         /// </summary>
         Settings,
+
+        /// <summary>
+        /// Open the Status window on its overview.
+        /// </summary>
+        Status,
+
+        /// <summary>
+        /// Open the Status window on its Logs tab.
+        /// </summary>
+        Logs,
 
         /// <summary>
         /// Start the link loop.
@@ -40,11 +51,6 @@ namespace Armada.Harbor
         Reconnect,
 
         /// <summary>
-        /// Edit this Harbor's settings.
-        /// </summary>
-        HarborSettings,
-
-        /// <summary>
         /// Copy the Harbor identifier.
         /// </summary>
         CopyHarborId,
@@ -60,67 +66,17 @@ namespace Armada.Harbor
         OpenHarborFolder,
 
         /// <summary>
-        /// Show Admiral and Harbor status.
-        /// </summary>
-        Status,
-
-        /// <summary>
-        /// Edit the Admiral's settings.json.
-        /// </summary>
-        ArmadaSettings,
-
-        /// <summary>
-        /// Edit the terminal UI's tui.json.
-        /// </summary>
-        TuiSettings,
-
-        /// <summary>
-        /// List the Admiral's database backups.
-        /// </summary>
-        Backups,
-
-        /// <summary>
-        /// Open the Armada data directory (~/.armada).
-        /// </summary>
-        OpenDataFolder,
-
-        /// <summary>
         /// Open the dashboard in the browser.
         /// </summary>
         OpenDashboard,
 
         /// <summary>
-        /// Open the Admiral's current log file.
-        /// </summary>
-        OpenAdmiralLog,
-
-        /// <summary>
-        /// Open Harbor's own log file.
-        /// </summary>
-        OpenHarborLog,
-
-        /// <summary>
-        /// Open a mission's log by mission identifier.
-        /// </summary>
-        MissionLog,
-
-        /// <summary>
-        /// Browse every Armada log.
-        /// </summary>
-        LogBrowser,
-
-        /// <summary>
-        /// Open the Admiral's log directory.
-        /// </summary>
-        OpenLogsFolder,
-
-        /// <summary>
-        /// Minimize the Harbor window.
+        /// Minimize the active Harbor window.
         /// </summary>
         MinimizeWindow,
 
         /// <summary>
-        /// Close (hide) the Harbor window; Harbor keeps running in the tray.
+        /// Close the active Harbor window (the main window hides; Harbor keeps running in the tray).
         /// </summary>
         CloseWindow,
 
