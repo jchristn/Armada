@@ -1187,7 +1187,8 @@ Returns current server settings including ports, agent configuration, system pat
     "ExpoAccessToken": "********",
     "Categories": ["AskProposal", "CliPermission", "MissionReview", "DeploymentApproval", "MissionFailed", "LandingFailed", "CaptainStalled", "VoyageFinished"],
     "MaxPerUserPerMinute": 20,
-    "DedupeWindowSeconds": 300
+    "DedupeWindowSeconds": 300,
+    "MaxDevicesPerUser": 10
   }
 }
 ```
@@ -1243,6 +1244,7 @@ Changes apply live.
 | `Categories` | every category | [PushCategoryEnum](#pushcategoryenum) values enabled on a newly registered device when the app does not choose. |
 | `MaxPerUserPerMinute` | 20 | Pushes per user per minute across their devices; further pushes in the minute are dropped and logged. Clamped to 1..600. |
 | `DedupeWindowSeconds` | 300 | A repeat push about the same item (same user, kind, and entity) inside the window is suppressed. Clamped to 0..86400 (0 disables). |
+| `MaxDevicesPerUser` | 10 | Active devices per user. Registering (or reactivating) a device beyond the cap deactivates the user's least recently seen active devices (they receive nothing until they register again), so one account cannot multiply every push by registering many tokens. Clamped to 1..100. |
 
 ```json
 {
@@ -4110,19 +4112,26 @@ inactive users and inactive devices are skipped. A device receives a push only w
 category; the per-user rate limit and dedupe window apply (`Push` settings above).
 
 **Payload.** `title` and `body` are short (at most 64 and 178 characters), single-line, and pass through the secret
-redactor; they never carry code, diffs, failure reasons, or tool input beyond a truncated summary (at most 60
-characters) of a CLI permission request. `data` is `{ "url": "/missions/msn_...", "kind": "failed", "entityId":
+redactor; they never carry diffs, failure reasons, or tool input beyond a truncated summary (at most 60 characters)
+of a CLI permission request or Ask proposal. They do name missions, voyages, captains, and tools, and that summary
+is the start of a command, so they are not content-free: they pass through the Expo Push Service and APNs / FCM and
+appear on the lock screen. `data` is `{ "url": "/missions/msn_...", "kind": "failed", "entityId":
 "msn_...", "category": "MissionFailed", "deviceId": "pdv_..." }`, plus `threadId` for the owner of an Ask proposal or
 thread permission request. `deviceId` is the registered device the message was built for, so an app signed in to more
 than one Admiral can tell which server a notification came from. `url` is a dashboard path (`/missions/{id}`, `/voyages/{id}`, `/captains/{id}`, `/deployments/{id}`,
 `/ask/{threadId}`, `/cli-permissions?request={id}`). `badge` is the recipient's pending approvals (mission reviews,
 deployment approvals, Ask proposals, and CLI permission requests in their inbox), `sound` is `default`, and recipients
 who may approve or deny an Ask proposal or CLI permission request get the iOS `categoryId` `armada_approve_deny`; the
-app performs the action through the existing approve, reject, and decide routes.
+app performs the action through the existing approve, reject, and decide routes. Because the text is a truncated
+summary, a client must not approve from the notification itself: the Armada app's **Approve** action opens the full
+request (from `GET /api/v1/inbox`) and the user approves there, while **Deny** is sent directly. A client acts only on
+a push whose `deviceId` names a device it registered with that Admiral; anything else may only open `url` (anyone
+holding an Expo push token can send to it unless the Expo project uses enhanced push security with
+`Push.ExpoAccessToken`).
 
 | Method | Path | Body | Response |
 |---|---|---|---|
-| POST | `/api/v1/push/devices` | `PushDeviceRegisterRequest` | `201` [PushDevice](#pushdevice) for a new token, `200` when the token was known (refreshed, reactivated, and moved to the caller if another user had it); `400` invalid token, missing platform, or a field too long; `403` captain session |
+| POST | `/api/v1/push/devices` | `PushDeviceRegisterRequest` | `201` [PushDevice](#pushdevice) for a token new to the caller, `200` when the caller had registered it (refreshed and reactivated); `400` invalid token, missing platform, or a field too long; `403` captain session |
 | GET | `/api/v1/push/devices` | | `200` `PushDevice[]`, oldest first: the caller's devices. Query `userId` (tenant admins: a user of their tenant; global admins: any user) and `tenantId` (global admins); `403` otherwise |
 | PUT | `/api/v1/push/devices/{id}` | `PushDeviceUpdateRequest` | `200` `PushDevice`; `400`; `404` when missing or not manageable by the caller |
 | DELETE | `/api/v1/push/devices/{id}` | | `204`; `404` |
@@ -4134,6 +4143,12 @@ app performs the action through the existing approve, reject, and decide routes.
 `PushDeviceUpdateRequest`: `DeviceName` and/or `Categories` (an empty list mutes the device); omitted fields are kept.
 A device can be managed by its owner, tenant admins of its tenant, and global admins. Deleting a user or tenant deletes
 its devices.
+
+A token is one device of one user in one tenant. When a token another user (or the same user in another tenant)
+registered is registered again, that device is deleted and a new one with a new `pdv_` id is created for the caller
+(`201`, the server's default categories): the previous owner stops receiving pushes on it, and a push for the new
+owner never carries an id the previous owner's app knows. Registering or reactivating a device beyond
+`Push.MaxDevicesPerUser` active devices deactivates the caller's least recently seen active devices.
 
 ```bash
 # Register (or refresh) this phone

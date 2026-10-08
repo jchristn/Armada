@@ -98,8 +98,9 @@ The proxy browser session is primarily cookie-backed:
 - attributes: `Path=/; HttpOnly; SameSite=Lax; Max-Age=<session lifetime>`, plus `Secure` when `secureCookie` is on or when `trustForwardedHeaders`
   is on and the request arrived with `X-Forwarded-Proto: https`
 
-Native clients (the mobile app, scripts, `Armada.Client` with `ProxySessionToken`) have no cookie jar. They take the
-`token` from the login response body and present it explicitly (see [Native Clients](#native-clients-bearer-sessions)).
+Native clients (the mobile app, scripts, `Armada.Client` with `ProxySessionToken`) do not use the cookie. They log in
+with `"setCookie": false`, take the `token` from the login response body, and present it explicitly (see
+[Native Clients](#native-clients-bearer-sessions)).
 
 ### Native Clients (Bearer Sessions)
 
@@ -139,6 +140,11 @@ The browser never sends the raw shared password. It first requests a nonce and t
 lowercase hex SHA-256 of `proxy-browser-login:proxy:<nonce>:<sha256hex(password)>` (the password is trimmed and
 `sha256hex` is lowercase hex). A challenge can be used once. Proxy browser sessions last 24 hours.
 
+The proof protects the password from casual disclosure, not from an eavesdropper: it is a fast, unsalted hash, so
+anyone who can read a challenge and its proof (plain `http://`, or a TLS-terminating middlebox) can guess the
+password offline at hash speed. Serve the proxy over HTTPS whenever it is reachable from an untrusted network, and
+use a long random password.
+
 ### `GET /proxy-api/v1/auth/challenge`
 
 Returns a one-time login challenge:
@@ -150,6 +156,13 @@ Returns a one-time login challenge:
 }
 ```
 
+The route is unauthenticated, so the proxy bounds what it holds: a challenge expires after at least 30 seconds
+(`handshakeTimeoutSeconds` when longer) and is consumed by the login that uses it; one client address may hold at
+most 16 unused challenges, and the proxy at most 4096 in total. Beyond either limit the request is refused with
+`Retry-After` (seconds until an outstanding challenge expires) and `{ "error": "...", "refusal": "AddressLimit" }`
+(`429`) or `{ "error": "...", "refusal": "GlobalLimit" }` (`503`). A client that signs in normally never reaches
+either limit.
+
 ### `POST /proxy-api/v1/auth/login`
 
 Request:
@@ -157,9 +170,15 @@ Request:
 ```json
 {
   "nonce": "4f3a0c7a8f6c49d9b6711d2c1a7b5e90",
-  "proofSha256": "8f5c4e1e1d7b5d8b2f6c6c987bfb76f5d55a75b8b940f882c817d39de42d83cc"
+  "proofSha256": "8f5c4e1e1d7b5d8b2f6c6c987bfb76f5d55a75b8b940f882c817d39de42d83cc",
+  "setCookie": false
 }
 ```
+
+`setCookie` is optional. Omitted or `true` (browsers), the response sets the `armada_proxy_session` cookie. `false`
+(native clients, which keep the returned `token` and send it as a header) sets no cookie, so the session never lands
+in a platform cookie jar (on iOS and Android that jar is outside the Keychain / Keystore and is included in device
+backups) and is never sent automatically.
 
 Response:
 
@@ -172,7 +191,7 @@ Response:
 ```
 
 The response is sent with `Cache-Control: no-store`. Browser callers rely on the `Set-Cookie` header; native clients
-keep the body's `token` (in secure storage) and send it as described in
+send `"setCookie": false`, keep the body's `token` (in secure storage), and send it as described in
 [Native Clients](#native-clients-bearer-sessions).
 
 A wrong proof returns `401`. After `loginMaxFailures` failures from one client address within

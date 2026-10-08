@@ -3,7 +3,7 @@ import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 import { Slot } from 'expo-router';
 import { renderRouter } from 'expo-router/testing-library';
 import type { ReactNode } from 'react';
-import { AppState, Linking, Text } from 'react-native';
+import { Alert, AppState, Linking, Text, type AlertButton } from 'react-native';
 import * as client from '@dashboard/api/client';
 import type { AskActionProposal, AskMessage, AskThread, CliPermissionRequest } from '@dashboard/types/models';
 import AskLayout from '../app/(app)/(ask)/_layout';
@@ -96,6 +96,21 @@ describe('Ask Armada', () => {
     expect(screen.getByTestId('ask-empty')).toBeTruthy();
     for (const name of ['dispatch', 'fleet-action', 'status', 'health', 'import']) expect(screen.getByTestId(`ask-empty-${name}`)).toBeTruthy();
     expect(screen.getByTestId('ask-send')).toBeDisabled();
+  });
+
+  it('a server without captains says so and links to Captains instead of leaving Send silently disabled', async () => {
+    api.listCaptains.mockResolvedValue({ objects: [] } as never);
+    await renderAsk();
+    expect(await screen.findByTestId('ask-no-captains')).toBeTruthy();
+    expect(screen.getByText('This server has no captains, so Ask Armada cannot answer yet. Quick actions still work.')).toBeTruthy();
+    expect(screen.queryByTestId('ask-choose-captain')).toBeNull();
+  });
+
+  it('with captains available, no captain notice is shown once one is selected', async () => {
+    await renderAsk();
+    await waitFor(() => expect(api.listCaptains).toHaveBeenCalled());
+    await waitFor(() => expect(screen.queryByTestId('ask-no-captains')).toBeNull());
+    expect(screen.queryByTestId('ask-choose-captain')).toBeNull();
   });
 
   it('sending creates the conversation, shows the message at once, and streams the reply', async () => {
@@ -309,18 +324,29 @@ describe('Ask Armada', () => {
     expect(screen.getByText('The captain turn failed: runtime not found')).toBeTruthy();
   });
 
-  it('links in captain replies open app pages in the app and web pages outside', async () => {
+  it('links in captain replies open app pages in the app and web pages outside, after naming the real host', async () => {
     const open = jest.spyOn(Linking, 'openURL').mockResolvedValue(true);
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
     api.enumerateAskMessages.mockResolvedValue({
-      messages: [message({ role: 'Assistant', contentText: 'See [the mission](/missions/msn_5) and [docs](https://example.com/x).' })],
+      messages: [message({ role: 'Assistant', contentText: 'See [the mission](/missions/msn_5), [github.com/acme/repo/pull/12](https://evil.example/x) and [mail](mailto:a@b.example).' })],
       hasMore: false,
     });
     const app = await renderAsk('/ask/thr_1');
-    await waitFor(() => expect(screen.getByText('docs')).toBeTruthy());
-    await fireEvent.press(screen.getByText('docs'));
-    expect(open).toHaveBeenCalledWith('https://example.com/x');
+    await waitFor(() => expect(screen.getByText('github.com/acme/repo/pull/12')).toBeTruthy());
+    await fireEvent.press(screen.getByText('github.com/acme/repo/pull/12'));
+    // The link text claims GitHub; the confirmation names the real destination, and nothing opens before it.
+    expect(open).not.toHaveBeenCalled();
+    expect(alert).toHaveBeenCalledTimes(1);
+    expect(alert.mock.calls[0][0]).toBe('Open evil.example?');
+    expect(alert.mock.calls[0][1]).toContain('https://evil.example/x');
+    const buttons = alert.mock.calls[0][2] as AlertButton[];
+    await act(async () => { buttons.find((b) => b.text === 'Open')!.onPress!(); });
+    await waitFor(() => expect(open).toHaveBeenCalledWith('https://evil.example/x'));
+    await fireEvent.press(screen.getByText('mail'));
+    expect(alert).toHaveBeenCalledTimes(1);
     await act(async () => { await fireEvent.press(screen.getByText('the mission')); });
     expect(app.getPathname()).toBe('/missions/msn_5');
     open.mockRestore();
+    alert.mockRestore();
   });
 });

@@ -1,5 +1,5 @@
 import { useRouter, type Href } from 'expo-router';
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { authenticateBiometric } from '../auth/biometrics';
 import { useLocale } from '../i18n/LocaleContext';
@@ -7,6 +7,8 @@ import { useApprovals } from '../notifications/ApprovalsContext';
 import { useNotifications, type Severity } from '../notifications/NotificationContext';
 import { performPushAction, type PushActionOutcome } from './actions';
 import { defaultApprovalActions, type ApprovalActions } from './approvalActions';
+import { canAct, type PushPayload } from './payload';
+import { PushApprovalReviewSheet } from './PushApprovalReviewSheet';
 import { usePush } from './PushContext';
 
 export interface PushResponseHandlerProps {
@@ -28,10 +30,14 @@ function outcomeToast(outcome: PushActionOutcome, t: (s: string) => string): { s
 }
 
 /**
- * Opens (and, for Approve / Deny, acts on) the notification the user tapped, once the app is signed in to the
- * profile it came from. Rendered only while the app shell is ready. Actions run only for pushes addressed to a
- * device this app registered, and only after the profile's biometric check when it has one; the iOS action itself
- * already required an unlocked device.
+ * Opens (and, for Deny, acts on) the notification the user tapped, once the app is signed in to the profile it came
+ * from. Rendered only while the app shell is ready. Actions run only for pushes addressed to a device this app
+ * registered with that profile; anything else only opens its (validated) link.
+ *
+ * Approve never decides from the notification: the lock-screen text is a short summary (a long command is cut), so
+ * Approve opens the request's review sheet with the full command or arguments and the same controls as the
+ * Approvals center, and the user approves there. Deny stays one tap (refusing something is always safe), after the
+ * profile's biometric check when it has one; the iOS action itself already required an unlocked device.
  */
 export function PushResponseHandler({ actions = defaultApprovalActions, verify = authenticateBiometric }: PushResponseHandlerProps) {
   const { pending, takePending } = usePush();
@@ -41,6 +47,8 @@ export function PushResponseHandler({ actions = defaultApprovalActions, verify =
   const { t } = useLocale();
   const router = useRouter();
   const busyRef = useRef(false);
+  const [review, setReview] = useState<PushPayload | null>(null);
+  const closeReview = useCallback(() => setReview(null), []);
 
   useEffect(() => {
     if (!pending || busyRef.current) return;
@@ -50,15 +58,18 @@ export function PushResponseHandler({ actions = defaultApprovalActions, verify =
     busyRef.current = true;
     void (async () => {
       try {
-        if (current.action !== 'open' && current.trusted) {
-          const outcome = await performPushAction(current.payload, current.action, actions, {
-            verify: activeProfile?.biometricUnlock
-              ? () => verify(current.action === 'approve' ? t('Confirm to approve') : t('Confirm to deny'), t('Cancel'))
-              : null,
+        if (current.action === 'approve' && current.trusted && canAct(current.payload)) {
+          router.push('/approvals' as Href);
+          setReview(current.payload);
+          return;
+        }
+        if (current.action === 'deny' && current.trusted) {
+          const outcome = await performPushAction(current.payload, 'deny', actions, {
+            verify: activeProfile?.biometricUnlock ? () => verify(t('Confirm to deny'), t('Cancel')) : null,
           });
           const toast = outcomeToast(outcome, t);
           if (toast) pushToast(toast.severity, toast.message, current.payload.path);
-          if (outcome === 'approved' || outcome === 'denied') void refresh();
+          if (outcome === 'denied') void refresh();
         }
         if (current.payload.path) router.push(current.payload.path as Href);
       } finally {
@@ -67,5 +78,5 @@ export function PushResponseHandler({ actions = defaultApprovalActions, verify =
     })();
   }, [pending, takePending, activeProfile, actions, verify, pushToast, refresh, router, t]);
 
-  return null;
+  return <PushApprovalReviewSheet payload={review} onClose={closeReview} />;
 }

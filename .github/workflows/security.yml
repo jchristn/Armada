@@ -1,8 +1,9 @@
 name: security
 
 # Dependency vulnerability scanning for NuGet and npm (V1_READINESS W1.7).
-# Fails when any NuGet package (direct or transitive) has a known vulnerability, or when the dashboard has an
-# npm advisory of severity high or critical. Runs on every push and pull request, and weekly so new advisories
+# Fails when any NuGet package (direct or transitive) has a known vulnerability, when the dashboard has an
+# npm advisory of severity high or critical, or when the mobile app has one that is not in its reviewed allowlist
+# (src/Armada.Mobile/audit-allowlist.json: build-time tooling advisories with no fixed release). Runs on every push and pull request, and weekly so new advisories
 # against unchanged dependencies are caught.
 on:
   push:
@@ -50,3 +51,17 @@ jobs:
           node-version: "22"
       - name: Audit
         run: npm audit --audit-level=high
+
+  npm-mobile:
+    name: npm audit (mobile)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/Armada.Mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Audit
+        run: npm run audit:check

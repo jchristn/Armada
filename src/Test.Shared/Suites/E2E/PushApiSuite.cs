@@ -104,7 +104,7 @@ namespace Test.Shared.Suites.E2E
                 AssertStatusCode(HttpStatusCode.OK, await t.PutAsync("/api/v1/push/devices/" + device.Id, JsonHelper.ToJsonContent(new { Categories = new string[0] })).ConfigureAwait(false), "tenant admin updates");
             }));
 
-            cases.Add(CaseAsync("reown_token_across_tenants", "A token registered in another tenant moves to the new user; the previous owner loses it", async () =>
+            cases.Add(CaseAsync("reown_token_across_tenants", "A token registered in another tenant becomes a new device (new id) of the new user; the previous owner's device is deleted", async () =>
             {
                 E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this).ConfigureAwait(false);
                 E2ETenantUser first = await E2ETenantUser.CreateAsync(fx.AuthClient, "push-first", false).ConfigureAwait(false);
@@ -115,14 +115,51 @@ namespace Test.Shared.Suites.E2E
 
                 PushDevice original = await JsonHelper.DeserializeAsync<PushDevice>(await one.PostAsync("/api/v1/push/devices", JsonHelper.ToJsonContent(new { Platform = "Ios", ExpoPushToken = token, DeviceName = "shared phone" })).ConfigureAwait(false)).ConfigureAwait(false);
                 HttpResponseMessage moved = await two.PostAsync("/api/v1/push/devices", JsonHelper.ToJsonContent(new { Platform = "Ios", ExpoPushToken = token })).ConfigureAwait(false);
-                AssertStatusCode(HttpStatusCode.OK, moved, "re-owned rows are refreshed, not created");
+                AssertStatusCode(HttpStatusCode.Created, moved, "a token that changes owner is registered afresh");
                 PushDevice device = await JsonHelper.DeserializeAsync<PushDevice>(moved).ConfigureAwait(false);
-                AssertEqual(original.Id, device.Id);
+                AssertTrue(device.Id != original.Id, "new id for the new owner: " + device.Id);
                 AssertEqual(second.TenantId, device.TenantId);
                 AssertEqual(second.UserId, device.UserId);
                 AssertNull(device.DeviceName, "previous owner's name dropped");
                 AssertEqual(0, (await JsonHelper.DeserializeAsync<List<PushDevice>>(await one.GetAsync("/api/v1/push/devices").ConfigureAwait(false)).ConfigureAwait(false)).Count, "first user lost it");
                 AssertStatusCode(HttpStatusCode.NotFound, await one.DeleteAsync("/api/v1/push/devices/" + device.Id).ConfigureAwait(false), "first user can no longer delete it");
+                AssertStatusCode(HttpStatusCode.NotFound, await one.DeleteAsync("/api/v1/push/devices/" + original.Id).ConfigureAwait(false), "the first user's device is gone");
+                AssertStatusCode(HttpStatusCode.NotFound, await two.DeleteAsync("/api/v1/push/devices/" + original.Id).ConfigureAwait(false), "the old id does not name the new owner's device");
+            }));
+
+            cases.Add(CaseAsync("device_cap_per_user", "Registering beyond Push.MaxDevicesPerUser deactivates the least recently seen devices; delivery stays bounded", async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this).ConfigureAwait(false);
+                HttpResponseMessage get = await fx.AuthClient.GetAsync("/api/v1/settings").ConfigureAwait(false);
+                PushSettingsEnvelope before = JsonHelper.Deserialize<PushSettingsEnvelope>(await get.Content.ReadAsStringAsync().ConfigureAwait(false));
+                AssertEqual(10, before.Push!.MaxDevicesPerUser, "default cap");
+                AssertStatusCode(HttpStatusCode.OK, await fx.AuthClient.PutAsync("/api/v1/settings", JsonHelper.ToJsonContent(new { Push = new { Enabled = true, MaxDevicesPerUser = 3, DedupeWindowSeconds = 0 } })).ConfigureAwait(false));
+                try
+                {
+                    PushSettingsEnvelope after = JsonHelper.Deserialize<PushSettingsEnvelope>(await (await fx.AuthClient.GetAsync("/api/v1/settings").ConfigureAwait(false)).Content.ReadAsStringAsync().ConfigureAwait(false));
+                    AssertEqual(3, after.Push!.MaxDevicesPerUser, "cap saved");
+
+                    E2ETenantUser user = await E2ETenantUser.CreateAsync(fx.AuthClient, "push-cap", false).ConfigureAwait(false);
+                    using HttpClient u = user.CreateClient(fx.BaseUrl);
+                    List<string> ids = new List<string>();
+                    for (int i = 0; i < 5; i++)
+                    {
+                        HttpResponseMessage created = await u.PostAsync("/api/v1/push/devices", JsonHelper.ToJsonContent(new { Platform = "Ios", ExpoPushToken = NewToken() })).ConfigureAwait(false);
+                        AssertStatusCode(HttpStatusCode.Created, created, "registration " + i);
+                        ids.Add((await JsonHelper.DeserializeAsync<PushDevice>(created).ConfigureAwait(false)).Id);
+                    }
+
+                    List<PushDevice> devices = await JsonHelper.DeserializeAsync<List<PushDevice>>(await u.GetAsync("/api/v1/push/devices").ConfigureAwait(false)).ConfigureAwait(false);
+                    AssertEqual(5, devices.Count, "rows are kept");
+                    AssertEqual(String.Join(",", ids.Skip(2)), String.Join(",", devices.Where(d => d.Active).Select(d => d.Id)), "the three most recent stay active");
+
+                    PushTestResult inactive = await JsonHelper.DeserializeAsync<PushTestResult>(await u.PostAsync("/api/v1/push/devices/" + ids[0] + "/test", null).ConfigureAwait(false)).ConfigureAwait(false);
+                    AssertEqual(PushTestStatusEnum.DeviceInactive, inactive.Status, "an evicted device receives nothing");
+                }
+                finally
+                {
+                    AssertStatusCode(HttpStatusCode.OK, await fx.AuthClient.PutAsync("/api/v1/settings", JsonHelper.ToJsonContent(new { Push = new { Enabled = true } })).ConfigureAwait(false));
+                }
             }));
 
             cases.Add(CaseAsync("settings_roundtrip_redaction_and_test_push", "Push settings round-trip with the access token redacted and kept; the test push uses the stored token", async () =>

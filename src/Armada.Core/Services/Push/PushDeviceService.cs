@@ -85,8 +85,11 @@ namespace Armada.Core.Services.Push
         }
 
         /// <summary>
-        /// Register or refresh the caller's device. The token identifies the device: a known token is refreshed (and
-        /// reactivated); a token registered by another user moves to the caller with fresh categories.
+        /// Register or refresh the caller's device. The token identifies the device: a token the caller already
+        /// registered is refreshed (and reactivated). A token registered by another user or tenant is deleted there and
+        /// registered afresh for the caller under a new device id, so the previous owner's records (and any app that
+        /// stored the old id) no longer match it. Registering or reactivating a device beyond
+        /// <see cref="PushSettings.MaxDevicesPerUser"/> deactivates the caller's least recently seen active devices.
         /// </summary>
         /// <param name="caller">Caller.</param>
         /// <param name="request">Registration.</param>
@@ -105,6 +108,15 @@ namespace Armada.Core.Services.Push
 
             DateTime now = DateTime.UtcNow;
             PushDevice? existing = await _Database.PushDevices.ReadByTokenAsync(expoToken, token).ConfigureAwait(false);
+            if (existing != null && !IsOwnedBy(existing, caller))
+            {
+                // The phone now belongs to another account (or tenant). Never move the row: a new id makes every record
+                // of the old one (the previous owner's, and the app's own) stop matching pushes for the new owner.
+                await _Database.PushDevices.DeleteAsync(existing.Id, token).ConfigureAwait(false);
+                _Logging.Info(_Header + "token of device " + existing.Id + " changed owner from user " + existing.UserId + " to user " + caller.UserId + "; old device deleted");
+                existing = null;
+            }
+
             if (existing == null)
             {
                 PushDevice device = new PushDevice();
@@ -123,37 +135,27 @@ namespace Armada.Core.Services.Push
                 {
                     device = await _Database.PushDevices.CreateAsync(device, token).ConfigureAwait(false);
                     _Logging.Info(_Header + "registered device " + device.Id + " for user " + caller.UserId);
+                    await EnforceDeviceCapAsync(device, token).ConfigureAwait(false);
                     return new PushDeviceRegistration(device.ToMasked(), true);
                 }
                 catch (Exception ex) when (!(ex is OperationCanceledException))
                 {
-                    // A concurrent registration of the same token won the insert; refresh that row instead.
+                    // A concurrent registration of the same token won the insert; refresh that row when it is ours.
                     existing = await _Database.PushDevices.ReadByTokenAsync(expoToken, token).ConfigureAwait(false);
-                    if (existing == null) throw;
+                    if (existing == null || !IsOwnedBy(existing, caller)) throw;
                 }
             }
 
-            bool sameOwner = String.Equals(existing.TenantId, caller.TenantId, StringComparison.Ordinal)
-                && String.Equals(existing.UserId, caller.UserId, StringComparison.Ordinal);
-            if (!sameOwner)
-            {
-                _Logging.Info(_Header + "device " + existing.Id + " moved from user " + existing.UserId + " to user " + caller.UserId);
-                existing.TenantId = caller.TenantId;
-                existing.UserId = caller.UserId;
-                existing.Categories = request.Categories ?? new List<PushCategoryEnum>(_Settings.Push.Categories);
-            }
-            else if (request.Categories != null)
-            {
-                existing.Categories = request.Categories;
-            }
-
+            if (request.Categories != null) existing.Categories = request.Categories;
             existing.Platform = request.Platform.Value;
-            if (deviceName != null || !sameOwner) existing.DeviceName = deviceName;
-            if (appVersion != null || !sameOwner) existing.AppVersion = appVersion;
-            if (locale != null || !sameOwner) existing.Locale = locale;
+            if (deviceName != null) existing.DeviceName = deviceName;
+            if (appVersion != null) existing.AppVersion = appVersion;
+            if (locale != null) existing.Locale = locale;
+            bool wasActive = existing.Active;
             existing.Active = true;
             existing.LastSeenUtc = now;
             existing = await _Database.PushDevices.UpdateAsync(existing, token).ConfigureAwait(false);
+            if (!wasActive) await EnforceDeviceCapAsync(existing, token).ConfigureAwait(false);
             return new PushDeviceRegistration(existing.ToMasked(), false);
         }
 
@@ -247,6 +249,40 @@ namespace Armada.Core.Services.Push
         #endregion
 
         #region Private-Methods
+
+        private static bool IsOwnedBy(PushDevice device, AuthContext caller)
+        {
+            return String.Equals(device.TenantId, caller.TenantId, StringComparison.Ordinal)
+                && String.Equals(device.UserId, caller.UserId, StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// Keep the owner of <paramref name="kept"/> at or under <see cref="PushSettings.MaxDevicesPerUser"/> active
+        /// devices by deactivating their least recently seen other active devices.
+        /// </summary>
+        private async Task EnforceDeviceCapAsync(PushDevice kept, CancellationToken token)
+        {
+            if (String.IsNullOrEmpty(kept.UserId)) return;
+            int max = _Settings.Push.MaxDevicesPerUser;
+            PushDeviceQuery query = new PushDeviceQuery();
+            query.TenantId = kept.TenantId;
+            query.UserId = kept.UserId;
+            query.ActiveOnly = true;
+            List<PushDevice> others = (await _Database.PushDevices.EnumerateAsync(query, token).ConfigureAwait(false))
+                .Where(d => d.Active
+                    && !String.Equals(d.Id, kept.Id, StringComparison.Ordinal)
+                    && String.Equals(d.TenantId, kept.TenantId, StringComparison.Ordinal)
+                    && String.Equals(d.UserId, kept.UserId, StringComparison.Ordinal))
+                .OrderBy(d => d.LastSeenUtc)
+                .ThenBy(d => d.CreatedUtc)
+                .ToList();
+            int excess = others.Count + 1 - max;
+            for (int i = 0; i < excess && i < others.Count; i++)
+            {
+                await _Database.PushDevices.SetActiveAsync(others[i].Id, false, token).ConfigureAwait(false);
+                _Logging.Info(_Header + "deactivated device " + others[i].Id + " of user " + kept.UserId + ": more than " + max + " active devices");
+            }
+        }
 
         private static string? Optional(string? value, int max, string name)
         {
