@@ -1,6 +1,7 @@
 import { useRouter, type Href } from 'expo-router';
 import { useAuth } from '../auth/AuthContext';
 import { DefaultCredentialsBanner } from '../components/app/DefaultCredentialsBanner';
+import { useSignOut } from '../components/app/useSignOut';
 import { ListRow, Screen, Section } from '../components/ui';
 import { useLocale } from '../i18n/LocaleContext';
 import { PREFERENCES_ITEM, PROFILES_ITEM, sectionsForTab, type MobileNavItem } from '../navigation/navItems';
@@ -41,7 +42,8 @@ export function NavSections({ tab }: { tab: TabKey }) {
 export function NavMenuScreen({ tab }: { tab: 'work' | 'more' }) {
   const router = useRouter();
   const { t } = useLocale();
-  const { logout, activeProfile, user } = useAuth();
+  const { activeProfile, user } = useAuth();
+  const { signOut, signOutSheet } = useSignOut();
 
   return (
     <Screen testID={`${tab}-menu`}>
@@ -57,9 +59,10 @@ export function NavMenuScreen({ tab }: { tab: 'work' | 'more' }) {
             subtitle={activeProfile ? `${activeProfile.name} - ${user?.user?.email ?? ''}` : null}
             onPress={() => router.push('/profiles')}
           />
-          <ListRow testID="sign-out" icon="log-out-outline" title={t('Sign out')} destructive onPress={() => void logout()} />
+          <ListRow testID="sign-out" icon="log-out-outline" title={t('Sign out')} destructive onPress={signOut} />
         </Section>
       ) : null}
+      {signOutSheet}
     </Screen>
   );
 }

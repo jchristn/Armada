@@ -6,6 +6,7 @@ import { StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from '../auth/AuthContext';
+import { SavePasswordOfferSheet } from '../components/app/SavePasswordOfferSheet';
 import { ToastHost } from '../components/app/ToastHost';
 import { IconButton } from '../components/ui';
 import { LocaleProvider, useLocale } from '../i18n/LocaleContext';
@@ -51,7 +52,7 @@ function SessionProviders({ children }: { children: ReactNode }) {
 }
 
 function RootNavigator() {
-  const { status, mustChangePassword } = useAuth();
+  const { status, mustChangePassword, savePasswordOffer } = useAuth();
   const { colors, dark } = useTheme();
   const { t } = useLocale();
   const router = useRouter();
@@ -98,7 +99,9 @@ function RootNavigator() {
       </Stack>
       {ready ? <ToastHost /> : null}
       {ready ? <PushResponseHandler /> : null}
-      {ready ? <PushPermissionPrompt /> : null}
+      {/* One sheet at a time: the save-password offer (right after sign-in) comes before the notifications one. */}
+      {ready && !savePasswordOffer ? <PushPermissionPrompt /> : null}
+      {ready ? <SavePasswordOfferSheet /> : null}
     </NavigationThemeProvider>
   );
 }

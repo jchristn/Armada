@@ -8,6 +8,7 @@ Developer setup, the code layout, and the test tooling are in
 - [What the app does](#what-the-app-does)
 - [Getting the app](#getting-the-app)
 - [Connecting to an Admiral](#connecting-to-an-admiral)
+- [Face ID, Touch ID, and fingerprint](#face-id-touch-id-and-fingerprint)
 - [Push notifications](#push-notifications)
 - [Security](#security)
 - [Building and store submission](#building-and-store-submission)
@@ -20,7 +21,7 @@ Developer setup, the code layout, and the test tooling are in
 | **Ask** | Ask Armada conversations: streaming replies with thinking and tool steps, `/` quick actions and forms, the captain picker, confirm cards, CLI permission cards, and live work cards |
 | **Approvals** | Everything that needs you, decided in place: Ask proposals, CLI permission requests, mission reviews, deployment approvals, failed landings (retry), failed missions (restart), and stalled captains (stop); recent alerts below |
 | **Work** | Home (status, KPIs, health, mission history, voyage progress, recent missions and signals), Missions, Voyages and Create Voyage, Dispatch, Merge Queue, and the Build, Delivery, Configuration, Activity, and Server sections |
-| **More** | Server profiles, preferences (theme, language, biometric unlock, notifications), the notification center, and sign-out |
+| **More** | Server profiles, preferences (theme, language, Face ID unlock and saved password, notifications), the notification center, and sign-out |
 
 On a tablet (768 dp and wider) the tabs become the dashboard's sidebar and lists open their detail side by side.
 Links work both ways: `armada://` links and pasted dashboard URLs (`https://admiral.example.com/dashboard/missions/msn_...`)
@@ -68,6 +69,32 @@ When the proxy session ends (after 24 hours), the app asks only for the proxy pa
 Admiral. **Change Admiral** and **Sign out of Armada.Proxy** are on the sign-in screen. Setting up the proxy and
 connecting an Admiral to it is described in [REMOTE_SERVER.md](REMOTE_SERVER.md).
 
+## Face ID, Touch ID, and fingerprint
+
+Two independent settings per server profile, both in **More > Preferences > Sign-in and security** (for the current
+server) and in the server's edit form (**More > Servers**). They appear once Face ID, Touch ID, or a fingerprint is set
+up on the device; the labels use the device's own method.
+
+| Setting | What it does |
+|---|---|
+| **Saved password for Face ID sign-in** | Signs you in with Face ID after you sign out or your session expires, instead of typing the password |
+| **Unlock with Face ID** | Locks the app while you stay signed in: asks for Face ID when Armada opens and after 5 minutes in the background |
+
+Saving the password:
+
+- On the password step of sign-in, turn on **Save password and use Face ID** (also offered for the Armada.Proxy
+  password). It is saved only after the sign-in succeeds. If you sign in without it, the app asks once, **Use Face ID
+  next time?**; **Not now** is remembered for that server.
+- Next time, the sign-in screen shows **Sign in with Face ID** and asks right away when it opens (except right after
+  you signed out yourself). Cancelling, or a failed scan, leaves the normal password form.
+- If the server no longer accepts the saved password (it was changed elsewhere), the app removes it and asks for the
+  password. Changing the default password in the app updates the saved one.
+- Adding a face or fingerprint on the device makes the saved password unreadable (by design); the app then forgets it
+  and asks for the password once.
+- Sign-out keeps the saved password; the sign-out confirmation offers **Sign out and forget saved password**.
+  **Forget saved password** is also in Preferences and the server form. Deleting a server, or changing its address or
+  connection kind, deletes it.
+
 ## Push notifications
 
 The Admiral can notify your phone about the things that need a person, the same items the Approvals tab shows:
@@ -113,6 +140,10 @@ The device API (`/api/v1/push/devices`) and the payload format are documented in
 
 - Admiral and proxy session tokens are kept in the platform's secure storage (iOS Keychain, Android Keystore), never
   in plain preferences. Biometric unlock can be required per profile.
+- A saved password (email, tenant, and password, per profile) is stored only in a Keychain item bound to the device's
+  current biometric set (this device only, never backed up, removed if the device passcode is removed) or, on Android,
+  encrypted with a Keystore key that requires biometric authentication for each use. Reading it needs Face ID,
+  Touch ID, or a fingerprint; the device passcode is not accepted. It is never written to preferences or logs.
 - Notification taps and deep links are validated before they navigate: only known app routes and Armada-shaped
   ids are accepted, and an Approve or Deny on a notification is only sent for a device this app registered with
   that server.
@@ -166,3 +197,5 @@ notifications are not available.
 | No notifications | Preferences says the device receives notifications from this server; the category switch is on; iOS or Android notification permission is granted; `push.enabled` is true; the Admiral can reach `exp.host`; the build has an EAS project id |
 | Approve or Deny on a notification does nothing | Unlock the device; complete the biometric prompt; the notification must come from a server this app is signed in to |
 | Asked for the proxy password again | The 24-hour proxy session ended; the Admiral sign-in is kept |
+| **Sign in with Face ID** is gone and the app asks for the password | A face or fingerprint was added on the device, or the server rejected the saved password; sign in once with the switch on to save it again |
+| No **Save password and use Face ID** switch | Set up Face ID, Touch ID, or a strong (class 3) fingerprint on the device; Android face unlock that is not class 3 cannot protect a keystore key |

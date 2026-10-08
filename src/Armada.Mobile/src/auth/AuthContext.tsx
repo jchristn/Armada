@@ -15,7 +15,7 @@ import {
   updateProfile,
   type ProfileState,
 } from '../profiles/profileStore';
-import type { ServerProfile, ServerProfileDraft, SignInMethod } from '../profiles/types';
+import type { SavedSignInInfo, ServerProfile, ServerProfileDraft, SignInMethod } from '../profiles/types';
 import { sessionFor, storedSessionFor, type ServerSession } from '../api/serverSession';
 import {
   createProxyClient,
@@ -28,6 +28,18 @@ import {
 } from '../proxy/proxyApi';
 import { deleteProxyToken, deleteToken, readProxyToken, readToken, writeProxyToken, writeToken } from '../storage/secure';
 import { authenticateBiometric } from './biometrics';
+import {
+  deleteSavedCredential,
+  deleteSavedCredentials,
+  readAdmiralCredentials,
+  readProxyCredentials,
+  saveAdmiralCredentials,
+  saveProxyCredentials,
+  type SavedAdmiralCredentials,
+  type SavedCredentialKind,
+  type SavedCredentialRead,
+  type SavedProxyCredentials,
+} from './savedCredentials';
 
 /**
  * Session state for the mobile app. Mirrors the dashboard's AuthContext (token, whoami user, admin flags, the
@@ -50,6 +62,45 @@ export interface SignInDetails {
   tenantName?: string | null;
 }
 
+/**
+ * The password of a password sign-in, passed so it can be saved behind biometrics. It is held in memory only: saved
+ * to the biometric-protected keychain item when `save` is on, or kept until the user answers the one-time offer.
+ */
+export interface PasswordToRemember {
+  password: string;
+  /** The user turned on "Save password and use Face ID". */
+  save: boolean;
+  /**
+   * The device can save passwords behind biometrics (the switch was offered). When false nothing is saved, offered,
+   * or forgotten.
+   */
+  canSave: boolean;
+  /** Prompt text for the Android biometric prompt that encrypts the item (iOS does not prompt to save). */
+  prompt?: string;
+}
+
+/** After a password sign-in without the switch: offer once to save the password(s) for biometric sign-in. */
+export interface SavePasswordOffer {
+  profileId: string;
+  profileName: string;
+  /** The Admiral password can be saved. */
+  admiral: boolean;
+  /** The Armada.Proxy password can be saved. */
+  proxy: boolean;
+}
+
+export interface LogoutOptions {
+  /** Also delete the passwords saved for biometric sign-in (they are kept by default). */
+  forgetSavedPassword?: boolean;
+}
+
+/** The password-bearing half of a pending offer (never leaves memory). */
+interface PendingOffer {
+  profileId: string;
+  admiral: SavedAdmiralCredentials | null;
+  proxy: SavedProxyCredentials | null;
+}
+
 export interface AuthState {
   status: AuthStatus;
   profiles: ServerProfile[];
@@ -64,9 +115,32 @@ export interface AuthState {
   passwordChangeSkipped: boolean;
   /** Keep the default password for now (remembered per profile and user); the default credentials banner stays. */
   skipPasswordChange: () => Promise<void>;
-  /** Validate a token with whoami and store it for the active profile. Throws when the token is rejected. */
-  login: (token: string, details: SignInDetails) => Promise<void>;
-  logout: () => Promise<void>;
+  /**
+   * Validate a token with whoami and store it for the active profile. Throws when the token is rejected. With
+   * `remember` (password sign-ins), the password is saved behind biometrics, forgotten (switch turned off), or offered.
+   */
+  login: (token: string, details: SignInDetails, remember?: PasswordToRemember) => Promise<void>;
+  /** Sign out. Passwords saved for biometric sign-in stay unless `forgetSavedPassword` is set. */
+  logout: (options?: LogoutOptions) => Promise<void>;
+  /** The user signed out in this app session (the sign-in screen then does not prompt for Face ID on its own). */
+  signedOutByUser: boolean;
+  /**
+   * Read the active profile's saved Admiral password (the OS shows the biometric prompt). `none` (nothing saved, or
+   * the item was invalidated by a biometric change) also clears the profile's saved-password flag.
+   */
+  readSavedPassword: (prompt: string) => Promise<SavedCredentialRead<SavedAdmiralCredentials>>;
+  /** The same for a Proxy profile's saved Armada.Proxy password. */
+  readSavedProxyPassword: (prompt: string) => Promise<SavedCredentialRead<SavedProxyCredentials>>;
+  /** Delete saved passwords of a profile (default: the active one; default: both the Admiral and the proxy one). */
+  forgetSavedPassword: (profileId?: string, kind?: SavedCredentialKind) => Promise<void>;
+  /** After a successful password change: replace the saved password when it belongs to the signed-in account. */
+  updateSavedPassword: (newPassword: string) => Promise<void>;
+  /** The pending one-time offer to save the password for biometric sign-in, or null. */
+  savePasswordOffer: SavePasswordOffer | null;
+  /** Save the offered password(s). Resolves false when saving failed (for example, the Android prompt was cancelled). */
+  acceptSavePasswordOffer: (prompt?: string) => Promise<boolean>;
+  /** "Not now": remembered per profile, so the offer is not shown again. */
+  declineSavePasswordOffer: () => Promise<void>;
   /** Re-read whoami (for example after a password change). */
   refresh: () => Promise<void>;
   /** Biometric unlock of the stored token. Resolves false when the user cancels or verification fails. */
@@ -87,8 +161,11 @@ export interface AuthState {
   proxyExpired: boolean;
   /** Headers for app-owned requests to the active server (the proxy session for Proxy profiles), or null. */
   requestHeaders: Record<string, string> | null;
-  /** Sign in to the Armada.Proxy portal with its password. Throws ProxyError (unauthorized, lockedOut, ...). */
-  proxySignIn: (password: string) => Promise<void>;
+  /**
+   * Sign in to the Armada.Proxy portal with its password. Throws ProxyError (unauthorized, lockedOut, ...). With
+   * `remember`, the proxy password is saved behind biometrics, forgotten, or offered, as for `login`.
+   */
+  proxySignIn: (password: string, remember?: PasswordToRemember) => Promise<void>;
   /** The Admiral instances connected to the proxy. */
   proxyListInstances: () => Promise<ProxyInstance[]>;
   /** Pick the Admiral instance this profile uses. Throws ProxyError (conflict when not connected). */
@@ -153,6 +230,8 @@ export function AuthProvider({ children, now = Date.now, hooks, proxyClientFacto
   const [proxyStage, setProxyStage] = useState<ProxyStage | null>(null);
   const [proxyToken, setProxyTokenState] = useState<string | null>(null);
   const [proxyExpired, setProxyExpired] = useState(false);
+  const [signedOutByUser, setSignedOutByUser] = useState(false);
+  const [savePasswordOffer, setSavePasswordOffer] = useState<SavePasswordOffer | null>(null);
 
   const profileStateRef = useRef(profileState);
   const proxyTokenRef = useRef<string | null>(null);
@@ -162,6 +241,8 @@ export function AuthProvider({ children, now = Date.now, hooks, proxyClientFacto
   const handlingUnauthorizedRef = useRef(false);
   const statusRef = useRef(status);
   const backgroundSinceRef = useRef<number | null>(null);
+  const userRef = useRef<WhoAmIResult | null>(null);
+  const pendingOfferRef = useRef<PendingOffer | null>(null);
 
   const activeProfile = useMemo(
     () => profileState.profiles.find((p) => p.id === profileState.activeId) ?? null,
@@ -175,6 +256,7 @@ export function AuthProvider({ children, now = Date.now, hooks, proxyClientFacto
     activeProfileRef.current = activeProfile;
   }, [profileState, activeProfile]);
   useEffect(() => { statusRef.current = status; }, [status]);
+  useEffect(() => { userRef.current = user; }, [user]);
   useEffect(() => { hooksRef.current = hooks; }, [hooks]);
   useEffect(() => { proxyFactoryRef.current = proxyClientFactory; }, [proxyClientFactory]);
 
@@ -202,6 +284,31 @@ export function AuthProvider({ children, now = Date.now, hooks, proxyClientFacto
     setUser(null);
   }, [setSession]);
 
+  /** Drop a pending save-password offer (and the password it holds in memory). */
+  const clearOffer = useCallback(() => {
+    pendingOfferRef.current = null;
+    setSavePasswordOffer(null);
+  }, []);
+
+  /** Keep a password in memory for the one-time offer (merged with the other half of a Proxy profile's sign-in). */
+  const addToOffer = useCallback((profile: ServerProfile, part: { admiral?: SavedAdmiralCredentials; proxy?: SavedProxyCredentials }) => {
+    const prev = pendingOfferRef.current?.profileId === profile.id ? pendingOfferRef.current : null;
+    const next: PendingOffer = {
+      profileId: profile.id,
+      admiral: part.admiral ?? prev?.admiral ?? null,
+      proxy: part.proxy ?? prev?.proxy ?? null,
+    };
+    pendingOfferRef.current = next;
+    setSavePasswordOffer({ profileId: profile.id, profileName: profile.name, admiral: !!next.admiral, proxy: !!next.proxy });
+  }, []);
+
+  /** Change fields of a stored profile (by id, against the latest state). */
+  const patchProfile = useCallback(async (id: string, patch: Partial<ServerProfile>) => {
+    const state = profileStateRef.current;
+    if (!state.profiles.some((p) => p.id === id)) return;
+    await persist({ ...state, profiles: state.profiles.map((p) => (p.id === id ? { ...p, ...patch } : p)) });
+  }, [persist]);
+
   /** The Admiral half of a sign-in: validate the stored Admiral token (through the relay for Proxy profiles). */
   const enterAdmiral = useCallback(async (profile: ServerProfile) => {
     const token = await readToken(profile.id);
@@ -216,6 +323,7 @@ export function AuthProvider({ children, now = Date.now, hooks, proxyClientFacto
       setSession(token);
       setUser(me);
       setProxyStage(null);
+      setSignedOutByUser(false);
       setStatus('signedIn');
     } catch (err) {
       setAuthToken(null);
@@ -240,6 +348,7 @@ export function AuthProvider({ children, now = Date.now, hooks, proxyClientFacto
     await deleteProxyToken(profile.id);
     setProxyToken(null);
     setProxyExpired(true);
+    setSignedOutByUser(false);
     setProxyStage('portal');
     setStatus('signedOut');
   }, [clearSession, setProxyToken]);
@@ -286,6 +395,7 @@ export function AuthProvider({ children, now = Date.now, hooks, proxyClientFacto
   /** Validate a stored token for a profile and enter the matching state. */
   const restore = useCallback(async (profile: ServerProfile | null, skipLock: boolean) => {
     clearSession();
+    clearOffer();
     setProxyStage(null);
     setProxyToken(null);
     setProxyExpired(false);
@@ -309,7 +419,7 @@ export function AuthProvider({ children, now = Date.now, hooks, proxyClientFacto
       return;
     }
     await enterAdmiral(profile);
-  }, [clearSession, enterAdmiral, restoreProxy, setProxyToken]);
+  }, [clearOffer, clearSession, enterAdmiral, restoreProxy, setProxyToken]);
 
   /** End the Admiral session of the active profile. `serverReachable` false: the token was rejected already. */
   const endAdmiralSession = useCallback(async (serverReachable: boolean) => {
@@ -322,12 +432,30 @@ export function AuthProvider({ children, now = Date.now, hooks, proxyClientFacto
       await runHook(() => hooksRef.current?.onSessionEnding?.(profile, session) ?? Promise.resolve());
     }
     clearSession();
+    clearOffer();
     setProxyStage(profile?.kind === 'Proxy' ? (proxyTokenRef.current ? 'admiral' : 'portal') : null);
     setStatus('signedOut');
     if (profile) await deleteToken(profile.id);
-  }, [clearSession]);
+  }, [clearOffer, clearSession]);
 
-  const logout = useCallback(() => endAdmiralSession(true), [endAdmiralSession]);
+  /** Delete saved passwords of a profile and clear its flags. */
+  const forgetSavedPassword = useCallback(async (profileId?: string, kind?: SavedCredentialKind) => {
+    const id = profileId ?? activeProfileRef.current?.id;
+    if (!id) return;
+    if (kind) await deleteSavedCredential(id, kind);
+    else await deleteSavedCredentials(id);
+    const patch: Partial<ServerProfile> = {};
+    if (!kind || kind === 'admiral') patch.savedSignIn = null;
+    if (!kind || kind === 'proxy') patch.proxyPasswordSaved = false;
+    await patchProfile(id, patch);
+  }, [patchProfile]);
+
+  const logout = useCallback(async (options?: LogoutOptions) => {
+    const profile = activeProfileRef.current;
+    setSignedOutByUser(true);
+    await endAdmiralSession(true);
+    if (profile && options?.forgetSavedPassword) await forgetSavedPassword(profile.id);
+  }, [endAdmiralSession, forgetSavedPassword]);
 
   /**
    * A 401 from any request means a credential is no longer valid. For a Proxy profile it may be the proxy session
@@ -348,6 +476,7 @@ export function AuthProvider({ children, now = Date.now, hooks, proxyClientFacto
           return;
         }
       }
+      setSignedOutByUser(false);
       await endAdmiralSession(false);
     } finally {
       handlingUnauthorizedRef.current = false;
@@ -392,7 +521,7 @@ export function AuthProvider({ children, now = Date.now, hooks, proxyClientFacto
     return () => sub.remove();
   }, [clearSession, now]);
 
-  const login = useCallback(async (token: string, details: SignInDetails) => {
+  const login = useCallback(async (token: string, details: SignInDetails, remember?: PasswordToRemember) => {
     const profile = activeProfileRef.current;
     if (!profile) throw new Error('No server profile is selected.');
     configureClient({ baseUrl: profile.url });
@@ -406,21 +535,101 @@ export function AuthProvider({ children, now = Date.now, hooks, proxyClientFacto
       throw err;
     }
     await writeToken(profile.id, token);
+    // Saved passwords: only after the server accepted the password (authenticate) and the token (whoami).
+    let savedSignIn: SavedSignInInfo | null = profile.savedSignIn ?? null;
+    const account: SavedSignInInfo | null = details.email && details.tenantId
+      ? { email: details.email, tenantId: details.tenantId, tenantName: details.tenantName ?? null }
+      : null;
+    if (remember && remember.canSave && account && remember.password) {
+      if (remember.save) {
+        const saved = await saveAdmiralCredentials(profile.id, { ...account, password: remember.password }, remember.prompt);
+        savedSignIn = saved ? account : null;
+      } else if (savedSignIn) {
+        // The switch was on (a password is saved) and the user turned it off.
+        await deleteSavedCredential(profile.id, 'admiral');
+        savedSignIn = null;
+      } else if (!profile.savePasswordOfferDeclined) {
+        addToOffer(profile, { admiral: { ...account, password: remember.password } });
+      }
+    }
+    const latest = profileStateRef.current.profiles.find((p) => p.id === profile.id) ?? profile;
     const updated: ServerProfile = {
-      ...profile,
+      ...latest,
       signInMethod: details.method,
-      lastEmail: details.email ?? profile.lastEmail,
-      lastTenantId: details.tenantId ?? profile.lastTenantId,
-      lastTenantName: details.tenantName ?? profile.lastTenantName,
-      lastUserEmail: me.user?.email ?? profile.lastUserEmail,
+      lastEmail: details.email ?? latest.lastEmail,
+      lastTenantId: details.tenantId ?? latest.lastTenantId,
+      lastTenantName: details.tenantName ?? latest.lastTenantName,
+      lastUserEmail: me.user?.email ?? latest.lastUserEmail,
+      savedSignIn,
     };
     const state = profileStateRef.current;
     await persist({ ...state, profiles: state.profiles.map((p) => (p.id === profile.id ? updated : p)) });
     setSession(token);
     setUser(me);
     setProxyStage(null);
+    setSignedOutByUser(false);
     setStatus('signedIn');
-  }, [persist, setSession]);
+  }, [addToOffer, persist, setSession]);
+
+  const readSavedPassword = useCallback(async (prompt: string): Promise<SavedCredentialRead<SavedAdmiralCredentials>> => {
+    const profile = activeProfileRef.current;
+    if (!profile?.savedSignIn) return { status: 'none' };
+    const result = await readAdmiralCredentials(profile.id, prompt);
+    // Invalidated (a face or fingerprint was enrolled) or unreadable: treat as not saved.
+    if (result.status === 'none') await forgetSavedPassword(profile.id, 'admiral');
+    return result;
+  }, [forgetSavedPassword]);
+
+  const readSavedProxyPassword = useCallback(async (prompt: string): Promise<SavedCredentialRead<SavedProxyCredentials>> => {
+    const profile = activeProfileRef.current;
+    if (!profile?.proxyPasswordSaved) return { status: 'none' };
+    const result = await readProxyCredentials(profile.id, prompt);
+    if (result.status === 'none') await forgetSavedPassword(profile.id, 'proxy');
+    return result;
+  }, [forgetSavedPassword]);
+
+  const updateSavedPassword = useCallback(async (newPassword: string) => {
+    const profile = activeProfileRef.current;
+    const me = userRef.current;
+    const pending = pendingOfferRef.current;
+    if (profile && pending?.profileId === profile.id && pending.admiral) {
+      pendingOfferRef.current = { ...pending, admiral: { ...pending.admiral, password: newPassword } };
+    }
+    const saved = profile?.savedSignIn;
+    if (!profile || !saved || !me?.user?.email) return;
+    const sameAccount = me.user.email.toLowerCase() === saved.email.toLowerCase() && (!me.tenant?.id || me.tenant.id === saved.tenantId);
+    if (!sameAccount) return;
+    const ok = await saveAdmiralCredentials(profile.id, { ...saved, password: newPassword });
+    if (!ok) await patchProfile(profile.id, { savedSignIn: null });
+  }, [patchProfile]);
+
+  const acceptSavePasswordOffer = useCallback(async (prompt?: string) => {
+    const pending = pendingOfferRef.current;
+    clearOffer();
+    if (!pending) return false;
+    const patch: Partial<ServerProfile> = {};
+    let ok = true;
+    if (pending.admiral) {
+      const saved = await saveAdmiralCredentials(pending.profileId, pending.admiral, prompt);
+      patch.savedSignIn = saved
+        ? { email: pending.admiral.email, tenantId: pending.admiral.tenantId, tenantName: pending.admiral.tenantName }
+        : null;
+      ok = ok && saved;
+    }
+    if (pending.proxy) {
+      const saved = await saveProxyCredentials(pending.profileId, pending.proxy, prompt);
+      patch.proxyPasswordSaved = saved;
+      ok = ok && saved;
+    }
+    await patchProfile(pending.profileId, patch);
+    return ok;
+  }, [clearOffer, patchProfile]);
+
+  const declineSavePasswordOffer = useCallback(async () => {
+    const pending = pendingOfferRef.current;
+    clearOffer();
+    if (pending) await patchProfile(pending.profileId, { savePasswordOfferDeclined: true });
+  }, [clearOffer, patchProfile]);
 
   const refresh = useCallback(async () => {
     const me = await whoami();
@@ -458,6 +667,8 @@ export function AuthProvider({ children, now = Date.now, hooks, proxyClientFacto
         await runHook(() => hooksRef.current?.onSessionEnding?.(existing, oldSession) ?? Promise.resolve());
         await deleteToken(updated.id);
         await deleteProxyToken(updated.id);
+        await deleteSavedCredentials(updated.id);
+        if (pendingOfferRef.current?.profileId === updated.id) clearOffer();
       }
       await persist({ ...state, profiles: state.profiles.map((p) => (p.id === id ? updated : p)) });
       if (state.activeId === id && serverChanged) await restore(updated, true);
@@ -467,7 +678,7 @@ export function AuthProvider({ children, now = Date.now, hooks, proxyClientFacto
     await persist({ profiles: [...state.profiles, created], activeId: created.id });
     await restore(created, true);
     return created;
-  }, [now, persist, restore]);
+  }, [clearOffer, now, persist, restore]);
 
   const deleteProfile = useCallback(async (id: string) => {
     const state = profileStateRef.current;
@@ -481,16 +692,18 @@ export function AuthProvider({ children, now = Date.now, hooks, proxyClientFacto
         if (pToken) await runHook(() => proxyFactoryRef.current(profile.url).logout(pToken));
       }
     }
+    if (pendingOfferRef.current?.profileId === id) clearOffer();
     const next = await removeProfile(state, id);
     await persist(next);
     if (wasActive) await restore(next.profiles.find((p) => p.id === next.activeId) ?? null, false);
-  }, [persist, restore]);
+  }, [clearOffer, persist, restore]);
 
   const selectProfile = useCallback(async (id: string) => {
     const state = profileStateRef.current;
     if (state.activeId === id) return;
     const next = { ...state, activeId: id };
     await persist(next);
+    setSignedOutByUser(false);
     setStatus('loading');
     await restore(next.profiles.find((p) => p.id === id) ?? null, false);
   }, [persist, restore]);
@@ -501,11 +714,21 @@ export function AuthProvider({ children, now = Date.now, hooks, proxyClientFacto
     return profile;
   }, []);
 
-  const proxySignIn = useCallback(async (password: string) => {
+  const proxySignIn = useCallback(async (password: string, remember?: PasswordToRemember) => {
     const profile = requireProxyProfile();
     const proxy = proxyFactoryRef.current(profile.url);
     const result = await proxy.login(password);
     await writeProxyToken(profile.id, result.token);
+    if (remember && remember.canSave && password) {
+      if (remember.save) {
+        const saved = await saveProxyCredentials(profile.id, { password }, remember.prompt);
+        await patchProfile(profile.id, { proxyPasswordSaved: saved });
+      } else if (profile.proxyPasswordSaved) {
+        await forgetSavedPassword(profile.id, 'proxy');
+      } else if (!profile.savePasswordOfferDeclined) {
+        addToOffer(profile, { proxy: { password } });
+      }
+    }
     setProxyToken(result.token);
     setProxyExpired(false);
     let ctx: ProxySessionContext | null = null;
@@ -523,7 +746,7 @@ export function AuthProvider({ children, now = Date.now, hooks, proxyClientFacto
     }
     // Same instance as before: a still-valid Admiral token resumes the session without a second sign-in.
     await enterAdmiral(profile);
-  }, [enterAdmiral, requireProxyProfile, setProxyToken]);
+  }, [addToOffer, enterAdmiral, forgetSavedPassword, patchProfile, requireProxyProfile, setProxyToken]);
 
   const proxyListInstances = useCallback(async () => {
     const profile = requireProxyProfile();
@@ -549,12 +772,13 @@ export function AuthProvider({ children, now = Date.now, hooks, proxyClientFacto
     }
     const changed = (profile.proxyInstanceId ?? null) !== instanceId;
     const updated: ServerProfile = changed
-      ? { ...profile, proxyInstanceId: instanceId, lastTenantId: null, lastTenantName: null }
+      ? { ...profile, proxyInstanceId: instanceId, lastTenantId: null, lastTenantName: null, savedSignIn: null }
       : profile;
     if (changed) {
-      // A different Admiral: an Admiral token kept from the previous instance is not valid there.
+      // A different Admiral: an Admiral token or password kept from the previous instance is not valid there.
       if (profile.proxyInstanceId) await runHook(() => hooksRef.current?.onSessionEnding?.(profile, null) ?? Promise.resolve());
       await deleteToken(profile.id);
+      await deleteSavedCredential(profile.id, 'admiral');
       const state = profileStateRef.current;
       await persist({ ...state, profiles: state.profiles.map((p) => (p.id === profile.id ? updated : p)) });
     }
@@ -571,6 +795,7 @@ export function AuthProvider({ children, now = Date.now, hooks, proxyClientFacto
 
   const proxySignOut = useCallback(async () => {
     const profile = requireProxyProfile();
+    setSignedOutByUser(true);
     if (statusRef.current === 'signedIn') await endAdmiralSession(true);
     const pToken = proxyTokenRef.current ?? await readProxyToken(profile.id);
     if (pToken) await runHook(() => proxyFactoryRef.current(profile.url).logout(pToken));
@@ -614,6 +839,14 @@ export function AuthProvider({ children, now = Date.now, hooks, proxyClientFacto
     skipPasswordChange,
     login,
     logout,
+    signedOutByUser,
+    readSavedPassword,
+    readSavedProxyPassword,
+    forgetSavedPassword,
+    updateSavedPassword,
+    savePasswordOffer,
+    acceptSavePasswordOffer,
+    declineSavePasswordOffer,
     refresh,
     unlock,
     retry,
@@ -630,7 +863,8 @@ export function AuthProvider({ children, now = Date.now, hooks, proxyClientFacto
     proxyChangeInstance,
     proxySignOut,
   }), [status, profileState.profiles, activeProfile, sessionToken, user, isAuthenticated, isAdmin, isTenantAdmin,
-    passwordChangeSkipped, skipPasswordChange, login, logout, refresh, unlock, retry, saveProfile, deleteProfile, selectProfile,
+    passwordChangeSkipped, skipPasswordChange, login, logout, signedOutByUser, readSavedPassword, readSavedProxyPassword,
+    forgetSavedPassword, updateSavedPassword, savePasswordOffer, acceptSavePasswordOffer, declineSavePasswordOffer, refresh, unlock, retry, saveProfile, deleteProfile, selectProfile,
     proxyStage, proxyToken, proxyExpired, requestHeaders, proxySignIn, proxyListInstances, proxySelectInstance,
     proxyChangeInstance, proxySignOut]);
 
