@@ -220,7 +220,75 @@ namespace Test.Shared.Suites.Tui
                 }
             }));
 
-            cases.Add(TuiCase.Sync(Suite, "streaming", "A scripted turn streams chunks, tools, and thinking, then the persisted reply replaces it", () =>
+            cases.Add(TuiCase.Sync(Suite, "turn_statistics", "A selected captain reply offers i Statistics in the status bar; i shows the full set (or an older reply's fallback) and hides it again", () =>
+            {
+                AskFixtures fx = new AskFixtures();
+                AskMessage question = AskFixtures.Message("amg_1", "ath_1", 1, AskMessageRoleEnum.User, AskMessageKindEnum.Text, "how is the fleet?");
+                AskMessage older = AskFixtures.Message("amg_2", "ath_1", 2, AskMessageRoleEnum.Assistant, AskMessageKindEnum.Text, "Older reply.");
+                older.CaptainId = "cpt_1";
+                older.DurationMs = 900;
+                older.ToolCalls = new List<AskMessageToolCall> { new AskMessageToolCall { CallId = "c9", ToolName = "armada_status", Ok = true, ResultText = "{}", ElapsedMs = 120 } };
+                AskMessage reply = AskFixtures.Message("amg_3", "ath_1", 3, AskMessageRoleEnum.Assistant, AskMessageKindEnum.Text, "All quiet.");
+                reply.CaptainId = "cpt_1";
+                reply.DurationMs = 2500;
+                reply.ToolCalls = new List<AskMessageToolCall> { new AskMessageToolCall { CallId = "c1", ToolName = "armada_status", Ok = true, ResultText = "{}", ElapsedMs = 250 } };
+                reply.Metrics = new CaptainChatMetrics
+                {
+                    TimeToFirstTokenMs = 400,
+                    TimeToFirstTextMs = 1000,
+                    StreamingMs = 2100,
+                    TotalMs = 2500,
+                    PromptTokens = 1050,
+                    CompletionTokens = 120,
+                    TotalTokens = 1170,
+                    TokensPerSecond = 57.14,
+                    CachedTokens = 900,
+                    CostUsd = 0.0123,
+                    TokensEstimated = false,
+                    ToolCallCount = 1,
+                    ToolTimeMs = 250
+                };
+                fx.AddThread(AskFixtures.Thread("ath_1", "Fleet"), question, older, reply);
+                using (TuiTestHost host = TuiCase.SignedIn(140, 50, "/ask/ath_1", fx.Stub))
+                {
+                    AskController ask = host.Tui.Ask;
+                    AskScreen screen = (AskScreen)host.Tui.Shell.Screen!;
+                    AssertTrue(host.PumpUntil(() => ask.Conversation.Messages.Count == 3), "loaded");
+                    host.Press("esc");
+                    AssertTrue(ReferenceEquals(screen.Scope.Focused, screen.Transcript), "Esc moves to the transcript");
+                    TuiCase.NotContains(StatusLine(host), "Statistics", "nothing selected yet");
+                    host.Press("up");
+                    AssertEqual("amg_3", screen.Transcript.SelectedKey, "Up selects the newest reply");
+                    string status = StatusLine(host);
+                    TuiCase.Contains(status, "i Statistics", "the selected reply's statistics are discoverable from the status bar");
+                    TuiCase.NotContains(host.Screen(), "Turn statistics", "closed until asked for");
+
+                    host.Press("i");
+                    string frame = host.Screen();
+                    TuiCase.Contains(frame, "Turn statistics", "panel heading");
+                    foreach (string expected in new[] { "time to first token", "400ms", "time to first text", "1.00s", "streaming", "2.10s", "tokens/sec", "57.1", "output tokens", "120", "input tokens", "1050", "cached tokens", "900", "$0.0123", "2.50s", "tool calls", "tool time", "250ms" })
+                        TuiCase.Contains(frame, expected, "full set: " + expected);
+                    TuiCase.Contains(StatusLine(host), "i Hide statistics", "the hint says how to close it");
+                    host.Press("i");
+                    TuiCase.NotContains(host.Screen(), "Turn statistics", "i hides it again");
+
+                    host.Press("up");
+                    AssertEqual("amg_2", screen.Transcript.SelectedKey, "the older reply");
+                    TuiCase.Contains(StatusLine(host), "i Statistics", "an older reply has statistics too");
+                    host.Press("i");
+                    List<AskTurnStatistic> fallback = AskTurnStatistics.Rows(older);
+                    AssertEqual("total,toolCalls,toolTime", String.Join(",", fallback.Select(r => r.Key)), "older reply: total and its tool calls");
+                    frame = host.Screen();
+                    TuiCase.Contains(frame, "900ms", "older reply total");
+                    TuiCase.Contains(frame, "120ms", "older reply tool time");
+
+                    host.Press("up");
+                    AssertEqual("amg_1", screen.Transcript.SelectedKey, "the user's message");
+                    TuiCase.NotContains(StatusLine(host), "Statistics", "a user message has no statistics");
+                }
+            }));
+
+            cases.Add(TuiCase.Sync(Suite, "streaming","A scripted turn streams chunks, tools, and thinking, then the persisted reply replaces it", () =>
             {
                 AskFixtures fx = new AskFixtures();
                 fx.AddThread(AskFixtures.Thread("ath_1", "TUIKit fixes"), AskFixtures.Message("amg_1", "ath_1", 1, AskMessageRoleEnum.User, AskMessageKindEnum.Text, "status?"));
@@ -746,6 +814,15 @@ namespace Test.Shared.Suites.Tui
             }));
 
             return new TestSuiteDescriptor(suiteId: Suite, displayName: "TUI Ask Armada", cases: cases);
+        }
+
+        /// <summary>
+        /// The status bar (the frame's last line).
+        /// </summary>
+        private static string StatusLine(TuiTestHost host)
+        {
+            string[] lines = host.Screen().Split('\n');
+            return lines[host.Height - 1];
         }
     }
 }

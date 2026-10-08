@@ -307,6 +307,8 @@ namespace Armada.Tui.Screens.Ask
                     hints.Add("Enter", "Open");
                 }
 
+                // A captain reply's turn statistics (time to first token, tokens, cost, tool time) open with i.
+                if (Transcript.SelectedHasStatistics()) hints.Add("i", Transcript.SelectedStatisticsOpen() ? "Hide statistics" : "Statistics");
                 hints.Add("Up/Down", "Select");
                 hints.Add("Esc", "Back to the message box");
                 hints.Add("End", "Live tail");

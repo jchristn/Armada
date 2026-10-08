@@ -1016,13 +1016,27 @@ export interface CaptainChatMessage {
 }
 
 export interface CaptainChatMetrics {
+  /** Time to the first output of any kind (reasoning, a tool call, or reply text). */
   timeToFirstTokenMs: number | null;
   streamingMs: number | null;
   totalMs: number | null;
+  /** Input tokens (cached included), when the runtime reports usage. */
   promptTokens: number | null;
   completionTokens: number | null;
   totalTokens: number | null;
   tokensPerSecond: number | null;
+  /** Time to the first visible reply text, when it differs from the first output. */
+  timeToFirstTextMs?: number | null;
+  /** Cache-read input tokens (a subset of promptTokens), when reported. */
+  cachedTokens?: number | null;
+  /** Cost of the turn in US dollars, when the runtime reports it (Claude Code, OpenCode). */
+  costUsd?: number | null;
+  /** True when completionTokens is an estimate from the reply length rather than the runtime's own count. */
+  tokensEstimated?: boolean | null;
+  /** Tool calls completed during the turn (Ask turns). */
+  toolCallCount?: number | null;
+  /** Total time spent in the turn's tool calls, in milliseconds (Ask turns). */
+  toolTimeMs?: number | null;
 }
 
 export interface Job {
@@ -3240,6 +3254,8 @@ export interface AskMessage {
   trackedWorkId?: string | null;
   captainId?: string | null;
   durationMs?: number | null;
+  /** Telemetry of the captain turn that wrote this reply; null for user messages, cards, and older replies. */
+  metrics?: CaptainChatMetrics | null;
   createdUtc?: string;
   toolCalls?: AskToolCall[] | null;
   proposal?: AskActionProposal | null;

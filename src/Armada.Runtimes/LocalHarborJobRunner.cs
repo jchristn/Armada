@@ -125,6 +125,8 @@ namespace Armada.Runtimes
             string jobId = request.JobId;
             if (runtime is ClaudeCodeRuntime claudeRuntime && request.StreamJsonOutput)
                 claudeRuntime.StreamJsonOutput = true;
+            else if (runtime is CodexRuntime codexRuntime && request.StreamJsonOutput)
+                codexRuntime.JsonOutput = true;
 
             // Working directory: the requested one, or (for interactive launches that allow it) a per-job scratch
             // directory owned by this Harbor when the request names none or names a path that does not exist here (the

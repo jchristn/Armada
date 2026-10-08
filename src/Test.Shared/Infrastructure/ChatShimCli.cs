@@ -17,7 +17,8 @@ namespace Test.Shared.Infrastructure
 
         /// <summary>
         /// A Claude Code stand-in that answers in streaming-JSON: one text delta per reply part, then a result event
-        /// whose text is the whole reply. It also writes a line to stderr.
+        /// whose text is the whole reply, with a usage block (input 40, cache read 300, cache creation 10, output 7) and
+        /// total_cost_usd 0.0042. It also writes a line to stderr.
         /// </summary>
         /// <param name="directory">Directory to write the shim into.</param>
         /// <param name="recordDirectory">Directory the shim records into.</param>
@@ -28,7 +29,7 @@ namespace Test.Shared.Infrastructure
             List<string> events = new List<string>();
             foreach (string part in replyParts)
                 events.Add("{\"type\":\"stream_event\",\"event\":{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"" + part + "\"}}}");
-            events.Add("{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"duration_ms\":5,\"result\":\"" + String.Join(String.Empty, replyParts) + "\"}");
+            events.Add("{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"duration_ms\":5,\"total_cost_usd\":0.0042,\"usage\":{\"input_tokens\":40,\"cache_read_input_tokens\":300,\"cache_creation_input_tokens\":10,\"output_tokens\":7},\"result\":\"" + String.Join(String.Empty, replyParts) + "\"}");
             return WriteShim(directory, "claude", recordDirectory, events, "claude stderr banner", null, false);
         }
 
@@ -43,6 +44,30 @@ namespace Test.Shared.Infrastructure
         public static string WriteCodexFinalMessageShim(string directory, string recordDirectory, string finalMessage)
         {
             return WriteShim(directory, "codex", recordDirectory, new List<string> { "codex progress noise" }, "codex stderr banner", finalMessage, false);
+        }
+
+        /// <summary>
+        /// A Codex stand-in for 'codex exec --json': reasoning, one command execution (started, then completed), the
+        /// agent message, and turn.completed with usage (input 1200, cached input 1000, output 33) on stdout, and the
+        /// final answer in the --output-last-message file.
+        /// </summary>
+        /// <param name="directory">Directory to write the shim into.</param>
+        /// <param name="recordDirectory">Directory the shim records into.</param>
+        /// <param name="finalMessage">Final answer (one ASCII word).</param>
+        /// <returns>Path of the shim executable.</returns>
+        public static string WriteCodexJsonShim(string directory, string recordDirectory, string finalMessage)
+        {
+            List<string> events = new List<string>
+            {
+                "{\"type\":\"thread.started\",\"thread_id\":\"th_1\"}",
+                "{\"type\":\"turn.started\"}",
+                "{\"type\":\"item.completed\",\"item\":{\"id\":\"item_0\",\"type\":\"reasoning\",\"text\":\"Checking\"}}",
+                "{\"type\":\"item.started\",\"item\":{\"id\":\"item_1\",\"type\":\"command_execution\",\"command\":\"ls\",\"status\":\"in_progress\"}}",
+                "{\"type\":\"item.completed\",\"item\":{\"id\":\"item_1\",\"type\":\"command_execution\",\"command\":\"ls\",\"exit_code\":0,\"status\":\"completed\"}}",
+                "{\"type\":\"item.completed\",\"item\":{\"id\":\"item_2\",\"type\":\"agent_message\",\"text\":\"" + finalMessage + "\"}}",
+                "{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":1200,\"cached_input_tokens\":1000,\"output_tokens\":33}}"
+            };
+            return WriteShim(directory, "codex", recordDirectory, events, "codex stderr banner", finalMessage, false);
         }
 
         /// <summary>

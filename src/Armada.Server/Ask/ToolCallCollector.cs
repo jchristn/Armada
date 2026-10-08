@@ -49,6 +49,7 @@ namespace Armada.Server.Ask
             {
                 AskMessageToolCall? call = null;
                 if (!String.IsNullOrEmpty(activity.Id)) _ById.TryGetValue(activity.Id!, out call);
+                bool seenBefore = call != null;
 
                 if (call == null)
                 {
@@ -75,7 +76,17 @@ namespace Armada.Server.Ask
                 {
                     call.Ok = activity.Ok;
                     call.ResultText = activity.Result;
-                    if (activity.ElapsedMs.HasValue) call.ElapsedMs = (long)Math.Round(activity.ElapsedMs.Value);
+                    if (activity.ElapsedMs.HasValue)
+                    {
+                        call.ElapsedMs = (long)Math.Round(activity.ElapsedMs.Value);
+                    }
+                    else if (seenBefore && !call.ElapsedMs.HasValue && _Started.TryGetValue(activity.Id!, out long startedAt))
+                    {
+                        // The runtime reports no time of its own (Codex, OpenCode): the call took from when it was first
+                        // seen starting until now, on the monotonic clock. A call first seen already completed has no
+                        // start to measure from and keeps no time.
+                        call.ElapsedMs = (long)Math.Round(_Time.GetElapsedTime(startedAt).TotalMilliseconds);
+                    }
                 }
             }
         }

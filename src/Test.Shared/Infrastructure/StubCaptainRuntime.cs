@@ -108,7 +108,9 @@ namespace Test.Shared.Infrastructure
                         StubCaptainTurn turn = new StubCaptainTurn(prompt, workingDirectory, "http://127.0.0.1:" + mcpPort + "/mcp", sessionToken!);
                         string reply = await _Behavior.OnTurn(turn).ConfigureAwait(false);
                         if (!String.IsNullOrEmpty(finalMessageFilePath)) File.WriteAllText(finalMessageFilePath, reply);
-                        foreach (string line in reply.Split('\n')) RaiseStdout(processId, line);
+                        Func<StubCaptainTurn, string, List<string>>? scripted = _Behavior.TurnOutput;
+                        List<string> lines = scripted != null ? scripted(turn, reply) : new List<string>(reply.Split('\n'));
+                        foreach (string line in lines) RaiseStdout(processId, line);
                         code = 0;
                     }
                     else if (mcpPort > 0 && !String.IsNullOrEmpty(logFilePath))

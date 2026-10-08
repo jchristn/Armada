@@ -4028,12 +4028,23 @@ PendingCliPermissions: CliPermissionRequest[] (pending requests of the thread's 
 
 `AskMessage`: `Id` (amg_), `ThreadId`, `Sequence` (per-thread, strictly increasing), `Role` (`User`, `Assistant`,
 `System`), `Kind` (`Text`, `ActionProposal`, `ActionResult`, `WorkUpdate`, `Summary`, `Error`, `CliPermission`),
-`ContentText`, `ThinkingText`, `ProposalId`, `TrackedWorkId`, `CaptainId`, `DurationMs`, `CreatedUtc`, `LastUpdateUtc`,
-plus embedded `ToolCalls` (`AskMessageToolCall`: `Id` atc_, `CallId`, `ToolName`, `ArgumentsText`, `ResultText`, `Ok`,
+`ContentText`, `ThinkingText`, `ProposalId`, `TrackedWorkId`, `CaptainId`, `DurationMs`, `Metrics`, `CreatedUtc`,
+`LastUpdateUtc`, plus embedded `ToolCalls` (`AskMessageToolCall`: `Id` atc_, `CallId`, `ToolName`, `ArgumentsText`, `ResultText`, `Ok`,
 `ElapsedMs`, `PermissionDenied` (true when the CLI refused the call because the turn's CLI tool permission policy did not
 grant it; null when unknown)), `Proposal`, `TrackedWork` (with `Snapshot`), and `CliPermissionRequest` (on a
 `CliPermission` card, a `System` message whose `ContentText` is `<Tool>: <summary>`; refreshed through `ask.message` when
 the request is decided).
+
+`Metrics` (`CaptainChatMetrics`, null for user messages, cards, and replies written before migration 82) is the
+telemetry of the captain turn that wrote the reply, recorded by the Admiral for every runtime whether the turn ran on
+the Admiral host or on a Harbor: `TimeToFirstTokenMs` (first output of any kind: reasoning, a tool call, or text),
+`TimeToFirstTextMs` (first visible reply text), `StreamingMs` (total minus time to first token), `TotalMs` (equals
+`DurationMs`), `PromptTokens` (input, cached included), `CompletionTokens` (output), `CachedTokens` (cache reads),
+`TotalTokens`, `CostUsd`, `TokensEstimated` (true when `CompletionTokens` is estimated from the reply because the
+runtime reported no usage), `TokensPerSecond` (completion tokens over the streaming window), `ToolCallCount`, and
+`ToolTimeMs`. Token counts and cost are null unless the runtime reports them: Claude Code (stream-json `result`: input,
+output, cache, cost), Codex (`turn.completed` usage: input, cached, output), and OpenCode (`step_finish`: tokens and
+cost). Durations are measured on the monotonic clock.
 
 `AskMessagePage`: `{ Messages, HasMore }`. Without `BeforeSequence` the newest page is returned; messages are in ascending
 sequence within the page; pass the oldest loaded `Sequence` as `BeforeSequence` for older pages. `PageSize` 1-200

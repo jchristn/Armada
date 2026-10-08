@@ -35,6 +35,7 @@ namespace Armada.Tui.Screens.Ask
     /// captain reply of the turn that proposed it, a CLI permission card, or a work card row of a mission waiting on a
     /// permission or a review; a chooser opens when there are several), <c>A</c> allow and remember and <c>d</c> deny a
     /// CLI permission request, and on anything else a hint says nothing waits there, <c>x</c> arguments, <c>t</c> thinking,
+    /// <c>i</c> a captain reply's turn statistics,
     /// <c>y</c> copy (arguments on a card, otherwise the message as Markdown), <c>Y</c> copy the conversation,
     /// <c>o</c> open the row's pull request, <c>l</c> mission log, <c>d</c> mission diff, <c>Ctrl+F</c> or <c>/</c> search
     /// with <c>n</c>/<c>N</c>. Not thread-safe.
@@ -177,6 +178,25 @@ namespace Armada.Tui.Screens.Ask
         public AskBlock? Selected()
         {
             return SelectedKey == null ? null : _Blocks.FirstOrDefault(b => b.Key == SelectedKey);
+        }
+
+        /// <summary>
+        /// True when the focused block is a captain reply with turn statistics to show (<c>i</c> toggles them).
+        /// </summary>
+        /// <returns>True when <c>i</c> applies to the selection.</returns>
+        public bool SelectedHasStatistics()
+        {
+            return HasStatistics(Selected());
+        }
+
+        /// <summary>
+        /// True when the focused captain reply's turn statistics are open.
+        /// </summary>
+        /// <returns>True when open.</returns>
+        public bool SelectedStatisticsOpen()
+        {
+            AskBlock? block = Selected();
+            return block != null && ViewState.ExpandedStats.Contains(block.Key);
         }
 
         /// <summary>
@@ -829,6 +849,14 @@ namespace Armada.Tui.Screens.Ask
             return true;
         }
 
+        private static bool HasStatistics(AskBlock? block)
+        {
+            AskMessage? message = block?.Message;
+            if (message == null || block!.Kind != AskBlockKindEnum.Message) return false;
+            if (message.Role != AskMessageRoleEnum.Assistant || message.Kind != AskMessageKindEnum.Text) return false;
+            return AskTurnStatistics.Rows(message).Count > 0;
+        }
+
         private void OpenWork(string workId)
         {
             AskTrackedWork? work = _Ask.Conversation.Work(workId);
@@ -860,6 +888,10 @@ namespace Armada.Tui.Screens.Ask
                 case 't':
                     if (block == null) return false;
                     ViewState.Toggle(ViewState.ExpandedThinking, block.Key);
+                    return true;
+                case 'i':
+                    if (!HasStatistics(block)) return false;
+                    ViewState.Toggle(ViewState.ExpandedStats, block!.Key);
                     return true;
                 case 'y':
                     if (block == null) return false;

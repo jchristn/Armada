@@ -22,9 +22,9 @@ namespace Armada.Core.Database.Sqlite.Implementations
         #region Private-Members
 
         private static readonly string _Insert = @"INSERT INTO ask_messages
-            (id, tenant_id, user_id, thread_id, sequence, role, kind, content_text, thinking_text, proposal_id, tracked_work_id, captain_id, duration_ms, created_utc, last_update_utc)
+            (id, tenant_id, user_id, thread_id, sequence, role, kind, content_text, thinking_text, proposal_id, tracked_work_id, captain_id, duration_ms, ttft_ms, first_text_ms, streaming_ms, tokens_per_second, input_tokens, output_tokens, cached_tokens, tokens_estimated, cost_usd, tool_call_count, tool_time_ms, created_utc, last_update_utc)
             VALUES
-            (@id, @tenant_id, @user_id, @thread_id, @sequence, @role, @kind, @content_text, @thinking_text, @proposal_id, @tracked_work_id, @captain_id, @duration_ms, @created_utc, @last_update_utc);";
+            (@id, @tenant_id, @user_id, @thread_id, @sequence, @role, @kind, @content_text, @thinking_text, @proposal_id, @tracked_work_id, @captain_id, @duration_ms, @ttft_ms, @first_text_ms, @streaming_ms, @tokens_per_second, @input_tokens, @output_tokens, @cached_tokens, @tokens_estimated, @cost_usd, @tool_call_count, @tool_time_ms, @created_utc, @last_update_utc);";
 
         private readonly string _ConnectionString;
         private readonly SemaphoreSlim? _WriteLock;
@@ -114,7 +114,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
             {
                 await SqliteCommandHelper.ExecuteAsync(conn, tx,
-                    "UPDATE ask_messages SET kind = @kind, content_text = @content_text, thinking_text = @thinking_text, proposal_id = @proposal_id, tracked_work_id = @tracked_work_id, captain_id = @captain_id, duration_ms = @duration_ms, last_update_utc = @last_update_utc WHERE tenant_id = @tenant_id AND id = @id;",
+                    "UPDATE ask_messages SET kind = @kind, content_text = @content_text, thinking_text = @thinking_text, proposal_id = @proposal_id, tracked_work_id = @tracked_work_id, captain_id = @captain_id, duration_ms = @duration_ms, ttft_ms = @ttft_ms, first_text_ms = @first_text_ms, streaming_ms = @streaming_ms, tokens_per_second = @tokens_per_second, input_tokens = @input_tokens, output_tokens = @output_tokens, cached_tokens = @cached_tokens, tokens_estimated = @tokens_estimated, cost_usd = @cost_usd, tool_call_count = @tool_call_count, tool_time_ms = @tool_time_ms, last_update_utc = @last_update_utc WHERE tenant_id = @tenant_id AND id = @id;",
                     cmd =>
                     {
                         SqliteCommandHelper.Add(cmd, "@kind", message.Kind.ToString());
@@ -124,6 +124,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
                         SqliteCommandHelper.Add(cmd, "@tracked_work_id", message.TrackedWorkId);
                         SqliteCommandHelper.Add(cmd, "@captain_id", message.CaptainId);
                         SqliteCommandHelper.Add(cmd, "@duration_ms", message.DurationMs);
+                        BindMetrics(cmd, message);
                         SqliteCommandHelper.AddDate(cmd, "@last_update_utc", message.LastUpdateUtc);
                         SqliteCommandHelper.Add(cmd, "@tenant_id", message.TenantId);
                         SqliteCommandHelper.Add(cmd, "@id", message.Id);
@@ -176,8 +177,25 @@ namespace Armada.Core.Database.Sqlite.Implementations
             SqliteCommandHelper.Add(cmd, "@tracked_work_id", message.TrackedWorkId);
             SqliteCommandHelper.Add(cmd, "@captain_id", message.CaptainId);
             SqliteCommandHelper.Add(cmd, "@duration_ms", message.DurationMs);
+            BindMetrics(cmd, message);
             SqliteCommandHelper.AddDate(cmd, "@created_utc", message.CreatedUtc);
             SqliteCommandHelper.AddDate(cmd, "@last_update_utc", message.LastUpdateUtc);
+        }
+
+        private static void BindMetrics(SqliteCommand cmd, AskMessage message)
+        {
+            CaptainChatMetrics? m = message.Metrics;
+            SqliteCommandHelper.Add(cmd, "@ttft_ms", m?.TimeToFirstTokenMs);
+            SqliteCommandHelper.Add(cmd, "@first_text_ms", m?.TimeToFirstTextMs);
+            SqliteCommandHelper.Add(cmd, "@streaming_ms", m?.StreamingMs);
+            SqliteCommandHelper.Add(cmd, "@tokens_per_second", m?.TokensPerSecond);
+            SqliteCommandHelper.Add(cmd, "@input_tokens", m?.PromptTokens);
+            SqliteCommandHelper.Add(cmd, "@output_tokens", m?.CompletionTokens);
+            SqliteCommandHelper.Add(cmd, "@cached_tokens", m?.CachedTokens);
+            SqliteCommandHelper.Add(cmd, "@tokens_estimated", m?.TokensEstimated);
+            SqliteCommandHelper.Add(cmd, "@cost_usd", m?.CostUsd);
+            SqliteCommandHelper.Add(cmd, "@tool_call_count", m?.ToolCallCount);
+            SqliteCommandHelper.Add(cmd, "@tool_time_ms", m?.ToolTimeMs);
         }
 
         private static AskMessage FromReader(SqliteDataReader reader)
@@ -196,6 +214,19 @@ namespace Armada.Core.Database.Sqlite.Implementations
             message.TrackedWorkId = SqliteCommandHelper.ReadString(reader["tracked_work_id"]);
             message.CaptainId = SqliteCommandHelper.ReadString(reader["captain_id"]);
             message.DurationMs = SqliteCommandHelper.ReadNullableLong(reader["duration_ms"]);
+            CaptainChatMetrics stored = new CaptainChatMetrics();
+            stored.TimeToFirstTokenMs = SqliteCommandHelper.ReadNullableDouble(reader["ttft_ms"]);
+            stored.TimeToFirstTextMs = SqliteCommandHelper.ReadNullableDouble(reader["first_text_ms"]);
+            stored.StreamingMs = SqliteCommandHelper.ReadNullableDouble(reader["streaming_ms"]);
+            stored.TokensPerSecond = SqliteCommandHelper.ReadNullableDouble(reader["tokens_per_second"]);
+            stored.PromptTokens = SqliteCommandHelper.ReadNullableInt(reader["input_tokens"]);
+            stored.CompletionTokens = SqliteCommandHelper.ReadNullableInt(reader["output_tokens"]);
+            stored.CachedTokens = SqliteCommandHelper.ReadNullableInt(reader["cached_tokens"]);
+            stored.TokensEstimated = SqliteCommandHelper.ReadNullableBool(reader["tokens_estimated"]);
+            stored.CostUsd = SqliteCommandHelper.ReadNullableDouble(reader["cost_usd"]);
+            stored.ToolCallCount = SqliteCommandHelper.ReadNullableInt(reader["tool_call_count"]);
+            stored.ToolTimeMs = SqliteCommandHelper.ReadNullableDouble(reader["tool_time_ms"]);
+            message.Metrics = AskMessageMetricsColumns.FromColumns(stored, message.DurationMs);
             message.CreatedUtc = SqliteCommandHelper.ReadDate(reader["created_utc"]);
             message.LastUpdateUtc = SqliteCommandHelper.ReadDate(reader["last_update_utc"]);
             return message;

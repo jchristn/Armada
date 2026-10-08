@@ -1,10 +1,12 @@
 namespace Armada.Core.Models
 {
     /// <summary>
-    /// Timing and token statistics for a single captain chat turn, surfaced in the dashboard so an
-    /// operator can see how the model performed. Values are populated from the provider's own usage
-    /// report where available (Ollama reports nanosecond-precision durations and token counts), so
-    /// tokens-per-second and durations reflect server-measured work rather than a client estimate.
+    /// Timing and token statistics for a single captain chat turn (Ask Armada, captain chat, planning), surfaced in
+    /// the dashboard, the mobile app, and the TUI so an operator can see how the model performed. Durations are
+    /// measured by the server on the monotonic clock (see <see cref="Armada.Core.Services.ChatTurnTelemetryRecorder"/>);
+    /// token counts and cost come from the runtime's own usage report where it has one (Claude Code's stream-json
+    /// result, Codex's turn.completed usage, OpenCode's step_finish), and completion tokens are otherwise estimated
+    /// from the reply length (<see cref="TokensEstimated"/>).
     /// </summary>
     public class CaptainChatMetrics
     {
@@ -47,6 +49,40 @@ namespace Armada.Core.Models
         /// the generation duration are known.
         /// </summary>
         public double? TokensPerSecond { get; set; } = null;
+
+        /// <summary>
+        /// Time from the start of the turn to the first visible reply text, in milliseconds, when it differs from
+        /// <see cref="TimeToFirstTokenMs"/> (the first output of any kind: reasoning, a tool call, or reply text).
+        /// Null when no reply text streamed.
+        /// </summary>
+        public double? TimeToFirstTextMs { get; set; } = null;
+
+        /// <summary>
+        /// Cache-read input tokens (a subset of <see cref="PromptTokens"/>), when reported by the runtime.
+        /// </summary>
+        public int? CachedTokens { get; set; } = null;
+
+        /// <summary>
+        /// Cost of the turn in US dollars, when reported by the runtime (Claude Code's total_cost_usd, OpenCode's
+        /// per-step cost).
+        /// </summary>
+        public double? CostUsd { get; set; } = null;
+
+        /// <summary>
+        /// True when <see cref="CompletionTokens"/> is an estimate from the reply length (the runtime reported no
+        /// output token count); false when the runtime reported it. Null when unknown.
+        /// </summary>
+        public bool? TokensEstimated { get; set; } = null;
+
+        /// <summary>
+        /// Number of tool calls the captain completed during the turn, when the turn was observed by the server.
+        /// </summary>
+        public int? ToolCallCount { get; set; } = null;
+
+        /// <summary>
+        /// Total time spent in the turn's tool calls in milliseconds (the sum of each completed call's time).
+        /// </summary>
+        public double? ToolTimeMs { get; set; } = null;
 
         #endregion
 

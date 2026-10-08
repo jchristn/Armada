@@ -45,6 +45,18 @@ namespace Armada.Core.Protocol
         [JsonPropertyName("state")]
         public OpenCodeToolState? State { get; set; } = null;
 
+        /// <summary>
+        /// Token usage of the step on a step-finish part, or null.
+        /// </summary>
+        [JsonPropertyName("tokens")]
+        public OpenCodeTokens? Tokens { get; set; } = null;
+
+        /// <summary>
+        /// Cost of the step in US dollars on a step-finish part, or null.
+        /// </summary>
+        [JsonPropertyName("cost")]
+        public double? Cost { get; set; } = null;
+
         #endregion
     }
 }

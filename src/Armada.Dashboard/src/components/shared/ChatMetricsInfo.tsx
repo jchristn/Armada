@@ -1,16 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
 import type { CaptainChatMetrics } from '../../types/models';
 import { useLocale } from '../../context/LocaleContext';
-import { chatTurnStatistics } from '../../lib/chatMetrics';
+import { chatTurnStatistics, type TurnStatistic } from '../../lib/chatMetrics';
 import type { ToolEvent } from './ChatToolChips';
 
 /**
  * Per-turn statistics shown behind an (i) affordance rather than a strip under every reply.
- * Time to first token, streaming time, tokens/sec, token count, total time, and -- when the turn
- * called any tools -- the number of tool calls and the total time spent in them appear in a small
- * popover on click. Token count prefers completion tokens and falls back to the runtime's estimate.
+ * Time to first token (and first text when it differs), streaming time, tokens/sec, token count, the input and
+ * cached tokens and cost when the runtime reported them, total time, and -- when the turn called any tools -- the
+ * number of tool calls and the total time spent in them appear in a small popover on click. Token count prefers
+ * completion tokens and falls back to the runtime's estimate. Callers that already built the rows (an Ask reply,
+ * which falls back to fewer rows for older messages) pass `rows` instead of `metrics`.
  */
-export default function ChatMetricsInfo({ metrics, tools }: { metrics: CaptainChatMetrics; tools?: ToolEvent[] }) {
+export default function ChatMetricsInfo({ metrics, tools, rows: givenRows }: { metrics?: CaptainChatMetrics | null; tools?: ToolEvent[]; rows?: TurnStatistic[] }) {
   const { t } = useLocale();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLSpanElement>(null);
@@ -32,7 +34,7 @@ export default function ChatMetricsInfo({ metrics, tools }: { metrics: CaptainCh
   }, [open]);
 
   // When the turn invoked tools, the rows end with how many and the total time spent in them (lib/chatMetrics).
-  const rows = chatTurnStatistics(t, metrics, tools);
+  const rows = givenRows ?? (metrics ? chatTurnStatistics(t, metrics, tools) : []);
 
   return (
     <span className="chat-metrics-info" ref={ref}>

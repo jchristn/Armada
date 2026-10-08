@@ -194,6 +194,86 @@ namespace Test.Shared.Suites.Database
                 AssertEqual(0, afterRead!.UnreadCount, "unread reset");
             }));
 
+            cases.Add(CaseAsync("message_turn_metrics_roundtrip", "A reply's turn telemetry (migration 82) round-trips through create, update, read, and enumerate", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                DatabaseDriver db = testDb.Driver;
+
+                AskThread thread = await db.AskThreads.CreateAsync(NewThread("usr_metrics")).ConfigureAwait(false);
+                AskMessage question = await db.AskMessages.CreateAsync(NewMessage(thread, "how fast?"), false).ConfigureAwait(false);
+
+                // The reply's place is reserved first (no telemetry yet), then completed with the turn's metrics, as
+                // AskTurnCoordinator does.
+                AskMessage reply = NewMessage(thread, String.Empty);
+                reply.Role = AskMessageRoleEnum.Assistant;
+                reply = await db.AskMessages.CreateAsync(reply, true).ConfigureAwait(false);
+                AskMessage? reserved = await db.AskMessages.ReadAsync(Constants.DefaultTenantId, reply.Id).ConfigureAwait(false);
+                AssertNull(reserved!.Metrics, "no telemetry on the reservation");
+
+                reserved.ContentText = "Fast enough.";
+                reserved.DurationMs = 2500;
+                reserved.Metrics = new CaptainChatMetrics
+                {
+                    TimeToFirstTokenMs = 400.25,
+                    TimeToFirstTextMs = 1000.5,
+                    StreamingMs = 2099.75,
+                    TotalMs = 2500,
+                    TokensPerSecond = 57.125,
+                    PromptTokens = 1050,
+                    CompletionTokens = 120,
+                    CachedTokens = 900,
+                    TokensEstimated = false,
+                    CostUsd = 0.0123,
+                    ToolCallCount = 2,
+                    ToolTimeMs = 812.5
+                };
+                await db.AskMessages.UpdateAsync(reserved).ConfigureAwait(false);
+
+                AskMessage? read = await db.AskMessages.ReadAsync(Constants.DefaultTenantId, reply.Id).ConfigureAwait(false);
+                CaptainChatMetrics? m = read!.Metrics;
+                AssertNotNull(m, "metrics read back");
+                AssertEqual(400.25, m!.TimeToFirstTokenMs, "ttft");
+                AssertEqual(1000.5, m.TimeToFirstTextMs, "first text");
+                AssertEqual(2099.75, m.StreamingMs, "streaming");
+                AssertEqual(2500.0, m.TotalMs, "total is duration_ms");
+                AssertEqual(57.125, m.TokensPerSecond, "tokens/sec");
+                AssertEqual(1050, m.PromptTokens, "input");
+                AssertEqual(120, m.CompletionTokens, "output");
+                AssertEqual(900, m.CachedTokens, "cached");
+                AssertEqual(1170, m.TotalTokens, "total tokens derived");
+                AssertEqual(false, m.TokensEstimated, "reported");
+                AssertTrue(m.CostUsd.HasValue && Math.Abs(m.CostUsd.Value - 0.0123) < 1e-9, "cost");
+                AssertEqual(2, m.ToolCallCount, "tool calls");
+                AssertEqual(812.5, m.ToolTimeMs, "tool time");
+
+                // A runtime without usage: only timing and an estimate are stored; the rest stays null.
+                AskMessage estimated = NewMessage(thread, "plain");
+                estimated.Role = AskMessageRoleEnum.Assistant;
+                estimated.DurationMs = 900;
+                estimated.Metrics = new CaptainChatMetrics { TimeToFirstTokenMs = 300, TimeToFirstTextMs = 300, StreamingMs = 600, CompletionTokens = 2, TokensEstimated = true, TokensPerSecond = 3.3333, ToolCallCount = 0, ToolTimeMs = 0 };
+                estimated = await db.AskMessages.CreateAsync(estimated, true).ConfigureAwait(false);
+
+                AskMessagePage page = await db.AskMessages.EnumerateAsync(Constants.DefaultTenantId, thread.Id, null, 10).ConfigureAwait(false);
+                AskMessage pagedQuestion = page.Messages.Single(x => x.Id == question.Id);
+                AskMessage pagedReply = page.Messages.Single(x => x.Id == reply.Id);
+                AskMessage pagedEstimated = page.Messages.Single(x => x.Id == estimated.Id);
+                AssertNull(pagedQuestion.Metrics, "a user message has no telemetry");
+                AssertEqual(120, pagedReply.Metrics!.CompletionTokens, "enumerate reads the columns too");
+                AssertEqual(true, pagedEstimated.Metrics!.TokensEstimated, "estimate flag");
+                AssertNull(pagedEstimated.Metrics.PromptTokens, "no input reported");
+                AssertNull(pagedEstimated.Metrics.CachedTokens, "no cache reported");
+                AssertNull(pagedEstimated.Metrics.CostUsd, "no cost reported");
+                AssertNull(pagedEstimated.Metrics.TotalTokens, "no total without input");
+                AssertEqual(0, pagedEstimated.Metrics.ToolCallCount, "zero tool calls stored as zero");
+
+                // Clearing the metrics clears every column.
+                pagedReply.Metrics = null;
+                await db.AskMessages.UpdateAsync(pagedReply).ConfigureAwait(false);
+                AskMessage? cleared = await db.AskMessages.ReadAsync(Constants.DefaultTenantId, reply.Id).ConfigureAwait(false);
+                AssertNull(cleared!.Metrics, "cleared");
+                AssertEqual(2500L, cleared.DurationMs, "duration kept");
+            }));
+
             cases.Add(CaseAsync("message_sequence_monotonic_under_concurrency", "Concurrent appends to one thread get unique, gap-free sequences", TestTags.Reliability, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);

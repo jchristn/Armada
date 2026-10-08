@@ -475,6 +475,7 @@ namespace Armada.Server.Ask
                     reply.Kind = AskMessageKindEnum.Text;
                     reply.ContentText = result.Response.Reply;
                     reply.ThinkingText = result.Response.Thinking;
+                    reply.Metrics = result.Response.Metrics;
                     state = "completed";
                 }
                 else
@@ -544,6 +545,7 @@ namespace Armada.Server.Ask
             placeholder.ThinkingText = reply.ThinkingText;
             placeholder.CaptainId = reply.CaptainId ?? placeholder.CaptainId;
             placeholder.DurationMs = reply.DurationMs;
+            placeholder.Metrics = reply.Metrics;
             return await _Threads.CompleteMessageAsync(thread, placeholder, toolCalls).ConfigureAwait(false);
         }
 

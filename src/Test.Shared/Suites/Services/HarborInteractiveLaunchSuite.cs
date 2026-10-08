@@ -67,6 +67,7 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(AskMessageRoleEnum.Assistant, reply.Role, "the turn produced an assistant reply: " + reply.ContentText);
                 AssertEqual("Hello from the Harbor", reply.ContentText);
                 AssertTrue(s.EventsFor("usr_ask", "ask.chunk").Count >= 2, "the reply streamed in chunks over the link");
+                AssertTurnTelemetryFromClaudeShim(reply, "on the Harbor");
 
                 AssertEqual(0, s.LocalLaunches, "the Admiral-host runtime was never created");
                 AssertEqual(String.Empty, ChatShimCli.ReadRecord(s.LocalRecord, "cwd.txt"), "nothing ran on the Admiral host");
@@ -102,6 +103,7 @@ namespace Test.Shared.Suites.Services
                 AskMessagePage page = (await s.Threads.EnumerateMessagesAsync(owner, thread.Id, null).ConfigureAwait(false))!;
                 AssertEqual("Hello from the Admiral", page.Messages.Last().ContentText);
                 AssertEqual(1, s.LocalLaunches, "ran on the Admiral host");
+                AssertTurnTelemetryFromClaudeShim(page.Messages.Last(), "on the Admiral host");
             }));
 
             cases.Add(CaseAsync("require_harbor_without_harbor_fails_typed", "With requireHarborForLaunch on and no eligible Harbor, a chat turn fails with HarborRequired instead of starting a local process", TestTags.Negative, async () =>
@@ -180,6 +182,42 @@ namespace Test.Shared.Suites.Services
                 List<AskTurnEventPayload> turns = s.EventsFor("usr_stop", "ask.turn").Select(e => AskTurnEventPayload.From(e.Payload)).ToList();
                 AssertEqual("cancelled", turns.Last().State, "the turn ended as cancelled");
                 AssertEqual(0, s.LocalLaunches, "nothing ran on the Admiral host");
+            }));
+
+            cases.Add(CaseAsync("codex_ask_turn_on_harbor_records_usage", "A Codex Ask turn on a Harbor runs 'codex exec --json', and the reply carries the usage and tool call streamed back over the link", TestTags.Positive, async () =>
+            {
+                using Scenario s = await Scenario.CreateAsync().ConfigureAwait(false);
+                s.HarborCodexJson = true;
+                using InProcessHarbor harbor = await s.ConnectHarborAsync("hbr_codex_json", Constants.DefaultTenantId, "usr_codex_json").ConfigureAwait(false);
+                AuthContext owner = AuthContext.Authenticated(Constants.DefaultTenantId, "usr_codex_json", false, true, "Test");
+                Captain captain = await s.CreateCaptainAsync("codex-json", AgentRuntimeEnum.Codex).ConfigureAwait(false);
+                AskThread thread = await s.Threads.CreateThreadAsync(owner, new AskThreadCreateRequest { CaptainId = captain.Id }).ConfigureAwait(false);
+
+                await s.Turns.SendMessageAsync(owner, thread.Id, new AskMessageSendRequest { Content = "List the files." }).ConfigureAwait(false);
+                await s.WaitForTurnEndAsync(thread.Id).ConfigureAwait(false);
+
+                List<HarborLaunchRequest> launches = harbor.Runner.LaunchSnapshot();
+                AssertEqual(1, launches.Count, "one launch on the Harbor");
+                AssertTrue(launches[0].StreamJsonOutput, "Codex runs in JSON mode on the Harbor");
+                AssertContains("--json", ChatShimCli.ReadRecord(s.HarborRecord, "args.txt"), "codex exec --json");
+
+                AskMessage reply = (await s.Threads.EnumerateMessagesAsync(owner, thread.Id, null).ConfigureAwait(false))!.Messages.Last();
+                AssertEqual("CodexJsonReply", reply.ContentText, "the final message is the reply");
+                AssertEqual(1, reply.ToolCalls.Count, "the command execution became a tool call");
+                AssertEqual("shell", reply.ToolCalls[0].ToolName);
+                AssertEqual(true, reply.ToolCalls[0].Ok, "exit code 0");
+                CaptainChatMetrics? m = reply.Metrics;
+                AssertNotNull(m, "the reply carries the turn telemetry");
+                AssertEqual(1200, m!.PromptTokens, "input from turn.completed");
+                AssertEqual(1000, m.CachedTokens, "cached input from turn.completed");
+                AssertEqual(33, m.CompletionTokens, "output from turn.completed");
+                AssertEqual(false, m.TokensEstimated, "reported, not estimated");
+                AssertNull(m.CostUsd, "Codex reports no cost");
+                AssertNotNull(m.TimeToFirstTokenMs, "first output observed");
+                AssertNotNull(m.TimeToFirstTextMs, "first text observed");
+                AssertTrue(m.TimeToFirstTokenMs <= m.TimeToFirstTextMs, "reasoning came before the reply text");
+                AssertEqual(1, m.ToolCallCount, "one tool call");
+                AssertEqual(reply.DurationMs.HasValue ? (double)reply.DurationMs.Value : -1, m.TotalMs, "total is the turn duration");
             }));
 
             cases.Add(CaseAsync("direct_chat_runs_on_harbor_with_final_message", "Direct captain chat runs on the Harbor, and the CLI's final-message file is returned over the link", TestTags.Positive, async () =>
@@ -280,6 +318,28 @@ namespace Test.Shared.Suites.Services
             return await condition().ConfigureAwait(false);
         }
 
+        /// <summary>
+        /// The reply of a turn answered by <see cref="ChatShimCli.WriteClaudeStreamShim"/> carries the usage and cost of
+        /// its result event and the timing the server observed, wherever the CLI ran.
+        /// </summary>
+        private static void AssertTurnTelemetryFromClaudeShim(AskMessage reply, string where)
+        {
+            CaptainChatMetrics? m = reply.Metrics;
+            AssertNotNull(m, "the reply carries the turn telemetry " + where);
+            AssertEqual(350, m!.PromptTokens, "input = input + cache read + cache creation " + where);
+            AssertEqual(300, m.CachedTokens, "cache reads " + where);
+            AssertEqual(7, m.CompletionTokens, "output tokens from the result event " + where);
+            AssertEqual(357, m.TotalTokens, "total tokens " + where);
+            AssertEqual(false, m.TokensEstimated, "reported, not estimated " + where);
+            AssertTrue(m.CostUsd.HasValue && Math.Abs(m.CostUsd.Value - 0.0042) < 1e-9, "cost from total_cost_usd " + where);
+            AssertNotNull(m.TimeToFirstTokenMs, "first token observed " + where);
+            AssertNotNull(m.TimeToFirstTextMs, "first text observed " + where);
+            AssertNotNull(m.StreamingMs, "streaming time " + where);
+            AssertTrue(m.TimeToFirstTokenMs <= m.TotalMs, "first token within the turn " + where);
+            AssertEqual(0, m.ToolCallCount, "no tool calls " + where);
+            AssertEqual(0.0, m.ToolTimeMs, "no tool time " + where);
+        }
+
         private static TestCaseDescriptor CaseAsync(string caseId, string displayName, string tag, Func<Task> body)
         {
             return new TestCaseDescriptor(
@@ -328,6 +388,8 @@ namespace Test.Shared.Suites.Services
             public string? HarborExecutable { get; set; } = null;
 
             public bool HarborSleeps { get; set; } = false;
+
+            public bool HarborCodexJson { get; set; } = false;
 
             public int LocalLaunches => _LocalLaunches;
 
@@ -394,7 +456,9 @@ namespace Test.Shared.Suites.Services
                 string claude = HarborSleeps
                     ? ChatShimCli.WriteSleepingShim(harborShims, "claude", HarborRecord)
                     : ChatShimCli.WriteClaudeStreamShim(harborShims, HarborRecord, new List<string> { "Hello from ", "the Harbor" });
-                string codex = ChatShimCli.WriteCodexFinalMessageShim(harborShims, HarborRecord, "FinalFromHarborCodex");
+                string codex = HarborCodexJson
+                    ? ChatShimCli.WriteCodexJsonShim(harborShims, HarborRecord, "CodexJsonReply")
+                    : ChatShimCli.WriteCodexFinalMessageShim(harborShims, HarborRecord, "FinalFromHarborCodex");
 
                 AgentRuntimeFactory harborRuntimes = new AgentRuntimeFactory(Logging);
                 string? missing = HarborExecutable;

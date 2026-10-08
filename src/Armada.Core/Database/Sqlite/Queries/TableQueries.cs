@@ -2020,7 +2020,20 @@ namespace Armada.Core.Database.Sqlite.Queries
                     );",
                     @"CREATE INDEX IF NOT EXISTS idx_harbor_link_events_harbor_occurred ON harbor_link_events(harbor_id, occurred_utc);",
                     @"ALTER TABLE token_usage ADD COLUMN harbor_id TEXT;",
-                    @"CREATE INDEX IF NOT EXISTS idx_token_usage_harbor_created ON token_usage(harbor_id, created_utc);")
+                    @"CREATE INDEX IF NOT EXISTS idx_token_usage_harbor_created ON token_usage(harbor_id, created_utc);"),
+
+                new SchemaMigration(82, "Add Ask turn telemetry to ask_messages: ttft_ms, first_text_ms, streaming_ms, tokens_per_second, input_tokens, output_tokens, cached_tokens, tokens_estimated, cost_usd, tool_call_count, and tool_time_ms (all nullable)",
+                    @"ALTER TABLE ask_messages ADD COLUMN ttft_ms REAL;",
+                    @"ALTER TABLE ask_messages ADD COLUMN first_text_ms REAL;",
+                    @"ALTER TABLE ask_messages ADD COLUMN streaming_ms REAL;",
+                    @"ALTER TABLE ask_messages ADD COLUMN tokens_per_second REAL;",
+                    @"ALTER TABLE ask_messages ADD COLUMN input_tokens INTEGER;",
+                    @"ALTER TABLE ask_messages ADD COLUMN output_tokens INTEGER;",
+                    @"ALTER TABLE ask_messages ADD COLUMN cached_tokens INTEGER;",
+                    @"ALTER TABLE ask_messages ADD COLUMN tokens_estimated INTEGER;",
+                    @"ALTER TABLE ask_messages ADD COLUMN cost_usd REAL;",
+                    @"ALTER TABLE ask_messages ADD COLUMN tool_call_count INTEGER;",
+                    @"ALTER TABLE ask_messages ADD COLUMN tool_time_ms REAL;")
 
             };
         }

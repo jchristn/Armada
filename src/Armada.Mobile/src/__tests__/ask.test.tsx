@@ -314,6 +314,61 @@ describe('Ask Armada', () => {
     expect(screen.getByTestId('ask-msg-2-stats-toggle').props.accessibilityState).toMatchObject({ expanded: true });
   });
 
+  it('a captain reply with recorded telemetry shows the full turn statistics behind its (i), and an older reply the fallback', async () => {
+    api.enumerateAskMessages.mockResolvedValue({
+      messages: [
+        message({}),
+        message({
+          id: 'msg_2', sequence: 2, role: 'Assistant', contentText: 'All quiet.', captainId: 'cpt_1', durationMs: 2500,
+          toolCalls: [{ callId: 'c1', toolName: 'armada_status', ok: true, resultText: '{}', elapsedMs: 250 }],
+          metrics: {
+            timeToFirstTokenMs: 400,
+            timeToFirstTextMs: 1000,
+            streamingMs: 2100,
+            totalMs: 2500,
+            promptTokens: 1050,
+            completionTokens: 120,
+            totalTokens: 1170,
+            tokensPerSecond: 57.14,
+            cachedTokens: 900,
+            costUsd: 0.0123,
+            tokensEstimated: false,
+            toolCallCount: 1,
+            toolTimeMs: 250,
+          },
+        }),
+        message({
+          id: 'msg_3', sequence: 3, role: 'Assistant', contentText: 'Older reply.', captainId: 'cpt_1', durationMs: 900,
+          toolCalls: [{ callId: 'c9', toolName: 'armada_status', ok: true, resultText: '{}', elapsedMs: 120 }],
+        }),
+      ],
+      hasMore: false,
+    });
+    await renderAsk('/ask/thr_1');
+    await waitFor(() => expect(screen.getByText('All quiet.')).toBeTruthy());
+
+    await act(async () => { fireEvent.press(screen.getByTestId('ask-msg-2-stats-toggle')); });
+    const panel = screen.getByTestId('ask-msg-2-stats');
+    expect(within(panel).getAllByLabelText(/: /).map((cell) => cell.props.accessibilityLabel)).toEqual([
+      'time to first token: 400ms',
+      'time to first text: 1.00s',
+      'streaming: 2.10s',
+      'tokens/sec: 57.1',
+      'output tokens: 120',
+      'input tokens: 1050',
+      'cached tokens: 900',
+      'cost: $0.0123',
+      'total: 2.50s',
+      'tool calls: 1',
+      'tool time: 250ms',
+    ]);
+    expect(screen.getByTestId('ask-msg-2-stats-cost')).toBeTruthy();
+
+    // A reply written before the Admiral recorded telemetry keeps today's rows: total, tool calls, tool time.
+    await act(async () => { fireEvent.press(screen.getByTestId('ask-msg-3-stats-toggle')); });
+    expect(within(screen.getByTestId('ask-msg-3-stats')).getAllByLabelText(/: /).map((cell) => cell.props.accessibilityLabel)).toEqual(['total: 900ms', 'tool calls: 1', 'tool time: 120ms']);
+  });
+
   it('the transcript keeps its newest message in view when its viewport shrinks (the keyboard opening)', async () => {
     const { FlatList } = jest.requireActual<typeof import('react-native')>('react-native');
     const scrollToEnd = jest.spyOn(FlatList.prototype, 'scrollToEnd');
