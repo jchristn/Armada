@@ -225,7 +225,7 @@ namespace Armada.Tui.Screens.Activity
             AddFixed(RangeTabs, w => 1);
             Chart.Kind = ChartKindEnum.Bar;
             Chart.EmptyText = "No requests in this time range. Widen the range above to see older traffic.";
-            AddFixed(Chart, w => 9);
+            AddFixed(Chart, w => 14);
 
             BuildFilters(context);
             Filters.Visible = false;

@@ -826,7 +826,7 @@ namespace Armada.Tui.Screens.Operations
             }));
             int fh = HistoryFilters.PreferredHeight(width);
             blocks.Add(HomeBlock.For(HistoryFilters, st.Place(HistoryFilters, fh).Y, fh, 0, 0, historyTop));
-            blocks.Add(HomeBlock.For(Chart, st.Content(8), 8));
+            blocks.Add(HomeBlock.For(Chart, st.Content(12), 12));
             y = st.Content(1);
             blocks.Add(HomeBlock.Drawn(y, 1, s =>
             {
