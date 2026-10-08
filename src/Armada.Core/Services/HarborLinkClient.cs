@@ -103,8 +103,8 @@ namespace Armada.Core.Services
         /// <param name="onLog">Optional sink for link log entries (work in, status out) for a UI log view.</param>
         /// <param name="jobRunner">Optional captain launcher; when null, launch requests are refused.</param>
         /// <param name="dockManager">Optional Harbor-side dock manager; when set the Harbor advertises
-        /// <see cref="HarborProtocol.DockCapability"/> and creates mission docks on this host. When null, dock and file
-        /// requests are refused.</param>
+        /// <see cref="HarborProtocol.DockCapability"/> and <see cref="HarborProtocol.CheckoutCapability"/>, creates mission docks
+        /// on this host, and serves file operations in vessel checkouts. When null, dock and file requests are refused.</param>
         public HarborLinkClient(
             string harborId,
             string name,
@@ -125,6 +125,8 @@ namespace Armada.Core.Services
             _Docks = dockManager;
             if (_Docks != null && !_Capabilities.Exists(c => String.Equals(c.Name, HarborProtocol.DockCapability, StringComparison.OrdinalIgnoreCase)))
                 _Capabilities.Add(new HarborCapability { Name = HarborProtocol.DockCapability, Available = true });
+            if (_Docks != null && !_Capabilities.Exists(c => String.Equals(c.Name, HarborProtocol.CheckoutCapability, StringComparison.OrdinalIgnoreCase)))
+                _Capabilities.Add(new HarborCapability { Name = HarborProtocol.CheckoutCapability, Available = true });
             _MaxConcurrentJobs = maxConcurrentJobs < 1 ? 1 : maxConcurrentJobs;
             _CommandExecutor = commandExecutor ?? throw new ArgumentNullException(nameof(commandExecutor));
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));

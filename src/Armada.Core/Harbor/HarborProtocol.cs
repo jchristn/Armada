@@ -25,6 +25,14 @@ namespace Armada.Core.Harbor
         /// </summary>
         public static readonly string DockCapability = "harbor-docks";
 
+        /// <summary>
+        /// Capability a Harbor advertises when it serves operations in a vessel's checkout on its host for the Admiral
+        /// (check runs, Workspace, readiness, and health): file requests with a root, confined to the checkout the Harbor
+        /// maps the vessel to or to its docks folder. An Admiral sends checkout operations only to a Harbor that
+        /// advertises this.
+        /// </summary>
+        public static readonly string CheckoutCapability = "harbor-checkouts";
+
         #endregion
 
         #region Private-Members

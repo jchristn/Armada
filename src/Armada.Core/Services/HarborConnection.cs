@@ -39,6 +39,12 @@ namespace Armada.Core.Services
         public bool HostsDocks { get; set; } = false;
 
         /// <summary>
+        /// Whether the Harbor serves operations in vessel checkouts on its host (it advertised
+        /// <see cref="Armada.Core.Harbor.HarborProtocol.CheckoutCapability"/>).
+        /// </summary>
+        public bool HostsCheckouts { get; set; } = false;
+
+        /// <summary>
         /// The Harbor's name from its handshake on this link.
         /// </summary>
         public string Name { get; set; } = string.Empty;

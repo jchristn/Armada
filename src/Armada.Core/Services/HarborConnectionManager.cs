@@ -122,6 +122,7 @@ namespace Armada.Core.Services
             HarborConnection connection = new HarborConnection(handshake.HarborId, tenantId, userId, send);
             connection.SetLiveJobs(null);
             connection.HostsDocks = HasAvailableCapability(handshake.Capabilities, HarborProtocol.DockCapability);
+            connection.HostsCheckouts = connection.HostsDocks && HasAvailableCapability(handshake.Capabilities, HarborProtocol.CheckoutCapability);
             connection.Name = handshake.Name;
             _Connections[handshake.HarborId] = connection;
 
@@ -354,6 +355,34 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
+        /// Whether a connected Harbor serves operations in vessel checkouts on its host (it advertised
+        /// <see cref="HarborProtocol.CheckoutCapability"/>).
+        /// </summary>
+        /// <param name="harborId">Harbor identifier.</param>
+        /// <returns>True when connected and serving checkout operations.</returns>
+        public bool HostsCheckouts(string harborId)
+        {
+            return !String.IsNullOrWhiteSpace(harborId) && _Connections.TryGetValue(harborId, out HarborConnection? connection) && connection!.HostsCheckouts;
+        }
+
+        /// <summary>
+        /// The registered Harbors a request of a tenant may use, by the same rules as launch routing: one owned by the
+        /// tenant or a shared (unassigned) Harbor, and, when <paramref name="restrictToOwner"/> is set, only Harbors owned by
+        /// <paramref name="ownerUserId"/>. Connection state is not considered.
+        /// </summary>
+        /// <param name="tenantId">Tenant identifier, or null/empty for every Harbor.</param>
+        /// <param name="restrictToOwner">Whether only the owner's Harbors count.</param>
+        /// <param name="ownerUserId">Owner user identifier (with <paramref name="restrictToOwner"/>).</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The candidates.</returns>
+        public async Task<List<Harbor>> ListCandidatesAsync(string? tenantId, bool restrictToOwner, string? ownerUserId, CancellationToken token = default)
+        {
+            AuthContext adminAuth = new AuthContext { IsAuthenticated = true, IsAdmin = true };
+            List<Harbor> all = await _Harbors.EnumerateAsync(adminAuth, token).ConfigureAwait(false);
+            return FilterCandidates(all, tenantId, restrictToOwner, ownerUserId);
+        }
+
+        /// <summary>
         /// Send a deferred-launch instruction to a Harbor and await its acknowledgement. The Harbor arms the
         /// instruction (to launch a new slot after the Admiral exits, with health-gated rollback) and replies;
         /// the reply confirms it is safe for the Admiral to exit. Returns null when the Harbor does not reply
@@ -541,15 +570,7 @@ namespace Armada.Core.Services
             AuthContext adminAuth = new AuthContext { IsAuthenticated = true, IsAdmin = true };
             List<Harbor> all = await _Harbors.EnumerateAsync(adminAuth, token).ConfigureAwait(false);
 
-            List<Harbor> candidates = new List<Harbor>();
-            foreach (Harbor harbor in all)
-            {
-                bool shared = String.IsNullOrEmpty(harbor.TenantId);
-                bool sameTenant = !String.IsNullOrEmpty(tenantId) && String.Equals(harbor.TenantId, tenantId, StringComparison.Ordinal);
-                if (!(String.IsNullOrEmpty(tenantId) || shared || sameTenant)) continue;
-                if (request.RestrictToOwner && !String.Equals(harbor.UserId, request.OwnerUserId, StringComparison.Ordinal)) continue;
-                candidates.Add(harbor);
-            }
+            List<Harbor> candidates = FilterCandidates(all, tenantId, request.RestrictToOwner, request.OwnerUserId);
 
             HarborRouter router = new HarborRouter();
             return router.Select(candidates, IsConnected, InFlightJobs, request);
@@ -682,6 +703,21 @@ namespace Armada.Core.Services
         #endregion
 
         #region Private-Methods
+
+        private static List<Harbor> FilterCandidates(List<Harbor> all, string? tenantId, bool restrictToOwner, string? ownerUserId)
+        {
+            List<Harbor> candidates = new List<Harbor>();
+            foreach (Harbor harbor in all)
+            {
+                bool shared = String.IsNullOrEmpty(harbor.TenantId);
+                bool sameTenant = !String.IsNullOrEmpty(tenantId) && String.Equals(harbor.TenantId, tenantId, StringComparison.Ordinal);
+                if (!(String.IsNullOrEmpty(tenantId) || shared || sameTenant)) continue;
+                if (restrictToOwner && !String.Equals(harbor.UserId, ownerUserId, StringComparison.Ordinal)) continue;
+                candidates.Add(harbor);
+            }
+
+            return candidates;
+        }
 
         private static bool HasAvailableCapability(List<HarborCapability>? capabilities, string name)
         {
