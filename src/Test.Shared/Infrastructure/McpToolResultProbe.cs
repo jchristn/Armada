@@ -23,6 +23,11 @@ namespace Test.Shared.Infrastructure
         public McpToolErrorCodeEnum? ErrorCode { get; set; } = null;
 
         /// <summary>
+        /// Feature-specific error code (for example DuplicateEntity), or null.
+        /// </summary>
+        public string? Code { get; set; } = null;
+
+        /// <summary>
         /// Rows deleted by a delete tool, or null.
         /// </summary>
         public int? Deleted { get; set; } = null;

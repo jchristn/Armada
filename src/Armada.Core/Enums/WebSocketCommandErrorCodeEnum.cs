@@ -25,7 +25,8 @@ namespace Armada.Core.Enums
         InvalidArgument,
 
         /// <summary>
-        /// The entity's current state does not allow the command (for example deleting a working captain).
+        /// The entity's current state does not allow the command (for example deleting a working captain), or a value
+        /// that must be unique (such as a name) is already taken.
         /// </summary>
         Conflict,
 

@@ -514,7 +514,7 @@ Every REST error is an `ApiErrorResponse` with a stable `Error` code that matche
 | `StatusCode` | int | The HTTP status code of the error code (same as the response status for the codes below) |
 | `Description` | string | Standard description of the error code |
 | `Message` | string | Human-readable detail. Not stable: do not parse it. |
-| `Data` | object \| null | Optional structured detail (for example `VesselImportErrorDetail { Code, Path }` on vessel import errors) |
+| `Data` | object \| null | Optional structured detail (for example `VesselImportErrorDetail { Code, Path }` on vessel import errors, or [DuplicateEntityErrorDetail](#duplicateentityerrordetail) on a duplicate) |
 
 ### Error Codes
 
@@ -525,7 +525,7 @@ Every REST error is an `ApiErrorResponse` with a stable `Error` code that matche
 | `NotAuthorized` | 401 | Missing, invalid, or expired credentials |
 | `Forbidden` | 403 | Authenticated, but the caller's role does not allow the operation on a resource it can see |
 | `NotFound` | 404 | No such route or entity, or the entity belongs to another tenant (or, for user-scoped records, another user) |
-| `Conflict` | 409 | The operation conflicts with the current state (deleting an active voyage, purging a non-terminal merge entry) |
+| `Conflict` | 409 | The operation conflicts with the current state (deleting an active voyage, purging a non-terminal merge entry), or a value that must be unique (a name, email, or file name) is already taken (see [Duplicate entities](#duplicate-entities)) |
 | `RequestTimeout` | 408 | The request timed out |
 | `SlowDown` | 429 | Rate limited |
 | `InternalError` | 500 | Unexpected server error |
@@ -548,13 +548,51 @@ Every REST error is an `ApiErrorResponse` with a stable `Error` code that matche
   planning or refinement session), invalid input is `400 BadRequest`, a state that blocks the operation is
   `400 BadRequest` or `409 Conflict` as each route documents (delete routes use `409`), and a role that cannot
   perform the operation is `403 Forbidden`.
-- Unhandled exceptions become `500 InternalError` with the exception message in `Message`.
+- Unhandled exceptions become `500 InternalError` with the exception message in `Message`. A database unique-constraint
+  violation is never one of them: it is a `409 Conflict` duplicate (below) whose message is Armada's own, so database
+  provider text (for example `SQLite Error 19: UNIQUE constraint failed`) never reaches a client.
 - Exceptions to the shape, frozen for 1.0 and documented with their routes: `POST /api/v1/authenticate` returns
   `AuthenticateResult { Success: false, ... }` with 401 on bad credentials, `POST /api/v1/onboarding` returns
   `OnboardingResult { Success: false, ErrorMessage }` with 400/403/409, and the vessel git helpers
   (`GET /api/v1/vessels/{id}/git-status`, `GET /api/v1/vessels/{id}/branches`, `GET /api/v1/vessels/{id}/history/activity`,
   `GET /api/v1/vessels/{id}/history/commits`) report a git failure in an `Error` field of a `200` result.
 - Clients should check the HTTP status code first, then read `Error`.
+
+### Duplicate entities
+
+A create or update that would store a value that must be unique and is already taken answers `409 Conflict` with a
+[DuplicateEntityErrorDetail](#duplicateentityerrordetail) in `Data`:
+
+```json
+{
+  "Error": "Conflict",
+  "StatusCode": 409,
+  "Description": "The request conflicts with the current state of the resource.",
+  "Message": "A captain named 'claude-1' already exists.",
+  "Data": { "Code": "DuplicateEntity", "EntityType": "Captain", "Field": "Name", "Value": "claude-1" }
+}
+```
+
+Branch on `Data.Code` (`DuplicateEntity`) and `Data.Field`; show `Message` to people. The routes check these values
+before writing:
+
+| Entity | Field | Unique within | Routes |
+|---|---|---|---|
+| `Fleet` | `Name` | the tenant | `POST /api/v1/fleets`, `PUT /api/v1/fleets/{id}` |
+| `Vessel` | `Name` | the tenant | `POST /api/v1/vessels`, `PUT /api/v1/vessels/{id}` |
+| `Captain` | `Name` | the tenant | `POST /api/v1/captains`, `PUT /api/v1/captains/{id}` |
+| `Persona` | `Name` | the tenant | `POST /api/v1/personas` |
+| `Pipeline` | `Name` | the tenant | `POST /api/v1/pipelines` |
+| `PromptTemplate` | `Name` | the server (built-in names included) | `POST /api/v1/prompt-templates` |
+| `Playbook` | `FileName` | the tenant | `POST /api/v1/playbooks`, `PUT /api/v1/playbooks/{id}` |
+| `User` | `Email` | the tenant | `POST /api/v1/users`, `PUT /api/v1/users/{id}` |
+
+An update that keeps the entity's own value is not a duplicate. Any other unique-constraint violation the database
+reports on any route (two concurrent creates of one name, a reused `Id`, a bearer or push token) is also a
+`409 Conflict` with `Data.Code` `DuplicateEntity` and `EntityType`, but with `Field` and `Value` null and a generic
+message such as `A captain with the same name or ID already exists.`. On SQLite and MySQL, fleet, vessel, and captain
+names are also unique across tenants by schema, so a name used in another tenant is refused with that generic
+message. `POST /api/v1/onboarding` keeps its documented `OnboardingResult` shape (`409`, `Success: false`).
 
 ---
 
@@ -879,6 +917,7 @@ Create a new user. Global admins can create users in any tenant. Tenant admins c
 ```
 
 **Response:** `201 Created` - [UserMaster](#usermaster) (password redacted)
+**Error:** `409 Conflict` - A user with that email already exists in the tenant (`Data`: [DuplicateEntityErrorDetail](#duplicateentityerrordetail) with `Code` `DuplicateEntity`, `EntityType` `User`, `Field` `Email`)
 
 ---
 
@@ -918,6 +957,7 @@ When the caller changes **their own** password this way, `CurrentPassword` is re
 ```
 
 **Response:** `200 OK` - [UserMaster](#usermaster) (password redacted)
+**Error:** `409 Conflict` - Another user in the tenant already has that email (`Data`: [DuplicateEntityErrorDetail](#duplicateentityerrordetail) with `Code` `DuplicateEntity`, `EntityType` `User`, `Field` `Email`)
 
 ---
 
@@ -1445,6 +1485,7 @@ Create a new fleet.
 | `Description` | string | no | Fleet description |
 
 **Response:** `201 Created` - [Fleet](#fleet)
+**Error:** `409 Conflict` - A fleet with that name already exists (`Data`: [DuplicateEntityErrorDetail](#duplicateentityerrordetail) with `Code` `DuplicateEntity`, `EntityType` `Fleet`, `Field` `Name`)
 
 ```bash
 curl -X POST http://localhost:7890/api/v1/fleets \
@@ -1491,6 +1532,7 @@ kept from the stored record (values in the body are ignored).
 
 **Response:** `200 OK` - [Fleet](#fleet)
 **Error:** `404` - Fleet not found
+**Error:** `409 Conflict` - Another fleet already has that name (`Data`: [DuplicateEntityErrorDetail](#duplicateentityerrordetail) with `Code` `DuplicateEntity`, `EntityType` `Fleet`, `Field` `Name`)
 
 ```bash
 curl -X PUT http://localhost:7890/api/v1/fleets/flt_abc123 \
@@ -1611,6 +1653,7 @@ Register a new vessel (git repository).
 | `GitHubTokenOverride` | string | no | Optional per-vessel GitHub token override. Omit to inherit the global token. Accepted only on create/update and never returned on reads. |
 
 **Response:** `201 Created` - [Vessel](#vessel)
+**Error:** `409 Conflict` - A vessel with that name already exists (`Data`: [DuplicateEntityErrorDetail](#duplicateentityerrordetail) with `Code` `DuplicateEntity`, `EntityType` `Vessel`, `Field` `Name`)
 
 ```bash
 curl -X POST http://localhost:7890/api/v1/vessels \
@@ -1653,6 +1696,7 @@ Update an existing vessel.
 
 **Response:** `200 OK` - [Vessel](#vessel)
 **Error:** `404` - Vessel not found
+**Error:** `409 Conflict` - Another vessel already has that name (`Data`: [DuplicateEntityErrorDetail](#duplicateentityerrordetail) with `Code` `DuplicateEntity`, `EntityType` `Vessel`, `Field` `Name`)
 
 ---
 
@@ -3562,6 +3606,7 @@ Register a new captain (AI agent).
 
 **Response:** `201 Created` - [Captain](#captain)
 **Error:** `400 Bad Request` - Invalid or unavailable model. `Data` is a `CaptainModelValidationFailure`: `{"Reason": "...", "Message": "..."}` with `Reason` one of `EndpointRequired`, `EndpointNotFound`, `EndpointNotInference`, `EndpointDisabled`, `RuntimeUnavailable`, `ModelRejected`, `TimedOut`, `InvalidRuntimeOptions`, `NamedEndpointRequired`, `UnsupportedContractVersion`, `EndpointProbeFailed`, `EndpointNotToolEnabled` (the same on `PUT /api/v1/captains/{id}`; MCP `create_captain` / `update_captain` return `ErrorCode` `InvalidArgument` with `Code` = the reason).
+**Error:** `409 Conflict` - A captain with that name already exists (`Data`: [DuplicateEntityErrorDetail](#duplicateentityerrordetail) with `Code` `DuplicateEntity`, `EntityType` `Captain`, `Field` `Name`)
 
 ```bash
 curl -X POST http://localhost:7890/api/v1/captains \
@@ -3653,6 +3698,7 @@ fields (state, current mission and dock, process, recovery attempts, quarantine,
 
 **Response:** `200 OK` - [Captain](#captain)
 **Error:** `400 Bad Request` - Invalid or unavailable model
+**Error:** `409 Conflict` - Another captain already has that name (`Data`: [DuplicateEntityErrorDetail](#duplicateentityerrordetail) with `Code` `DuplicateEntity`, `EntityType` `Captain`, `Field` `Name`)
 
 **Response:** `200 OK` - [Captain](#captain)
 **Error:** `404` - Captain not found
@@ -5523,7 +5569,7 @@ Create a playbook.
 
 **Request Body:** [Playbook](#playbook). `FileName` must end with `.md` (default `PLAYBOOK.md`) and `Content` must not be empty.
 
-**Response:** `201 Created` - [Playbook](#playbook). `409 Conflict` when a playbook with that file name already exists.
+**Response:** `201 Created` - [Playbook](#playbook). `409 Conflict` when a playbook with that file name already exists (`Data`: [DuplicateEntityErrorDetail](#duplicateentityerrordetail) with `Code` `DuplicateEntity`, `EntityType` `Playbook`, `Field` `FileName`).
 
 #### GET /api/v1/playbooks/{id}
 
@@ -5541,7 +5587,7 @@ Update a playbook's file name, description, content, or active state.
 
 **Request Body:** [Playbook](#playbook)
 
-**Response:** `200 OK` - [Playbook](#playbook). `404` when not found, `409` when the new file name is taken.
+**Response:** `200 OK` - [Playbook](#playbook). `404` when not found, `409` when the new file name is taken (`Data.Code` `DuplicateEntity`, `Data.Field` `FileName`).
 
 #### DELETE /api/v1/playbooks/{id}
 
@@ -5610,6 +5656,7 @@ Create a prompt template.
 | `Active` | bool | no | Whether the template is active |
 
 **Response:** `201 Created` - PromptTemplate
+**Error:** `409 Conflict` - A prompt template with that name already exists (`Data`: [DuplicateEntityErrorDetail](#duplicateentityerrordetail) with `Code` `DuplicateEntity`, `EntityType` `PromptTemplate`, `Field` `Name`)
 
 ```bash
 curl -X POST http://localhost:7890/api/v1/prompt-templates \
@@ -5761,6 +5808,7 @@ Create a new persona.
 | `PromptTemplateName` | string | yes | Name of the prompt template to use |
 
 **Response:** `201 Created` - Persona
+**Error:** `409 Conflict` - A persona with that name already exists (`Data`: [DuplicateEntityErrorDetail](#duplicateentityerrordetail) with `Code` `DuplicateEntity`, `EntityType` `Persona`, `Field` `Name`)
 
 ```bash
 curl -X POST http://localhost:7890/api/v1/personas \
@@ -5904,6 +5952,7 @@ Create a new pipeline with stages.
 | `ReviewDenyAction` | string | no | `RetryStage` (default) or `FailPipeline` when the review is denied |
 
 **Response:** `201 Created` - Pipeline
+**Error:** `409 Conflict` - A pipeline with that name already exists (`Data`: [DuplicateEntityErrorDetail](#duplicateentityerrordetail) with `Code` `DuplicateEntity`, `EntityType` `Pipeline`, `Field` `Name`)
 
 ```bash
 curl -X POST http://localhost:7890/api/v1/pipelines \
@@ -9204,6 +9253,20 @@ Body of `PUT /api/v1/captains/{id}/cli-permission-policy` and `PUT /api/v1/ask/t
 ---
 
 ### Response Wrappers
+
+#### DuplicateEntityErrorDetail
+
+The `Data` of a `409 Conflict` for a value that must be unique and is already taken (see
+[Duplicate entities](#duplicate-entities)).
+
+| Field | Type | Description |
+|---|---|---|
+| `Code` | string | Always `DuplicateEntity` |
+| `EntityType` | string | Entity type, for example `Captain`, `Fleet`, `User` |
+| `Field` | string \| null | The unique field that is taken (`Name`, `Email`, `FileName`), or null when the database reported the duplicate without saying which field |
+| `Value` | string \| null | The value that is taken, or null when unknown |
+
+---
 
 #### EnumerationResult\<T\>
 

@@ -168,6 +168,7 @@ namespace Armada.Server.Mcp.Tools
                         if (validationFailure != null) return (object)McpToolError.InvalidArgument(validationFailure.Message, validationFailure.Reason.ToString());
                     }
 
+                    await DuplicateEntityGuard.EnsureCaptainNameAvailableAsync(database, captain).ConfigureAwait(false);
                     captain = await database.Captains.CreateAsync(captain).ConfigureAwait(false);
                     return (object)captain;
                 });
@@ -242,6 +243,7 @@ namespace Armada.Server.Mcp.Tools
                     }
 
                     captain.LastUpdateUtc = DateTime.UtcNow;
+                    await DuplicateEntityGuard.EnsureCaptainNameAvailableAsync(database, captain).ConfigureAwait(false);
                     captain = await database.Captains.UpdateAsync(captain).ConfigureAwait(false);
                     return (object)captain;
                 });

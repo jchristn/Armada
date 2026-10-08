@@ -2,7 +2,9 @@ namespace Armada.Core.Models
 {
     using System;
     using System.Collections.Generic;
+    using Armada.Core.Database;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>
     /// The error object an MCP tool returns. <see cref="ErrorCode"/> is the machine-readable category; <see cref="Error"/>
@@ -90,7 +92,9 @@ namespace Armada.Core.Models
         }
 
         /// <summary>
-        /// The entity's state does not allow the operation, or it already exists.
+        /// The entity's state does not allow the operation, or it already exists. For a value that must be unique and
+        /// is taken, pass <see cref="DuplicateEntityException.ErrorCode"/> as the code (or use
+        /// <see cref="FromException(Exception, string?)"/> with the <see cref="DuplicateEntityException"/>).
         /// </summary>
         /// <param name="error">English message.</param>
         /// <param name="code">Feature-specific detail code, or null.</param>
@@ -137,7 +141,9 @@ namespace Armada.Core.Models
         /// Map an exception to an error by its type (never by its message): <see cref="KeyNotFoundException"/> is
         /// NotFound, <see cref="ArgumentException"/> InvalidArgument, <see cref="InvalidOperationException"/> Conflict,
         /// <see cref="UnauthorizedAccessException"/> Forbidden, <see cref="NotSupportedException"/> Unavailable, and
-        /// anything else Failed.
+        /// anything else Failed. A <see cref="DuplicateEntityException"/>, or a provider unique-constraint violation
+        /// (translated by <see cref="UniqueConstraintViolation"/> so its text is never returned), is Conflict with
+        /// <see cref="Code"/> <see cref="DuplicateEntityException.ErrorCode"/> unless a code is given.
         /// </summary>
         /// <param name="ex">Exception.</param>
         /// <param name="code">Feature-specific detail code, or null.</param>
@@ -146,6 +152,8 @@ namespace Armada.Core.Models
         public static McpToolError FromException(Exception ex, string? code = null)
         {
             if (ex == null) throw new ArgumentNullException(nameof(ex));
+            DuplicateEntityException? duplicate = UniqueConstraintViolation.Translate(ex);
+            if (duplicate != null) return new McpToolError(McpToolErrorCodeEnum.Conflict, duplicate.Message, code ?? DuplicateEntityException.ErrorCode);
             McpToolErrorCodeEnum category = McpToolErrorCodeEnum.Failed;
             if (ex is KeyNotFoundException) category = McpToolErrorCodeEnum.NotFound;
             else if (ex is ArgumentException) category = McpToolErrorCodeEnum.InvalidArgument;

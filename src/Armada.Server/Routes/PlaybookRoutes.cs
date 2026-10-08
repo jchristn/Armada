@@ -126,12 +126,7 @@ namespace Armada.Server.Routes
                 PlaybookService playbookService = new PlaybookService(_database, _logging);
                 playbookService.Validate(playbook);
 
-                bool fileNameExists = await _database.Playbooks.ExistsByFileNameAsync(ctx.TenantId!, playbook.FileName).ConfigureAwait(false);
-                if (fileNameExists)
-                {
-                    req.Http.Response.StatusCode = 409;
-                    return new ApiErrorResponse { Error = ApiResultEnum.Conflict, Message = "A playbook with that file name already exists." };
-                }
+                await DuplicateEntityGuard.EnsurePlaybookFileNameAvailableAsync(_database, playbook).ConfigureAwait(false);
 
                 playbook = await _database.Playbooks.CreateAsync(playbook).ConfigureAwait(false);
                 req.Http.Response.StatusCode = 201;
@@ -143,7 +138,7 @@ namespace Armada.Server.Routes
                 .WithDescription("Creates a tenant-scoped markdown playbook.")
                 .WithRequestBody(OpenApiJson.BodyFor<Playbook>("Playbook data", true))
                 .WithResponse(201, OpenApiJson.For<Playbook>("Created playbook"))
-                .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("Conflicts with the current state"))
+                .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("A playbook with that file name already exists (Data: DuplicateEntityErrorDetail)"))
                 .WithSecurity("ApiKey"));
 
             app.Get("/api/v1/playbooks/{id}", async (ApiRequest req) =>
@@ -223,12 +218,7 @@ namespace Armada.Server.Routes
                 PlaybookService playbookService = new PlaybookService(_database, _logging);
                 playbookService.Validate(existing);
 
-                Playbook? duplicate = await _database.Playbooks.ReadByFileNameAsync(existing.TenantId!, existing.FileName).ConfigureAwait(false);
-                if (duplicate != null && !String.Equals(duplicate.Id, existing.Id, StringComparison.Ordinal))
-                {
-                    req.Http.Response.StatusCode = 409;
-                    return new ApiErrorResponse { Error = ApiResultEnum.Conflict, Message = "A playbook with that file name already exists." };
-                }
+                await DuplicateEntityGuard.EnsurePlaybookFileNameAvailableAsync(_database, existing).ConfigureAwait(false);
 
                 existing = await _database.Playbooks.UpdateAsync(existing).ConfigureAwait(false);
                 return existing;
@@ -241,7 +231,7 @@ namespace Armada.Server.Routes
                 .WithRequestBody(OpenApiJson.BodyFor<Playbook>("Updated playbook data", true))
                 .WithResponse(200, OpenApiJson.For<Playbook>("Updated playbook"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
-                .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("Conflicts with the current state"))
+                .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("A playbook with that file name already exists (Data: DuplicateEntityErrorDetail)"))
                 .WithSecurity("ApiKey"));
 
             app.Delete("/api/v1/playbooks/{id}", async (ApiRequest req) =>
