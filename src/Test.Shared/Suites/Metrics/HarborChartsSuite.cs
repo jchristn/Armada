@@ -15,8 +15,8 @@ namespace Test.Shared.Suites.Metrics
     /// <summary>
     /// The chart layer behind the Harbor app's and the TUI's Harbor charts (Armada.Core.Metrics.Charts), tested without
     /// Avalonia: axis scale, stacked bar rectangles, line runs with gaps, sparkline points, hit testing, text levels and
-    /// downsampling, the series mapping from a metrics response (names, order, colors, values, the capacity line, the
-    /// "Other" token series), the link strip (clipping, worst state per column), tooltips, accessible summaries, and the
+    /// downsampling, whole-number ticks, the series mapping from a metrics response (names, order, colors, values, the
+    /// capacity line and the axis that tops out at it, tokens by type without counting cache reads twice), the link strip (clipping, worst state per column), tooltips, accessible summaries, and the
     /// value formats.
     /// </summary>
     public sealed class HarborChartsSuite : IArmadaTestSuite
@@ -46,6 +46,20 @@ namespace Test.Shared.Suites.Metrics
                 AssertEqual(10.0, ChartGeometry.NiceCeiling(6), "6");
                 AssertEqual(10.0, ChartGeometry.NiceCeiling(10), "exactly 10");
                 AssertEqual(200000.0, ChartGeometry.NiceCeiling(123456), "tokens");
+            }));
+
+            cases.Add(Case("whole_ticks", "Whole-number ticks run from zero to the maximum itself, prefer an even step, and do not crowd the top", () =>
+            {
+                AssertEqual("0,1,2,3,4", Join(ChartGeometry.WholeTicks(4, 4)), "4 slots, room for 4 gaps");
+                AssertEqual("0,2,4", Join(ChartGeometry.WholeTicks(4, 2)), "4 slots, room for 2 gaps");
+                AssertEqual("0,2,4,6,7", Join(ChartGeometry.WholeTicks(7, 4)), "7 has no even step; the top is still 7");
+                AssertEqual("0,4,7", Join(ChartGeometry.WholeTicks(7, 2)), "7 in 2 gaps");
+                AssertEqual("0,5,10", Join(ChartGeometry.WholeTicks(10, 4)), "a step of 5 divides 10");
+                AssertEqual("0,4,8,12,16", Join(ChartGeometry.WholeTicks(16, 4)), "16");
+                AssertEqual("0,3,6,9", Join(ChartGeometry.WholeTicks(9, 3)), "9 in 3 gaps");
+                AssertEqual("0,1", Join(ChartGeometry.WholeTicks(1, 5)), "one slot");
+                AssertEqual("0,1", Join(ChartGeometry.WholeTicks(0, 5)), "at least 1");
+                AssertEqual("0,3", Join(ChartGeometry.WholeTicks(2.2, 0)), "rounded up; gaps below 1 count as 1");
             }));
 
             cases.Add(Case("stacked_bar_geometry", "Stacked bars: series stack bottom up in order, zeros draw nothing, bars leave a gap", () =>
@@ -164,7 +178,26 @@ namespace Test.Shared.Suites.Metrics
                 AssertEqual("Max slots (4)", slots.Reference.Label);
                 AssertEqual(ChartColorEnum.Danger, slots.Reference.Color);
                 AssertEqual(4.0, slots.DataMax(), "the capacity counts toward the axis");
-                AssertEqual(5.0, slots.AxisMax());
+                AssertEqual(4.0, slots.AxisCeiling!.Value, "the axis is pinned to the capacity");
+                AssertEqual(4.0, slots.AxisMax(), "the top of the axis is MaxConcurrentJobs, not a rounded 5");
+                AssertEqual("0,1,2,3,4", Join(slots.AxisTicks(4)), "whole-number ticks up to the capacity");
+                AssertEqual("0,2,4", Join(slots.AxisTicks(2)), "fewer ticks on a short plot, still ending at 4");
+
+                metrics.Slots.MaxConcurrentJobs = 7;
+                BucketChartModel seven = HarborChartMapper.Slots(metrics);
+                AssertEqual(7.0, seven.AxisMax(), "7 slots tops out at 7, not 10");
+                AssertEqual(7.0, seven.AxisTicks(4).Last(), "the last tick is the capacity");
+
+                metrics.Slots.MaxConcurrentJobs = 2;
+                BucketChartModel over = HarborChartMapper.Slots(metrics);
+                AssertEqual(3.0, over.AxisMax(), "a peak past the capacity (lowered mid-window) is not clipped");
+
+                metrics.Slots.MaxConcurrentJobs = 0;
+                BucketChartModel none = HarborChartMapper.Slots(metrics);
+                AssertEqual(null, none.AxisCeiling, "no capacity: a nice axis");
+                AssertEqual(5.0, none.AxisMax());
+                AssertEqual("0,2.5,5", Join(none.AxisTicks(4)), "zero, half, and the top");
+                metrics.Slots.MaxConcurrentJobs = 4;
                 AssertEqual(3.0, slots.Series[0].Max(), "peak");
                 AssertEqual(2.5, slots.Series[1].At(1), "average in bucket 1");
                 AssertEqual("Slot usage, last 24 hours: Peak highest 3, Average highest 2.5; Max slots (4)", slots.Summary());
@@ -181,32 +214,65 @@ namespace Test.Shared.Suites.Metrics
                 AssertEqual(48, HarborChartMapper.Slots(metrics).Series[0].Values.Count, "padded");
             }));
 
-            cases.Add(Case("tokens_mapping", "Tokens: one series per runtime and model, most first; past five the rest are summed into Other", () =>
+            cases.Add(Case("tokens_mapping", "Tokens: uncached input, cached input, and output stacked per bucket; bars add up to input plus output", () =>
             {
                 HarborMetrics metrics = HarborMetricsFixture.Build();
                 BucketChartModel tokens = HarborChartMapper.Tokens(metrics);
+                AssertEqual("Tokens by type", tokens.Title);
+                AssertEqual(BucketChartKindEnum.StackedBar, tokens.Kind);
                 AssertEqual(ChartValueFormatEnum.Tokens, tokens.Format);
-                AssertEqual("ClaudeCode / claude-opus,Codex / gpt-5", String.Join(",", tokens.Series.Select(s => s.Name)));
-                AssertEqual("Series1,Series2", String.Join(",", tokens.Series.Select(s => s.Color.ToString())));
-                AssertEqual(1500.0, tokens.Series[0].At(1));
+                AssertEqual("uncachedInput,cachedInput,output", String.Join(",", tokens.Series.Select(s => s.Key)));
+                AssertEqual("Uncached input,Cached input,Output", String.Join(",", tokens.Series.Select(s => s.Name)));
+                AssertEqual("Series1,Series2,Series3", String.Join(",", tokens.Series.Select(s => s.Color.ToString())));
+                AssertEqual(600.0, tokens.Series[0].At(1), "input 1,300 minus 700 cached");
+                AssertEqual(700.0, tokens.Series[1].At(1), "cached");
+                AssertEqual(700.0, tokens.Series[2].At(1), "output");
+                AssertEqual(2000.0, tokens.StackTotal(1), "the bar is the real total, cached counted once");
+                AssertEqual((double)metrics.Tokens.Buckets[1].TotalTokens, tokens.StackTotal(1), "matches the bucket's TotalTokens");
+                AssertEqual(2000.0, tokens.DataMax());
                 AssertEqual(0.0, tokens.Series[0].At(0), "no tokens in bucket 0");
-                AssertEqual("Tokens by runtime and model, last 24 hours: ClaudeCode / claude-opus 1.5K, Codex / gpt-5 500", tokens.Summary());
+                AssertEqual(48, tokens.Series[2].Values.Count, "one value per bucket");
 
-                metrics.Tokens.Series.Clear();
-                metrics.Tokens.Buckets[1].Series.Clear();
-                for (int i = 0; i < 7; i++)
-                {
-                    HarborTokenSeries s = new HarborTokenSeries { Runtime = "R" + i, Model = "m", TotalTokens = 100 - i };
-                    metrics.Tokens.Series.Add(s);
-                    metrics.Tokens.Buckets[1].Series.Add(new HarborTokenSeries { Runtime = s.Runtime, Model = s.Model, TotalTokens = s.TotalTokens });
-                }
+                string[] tip = tokens.Tooltip(1, TimeZoneInfo.Utc).Split('\n');
+                AssertEqual("Uncached input: 600", tip[1]);
+                AssertEqual("Cached input: 700", tip[2]);
+                AssertEqual("Output: 700", tip[3]);
+                AssertEqual("Total: 2K", tip[4]);
+                AssertEqual("Tokens by type, last 24 hours: Uncached input 600, Cached input 700, Output 700", tokens.Summary());
 
-                BucketChartModel capped = HarborChartMapper.Tokens(metrics);
-                AssertEqual(HarborChartMapper.MaxTokenSeries + 1, capped.Series.Count, "five named plus Other");
-                ChartSeriesData other = capped.Series.Last();
-                AssertEqual("Other (2)", other.Name);
-                AssertEqual(ChartColorEnum.Idle, other.Color);
-                AssertEqual((double)(95 + 94), other.At(1), "R5 and R6 summed");
+                List<ChartBarSegment> bars = ChartGeometry.StackedBars(tokens, 480, 100, tokens.AxisMax());
+                AssertEqual("0,1,2", String.Join(",", bars.Where(b => b.BucketIndex == 1).Select(b => b.SeriesIndex)), "uncached at the bottom, then cached, then output");
+
+                // Runtime and model stay available as totals, most tokens first.
+                List<HarborTokenSeries> rows = HarborChartMapper.TokenRows(metrics);
+                AssertEqual("ClaudeCode/claude-opus,Codex/gpt-5", String.Join(",", rows.Select(r => r.Runtime + "/" + r.Model)));
+            }));
+
+            cases.Add(Case("token_type_split", "Token split: cached is part of input, never counted twice, never more than input, never negative", () =>
+            {
+                TokenTypeSplit split = TokenTypeSplit.From(1000, 500, 600);
+                AssertEqual(400L, split.UncachedInput, "input minus cached");
+                AssertEqual(600L, split.CachedInput);
+                AssertEqual(500L, split.Output);
+                AssertEqual(1500L, split.Total, "input plus output, the recorded total");
+
+                TokenTypeSplit over = TokenTypeSplit.From(100, 50, 300);
+                AssertEqual(0L, over.UncachedInput, "cached above input is capped");
+                AssertEqual(100L, over.CachedInput);
+                AssertEqual(150L, over.Total, "still input plus output");
+
+                TokenTypeSplit negative = TokenTypeSplit.From(-5, -1, -9);
+                AssertEqual(0L, negative.Total, "negatives count as zero");
+
+                // A bucket where the cache reads exceed the input does not grow the bar past input plus output.
+                HarborMetrics metrics = HarborMetricsFixture.Build();
+                metrics.Tokens.Buckets[2].InputTokens = 100;
+                metrics.Tokens.Buckets[2].OutputTokens = 40;
+                metrics.Tokens.Buckets[2].CachedTokens = 250;
+                metrics.Tokens.Buckets[2].TotalTokens = 140;
+                BucketChartModel tokens = HarborChartMapper.Tokens(metrics);
+                AssertEqual(140.0, tokens.StackTotal(2));
+                AssertEqual(100.0, tokens.Series[1].At(2), "cached capped at input");
             }));
 
             cases.Add(Case("link_strip", "Link strip: segments clipped to the window, worst state per column, tooltips and summary", () =>
@@ -291,6 +357,11 @@ namespace Test.Shared.Suites.Metrics
         #endregion
 
         #region Private-Methods
+
+        private static string Join(IEnumerable<double> values)
+        {
+            return String.Join(",", values.Select(v => v.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+        }
 
         private static DateTime Utc(int minutes)
         {
