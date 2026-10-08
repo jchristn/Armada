@@ -30,6 +30,8 @@ jest.mock('expo-router', () => ({
   ...jest.requireActual('expo-router'),
   useRouter: () => mockRouter,
   useLocalSearchParams: () => ({}),
+  // Rendered outside a navigator: focus effects (hardware back in selection mode) do not run.
+  useFocusEffect: () => undefined,
   Stack: { Screen: () => null },
 }));
 

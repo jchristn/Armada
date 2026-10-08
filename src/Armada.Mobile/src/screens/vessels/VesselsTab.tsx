@@ -18,6 +18,7 @@ import { spacing } from '../../theme/typography';
 import { useVesselActions } from './VesselActions';
 import { VesselDetailView } from './VesselDetailView';
 import { syncParts, vesselLinks, type GitSync } from './vesselLinks';
+import { useHardwareBack } from '../../navigation/useHardwareBack';
 
 /** Parallel git-status / branch requests while filling the Sync and Branches columns. */
 const STATUS_CONCURRENCY = 4;
@@ -150,6 +151,7 @@ export function VesselsTab() {
   });
 
   const exitSelection = () => { table.clearSelection(); setSelecting(false); };
+  useHardwareBack(selecting, exitSelection);
 
   async function bulkDelete() {
     setConfirmBulk(false);

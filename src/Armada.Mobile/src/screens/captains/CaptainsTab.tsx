@@ -19,6 +19,7 @@ import { CaptainFormSheet } from './CaptainFormSheet';
 import { TierBadge } from './TierBadge';
 import { useCaptainActions } from './useCaptainActions';
 import { UserScopeField } from './UserScopeField';
+import { useHardwareBack } from '../../navigation/useHardwareBack';
 
 export type CaptainSort = 'name' | 'runtime' | 'state' | 'createdUtc';
 
@@ -92,6 +93,8 @@ export function CaptainsTab() {
     if (action === 'delete' && captain && selection.selectedId === captain.id) selection.clear();
     void resource.reload();
   });
+
+  useHardwareBack(selecting, () => { setSelecting(false); setSelected([]); });
 
   const activeFilters = (filters.runtime ? 1 : 0) + (filters.state ? 1 : 0) + (userScope ? 1 : 0);
 
