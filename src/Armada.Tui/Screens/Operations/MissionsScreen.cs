@@ -225,7 +225,7 @@ namespace Armada.Tui.Screens.Operations
                     d.Complete();
                     Toast(NotificationSeverityEnum.Success, Tr("Mission \"{{title}}\" created.", LocalizationArgs.Of("title", created)));
                     Refresh();
-                }, null, ex => d.Fail(Tr("Create failed.")));
+                }, null, ex => d.Fail(ex, Tr("Create failed.")));
                 return false;
             };
             Context.Modals.Show(dialog, r => Reference.Changed -= vesselsArrived);

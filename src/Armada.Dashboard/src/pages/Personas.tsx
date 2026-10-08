@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { listPersonas, listPromptTemplates, createPersona, updatePersona, deletePersona } from '../api/client';
+import { listPersonas, listPromptTemplates, createPersona, updatePersona, deletePersona, apiErrorMessage } from '../api/client';
 import type { Persona, ScopeEnum } from '../types/models';
 import { useAuth } from '../context/AuthContext';
 import { canEdit as canEditScoped, resolveCreateScope, type ScopeViewer } from '../lib/scoping';
@@ -96,7 +96,7 @@ export default function Personas() {
         ? t('Persona "{{name}}" saved.', { name: editing.name })
         : t('Persona "{{name}}" created.', { name: form.name }));
       load();
-    } catch { setError(t('Save failed.')); }
+    } catch (err: unknown) { setError(apiErrorMessage(err, t('Save failed.'))); }
   }
 
   function handleDelete(name: string) {

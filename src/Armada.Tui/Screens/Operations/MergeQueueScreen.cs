@@ -213,7 +213,7 @@ namespace Armada.Tui.Screens.Operations
                     d.Complete();
                     Toast(NotificationSeverityEnum.Success, Tr("Merge entry enqueued."));
                     Refresh();
-                }, null, ex => d.Fail(Tr("Enqueue failed.")));
+                }, null, ex => d.Fail(ex, Tr("Enqueue failed.")));
                 return false;
             };
             Context.Modals.Show(dialog);

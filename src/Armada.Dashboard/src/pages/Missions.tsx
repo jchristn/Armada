@@ -4,7 +4,7 @@ import { useNotifications } from '../context/NotificationContext';
 import {
   listMissionSummaries, createMission, updateMission, deleteMission, purgeMission,
   restartMission, retryMissionLanding, transitionMission, getMissionDiff, getMissionLog,
-  listVessels, listCaptains, listVoyages,
+  listVessels, listCaptains, listVoyages, apiErrorMessage,
 } from '../api/client';
 import type { MissionSummary, Vessel, Captain, Voyage, MissionMode } from '../types/models';
 import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
@@ -170,7 +170,7 @@ export default function Missions() {
       setShowForm(false);
       pushToast('success', t('Mission "{{title}}" created.', { title: formData.title }));
       load();
-    } catch { setError(t('Create failed.')); }
+    } catch (err: unknown) { setError(apiErrorMessage(err, t('Create failed.'))); }
   }
 
   // Actions

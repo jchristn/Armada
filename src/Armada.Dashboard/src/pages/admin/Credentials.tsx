@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
-import { listCredentials, createCredential, updateCredential, deleteCredential, listUsers, listTenants } from '../../api/client';
+import { listCredentials, createCredential, updateCredential, deleteCredential, listUsers, listTenants, apiErrorMessage } from '../../api/client';
 import type { Credential, UserMaster, TenantMetadata } from '../../types/models';
 import DataTable, { type DataTableColumn } from '../../components/shared/DataTable';
 import ActionMenu from '../../components/shared/ActionMenu';
@@ -158,8 +158,8 @@ export default function Credentials() {
         ? t('Credential "{{name}}" saved.', { name: form.name || editing.id })
         : t('Credential created.'));
       load();
-    } catch {
-      setError(editing ? t('Update failed.') : t('Create failed.'));
+    } catch (err: unknown) {
+      setError(apiErrorMessage(err, editing ? t('Update failed.') : t('Create failed.')));
     }
   }
 

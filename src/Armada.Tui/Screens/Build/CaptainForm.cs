@@ -385,7 +385,7 @@ namespace Armada.Tui.Screens.Build
                         screen.Toast(NotificationSeverityEnum.Success, screen.Tr("Captain \"{{name}}\" saved.", LocalizationArgs.Of("name", label)));
                         saved?.Invoke(result);
                     };
-                    Action<Exception> fail = ex => d.Fail(ex is ArmadaApiException api && !String.IsNullOrEmpty(api.Message) ? api.Message : screen.Tr("Save failed."));
+                    Action<Exception> fail = ex => d.Fail(ex, screen.Tr("Save failed."));
                     screen.Call((c, t) => c.UpdateCaptainAsync(editing.Id, body, t), result =>
                     {
                         if (!canManagePolicy || chosenPolicy == storedPolicy)
@@ -405,7 +405,7 @@ namespace Armada.Tui.Screens.Build
                         d.Complete();
                         screen.Toast(NotificationSeverityEnum.Success, screen.Tr("Captain \"{{name}}\" created.", LocalizationArgs.Of("name", label)));
                         saved?.Invoke(result);
-                    }, null, ex => d.Fail(ex is ArmadaApiException api && !String.IsNullOrEmpty(api.Message) ? api.Message : screen.Tr("Save failed.")));
+                    }, null, ex => d.Fail(ex, screen.Tr("Save failed.")));
                 }
 
                 return false;

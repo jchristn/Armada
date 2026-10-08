@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { createTenant, deleteTenant, listTenants, updateTenant } from '@dashboard/api/client';
+import { createTenant, deleteTenant, listTenants, updateTenant, apiErrorMessage } from '@dashboard/api/client';
 import type { TenantCreateRequest, TenantMetadata } from '@dashboard/types/models';
 import { useAuth } from '../../auth/AuthContext';
 import { JsonSheet } from '../../components/resource/DetailParts';
@@ -167,8 +167,8 @@ export function TenantsTab() {
               const created = await createTenant(request);
               if (created?.adminPassword) setGenerated({ email: created.adminEmail || 'admin@armada', password: created.adminPassword });
             }
-          } catch {
-            throw new Error(t('Save failed.'));
+          } catch (err: unknown) {
+            throw new Error(apiErrorMessage(err, t('Save failed.')));
           }
           pushToast('success', editing && editing !== 'new' ? t('Tenant "{{name}}" saved.', { name }) : t('Tenant "{{name}}" created.', { name }));
           setEditing(null);

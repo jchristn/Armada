@@ -1,6 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { createVessel, updateVessel } from '@dashboard/api/client';
+import { createVessel, updateVessel, apiErrorMessage } from '@dashboard/api/client';
 import type { Fleet, Pipeline, Vessel } from '@dashboard/types/models';
 import {
   buildVesselPayload,
@@ -29,7 +29,7 @@ export interface VesselFormProps {
   pipelines: Pipeline[];
   /** After a successful save, with the saved name and whether it was a create. */
   onSaved: (name: string, created: boolean) => void;
-  /** A failed save (the dashboard shows "Save failed."). */
+  /** A failed save: the server's message (for example a duplicate name), else "Save failed.". */
   onError: (message: string) => void;
   /** Whether Save can run and whether a save is in flight (for VesselFormActions in the sheet's footer). */
   onStatus?: (status: VesselFormStatus) => void;
@@ -62,8 +62,8 @@ export const VesselForm = forwardRef<VesselFormHandle, VesselFormProps>(function
       if (vessel) await updateVessel(vessel.id, payload as Partial<Vessel>);
       else await createVessel(payload as Partial<Vessel>);
       onSaved(form.name, !vessel);
-    } catch {
-      onError(t('Save failed.'));
+    } catch (err: unknown) {
+      onError(apiErrorMessage(err, t('Save failed.')));
     } finally {
       setSaving(false);
     }

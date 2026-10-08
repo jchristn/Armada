@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { createPersona, deletePersona, getPersona, getPromptTemplate, listCaptains, listPromptTemplates, resetPromptTemplate, updatePersona, updatePromptTemplate } from '../api/client';
+import { createPersona, deletePersona, getPersona, getPromptTemplate, listCaptains, listPromptTemplates, resetPromptTemplate, updatePersona, updatePromptTemplate, apiErrorMessage } from '../api/client';
 import type { Captain, Persona, PromptTemplate } from '../types/models';
 import ActionMenu from '../components/shared/ActionMenu';
 import CaptainPicker from '../components/shared/CaptainPicker';
@@ -111,7 +111,7 @@ export default function PersonaDetail() {
       setShowForm(false);
       pushToast('success', t('Persona "{{name}}" saved.', { name: persona.name }));
       load();
-    } catch { setError(t('Save failed.')); }
+    } catch (err: unknown) { setError(apiErrorMessage(err, t('Save failed.'))); }
   }
 
   async function handleSavePrompt() {

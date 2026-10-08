@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { createPipeline, getPipeline, updatePipeline, deletePipeline, listPersonas, listVessels, createVoyage } from '../api/client';
+import { createPipeline, getPipeline, updatePipeline, deletePipeline, listPersonas, listVessels, createVoyage, apiErrorMessage } from '../api/client';
 import type { Pipeline, PipelineStage, Vessel } from '../types/models';
 import { useAuth } from '../context/AuthContext';
 import { canEdit as canEditScoped, type ScopeViewer } from '../lib/scoping';
@@ -157,7 +157,7 @@ export default function PipelineDetail() {
       setShowForm(false);
       pushToast('success', t('Pipeline "{{name}}" saved.', { name: pipeline.name }));
       load();
-    } catch { setError(t('Save failed.')); }
+    } catch (err: unknown) { setError(apiErrorMessage(err, t('Save failed.'))); }
   }
 
   function handleDelete() {
