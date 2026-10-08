@@ -373,7 +373,7 @@ export function SignInScreen() {
                 title={p.name}
                 subtitle={p.kind === 'Proxy' ? `${p.url} (${t('Armada.Proxy')})` : p.url}
                 selected={p.id === activeProfile.id}
-                accessory={p.id === activeProfile.id ? <Icon name="checkmark" color="primary" accessibilityLabel={t('Selected')} /> : null}
+                accessory={p.id === activeProfile.id ? <Icon name="checkmark" color="primary" /> : null}
                 onPress={() => { void selectProfile(p.id); setServersOpen(false); }}
               />
             ))}

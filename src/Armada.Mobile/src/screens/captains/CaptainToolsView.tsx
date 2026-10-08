@@ -61,6 +61,7 @@ export function CaptainToolsView({ captainId }: { captainId: string }) {
             title={s.name}
             subtitle={[s.transport, s.url || s.command || s.target, t('Tools: {{count}}', { count: s.toolCount }), notes(s)].filter(Boolean).join(' \u00b7 ')}
             accessory={<StatusBadge label={s.status} tone={s.reachable ? 'success' : s.enabled ? 'warning' : 'cancelled'} />}
+            accessibilityValue={s.status}
           />
         ))}
       </Section>

@@ -245,6 +245,12 @@ export function VesselHealthTab() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={[row.vesselName || row.vesselId, statusLabel(t, row.overallStatus), divergence, meta].filter(Boolean).join(', ')}
+          accessibilityValue={{ text: [
+            `${t('Dependencies')}: ${statusLabel(t, row.dependencyStatus)}`,
+            `${t('Vulnerabilities')}: ${statusLabel(t, row.vulnerabilityStatus)}`,
+            `${t('Tests')}: ${statusLabel(t, row.testInfraStatus)}`,
+            `${t('CI')}: ${statusLabel(t, row.ciStatus)}`,
+          ].join(', ') }}
           accessibilityHint={t('Long press to select')}
           accessibilityState={{ selected: isSel }}
           onPress={() => (selecting ? toggleSelected(row.vesselId) : openDetail(row))}

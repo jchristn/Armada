@@ -198,6 +198,7 @@ export function VesselsTab() {
         title={selecting ? `${selected ? '\u2611' : '\u2610'} ${v.name}` : v.name}
         subtitle={subtitle}
         accessory={sync ? <StatusBadge label={sync.text} tone={sync.tone} /> : null}
+        accessibilityValue={sync?.text}
         selected={selecting ? selected : selection.selectedId === v.id}
         accessibilityHint={findLandingMode(landingModes, v.landingMode).description}
         onPress={() => (selecting ? table.toggleSelect(v.id) : selection.open(v.id))}

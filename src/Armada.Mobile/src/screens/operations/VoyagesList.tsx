@@ -10,7 +10,7 @@ import { JsonSheet } from '../../components/app/JsonSheet';
 import { PagedList } from '../../components/app/PagedList';
 import { useConfirm } from '../../components/app/useConfirm';
 import { UserScopeSelect } from '../../components/app/UserScopeSelect';
-import { ActionSheet, AppText, Button, IconButton, ListRow, SearchField } from '../../components/ui';
+import { ActionSheet, AppText, Button, ListRow, SearchField } from '../../components/ui';
 import { SelectField } from '../../components/ui/SelectField';
 import { useLiveRefresh } from '../../data/useLiveRefresh';
 import { usePagedList } from '../../data/usePagedList';
@@ -186,12 +186,9 @@ export function VoyagesList({ onSelect, selectedId }: OperationsListProps) {
               title={v.title}
               subtitle={`${v.id}\n${t('Landing Mode')}: ${v.landingMode || t('Default')} (${mode.short}) - ${formatRelativeTime(v.createdUtc)}`}
               selected={selecting ? checked : selectedId === v.id}
-              accessory={(
-                <View style={styles.accessory}>
-                  <EntityStatusBadge status={v.status} />
-                  <IconButton icon="ellipsis-horizontal" label={t('Actions')} onPress={() => setMenu(v)} testID={`voyage-row-menu-${v.id}`} />
-                </View>
-              )}
+              accessory={<EntityStatusBadge status={v.status} />}
+              accessibilityValue={t(v.status)}
+              menu={{ label: t('Actions'), onPress: () => setMenu(v), testID: `voyage-row-menu-${v.id}` }}
               accessibilityHint={selecting ? t('Select this voyage') : undefined}
               onPress={() => (selecting ? toggle(v.id) : onSelect(v.id))}
               onLongPress={() => toggle(v.id)}
@@ -223,6 +220,5 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   header: { paddingTop: spacing.md },
   buttons: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.md },
-  accessory: { alignItems: 'flex-end', gap: spacing.xs },
   error: { paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
 });

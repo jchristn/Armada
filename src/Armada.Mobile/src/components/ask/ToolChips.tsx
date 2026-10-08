@@ -30,6 +30,7 @@ function ToolChip({ tool, permissionDeniedNote }: { tool: ToolEvent; permissionD
           testID={`tool-chip-${tool.id}`}
           accessibilityRole="button"
           accessibilityLabel={`${tool.name}, ${statusWord}${meta && tool.status !== 'running' ? `, ${meta}` : ''}`}
+          accessibilityValue={preview ? { text: preview } : undefined}
           accessibilityState={{ expanded: open }}
           onPress={() => setOpen((v) => !v)}
           style={styles.summary}

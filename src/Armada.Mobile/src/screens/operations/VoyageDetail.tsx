@@ -15,7 +15,7 @@ import { RefreshControl, StyleSheet, View } from 'react-native';
 import { EntityStatusBadge } from '../../components/app/EntityStatusBadge';
 import { JsonSheet } from '../../components/app/JsonSheet';
 import { useConfirm } from '../../components/app/useConfirm';
-import { ActionSheet, AppText, Button, EmptyState, ErrorState, IconButton, ListRow, LoadingState, Screen, Section } from '../../components/ui';
+import { ActionSheet, AppText, Button, EmptyState, ErrorState, ListRow, LoadingState, Screen, Section } from '../../components/ui';
 import { KeyValueRow } from '../../components/ui/KeyValueRow';
 import { ProgressBar } from '../../components/ui/ProgressBar';
 import { useLiveRefresh } from '../../data/useLiveRefresh';
@@ -270,12 +270,9 @@ export function VoyageDetail({ id, embedded }: OperationsDetailProps) {
             testID={`voyage-mission-row-${m.id}`}
             title={m.title}
             subtitle={[m.id, `${t('Vessel')}: ${lookups.vesselName(m.vesselId)}`, `${t('Captain')}: ${lookups.captainName(m.captainId)}`, m.branchName ? `${t('Branch')}: ${m.branchName}` : null].filter(Boolean).join('\n')}
-            accessory={(
-              <View style={styles.rowAccessory}>
-                <EntityStatusBadge status={m.status} />
-                <IconButton icon="ellipsis-horizontal" label={t('Actions')} onPress={() => setMissionMenu(m)} testID={`voyage-mission-menu-${m.id}`} />
-              </View>
-            )}
+            accessory={<EntityStatusBadge status={m.status} />}
+            accessibilityValue={t(m.status)}
+            menu={{ label: t('Actions'), onPress: () => setMissionMenu(m), testID: `voyage-mission-menu-${m.id}` }}
             onPress={() => router.push(`/missions/${m.id}` as Href)}
             onLongPress={() => setMissionMenu(m)}
           />
@@ -305,5 +302,4 @@ const styles = StyleSheet.create({
   pad: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, paddingHorizontal: spacing.md, marginBottom: spacing.md },
   progress: { paddingHorizontal: spacing.lg, gap: spacing.xs, marginBottom: spacing.lg },
-  rowAccessory: { alignItems: 'flex-end', gap: spacing.xs },
 });

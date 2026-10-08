@@ -142,6 +142,7 @@ export function CaptainsTab() {
             <StatusBadge label={item.state} tone={statusTone(item.state)} />
           </View>
         )}
+        accessibilityValue={[item.tier ? t(item.tier) : null, item.state]}
         selected={selecting ? isSelected : selection.selectedId === item.id}
         onPress={() => (selecting ? toggle(item.id) : selection.open(item.id))}
         onLongPress={() => setMenuFor(item)}

@@ -25,7 +25,7 @@ export function LocalePicker({ testID = 'locale-picker' }: { testID?: string }) 
             title={localeOptionLabel(meta)}
             subtitle={meta.label}
             selected={meta.code === locale}
-            accessory={meta.code === locale ? <Icon name="checkmark" color="primary" accessibilityLabel={t('Selected')} /> : null}
+            accessory={meta.code === locale ? <Icon name="checkmark" color="primary" /> : null}
             onPress={() => { setLocale(meta.code); setOpen(false); }}
           />
         ))}

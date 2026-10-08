@@ -129,6 +129,7 @@ export function DocksList({ onSelect, selectedId }: OperationsListProps) {
             title={item.branchName || item.id}
             subtitle={[lookups.vesselName(item.vesselId), item.captainId ? lookups.captainName(item.captainId) : null, formatRelativeTime(item.createdUtc)].filter(Boolean).join(' - ')}
             accessory={<StatusBadge label={item.active ? t('Active') : t('Inactive')} tone={item.active ? 'success' : 'cancelled'} />}
+            accessibilityValue={item.active ? t('Active') : t('Inactive')}
             selecting={selection.active}
             checked={selection.selected.includes(item.id)}
             highlighted={selectedId === item.id}

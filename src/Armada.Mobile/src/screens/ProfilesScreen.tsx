@@ -36,7 +36,8 @@ export function ProfilesScreen() {
               subtitle={`${p.url}${p.lastUserEmail ? `\n${p.lastUserEmail}` : ''}`}
               icon="server-outline"
               selected={p.id === activeProfile?.id}
-              accessory={p.id === activeProfile?.id ? <Icon name="checkmark-circle" color="primary" accessibilityLabel={t('Active')} /> : null}
+              accessory={p.id === activeProfile?.id ? <Icon name="checkmark-circle" color="primary" /> : null}
+              accessibilityValue={p.id === activeProfile?.id ? t('Active') : undefined}
               onPress={() => void selectProfile(p.id)}
               onLongPress={() => setEditing(p)}
               accessibilityHint={t('Switch to this server. Swipe or use actions to edit or delete.')}

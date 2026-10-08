@@ -167,6 +167,7 @@ export function PlanningScreen({ initialSessionId = null }: { initialSessionId?:
               title={item.title}
               subtitle={[catalog.captainName(item.captainId), catalog.vesselName(item.vesselId), catalog.pipelineName(item.pipelineId), ending ? t('Ending...') : formatRelativeTime(item.lastUpdateUtc)].join(' \u00b7 ')}
               accessory={<StatusBadge label={t(item.status)} tone={statusTone(item.status)} />}
+              accessibilityValue={t(item.status)}
               selected={isTablet && selectedId === item.id}
               onPress={() => open(item.id)}
               testID={`planning-open-${item.id}`}

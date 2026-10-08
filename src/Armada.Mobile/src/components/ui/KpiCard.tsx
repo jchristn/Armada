@@ -5,11 +5,13 @@ import { radius, spacing } from '../../theme/typography';
 import { AppText } from './AppText';
 
 /** A KPI tile (label, big value, optional detail chips). Tapping opens the related list. */
-export function KpiCard({ label, value, children, onPress, testID }: {
+export function KpiCard({ label, value, children, onPress, accessibilityValue, testID }: {
   label: string;
   value: string | number;
   children?: ReactNode;
   onPress?: () => void;
+  /** What the detail chips say, read after the label and value (a tappable card is one screen-reader element). */
+  accessibilityValue?: string;
   testID?: string;
 }) {
   const { colors } = useTheme();
@@ -23,7 +25,7 @@ export function KpiCard({ label, value, children, onPress, testID }: {
   const style = [styles.card, { backgroundColor: colors.surface, borderColor: colors.border }];
   if (!onPress) return <View testID={testID} style={style}>{content}</View>;
   return (
-    <Pressable testID={testID} accessibilityRole="button" accessibilityLabel={`${label}, ${value}`} onPress={onPress} style={({ pressed }) => [style, { opacity: pressed ? 0.75 : 1 }]}>
+    <Pressable testID={testID} accessibilityRole="button" accessibilityLabel={`${label}, ${value}`} accessibilityValue={accessibilityValue ? { text: accessibilityValue } : undefined} onPress={onPress} style={({ pressed }) => [style, { opacity: pressed ? 0.75 : 1 }]}>
       {content}
     </Pressable>
   );

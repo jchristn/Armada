@@ -30,7 +30,7 @@ export function ResourceRow({ title, subtitle, badge, meta, onPress, actions = [
       {meta ? <AppText variant="caption" muted numberOfLines={1}>{meta}</AppText> : null}
     </View>
   ) : null;
-  const row = <ListRow title={title} subtitle={subtitle} accessory={accessory} onPress={onPress} selected={selected} testID={testID} accessibilityValue={badge?.label} />;
+  const row = <ListRow title={title} subtitle={subtitle} accessory={accessory} onPress={onPress} selected={selected} testID={testID} accessibilityValue={[badge?.label, meta]} />;
   if (actions.length === 0) return row;
   return <SwipeRow actions={actions} testID={testID ? `${testID}-swipe` : undefined}>{row}</SwipeRow>;
 }

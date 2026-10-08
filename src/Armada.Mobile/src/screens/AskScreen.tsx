@@ -192,7 +192,7 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
     <KeyboardAvoidingView style={styles.fill} behavior="padding" keyboardVerticalOffset={headerHeight}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={t('Captain: {{name}}. Change captain', { name: activeCaptain ? captainLabel(activeCaptain) : t('None') })}
+        accessibilityLabel={t('Captain: {{name}}. Change captain', { name: activeCaptain ? captainLabel(activeCaptain) : t('None (quick actions only)') })}
         disabled={conv.turnActive}
         onPress={() => setOptionsOpen(true)}
         style={[styles.captainBar, { borderBottomColor: colors.border, backgroundColor: colors.surface }]}

@@ -114,6 +114,7 @@ export function RefinementPanel({ objective, refinement, reference, pipelines, c
           selected={session.id === refinement.selectedSessionId}
           onPress={() => refinement.selectSession(session.id)}
           accessory={<StatusBadge label={session.status} tone={statusTone(session.status)} />}
+          accessibilityValue={session.status}
         />
       ))}
 

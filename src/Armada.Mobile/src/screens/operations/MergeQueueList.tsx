@@ -192,6 +192,7 @@ export function MergeQueueList({ onSelect, selectedId }: OperationsListProps) {
             title={`${item.branchName} -> ${item.targetBranch}`}
             subtitle={[t('Priority') + ' ' + item.priority, item.vesselId ? lookups.vesselName(item.vesselId) : null, item.missionId].filter(Boolean).join(' - ')}
             accessory={<EntityStatusBadge status={item.status} />}
+            accessibilityValue={t(item.status)}
             selecting={selection.active}
             checked={selection.selected.includes(item.id)}
             highlighted={selectedId === item.id}

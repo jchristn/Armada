@@ -42,6 +42,7 @@ export function WorkStrip({ work, onSelect }: { work: AskTrackedWork[]; onSelect
               testID={`work-chip-${item.id}`}
               accessibilityRole="button"
               accessibilityLabel={t('Show the live card for {{title}}', { title: item.title || item.entityId })}
+              accessibilityValue={{ text: [entityTypeLabel(t, item.entityType), item.status ? t(item.status) : null].filter(Boolean).join(', ') }}
               onPress={() => onSelect(item)}
               style={[styles.chip, { borderColor: isWorkActive(item) ? colors.info : colors.border }]}
             >

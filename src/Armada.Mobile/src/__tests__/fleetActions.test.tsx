@@ -97,7 +97,7 @@ describe('fleet action helpers', () => {
     function Probe() {
       const [on, setOn] = useState(true);
       usePolling(on, tick, 1000);
-      return <Text testID="stop" onPress={() => setOn(false)}>p</Text>;
+      return <Text testID="stop" accessibilityRole="button" onPress={() => setOn(false)}>p</Text>;
     }
     await render(<Probe />);
     await act(async () => { jest.advanceTimersByTime(2100); });

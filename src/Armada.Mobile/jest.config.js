@@ -8,6 +8,8 @@ const local = (name) => path.join(__dirname, 'node_modules', name);
 module.exports = {
   preset: 'jest-expo/ios',
   setupFiles: ['<rootDir>/jest.setup.js'],
+  // Runs the accessibility audit on what every test leaves rendered (see jest.a11y.js).
+  setupFilesAfterEnv: ['<rootDir>/jest.a11y.js'],
   resolver: '<rootDir>/jest.resolver.js',
   roots: ['<rootDir>/src'],
   testMatch: ['**/__tests__/**/*.test.ts?(x)'],
