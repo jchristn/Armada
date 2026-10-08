@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import {
   Animated,
   Easing,
   KeyboardAvoidingView,
   Modal,
-  Platform,
   Pressable,
   StyleSheet,
   View,
@@ -51,11 +50,11 @@ export interface ModalOverlayProps {
 
 /**
  * The one modal frame behind every sheet and dialog (BottomSheet, ConfirmDialog, one-time secret dialogs). The dim
- * backdrop covers the whole screen, under the status bar and the Android navigation bar, appears at once with no
- * animation, and never moves: it is a sibling of the keyboard-avoiding layer, not a child of it, so only
+ * backdrop covers the whole screen, under the status bar and the Android navigation bar, appears and disappears at
+ * once with no animation, and never moves: it is a sibling of the keyboard-avoiding layer, not a child of it, so only
  * the sheet or dialog content lifts when the keyboard opens and drops when it closes. The platform Modal does not
- * animate its appearance (its slide and fade moved the backdrop with the content); the content enters on its own,
- * sliding or fading (see modalEntrance). Closing is instant on Android and the platform fade on iOS (see below).
+ * animate (its slide and fade moved the backdrop with the content); the content enters on its own, sliding or fading
+ * (see modalEntrance), and leaves at once with the backdrop.
  */
 export function ModalOverlay({ visible, onRequestClose, onShow, kind, onBackdropPress, backdropLabel, contentStyle, children }: ModalOverlayProps) {
   const { colors } = useTheme();
@@ -64,12 +63,6 @@ export function ModalOverlay({ visible, onRequestClose, onShow, kind, onBackdrop
   const entrance = modalEntrance(kind, reduceMotion);
   // 0 = hidden (below the screen, or transparent), 1 = in place. Reset while closed so every opening starts hidden.
   const progress = useAnimatedValue(0);
-  // iOS: shown without animation, but dismissed with the platform fade (see the comment on animationType below).
-  const [presented, setPresented] = useState(false);
-  const handleShow = useCallback(() => {
-    setPresented(true);
-    onShow?.();
-  }, [onShow]);
 
   useEffect(() => {
     if (!visible) {
@@ -96,15 +89,9 @@ export function ModalOverlay({ visible, onRequestClose, onShow, kind, onBackdrop
       supportedOrientations={MODAL_ORIENTATIONS}
       visible={visible}
       transparent
-      // Appearing never animates (UIKit's slide and fade moved or faded the backdrop with the content). On iOS the
-      // dismissal still fades: whatever the caller presents next as the modal closes (a system passcode prompt, a share
-      // sheet, another dialog) is presented by UIKit after the fade, as before; an instant dismissal raced it and left
-      // the system passcode prompt unable to close. Android dialogs need no such ordering (and changing the animation
-      // of a shown Android Modal would recreate its window), so they stay unanimated.
-      animationType={Platform.OS === 'ios' && presented ? 'fade' : 'none'}
+      animationType="none"
       onRequestClose={onRequestClose}
-      onShow={handleShow}
-      onDismiss={() => setPresented(false)}
+      onShow={onShow}
       statusBarTranslucent
       navigationBarTranslucent
     >

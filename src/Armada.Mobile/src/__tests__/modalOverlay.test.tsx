@@ -93,18 +93,6 @@ describe('modal backdrop', () => {
     expectStillFullScreenBackdrop();
   });
 
-  it('iOS: appears without animation but fades out once shown, so what the caller presents next waits for it; Android never animates', async () => {
-    const { Platform } = jest.requireActual<typeof import('react-native')>('react-native');
-    const view = await render(<Themed><ConfirmDialog open title="Backup?" message="M" confirmLabel="Continue" cancelLabel="Cancel" onConfirm={() => undefined} onCancel={() => undefined} /></Themed>);
-    expect(modalHost().props.animationType).toBe('none');
-    await act(async () => { (modalHost().props.onShow as () => void)(); });
-    expect(modalHost().props.animationType).toBe(Platform.OS === 'ios' ? 'fade' : 'none');
-    // Dismissed: the next opening appears at once again.
-    await act(async () => { (modalHost().props.onDismiss as () => void)(); });
-    expect(modalHost().props.animationType).toBe('none');
-    await view.unmount();
-  });
-
   it('closed modals render nothing (no backdrop left behind)', async () => {
     const view = await render(<Themed><BottomSheet open title="Filters" onClose={() => undefined} closeLabel="Close"><Text>body</Text></BottomSheet></Themed>);
     expect(screen.getByTestId('modal-backdrop')).toBeTruthy();
