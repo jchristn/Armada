@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
-import { radius, spacing } from '../../theme/typography';
+import { radius, spacing, useLargeText } from '../../theme/typography';
 import { AppText } from './AppText';
 
 /** A KPI tile (label, big value, optional detail chips). Tapping opens the related list. */
@@ -31,14 +31,19 @@ export function KpiCard({ label, value, children, onPress, accessibilityValue, t
   );
 }
 
-/** Wraps KPI cards: two per row on phones, more on wide screens (each card is at least 150 dp wide). */
+/**
+ * Wraps KPI cards: two per row on phones, more on wide screens (each card is at least 150 dp wide). At large text
+ * sizes the cards stack one per row, so labels like "Missions" are not broken mid-word in a half-width card.
+ */
 export function KpiGrid({ children }: { children: ReactNode }) {
-  return <View style={styles.grid}>{children}</View>;
+  const large = useLargeText();
+  return <View style={[styles.grid, large ? styles.stacked : null]} testID={large ? 'kpi-grid-stacked' : undefined}>{children}</View>;
 }
 
 const styles = StyleSheet.create({
   card: { flexGrow: 1, flexBasis: 150, minWidth: 140, borderWidth: StyleSheet.hairlineWidth, borderRadius: radius.md, padding: spacing.md },
   inner: { gap: spacing.xs },
   detail: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.xs },
+  stacked: { flexDirection: 'column' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginHorizontal: spacing.md, marginBottom: spacing.xl },
 });

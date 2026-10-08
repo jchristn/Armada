@@ -1,4 +1,4 @@
-import { Platform, type TextStyle } from 'react-native';
+import { Platform, useWindowDimensions, type TextStyle } from 'react-native';
 
 /**
  * Type scale. Sizes are base sizes: React Native scales them with the user's font size setting (Dynamic Type /
@@ -19,6 +19,20 @@ export type TypographyVariant = keyof typeof typography;
 
 /** Largest font scale for compact chrome (tab bar labels, badges); body text is never capped. */
 export const CHROME_MAX_FONT_SCALE = 1.6;
+
+/**
+ * Button labels grow up to this multiple of their size: at the largest accessibility sizes a fully scaled label in a
+ * half-width toolbar button broke mid-word ("Missi" / "on"). Twice the size stays readable and keeps words whole.
+ */
+export const BUTTON_MAX_FONT_SCALE = 2;
+
+/** From this text size on (Dynamic Type accessibility sizes, Android 150% and up), layouts stack instead of sitting side by side. */
+export const LARGE_TEXT_SCALE = 1.5;
+
+/** True when the user's text size calls for stacked layouts (see LARGE_TEXT_SCALE). */
+export function useLargeText(): boolean {
+  return useWindowDimensions().fontScale >= LARGE_TEXT_SCALE;
+}
 
 /** Minimum touch target (Apple HIG 44 pt, Material 48 dp). */
 export const MIN_TOUCH = 48;

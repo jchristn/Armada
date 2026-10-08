@@ -1,0 +1,122 @@
+# Screen-reader checks on a device (W6.1): Maestro finds elements the way VoiceOver and TalkBack read them (the
+# accessibility label), so each selector below pairs an element's test id with the words a screen reader speaks.
+# Run after the main flows (signed in, seeded by scripts/mobile/run-e2e.sh), at any text size:
+#   scripts/mobile/run-e2e.sh --platform ios --flows src/Armada.Mobile/e2e/a11y
+# Before a large-text pass, set the size with `xcrun simctl ui <device> content_size
+# accessibility-extra-extra-extra-large` or `adb shell settings put system font_scale 2.0`.
+appId: ${APP_ID}
+name: 01-a11y-labels
+---
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: "tab-ask"
+    timeout: 30000
+# Tabs: each has a spoken name (Ask's is the full "Ask Armada").
+- assertVisible:
+    id: "tab-ask"
+    text: "Ask Armada"
+- assertVisible:
+    id: "tab-approvals"
+    text: "Approvals.*"
+- takeScreenshot: a11y-ask
+- tapOn:
+    id: "tab-work"
+- extendedWaitUntil:
+    visible:
+      id: "home-screen"
+    timeout: 10000
+# Icon-only header button: named, with its unread count.
+- assertVisible:
+    id: "header-notifications"
+    text: "Notifications.*"
+- takeScreenshot: a11y-home-top
+# At large text sizes the banner and the hero push these below the fold.
+- scrollUntilVisible:
+    element:
+      id: "home-health"
+    direction: DOWN
+    timeout: 60000
+- assertVisible:
+    id: "home-health"
+    text: "Server: .*"
+- scrollUntilVisible:
+    element:
+      id: "home-kpi-missions"
+    direction: DOWN
+    timeout: 60000
+- assertVisible:
+    id: "home-kpi-missions"
+    text: "Missions, .*"
+- takeScreenshot: a11y-home-kpis
+# The chart is read as its totals.
+- scrollUntilVisible:
+    element:
+      id: "mission-history-chart"
+    direction: DOWN
+    timeout: 60000
+- assertVisible:
+    id: "mission-history-chart"
+    text: "Mission History: .*total.*"
+- takeScreenshot: a11y-home-chart
+# Voyage progress is one element: title, status, percent.
+- scrollUntilVisible:
+    element: "Seeded voyage, .*%"
+    direction: DOWN
+    timeout: 60000
+- takeScreenshot: a11y-home-voyages
+# Missions list: a row reads its title, status, and details; its menu button is its own control.
+- scrollUntilVisible:
+    element:
+      id: "home-missions-all"
+    direction: DOWN
+    visibilityPercentage: 100
+    centerElement: true
+- tapOn:
+    id: "home-missions-all"
+- extendedWaitUntil:
+    visible:
+      id: "missions-list"
+    timeout: 10000
+- takeScreenshot: a11y-missions
+# Filters open in a sheet whose title is a header; Close is named.
+- tapOn:
+    id: "missions-filters"
+    optional: true
+- runFlow:
+    when:
+      visible:
+        id: "missions-filters-sheet"
+    commands:
+      - assertVisible: "Filters"
+      - takeScreenshot: a11y-filters-sheet
+      - tapOn:
+          id: "missions-filters-sheet-close"
+          text: "Close"
+- scrollUntilVisible:
+    element: "Seeded mission one, Pending.*"
+    direction: DOWN
+    timeout: 60000
+    centerElement: true
+- tapOn: "Seeded mission one, Pending.*"
+- extendedWaitUntil:
+    visible:
+      id: "mission-detail"
+    timeout: 15000
+- takeScreenshot: a11y-mission-detail
+- tapOn:
+    id: "tab-more"
+- extendedWaitUntil:
+    visible:
+      id: "more-menu"
+    timeout: 10000
+- takeScreenshot: a11y-more
+- scrollUntilVisible:
+    element:
+      id: "nav-/preferences"
+    direction: DOWN
+    timeout: 60000
+    centerElement: true
+- tapOn:
+    id: "nav-/preferences"
+- takeScreenshot: a11y-preferences

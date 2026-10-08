@@ -23,6 +23,7 @@ import { NotificationProvider } from '../notifications/NotificationContext';
 import { RoutePlaceholder } from '../screens/RoutePlaceholder';
 import { SocketProvider } from '../socket/SocketContext';
 import { ThemeProvider } from '../theme/ThemeContext';
+import { CHROME_MAX_FONT_SCALE } from '../theme/typography';
 
 jest.mock('@dashboard/api/client', () => require('../test/mockClient').clientMockFactory());
 
@@ -205,6 +206,15 @@ describe('adaptive shell', () => {
     expect(screen.getByTestId('tab-work')).toBeTruthy();
     expect(screen.getByTestId('tab-more')).toBeTruthy();
     expect(screen.queryByTestId('sidebar')).toBeNull();
+  });
+
+  it('tab labels grow with the text size only up to the chrome cap, so large text does not cut them off', async () => {
+    setWindow(390, 844);
+    await renderApp('/ask');
+    for (const label of ['Ask', 'Approvals', 'Work', 'More']) {
+      expect(screen.getByText(label).props.maxFontSizeMultiplier).toBe(CHROME_MAX_FONT_SCALE);
+    }
+    expect(screen.getByTestId('tab-ask').props.accessibilityLabel).toBe('Ask Armada');
   });
 
   it('tablets get the dashboard sidebar instead of the tab bar', async () => {

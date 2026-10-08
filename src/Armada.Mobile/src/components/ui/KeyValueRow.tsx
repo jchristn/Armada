@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
-import { MIN_TOUCH, spacing } from '../../theme/typography';
+import { MIN_TOUCH, spacing, useLargeText } from '../../theme/typography';
 import { AppText } from './AppText';
 import { Icon } from './Icon';
 
@@ -23,6 +23,8 @@ export interface KeyValueRowProps {
  */
 export function KeyValueRow({ label, value, children, mono, onPress, testID }: KeyValueRowProps) {
   const { colors } = useTheme();
+  // At large text sizes the label sits above the value: a 120 dp label column would break both into word fragments.
+  const large = useLargeText();
   const text = value === null || value === undefined || value === '' ? '-' : String(value);
   const body = children ?? (
     <AppText selectable variant={mono ? 'mono' : 'body'} color={onPress ? 'primary' : 'text'} testID={testID ? `${testID}-value` : undefined}>
@@ -30,9 +32,9 @@ export function KeyValueRow({ label, value, children, mono, onPress, testID }: K
     </AppText>
   );
   const content = (
-    <View style={styles.row}>
-      <AppText variant="caption" muted style={styles.label}>{label}</AppText>
-      <View style={styles.value}>{body}</View>
+    <View style={[styles.row, large ? styles.stacked : null]}>
+      <AppText variant="caption" muted style={large ? null : styles.label}>{label}</AppText>
+      <View style={large ? null : styles.value}>{body}</View>
       {onPress ? <Icon name="chevron-forward" size={16} color="textMuted" /> : null}
     </View>
   );
@@ -55,6 +57,7 @@ export function KeyValueRow({ label, value, children, mono, onPress, testID }: K
 const styles = StyleSheet.create({
   base: { minHeight: MIN_TOUCH, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, justifyContent: 'center', borderBottomWidth: StyleSheet.hairlineWidth },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  stacked: { flexDirection: 'column', alignItems: 'stretch', gap: spacing.xs },
   label: { width: 120 },
   value: { flex: 1 },
 });

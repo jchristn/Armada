@@ -14,7 +14,7 @@ import type { Fleet, MissionHistorySummaryResult, Vessel } from '@dashboard/type
 import { useQuery } from '../../data/useQuery';
 import { useLocale } from '../../i18n/LocaleContext';
 import { useTheme } from '../../theme/ThemeContext';
-import { radius, spacing } from '../../theme/typography';
+import { radius, spacing, useLargeText } from '../../theme/typography';
 import { AppText, IconButton, SegmentedControl, SelectField } from '../ui';
 
 const CHART_HEIGHT = 160;
@@ -33,6 +33,7 @@ export function MissionHistoryChart({ vessels, fleets, refreshToken }: { vessels
   const [vesselId, setVesselId] = useState('');
   const [hovered, setHovered] = useState<number | null>(null);
   const [width, setWidth] = useState(0);
+  const largeText = useLargeText();
 
   const filteredVessels = useMemo(() => (fleetId ? vessels.filter((v) => v.fleetId === fleetId) : vessels), [vessels, fleetId]);
   const effectiveVesselId = vesselId && filteredVessels.some((v) => v.id === vesselId) ? vesselId : '';
@@ -80,8 +81,9 @@ export function MissionHistoryChart({ vessels, fleets, refreshToken }: { vessels
         onChange={(value) => { setRange(value); setHovered(null); }}
         options={MISSION_HISTORY_RANGES.map((r) => ({ value: r.value, label: t(r.label), testID: `mission-history-range-${r.value}` }))}
       />
-      <View style={styles.filters}>
-        <View style={styles.flex}>
+      {/* At large text sizes the two pickers stack so their values are not cut to "All...". */}
+      <View style={[styles.filters, largeText ? styles.stacked : null]}>
+        <View style={largeText ? null : styles.flex}>
           <SelectField
             label={t('Fleet')}
             value={fleetId}
@@ -93,7 +95,7 @@ export function MissionHistoryChart({ vessels, fleets, refreshToken }: { vessels
             testID="mission-history-fleet"
           />
         </View>
-        <View style={styles.flex}>
+        <View style={largeText ? null : styles.flex}>
           <SelectField
             label={t('Vessel')}
             value={effectiveVesselId}
@@ -193,7 +195,9 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center' },
   flex: { flex: 1 },
   filters: { flexDirection: 'row', gap: spacing.sm },
-  stats: { flexDirection: 'row', gap: spacing.lg, marginBottom: spacing.md },
+  stacked: { flexDirection: 'column' },
+  // Wraps at large text sizes instead of pushing "Failed" off the card.
+  stats: { flexDirection: 'row', flexWrap: 'wrap', columnGap: spacing.lg, rowGap: spacing.sm, marginBottom: spacing.md },
   stat: { alignItems: 'flex-start' },
   empty: { paddingVertical: spacing.xl, textAlign: 'center' },
   chart: { height: CHART_HEIGHT, flexDirection: 'row', alignItems: 'flex-end', gap: 1, borderBottomWidth: 1 },

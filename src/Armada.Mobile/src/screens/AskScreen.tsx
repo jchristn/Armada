@@ -202,7 +202,7 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
       >
         <Icon name="person-circle-outline" size={18} color="textMuted" />
         <AppText variant="caption" muted>{t('Captain')}</AppText>
-        <AppText variant="body" numberOfLines={1} style={styles.fill} testID="ask-captain-bar-name">
+        <AppText variant="body" numberOfLines={2} style={styles.fill} testID="ask-captain-bar-name">
           {activeCaptain ? captainLabel(activeCaptain) : t('None (quick actions only)')}
         </AppText>
         <Icon name="chevron-down" size={16} color="textMuted" />

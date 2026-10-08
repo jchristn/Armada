@@ -11,7 +11,8 @@ import * as RN from 'react-native';
 import { AccessibilityInfo } from 'react-native';
 import { TOAST_TIMEOUT_MS } from '@dashboard/lib/notificationEvents';
 import { ToastHost } from '../components/app/ToastHost';
-import { BottomSheet, ConfirmDialog, ErrorState, SelectField } from '../components/ui';
+import { BottomSheet, Button, ConfirmDialog, ErrorState, KeyValueRow, KpiCard, KpiGrid, SegmentedControl, SelectField } from '../components/ui';
+import { BUTTON_MAX_FONT_SCALE } from '../theme/typography';
 import { LocaleProvider } from '../i18n/LocaleContext';
 import { NotificationProvider, SCREEN_READER_TOAST_FACTOR, useNotifications, type NotificationState } from '../notifications/NotificationContext';
 import { SocketProvider } from '../socket/SocketContext';
@@ -20,6 +21,13 @@ import { resolveTheme } from '../theme/palette';
 import { ThemeProvider, useTheme, type ThemeState } from '../theme/ThemeContext';
 
 jest.mock('expo-router', () => ({ useRouter: () => ({ push: jest.fn() }) }));
+
+// The user's text size; tests set it per case.
+const mockWindow = { fontScale: 1 };
+jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
+  __esModule: true,
+  default: () => ({ width: 390, height: 844, scale: 3, fontScale: mockWindow.fontScale }),
+}));
 
 const info = AccessibilityInfo as jest.Mocked<typeof AccessibilityInfo>;
 
@@ -189,5 +197,37 @@ describe('increased contrast', () => {
     await render(<ThemeProvider><Probe /></ThemeProvider>);
     await waitFor(() => expect(theme!.name).toBe('highContrast'));
     scheme.mockRestore();
+  });
+});
+
+describe('large text', () => {
+  afterEach(() => { mockWindow.fontScale = 1; });
+
+  async function renderParts() {
+    await render(<Themed>
+      <KpiGrid><KpiCard label="Missions" value={3} /><KpiCard label="Captains" value={2} /></KpiGrid>
+      <KeyValueRow testID="kv" label="Branch" value="armada/fix" />
+      <Button label="+ Mission" onPress={() => undefined} testID="b" />
+      <SegmentedControl label="Sections" value="a" onChange={() => undefined} options={[{ value: 'a', label: 'Overview' }, { value: 'b', label: 'Instructions' }]} />
+    </Themed>);
+  }
+
+  it('at default sizes KPI cards share rows and labels sit beside values', async () => {
+    mockWindow.fontScale = 1;
+    await renderParts();
+    expect(screen.queryByTestId('kpi-grid-stacked')).toBeNull();
+    expect(RN.StyleSheet.flatten(screen.getByText('Branch').props.style).width).toBe(120);
+    expect(screen.getByText('Instructions').props.adjustsFontSizeToFit).toBe(true);
+  });
+
+  it('at accessibility sizes KPI cards and key-value rows stack, and button labels stop growing at twice their size', async () => {
+    mockWindow.fontScale = 3.1;
+    await renderParts();
+    expect(screen.getByTestId('kpi-grid-stacked')).toBeTruthy();
+    expect(RN.StyleSheet.flatten(screen.getByText('Branch').props.style).width).toBeUndefined();
+    expect(screen.getByText('+ Mission').props.maxFontSizeMultiplier).toBe(BUTTON_MAX_FONT_SCALE);
+    // Segments wrap with whole, equally sized labels instead of shrinking some of them.
+    expect(screen.getByText('Instructions').props.adjustsFontSizeToFit).toBeUndefined();
+    expect(screen.getByText('Instructions').props.numberOfLines).toBeUndefined();
   });
 });
