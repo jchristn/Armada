@@ -32,6 +32,17 @@
           <SolidColorBrush x:Key="HarborLogBrush" Color="#F8FAFC" />
           <SolidColorBrush x:Key="HarborInputBrush" Color="#FFFFFF" />
           <SolidColorBrush x:Key="HarborInputBorderBrush" Color="#CBD5E1" />
+          <!-- Chart series (tokens by runtime and model), gridlines, and the strip background; contrast checked against
+               the card background in each theme. -->
+          <SolidColorBrush x:Key="HarborChartSeries1Brush" Color="#2563EB" />
+          <SolidColorBrush x:Key="HarborChartSeries2Brush" Color="#0D9488" />
+          <SolidColorBrush x:Key="HarborChartSeries3Brush" Color="#7C3AED" />
+          <SolidColorBrush x:Key="HarborChartSeries4Brush" Color="#DB2777" />
+          <SolidColorBrush x:Key="HarborChartSeries5Brush" Color="#CA8A04" />
+          <SolidColorBrush x:Key="HarborChartSeries6Brush" Color="#0891B2" />
+          <SolidColorBrush x:Key="HarborChartGridBrush" Color="#E2E8F0" />
+          <SolidColorBrush x:Key="HarborChartTrackBrush" Color="#F1F5F9" />
+          <SolidColorBrush x:Key="HarborChartHoverBrush" Color="#1A2563EB" />
 
           <Color x:Key="SystemAccentColor">#2563EB</Color>
           <Color x:Key="SystemAccentColorDark1">#1D4ED8</Color>
@@ -55,6 +66,13 @@
           <SolidColorBrush x:Key="ButtonBorderBrush" Color="#CBD5E1" />
           <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="#94A3B8" />
           <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="#94A3B8" />
+          <SolidColorBrush x:Key="ToggleButtonBackground" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="ToggleButtonBackgroundPointerOver" Color="#F1F5F9" />
+          <SolidColorBrush x:Key="ToggleButtonBackgroundPressed" Color="#E2E8F0" />
+          <SolidColorBrush x:Key="ToggleButtonForeground" Color="#1E293B" />
+          <SolidColorBrush x:Key="ToggleButtonForegroundPointerOver" Color="#1E293B" />
+          <SolidColorBrush x:Key="ToggleButtonBorderBrush" Color="#CBD5E1" />
+          <SolidColorBrush x:Key="ToggleButtonBorderBrushPointerOver" Color="#94A3B8" />
           <SolidColorBrush x:Key="TextControlBackground" Color="#FFFFFF" />
           <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#FFFFFF" />
           <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="#FFFFFF" />
@@ -98,6 +116,15 @@
           <SolidColorBrush x:Key="HarborLogBrush" Color="#0D1117" />
           <SolidColorBrush x:Key="HarborInputBrush" Color="#111827" />
           <SolidColorBrush x:Key="HarborInputBorderBrush" Color="#334155" />
+          <SolidColorBrush x:Key="HarborChartSeries1Brush" Color="#60A5FA" />
+          <SolidColorBrush x:Key="HarborChartSeries2Brush" Color="#2DD4BF" />
+          <SolidColorBrush x:Key="HarborChartSeries3Brush" Color="#A78BFA" />
+          <SolidColorBrush x:Key="HarborChartSeries4Brush" Color="#F472B6" />
+          <SolidColorBrush x:Key="HarborChartSeries5Brush" Color="#FACC15" />
+          <SolidColorBrush x:Key="HarborChartSeries6Brush" Color="#22D3EE" />
+          <SolidColorBrush x:Key="HarborChartGridBrush" Color="#1E293B" />
+          <SolidColorBrush x:Key="HarborChartTrackBrush" Color="#1E293B" />
+          <SolidColorBrush x:Key="HarborChartHoverBrush" Color="#2660A5FA" />
 
           <Color x:Key="SystemAccentColor">#2563EB</Color>
           <Color x:Key="SystemAccentColorDark1">#1D4ED8</Color>
@@ -121,6 +148,13 @@
           <SolidColorBrush x:Key="ButtonBorderBrush" Color="#334155" />
           <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="#475569" />
           <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="#475569" />
+          <SolidColorBrush x:Key="ToggleButtonBackground" Color="#111827" />
+          <SolidColorBrush x:Key="ToggleButtonBackgroundPointerOver" Color="#1E293B" />
+          <SolidColorBrush x:Key="ToggleButtonBackgroundPressed" Color="#273449" />
+          <SolidColorBrush x:Key="ToggleButtonForeground" Color="#F1F5F9" />
+          <SolidColorBrush x:Key="ToggleButtonForegroundPointerOver" Color="#F1F5F9" />
+          <SolidColorBrush x:Key="ToggleButtonBorderBrush" Color="#334155" />
+          <SolidColorBrush x:Key="ToggleButtonBorderBrushPointerOver" Color="#475569" />
           <SolidColorBrush x:Key="TextControlBackground" Color="#111827" />
           <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#111827" />
           <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="#111827" />

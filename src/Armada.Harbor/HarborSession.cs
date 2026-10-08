@@ -5,6 +5,7 @@ namespace Armada.Harbor
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Client;
+    using Armada.Client.Metrics;
     using Armada.Core.Hosting;
     using Avalonia.Threading;
 
@@ -147,6 +148,16 @@ namespace Armada.Harbor
             if (IsAdmiralLocal && !String.IsNullOrWhiteSpace(Admiral!.LocalApiKey)) options.ApiKey = Admiral.LocalApiKey;
             else if (!String.IsNullOrWhiteSpace(Settings.AccessKey)) options.BearerToken = Settings.AccessKey.Trim();
             return new ArmadaClient(options);
+        }
+
+        /// <summary>
+        /// A feed of this Harbor's own metrics from the linked Admiral, read with <see cref="CreateClient"/>'s credential
+        /// and the current Harbor ID.
+        /// </summary>
+        /// <returns>The feed.</returns>
+        public HarborMetricsFeed CreateMetricsFeed()
+        {
+            return new HarborMetricsFeed(() => CreateClient(8000), () => Settings.HarborId, () => IsAdmiralLocal);
         }
 
         /// <summary>
