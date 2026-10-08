@@ -142,22 +142,32 @@ namespace Armada.Harbor
         private Rect PlotRect(BucketChartModel model, double axisMax)
         {
             double gutter = 0;
-            foreach (double value in AxisValues(axisMax)) gutter = Math.Max(gutter, Label(ChartFormat.Value(value, model.Format)).Width);
+            foreach (double value in AxisValues(model)) gutter = Math.Max(gutter, Label(ChartFormat.Value(value, model.Format)).Width);
             double left = Math.Ceiling(gutter) + 6;
-            double top = Math.Ceiling(LabelFontSize / 2) + 2;
-            double bottom = LabelFontSize + 8;
-            return new Rect(left, top, Math.Max(0, Bounds.Width - left - 4), Math.Max(0, Bounds.Height - top - bottom));
+            return new Rect(left, PlotTop, Math.Max(0, Bounds.Width - left - 4), PlotHeight);
         }
 
-        private static IEnumerable<double> AxisValues(double axisMax)
+        private double PlotTop
         {
-            return new double[] { 0, axisMax / 2, axisMax };
+            get { return Math.Ceiling(LabelFontSize / 2) + 2; }
+        }
+
+        private double PlotHeight
+        {
+            get { return Math.Max(0, Bounds.Height - PlotTop - (LabelFontSize + 8)); }
+        }
+
+        private List<double> AxisValues(BucketChartModel model)
+        {
+            // As many gaps as fit with room for a label in each, between 1 and 6.
+            int intervals = Math.Clamp((int)Math.Floor(PlotHeight / (LabelFontSize * 2.5)), 1, 6);
+            return model.AxisTicks(intervals);
         }
 
         private void DrawAxes(DrawingContext context, BucketChartModel model, Rect plot, double axisMax)
         {
             Pen grid = new Pen(ThemeBrush("HarborChartGridBrush"), 1);
-            foreach (double value in AxisValues(axisMax))
+            foreach (double value in AxisValues(model))
             {
                 double y = Math.Round(plot.Y + ChartGeometry.ValueToY(value, plot.Height, axisMax)) + 0.5;
                 context.DrawLine(grid, new Point(plot.X, y), new Point(plot.Right, y));

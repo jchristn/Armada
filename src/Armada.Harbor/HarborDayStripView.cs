@@ -28,17 +28,17 @@ namespace Armada.Harbor
         /// <summary>
         /// Jobs over the last 24 hours.
         /// </summary>
-        public StackedBarChart JobsChart { get; } = new StackedBarChart(96);
+        public StackedBarChart JobsChart { get; } = new StackedBarChart(112);
 
         /// <summary>
         /// Slot usage over the last 24 hours.
         /// </summary>
-        public LineChart SlotsChart { get; } = new LineChart(96);
+        public LineChart SlotsChart { get; } = new LineChart(112);
 
         /// <summary>
         /// Link health over the last 24 hours.
         /// </summary>
-        public StatusStrip LinkStrip { get; } = new StatusStrip(16);
+        public StatusStrip LinkStrip { get; } = new StatusStrip(20);
 
         /// <summary>
         /// The latest answer, or null before the first.
