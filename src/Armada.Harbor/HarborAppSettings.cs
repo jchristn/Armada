@@ -5,6 +5,7 @@ namespace Armada.Harbor
     using System.IO;
     using System.Text.Json;
     using Armada.Core;
+    using Armada.Core.Harbor;
     using Armada.Core.Hosting;
 
     /// <summary>
@@ -80,6 +81,30 @@ namespace Armada.Harbor
         /// Credential secret presented on the link. Never logged.
         /// </summary>
         public string Secret { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Folder mission docks (git worktrees) are created in, as &lt;vessel&gt;/&lt;mission&gt;. Empty means docks/ in
+        /// <see cref="SettingsDirectory"/>. Must not be inside one of your checkouts.
+        /// </summary>
+        public string DocksDirectory { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Folder the Harbor keeps its own bare clones in, for vessels with no checkout on this machine. Empty means
+        /// repos/ in <see cref="SettingsDirectory"/>.
+        /// </summary>
+        public string ReposDirectory { get; set; } = string.Empty;
+
+        /// <summary>
+        /// The checkout on this machine for each vessel named here (by vessel name or ID). Mission docks are worktrees of
+        /// that checkout, and LocalMerge lands into it.
+        /// </summary>
+        public List<HarborRepositoryMapping> Repositories { get; set; } = new List<HarborRepositoryMapping>();
+
+        /// <summary>
+        /// Folders searched (up to three levels deep) for checkouts whose remote matches a vessel's repository URL, for
+        /// vessels not named in <see cref="Repositories"/>.
+        /// </summary>
+        public List<string> RepositoryRoots { get; set; } = new List<string>();
 
         #endregion
 
@@ -162,6 +187,7 @@ namespace Armada.Harbor
             if (HeartbeatIntervalMs > 0 && HeartbeatIntervalMs < 1000) errors.Add("Heartbeat interval must be at least 1000 ms, or 0 to turn heartbeats off.");
             if (MaxConcurrentJobs < 1 || MaxConcurrentJobs > 64) errors.Add("Maximum concurrent jobs must be between 1 and 64.");
             if (!string.IsNullOrWhiteSpace(Secret) && string.IsNullOrWhiteSpace(AccessKey)) errors.Add("A secret needs an access key.");
+            errors.AddRange(BuildDockSettings().Validate());
             return errors;
         }
 
@@ -195,6 +221,46 @@ namespace Armada.Harbor
             MaxConcurrentJobs = other.MaxConcurrentJobs;
             AccessKey = other.AccessKey;
             Secret = other.Secret;
+            DocksDirectory = other.DocksDirectory;
+            ReposDirectory = other.ReposDirectory;
+            Repositories = new List<HarborRepositoryMapping>();
+            foreach (HarborRepositoryMapping mapping in other.Repositories ?? new List<HarborRepositoryMapping>())
+                if (mapping != null) Repositories.Add(new HarborRepositoryMapping(mapping.Vessel, mapping.Path));
+            RepositoryRoots = new List<string>(other.RepositoryRoots ?? new List<string>());
+        }
+
+        /// <summary>
+        /// The repository and dock settings the Harbor serves mission docks with, with the default folders filled in.
+        /// </summary>
+        /// <returns>The dock settings.</returns>
+        public HarborDockSettings BuildDockSettings()
+        {
+            HarborDockSettings settings = new HarborDockSettings();
+            settings.DocksDirectory = string.IsNullOrWhiteSpace(DocksDirectory) ? DefaultDocksDirectory() : DocksDirectory.Trim();
+            settings.ReposDirectory = string.IsNullOrWhiteSpace(ReposDirectory) ? DefaultReposDirectory() : ReposDirectory.Trim();
+            foreach (HarborRepositoryMapping mapping in Repositories ?? new List<HarborRepositoryMapping>())
+                if (mapping != null) settings.Repositories.Add(new HarborRepositoryMapping((mapping.Vessel ?? string.Empty).Trim(), (mapping.Path ?? string.Empty).Trim()));
+            foreach (string root in RepositoryRoots ?? new List<string>())
+                if (!string.IsNullOrWhiteSpace(root)) settings.RepositoryRoots.Add(root.Trim());
+            return settings;
+        }
+
+        /// <summary>
+        /// The default docks folder (docks/ in <see cref="SettingsDirectory"/>).
+        /// </summary>
+        /// <returns>Full path.</returns>
+        public static string DefaultDocksDirectory()
+        {
+            return Path.Combine(SettingsDirectory(), "docks");
+        }
+
+        /// <summary>
+        /// The default folder for the Harbor's own clones (repos/ in <see cref="SettingsDirectory"/>).
+        /// </summary>
+        /// <returns>Full path.</returns>
+        public static string DefaultReposDirectory()
+        {
+            return Path.Combine(SettingsDirectory(), "repos");
         }
 
         /// <summary>

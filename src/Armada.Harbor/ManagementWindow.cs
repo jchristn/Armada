@@ -40,6 +40,7 @@ namespace Armada.Harbor
             _Logs = new LogBrowserView(session);
             Add(ManagementTabEnum.Status, "Status", new StatusView(session));
             Add(ManagementTabEnum.Harbor, "Harbor", new HarborSettingsView(session));
+            Add(ManagementTabEnum.Repositories, "Repositories", new RepositoriesSettingsView(session));
             Add(ManagementTabEnum.Armada, "Armada", new ArmadaSettingsView(session));
             Add(ManagementTabEnum.Tui, "TUI", new TuiSettingsView(session));
             Add(ManagementTabEnum.Logs, "Logs", _Logs);

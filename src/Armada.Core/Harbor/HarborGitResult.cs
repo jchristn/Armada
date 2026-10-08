@@ -27,6 +27,11 @@ namespace Armada.Core.Harbor
         /// </summary>
         public string StandardError { get; set; } = string.Empty;
 
+        /// <summary>
+        /// Whether the Harbor stopped the command because it ran past the request's timeout.
+        /// </summary>
+        public bool TimedOut { get; set; } = false;
+
         #endregion
     }
 }
