@@ -4112,15 +4112,22 @@ inactive users and inactive devices are skipped. A device receives a push only w
 category; the per-user rate limit and dedupe window apply (`Push` settings above).
 
 **Payload.** `title` and `body` are short (at most 64 and 178 characters), single-line, and pass through the secret
-redactor; they never carry code, diffs, failure reasons, or tool input beyond a truncated summary (at most 60
-characters) of a CLI permission request. `data` is `{ "url": "/missions/msn_...", "kind": "failed", "entityId":
+redactor; they never carry diffs, failure reasons, or tool input beyond a truncated summary (at most 60 characters)
+of a CLI permission request or Ask proposal. They do name missions, voyages, captains, and tools, and that summary
+is the start of a command, so they are not content-free: they pass through the Expo Push Service and APNs / FCM and
+appear on the lock screen. `data` is `{ "url": "/missions/msn_...", "kind": "failed", "entityId":
 "msn_...", "category": "MissionFailed", "deviceId": "pdv_..." }`, plus `threadId` for the owner of an Ask proposal or
 thread permission request. `deviceId` is the registered device the message was built for, so an app signed in to more
 than one Admiral can tell which server a notification came from. `url` is a dashboard path (`/missions/{id}`, `/voyages/{id}`, `/captains/{id}`, `/deployments/{id}`,
 `/ask/{threadId}`, `/cli-permissions?request={id}`). `badge` is the recipient's pending approvals (mission reviews,
 deployment approvals, Ask proposals, and CLI permission requests in their inbox), `sound` is `default`, and recipients
 who may approve or deny an Ask proposal or CLI permission request get the iOS `categoryId` `armada_approve_deny`; the
-app performs the action through the existing approve, reject, and decide routes.
+app performs the action through the existing approve, reject, and decide routes. Because the text is a truncated
+summary, a client must not approve from the notification itself: the Armada app's **Approve** action opens the full
+request (from `GET /api/v1/inbox`) and the user approves there, while **Deny** is sent directly. A client acts only on
+a push whose `deviceId` names a device it registered with that Admiral; anything else may only open `url` (anyone
+holding an Expo push token can send to it unless the Expo project uses enhanced push security with
+`Push.ExpoAccessToken`).
 
 | Method | Path | Body | Response |
 |---|---|---|---|
