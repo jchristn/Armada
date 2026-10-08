@@ -599,7 +599,7 @@ namespace Armada.Core.Services
                 {
                     await Task.Delay(_HeartbeatIntervalMs, token).ConfigureAwait(false);
                     Enqueue(new HarborHeartbeat { LiveJobIds = SnapshotLiveJobs() });
-                    Log(HarborLogDirection.Out, "Heartbeat");
+                    LogEntry(new HarborLogEntry(HarborLogDirection.Out, "Heartbeat") { IsHeartbeat = true });
                 }
                 catch (OperationCanceledException)
                 {
@@ -664,9 +664,14 @@ namespace Armada.Core.Services
 
         private void Log(HarborLogDirection direction, string message)
         {
+            LogEntry(new HarborLogEntry(direction, message));
+        }
+
+        private void LogEntry(HarborLogEntry entry)
+        {
             try
             {
-                _OnLog?.Invoke(new HarborLogEntry(direction, message));
+                _OnLog?.Invoke(entry);
             }
             catch
             {

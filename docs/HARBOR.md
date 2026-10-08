@@ -57,7 +57,7 @@ repositories and agent logins live:
 | macOS | `armada-harbor-<version>-osx-arm64.dmg` (or `-osx-x64`): drag **Armada Harbor** to Applications | `"/Applications/Armada Harbor.app/Contents/MacOS/Armada.Harbor" --install-startup` (once) |
 | Windows | `armada-harbor-<version>-win-x64.exe` (Inno Setup) | Registered by the installer |
 | Linux | `armada-harbor` `.deb` / `.rpm` | `armada-harbor --install-startup` (as yourself) |
-| Any, from source | `dotnet run --project src/Armada.Harbor` | -- |
+| Any, from source | `scripts/<os>/run-harbor.sh` (or `scripts\windows\run-harbor.bat`), which builds and runs `src/Armada.Harbor`; or `dotnet run --project src/Armada.Harbor` | -- |
 
 On macOS, Harbor is a menu bar app (`LSUIElement`): started from the login item it shows only its menu bar icon;
 opening its window (click the icon, or launch it from Applications) adds a Dock icon and app menu, and closing the

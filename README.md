@@ -1188,7 +1188,7 @@ A Harbor (`Armada.Harbor`, a small desktop app with a tray icon) is the host run
 | Windows | Harbor `.exe` installer (Inno Setup) | The installer registers it (`--install-startup`) |
 | macOS | `Armada Harbor.app` from the `.dmg` | Run `"/Applications/Armada Harbor.app/Contents/MacOS/Armada.Harbor" --install-startup` once |
 | Linux | `.deb` / `.rpm` Harbor package (`armada-harbor`) | Run `armada-harbor --install-startup` as yourself |
-| From source | `dotnet run --project src/Armada.Harbor` | -- |
+| From source | `scripts/<os>/run-harbor.sh` (or `scripts\windows\run-harbor.bat`); or `dotnet run --project src/Armada.Harbor` | -- |
 
 `--install-startup` adds a per-user login item (Run key, LaunchAgent, or XDG autostart) that starts Harbor with `--minimized`: it connects from the tray without opening its window. `--uninstall-startup` removes it, and `--dry-run` prints what either would do. Closing the window keeps Harbor running in the tray; quit from the tray menu. See [docs/OPERATIONS.md](docs/OPERATIONS.md) for the exit codes and per-OS details.
 
