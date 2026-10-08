@@ -1187,7 +1187,8 @@ Returns current server settings including ports, agent configuration, system pat
     "ExpoAccessToken": "********",
     "Categories": ["AskProposal", "CliPermission", "MissionReview", "DeploymentApproval", "MissionFailed", "LandingFailed", "CaptainStalled", "VoyageFinished"],
     "MaxPerUserPerMinute": 20,
-    "DedupeWindowSeconds": 300
+    "DedupeWindowSeconds": 300,
+    "MaxDevicesPerUser": 10
   }
 }
 ```
@@ -1243,6 +1244,7 @@ Changes apply live.
 | `Categories` | every category | [PushCategoryEnum](#pushcategoryenum) values enabled on a newly registered device when the app does not choose. |
 | `MaxPerUserPerMinute` | 20 | Pushes per user per minute across their devices; further pushes in the minute are dropped and logged. Clamped to 1..600. |
 | `DedupeWindowSeconds` | 300 | A repeat push about the same item (same user, kind, and entity) inside the window is suppressed. Clamped to 0..86400 (0 disables). |
+| `MaxDevicesPerUser` | 10 | Active devices per user. Registering (or reactivating) a device beyond the cap deactivates the user's least recently seen active devices (they receive nothing until they register again), so one account cannot multiply every push by registering many tokens. Clamped to 1..100. |
 
 ```json
 {
@@ -4122,7 +4124,7 @@ app performs the action through the existing approve, reject, and decide routes.
 
 | Method | Path | Body | Response |
 |---|---|---|---|
-| POST | `/api/v1/push/devices` | `PushDeviceRegisterRequest` | `201` [PushDevice](#pushdevice) for a new token, `200` when the token was known (refreshed, reactivated, and moved to the caller if another user had it); `400` invalid token, missing platform, or a field too long; `403` captain session |
+| POST | `/api/v1/push/devices` | `PushDeviceRegisterRequest` | `201` [PushDevice](#pushdevice) for a token new to the caller, `200` when the caller had registered it (refreshed and reactivated); `400` invalid token, missing platform, or a field too long; `403` captain session |
 | GET | `/api/v1/push/devices` | | `200` `PushDevice[]`, oldest first: the caller's devices. Query `userId` (tenant admins: a user of their tenant; global admins: any user) and `tenantId` (global admins); `403` otherwise |
 | PUT | `/api/v1/push/devices/{id}` | `PushDeviceUpdateRequest` | `200` `PushDevice`; `400`; `404` when missing or not manageable by the caller |
 | DELETE | `/api/v1/push/devices/{id}` | | `204`; `404` |
@@ -4134,6 +4136,12 @@ app performs the action through the existing approve, reject, and decide routes.
 `PushDeviceUpdateRequest`: `DeviceName` and/or `Categories` (an empty list mutes the device); omitted fields are kept.
 A device can be managed by its owner, tenant admins of its tenant, and global admins. Deleting a user or tenant deletes
 its devices.
+
+A token is one device of one user in one tenant. When a token another user (or the same user in another tenant)
+registered is registered again, that device is deleted and a new one with a new `pdv_` id is created for the caller
+(`201`, the server's default categories): the previous owner stops receiving pushes on it, and a push for the new
+owner never carries an id the previous owner's app knows. Registering or reactivating a device beyond
+`Push.MaxDevicesPerUser` active devices deactivates the caller's least recently seen active devices.
 
 ```bash
 # Register (or refresh) this phone

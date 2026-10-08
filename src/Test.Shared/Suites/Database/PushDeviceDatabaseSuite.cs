@@ -8,6 +8,9 @@ namespace Test.Shared.Suites.Database
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Core.Services.Push;
+    using Armada.Core.Settings;
+    using SyslogLogging;
     using Test.Shared.Infrastructure;
     using Touchstone.Core;
     using static Test.Shared.Infrastructure.Asserts;
@@ -15,8 +18,9 @@ namespace Test.Shared.Suites.Database
     /// <summary>
     /// Descriptors for the push_devices table added by migration 79: round trip of every field (including empty and
     /// multi-value categories), lookup by token, the unique token, updates that re-own a device, the active flag,
-    /// filtered oldest-first listing, and deletes by id, user, and tenant. Runs on every provider through the parity
-    /// script.
+    /// filtered oldest-first listing, and deletes by id, user, and tenant; and the registration rules that rely on them
+    /// (a token that changes owner gets a new device id; the per-user active device cap). Runs on every provider through
+    /// the parity script.
     /// </summary>
     public sealed class PushDeviceDatabaseSuite : IArmadaTestSuite
     {
@@ -169,6 +173,64 @@ namespace Test.Shared.Suites.Database
                 AssertNotNull(await db.PushDevices.ReadAsync(foreign.Id).ConfigureAwait(false), "other tenant kept");
             }));
 
+            cases.Add(CaseAsync("register_new_owner_gets_new_id", "A token registered by another user or tenant is deleted there and registered under a new id", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                DatabaseDriver db = testDb.Driver;
+                PushDeviceService service = new PushDeviceService(db, new ArmadaSettings(), Quiet());
+                string token = "ExponentPushToken[" + Guid.NewGuid().ToString("N") + "]";
+
+                PushDeviceRegistration first = await service.RegisterAsync(Auth("ten_o1", "usr_o1"), Register(token)).ConfigureAwait(false);
+                PushDeviceRegistration sameUserOtherTenant = await service.RegisterAsync(Auth("ten_o2", "usr_o1"), Register(token)).ConfigureAwait(false);
+                AssertTrue(sameUserOtherTenant.Created, "created for the new tenant");
+                AssertTrue(sameUserOtherTenant.Device.Id != first.Device.Id, "new id for another tenant");
+                AssertNull(await db.PushDevices.ReadAsync(first.Device.Id).ConfigureAwait(false), "first row deleted");
+
+                PushDeviceRegistration otherUser = await service.RegisterAsync(Auth("ten_o2", "usr_o2"), Register(token)).ConfigureAwait(false);
+                AssertTrue(otherUser.Device.Id != sameUserOtherTenant.Device.Id && otherUser.Device.Id != first.Device.Id, "new id for another user");
+                AssertNull(await db.PushDevices.ReadAsync(sameUserOtherTenant.Device.Id).ConfigureAwait(false), "second row deleted");
+                PushDevice? byToken = await db.PushDevices.ReadByTokenAsync(token).ConfigureAwait(false);
+                AssertEqual(otherUser.Device.Id, byToken!.Id, "the token names the newest owner's device");
+                AssertEqual("usr_o2", byToken.UserId);
+
+                PushDeviceRegistration refreshed = await service.RegisterAsync(Auth("ten_o2", "usr_o2"), Register(token)).ConfigureAwait(false);
+                AssertFalse(refreshed.Created, "the same owner refreshes");
+                AssertEqual(otherUser.Device.Id, refreshed.Device.Id, "same id for the same owner");
+            }));
+
+            cases.Add(CaseAsync("register_caps_active_devices_per_user", "Registering or reactivating beyond MaxDevicesPerUser deactivates the least recently seen devices of that user only", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                DatabaseDriver db = testDb.Driver;
+                ArmadaSettings settings = new ArmadaSettings();
+                settings.Push.MaxDevicesPerUser = 2;
+                PushDeviceService service = new PushDeviceService(db, settings, Quiet());
+
+                PushDevice oldest = NewDevice("ten_c", "usr_c", _Fixed);
+                PushDevice middle = NewDevice("ten_c", "usr_c", _Fixed.AddMinutes(1));
+                PushDevice otherUser = NewDevice("ten_c", "usr_other", _Fixed);
+                PushDevice otherTenant = NewDevice("ten_c2", "usr_c", _Fixed);
+                foreach (PushDevice d in new[] { oldest, middle, otherUser, otherTenant }) await db.PushDevices.CreateAsync(d).ConfigureAwait(false);
+
+                PushDeviceRegistration third = await service.RegisterAsync(Auth("ten_c", "usr_c"), Register("ExponentPushToken[" + Guid.NewGuid().ToString("N") + "]")).ConfigureAwait(false);
+                AssertFalse((await db.PushDevices.ReadAsync(oldest.Id).ConfigureAwait(false))!.Active, "least recently seen deactivated");
+                AssertTrue((await db.PushDevices.ReadAsync(middle.Id).ConfigureAwait(false))!.Active, "next one kept");
+                AssertTrue((await db.PushDevices.ReadAsync(third.Device.Id).ConfigureAwait(false))!.Active, "new one active");
+                AssertTrue((await db.PushDevices.ReadAsync(otherUser.Id).ConfigureAwait(false))!.Active, "another user is not affected");
+                AssertTrue((await db.PushDevices.ReadAsync(otherTenant.Id).ConfigureAwait(false))!.Active, "the same user id in another tenant is not affected");
+
+                PushDeviceRegistration back = await service.RegisterAsync(Auth("ten_c", "usr_c"), Register(oldest.ExpoPushToken)).ConfigureAwait(false);
+                AssertEqual(oldest.Id, back.Device.Id, "reactivated in place");
+                AssertTrue(back.Device.Active, "reactivated");
+                AssertFalse((await db.PushDevices.ReadAsync(middle.Id).ConfigureAwait(false))!.Active, "reactivating evicts the now least recently seen");
+                List<PushDevice> active = await db.PushDevices.EnumerateAsync(new PushDeviceQuery { TenantId = "ten_c", UserId = "usr_c", ActiveOnly = true }).ConfigureAwait(false);
+                AssertEqual(2, active.Count, "never more than the cap");
+
+                PushDeviceRegistration refresh = await service.RegisterAsync(Auth("ten_c", "usr_c"), Register(oldest.ExpoPushToken)).ConfigureAwait(false);
+                AssertTrue((await db.PushDevices.ReadAsync(third.Device.Id).ConfigureAwait(false))!.Active, "refreshing an active device evicts nothing");
+                AssertTrue(refresh.Device.Active, "still active");
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
                 displayName: "Database: push devices",
@@ -189,6 +251,26 @@ namespace Test.Shared.Suites.Database
             device.CreatedUtc = created;
             device.LastSeenUtc = created;
             return device;
+        }
+
+        private static LoggingModule Quiet()
+        {
+            LoggingModule logging = new LoggingModule();
+            logging.Settings.EnableConsole = false;
+            return logging;
+        }
+
+        private static AuthContext Auth(string tenantId, string userId)
+        {
+            return AuthContext.Authenticated(tenantId, userId, false, false, "Test");
+        }
+
+        private static PushDeviceRegisterRequest Register(string token)
+        {
+            PushDeviceRegisterRequest request = new PushDeviceRegisterRequest();
+            request.Platform = PushPlatformEnum.Ios;
+            request.ExpoPushToken = token;
+            return request;
         }
 
         private static void AssertIds(List<PushDevice> devices, string label, params string[] expected)

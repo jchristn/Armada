@@ -1072,7 +1072,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n  \"Push\": {\n    \"Enabled\": true,\n    \"ExpoAccessToken\": \"********\",\n    \"Categories\": [\n      \"AskProposal\",\n      \"CliPermission\",\n      \"MissionReview\",\n      \"DeploymentApproval\",\n      \"MissionFailed\",\n      \"LandingFailed\",\n      \"CaptainStalled\",\n      \"VoyageFinished\"\n    ],\n    \"MaxPerUserPerMinute\": 20,\n    \"DedupeWindowSeconds\": 300\n  }\n}"
+                            "raw": "{\n  \"Push\": {\n    \"Enabled\": true,\n    \"ExpoAccessToken\": \"********\",\n    \"Categories\": [\n      \"AskProposal\",\n      \"CliPermission\",\n      \"MissionReview\",\n      \"DeploymentApproval\",\n      \"MissionFailed\",\n      \"LandingFailed\",\n      \"CaptainStalled\",\n      \"VoyageFinished\"\n    ],\n    \"MaxPerUserPerMinute\": 20,\n    \"DedupeWindowSeconds\": 300,\n    \"MaxDevicesPerUser\": 10\n  }\n}"
                         },
                         "url": {
                             "raw": "{{baseUrl}}/api/v1/settings",
