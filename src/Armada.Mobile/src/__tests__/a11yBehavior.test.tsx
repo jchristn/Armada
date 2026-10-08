@@ -80,16 +80,26 @@ beforeEach(async () => {
 });
 
 describe('focus in sheets and dialogs', () => {
+  beforeEach(() => { info.isScreenReaderEnabled.mockResolvedValue(true); });
+
+  it('without a screen reader no focus event is sent', async () => {
+    info.isScreenReaderEnabled.mockResolvedValue(false);
+    await render(<Themed><BottomSheet open title="Filters" onClose={() => undefined} closeLabel="Close"><></></BottomSheet></Themed>);
+    await showModal();
+    await act(async () => { await Promise.resolve(); });
+    expect(focusedTexts()).toEqual([]);
+  });
+
   it('a bottom sheet moves screen-reader focus to its title when it has appeared', async () => {
     await render(<Themed><BottomSheet open title="Filters" onClose={() => undefined} closeLabel="Close"><></></BottomSheet></Themed>);
     await showModal();
-    expect(focusedTexts()).toEqual(['Filters']);
+    await waitFor(() => expect(focusedTexts()).toEqual(['Filters']));
   });
 
   it('a confirm dialog moves focus to its title', async () => {
     await render(<Themed><ConfirmDialog open title="Delete vessel?" message="This cannot be undone." confirmLabel="Delete" cancelLabel="Cancel" onConfirm={() => undefined} onCancel={() => undefined} /></Themed>);
     await showModal();
-    expect(focusedTexts()).toEqual(['Delete vessel?']);
+    await waitFor(() => expect(focusedTexts()).toEqual(['Delete vessel?']));
   });
 
   it('a select field returns focus to itself when its sheet closes', async () => {
@@ -107,10 +117,11 @@ describe('focus in sheets and dialogs', () => {
 
 describe('narrow list-detail panes', () => {
   it('moves focus to Back when a selection replaces the list, so the reader lands on the new content', async () => {
+    info.isScreenReaderEnabled.mockResolvedValue(true);
     const view = await render(<Themed><SplitView master={<RN.Text>list</RN.Text>} detail={null} onBack={() => undefined} backLabel="Back" /></Themed>);
     expect(focusedTexts()).toEqual([]);
     await view.rerender(<Themed><SplitView master={<RN.Text>list</RN.Text>} detail={<RN.Text>item</RN.Text>} onBack={() => undefined} backLabel="Back" /></Themed>);
-    expect(focusedTexts()).toEqual(['split-view-back']);
+    await waitFor(() => expect(focusedTexts()).toEqual(['split-view-back']));
   });
 });
 

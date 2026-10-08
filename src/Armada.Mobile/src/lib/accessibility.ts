@@ -51,7 +51,13 @@ export function announce(message: string): void {
   else AccessibilityInfo.announceForAccessibility(text);
 }
 
-/** Moves the screen-reader focus to a rendered element (a sheet's title when it opens, its opener when it closes). */
+/**
+ * Moves the screen-reader focus to a rendered element (a sheet's title when it opens, its opener when it closes).
+ * Only while VoiceOver or TalkBack is running: without one there is no reader focus to move, and the focus event
+ * would otherwise reach the native view for nothing.
+ */
 export function focusElement(ref: RefObject<HostInstance | null>): void {
-  if (ref.current) AccessibilityInfo.sendAccessibilityEvent(ref.current, 'focus');
+  AccessibilityInfo.isScreenReaderEnabled()
+    .then((on) => { if (on && ref.current) AccessibilityInfo.sendAccessibilityEvent(ref.current, 'focus'); })
+    .catch(() => undefined);
 }
