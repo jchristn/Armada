@@ -17,6 +17,7 @@
   <a href="#quick-start">Quick Start</a> |
   <a href="#ask-armada">Ask Armada</a> |
   <a href="#terminal-ui">Terminal UI</a> |
+  <a href="#mobile-app">Mobile</a> |
   <a href="#harbor-run-agents-on-your-machine">Harbor</a> |
   <a href="#pipelines">Pipelines</a> |
   <a href="#use-cases">Use Cases</a> |
@@ -688,6 +689,12 @@ More captures from the headless renderer: [login](docs/tui-screens/login-120x40.
 
 </details>
 
+## Mobile App
+
+Armada for iPhone, iPad, and Android phones and tablets (`src/Armada.Mobile`, Expo / React Native) is a client of the Admiral like the web dashboard: the same REST API and WebSocket, the same data, and every dashboard screen, laid out for touch. Connect directly to an Admiral on your network or a public URL, or through Armada.Proxy when you are away. The app adds push notifications for things that need you (approvals, CLI permission requests, failed missions and landings, stalled captains) with approve and deny from the notification, Face ID, Touch ID, or fingerprint unlock with a saved password, and tablet layouts with an icon rail, sidebar, and side-by-side list and detail. `src/Armada.Mobile/parity.json` maps every dashboard surface to its mobile screen, and CI fails when the dashboard gains one the app does not cover.
+
+See [docs/MOBILE.md](docs/MOBILE.md) for installing, connecting, push setup, security, and building and submitting to the stores.
+
 ## Screenshots
 
 <details>
@@ -717,6 +724,7 @@ Armada is a C#/.NET solution with these main projects:
 | **Armada.Dashboard** | React dashboard, served by the Admiral at `/dashboard` and also available as a standalone container |
 | **Armada.Helm** | CLI ([Spectre.Console](https://spectreconsole.net/)), thin HTTP client to Admiral; hosts `armada tui` |
 | **Armada.Tui** | Terminal UI (built on the TUIKit 1.5.0 NuGet package) covering every dashboard screen (see [docs/TUI.md](docs/TUI.md)) |
+| **Armada.Mobile** | iOS and Android app (Expo / React Native) covering every dashboard screen, with push notifications and biometric unlock; shares the dashboard's API client, types, and translations (see [docs/MOBILE.md](docs/MOBILE.md)) |
 | **Armada.Client** | Typed .NET client for the REST API and WebSocket, used by the TUI |
 | **Armada.Harbor** | Avalonia host-runner app that opens an authenticated link to the Admiral and executes agent processes, git, and worktrees on the developer's machine (see [docs/HARBOR.md](docs/HARBOR.md)) |
 | **Armada.Proxy** | Optional remote-access portal and relay (see [docs/REMOTE_MGMT.md](docs/REMOTE_MGMT.md)) |

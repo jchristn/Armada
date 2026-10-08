@@ -6,6 +6,17 @@ All notable changes to Armada are documented in this file.
 
 ## Unreleased
 
+### Mobile app for iOS and Android
+- New `src/Armada.Mobile` (Expo / React Native): Armada for iPhone, iPad, and Android phones and tablets, with every dashboard screen (Ask Armada, Approvals, Home, Missions, Voyages, Dispatch, Merge Queue, and the Build, Delivery, Configuration, Activity, and Server sections). It shares the dashboard's API client, types, helpers, and translations, so the two stay in step. See [docs/MOBILE.md](docs/MOBILE.md).
+- Connect directly (LAN or a public URL) or through Armada.Proxy (portal sign-in and instance picker); several server profiles.
+- Push notifications for approvals, CLI permission requests, failed missions and landings, and stalled captains, with approve and deny from the notification after an unlock; badge counts and a notification center.
+- Face ID, Touch ID, or fingerprint unlock, and an optional saved password in the device keychain.
+- Tablet and landscape layouts: tabs on phones, an icon rail or a sidebar on wider windows, and list and detail side by side.
+- Accessibility: VoiceOver and TalkBack labels, actions, focus, and announcements; large text layouts; WCAG contrast in light, dark, and high-contrast themes; Reduce Motion.
+- Parity gate: `src/Armada.Mobile/parity.json` maps every dashboard route, tab, API call, event, and setting to the app, and CI fails on a new dashboard surface without an entry or on any entry still planned.
+- Tests: Jest (with an accessibility audit after every test and a sweep of every screen), Maestro end-to-end flows on iOS and Android (`scripts/mobile/run-e2e.sh`), and `npm audit` in the security workflow.
+- Shared client: a request that cannot reach the server now raises `NetworkError` on every platform (React Native's fetch rejects with a different error class than browsers), so sign-in and screens show a connection error instead of a generic failure.
+
 ### Harbor: manage and monitor Harbor and Armada from the app
 - The macOS menu bar names the app **Armada Harbor** (it showed "Avalonia Application") and has real menus instead of Avalonia's default "About Avalonia" menu: Harbor, Armada, Logs, Window, and Help. Windows and Linux get the same menus in a menu bar inside the Harbor window, and the tray icon offers them too, with the link status at the top. Quit (including Command-Q) now quits instead of being cancelled by the window's close-to-tray behavior.
 - A **Manage** window with Status, Harbor, Armada, TUI, Logs, and Backups tabs: Admiral health and workload and data directory disk usage; a form for Harbor's own settings (validated, saved atomically with a backup, reconnecting when needed); the Admiral's settings live through the API or as the whole `settings.json` (validated as the Admiral loads it, with backups and an offer to restart the Admiral); the TUI's `tui.json`; a log browser and viewer that follows, filters by level, and opens a mission's log by id; and read-only lists of database and settings backups. File editors, logs, and backups are offered only when the linked Admiral runs on the same machine. See [Managing Harbor and Armada from the app](docs/HARBOR.md#managing-harbor-and-armada-from-the-app).
