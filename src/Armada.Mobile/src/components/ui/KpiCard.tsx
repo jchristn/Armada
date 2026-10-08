@@ -44,6 +44,7 @@ const styles = StyleSheet.create({
   card: { flexGrow: 1, flexBasis: 150, minWidth: 140, borderWidth: StyleSheet.hairlineWidth, borderRadius: radius.md, padding: spacing.md },
   inner: { gap: spacing.xs },
   detail: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.xs },
-  stacked: { flexDirection: 'column' },
+  // No wrapping in a column: wrapped column lines are only as wide as their widest card, not the screen.
+  stacked: { flexDirection: 'column', flexWrap: 'nowrap' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginHorizontal: spacing.md, marginBottom: spacing.xl },
 });

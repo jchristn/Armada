@@ -225,7 +225,7 @@ describe('large text', () => {
   it('at accessibility sizes KPI cards and key-value rows stack, and button labels stop growing at twice their size', async () => {
     mockWindow.fontScale = 3.1;
     await renderParts();
-    expect(screen.getByTestId('kpi-grid-stacked')).toBeTruthy();
+    expect(RN.StyleSheet.flatten(screen.getByTestId('kpi-grid-stacked').props.style)).toMatchObject({ flexDirection: 'column', flexWrap: 'nowrap' });
     expect(RN.StyleSheet.flatten(screen.getByText('Branch').props.style).width).toBeUndefined();
     expect(screen.getByText('+ Mission').props.maxFontSizeMultiplier).toBe(BUTTON_MAX_FONT_SCALE);
     expect(screen.getByText('Run a command or mission across many vessels at once.').props.numberOfLines).toBeUndefined();
