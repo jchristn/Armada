@@ -54,12 +54,12 @@ describe('sha256 and base64url', () => {
   });
 });
 
-interface Recorded { url: string; method: string; headers: Record<string, string>; body?: string }
+interface Recorded { url: string; method: string; headers: Record<string, string>; body?: string; credentials?: string }
 
 function fakeFetch(routes: Record<string, { status: number; body?: unknown; headers?: Record<string, string> } | (() => never)>) {
   const calls: Recorded[] = [];
   const fn: FetchLike = async (url, init) => {
-    calls.push({ url, method: init?.method ?? 'GET', headers: init?.headers ?? {}, body: init?.body });
+    calls.push({ url, method: init?.method ?? 'GET', headers: init?.headers ?? {}, body: init?.body, credentials: init?.credentials });
     const key = `${init?.method ?? 'GET'} ${url.replace(/^https?:\/\/[^/]+/, '')}`;
     const route = routes[key];
     if (!route) throw new TypeError(`Network request failed (${key})`);
@@ -86,8 +86,23 @@ describe('proxy API client', () => {
     const result = await proxy.login('hunter2');
     expect(result).toEqual({ token: 'P1', expiresUtc: '2026-10-08T00:00:00Z', selectedInstanceId: null });
     expect(calls[1].url).toBe('https://proxy.example/proxy-api/v1/auth/login');
-    expect(JSON.parse(calls[1].body ?? '{}')).toEqual({ nonce: 'abc123', proofSha256: proxyLoginProof('hunter2', 'abc123') });
+    expect(JSON.parse(calls[1].body ?? '{}')).toEqual({ nonce: 'abc123', proofSha256: proxyLoginProof('hunter2', 'abc123'), setCookie: false });
     expect(calls.map((c) => c.body ?? '').join('')).not.toContain('hunter2');
+  });
+
+  it('never uses cookies: the login asks for none and every request omits credentials', async () => {
+    const { fn, calls } = fakeFetch({
+      'GET /proxy-api/v1/auth/challenge': { status: 200, body: { nonce: 'abc123', expiresUtc: 'x' } },
+      'POST /proxy-api/v1/auth/login': { status: 200, body: { token: 'P1', expiresUtc: null, selectedInstanceId: null } },
+      'GET /proxy-api/v1/instances': { status: 200, body: { instances: [] } },
+      'POST /proxy-api/v1/auth/logout': { status: 200, body: { success: true } },
+    });
+    const proxy = createProxyClient('https://proxy.example', { fetch: fn });
+    await proxy.login('hunter2');
+    await proxy.listInstances('P1');
+    await proxy.logout('P1');
+    expect(JSON.parse(calls[1].body ?? '{}').setCookie).toBe(false);
+    expect(calls.map((c) => c.credentials)).toEqual(['omit', 'omit', 'omit', 'omit']);
   });
 
   it('sends the session as a bearer token on /proxy-api routes', async () => {

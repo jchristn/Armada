@@ -23,8 +23,9 @@ namespace Test.Shared.Suites.Services
     /// <summary>
     /// Proxy hardening (security review O-11): the proxy refuses to start with the built-in default password unless
     /// explicitly allowed, the instance list requires a proxy session, failed logins are rate limited per client
-    /// address with 429 and Retry-After, forwarded headers are ignored unless trusted, and the session cookie can be
-    /// marked Secure.
+    /// address with 429 and Retry-After, forwarded headers are ignored unless trusted, the session cookie can be
+    /// marked Secure, native logins (SetCookie false) set no cookie, logout clears the cookie, and unauthenticated login
+    /// challenges are capped per address.
     /// </summary>
     public sealed class ProxySecuritySuite : IArmadaTestSuite
     {
@@ -217,6 +218,58 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("native_login_sets_no_cookie", "A login with SetCookie false returns the token but sets no cookie; the token works as a bearer credential", TestTags.Positive, async () =>
+            {
+                await using (RunningProxy running = await RunningProxy.StartAsync(CreateSettings(TestPassword)).ConfigureAwait(false))
+                {
+                    HttpResponseMessage login = await running.LoginAsync(TestPassword, setCookie: false).ConfigureAwait(false);
+                    AssertEqual(HttpStatusCode.OK, login.StatusCode, "login should succeed");
+                    AssertFalse(login.Headers.Contains("Set-Cookie"), "a native login must not set the session cookie");
+                    LoginBody body = JsonSerializer.Deserialize<LoginBody>(await login.Content.ReadAsStringAsync().ConfigureAwait(false), new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
+                    AssertFalse(String.IsNullOrEmpty(body.Token), "the token is returned");
+
+                    HttpResponseMessage noCredential = await running.Client.GetAsync("/proxy-api/v1/instances").ConfigureAwait(false);
+                    AssertEqual(HttpStatusCode.Unauthorized, noCredential.StatusCode, "nothing was stored in the client's cookie jar");
+                    HttpRequestMessage bearer = new HttpRequestMessage(HttpMethod.Get, "/proxy-api/v1/instances");
+                    bearer.Headers.Add("Authorization", "Bearer " + body.Token);
+                    AssertEqual(HttpStatusCode.OK, (await running.Client.SendAsync(bearer).ConfigureAwait(false)).StatusCode, "the token works as a bearer credential");
+                }
+            }));
+
+            cases.Add(CaseAsync("browser_login_cookie_is_cleared_by_logout", "A browser login sets the cookie; logout invalidates the session and clears the cookie", TestTags.Positive, async () =>
+            {
+                await using (RunningProxy running = await RunningProxy.StartAsync(CreateSettings(TestPassword)).ConfigureAwait(false))
+                {
+                    HttpResponseMessage login = await running.LoginAsync(TestPassword).ConfigureAwait(false);
+                    AssertTrue(login.Headers.TryGetValues("Set-Cookie", out IEnumerable<string>? cookies), "a browser login sets the cookie");
+                    AssertContains(Constants.ProxySessionCookieName + "=", String.Join(";", cookies!), "session cookie");
+                    AssertEqual(HttpStatusCode.OK, (await running.Client.GetAsync("/proxy-api/v1/instances").ConfigureAwait(false)).StatusCode, "the cookie authenticates");
+
+                    HttpResponseMessage logout = await running.Client.PostAsync("/proxy-api/v1/auth/logout", new StringContent("{}", Encoding.UTF8, "application/json")).ConfigureAwait(false);
+                    AssertEqual(HttpStatusCode.OK, logout.StatusCode, "logout");
+                    AssertTrue(logout.Headers.TryGetValues("Set-Cookie", out IEnumerable<string>? cleared), "logout clears the cookie");
+                    AssertContains("Max-Age=0", String.Join(";", cleared!), "expired cookie");
+                    AssertEqual(HttpStatusCode.Unauthorized, (await running.Client.GetAsync("/proxy-api/v1/instances").ConfigureAwait(false)).StatusCode, "the session is gone");
+                }
+            }));
+
+            cases.Add(CaseAsync("challenge_flood_from_one_address_is_refused", "Unauthenticated challenges are capped per address: 429 with Retry-After and a typed refusal", TestTags.Negative, async () =>
+            {
+                await using (RunningProxy running = await RunningProxy.StartAsync(CreateSettings(TestPassword)).ConfigureAwait(false))
+                {
+                    for (int i = 0; i < ProxyAuthService.DefaultMaxPendingChallengesPerAddress; i++)
+                    {
+                        HttpResponseMessage ok = await running.Client.GetAsync("/proxy-api/v1/auth/challenge").ConfigureAwait(false);
+                        AssertEqual(HttpStatusCode.OK, ok.StatusCode, "challenge " + i);
+                    }
+
+                    HttpResponseMessage refused = await running.Client.GetAsync("/proxy-api/v1/auth/challenge").ConfigureAwait(false);
+                    AssertEqual((HttpStatusCode)429, refused.StatusCode, "the address holds too many challenges");
+                    AssertTrue(refused.Headers.TryGetValues("Retry-After", out IEnumerable<string>? retry) && Int32.Parse(retry!.First()) >= 1, "Retry-After");
+                    AssertContains("AddressLimit", await refused.Content.ReadAsStringAsync().ConfigureAwait(false), "typed refusal");
+                }
+            }));
+
             cases.Add(CaseAsync("malformed_login_body_is_400_and_counts_toward_lockout", "A malformed login body is 400 and counts as a failed login", TestTags.Negative, async () =>
             {
                 ProxySettings settings = CreateSettings(TestPassword);
@@ -386,13 +439,15 @@ namespace Test.Shared.Suites.Services
                 return running;
             }
 
-            public async Task<HttpResponseMessage> LoginAsync(string password, string? forwardedFor = null)
+            public async Task<HttpResponseMessage> LoginAsync(string password, string? forwardedFor = null, bool? setCookie = null)
             {
                 HttpResponseMessage challengeResponse = await Client.GetAsync("/proxy-api/v1/auth/challenge").ConfigureAwait(false);
                 string challengeJson = await challengeResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
                 ChallengeBody challenge = JsonSerializer.Deserialize<ChallengeBody>(challengeJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
                 string proof = RemoteTunnelAuth.ComputeBrowserLoginProof(password, challenge.Nonce);
-                string body = JsonSerializer.Serialize(new { nonce = challenge.Nonce, proofSha256 = proof });
+                string body = setCookie.HasValue
+                    ? JsonSerializer.Serialize(new { nonce = challenge.Nonce, proofSha256 = proof, setCookie = setCookie.Value })
+                    : JsonSerializer.Serialize(new { nonce = challenge.Nonce, proofSha256 = proof });
                 HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Post, "/proxy-api/v1/auth/login");
                 request.Content = new StringContent(body, Encoding.UTF8, "application/json");
                 if (!String.IsNullOrEmpty(forwardedFor)) request.Headers.Add("X-Forwarded-For", forwardedFor);
@@ -411,6 +466,11 @@ namespace Test.Shared.Suites.Services
         private sealed class ChallengeBody
         {
             public string Nonce { get; set; } = String.Empty;
+        }
+
+        private sealed class LoginBody
+        {
+            public string Token { get; set; } = String.Empty;
         }
 
         #endregion

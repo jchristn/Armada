@@ -210,8 +210,8 @@ describe('push registration lifecycle', () => {
 
 describe('push API wire format', () => {
   function recorder(status = 200, body: unknown = {}) {
-    const calls: { url: string; init: { method: string; headers: Record<string, string>; body?: string } }[] = [];
-    const fetchImpl = jest.fn(async (url: string, init: { method: string; headers: Record<string, string>; body?: string }) => {
+    const calls: { url: string; init: { method: string; headers: Record<string, string>; body?: string; credentials?: string } }[] = [];
+    const fetchImpl = jest.fn(async (url: string, init: { method: string; headers: Record<string, string>; body?: string; credentials?: 'omit' }) => {
       calls.push({ url, init });
       return { status, ok: status >= 200 && status < 300, text: async () => (status === 204 ? '' : JSON.stringify(body)) };
     });
@@ -228,6 +228,7 @@ describe('push API wire format', () => {
     expect(calls[0].init.method).toBe('POST');
     expect(calls[0].init.headers['X-Token']).toBe('A1');
     expect(calls[0].init.headers['X-Armada-Proxy-Session']).toBe('P1');
+    expect(calls[0].init.credentials).toBe('omit');
     expect(JSON.parse(calls[0].init.body!)).toEqual({ Platform: 'Android', ExpoPushToken: 'ExponentPushToken[x]', DeviceName: 'Pixel', AppVersion: '1.0.0', Locale: 'de-DE', Categories: null });
   });
 

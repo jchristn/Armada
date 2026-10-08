@@ -2,7 +2,8 @@ import { camelizeKeys, type ProxySessionContext } from '@dashboard/api/client';
 import { sha256Hex } from './sha256';
 
 /**
- * Armada.Proxy's own API (`/proxy-api/v1/*`) for a native client: no cookies; the proxy session token travels as
+ * Armada.Proxy's own API (`/proxy-api/v1/*`) for a native client: no cookies (the login asks for none, and requests
+ * omit credentials); the proxy session token travels as
  * `Authorization: Bearer` (docs/PROXY_API.md, Native Clients). These routes are never relayed to an Admiral, so
  * they do not go through the shared dashboard client (which carries the Admiral's credentials).
  */
@@ -67,7 +68,7 @@ export function proxySessionHeaders(proxyToken: string | null): Record<string, s
   return proxyToken ? { [PROXY_SESSION_HEADER]: proxyToken } : null;
 }
 
-export type FetchLike = (url: string, init?: { method?: string; headers?: Record<string, string>; body?: string; signal?: AbortSignal }) => Promise<{
+export type FetchLike = (url: string, init?: { method?: string; headers?: Record<string, string>; body?: string; signal?: AbortSignal; credentials?: 'omit' }) => Promise<{
   status: number;
   ok: boolean;
   headers: { get: (name: string) => string | null };
@@ -107,6 +108,9 @@ export function createProxyClient(baseUrl: string, options: ProxyClientOptions =
         headers,
         body: body !== undefined ? JSON.stringify(body) : undefined,
         signal: controller.signal,
+        // The session travels only as a header: never store or send a cookie (React Native's fetch would keep one
+        // in the platform cookie jar, outside the Keychain / Keystore, and send it automatically).
+        credentials: 'omit',
       });
     } catch {
       throw new ProxyError('network', 0, 'The proxy could not be reached.');
@@ -145,6 +149,8 @@ export function createProxyClient(baseUrl: string, options: ProxyClientOptions =
       const result = await call<Partial<ProxyLoginResult>>('POST', '/proxy-api/v1/auth/login', null, {
         nonce: challenge.nonce,
         proofSha256: proxyLoginProof(password, challenge.nonce),
+        // A native client keeps the token itself; the proxy then sets no session cookie (docs/PROXY_API.md).
+        setCookie: false,
       });
       if (!result?.token) throw new ProxyError('server', 200, 'The proxy did not return a session token.');
       return { token: result.token, expiresUtc: result.expiresUtc ?? null, selectedInstanceId: result.selectedInstanceId ?? null };
