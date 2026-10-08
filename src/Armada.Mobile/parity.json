@@ -2185,6 +2185,14 @@
     },
     {
       "kind": "api",
+      "key": "getHarborMetrics",
+      "status": "implemented",
+      "mobile": "src/screens/configuration/HarborMetricsSection",
+      "workstream": "W4.2",
+      "notes": "Harbors (host runners) | Harbor detail charts: jobs, slots, link health, launch speed, tokens"
+    },
+    {
+      "kind": "api",
       "key": "getHealth",
       "status": "implemented",
       "mobile": "HomeScreen",

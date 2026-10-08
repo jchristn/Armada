@@ -14,6 +14,7 @@ import { useLocale } from '../../i18n/LocaleContext';
 import { useNotifications } from '../../notifications/NotificationContext';
 import { errorText, useLoad, useReloadOnFocus } from '../../resource/useLoad';
 import { LocalBody, LocalMasterDetail, useLocalSelection } from './common';
+import { HarborMetricsSection } from './HarborMetricsSection';
 
 function connectionTone(h: Harbor): StatusTone {
   switch (h.connectionStatus) {
@@ -45,7 +46,10 @@ interface HarborDetailProps {
   onDelete: (h: Harbor) => void;
 }
 
-/** One harbor (the dashboard's Details modal) with Edit, Enable / Disable, View JSON, and Delete for tenant admins. */
+/**
+ * One harbor (the dashboard's Details modal) with Edit, Enable / Disable, View JSON, and Delete for tenant admins, and its
+ * metrics charts (jobs, slots, link health, launch speed, tokens).
+ */
 function HarborDetail({ id, inSheet, canManage, onEdit, onToggle, onDelete }: HarborDetailProps) {
   const { t, formatDateTime } = useLocale();
   const [jsonOpen, setJsonOpen] = useState(false);
@@ -70,6 +74,7 @@ function HarborDetail({ id, inSheet, canManage, onEdit, onToggle, onDelete }: Ha
         <Field label={t('Last Seen')} value={h.lastSeenUtc ? formatDateTime(h.lastSeenUtc) : t('Never')} />
         <Field label={t('Capabilities')} value={capabilityText(t, h)} />
       </FieldCard>
+      <HarborMetricsSection harborId={h.id} />
       <JsonSheet open={jsonOpen} title={h.name} data={h} onClose={() => setJsonOpen(false)} />
     </LocalBody>
   );
