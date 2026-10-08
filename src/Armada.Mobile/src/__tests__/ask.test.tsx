@@ -131,11 +131,85 @@ describe('Ask Armada', () => {
     expect(screen.queryByTestId('ask-choose-captain')).toBeNull();
   });
 
-  it('the conversation shows its captain at the top, and tapping it opens the captain picker', async () => {
+  it('the conversation shows its captain at the top; tapping it opens an inline dropdown of captains under the bar', async () => {
+    api.listCaptains.mockResolvedValue({ objects: [{ id: 'cpt_1', name: 'Ada', runtime: 'ClaudeCode', model: 'opus' }, { id: 'cpt_2', name: 'Grace', runtime: 'Codex' }] } as never);
+    api.createAskThread.mockResolvedValue(thread({ id: 'thr_new', captainId: 'cpt_2' }));
+    api.sendAskMessage.mockResolvedValue({ messageId: 'msg_1', turnId: 'turn_1' });
     await renderAsk();
     await waitFor(() => expect(screen.getByTestId('ask-captain-bar-name')).toHaveTextContent(/Ada/));
+    const bar = screen.getByTestId('ask-captain-bar');
+    expect(bar.props.accessibilityState).toMatchObject({ expanded: false });
+    await act(async () => { fireEvent.press(bar); });
+
+    // A dropdown in the conversation pane, not a sheet: no Modal, anchored to the bar, inside the pane above the composer.
+    const menu = screen.getByTestId('ask-captain-menu');
+    expect(within(screen.getByTestId('ask-above-composer')).getByTestId('ask-captain-menu')).toBeTruthy();
+    expect(screen.queryByTestId('ask-options')).toBeNull();
+    expect(screen.queryByTestId('modal-backdrop')).toBeNull();
+    expect(menu.props.accessibilityRole).toBe('radiogroup');
+    expect(menu.props.accessibilityLabel).toBe('Captain');
+    expect(screen.getByTestId('ask-captain-bar').props.accessibilityState).toMatchObject({ expanded: true });
+    const ada = screen.getByTestId('ask-captain-menu-option-cpt_1');
+    expect(ada.props.accessibilityRole).toBe('radio');
+    expect(ada.props.accessibilityState).toMatchObject({ checked: true });
+    expect(screen.getByTestId('ask-captain-menu-option-none')).toBeTruthy();
+    expect(screen.getByTestId('ask-captain-menu-option-cpt_2').props.accessibilityLabel).toBe('Grace (Codex)');
+
+    // Choosing a captain closes the dropdown; the new conversation is created with it.
+    await act(async () => { fireEvent.press(screen.getByTestId('ask-captain-menu-option-cpt_2')); });
+    expect(screen.queryByTestId('ask-captain-menu')).toBeNull();
+    expect(screen.getByTestId('ask-captain-bar-name')).toHaveTextContent(/Grace/);
+    expect(screen.getByTestId('ask-captain-bar').props.accessibilityState).toMatchObject({ expanded: false });
+    expect(await AsyncStorage.getItem(ASK_PREF_KEYS.captain)).toBe('"cpt_2"');
+    await fireEvent.changeText(screen.getByTestId('ask-input'), 'hi');
+    await act(async () => { await fireEvent.press(screen.getByTestId('ask-send')); });
+    expect(api.createAskThread).toHaveBeenCalledWith({ captainId: 'cpt_2' });
+  });
+
+  it('the captain dropdown changes an existing conversation through the thread update, and closes on a tap outside or the escape gesture', async () => {
+    api.listCaptains.mockResolvedValue({ objects: [{ id: 'cpt_1', name: 'Ada' }, { id: 'cpt_2', name: 'Grace' }] } as never);
+    api.updateAskThread.mockImplementation(async (_id, patch) => thread(patch as Partial<AskThread>));
+    await renderAsk('/ask/thr_1');
+    await waitFor(() => expect(screen.getByTestId('ask-captain-bar-name')).toHaveTextContent(/Ada/));
+
     await act(async () => { fireEvent.press(screen.getByTestId('ask-captain-bar')); });
-    expect(await screen.findByTestId('ask-captain')).toBeTruthy();
+    await act(async () => { fireEvent.press(screen.getByTestId('ask-captain-menu-scrim')); });
+    expect(screen.queryByTestId('ask-captain-menu')).toBeNull();
+
+    await act(async () => { fireEvent.press(screen.getByTestId('ask-captain-bar')); });
+    await act(async () => { fireEvent(screen.getByTestId('ask-captain-menu'), 'accessibilityEscape'); });
+    expect(screen.queryByTestId('ask-captain-menu')).toBeNull();
+
+    await act(async () => { fireEvent.press(screen.getByTestId('ask-captain-bar')); });
+    await act(async () => { fireEvent.press(screen.getByTestId('ask-captain-menu-option-cpt_2')); });
+    expect(api.updateAskThread).toHaveBeenCalledWith('thr_1', { captainId: 'cpt_2' });
+    await waitFor(() => expect(screen.getByTestId('ask-captain-bar-name')).toHaveTextContent(/Grace/));
+  });
+
+  it('screen readers land on the chosen captain when the dropdown opens and back on the bar when it closes', async () => {
+    const info = AccessibilityInfo as jest.Mocked<typeof AccessibilityInfo>;
+    info.isScreenReaderEnabled.mockResolvedValue(true);
+    await renderAsk();
+    await waitFor(() => expect(screen.getByTestId('ask-captain-bar-name')).toHaveTextContent(/Ada/));
+    const focused = () => info.sendAccessibilityEvent.mock.calls.filter(([, type]) => type === 'focus')
+      .map(([node]) => (node as unknown as { props: { testID?: string } }).props.testID);
+    await act(async () => { fireEvent.press(screen.getByTestId('ask-captain-bar')); });
+    await waitFor(() => expect(focused()).toEqual(['ask-captain-menu-option-cpt_1']));
+    await act(async () => { fireEvent.press(screen.getByTestId('ask-captain-bar')); });
+    expect(screen.queryByTestId('ask-captain-menu')).toBeNull();
+    await waitFor(() => expect(focused()).toEqual(['ask-captain-menu-option-cpt_1', 'ask-captain-bar']));
+    info.isScreenReaderEnabled.mockResolvedValue(false);
+  });
+
+  it('the captain cannot change during a turn: the bar is disabled and an open dropdown closes', async () => {
+    api.getAskThread.mockResolvedValue({ thread: thread(), trackedWork: [] });
+    await renderAsk('/ask/thr_1');
+    await waitFor(() => expect(screen.getByTestId('ask-captain-bar-name')).toHaveTextContent(/Ada/));
+    await act(async () => { fireEvent.press(screen.getByTestId('ask-captain-bar')); });
+    expect(screen.getByTestId('ask-captain-menu')).toBeTruthy();
+    await emit('ask.turn', { threadId: 'thr_1', turnId: 'turn_5', state: 'started' });
+    expect(screen.queryByTestId('ask-captain-menu')).toBeNull();
+    expect(screen.getByTestId('ask-captain-bar').props.accessibilityState).toMatchObject({ disabled: true });
   });
 
   it('sending creates the conversation, shows the message at once, and streams the reply', async () => {

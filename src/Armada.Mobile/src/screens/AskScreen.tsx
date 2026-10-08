@@ -1,6 +1,6 @@
 import { Stack, useFocusEffect, useRouter, type Href } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Linking, Modal, Pressable, StyleSheet, View } from 'react-native';
+import { Linking, Modal, Pressable, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { AskThread, AskTrackedWork, CaptainToolAccessResult } from '@dashboard/types/models';
@@ -13,6 +13,7 @@ import { useAsk } from '../ask/AskContext';
 import { useAskConversation } from '../ask/useAskConversation';
 import { HeaderActions } from '../components/app/HeaderActions';
 import { Composer, type ComposerHandle } from '../components/ask/Composer';
+import { CaptainMenu } from '../components/ask/CaptainMenu';
 import { ConversationOptionsSheet, captainLabel } from '../components/ask/ConversationOptionsSheet';
 import { DeleteConversationDialog } from '../components/ask/DeleteConversationDialog';
 import { MessageList, type MessageListHandle } from '../components/ask/MessageList';
@@ -25,7 +26,7 @@ import { useNotifications } from '../notifications/NotificationContext';
 import { useTheme } from '../theme/ThemeContext';
 import { spacing } from '../theme/typography';
 import { useModalBack } from '../components/ui/useModalBack';
-import { useReducedMotion } from '../lib/accessibility';
+import { focusElement, useReducedMotion } from '../lib/accessibility';
 import { MODAL_ORIENTATIONS } from '../components/ui/modalOrientations';
 
 /** The last conversation reopens once per app session (MOBILE_APP_PLAN.md design principle 1). */
@@ -72,6 +73,10 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
   // Android back in the list's search closes the keyboard first, then the list.
   const onListBack = useModalBack(useCallback(() => setListOpen(false), []));
   const [optionsOpen, setOptionsOpen] = useState(false);
+  const [captainMenuOpen, setCaptainMenuOpen] = useState(false);
+  // Where the captain bar ends: the dropdown hangs from it, over the transcript.
+  const [captainBarBottom, setCaptainBarBottom] = useState(0);
+  const captainBarRef = useRef<View | null>(null);
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameValue, setRenameValue] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<AskThread | null>(null);
@@ -117,6 +122,8 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
   const tools = toolsFor && toolsFor.captainId === activeCaptainId ? toolsFor.tools : null;
 
   const { mcpMissing, ungated, noCaptain } = askCaptainAccess(activeCaptainId, tools);
+  // The captain cannot change mid-turn, so the dropdown closes when a turn starts.
+  const captainMenuShown = captainMenuOpen && !conv.turnActive;
 
   async function applyUpdate(target: AskThread, patch: Parameters<typeof updateThread>[1]) {
     const merged = await updateThread(target, patch);
@@ -131,6 +138,16 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
     onToggleArchive: (th: AskThread) => { void applyUpdate(th, { archived: !th.archived }); },
     onDelete: (th: AskThread) => setDeleteTarget(th),
   };
+
+  function changeCaptain(captainId: string) {
+    if (thread) void applyUpdate(thread, { captainId: captainId || null });
+    else setDraftCaptainId(captainId);
+  }
+
+  const closeCaptainMenu = useCallback(() => {
+    setCaptainMenuOpen(false);
+    focusElement(captainBarRef);
+  }, []);
 
   function selectThread(th: AskThread) {
     setListOpen(false);
@@ -195,10 +212,13 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
           (about 140 dp), the captain bar and banners alone used to push the composer under the keyboard. */}
       <View style={styles.aboveComposer} testID="ask-above-composer">
       <Pressable
+        ref={captainBarRef}
         accessibilityRole="button"
         accessibilityLabel={t('Captain: {{name}}. Change captain', { name: activeCaptain ? captainLabel(activeCaptain) : t('None (quick actions only)') })}
+        accessibilityState={{ expanded: captainMenuShown, disabled: conv.turnActive }}
         disabled={conv.turnActive}
-        onPress={() => setOptionsOpen(true)}
+        onPress={() => (captainMenuShown ? closeCaptainMenu() : setCaptainMenuOpen(true))}
+        onLayout={(event: LayoutChangeEvent) => setCaptainBarBottom(event.nativeEvent.layout.y + event.nativeEvent.layout.height)}
         style={[styles.captainBar, { borderBottomColor: colors.border, backgroundColor: colors.surface }]}
         testID="ask-captain-bar"
       >
@@ -207,7 +227,7 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
         <AppText variant="body" numberOfLines={2} style={styles.fill} testID="ask-captain-bar-name">
           {activeCaptain ? captainLabel(activeCaptain) : t('None (quick actions only)')}
         </AppText>
-        <Icon name="chevron-down" size={16} color="textMuted" />
+        <Icon name={captainMenuShown ? 'chevron-up' : 'chevron-down'} size={16} color="textMuted" />
       </Pressable>
       {ungated ? (
         <Banner tone="warning" title={t('Actions from this captain run without approval cards.')} message={t('This runtime uses its own Armada connection, so anything it does through Armada tools happens immediately.')} testID="ask-ungated-note" />
@@ -224,7 +244,7 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
             <Banner tone="warning" title={t('This server has no captains, so Ask Armada cannot answer yet. Quick actions still work.')} message={t('Add a captain')} />
           </Pressable>
         ) : (
-          <Pressable accessibilityRole="button" onPress={() => setOptionsOpen(true)} testID="ask-choose-captain">
+          <Pressable accessibilityRole="button" onPress={() => setCaptainMenuOpen(true)} testID="ask-choose-captain">
             <Banner tone="info" title={t('Choose a captain to chat with in this conversation.')} message={t('Choose a captain')} />
           </Pressable>
         )
@@ -271,6 +291,21 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
         />
       )}
 
+      {captainMenuShown ? (
+        <>
+          {/* Tapping anywhere else over the transcript closes the dropdown; screen readers close it from the bar. */}
+          <Pressable
+            style={[StyleSheet.absoluteFill, { top: captainBarBottom }]}
+            onPress={closeCaptainMenu}
+            accessible={false}
+            importantForAccessibility="no"
+            testID="ask-captain-menu-scrim"
+          />
+          <View style={[styles.captainDropdown, { top: captainBarBottom }]}>
+            <CaptainMenu value={activeCaptainId} captains={captains} onSelect={changeCaptain} onClose={closeCaptainMenu} />
+          </View>
+        </>
+      ) : null}
       </View>
 
       <Composer
@@ -355,7 +390,7 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
         captains={captains}
         draftCaptainId={draftCaptainId}
         onDraftCaptainChange={setDraftCaptainId}
-        onCaptainChange={(captainId) => { if (thread) void applyUpdate(thread, { captainId }); }}
+        onCaptainChange={(captainId) => changeCaptain(captainId ?? '')}
         onAutoApproveChange={(value) => {
           if (!thread) return;
           void applyUpdate(thread, { autoApprove: value }).then((updated) => {
@@ -405,5 +440,6 @@ const styles = StyleSheet.create({
   quickButton: { marginBottom: 0 },
   headerRow: { flexDirection: 'row', alignItems: 'center' },
   captainBar: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, minHeight: 44 },
+  captainDropdown: { position: 'absolute', left: 0, right: 0 },
   modalHead: { flexDirection: 'row', alignItems: 'center', paddingLeft: spacing.lg, paddingRight: spacing.xs, borderBottomWidth: StyleSheet.hairlineWidth },
 });
