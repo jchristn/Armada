@@ -36,8 +36,6 @@ export const TextField = forwardRef<TextInput, TextFieldProps>(function TextFiel
           secureTextEntry={secret && !revealed}
           autoCorrect={secret ? false : rest.autoCorrect}
           autoCapitalize={secret ? 'none' : rest.autoCapitalize}
-          // Android wraps a long placeholder in a one-line field onto a second line that the box clips.
-          numberOfLines={rest.multiline ? undefined : 1}
           {...rest}
           onFocus={(e) => { setFocused(true); rest.onFocus?.(e); }}
           onBlur={(e) => { setFocused(false); rest.onBlur?.(e); }}
