@@ -72,6 +72,8 @@ import type {
   PersonaPromptPreview,
   Skill,
   Harbor,
+  HarborMetrics,
+  HarborMetricsRange,
   ModelEndpoint,
   Memory,
   ModelEndpointProbeResult,
@@ -1012,7 +1014,7 @@ export const getMissionHistory = (params?: { fromUtc?: string; toUtc?: string; b
         .map(([key, value]) => [key, String(value)]),
     ),
   } : undefined)}`);
-export const getTokenUsage = (params?: { fromUtc?: string; toUtc?: string; bucketMinutes?: number; model?: string; runtime?: string; source?: string; vesselId?: string; captainId?: string }) =>
+export const getTokenUsage = (params?: { fromUtc?: string; toUtc?: string; bucketMinutes?: number; model?: string; runtime?: string; source?: string; vesselId?: string; captainId?: string; harborId?: string }) =>
   get<TokenUsageSummaryResult>(`/api/v1/token-usage/summary${buildQuery(params ? {
     filters: Object.fromEntries(
       Object.entries(params)
@@ -1137,6 +1139,8 @@ export const updateHarbor = (id: string, data: Partial<Harbor>) =>
 export const deleteHarbor = (id: string) => del<void>(`/api/v1/harbors/${encodeURIComponent(id)}`);
 export const enableHarbor = (id: string) => post<Harbor>(`/api/v1/harbors/${encodeURIComponent(id)}/enable`, {});
 export const disableHarbor = (id: string) => post<Harbor>(`/api/v1/harbors/${encodeURIComponent(id)}/disable`, {});
+export const getHarborMetrics = (id: string, range: HarborMetricsRange = '24h') =>
+  get<HarborMetrics>(`/api/v1/harbors/${encodeURIComponent(id)}/metrics?range=${encodeURIComponent(range)}`);
 
 // Model endpoints (embedding/inference)
 export const listModelEndpoints = () => get<ModelEndpoint[]>('/api/v1/model-endpoints');

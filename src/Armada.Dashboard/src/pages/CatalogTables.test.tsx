@@ -22,7 +22,7 @@ vi.mock('../api/client', () => ({
   listRunbooks: vi.fn(), listRunbookExecutions: vi.fn(), listEnvironments: vi.fn(), createRunbook: vi.fn(), deleteRunbook: vi.fn(),
   listWorkflowProfiles: vi.fn(), createWorkflowProfile: vi.fn(), updateWorkflowProfile: vi.fn(), deleteWorkflowProfile: vi.fn(),
   listProjectProfiles: vi.fn(), createProjectProfile: vi.fn(), updateProjectProfile: vi.fn(), deleteProjectProfile: vi.fn(),
-  listHarbors: vi.fn(), createHarbor: vi.fn(), updateHarbor: vi.fn(), deleteHarbor: vi.fn(), enableHarbor: vi.fn(), disableHarbor: vi.fn(),
+  listHarbors: vi.fn(), createHarbor: vi.fn(), updateHarbor: vi.fn(), deleteHarbor: vi.fn(), enableHarbor: vi.fn(), disableHarbor: vi.fn(), getHarborMetrics: vi.fn(),
   listBacklog: vi.fn(), createBacklogItem: vi.fn(), deleteBacklogItem: vi.fn(), importObjectiveFromGitHub: vi.fn(), reorderBacklog: vi.fn(),
   listFleets: vi.fn(), listVessels: vi.fn(), listUsers: vi.fn(),
 }));
@@ -172,9 +172,10 @@ describe('catalog list tables on the shared DataTable', () => {
 
   it('Harbors: capabilities truncate on one line with the full list in the title', async () => {
     renderPage(<Harbors />);
-    await screen.findByText('laptop');
+    // The name is also an option of the page's chart picker, so read it from the table cell.
+    await screen.findByText('laptop', { selector: 'td strong' });
     expectOneLine('git, claude, codex', 'capabilities');
-    expect(screen.getByText('laptop').closest('td')).not.toHaveTextContent('hbr_1');
+    expect(screen.getByText('laptop', { selector: 'td strong' }).closest('td')).not.toHaveTextContent('hbr_1');
     await expectChooser(['Harbor', 'ID'], 'Refresh harbors');
   });
 

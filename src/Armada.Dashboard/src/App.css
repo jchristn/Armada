@@ -9082,3 +9082,26 @@ thead tr.column-filter-row td input.col-filter { width: 0; min-width: 100%; }
     white-space: nowrap;
     vertical-align: bottom;
 }
+
+/* Per-Harbor charts (Harbors page and Harbor detail) */
+.harbor-detail-modal { max-width: 1040px; width: 96vw; }
+.harbor-metrics-page-section { margin-top: 1.5rem; }
+.harbor-metrics-picker { margin-bottom: 0.5rem; }
+.harbor-metrics-picker label { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; color: var(--text-dim); }
+.harbor-metrics-picker select { font-size: 0.85rem; padding: 0.25rem 0.5rem; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); }
+.harbor-metrics { margin-top: 1rem; }
+.harbor-metrics-stats { flex-wrap: wrap; gap: 0.5rem 1.25rem; }
+.harbor-metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1rem; margin-bottom: 1rem; }
+.harbor-metrics-chart { border: 1px solid var(--border); border-radius: var(--radius); padding: 0.5rem 0.75rem; background: var(--bg-card); }
+.harbor-metrics-legend { flex-wrap: wrap; gap: 0.35rem 1rem; }
+.harbor-metrics-block { margin-top: 1rem; display: flex; flex-direction: column; gap: 0.5rem; }
+.harbor-metrics-block-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.harbor-metrics-block-title { font-weight: 600; font-size: 0.85rem; }
+.harbor-metrics-strip { display: block; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+.harbor-metrics-link { font-size: 0.8rem; color: var(--accent); }
+.harbor-metrics-sparkline { display: block; }
+.harbor-metrics-error { color: var(--red); }
+@media (max-width: 640px) {
+  .harbor-metrics-grid { grid-template-columns: 1fr; }
+}
+.token-usage-filter-note { display: flex; align-items: center; gap: 0.75rem; font-size: 0.85rem; color: var(--text-dim); }

@@ -2137,6 +2137,14 @@
     },
     {
       "kind": "api",
+      "key": "getHarborMetrics",
+      "status": "implemented",
+      "tui": "ArmadaClient.GetHarborMetricsAsync",
+      "workstream": "W0.2",
+      "notes": "Harbors (host runners); client method only, the TUI Harbor charts are phase 2"
+    },
+    {
+      "kind": "api",
       "key": "getHealth",
       "status": "implemented",
       "tui": "ArmadaClient.GetHealthAsync",
