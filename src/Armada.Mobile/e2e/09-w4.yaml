@@ -86,7 +86,10 @@ name: 09-w4
     id: "persona-form-description"
 - eraseText: 400
 - inputText: "Edited from the mobile E2E flow"
+# On Android this is a back press: it must close only the keyboard, not the sheet with the edit in it.
 - hideKeyboard
+- assertVisible:
+    id: "persona-form-description"
 # Save sits in the form sheet's footer, reachable without scrolling.
 - assertVisible:
     id: "persona-form-footer"

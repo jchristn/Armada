@@ -24,6 +24,7 @@ import { useLayout } from '../navigation/useLayout';
 import { useNotifications } from '../notifications/NotificationContext';
 import { useTheme } from '../theme/ThemeContext';
 import { spacing } from '../theme/typography';
+import { useModalBack } from '../components/ui/useModalBack';
 
 /** The last conversation reopens once per app session (MOBILE_APP_PLAN.md design principle 1). */
 let restoredLastThread = false;
@@ -65,6 +66,8 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
 
   const [threadId, setThreadId] = useState<string | null>(routeThreadId);
   const [listOpen, setListOpen] = useState(false);
+  // Android back in the list's search closes the keyboard first, then the list.
+  const onListBack = useModalBack(useCallback(() => setListOpen(false), []));
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameValue, setRenameValue] = useState('');
@@ -310,7 +313,7 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
       />
       <SplitView master={threadList} detail={conversationPane} />
 
-      <Modal visible={listOpen && !isTablet} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setListOpen(false)}>
+      <Modal visible={listOpen && !isTablet} animationType="slide" presentationStyle="pageSheet" onRequestClose={onListBack}>
         {/* A modal is a new native root: swipe actions in the list need their own gesture root. */}
         <GestureHandlerRootView style={styles.fill}>
         <SafeAreaView style={[styles.fill, { backgroundColor: colors.background }]} edges={['top', 'bottom', 'left', 'right']}>

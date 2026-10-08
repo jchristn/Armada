@@ -6,6 +6,7 @@ import { radius, spacing } from '../../theme/typography';
 import { AppText } from './AppText';
 import { IconButton } from './IconButton';
 import { StickyFooter } from './StickyFooter';
+import { useModalBack } from './useModalBack';
 
 export interface BottomSheetProps {
   open: boolean;
@@ -25,8 +26,10 @@ export interface BottomSheetProps {
 export function BottomSheet({ open, title, onClose, closeLabel, children, footer, testID }: BottomSheetProps) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  // Android back closes the keyboard first, then the sheet (one press used to drop the sheet and its text).
+  const onBack = useModalBack(onClose);
   return (
-    <Modal visible={open} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
+    <Modal visible={open} transparent animationType="slide" onRequestClose={onBack} statusBarTranslucent>
       {/* Padding on both platforms: with Android edge-to-edge the window no longer resizes for the keyboard. */}
       <KeyboardAvoidingView style={styles.fill} behavior="padding">
         <Pressable style={[styles.fill, { backgroundColor: colors.overlay }]} onPress={onClose} accessibilityRole="button" accessibilityLabel={closeLabel} />
