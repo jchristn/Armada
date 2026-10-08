@@ -17,10 +17,10 @@ namespace Armada.Harbor
     /// <summary>
     /// The Activity tab of the Status window: this Harbor's charts from the Admiral (GET /api/v1/harbors/{id}/metrics,
     /// read with Harbor's own credential) over the last hour, 24 hours, or 7 days: jobs over time, slot usage against the
-    /// capacity, link health and heartbeat round trip, launch speed per runtime (median and p95, with a trend), and tokens
-    /// by runtime and model. Refreshes on a timer while the tab is shown and stops when it is hidden. When the Admiral
-    /// cannot answer (offline, a refused credential, an Admiral too old to have the charts), says why in plain language
-    /// and keeps the last charts it had.
+    /// capacity, link health and heartbeat round trip, tokens by type (uncached input, cached input, and output stacked,
+    /// with totals per runtime and model), and launch speed per runtime (median and p95, with a trend). Refreshes on a
+    /// timer while the tab is shown and stops when it is hidden. When the Admiral cannot answer (offline, a refused
+    /// credential, an Admiral too old to have the charts), says why in plain language and keeps the last charts it had.
     /// </summary>
     public class HarborActivityView : UserControl
     {
@@ -50,27 +50,27 @@ namespace Armada.Harbor
         /// <summary>
         /// Jobs over time.
         /// </summary>
-        public StackedBarChart JobsChart { get; } = new StackedBarChart(200);
+        public StackedBarChart JobsChart { get; } = new StackedBarChart(300);
 
         /// <summary>
         /// Slot usage.
         /// </summary>
-        public LineChart SlotsChart { get; } = new LineChart(180);
+        public LineChart SlotsChart { get; } = new LineChart(270);
 
         /// <summary>
         /// Link health strip.
         /// </summary>
-        public StatusStrip LinkStrip { get; } = new StatusStrip(20);
+        public StatusStrip LinkStrip { get; } = new StatusStrip(30);
 
         /// <summary>
         /// Heartbeat round trip.
         /// </summary>
-        public LineChart RoundTripChart { get; } = new LineChart(160);
+        public LineChart RoundTripChart { get; } = new LineChart(240);
 
         /// <summary>
-        /// Tokens by runtime and model.
+        /// Tokens by type (uncached input, cached input, output).
         /// </summary>
-        public StackedBarChart TokensChart { get; } = new StackedBarChart(200);
+        public StackedBarChart TokensChart { get; } = new StackedBarChart(300);
 
         #endregion
 
@@ -97,6 +97,7 @@ namespace Armada.Harbor
         private readonly StackPanel _SpeedPanel = new StackPanel();
         private readonly WrapPanel _TokenStats = new WrapPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
         private readonly ChartLegend _TokensLegend = new ChartLegend();
+        private readonly StackPanel _TokenRows = new StackPanel { Margin = new Thickness(0, 12, 0, 0) };
         private readonly TextBlock _TokensEmpty;
         private string _Range = "24h";
         private HarborMetricsLoadResult? _LastResult = null;
@@ -150,9 +151,9 @@ namespace Armada.Harbor
             _LinkLegend.ShowStates();
             TextBlock roundTripTitle = new TextBlock { Text = "Heartbeat round trip", FontWeight = FontWeight.SemiBold, Margin = new Thickness(0, 4, 0, 6) };
             _Charts.Children.Add(HarborUi.Card("Link health", Stack(LinkStrip, _LinkLegend, _LinkStats, roundTripTitle, RoundTripChart, _RoundTripLegend), null));
-            _Charts.Children.Add(HarborUi.Card("Launch speed", _SpeedPanel, null));
             _TokensEmpty = HarborUi.Note("No token usage in this time range.");
-            _Charts.Children.Add(HarborUi.Card("Token usage", Stack(_TokenStats, _TokensEmpty, TokensChart, _TokensLegend), null));
+            _Charts.Children.Add(HarborUi.Card("Token usage", Stack(_TokenStats, _TokensEmpty, TokensChart, _TokensLegend, _TokenRows), null));
+            _Charts.Children.Add(HarborUi.Card("Launch speed", _SpeedPanel, null));
             _Charts.IsVisible = false;
 
             Content = HarborUi.Page(HarborUi.Card("Harbor activity", summary, rangeButtons), _Charts);
@@ -278,10 +279,11 @@ namespace Armada.Harbor
 
             _TokenStats.Children.Clear();
             HarborTokenMetrics tokens = metrics.Tokens;
-            AddStat(_TokenStats, ChartFormat.Tokens(tokens.TotalTokens), "Total", null);
-            AddStat(_TokenStats, ChartFormat.Tokens(tokens.InputTokens), "Input", null);
-            AddStat(_TokenStats, ChartFormat.Tokens(tokens.OutputTokens), "Output", null);
-            AddStat(_TokenStats, ChartFormat.Tokens(tokens.CachedTokens), "Cached", null);
+            TokenTypeSplit split = TokenTypeSplit.From(tokens.InputTokens, tokens.OutputTokens, tokens.CachedTokens);
+            AddStat(_TokenStats, ChartFormat.Tokens(split.Total), "Total", null);
+            AddStat(_TokenStats, ChartFormat.Tokens(split.UncachedInput), "Uncached input", null);
+            AddStat(_TokenStats, ChartFormat.Tokens(split.CachedInput), "Cached input", null);
+            AddStat(_TokenStats, ChartFormat.Tokens(split.Output), "Output", null);
             if (tokens.EstimatedCount > 0) AddStat(_TokenStats, Number(tokens.EstimatedCount) + " of " + Number(tokens.RecordCount), "records estimated", "HarborWarningBrush");
             BucketChartModel tokenModel = HarborChartMapper.Tokens(metrics);
             bool hasTokens = tokenModel.Series.Count > 0 && tokenModel.HasData;
@@ -290,6 +292,33 @@ namespace Armada.Harbor
             _TokensLegend.IsVisible = hasTokens;
             TokensChart.Model = tokenModel;
             _TokensLegend.Show(tokenModel);
+            ShowTokenRows(metrics);
+        }
+
+        private void ShowTokenRows(HarborMetrics metrics)
+        {
+            _TokenRows.Children.Clear();
+            List<HarborTokenSeries> rows = HarborChartMapper.TokenRows(metrics);
+            _TokenRows.IsVisible = rows.Count > 0;
+            if (rows.Count == 0) return;
+
+            Grid grid = new Grid { ColumnDefinitions = new ColumnDefinitions("2*,Auto,Auto,Auto,Auto"), RowSpacing = 6, ColumnSpacing = 18 };
+            AddRow(grid, new string[] { "Runtime / model", "Uncached input", "Cached input", "Output", "Total" }, true);
+            foreach (HarborTokenSeries row in rows)
+            {
+                TokenTypeSplit split = TokenTypeSplit.From(row.InputTokens, row.OutputTokens, row.CachedTokens);
+                AddRow(grid, new string[]
+                {
+                    row.Runtime + " / " + row.Model,
+                    ChartFormat.Tokens(split.UncachedInput),
+                    ChartFormat.Tokens(split.CachedInput),
+                    ChartFormat.Tokens(split.Output),
+                    ChartFormat.Tokens(split.Total)
+                }, false);
+            }
+
+            AutomationProperties.SetName(grid, "Tokens per runtime and model");
+            _TokenRows.Children.Add(grid);
         }
 
         private void ShowLaunchSpeed(HarborMetrics metrics)

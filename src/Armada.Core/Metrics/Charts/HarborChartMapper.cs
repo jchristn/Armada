@@ -8,23 +8,15 @@ namespace Armada.Core.Metrics.Charts
     using Armada.Core.Models;
 
     /// <summary>
-    /// Turns a Harbor's metrics (GET /api/v1/harbors/{id}/metrics) into the chart models the Harbor app and the TUI draw,
-    /// with the same series, names, and colors as the dashboard: jobs over time (missions and interactive, finished and
-    /// failed, stacked), slot usage (peak and average against the capacity), heartbeat round trip (average and largest),
-    /// the link health strip, the launch speed trend per runtime, and tokens by runtime and model. The Admiral computes
+    /// Turns a Harbor's metrics (GET /api/v1/harbors/{id}/metrics) into the chart models the Harbor app and the TUI draw:
+    /// jobs over time (missions and interactive, finished and failed, stacked), slot usage (peak and average against the
+    /// capacity, on an axis that tops out at the capacity), heartbeat round trip (average and largest), the link health
+    /// strip, the launch speed trend per runtime, and tokens by type (uncached input, cached input, output) with totals per
+    /// runtime and model. Series names and colors follow the dashboard where it has the same chart. The Admiral computes
     /// every number; this only shapes them.
     /// </summary>
     public static class HarborChartMapper
     {
-        #region Public-Members
-
-        /// <summary>
-        /// Most runtime and model series the token chart shows by name; the rest are summed into "Other".
-        /// </summary>
-        public const int MaxTokenSeries = 5;
-
-        #endregion
-
         #region Public-Methods
 
         /// <summary>
@@ -76,7 +68,8 @@ namespace Armada.Core.Metrics.Charts
         }
 
         /// <summary>
-        /// Slot usage: the peak and the average of concurrent jobs per bucket, against a dashed line at the capacity.
+        /// Slot usage: the peak and the average of concurrent jobs per bucket, against a dashed line at the capacity. The
+        /// value axis tops out at the capacity (MaxConcurrentJobs) itself, with whole-number ticks.
         /// </summary>
         /// <param name="metrics">Metrics.</param>
         /// <returns>Chart.</returns>
@@ -88,6 +81,7 @@ namespace Armada.Core.Metrics.Charts
             model.Series.Add(new ChartSeriesData("average", "Average", ChartColorEnum.Success, buckets.Select(b => (double?)b.Average)));
             int max = metrics.Slots.MaxConcurrentJobs;
             model.Reference = new ChartReferenceLine(max, "Max slots (" + max.ToString(CultureInfo.InvariantCulture) + ")", ChartColorEnum.Danger);
+            if (max > 0) model.AxisCeiling = max;
             return model;
         }
 
@@ -107,35 +101,38 @@ namespace Armada.Core.Metrics.Charts
         }
 
         /// <summary>
-        /// Tokens by runtime and model, stacked per bucket, most tokens first. Past <see cref="MaxTokenSeries"/> series,
-        /// the rest are summed into "Other".
+        /// Tokens by type, stacked per bucket: uncached input, cached input, then output. Recorded input already includes
+        /// cache reads, so the parts come from <see cref="TokenTypeSplit"/> and each bar adds up to input plus output (the
+        /// recorded total) without counting cached tokens twice.
         /// </summary>
         /// <param name="metrics">Metrics.</param>
         /// <returns>Chart.</returns>
         public static BucketChartModel Tokens(HarborMetrics metrics)
         {
-            BucketChartModel model = Base(metrics, "Tokens by runtime and model", BucketChartKindEnum.StackedBar, ChartValueFormatEnum.Tokens);
-            List<HarborTokenBucket> buckets = Aligned(metrics.Tokens.Buckets, model.BucketCount);
-            List<HarborTokenSeries> totals = metrics.Tokens.Series.OrderByDescending(s => s.TotalTokens).ToList();
-            List<HarborTokenSeries> named = totals.Take(MaxTokenSeries).ToList();
-            List<HarborTokenSeries> rest = totals.Skip(MaxTokenSeries).ToList();
-            ChartColorEnum[] palette = new ChartColorEnum[] { ChartColorEnum.Series1, ChartColorEnum.Series2, ChartColorEnum.Series3, ChartColorEnum.Series4, ChartColorEnum.Series5 };
-            for (int i = 0; i < named.Count; i++)
-            {
-                HarborTokenSeries series = named[i];
-                string key = TokenKey(series);
-                model.Series.Add(new ChartSeriesData(key, series.Runtime + " / " + series.Model, palette[i % palette.Length],
-                    buckets.Select(b => (double?)b.Series.Where(s => TokenKey(s) == key).Sum(s => s.TotalTokens))));
-            }
-
-            if (rest.Count > 0)
-            {
-                HashSet<string> restKeys = new HashSet<string>(rest.Select(TokenKey), StringComparer.Ordinal);
-                model.Series.Add(new ChartSeriesData("other", "Other (" + rest.Count.ToString(CultureInfo.InvariantCulture) + ")", ChartColorEnum.Idle,
-                    buckets.Select(b => (double?)b.Series.Where(s => restKeys.Contains(TokenKey(s))).Sum(s => s.TotalTokens))));
-            }
-
+            BucketChartModel model = Base(metrics, "Tokens by type", BucketChartKindEnum.StackedBar, ChartValueFormatEnum.Tokens);
+            List<TokenTypeSplit> splits = Aligned(metrics.Tokens.Buckets, model.BucketCount)
+                .Select(b => TokenTypeSplit.From(b.InputTokens, b.OutputTokens, b.CachedTokens))
+                .ToList();
+            model.Series.Add(new ChartSeriesData("uncachedInput", "Uncached input", ChartColorEnum.Series1, splits.Select(s => (double?)s.UncachedInput)));
+            model.Series.Add(new ChartSeriesData("cachedInput", "Cached input", ChartColorEnum.Series2, splits.Select(s => (double?)s.CachedInput)));
+            model.Series.Add(new ChartSeriesData("output", "Output", ChartColorEnum.Series3, splits.Select(s => (double?)s.Output)));
             return model;
+        }
+
+        /// <summary>
+        /// Token totals per runtime and model over the window, most tokens first (the table beside the token chart).
+        /// </summary>
+        /// <param name="metrics">Metrics.</param>
+        /// <returns>Rows.</returns>
+        public static List<HarborTokenSeries> TokenRows(HarborMetrics metrics)
+        {
+            if (metrics == null) throw new ArgumentNullException(nameof(metrics));
+            return metrics.Tokens.Series
+                .Where(s => s != null)
+                .OrderByDescending(s => s.TotalTokens)
+                .ThenBy(s => s.Runtime, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(s => s.Model, StringComparer.OrdinalIgnoreCase)
+                .ToList();
         }
 
         /// <summary>
@@ -209,11 +206,6 @@ namespace Armada.Core.Metrics.Charts
             List<T> result = new List<T>();
             for (int i = 0; i < count; i++) result.Add(buckets != null && i < buckets.Count && buckets[i] != null ? buckets[i] : new T());
             return result;
-        }
-
-        private static string TokenKey(HarborTokenSeries series)
-        {
-            return series.Runtime + "|" + series.Model;
         }
 
         #endregion

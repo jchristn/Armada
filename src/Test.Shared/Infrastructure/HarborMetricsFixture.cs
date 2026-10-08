@@ -9,7 +9,7 @@ namespace Test.Shared.Infrastructure
     /// <summary>
     /// A deterministic Harbor metrics response for chart, feed, and TUI tests: every series has known values (jobs in
     /// buckets 1 and 2, a peak of 3 slots of 4, a round-trip gap in bucket 2, a down stretch and a reconnect, two runtimes,
-    /// and two token series).
+    /// and two token series with cache reads inside their input).
     /// </summary>
     public static class HarborMetricsFixture
     {
@@ -78,10 +78,11 @@ namespace Test.Shared.Infrastructure
                 HarborTokenBucket tokens = new HarborTokenBucket { BucketStartUtc = start };
                 if (i == 1)
                 {
-                    tokens.Series.Add(new HarborTokenSeries { Runtime = "ClaudeCode", Model = "claude-opus", InputTokens = 1000, OutputTokens = 500, TotalTokens = 1500 });
-                    tokens.Series.Add(new HarborTokenSeries { Runtime = "Codex", Model = "gpt-5", InputTokens = 300, OutputTokens = 200, TotalTokens = 500 });
+                    tokens.Series.Add(new HarborTokenSeries { Runtime = "ClaudeCode", Model = "claude-opus", InputTokens = 1000, OutputTokens = 500, CachedTokens = 600, TotalTokens = 1500 });
+                    tokens.Series.Add(new HarborTokenSeries { Runtime = "Codex", Model = "gpt-5", InputTokens = 300, OutputTokens = 200, CachedTokens = 100, TotalTokens = 500 });
                     tokens.InputTokens = 1300;
                     tokens.OutputTokens = 700;
+                    tokens.CachedTokens = 700;
                     tokens.TotalTokens = 2000;
                 }
 
@@ -127,11 +128,12 @@ namespace Test.Shared.Infrastructure
             m.LaunchSpeed.Add(codex);
             m.Tokens.Series = new List<HarborTokenSeries>
             {
-                new HarborTokenSeries { Runtime = "ClaudeCode", Model = "claude-opus", InputTokens = 1000, OutputTokens = 500, TotalTokens = 1500 },
-                new HarborTokenSeries { Runtime = "Codex", Model = "gpt-5", InputTokens = 300, OutputTokens = 200, TotalTokens = 500 }
+                new HarborTokenSeries { Runtime = "ClaudeCode", Model = "claude-opus", InputTokens = 1000, OutputTokens = 500, CachedTokens = 600, TotalTokens = 1500 },
+                new HarborTokenSeries { Runtime = "Codex", Model = "gpt-5", InputTokens = 300, OutputTokens = 200, CachedTokens = 100, TotalTokens = 500 }
             };
             m.Tokens.InputTokens = 1300;
             m.Tokens.OutputTokens = 700;
+            m.Tokens.CachedTokens = 700;
             m.Tokens.TotalTokens = 2000;
             m.Tokens.RecordCount = 4;
             m.Tokens.EstimatedCount = 1;

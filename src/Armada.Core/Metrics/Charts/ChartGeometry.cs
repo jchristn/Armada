@@ -33,6 +33,40 @@ namespace Armada.Core.Metrics.Charts
         }
 
         /// <summary>
+        /// Whole-number ticks from zero to a maximum: the smallest step that keeps the gaps within
+        /// <paramref name="maxIntervals"/> (a step up to twice as large that divides the maximum evenly is preferred), every
+        /// multiple of the step below the maximum, then the maximum itself. A multiple closer to the maximum than half a
+        /// step is dropped so labels do not crowd. The maximum is rounded up to a whole number, at least 1.
+        /// </summary>
+        /// <param name="max">Axis maximum.</param>
+        /// <param name="maxIntervals">Most gaps between ticks (values below 1 count as 1).</param>
+        /// <returns>Ticks, ascending, from zero to the maximum.</returns>
+        public static List<double> WholeTicks(double max, int maxIntervals)
+        {
+            long top = Double.IsNaN(max) || max <= 1 ? 1 : (long)Math.Ceiling(max);
+            int intervals = Math.Max(1, maxIntervals);
+            long step = Math.Max(1, (long)Math.Ceiling(top / (double)intervals));
+            for (long candidate = step; candidate <= step * 2 && candidate < top; candidate++)
+            {
+                if (top % candidate == 0)
+                {
+                    step = candidate;
+                    break;
+                }
+            }
+
+            List<double> ticks = new List<double>();
+            for (long value = 0; value < top; value += step)
+            {
+                if (value > 0 && (top - value) * 2 < step) break;
+                ticks.Add(value);
+            }
+
+            ticks.Add(top);
+            return ticks;
+        }
+
+        /// <summary>
         /// Vertical position of a value on a plot of a height (zero at the bottom, the axis maximum at the top), clamped.
         /// </summary>
         /// <param name="value">Value.</param>

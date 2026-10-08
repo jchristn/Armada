@@ -63,6 +63,17 @@ namespace Armada.Core.Metrics.Charts
         public ChartReferenceLine? Reference { get; set; } = null;
 
         /// <summary>
+        /// A fixed top for the value axis (for example a Harbor's slot capacity), or null to round the data up to a nice
+        /// number. When set, the axis tops out at exactly this value (or at the largest value rounded up to a whole number,
+        /// should the data exceed it) and its ticks are whole numbers. Zero or less counts as not set.
+        /// </summary>
+        public double? AxisCeiling
+        {
+            get { return _AxisCeiling; }
+            set { _AxisCeiling = value.HasValue && value.Value > 0 && !Double.IsNaN(value.Value) && !Double.IsInfinity(value.Value) ? value : null; }
+        }
+
+        /// <summary>
         /// Number of buckets.
         /// </summary>
         public int BucketCount
@@ -84,6 +95,7 @@ namespace Armada.Core.Metrics.Charts
 
         private List<DateTime> _BucketStartsUtc = new List<DateTime>();
         private List<ChartSeriesData> _Series = new List<ChartSeriesData>();
+        private double? _AxisCeiling = null;
 
         #endregion
 
@@ -126,12 +138,29 @@ namespace Armada.Core.Metrics.Charts
         }
 
         /// <summary>
-        /// The top of the value axis: <see cref="DataMax"/> rounded up to 1, 2, or 5 times a power of ten (at least 1).
+        /// The top of the value axis: <see cref="AxisCeiling"/> when set (or the largest value rounded up to a whole number
+        /// when the data goes past it), otherwise <see cref="DataMax"/> rounded up to 1, 2, or 5 times a power of ten (at
+        /// least 1).
         /// </summary>
         /// <returns>Axis maximum.</returns>
         public double AxisMax()
         {
+            if (_AxisCeiling.HasValue) return Math.Max(_AxisCeiling.Value, Math.Ceiling(DataMax()));
             return ChartGeometry.NiceCeiling(DataMax());
+        }
+
+        /// <summary>
+        /// Values to label and grid on the value axis, from zero up to <see cref="AxisMax"/>. With an
+        /// <see cref="AxisCeiling"/>, whole-number steps (see <see cref="ChartGeometry.WholeTicks"/>); otherwise zero, half,
+        /// and the maximum.
+        /// </summary>
+        /// <param name="maxIntervals">Most gaps between ticks the plot has room for (at least 1).</param>
+        /// <returns>Tick values, ascending, starting at zero and ending at the axis maximum.</returns>
+        public List<double> AxisTicks(int maxIntervals)
+        {
+            double axisMax = AxisMax();
+            if (_AxisCeiling.HasValue) return ChartGeometry.WholeTicks(axisMax, maxIntervals);
+            return new List<double> { 0, axisMax / 2, axisMax };
         }
 
         /// <summary>
