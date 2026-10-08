@@ -721,6 +721,11 @@ namespace Armada.Core.Database.Mysql
                     79,
                     "Add push notification devices: push_devices table (one row per Expo push token, owned by a user)",
                     TableQueries.MigrationV79Statements
+                ),
+                new SchemaMigration(
+                    80,
+                    "Add repository_path and checkout_path to docks: the repository a Harbor-side dock was created from and the user's checkout on that Harbor host",
+                    TableQueries.MigrationV80Statements
                 )
             };
         }

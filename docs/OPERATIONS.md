@@ -208,6 +208,50 @@ The Admiral also sends its log stream to the syslog targets in `syslogServers` (
 telemetry on, to Loki. In Docker, `docker compose logs armada-server` shows the console output. Armada.Proxy logs to
 its own `logDirectory` (`docker/proxy/logs` in Docker).
 
+## Reading captain papercuts
+
+Captains report friction they meet on an `[ARMADA:PAPERCUT]` line: a stale
+document, a dead link, a brief that contradicts itself, a missing sibling
+repository, a test that fails under load. Armada stores each report as a
+`papercut` event with the reporting mission, captain, vessel, and voyage, and
+the `papercut_summary` MCP tool reads them back collapsed into groups of
+the same vessel, category, and problem.
+
+Read them on a schedule. A report that nobody reads is worse than no report:
+the captain paid to write it and the next captain still pays the same cost.
+
+1. Run `papercut_summary` after a voyage closes, and again in the weekly
+   sweep with `sinceHours: 168`.
+2. Read the count and the distinct-captain count first. One captain reporting
+   a problem is an anecdote. Several captains reporting it is a defect with
+   evidence.
+3. Route the group by category:
+
+   | Category | Owner |
+   | --- | --- |
+   | `MissingDoc`, `BrokenLink`, `RepoFriction`, `TestFlake`, `Other` | Backlog item on that vessel |
+   | `EnvSetup` | Dock or workflow-profile fix, then a Check to prove it |
+   | `BriefContradiction`, `PlatformBug` | Armada objective, direct-edit only |
+   | `ToolFailure` | Read the mission log before you accept it; a captain calling a tool it never received is a `BriefContradiction` |
+
+4. Quote the group in the record you create: the count, the distinct-captain
+   count, the sample title, and the sample mission IDs. Those missions are the
+   evidence.
+5. Keep the promotion manual. A high count is not authority to dispatch.
+
+Two signals need a different response than a repository fix:
+
+- **A `BriefContradiction` group is a captain-quality defect, not a vessel
+  defect.** It means the brief asks for something the captain cannot do. Fix
+  the instruction module, not the repository.
+- **A category that one runtime reports and no other runtime reports** is
+  usually about that runtime, not about the vessel. Compare the reports before
+  you change vessel code.
+
+Judge missions do not file papercuts. A judge reports what it finds through
+its verdict, and splitting review feedback across two surfaces means the
+operator reads only one of them.
+
 ## Troubleshooting
 
 **The server will not start and the log says the address is in use.** Another process holds 7890 or 7891, often a

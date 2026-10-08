@@ -51,6 +51,7 @@ namespace Armada.Core.Services
         private readonly int _MaxConcurrentJobs;
         private readonly IHostCommandExecutor _CommandExecutor;
         private readonly IHarborJobRunner? _JobRunner;
+        private readonly HarborDockManager? _Docks;
         private readonly LoggingModule _Logging;
         private readonly int _HeartbeatIntervalMs;
         private readonly Action<HarborLogEntry>? _OnLog;
@@ -76,6 +77,9 @@ namespace Armada.Core.Services
         /// <param name="heartbeatIntervalMs">Heartbeat interval in milliseconds; 0 disables heartbeats.</param>
         /// <param name="onLog">Optional sink for link log entries (work in, status out) for a UI log view.</param>
         /// <param name="jobRunner">Optional captain launcher; when null, launch requests are refused.</param>
+        /// <param name="dockManager">Optional Harbor-side dock manager; when set the Harbor advertises
+        /// <see cref="HarborProtocol.DockCapability"/> and creates mission docks on this host. When null, dock and file
+        /// requests are refused.</param>
         public HarborLinkClient(
             string harborId,
             string name,
@@ -85,13 +89,17 @@ namespace Armada.Core.Services
             LoggingModule logging,
             int heartbeatIntervalMs,
             Action<HarborLogEntry>? onLog = null,
-            IHarborJobRunner? jobRunner = null)
+            IHarborJobRunner? jobRunner = null,
+            HarborDockManager? dockManager = null)
         {
             if (String.IsNullOrWhiteSpace(harborId)) throw new ArgumentNullException(nameof(harborId));
             if (String.IsNullOrWhiteSpace(name)) throw new ArgumentNullException(nameof(name));
             _HarborId = harborId;
             _Name = name;
-            _Capabilities = capabilities ?? new List<HarborCapability>();
+            _Capabilities = new List<HarborCapability>(capabilities ?? new List<HarborCapability>());
+            _Docks = dockManager;
+            if (_Docks != null && !_Capabilities.Exists(c => String.Equals(c.Name, HarborProtocol.DockCapability, StringComparison.OrdinalIgnoreCase)))
+                _Capabilities.Add(new HarborCapability { Name = HarborProtocol.DockCapability, Available = true });
             _MaxConcurrentJobs = maxConcurrentJobs < 1 ? 1 : maxConcurrentJobs;
             _CommandExecutor = commandExecutor ?? throw new ArgumentNullException(nameof(commandExecutor));
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
@@ -231,12 +239,24 @@ namespace Armada.Core.Services
                     + (String.IsNullOrEmpty(git.WorkingDirectory) ? " (in the Harbor's current directory)" : " (in " + git.WorkingDirectory + ")")
                     + " [req " + git.RequestId + "]");
 
-                HostCommandResult result = await _CommandExecutor.RunAsync(new HostCommandRequest
+                HostCommandResult result;
+                try
                 {
-                    Executable = git.Executable,
-                    WorkingDirectory = git.WorkingDirectory,
-                    Arguments = git.Arguments
-                }, token).ConfigureAwait(false);
+                    HostCommandRequest command = new HostCommandRequest
+                    {
+                        Executable = git.Executable,
+                        WorkingDirectory = git.WorkingDirectory,
+                        Arguments = git.Arguments
+                    };
+                    if (git.TimeoutMs > 0) command.TimeoutMs = git.TimeoutMs;
+                    result = await _CommandExecutor.RunAsync(command, token).ConfigureAwait(false);
+                }
+                catch (Exception e) when (!(e is OperationCanceledException))
+                {
+                    // A command that cannot start (a working directory that does not exist here, a missing executable)
+                    // is a failed result, not the end of the link.
+                    result = new HostCommandResult { ExitCode = -1, StandardError = e.Message };
+                }
 
                 Enqueue(new HarborGitResult
                 {
@@ -244,10 +264,11 @@ namespace Armada.Core.Services
                     RequestId = git.RequestId,
                     ExitCode = result.ExitCode,
                     StandardOutput = result.StandardOutput,
-                    StandardError = result.StandardError
+                    StandardError = result.StandardError,
+                    TimedOut = result.TimedOut
                 });
 
-                Log(HarborLogDirection.Out, "Result: exit " + result.ExitCode + " [req " + git.RequestId + "]");
+                Log(HarborLogDirection.Out, "Result: exit " + result.ExitCode + (result.TimedOut ? " (timed out)" : "") + " [req " + git.RequestId + "]");
                 return;
             }
 
@@ -280,7 +301,113 @@ namespace Armada.Core.Services
                 return;
             }
 
+            if (message is HarborDockRequest dock)
+            {
+                // Clones and fetches can take a while: run off the receive loop so other work keeps flowing.
+                _ = Task.Run(() => HandleDockAsync(dock, token));
+                return;
+            }
+
+            if (message is HarborFileRequest file)
+            {
+                _ = Task.Run(() => HandleFileAsync(file, token));
+                return;
+            }
+
             _Logging.Debug(_Header + "ignoring message " + message.GetType().Name);
+        }
+
+        private async Task HandleDockAsync(HarborDockRequest dock, CancellationToken token)
+        {
+            Log(HarborLogDirection.In, "Dock " + dock.Operation + " for vessel " + dock.VesselName
+                + (String.IsNullOrEmpty(dock.BranchName) ? "" : " branch " + dock.BranchName)
+                + (String.IsNullOrEmpty(dock.WorktreePath) ? "" : " at " + dock.WorktreePath)
+                + " [req " + dock.RequestId + "]");
+
+            HarborDockResult result;
+            if (_Docks == null)
+            {
+                result = new HarborDockResult
+                {
+                    CorrelationId = dock.CorrelationId,
+                    RequestId = dock.RequestId,
+                    Message = "this Harbor build does not create mission docks"
+                };
+            }
+            else
+            {
+                try
+                {
+                    result = await _Docks.HandleAsync(dock, token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+            }
+
+            Enqueue(result);
+            Log(HarborLogDirection.Out, DescribeDockResult(dock, result) + " [req " + dock.RequestId + "]");
+        }
+
+        private async Task HandleFileAsync(HarborFileRequest file, CancellationToken token)
+        {
+            HarborFileResult result;
+            if (_Docks == null)
+            {
+                result = new HarborFileResult
+                {
+                    CorrelationId = file.CorrelationId,
+                    RequestId = file.RequestId,
+                    Message = "this Harbor build does not create mission docks"
+                };
+            }
+            else
+            {
+                try
+                {
+                    result = await _Docks.HandleFileAsync(file, token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+            }
+
+            Enqueue(result);
+
+            // Reads and stats are frequent and uninteresting; writes and refusals are worth a line.
+            if (file.Operation == HarborFileOperationEnum.Write || file.Operation == HarborFileOperationEnum.AddGitExclude || !result.Success)
+                Log(HarborLogDirection.In, "File " + file.Operation + " " + file.Path + (result.Success ? "" : " failed: " + result.Message) + " [req " + file.RequestId + "]");
+        }
+
+        private static string DescribeDockResult(HarborDockRequest request, HarborDockResult result)
+        {
+            if (!result.Success) return "Dock " + request.Operation + " failed: " + (result.Message ?? "no reason given");
+            switch (request.Operation)
+            {
+                case HarborDockOperationEnum.Provision:
+                    return "Dock ready at " + result.WorktreePath + " (" + DescribeSource(result) + ")";
+                case HarborDockOperationEnum.Reclaim:
+                    return "Dock removed at " + result.WorktreePath;
+                default:
+                    return "Vessel " + request.VesselName + " served from " + DescribeSource(result);
+            }
+        }
+
+        private static string DescribeSource(HarborDockResult result)
+        {
+            switch (result.Source)
+            {
+                case HarborRepositorySourceEnum.Mapped:
+                    return "mapped checkout " + result.CheckoutPath;
+                case HarborRepositorySourceEnum.Discovered:
+                    return "discovered checkout " + result.CheckoutPath;
+                case HarborRepositorySourceEnum.Clone:
+                    return "Harbor clone " + result.RepositoryPath;
+                default:
+                    return "no repository";
+            }
         }
 
         private void HandleDeferredLaunch(HarborDeferredLaunchRequest deferred)

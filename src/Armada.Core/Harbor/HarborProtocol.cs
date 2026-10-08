@@ -18,6 +18,13 @@ namespace Armada.Core.Harbor
         /// </summary>
         public static readonly string Version = "1.0";
 
+        /// <summary>
+        /// Capability a Harbor advertises when it creates mission docks on its own host (the dock, file, and Harbor-side
+        /// repository messages). An Admiral routes a mission's dock to a Harbor only when it advertises this; a Harbor
+        /// without it gets the earlier behavior (docks on the Admiral's host).
+        /// </summary>
+        public static readonly string DockCapability = "harbor-docks";
+
         #endregion
 
         #region Private-Members

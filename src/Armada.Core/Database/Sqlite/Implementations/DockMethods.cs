@@ -57,8 +57,8 @@ namespace Armada.Core.Database.Sqlite.Implementations
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqliteCommand cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = @"INSERT INTO docks (id, tenant_id, user_id, vessel_id, captain_id, worktree_path, harbor_id, branch_name, active, created_utc, last_update_utc, state, lease_expires_utc, owner_token, git_anchors_json)
-                            VALUES (@id, @tenant_id, @user_id, @vessel_id, @captain_id, @worktree_path, @harbor_id, @branch_name, @active, @created_utc, @last_update_utc, @state, @lease_expires_utc, @owner_token, @git_anchors_json);";
+                    cmd.CommandText = @"INSERT INTO docks (id, tenant_id, user_id, vessel_id, captain_id, worktree_path, harbor_id, branch_name, active, created_utc, last_update_utc, state, lease_expires_utc, owner_token, git_anchors_json, repository_path, checkout_path)
+                            VALUES (@id, @tenant_id, @user_id, @vessel_id, @captain_id, @worktree_path, @harbor_id, @branch_name, @active, @created_utc, @last_update_utc, @state, @lease_expires_utc, @owner_token, @git_anchors_json, @repository_path, @checkout_path);";
                     cmd.Parameters.AddWithValue("@id", dock.Id);
                     cmd.Parameters.AddWithValue("@tenant_id", (object?)dock.TenantId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@user_id", (object?)dock.UserId ?? DBNull.Value);
@@ -74,6 +74,8 @@ namespace Armada.Core.Database.Sqlite.Implementations
                     cmd.Parameters.AddWithValue("@lease_expires_utc", dock.LeaseExpiresUtc.HasValue ? (object)SqliteDatabaseDriver.ToIso8601(dock.LeaseExpiresUtc.Value) : DBNull.Value);
                     cmd.Parameters.AddWithValue("@owner_token", (object?)dock.OwnerToken ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@git_anchors_json", (object?)dock.GitAnchorsJson ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@repository_path", (object?)dock.RepositoryPath ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@checkout_path", (object?)dock.CheckoutPath ?? DBNull.Value);
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 }
             }
@@ -128,6 +130,8 @@ namespace Armada.Core.Database.Sqlite.Implementations
                             lease_expires_utc = @lease_expires_utc,
                             owner_token = @owner_token,
                             git_anchors_json = @git_anchors_json,
+                            repository_path = @repository_path,
+                            checkout_path = @checkout_path,
                             last_update_utc = @last_update_utc
                             WHERE id = @id;";
                     cmd.Parameters.AddWithValue("@id", dock.Id);
@@ -143,6 +147,8 @@ namespace Armada.Core.Database.Sqlite.Implementations
                     cmd.Parameters.AddWithValue("@lease_expires_utc", dock.LeaseExpiresUtc.HasValue ? (object)SqliteDatabaseDriver.ToIso8601(dock.LeaseExpiresUtc.Value) : DBNull.Value);
                     cmd.Parameters.AddWithValue("@owner_token", (object?)dock.OwnerToken ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@git_anchors_json", (object?)dock.GitAnchorsJson ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@repository_path", (object?)dock.RepositoryPath ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@checkout_path", (object?)dock.CheckoutPath ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@last_update_utc", SqliteDatabaseDriver.ToIso8601(dock.LastUpdateUtc));
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 }

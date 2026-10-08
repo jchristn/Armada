@@ -256,8 +256,9 @@ affected. `scripts/common/install-verify/verify-docker.sh` uses exactly this set
 
 `docker/armada/compose.split.yaml` runs the Admiral and the observability stack without the standalone dashboard,
 using `docker/armada/armada.split.json`. That file sets `deploymentMode: "Split"`, `requireHarborForLaunch: true`, and
-`harbor.advertisedMcpBaseUrl: "http://127.0.0.1:7891/mcp"`, so missions wait for a Harbor on the host instead of
-running in the container. Split mode is experimental in 1.0 (see [COMPATIBILITY.md](COMPATIBILITY.md)).
+`harbor.advertisedMcpBaseUrl: "http://127.0.0.1:7891/mcp"`, so missions wait for a Harbor that can serve their vessel
+instead of running in the container; the Harbor creates each mission's dock in its own checkout of the repository (see
+[HARBOR.md](HARBOR.md#dock-affinity-and-routing)). Split mode is experimental in 1.0 (see [COMPATIBILITY.md](COMPATIBILITY.md)).
 
 ```bash
 cd docker/armada

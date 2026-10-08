@@ -15,6 +15,7 @@ namespace Armada.Core.Services
 
         private readonly HarborConnectionManager _Manager;
         private readonly string _HarborId;
+        private const int _ReplyGraceMs = 15000;
 
         #endregion
 
@@ -46,10 +47,14 @@ namespace Armada.Core.Services
                 RequestId = Guid.NewGuid().ToString("N"),
                 Executable = request.Executable,
                 WorkingDirectory = request.WorkingDirectory,
-                Arguments = request.Arguments
+                Arguments = request.Arguments,
+                TimeoutMs = request.TimeoutMs
             };
 
-            HarborGitResult? result = await _Manager.SendGitAsync(_HarborId, gitRequest, request.TimeoutMs, token).ConfigureAwait(false);
+            // The Harbor stops the command at TimeoutMs; wait somewhat longer (up to 15 seconds more) so its result, rather
+            // than a local timeout, reports what happened.
+            int waitMs = request.TimeoutMs > 0 ? request.TimeoutMs + Math.Min(request.TimeoutMs, _ReplyGraceMs) : 0;
+            HarborGitResult? result = await _Manager.SendGitAsync(_HarborId, gitRequest, waitMs, token).ConfigureAwait(false);
             if (result == null)
             {
                 return new HostCommandResult
@@ -65,7 +70,7 @@ namespace Armada.Core.Services
                 ExitCode = result.ExitCode,
                 StandardOutput = result.StandardOutput,
                 StandardError = result.StandardError,
-                TimedOut = false
+                TimedOut = result.TimedOut
             };
         }
 

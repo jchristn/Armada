@@ -64,15 +64,14 @@ namespace Armada.Harbor
         #region Private-Methods
 
         /// <summary>
-        /// The Repositories tab's content: where each vessel's repository is checked out on this computer. Returns null
-        /// (no tab) until the view exists; plugging it in is this one line:
-        /// <c>return new RepositoriesSettingsView(session);</c>
+        /// The Repositories tab's content: where this computer keeps vessel checkouts, mission docks, and the Harbor's
+        /// own clones.
         /// </summary>
         /// <param name="session">Harbor session.</param>
         /// <returns>The view, or null for no Repositories tab.</returns>
         private static Control? CreateRepositoriesView(HarborSession session)
         {
-            return null;
+            return new RepositoriesSettingsView(session);
         }
 
         private void Add(SettingsTabEnum tab, string header, Control content)

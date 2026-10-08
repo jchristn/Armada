@@ -6,6 +6,14 @@ All notable changes to Armada are documented in this file.
 
 ## Unreleased
 
+### Harbor: mission docks on the Harbor's machine
+- In split mode a mission routed to a Harbor gets its dock on that Harbor's machine, and the whole mission runs there: dock creation, instruction files, the captain, the Definition-of-Done gate, diff capture, landing, and dock removal. Before, every dock was created on the Admiral (for an Admiral in Docker, under `/app/data/docks`), so a Harbor on another machine could not run missions.
+- The Admiral chooses the Harbor before it creates the dock and asks it whether it can serve the vessel. The Harbor uses the checkout named for the vessel in Harbor > Settings > Repositories, else a checkout under a root folder whose remote matches the vessel's repository URL (https and ssh forms match; `.git` and case do not matter), else its own bare clone under `~/.armada-harbor/repos`. A Harbor that cannot serve the vessel is skipped; if none can, the mission waits with `requireHarborForLaunch` on (the reason names the Harbor and the setting to change) and otherwise runs on the Admiral as before.
+- Docks are worktrees under `~/.armada-harbor/docks/<vessel>/<mission>` (configurable). Creating one never changes your checkout's files, index, or current branch; the mission branch is created in your repository. LocalMerge and MergeAndPush land into that checkout (refused while it has uncommitted changes), and PullRequest pushes and runs `gh` on the Harbor.
+- Harbor has a new **Repositories** tab for vessel checkouts, root folders, and the docks and clones folders, validated on save and applied without reconnecting.
+- Protocol (additive, still 1.0): `dock`/`dockResult` and `file`/`fileResult` messages and a `harbor-docks` capability; `git` requests carry `timeoutMs` and results `timedOut`; a git request whose command cannot start no longer ends the link. Harbors without the capability keep the earlier behavior.
+- Database: migration 80 adds `repository_path` and `checkout_path` to `docks`.
+
 ### Settings files
 - The Admiral rewrites `settings.json` at startup with every current setting, so settings added by an upgrade appear in the file with their default values. Settings whose default is empty are written as `null` instead of being left out. Nothing is written when the file is already complete; otherwise the previous file is kept as `settings.json.bak-<timestamp>` (newest 5). The file is written in place, so a single-file Docker bind mount works; if it cannot be written (a read-only mount), the Admiral logs a warning and starts.
 - `harbor.advertisedMcpBaseUrl` now has a visible default: when empty, it is derived from `mcpPort` and `rest.hostname` (for example `http://localhost:7891/mcp`) and written to the file, so a split-mode Admiral shows the value to change instead of a missing key.

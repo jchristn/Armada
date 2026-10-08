@@ -97,7 +97,8 @@ namespace Armada.Server
                     RequestedRuntime = context.Captain.Runtime.ToString(),
                     RequiredCapabilities = SplitCapabilities(context.Vessel?.RequiredCapabilities),
                     RestrictToOwner = result.HarborRequired,
-                    OwnerUserId = context.UserId
+                    OwnerUserId = context.UserId,
+                    ExcludedHarborIds = new List<string>(context.ExcludedHarborIds ?? new List<string>())
                 };
 
                 _Logging.Debug(_Header + "Harbor routing for " + context.Purpose + " (captain " + context.Captain.Id + "): tenant=" + (context.TenantId ?? "(none)")

@@ -7,6 +7,7 @@ namespace Armada.Server
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Core.Services;
     using Armada.Core.Services.Interfaces;
     using Armada.Core.Settings;
     using Armada.Server.WebSocket;
@@ -16,6 +17,16 @@ namespace Armada.Server
     /// </summary>
     public class MissionLandingHandler
     {
+        #region Public-Members
+
+        /// <summary>
+        /// Where docks live. A Harbor-hosted dock lands on its Harbor: diff capture, push, pull request, and LocalMerge into
+        /// the user's checkout there all run through the Harbor. Without it every dock lands on this machine.
+        /// </summary>
+        public DockHostResolver? DockHosts { get; set; } = null;
+
+        #endregion
+
         #region Private-Members
 
         private string _Header = "[MissionLanding] ";
@@ -93,6 +104,7 @@ namespace Armada.Server
                 return;
 
             _Logging.Debug(_Header + "capturing diff for mission " + mission.Id + " before worktree reclamation");
+            IGitService git = GitFor(dock);
 
             // Capture diff and persist to database + file
             string baseBranch = "main";
@@ -104,7 +116,7 @@ namespace Armada.Server
                     if (diffVessel != null) baseBranch = diffVessel.DefaultBranch;
                 }
 
-                string diff = await _Git.DiffAsync(dock.WorktreePath, baseBranch).ConfigureAwait(false);
+                string diff = await git.DiffAsync(dock.WorktreePath, baseBranch).ConfigureAwait(false);
                 if (!String.IsNullOrEmpty(diff))
                 {
                     // Persist to database so it survives worktree reclamation
@@ -127,7 +139,7 @@ namespace Armada.Server
             // Capture the HEAD commit hash before any merge/reclaim
             try
             {
-                string? commitHash = await _Git.GetHeadCommitHashAsync(dock.WorktreePath).ConfigureAwait(false);
+                string? commitHash = await git.GetHeadCommitHashAsync(dock.WorktreePath).ConfigureAwait(false);
                 if (!String.IsNullOrEmpty(commitHash))
                 {
                     mission.CommitHash = commitHash;
@@ -178,6 +190,14 @@ namespace Armada.Server
             // Resolve branch cleanup policy: vessel > global setting
             BranchCleanupPolicyEnum cleanupPolicy = vessel?.BranchCleanupPolicy ?? _Settings.BranchCleanupPolicy;
 
+            // Where the mission branch lives and what LocalMerge lands into: for a Harbor-hosted dock, the repository and
+            // the user's checkout on that Harbor's host (all git work runs there); otherwise the vessel's bare repository
+            // and working directory on this machine.
+            bool harborDock = IsHarborDock(dock);
+            IGitService git = GitFor(dock);
+            string? sourceRepoPath = harborDock ? dock.RepositoryPath : vessel?.LocalPath;
+            string? targetWorkDir = harborDock ? dock.CheckoutPath : vessel?.WorkingDirectory;
+
             // Acquire per-vessel merge lock to prevent concurrent git operations on the same repo
             string vesselLockKey = mission.VesselId ?? dock.VesselId ?? "unknown";
             SemaphoreSlim vesselLock = _VesselMergeLocks.GetOrAdd(vesselLockKey, _ => new SemaphoreSlim(1, 1));
@@ -199,7 +219,7 @@ namespace Armada.Server
                     landingAttempted = true;
                     try
                     {
-                        await _Git.PushBranchAsync(dock.WorktreePath).ConfigureAwait(false);
+                        await git.PushBranchAsync(dock.WorktreePath).ConfigureAwait(false);
                         _Logging.Debug(_Header + "pushed branch " + dock.BranchName);
 
                         string prBody;
@@ -222,7 +242,7 @@ namespace Armada.Server
                         Dictionary<string, string> prContext = _TemplateService.BuildContext(mission, null, vessel, voyage, dock);
                         prBody = _TemplateService.RenderPrDescription(_Settings.MessageTemplates, prBody, prContext);
 
-                        string prUrl = await _Git.CreatePullRequestAsync(
+                        string prUrl = await git.CreatePullRequestAsync(
                             dock.WorktreePath,
                             mission.Title,
                             prBody).ConfigureAwait(false);
@@ -279,13 +299,13 @@ namespace Armada.Server
                         {
                             try
                             {
-                                await _Git.EnableAutoMergeAsync(dock.WorktreePath, prUrl).ConfigureAwait(false);
+                                await git.EnableAutoMergeAsync(dock.WorktreePath, prUrl).ConfigureAwait(false);
                                 _Logging.Debug(_Header + "enabled auto-merge for PR: " + prUrl);
 
                                 // Poll for merge completion, then transition to Complete
-                                if (vessel != null && !String.IsNullOrEmpty(vessel.WorkingDirectory) && !String.IsNullOrEmpty(vessel.LocalPath) && !String.IsNullOrEmpty(dock.BranchName))
+                                if (vessel != null && !String.IsNullOrEmpty(targetWorkDir) && !String.IsNullOrEmpty(sourceRepoPath) && !String.IsNullOrEmpty(dock.BranchName))
                                 {
-                                    _ = PollAndPullAfterMergeAsync(vessel.WorkingDirectory, vessel.LocalPath, dock.BranchName, prUrl, mission.Id, cleanupPolicy);
+                                    _ = PollAndPullAfterMergeAsync(git, targetWorkDir, sourceRepoPath, dock.BranchName, prUrl, mission.Id, cleanupPolicy);
                                 }
                             }
                             catch (Exception mergeEx)
@@ -304,7 +324,7 @@ namespace Armada.Server
                 }
                 else if (!landingModeIsNone
                     && !landingModeIsMergeQueue
-                    && vessel != null && !String.IsNullOrEmpty(vessel.WorkingDirectory) && !String.IsNullOrEmpty(vessel.LocalPath))
+                    && vessel != null && !String.IsNullOrEmpty(targetWorkDir) && !String.IsNullOrEmpty(sourceRepoPath))
                 {
                     // Local merge runs for LocalMerge and MergeAndPush. An explicit None (manual landing)
                     // or MergeQueue must never merge into the user's working directory, even when one is configured.
@@ -315,12 +335,12 @@ namespace Armada.Server
                     // the bare repo as indicators -- the worktree may already be gone at this point.
                     bool hasChanges = true;
                     bool branchExists = false;
-                    if (!String.IsNullOrEmpty(dock.BranchName) && !String.IsNullOrEmpty(vessel.LocalPath))
+                    if (!String.IsNullOrEmpty(dock.BranchName) && !String.IsNullOrEmpty(sourceRepoPath))
                     {
                         // Also check if the branch actually exists in the bare repo
                         try
                         {
-                            branchExists = await _Git.BranchExistsAsync(vessel.LocalPath, dock.BranchName).ConfigureAwait(false);
+                            branchExists = await git.BranchExistsAsync(sourceRepoPath, dock.BranchName).ConfigureAwait(false);
                         }
                         catch { }
                     }
@@ -346,8 +366,9 @@ namespace Armada.Server
                         if (branchExists && !String.IsNullOrEmpty(dock.BranchName))
                         {
                             await CleanupMissionBranchAsync(
-                                vessel.LocalPath,
-                                vessel.WorkingDirectory,
+                                git,
+                                sourceRepoPath,
+                                targetWorkDir,
                                 dock.BranchName,
                                 cleanupPolicy,
                                 "after successful no-op landing",
@@ -365,8 +386,8 @@ namespace Armada.Server
                         Dictionary<string, string> mergeContext = _TemplateService.BuildContext(mission, null, vessel, voyage, dock);
                         mergeMessage = _TemplateService.RenderMergeCommitMessage(_Settings.MessageTemplates, mergeContext);
 
-                        await _Git.MergeBranchLocalAsync(vessel.WorkingDirectory, vessel.LocalPath, dock.BranchName, vessel.DefaultBranch, mergeMessage).ConfigureAwait(false);
-                        _Logging.Debug(_Header + "merged branch " + dock.BranchName + " into " + vessel.WorkingDirectory);
+                        await git.MergeBranchLocalAsync(targetWorkDir, sourceRepoPath, dock.BranchName, vessel.DefaultBranch, mergeMessage).ConfigureAwait(false);
+                        _Logging.Debug(_Header + "merged branch " + dock.BranchName + " into " + targetWorkDir + (harborDock ? " on Harbor " + dock.HarborId : ""));
 
                         landingSucceeded = true;
 
@@ -376,8 +397,8 @@ namespace Armada.Server
                         {
                             try
                             {
-                                await _Git.PushBranchAsync(vessel.WorkingDirectory).ConfigureAwait(false);
-                                _Logging.Debug(_Header + "pushed merged changes from " + vessel.WorkingDirectory);
+                                await git.PushBranchAsync(targetWorkDir).ConfigureAwait(false);
+                                _Logging.Debug(_Header + "pushed merged changes from " + targetWorkDir);
                             }
                             catch (Exception pushEx)
                             {
@@ -392,8 +413,9 @@ namespace Armada.Server
                         if (landingSucceeded)
                         {
                             await CleanupMissionBranchAsync(
-                                vessel.LocalPath,
-                                vessel.WorkingDirectory,
+                                git,
+                                sourceRepoPath,
+                                targetWorkDir,
                                 dock.BranchName,
                                 cleanupPolicy,
                                 "after successful landing",
@@ -451,6 +473,12 @@ namespace Armada.Server
                         _Logging.Warn(_Header + "error auto-enqueuing merge entry for mission " + mission.Id + ": " + mqEx.Message + " — branch " + dock.BranchName + " is still available for manual enqueue");
                     }
                     // Mission stays as WorkProduced; merge queue processing will land it
+                }
+                else if (harborDock && String.IsNullOrEmpty(targetWorkDir) && !landingModeIsNone)
+                {
+                    _Logging.Info(_Header + "mission " + mission.Id + " work produced: branch " + dock.BranchName + " is in Harbor " + dock.HarborId
+                        + "'s own clone " + dock.RepositoryPath + ", and that Harbor has no checkout of the vessel to land into (landing mode: " + resolvedLandingMode
+                        + "); map the vessel to a checkout in Harbor > Settings > Repositories, or use PullRequest landing");
                 }
                 else
                 {
@@ -598,11 +626,24 @@ namespace Armada.Server
                 vessel = await _Database.Vessels.ReadAsync(mission.VesselId).ConfigureAwait(false);
 
             string? workingDir = vessel?.WorkingDirectory ?? vessel?.LocalPath;
+            string? pullDir = vessel?.WorkingDirectory;
+            IGitService git = _Git;
+
+            // A mission whose dock was on a Harbor is checked, and pulled, on that Harbor (its checkout is there).
+            Dock? missionDock = !String.IsNullOrEmpty(mission.DockId) ? await _Database.Docks.ReadAsync(mission.DockId).ConfigureAwait(false) : null;
+            if (missionDock != null && IsHarborDock(missionDock))
+            {
+                if (DockHosts?.Harbors == null || !DockHosts.Harbors.IsConnected(missionDock.HarborId!)) return false;
+                git = DockHosts.ForDock(missionDock).Git;
+                workingDir = missionDock.CheckoutPath ?? missionDock.RepositoryPath;
+                pullDir = missionDock.CheckoutPath;
+            }
+
             if (String.IsNullOrEmpty(workingDir)) return false;
 
             try
             {
-                bool merged = await _Git.IsPrMergedAsync(workingDir, mission.PrUrl).ConfigureAwait(false);
+                bool merged = await git.IsPrMergedAsync(workingDir, mission.PrUrl).ConfigureAwait(false);
                 if (merged)
                 {
                     mission.Status = MissionStatusEnum.Complete;
@@ -612,15 +653,15 @@ namespace Armada.Server
                     _Logging.Info(_Header + "PR reconciler: mission " + mission.Id + " PR merged, status set to Complete");
 
                     // Pull latest into working directory if available
-                    if (!String.IsNullOrEmpty(vessel?.WorkingDirectory))
+                    if (!String.IsNullOrEmpty(pullDir))
                     {
                         try
                         {
-                            await _Git.PullAsync(vessel.WorkingDirectory).ConfigureAwait(false);
+                            await git.PullAsync(pullDir).ConfigureAwait(false);
                         }
                         catch (Exception pullEx)
                         {
-                            _Logging.Warn(_Header + "PR reconciler: pull failed for " + vessel.WorkingDirectory + ": " + pullEx.Message);
+                            _Logging.Warn(_Header + "PR reconciler: pull failed for " + pullDir + ": " + pullEx.Message);
                         }
                     }
 
@@ -638,7 +679,16 @@ namespace Armada.Server
         /// <summary>
         /// Poll for PR merge completion, pull latest, transition mission to Complete, and clean up branches.
         /// </summary>
-        public async Task PollAndPullAfterMergeAsync(string workingDirectory, string bareRepoPath, string branchName, string prUrl, string missionId, BranchCleanupPolicyEnum cleanupPolicy = BranchCleanupPolicyEnum.LocalOnly)
+        public Task PollAndPullAfterMergeAsync(string workingDirectory, string bareRepoPath, string branchName, string prUrl, string missionId, BranchCleanupPolicyEnum cleanupPolicy = BranchCleanupPolicyEnum.LocalOnly)
+        {
+            return PollAndPullAfterMergeAsync(_Git, workingDirectory, bareRepoPath, branchName, prUrl, missionId, cleanupPolicy);
+        }
+
+        #endregion
+
+        #region Private-Methods
+
+        private async Task PollAndPullAfterMergeAsync(IGitService git, string workingDirectory, string bareRepoPath, string branchName, string prUrl, string missionId, BranchCleanupPolicyEnum cleanupPolicy)
         {
             try
             {
@@ -649,11 +699,11 @@ namespace Armada.Server
                 {
                     await Task.Delay(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
 
-                    bool merged = await _Git.IsPrMergedAsync(workingDirectory, prUrl).ConfigureAwait(false);
+                    bool merged = await git.IsPrMergedAsync(workingDirectory, prUrl).ConfigureAwait(false);
                     if (merged)
                     {
                         _Logging.Debug(_Header + "PR " + prUrl + " merged, pulling into " + workingDirectory);
-                        await _Git.PullAsync(workingDirectory).ConfigureAwait(false);
+                        await git.PullAsync(workingDirectory).ConfigureAwait(false);
                         _Logging.Debug(_Header + "pulled latest into " + workingDirectory + " after PR merge");
 
                         // Transition mission from PullRequestOpen to Complete
@@ -711,7 +761,7 @@ namespace Armada.Server
                         {
                             try
                             {
-                                await _Git.DeleteLocalBranchAsync(bareRepoPath, branchName).ConfigureAwait(false);
+                                await git.DeleteLocalBranchAsync(bareRepoPath, branchName).ConfigureAwait(false);
                                 _Logging.Debug(_Header + "deleted branch " + branchName + " from bare repo after PR merge");
                             }
                             catch (Exception branchEx)
@@ -723,7 +773,7 @@ namespace Armada.Server
                             {
                                 try
                                 {
-                                    await _Git.DeleteRemoteBranchAsync(workingDirectory, branchName).ConfigureAwait(false);
+                                    await git.DeleteRemoteBranchAsync(workingDirectory, branchName).ConfigureAwait(false);
                                     _Logging.Debug(_Header + "deleted remote branch " + branchName + " after PR merge");
                                 }
                                 catch (Exception remoteBranchEx)
@@ -749,7 +799,24 @@ namespace Armada.Server
             }
         }
 
+        /// <summary>
+        /// Whether a dock lives on a Harbor (and this Admiral can reach Harbors).
+        /// </summary>
+        private bool IsHarborDock(Dock dock)
+        {
+            return DockHosts != null && DockHostResolver.IsHarborDock(dock);
+        }
+
+        /// <summary>
+        /// The git service for the host a dock lives on.
+        /// </summary>
+        private IGitService GitFor(Dock dock)
+        {
+            return IsHarborDock(dock) ? DockHosts!.ForDock(dock).Git : _Git;
+        }
+
         private async Task CleanupMissionBranchAsync(
+            IGitService git,
             string bareRepoPath,
             string workingDirectory,
             string branchName,
@@ -769,7 +836,7 @@ namespace Armada.Server
             {
                 try
                 {
-                    await _Git.RemoveWorktreeAsync(activeWorktreePath).ConfigureAwait(false);
+                    await git.RemoveWorktreeAsync(activeWorktreePath).ConfigureAwait(false);
                     _Logging.Debug(_Header + "removed active worktree " + activeWorktreePath + " before deleting branch " + branchName);
                 }
                 catch (Exception worktreeEx)
@@ -780,7 +847,7 @@ namespace Armada.Server
 
             try
             {
-                await _Git.DeleteLocalBranchAsync(bareRepoPath, branchName).ConfigureAwait(false);
+                await git.DeleteLocalBranchAsync(bareRepoPath, branchName).ConfigureAwait(false);
                 _Logging.Debug(_Header + "deleted branch " + branchName + " from bare repo " + cleanupReason);
             }
             catch (Exception branchEx)
@@ -792,7 +859,7 @@ namespace Armada.Server
             {
                 try
                 {
-                    await _Git.DeleteRemoteBranchAsync(workingDirectory, branchName).ConfigureAwait(false);
+                    await git.DeleteRemoteBranchAsync(workingDirectory, branchName).ConfigureAwait(false);
                     _Logging.Debug(_Header + "deleted remote branch " + branchName + " " + cleanupReason);
                 }
                 catch (Exception remoteBranchEx)

@@ -342,6 +342,8 @@ namespace Armada.Harbor
             // Each job's output is also kept on this computer, so its log can be read here (Status > Logs) even when
             // the Admiral is on another machine.
             jobRunner.JobLogs = new HarborLogPaths(HarborAppSettings.LogDirectory());
+            // Reads the live settings on every request, so repository edits apply without reconnecting.
+            HarborDockManager dockManager = new HarborDockManager(() => _Settings.BuildDockSettings(), _Logging, executor);
             List<HarborCapability> capabilities = BuildCapabilities();
 
             while (!token.IsCancellationRequested)
@@ -357,7 +359,8 @@ namespace Armada.Harbor
                         _Logging,
                         _Settings.HeartbeatIntervalMs,
                         AppendLog,
-                        jobRunner);
+                        jobRunner,
+                        dockManager);
                     _Client = client;
 
                     try

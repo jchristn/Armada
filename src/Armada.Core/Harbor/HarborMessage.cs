@@ -23,6 +23,10 @@ namespace Armada.Core.Harbor
     [JsonDerivedType(typeof(HarborError), "error")]
     [JsonDerivedType(typeof(HarborDeferredLaunchRequest), "deferredLaunch")]
     [JsonDerivedType(typeof(HarborDeferredLaunchAck), "deferredLaunchAck")]
+    [JsonDerivedType(typeof(HarborDockRequest), "dock")]
+    [JsonDerivedType(typeof(HarborDockResult), "dockResult")]
+    [JsonDerivedType(typeof(HarborFileRequest), "file")]
+    [JsonDerivedType(typeof(HarborFileResult), "fileResult")]
     public abstract class HarborMessage
     {
         #region Public-Members

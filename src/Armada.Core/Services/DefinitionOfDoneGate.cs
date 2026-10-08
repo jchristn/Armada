@@ -88,9 +88,79 @@ namespace Armada.Core.Services
             }
         }
 
+        /// <inheritdoc />
+        public async Task<DefinitionOfDoneResult> EvaluateOnHostAsync(Vessel vessel, string worktreePath, IHostCommandExecutor commands, CancellationToken token = default)
+        {
+            if (vessel == null) throw new ArgumentNullException(nameof(vessel));
+            if (commands == null) throw new ArgumentNullException(nameof(commands));
+
+            if (!vessel.DefinitionOfDoneEnabled)
+                return DefinitionOfDoneResult.SkippedResult("Definition-of-Done gate disabled for vessel");
+
+            string? buildCommand = String.IsNullOrWhiteSpace(vessel.DefinitionOfDoneBuildCommand) ? null : vessel.DefinitionOfDoneBuildCommand!.Trim();
+            string? testCommand = String.IsNullOrWhiteSpace(vessel.DefinitionOfDoneTestCommand) ? null : vessel.DefinitionOfDoneTestCommand!.Trim();
+
+            if (buildCommand == null && testCommand == null)
+                return DefinitionOfDoneResult.SkippedResult("Definition-of-Done gate enabled but no build or test command configured");
+
+            if (String.IsNullOrWhiteSpace(worktreePath))
+                return new DefinitionOfDoneResult(DefinitionOfDoneOutcomeEnum.Infra, "Mission checkout unavailable at <null>");
+
+            // The commands run on the other host, so the Admiral's host-wide serialization does not apply.
+            TimeSpan timeout = TimeSpan.FromSeconds(vessel.DefinitionOfDoneTimeoutSeconds);
+            if (buildCommand != null)
+            {
+                DefinitionOfDoneResult buildResult = await RunHostPhaseAsync(commands, buildCommand, worktreePath, timeout, true, token).ConfigureAwait(false);
+                if (!buildResult.Passed) return buildResult;
+            }
+
+            if (testCommand != null)
+            {
+                DefinitionOfDoneResult testResult = await RunHostPhaseAsync(commands, testCommand, worktreePath, timeout, false, token).ConfigureAwait(false);
+                if (!testResult.Passed) return testResult;
+            }
+
+            return new DefinitionOfDoneResult(DefinitionOfDoneOutcomeEnum.Pass, "Definition-of-Done gate passed");
+        }
+
         #endregion
 
         #region Private-Methods
+
+        private async Task<DefinitionOfDoneResult> RunHostPhaseAsync(IHostCommandExecutor commands, string command, string worktreePath, TimeSpan timeout, bool isBuildPhase, CancellationToken token)
+        {
+            string phase = isBuildPhase ? "build" : "test";
+            HostCommandResult result;
+            try
+            {
+                result = await commands.RunAsync(new HostCommandRequest
+                {
+                    Executable = "/bin/sh",
+                    WorkingDirectory = worktreePath,
+                    Arguments = new System.Collections.Generic.List<string> { "-lc", command },
+                    TimeoutMs = (int)Math.Min(int.MaxValue, Math.Max(1000, timeout.TotalMilliseconds))
+                }, token).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is InvalidOperationException || ex is TimeoutException)
+            {
+                _Logging.Warn(_Header + phase + " command could not run on the dock's host for " + worktreePath + ": " + ex.Message);
+                return new DefinitionOfDoneResult(DefinitionOfDoneOutcomeEnum.Infra, phase + " command could not run on the dock's host: " + ex.Message);
+            }
+
+            // An executor reports a process it could not start as exit -1 without a timeout.
+            bool started = result.TimedOut || result.ExitCode != -1;
+            if (!started)
+                return new DefinitionOfDoneResult(DefinitionOfDoneOutcomeEnum.Infra, phase + " command failed to start: " + result.StandardError.Trim());
+
+            string output = (result.StandardOutput + "\n" + result.StandardError).Trim();
+            DefinitionOfDoneOutcomeEnum outcome = DefinitionOfDoneClassifier.ClassifyPhase(true, result.TimedOut, result.ExitCode, isBuildPhase);
+            string detail = BuildDetail(phase, outcome, result.ExitCode, result.TimedOut, output);
+            if (outcome == DefinitionOfDoneOutcomeEnum.Pass)
+                _Logging.Debug(_Header + phase + " phase passed in " + worktreePath);
+            else
+                _Logging.Warn(_Header + phase + " phase classified " + outcome + " in " + worktreePath);
+            return new DefinitionOfDoneResult(outcome, detail);
+        }
 
         private async Task<DefinitionOfDoneResult> RunPhaseAsync(string command, string worktreePath, TimeSpan timeout, bool isBuildPhase, CancellationToken token)
         {

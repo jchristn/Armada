@@ -33,6 +33,17 @@ namespace Armada.Core.Services
         public DateTime LastSeenUtc { get; set; } = DateTime.UtcNow;
 
         /// <summary>
+        /// Whether this Harbor creates mission docks on its own host (it advertised
+        /// <see cref="HarborProtocol.DockCapability"/> in its handshake on this link).
+        /// </summary>
+        public bool HostsDocks { get; set; } = false;
+
+        /// <summary>
+        /// The Harbor's name from its handshake on this link.
+        /// </summary>
+        public string Name { get; set; } = string.Empty;
+
+        /// <summary>
         /// Number of jobs the Harbor currently reports running.
         /// </summary>
         public int InFlightJobs

@@ -44,6 +44,12 @@ namespace Armada.Core.Services
         /// </summary>
         public string? OwnerUserId { get; set; } = null;
 
+        /// <summary>
+        /// Harbors not to choose, for example ones already asked that cannot serve the vessel. An excluded pinned Harbor
+        /// (<see cref="ExistingHarborId"/>) yields no choice.
+        /// </summary>
+        public List<string> ExcludedHarborIds { get; set; } = new List<string>();
+
         #endregion
 
         #region Constructors-and-Factories

@@ -38,6 +38,19 @@ namespace Armada.Core.Services
         /// </summary>
         public Func<Mission, Captain, Task<bool>>? CanAssignMissionAsync { get; set; }
 
+        /// <summary>
+        /// Chooses where a mission's dock is created before it is provisioned: on a Harbor that can serve the vessel, on
+        /// the Admiral's host, or nowhere yet (the mission stays Pending). When null every dock is created on the
+        /// Admiral's host.
+        /// </summary>
+        public Func<Mission, Captain, Vessel, Task<DockPlacement>>? ResolveDockPlacementAsync { get; set; }
+
+        /// <summary>
+        /// Where docks live. Operations on a Harbor-hosted dock (instruction files, git, the Definition-of-Done gate) run
+        /// on its Harbor through this; without it every dock is treated as local.
+        /// </summary>
+        public DockHostResolver? DockHosts { get; set; }
+
         #endregion
 
         #region Private-Members
@@ -51,6 +64,10 @@ namespace Armada.Core.Services
         private ICaptainService _Captains;
         private IPromptTemplateService? _PromptTemplates;
         private IDefinitionOfDoneGate? _DefinitionOfDone;
+        private readonly IDockFileSystem _LocalFiles = new LocalDockFileSystem();
+        private readonly IHostCommandExecutor _LocalCommands = new LocalHostCommandExecutor();
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _PlacementWaitReasons =
+            new System.Collections.Concurrent.ConcurrentDictionary<string, string>(StringComparer.Ordinal);
         private const string ArchitectHandoffMarker = "<!-- ARMADA:ARCHITECT-HANDOFF -->";
         private const string ReviewFeedbackMarker = "<!-- ARMADA:REVIEW-FEEDBACK -->";
         private const string ReviewerGuidanceMarker = "<!-- ARMADA:REVIEWER-GUIDANCE -->";
@@ -497,6 +514,28 @@ namespace Armada.Core.Services
                 }
             }
 
+            // Choose where the dock lives before creating it: a Harbor that can serve the vessel, the Admiral's host, or
+            // nowhere yet (the mission stays Pending and is retried on the next dispatch cycle).
+            DockPlacement placement = DockPlacement.OnAdmiral("no Harbor placement is configured");
+            if (ResolveDockPlacementAsync != null)
+            {
+                placement = await ResolveDockPlacementAsync(mission, captain, vessel).ConfigureAwait(false);
+                if (placement.Wait)
+                {
+                    // Log a reason once per mission until it changes, not on every dispatch cycle.
+                    string previousReason = _PlacementWaitReasons.TryGetValue(mission.Id, out string? known) ? known : String.Empty;
+                    if (!String.Equals(previousReason, placement.Reason, StringComparison.Ordinal))
+                    {
+                        _PlacementWaitReasons[mission.Id] = placement.Reason;
+                        _Logging.Warn(_Header + "mission " + mission.Id + " waits: " + placement.Reason);
+                    }
+
+                    return false;
+                }
+            }
+
+            _PlacementWaitReasons.TryRemove(mission.Id, out string? _);
+
             // Missions with an existing branch continue work on that branch. This covers
             // downstream pipeline stages, review rework loops, and resumed missions.
             bool preserveExistingBranch = !String.IsNullOrEmpty(mission.BranchName);
@@ -514,11 +553,15 @@ namespace Armada.Core.Services
             try
             {
                 _Logging.Debug(_Header + "provisioning dock for mission " + mission.Id + " on vessel " + vessel.Id + " with captain " + captain.Id);
-                dock = await _Docks.ProvisionAsync(vessel, captain, branchName, mission.Id, token).ConfigureAwait(false);
+                if (placement.HarborId != null)
+                    dock = await _Docks.ProvisionOnHarborAsync(vessel, captain, branchName, mission.Id, placement.HarborId, token).ConfigureAwait(false);
+                else
+                    dock = await _Docks.ProvisionAsync(vessel, captain, branchName, mission.Id, token).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "dock provisioning threw for mission " + mission.Id + " vessel " + vessel.Id + " captain " + captain.Id + ": " + ex.ToString());
+                _Logging.Warn(_Header + "dock provisioning threw for mission " + mission.Id + " vessel " + vessel.Id + " captain " + captain.Id + ": "
+                    + (ex is DockProvisioningException ? ex.Message : ex.ToString()));
 
                 // Revert mission to Pending
                 mission.Status = MissionStatusEnum.Pending;
@@ -589,9 +632,36 @@ namespace Armada.Core.Services
             signal.ToCaptainId = captain.Id;
             await _Database.Signals.CreateAsync(signal, token).ConfigureAwait(false);
 
-            // Generate mission CLAUDE.md into worktree
-            await GenerateClaudeMdAsync(dock.WorktreePath!, mission, vessel, captain, token).ConfigureAwait(false);
-            await EnsureMissionInstructionsPresentAsync(dock.WorktreePath!, mission, captain, token).ConfigureAwait(false);
+            // Generate mission CLAUDE.md into worktree (on the dock's Harbor for a Harbor-hosted dock)
+            DockHost? harborHost = HarborHostFor(dock);
+            try
+            {
+                await GenerateClaudeMdOnHostAsync(harborHost, dock.WorktreePath!, mission, vessel, captain, token).ConfigureAwait(false);
+                await EnsureMissionInstructionsPresentAsync(harborHost, dock.WorktreePath!, mission, captain, token).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (harborHost != null && (ex is InvalidOperationException || ex is TimeoutException || ex is IOException))
+            {
+                // The dock's Harbor went away (or refused a write) before the captain could start: put the mission back.
+                _Logging.Warn(_Header + "could not write mission instructions into dock " + dock.Id + " on Harbor " + harborHost.HarborId + " for mission " + mission.Id + ": " + ex.Message);
+                await _Captains.ReleaseAsync(captain, token).ConfigureAwait(false);
+                mission.Status = MissionStatusEnum.Pending;
+                mission.CaptainId = null;
+                if (!preserveExistingBranch)
+                    mission.BranchName = null;
+                mission.DockId = null;
+                mission.LastUpdateUtc = DateTime.UtcNow;
+                await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+                try
+                {
+                    await _Docks.ReclaimAsync(dock.Id, token: token).ConfigureAwait(false);
+                }
+                catch (Exception reclaimEx)
+                {
+                    _Logging.Warn(_Header + "failed to reclaim dock " + dock.Id + " after instruction failure for mission " + mission.Id + ": " + reclaimEx.Message);
+                }
+
+                return false;
+            }
 
             // Launch agent process via captain service
             if (_Captains.OnLaunchAgent != null)
@@ -961,13 +1031,15 @@ namespace Armada.Core.Services
         private async Task<DiffChangeSummary> ResolveDiffChangeSummaryAsync(Mission mission, Vessel vessel, Dock? dock, CancellationToken token)
         {
             DiffChangeSummary summary = DiffChangeSummary.FromUnifiedDiff(mission.DiffSnapshot);
-            if (_Git == null || dock == null || String.IsNullOrEmpty(dock.WorktreePath) || !Directory.Exists(dock.WorktreePath))
+            DockHost? harborHost = HarborHostFor(dock);
+            IGitService? git = harborHost != null ? harborHost.Git : _Git;
+            if (git == null || dock == null || String.IsNullOrEmpty(dock.WorktreePath) || !await DockDirectoryExistsAsync(harborHost, dock.WorktreePath!, token).ConfigureAwait(false))
                 return summary;
 
             string baseBranch = String.IsNullOrEmpty(vessel.DefaultBranch) ? "main" : vessel.DefaultBranch;
             try
             {
-                IReadOnlyList<GitChangedFile> gitChanges = await _Git.GetBranchChangesAsync(dock.WorktreePath!, baseBranch, token).ConfigureAwait(false);
+                IReadOnlyList<GitChangedFile> gitChanges = await git.GetBranchChangesAsync(dock.WorktreePath!, baseBranch, token).ConfigureAwait(false);
                 return DiffChangeSummary.Combine(summary, DiffChangeSummary.FromGitChanges(gitChanges));
             }
             catch (Exception ex) when (ex is InvalidOperationException || ex is TimeoutException)
@@ -998,7 +1070,10 @@ namespace Armada.Core.Services
             Vessel? vessel = await _Database.Vessels.ReadAsync(mission.VesselId, token).ConfigureAwait(false);
             if (vessel == null || !vessel.DefinitionOfDoneEnabled) return false;
 
-            DefinitionOfDoneResult result = await _DefinitionOfDone.EvaluateAsync(vessel, dock.WorktreePath!, token).ConfigureAwait(false);
+            DockHost? harborHost = HarborHostFor(dock);
+            DefinitionOfDoneResult result = harborHost != null
+                ? await _DefinitionOfDone.EvaluateOnHostAsync(vessel, dock.WorktreePath!, harborHost.Commands, token).ConfigureAwait(false)
+                : await _DefinitionOfDone.EvaluateAsync(vessel, dock.WorktreePath!, token).ConfigureAwait(false);
             if (result.Passed) return false;
 
             mission.Status = MissionStatusEnum.Failed;
@@ -1521,7 +1596,16 @@ namespace Armada.Core.Services
         }
 
         /// <inheritdoc />
-        public async Task GenerateClaudeMdAsync(string worktreePath, Mission mission, Vessel vessel, Captain? captain = null, CancellationToken token = default)
+        public Task GenerateClaudeMdAsync(string worktreePath, Mission mission, Vessel vessel, Captain? captain = null, CancellationToken token = default)
+        {
+            return GenerateClaudeMdOnHostAsync(null, worktreePath, mission, vessel, captain, token);
+        }
+
+        /// <summary>
+        /// Generate the mission's instruction file into a dock: on this machine when <paramref name="harborHost"/> is null,
+        /// else on that Harbor (file writes, git anchors, and exclude entries all go through the Harbor).
+        /// </summary>
+        private async Task GenerateClaudeMdOnHostAsync(DockHost? harborHost, string worktreePath, Mission mission, Vessel vessel, Captain? captain, CancellationToken token)
         {
             if (String.IsNullOrEmpty(worktreePath)) throw new ArgumentNullException(nameof(worktreePath));
             if (mission == null) throw new ArgumentNullException(nameof(mission));
@@ -1565,6 +1649,7 @@ namespace Armada.Core.Services
             if (playbookSnapshots.Count > 0)
             {
                 templateParams["SelectedPlaybooksMarkdown"] = await RenderSelectedPlaybooksMarkdownAsync(
+                    harborHost,
                     worktreePath,
                     mission,
                     playbookSnapshots,
@@ -1604,9 +1689,10 @@ namespace Armada.Core.Services
             string? headCommit = null;
             IReadOnlyList<string>? recentPathCommits = null;
             IReadOnlyList<string>? subjectTermsPresent = null;
-            if (_Git != null)
+            IGitService? anchorGit = harborHost != null ? harborHost.Git : _Git;
+            if (anchorGit != null)
             {
-                try { headCommit = await _Git.GetHeadCommitHashAsync(worktreePath, token).ConfigureAwait(false); }
+                try { headCommit = await anchorGit.GetHeadCommitHashAsync(worktreePath, token).ConfigureAwait(false); }
                 catch { headCommit = null; }
 
                 string missionText = (mission.Title ?? "") + "\n" + (mission.Description ?? "");
@@ -1614,7 +1700,7 @@ namespace Armada.Core.Services
                 {
                     IReadOnlyList<string> namedPaths = GitAnchorInputs.ExtractPaths(missionText);
                     if (namedPaths.Count > 0)
-                        recentPathCommits = await _Git.GetRecentCommitsForPathsAsync(worktreePath, namedPaths, 3, token).ConfigureAwait(false);
+                        recentPathCommits = await anchorGit.GetRecentCommitsForPathsAsync(worktreePath, namedPaths, 3, token).ConfigureAwait(false);
                 }
                 catch { recentPathCommits = null; }
 
@@ -1622,7 +1708,7 @@ namespace Armada.Core.Services
                 {
                     IReadOnlyList<string> terms = GitAnchorInputs.ExtractSubjectTerms(mission.Title, mission.Description);
                     if (terms.Count > 0)
-                        subjectTermsPresent = await _Git.FindExistingSubjectTermsAsync(worktreePath, terms, token).ConfigureAwait(false);
+                        subjectTermsPresent = await anchorGit.FindExistingSubjectTermsAsync(worktreePath, terms, token).ConfigureAwait(false);
                 }
                 catch { subjectTermsPresent = null; }
             }
@@ -1688,9 +1774,10 @@ namespace Armada.Core.Services
             }
 
             // If there's an existing runtime instruction file, preserve it and prepend our instructions
-            if (File.Exists(instructionsPath))
+            IDockFileSystem files = harborHost != null ? harborHost.Files : _LocalFiles;
+            string? existing = await files.ReadTextAsync(instructionsPath, token).ConfigureAwait(false);
+            if (existing != null)
             {
-                string existing = await File.ReadAllTextAsync(instructionsPath).ConfigureAwait(false);
                 string sanitizedExisting = SanitizeExistingInstructions(existing);
 
                 if (!String.IsNullOrWhiteSpace(sanitizedExisting))
@@ -1705,8 +1792,7 @@ namespace Armada.Core.Services
                 }
             }
 
-            Directory.CreateDirectory(Path.GetDirectoryName(instructionsPath)!);
-            await File.WriteAllTextAsync(instructionsPath, content).ConfigureAwait(false);
+            await files.WriteTextAsync(instructionsPath, content, token).ConfigureAwait(false);
 
             // Persist a stable copy outside the dock so the dashboard and APIs can still
             // show the generated mission instructions after the worktree is reclaimed.
@@ -1724,36 +1810,21 @@ namespace Armada.Core.Services
 
             // Ensure the generated instruction file is ignored locally so agents don't commit it.
             // Mission instructions are ephemeral and should not alter tracked repository files.
+            bool isGitCheckout = false;
             try
             {
-                string? excludePath = ResolveGitInfoExcludePath(worktreePath);
-                if (!String.IsNullOrEmpty(excludePath))
-                {
-                    Directory.CreateDirectory(Path.GetDirectoryName(excludePath)!);
-                    string excludeContent = File.Exists(excludePath)
-                        ? await File.ReadAllTextAsync(excludePath).ConfigureAwait(false)
-                        : "";
-                    bool hasEntry = excludeContent
-                        .Split('\n')
-                        .Select(l => l.Trim())
-                        .Any(l => String.Equals(l, instructionsFileName, StringComparison.Ordinal));
-                    if (!hasEntry)
-                    {
-                        string entry = (excludeContent.Length > 0 && !excludeContent.EndsWith("\n") ? "\n" : "") + instructionsFileName + "\n";
-                        await File.AppendAllTextAsync(excludePath, entry).ConfigureAwait(false);
-                    }
-                }
+                isGitCheckout = await files.AddGitExcludeEntryAsync(worktreePath, instructionsFileName, token).ConfigureAwait(false);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (!(ex is OperationCanceledException))
             {
                 _Logging.Warn(_Header + "could not update git exclude for " + instructionsFileName + ": " + ex.ToString());
             }
 
             try
             {
-                if (ResolveGitInfoExcludePath(worktreePath) != null)
+                if (isGitCheckout)
                 {
-                    await HideTrackedInstructionsFileAsync(worktreePath, instructionsFileName, token).ConfigureAwait(false);
+                    await HideTrackedInstructionsFileAsync(harborHost != null ? harborHost.Commands : _LocalCommands, worktreePath, instructionsFileName, token).ConfigureAwait(false);
                 }
             }
             catch (Exception ex) when (!(ex is OperationCanceledException))
@@ -1781,6 +1852,7 @@ namespace Armada.Core.Services
         }
 
         private async Task<string> RenderSelectedPlaybooksMarkdownAsync(
+            DockHost? harborHost,
             string worktreePath,
             Mission mission,
             List<MissionPlaybookSnapshot> snapshots,
@@ -1799,7 +1871,13 @@ namespace Armada.Core.Services
                 string header = "### " + snapshot.FileName;
                 string? description = String.IsNullOrWhiteSpace(snapshot.Description) ? null : snapshot.Description.Trim();
 
-                switch (snapshot.DeliveryMode)
+                // A captain on a Harbor cannot read the Admiral's files, so a by-reference playbook is attached into its
+                // dock instead.
+                PlaybookDeliveryModeEnum deliveryMode = snapshot.DeliveryMode;
+                if (harborHost != null && deliveryMode == PlaybookDeliveryModeEnum.InstructionWithReference)
+                    deliveryMode = PlaybookDeliveryModeEnum.AttachIntoWorktree;
+
+                switch (deliveryMode)
                 {
                     case PlaybookDeliveryModeEnum.InstructionWithReference:
                         string resolvedPath = await MaterializeReferencePlaybookAsync(mission, snapshot, i, token).ConfigureAwait(false);
@@ -1818,6 +1896,7 @@ namespace Armada.Core.Services
 
                     case PlaybookDeliveryModeEnum.AttachIntoWorktree:
                         WorktreePlaybookLocation attachedPlaybook = await MaterializeWorktreePlaybookAsync(
+                            harborHost != null ? harborHost.Files : _LocalFiles,
                             worktreePath,
                             snapshot,
                             i,
@@ -1869,6 +1948,7 @@ namespace Armada.Core.Services
         }
 
         private async Task<WorktreePlaybookLocation> MaterializeWorktreePlaybookAsync(
+            IDockFileSystem files,
             string worktreePath,
             MissionPlaybookSnapshot snapshot,
             int selectionOrder,
@@ -1876,42 +1956,18 @@ namespace Armada.Core.Services
         {
             string relativeDir = Path.Combine(".armada", "playbooks");
             string absoluteDir = Path.Combine(worktreePath, relativeDir);
-            Directory.CreateDirectory(absoluteDir);
 
             string fileName = BuildMaterializedPlaybookFileName(selectionOrder, snapshot.FileName);
             string absolutePath = Path.Combine(absoluteDir, fileName);
-            await File.WriteAllTextAsync(absolutePath, snapshot.Content, token).ConfigureAwait(false);
+            await files.WriteTextAsync(absolutePath, snapshot.Content, token).ConfigureAwait(false);
 
-            string? excludePath = ResolveGitInfoExcludePath(worktreePath);
-            if (!String.IsNullOrEmpty(excludePath))
-            {
-                await EnsureGitExcludeEntryAsync(excludePath, ".armada/playbooks/", token).ConfigureAwait(false);
-            }
+            await files.AddGitExcludeEntryAsync(worktreePath, ".armada/playbooks/", token).ConfigureAwait(false);
 
             return new WorktreePlaybookLocation
             {
                 ResolvedPath = absolutePath,
                 RelativePath = Path.Combine(relativeDir, fileName)
             };
-        }
-
-        private async Task EnsureGitExcludeEntryAsync(string excludePath, string entry, CancellationToken token)
-        {
-            if (String.IsNullOrEmpty(excludePath)) return;
-            if (String.IsNullOrEmpty(entry)) return;
-
-            Directory.CreateDirectory(Path.GetDirectoryName(excludePath)!);
-            string excludeContent = File.Exists(excludePath)
-                ? await File.ReadAllTextAsync(excludePath, token).ConfigureAwait(false)
-                : "";
-            bool hasEntry = excludeContent
-                .Split('\n')
-                .Select(l => l.Trim())
-                .Any(l => String.Equals(l, entry, StringComparison.Ordinal));
-            if (hasEntry) return;
-
-            string suffix = excludeContent.Length > 0 && !excludeContent.EndsWith("\n", StringComparison.Ordinal) ? "\n" : "";
-            await File.AppendAllTextAsync(excludePath, suffix + entry + "\n", token).ConfigureAwait(false);
         }
 
         private static string BuildMaterializedPlaybookFileName(int selectionOrder, string? originalFileName)
@@ -2375,7 +2431,13 @@ namespace Armada.Core.Services
                 ? await _Database.Vessels.ReadAsync(mission.TenantId, mission.VesselId, token).ConfigureAwait(false)
                 : await _Database.Vessels.ReadAsync(mission.VesselId, token).ConfigureAwait(false);
 
-            if (vessel == null || String.IsNullOrEmpty(vessel.LocalPath))
+            // A Harbor-hosted dock's branch lives in the repository on that Harbor's host.
+            DockHost? harborHost = HarborHostFor(dock);
+            IGitService git = harborHost != null ? harborHost.Git : _Git;
+            string? repositoryPath = harborHost != null ? dock!.RepositoryPath : vessel?.LocalPath;
+            string? workingDirectory = harborHost != null ? (dock!.CheckoutPath ?? dock.RepositoryPath) : vessel?.WorkingDirectory;
+
+            if (vessel == null || String.IsNullOrEmpty(repositoryPath))
             {
                 _Logging.Warn(_Header + "unable to clean architect branch " + branchName +
                     " for mission " + mission.Id + " because vessel metadata is incomplete");
@@ -2391,7 +2453,7 @@ namespace Armada.Core.Services
 
             try
             {
-                await _Git.DeleteLocalBranchAsync(vessel.LocalPath, branchName, token).ConfigureAwait(false);
+                await git.DeleteLocalBranchAsync(repositoryPath, branchName, token).ConfigureAwait(false);
                 _Logging.Debug(_Header + "deleted architect branch " + branchName + " from bare repo after successful handoff");
             }
             catch (Exception branchEx)
@@ -2401,7 +2463,7 @@ namespace Armada.Core.Services
 
             if (cleanupPolicy == BranchCleanupPolicyEnum.LocalAndRemote)
             {
-                if (String.IsNullOrEmpty(vessel.WorkingDirectory))
+                if (String.IsNullOrEmpty(workingDirectory))
                 {
                     _Logging.Warn(_Header + "cannot delete remote architect branch " + branchName +
                         " because vessel working directory is not configured");
@@ -2410,7 +2472,7 @@ namespace Armada.Core.Services
 
                 try
                 {
-                    await _Git.DeleteRemoteBranchAsync(vessel.WorkingDirectory, branchName, token).ConfigureAwait(false);
+                    await git.DeleteRemoteBranchAsync(workingDirectory, branchName, token).ConfigureAwait(false);
                     _Logging.Debug(_Header + "deleted remote architect branch " + branchName + " after successful handoff");
                 }
                 catch (Exception remoteBranchEx)
@@ -2678,14 +2740,16 @@ namespace Armada.Core.Services
             Dock? dock = !String.IsNullOrEmpty(completedMission.TenantId)
                 ? await _Database.Docks.ReadAsync(completedMission.TenantId, completedMission.DockId!, token).ConfigureAwait(false)
                 : await _Database.Docks.ReadAsync(completedMission.DockId!, token).ConfigureAwait(false);
-            if (dock == null || String.IsNullOrEmpty(dock.WorktreePath) || !Directory.Exists(dock.WorktreePath)) return;
+            DockHost? harborHost = HarborHostFor(dock);
+            IGitService git = harborHost != null ? harborHost.Git : _Git;
+            if (dock == null || String.IsNullOrEmpty(dock.WorktreePath) || !await DockDirectoryExistsAsync(harborHost, dock.WorktreePath!, token).ConfigureAwait(false)) return;
 
             try
             {
-                string? headCommit = await _Git.GetHeadCommitHashAsync(dock.WorktreePath!, token).ConfigureAwait(false);
+                string? headCommit = await git.GetHeadCommitHashAsync(dock.WorktreePath!, token).ConfigureAwait(false);
                 if (String.IsNullOrEmpty(headCommit)) return;
 
-                bool advanced = await _Git.ForceAdvanceBranchAsync(dock.WorktreePath!, completedMission.BranchName!, headCommit!, token).ConfigureAwait(false);
+                bool advanced = await git.ForceAdvanceBranchAsync(dock.WorktreePath!, completedMission.BranchName!, headCommit!, token).ConfigureAwait(false);
                 if (advanced)
                 {
                     _Logging.Debug(_Header + "stage-lag hardening: advanced branch " + completedMission.BranchName +
@@ -3487,7 +3551,9 @@ namespace Armada.Core.Services
             IReadOnlyList<string> changedFiles;
             try
             {
-                changedFiles = await _Git.GetChangedFilesSinceAsync(dock.WorktreePath, startCommit, token).ConfigureAwait(false);
+                DockHost? harborHost = HarborHostFor(dock);
+                IGitService git = harborHost != null ? harborHost.Git : _Git;
+                changedFiles = await git.GetChangedFilesSinceAsync(dock.WorktreePath, startCommit, token).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -3575,6 +3641,7 @@ namespace Armada.Core.Services
         }
 
         private async Task EnsureMissionInstructionsPresentAsync(
+            DockHost? harborHost,
             string worktreePath,
             Mission mission,
             Captain captain,
@@ -3586,7 +3653,8 @@ namespace Armada.Core.Services
 
             string instructionsFileName = MissionPromptBuilder.GetInstructionsFileName(captain.Runtime.ToString());
             string instructionsPath = Path.Combine(worktreePath, instructionsFileName);
-            if (File.Exists(instructionsPath)) return;
+            IDockFileSystem files = harborHost != null ? harborHost.Files : _LocalFiles;
+            if (await files.ReadTextAsync(instructionsPath, token).ConfigureAwait(false) != null) return;
 
             string snapshotPath = Path.Combine(_Settings.LogDirectory, "instructions", mission.Id + "." + instructionsFileName);
             if (!File.Exists(snapshotPath))
@@ -3596,8 +3664,7 @@ namespace Armada.Core.Services
                 return;
             }
 
-            Directory.CreateDirectory(worktreePath);
-            await File.WriteAllTextAsync(instructionsPath, await File.ReadAllTextAsync(snapshotPath, token).ConfigureAwait(false), token).ConfigureAwait(false);
+            await files.WriteTextAsync(instructionsPath, await File.ReadAllTextAsync(snapshotPath, token).ConfigureAwait(false), token).ConfigureAwait(false);
             _Logging.Warn(_Header + "restored missing mission instructions from snapshot to " + instructionsPath);
         }
 
@@ -4302,104 +4369,59 @@ namespace Armada.Core.Services
                 lowered.Contains("after the implementation details are finalized");
         }
 
-        private static string? ResolveGitInfoExcludePath(string worktreePath)
+        /// <summary>
+        /// The Harbor host of a Harbor-hosted dock, or null for a dock on this machine (which keeps using the local git
+        /// service and disk exactly as before).
+        /// </summary>
+        private DockHost? HarborHostFor(Dock? dock)
         {
-            if (String.IsNullOrEmpty(worktreePath)) return null;
-
-            string gitPath = Path.Combine(worktreePath, ".git");
-            if (Directory.Exists(gitPath))
-            {
-                return Path.Combine(gitPath, "info", "exclude");
-            }
-
-            if (!File.Exists(gitPath))
-            {
-                return null;
-            }
-
-            string gitPointer = File.ReadAllText(gitPath).Trim();
-            const string prefix = "gitdir:";
-            if (!gitPointer.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-            {
-                return null;
-            }
-
-            string gitDir = gitPointer.Substring(prefix.Length).Trim();
-            if (!Path.IsPathRooted(gitDir))
-            {
-                gitDir = Path.GetFullPath(Path.Combine(worktreePath, gitDir));
-            }
-
-            // A linked worktree's private git directory names the shared repository directory in
-            // "commondir". git only reads info/exclude from the shared directory, so an entry written
-            // into the per-worktree directory would be silently ignored.
-            string commonDirPointer = Path.Combine(gitDir, "commondir");
-            if (File.Exists(commonDirPointer))
-            {
-                string commonDir = File.ReadAllText(commonDirPointer).Trim();
-                if (!String.IsNullOrEmpty(commonDir))
-                {
-                    if (!Path.IsPathRooted(commonDir))
-                    {
-                        commonDir = Path.GetFullPath(Path.Combine(gitDir, commonDir));
-                    }
-
-                    return Path.Combine(commonDir, "info", "exclude");
-                }
-            }
-
-            return Path.Combine(gitDir, "info", "exclude");
+            if (DockHosts == null || !DockHostResolver.IsHarborDock(dock)) return null;
+            return DockHosts.ForDock(dock);
         }
 
-        private async Task HideTrackedInstructionsFileAsync(string worktreePath, string instructionsFileName, CancellationToken token)
+        /// <summary>
+        /// Whether a dock's worktree folder exists on its host. A Harbor that is offline or does not answer counts as
+        /// "not there", so callers fall back to what the Admiral already has (the diff snapshot).
+        /// </summary>
+        private async Task<bool> DockDirectoryExistsAsync(DockHost? harborHost, string path, CancellationToken token)
+        {
+            if (harborHost == null) return Directory.Exists(path);
+            try
+            {
+                return await harborHost.Files.DirectoryExistsAsync(path, token).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is InvalidOperationException || ex is TimeoutException || ex is IOException)
+            {
+                _Logging.Debug(_Header + "could not check dock " + path + " on Harbor " + harborHost.HarborId + ": " + ex.Message);
+                return false;
+            }
+        }
+
+        private async Task HideTrackedInstructionsFileAsync(IHostCommandExecutor commands, string worktreePath, string instructionsFileName, CancellationToken token)
         {
             // git ignores exclude rules for files it already tracks. When the repository commits its own
             // instruction file (for example CLAUDE.md), mark it skip-worktree in this dock so the generated
             // mission instructions can never be staged or committed by the captain.
-            int tracked = await RunGitExitCodeAsync(worktreePath, token, "ls-files", "--error-unmatch", "--", instructionsFileName).ConfigureAwait(false);
+            int tracked = await RunGitExitCodeAsync(commands, worktreePath, token, "ls-files", "--error-unmatch", "--", instructionsFileName).ConfigureAwait(false);
             if (tracked != 0) return;
 
-            int marked = await RunGitExitCodeAsync(worktreePath, token, "update-index", "--skip-worktree", "--", instructionsFileName).ConfigureAwait(false);
+            int marked = await RunGitExitCodeAsync(commands, worktreePath, token, "update-index", "--skip-worktree", "--", instructionsFileName).ConfigureAwait(false);
             if (marked != 0)
             {
                 _Logging.Warn(_Header + "could not mark " + instructionsFileName + " skip-worktree in " + worktreePath + " (git exit code " + marked + ")");
             }
         }
 
-        private static async Task<int> RunGitExitCodeAsync(string workingDirectory, CancellationToken token, params string[] args)
+        private static async Task<int> RunGitExitCodeAsync(IHostCommandExecutor commands, string workingDirectory, CancellationToken token, params string[] args)
         {
-            System.Diagnostics.ProcessStartInfo startInfo = new System.Diagnostics.ProcessStartInfo("git");
-            startInfo.WorkingDirectory = workingDirectory;
-            startInfo.RedirectStandardOutput = true;
-            startInfo.RedirectStandardError = true;
-            startInfo.UseShellExecute = false;
-            startInfo.CreateNoWindow = true;
-            GitProcessEnvironment.Apply(startInfo);
-            foreach (string arg in args) startInfo.ArgumentList.Add(arg);
-
-            using (System.Diagnostics.Process process = new System.Diagnostics.Process())
+            HostCommandResult result = await commands.RunAsync(new HostCommandRequest
             {
-                process.StartInfo = startInfo;
-                process.Start();
-                Task<string> stdout = process.StandardOutput.ReadToEndAsync(token);
-                Task<string> stderr = process.StandardError.ReadToEndAsync(token);
-                using (CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(token))
-                {
-                    timeout.CancelAfter(TimeSpan.FromSeconds(30));
-                    try
-                    {
-                        await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        try { process.Kill(true); } catch (InvalidOperationException) { }
-                        throw;
-                    }
-                }
-
-                await Task.WhenAll(stdout, stderr).ConfigureAwait(false);
-                return process.ExitCode;
-            }
+                Executable = "git",
+                WorkingDirectory = workingDirectory,
+                Arguments = new List<string>(args),
+                TimeoutMs = 30000
+            }, token).ConfigureAwait(false);
+            return result.ExitCode;
         }
 
         #endregion
