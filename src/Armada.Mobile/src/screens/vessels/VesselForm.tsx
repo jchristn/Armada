@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { createVessel, updateVessel } from '@dashboard/api/client';
 import type { Fleet, Pipeline, Vessel } from '@dashboard/types/models';
@@ -11,7 +11,7 @@ import {
   type VesselFormState,
 } from '@dashboard/lib/vesselForm';
 import { SwitchField } from '../../build/fields';
-import { AppText, Button, TextField } from '../../components/ui';
+import { AppText, Button, FormActions, TextField } from '../../components/ui';
 import { SelectField, type SelectOption } from '../../components/ui/SelectSheet';
 import { useLocale } from '../../i18n/LocaleContext';
 import { spacing } from '../../theme/typography';
@@ -27,20 +27,32 @@ export interface VesselFormProps {
   vessel: Vessel | null;
   fleets: Fleet[];
   pipelines: Pipeline[];
-  onClose: () => void;
   /** After a successful save, with the saved name and whether it was a create. */
   onSaved: (name: string, created: boolean) => void;
   /** A failed save (the dashboard shows "Save failed."). */
   onError: (message: string) => void;
+  /** Whether Save can run and whether a save is in flight (for VesselFormActions in the sheet's footer). */
+  onStatus?: (status: VesselFormStatus) => void;
 }
 
-export function VesselForm({ vessel, fleets, pipelines, onClose, onSaved, onError }: VesselFormProps) {
+export interface VesselFormStatus {
+  canSave: boolean;
+  saving: boolean;
+}
+
+/** Lets the sheet's footer (VesselFormActions) save the form. */
+export interface VesselFormHandle {
+  save: () => void;
+}
+
+export const VesselForm = forwardRef<VesselFormHandle, VesselFormProps>(function VesselForm({ vessel, fleets, pipelines, onSaved, onError, onStatus }, ref) {
   const { t } = useLocale();
   const [form, setForm] = useState<VesselFormState>(() => (vessel ? vesselToForm(vessel) : { ...emptyVesselForm }));
   const [saving, setSaving] = useState(false);
   const landingModes = getLandingModes(t);
   const set = <K extends keyof VesselFormState>(key: K, value: VesselFormState[K]) => setForm((f) => ({ ...f, [key]: value }));
   const canSave = form.name.trim().length > 0 && form.repoUrl.trim().length > 0 && !saving;
+  useEffect(() => { onStatus?.({ canSave, saving }); }, [onStatus, canSave, saving]);
 
   async function save() {
     if (!canSave) return;
@@ -56,6 +68,7 @@ export function VesselForm({ vessel, fleets, pipelines, onClose, onSaved, onErro
       setSaving(false);
     }
   }
+  useImperativeHandle(ref, () => ({ save: () => { void save(); } }));
 
   const fleetOptions: SelectOption<string>[] = [{ value: '', label: t('Select a fleet...') }, ...fleets.map((f) => ({ value: f.id, label: f.name }))];
   const landingOptions: SelectOption<string>[] = landingModes.map((m) => ({ value: m.value, label: m.label, description: m.description }));
@@ -163,12 +176,21 @@ export function VesselForm({ vessel, fleets, pipelines, onClose, onSaved, onErro
         disabled={!form.enableModelContext}
         tall
       />
-
-      <View style={styles.actions}>
-        <Button label={t('Cancel')} variant="ghost" onPress={onClose} testID="vessel-form-cancel" />
-        <Button label={t('Save')} onPress={() => void save()} busy={saving} disabled={!canSave} testID="vessel-form-save" />
-      </View>
     </View>
+  );
+});
+
+/**
+ * Cancel and Save for the vessel form, for the footer of the sheet that shows it (so Save is reachable without
+ * scrolling the long form).
+ */
+export function VesselFormActions({ status, onSave, onCancel }: { status: VesselFormStatus; onSave: () => void; onCancel: () => void }) {
+  const { t } = useLocale();
+  return (
+    <FormActions>
+      <Button label={t('Cancel')} variant="ghost" onPress={onCancel} testID="vessel-form-cancel" />
+      <Button label={t('Save')} onPress={onSave} busy={status.saving} disabled={!status.canSave} testID="vessel-form-save" />
+    </FormActions>
   );
 }
 
@@ -198,5 +220,4 @@ function Multiline({ label, value, onChange, placeholder, disabled, tall, testID
 
 const styles = StyleSheet.create({
   heading: { textTransform: 'uppercase', marginTop: spacing.sm, marginBottom: spacing.md },
-  actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm, marginTop: spacing.sm },
 });

@@ -1,5 +1,5 @@
 import { useRouter, type Href } from 'expo-router';
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { createVessel, deleteVessel } from '@dashboard/api/client';
 import type { Fleet, Pipeline, Vessel } from '@dashboard/types/models';
 import { buildVesselDuplicatePayload } from '@dashboard/lib/duplicates';
@@ -14,7 +14,7 @@ import { spacing } from '../../theme/typography';
 import { Branches } from './Branches';
 import { BuildContext } from './BuildContext';
 import { JsonView } from './JsonView';
-import { VesselForm } from './VesselForm';
+import { VesselForm, VesselFormActions, type VesselFormHandle, type VesselFormStatus } from './VesselForm';
 import { vesselLinks } from './vesselLinks';
 
 /** Every action of the dashboard's vessel row menu (and the vessel page's menu). */
@@ -63,6 +63,8 @@ export function useVesselActions({ fleets, pipelines, onChanged, onDeleted, excl
   // One sheet whose content switches (menu -> form, branches, ...): chaining two native modals is unreliable on iOS.
   const [sheet, setSheet] = useState<SheetState | null>(null);
   const close = () => setSheet(null);
+  const formRef = useRef<VesselFormHandle>(null);
+  const [formStatus, setFormStatus] = useState<VesselFormStatus>({ canSave: false, saving: false });
 
   const go = (path: string) => router.push(path as Href);
 
@@ -136,6 +138,7 @@ export function useVesselActions({ fleets, pipelines, onChanged, onDeleted, excl
   const hasContext = !!(sheet?.vessel?.modelContext && sheet.vessel.modelContext.trim().length > 0);
   let title = '';
   let body: ReactNode = null;
+  let footer: ReactNode = null;
   if (sheet) {
     const vessel = sheet.vessel;
     switch (sheet.kind) {
@@ -157,10 +160,11 @@ export function useVesselActions({ fleets, pipelines, onChanged, onDeleted, excl
         title = vessel ? t('Edit Vessel') : t('Create Vessel');
         body = (
           <VesselForm
+            ref={formRef}
             vessel={vessel}
             fleets={fleets}
             pipelines={pipelines}
-            onClose={close}
+            onStatus={setFormStatus}
             onError={(message) => pushToast('error', message)}
             onSaved={(name, created) => {
               close();
@@ -169,6 +173,7 @@ export function useVesselActions({ fleets, pipelines, onChanged, onDeleted, excl
             }}
           />
         );
+        footer = <VesselFormActions status={formStatus} onSave={() => formRef.current?.save()} onCancel={close} />;
         break;
       case 'branches':
         title = `${t('Manage Branches')} -- ${vessel?.name ?? ''}`;
@@ -218,6 +223,7 @@ export function useVesselActions({ fleets, pipelines, onChanged, onDeleted, excl
       }}
       closeLabel={t('Close')}
       testID={sheet ? `vessel-${sheet.kind === 'menu' ? 'actions' : sheet.kind}` : undefined}
+      footer={footer}
     >
       {body}
     </BottomSheet>
