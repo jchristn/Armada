@@ -236,3 +236,5 @@ notifications are not available.
 | Asked for the proxy password again | The 24-hour proxy session ended; the Admiral sign-in is kept |
 | **Sign in with Face ID** is gone and the app asks for the password | A face or fingerprint was added on the device, or the server rejected the saved password; sign in once with the switch on to save it again |
 | No **Save password and use Face ID** switch | Set up Face ID, Touch ID, or a strong (class 3) fingerprint on the device; Android face unlock that is not class 3 cannot protect a keystore key |
+| An Ask reply says the CLI "is not installed on the Admiral host" | The Admiral (for example a Docker image) has no agent CLI. Connect a Harbor on a machine where the CLI and its login live: Ask turns then run there (see [CAPTAINS.md](CAPTAINS.md#where-interactive-turns-run)) |
+| An Ask reply says "No Harbor is connected to run this captain" | `requireHarborForLaunch` is on and none of your Harbors that advertises the captain's runtime is connected. Start your Harbor, or check that its `AccessKey` is one of your credentials |

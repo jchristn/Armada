@@ -6,6 +6,7 @@ namespace Armada.Server
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Core.Database;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Core.Services.Interfaces;
     using Armada.Core.Services;
@@ -22,6 +23,17 @@ namespace Armada.Server
     /// </summary>
     public class VesselContextService
     {
+        #region Public-Members
+
+        /// <summary>
+        /// Routes the analysis to a connected, eligible Harbor or to the Admiral host with the policy missions use
+        /// (including requireHarborForLaunch). The analysis needs the repository checkout, so on a Harbor it runs in the
+        /// dock's path and fails when that path does not exist there. Null always runs on the Admiral host.
+        /// </summary>
+        public CaptainLaunchRouter? LaunchRouter { get; set; } = null;
+
+        #endregion
+
         #region Private-Members
 
         private readonly DatabaseDriver _Database;
@@ -80,7 +92,22 @@ namespace Armada.Server
         /// <param name="notes">Optional operator guidance for the captain to focus on.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The updated vessel with its new Model Context.</returns>
-        public async Task<Vessel> BuildAsync(string vesselId, string captainId, string? notes, CancellationToken token = default)
+        public Task<Vessel> BuildAsync(string vesselId, string captainId, string? notes, CancellationToken token = default)
+        {
+            return BuildAsync(vesselId, captainId, notes, null, token);
+        }
+
+        /// <summary>
+        /// Build (or refine, when one already exists) the vessel's Model Context using the given captain, on behalf of a
+        /// user (with requireHarborForLaunch only that user's Harbors can run it).
+        /// </summary>
+        /// <param name="vesselId">Vessel identifier (vsl_ prefix).</param>
+        /// <param name="captainId">Captain identifier (cpt_ prefix) whose runtime performs the analysis.</param>
+        /// <param name="notes">Optional operator guidance for the captain to focus on.</param>
+        /// <param name="userId">User the analysis runs for, or null for the vessel's owner.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The updated vessel with its new Model Context.</returns>
+        public async Task<Vessel> BuildAsync(string vesselId, string captainId, string? notes, string? userId, CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(vesselId)) throw new ArgumentNullException(nameof(vesselId));
             if (String.IsNullOrEmpty(captainId)) throw new ArgumentNullException(nameof(captainId));
@@ -109,7 +136,7 @@ namespace Armada.Server
 
             try
             {
-                string context = await RunCaptainAsync(captain, dock.WorktreePath!, prompt, finalMessageFilePath, token).ConfigureAwait(false);
+                string context = await RunCaptainAsync(captain, vessel, dock, userId ?? vessel.UserId, prompt, finalMessageFilePath, token).ConfigureAwait(false);
 
                 vessel.ModelContext = context;
                 vessel.EnableModelContext = true;
@@ -173,16 +200,34 @@ namespace Armada.Server
             return builder.ToString();
         }
 
-        private async Task<string> RunCaptainAsync(Captain captain, string workingDirectory, string prompt, string finalMessageFilePath, CancellationToken token)
+        private async Task<string> RunCaptainAsync(Captain captain, Vessel vessel, Dock dock, string? userId, string prompt, string finalMessageFilePath, CancellationToken token)
         {
+            string workingDirectory = dock.WorktreePath!;
             IAgentRuntime runtime;
-            try
+            if (LaunchRouter != null)
             {
-                runtime = _RuntimeFactory.Create(captain.Runtime);
+                CaptainLaunchContext launch = new CaptainLaunchContext(captain, "Model Context build")
+                {
+                    TenantId = vessel.TenantId,
+                    UserId = userId,
+                    Vessel = vessel,
+                    PinnedHarborId = dock.HarborId,
+                    AllowScratchWorkingDirectory = false
+                };
+
+                // HarborLaunchUnavailableException (requireHarborForLaunch with no Harbor) propagates as is.
+                runtime = (await LaunchRouter.SelectAsync(launch, token).ConfigureAwait(false)).Runtime;
             }
-            catch (Exception ex)
+            else
             {
-                throw new InvalidOperationException("This captain's runtime (" + captain.Runtime + ") could not be launched: " + ex.Message);
+                try
+                {
+                    runtime = _RuntimeFactory.Create(captain.Runtime);
+                }
+                catch (Exception ex)
+                {
+                    throw new InvalidOperationException("This captain's runtime (" + captain.Runtime + ") could not be launched: " + ex.Message);
+                }
             }
 
             TaskCompletionSource<int?> exitSource = new TaskCompletionSource<int?>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -203,13 +248,22 @@ namespace Armada.Server
             };
             runtime.OnProcessExited += (pid, code) => exitSource.TrySetResult(code);
 
-            int processId = await runtime.StartAsync(
-                workingDirectory,
-                prompt,
-                finalMessageFilePath: finalMessageFilePath,
-                model: captain.Model,
-                captain: captain,
-                token: token).ConfigureAwait(false);
+            int processId;
+            try
+            {
+                processId = await runtime.StartAsync(
+                    workingDirectory,
+                    prompt,
+                    finalMessageFilePath: finalMessageFilePath,
+                    model: captain.Model,
+                    captain: captain,
+                    token: token).ConfigureAwait(false);
+            }
+            catch (AgentRuntimeNotInstalledException missing)
+            {
+                CaptainLaunchRouter.TryDescribeFailure(missing, out string message, out CaptainChatErrorCodeEnum _);
+                throw new InvalidOperationException(message, missing);
+            }
 
             using (CancellationTokenSource timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(token))
             {

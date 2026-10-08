@@ -188,6 +188,11 @@ namespace Armada.Core.Services
             {
                 _Logging.Warn(_Header + "harbor " + harborId + " reported error"
                     + (String.IsNullOrEmpty(error.JobId) ? "" : " (job " + error.JobId + ")") + ": " + error.Message);
+
+                // A job-scoped error ends the job (the Harbor could not launch it): tell its listener at once so the
+                // launch fails with the Harbor's reason instead of waiting out the start timeout.
+                if (!String.IsNullOrEmpty(error.JobId) && _JobListeners.TryRemove(error.JobId!, out IHarborJobListener? failedListener))
+                    failedListener.OnFailed(String.IsNullOrEmpty(error.Message) ? "The Harbor could not run the job." : error.Message);
                 return;
             }
 

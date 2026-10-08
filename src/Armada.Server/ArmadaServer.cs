@@ -143,6 +143,7 @@ namespace Armada.Server
         private ModelEndpointService _ModelEndpointService = null!;
         private HarborService _HarborService = null!;
         private HarborConnectionManager _HarborConnectionManager = null!;
+        private CaptainLaunchRouter _LaunchRouter = null!;
         private HarborLinkEndpoint _HarborLinkEndpoint = null!;
         private IVesselService _VesselService = null!;
         private IVesselImportService _VesselImportService = null!;
@@ -259,7 +260,7 @@ namespace Armada.Server
             _LandingService = new LandingService(_Logging, _Database, _Settings, _Git);
             _TemplateService = new MessageTemplateService(_Logging, _PromptTemplateService);
             _RuntimeFactory = new AgentRuntimeFactory(_Logging, ResolveInferenceEndpoint);
-            _FleetCategorizationService = new FleetCategorizationService(_Database, _Settings, _JobService, new CaptainPromptRunner(_RuntimeFactory, _Logging), _PromptTemplateService, _Logging);
+            _FleetCategorizationService = new FleetCategorizationService(_Database, _Settings, _JobService, new CaptainPromptRunner(_RuntimeFactory, _Logging) { Settings = _Settings }, _PromptTemplateService, _Logging);
             _VesselImportService = new VesselImportService(_Database, _Settings, new VesselDiscoveryService(_Database, _Settings), _VesselService, _JobService, _Logging, _FleetCategorizationService);
             _Workspace = new WorkspaceService();
             _RequestHistoryCapture = new RequestHistoryCaptureService(_Settings);
@@ -374,6 +375,10 @@ namespace Armada.Server
             _AgentLifecycle.SetSessionTokenService(_SessionTokenService);
             // Enable API-endpoint captains delegated to a Harbor to carry their resolved inference endpoint.
             _AgentLifecycle.SetEndpointResolver(ResolveInferenceEndpoint);
+
+            // Interactive captain launches (chat, Ask turns, planning, refinement, vessel context) route to a connected
+            // Harbor with the same policy as missions, including requireHarborForLaunch.
+            _LaunchRouter = new CaptainLaunchRouter(_Settings, _RuntimeFactory, _HarborConnectionManager, ResolveInferenceEndpoint, _Logging);
 
             // Wire up agent lifecycle events
             _Admiral.OnLaunchAgent = _AgentLifecycle.HandleLaunchAgentAsync;
@@ -536,6 +541,8 @@ namespace Armada.Server
                 _RuntimeFactory,
                 EmitEventAsync,
                 _WebSocketHub);
+            _PlanningSessions.LaunchRouter = _LaunchRouter;
+            _ObjectiveRefinementSessions.LaunchRouter = _LaunchRouter;
 
             _CaptainTools = new CaptainToolService(
                 _Logging,
@@ -550,6 +557,7 @@ namespace Armada.Server
             // Ask Armada threads: thread store, approval gate / action executor, turn coordinator, and work tracker.
             // Thread events go only to the owner's sockets.
             _CaptainChat = new CaptainChatService(_Database, _RuntimeFactory, _WebSocketHub, _PromptTemplateService, _SessionTokenService, _Settings.McpPort, _Logging, ArmadaMcpConfigBuilder.ClientHostFor(_Settings.Rest.Hostname));
+            _CaptainChat.LaunchRouter = _LaunchRouter;
             _AskThreads = new Armada.Core.Services.Ask.AskThreadService(_Database, _Settings, _Logging);
             _AskActions = new Armada.Server.Ask.AskActionService(_Database, _AskThreads, _Settings, _Logging);
             _AskTurns = new Armada.Server.Ask.AskTurnCoordinator(_Database, _AskThreads, _CaptainChat, _SessionTokenService, _PromptTemplateService, _Settings, _Logging);
@@ -1131,6 +1139,7 @@ namespace Armada.Server
 
             // Vessels
             VesselContextService vesselContextService = new VesselContextService(_Database, _RuntimeFactory, _Docks, _PromptTemplateService, _Logging);
+            vesselContextService.LaunchRouter = _LaunchRouter;
             new VesselRoutes(_Database, _VesselReadinessService, _LandingPreviewService, EmitEventAsync, _JsonOptions, _Docks, vesselContextService, _Git, _Settings, _VesselService, _ManualLandingReconciler)
                 .Register(_App, authenticate, _AuthorizationService);
 

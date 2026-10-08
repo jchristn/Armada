@@ -107,7 +107,7 @@ A `Custom` runtime is not gated, and neither is a captain on a server whose MCP 
 `askApprovalGated` from `GET /api/v1/captains/{id}/tools`; when it is false, the Ask conversation shows a persistent
 note under the header: "Actions from this captain run without approval cards."
 
-**Planning** runs for any CLI runtime. ApiEndpoint and Harbor-hosted (remote) runtimes report
+**Planning** runs for any CLI runtime, on the Admiral host or on a Harbor. ApiEndpoint runtimes report
 `SupportsPlanningSessions = false`, and the coordinator refuses them. `Captain.SupportsPlanningSessions` and the
 `PlanningSessionSupportReason` string come from the same per-runtime capability (`AgentRuntimeCapabilities`) that the
 runtime adapters report, so an ApiEndpoint or Custom captain is shown as "planning unsupported" in the dashboard and
@@ -142,6 +142,36 @@ reply text cannot fake a tool card). A JSON line counts as a protocol event only
 | High | 16384 | high | high | high |
 
 Gemini, Cursor, and ApiEndpoint ignore the setting.
+
+## Where interactive turns run
+
+Ask Armada turns and narrations, direct captain chat, planning turns and summaries, objective refinement, and vessel
+Model Context builds are routed exactly like missions (see
+[HARBOR.md](HARBOR.md#dock-affinity-and-routing)): when an eligible Harbor is connected (enabled, under capacity,
+advertising the captain's runtime and the vessel's required capabilities, the vessel's preferred Harbor first, a
+pinned dock's Harbor only), the CLI runs on that Harbor and its output streams back over the link; with
+`requireHarborForLaunch` on, only the launching user's Harbors count, and with none connected the turn fails with
+"No Harbor is connected to run this captain" instead of running on the Admiral host. With the policy off and no eligible
+Harbor, the turn runs on the Admiral host as before. On a Harbor:
+
+- A chat or Ask turn runs in a scratch directory the Harbor creates for the job and removes when it ends. Planning and
+  refinement turns run in the dock's or vessel's path when it exists on the Harbor host, otherwise in such a scratch
+  directory; their Admiral-side context file is inlined into the prompt. A Model Context build needs the repository, so
+  it runs in the dock's path and fails when that path does not exist on the Harbor host.
+- The turn's thread-scoped MCP token is bound on the Harbor against `harbor.advertisedMcpBaseUrl`, as for missions, so
+  that URL must be reachable from the Harbor host. Only a plain `http://host:port/mcp` URL can be bound per launch; with
+  any other form (for example `https://`) the CLI gets the token in `ARMADA_MCP_TOKEN` but no Armada MCP server.
+- `ApproveInArmada` runs as `Refuse`, as for missions (see [CLI tool permissions](#cli-tool-permissions)); `Bypass` and
+  `Refuse` apply unchanged.
+- Stopping the turn kills the process on the Harbor.
+- The CLI's final-message file (Codex `--output-last-message`, Mux) is returned over the link.
+
+ApiEndpoint captains always run in-process on the Admiral for these turns (they have no CLI, and their tool activity and
+in-process permission prompts need the in-process runtime). Fleet categorization reads files its captain writes on the
+Admiral host, so it always runs there and is refused while `requireHarborForLaunch` is on. When a CLI is missing on the
+Admiral host the turn fails with "The ClaudeCode CLI ('claude') is not installed on the Admiral host ..." (error code
+`RuntimeNotInstalled`) instead of the raw process-start error; when it is missing on the Harbor, the turn fails at once
+with the Harbor's reason (`HarborLaunchFailed`).
 
 ## How Armada launches each runtime
 
@@ -357,7 +387,7 @@ conversation, so they ask instead.
 | ApiEndpoint | No CLI flags; the built-in `run_process` tool refuses every call | Each `run_process` call becomes a CLI permission request, answered in-process (no MCP token needed) | `run_process` runs without asking |
 
 `Refuse` and `Bypass` are carried by the launched captain's auto-approve option, so a Mux captain with an explicit
-`muxApprovalPolicy` keeps that policy in both. Harbor launches apply `Refuse` and `Bypass` the same way (through the
+`muxApprovalPolicy` keeps that policy in both. Harbor launches (missions, and Ask turns that run on a Harbor) apply `Refuse` and `Bypass` the same way (through the
 captain's auto-approve option) and run `ApproveInArmada` as `Refuse`, because the Harbor launch protocol does not carry
 the permission prompt tool yet.
 

@@ -26,6 +26,11 @@ namespace Test.Shared.Infrastructure
         /// </summary>
         public int? ExitCode { get; private set; } = null;
 
+        /// <summary>
+        /// Failure message reported by OnFailed, or null.
+        /// </summary>
+        public string? Failure { get; private set; } = null;
+
         #endregion
 
         #region Public-Methods
@@ -46,6 +51,12 @@ namespace Test.Shared.Infrastructure
         public void OnExited(int exitCode)
         {
             ExitCode = exitCode;
+        }
+
+        /// <inheritdoc />
+        public void OnFailed(string message)
+        {
+            Failure = message;
         }
 
         #endregion
