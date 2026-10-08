@@ -17,7 +17,9 @@ namespace Armada.Server
     /// <see cref="AgentRuntimeFactory"/>, StartAsync with the captain's model and options, a wait on the process-exit
     /// event raced against a time limit and the caller's token, and StopAsync on timeout or cancellation. It does not
     /// touch captain state, docks, or missions; callers reserve the captain. Harbor-hosted execution is not used:
-    /// callers read files the agent writes in the scratch directory, which must be local.
+    /// callers read files the agent writes in the scratch directory, which must be local. So when requireHarborForLaunch
+    /// is on (captains never run on the Admiral host) the run is refused, and a CLI missing on the Admiral host is
+    /// reported as such.
     /// </summary>
     public class CaptainPromptRunner : ICaptainPromptRunner
     {
@@ -32,6 +34,12 @@ namespace Armada.Server
             get => _MaxOutputChars;
             set => _MaxOutputChars = Math.Clamp(value, 1024, 4194304);
         }
+
+        /// <summary>
+        /// Admiral settings; when set and requireHarborForLaunch is on, runs are refused because they would run the
+        /// captain on the Admiral host. Null never refuses.
+        /// </summary>
+        public Armada.Core.Settings.ArmadaSettings? Settings { get; set; } = null;
 
         #endregion
 
@@ -77,6 +85,13 @@ namespace Armada.Server
             if (prompt == null) throw new ArgumentNullException(nameof(prompt));
 
             CaptainPromptResult result = new CaptainPromptResult();
+            if (Settings != null && Settings.RequireHarborForLaunch)
+            {
+                result.Error = "This captain run needs the Admiral host (it reads files the captain writes there), and requireHarborForLaunch is on, "
+                    + "so captains never run on the Admiral host. Turn requireHarborForLaunch off to run it.";
+                return result;
+            }
+
             StringBuilder output = new StringBuilder();
             object outputLock = new object();
             TaskCompletionSource<int?> exitSource = new TaskCompletionSource<int?>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -124,7 +139,9 @@ namespace Armada.Server
             catch (Exception ex)
             {
                 _Logging.Warn(_Header + "could not start captain " + captain.Id + ": " + ex.Message);
-                result.Error = ex.Message;
+                result.Error = CaptainLaunchRouter.TryDescribeFailure(ex, out string described, out Armada.Core.Enums.CaptainChatErrorCodeEnum _)
+                    ? described
+                    : ex.Message;
                 return result;
             }
 

@@ -1221,61 +1221,35 @@ namespace Armada.Server
         private async Task<IHostProcessExecutor> ResolveLaunchExecutorAsync(Captain captain, Mission mission, Dock dock)
         {
             string? pinnedHarborId = String.IsNullOrWhiteSpace(dock.HarborId) ? null : dock.HarborId;
-            bool requiredByPolicy = _Settings.RequireHarborForLaunch;
-            bool harborRequired = requiredByPolicy;
 
-            if (_HarborConnections == null)
+            Vessel? vessel = null;
+            if (_HarborConnections != null && _HarborConnections.HasConnectedHarbor() && !String.IsNullOrEmpty(mission.VesselId))
             {
-                if (harborRequired) throw HarborUnavailable(mission, pinnedHarborId, requiredByPolicy, "Harbor delegation is not available on this Admiral");
-                return LocalFallback(mission, pinnedHarborId, "Harbor delegation disabled (no connection manager wired)");
+                try { vessel = await _Database.Vessels.ReadAsync(mission.VesselId).ConfigureAwait(false); }
+                catch (Exception ex) { _Logging.Warn(_Header + "could not read vessel " + mission.VesselId + " for Harbor routing: " + ex.Message); }
             }
 
-            if (!_HarborConnections.HasConnectedHarbor())
+            // The same routing every captain launch uses (missions and interactive launches alike).
+            CaptainLaunchContext context = new CaptainLaunchContext(captain, "mission " + mission.Id)
             {
-                if (harborRequired) throw HarborUnavailable(mission, pinnedHarborId, requiredByPolicy, "no Harbor is connected");
-                return LocalFallback(mission, pinnedHarborId, "no Harbor connected");
+                TenantId = mission.TenantId,
+                UserId = mission.UserId,
+                Vessel = vessel,
+                PinnedHarborId = pinnedHarborId,
+                AllowScratchWorkingDirectory = false
+            };
+
+            CaptainLaunchRouter router = new CaptainLaunchRouter(_Settings, _RuntimeFactory, _HarborConnections, _EndpointResolver, _Logging);
+            CaptainLaunchDecision decision = await router.DecideAsync(context).ConfigureAwait(false);
+            if (decision.HarborId != null && _HarborConnections != null)
+            {
+                await RecordHarborAffinityAsync(mission, dock, decision.HarborId).ConfigureAwait(false);
+                _Logging.Info(_Header + "delegating captain launch to Harbor " + decision.HarborId + " (" + decision.Reason + ")");
+                return new Armada.Runtimes.RemoteHostProcessExecutor(_HarborConnections, decision.HarborId, _EndpointResolver);
             }
 
-            string reason;
-            try
-            {
-                Vessel? vessel = !String.IsNullOrEmpty(mission.VesselId)
-                    ? await _Database.Vessels.ReadAsync(mission.VesselId).ConfigureAwait(false)
-                    : null;
-
-                HarborRoutingRequest request = new HarborRoutingRequest
-                {
-                    ExistingHarborId = pinnedHarborId,
-                    PreferredHarborId = vessel?.PreferredHarborId,
-                    RequestedRuntime = captain.Runtime.ToString(),
-                    RequiredCapabilities = SplitCapabilities(vessel?.RequiredCapabilities),
-                    RestrictToOwner = requiredByPolicy,
-                    OwnerUserId = mission.UserId
-                };
-
-                _Logging.Debug(_Header + "Harbor routing for mission " + mission.Id + ": tenant=" + (mission.TenantId ?? "(none)")
-                    + " runtime=" + request.RequestedRuntime + " dockHarbor=" + (request.ExistingHarborId ?? "(none)")
-                    + " connected=[" + String.Join(",", _HarborConnections.ConnectedHarborIds) + "]");
-
-                HarborRoutingDecision decision = await _HarborConnections.SelectHarborAsync(mission.TenantId, request).ConfigureAwait(false);
-                if (decision.Success && !String.IsNullOrWhiteSpace(decision.HarborId))
-                {
-                    await RecordHarborAffinityAsync(mission, dock, decision.HarborId!).ConfigureAwait(false);
-                    _Logging.Info(_Header + "delegating captain launch to Harbor " + decision.HarborId + " (" + decision.Reason + ")");
-                    return new Armada.Runtimes.RemoteHostProcessExecutor(_HarborConnections, decision.HarborId!, _EndpointResolver);
-                }
-
-                reason = decision.Reason ?? "no eligible Harbor";
-                _Logging.Debug(_Header + "no eligible Harbor for this launch (" + reason + ")");
-            }
-            catch (Exception ex)
-            {
-                reason = "Harbor routing failed: " + ex.Message;
-                _Logging.Warn(_Header + "Harbor routing failed: " + ex.ToString());
-            }
-
-            if (harborRequired) throw HarborUnavailable(mission, pinnedHarborId, requiredByPolicy, reason);
-            return LocalFallback(mission, pinnedHarborId, reason);
+            if (decision.HarborRequired) throw HarborUnavailable(mission, pinnedHarborId, true, decision.Reason);
+            return LocalFallback(mission, pinnedHarborId, decision.Reason);
         }
 
         /// <summary>
@@ -1338,23 +1312,6 @@ namespace Armada.Server
             {
                 _Logging.Warn(_Header + "could not persist Harbor affinity for mission " + mission.Id + ": " + ex.ToString());
             }
-        }
-
-        /// <summary>
-        /// Split a comma or whitespace separated capability list into distinct required capability names.
-        /// </summary>
-        private static List<string> SplitCapabilities(string? capabilities)
-        {
-            List<string> result = new List<string>();
-            if (String.IsNullOrWhiteSpace(capabilities)) return result;
-            string[] parts = capabilities.Split(new char[] { ',', ';', ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-            foreach (string part in parts)
-            {
-                string trimmed = part.Trim();
-                if (trimmed.Length > 0 && !result.Contains(trimmed)) result.Add(trimmed);
-            }
-
-            return result;
         }
 
         private async Task<CaptainModelValidationFailure?> ValidateMuxCaptainAsync(Captain captain, CancellationToken token)

@@ -166,6 +166,8 @@ namespace Test.Shared.Suites.Services
             public void OnOutput(HarborOutputStreamEnum stream, string data) { }
 
             public void OnExited(int exitCode) { }
+
+            public void OnFailed(string message) { }
         }
 
         #endregion

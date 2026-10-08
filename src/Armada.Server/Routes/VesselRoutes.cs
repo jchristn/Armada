@@ -769,7 +769,7 @@ namespace Armada.Server.Routes
 
                 try
                 {
-                    Vessel updated = await _contextService.BuildAsync(buildVessel.Id, request.CaptainId, request.Notes).ConfigureAwait(false);
+                    Vessel updated = await _contextService.BuildAsync(buildVessel.Id, request.CaptainId, request.Notes, ctx.UserId).ConfigureAwait(false);
                     return (object)updated;
                 }
                 catch (TimeoutException ex)

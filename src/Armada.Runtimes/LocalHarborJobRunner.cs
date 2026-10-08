@@ -3,6 +3,7 @@ namespace Armada.Runtimes
     using System;
     using System.Collections.Concurrent;
     using System.Collections.Generic;
+    using System.IO;
     using Armada.Core.Enums;
     using Armada.Core.Harbor;
     using Armada.Core.Services;
@@ -22,6 +23,10 @@ namespace Armada.Runtimes
         private readonly IHostProcessExecutor _Executor;
         private readonly LoggingModule _Logging;
         private readonly ConcurrentDictionary<string, JobEntry> _Jobs = new ConcurrentDictionary<string, JobEntry>(StringComparer.Ordinal);
+        private readonly string _ScratchRoot;
+
+        // Bound the final-message artifact sent back over the link.
+        private const int _MaxFinalMessageChars = 1000000;
 
         #endregion
 
@@ -42,10 +47,23 @@ namespace Armada.Runtimes
         /// <param name="logging">Logging module.</param>
         /// <param name="runtimeFactory">Runtime factory used for CLI runtimes.</param>
         public LocalHarborJobRunner(LoggingModule logging, AgentRuntimeFactory runtimeFactory)
+            : this(logging, runtimeFactory, null)
+        {
+        }
+
+        /// <summary>
+        /// Instantiate with a specific runtime factory and scratch root.
+        /// </summary>
+        /// <param name="logging">Logging module.</param>
+        /// <param name="runtimeFactory">Runtime factory used for CLI runtimes.</param>
+        /// <param name="scratchRoot">Directory under which per-job scratch directories and final-message files are
+        /// created; null uses "armada-harbor" under the system temporary directory.</param>
+        public LocalHarborJobRunner(LoggingModule logging, AgentRuntimeFactory runtimeFactory, string? scratchRoot)
         {
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
             if (runtimeFactory == null) throw new ArgumentNullException(nameof(runtimeFactory));
             _Executor = new LocalHostProcessExecutor(runtimeFactory);
+            _ScratchRoot = String.IsNullOrWhiteSpace(scratchRoot) ? Path.Combine(Path.GetTempPath(), "armada-harbor") : scratchRoot!;
         }
 
         #endregion
@@ -95,6 +113,38 @@ namespace Armada.Runtimes
             }
 
             string jobId = request.JobId;
+            if (runtime is ClaudeCodeRuntime claudeRuntime && request.StreamJsonOutput)
+                claudeRuntime.StreamJsonOutput = true;
+
+            // Working directory: the requested one, or (for interactive launches that allow it) a per-job scratch
+            // directory owned by this Harbor when the request names none or names a path that does not exist here (the
+            // Admiral's own paths are not valid on this host).
+            string workingDirectory = request.WorkingDirectory ?? String.Empty;
+            string? scratchDirectory = null;
+            if (request.ScratchWorkingDirectory && (String.IsNullOrWhiteSpace(workingDirectory) || !Directory.Exists(workingDirectory)))
+            {
+                scratchDirectory = Path.Combine(_ScratchRoot, "scratch", SafeName(jobId));
+                Directory.CreateDirectory(scratchDirectory);
+                workingDirectory = scratchDirectory;
+            }
+            else if (String.IsNullOrWhiteSpace(workingDirectory))
+            {
+                throw new ArgumentException("The launch request has no working directory.");
+            }
+            else if (!Directory.Exists(workingDirectory))
+            {
+                throw new DirectoryNotFoundException("The working directory '" + workingDirectory + "' does not exist on this Harbor host.");
+            }
+
+            // The final-message artifact is written outside the working directory (never into a dock worktree) and sent
+            // back just before the exit.
+            string? finalMessageFilePath = null;
+            if (request.ReturnFinalMessage)
+            {
+                string finalDirectory = Path.Combine(_ScratchRoot, "final");
+                Directory.CreateDirectory(finalDirectory);
+                finalMessageFilePath = Path.Combine(finalDirectory, SafeName(jobId) + ".txt");
+            }
 
             runtime.OnProcessStarted += processId =>
             {
@@ -102,18 +152,27 @@ namespace Armada.Runtimes
                 onStarted(processId);
             };
 
-            // The lifecycle handler consumes OnOutputReceived (both stdout and stderr) for mission output, so
-            // forward every line as Stdout. A finer stdout/stderr split can follow when chat/planning is
-            // delegated.
-            runtime.OnOutputReceived += (processId, line) => onOutput(HarborOutputStreamEnum.Stdout, line);
+            // Report stdout and stderr on their own streams, as a local run raises them: the Admiral's mission lifecycle
+            // consumes both, while chat and planning read only stdout (CLI stderr banners stay out of a reply).
+            if (runtime is BaseAgentRuntime split)
+            {
+                split.OnStdoutReceived += (processId, line) => onOutput(HarborOutputStreamEnum.Stdout, line);
+                split.OnStderrReceived += (processId, line) => onOutput(HarborOutputStreamEnum.Stderr, line);
+            }
+            else
+            {
+                runtime.OnOutputReceived += (processId, line) => onOutput(HarborOutputStreamEnum.Stdout, line);
+            }
 
             runtime.OnProcessExited += (processId, exitCode) =>
             {
                 _Jobs.TryRemove(jobId, out JobEntry? _);
+                SendFinalMessage(finalMessageFilePath, onOutput);
+                TryDeleteDirectory(scratchDirectory);
                 onExited(exitCode ?? -1);
             };
 
-            _Logging.Info("[LocalHarborJobRunner] launching " + runtimeType + " for job " + jobId + " in " + request.WorkingDirectory);
+            _Logging.Info("[LocalHarborJobRunner] launching " + runtimeType + " for job " + jobId + " in " + workingDirectory);
 
             // Apply the auto-approve decision the Admiral resolved (captain setting plus vessel override). The Harbor has
             // no database, so the decision travels in the launch request; null (an older Admiral) keeps the default.
@@ -151,15 +210,26 @@ namespace Armada.Runtimes
                 }
             }
 
-            await runtime.StartAsync(
-                request.WorkingDirectory,
-                request.Prompt ?? string.Empty,
-                environment,
-                model: request.Model,
-                captain: launchCaptain,
-                isolateLaunch: bindMcp,
-                mcpPort: mcpPort,
-                token: token).ConfigureAwait(false);
+            try
+            {
+                await runtime.StartAsync(
+                    workingDirectory,
+                    request.Prompt ?? string.Empty,
+                    environment,
+                    finalMessageFilePath: finalMessageFilePath,
+                    model: request.Model,
+                    captain: launchCaptain,
+                    isolateLaunch: bindMcp,
+                    mcpPort: mcpPort,
+                    showThinking: request.ShowThinking,
+                    token: token).ConfigureAwait(false);
+            }
+            catch
+            {
+                TryDeleteDirectory(scratchDirectory);
+                TryDeleteFile(finalMessageFilePath);
+                throw;
+            }
         }
 
         /// <inheritdoc />
@@ -168,6 +238,57 @@ namespace Armada.Runtimes
             if (String.IsNullOrWhiteSpace(jobId)) return;
             if (_Jobs.TryRemove(jobId, out JobEntry? entry))
                 await entry!.Runtime.StopAsync(entry.ProcessId, token).ConfigureAwait(false);
+        }
+
+        #endregion
+
+        #region Private-Methods
+
+        private void SendFinalMessage(string? finalMessageFilePath, Action<HarborOutputStreamEnum, string> onOutput)
+        {
+            if (finalMessageFilePath == null) return;
+            try
+            {
+                if (File.Exists(finalMessageFilePath))
+                {
+                    string text = File.ReadAllText(finalMessageFilePath);
+                    if (text.Length > _MaxFinalMessageChars) text = text.Substring(0, _MaxFinalMessageChars);
+                    if (!String.IsNullOrWhiteSpace(text)) onOutput(HarborOutputStreamEnum.FinalMessage, text);
+                }
+            }
+            catch (Exception e)
+            {
+                _Logging.Warn("[LocalHarborJobRunner] could not read the final message " + finalMessageFilePath + ": " + e.Message);
+            }
+            finally
+            {
+                TryDeleteFile(finalMessageFilePath);
+            }
+        }
+
+        private static string SafeName(string jobId)
+        {
+            if (String.IsNullOrWhiteSpace(jobId)) return Guid.NewGuid().ToString("N");
+            char[] chars = jobId.ToCharArray();
+            for (int i = 0; i < chars.Length; i++)
+            {
+                if (!Char.IsLetterOrDigit(chars[i]) && chars[i] != '-' && chars[i] != '_') chars[i] = '_';
+            }
+            return new string(chars);
+        }
+
+        private static void TryDeleteDirectory(string? path)
+        {
+            if (String.IsNullOrEmpty(path)) return;
+            try { if (Directory.Exists(path)) Directory.Delete(path, true); }
+            catch { }
+        }
+
+        private static void TryDeleteFile(string? path)
+        {
+            if (String.IsNullOrEmpty(path)) return;
+            try { if (File.Exists(path)) File.Delete(path); }
+            catch { }
         }
 
         #endregion

@@ -19,6 +19,18 @@ namespace Armada.Server
     /// </summary>
     public class ObjectiveRefinementCoordinator
     {
+        #region Public-Members
+
+        /// <summary>
+        /// Routes refinement turns and summaries to a connected, eligible Harbor or to the Admiral host with the policy
+        /// missions use (including requireHarborForLaunch). On a Harbor the turn runs in the vessel's working directory
+        /// when it exists there, otherwise in a Harbor scratch directory, and its context file is inlined into the
+        /// prompt. Null always runs on the Admiral host.
+        /// </summary>
+        public CaptainLaunchRouter? LaunchRouter { get; set; } = null;
+
+        #endregion
+
         private sealed class TurnState
         {
             private volatile bool _StopRequested = false;
@@ -335,7 +347,7 @@ namespace Armada.Server
                 ObjectiveRefinementSummaryResponse draft = BuildFallbackSummary(session, sourceMessage);
                 try
                 {
-                    string runtimeOutput = await RunRuntimePromptAsync(session, captain, vessel, prompt, logFilePath, finalMessageFilePath, token).ConfigureAwait(false);
+                    string runtimeOutput = await RunRuntimePromptAsync(session, captain, vessel, prompt, promptFilePath, logFilePath, finalMessageFilePath, token).ConfigureAwait(false);
                     if (TryParseSummaryResponse(runtimeOutput, out ObjectiveRefinementSummaryResponse? parsed) && parsed != null)
                     {
                         parsed.SessionId = session.Id;
@@ -537,8 +549,7 @@ namespace Armada.Server
                     {
                         try
                         {
-                            IAgentRuntime runtime = CreateRefinementRuntime(captain);
-                            await runtime.StopAsync(session.ProcessId.Value, token).ConfigureAwait(false);
+                            await StopRefinementProcessAsync(captain, session.ProcessId.Value, token).ConfigureAwait(false);
                         }
                         catch
                         {
@@ -629,7 +640,9 @@ namespace Armada.Server
                 string logFilePath = Path.Combine(turnDir, "session.log");
                 string finalMessageFilePath = Path.Combine(turnDir, "final-" + assistantMessage.Id + ".txt");
 
-                IAgentRuntime runtime = CreateRefinementRuntime(captain);
+                IAgentRuntime runtime = await CreateRefinementRuntimeAsync(session, captain, vessel, CancellationToken.None).ConfigureAwait(false);
+                if (runtime is RemoteAgentRuntime)
+                    prompt = CaptainLaunchRouter.InlinePromptFile(prompt, promptFilePath);
                 TaskCompletionSource<int?> exitSource = new TaskCompletionSource<int?>(TaskCreationOptions.RunContinuationsAsynchronously);
                 object outputLock = new object();
                 StringBuilder output = new StringBuilder();
@@ -904,11 +917,14 @@ namespace Armada.Server
             Captain captain,
             Vessel? vessel,
             string prompt,
+            string promptFilePath,
             string logFilePath,
             string finalMessageFilePath,
             CancellationToken token)
         {
-            IAgentRuntime runtime = CreateRefinementRuntime(captain);
+            IAgentRuntime runtime = await CreateRefinementRuntimeAsync(session, captain, vessel, token).ConfigureAwait(false);
+            if (runtime is RemoteAgentRuntime)
+                prompt = CaptainLaunchRouter.InlinePromptFile(prompt, promptFilePath);
             TaskCompletionSource<int?> exitSource = new TaskCompletionSource<int?>(TaskCreationOptions.RunContinuationsAsynchronously);
             StringBuilder output = new StringBuilder();
             object outputLock = new object();
@@ -1102,8 +1118,7 @@ namespace Armada.Server
                 {
                     try
                     {
-                        IAgentRuntime runtime = CreateRefinementRuntime(captain);
-                        await runtime.StopAsync(session.ProcessId.Value, CancellationToken.None).ConfigureAwait(false);
+                        await StopRefinementProcessAsync(captain, session.ProcessId.Value, CancellationToken.None).ConfigureAwait(false);
                     }
                     catch (Exception ex)
                     {
@@ -1147,6 +1162,43 @@ namespace Armada.Server
             {
                 _StopOperations.TryRemove(sessionId, out _);
             }
+        }
+
+        /// <summary>
+        /// Create the runtime of a refinement turn or summary: on the Harbor the router picks, or on the Admiral host.
+        /// </summary>
+        private async Task<IAgentRuntime> CreateRefinementRuntimeAsync(ObjectiveRefinementSession session, Captain captain, Vessel? vessel, CancellationToken token)
+        {
+            if (LaunchRouter == null) return CreateRefinementRuntime(captain);
+            if (!captain.SupportsPlanningSessions)
+                throw new InvalidOperationException(captain.PlanningSessionSupportReason ?? "This captain runtime is not supported for refinement sessions.");
+
+            CaptainLaunchContext launch = new CaptainLaunchContext(captain, "refinement session")
+            {
+                TenantId = session.TenantId,
+                UserId = session.UserId,
+                Vessel = vessel,
+                AllowScratchWorkingDirectory = true
+            };
+            IAgentRuntime runtime = (await LaunchRouter.SelectAsync(launch, token).ConfigureAwait(false)).Runtime;
+            if (!runtime.SupportsPlanningSessions)
+                throw new InvalidOperationException("Runtime " + runtime.Name + " does not currently support refinement sessions.");
+            return runtime;
+        }
+
+        /// <summary>
+        /// Stop a refinement turn's process, on its Harbor when it runs on one.
+        /// </summary>
+        private async Task StopRefinementProcessAsync(Captain captain, int processId, CancellationToken token)
+        {
+            if (LaunchRouter != null)
+            {
+                await LaunchRouter.StopAsync(captain.Runtime, processId, token).ConfigureAwait(false);
+                return;
+            }
+
+            IAgentRuntime runtime = CreateRefinementRuntime(captain);
+            await runtime.StopAsync(processId, token).ConfigureAwait(false);
         }
 
         private IAgentRuntime CreateRefinementRuntime(Captain captain)

@@ -22,13 +22,27 @@ namespace Armada.Server
     /// Runs an interactive chat turn with a captain by launching its agent runtime headlessly, the same
     /// way missions and planning sessions drive the CLI. Every runtime (Mux, Claude Code, Codex, Gemini,
     /// Cursor) is invoked through its <see cref="IAgentRuntime"/> adapter in a throwaway working directory;
-    /// the agent's final response is read from the runtime's final-message artifact. There is no separate
+    /// the agent's final response is read from the runtime's final-message artifact. With a
+    /// <see cref="LaunchRouter"/>, a turn goes to a connected, eligible Harbor exactly as a mission would: the CLI runs
+    /// on the Harbor host in a scratch directory the Harbor owns, its output and final message stream back over the
+    /// link, and stopping the turn kills it there. There is no separate
     /// model-endpoint (PolyPrompt) path: Mux, like the others, is a CLI that runs headless.
     /// Streaming events of the direct chat endpoint go only to the caller's own sockets; Ask Armada threads use
     /// <see cref="RunTurnAsync"/>, which takes a fully built prompt, a thread-scoped MCP token, and callbacks.
     /// </summary>
     public class CaptainChatService : IAskCaptainTurnRunner
     {
+        #region Public-Members
+
+        /// <summary>
+        /// Routes each turn to a connected, eligible Harbor (the captain's CLI then runs on that machine and its output
+        /// streams back over the link) or to the Admiral host, with the same policy missions use, including
+        /// requireHarborForLaunch. Null runs every turn on the Admiral host.
+        /// </summary>
+        public CaptainLaunchRouter? LaunchRouter { get; set; } = null;
+
+        #endregion
+
         #region Private-Members
 
         private readonly DatabaseDriver _Database;
@@ -211,18 +225,42 @@ namespace Armada.Server
             string finalMessageFilePath = Path.Combine(workingDirectory, "reply.txt");
 
             IAgentRuntime? runtime = null;
+            RemoteAgentRuntime? remoteRuntime = null;
             int processId = -1;
 
             try
             {
+                // Holds the final-message artifact. A turn on the Admiral host also runs here; a turn on a Harbor runs in
+                // a scratch directory the Harbor creates on its own host, and its final message is written back here.
                 Directory.CreateDirectory(workingDirectory);
 
                 try
                 {
-                    runtime = _RuntimeFactory.Create(captain.Runtime);
+                    if (LaunchRouter != null)
+                    {
+                        CaptainLaunchContext launch = new CaptainLaunchContext(captain, "chat turn")
+                        {
+                            TenantId = options.TenantId ?? captain.TenantId,
+                            UserId = options.UserId,
+                            AllowScratchWorkingDirectory = true
+                        };
+                        CaptainLaunchTarget target = await LaunchRouter.SelectAsync(launch, token).ConfigureAwait(false);
+                        runtime = target.Runtime;
+                        remoteRuntime = runtime as RemoteAgentRuntime;
+                    }
+                    else
+                    {
+                        runtime = _RuntimeFactory.Create(captain.Runtime);
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
                 }
                 catch (Exception e)
                 {
+                    if (CaptainLaunchRouter.TryDescribeFailure(e, out string described, out CaptainChatErrorCodeEnum code))
+                        return Failed(described, code);
                     return Failed("This captain's runtime (" + captain.Runtime + ") could not be launched for chat: " + e.Message);
                 }
 
@@ -232,6 +270,10 @@ namespace Armada.Server
                 if (runtime is ClaudeCodeRuntime claudeRuntime)
                 {
                     claudeRuntime.StreamJsonOutput = true;
+                }
+                else if (remoteRuntime != null)
+                {
+                    remoteRuntime.StreamJsonOutput = true;
                 }
 
                 TaskCompletionSource<int?> exitSource = new TaskCompletionSource<int?>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -283,7 +325,21 @@ namespace Armada.Server
                         // Claude Code streaming-JSON: each stdout line is one typed event. Incremental text deltas stream
                         // the reply token-by-token; the terminal "result" event carries the authoritative final message
                         // and metrics. Non-event lines are ignored.
-                        if (!ClaudeStreamLine.TryParse(line, out ClaudeStreamLine? claudeEvent) || claudeEvent == null) return;
+                        if (!ClaudeStreamLine.TryParse(line, out ClaudeStreamLine? claudeEvent) || claudeEvent == null)
+                        {
+                            // A Harbor that predates streaming-JSON launches runs Claude Code in --print text mode: keep
+                            // its plain reply lines instead of dropping them.
+                            if (remoteRuntime != null && !String.IsNullOrEmpty(line) && !line.TrimStart().StartsWith("{", StringComparison.Ordinal))
+                            {
+                                lock (outputLock)
+                                {
+                                    if (firstOutputAfter == null) firstOutputAfter = turnTimer.Elapsed;
+                                    if (output.Length < _MaxOutputChars) output.Append(line).Append('\n');
+                                }
+                                emitChunk(line + "\n");
+                            }
+                            return;
+                        }
 
                         string? deltaText = claudeEvent.TextDelta;
                         if (!String.IsNullOrEmpty(deltaText))
@@ -464,7 +520,23 @@ namespace Armada.Server
                 // place (only on scoped turns, so the direct chat endpoint's behavior is unchanged).
                 Dictionary<string, string>? environment = null;
                 bool isolateLaunch = false;
-                if (!String.IsNullOrEmpty(options.McpSessionToken) && _McpPort > 0)
+                if (remoteRuntime != null)
+                {
+                    // On a Harbor the captain reaches Armada's MCP server at the URL the Admiral advertised in the
+                    // handshake (harbor.advertisedMcpBaseUrl); the Harbor binds the turn's token to it, as for missions.
+                    if (scopedMcp
+                        && !String.IsNullOrEmpty(options.McpSessionToken)
+                        && Armada.Core.Services.CaptainThreadMcpPlanner.SupportsApprovalGating(captain.Runtime))
+                    {
+                        remoteRuntime.McpSessionToken = options.McpSessionToken;
+                    }
+
+                    // A Harbor cannot route permission prompts to Armada yet (as for missions), so ApproveInArmada runs as
+                    // Refuse there: the launched captain's auto-approve is already off for anything but Bypass.
+                    if (options.CliPermissionPolicy == CliPermissionPolicyEnum.ApproveInArmada)
+                        _Logging.Info(_Header + "chat turn for captain " + captainId + " runs on Harbor " + remoteRuntime.HarborId + ": ApproveInArmada runs as Refuse there");
+                }
+                else if (!String.IsNullOrEmpty(options.McpSessionToken) && _McpPort > 0)
                 {
                     if (captain.Runtime == AgentRuntimeEnum.ApiEndpoint)
                     {
@@ -492,17 +564,29 @@ namespace Armada.Server
                     }
                 }
 
-                processId = await runtime.StartAsync(
-                    workingDirectory,
-                    prompt,
-                    environment: environment,
-                    finalMessageFilePath: finalMessageFilePath,
-                    model: captain.Model,
-                    captain: captain,
-                    isolateLaunch: isolateLaunch,
-                    mcpPort: _McpPort,
-                    showThinking: showThinking,
-                    token: token).ConfigureAwait(false);
+                try
+                {
+                    processId = await runtime.StartAsync(
+                        remoteRuntime != null ? String.Empty : workingDirectory,
+                        prompt,
+                        environment: environment,
+                        finalMessageFilePath: finalMessageFilePath,
+                        model: captain.Model,
+                        captain: captain,
+                        isolateLaunch: isolateLaunch,
+                        mcpPort: _McpPort,
+                        showThinking: showThinking,
+                        token: token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception startFailure) when (CaptainLaunchRouter.TryDescribeFailure(startFailure, out string startMessage, out CaptainChatErrorCodeEnum startCode))
+                {
+                    _Logging.Warn(_Header + "chat turn for captain " + captainId + " could not start: " + startFailure.Message);
+                    return Failed(startMessage, startCode);
+                }
 
                 using (CancellationTokenSource timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(token))
                 {
@@ -635,6 +719,13 @@ namespace Armada.Server
         private CaptainChatTurnResult Failed(string error)
         {
             return new CaptainChatTurnResult { Response = Fail(error) };
+        }
+
+        private CaptainChatTurnResult Failed(string error, CaptainChatErrorCodeEnum code)
+        {
+            CaptainChatResponse response = Fail(error);
+            response.ErrorCode = code;
+            return new CaptainChatTurnResult { Response = response };
         }
 
         private static void ObserveClaudeToolBlocks(ClaudeStreamLine parsed, ToolCallCollector collector, Action<CaptainToolActivity> emitTool)

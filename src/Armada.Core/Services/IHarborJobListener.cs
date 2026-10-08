@@ -27,5 +27,12 @@ namespace Armada.Core.Services
         /// </summary>
         /// <param name="exitCode">Process exit code.</param>
         void OnExited(int exitCode);
+
+        /// <summary>
+        /// The Harbor reported that it could not carry out the job (an <c>error</c> message naming the job), for example
+        /// because the runtime's CLI is not installed on the Harbor host. No further events follow for the job.
+        /// </summary>
+        /// <param name="message">The Harbor's error message.</param>
+        void OnFailed(string message);
     }
 }
