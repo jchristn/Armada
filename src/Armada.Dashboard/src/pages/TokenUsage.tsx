@@ -4,14 +4,9 @@ import { getTokenUsage } from '../api/client';
 import type { TokenUsageSummaryResult } from '../types/models';
 import { useLocale } from '../context/LocaleContext';
 import { copySvgToClipboard } from '../lib/chartImage';
+import { computeYTicks, formatTokens, TOKEN_USAGE_TIME_RANGES } from '../lib/tokenUsage';
 
-// Bucket counts per range: hour = 2/min (120), day = 4/hour (96), week = 12/day (84), month = 4/day (120).
-const TIME_RANGES = [
-  { label: 'Last Hour', value: 'hour', hours: 1, stepMinutes: 0.5 },
-  { label: 'Last Day', value: 'day', hours: 24, stepMinutes: 15 },
-  { label: 'Last Week', value: 'week', hours: 168, stepMinutes: 120 },
-  { label: 'Last Month', value: 'month', hours: 720, stepMinutes: 360 },
-] as const;
+const TIME_RANGES = TOKEN_USAGE_TIME_RANGES;
 
 type TimeRangeValue = typeof TIME_RANGES[number]['value'];
 type Metric = 'total' | 'byType';
@@ -24,32 +19,6 @@ const TYPE_COLORS = { input: 'var(--accent)', output: 'var(--green)', cached: 'v
 interface SeriesDef { key: string; label: string; color: string }
 interface TooltipRow { label: string; color: string; value: number }
 interface TooltipData { x: number; y: number; title: string; rows: TooltipRow[]; total: number | null }
-
-function computeYTicks(max: number): number[] {
-  if (max <= 0) return [0];
-  const rawStep = max / 4;
-  const magnitude = Math.pow(10, Math.floor(Math.log10(rawStep)));
-  const normalized = rawStep / magnitude;
-  const niceNormalized = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
-  const step = niceNormalized * magnitude;
-  const ticks: number[] = [];
-  for (let value = 0; value <= max; value += step) ticks.push(value);
-  if (ticks[ticks.length - 1] < max) ticks.push(ticks[ticks.length - 1] + step);
-  return ticks;
-}
-
-function trimZero(value: number): string {
-  const fixed = value.toFixed(1);
-  return fixed.endsWith('.0') ? fixed.slice(0, -2) : fixed;
-}
-
-function formatTokens(value: number): string {
-  const abs = Math.abs(value);
-  if (abs >= 1e9) return trimZero(value / 1e9) + 'B';
-  if (abs >= 1e6) return trimZero(value / 1e6) + 'M';
-  if (abs >= 1e3) return trimZero(value / 1e3) + 'K';
-  return String(Math.round(value));
-}
 
 function formatBucketLabel(ts: number, stepMinutes: number, hours: number): string {
   const d = new Date(ts);

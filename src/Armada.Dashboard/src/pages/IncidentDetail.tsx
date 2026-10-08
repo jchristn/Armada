@@ -32,53 +32,11 @@ import ErrorModal from '../components/shared/ErrorModal';
 import JsonViewer from '../components/shared/JsonViewer';
 import PageHeader from '../components/shared/PageHeader';
 import StatusBadge from '../components/shared/StatusBadge';
+import { buildIncidentPrompt, INCIDENT_SEVERITIES, INCIDENT_STATUSES, toInputDateTime, toUtcValue } from '../lib/deliveryForms';
 
-const INCIDENT_STATUSES: IncidentStatus[] = ['Open', 'Monitoring', 'Mitigated', 'RolledBack', 'Closed'];
-const INCIDENT_SEVERITIES: IncidentSeverity[] = ['Critical', 'High', 'Medium', 'Low'];
 
 interface IncidentPrefillState {
   prefill?: IncidentUpsertRequest;
-}
-
-function toInputDateTime(value: string | null | undefined) {
-  if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
-  const pad = (input: number) => String(input).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
-function toUtcValue(value: string) {
-  if (!value.trim()) return null;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date.toISOString();
-}
-
-function buildIncidentPrompt(incidentTitle: string, summary: string, impact: string, environmentName: string, deploymentId: string, releaseId: string) {
-  const lines: string[] = [
-    `Investigate and mitigate the incident "${incidentTitle}".`,
-    '',
-  ];
-
-  if (summary) {
-    lines.push(`Summary: ${summary}`);
-  }
-  if (impact) {
-    lines.push(`Impact: ${impact}`);
-  }
-  if (environmentName) {
-    lines.push(`Environment: ${environmentName}`);
-  }
-  if (deploymentId) {
-    lines.push(`Deployment: ${deploymentId}`);
-  }
-  if (releaseId) {
-    lines.push(`Release: ${releaseId}`);
-  }
-
-  lines.push('');
-  lines.push('Produce a concrete hotfix plan and, if appropriate, implementation scope for the linked vessel.');
-  return lines.join('\n');
 }
 
 export default function IncidentDetail() {

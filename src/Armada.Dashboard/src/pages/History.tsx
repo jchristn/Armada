@@ -12,6 +12,7 @@ import DataTable, { type DataTableColumn } from '../components/shared/DataTable'
 import PageHeader from '../components/shared/PageHeader';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import { canDeleteHistoryEntry } from '../lib/history';
+import { buildHistoryCsv, buildHistoryJson, buildHistoryMarkdown, buildHistoryTimelineQuery } from '../lib/historyExport';
 
 interface SavedHistoryView {
   id: string;
@@ -58,12 +59,6 @@ function persistSavedViews(savedViews: SavedHistoryView[]) {
   }
 }
 
-function escapeCsvValue(value: string | null | undefined) {
-  const normalized = value || '';
-  if (!/[",\r\n]/.test(normalized)) return normalized;
-  return `"${normalized.replace(/"/g, '""')}"`;
-}
-
 function downloadTextFile(fileName: string, content: string, mimeType: string) {
   const blob = new Blob([content], { type: mimeType });
   const url = URL.createObjectURL(blob);
@@ -74,79 +69,6 @@ function downloadTextFile(fileName: string, content: string, mimeType: string) {
   anchor.click();
   document.body.removeChild(anchor);
   URL.revokeObjectURL(url);
-}
-
-function buildCsv(entries: HistoricalTimelineEntry[]) {
-  const header = [
-    'id',
-    'sourceType',
-    'title',
-    'status',
-    'severity',
-    'occurredUtc',
-    'actorDisplay',
-    'vesselId',
-    'missionId',
-    'voyageId',
-    'route',
-    'description',
-  ];
-  const rows = entries.map((entry) => [
-    escapeCsvValue(entry.id),
-    escapeCsvValue(entry.sourceType),
-    escapeCsvValue(entry.title),
-    escapeCsvValue(entry.status),
-    escapeCsvValue(entry.severity),
-    escapeCsvValue(entry.occurredUtc),
-    escapeCsvValue(entry.actorDisplay),
-    escapeCsvValue(entry.vesselId),
-    escapeCsvValue(entry.missionId),
-    escapeCsvValue(entry.voyageId),
-    escapeCsvValue(entry.route),
-    escapeCsvValue(entry.description),
-  ].join(','));
-  return [header.join(','), ...rows].join('\r\n');
-}
-
-function buildMarkdown(query: HistoricalTimelineQuery, entries: HistoricalTimelineEntry[]) {
-  const activeFilters: string[] = [];
-  if (query.objectiveId) activeFilters.push(`objective=\`${query.objectiveId}\``);
-  if (query.text) activeFilters.push(`text=\`${query.text}\``);
-  if (query.actor) activeFilters.push(`actor=\`${query.actor}\``);
-  if (query.vesselId) activeFilters.push(`vessel=\`${query.vesselId}\``);
-  if (query.postmortemOnly) activeFilters.push('postmortemOnly=`true`');
-  if (query.excludeReadRequests) activeFilters.push('excludeReadRequests=`true`');
-  if (query.sourceTypes && query.sourceTypes.length > 0) activeFilters.push(`sourceTypes=\`${query.sourceTypes.join(', ')}\``);
-
-  const lines: string[] = [
-    '# Armada History Export',
-    '',
-    `Exported: ${new Date().toISOString()}`,
-    `Entries: ${entries.length}`,
-  ];
-
-  if (activeFilters.length > 0) {
-    lines.push(`Filters: ${activeFilters.join(', ')}`);
-  }
-
-  lines.push('');
-  for (const entry of entries) {
-    lines.push(`## ${entry.title}`);
-    lines.push(`- Source: ${entry.sourceType}`);
-    lines.push(`- Time: ${entry.occurredUtc}`);
-    if (entry.status) lines.push(`- Status: ${entry.status}`);
-    if (entry.severity) lines.push(`- Severity: ${entry.severity}`);
-    if (entry.actorDisplay) lines.push(`- Actor: ${entry.actorDisplay}`);
-    if (entry.vesselId) lines.push(`- Vessel: ${entry.vesselId}`);
-    if (entry.route) lines.push(`- Route: ${entry.route}`);
-    if (entry.description) {
-      lines.push('');
-      lines.push(entry.description);
-    }
-    lines.push('');
-  }
-
-  return lines.join('\n');
 }
 
 export default function History() {
@@ -181,17 +103,15 @@ export default function History() {
   });
 
   function buildQuery(pageSize = 250): HistoricalTimelineQuery {
-    return {
-      pageNumber: 1,
-      pageSize,
-      objectiveId: objectiveFilter === 'all' ? null : objectiveFilter,
-      text: textFilter || null,
-      actor: actorFilter || null,
-      vesselId: vesselFilter === 'all' ? null : vesselFilter,
-      sourceTypes: sourceTypeFilter === 'all' ? [] : [sourceTypeFilter],
-      postmortemOnly: postmortemOnly || undefined,
-      excludeReadRequests: !showReadRequests,
-    };
+    return buildHistoryTimelineQuery({
+      objectiveId: objectiveFilter,
+      text: textFilter,
+      actor: actorFilter,
+      vesselId: vesselFilter,
+      sourceType: sourceTypeFilter,
+      postmortemOnly,
+      showReadRequests,
+    }, pageSize);
   }
 
   async function load() {
@@ -351,22 +271,17 @@ export default function History() {
       const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
 
       if (format === 'json') {
-        const content = JSON.stringify({
-          exportedUtc: new Date().toISOString(),
-          query,
-          totalCount: allEntries.length,
-          entries: allEntries,
-        }, null, 2);
+        const content = buildHistoryJson(query, allEntries);
         downloadTextFile(`armada-history-${timestamp}.json`, content, 'application/json');
         return;
       }
 
       if (format === 'csv') {
-        downloadTextFile(`armada-history-${timestamp}.csv`, buildCsv(allEntries), 'text/csv');
+        downloadTextFile(`armada-history-${timestamp}.csv`, buildHistoryCsv(allEntries), 'text/csv');
         return;
       }
 
-      downloadTextFile(`armada-history-${timestamp}.md`, buildMarkdown(query, allEntries), 'text/markdown');
+      downloadTextFile(`armada-history-${timestamp}.md`, buildHistoryMarkdown(query, allEntries), 'text/markdown');
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : t('Failed to export history.'));
     } finally {

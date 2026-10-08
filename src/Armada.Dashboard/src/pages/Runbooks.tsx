@@ -35,23 +35,7 @@ import DataTable, { type DataTableColumn } from '../components/shared/DataTable'
 import StatusBadge from '../components/shared/StatusBadge';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import { buildRunbookDuplicatePayload } from '../lib/duplicates';
-
-const RUNBOOK_CHECK_TYPES: CheckRunType[] = [
-  'Build',
-  'UnitTest',
-  'IntegrationTest',
-  'E2ETest',
-  'Migration',
-  'SecurityScan',
-  'Performance',
-  'Deploy',
-  'Rollback',
-  'SmokeTest',
-  'HealthCheck',
-  'DeploymentVerification',
-  'RollbackVerification',
-  'Custom',
-];
+import { RUNBOOK_CHECK_TYPES } from '../lib/deliveryForms';
 
 interface RunbookPageState {
   prefillExecution?: Partial<RunbookExecutionStartRequest>;

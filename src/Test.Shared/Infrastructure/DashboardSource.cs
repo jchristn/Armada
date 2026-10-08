@@ -139,7 +139,11 @@ namespace Test.Shared.Infrastructure
             foreach (Match m in Regex.Matches(imp, "fleetDraft\\??\\.([a-zA-Z]+)")) fields.Add("settings.fleetActions." + m.Groups[1].Value);
             string rh = File.ReadAllText(Path.Combine(Src(), "components", "vessels", "health", "RepositoryHealthSettingsSection.tsx"));
             foreach (Match m in Regex.Matches(rh, "settings\\??\\.([a-zA-Z]+)")) fields.Add("settings.repositoryHealth." + m.Groups[1].Value);
-            foreach (Match m in Regex.Matches(rh, "\\{ key: '([a-zA-Z]+)', label: msg\\("))
+            // The field tables (REPOSITORY_HEALTH_FIELDS, ..._THRESHOLD_FIELDS) live in lib/settingsRanges.ts, shared with the mobile app.
+            string ranges = File.ReadAllText(Path.Combine(Src(), "lib", "settingsRanges.ts"));
+            MatchCollection rhKeys = Regex.Matches(rh + ranges, "\\{ key: '([a-zA-Z]+)', label: msg\\(");
+            if (rhKeys.Count == 0) throw new InvalidOperationException("Repository health field tables not found in the dashboard source; update SettingsFields().");
+            foreach (Match m in rhKeys)
             {
                 string key = m.Groups[1].Value;
                 bool threshold = key.EndsWith("Warn", StringComparison.Ordinal) || key.EndsWith("Fail", StringComparison.Ordinal);
@@ -148,13 +152,15 @@ namespace Test.Shared.Infrastructure
 
             string perm = File.ReadAllText(Path.Combine(Src(), "components", "settings", "CliPermissionSettings.tsx"));
             Match draft = Regex.Match(perm, "interface Draft \\{([^}]*)\\}");
+            if (!draft.Success) throw new InvalidOperationException("CliPermissionSettings Draft interface not found in the dashboard source; update SettingsFields().");
             if (draft.Success)
             {
                 foreach (Match f in Regex.Matches(draft.Groups[1].Value, "^\\s*([a-zA-Z]+):", RegexOptions.Multiline)) fields.Add("settings.permissions." + f.Groups[1].Value);
             }
 
-            string ret = File.ReadAllText(Path.Combine(Src(), "components", "settings", "RetentionSettings.tsx"));
-            Match retention = Regex.Match(ret, "const FIELDS: RetentionField\\[\\] = \\[([^\\]]*)\\]");
+            // RETENTION_FIELDS lives in lib/settingsRanges.ts, shared with the mobile app.
+            Match retention = Regex.Match(ranges, "const RETENTION_FIELDS: RetentionField\\[\\] = \\[([^\\]]*)\\]");
+            if (!retention.Success) throw new InvalidOperationException("RETENTION_FIELDS not found in the dashboard source; update SettingsFields().");
             if (retention.Success)
             {
                 foreach (Match f in Regex.Matches(retention.Groups[1].Value, "'([a-zA-Z]+)'")) fields.Add("settings.retention." + f.Groups[1].Value);

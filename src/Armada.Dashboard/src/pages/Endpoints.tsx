@@ -24,9 +24,12 @@ import PageHeader from '../components/shared/PageHeader';
 import StatusBadge from '../components/shared/StatusBadge';
 import HealthHistogram from '../components/shared/HealthHistogram';
 import CopyButton from '../components/shared/CopyButton';
+import { formatHealthSpan, MODEL_ENDPOINT_KINDS, MODEL_PROVIDERS, unsupportedEndpointReason } from '../lib/configuration';
 
-const PROVIDERS: ModelProvider[] = ['Ollama', 'OpenAI', 'OpenAICompatible', 'Anthropic', 'Gemini', 'VoyageAI', 'AzureOpenAI', 'VertexAI', 'Bedrock'];
-const KINDS: ModelEndpointKind[] = ['Embedding', 'Inference'];
+const PROVIDERS = MODEL_PROVIDERS;
+const KINDS = MODEL_ENDPOINT_KINDS;
+const formatSpan = (firstUtc: string | null) => formatHealthSpan(firstUtc);
+const unsupportedReason = unsupportedEndpointReason;
 
 interface EndpointForm {
   name: string;
@@ -64,26 +67,7 @@ const EMPTY_FORM: EndpointForm = {
   scope: 'TenantWide',
 };
 
-/** Humanize the span between the earliest retained probe and now, for the health modal. */
-function formatSpan(firstUtc: string | null): string {
-  if (!firstUtc) return '-';
-  const ms = Date.now() - new Date(firstUtc).getTime();
-  if (ms < 0) return '-';
-  const minutes = Math.floor(ms / 60000);
-  if (minutes < 1) return '<1m';
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ${minutes % 60}m`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ${hours % 24}h`;
-}
 
-/** Reason a provider/kind combination is invalid, or null when valid. Mirrors the server-side guard. */
-function unsupportedReason(provider: ModelProvider, kind: ModelEndpointKind): string | null {
-  if (kind === 'Embedding' && provider === 'Anthropic') return 'Anthropic does not provide an embeddings API. Choose Inference or a different provider.';
-  if (kind === 'Inference' && provider === 'VoyageAI') return 'Voyage AI provides embeddings only. Choose Embedding or a different provider.';
-  return null;
-}
 
 export default function Endpoints() {
   const { isAdmin, isTenantAdmin, user } = useAuth();

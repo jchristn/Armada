@@ -3,7 +3,7 @@
 > **Type:** implementation plan (work-tracking). Annotate task status and the progress log as you go; keep this
 > document in sync with what actually shipped.
 >
-> **Status:** In progress (W0, W1, W2, W3 and W5 done; W4 in progress; W2 Android verification pending)
+> **Status:** In progress (W0-W5 done; W6 in progress: security fixes merged, Android pass running)
 > **Built on:** React Native with Expo SDK 57 (TypeScript, Expo Router), in `src/Armada.Mobile`
 > **Parity baseline:** the web dashboard at `src/Armada.Dashboard` as of 2026-10-07 (the same surfaces the TUI parity
 > manifest tracks: page routes, hub tabs, server-calling API client functions, WebSocket events, Server-page settings)
@@ -160,11 +160,11 @@ selection) are recorded per entry in the manifest notes.
 - [x] W3.3 Planning sessions, Backlog and objective refinement
 
 ### W4. Delivery, Configuration, Activity, System
-- [ ] W4.1 Delivery hub (environments, deployments, incidents, runbooks, releases, check runs)
-- [ ] W4.2 Configuration hub (personas, pipelines, prompts, playbooks, skills, memories, project and workflow
+- [x] W4.1 Delivery hub (environments, deployments, incidents, runbooks, releases, check runs)
+- [x] W4.2 Configuration hub (personas, pipelines, prompts, playbooks, skills, memories, project and workflow
   profiles, harbors, model endpoints)
-- [ ] W4.3 Activity hub (all activity, API requests, events, signals, token usage)
-- [ ] W4.4 CLI Tool Permissions, Server hub (settings incl. Default Landing Mode, users, tenants, credentials,
+- [x] W4.3 Activity hub (all activity, API requests, events, signals, token usage)
+- [x] W4.4 CLI Tool Permissions, Server hub (settings incl. Default Landing Mode, users, tenants, credentials,
   backup/restore via share sheet and document picker, rebuild), Setup wizard
 
 ### W5. Push and remote access
@@ -209,3 +209,4 @@ Milestone C: push, proxy, quality pass, store-ready builds.
 | 2026-10-07 | W3 | work/mobile-w3 | Build: Vessels hub (vessels, health, fleets, workspace), vessel page and form with landing mode, branches, import wizard, View History; Captains (chat, tool access, CLI policy, Docks tab embeds W2's list), Fleet Actions; Planning, Backlog and refinement (embedded in Dispatch Backlog tab); shared lib extractions; Jest 543; Maestro 9/9 on iPhone 17 and Armada_Phone; iPad split checked. For W6: iPad portrait list density, Save under the iOS tab bar on long forms, captain create auto-approve default, W4 /releases/new and /delivery?tab=checks must read Backlog/Vessels query params |
 | 2026-10-07 | W6.4 | work/mobile-security | Review: 18 findings F-39..F-56 (3 Medium, 10 Low, 5 Info). Fixed: registered-device-only push actions, Approve opens the full request, new device id on owner change, per-user device cap, no proxy cookie for native logins, bounded proxy challenges, privacy cover, Not encrypted mark, scoped notification history, http(s)-only links with host confirmation, safe deep-link ids, mobile npm audit in CI; Jest 589, server suites 92/92, PushDevices on 4 providers. Open: F-41/F-50 (work/mobile-faceid), F-56 (W4) |
 | 2026-10-07 | Face ID | work/mobile-faceid | Saved password behind biometrics (Keychain/Keystore, current biometry set), Face ID sign-in with one auto-prompt, one-time offer sheet, Preferences and server-form settings, sign-out forget option, password change updates it; F-41 (biometric bypasses on retry and proxy re-sign-in) and F-50 (retired device after offline sign-out) fixed; Jest 631. Open: 06-build-vessels landing mode option and the proxy flow's Preferences tap fail on iOS (pre-existing) |
+| 2026-10-07 | W4 | work/mobile-w4 | Resource kit (live loads, lists, form sheets, hubs, tablet split); Delivery, Configuration (10 tabs, 8 detail routes), Activity (history, API requests, W2 events/signals, token usage, jobs), Settings (all sections incl. Default Landing Mode and Push with redacted secrets, diagnostics, tenants/users/credentials, rebuild), backup/restore per F-56, CLI Tool Permissions, API Explorer with replay, /setup wizard; 14 shared lib extractions; parity 524 implemented (1 planned: getEntity); Jest 782 after merge; Maestro iPhone 18 Pro 10/10, tablet flow on iPad mini (landscape) and Armada_Tablet. Parity scanners fixed to read lib/settingsRanges.ts |

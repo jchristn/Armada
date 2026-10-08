@@ -16,6 +16,7 @@ import {
 import MuxRuntimeFields from './captains/MuxRuntimeFields';
 import { buildMuxRuntimeOptionsJson, EMPTY_MUX_CAPTAIN_FORM, isMuxRuntime, type MuxCaptainFormFields } from '../lib/mux';
 import { SETUP_LANDING_MODES, setupLandingModeHint, setupLandingWorkingDirectoryError } from '../lib/setupLanding';
+import { idShort, normalizeMissionResponse, relevantWorkflowProfiles, SETTLED_MISSION_STATUSES, SETUP_STEPS, SETUP_TOOLTIPS, upsertById } from '../lib/setupWizard';
 import type { Captain, DeploymentEnvironment, Fleet, Mission, Vessel, VesselReadinessResult, WorkflowProfile } from '../types/models';
 import { useLocale } from '../context/LocaleContext';
 import MissionFailureDetails, { FAILED_MISSION_STATUSES } from './shared/MissionFailureDetails';
@@ -60,11 +61,6 @@ export interface SetupWizardProps {
 type ResourceMode = 'existing' | 'new';
 type ResultKind = 'success' | 'error' | 'info';
 
-interface WizardStep {
-  title: string;
-  summary: string;
-}
-
 interface StepResult {
   kind: ResultKind;
   message: string;
@@ -101,65 +97,11 @@ interface DispatchForm {
   priority: number;
 }
 
-const steps: WizardStep[] = [
-  { title: 'Objective', summary: 'Configure Armada to dispatch one safe first mission.' },
-  { title: 'Fleet', summary: 'Create or choose the group that owns your repository.' },
-  { title: 'Vessel', summary: 'Register the git repository that captains will work in.' },
-  { title: 'Captain', summary: 'Create or choose an AI runtime so dispatch has capacity.' },
-  { title: 'Dispatch', summary: 'Send a low-risk onboarding mission directly to Armada.' },
-  { title: 'Handoff', summary: 'Refresh the mission and continue into onboarding, backlog, planning, and delivery setup.' },
-];
-
-const tooltips = {
-  fleetSelect: 'Choose an existing fleet to group this setup vessel under.',
-  fleetName: 'Name for the fleet that will organize one or more related repositories.',
-  fleetDescription: 'Optional notes describing what repositories belong in this fleet.',
-  vesselSelect: 'Choose the existing git repository Armada should dispatch the setup mission to.',
-  vesselName: 'Display name for this repository inside Armada.',
-  defaultBranch: 'Default branch Armada should branch from when creating mission worktrees.',
-  repoUrl: 'Git clone URL or local repository path for the repository Armada will manage.',
-  workingDirectory: 'Optional path to your local checkout, used for local landing and git status checks.',
-  landingMode: 'Controls how completed mission work is landed. None keeps the work on a branch for you to review; Local Merge merges it into the working directory without pushing; Merge and Push also pushes it to that checkout\'s origin remote.',
-  enableModelContext: 'Allow captains to save useful repository knowledge back onto the vessel for future missions.',
-  allowConcurrentMissions: 'Allow more than one mission to run on this vessel at the same time.',
-  projectContext: 'Optional architecture, build, test, and dependency notes injected into captain prompts.',
-  styleGuide: 'Optional coding conventions, naming rules, and library preferences for captains.',
-  captainSelect: 'Choose an idle captain that is currently available for mission assignment.',
-  captainName: 'Display name for the AI agent runtime registered with Armada.',
-  runtime: 'AI agent runtime Armada should launch for missions assigned to this captain.',
-  model: 'Optional runtime-specific model override. Leave blank to use the runtime default.',
-  systemInstructions: 'Optional instructions injected into every mission handled by this captain.',
-  muxConfigDirectory: 'Optional mux config directory override for loading saved endpoints.',
-  muxEndpoint: 'Required named mux endpoint when the captain runtime is Mux.',
-  missionTitle: 'Short title for the direct setup mission created by dispatch.',
-  missionDescription: 'Full task instructions sent to the captain for this setup dispatch.',
-  priority: 'Scheduling priority for the mission. Lower values are higher priority in Armada.',
-};
-
-const SETTLED_MISSION_STATUSES = new Set(['Complete', 'Failed', 'Cancelled', 'WorkProduced', 'LandingFailed', 'PullRequestOpen']);
-
-function upsertById<T extends { id: string }>(items: T[], item: T): T[] {
-  const found = items.some((existing) => existing.id === item.id);
-  if (found) return items.map((existing) => (existing.id === item.id ? item : existing));
-  return [item, ...items];
-}
+const steps = SETUP_STEPS;
+const tooltips = SETUP_TOOLTIPS;
 
 function normalizeError(error: unknown): string {
   return error instanceof Error ? error.message : 'Request failed.';
-}
-
-function normalizeMissionResponse(value: unknown): { mission: Mission | null; warning?: string } {
-  const maybeWrapped = value as { mission?: Mission; warning?: string } | null;
-  if (maybeWrapped?.mission?.id) {
-    return { mission: maybeWrapped.mission, warning: maybeWrapped.warning };
-  }
-
-  const maybeMission = value as Mission | null;
-  return maybeMission?.id ? { mission: maybeMission } : { mission: null };
-}
-
-function idShort(id?: string | null): string {
-  return id ? id.slice(0, 12) : '-';
 }
 
 function WizardExplanation({ title, children }: { title: string; children: ReactNode }) {
@@ -387,12 +329,7 @@ export default function SetupWizard({ onClose, onHighlightChange }: SetupWizardP
 
         if (!mounted) return;
 
-        const relevantProfiles = (profileResult.objects || []).filter((profile) => {
-          if (profile.scope === 'Global') return true;
-          if (profile.scope === 'Fleet' && activeFleetId) return profile.fleetId === activeFleetId;
-          if (profile.scope === 'Vessel') return profile.vesselId === activeVesselId;
-          return false;
-        });
+        const relevantProfiles = relevantWorkflowProfiles(profileResult.objects || [], activeFleetId, activeVesselId);
 
         setReadiness(loadedReadiness);
         setMatchingProfiles(relevantProfiles);

@@ -41,10 +41,10 @@ describe('hubs serve the sections already built', () => {
   it('maps hub queries to sections', () => {
     // The Captains hub is a real screen now; its Docks tab embeds the list itself.
     expect(embeddedSectionFor('/captains', { tab: 'docks' })).toBeNull();
-    expect(embeddedSectionFor('/activity', { source: ['signals'] })?.key).toBe('signals');
-    expect(embeddedSectionFor('/activity', { source: 'history' })).toBeNull();
+    // The Activity hub (W4.3) is a real screen too; it embeds the Events and Signals lists itself.
+    expect(embeddedSectionFor('/activity', { source: ['signals'] })).toBeNull();
     expect(embeddedSectionFor('/vessels', { tab: 'docks' })).toBeNull();
-    expect(Object.keys(EMBEDDED_SECTIONS['/activity'].sections)).toEqual(['events', 'signals']);
+    expect(EMBEDDED_SECTIONS).toEqual({});
   });
 
   it('/captains?tab=docks shows the Docks list in the Captains hub; a row pushes the dock on phones', async () => {
@@ -53,23 +53,6 @@ describe('hubs serve the sections already built', () => {
     expect(await screen.findByTestId('docks-list')).toBeTruthy();
     await fireEvent.press(await screen.findByTestId('dock-row-dck_1'));
     expect(mockRouter.push).toHaveBeenCalledWith('/docks/dck_1');
-  });
-
-  it('on tablets the detail opens beside the list', async () => {
-    mockWindow.width = 1180;
-    setMockParams({ source: 'signals' });
-    await renderScreen(<RoutePlaceholder pattern="/activity" />);
-    await fireEvent.press(await screen.findByTestId('signal-row-sig_1'));
-    expect(await screen.findByTestId('signal-detail')).toBeTruthy();
-    expect(screen.getByTestId('split-view')).toBeTruthy();
-    expect(mockRouter.push).not.toHaveBeenCalledWith('/signals/sig_1');
-  });
-
-  it('without a section the hub placeholder lists the built sections', async () => {
-    await renderScreen(<RoutePlaceholder pattern="/activity" />);
-    expect(await screen.findByTestId('route-placeholder-title')).toBeTruthy();
-    await fireEvent.press(screen.getByTestId('route-placeholder-section-events'));
-    expect(mockRouter.setParams).toHaveBeenCalledWith({ source: 'events' });
   });
 
   it('other placeholders are unchanged', async () => {

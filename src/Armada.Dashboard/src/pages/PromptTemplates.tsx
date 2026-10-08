@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPromptTemplate, listPromptTemplates, resetPromptTemplate } from '../api/client';
+import { PROMPT_TEMPLATE_CATEGORIES } from '../lib/configuration';
 import type { PromptTemplate } from '../types/models';
 import { useAuth } from '../context/AuthContext';
 import { canEdit as canEditScoped, type ScopeViewer } from '../lib/scoping';
@@ -21,7 +22,7 @@ import { buildPromptTemplateDuplicatePayload } from '../lib/duplicates';
 type SortDir = 'asc' | 'desc';
 type SortField = 'name' | 'description' | 'category' | 'isBuiltIn' | 'contentLength' | 'active' | 'lastUpdateUtc';
 
-const CATEGORY_OPTIONS = ['all', 'mission', 'persona', 'structure', 'commit', 'landing', 'agent', 'import'] as const;
+const CATEGORY_OPTIONS = ['all', ...PROMPT_TEMPLATE_CATEGORIES] as const;
 
 export default function PromptTemplates() {
   const navigate = useNavigate();

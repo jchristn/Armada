@@ -32,9 +32,8 @@ import CopyButton from '../components/shared/CopyButton';
 import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
 import StatusBadge from '../components/shared/StatusBadge';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
+import { INCIDENT_SEVERITIES, INCIDENT_STATUSES } from '../lib/deliveryForms';
 
-const INCIDENT_STATUSES: IncidentStatus[] = ['Open', 'Monitoring', 'Mitigated', 'RolledBack', 'Closed'];
-const INCIDENT_SEVERITIES: IncidentSeverity[] = ['Critical', 'High', 'Medium', 'Low'];
 
 interface IncidentPageState {
   prefill?: Record<string, unknown>;

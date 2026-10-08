@@ -23,41 +23,7 @@ import ErrorModal from '../components/shared/ErrorModal';
 import JsonViewer from '../components/shared/JsonViewer';
 import PageHeader from '../components/shared/PageHeader';
 import { buildEnvironmentDuplicatePayload } from '../lib/duplicates';
-
-const ENVIRONMENT_KINDS: EnvironmentKind[] = ['Development', 'Test', 'Staging', 'Production', 'CustomerHosted', 'Custom'];
-
-function parseHeaderLines(value: string) {
-  const headers: Record<string, string> = {};
-  for (const rawLine of value.split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line) continue;
-    const separatorIndex = line.indexOf(':');
-    if (separatorIndex < 1) continue;
-    const key = line.substring(0, separatorIndex).trim();
-    const headerValue = line.substring(separatorIndex + 1).trim();
-    if (!key) continue;
-    headers[key] = headerValue;
-  }
-  return headers;
-}
-
-function serializeHeaderLines(value: Record<string, string> | null | undefined) {
-  return Object.entries(value || {}).map(([key, headerValue]) => `${key}: ${headerValue}`).join('\n');
-}
-
-function createVerificationDefinition(): DeploymentVerificationDefinition {
-  return {
-    id: `dvd_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-    name: 'Verification',
-    method: 'GET',
-    path: '/health',
-    requestBody: null,
-    headers: {},
-    expectedStatusCode: 200,
-    mustContainText: null,
-    active: true,
-  };
-}
+import { createVerificationDefinition, ENVIRONMENT_KINDS, parseHeaderLines, serializeHeaderLines } from '../lib/environmentForm';
 
 export default function EnvironmentDetail() {
   const { id } = useParams<{ id: string }>();

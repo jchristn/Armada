@@ -11,7 +11,6 @@ import {
   listRequestHistory,
 } from '../api/client';
 import type {
-  RequestHistoryDetail,
   RequestHistoryEntry,
   RequestHistoryQuery,
   RequestHistoryRecord,
@@ -27,16 +26,19 @@ import { useAutoRefresh } from '../lib/useAutoRefresh';
 import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
 import { useAuth } from '../context/AuthContext';
-import { formatBytes, parseJsonString } from '../lib/format';
-
-type ActivityRangeId = 'lastHour' | 'lastDay' | 'lastWeek' | 'lastMonth';
-
-interface ActivityRangeOption {
-  id: ActivityRangeId;
-  label: string;
-  bucketMinutes: number;
-  sliceCount: number;
-}
+import { formatBytes } from '../lib/format';
+import {
+  ACTIVITY_RANGE_OPTIONS,
+  buildReplayState,
+  buildRequestHistoryQuery,
+  buildRequestHistorySummaryQuery,
+  defaultRequestHistoryFilters,
+  hasActiveRequestFilters,
+  normalizeSummaryBuckets,
+  requestDetailMaps,
+  type ActivityRangeId,
+  type RequestHistoryFilters,
+} from '../lib/requestHistory';
 
 interface HistoryChartTooltipState {
   bucket: RequestHistorySummaryBucket;
@@ -44,34 +46,7 @@ interface HistoryChartTooltipState {
   clientY: number;
 }
 
-interface FiltersState {
-  method: string;
-  route: string;
-  statusCode: string;
-  principal: string;
-  tenantId: string;
-  userId: string;
-  credentialId: string;
-  isSuccess: 'all' | 'true' | 'false';
-  fromUtc: string;
-  toUtc: string;
-}
-
-const ACTIVITY_RANGE_OPTIONS: ActivityRangeOption[] = [
-  { id: 'lastHour', label: 'Last Hour', bucketMinutes: 1, sliceCount: 60 },
-  { id: 'lastDay', label: 'Last Day', bucketMinutes: 15, sliceCount: 96 },
-  { id: 'lastWeek', label: 'Last Week', bucketMinutes: 120, sliceCount: 84 },
-  { id: 'lastMonth', label: 'Last Month', bucketMinutes: 720, sliceCount: 60 },
-];
-
-function toLocalInputValue(date: Date) {
-  const offsetMs = date.getTimezoneOffset() * 60000;
-  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
-}
-
-function buildApiDate(value: string) {
-  return value ? new Date(value).toISOString() : undefined;
-}
+type FiltersState = RequestHistoryFilters;
 
 function formatChartLabel(value: string, rangeId: ActivityRangeId) {
   const date = new Date(value);
@@ -82,49 +57,6 @@ function formatChartLabel(value: string, rangeId: ActivityRangeId) {
     return date.toLocaleString([], { weekday: 'short', hour: 'numeric' });
   }
   return date.toLocaleString([], { month: 'short', day: 'numeric' });
-}
-
-function floorToBucketTimestamp(value: string, bucketMs: number) {
-  return Math.floor(new Date(value).getTime() / bucketMs) * bucketMs;
-}
-
-function getActivityRangeConfig(rangeId: ActivityRangeId) {
-  return ACTIVITY_RANGE_OPTIONS.find((option) => option.id === rangeId) ?? ACTIVITY_RANGE_OPTIONS[1];
-}
-
-function getActivityRangeWindow(rangeId: ActivityRangeId, now = new Date()) {
-  const config = getActivityRangeConfig(rangeId);
-  const bucketMs = config.bucketMinutes * 60 * 1000;
-  const endExclusiveMs = Math.floor(now.getTime() / bucketMs) * bucketMs + bucketMs;
-  const startMs = endExclusiveMs - config.sliceCount * bucketMs;
-  return {
-    ...config,
-    bucketMs,
-    startMs,
-    endExclusiveMs,
-    startUtc: new Date(startMs),
-    endUtc: new Date(endExclusiveMs - 1),
-  };
-}
-
-function normalizeSummaryBuckets(summary: RequestHistorySummaryResult | null, rangeId: ActivityRangeId) {
-  const range = getActivityRangeWindow(rangeId);
-  const apiBuckets = new Map<number, RequestHistorySummaryBucket>(
-    (summary?.buckets || []).map((bucket) => [floorToBucketTimestamp(bucket.bucketStartUtc, range.bucketMs), bucket]),
-  );
-
-  return Array.from({ length: range.sliceCount }, (_, index) => {
-    const bucketStartMs = range.startMs + index * range.bucketMs;
-    const source = apiBuckets.get(bucketStartMs);
-    return {
-      bucketStartUtc: new Date(bucketStartMs).toISOString(),
-      bucketEndUtc: new Date(bucketStartMs + range.bucketMs).toISOString(),
-      totalCount: source?.totalCount || 0,
-      successCount: source?.successCount || 0,
-      failureCount: source?.failureCount || 0,
-      averageDurationMs: source?.averageDurationMs || 0,
-    };
-  });
 }
 
 function getTooltipPosition(clientX: number, clientY: number) {
@@ -301,19 +233,6 @@ function RequestDetailBlock({
   );
 }
 
-function buildReplayState(record: RequestHistoryRecord) {
-  const detail = record.detail;
-  return {
-    method: record.entry.method,
-    route: record.entry.route,
-    routeTemplate: record.entry.routeTemplate,
-    queryValues: parseJsonString<Record<string, string | null>>(detail?.queryParamsJson, {}),
-    headerValues: parseJsonString<Record<string, string | null>>(detail?.requestHeadersJson, {}),
-    bodyValue: detail?.requestBodyText || '',
-    pathValues: parseJsonString<Record<string, string | null>>(detail?.pathParamsJson, {}),
-  };
-}
-
 export default function RequestHistory() {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -321,18 +240,7 @@ export default function RequestHistory() {
   const { pushToast } = useNotifications();
   const { isAdmin, isTenantAdmin } = useAuth();
 
-  const defaultFilters = useMemo<FiltersState>(() => ({
-    method: '',
-    route: '',
-    statusCode: '',
-    principal: '',
-    tenantId: '',
-    userId: '',
-    credentialId: '',
-    isSuccess: 'all',
-    fromUtc: toLocalInputValue(new Date(Date.now() - 24 * 60 * 60 * 1000)),
-    toUtc: toLocalInputValue(new Date()),
-  }), []);
+  const defaultFilters = useMemo<FiltersState>(() => defaultRequestHistoryFilters(), []);
 
   const [filters, setFilters] = useState<FiltersState>(defaultFilters);
   // Filters are a supporting control surface, not the primary content, so the section starts collapsed.
@@ -355,48 +263,11 @@ export default function RequestHistory() {
   const [deleteSelectedOpen, setDeleteSelectedOpen] = useState(false);
   const [deleteFilteredOpen, setDeleteFilteredOpen] = useState(false);
 
-  const query = useMemo<RequestHistoryQuery>(() => ({
-    pageNumber,
-    pageSize,
-    method: filters.method || undefined,
-    route: filters.route || undefined,
-    principal: filters.principal || undefined,
-    tenantId: filters.tenantId || undefined,
-    userId: filters.userId || undefined,
-    credentialId: filters.credentialId || undefined,
-    statusCode: filters.statusCode ? Number(filters.statusCode) : undefined,
-    isSuccess: filters.isSuccess === 'all' ? undefined : filters.isSuccess === 'true',
-    fromUtc: buildApiDate(filters.fromUtc),
-    toUtc: buildApiDate(filters.toUtc),
-  }), [filters, pageNumber, pageSize]);
+  const query = useMemo<RequestHistoryQuery>(() => buildRequestHistoryQuery(filters, pageNumber, pageSize), [filters, pageNumber, pageSize]);
 
-  const summaryQuery = useMemo<RequestHistoryQuery>(() => {
-    const range = getActivityRangeWindow(activityRange);
-    return {
-      method: filters.method || undefined,
-      route: filters.route || undefined,
-      principal: filters.principal || undefined,
-      tenantId: filters.tenantId || undefined,
-      userId: filters.userId || undefined,
-      credentialId: filters.credentialId || undefined,
-      statusCode: filters.statusCode ? Number(filters.statusCode) : undefined,
-      isSuccess: filters.isSuccess === 'all' ? undefined : filters.isSuccess === 'true',
-      fromUtc: range.startUtc.toISOString(),
-      toUtc: range.endUtc.toISOString(),
-      bucketMinutes: range.bucketMinutes,
-    };
-  }, [activityRange, filters]);
+  const summaryQuery = useMemo<RequestHistoryQuery>(() => buildRequestHistorySummaryQuery(filters, activityRange), [activityRange, filters]);
 
-  const hasActiveFilters = useMemo(() => (
-    filters.method !== ''
-    || filters.route !== ''
-    || filters.statusCode !== ''
-    || filters.principal !== ''
-    || filters.tenantId !== ''
-    || filters.userId !== ''
-    || filters.credentialId !== ''
-    || filters.isSuccess !== 'all'
-  ), [filters]);
+  const hasActiveFilters = useMemo(() => hasActiveRequestFilters(filters), [filters]);
 
   const allSelected = entries.length > 0 && entries.length === selectedIds.length;
 
@@ -519,12 +390,7 @@ export default function RequestHistory() {
     }
   }, [loadEntries, loadSummary, pushToast, query, t]);
 
-  const detailHeaders = useMemo(() => ({
-    query: parseJsonString<Record<string, string | null>>(detailRecord?.detail?.queryParamsJson, {}),
-    path: parseJsonString<Record<string, string | null>>(detailRecord?.detail?.pathParamsJson, {}),
-    request: parseJsonString<Record<string, string | null>>(detailRecord?.detail?.requestHeadersJson, {}),
-    response: parseJsonString<Record<string, string | null>>(detailRecord?.detail?.responseHeadersJson, {}),
-  }), [detailRecord]);
+  const detailHeaders = useMemo(() => requestDetailMaps(detailRecord), [detailRecord]);
 
   const columns: DataTableColumn<RequestHistoryEntry>[] = [
     {

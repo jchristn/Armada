@@ -9,6 +9,7 @@ import {
   previewPersonaPrompt,
   updateProjectProfile,
 } from '../api/client';
+import { blankPersonaOverride, KNOWN_PERSONAS, splitList } from '../lib/configuration';
 import type { Fleet, PersonaOverride, PersonaPromptPreview, ProjectProfile, Vessel } from '../types/models';
 import { useAuth } from '../context/AuthContext';
 import { useLocale } from '../context/LocaleContext';
@@ -21,15 +22,8 @@ import PageHeader from '../components/shared/PageHeader';
 import StatusBadge from '../components/shared/StatusBadge';
 import { canEdit as canEditScoped, type ScopeViewer } from '../lib/scoping';
 
-const KNOWN_PERSONAS = ['Product Manager', 'Architect', 'Worker', 'Test Engineer', 'Judge', 'Usability Engineer'];
 
-function splitList(value: string): string[] {
-  return value.split(/\r?\n|,/).map((item) => item.trim()).filter(Boolean);
-}
 
-function blankOverride(): PersonaOverride {
-  return { personaName: 'Architect', promptTemplateName: null, additionalInstructions: null, enabled: true };
-}
 
 export default function ProjectProfileDetail() {
   const { id } = useParams<{ id: string }>();
@@ -284,7 +278,7 @@ export default function ProjectProfileDetail() {
         <div className="view-header" style={{ marginBottom: '0.5rem' }}>
           <h3>{t('Persona Overrides')}</h3>
           {canManage && (
-            <button className="btn" onClick={() => setOverrides((c) => [...c, blankOverride()])}>+ {t('Override')}</button>
+            <button className="btn" onClick={() => setOverrides((c) => [...c, blankPersonaOverride()])}>+ {t('Override')}</button>
           )}
         </div>
         <p className="text-dim" style={{ marginTop: 0 }}>

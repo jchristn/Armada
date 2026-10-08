@@ -5,11 +5,7 @@ import { useSplitSelection } from '../components/app/useSplitSelection';
 import { AppText, Button, SplitView } from '../components/ui';
 import { useLocale } from '../i18n/LocaleContext';
 import { spacing } from '../theme/typography';
-import { EventDetail } from './operations/EventDetail';
-import { EventsList } from './operations/EventsList';
 import type { OperationsDetailProps, OperationsListProps } from './operations/listTypes';
-import { SignalDetail } from './operations/SignalDetail';
-import { SignalsList } from './operations/SignalsList';
 
 /** A list built ahead of the hub that hosts it on the dashboard (for example Docks before the Captains hub). */
 export interface EmbeddedSection {
@@ -27,20 +23,11 @@ export interface EmbeddedHub {
 }
 
 /**
- * Placeholder hubs that already serve some of their sections. The dashboard shows Signals and Events as Activity
- * sources (/activity?source=..., W4.3); W2.4 built those lists first, so the hub placeholder serves them until W4.3
- * replaces the hub screen (which then embeds the same list components). The Captains hub (W3.2) embeds the Docks
- * list in its Docks tab.
+ * Placeholder hubs that already serve some of their sections. None remain: the Captains hub (W3.2) embeds the Docks
+ * list in its Docks tab, and the Activity hub (W4.3) embeds the Events and Signals lists. Kept so a later list built
+ * ahead of its hub can be served the same way.
  */
-export const EMBEDDED_SECTIONS: Record<string, EmbeddedHub> = {
-  '/activity': {
-    param: 'source',
-    sections: {
-      events: { label: 'Events', List: EventsList, Detail: EventDetail, route: (id) => `/events/${id}` },
-      signals: { label: 'Signals', List: SignalsList, Detail: SignalDetail, route: (id) => `/signals/${id}` },
-    },
-  },
-};
+export const EMBEDDED_SECTIONS: Record<string, EmbeddedHub> = {};
 
 /** Pure: the embedded section a placeholder route and its query select, if any. */
 export function embeddedSectionFor(pattern: string, params: Record<string, string | string[] | undefined>): { key: string; section: EmbeddedSection } | null {

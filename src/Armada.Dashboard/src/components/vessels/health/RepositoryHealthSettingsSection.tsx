@@ -3,51 +3,12 @@ import { getSettings, updateSettings } from '../../../api/client';
 import { useAuth } from '../../../context/AuthContext';
 import { useLocale } from '../../../context/LocaleContext';
 import { useNotifications } from '../../../context/NotificationContext';
-import type { RepositoryHealthSettings, RepositoryHealthThresholds, VesselHealthCriterion } from '../../../types/models';
-import { HEALTH_CRITERIA, criterionLabel, formatCount, msg } from '../../../lib/health/healthText';
+import type { RepositoryHealthSettings, VesselHealthCriterion } from '../../../types/models';
+import { mergeRepositoryHealth, REPOSITORY_HEALTH_FIELDS, REPOSITORY_HEALTH_THRESHOLD_FIELDS, validateRange, type NumericFieldDef } from '../../../lib/settingsRanges';
+import { HEALTH_CRITERIA, criterionLabel, formatCount } from '../../../lib/health/healthText';
 import './vesselHealth.css';
 
-type NumericSettingKey = 'intervalMinutes' | 'maxConcurrency' | 'dependencyMaxAgeHours' | 'dependencyCommandTimeoutSeconds' | 'staleBranchDays' | 'missionWindowDays';
-type ThresholdKey = keyof RepositoryHealthThresholds;
-
-interface NumericFieldDef<K extends string> {
-  key: K;
-  label: string;
-  help: string;
-  min: number;
-  max: number;
-}
-
-/** Ranges mirror RepositoryHealthSettings.cs and RepositoryHealthThresholds.cs (the server clamps too). */
-export const REPOSITORY_HEALTH_FIELDS: NumericFieldDef<NumericSettingKey>[] = [
-  { key: 'intervalMinutes', label: msg('Evaluation interval (minutes)'), help: msg('Minutes between scheduled evaluations; 0 turns the schedule off.'), min: 0, max: 10080 },
-  { key: 'maxConcurrency', label: msg('Max concurrency'), help: msg('Vessels evaluated at the same time within one job.'), min: 1, max: 32 },
-  { key: 'dependencyMaxAgeHours', label: msg('Dependency result max age (hours)'), help: msg('Refresh dependency results after this long even when manifests are unchanged.'), min: 1, max: 720 },
-  { key: 'dependencyCommandTimeoutSeconds', label: msg('Dependency command timeout (seconds)'), help: msg('Timeout for each dotnet or npm call; a timeout grades Unknown.'), min: 10, max: 900 },
-  { key: 'staleBranchDays', label: msg('Stale branch age (days)'), help: msg('A branch whose last commit is older than this counts as stale.'), min: 1, max: 3650 },
-  { key: 'missionWindowDays', label: msg('Mission failure window (days)'), help: msg('Window for counting failed and landing-failed missions.'), min: 1, max: 90 },
-];
-
-export const REPOSITORY_HEALTH_THRESHOLD_FIELDS: NumericFieldDef<ThresholdKey>[] = [
-  { key: 'behindWarn', label: msg('Behind: warn at'), help: msg('Commits behind the default branch that warn.'), min: 1, max: 100000 },
-  { key: 'behindFail', label: msg('Behind: fail at'), help: msg('Commits behind the default branch that fail.'), min: 1, max: 100000 },
-  { key: 'staleBranchWarn', label: msg('Stale branches: warn at'), help: msg('Stale branches that warn.'), min: 1, max: 10000 },
-  { key: 'staleBranchFail', label: msg('Stale branches: fail at'), help: msg('Stale branches that fail.'), min: 1, max: 10000 },
-  { key: 'missionFailureWarn', label: msg('Failed missions: warn at'), help: msg('Recent failed missions that warn.'), min: 1, max: 1000 },
-  { key: 'missionFailureFail', label: msg('Failed missions: fail at'), help: msg('Recent failed missions that fail.'), min: 1, max: 1000 },
-];
-
-const DEFAULTS: RepositoryHealthSettings = {
-  intervalMinutes: 360,
-  maxConcurrency: 4,
-  fetchBeforeEvaluate: true,
-  dependencyMaxAgeHours: 24,
-  dependencyCommandTimeoutSeconds: 120,
-  staleBranchDays: 90,
-  missionWindowDays: 7,
-  scoredCriteria: ['GitDivergence', 'WorkingTree', 'Branches', 'Dependencies', 'Vulnerabilities', 'TestInfrastructure', 'ArmadaReadiness', 'MissionOutcomes'],
-  thresholds: { behindWarn: 1, behindFail: 21, staleBranchWarn: 4, staleBranchFail: 11, missionFailureWarn: 1, missionFailureFail: 3 },
-};
+export { REPOSITORY_HEALTH_FIELDS, REPOSITORY_HEALTH_THRESHOLD_FIELDS, validateRange } from '../../../lib/settingsRanges';
 
 type Drafts = Record<string, string>;
 
@@ -56,15 +17,6 @@ function toDrafts(s: RepositoryHealthSettings): Drafts {
   for (const f of REPOSITORY_HEALTH_FIELDS) d[f.key] = String(s[f.key]);
   for (const f of REPOSITORY_HEALTH_THRESHOLD_FIELDS) d[`thresholds.${f.key}`] = String(s.thresholds[f.key]);
   return d;
-}
-
-/** Returns an English error key for a numeric draft, or null when valid. */
-export function validateRange(raw: string, min: number, max: number): string | null {
-  const value = raw.trim();
-  if (!/^-?\d+$/.test(value)) return msg('Enter a whole number.');
-  const n = parseInt(value, 10);
-  if (n < min || n > max) return msg('Must be between {{min}} and {{max}}.');
-  return null;
 }
 
 /**
@@ -82,12 +34,7 @@ export default function RepositoryHealthSettingsSection({ locked = false }: { lo
   const [saving, setSaving] = useState(false);
 
   const apply = useCallback((source: Partial<RepositoryHealthSettings> | null | undefined) => {
-    const merged: RepositoryHealthSettings = {
-      ...DEFAULTS,
-      ...(source ?? {}),
-      thresholds: { ...DEFAULTS.thresholds, ...(source?.thresholds ?? {}) },
-      scoredCriteria: Array.isArray(source?.scoredCriteria) ? source!.scoredCriteria : DEFAULTS.scoredCriteria,
-    };
+    const merged: RepositoryHealthSettings = mergeRepositoryHealth(source);
     setSettings(merged);
     setDrafts(toDrafts(merged));
   }, []);

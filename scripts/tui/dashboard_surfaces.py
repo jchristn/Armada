@@ -85,17 +85,26 @@ def settings_fields():
     rh = read(os.path.join(DASH, "components", "vessels", "health", "RepositoryHealthSettingsSection.tsx"))
     for m in re.finditer(r"settings\??\.([a-zA-Z]+)", rh):
         fields.add("settings.repositoryHealth." + m.group(1))
-    for m in re.finditer(r"\{ key: '([a-zA-Z]+)', label: msg\(", rh):
-        key = m.group(1)
+    # The field tables (REPOSITORY_HEALTH_FIELDS, ..._THRESHOLD_FIELDS) live in lib/settingsRanges.ts, shared with the mobile app.
+    rh_fields = rh + read(os.path.join(DASH, "lib", "settingsRanges.ts"))
+    rh_keys = re.findall(r"\{ key: '([a-zA-Z]+)', label: msg\(", rh_fields)
+    if not rh_keys:
+        raise SystemExit("dashboard_surfaces: repository health field tables not found; update settings_fields()")
+    for key in rh_keys:
         prefix = "settings.repositoryHealth.thresholds." if key.endswith("Warn") or key.endswith("Fail") else "settings.repositoryHealth."
         fields.add(prefix + key)
     perm = read(os.path.join(DASH, "components", "settings", "CliPermissionSettings.tsx"))
     m = re.search(r"interface Draft \{([^}]*)\}", perm)
+    if not m:
+        raise SystemExit("dashboard_surfaces: CliPermissionSettings Draft interface not found; update settings_fields()")
     if m:
         for f in re.findall(r"^\s*([a-zA-Z]+):", m.group(1), re.M):
             fields.add("settings.permissions." + f)
-    ret = read(os.path.join(DASH, "components", "settings", "RetentionSettings.tsx"))
-    m = re.search(r"const FIELDS: RetentionField\[\] = \[([^\]]*)\]", ret)
+    # RETENTION_FIELDS lives in lib/settingsRanges.ts, shared with the mobile app.
+    ret = read(os.path.join(DASH, "lib", "settingsRanges.ts"))
+    m = re.search(r"const RETENTION_FIELDS: RetentionField\[\] = \[([^\]]*)\]", ret)
+    if not m:
+        raise SystemExit("dashboard_surfaces: RETENTION_FIELDS not found; update settings_fields()")
     if m:
         for f in re.findall(r"'([a-zA-Z]+)'", m.group(1)):
             fields.add("settings.retention." + f)

@@ -26,86 +26,11 @@ import {
   buildCheckRunComparisonMap,
   formatCheckRunComparisonScope,
   formatCheckRunComparisonSummary,
-} from './checkRunComparison';
-
-const ALL_CHECK_TYPES: CheckRunType[] = [
-  'Lint',
-  'Build',
-  'UnitTest',
-  'IntegrationTest',
-  'E2ETest',
-  'Migration',
-  'SecurityScan',
-  'Performance',
-  'Package',
-  'DeploymentVerification',
-  'RollbackVerification',
-  'PublishArtifact',
-  'ReleaseVersioning',
-  'Changelog',
-  'Deploy',
-  'Rollback',
-  'SmokeTest',
-  'HealthCheck',
-  'Custom',
-];
+} from '../lib/checkRunComparison';
+import { ALL_CHECK_TYPES, getAvailableCheckTypes, requiresEnvironment, summarizeRunParsing } from '../lib/deliveryForms';
 
 interface CheckRunPrefillState {
   prefill?: Partial<CheckRunRequest>;
-}
-
-function getAvailableCheckTypes(profile: WorkflowProfile | null): CheckRunType[] {
-  if (!profile) return ALL_CHECK_TYPES;
-
-  const types: CheckRunType[] = [];
-  if (profile.lintCommand) types.push('Lint');
-  if (profile.buildCommand) types.push('Build');
-  if (profile.unitTestCommand) types.push('UnitTest');
-  if (profile.integrationTestCommand) types.push('IntegrationTest');
-  if (profile.e2eTestCommand) types.push('E2ETest');
-  if (profile.migrationCommand) types.push('Migration');
-  if (profile.securityScanCommand) types.push('SecurityScan');
-  if (profile.performanceCommand) types.push('Performance');
-  if (profile.packageCommand) types.push('Package');
-  if (profile.deploymentVerificationCommand) types.push('DeploymentVerification');
-  if (profile.rollbackVerificationCommand) types.push('RollbackVerification');
-  if (profile.publishArtifactCommand) types.push('PublishArtifact');
-  if (profile.releaseVersioningCommand) types.push('ReleaseVersioning');
-  if (profile.changelogGenerationCommand) types.push('Changelog');
-  if (profile.environments.some((environment) => environment.deployCommand)) types.push('Deploy');
-  if (profile.environments.some((environment) => environment.rollbackCommand)) types.push('Rollback');
-  if (profile.environments.some((environment) => environment.smokeTestCommand)) types.push('SmokeTest');
-  if (profile.environments.some((environment) => environment.healthCheckCommand)) types.push('HealthCheck');
-  if (profile.environments.some((environment) => environment.deploymentVerificationCommand)) types.push('DeploymentVerification');
-  if (profile.environments.some((environment) => environment.rollbackVerificationCommand)) types.push('RollbackVerification');
-  return types.length > 0 ? types : ALL_CHECK_TYPES;
-}
-
-function requiresEnvironment(type: CheckRunType): boolean {
-  return type === 'Deploy'
-    || type === 'Rollback'
-    || type === 'SmokeTest'
-    || type === 'HealthCheck'
-    || type === 'DeploymentVerification'
-    || type === 'RollbackVerification';
-}
-
-function summarizeRunParsing(run: CheckRun) {
-  const parts: string[] = [];
-  if (run.testSummary) {
-    const testParts: string[] = [];
-    if (run.testSummary.passed != null) testParts.push(`${run.testSummary.passed} passed`);
-    if (run.testSummary.failed != null) testParts.push(`${run.testSummary.failed} failed`);
-    if (run.testSummary.skipped != null && run.testSummary.skipped > 0) testParts.push(`${run.testSummary.skipped} skipped`);
-    if (testParts.length > 0) parts.push(testParts.join(', '));
-  }
-
-  const lineCoverage = run.coverageSummary?.lines?.percentage;
-  const statementCoverage = run.coverageSummary?.statements?.percentage;
-  const coverage = lineCoverage ?? statementCoverage ?? null;
-  if (coverage != null) parts.push(`${coverage.toFixed(coverage % 1 === 0 ? 0 : 2)}% coverage`);
-
-  return parts.join(' | ');
 }
 
 export default function CheckRuns() {
