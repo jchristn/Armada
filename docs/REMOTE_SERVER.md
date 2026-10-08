@@ -440,8 +440,8 @@ Request sequence (`P` is the proxy session token, `A` the Admiral token):
    -> {"nonce":"<nonce>","expiresUtc":"..."}
 2. POST /proxy-api/v1/auth/login
    Content-Type: application/json
-   {"nonce":"<nonce>","proofSha256":"<sha256hex('proxy-browser-login:proxy:' + nonce + ':' + sha256hex(trim(password)))>"}
-   -> {"token":"<P>","expiresUtc":"...","selectedInstanceId":null}   (Cache-Control: no-store; 429 + Retry-After when locked out)
+   {"nonce":"<nonce>","proofSha256":"<sha256hex('proxy-browser-login:proxy:' + nonce + ':' + sha256hex(trim(password)))>","setCookie":false}
+   -> {"token":"<P>","expiresUtc":"...","selectedInstanceId":null}   (Cache-Control: no-store; no Set-Cookie; 429 + Retry-After when locked out)
 3. GET  /proxy-api/v1/instances
    Authorization: Bearer <P>
    -> {"count":1,"instances":[{"instanceId":"armada-...","state":"connected","capabilities":[...]}]}

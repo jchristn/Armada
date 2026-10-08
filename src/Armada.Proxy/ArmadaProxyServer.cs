@@ -214,7 +214,18 @@ namespace Armada.Proxy
         {
             MapJsonGet(server, "/proxy-api/v1/auth/challenge", (req) =>
             {
-                ProxyAuthService.ProxyAuthChallenge challenge = _Auth.CreateChallenge();
+                ProxyAuthService.ProxyAuthChallenge challenge;
+                try
+                {
+                    challenge = _Auth.CreateChallenge(ResolveRequesterIp(req.Http));
+                }
+                catch (ProxyChallengeLimitException limit)
+                {
+                    req.Http.Response.StatusCode = limit.Refusal == ProxyChallengeRefusalEnum.AddressLimit ? 429 : 503;
+                    req.Http.Response.Headers.Add("Retry-After", limit.RetryAfterSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                    return new { error = limit.Message, refusal = limit.Refusal };
+                }
+
                 return new
                 {
                     nonce = challenge.Nonce,
@@ -253,12 +264,18 @@ namespace Armada.Proxy
                 }
 
                 _LoginLimiter.RecordSuccess(clientKey);
-                req.Http.Response.Headers.Add("Set-Cookie", BuildSessionCookie(session!.Token, session.ExpiresUtc, IsSecureRequest(req.Http)));
+                // Native clients carry the token in a header and ask for no cookie (SetCookie: false), so the session
+                // never lands in the platform's cookie jar, outside the app's secure storage.
+                if (loginRequest.SetCookie != false)
+                {
+                    req.Http.Response.Headers.Add("Set-Cookie", BuildSessionCookie(session!.Token, session.ExpiresUtc, IsSecureRequest(req.Http)));
+                }
+
                 req.Http.Response.Headers.Add("Cache-Control", "no-store");
                 _Logging.Debug(_Header + "browser login accepted");
                 return new
                 {
-                    token = session.Token,
+                    token = session!.Token,
                     expiresUtc = session.ExpiresUtc,
                     selectedInstanceId = session.SelectedInstanceId
                 };

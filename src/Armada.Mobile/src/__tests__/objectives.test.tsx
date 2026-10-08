@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react-native';
 import { Slot } from 'expo-router';
 import { renderRouter } from 'expo-router/testing-library';
-import { Text } from 'react-native';
+import { Alert, Linking, Text } from 'react-native';
 import * as client from '@dashboard/api/client';
 import type { Objective, ObjectiveRefinementMessage, ObjectiveRefinementSession, ObjectiveRefinementSessionDetail } from '@dashboard/types/models';
 import { DEFAULT_BACKLOG_FILTERS } from '@dashboard/lib/backlogUtils';
@@ -251,6 +251,38 @@ describe('backlog item', () => {
     await fireEvent.press(screen.getByTestId('objective-delete'));
     await fireEvent.press(screen.getByTestId('objective-detail-delete-confirm-confirm'));
     await waitFor(() => expect(api.deleteBacklogItem).toHaveBeenCalledWith('obj_a'));
+  });
+
+  it('a source link with another scheme is shown but never opened', async () => {
+    const open = jest.spyOn(Linking, 'openURL').mockResolvedValue(true);
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    try {
+      api.getBacklogItem.mockResolvedValue(objective({ sourceProvider: 'GitHub', sourceUrl: 'sms:+15550100?body=pay' }));
+      await renderAt('/objectives/obj_a');
+      await waitFor(() => expect(screen.getByText('sms:+15550100?body=pay')).toBeTruthy());
+      await fireEvent.press(screen.getByText('Source Link'));
+      expect(alert).not.toHaveBeenCalled();
+      expect(open).not.toHaveBeenCalled();
+    } finally {
+      open.mockRestore();
+      alert.mockRestore();
+    }
+  });
+
+  it('an http(s) source link opens only after the destination host was shown', async () => {
+    const open = jest.spyOn(Linking, 'openURL').mockResolvedValue(true);
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    try {
+      api.getBacklogItem.mockResolvedValue(objective({ sourceProvider: 'GitHub', sourceUrl: 'https://evil.example/issues/1' }));
+      await renderAt('/objectives/obj_a');
+      await waitFor(() => expect(screen.getByText('https://evil.example/issues/1')).toBeTruthy());
+      await fireEvent.press(screen.getByText('Source Link'));
+      expect(alert).toHaveBeenCalledWith('Open evil.example?', expect.stringContaining('https://evil.example/issues/1'), expect.any(Array));
+      expect(open).not.toHaveBeenCalled();
+    } finally {
+      open.mockRestore();
+      alert.mockRestore();
+    }
   });
 
   it('starts a refinement session, streams the transcript live, summarizes, and applies', async () => {

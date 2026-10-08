@@ -17821,6 +17821,12 @@
       "experimental": false
     },
     {
+      "key": "push.maxDevicesPerUser",
+      "type": "int",
+      "default": "10",
+      "experimental": false
+    },
+    {
       "key": "push.maxPerUserPerMinute",
       "type": "int",
       "default": "20",

@@ -59,11 +59,16 @@ function idOrNull(value: unknown, prefix?: string): string | null {
  */
 export function appPathForPushLink(link: unknown): string | null {
   if (typeof link !== 'string' || link.length > 2048 || /[\u0000-\u001f\u007f]/.test(link) || isRootLink(link)) return null;
-  const mapped = appPathFromLink(link);
-  if (!mapped) return null;
-  const pathOnly = mapped.split(/[?#]/)[0];
-  if (!matchRoute(pathOnly) && !APP_ONLY_ROUTES.includes(pathOnly)) return null;
-  return mapped;
+  try {
+    const mapped = appPathFromLink(link);
+    if (!mapped) return null;
+    const pathOnly = mapped.split(/[?#]/)[0];
+    if (!matchRoute(pathOnly) && !APP_ONLY_ROUTES.includes(pathOnly)) return null;
+    return mapped;
+  } catch {
+    // Never let a malformed link (for example bad percent-encoding) drop the whole push: it just opens the app.
+    return null;
+  }
 }
 
 /** Parse a notification's data object; null when it is not an Armada push. */

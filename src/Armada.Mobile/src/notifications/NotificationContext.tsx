@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { WebSocketMessage } from '@dashboard/types/models';
 import type { Severity } from '@dashboard/lib/notificationSeverity';
@@ -11,9 +12,10 @@ import {
   prependNotification,
   type Notification,
 } from '@dashboard/lib/notificationEvents';
+import type { AuthHooks } from '../auth/AuthContext';
 import { useLocale } from '../i18n/LocaleContext';
 import { useSocket } from '../socket/SocketContext';
-import { PREF_KEYS, readPref, writePref } from '../storage/prefs';
+import { PREF_KEYS, readPref, removePref, writePref } from '../storage/prefs';
 
 export type { Notification, Severity };
 
@@ -46,42 +48,115 @@ export function notificationHref(n: Pick<Notification, 'missionId' | 'voyageId' 
   return null;
 }
 
+/** Storage key prefix of the per-profile, per-user notification history. */
+export const NOTIFICATION_HISTORY_PREFIX = 'armada.notificationHistory.';
+
+function keyPart(value: string): string {
+  return value.replace(/[^A-Za-z0-9_-]/g, '_');
+}
+
+/**
+ * The history scope of a signed-in session: one profile (server) and one user. History never crosses users or
+ * servers: another user on the same phone, or another server, starts with an empty list.
+ */
+export function notificationScope(profileId: string, userId: string): string {
+  return `${keyPart(profileId)}.${keyPart(userId)}`;
+}
+
+function historyKey(scope: string): string {
+  return `${NOTIFICATION_HISTORY_PREFIX}${scope}`;
+}
+
+/**
+ * Forget the stored notification history of a profile (every user who signed in to it). Called when a profile's
+ * session ends (sign-out, profile removal, server change, rejected token): see createNotificationAuthHooks.
+ */
+export async function clearNotificationHistory(profileId: string): Promise<void> {
+  const prefix = `${NOTIFICATION_HISTORY_PREFIX}${keyPart(profileId)}.`;
+  try {
+    const keys = await AsyncStorage.getAllKeys();
+    const mine = keys.filter((key) => key.startsWith(prefix));
+    if (mine.length > 0) await AsyncStorage.multiRemove(mine);
+  } catch {
+    // Best effort: the provider shows nothing for a session that is not signed in anyway.
+  }
+}
+
+/** Auth hooks that forget a profile's notification history whenever its Admiral session ends. */
+export function createNotificationAuthHooks(): AuthHooks {
+  return { onSessionEnding: (profile) => clearNotificationHistory(profile.id) };
+}
+
 export interface NotificationProviderProps {
   children: ReactNode;
+  /**
+   * Whose history this is (notificationScope(profileId, userId)), or null while signed out: then nothing is shown or
+   * stored. Defaults to one local scope (tests and previews).
+   */
+  scope?: string | null;
   /** Injectable timers for tests. */
   schedule?: (fn: () => void, ms: number) => unknown;
+}
+
+interface History {
+  scope: string | null;
+  items: Notification[];
+  /** The stored history of this scope has been read (writes wait for it, so they never overwrite it). */
+  loaded: boolean;
 }
 
 /**
  * In-app notification center and toasts. The events and text come from the dashboard's shared
  * lib/notificationEvents (the same notifications, worded the same, for the same WebSocket events); history is kept
- * on the device (preferences storage, capped) like the dashboard keeps it in localStorage.
+ * on the device (preferences storage, capped) like the dashboard keeps it in localStorage, separately for each
+ * profile and user (`scope`), and is cleared when that profile's session ends.
  */
-export function NotificationProvider({ children, schedule = (fn, ms) => setTimeout(fn, ms) }: NotificationProviderProps) {
+export function NotificationProvider({ children, scope = 'local', schedule = (fn, ms) => setTimeout(fn, ms) }: NotificationProviderProps) {
   const { subscribe } = useSocket();
   const { t } = useLocale();
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [history, setHistory] = useState<History>({ scope, items: [], loaded: false });
   const [toasts, setToasts] = useState<Toast[]>([]);
-  const [loaded, setLoaded] = useState(false);
   const toastCounterRef = useRef(0);
   const lastSeenRef = useRef<Map<string, string>>(new Map());
   const tRef = useRef(t);
+  const scopeRef = useRef(scope);
 
   useEffect(() => { tRef.current = t; }, [t]);
+  useEffect(() => { scopeRef.current = scope; }, [scope]);
 
+  // The history before it was scoped (one list for every user and server) is never shown again.
+  useEffect(() => { void removePref(PREF_KEYS.notifications); }, []);
+
+  // Load the scope's stored history; a change of scope (sign-out, another user or server) starts from that one.
   useEffect(() => {
     let cancelled = false;
-    void readPref<Notification[]>(PREF_KEYS.notifications).then((stored) => {
+    lastSeenRef.current.clear();
+    const read: Promise<Notification[] | null> = scope ? readPref<Notification[]>(historyKey(scope)) : Promise.resolve(null);
+    void read.then((stored) => {
       if (cancelled) return;
-      if (Array.isArray(stored)) setNotifications((current) => [...current, ...stored].slice(0, MAX_NOTIFICATIONS));
-      setLoaded(true);
+      const saved = Array.isArray(stored) ? stored : [];
+      setHistory((prev) => ({
+        scope,
+        items: (prev.scope === scope ? [...prev.items, ...saved] : saved).slice(0, MAX_NOTIFICATIONS),
+        loaded: true,
+      }));
     });
     return () => { cancelled = true; };
-  }, []);
+  }, [scope]);
 
   useEffect(() => {
-    if (loaded) void writePref(PREF_KEYS.notifications, notifications.slice(0, MAX_NOTIFICATIONS));
-  }, [notifications, loaded]);
+    if (history.loaded && history.scope) void writePref(historyKey(history.scope), history.items.slice(0, MAX_NOTIFICATIONS));
+  }, [history]);
+
+  const notifications = useMemo(() => (history.scope === scope ? history.items : []), [history, scope]);
+
+  const updateItems = useCallback((change: (items: Notification[]) => Notification[]) => {
+    setHistory((prev) => {
+      const current = scopeRef.current;
+      if (prev.scope !== current) return { scope: current, items: change([]), loaded: false };
+      return { ...prev, items: change(prev.items) };
+    });
+  }, []);
 
   const pushToast = useCallback((severity: Severity, message: string, href: string | null = null) => {
     const id = ++toastCounterRef.current;
@@ -96,22 +171,22 @@ export function NotificationProvider({ children, schedule = (fn, ms) => setTimeo
     if (lastSeenRef.current.get(key) === seen) return;
     lastSeenRef.current.set(key, seen);
     const notification = buildEntityNotification(entry, tRef.current, newNotificationId(), new Date().toISOString());
-    setNotifications((prev) => prependNotification(prev, notification));
+    updateItems((prev) => prependNotification(prev, notification));
     pushToast(notification.severity, notification.message, notificationHref(notification));
-  }), [subscribe, pushToast]);
+  }), [subscribe, pushToast, updateItems]);
 
   const markRead = useCallback((id: string) => {
-    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
-  }, []);
+    updateItems((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+  }, [updateItems]);
 
   const markAllRead = useCallback(() => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-  }, []);
+    updateItems((prev) => prev.map((n) => ({ ...n, read: true })));
+  }, [updateItems]);
 
   const clearHistory = useCallback(() => {
-    setNotifications([]);
+    updateItems(() => []);
     lastSeenRef.current.clear();
-  }, []);
+  }, [updateItems]);
 
   const dismissToast = useCallback((id: number) => {
     setToasts((prev) => prev.filter((toast) => toast.id !== id));

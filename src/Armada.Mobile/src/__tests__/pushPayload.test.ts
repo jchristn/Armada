@@ -42,12 +42,21 @@ describe('push deep link validation', () => {
     [null],
     [{ url: '/missions/msn_1' }],
     ['/missions/' + 'a'.repeat(3000)],
+    ['/missions/..%2Fusers%2Fusr_x'],
+    ['/missions/%E0%A4%A'],
   ])('rejects %#', (link) => {
     expect(appPathForPushLink(link)).toBeNull();
   });
 });
 
 describe('push payload parsing', () => {
+  it('a link with malformed percent-encoding is ignored; the push still opens the app', () => {
+    const parsed = parsePushData({ url: '/missions/%E0%A4%A', kind: 'failed', entityId: 'msn_1', category: 'MissionFailed' });
+    expect(parsed).not.toBeNull();
+    expect(parsed!.path).toBeNull();
+    expect(parsed!.entityId).toBe('msn_1');
+  });
+
   const base = { url: '/ask/ath_t1', kind: 'ask_proposal', entityId: 'aap_p1', category: 'AskProposal', threadId: 'ath_t1', deviceId: 'pdv_d1' };
 
   it('parses the server data object', () => {

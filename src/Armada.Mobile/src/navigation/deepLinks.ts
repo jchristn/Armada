@@ -1,3 +1,17 @@
+import { decodeParam } from './routeMatch';
+
+/** Longest link accepted (a dashboard URL with a query is far shorter). */
+export const MAX_LINK_LENGTH = 2048;
+
+function decodesCleanly(text: string): boolean {
+  try {
+    decodeURIComponent(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Map links into app paths. Accepted forms, all resolving to the same screen as on the dashboard:
  *   armada://missions/msn_1            (custom scheme; host is the first path segment)
@@ -5,12 +19,14 @@
  *   https://admiral.example/dashboard/missions/msn_1?tab=log   (a pasted dashboard URL)
  *   /dashboard/missions/msn_1, /missions/msn_1                  (paths)
  * The dashboard's root "/" is the mobile Home screen "/home". Anything that is not a safe relative app path
- * (other schemes, "..", control characters) maps to null and is ignored.
+ * (other schemes, "..", control characters, and segments that decode to any of those or contain an encoded '/' or
+ * '\\', or are malformed percent-encoding, a query with malformed percent-encoding, links over MAX_LINK_LENGTH)
+ * maps to null and is ignored.
  */
 export function appPathFromLink(link: string | null | undefined): string | null {
   if (!link) return null;
   let value = link.trim();
-  if (!value || /[\u0000-\u001f\u007f]/.test(value)) return null;
+  if (!value || value.length > MAX_LINK_LENGTH || /[\u0000-\u001f\u007f]/.test(value)) return null;
 
   const scheme = /^([a-z][a-z0-9+.-]*):/i.exec(value);
   if (scheme) {
@@ -29,10 +45,15 @@ export function appPathFromLink(link: string | null | undefined): string | null 
   const queryIndex = value.search(/[?#]/);
   let path = queryIndex >= 0 ? value.slice(0, queryIndex) : value;
   const query = queryIndex >= 0 ? value.slice(queryIndex).split('#')[0] : '';
+  // A query with malformed percent-encoding would reach expo-router's query parser, whose fallback decoder
+  // (decode-uri-component, GHSA-vcc3-ghjq-m6fr) is exponential on such input: refuse the link instead.
+  if (query && !decodesCleanly(query)) return null;
 
   path = path.replace(/\/{2,}/g, '/');
   if (path === '/dashboard' || path.startsWith('/dashboard/')) path = path.slice('/dashboard'.length) || '/';
   if (path.split('/').some((seg) => seg === '..' || seg === '.')) return null;
+  // Also after decoding: screens build API paths from these segments, so '..%2Fusers' must not get through.
+  if (path.split('/').some((seg) => seg !== '' && decodeParam(seg) === null)) return null;
   if (path.length > 1) path = path.replace(/\/+$/, '');
   if (path === '/') path = '/home';
   return `${path}${query}`;
