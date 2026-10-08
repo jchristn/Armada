@@ -1,10 +1,12 @@
-import { memo } from 'react';
+import { memo, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import type { PlanningSessionMessage } from '@dashboard/types/models';
 import type { ToolEvent } from '@dashboard/lib/toolEvents';
+import { chatTurnStatistics } from '@dashboard/lib/chatMetrics';
 import { Markdown } from '../../components/ask/Markdown';
 import { ThinkingBlock } from '../../components/ask/MessageView';
 import { ToolChips } from '../../components/ask/ToolChips';
+import { TurnStatsPanel, TurnStatsToggle } from '../../components/ask/TurnStats';
 import { AppText, Button } from '../../components/ui';
 import { useLocale } from '../../i18n/LocaleContext';
 import { useTheme } from '../../theme/ThemeContext';
@@ -26,11 +28,13 @@ export interface PlanningMessageViewProps {
 /**
  * One planning transcript message, rendered like Ask Armada's (the dashboard maps the planning transcript onto the
  * same chat panel): the user's text in a bubble, the captain's reply as Markdown with its tool calls and reasoning,
- * and on replies the actions that promote them to dispatch.
+ * and on replies the actions that promote them to dispatch. A finished reply has its turn statistics (time to first
+ * token, streaming, tokens/sec, tokens, total, tool calls, tool time) behind an (i), like the dashboard's.
  */
 export const PlanningMessageView = memo(function PlanningMessageView({ message, captainName, tools, thinking, streaming, selected, onSelect, onOpenInDispatch }: PlanningMessageViewProps) {
   const { t, formatRelativeTime } = useLocale();
   const { colors } = useTheme();
+  const [statsOpen, setStatsOpen] = useState(false);
   const role = message.role.toLowerCase();
   const when = formatRelativeTime(message.createdUtc);
   const testID = `planning-msg-${message.sequence}`;
@@ -55,6 +59,7 @@ export const PlanningMessageView = memo(function PlanningMessageView({ message, 
   }
 
   const hasText = message.content.trim().length > 0;
+  const stats = message.metrics && !streaming ? chatTurnStatistics(t, message.metrics, tools) : [];
   return (
     <View style={styles.block} testID={testID}>
       <ToolChips tools={tools} />
@@ -63,7 +68,9 @@ export const PlanningMessageView = memo(function PlanningMessageView({ message, 
           <AppText variant="caption" muted style={styles.bold}>{captainName}</AppText>
           <AppText variant="caption" muted>{when}</AppText>
           {selected ? <AppText variant="caption" color="primary" style={styles.bold}>{t('Selected for dispatch')}</AppText> : null}
+          {stats.length > 0 ? <TurnStatsToggle open={statsOpen} onToggle={() => setStatsOpen((v) => !v)} testID={`${testID}-stats-toggle`} /> : null}
         </View>
+        {statsOpen && stats.length > 0 ? <TurnStatsPanel rows={stats} testID={`${testID}-stats`} /> : null}
         {thinking && thinking.trim() ? <ThinkingBlock text={thinking} live={streaming} /> : null}
         {hasText ? <Markdown>{message.content}</Markdown> : null}
         {streaming && !hasText ? <ActivityIndicator color={colors.primary} accessibilityLabel={t('Responding')} /> : null}

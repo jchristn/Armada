@@ -1,4 +1,4 @@
-import { Modal, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useProxySessionContext } from '@dashboard/lib/useProxySessionContext';
 import { AppText } from '../../components/ui/AppText';
 import { Banner } from '../../components/ui/Banner';
@@ -10,7 +10,7 @@ import { SwipeRow, type SwipeAction } from '../../components/ui/SwipeRow';
 import { useLocale } from '../../i18n/LocaleContext';
 import { useTheme } from '../../theme/ThemeContext';
 import { radius, spacing } from '../../theme/typography';
-import { MODAL_ORIENTATIONS } from '../../components/ui/modalOrientations';
+import { ModalOverlay } from '../../components/ui/ModalOverlay';
 
 /**
  * Shared pieces of the Settings hub's admin tabs (Tenants, Users, Credentials): remote proxy mode (create, edit, and
@@ -56,39 +56,38 @@ export interface SecretOnceDialogProps {
 /**
  * One-time display of a server-generated secret (a tenant admin password, a new credential's bearer token), the
  * mobile form of the dashboard's GeneratedPasswordDialog. The secret is selectable so it can be copied; it lives only
- * in the caller's state while the dialog is open, and the backdrop and back gesture do not close it.
+ * in the caller's state while the dialog is open, and the backdrop and back gesture do not close it. Built on
+ * ModalOverlay, like ConfirmDialog.
  */
 export function SecretOnceDialog({ open, title, message, email, emailLabel, secretLabel, secret, doneLabel, onClose, testID }: SecretOnceDialogProps) {
   const { colors } = useTheme();
   return (
-    <Modal supportedOrientations={MODAL_ORIENTATIONS} visible={open} transparent animationType="fade" onRequestClose={() => undefined} statusBarTranslucent>
-      <View style={[styles.backdrop, { backgroundColor: colors.overlay }]}>
-        {open ? (
-          <View testID={testID} accessibilityViewIsModal style={[styles.card, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}>
-            <AppText variant="heading" accessibilityRole="header">{title}</AppText>
-            <View style={[styles.warning, { borderColor: colors.warning, backgroundColor: colors.warningSurface }]}>
-              <AppText>{message}</AppText>
-            </View>
-            {email ? (
-              <View style={styles.field}>
-                <AppText variant="caption" muted>{emailLabel}</AppText>
-                <AppText selectable>{email}</AppText>
-              </View>
-            ) : null}
-            <View style={styles.field}>
-              <AppText variant="caption" muted>{secretLabel}</AppText>
-              <AppText variant="mono" selectable testID={testID ? `${testID}-secret` : undefined}>{secret}</AppText>
-            </View>
-            <Button label={doneLabel} onPress={onClose} testID={testID ? `${testID}-done` : undefined} />
+    <ModalOverlay visible={open} kind="dialog" onRequestClose={() => undefined} contentStyle={styles.host}>
+      {open ? (
+        <View testID={testID} accessibilityViewIsModal style={[styles.card, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}>
+          <AppText variant="heading" accessibilityRole="header">{title}</AppText>
+          <View style={[styles.warning, { borderColor: colors.warning, backgroundColor: colors.warningSurface }]}>
+            <AppText>{message}</AppText>
           </View>
-        ) : null}
-      </View>
-    </Modal>
+          {email ? (
+            <View style={styles.field}>
+              <AppText variant="caption" muted>{emailLabel}</AppText>
+              <AppText selectable>{email}</AppText>
+            </View>
+          ) : null}
+          <View style={styles.field}>
+            <AppText variant="caption" muted>{secretLabel}</AppText>
+            <AppText variant="mono" selectable testID={testID ? `${testID}-secret` : undefined}>{secret}</AppText>
+          </View>
+          <Button label={doneLabel} onPress={onClose} testID={testID ? `${testID}-done` : undefined} />
+        </View>
+      ) : null}
+    </ModalOverlay>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
+  host: { alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
   card: { width: '100%', maxWidth: 480, borderRadius: radius.lg, borderWidth: StyleSheet.hairlineWidth, padding: spacing.xl, gap: spacing.md },
   warning: { borderWidth: 1, borderLeftWidth: 4, borderRadius: radius.md, padding: spacing.md },
   field: { gap: 2 },

@@ -13,7 +13,7 @@ import { ASK_PREF_KEYS } from '../ask/AskContext';
 import { AuthProvider } from '../auth/AuthContext';
 import { LocaleProvider } from '../i18n/LocaleContext';
 import { ApprovalsProvider } from '../notifications/ApprovalsContext';
-import { NotificationProvider } from '../notifications/NotificationContext';
+import { NotificationProvider, useNotifications } from '../notifications/NotificationContext';
 import { resetAskSessionForTests } from '../screens/AskScreen';
 import { SocketProvider } from '../socket/SocketContext';
 import { socketFactory, type FakeSocket } from '../test/fakeSocket';
@@ -38,6 +38,12 @@ function proposal(over: Partial<AskActionProposal> = {}): AskActionProposal {
 
 let sockets: FakeSocket[] = [];
 
+/** The toasts on screen, as text (the app shows them through ToastHost). */
+function ToastProbe() {
+  const { toasts } = useNotifications();
+  return <>{toasts.map((toast) => <Text key={toast.id} testID={`toast-${toast.severity}`}>{toast.message}</Text>)}</>;
+}
+
 function Providers({ children }: { children: ReactNode }) {
   const { sockets: list, factory } = socketFactory();
   sockets = list;
@@ -48,6 +54,7 @@ function Providers({ children }: { children: ReactNode }) {
           <SocketProvider serverUrl="http://h:1" token="tok" factory={factory}>
             <NotificationProvider>
               <ApprovalsProvider enabled={false}>{children}</ApprovalsProvider>
+              <ToastProbe />
             </NotificationProvider>
           </SocketProvider>
         </LocaleProvider>
@@ -124,11 +131,85 @@ describe('Ask Armada', () => {
     expect(screen.queryByTestId('ask-choose-captain')).toBeNull();
   });
 
-  it('the conversation shows its captain at the top, and tapping it opens the captain picker', async () => {
+  it('the conversation shows its captain at the top; tapping it opens an inline dropdown of captains under the bar', async () => {
+    api.listCaptains.mockResolvedValue({ objects: [{ id: 'cpt_1', name: 'Ada', runtime: 'ClaudeCode', model: 'opus' }, { id: 'cpt_2', name: 'Grace', runtime: 'Codex' }] } as never);
+    api.createAskThread.mockResolvedValue(thread({ id: 'thr_new', captainId: 'cpt_2' }));
+    api.sendAskMessage.mockResolvedValue({ messageId: 'msg_1', turnId: 'turn_1' });
     await renderAsk();
     await waitFor(() => expect(screen.getByTestId('ask-captain-bar-name')).toHaveTextContent(/Ada/));
+    const bar = screen.getByTestId('ask-captain-bar');
+    expect(bar.props.accessibilityState).toMatchObject({ expanded: false });
+    await act(async () => { fireEvent.press(bar); });
+
+    // A dropdown in the conversation pane, not a sheet: no Modal, anchored to the bar, inside the pane above the composer.
+    const menu = screen.getByTestId('ask-captain-menu');
+    expect(within(screen.getByTestId('ask-above-composer')).getByTestId('ask-captain-menu')).toBeTruthy();
+    expect(screen.queryByTestId('ask-options')).toBeNull();
+    expect(screen.queryByTestId('modal-backdrop')).toBeNull();
+    expect(menu.props.accessibilityRole).toBe('radiogroup');
+    expect(menu.props.accessibilityLabel).toBe('Captain');
+    expect(screen.getByTestId('ask-captain-bar').props.accessibilityState).toMatchObject({ expanded: true });
+    const ada = screen.getByTestId('ask-captain-menu-option-cpt_1');
+    expect(ada.props.accessibilityRole).toBe('radio');
+    expect(ada.props.accessibilityState).toMatchObject({ checked: true });
+    expect(screen.getByTestId('ask-captain-menu-option-none')).toBeTruthy();
+    expect(screen.getByTestId('ask-captain-menu-option-cpt_2').props.accessibilityLabel).toBe('Grace (Codex)');
+
+    // Choosing a captain closes the dropdown; the new conversation is created with it.
+    await act(async () => { fireEvent.press(screen.getByTestId('ask-captain-menu-option-cpt_2')); });
+    expect(screen.queryByTestId('ask-captain-menu')).toBeNull();
+    expect(screen.getByTestId('ask-captain-bar-name')).toHaveTextContent(/Grace/);
+    expect(screen.getByTestId('ask-captain-bar').props.accessibilityState).toMatchObject({ expanded: false });
+    expect(await AsyncStorage.getItem(ASK_PREF_KEYS.captain)).toBe('"cpt_2"');
+    await fireEvent.changeText(screen.getByTestId('ask-input'), 'hi');
+    await act(async () => { await fireEvent.press(screen.getByTestId('ask-send')); });
+    expect(api.createAskThread).toHaveBeenCalledWith({ captainId: 'cpt_2' });
+  });
+
+  it('the captain dropdown changes an existing conversation through the thread update, and closes on a tap outside or the escape gesture', async () => {
+    api.listCaptains.mockResolvedValue({ objects: [{ id: 'cpt_1', name: 'Ada' }, { id: 'cpt_2', name: 'Grace' }] } as never);
+    api.updateAskThread.mockImplementation(async (_id, patch) => thread(patch as Partial<AskThread>));
+    await renderAsk('/ask/thr_1');
+    await waitFor(() => expect(screen.getByTestId('ask-captain-bar-name')).toHaveTextContent(/Ada/));
+
     await act(async () => { fireEvent.press(screen.getByTestId('ask-captain-bar')); });
-    expect(await screen.findByTestId('ask-captain')).toBeTruthy();
+    await act(async () => { fireEvent.press(screen.getByTestId('ask-captain-menu-scrim')); });
+    expect(screen.queryByTestId('ask-captain-menu')).toBeNull();
+
+    await act(async () => { fireEvent.press(screen.getByTestId('ask-captain-bar')); });
+    await act(async () => { fireEvent(screen.getByTestId('ask-captain-menu'), 'accessibilityEscape'); });
+    expect(screen.queryByTestId('ask-captain-menu')).toBeNull();
+
+    await act(async () => { fireEvent.press(screen.getByTestId('ask-captain-bar')); });
+    await act(async () => { fireEvent.press(screen.getByTestId('ask-captain-menu-option-cpt_2')); });
+    expect(api.updateAskThread).toHaveBeenCalledWith('thr_1', { captainId: 'cpt_2' });
+    await waitFor(() => expect(screen.getByTestId('ask-captain-bar-name')).toHaveTextContent(/Grace/));
+  });
+
+  it('screen readers land on the chosen captain when the dropdown opens and back on the bar when it closes', async () => {
+    const info = AccessibilityInfo as jest.Mocked<typeof AccessibilityInfo>;
+    info.isScreenReaderEnabled.mockResolvedValue(true);
+    await renderAsk();
+    await waitFor(() => expect(screen.getByTestId('ask-captain-bar-name')).toHaveTextContent(/Ada/));
+    const focused = () => info.sendAccessibilityEvent.mock.calls.filter(([, type]) => type === 'focus')
+      .map(([node]) => (node as unknown as { props: { testID?: string } }).props.testID);
+    await act(async () => { fireEvent.press(screen.getByTestId('ask-captain-bar')); });
+    await waitFor(() => expect(focused()).toEqual(['ask-captain-menu-option-cpt_1']));
+    await act(async () => { fireEvent.press(screen.getByTestId('ask-captain-bar')); });
+    expect(screen.queryByTestId('ask-captain-menu')).toBeNull();
+    await waitFor(() => expect(focused()).toEqual(['ask-captain-menu-option-cpt_1', 'ask-captain-bar']));
+    info.isScreenReaderEnabled.mockResolvedValue(false);
+  });
+
+  it('the captain cannot change during a turn: the bar is disabled and an open dropdown closes', async () => {
+    api.getAskThread.mockResolvedValue({ thread: thread(), trackedWork: [] });
+    await renderAsk('/ask/thr_1');
+    await waitFor(() => expect(screen.getByTestId('ask-captain-bar-name')).toHaveTextContent(/Ada/));
+    await act(async () => { fireEvent.press(screen.getByTestId('ask-captain-bar')); });
+    expect(screen.getByTestId('ask-captain-menu')).toBeTruthy();
+    await emit('ask.turn', { threadId: 'thr_1', turnId: 'turn_5', state: 'started' });
+    expect(screen.queryByTestId('ask-captain-menu')).toBeNull();
+    expect(screen.getByTestId('ask-captain-bar').props.accessibilityState).toMatchObject({ disabled: true });
   });
 
   it('sending creates the conversation, shows the message at once, and streams the reply', async () => {
@@ -165,6 +246,51 @@ describe('Ask Armada', () => {
     await waitFor(() => expect(screen.getByText('Two voyages are running.')).toBeTruthy());
     expect(screen.queryByTestId('ask-streaming')).toBeNull();
     expect(screen.getByTestId('ask-send')).toBeTruthy();
+  });
+
+  it('a captain reply shows its turn duration and, behind an (i), its turn statistics with tool calls and tool time', async () => {
+    api.enumerateAskMessages.mockResolvedValue({
+      messages: [
+        message({}),
+        message({
+          id: 'msg_2', sequence: 2, role: 'Assistant', contentText: 'All quiet.', captainId: 'cpt_1', durationMs: 6400,
+          toolCalls: [
+            { callId: 'c1', toolName: 'armada_status', ok: true, resultText: '{}', elapsedMs: 420 },
+            { callId: 'c2', toolName: 'armada_enumerate', ok: true, resultText: '[]', elapsedMs: 1830 },
+          ],
+        }),
+        message({ id: 'msg_3', sequence: 3, role: 'Assistant', contentText: 'No timing here.', captainId: 'cpt_1' }),
+      ],
+      hasMore: false,
+    });
+    await renderAsk('/ask/thr_1');
+    await waitFor(() => expect(screen.getByText('All quiet.')).toBeTruthy());
+    // The dashboard's header duration and per-tool times stay where they were.
+    expect(screen.getByLabelText('Turn duration 6.4s')).toBeTruthy();
+    expect(screen.getByTestId('tool-chip-c2').props.accessibilityLabel).toContain('1.83s');
+    expect(screen.queryByTestId('ask-msg-3-stats-toggle')).toBeNull();
+
+    await act(async () => { fireEvent.press(screen.getByTestId('ask-msg-2-stats-toggle')); });
+    const panel = screen.getByTestId('ask-msg-2-stats');
+    expect(within(panel).getAllByLabelText(/: /).map((cell) => cell.props.accessibilityLabel)).toEqual(['total: 6.40s', 'tool calls: 2', 'tool time: 2.25s']);
+    expect(screen.getByTestId('ask-msg-2-stats-toggle').props.accessibilityState).toMatchObject({ expanded: true });
+  });
+
+  it('the transcript keeps its newest message in view when its viewport shrinks (the keyboard opening)', async () => {
+    const { FlatList } = jest.requireActual<typeof import('react-native')>('react-native');
+    const scrollToEnd = jest.spyOn(FlatList.prototype, 'scrollToEnd');
+    api.enumerateAskMessages.mockResolvedValue({ messages: [message({}), message({ id: 'msg_2', sequence: 2, role: 'Assistant', contentText: 'Latest reply.' })], hasMore: false });
+    await renderAsk('/ask/thr_1');
+    await waitFor(() => expect(screen.getByText('Latest reply.')).toBeTruthy());
+    scrollToEnd.mockClear();
+    await act(async () => { fireEvent(screen.getByTestId('ask-transcript'), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 390, height: 240 } } }); });
+    expect(scrollToEnd).toHaveBeenCalledWith({ animated: false });
+    // Scrolled up to read older messages: a layout change leaves the position alone.
+    await act(async () => { fireEvent.scroll(screen.getByTestId('ask-transcript'), { nativeEvent: { contentOffset: { y: 0 }, contentSize: { height: 2000, width: 390 }, layoutMeasurement: { height: 240, width: 390 } } }); });
+    scrollToEnd.mockClear();
+    await act(async () => { fireEvent(screen.getByTestId('ask-transcript'), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 390, height: 500 } } }); });
+    expect(scrollToEnd).not.toHaveBeenCalled();
+    scrollToEnd.mockRestore();
   });
 
   it('a failed send drops the optimistic message and reports the error', async () => {
@@ -370,5 +496,171 @@ describe('Ask Armada', () => {
     expect(app.getPathname()).toBe('/missions/msn_5');
     open.mockRestore();
     alert.mockRestore();
+  });
+});
+
+describe('Ask Armada conversation list actions', () => {
+  const two = () => [thread(), thread({ id: 'thr_2', title: 'Deploy plan', lastMessageUtc: '2026-10-06T12:00:00Z' })];
+
+  async function openList() {
+    api.enumerateAskThreads.mockResolvedValue({ objects: two(), totalPages: 1 } as never);
+    await renderAsk();
+    await act(async () => { await fireEvent.press(screen.getByTestId('ask-open-list')); });
+    await waitFor(() => expect(screen.getByTestId('ask-thread-row-thr_2')).toBeTruthy());
+  }
+
+  async function longPress(id: string) {
+    await act(async () => { await fireEvent(screen.getByTestId(`ask-thread-row-${id}`), 'longPress'); });
+    expect(screen.getByTestId('ask-thread-actions')).toBeTruthy();
+  }
+
+  async function swipeAction(id: string, action: string) {
+    await act(async () => { await fireEvent(screen.getByTestId(`ask-thread-row-${id}`), 'accessibilityAction', { nativeEvent: { actionName: action } }); });
+  }
+
+  /** The delete dialog must be inside the phone list's own modal: iOS cannot present it from the screen behind. */
+  function expectDialogInsideList() {
+    const sheet = screen.getByTestId('ask-list-sheet');
+    expect(within(sheet).getByTestId('ask-delete-confirm')).toBeTruthy();
+    expect(screen.getAllByTestId('ask-delete-confirm')).toHaveLength(1);
+  }
+
+  it('Delete from the row menu confirms inside the list, deletes on the server, and drops the row', async () => {
+    api.deleteAskThread.mockResolvedValue(undefined);
+    await openList();
+    await longPress('thr_2');
+    await act(async () => { await fireEvent.press(screen.getByTestId('ask-action-delete')); });
+    expect(screen.queryByTestId('ask-thread-actions')).toBeNull();
+    expectDialogInsideList();
+    expect(api.deleteAskThread).not.toHaveBeenCalled();
+    await act(async () => { await fireEvent.press(screen.getByTestId('ask-delete-confirm-confirm')); });
+    expect(api.deleteAskThread).toHaveBeenCalledWith('thr_2');
+    await waitFor(() => expect(screen.queryByTestId('ask-thread-row-thr_2')).toBeNull());
+    expect(screen.getByTestId('ask-thread-row-thr_1')).toBeTruthy();
+    expect(screen.getByTestId('toast-success')).toHaveTextContent('Conversation deleted.');
+    expect(screen.queryByTestId('ask-delete-confirm')).toBeNull();
+  });
+
+  it('the swipe Delete confirms inside the list too; Cancel deletes nothing', async () => {
+    api.deleteAskThread.mockResolvedValue(undefined);
+    await openList();
+    await swipeAction('thr_2', 'delete');
+    expectDialogInsideList();
+    await act(async () => { await fireEvent.press(screen.getByTestId('ask-delete-confirm-cancel')); });
+    expect(api.deleteAskThread).not.toHaveBeenCalled();
+    expect(screen.getByTestId('ask-thread-row-thr_2')).toBeTruthy();
+    await swipeAction('thr_2', 'delete');
+    await act(async () => { await fireEvent.press(screen.getByTestId('ask-delete-confirm-confirm')); });
+    expect(api.deleteAskThread).toHaveBeenCalledWith('thr_2');
+    await waitFor(() => expect(screen.queryByTestId('ask-thread-row-thr_2')).toBeNull());
+  });
+
+  it('a failed delete keeps the row and reports the server error', async () => {
+    api.deleteAskThread.mockRejectedValue(new Error('Conversation is locked'));
+    await openList();
+    await swipeAction('thr_2', 'delete');
+    await act(async () => { await fireEvent.press(screen.getByTestId('ask-delete-confirm-confirm')); });
+    expect(api.deleteAskThread).toHaveBeenCalledWith('thr_2');
+    await waitFor(() => expect(screen.getByTestId('toast-error')).toHaveTextContent('Conversation is locked'));
+    expect(screen.getByTestId('ask-thread-row-thr_2')).toBeTruthy();
+  });
+
+  it('deleting the open conversation from the list returns to a new conversation', async () => {
+    api.deleteAskThread.mockResolvedValue(undefined);
+    api.enumerateAskThreads.mockResolvedValue({ objects: two(), totalPages: 1 } as never);
+    api.enumerateAskMessages.mockResolvedValue({ messages: [message({ contentText: 'open one' })], hasMore: false });
+    await renderAsk('/ask/thr_1');
+    await waitFor(() => expect(screen.getByText('open one')).toBeTruthy());
+    await act(async () => { await fireEvent.press(screen.getByTestId('ask-open-list')); });
+    await swipeAction('thr_1', 'delete');
+    await act(async () => { await fireEvent.press(screen.getByTestId('ask-delete-confirm-confirm')); });
+    expect(api.deleteAskThread).toHaveBeenCalledWith('thr_1');
+    await waitFor(() => expect(screen.getByTestId('ask-empty')).toBeTruthy());
+  });
+
+  it('while the phone list is open, every sheet and dialog it opens is presented from inside it (iOS: a screen presenting the list cannot present another modal; that left the composer unable to take focus)', async () => {
+    await openList();
+    type HostNode = { props: Record<string, unknown>; parent: HostNode | null; children: (HostNode | string)[] };
+    /** Visible Modal hosts (they carry the Modal's props) other than the list's own page sheet. */
+    const otherModals = (): HostNode[] => {
+      const out: HostNode[] = [];
+      const walk = (n: HostNode | string) => {
+        if (typeof n === 'string') return;
+        if (n.props.animationType !== undefined && n.props.presentationStyle !== 'pageSheet') out.push(n);
+        n.children.forEach(walk);
+      };
+      walk(screen.root as unknown as HostNode);
+      return out;
+    };
+    const insideList = (node: HostNode) => {
+      for (let p = node.parent; p; p = p.parent) if (p.props.testID === 'ask-list-sheet') return true;
+      return false;
+    };
+    const check = () => {
+      const modals = otherModals();
+      expect(modals.length).toBeGreaterThan(0);
+      for (const modal of modals) expect(insideList(modal)).toBe(true);
+    };
+    await longPress('thr_2');
+    check();
+    await act(async () => { await fireEvent.press(screen.getByTestId('ask-action-delete')); });
+    check();
+    await act(async () => { await fireEvent.press(screen.getByTestId('ask-delete-confirm-cancel')); });
+    await swipeAction('thr_1', 'delete');
+    check();
+    await act(async () => { await fireEvent.press(screen.getByTestId('ask-delete-confirm-cancel')); });
+    // Nothing is left open behind the list, and the composer still takes text once the list closes.
+    expect(otherModals()).toHaveLength(0);
+    await act(async () => { await fireEvent.press(screen.getByTestId('ask-close-list')); });
+    expect(otherModals()).toHaveLength(0);
+    expect(screen.getByTestId('ask-input').props.editable).not.toBe(false);
+  });
+
+  it('Pin, Archive, Rename, and Summarize reach the server with the dashboard payloads and update the list', async () => {
+    api.updateAskThread.mockImplementation(async (id, patch) => thread({ id, title: id === 'thr_2' ? 'Deploy plan' : 'Fleet status', ...(patch as Partial<AskThread>) }));
+    api.summarizeAskThread.mockResolvedValue(undefined);
+    await openList();
+
+    // Pin (swipe): the pinned row moves to the top.
+    await swipeAction('thr_2', 'pin');
+    expect(api.updateAskThread).toHaveBeenLastCalledWith('thr_2', { pinned: true });
+    await waitFor(() => expect(screen.getByTestId('ask-thread-row-thr_2').props.accessibilityLabel).toContain('Pinned'));
+    const rows = screen.getAllByTestId(/^ask-thread-row-/).map((r) => r.props.testID);
+    expect(rows).toEqual(['ask-thread-row-thr_2', 'ask-thread-row-thr_1']);
+
+    // Rename (row menu, inline field).
+    await longPress('thr_2');
+    await act(async () => { await fireEvent.press(screen.getByTestId('ask-action-rename')); });
+    await fireEvent.changeText(screen.getByTestId('ask-rename-input'), 'Release plan');
+    await act(async () => { await fireEvent.press(screen.getByTestId('ask-rename-save')); });
+    expect(api.updateAskThread).toHaveBeenLastCalledWith('thr_2', { title: 'Release plan' });
+    await waitFor(() => expect(screen.getByText('Release plan')).toBeTruthy());
+
+    // Summarize (row menu).
+    await longPress('thr_1');
+    await act(async () => { await fireEvent.press(screen.getByTestId('ask-action-summarize')); });
+    expect(api.summarizeAskThread).toHaveBeenCalledWith('thr_1');
+    expect(screen.getByTestId('toast-info')).toHaveTextContent('Summarizing "Fleet status". The summary will appear in the conversation.');
+
+    // Archive (row menu): hidden while archived conversations are not shown.
+    await longPress('thr_1');
+    await act(async () => { await fireEvent.press(screen.getByTestId('ask-action-archive')); });
+    expect(api.updateAskThread).toHaveBeenLastCalledWith('thr_1', { archived: true });
+    await waitFor(() => expect(screen.queryByTestId('ask-thread-row-thr_1')).toBeNull());
+  });
+
+  it('a failed update keeps the row as it was and reports the error', async () => {
+    api.updateAskThread.mockRejectedValue(new Error('Forbidden'));
+    await openList();
+    await swipeAction('thr_2', 'archive');
+    expect(api.updateAskThread).toHaveBeenCalledWith('thr_2', { archived: true });
+    await waitFor(() => expect(screen.getByTestId('toast-error')).toHaveTextContent('Forbidden'));
+    expect(screen.getByTestId('ask-thread-row-thr_2')).toBeTruthy();
+  });
+
+  it('Show archived reloads the list from the server with archived conversations', async () => {
+    await openList();
+    await act(async () => { await fireEvent(screen.getByTestId('ask-show-archived'), 'valueChange', true); });
+    await waitFor(() => expect(api.enumerateAskThreads).toHaveBeenLastCalledWith(expect.objectContaining({ pageNumber: 1, includeArchived: true })));
   });
 });

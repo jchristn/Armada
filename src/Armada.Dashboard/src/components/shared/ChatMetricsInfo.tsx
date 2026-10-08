@@ -1,13 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { CaptainChatMetrics } from '../../types/models';
 import { useLocale } from '../../context/LocaleContext';
+import { chatTurnStatistics } from '../../lib/chatMetrics';
 import type { ToolEvent } from './ChatToolChips';
-
-function fmtMs(ms: number | null | undefined): string {
-  if (ms == null) return '-';
-  if (ms >= 1000) return (ms / 1000).toFixed(2) + 's';
-  return Math.round(ms) + 'ms';
-}
 
 /**
  * Per-turn statistics shown behind an (i) affordance rather than a strip under every reply.
@@ -36,23 +31,8 @@ export default function ChatMetricsInfo({ metrics, tools }: { metrics: CaptainCh
     };
   }, [open]);
 
-  const tokens = metrics.completionTokens ?? metrics.totalTokens;
-  const rows: Array<[string, string]> = [
-    [t('time to first token'), fmtMs(metrics.timeToFirstTokenMs)],
-    [t('streaming'), fmtMs(metrics.streamingMs)],
-    [t('tokens/sec'), metrics.tokensPerSecond != null ? metrics.tokensPerSecond.toFixed(1) : '-'],
-    [t('tokens'), tokens != null ? String(tokens) : '-'],
-    [t('total'), fmtMs(metrics.totalMs)],
-  ];
-
-  // When the turn invoked tools, report how many and the total time spent in them (summed across every
-  // completed tool call). Only shown when at least one tool ran this turn.
-  const completedTools = (tools ?? []).filter((tl) => tl.status !== 'running');
-  if (completedTools.length > 0) {
-    const toolMs = completedTools.reduce((sum, tl) => sum + (tl.elapsedMs ?? 0), 0);
-    rows.push([t('tool calls'), String(completedTools.length)]);
-    rows.push([t('tool time'), fmtMs(toolMs)]);
-  }
+  // When the turn invoked tools, the rows end with how many and the total time spent in them (lib/chatMetrics).
+  const rows = chatTurnStatistics(t, metrics, tools);
 
   return (
     <span className="chat-metrics-info" ref={ref}>
@@ -72,8 +52,8 @@ export default function ChatMetricsInfo({ metrics, tools }: { metrics: CaptainCh
       </button>
       {open && (
         <span className="chat-metrics-popover" role="dialog" aria-label={t('Turn statistics')}>
-          {rows.map(([label, value]) => (
-            <span key={label} className="chat-metrics-row">
+          {rows.map(({ key, label, value }) => (
+            <span key={key} className="chat-metrics-row">
               <span className="chat-metrics-row-label">{label}</span>
               <span className="chat-metrics-row-value">{value}</span>
             </span>

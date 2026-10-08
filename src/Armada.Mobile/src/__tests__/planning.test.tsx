@@ -203,6 +203,28 @@ describe('Planning session', () => {
     await waitFor(() => expect(getPathname()).toBe('/voyages/vyg_1'));
   });
 
+  it('a finished reply shows its turn statistics behind an (i), as the dashboard does', async () => {
+    const withMetrics = message({
+      id: 'pmg_2', role: 'Assistant', sequence: 2, content: 'Step 1: fix the login form.',
+      metrics: { timeToFirstTokenMs: 640, streamingMs: 3250, totalMs: 3890, promptTokens: 900, completionTokens: 210, totalTokens: 1110, tokensPerSecond: 64.6 },
+    });
+    api.getPlanningSession.mockResolvedValue(detail({ messages: [message({}), withMetrics] }));
+    await renderAt('/planning/pls_1');
+    await waitFor(() => expect(screen.getByText('Step 1: fix the login form.')).toBeTruthy());
+    expect(screen.queryByTestId('planning-msg-1-stats-toggle')).toBeNull();
+    const toggle = screen.getByTestId('planning-msg-2-stats-toggle');
+    expect(toggle.props.accessibilityLabel).toBe('Turn statistics');
+    expect(toggle.props.accessibilityState).toMatchObject({ expanded: false });
+    expect(screen.queryByTestId('planning-msg-2-stats')).toBeNull();
+    await act(async () => { fireEvent.press(toggle); });
+    const panel = screen.getByTestId('planning-msg-2-stats');
+    const spoken = within(panel).getAllByLabelText(/: /).map((cell) => cell.props.accessibilityLabel);
+    expect(spoken).toEqual(['time to first token: 640ms', 'streaming: 3.25s', 'tokens/sec: 64.6', 'tokens: 210', 'total: 3.89s']);
+    expect(screen.getByTestId('planning-msg-2-stats-toggle').props.accessibilityState).toMatchObject({ expanded: true });
+    await act(async () => { fireEvent.press(screen.getByTestId('planning-msg-2-stats-toggle')); });
+    expect(screen.queryByTestId('planning-msg-2-stats')).toBeNull();
+  });
+
   it('opens a reply in Dispatch after releasing the captain', async () => {
     api.getPlanningSession.mockResolvedValue(detail({ messages: [message({}), reply] }));
     api.stopPlanningSession.mockResolvedValue(detail({ session: session({ status: 'Stopped' }), messages: [message({}), reply] }));
