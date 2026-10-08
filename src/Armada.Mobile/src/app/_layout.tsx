@@ -6,6 +6,7 @@ import { StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from '../auth/AuthContext';
+import { PrivacyOverlay } from '../components/app/PrivacyOverlay';
 import { ToastHost } from '../components/app/ToastHost';
 import { IconButton } from '../components/ui';
 import { LocaleProvider, useLocale } from '../i18n/LocaleContext';
@@ -117,6 +118,7 @@ export default function RootLayout() {
               <RootNavigator />
             </SessionProviders>
           </AuthProvider>
+          <PrivacyOverlay />
         </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
