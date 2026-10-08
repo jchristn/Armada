@@ -30,9 +30,11 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     buildNumber: '1',
     config: { usesNonExemptEncryption: false },
     infoPlist: {
-      // Plain HTTP is allowed only for local networks (unqualified and .local host names); IP address literals
-      // are not subject to ATS. Public hosts must use HTTPS. The app warns before saving an http:// profile.
-      NSAppTransportSecurity: { NSAllowsLocalNetworking: true },
+      // The Admiral is self-hosted at an address the user types, often plain HTTP on a home or office network
+      // reached by a public host name (dynamic DNS), so ATS cannot be scoped to known domains. Plain HTTP is
+      // allowed (as on Android, where cleartext is allowed app-wide); the app warns on every http:// profile and
+      // docs/MOBILE.md recommends https:// for anything that leaves the network.
+      NSAppTransportSecurity: { NSAllowsArbitraryLoads: true, NSAllowsLocalNetworking: true },
       NSLocalNetworkUsageDescription: 'Armada connects to your Admiral server on the local network.',
       NSFaceIDUsageDescription: 'Unlock your saved Armada sign-in with Face ID.',
     },

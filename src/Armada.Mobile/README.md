@@ -45,7 +45,8 @@ npx expo run:android --variant release --no-bundler
 
 Connect to an Admiral on first launch: enter its URL (`https://...`, or `http://` on a trusted LAN). From the iOS
 simulator the host machine is `127.0.0.1`; from the Android emulator it is `10.0.2.2`. Plain HTTP is allowed for
-LAN Admirals (iOS ATS local networking; Android cleartext) and the app warns on every `http://` profile.
+self-hosted Admirals on any host (iOS `NSAllowsArbitraryLoads`; Android cleartext) and the app warns on every
+`http://` profile.
 
 ## End-to-end tests (Maestro)
 

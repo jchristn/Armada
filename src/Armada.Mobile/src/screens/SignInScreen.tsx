@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Image, StyleSheet, View } from 'react-native';
-import { ApiError, authenticate, lookupTenants } from '@dashboard/api/client';
+import { ApiError, TimeoutError, authenticate, lookupTenants } from '@dashboard/api/client';
 import type { TenantListEntry } from '@dashboard/types/models';
 import { useAuth } from '../auth/AuthContext';
 import { InsecureUrlWarning } from '../components/app/InsecureUrlWarning';
@@ -19,6 +19,12 @@ type Mode = 'email' | 'apikey';
  * password; or an API key / bearer token. Adds the server profile choice (which Admiral to sign in to). A Proxy
  * profile first signs in to Armada.Proxy and picks an Admiral instance; the Admiral sign-in then goes through the relay.
  */
+
+/** fetch rejects with a TypeError when no HTTP response arrives (DNS, refused, TLS, or blocked by the OS). */
+function isConnectionError(err: unknown): boolean {
+  return err instanceof TypeError || err instanceof TimeoutError;
+}
+
 export function SignInScreen() {
   const { activeProfile, profiles, login, saveProfile, selectProfile, proxyStage } = useAuth();
   const { t } = useLocale();
@@ -63,8 +69,10 @@ export function SignInScreen() {
         setTenant(result.tenants.find((x) => x.id === activeProfile?.lastTenantId) ?? null);
         setStep('tenant');
       }
-    } catch {
-      setError(t('Failed to look up tenants.'));
+    } catch (err) {
+      setError(isConnectionError(err)
+        ? t('Could not reach the server. Check the address, the port, and your connection.')
+        : t('Failed to look up tenants.'));
     } finally {
       setBusy(false);
     }
@@ -81,7 +89,9 @@ export function SignInScreen() {
     } catch (err) {
       setError(err instanceof ApiError && err.status === 429
         ? t('Too many failed sign-in attempts. Wait a few minutes and try again.')
-        : t('Authentication failed.'));
+        : isConnectionError(err)
+          ? t('Could not reach the server. Check the address, the port, and your connection.')
+          : t('Authentication failed.'));
     } finally {
       setBusy(false);
     }
