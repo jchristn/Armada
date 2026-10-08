@@ -108,9 +108,8 @@ name: 02-operations
 - tapOn:
     id: "voyage-mission-title-0"
 - inputText: "Mobile E2E mission"
-# Tapping outside the inputs dismisses the keyboard (keyboardShouldPersistTaps="handled").
-- tapOn: "Mission 1"
-# Create Voyage sits in the form's footer: reachable wherever the form is scrolled, never behind the tab bar.
+# The keyboard stays up. Create Voyage sits in the form's footer, which the screen keeps above the keyboard (it
+# measures its place in the window, below the header), so it is reachable without closing the keyboard first.
 - assertVisible:
     id: "voyage-create-footer"
 - assertVisible:
