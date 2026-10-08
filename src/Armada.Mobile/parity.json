@@ -4273,9 +4273,49 @@
     },
     {
       "kind": "setting",
+      "key": "settings.repositoryHealth.dependencyCommandTimeoutSeconds",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerPolicySections.tsx",
+      "workstream": "W4.4",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.repositoryHealth.dependencyMaxAgeHours",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerPolicySections.tsx",
+      "workstream": "W4.4",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
       "key": "settings.repositoryHealth.fetchBeforeEvaluate",
       "status": "implemented",
       "mobile": "src/screens/system/ServerSettingsTab.tsx",
+      "workstream": "W4.4",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.repositoryHealth.intervalMinutes",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerPolicySections.tsx",
+      "workstream": "W4.4",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.repositoryHealth.maxConcurrency",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerPolicySections.tsx",
+      "workstream": "W4.4",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.repositoryHealth.missionWindowDays",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerPolicySections.tsx",
       "workstream": "W4.4",
       "notes": ""
     },
@@ -4289,9 +4329,105 @@
     },
     {
       "kind": "setting",
+      "key": "settings.repositoryHealth.staleBranchDays",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerPolicySections.tsx",
+      "workstream": "W4.4",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.repositoryHealth.thresholds.behindFail",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerPolicySections.tsx",
+      "workstream": "W4.4",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.repositoryHealth.thresholds.behindWarn",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerPolicySections.tsx",
+      "workstream": "W4.4",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.repositoryHealth.thresholds.missionFailureFail",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerPolicySections.tsx",
+      "workstream": "W4.4",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.repositoryHealth.thresholds.missionFailureWarn",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerPolicySections.tsx",
+      "workstream": "W4.4",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.repositoryHealth.thresholds.staleBranchFail",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerPolicySections.tsx",
+      "workstream": "W4.4",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.repositoryHealth.thresholds.staleBranchWarn",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerPolicySections.tsx",
+      "workstream": "W4.4",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
       "key": "settings.retention",
       "status": "implemented",
       "mobile": "src/screens/system/ServerSettingsTab.tsx",
+      "workstream": "W4.4",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.retention.askThreadArchiveAfterDays",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerPolicySections.tsx",
+      "workstream": "W4.4",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.retention.askThreadDeleteAfterDays",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerPolicySections.tsx",
+      "workstream": "W4.4",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.retention.cliPermissionRequestRetentionDays",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerPolicySections.tsx",
+      "workstream": "W4.4",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.retention.importBatchRetentionDays",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerPolicySections.tsx",
+      "workstream": "W4.4",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.retention.jobRetentionDays",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerPolicySections.tsx",
       "workstream": "W4.4",
       "notes": ""
     },
