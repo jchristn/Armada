@@ -50,7 +50,15 @@ class ParityGateTest(unittest.TestCase):
         self.rewrite(lambda entries: entries.append({"kind": "route", "key": "/gone", "status": "implemented", "mobile": "", "workstream": "W0.5", "notes": ""}))
         self.assertEqual(self.run_check(), 1)
 
+    def test_committed_manifest_has_no_planned_entries(self):
+        self.assertEqual(self.run_check(forbid_planned=True), 0)
+
     def test_planned_fails_only_with_forbid_planned(self):
+        def plan(entries):
+            for e in entries:
+                if e["kind"] == "api" and e["key"] == "getMission":
+                    e["status"] = "planned"
+        self.rewrite(plan)
         self.assertEqual(self.run_check(forbid_planned=False), 0)
         self.assertEqual(self.run_check(forbid_planned=True), 1)
 
