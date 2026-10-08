@@ -112,17 +112,31 @@ namespace Test.Shared.Infrastructure
         {
             if (_Server != null) throw new InvalidOperationException("Server is already running.");
 
-            Settings.AdmiralPort = await ReservePortAsync().ConfigureAwait(false);
-            Settings.McpPort = await ReservePortAsync().ConfigureAwait(false);
             Settings.InitializeDirectories();
 
             LoggingModule logging = new LoggingModule();
             logging.Settings.EnableConsole = false;
 
-            ArmadaServer server = new ArmadaServer(logging, Settings, quiet: true);
-            server.RuntimeToolDiscoverySource = new RecordingRuntimeToolDiscoverySource();
-            server.PushTransport = new RecordingPushTransport();
-            await server.StartAsync().ConfigureAwait(false);
+            // Bind through TestPorts: a reserved port that something else bound before the Admiral did is replaced
+            // by fresh ports instead of failing the start with "Address already in use".
+            ArmadaServer server = await TestPorts.StartOnFreePortsAsync(2, async ports =>
+            {
+                Settings.AdmiralPort = ports[0];
+                Settings.McpPort = ports[1];
+                ArmadaServer candidate = new ArmadaServer(logging, Settings, quiet: true);
+                candidate.RuntimeToolDiscoverySource = new RecordingRuntimeToolDiscoverySource();
+                candidate.PushTransport = new RecordingPushTransport();
+                try
+                {
+                    await candidate.StartAsync().ConfigureAwait(false);
+                    return candidate;
+                }
+                catch
+                {
+                    try { candidate.Stop(); } catch { }
+                    throw;
+                }
+            }).ConfigureAwait(false);
             _StubAgents.InstallOn(server);
             _Server = server;
 

@@ -354,11 +354,6 @@ namespace Test.Shared.Suites.Services
                 : Convert.FromBase64String(bodyBase64);
         }
 
-        private static int ReservePort()
-        {
-            return TestPorts.Reserve(1)[0];
-        }
-
         private static TestCaseDescriptor CaseAsync(string caseId, string displayName, string tag, Func<Task> body)
         {
             return new TestCaseDescriptor(
@@ -417,12 +412,10 @@ namespace Test.Shared.Suites.Services
             private readonly CancellationTokenSource _Cancellation = new CancellationTokenSource();
             private readonly Task _LoopTask;
 
-            private LoopbackRelayHost(int port)
+            private LoopbackRelayHost()
             {
+                _Listener = TestPorts.StartHttpListener(p => new[] { "http://127.0.0.1:" + p + "/" }, out int port);
                 Port = port;
-                _Listener = new HttpListener();
-                _Listener.Prefixes.Add("http://127.0.0.1:" + port + "/");
-                _Listener.Start();
                 _LoopTask = Task.Run(() => ListenAsync(_Cancellation.Token));
             }
 
@@ -444,7 +437,7 @@ namespace Test.Shared.Suites.Services
 
             public static Task<LoopbackRelayHost> StartAsync()
             {
-                return Task.FromResult(new LoopbackRelayHost(ReservePort()));
+                return Task.FromResult(new LoopbackRelayHost());
             }
 
             public async ValueTask DisposeAsync()

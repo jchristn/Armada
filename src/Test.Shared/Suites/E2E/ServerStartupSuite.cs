@@ -48,18 +48,34 @@ namespace Test.Shared.Suites.E2E
                 TcpListener squatter = new TcpListener(IPAddress.Loopback, 0);
                 squatter.Start();
                 int mcpPort = ((IPEndPoint)squatter.LocalEndpoint).Port;
-                ArmadaServer server = CreateServer(FreePort(), mcpPort, out string tempDir);
+                ArmadaSettings settings = CreateSettings(out string tempDir);
+                settings.McpPort = mcpPort;
+                ArmadaServer? server = null;
                 try
                 {
-                    ListenerBindException? caught = null;
-                    try
+                    // Only the REST port comes from TestPorts (and is replaced if something else bound it first); the
+                    // MCP failure on the squatter's port is the result under test, so it is returned, never retried.
+                    ListenerBindException? caught = await TestPorts.StartOnFreePortsAsync(1, async ports =>
                     {
-                        await server.StartAsync().ConfigureAwait(false);
-                    }
-                    catch (ListenerBindException ex)
-                    {
-                        caught = ex;
-                    }
+                        settings.AdmiralPort = ports[0];
+                        ArmadaServer candidate = CreateServerFromSettings(settings);
+                        server = candidate;
+                        try
+                        {
+                            await candidate.StartAsync().ConfigureAwait(false);
+                            return (ListenerBindException?)null;
+                        }
+                        catch (ListenerBindException ex) when (ex.Listener == "MCP" && ex.Port == mcpPort)
+                        {
+                            return ex;
+                        }
+                        catch
+                        {
+                            server = null;
+                            try { candidate.Stop(); } catch (Exception) { }
+                            throw;
+                        }
+                    }).ConfigureAwait(false);
 
                     AssertNotNull(caught, "StartAsync must throw a typed ListenerBindException when the MCP port is taken");
                     AssertEqual("MCP", caught!.Listener, "the MCP listener failed");
@@ -68,7 +84,7 @@ namespace Test.Shared.Suites.E2E
                 }
                 finally
                 {
-                    try { server.Stop(); } catch (Exception) { }
+                    if (server != null) { try { server.Stop(); } catch (Exception) { } }
                     squatter.Stop();
                     TestTemp.TryDelete(tempDir);
                 }
@@ -76,12 +92,13 @@ namespace Test.Shared.Suites.E2E
 
             cases.Add(CaseAsync("both_listeners_ready_after_start", "Both listeners answer as soon as StartAsync returns", TestTags.Positive, async () =>
             {
-                int restPort = FreePort();
-                int mcpPort = FreePort();
-                ArmadaServer server = CreateServer(restPort, mcpPort, out string tempDir);
+                ArmadaSettings settings = CreateSettings(out string tempDir);
+                ArmadaServer? server = null;
                 try
                 {
-                    await server.StartAsync().ConfigureAwait(false);
+                    server = await StartOnFreePortsAsync(settings).ConfigureAwait(false);
+                    int restPort = settings.AdmiralPort;
+                    int mcpPort = settings.McpPort;
                     using (HttpClient client = new HttpClient())
                     {
                         client.Timeout = TimeSpan.FromSeconds(10);
@@ -93,19 +110,20 @@ namespace Test.Shared.Suites.E2E
                 }
                 finally
                 {
-                    try { server.Stop(); } catch (Exception) { }
+                    if (server != null) { try { server.Stop(); } catch (Exception) { } }
                     TestTemp.TryDelete(tempDir);
                 }
             }));
 
             cases.Add(CaseAsync("generated_captain_mcp_url_answers_on_loopback_literal", "A captain MCP URL generated for an Admiral bound to 127.0.0.1 answers initialize with 200", TestTags.Positive, async () =>
             {
-                int restPort = FreePort();
-                int mcpPort = FreePort();
-                ArmadaServer server = CreateServer(restPort, mcpPort, out string tempDir);
+                ArmadaSettings settings = CreateSettings(out string tempDir);
+                ArmadaServer? server = null;
                 try
                 {
-                    await server.StartAsync().ConfigureAwait(false);
+                    server = await StartOnFreePortsAsync(settings).ConfigureAwait(false);
+                    int restPort = settings.AdmiralPort;
+                    int mcpPort = settings.McpPort;
 
                     // The URL a captain is handed: the isolated Claude Code launch config built for the configured hostname
                     // (the same host AgentLifecycleHandler and CaptainChatService pass). Before the fix it was localhost,
@@ -141,7 +159,7 @@ namespace Test.Shared.Suites.E2E
                 }
                 finally
                 {
-                    try { server.Stop(); } catch (Exception) { }
+                    if (server != null) { try { server.Stop(); } catch (Exception) { } }
                     TestTemp.TryDelete(tempDir);
                 }
             }));
@@ -150,12 +168,13 @@ namespace Test.Shared.Suites.E2E
             {
                 // No preset API key: like a real first start, the Admiral generates its local secrets and writes
                 // settings.json. Before the fix the session key was generated after that save and never persisted.
-                ArmadaServer first = CreateServer(FreePort(), FreePort(), out string tempDir, presetApiKey: false);
+                ArmadaSettings firstSettings = CreateSettings(out string tempDir, presetApiKey: false);
                 string settingsPath = Path.Combine(tempDir, "settings.json");
+                ArmadaServer? first = null;
                 ArmadaServer? second = null;
                 try
                 {
-                    await first.StartAsync().ConfigureAwait(false);
+                    first = await StartOnFreePortsAsync(firstSettings).ConfigureAwait(false);
                     ArmadaSettings loadedFirst = await ArmadaSettings.LoadAsync(settingsPath).ConfigureAwait(false);
                     AssertFalse(String.IsNullOrEmpty(loadedFirst.ApiKey), "the generated API key is persisted");
                     AssertFalse(String.IsNullOrEmpty(loadedFirst.SessionTokenEncryptionKey), "the session token encryption key is persisted");
@@ -164,24 +183,21 @@ namespace Test.Shared.Suites.E2E
                     using (HttpClient client = new HttpClient())
                     {
                         client.Timeout = TimeSpan.FromSeconds(10);
-                        HttpRequestMessage auth = new HttpRequestMessage(HttpMethod.Post, "http://127.0.0.1:" + loadedFirst.AdmiralPort + "/api/v1/authenticate");
+                        HttpRequestMessage auth = new HttpRequestMessage(HttpMethod.Post, "http://127.0.0.1:" + firstSettings.AdmiralPort + "/api/v1/authenticate");
                         auth.Headers.Add("X-Api-Key", loadedFirst.ApiKey);
                         HttpResponseMessage authResponse = await client.SendAsync(auth).ConfigureAwait(false);
                         AssertEqual(HttpStatusCode.OK, authResponse.StatusCode, "authenticate before restart");
                         AuthenticateResult result = JsonHelper.Deserialize<AuthenticateResult>(await authResponse.Content.ReadAsStringAsync().ConfigureAwait(false));
                         AssertFalse(String.IsNullOrEmpty(result.Token), "a session token is issued");
                         token = result.Token!;
-                        AssertEqual(HttpStatusCode.OK, await WhoAmIStatusAsync(client, loadedFirst.AdmiralPort, token).ConfigureAwait(false), "whoami before restart");
+                        AssertEqual(HttpStatusCode.OK, await WhoAmIStatusAsync(client, firstSettings.AdmiralPort, token).ConfigureAwait(false), "whoami before restart");
                     }
 
                     first.Stop();
 
                     // Restart the way Program.cs does: load settings.json from the same data directory.
                     ArmadaSettings reloaded = await ArmadaSettings.LoadAsync(settingsPath).ConfigureAwait(false);
-                    reloaded.AdmiralPort = FreePort();
-                    reloaded.McpPort = FreePort();
-                    second = CreateServerFromSettings(reloaded);
-                    await second.StartAsync().ConfigureAwait(false);
+                    second = await StartOnFreePortsAsync(reloaded).ConfigureAwait(false);
                     using (HttpClient client = new HttpClient())
                     {
                         client.Timeout = TimeSpan.FromSeconds(10);
@@ -190,7 +206,7 @@ namespace Test.Shared.Suites.E2E
                 }
                 finally
                 {
-                    try { first.Stop(); } catch (Exception) { }
+                    if (first != null) { try { first.Stop(); } catch (Exception) { } }
                     if (second != null) { try { second.Stop(); } catch (Exception) { } }
                     TestTemp.TryDelete(tempDir);
                 }
@@ -222,7 +238,29 @@ namespace Test.Shared.Suites.E2E
             return server;
         }
 
-        private static ArmadaServer CreateServer(int restPort, int mcpPort, out string tempDir, bool presetApiKey = true)
+        private static async Task<ArmadaServer> StartOnFreePortsAsync(ArmadaSettings settings)
+        {
+            // Bind through TestPorts: a reserved port that something else bound before the Admiral did is replaced
+            // by fresh ports instead of failing the case with "Address already in use".
+            return await TestPorts.StartOnFreePortsAsync(2, async ports =>
+            {
+                settings.AdmiralPort = ports[0];
+                settings.McpPort = ports[1];
+                ArmadaServer candidate = CreateServerFromSettings(settings);
+                try
+                {
+                    await candidate.StartAsync().ConfigureAwait(false);
+                    return candidate;
+                }
+                catch
+                {
+                    try { candidate.Stop(); } catch (Exception) { }
+                    throw;
+                }
+            }).ConfigureAwait(false);
+        }
+
+        private static ArmadaSettings CreateSettings(out string tempDir, bool presetApiKey = true)
         {
             tempDir = TestTemp.NewDirectory("startup");
             string sqlitePath = Path.Combine(tempDir, "armada.db");
@@ -239,40 +277,12 @@ namespace Test.Shared.Suites.E2E
             settings.LogDirectory = Path.Combine(tempDir, "logs");
             settings.DocksDirectory = Path.Combine(tempDir, "docks");
             settings.ReposDirectory = Path.Combine(tempDir, "repos");
-            settings.AdmiralPort = restPort;
-            settings.McpPort = mcpPort;
             if (presetApiKey) settings.ApiKey = "test-key-" + Guid.NewGuid().ToString("N");
             settings.HeartbeatIntervalSeconds = 300;
             settings.Rest.Hostname = "127.0.0.1";
             // Keep any settings save (generated local secrets) inside the temp directory.
             settings.SettingsFilePath = Path.Combine(tempDir, "settings.json");
-            return CreateServerFromSettings(settings);
-        }
-
-        private static int FreePort()
-        {
-            // Same non-ephemeral range as E2EServerFixture, so outbound sockets cannot take the port before the bind.
-            Random random = new Random();
-            for (int i = 0; i < 200; i++)
-            {
-                int candidate = random.Next(20000, 32000);
-                if (candidate >= 25000 && candidate < 25100) continue;
-                if (candidate >= 21000 && candidate < 21100) continue;
-                TcpListener probe = new TcpListener(IPAddress.Loopback, candidate);
-                try
-                {
-                    probe.Start();
-                    return candidate;
-                }
-                catch (SocketException)
-                {
-                }
-                finally
-                {
-                    probe.Stop();
-                }
-            }
-            throw new InvalidOperationException("no free port in 20000-31999");
+            return settings;
         }
 
         private static TestCaseDescriptor CaseAsync(string caseId, string displayName, string tag, Func<Task> body)

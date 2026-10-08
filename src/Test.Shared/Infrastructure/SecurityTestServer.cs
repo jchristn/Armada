@@ -39,12 +39,12 @@ namespace Test.Shared.Infrastructure
         public ArmadaSettings Settings { get; private set; } = null!;
 
         /// <summary>
-        /// REST base URL on IPv4 loopback.
+        /// REST base URL on IPv4 loopback; final once <see cref="StartAsync"/> has bound the listeners.
         /// </summary>
         public string BaseUrl { get; private set; } = "";
 
         /// <summary>
-        /// MCP base URL on IPv4 loopback.
+        /// MCP base URL on IPv4 loopback; final once <see cref="StartAsync"/> has bound the listeners.
         /// </summary>
         public string McpUrl { get; private set; } = "";
 
@@ -101,17 +101,15 @@ namespace Test.Shared.Infrastructure
             settings.DocksDirectory = Path.Combine(server.TempDir, "docks");
             settings.ReposDirectory = Path.Combine(server.TempDir, "repos");
             settings.SettingsFilePath = Path.Combine(server.TempDir, "settings.json");
-            int[] ports = TestPorts.Reserve(2);
-            settings.AdmiralPort = ports[0];
-            settings.McpPort = ports[1];
             settings.ApiKey = "test-key-" + Guid.NewGuid().ToString("N");
             settings.HeartbeatIntervalSeconds = 300;
             settings.Rest.Hostname = hostname;
             settings.InitializeDirectories();
             server.Settings = settings;
             server.ApiKey = settings.ApiKey;
-            server.BaseUrl = "http://127.0.0.1:" + settings.AdmiralPort;
-            server.McpUrl = "http://127.0.0.1:" + settings.McpPort;
+            // Provisional ports so the settings never name a default port; StartAsync binds on fresh ones.
+            int[] ports = TestPorts.Reserve(2);
+            server.UsePorts(ports[0], ports[1]);
 
             TestDatabaseHelper.SeedDatabaseFile(sqlitePath);
 
@@ -150,10 +148,25 @@ namespace Test.Shared.Infrastructure
             logging.Settings.LogFilename = Path.Combine(LogDirectory, "security-test.log");
             logging.Settings.MinimumSeverity = Severity.Debug;
 
-            Server = new ArmadaServer(logging, Settings, quiet: true);
-            Server.RuntimeToolDiscoverySource = new RecordingRuntimeToolDiscoverySource();
-            Server.PushTransport = new RecordingPushTransport();
-            await Server.StartAsync().ConfigureAwait(false);
+            // Bind through TestPorts: a reserved port that something else bound before the Admiral did is replaced
+            // by fresh ports instead of failing the suite with "Address already in use".
+            Server = await TestPorts.StartOnFreePortsAsync(2, async ports =>
+            {
+                UsePorts(ports[0], ports[1]);
+                ArmadaServer candidate = new ArmadaServer(logging, Settings, quiet: true);
+                candidate.RuntimeToolDiscoverySource = new RecordingRuntimeToolDiscoverySource();
+                candidate.PushTransport = new RecordingPushTransport();
+                try
+                {
+                    await candidate.StartAsync().ConfigureAwait(false);
+                    return candidate;
+                }
+                catch
+                {
+                    try { candidate.Stop(); } catch { }
+                    throw;
+                }
+            }).ConfigureAwait(false);
             StubAgents = new StubAgentProcesses(logging);
             StubAgents.InstallOn(Server);
 
@@ -211,6 +224,18 @@ namespace Test.Shared.Infrastructure
             try { Server?.Stop(); } catch { }
             try { StubAgents?.StopAll(); } catch { }
             TestTemp.TryDelete(TempDir);
+        }
+
+        #endregion
+
+        #region Private-Methods
+
+        private void UsePorts(int restPort, int mcpPort)
+        {
+            Settings.AdmiralPort = restPort;
+            Settings.McpPort = mcpPort;
+            BaseUrl = "http://127.0.0.1:" + restPort;
+            McpUrl = "http://127.0.0.1:" + mcpPort;
         }
 
         #endregion
