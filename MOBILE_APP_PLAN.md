@@ -3,7 +3,7 @@
 > **Type:** implementation plan (work-tracking). Annotate task status and the progress log as you go; keep this
 > document in sync with what actually shipped.
 >
-> **Status:** In progress (W0-W5 done; W6 in progress: security fixes merged, Android pass running)
+> **Status:** In progress (W0-W5 done; W6: security fixes and Android pass done; accessibility, tablet, parity gate, and docs remaining)
 > **Built on:** React Native with Expo SDK 57 (TypeScript, Expo Router), in `src/Armada.Mobile`
 > **Parity baseline:** the web dashboard at `src/Armada.Dashboard` as of 2026-10-07 (the same surfaces the TUI parity
 > manifest tracks: page routes, hub tabs, server-calling API client functions, WebSocket events, Server-page settings)
@@ -177,8 +177,8 @@ selection) are recorded per entry in the manifest notes.
 ### W6. Quality and release readiness
 - [ ] W6.1 Accessibility pass (VoiceOver, TalkBack, font scaling, contrast)
 - [ ] W6.2 Tablet and landscape pass (iPad split view, Stage Manager, Android foldables)
-- [ ] W6.3 E2E suite green on both platforms; performance on large lists (virtualized lists, pagination)
-- [~] W6.4 Security review (token storage, ATS/cleartext, deep link validation, push payload content)
+- [x] W6.3 E2E suite green on both platforms; performance on large lists (virtualized lists, pagination)
+- [x] W6.4 Security review (token storage, ATS/cleartext, deep link validation, push payload content)
 - [ ] W6.5 Docs: `docs/MOBILE.md` (install, connect, push setup, building and store submission), README, CHANGELOG
 
 ## Parity enforcement
@@ -210,3 +210,4 @@ Milestone C: push, proxy, quality pass, store-ready builds.
 | 2026-10-07 | W6.4 | work/mobile-security | Review: 18 findings F-39..F-56 (3 Medium, 10 Low, 5 Info). Fixed: registered-device-only push actions, Approve opens the full request, new device id on owner change, per-user device cap, no proxy cookie for native logins, bounded proxy challenges, privacy cover, Not encrypted mark, scoped notification history, http(s)-only links with host confirmation, safe deep-link ids, mobile npm audit in CI; Jest 589, server suites 92/92, PushDevices on 4 providers. Open: F-41/F-50 (work/mobile-faceid), F-56 (W4) |
 | 2026-10-07 | Face ID | work/mobile-faceid | Saved password behind biometrics (Keychain/Keystore, current biometry set), Face ID sign-in with one auto-prompt, one-time offer sheet, Preferences and server-form settings, sign-out forget option, password change updates it; F-41 (biometric bypasses on retry and proxy re-sign-in) and F-50 (retired device after offline sign-out) fixed; Jest 631. Open: 06-build-vessels landing mode option and the proxy flow's Preferences tap fail on iOS (pre-existing) |
 | 2026-10-07 | W4 | work/mobile-w4 | Resource kit (live loads, lists, form sheets, hubs, tablet split); Delivery, Configuration (10 tabs, 8 detail routes), Activity (history, API requests, W2 events/signals, token usage, jobs), Settings (all sections incl. Default Landing Mode and Push with redacted secrets, diagnostics, tenants/users/credentials, rebuild), backup/restore per F-56, CLI Tool Permissions, API Explorer with replay, /setup wizard; 14 shared lib extractions; parity 524 implemented (1 planned: getEntity); Jest 782 after merge; Maestro iPhone 18 Pro 10/10, tablet flow on iPad mini (landscape) and Armada_Tablet. Parity scanners fixed to read lib/settingsRanges.ts |
+| 2026-10-08 | W6.3 Android | work/mobile-android | Full Maestro suite 10/10 on Armada_Phone after merging main; W2/W3/W4 screens walked on Android (W2 Android verification done). Fixed: back with the keyboard up in a sheet, back exits list selection, Recents privacy on Android 13+, one-line search placeholders, sticky Save footer in Screen/BottomSheet/FormSheet; Dispatch keeps long text. iOS flow failures root-caused to Maestro not clipping scrolled rows; new e2eFlows lint. Jest 800. Open: FLAG_SECURE decision, /setup deep link, raw server errors in sheets |
