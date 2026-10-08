@@ -18,6 +18,12 @@ name: 09-w4
     element:
       id: "nav-/delivery"
     direction: DOWN
+    visibilityPercentage: 100
+# Nudge it clear of the tab bar (the bottom edge counts as visible behind it).
+- swipe:
+    start: "50%,60%"
+    end: "50%,40%"
+    duration: 600
 - tapOn:
     id: "nav-/delivery"
 - extendedWaitUntil:
@@ -134,7 +140,11 @@ name: 09-w4
       id: "nav-/server"
     direction: DOWN
     visibilityPercentage: 100
-    centerElement: true
+# Nudge it clear of the tab bar (the bottom edge counts as visible behind it).
+- swipe:
+    start: "50%,60%"
+    end: "50%,40%"
+    duration: 600
 - tapOn:
     id: "nav-/server"
 - extendedWaitUntil:
