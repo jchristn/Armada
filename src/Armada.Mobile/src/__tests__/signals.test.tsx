@@ -6,6 +6,7 @@ import { SignalsList, filterSignals } from '../screens/operations/SignalsList';
 import { page } from '../test/operationsClient';
 import { mockRouter, setMockParams } from '../test/routerMock';
 import { renderScreen } from '../test/screen';
+import { rowActionTarget } from '../test/a11y';
 
 jest.mock('@dashboard/api/client', () => require('../test/operationsClient').operationsClientMockFactory());
 jest.mock('expo-router', () => require('../test/routerMock').routerMockFactory());
@@ -55,7 +56,7 @@ describe('signals', () => {
   it('marks read, sends, and bulk deletes', async () => {
     await renderScreen(<SignalsList onSelect={jest.fn()} />);
     await screen.findByTestId('signal-row-sig_1');
-    await fireEvent(screen.getByTestId('signal-row-sig_1-swipe'), 'accessibilityAction', { nativeEvent: { actionName: 'read' } });
+    await fireEvent(rowActionTarget(screen.getByTestId('signal-row-sig_1-swipe'), 'read'), 'accessibilityAction', { nativeEvent: { actionName: 'read' } });
     await waitFor(() => expect(api.markSignalRead).toHaveBeenCalledWith('sig_1'));
 
     await fireEvent.press(screen.getByTestId('signal-send'));

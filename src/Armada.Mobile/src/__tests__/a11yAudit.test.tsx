@@ -1,9 +1,9 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { Image, Pressable, Switch, Text, TextInput, View } from 'react-native';
 import { ResourceRow } from '../components/resource/ResourceRow';
-import { KpiCard, ListRow, StatusBadge } from '../components/ui';
+import { KpiCard, ListRow, StatusBadge, SwipeRow } from '../components/ui';
 import { spokenValue } from '../components/ui/ListRow';
-import { auditAccessibility, type A11yRule } from '../test/a11y';
+import { auditAccessibility, rowActionTarget, type A11yRule } from '../test/a11y';
 import { ThemeProvider } from '../theme/ThemeContext';
 
 /** The UI kit only needs the theme. */
@@ -60,6 +60,14 @@ describe('accessibility audit', () => {
     )).toContain('nested-interactive');
   });
 
+  it('flags screen-reader actions on an element screen readers never focus', async () => {
+    expect(await auditOf(
+      <View accessibilityActions={[{ name: 'delete', label: 'Delete' }]}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Row" onPress={() => undefined}><View /></Pressable>
+      </View>,
+    )).toEqual(['unreachable-actions']);
+  });
+
   it('flags a row that shows text its label leaves out', async () => {
     expect(await auditOf(
       <Pressable accessibilityRole="button" accessibilityLabel="Fix login" onPress={() => undefined}>
@@ -107,6 +115,24 @@ describe('list rows read what they show', () => {
     </AppProviders>);
     await fireEvent(screen.getByTestId('r'), 'accessibilityAction', { nativeEvent: { actionName: 'longpress' } });
     expect(longPress).toHaveBeenCalledTimes(1);
+  });
+
+  it('swipe actions are offered on the row screen readers focus, next to its own actions', async () => {
+    const remove = jest.fn();
+    const menu = jest.fn();
+    await render(<AppProviders>
+      <SwipeRow testID="s" actions={[{ key: 'delete', label: 'Delete', icon: 'trash-outline', onPress: remove }]}>
+        <ListRow testID="r" title="Fix login" onPress={() => undefined} menu={{ label: 'Actions', onPress: menu }} />
+      </SwipeRow>
+    </AppProviders>);
+    expect(rules()).toEqual([]);
+    const row = screen.getByTestId('r');
+    expect(row.props.accessibilityActions).toEqual([{ name: 'menu', label: 'Actions' }, { name: 'delete', label: 'Delete' }]);
+    expect(screen.getByTestId('s').props.accessibilityActions).toBeUndefined();
+    await fireEvent(rowActionTarget(screen.getByTestId('s'), 'delete'), 'accessibilityAction', { nativeEvent: { actionName: 'delete' } });
+    expect(remove).toHaveBeenCalledTimes(1);
+    await fireEvent(row, 'accessibilityAction', { nativeEvent: { actionName: 'menu' } });
+    expect(menu).toHaveBeenCalledTimes(1);
   });
 
   it('a resource row reads its badge and its meta text', async () => {

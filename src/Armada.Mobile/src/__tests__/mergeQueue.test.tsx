@@ -6,6 +6,7 @@ import { MergeQueueList, filterMergeEntries } from '../screens/operations/MergeQ
 import { page } from '../test/operationsClient';
 import { mockRouter, setMockParams } from '../test/routerMock';
 import { renderScreen } from '../test/screen';
+import { rowActionTarget } from '../test/a11y';
 
 jest.mock('@dashboard/api/client', () => ({
   ...require('../test/operationsClient').operationsClientMockFactory(),
@@ -35,7 +36,7 @@ function entry(id: string, over: Partial<MergeEntry> = {}): MergeEntry {
 
 /** Runs a row's swipe action the way VoiceOver and TalkBack do (accessibility actions). */
 async function rowAction(testID: string, action: string) {
-  await fireEvent(screen.getByTestId(`${testID}-swipe`), 'accessibilityAction', { nativeEvent: { actionName: action } });
+  await fireEvent(rowActionTarget(screen.getByTestId(`${testID}-swipe`), action), 'accessibilityAction', { nativeEvent: { actionName: action } });
 }
 
 beforeEach(() => {

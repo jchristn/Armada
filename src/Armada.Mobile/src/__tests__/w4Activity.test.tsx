@@ -16,6 +16,7 @@ import RequestRoute from '../app/(app)/(more)/requests/[id]';
 import { replayHref } from '../screens/activity/RequestDetail';
 import { usageSeries } from '../screens/activity/TokenUsageTab';
 import { emit, page, renderW4Routes, resetW4 } from '../test/w4';
+import { rowActionTarget } from '../test/a11y';
 
 jest.mock('@dashboard/api/client', () => require('../test/w4Client').autoMockClient());
 jest.mock('expo-sharing', () => ({ isAvailableAsync: jest.fn(async () => true), shareAsync: jest.fn(async () => undefined) }));
@@ -177,7 +178,7 @@ describe('Activity > All Activity', () => {
     await renderW4Routes(ROUTES, '/activity');
     await waitFor(() => expect(screen.getByText('POST /api/v1/x')).toBeTruthy());
     expect(screen.queryByTestId('history-row-0-swipe-delete')).toBeNull();
-    await fireEvent(screen.getByTestId('history-row-1-swipe'), 'accessibilityAction', { nativeEvent: { actionName: 'delete' } });
+    await fireEvent(rowActionTarget(screen.getByTestId('history-row-1-swipe'), 'delete'), 'accessibilityAction', { nativeEvent: { actionName: 'delete' } });
     await waitFor(() => expect(screen.getByText('Delete this request-history entry? This cannot be undone.')).toBeTruthy());
     await act(async () => { await fireEvent.press(screen.getByTestId('history-confirm-confirm')); });
     expect(api.deleteRequestHistoryEntry).toHaveBeenCalledWith('req_9');
@@ -328,7 +329,7 @@ describe('Jobs', () => {
     api.cancelJob.mockResolvedValue({ ...JOBS[1], status: 'Cancelled' });
     await renderW4Routes(ROUTES, '/jobs');
     await waitFor(() => expect(screen.getByText('Health scan')).toBeTruthy());
-    await act(async () => { await fireEvent(screen.getByTestId('job-row-job_2-swipe'), 'accessibilityAction', { nativeEvent: { actionName: 'cancel' } }); });
+    await act(async () => { await fireEvent(rowActionTarget(screen.getByTestId('job-row-job_2-swipe'), 'cancel'), 'accessibilityAction', { nativeEvent: { actionName: 'cancel' } }); });
     expect(api.cancelJob).toHaveBeenCalledWith('job_2');
   });
 });

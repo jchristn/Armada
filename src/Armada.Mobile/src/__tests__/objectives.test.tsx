@@ -18,6 +18,7 @@ import { armadaLinkGroups, backlogItemPath, dispatchHref, historyHref, planningH
 import { dispatchPrefillFromParams } from '../screens/operations/w24/dispatchLink';
 import { prefillFromParams } from '../screens/planning/PlanningScreen';
 import { BuildProviders, buildSockets, deliver, page } from '../test/buildFixtures';
+import { rowActionTarget } from '../test/a11y';
 
 jest.mock('@dashboard/api/client', () => require('../test/buildClientMock').buildClientMockFactory());
 
@@ -173,12 +174,12 @@ describe('backlog list', () => {
     api.reorderBacklog.mockResolvedValue([{ ...A, rank: 1 }, { ...B, rank: 2 }]);
     await renderAt('/objectives');
     await waitFor(() => expect(screen.getByTestId('objective-row-Alpha')).toBeTruthy());
-    await act(async () => { fireEvent(screen.getByTestId('objective-swipe-Alpha'), 'accessibilityAction', { nativeEvent: { actionName: 'up' } }); });
+    await act(async () => { fireEvent(rowActionTarget(screen.getByTestId('objective-swipe-Alpha'), 'up'), 'accessibilityAction', { nativeEvent: { actionName: 'up' } }); });
     await waitFor(() => expect(api.reorderBacklog).toHaveBeenCalledWith({ items: [{ objectiveId: 'obj_a', rank: 1 }, { objectiveId: 'obj_b', rank: 2 }] }));
     await waitFor(() => expect(screen.getAllByTestId(/^objective-row-/)[0].props.testID).toBe('objective-row-Alpha'));
 
     api.listBacklog.mockResolvedValue(page([B, C]));
-    await act(async () => { fireEvent(screen.getByTestId('objective-swipe-Alpha'), 'accessibilityAction', { nativeEvent: { actionName: 'delete' } }); });
+    await act(async () => { fireEvent(rowActionTarget(screen.getByTestId('objective-swipe-Alpha'), 'delete'), 'accessibilityAction', { nativeEvent: { actionName: 'delete' } }); });
     expect(screen.getByText(/Delete "Alpha"\?/)).toBeTruthy();
     await fireEvent.press(screen.getByTestId('objective-delete-confirm-confirm'));
     await waitFor(() => expect(api.deleteBacklogItem).toHaveBeenCalledWith('obj_a'));

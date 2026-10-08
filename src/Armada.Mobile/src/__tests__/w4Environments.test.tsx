@@ -8,6 +8,7 @@ import { resolveHubTab } from '../components/resource/Hub';
 import { prefillQuery } from '../resource/links';
 import { environmentPayload, newEnvironmentValues } from '../screens/delivery/environmentForm';
 import { page, renderW4Routes, resetW4 } from '../test/w4';
+import { rowActionTarget } from '../test/a11y';
 
 jest.mock('@dashboard/api/client', () => require('../test/w4Client').autoMockClient());
 
@@ -99,7 +100,7 @@ describe('Delivery > Environments', () => {
     api.deleteEnvironment.mockResolvedValue(undefined as never);
     await renderW4Routes(ROUTES, '/delivery?tab=environments');
     await waitFor(() => expect(screen.getByText('production')).toBeTruthy());
-    await fireEvent(screen.getByTestId('environment-row-env_1-swipe'), 'accessibilityAction', { nativeEvent: { actionName: 'delete' } });
+    await fireEvent(rowActionTarget(screen.getByTestId('environment-row-env_1-swipe'), 'delete'), 'accessibilityAction', { nativeEvent: { actionName: 'delete' } });
     await waitFor(() => expect(screen.getByText('Delete "production"? This removes only the environment record.')).toBeTruthy());
     await act(async () => { await fireEvent.press(screen.getByTestId('environment-confirm-confirm')); });
     expect(api.deleteEnvironment).toHaveBeenCalledWith('env_1');

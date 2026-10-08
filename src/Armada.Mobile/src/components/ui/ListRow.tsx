@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View, type AccessibilityActionEvent, type AccessibilityActionInfo } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
 import { MIN_TOUCH, spacing } from '../../theme/typography';
 import { AppText } from './AppText';
@@ -34,6 +34,9 @@ export interface ListRowProps {
    * commas; empty pieces are dropped. A row is one screen-reader element, so anything shown must be here.
    */
   accessibilityValue?: string | (string | number | null | undefined | false)[];
+  /** More screen-reader actions (SwipeRow passes the row's swipe actions here). */
+  accessibilityActions?: readonly AccessibilityActionInfo[];
+  onAccessibilityAction?: (event: AccessibilityActionEvent) => void;
   testID?: string;
 }
 
@@ -45,7 +48,8 @@ export function spokenValue(value: ListRowProps['accessibilityValue']): string {
 }
 
 export function ListRow({
-  title, subtitle, icon, accessory, onPress, onLongPress, longPressLabel, menu, selected, destructive, accessibilityHint, accessibilityValue, testID,
+  title, subtitle, icon, accessory, onPress, onLongPress, longPressLabel, menu, selected, destructive, accessibilityHint, accessibilityValue,
+  accessibilityActions: extraActions, onAccessibilityAction: onExtraAction, testID,
 }: ListRowProps) {
   const { colors } = useTheme();
   const value = spokenValue(accessibilityValue);
@@ -62,15 +66,23 @@ export function ListRow({
   );
   if (!onPress) {
     return (
-      <View testID={testID} style={[styles.base, { borderBottomColor: colors.border }]} accessible accessibilityLabel={[title, subtitle, value].filter(Boolean).join(', ')}>
+      <View
+        testID={testID}
+        style={[styles.base, { borderBottomColor: colors.border }]}
+        accessible
+        accessibilityLabel={[title, subtitle, value].filter(Boolean).join(', ')}
+        accessibilityActions={extraActions}
+        onAccessibilityAction={onExtraAction}
+      >
         {content}
       </View>
     );
   }
   // Screen readers cannot swipe to a nested button or long-press reliably: both are offered as actions.
-  const actions: { name: string; label: string }[] = [];
+  const actions: AccessibilityActionInfo[] = [];
   if (menu) actions.push({ name: 'menu', label: menu.label });
   if (onLongPress && longPressLabel) actions.push({ name: 'longpress', label: longPressLabel });
+  if (extraActions) actions.push(...extraActions);
   const row = (
     <Pressable
       testID={testID}
@@ -81,8 +93,9 @@ export function ListRow({
       accessibilityState={{ selected: !!selected }}
       accessibilityActions={actions.length > 0 ? actions : undefined}
       onAccessibilityAction={actions.length > 0 ? (event) => {
-        if (event.nativeEvent.actionName === 'menu') menu?.onPress();
-        else if (event.nativeEvent.actionName === 'longpress') onLongPress?.();
+        if (menu && event.nativeEvent.actionName === 'menu') menu.onPress();
+        else if (onLongPress && longPressLabel && event.nativeEvent.actionName === 'longpress') onLongPress();
+        else onExtraAction?.(event);
       } : undefined}
       onPress={onPress}
       onLongPress={onLongPress}

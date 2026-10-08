@@ -11,6 +11,8 @@
  * - image-label: an image that screen readers reach (not hidden) without a label.
  * - nested-interactive: a touchable or input inside an element that is itself one accessibility element
  *   (`accessible`): iOS makes the inner control unreachable.
+ * - unreachable-actions: accessibility actions (swipe or menu actions for screen readers) on an element that is not
+ *   itself an accessibility element, so VoiceOver and TalkBack never offer them.
  * - summary-incomplete: an element read as one (accessible, with its own label) that shows text its label and
  *   value leave out, for example a list row whose status badge is never spoken.
  *
@@ -20,7 +22,7 @@
  *   expectAccessible(screen.root);
  */
 
-export type A11yRule = 'touchable-role' | 'touchable-name' | 'input-label' | 'switch-label' | 'image-label' | 'nested-interactive' | 'summary-incomplete';
+export type A11yRule = 'touchable-role' | 'touchable-name' | 'input-label' | 'switch-label' | 'image-label' | 'nested-interactive' | 'summary-incomplete' | 'unreachable-actions';
 
 export interface A11yIssue {
   rule: A11yRule;
@@ -164,6 +166,10 @@ export function auditAccessibility(root: object | null): A11yIssue[] {
         }
       }
     }
+    const actions = node.props.accessibilityActions;
+    if (Array.isArray(actions) && actions.length > 0 && node.props.accessible !== true) {
+      issues.push({ rule: 'unreachable-actions', where: where(node), detail: `${actions.length} action(s) on an element screen readers do not focus` });
+    }
     if (typeName(node) === 'Image' && node.props.accessible !== false && node.props.importantForAccessibility !== 'no' && !label(node.props)) {
       issues.push({ rule: 'image-label', where: where(node), detail: 'not hidden and no accessibilityLabel' });
     }
@@ -185,4 +191,21 @@ export function formatIssues(issues: A11yIssue[]): string {
 export function expectAccessible(root: object | null): void {
   const issues = auditAccessibility(root);
   if (issues.length > 0) throw new Error(`Accessibility issues:\n${formatIssues(issues)}`);
+}
+
+/**
+ * Runs a row's screen-reader action the way VoiceOver and TalkBack do: on the accessibility element inside `row`
+ * (a SwipeRow wrapper or the row itself) that offers it. Fails when no focusable element offers the action.
+ */
+export function rowActionTarget<T extends object>(row: T, actionName: string): T {
+  const offers = (n: HostNode) => n.props.accessible === true && Array.isArray(n.props.accessibilityActions)
+    && (n.props.accessibilityActions as { name: string }[]).some((a) => a.name === actionName);
+  const queue: (HostNode | string)[] = [row as HostNode];
+  while (queue.length > 0) {
+    const n = queue.shift()!;
+    if (typeof n === 'string') continue;
+    if (offers(n)) return n as unknown as T;
+    queue.push(...n.children);
+  }
+  throw new Error(`no accessibility element offers the action "${actionName}"`);
 }

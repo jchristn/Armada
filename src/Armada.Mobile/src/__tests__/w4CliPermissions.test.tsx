@@ -5,6 +5,7 @@ import MoreLayout from '../app/(app)/(more)/_layout';
 import CliRoute from '../app/(app)/(more)/cli-permissions';
 import { ruleDraftError, ruleTarget } from '../screens/system/CliPermissionsHub';
 import { emit, page, renderW4Routes, resetW4 } from '../test/w4';
+import { rowActionTarget } from '../test/a11y';
 
 jest.mock('@dashboard/api/client', () => require('../test/w4Client').autoMockClient());
 
@@ -86,7 +87,7 @@ describe('CLI Tool Permissions', () => {
     await fireEvent.changeText(screen.getByTestId('cli-rule-edit-form-description'), 'changed');
     await act(async () => { await fireEvent.press(screen.getByTestId('cli-rule-edit-form-submit')); });
     expect(api.updateCliPermissionRule).toHaveBeenCalledWith('cpl_1', { pattern: 'Bash(git status:*)', action: 'Allow', description: 'changed' });
-    await fireEvent(screen.getByTestId('cli-rule-row-cpl_1-swipe'), 'accessibilityAction', { nativeEvent: { actionName: 'delete' } });
+    await fireEvent(rowActionTarget(screen.getByTestId('cli-rule-row-cpl_1-swipe'), 'delete'), 'accessibilityAction', { nativeEvent: { actionName: 'delete' } });
     await waitFor(() => expect(screen.getByTestId('cli-rule-confirm-confirm')).toBeTruthy());
     await act(async () => { await fireEvent.press(screen.getByTestId('cli-rule-confirm-confirm')); });
     expect(api.deleteCliPermissionRule).toHaveBeenCalledWith('cpl_1');
