@@ -13,7 +13,9 @@ namespace Armada.Server.Routes
     using Armada.Core.Services.Interfaces;
 
     /// <summary>
-    /// REST API routes for the first-class vessel Workspace experience.
+    /// REST API routes for the first-class vessel Workspace experience. Every route works in the vessel's checkout where it
+    /// lives (see <see cref="VesselHostResolver"/>): the working directory on the Admiral host, or a checkout on a
+    /// connected Harbor that can serve the vessel. A vessel with neither is a 409 whose message says what to set.
     /// </summary>
     public class WorkspaceRoutes
     {
@@ -28,18 +30,25 @@ namespace Armada.Server.Routes
         private readonly DatabaseDriver _database;
         private readonly IWorkspaceService _workspace;
         private readonly JsonSerializerOptions _jsonOptions;
+        private readonly VesselHostResolver _hosts;
 
         /// <summary>
         /// Instantiate.
         /// </summary>
+        /// <param name="database">Database driver.</param>
+        /// <param name="workspace">Workspace service.</param>
+        /// <param name="jsonOptions">JSON options.</param>
+        /// <param name="hosts">Finds where a vessel's checkout lives; null to use the Admiral host only.</param>
         public WorkspaceRoutes(
             DatabaseDriver database,
             IWorkspaceService workspace,
-            JsonSerializerOptions jsonOptions)
+            JsonSerializerOptions jsonOptions,
+            VesselHostResolver? hosts = null)
         {
             _database = database ?? throw new ArgumentNullException(nameof(database));
             _workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
             _jsonOptions = jsonOptions ?? throw new ArgumentNullException(nameof(jsonOptions));
+            _hosts = hosts ?? new VesselHostResolver(database, new Armada.Core.Settings.ArmadaSettings(), new SyslogLogging.LoggingModule { Settings = { EnableConsole = false } }, null);
         }
 
         /// <summary>
@@ -65,7 +74,7 @@ namespace Armada.Server.Routes
                 try
                 {
                     string? path = req.Query.GetValueOrDefault("path");
-                    return await _workspace.GetTreeAsync(vessel, path).ConfigureAwait(false);
+                    return await _workspace.GetTreeAsync(await _hosts.ResolveAsync(vessel, ctx.UserId).ConfigureAwait(false), path).ConfigureAwait(false);
                 }
                 catch (Exception ex) when (TryMapWorkspaceException(req, ex, out ApiErrorResponse error))
                 {
@@ -97,7 +106,7 @@ namespace Armada.Server.Routes
                 string? path = req.Query.GetValueOrDefault("path");
                 try
                 {
-                    return await _workspace.GetDiffAsync(vessel, path).ConfigureAwait(false);
+                    return await _workspace.GetDiffAsync(await _hosts.ResolveAsync(vessel, ctx.UserId).ConfigureAwait(false), path).ConfigureAwait(false);
                 }
                 catch (Exception ex) when (TryMapWorkspaceException(req, ex, out ApiErrorResponse error))
                 {
@@ -135,7 +144,7 @@ namespace Armada.Server.Routes
 
                 try
                 {
-                    return await _workspace.GetFileAsync(vessel, path).ConfigureAwait(false);
+                    return await _workspace.GetFileAsync(await _hosts.ResolveAsync(vessel, ctx.UserId).ConfigureAwait(false), path).ConfigureAwait(false);
                 }
                 catch (Exception ex) when (TryMapWorkspaceException(req, ex, out ApiErrorResponse error))
                 {
@@ -170,7 +179,7 @@ namespace Armada.Server.Routes
 
                 try
                 {
-                    return await _workspace.SaveFileAsync(vessel, request).ConfigureAwait(false);
+                    return await _workspace.SaveFileAsync(await _hosts.ResolveAsync(vessel, ctx.UserId).ConfigureAwait(false), request).ConfigureAwait(false);
                 }
                 catch (Exception ex) when (TryMapWorkspaceException(req, ex, out ApiErrorResponse error))
                 {
@@ -207,21 +216,23 @@ namespace Armada.Server.Routes
                 WorkspaceExecRequest execRequest = JsonSerializer.Deserialize<WorkspaceExecRequest>(req.Http.Request.DataAsString, _jsonOptions)
                     ?? throw new InvalidOperationException("Request body could not be deserialized as WorkspaceExecRequest.");
 
-                await CommandAudit.RecordAsync(_database, new CommandAuditRecord
-                {
-                    Source = "WorkspaceExec",
-                    Command = execRequest.Command ?? String.Empty,
-                    WorkingDirectory = vessel.WorkingDirectory,
-                    TenantId = vessel.TenantId ?? ctx.TenantId,
-                    UserId = ctx.UserId,
-                    VesselId = vessel.Id,
-                    EntityType = "Vessel",
-                    EntityId = vessel.Id
-                }).ConfigureAwait(false);
-
                 try
                 {
-                    return await _workspace.ExecAsync(vessel, execRequest).ConfigureAwait(false);
+                    VesselHost host = await _hosts.ResolveAsync(vessel, ctx.UserId).ConfigureAwait(false);
+                    await CommandAudit.RecordAsync(_database, new CommandAuditRecord
+                    {
+                        Source = "WorkspaceExec",
+                        Command = execRequest.Command ?? String.Empty,
+                        WorkingDirectory = host.WorkingDirectory,
+                        Host = host.HostLabel,
+                        TenantId = vessel.TenantId ?? ctx.TenantId,
+                        UserId = ctx.UserId,
+                        VesselId = vessel.Id,
+                        EntityType = "Vessel",
+                        EntityId = vessel.Id
+                    }).ConfigureAwait(false);
+
+                    return await _workspace.ExecAsync(host, execRequest).ConfigureAwait(false);
                 }
                 catch (Exception ex) when (TryMapWorkspaceException(req, ex, out ApiErrorResponse error))
                 {
@@ -256,7 +267,7 @@ namespace Armada.Server.Routes
                 try
                 {
                     req.Http.Response.StatusCode = 201;
-                    return await _workspace.CreateDirectoryAsync(vessel, request).ConfigureAwait(false);
+                    return await _workspace.CreateDirectoryAsync(await _hosts.ResolveAsync(vessel, ctx.UserId).ConfigureAwait(false), request).ConfigureAwait(false);
                 }
                 catch (Exception ex) when (TryMapWorkspaceException(req, ex, out ApiErrorResponse error))
                 {
@@ -290,7 +301,7 @@ namespace Armada.Server.Routes
 
                 try
                 {
-                    return await _workspace.RenameAsync(vessel, request).ConfigureAwait(false);
+                    return await _workspace.RenameAsync(await _hosts.ResolveAsync(vessel, ctx.UserId).ConfigureAwait(false), request).ConfigureAwait(false);
                 }
                 catch (Exception ex) when (TryMapWorkspaceException(req, ex, out ApiErrorResponse error))
                 {
@@ -328,7 +339,7 @@ namespace Armada.Server.Routes
 
                 try
                 {
-                    return await _workspace.DeleteAsync(vessel, path).ConfigureAwait(false);
+                    return await _workspace.DeleteAsync(await _hosts.ResolveAsync(vessel, ctx.UserId).ConfigureAwait(false), path).ConfigureAwait(false);
                 }
                 catch (Exception ex) when (TryMapWorkspaceException(req, ex, out ApiErrorResponse error))
                 {
@@ -374,7 +385,7 @@ namespace Armada.Server.Routes
 
                 try
                 {
-                    return await _workspace.SearchAsync(vessel, query, maxResults).ConfigureAwait(false);
+                    return await _workspace.SearchAsync(await _hosts.ResolveAsync(vessel, ctx.UserId).ConfigureAwait(false), query, maxResults).ConfigureAwait(false);
                 }
                 catch (Exception ex) when (TryMapWorkspaceException(req, ex, out ApiErrorResponse error))
                 {
@@ -407,7 +418,7 @@ namespace Armada.Server.Routes
 
                 try
                 {
-                    return await _workspace.GetChangesAsync(vessel).ConfigureAwait(false);
+                    return await _workspace.GetChangesAsync(await _hosts.ResolveAsync(vessel, ctx.UserId).ConfigureAwait(false)).ConfigureAwait(false);
                 }
                 catch (Exception ex) when (TryMapWorkspaceException(req, ex, out ApiErrorResponse error))
                 {
@@ -438,7 +449,10 @@ namespace Armada.Server.Routes
                 try
                 {
                     List<WorkspaceActiveMission> activeMissions = await GetActiveMissionSummariesAsync(ctx, vessel.Id).ConfigureAwait(false);
-                    return await _workspace.GetStatusAsync(vessel, activeMissions).ConfigureAwait(false);
+                    VesselHostResolution resolution = await _hosts.TryResolveAsync(vessel, ctx.UserId).ConfigureAwait(false);
+                    if (resolution.Host == null)
+                        return WorkspaceService.Unavailable(vessel, activeMissions, resolution.Message ?? "No working directory configured or directory does not exist.", vessel.WorkingDirectory);
+                    return await _workspace.GetStatusAsync(resolution.Host, activeMissions).ConfigureAwait(false);
                 }
                 catch (Exception ex) when (TryMapWorkspaceException(req, ex, out ApiErrorResponse error))
                 {
@@ -546,6 +560,9 @@ namespace Armada.Server.Routes
             error = new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = ex.Message };
             switch (ex)
             {
+                case VesselCheckoutUnavailableException checkout:
+                    error = RouteErrorMapper.CheckoutUnavailable(req, checkout);
+                    return true;
                 case WorkspaceConflictException:
                     req.Http.Response.StatusCode = 409;
                     error.Error = ApiResultEnum.Conflict;

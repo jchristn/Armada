@@ -16,6 +16,11 @@ namespace Armada.Core.Models
         public string WorkingDirectory { get; set; } = string.Empty;
 
         /// <summary>
+        /// Where the command ran: "Admiral", or "Harbor Name (hbr_...)" for a checkout on a Harbor.
+        /// </summary>
+        public string Host { get; set; } = "Admiral";
+
+        /// <summary>
         /// The process exit code (-1 when the command timed out or failed to start).
         /// </summary>
         public int ExitCode { get; set; } = -1;

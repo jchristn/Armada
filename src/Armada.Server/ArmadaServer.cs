@@ -132,6 +132,7 @@ namespace Armada.Server
         private PlanningSessionCoordinator _PlanningSessions = null!;
         private ObjectiveRefinementCoordinator _ObjectiveRefinementSessions = null!;
         private IWorkspaceService _Workspace = null!;
+        private VesselHostResolver? _VesselHosts = null;
         private RequestHistoryCaptureService _RequestHistoryCapture = null!;
         private WorkflowProfileService _WorkflowProfileService = null!;
         private ProjectProfileService _ProjectProfileService = null!;
@@ -311,6 +312,13 @@ namespace Armada.Server
             _HarborConnectionManager = new HarborConnectionManager(_HarborService, _Logging, harborMcpUrl);
             _HarborMetricsRecorder = new HarborMetricsRecorder(_Database, _Logging, _Settings.Harbor);
             _HarborConnectionManager.Metrics = _HarborMetricsRecorder;
+
+            // Operations that need a vessel's checkout outside a mission (check runs, Workspace, readiness, health, branch
+            // views) run where the checkout lives: the working directory on this host, or a connected Harbor's checkout.
+            _VesselHosts = new VesselHostResolver(_Database, _Settings, _Logging, _HarborConnectionManager);
+            _CheckRunService.Hosts = _VesselHosts;
+            _VesselReadinessService.Hosts = _VesselHosts;
+            healthEvaluator.Hosts = _VesselHosts;
             _HarborMetricsService = new HarborMetricsService(_Database, _HarborService, _Settings.Harbor);
             _HarborLinkEndpoint = new HarborLinkEndpoint(
                 _HarborConnectionManager,
@@ -1196,7 +1204,7 @@ namespace Armada.Server
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Workspace
-            new WorkspaceRoutes(_Database, _Workspace, _JsonOptions)
+            new WorkspaceRoutes(_Database, _Workspace, _JsonOptions, _VesselHosts)
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Workflow profiles

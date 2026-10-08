@@ -101,7 +101,7 @@ namespace Test.Shared.Suites.Services
             cases.Add(CaseAsync("get_status_async_null_vessel_throws", "GetStatusAsync NullVessel Throws", TestTags.Negative, async () =>
             {
                 WorkspaceService service = new WorkspaceService();
-                await AssertThrowsAsync<ArgumentNullException>(() => service.GetStatusAsync(null!)).ConfigureAwait(false);
+                await AssertThrowsAsync<ArgumentNullException>(() => service.GetStatusAsync((Vessel)null!)).ConfigureAwait(false);
             }));
 
             cases.Add(CaseAsync("save_file_async_null_request_throws", "SaveFileAsync NullRequest Throws", TestTags.Negative, async () =>
