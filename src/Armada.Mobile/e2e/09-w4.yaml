@@ -208,12 +208,17 @@ name: 09-w4
     when:
       platform: iOS
     commands:
+      # The simulator has a passcode, so the export first asks the owner to confirm it is them (F-56). Maestro
+      # cannot enter it: check the prompt and that cancelling exports nothing.
       - extendedWaitUntil:
-          visible: "Save to Files"
+          visible: ".*Confirm it is you to export the Armada backup.*"
           timeout: 20000
-      - takeScreenshot: w4-backup-share-sheet
+      - takeScreenshot: w4-backup-reauth
       - tapOn:
-          point: "50%,10%"
+          point: "9%,11%"
+      - extendedWaitUntil:
+          visible: ".*Backup cancelled.*"
+          timeout: 10000
 - runFlow:
     when:
       platform: Android
