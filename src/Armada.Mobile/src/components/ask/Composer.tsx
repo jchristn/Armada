@@ -138,6 +138,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             multiline
             accessibilityLabel={t('Message')}
             accessibilityHint={placeholder}
+            // Return (on-screen or a hardware keyboard) sends, as the Send button does, and keeps the keyboard up.
+            returnKeyType="send"
+            submitBehavior="submit"
+            onSubmitEditing={send}
             onChangeText={(value) => { setInput(value); setMenuDismissed(false); }}
             onLayout={measureInput}
             style={[styles.input, typography.body, { minHeight: restingHeight, color: colors.text, borderColor: colors.control, backgroundColor: colors.background }]}

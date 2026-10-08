@@ -128,6 +128,27 @@ describe('Ask Armada', () => {
     expect(minHeight('ask-send')).toBe(72);
   });
 
+  it('pressing Return in the message box sends, like Send, and keeps the keyboard up', async () => {
+    api.createAskThread.mockResolvedValue(thread({ id: 'thr_new', title: 'New conversation' }));
+    api.sendAskMessage.mockResolvedValue({ messageId: 'msg_10', turnId: 'turn_1' });
+    api.getAskThread.mockResolvedValue({ thread: thread({ id: 'thr_new', activeTurnId: 'turn_1' }), trackedWork: [] });
+    api.enumerateAskMessages.mockResolvedValue({ messages: [message({ id: 'msg_10', threadId: 'thr_new', contentText: 'What is running?' })], hasMore: false });
+    await renderAsk();
+    await waitFor(() => expect(api.listCaptains).toHaveBeenCalled());
+    const input = screen.getByTestId('ask-input');
+    expect(input.props.returnKeyType).toBe('send');
+    expect(input.props.submitBehavior).toBe('submit');
+
+    // Return with nothing sendable does nothing, as the disabled Send button would.
+    await act(async () => { fireEvent(screen.getByTestId('ask-input'), 'submitEditing'); });
+    expect(api.sendAskMessage).not.toHaveBeenCalled();
+
+    await fireEvent.changeText(screen.getByTestId('ask-input'), 'What is running?');
+    await act(async () => { fireEvent(screen.getByTestId('ask-input'), 'submitEditing'); });
+    await waitFor(() => expect(api.sendAskMessage).toHaveBeenCalledWith('thr_new', 'What is running?', false));
+    expect(screen.getByTestId('ask-input').props.value).toBe('');
+  });
+
   it('measuring the composer reads each layout event before React Native releases it', async () => {
     await renderAsk();
     // React Native nulls nativeEvent once a handler returns. Queue the input's update first so the button's state
