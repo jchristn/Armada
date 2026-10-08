@@ -41,6 +41,7 @@ namespace Armada.Harbor
         private readonly SelectableTextBlock _MissionsValue;
         private readonly SelectableTextBlock _VoyagesValue;
         private readonly StackPanel _UsagePanel;
+        private readonly StackPanel _UsageButtons;
         private readonly TextBlock _UsageNote;
         private readonly DispatcherTimer _Timer;
         private bool _Polling = false;
@@ -84,6 +85,7 @@ namespace Armada.Harbor
             _VoyagesValue = HarborUi.AddRow(admiral, "Active voyages", null);
 
             StackPanel usageButtons = HarborUi.ButtonRow();
+            _UsageButtons = usageButtons;
             Button refresh = HarborUi.Button("Measure Again", () => _ = MeasureUsageAsync(), "Measure the size of each item in the data directory");
             usageButtons.Children.Add(refresh);
             usageButtons.Children.Add(HarborUi.Button("Open Folder", OpenDataFolder));
@@ -139,6 +141,8 @@ namespace Armada.Harbor
             _HarborLogValue.Text = harborLog ?? HarborAppSettings.LogDirectory() + " (no log yet)";
             _RestValue.Text = _Session.RestBaseUrl ?? "-  (the Admiral address is not a ws:// or wss:// address)";
 
+            // Measuring and opening the folder apply only to an Admiral whose data is on this computer.
+            _UsageButtons.IsVisible = _Session.IsAdmiralLocal;
             if (_Session.Admiral == null) _UsageNote.Text = "Looking for the Armada data directory...";
             else if (!_Session.Admiral.IsLocal) _UsageNote.Text = _Session.Admiral.Reason;
             else _UsageNote.Text = _Session.Admiral.DataDirectory;

@@ -40,39 +40,42 @@ namespace Armada.Harbor
         public RepositoriesSettingsView(HarborSession session)
         {
             _Session = session ?? throw new ArgumentNullException(nameof(session));
-            StackPanel root = new StackPanel { Spacing = 10, Margin = new Thickness(4, 4, 12, 12) };
-            root.Children.Add(HarborUi.Heading("Repositories"));
-            root.Children.Add(HarborUi.Note("Missions routed to this Harbor get their dock (a git worktree) on this machine. A vessel's dock is made from "
-                + "the checkout named for it below, else from a checkout under a root folder whose remote matches the vessel's repository URL "
-                + "(https and ssh forms both match), else from a clone this Harbor makes. Docks never change your checkout's files, index, or "
-                + "current branch; LocalMerge and MergeAndPush land into the checkout, which must have no uncommitted changes."));
+            StackPanel checkouts = new StackPanel { Spacing = 8 };
+            checkouts.Children.Add(HarborUi.Help("A vessel (by name or ID) and the folder of its checkout on this computer."));
+            checkouts.Children.Add(_MappingRows);
+            checkouts.Children.Add(HarborUi.Button("Add vessel checkout", () => AddMapping(String.Empty, String.Empty), "Name a vessel (by name or ID) and the folder of its checkout on this machine"));
 
-            root.Children.Add(Label("Vessel checkouts"));
-            root.Children.Add(_MappingRows);
-            root.Children.Add(HarborUi.Button("Add vessel checkout", () => AddMapping(String.Empty, String.Empty), "Name a vessel (by name or ID) and the folder of its checkout on this machine"));
+            StackPanel roots = new StackPanel { Spacing = 8 };
+            roots.Children.Add(HarborUi.Help("Searched up to three folders deep for checkouts of vessels not named above."));
+            roots.Children.Add(_RootRows);
+            roots.Children.Add(HarborUi.Button("Add root folder", () => AddRoot(String.Empty)));
 
-            root.Children.Add(Label("Root folders"));
-            root.Children.Add(HarborUi.Help("Searched up to three folders deep for checkouts of vessels not named above."));
-            root.Children.Add(_RootRows);
-            root.Children.Add(HarborUi.Button("Add root folder", () => AddRoot(String.Empty)));
-
-            root.Children.Add(Label("Docks folder"));
-            root.Children.Add(PathRow(_DocksDirectory));
-            root.Children.Add(HarborUi.Help("Mission docks are created here as <vessel>/<mission>. Keep it outside your code folders."));
-
-            root.Children.Add(Label("Clones folder"));
-            root.Children.Add(PathRow(_ReposDirectory));
-            root.Children.Add(HarborUi.Help("Where this Harbor clones a vessel it has no checkout of."));
+            StackPanel folders = new StackPanel { Spacing = 6 };
+            folders.Children.Add(Label("Docks folder"));
+            folders.Children.Add(PathRow(_DocksDirectory));
+            folders.Children.Add(HarborUi.Help("Mission docks are created here as <vessel>/<mission>. Keep it outside your code folders."));
+            folders.Children.Add(Label("Clones folder"));
+            folders.Children.Add(PathRow(_ReposDirectory));
+            folders.Children.Add(HarborUi.Help("Where this Harbor clones a vessel it has no checkout of."));
 
             StackPanel buttons = HarborUi.ButtonRow();
             Button save = HarborUi.Button("Save", Save);
             save.Classes.Add("accent");
             buttons.Children.Add(save);
             buttons.Children.Add(HarborUi.Button("Revert", () => Load(_Session.Settings), "Discard unsaved changes"));
-            root.Children.Add(buttons);
-            root.Children.Add(_Message);
+            StackPanel footer = new StackPanel { Spacing = 8 };
+            footer.Children.Add(buttons);
+            footer.Children.Add(_Message);
 
-            Content = new ScrollViewer { Content = root, HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled };
+            Content = HarborUi.Page(
+                HarborUi.Note("Missions routed to this Harbor get their dock (a git worktree) on this machine. A vessel's dock is made from "
+                    + "the checkout named for it below, else from a checkout under a root folder whose remote matches the vessel's repository URL "
+                    + "(https and ssh forms both match), else from a clone this Harbor makes. Docks never change your checkout's files, index, or "
+                    + "current branch; LocalMerge and MergeAndPush land into the checkout, which must have no uncommitted changes."),
+                HarborUi.Card("Vessel checkouts", checkouts, null),
+                HarborUi.Card("Root folders", roots, null),
+                HarborUi.Card("Folders this Harbor manages", folders, null),
+                footer);
             Load(_Session.Settings);
         }
 
@@ -149,10 +152,7 @@ namespace Armada.Harbor
 
         private void SetMessage(string? text, bool isError)
         {
-            _Message.Text = text ?? String.Empty;
-            _Message.IsVisible = !String.IsNullOrEmpty(text);
-            if (isError) _Message.Foreground = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#ef4444"));
-            else HarborUi.Secondary(_Message);
+            HarborUi.SetMessage(_Message, text, isError);
         }
 
         private static TextBlock Label(string text)
