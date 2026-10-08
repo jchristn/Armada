@@ -351,7 +351,7 @@ Set `ARMADA_INITIAL_ADMIN_PASSWORD` (8+ characters, not `password`) before `dock
 
 Data is persisted in `docker/armada/db/`. To stop: `docker compose down`. To reset all data: run `docker/armada/factory/reset.sh` (or `reset.bat` on Windows).
 
-See the [README](README.md#running-locally-with-docker) for full Docker details including volume layout, configuration, and building images from source.
+See [docs/DOCKER.md](docs/DOCKER.md) for full Docker details including volume layout, configuration, and building images from source.
 
 ---
 

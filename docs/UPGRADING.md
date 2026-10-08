@@ -195,3 +195,274 @@ scripts/common/run-upgrade-test.sh --from-ref 574a8a1a      # any other baseline
 ```
 
 The baseline defaults to the `v0.9.0` tag when the repository has one, and to the `release(v0.9.0)` commit `e456b008` otherwise. Run it before every release candidate.
+
+## Version-by-version upgrade notes
+
+What changed in `settings.json`, the database schema, and behavior at each release step, oldest first. Schema migrations run automatically at startup; the steps below are the ones that may need you.
+
+### v0.1.0 to v0.2.0
+
+**Breaking change:** The `settings.json` format changed. Armada v0.2.0 will fail to start with a v0.1.0 `settings.json`.
+
+The `databasePath` string property was replaced with a `database` object supporting multiple backends (SQLite, PostgreSQL, SQL Server, MySQL).
+
+#### Before (v0.1.0)
+
+```json
+{
+  "databasePath": "armada.db",
+  "admiralPort": 7890,
+  "maxCaptains": 5
+}
+```
+
+#### After (v0.2.0)
+
+```json
+{
+  "database": {
+    "type": "Sqlite",
+    "filename": "armada.db"
+  },
+  "admiralPort": 7890,
+  "maxCaptains": 5
+}
+```
+
+#### Minimal change for SQLite users
+
+Replace:
+
+```json
+"databasePath": "path/to/armada.db"
+```
+
+With:
+
+```json
+"database": {
+  "type": "Sqlite",
+  "filename": "path/to/armada.db"
+}
+```
+
+No other changes are required -- all other settings remain the same.
+
+#### Switching to PostgreSQL
+
+```json
+"database": {
+  "type": "Postgresql",
+  "hostname": "localhost",
+  "port": 5432,
+  "username": "armada",
+  "password": "your-password",
+  "databaseName": "armada",
+  "schema": "public",
+  "minPoolSize": 1,
+  "maxPoolSize": 25,
+  "connectionLifetimeSeconds": 300,
+  "connectionIdleTimeoutSeconds": 60
+}
+```
+
+#### Switching to SQL Server
+
+```json
+"database": {
+  "type": "SqlServer",
+  "hostname": "localhost",
+  "port": 1433,
+  "username": "armada",
+  "password": "your-password",
+  "databaseName": "armada",
+  "minPoolSize": 1,
+  "maxPoolSize": 25,
+  "connectionLifetimeSeconds": 300,
+  "connectionIdleTimeoutSeconds": 60
+}
+```
+
+#### Switching to MySQL
+
+```json
+"database": {
+  "type": "Mysql",
+  "hostname": "localhost",
+  "port": 3306,
+  "username": "armada",
+  "password": "your-password",
+  "databaseName": "armada",
+  "minPoolSize": 1,
+  "maxPoolSize": 25,
+  "connectionLifetimeSeconds": 300,
+  "connectionIdleTimeoutSeconds": 60
+}
+```
+
+#### Additional notes
+
+- **Port auto-detection:** Setting `port` to `0` (or omitting it) auto-detects the default port for each database type (PostgreSQL: 5432, SQL Server: 1433, MySQL: 3306).
+- **Connection pooling:** All non-SQLite backends support connection pooling via `minPoolSize` (0-100), `maxPoolSize` (1-200), `connectionLifetimeSeconds` (minimum 30), and `connectionIdleTimeoutSeconds` (minimum 10).
+- **Encryption:** Set `requireEncryption` to `true` to require encrypted connections for PostgreSQL, SQL Server, or MySQL.
+- **Backup/restore:** The `backup` and `restore` MCP tools are only available when using SQLite. If you switch to PostgreSQL, SQL Server, or MySQL, use your database's native backup tools instead.
+
+#### Automated migration script
+
+For existing v0.1.0 deployments, run the migration script to automatically convert your `settings.json`:
+
+**Windows:**
+```
+migrations\migrate_v0.1.0_to_v0.2.0.bat
+# or with a custom path:
+migrations\migrate_v0.1.0_to_v0.2.0.bat C:\path\to\settings.json
+```
+
+**Linux/macOS:**
+```
+./migrations/migrate_v0.1.0_to_v0.2.0.sh
+# or with a custom path:
+./migrations/migrate_v0.1.0_to_v0.2.0.sh /path/to/settings.json
+```
+
+The script backs up your original file to `settings.json.v0.1.0.bak` before making changes.
+
+**Requires:** jq (Linux/macOS) -- install via `apt install jq`, `brew install jq`, etc.
+
+### v0.2.0 to v0.3.0
+
+v0.3.0 introduces multi-tenant support. The database schema is automatically migrated on first startup. Key changes:
+
+- **New tables:** `TenantMetadata`, `UserMaster`, `Credential` are created automatically
+- **Default data seeded:** A default tenant (`default`), user (`admin@armada` / `password`), and credential (bearer token `default`) are created if no tenants exist
+- **All operational tables gain `TenantId`:** Existing rows are assigned to the `default` tenant during migration
+- **All operational tables gain `UserId`:** Existing rows are assigned to the earliest user in their tenant during migration
+- **Ownership integrity:** Operational `TenantId` and `UserId` columns are indexed and protected by database foreign keys across all supported backends
+- **Protected auth resources:** The default tenant, its default user/credential, and the synthetic system records are seeded as protected and cannot be deleted directly
+- **Role model:** `IsAdmin` now means global system admin. `IsTenantAdmin` means tenant-scoped admin. Regular users are limited to their own tenant, own account, and own credentials
+- **Password management:** User create/update APIs accept plaintext `Password`; the server hashes it before persistence. Leaving `Password` blank on update preserves the existing password. The dashboard exposes this through the Users edit modal for both admin-managed and self-service password changes
+- **Protected resources:** `IsProtected` is server-controlled on tenants, users, and credentials. Protected objects cannot be deleted directly, and immutable identifiers/timestamps/ownership fields are preserved on update
+- **Tenant-created seed admin:** Creating a tenant also creates `admin@armada` with password `password` plus a default credential inside that tenant; that seeded user is tenant admin only (`IsAdmin = false`, `IsTenantAdmin = true`) and those child resources are protected from direct delete
+- **Authentication required:** All REST API endpoints now require authentication. Use `Authorization: Bearer default` for backward-compatible access
+- **`X-Api-Key` deprecated:** The `X-Api-Key` header still works but is deprecated. If configured, it maps to a synthetic admin identity. Migrate to bearer tokens
+- **New settings:** `AllowSelfRegistration` (default then: `true`; 1.0 defaults to `false`), `RequireAuthForShutdown` (default: `false`), `SessionTokenEncryptionKey` (auto-generated)
+
+No manual changes to `settings.json` are required. Existing `ApiKey` settings continue to work.
+
+### v0.3.0 to v0.4.0
+
+v0.4.0 adds personas, pipelines, and prompt templates. The database schema is automatically migrated on first startup (migrations 19-23). Key changes:
+
+- New tables: `prompt_templates`, `personas`, `pipelines`, `pipeline_stages`
+- New columns: `captains.allowed_personas`, `captains.preferred_persona`, `missions.persona`, `missions.depends_on_mission_id`, `fleets.default_pipeline_id`, `vessels.default_pipeline_id`
+- Built-in personas (Worker, Architect, Judge, TestEngineer) and pipelines (WorkerOnly, Reviewed, Tested, FullPipeline) are seeded automatically
+- 18 built-in prompt templates are seeded automatically
+- Standalone migration scripts available in `migrations/` for manual execution
+
+### v0.4.0 to v0.5.0
+
+v0.5.0 is focused on dispatch and pipeline stability. It adds captain model selection, startup model validation, mission runtime tracking, and a broad set of handoff, landing, cleanup, and workflow reliability improvements. The database schema is automatically migrated on first startup (migrations 24-27). Key changes:
+
+- New columns: `captains.model`, `missions.total_runtime_ms`
+- Captain model overrides are persisted across SQLite, MySQL, PostgreSQL, and SQL Server
+- REST and MCP captain create/update operations validate configured models before saving
+- React dashboard captain detail now exposes the captain model field and shows validation errors in a modal
+- Mission detail now shows total runtime, and dispatch cleanup removes the redundant parsed-task UI
+- Docker image tags, release metadata, and API documentation are updated for `v0.5.0`
+
+### v0.6.0 to v0.7.0
+
+v0.7.0 is focused on remote access. This release adds the local outbound tunnel client, the first shipped `Armada.Proxy` service, tunnel telemetry, server/dashboard configuration surfaces, and a bounded remote management shell for day-one operator workflows. No database schema migration is required for this release.
+
+Key changes:
+
+- New `RemoteControl` settings in `settings.json`, exposed through `GET /api/v1/settings` and `PUT /api/v1/settings`
+- New `RemoteTunnel` health/status telemetry, exposed through `/api/v1/status`, `/api/v1/status/health`, the React dashboard, the legacy dashboard, and `armada status`
+- Experimental outbound websocket tunnel client with URL normalization, handshake, heartbeat, reconnect, request/response handling, and event forwarding
+- New `Armada.Proxy` service with websocket tunnel termination, a mobile-first remote operations shell, focused instance inspection APIs, live forwarded status/health/detail requests, and the initial bounded remote-management slice for fleets, vessels, voyages, missions, and captain stop
+- The embedded server host now runs on Watson Webserver 7 for both HTTP and WebSocket traffic, replacing the standalone `WatsonWebsocket` dependency and fixing foreground startup handoff
+- The dashboard setup wizard was rebuilt into a contained first-run workflow with direct dispatch, richer guidance, and improved server/settings ergonomics
+- Dashboard internationalization now includes login language selection, persistent locale preference, route-level React coverage, legacy embedded dashboard coverage, and locale-aware date/time/number formatting
+- New operator docs: `docs/REMOTE_MGMT.md`, `docs/TUNNEL_PROTOCOL.md`, `docs/PROXY_API.md`, and `docs/TUNNEL_OPERATIONS.md`
+- Release metadata, Docker image tags, Postman examples, and API documentation are updated for `v0.7.0`
+- Standalone no-op release scripts are available in `migrations/` for `v0.6.0 -> v0.7.0`
+
+### v0.7.0 to v0.8.0
+
+v0.8.0 is focused on backlog-first delivery management. This release adds normalized objective storage, explicit backlog refinement sessions with captain selection, ranked backlog management, and end-to-end linkage from backlog items into release, deployment, and incident records. The Armada server applies the required schema migration (startup migration 43) automatically on first startup across SQLite, PostgreSQL, MySQL, and SQL Server.
+
+Key changes:
+
+- New normalized `objectives`, `objective_refinement_sessions`, and `objective_refinement_messages` persistence across SQLite, MySQL, PostgreSQL, and SQL Server
+- Objective/backlog CRUD, filtering, ranking, reorder, and backlog alias routes under `/api/v1/backlog`
+- Backlog refinement sessions with explicit captain selection, transcript persistence, summary generation, and objective apply-back support
+- MCP backlog CRUD and reorder coverage, plus backlog-named aliases for first-class backlog operations
+- Release, deployment, and incident flows now preserve linkage back to the same objective record
+- Shared version metadata, Postman examples, and current-version API docs are updated for `v0.8.0`
+- Versioned migration handoff scripts are available in `migrations/` for `v0.7.0 -> v0.8.0`
+
+### v0.8.0 to v0.9.0
+
+v0.9.0 is focused on reliability: it eliminates the stuck-dock and dangling-handoff failure modes and hardens the orchestrator for multi-instance operation. The Armada server applies startup migration 44 automatically on first startup across SQLite, PostgreSQL, MySQL, and SQL Server.
+
+Key changes:
+
+- Fixed stall detection (process liveness is tracked separately from the output heartbeat, so a live-but-silent agent is still caught) plus a configurable max-mission-runtime backstop for runaways
+- Cross-platform process supervision with PID-identity verification, and automatic re-drive of dangling pipeline handoffs each health cycle
+- Review-timeout watchdog, an enforced global `MaxConcurrentMissions` ceiling, and non-destructive dock repair/unstick operator tools (REST + MCP)
+- Merge queue background driver with hard subprocess timeouts and multi-instance-safe processing via a durable coordination lease
+- Centralized, tested mission state machine (single authoritative transition table and classifiers)
+- Startup migration 44 adds dock state/lease, captain process-liveness, mission review deadline, merge-entry retry/lease, and a durable coordination-lease table
+- Opt-in OpenTelemetry export (OTLP collector, in-process Prometheus scrape, and/or Loki); the Docker stack ships Prometheus, Loki, and Grafana with an "Armada Reliability" dashboard
+- Shared version metadata, Postman examples, and current-version API docs are updated for `v0.9.0`
+- Versioned migration handoff scripts are available in `migrations/` for `v0.8.0 -> v0.9.0`
+
+### v0.9.0 to v1.0.0
+
+v1.0.0 is the first stable release: security hardening, a frozen and documented API surface, upgrade safety, Ask Armada as the home base, the terminal UI, Harbors, and install packages for every platform. Upgrade any 0.9.x release directly; on 0.8.x or earlier, move to 0.9.x first. Downgrades are not supported. The full procedure, backups, and restores are described above; every change is in [CHANGELOG.md](../CHANGELOG.md).
+
+**Database**
+
+- The Admiral applies every pending migration on first start, through migration 77, on SQLite, PostgreSQL, MySQL, and SQL Server (Harbors, agent memory, vessel import, fleet actions, vessel health, Ask threads, per-vessel auto-approve, and mission failure kinds, among others). Every migration is safe to re-run.
+- SQLite is backed up automatically before migrating, to `{DataDirectory}/backups/pre-migration-*` (newest 5 kept, `database.migrationBackupRetentionCount`). On a server provider take a dump first: the Admiral logs the command, and `database.requireBackupConfirmationForMigrations` makes it refuse to migrate until you confirm a backup.
+- Passwords are re-hashed as salted PBKDF2-SHA256 on first start; an upgraded database cannot be used for password login by an older Admiral.
+
+**Security and access**
+
+- **Default credentials:** the default admin password is flagged, not blocked (the dashboard prompts for a new one; the API and TUI keep working with a warning). Changing it disables `Authorization: Bearer default`. The Admiral refuses to listen on a non-loopback hostname while default credentials are in use unless `AllowDefaultCredentialsOnNetwork` is true; Docker compose requires `ARMADA_INITIAL_ADMIN_PASSWORD`.
+- **MCP:** unauthenticated calls are accepted only when the Admiral listens on localhost (`Mcp.AllowUnauthenticatedLoopback`, default true); remote MCP clients must send a credential. `backup`, `restore`, and `stop_server` need an admin credential even locally. Tool calls are rate limited per client (`mcp.toolCallsPerSecond`, default 100). Custom MCP clients must perform the `initialize` / `Mcp-Session-Id` handshake.
+- **Server control:** `POST /api/v1/server/stop`, `restart`, `rebuild`, and `rollback` always require an admin; `RequireAuthForShutdown` is ignored. The `armada` CLI sends the local API key.
+- **WebSocket:** `/ws` requires authentication (non-browser clients pass `?token=<token>`), events are scoped to the tenant (and `ask.*` events to the owning user), and WebSocket commands are global-admin only.
+- **Self-registration** defaults to `false` for new settings files. **Credentials:** bearer tokens are shown once at creation and masked on reads. **Logins** are rate limited (`loginRateLimit`, 429 with `Retry-After`).
+- **Permissions:** every route and tool declares its authorization; check-run writes and Harbor probes need a tenant admin; `POST .../enumerate` routes need only authentication. See [SECURITY_REVIEW.md](SECURITY_REVIEW.md#permission-changes-in-w1).
+- **Harbor:** a Harbor connecting from another host must send an Armada credential as its access key.
+- **Proxy:** Armada.Proxy refuses to start with a blank or default password (compose requires `ARMADA_PROXY_PASSWORD`).
+- **Docker:** containers run as non-root (UID 1654 for the Admiral and proxy, 101 for the dashboard, which now listens on 8080). Make bind-mounted `db` and `logs` directories writable by UID 1654.
+
+**API behavior (scripts and integrations)**
+
+- REST errors always use `ApiErrorResponse` with an `Error` code matching the HTTP status. A missing entity referenced in a create or update body is now 404 (was 400); planning and refinement routes answer 404 for a missing captain, vessel, or dock (was 409) and 400 for invalid input (was 500); deletes answer 409 for a blocking state (was 404); cross-tenant reads of users, prompt templates, memories, model endpoints, and harbors answer 404 (was 403); several validation errors that returned 200 now return 400 or 404.
+- MCP tool errors carry a typed `ErrorCode` (`NotFound`, `InvalidArgument`, `Conflict`, `Forbidden`, `Unavailable`, `Failed`). Missing entities that used to return an untyped error now return `NotFound`.
+- The 1.0 surface is frozen in [API_SURFACE_1.0.md](API_SURFACE_1.0.md) and covered by [COMPATIBILITY.md](COMPATIBILITY.md). Harbor split mode and self-rebuild are experimental and excluded.
+- **Removed:** `POST /api/v1/ask` and `armada ask`. Use Ask Armada conversations (`/api/v1/ask/threads`).
+
+**CLI**
+
+- `armada go` takes a repeatable `--task` (`-t`) for multiple missions and never splits a prompt on `;` or `1.`; without `--task` the whole prompt is one mission.
+- `--runtime` (`captain add`, `captain update`, `config set DefaultRuntime`) is validated: `opencode` and `api` now work, and an unknown value is an error instead of silently creating a Claude Code captain.
+- New: `armada tui`, `armada health`, `armada action ...`, `armada vessel import`.
+
+**Missions, agents, and prompt templates**
+
+- Judges must end with a standalone `[ARMADA:VERDICT] PASS`, `FAIL`, or `NEEDS_REVISION` line (outside a code block). "Verdict: PASS" prose and bare PASS/FAIL lines no longer count. If you edited the Judge persona template, make sure it still asks for that line.
+- Architects emit their plan as a fenced `armada-plan` JSON block (`[ARMADA:MISSION]` blocks are still accepted). `[ARMADA:STATUS]` can only move a mission between InProgress and Testing.
+- Missions carry a typed `FailureKind` (`MissionFailureKindEnum`), and auto-rescue decides on it. `FailureReason` is plain text without the old prefixes. Failures recorded before the upgrade have no kind and are not auto-rescued.
+- Runtime failures are classified from exit codes and structured provider errors, not by searching output text, so a build error mentioning "403" no longer quarantines a captain.
+- A vessel with Landing Mode `None` stops at WorkProduced and `MergeQueue` enqueues; neither merges into the vessel's working directory any more.
+- Codex captains run with `--sandbox workspace-write` (codex 0.159 removed `--full-auto`).
+
+**New settings worth reviewing:** `mcp.toolCallsPerSecond`, `mcp.missionScopedTokens` (default true), `mcp.allowUnauthenticatedLoopback` (default true), `ask.*` (including `captainAutoApprove`, default false), `retention.*` (Ask threads archive after 90 idle days, finished jobs deleted after 30), `loginRateLimit`, `database.migrationBackupRetentionCount`, `database.requireBackupConfirmationForMigrations`, and the per-vessel `AutoApprove` override.
+
+### v1.0.0 to v1.0.1
+
+**Landing modes changed; check yours.** `LocalMerge` no longer pushes: it merges finished work into the vessel's working directory and stops there. The new `MergeAndPush` mode merges and then pushes (what `LocalMerge` did in 1.0.0), and it is the global default. Nothing is migrated, so switch any vessel, voyage, or global `landingMode` that should keep pushing from `LocalMerge` to `MergeAndPush`. The `autoPush`/`autoCreatePullRequests` settings, the "Auto-Create Pull Requests" toggle, and `armada go --push/--pr/--merge` are replaced by landing modes (`armada go --landing-mode`, `armada config set landingMode`). Step-by-step instructions: [MERGING.md](MERGING.md#upgrading-from-100-landing-modes-fixed-in-101).
