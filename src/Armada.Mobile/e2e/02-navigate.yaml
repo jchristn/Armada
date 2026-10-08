@@ -15,14 +15,18 @@ name: 02-navigate
     visible:
       id: "home-screen"
     timeout: 10000
+# The group header first: centering Missions (the group's last row) scrolls the header off a phone screen.
+- scrollUntilVisible:
+    element: "OPERATIONS"
+    direction: DOWN
+- assertVisible: "OPERATIONS"
+- takeScreenshot: work
 - scrollUntilVisible:
     element:
       id: "nav-/missions"
     direction: DOWN
     visibilityPercentage: 100
     centerElement: true
-- assertVisible: "OPERATIONS"
-- takeScreenshot: work
 - tapOn:
     id: "nav-/missions"
 - extendedWaitUntil:

@@ -34,9 +34,15 @@ name: 04-ask
 - tapOn:
     id: "ask-quick-status"
 - extendedWaitUntil:
-    visible: "Action result"
+    visible: "Show Armada status: done."
     timeout: 30000
-- assertVisible: "Show Armada status: done."
+# The composer keeps focus; with the keyboard up a phone transcript shows only the end of the result card (the
+# transcript follows the newest message), so close the keyboard and scroll back to the result's heading.
+- hideKeyboard
+- scrollUntilVisible:
+    element: "Action result"
+    direction: UP
+    timeout: 10000
 - takeScreenshot: ask-action-result
 - tapOn:
     id: "ask-open-options"
