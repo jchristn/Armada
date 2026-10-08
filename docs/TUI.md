@@ -17,6 +17,8 @@ armada tui --server https://armada.example.com --profile prod --route "/missions
 
 With no options the TUI connects to the last profile you used, or to the local Admiral from your Armada settings. `--server` connects to a URL and remembers it as a profile named after the host. `--profile NAME` picks a saved profile (and, combined with `--server`, creates or updates it). `--route` chooses the first screen after sign-in; otherwise you land on the screen you left, and on a first run you land in Ask Armada.
 
+From a source checkout, `scripts/macos/run-tui.sh` or `scripts/linux/run-tui.sh` (or `scripts\windows\run-tui.bat`) builds the CLI and runs `armada tui`, passing on any options, for example `scripts/macos/run-tui.sh --profile work`.
+
 For scripted starts, `ARMADA_SERVER_URL` (or `ARMADA_URL`) supplies the server and `--token` or `ARMADA_TOKEN` a bearer token, session token, or API key, which skips the login screen when the server accepts it.
 
 The `armada` CLI uses the same profiles and stored tokens: `armada profile add NAME --server URL --token TOKEN` saves a server the TUI can open with `--profile NAME`, `armada profile use NAME` makes it the default for both, and a profile you sign in to here is available to CLI commands with `--profile NAME`. For running the Admiral on another machine, see [REMOTE_SERVER.md](REMOTE_SERVER.md).
