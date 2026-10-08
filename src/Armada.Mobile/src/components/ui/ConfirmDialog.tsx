@@ -1,13 +1,13 @@
 import { useRef, useState, type RefObject } from 'react';
-import { Modal, StyleSheet, View, type HostInstance, type Text } from 'react-native';
+import { StyleSheet, View, type HostInstance, type Text } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
 import { radius, spacing } from '../../theme/typography';
 import { AppText } from './AppText';
 import { Button } from './Button';
 import { TextField } from './TextField';
 import { useModalBack } from './useModalBack';
+import { ModalOverlay } from './ModalOverlay';
 import { useModalFocus } from './useModalFocus';
-import { MODAL_ORIENTATIONS } from './modalOrientations';
 
 export interface ConfirmDialogProps {
   open: boolean;
@@ -33,19 +33,16 @@ export interface ConfirmDialogProps {
 
 /** A centered confirmation dialog, mirroring the dashboard's ConfirmDialog (including the typed-delete variant). */
 export function ConfirmDialog(props: ConfirmDialogProps) {
-  const { colors } = useTheme();
   // Android back closes the keyboard (the typed confirmation) first, then the dialog.
   const onBack = useModalBack(props.onCancel);
-  // Screen readers start on the title when the dialog appears (a fade, also under reduced motion).
+  // Screen readers start on the title when the dialog appears (the card fades in over a backdrop that appears at once).
   const titleRef = useRef<Text | null>(null);
   const onShow = useModalFocus(props.open, titleRef, props.returnFocusRef);
   return (
-    <Modal supportedOrientations={MODAL_ORIENTATIONS} visible={props.open} transparent animationType="fade" onRequestClose={onBack} onShow={onShow} statusBarTranslucent>
-      <View style={[styles.backdrop, { backgroundColor: colors.overlay }]}>
-        {/* Mounted only while open, so the typed confirmation starts empty every time. */}
-        {props.open ? <DialogCard {...props} titleRef={titleRef} /> : null}
-      </View>
-    </Modal>
+    <ModalOverlay visible={props.open} kind="dialog" onRequestClose={onBack} onShow={onShow} contentStyle={styles.host}>
+      {/* Mounted only while open, so the typed confirmation starts empty every time. */}
+      {props.open ? <DialogCard {...props} titleRef={titleRef} /> : null}
+    </ModalOverlay>
   );
 }
 
@@ -84,7 +81,7 @@ function DialogCard({
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
+  host: { alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
   card: { width: '100%', maxWidth: 480, borderRadius: radius.lg, borderWidth: StyleSheet.hairlineWidth, padding: spacing.xl, gap: spacing.md },
   actions: { flexDirection: 'row', justifyContent: 'flex-end', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.sm },
 });

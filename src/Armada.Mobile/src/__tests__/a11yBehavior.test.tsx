@@ -1,6 +1,6 @@
 /**
  * Screen-reader and system-setting behavior of the UI kit: focus moves to a sheet's or dialog's title when it opens
- * and back to its opener when it closes, sheets fade instead of sliding under Reduce Motion, toasts and error
+ * and back to its opener when it closes, sheet content fades instead of sliding under Reduce Motion, toasts and error
  * states are announced (queued, without moving focus) and toasts stay longer with a screen reader, and following
  * the system theme honors Increase Contrast in dark mode.
  */
@@ -125,16 +125,25 @@ describe('narrow list-detail panes', () => {
   });
 });
 
+/** How the open modal's content enters: 'slide' (a translateY transform) or 'fade' (opacity). */
+function contentEntrance(): 'slide' | 'fade' {
+  const style = RN.StyleSheet.flatten(screen.getByTestId('modal-content-layer').props.style) as RN.ViewStyle;
+  return style.transform ? 'slide' : 'fade';
+}
+
 describe('reduce motion', () => {
-  it('sheets slide normally and fade when the system asks for reduced motion', async () => {
+  it('sheets slide their content normally and fade it when the system asks for reduced motion', async () => {
     const first = await render(<Themed><BottomSheet open title="A" onClose={() => undefined} closeLabel="Close"><></></BottomSheet></Themed>);
     await waitFor(() => expect(info.isReduceMotionEnabled).toHaveBeenCalled());
-    expect(modals()[0].props.animationType).toBe('slide');
+    expect(contentEntrance()).toBe('slide');
+    // The platform Modal never animates: its slide or fade moved the backdrop with the sheet.
+    expect(modals()[0].props.animationType).toBe('none');
     await first.unmount();
 
     info.isReduceMotionEnabled.mockResolvedValue(true);
     await render(<Themed><BottomSheet open title="A" onClose={() => undefined} closeLabel="Close"><></></BottomSheet></Themed>);
-    await waitFor(() => expect(modals()[0].props.animationType).toBe('fade'));
+    await waitFor(() => expect(contentEntrance()).toBe('fade'));
+    expect(modals()[0].props.animationType).toBe('none');
   });
 
   it('follows the setting when it changes while the sheet is mounted', async () => {
@@ -142,7 +151,13 @@ describe('reduce motion', () => {
     const listener = settingListener('reduceMotionChanged');
     expect(listener).toBeDefined();
     await act(async () => { listener?.(true); });
-    expect(modals()[0].props.animationType).toBe('fade');
+    expect(contentEntrance()).toBe('fade');
+  });
+
+  it('dialogs fade their card in with or without reduced motion', async () => {
+    await render(<Themed><ConfirmDialog open title="T" message="M" confirmLabel="OK" cancelLabel="Cancel" onConfirm={() => undefined} onCancel={() => undefined} /></Themed>);
+    expect(contentEntrance()).toBe('fade');
+    expect(modals()[0].props.animationType).toBe('none');
   });
 });
 
