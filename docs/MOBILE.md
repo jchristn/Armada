@@ -18,7 +18,7 @@ Developer setup, the code layout, and the test tooling are in
 
 | Tab (phone) | What is there |
 |---|---|
-| **Ask** | Ask Armada conversations: streaming replies with thinking and tool steps, `/` quick actions and forms, the captain picker, confirm cards, CLI permission cards, and live work cards |
+| **Ask** | Ask Armada conversations: streaming replies with thinking and tool steps, `/` quick actions and forms, the captain picker, confirm cards, CLI permission cards, live work cards, and the captain's report when work finishes (tagged "Report") |
 | **Approvals** | Everything that needs you, decided in place: Ask proposals, CLI permission requests, mission reviews, deployment approvals, failed landings (retry), failed missions (restart), and stalled captains (stop); recent alerts below |
 | **Work** | Home (status, KPIs, health, mission history, voyage progress, recent missions and signals), Missions, Voyages and Create Voyage, Dispatch, Merge Queue, and the Build, Delivery, Configuration, Activity, and Server sections |
 | **More** | Server profiles, preferences (theme, language, Face ID unlock and saved password, notifications), the notification center, and sign-out |

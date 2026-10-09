@@ -1,5 +1,5 @@
 import type { RebuildStatus } from '../api/client';
-import type { CliPermissionSettingsData, FleetActionSettingsData, RetentionSettingsData, VesselImportSettingsData } from '../types/models';
+import type { AskSettingsData, CliPermissionSettingsData, FleetActionSettingsData, RetentionSettingsData, VesselImportSettingsData } from '../types/models';
 import { DEFAULT_GLOBAL_LANDING_MODE } from './vesselForm';
 
 /**
@@ -83,6 +83,8 @@ export interface ServerSettings {
   fleetActions?: FleetActionSettingsData;
   retention?: RetentionSettingsData;
   permissions?: CliPermissionSettingsData;
+  /** Absent on servers older than the Ask settings group. */
+  ask?: AskSettingsData;
 }
 
 /** The redacted form of a stored secret in GET /api/v1/settings; sending it back keeps the stored value. */

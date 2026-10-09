@@ -220,6 +220,44 @@ namespace Test.Shared.Suites.Tui
                 }
             }));
 
+            cases.Add(TuiCase.Sync(Suite, "work_report_label", "The captain's report of finished work reads like a reply tagged [Report]; the final milestone shows its outcome; older replies are untagged", () =>
+            {
+                AskFixtures fx = new AskFixtures();
+                AskMessage question = AskFixtures.Message("amg_1", "ath_1", 1, AskMessageRoleEnum.User, AskMessageKindEnum.Text, "run Test.Automated in DocConverter");
+                AskMessage reply = AskFixtures.Message("amg_2", "ath_1", 2, AskMessageRoleEnum.Assistant, AskMessageKindEnum.Text, "I proposed a dispatch.");
+                reply.CaptainId = "cpt_1";
+                AskMessage result = AskFixtures.Message("amg_3", "ath_1", 3, AskMessageRoleEnum.System, AskMessageKindEnum.ActionResult, "Dispatch voyage: done.");
+                result.TrackedWorkId = "atw_1";
+                AskMessage final = AskFixtures.Message("amg_4", "ath_1", 4, AskMessageRoleEnum.System, AskMessageKindEnum.WorkUpdate,
+                    "Voyage \"Run tests\" finished (1 of 1 missions done).\n\n**Outcome** (took 3m 12s)\n- Mission \"Run Test.Automated\" on DocConverter: complete, landed. Took 3m 05s.\n  - Captain's final message: \"All 412 tests passed.\"");
+                final.TrackedWorkId = "atw_1";
+                AskMessage report = AskFixtures.Message("amg_5", "ath_1", 5, AskMessageRoleEnum.Assistant, AskMessageKindEnum.WorkReport, "Done: all 412 tests passed in DocConverter.");
+                report.CaptainId = "cpt_1";
+                report.TrackedWorkId = "atw_1";
+                report.DurationMs = 3100;
+                AskMessage reserved = AskFixtures.Message("amg_6", "ath_1", 6, AskMessageRoleEnum.Assistant, AskMessageKindEnum.WorkReport, "");
+                reserved.CaptainId = "cpt_1";
+                fx.AddThread(AskFixtures.Thread("ath_1", "Tests"), question, reply, result, final, report, reserved);
+                using (TuiTestHost host = TuiCase.SignedIn(140, 60, "/ask/ath_1", fx.Stub))
+                {
+                    AskScreen screen = (AskScreen)host.Tui.Shell.Screen!;
+                    AssertTrue(host.PumpUntil(() => host.Tui.Ask.Conversation.Messages.Count == 6), "loaded");
+                    screen.Transcript.Layout(110);
+                    List<string> lines = screen.Transcript.PlainLines().ToList();
+                    string text = String.Join("\n", lines);
+                    AssertTrue(lines.Any(l => l.Contains("claude-1  [Report]  3.1s", StringComparison.Ordinal)), "the report is a captain reply tagged [Report]\n" + text);
+                    TuiCase.Contains(text, "Done: all 412 tests passed in DocConverter.", "report text");
+                    AssertEqual(1, lines.Count(l => l.Contains("[Report]", StringComparison.Ordinal)), "only the report is tagged (the plain reply and the empty reservation are not)");
+                    TuiCase.Contains(text, "I proposed a dispatch.", "older reply still renders");
+                    TuiCase.Contains(text, "- Progress update", "final milestone");
+                    TuiCase.Contains(text, "Outcome (took 3m 12s)", "the outcome heading renders as Markdown");
+                    TuiCase.Contains(text, "Mission \"Run Test.Automated\" on DocConverter: complete, landed. Took 3m 05s.", "the mission outcome");
+                    TuiCase.Contains(text, "Captain's final message: \"All 412 tests passed.\"", "the captain's final message");
+                    AssertFalse(screen.Transcript.Blocks.Any(b => b.Key == "amg_6"), "an empty report reservation is hidden");
+                    AssertEqual("amg_3", host.Tui.Ask.Conversation.WorkCardHosts()["atw_1"], "the live card stays on the message that started the work");
+                }
+            }));
+
             cases.Add(TuiCase.Sync(Suite, "turn_statistics", "A selected captain reply offers i Statistics in the status bar; i shows the full set (or an older reply's fallback) and hides it again", () =>
             {
                 AskFixtures fx = new AskFixtures();

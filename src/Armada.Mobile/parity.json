@@ -3977,6 +3977,70 @@
     },
     {
       "kind": "setting",
+      "key": "settings.ask",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerSettingsTab.tsx",
+      "workstream": "W4.4",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.ask.historyTurns",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerPolicySections.tsx",
+      "workstream": "W4.4",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.ask.narrateMilestones",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerPolicySections.tsx",
+      "workstream": "W4.4",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.ask.narrationTimeoutSeconds",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerPolicySections.tsx",
+      "workstream": "W4.4",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.ask.proposalExpiryMinutes",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerPolicySections.tsx",
+      "workstream": "W4.4",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.ask.reportResultsOnCompletion",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerPolicySections.tsx",
+      "workstream": "W4.4",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.ask.trackerIntervalSeconds",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerPolicySections.tsx",
+      "workstream": "W4.4",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.ask.turnTimeoutMinutes",
+      "status": "implemented",
+      "mobile": "src/screens/system/ServerPolicySections.tsx",
+      "workstream": "W4.4",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
       "key": "settings.dataDirectory",
       "status": "implemented",
       "mobile": "src/screens/system/ServerSettingsTab.tsx",

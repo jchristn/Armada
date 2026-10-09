@@ -366,20 +366,26 @@ export function cliRequestForMessage(state: Pick<ConversationState, 'cliPermissi
 
 /**
  * Which message hosts the full live card for each tracked item: the first non-milestone message that references
- * it (usually the ActionResult). Milestone (WorkUpdate) messages render compactly and link to that card.
+ * it (usually the ActionResult). Milestone (WorkUpdate) messages render compactly and link to that card, and the
+ * captain's automatic report (WorkReport) of finished work hosts it only when no other message references the item.
  */
 export function workCardHosts(messages: AskMessage[]): Record<string, string> {
   const hosts: Record<string, string> = {};
   for (const message of messages) {
     const workId = message.trackedWorkId ?? message.trackedWork?.id ?? null;
     if (!workId || hosts[workId]) continue;
-    if (message.kind === 'WorkUpdate') continue;
+    if (message.kind === 'WorkUpdate' || message.kind === 'WorkReport') continue;
     hosts[workId] = message.id;
   }
-  // Items only referenced by milestones get their card on the first milestone.
-  for (const message of messages) {
-    const workId = message.trackedWorkId ?? message.trackedWork?.id ?? null;
-    if (workId && !hosts[workId]) hosts[workId] = message.id;
+  // Items only referenced by milestones get their card on the first milestone; a report hosts only when nothing
+  // else references the item (for example when older messages were not loaded).
+  for (const reports of [false, true]) {
+    for (const message of messages) {
+      const workId = message.trackedWorkId ?? message.trackedWork?.id ?? null;
+      if (!workId || hosts[workId]) continue;
+      if (!reports && message.kind === 'WorkReport') continue;
+      hosts[workId] = message.id;
+    }
   }
   return hosts;
 }

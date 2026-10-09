@@ -26,7 +26,8 @@ namespace Armada.Tui.Screens.Admin
 
     /// <summary>
     /// Settings, Server tab (dashboard <c>Server.tsx</c> with <c>RepositoryHealthSettingsSection</c>,
-    /// <c>ImportFleetActionSettings</c>, <c>CliPermissionSettings</c>, and <c>RetentionSettings</c>): health, uptime,
+    /// <c>ImportFleetActionSettings</c>, <c>CliPermissionSettings</c>, <c>RetentionSettings</c>, and <c>AskSettings</c>):
+    /// health, uptime,
     /// connection, and tunnel
     /// cards; server detail fields; every settings group with its own Save (and Discard where the dashboard has it),
     /// the dashboard's validation messages, and <c>Ctrl+S</c> saving the group that holds focus; MCP snippets and
@@ -89,7 +90,7 @@ namespace Armada.Tui.Screens.Admin
 
         /// <summary>
         /// Settings groups by key (server, rebuild, agent, planning, repositoryHealth, import, fleetActions,
-        /// permissions, retention, remoteControl).
+        /// permissions, retention, ask, remoteControl).
         /// </summary>
         public IReadOnlyDictionary<string, ServerSettingsGroup> Groups
         {
@@ -199,6 +200,27 @@ namespace Armada.Tui.Screens.Admin
         /// <summary>Retention: decided CLI tool permission requests.</summary>
         public InputField RetentionCliPermissions { get; } = new InputField();
 
+        /// <summary>Ask Armada: the captain reports the outcome of finished work.</summary>
+        public ToggleField AskReportResults { get; } = new ToggleField();
+
+        /// <summary>Ask Armada: the captain narrates milestones when idle.</summary>
+        public ToggleField AskNarrateMilestones { get; } = new ToggleField();
+
+        /// <summary>Ask Armada: messages replayed to the captain each turn.</summary>
+        public InputField AskHistoryTurns { get; } = new InputField();
+
+        /// <summary>Ask Armada: proposal expiry in minutes.</summary>
+        public InputField AskProposalExpiry { get; } = new InputField();
+
+        /// <summary>Ask Armada: work tracker interval in seconds.</summary>
+        public InputField AskTrackerInterval { get; } = new InputField();
+
+        /// <summary>Ask Armada: narration timeout in seconds.</summary>
+        public InputField AskNarrationTimeout { get; } = new InputField();
+
+        /// <summary>Ask Armada: turn timeout in minutes.</summary>
+        public InputField AskTurnTimeout { get; } = new InputField();
+
         /// <summary>CLI tool permissions: Ask conversation default policy.</summary>
         public SelectField<string> PermissionsAskDefault { get; } = new SelectField<string>();
 
@@ -290,6 +312,7 @@ namespace Armada.Tui.Screens.Admin
         private Button? _ResetButton = null;
         private bool _BackupLoading = false;
         private bool _SuppressRemoteConfirm = false;
+        private bool _AskCaptainAutoApprove = false;
         private string? _BranchesFor = null;
         private int _RebuildPollIntervalMs = 1500;
         private CancellationTokenSource? _PollCts = null;
@@ -575,6 +598,7 @@ namespace Armada.Tui.Screens.Admin
             BuildImportAndFleet();
             BuildCliPermissions();
             BuildRetention();
+            BuildAsk();
             BuildRemoteControl();
             BuildMcp();
 
@@ -733,6 +757,27 @@ namespace Armada.Tui.Screens.Admin
             AddNumber(g, "Job retention (days)", RetentionJobs, "Finished background jobs older than this are deleted; the latest of each kind is kept (0-3650, default 30).", range);
             AddNumber(g, "Import history retention (days)", RetentionImports, "Finished vessel import batches older than this are deleted; imported vessels are not affected (0-3650, default 90).", range);
             AddNumber(g, "CLI permission request retention (days)", RetentionCliPermissions, "Decided, expired, and cancelled CLI tool permission requests older than this are deleted; pending ones are kept (0-3650, default 90).", range);
+            AddButtons(g);
+        }
+
+        private void BuildAsk()
+        {
+            Form.AddSection("Ask Armada");
+            AddNote("How Ask Armada conversations follow and report on the work they start. Changes apply immediately.");
+            ServerSettingsGroup g = Group("ask", "Save Ask Armada Settings", SaveAsk, () => DiscardGroup("ask"));
+            g.RequireDirty = true;
+            AskSettings defaults = new AskSettings();
+            AskReportResults.Caption = "Report results when work finishes";
+            AskReportResults.SetValue(defaults.ReportResultsOnCompletion, false);
+            AddTracked(g, "Report results when work finishes", AskReportResults, "When work started from a conversation finishes, its captain posts a short report of the outcome. The final progress update always includes the outcome.");
+            AskNarrateMilestones.Caption = "Narrate milestones";
+            AskNarrateMilestones.SetValue(defaults.NarrateMilestones, false);
+            AddTracked(g, "Narrate milestones", AskNarrateMilestones, "The captain writes progress updates in its own words when it is idle; otherwise a plain sentence is posted.");
+            AddNumber(g, "Conversation history (messages)", AskHistoryTurns, "Recent messages replayed to the captain each turn; older history is represented by the thread summary (2-200, default 20).", v => ServerSettingsRules.WholeNumberRange(Context.Loc, v, 2, 200));
+            AddNumber(g, "Proposal expiry (minutes)", AskProposalExpiry, "How long a pending action proposal waits for a decision before it expires (1-1440, default 60).", v => ServerSettingsRules.WholeNumberRange(Context.Loc, v, 1, 1440));
+            AddNumber(g, "Work tracking interval (seconds)", AskTrackerInterval, "Seconds between checks of tracked work; changes are also picked up immediately (2-300, default 5).", v => ServerSettingsRules.WholeNumberRange(Context.Loc, v, 2, 300));
+            AddNumber(g, "Narration timeout (seconds)", AskNarrationTimeout, "Longest a milestone narration may take before the plain sentence is used instead (10-600, default 60).", v => ServerSettingsRules.WholeNumberRange(Context.Loc, v, 10, 600));
+            AddNumber(g, "Turn timeout (minutes)", AskTurnTimeout, "Longest a captain turn may run before it is stopped and marked failed (1-120, default 15).", v => ServerSettingsRules.WholeNumberRange(Context.Loc, v, 1, 120));
             AddButtons(g);
         }
 
@@ -987,6 +1032,19 @@ namespace Armada.Tui.Screens.Admin
                 RetentionImports.Value = Num(r.ImportBatchRetentionDays);
                 RetentionCliPermissions.Value = Num(r.CliPermissionRequestRetentionDays);
             });
+            // The ask group is saved whole; keep the stored captain auto-approve (not edited here) so a save never changes it.
+            _AskCaptainAutoApprove = s.Ask?.CaptainAutoApprove ?? false;
+            Apply("ask", force, () =>
+            {
+                AskSettings a = s.Ask ?? new AskSettings();
+                AskReportResults.SetValue(a.ReportResultsOnCompletion, false);
+                AskNarrateMilestones.SetValue(a.NarrateMilestones, false);
+                AskHistoryTurns.Value = Num(a.HistoryTurns);
+                AskProposalExpiry.Value = Num(a.ProposalExpiryMinutes);
+                AskTrackerInterval.Value = Num(a.TrackerIntervalSeconds);
+                AskNarrationTimeout.Value = Num(a.NarrationTimeoutSeconds);
+                AskTurnTimeout.Value = Num(a.TurnTimeoutMinutes);
+            });
             Apply("permissions", force, () =>
             {
                 CliPermissionSettings p = s.Permissions ?? new CliPermissionSettings();
@@ -1217,6 +1275,7 @@ namespace Armada.Tui.Screens.Admin
                 case "fleetActions": return "Save Fleet Action Settings";
                 case "retention": return "Save Retention Settings";
                 case "permissions": return "Save CLI Tool Permissions";
+                case "ask": return "Save Ask Armada Settings";
                 default: return "Save Remote Control Settings";
             }
         }
@@ -1351,6 +1410,25 @@ namespace Armada.Tui.Screens.Admin
                 d.Retention = r;
                 return d;
             }, "Retention settings saved and applied.");
+        }
+
+        private void SaveAsk()
+        {
+            SaveWith(_Groups["ask"], () =>
+            {
+                AskSettings a = new AskSettings();
+                a.ReportResultsOnCompletion = AskReportResults.Value;
+                a.NarrateMilestones = AskNarrateMilestones.Value;
+                a.HistoryTurns = IntOf(AskHistoryTurns);
+                a.ProposalExpiryMinutes = IntOf(AskProposalExpiry);
+                a.TrackerIntervalSeconds = IntOf(AskTrackerInterval);
+                a.NarrationTimeoutSeconds = IntOf(AskNarrationTimeout);
+                a.TurnTimeoutMinutes = IntOf(AskTurnTimeout);
+                a.CaptainAutoApprove = _AskCaptainAutoApprove;
+                SettingsData d = new SettingsData();
+                d.Ask = a;
+                return d;
+            }, "Ask Armada settings saved and applied.");
         }
 
         private void SavePermissions()

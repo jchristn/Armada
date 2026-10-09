@@ -3921,6 +3921,70 @@
     },
     {
       "kind": "setting",
+      "key": "settings.ask",
+      "status": "implemented",
+      "tui": "ServerSettingsScreen",
+      "workstream": "W7.7",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.ask.historyTurns",
+      "status": "implemented",
+      "tui": "ServerSettingsScreen",
+      "workstream": "W7.7",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.ask.narrateMilestones",
+      "status": "implemented",
+      "tui": "ServerSettingsScreen",
+      "workstream": "W7.7",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.ask.narrationTimeoutSeconds",
+      "status": "implemented",
+      "tui": "ServerSettingsScreen",
+      "workstream": "W7.7",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.ask.proposalExpiryMinutes",
+      "status": "implemented",
+      "tui": "ServerSettingsScreen",
+      "workstream": "W7.7",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.ask.reportResultsOnCompletion",
+      "status": "implemented",
+      "tui": "ServerSettingsScreen",
+      "workstream": "W7.7",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.ask.trackerIntervalSeconds",
+      "status": "implemented",
+      "tui": "ServerSettingsScreen",
+      "workstream": "W7.7",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.ask.turnTimeoutMinutes",
+      "status": "implemented",
+      "tui": "ServerSettingsScreen",
+      "workstream": "W7.7",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
       "key": "settings.dataDirectory",
       "status": "implemented",
       "tui": "ServerSettingsScreen",

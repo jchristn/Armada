@@ -2,7 +2,7 @@ namespace Armada.Core.Settings
 {
     /// <summary>
     /// Settings for Ask Armada conversation threads (history window, proposal expiry, work tracking, milestone
-    /// narration, and turn timeout). All values apply live.
+    /// narration, result reports, and turn timeout). All values apply live.
     /// </summary>
     public class AskSettings
     {
@@ -43,6 +43,15 @@ namespace Armada.Core.Settings
         /// or failure) a deterministic sentence is posted. Default true.
         /// </summary>
         public bool NarrateMilestones { get; set; } = true;
+
+        /// <summary>
+        /// When true (the default), and the thread has a captain, a short follow-up captain turn reports the outcome of
+        /// tracked work in the thread after its final milestone (a WorkReport message): it runs once per tracked item,
+        /// waits for a running turn to end, and is skipped when the user posted a message after the work finished or the
+        /// thread was archived or deleted. When false only the final milestone, which always carries the outcome, is
+        /// posted.
+        /// </summary>
+        public bool ReportResultsOnCompletion { get; set; } = true;
 
         /// <summary>
         /// When false (the default), Ask thread turns and milestone narrations run CLI captains without their

@@ -528,6 +528,8 @@ namespace Armada.Server.Routes
                     _settings.Retention = body.Retention;
                 if (body.Permissions != null)
                     _settings.Permissions = body.Permissions;
+                if (body.Ask != null)
+                    _settings.Ask = body.Ask;
                 if (body.Push != null)
                 {
                     // The access token comes back from GET redacted; a redacted value keeps the stored token.
@@ -715,6 +717,7 @@ namespace Armada.Server.Routes
                 RepositoryHealth = _settings.RepositoryHealth,
                 Retention = _settings.Retention,
                 Permissions = _settings.Permissions,
+                Ask = _settings.Ask,
                 Push = RedactPush(_settings.Push)
             };
         }

@@ -215,8 +215,8 @@ namespace Armada.Tui.Ask
         }
 
         /// <summary>
-        /// Which message hosts each tracked item's full live card: the first non-milestone message that references it,
-        /// else the first milestone.
+        /// Which message hosts each tracked item's full live card: the first message that references it and is neither a
+        /// milestone nor the captain's report of the finished work, else the first message that references it.
         /// </summary>
         /// <returns>Work id to message id.</returns>
         public Dictionary<string, string> WorkCardHosts()
@@ -225,7 +225,7 @@ namespace Armada.Tui.Ask
             foreach (AskMessage m in Messages)
             {
                 string? workId = m.TrackedWorkId ?? m.TrackedWork?.Id;
-                if (workId == null || hosts.ContainsKey(workId) || m.Kind == AskMessageKindEnum.WorkUpdate) continue;
+                if (workId == null || hosts.ContainsKey(workId) || m.Kind == AskMessageKindEnum.WorkUpdate || m.Kind == AskMessageKindEnum.WorkReport) continue;
                 hosts[workId] = m.Id;
             }
 

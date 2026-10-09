@@ -8657,6 +8657,16 @@ tr.row-muted td { opacity: 0.72; }
 }
 .ask-bubble-text { white-space: pre-wrap; font-size: 0.9rem; }
 .ask-bubble-head { display: flex; gap: 0.6rem; align-items: baseline; font-size: 0.7rem; margin-bottom: 0.2rem; }
+.ask-report-tag {
+    padding: 0 0.35rem;
+    border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+    border-radius: 4px;
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+}
 .ask-thinking-text { margin-top: 0.3rem; font-size: 0.8rem; white-space: pre-wrap; color: var(--text-dim); }
 .ask-msg-assistant .chat-thinking summary { font-size: 0.72rem; cursor: pointer; }
 .ask-waiting { align-self: flex-start; }

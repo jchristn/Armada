@@ -315,6 +315,7 @@ export default function AskArmada() {
         const kind = String(event.message.kind);
         const snippet = (event.message.contentText ?? '').replace(/\s+/g, ' ').slice(0, 160);
         if (kind === 'WorkUpdate') setAnnouncement(t('Work update: {{text}}', { text: snippet }));
+        else if (kind === 'WorkReport') setAnnouncement(t('Report: {{text}}', { text: snippet }));
         else if (kind === 'Error') setAnnouncement(t('Error: {{text}}', { text: snippet }));
         else if (kind !== 'ActionProposal' && kind !== 'CliPermission') setAnnouncement(t('New message: {{text}}', { text: snippet }));
       } else if (event.type === 'ask.proposal' && String(event.proposal.status).toLowerCase() === 'pending') {

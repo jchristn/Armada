@@ -127,6 +127,14 @@ namespace Armada.Server
         public CliPermissionSettings? Permissions { get; set; }
 
         /// <summary>
+        /// Optional Ask Armada settings update (HistoryTurns, ProposalExpiryMinutes, TrackerIntervalSeconds,
+        /// NarrateMilestones, ReportResultsOnCompletion, CaptainAutoApprove, NarrationTimeoutSeconds, TurnTimeoutMinutes).
+        /// When supplied, replaces the full ask object; omitted fields take their defaults and out-of-range values are
+        /// clamped. Applied live.
+        /// </summary>
+        public AskSettings? Ask { get; set; }
+
+        /// <summary>
         /// Optional push notification settings update (Enabled, ExpoAccessToken, Categories, MaxPerUserPerMinute,
         /// DedupeWindowSeconds, MaxDevicesPerUser). When supplied, replaces the full push object; omitted fields take their defaults and
         /// out-of-range values are clamped. ExpoAccessToken sent back as the redacted value from GET keeps the stored

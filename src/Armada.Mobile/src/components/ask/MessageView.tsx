@@ -51,8 +51,8 @@ export function ThinkingBlock({ text, live }: { text: string; live?: boolean }) 
 
 /**
  * One persisted message, rendered by kind (the dashboard's AskMessageView): text (Markdown for the captain, plain
- * for the user), tool chips, confirm cards, CLI permission cards, action results, milestone updates, summaries,
- * and errors. A captain reply also has its turn statistics behind an (i) in its header (total time, tool calls, tool
+ * for the user), tool chips, confirm cards, CLI permission cards, action results, milestone updates, work reports
+ * (a captain reply with a Report tag), summaries, and errors. A captain reply also has its turn statistics behind an (i) in its header (total time, tool calls, tool
  * time: what the Admiral records for an Ask turn, which the dashboard shows as the turn duration and on the chips).
  */
 export const MessageView = memo(function MessageView({ message, proposal, captainName, proposalBusy, onApprove, onReject, workCard, onShowWork, cliRequest, onCliDecided, permissionDeniedNote }: MessageViewProps) {
@@ -167,7 +167,9 @@ export const MessageView = memo(function MessageView({ message, proposal, captai
     );
   }
 
-  // Assistant text (and any unknown kind): tool chips, optional thinking, Markdown body.
+  // Assistant text, the captain's automatic WorkReport (same bubble plus a Report tag), and any unknown kind: tool
+  // chips, optional thinking, Markdown body.
+  const isReport = kind === 'WorkReport';
   const tools = toolCallsToEvents(message.toolCalls);
   const stats = askTurnStatistics(t, message);
   return (
@@ -176,6 +178,11 @@ export const MessageView = memo(function MessageView({ message, proposal, captai
       <View style={[styles.bubble, { backgroundColor: colors.surface, borderColor: colors.border }, styles.assistantBubble]}>
         <View style={styles.headRow}>
           <AppText variant="caption" muted style={styles.bold}>{captainName || t('Captain')}</AppText>
+          {isReport ? (
+            <View style={[styles.reportTag, { borderColor: colors.border }]} accessibilityHint={t('Posted automatically when the work finished')} testID={`${testID}-report`}>
+              <AppText variant="caption" muted style={styles.bold}>{t('Report')}</AppText>
+            </View>
+          ) : null}
           {message.durationMs != null ? <AppText variant="caption" muted accessibilityLabel={`${t('Turn duration')} ${formatTurnDuration(message.durationMs)}`}>{formatTurnDuration(message.durationMs)}</AppText> : null}
           <AppText variant="caption" muted>{when}</AppText>
           {stats.length > 0 ? <TurnStatsToggle open={statsOpen} onToggle={() => setStatsOpen((v) => !v)} testID={`${testID}-stats-toggle`} /> : null}
@@ -202,6 +209,7 @@ const styles = StyleSheet.create({
   milestone: { borderLeftWidth: 3, paddingLeft: spacing.md },
   summary: { borderWidth: 1, borderRadius: radius.md, padding: spacing.md },
   error: { borderWidth: 1, borderRadius: radius.md, padding: spacing.md },
+  reportTag: { borderWidth: StyleSheet.hairlineWidth, borderRadius: radius.sm, paddingHorizontal: spacing.xs },
   thinking: { borderLeftWidth: 2, paddingLeft: spacing.sm, gap: spacing.xs },
   thinkingHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, minHeight: 32 },
 });

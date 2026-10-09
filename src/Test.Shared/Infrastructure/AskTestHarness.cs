@@ -89,6 +89,7 @@ namespace Test.Shared.Infrastructure
             Actions.OnWorkLinked = Tracker.OnWorkLinkedAsync;
             Actions.OnProposalApproved = Turns.StartFollowUpAsync;
             Tracker.Narrate = Turns.NarrateAsync;
+            Tracker.ReportResult = request => Turns.ScheduleReportAsync(request);
             Tracker.ExpireProposals = Actions.ExpireDueAsync;
 
             RegisterStub("status", _ => new { Captains = 0, Health = "ok" });

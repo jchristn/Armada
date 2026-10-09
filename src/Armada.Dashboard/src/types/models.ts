@@ -3098,13 +3098,37 @@ export interface RetentionSettingsData {
   cliPermissionRequestRetentionDays: number;
 }
 
+/**
+ * Server `Ask` settings group (Ask Armada conversations). PUT replaces the whole group, so clients send every field
+ * and round-trip captainAutoApprove unchanged (a security setting governed by the CLI permission policy, not edited
+ * in the UI).
+ */
+export interface AskSettingsData {
+  /** Recent messages replayed to the captain each turn (2-200, default 20). */
+  historyTurns: number;
+  /** Minutes a pending action proposal waits before it expires (1-1440, default 60). */
+  proposalExpiryMinutes: number;
+  /** Seconds between work-tracker sweeps (2-300, default 5). */
+  trackerIntervalSeconds: number;
+  /** The captain narrates milestones when idle (default true). */
+  narrateMilestones: boolean;
+  /** The captain posts a WorkReport when tracked work finishes (default true). */
+  reportResultsOnCompletion: boolean;
+  /** Ask turns run CLI captains with their auto-approve flags (default false). Preserved, never edited. */
+  captainAutoApprove: boolean;
+  /** Seconds a milestone narration may take (10-600, default 60). */
+  narrationTimeoutSeconds: number;
+  /** Minutes a captain turn may run (1-120, default 15). */
+  turnTimeoutMinutes: number;
+}
+
 // ---------------------------------------------------------------------------
 // Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md). The server sends PascalCase; the API client camelizes.
 // Every field the plan does not pin down is optional so the UI tolerates a slightly different server shape.
 // ---------------------------------------------------------------------------
 
 export type AskMessageRole = 'User' | 'Assistant' | 'System';
-export type AskMessageKind = 'Text' | 'ActionProposal' | 'ActionResult' | 'WorkUpdate' | 'Summary' | 'Error' | 'CliPermission';
+export type AskMessageKind = 'Text' | 'ActionProposal' | 'ActionResult' | 'WorkUpdate' | 'Summary' | 'Error' | 'CliPermission' | 'WorkReport';
 export type AskProposalStatus = 'Pending' | 'Approved' | 'Rejected' | 'Expired' | 'Executed' | 'Failed';
 export type AskProposalSource = 'Captain' | 'QuickAction';
 export type AskTrackedEntityType = 'Voyage' | 'Mission' | 'FleetActionRun' | 'Job' | 'VesselImportBatch';

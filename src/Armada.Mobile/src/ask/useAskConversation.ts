@@ -183,6 +183,7 @@ export function useAskConversation({ threadId, onCreated, schedule = (fn, ms) =>
       const kind = String(event.message.kind);
       const snippet = (event.message.contentText ?? '').replace(/\s+/g, ' ').slice(0, 160);
       if (kind === 'WorkUpdate') announce(tr('Work update: {{text}}', { text: snippet }));
+      else if (kind === 'WorkReport') announce(tr('Report: {{text}}', { text: snippet }));
       else if (kind === 'Error') announce(tr('Error: {{text}}', { text: snippet }));
       else if (kind !== 'ActionProposal' && kind !== 'CliPermission') announce(tr('New message: {{text}}', { text: snippet }));
     } else if (event.type === 'ask.proposal' && String(event.proposal.status).toLowerCase() === 'pending') {
