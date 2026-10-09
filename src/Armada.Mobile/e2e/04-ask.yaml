@@ -1,7 +1,7 @@
 # Signed in (state kept from 01): Ask Armada against the throwaway Admiral. The seeded server has no captains, so
 # plain messages are disabled and quick actions still work: run /status from the / menu (creates the conversation
 # and posts its action result), find it in the conversation list, rename it from the options sheet, start a delete
-# from the list and cancel it, leave Ask and come back and type, and delete it from the options sheet.
+# from the list and cancel it, leave Ask and come back and type, delete it from the options sheet, and run /new.
 appId: ${APP_ID}
 name: 04-ask
 ---
@@ -139,3 +139,15 @@ name: 04-ask
     visible:
       id: "ask-empty"
     timeout: 20000
+# Slash commands run on Return: /new starts a new conversation and leaves the composer empty (not the command, and
+# not a newline).
+- tapOn:
+    id: "ask-input"
+- inputText: "/new"
+- pressKey: Enter
+- extendedWaitUntil:
+    visible:
+      id: "ask-empty"
+    timeout: 10000
+- assertNotVisible: ".*/new.*"
+- takeScreenshot: ask-new-command

@@ -310,19 +310,59 @@ default.
   with status and progress bar, per-mission rows with status, captain, stage, checks, merge/landing, PR
   link, failure reason, and links to the normal detail pages), **milestone messages** (the final one with its
   **Outcome** block), the captain's **report** of finished work (a captain reply tagged "Report"), summaries, errors.
-- Composer: `/` opens the quick-action menu; each quick action opens an inline form (vessel picker and
-  mission list for `/dispatch`, action + vessel picker for `/fleet-action`, etc.). Typing plain text sends
-  to the captain. Stop button cancels a running turn.
+- Composer: `/` opens the command menu (quick actions and the local commands below); each quick action that
+  needs input opens an inline form (vessel picker and mission list for `/dispatch`, action + vessel picker for
+  `/fleet-action`, etc.). Typing plain text sends to the captain. Stop button cancels a running turn. See
+  "Slash commands" below.
 - Each captain reply has the Planning chat's (i) turn statistics popover next to its duration (see "Turn
   telemetry").
 - All updates arrive over the scoped WebSocket; the page also reconciles by refetching on reconnect.
   All strings go through the i18n runtime with catalog entries for every locale.
 
+### Slash commands
+
+The dashboard, the mobile app, and the TUI share one command catalog: the server's quick actions
+(`GET /ask/quick-actions`, merged with the built-ins in `lib/askQuickActions.ts`) followed by the local commands in
+`src/Armada.Dashboard/src/lib/askCommands.ts` (the mobile app imports the same file; the TUI mirrors the rules in
+`Armada.Tui/Ask/AskCommands.cs`). Local commands run in the client and are never sent to the captain.
+
+| Command | Arguments | What it does |
+|---------|-----------|--------------|
+| `/dispatch` | | Opens the Dispatch form (quick action) |
+| `/fleet-action` | | Opens the Fleet action form (quick action) |
+| `/status` | | Summarizes all active work (quick action, runs at once) |
+| `/health` | | Evaluates the health of every active vessel (quick action, runs at once) |
+| `/import` | | Opens the import wizard |
+| `/new` (alias `/clear`) | | Starts a new conversation with a fresh context and the same captain; the old one stays in the list |
+| `/help` | | Opens the menu with every command and its description |
+| `/summarize` | | Posts a summary of the open conversation |
+| `/rename` | `<title>` | Renames the open conversation (chosen from the menu, it fills `/rename ` so the title can be typed) |
+| `/archive` | | Archives the open conversation |
+| `/captain` | `<name>` | Switches the captain by name (id, exact name, prefix, substring, then letters in order); with no name or several matches it opens the captain picker |
+| `/thinking` | `on` or `off` | Turns Show thinking on or off (no argument toggles it) |
+
+Rules (every client):
+
+- Typing `/` opens the menu; it narrows as you type (command, alias, or quick action name), exact matches first, and
+  closes once arguments are typed. The first entry is highlighted; on the dashboard and in the TUI the arrow keys
+  move the highlight. The mobile app highlights the first entry (React Native reports no arrow keys from a hardware
+  keyboard).
+- Return (or Send, which is enabled for a runnable command) runs the highlighted entry while the menu is open,
+  otherwise the exact command typed (case-insensitive) with its arguments.
+- An unknown command shows "Unknown command /foo. Type / to see commands" under the composer and keeps the text.
+- Commands that need a saved conversation say so on a new one ("Nothing to summarize yet.", "Nothing to rename yet.
+  Send a message first.", "Nothing to archive yet.") and keep the text.
+- A server quick action cannot take the name of a local command or alias.
+- Starting a new conversation by any path (New conversation, `/new`, `/clear`, `n` in the TUI, a deep link to
+  `/ask`) clears the composer, the menu, and any hint, and focuses the composer. Each saved conversation keeps its
+  own unsent draft in memory, so switching back restores it and a new conversation never inherits another's text.
+  (The TUI's "Ask about this" still pre-fills the new conversation with the screen's context.)
+
 ### Terminal UI
 
 `armada tui` opens into the same experience at `/ask/:threadId?` (`AskScreen`): the conversation list,
 header with the Auto-approve toggle, streaming transcript with confirm cards (`a` approve, `r` reject) and
-live work cards, and a composer with `/` quick actions and inline Dispatch and Fleet action forms. The Ask
+live work cards, and a composer with `/` commands (see "Slash commands") and inline Dispatch and Fleet action forms. The Ask
 dock (`Ctrl+J`) follows the active thread from any screen, and the Approvals center (`Ctrl+A`) lists pending
 proposals next to mission reviews and deployment approvals. With a captain reply selected, the status bar shows
 `i Statistics`, and `i` opens or closes its turn statistics under the reply header. The captain's report of finished

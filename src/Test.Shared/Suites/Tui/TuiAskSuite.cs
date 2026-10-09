@@ -851,6 +851,161 @@ namespace Test.Shared.Suites.Tui
                 }
             }));
 
+            cases.Add(TuiCase.Sync(Suite, "command_rules", "The shared command catalog: quick actions then local commands, exact matches first, aliases, arguments, unknown commands, captain matching", () =>
+            {
+                List<AskCommandItem> catalog = AskCommands.Catalog(AskQuickActions.Defaults());
+                AssertEqual("/dispatch,/fleet-action,/status,/health,/import,/new,/help,/summarize,/rename,/archive,/captain,/thinking", String.Join(",", catalog.Select(i => i.Command)), "catalog order");
+                AssertEqual("/health,/help", String.Join(",", AskCommands.Filter(catalog, "/he").Select(i => i.Command)), "prefix matches");
+                AssertEqual("/new", String.Join(",", AskCommands.Filter(catalog, "/cl").Select(i => i.Command)), "alias prefix");
+                AssertEqual(0, AskCommands.Filter(catalog, "/rename x").Count, "menu closes once arguments are typed");
+                AskCommandParse rename = AskCommands.Parse(catalog, "  /RENAME  Billing fix ");
+                AssertEqual(AskCommandParseKindEnum.Command, rename.Kind, "exact command, any case");
+                AssertEqual(AskLocalCommandEnum.Rename, rename.Item!.Local!.Name, "rename");
+                AssertEqual("Billing fix", rename.Args, "arguments");
+                AssertEqual(AskLocalCommandEnum.New, AskCommands.Parse(catalog, "/clear").Item!.Local!.Name, "/clear is /new");
+                AskCommandParse unknown = AskCommands.Parse(catalog, "/foo bar");
+                AssertEqual(AskCommandParseKindEnum.Unknown, unknown.Kind, "unknown");
+                AssertEqual("/foo", unknown.Typed, "typed command");
+                AssertEqual(AskCommandParseKindEnum.Text, AskCommands.Parse(catalog, "hello /new").Kind, "plain text");
+                List<AskCommandItem> shadow = AskCommands.Catalog(new List<AskQuickAction> { new AskQuickAction { Name = "clear", Command = "/clear", ToolName = "x" } });
+                AssertFalse(shadow.Any(i => i.Action != null), "a quick action cannot shadow a local command");
+                List<Captain> captains = new List<Captain>
+                {
+                    new Captain { Id = "cpt_1", Name = "Ada" },
+                    new Captain { Id = "cpt_2", Name = "Grace Hopper" },
+                    new Captain { Id = "cpt_3", Name = "Grace Kelly" }
+                };
+                AssertEqual("cpt_1", String.Join(",", AskCommands.MatchCaptains(captains, "ADA").Select(c => c.Id)), "exact name");
+                AssertEqual("cpt_2,cpt_3", String.Join(",", AskCommands.MatchCaptains(captains, "grace").Select(c => c.Id)), "ambiguous prefix");
+                AssertEqual("cpt_3", String.Join(",", AskCommands.MatchCaptains(captains, "kelly").Select(c => c.Id)), "substring");
+                AssertEqual("cpt_2", String.Join(",", AskCommands.MatchCaptains(captains, "ghop").Select(c => c.Id)), "letters in order");
+                AssertEqual(0, AskCommands.MatchCaptains(captains, "zed").Count, "no match");
+                AssertTrue(AskCommands.TryParseThinking("on", false, out bool on) && on, "on");
+                AssertTrue(AskCommands.TryParseThinking("", true, out bool toggled) && !toggled, "empty toggles");
+                AssertFalse(AskCommands.TryParseThinking("maybe", true, out bool _), "other values rejected");
+            }));
+
+            cases.Add(TuiCase.Sync(Suite, "slash_commands", "Enter runs exact commands with arguments and the highlighted menu entry; unknown commands hint and keep the text", () =>
+            {
+                AskFixtures fx = new AskFixtures();
+                Captain codex = new Captain();
+                codex.Id = "cpt_2";
+                codex.Name = "codex-1";
+                codex.Runtime = AgentRuntimeEnum.Codex;
+                fx.Captains.Add(codex);
+                fx.Stub.On("GET", "/api/v1/captains/cpt_2/tools", body => StubHttpHandler.Response(System.Net.HttpStatusCode.OK, "{\"CaptainId\":\"cpt_2\",\"Runtime\":\"Codex\",\"ArmadaToolCount\":0}"));
+                fx.AddThread(AskFixtures.Thread("ath_1", "TUIKit fixes"));
+                using (TuiTestHost host = TuiCase.SignedIn(140, 50, "/ask/ath_1", fx.Stub))
+                {
+                    AskController ask = host.Tui.Ask;
+                    AskScreen screen = (AskScreen)host.Tui.Shell.Screen!;
+                    host.PumpUntil(() => ask.Conversation.Thread != null && ask.Captains.Count == 2);
+
+                    host.Type("/Summarize").Press("enter");
+                    AssertTrue(host.PumpUntil(() => fx.Stub.CountFor("POST", "/api/v1/ask/threads/ath_1/summarize") == 1), "summarize call");
+                    AssertEqual("", screen.Composer.Text, "composer cleared");
+                    AssertEqual(0, fx.Stub.CountFor("POST", "/api/v1/ask/threads/ath_1/messages"), "nothing sent to the captain");
+
+                    host.Type("/rename Billing retry fix").Press("enter");
+                    AssertTrue(host.PumpUntil(() => ask.Conversation.Thread!.Title == "Billing retry fix"), "renamed with the arguments");
+
+                    host.Type("/rename").Press("enter");
+                    AssertEqual("/rename ", screen.Composer.Text, "a command that needs arguments fills the composer");
+                    host.Press("ctrl+u");
+
+                    host.Type("/foo bar").Press("enter");
+                    AssertEqual(AskCommands.UnknownCommandHint, screen.Composer.Hint, "unknown hint");
+                    AssertEqual("/foo bar", screen.Composer.Text, "text kept");
+                    TuiCase.Contains(host.Screen(), "Unknown command /foo. Type / to see commands", "hint shown");
+                    host.Press("backspace");
+                    AssertNull(screen.Composer.Hint, "typing clears the hint");
+                    host.Press("ctrl+u");
+
+                    host.Type("/he");
+                    AssertEqual("/health,/help", String.Join(",", screen.Composer.Matches().Select(i => i.Command)), "menu matches");
+                    host.Press("down").Press("enter");
+                    AssertEqual("/", screen.Composer.Text, "/help opens the full menu");
+                    AssertTrue(screen.Composer.MenuOpen, "menu open");
+                    TuiCase.Contains(host.Screen(), "Commands", "menu heading");
+                    host.Press("ctrl+u");
+
+                    bool before = ask.ShowThinking;
+                    host.Type("/thinking " + (before ? "off" : "on")).Press("enter");
+                    AssertEqual(!before, ask.ShowThinking, "thinking set");
+                    host.Type("/thinking").Press("enter");
+                    AssertEqual(before, ask.ShowThinking, "thinking toggled back");
+
+                    host.Type("/captain codex").Press("enter");
+                    AssertTrue(host.PumpUntil(() => ask.Conversation.Thread!.CaptainId == "cpt_2"), "captain switched by name");
+                    TuiCase.Contains(host.Screen(), "Captain: codex-1", "captain hint");
+                    host.Type("/captain nobody").Press("enter");
+                    AssertEqual("/captain nobody", screen.Composer.Text, "no match keeps the text");
+                    TuiCase.Contains(host.Screen(), "No captain matches \"nobody\".", "no match hint");
+                    host.Press("ctrl+u");
+                    host.Type("/captain").Press("enter");
+                    AssertTrue(host.PumpUntil(() => host.App.Modals.IsActive), "the picker opens without a name");
+                    host.Press("esc");
+
+                    host.Type("/archive").Press("enter");
+                    AssertTrue(host.PumpUntil(() => ask.Conversation.Thread!.Archived), "archived");
+                }
+            }));
+
+            cases.Add(TuiCase.Sync(Suite, "new_conversation_clears_composer", "New, n, and /new open an empty composer; each conversation keeps its own draft; /new keeps the captain", () =>
+            {
+                AskFixtures fx = new AskFixtures();
+                Captain codex = new Captain();
+                codex.Id = "cpt_2";
+                codex.Name = "codex-1";
+                codex.Runtime = AgentRuntimeEnum.Codex;
+                fx.Captains.Add(codex);
+                fx.Stub.On("GET", "/api/v1/captains/cpt_2/tools", body => StubHttpHandler.Response(System.Net.HttpStatusCode.OK, "{\"CaptainId\":\"cpt_2\",\"Runtime\":\"Codex\",\"ArmadaToolCount\":0}"));
+                AskThread second = AskFixtures.Thread("ath_2", "Other");
+                second.CaptainId = "cpt_2";
+                fx.AddThread(AskFixtures.Thread("ath_1", "TUIKit fixes")).AddThread(second);
+                using (TuiTestHost host = TuiCase.SignedIn(140, 50, "/ask/ath_1", fx.Stub))
+                {
+                    AskController ask = host.Tui.Ask;
+                    host.PumpUntil(() => ask.Conversation.Thread != null && ask.Captains.Count == 2);
+                    host.Type("half-written question");
+                    host.Press("esc").Press("n");
+                    AssertEqual("/ask", host.Tui.Context.Router.Current!.FullPath, "new conversation route");
+                    AskScreen screen = (AskScreen)host.Tui.Shell.Screen!;
+                    AssertEqual("", screen.Composer.Text, "New starts empty");
+                    AssertTrue(ReferenceEquals(screen.Scope.Focused, screen.Composer), "composer focused");
+
+                    host.Type("a new draft");
+                    host.Press("esc").Press("n");
+                    AssertEqual("", ((AskScreen)host.Tui.Shell.Screen!).Composer.Text, "New on a new conversation clears it too");
+
+                    host.Tui.Context.Navigate("/ask/ath_1");
+                    host.PumpUntil(() => ask.Conversation.Thread != null);
+                    AssertEqual("half-written question", ((AskScreen)host.Tui.Shell.Screen!).Composer.Text, "the old conversation keeps its draft");
+                    host.Tui.Context.Navigate("/ask/ath_2");
+                    host.PumpUntil(() => ask.Conversation.Thread != null && ask.Conversation.Thread.Id == "ath_2");
+                    screen = (AskScreen)host.Tui.Shell.Screen!;
+                    AssertEqual("", screen.Composer.Text, "another conversation does not carry it");
+
+                    host.Type("/clear").Press("enter");
+                    AssertEqual("/ask", host.Tui.Context.Router.Current!.FullPath, "/clear opens a new conversation");
+                    AssertEqual("", ((AskScreen)host.Tui.Shell.Screen!).Composer.Text, "empty composer");
+                    AssertEqual("cpt_2", ask.DraftCaptainId, "keeps the captain");
+                    AssertTrue(ask.Threads.Any(t => t.Id == "ath_2"), "the old conversation stays in the list");
+                    host.Tui.Context.Navigate("/ask/ath_2");
+                    host.PumpUntil(() => ask.Conversation.Thread != null && ask.Conversation.Thread.Id == "ath_2");
+                    AssertEqual("", ((AskScreen)host.Tui.Shell.Screen!).Composer.Text, "the command is not left behind as a draft");
+
+                    screen = (AskScreen)host.Tui.Shell.Screen!;
+                    host.Type("/summarize");
+                    host.Tui.Context.Navigate("/ask");
+                    screen = (AskScreen)host.Tui.Shell.Screen!;
+                    host.Type("/summarize").Press("enter");
+                    AssertEqual("Nothing to summarize yet.", screen.Composer.Hint, "thread commands explain themselves on a new conversation");
+                    AssertEqual("/summarize", screen.Composer.Text, "text kept");
+                    AssertEqual(0, fx.Stub.CountFor("POST", "/api/v1/ask/threads/ath_2/summarize"), "nothing summarized");
+                }
+            }));
+
             return new TestSuiteDescriptor(suiteId: Suite, displayName: "TUI Ask Armada", cases: cases);
         }
 

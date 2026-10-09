@@ -43,7 +43,7 @@ import ConfirmDialog from '../components/shared/ConfirmDialog';
 import { ErrorState, LoadingState } from '../components/shared/StateBlocks';
 import ImportWizard from '../components/vessels/import/ImportWizard';
 import AskThreadList from '../components/ask/AskThreadList';
-import AskConversationHeader from '../components/ask/AskConversationHeader';
+import AskConversationHeader, { CAPTAIN_SELECT_ID } from '../components/ask/AskConversationHeader';
 import AskWorkStrip from '../components/ask/AskWorkStrip';
 import AskMessageList, { type AskMessageListHandle } from '../components/ask/AskMessageList';
 import AskComposer, { type AskComposerHandle } from '../components/ask/AskComposer';
@@ -53,6 +53,7 @@ import { parseAskEvent } from '../lib/askEvents';
 import { conversationReducer, initialConversation, isLocalMessage } from '../lib/askConversation';
 import { applyActivityEvent, applyThreadUpdate, sortThreads, type ThreadActivityMap, type ThreadListFilter } from '../lib/askThreads';
 import { DEFAULT_QUICK_ACTIONS, mergeQuickActions } from '../lib/askQuickActions';
+import { runLocalCommand, type AskCommandOutcome, type AskLocalCommand } from '../lib/askCommands';
 import { isWorkActive, workRoute } from '../lib/askWork';
 import { useFocusTrap } from '../lib/useFocusTrap';
 import { askCaptainAccess, instructionsDocUrl } from '../lib/askCaptain';
@@ -133,6 +134,8 @@ export default function AskArmada() {
   const [greeting] = useState(() => randomGreeting());
   const messageListRef = useRef<AskMessageListHandle>(null);
   const composerRef = useRef<AskComposerHandle>(null);
+  // Each saved conversation keeps its own unsent draft; a new conversation always starts empty.
+  const draftsRef = useRef<Record<string, string>>({});
   const drawerRef = useRef<HTMLDivElement>(null);
   // On narrow screens the list is a modal drawer: keep focus inside it and close it with Escape.
   useFocusTrap(drawerRef, drawerOpen, () => setDrawerOpen(false));
@@ -250,7 +253,13 @@ export default function AskArmada() {
   // Route changes open a different conversation (or the new-conversation screen).
   useEffect(() => {
     setDrawerOpen(false);
-    if (convRef.current.threadId !== routeThreadId) dispatch({ type: 'reset', threadId: routeThreadId });
+    const previousId = convRef.current.threadId;
+    // A conversation just created by a send or quick action already holds this id: its composer state carries over.
+    if (previousId !== routeThreadId) {
+      if (previousId) draftsRef.current[previousId] = composerRef.current?.getText() ?? '';
+      composerRef.current?.reset({ text: routeThreadId ? draftsRef.current[routeThreadId] ?? '' : '', focus: !routeThreadId });
+      dispatch({ type: 'reset', threadId: routeThreadId });
+    }
     setConvError(null);
     setStopping(false);
     if (routeThreadId) void loadConversation(routeThreadId);
@@ -460,6 +469,48 @@ export default function AskArmada() {
     }
   }
 
+  /** Start a new conversation (the New button, /new, /clear): the composer is cleared and focused. */
+  function newConversation(keepCaptain: boolean) {
+    setDrawerOpen(false);
+    if (keepCaptain && thread?.captainId) { setDraftCaptainId(thread.captainId); writeStored(CAPTAIN_STORAGE_KEY, thread.captainId); }
+    if (convRef.current.threadId) navigate('/ask');
+    else composerRef.current?.reset({ focus: true });
+  }
+
+  function openCaptainPicker() {
+    const select = document.getElementById(CAPTAIN_SELECT_ID) as (HTMLSelectElement & { showPicker?: () => void }) | null;
+    if (!select) return;
+    select.focus();
+    try { select.showPicker?.(); } catch { /* not supported (or no user activation): focus is enough */ }
+  }
+
+  function localCommand(command: AskLocalCommand, args: string): Promise<AskCommandOutcome> {
+    return runLocalCommand(command, args, {
+      hasThread: !!thread,
+      archived: !!thread?.archived,
+      turnActive: conv.turnActive,
+      captains,
+      showThinking,
+      newConversation: () => newConversation(true),
+      openHelp: () => composerRef.current?.reset({ text: '/', focus: true }),
+      summarize: () => (thread ? summarize(thread) : undefined),
+      rename: (title) => (thread ? updateThread(thread, { title }) : undefined),
+      archive: () => (thread ? updateThread(thread, { archived: true }) : undefined),
+      setCaptain: (captainId) => {
+        writeStored(CAPTAIN_STORAGE_KEY, captainId);
+        if (thread) void updateThread(thread, { captainId });
+        else setDraftCaptainId(captainId);
+      },
+      openCaptainPicker,
+      setShowThinking: changeShowThinking,
+    });
+  }
+
+  function changeShowThinking(value: boolean) {
+    setShowThinking(value);
+    writeStored(THINKING_STORAGE_KEY, value ? 'true' : 'false');
+  }
+
   async function confirmDelete() {
     const target = deleteTarget;
     setDeleteTarget(null);
@@ -541,7 +592,7 @@ export default function AskArmada() {
           onLoadMore={() => void loadThreads(listPage + 1)}
           onRetry={() => void loadThreads(1)}
           onSelect={(th) => { setDrawerOpen(false); navigate(`/ask/${encodeURIComponent(th.id)}`); }}
-          onNew={() => { setDrawerOpen(false); navigate('/ask'); window.setTimeout(() => composerRef.current?.focus(), 0); }}
+          onNew={() => newConversation(false)}
           onRename={(th, title) => void updateThread(th, { title })}
           onTogglePin={(th) => void updateThread(th, { pinned: !th.pinned })}
           onSummarize={(th) => void summarize(th)}
@@ -647,11 +698,12 @@ export default function AskArmada() {
           onStop={stop}
           onSend={(text) => void send(text)}
           onQuickAction={runQuickAction}
+          onLocalCommand={localCommand}
           actionBusy={actionBusy}
           onOpenImport={() => setImportOpen(true)}
           noCaptain={noCaptain}
           showThinking={showThinking}
-          onShowThinkingChange={(value) => { setShowThinking(value); writeStored(THINKING_STORAGE_KEY, value ? 'true' : 'false'); }}
+          onShowThinkingChange={changeShowThinking}
         />
       </section>
 

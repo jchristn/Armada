@@ -5,6 +5,9 @@ import ActionMenu, { type ActionMenuItem } from '../shared/ActionMenu';
 import CliPermissionPolicySelect from '../cliPermissions/CliPermissionPolicySelect';
 import { resolutionSummary } from '../../lib/cliPermissions';
 
+/** The captain picker's id (the /captain command focuses it when a name is ambiguous). */
+export const CAPTAIN_SELECT_ID = 'ask-captain-select';
+
 interface AskConversationHeaderProps {
   thread: AskThread | null;
   captains: Captain[];
@@ -96,6 +99,7 @@ export default function AskConversationHeader(props: AskConversationHeaderProps)
         <label className="ask-captain-field">
           <span className="text-dim">{t('Captain')}</span>
           <select
+            id={CAPTAIN_SELECT_ID}
             value={captainValue}
             disabled={busy}
             onChange={(e) => (thread ? onCaptainChange(e.target.value || null) : onDraftCaptainChange(e.target.value))}

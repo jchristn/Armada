@@ -8838,6 +8838,8 @@ tr.row-muted td { opacity: 0.72; }
     line-height: 1.4;
 }
 .ask-composer-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 0.35rem 1rem; font-size: 0.74rem; }
+.ask-composer-hint { font-size: 0.78rem; }
+.ask-composer-hint:empty { margin-top: -0.45rem; }
 .ask-disclaimer-inline { margin-left: auto; font-size: 0.72rem; }
 .ask-link-btn {
     padding: 0;
@@ -8876,7 +8878,7 @@ tr.row-muted td { opacity: 0.72; }
 .ask-quick-menu-head { padding: 0.15rem 0.5rem 0.3rem; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
 .ask-quick-option {
     display: grid;
-    grid-template-columns: 7.5rem 7rem minmax(0, 1fr);
+    grid-template-columns: 9.5rem 8rem minmax(0, 1fr);
     align-items: baseline;
     gap: 0.6rem;
     padding: 0.4rem 0.55rem;
@@ -8887,6 +8889,7 @@ tr.row-muted td { opacity: 0.72; }
 .ask-quick-option.is-active { background: color-mix(in srgb, var(--accent) 14%, var(--bg-card)); }
 .ask-quick-command { font-family: var(--mono); font-size: 0.8rem; color: var(--accent); }
 .ask-quick-title { font-weight: 600; }
+.ask-quick-usage { color: var(--text-dim); }
 .ask-quick-desc { font-size: 0.76rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ask-inline-form {
     display: flex;

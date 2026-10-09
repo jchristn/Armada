@@ -162,9 +162,14 @@ namespace Armada.Tui.Ask
         public string Greeting { get; private set; } = AskPhrases.RandomGreeting();
 
         /// <summary>
-        /// Composer text kept across screen instances (and pre-filled by "Ask about this").
+        /// The open conversation's unsent composer text, kept across screen instances. Each saved conversation keeps its
+        /// own draft; a new conversation starts empty (or with the "Ask about this" context).
         /// </summary>
-        public string ComposerDraft { get; set; } = "";
+        public string ComposerDraft
+        {
+            get { return _Drafts.TryGetValue(Conversation.ThreadId ?? "", out string? draft) ? draft : ""; }
+            set { _Drafts[Conversation.ThreadId ?? ""] = value ?? ""; }
+        }
 
         /// <summary>
         /// Messages sent in this session, oldest first (composer history recall). Never null.
@@ -278,6 +283,8 @@ namespace Armada.Tui.Ask
         private string _Waiting = "";
         private DateTime _WaitingNextUtc = DateTime.MinValue;
         private bool _Started = false;
+        private readonly Dictionary<string, string> _Drafts = new Dictionary<string, string>(StringComparer.Ordinal);
+        private string? _NewDraftSeed = null;
 
         #endregion
 
@@ -370,7 +377,8 @@ namespace Armada.Tui.Ask
             _ToolsRequestedFor = null;
             ListError = null;
             ConvError = null;
-            ComposerDraft = "";
+            _Drafts.Clear();
+            _NewDraftSeed = null;
             _Stopping = false;
         }
 
@@ -391,6 +399,8 @@ namespace Armada.Tui.Ask
             }
 
             ConvError = null;
+            if (threadId == null && (!same || _NewDraftSeed != null)) _Drafts[""] = _NewDraftSeed ?? "";
+            _NewDraftSeed = null;
             if (threadId != null)
             {
                 Context.Prefs.Current.LastAskThreadId = threadId;
@@ -401,6 +411,32 @@ namespace Armada.Tui.Ask
                 ConvLoading = false;
             }
 
+            EnsureTools();
+        }
+
+        /// <summary>
+        /// Start a new conversation (New, <c>n</c>, <c>/new</c>, <c>/clear</c>): open <c>/ask</c> with an empty composer.
+        /// The open conversation keeps its draft and stays in the list.
+        /// </summary>
+        /// <param name="keepCaptain">Use the open conversation's captain for the new one (<c>/new</c> keeps it).</param>
+        public void NewConversation(bool keepCaptain = false)
+        {
+            string? captainId = Conversation.Thread?.CaptainId;
+            if (keepCaptain && !String.IsNullOrEmpty(captainId))
+            {
+                DraftCaptainId = captainId!;
+                Context.Prefs.Current.AskDraftCaptainId = captainId;
+                Context.Prefs.Save();
+            }
+
+            if (Conversation.ThreadId == null)
+            {
+                // Already on a new conversation (the route does not change): clear it in place.
+                _Drafts[""] = "";
+                DraftChanged?.Invoke(this, "");
+            }
+
+            Context.Navigate("/ask");
             EnsureTools();
         }
 
@@ -1131,9 +1167,14 @@ namespace Armada.Tui.Ask
                         Context.Notifications.Toast(NotificationSeverityEnum.Success, Context.Loc.T("Conversation deleted."));
                         if (target.Id == Conversation.ThreadId)
                         {
-                            Conversation.Reset(null);
+                            // Navigate first: the screen saves its draft under the deleted thread, and the new
+                            // conversation starts empty.
                             if (Viewing) Context.Navigate("/ask");
+                            Conversation.Reset(null);
+                            _Drafts[""] = "";
                         }
+
+                        _Drafts.Remove(target.Id);
                     });
                 }
                 catch (ArmadaApiException ex)
@@ -1245,7 +1286,7 @@ namespace Armada.Tui.Ask
 
             string? id = route.Param("id");
             string kind = EntityKind(route.Route.Pattern);
-            ComposerDraft = ContextPrefix(route, null);
+            _NewDraftSeed = ContextPrefix(route, null);
             Context.Navigate("/ask");
             if (id == null || kind.Length == 0) return;
             ArmadaClient client = Context.Client;
@@ -1270,7 +1311,8 @@ namespace Armada.Tui.Ask
                 string named = ContextPrefix(route, name);
                 Context.Dispatcher.Post(() =>
                 {
-                    if (ComposerDraft == plain) ComposerDraft = named;
+                    if (Conversation.ThreadId != null || ComposerDraft != plain) return;
+                    ComposerDraft = named;
                     DraftChanged?.Invoke(this, named);
                 });
             });
@@ -1495,6 +1537,10 @@ namespace Armada.Tui.Ask
             if (created == null) throw new ArmadaApiException("The server returned no conversation.", 500, null, null, null, "POST", "/api/v1/ask/threads", null, null);
             await OnUiAsync(() =>
             {
+                // The new conversation's draft (typed while it was being created) carries over to the saved thread.
+                string carried = Conversation.ThreadId == null ? ComposerDraft : "";
+                _Drafts.Remove("");
+                _Drafts[created.Id] = carried;
                 Conversation.Reset(created.Id);
                 Conversation.ApplyThread(created);
                 Threads = AskThreadListLogic.ApplyUpdate(Threads, created, Query, IncludeArchived, created.Id);

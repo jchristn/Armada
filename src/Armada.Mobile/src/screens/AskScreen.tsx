@@ -8,6 +8,7 @@ import { askCaptainAccess, instructionsDocUrl } from '@dashboard/lib/askCaptain'
 import { randomGreeting } from '@dashboard/lib/askGreetings';
 import { workRoute } from '@dashboard/lib/askWork';
 import { fallbackReasonText } from '@dashboard/lib/cliPermissions';
+import { runLocalCommand, type AskCommandOutcome, type AskLocalCommand } from '@dashboard/lib/askCommands';
 import { useAuth } from '../auth/AuthContext';
 import { useAsk } from '../ask/AskContext';
 import { useAskConversation } from '../ask/useAskConversation';
@@ -85,6 +86,10 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
   const [greeting] = useState(() => randomGreeting());
   const messageListRef = useRef<MessageListHandle>(null);
   const composerRef = useRef<ComposerHandle>(null);
+  // Each saved conversation keeps its own unsent draft; a new conversation always starts empty.
+  const draftsRef = useRef<Record<string, string>>({});
+  const shownThreadRef = useRef<string | null>(threadId);
+  const createdThreadRef = useRef<string | null>(null);
 
   // A deep link to a conversation (or a new route param) opens it.
   const [seenRoute, setSeenRoute] = useState(routeThreadId);
@@ -105,7 +110,7 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
     return () => setOpenThreadId(null);
   }, [threadId, setOpenThreadId]));
 
-  const onCreated = useCallback((id: string) => setThreadId(id), []);
+  const onCreated = useCallback((id: string) => { createdThreadRef.current = id; setThreadId(id); }, []);
   const conversation = useAskConversation({ threadId, onCreated });
   const { conv } = conversation;
   const thread = conv.thread;
@@ -120,6 +125,17 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
     return () => { active = false; };
   }, [activeCaptainId, loadCaptainTools]);
   const tools = toolsFor && toolsFor.captainId === activeCaptainId ? toolsFor.tools : null;
+
+  // Switching conversations swaps the composer draft; a new conversation starts empty and focused. The conversation a
+  // send or quick action just created keeps the composer as it is.
+  useEffect(() => {
+    const previous = shownThreadRef.current;
+    if (previous === threadId) return;
+    shownThreadRef.current = threadId;
+    if (threadId && threadId === createdThreadRef.current) { createdThreadRef.current = null; return; }
+    if (previous) draftsRef.current[previous] = composerRef.current?.getText() ?? '';
+    composerRef.current?.reset({ text: threadId ? draftsRef.current[threadId] ?? '' : '', focus: threadId === null });
+  }, [threadId]);
 
   const { mcpMissing, ungated, noCaptain } = askCaptainAccess(activeCaptainId, tools);
   // The captain cannot change mid-turn, so the dropdown closes when a turn starts.
@@ -154,10 +170,30 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
     setThreadId(th.id);
   }
 
-  function newConversation() {
+  /** Start a new conversation (New, /new, /clear): the composer is cleared and focused. */
+  function newConversation(keepCaptain = false) {
     setListOpen(false);
-    setThreadId(null);
-    setTimeout(() => composerRef.current?.focus(), 0);
+    if (keepCaptain && thread?.captainId) setDraftCaptainId(thread.captainId);
+    if (threadId === null) composerRef.current?.reset({ focus: true });
+    else setThreadId(null);
+  }
+
+  function localCommand(command: AskLocalCommand, args: string): Promise<AskCommandOutcome> {
+    return runLocalCommand(command, args, {
+      hasThread: !!thread,
+      archived: !!thread?.archived,
+      turnActive: conv.turnActive,
+      captains,
+      showThinking,
+      newConversation: () => newConversation(true),
+      openHelp: () => composerRef.current?.reset({ text: '/', focus: true }),
+      summarize: () => (thread ? summarize(thread) : undefined),
+      rename: (title) => (thread ? applyUpdate(thread, { title }) : undefined),
+      archive: () => (thread ? applyUpdate(thread, { archived: true }) : undefined),
+      setCaptain: (captainId) => { setCaptainMenuOpen(false); changeCaptain(captainId); },
+      openCaptainPicker: () => setCaptainMenuOpen(true),
+      setShowThinking,
+    });
   }
 
   async function deleteConversation(target: AskThread) {
@@ -260,7 +296,7 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
       {conversation.error ? (
         <View style={styles.fill}>
           <ErrorState title={conversation.error} retryLabel={threadId ? t('Retry') : undefined} onRetry={threadId ? conversation.reload : undefined} />
-          <Button label={t('Start a new conversation')} variant="ghost" onPress={newConversation} />
+          <Button label={t('Start a new conversation')} variant="ghost" onPress={() => newConversation()} />
         </View>
       ) : conversation.loading && conv.messages.length === 0 ? (
         <LoadingState label={t('Loading conversation...')} />
@@ -320,6 +356,7 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
           if (ok) messageListRef.current?.scrollToBottom();
           return ok;
         }}
+        onLocalCommand={localCommand}
         actionBusy={conversation.actionBusy}
         onOpenImport={() => router.push('/vessels/import' as Href)}
         noCaptain={noCaptain}
@@ -344,7 +381,7 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
       onLoadMore={loadMoreThreads}
       onRetry={reloadThreads}
       onSelect={selectThread}
-      onNew={newConversation}
+      onNew={() => newConversation()}
       {...threadActions}
       onDelete={(th) => void deleteConversation(th)}
     />

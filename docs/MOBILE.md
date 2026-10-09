@@ -18,10 +18,17 @@ Developer setup, the code layout, and the test tooling are in
 
 | Tab (phone) | What is there |
 |---|---|
-| **Ask** | Ask Armada conversations: streaming replies with thinking and tool steps, `/` quick actions and forms, the captain picker, confirm cards, CLI permission cards, live work cards, and the captain's report when work finishes (tagged "Report") |
+| **Ask** | Ask Armada conversations: streaming replies with thinking and tool steps, `/` commands (quick actions and forms, `/new`, `/rename`, and more), the captain picker, confirm cards, CLI permission cards, live work cards, and the captain's report when work finishes (tagged "Report") |
 | **Approvals** | Everything that needs you, decided in place: Ask proposals, CLI permission requests, mission reviews, deployment approvals, failed landings (retry), failed missions (restart), and stalled captains (stop); recent alerts below |
 | **Work** | Home (status, KPIs, health, mission history, voyage progress, recent missions and signals), Missions, Voyages and Create Voyage, Dispatch, Merge Queue, and the Build, Delivery, Configuration, Activity, and Server sections |
 | **More** | Server profiles, preferences (theme, language, Face ID unlock and saved password, notifications), the notification center, and sign-out |
+
+In Ask, typing `/` opens the command menu: the quick actions plus `/new` (also `/clear`), `/help`, `/summarize`,
+`/rename <title>`, `/archive`, `/captain <name>`, and `/thinking on|off` (see "Slash commands" in
+[ASK_ARMADA_HOME_BASE.md](ASK_ARMADA_HOME_BASE.md)). The first entry is highlighted (a bar on its left edge), and
+Return or **Send** runs it, or runs the command you typed with its arguments (`/rename Billing retry fix`). An unknown
+command shows a short hint under the message box and keeps your text. **New conversation**, `/new`, and `/clear`
+always start with an empty message box; each conversation keeps its own unsent draft while the app runs.
 
 On a tablet (768 dp and wider) the tabs become the dashboard's sidebar and lists open their detail side by side.
 Links work both ways: `armada://` links and pasted dashboard URLs (`https://admiral.example.com/dashboard/missions/msn_...`)

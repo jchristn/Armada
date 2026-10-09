@@ -1,7 +1,16 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Switch, TextInput, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Switch, TextInput, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
 import type { AskQuickAction } from '@dashboard/types/models';
-import { filterQuickActions, quickActionForm } from '@dashboard/lib/askQuickActions';
+import { quickActionForm } from '@dashboard/lib/askQuickActions';
+import {
+  buildCommandCatalog,
+  filterCommands,
+  resolveSubmit,
+  unknownCommandHint,
+  type AskCommandItem,
+  type AskCommandOutcome,
+  type AskLocalCommand,
+} from '@dashboard/lib/askCommands';
 import { useLocale } from '../../i18n/LocaleContext';
 import { useTheme } from '../../theme/ThemeContext';
 import { MIN_TOUCH, radius, spacing, typography } from '../../theme/typography';
@@ -20,31 +29,51 @@ export interface ComposerProps {
   onSend: (text: string) => void;
   /** Runs a quick action; resolves true when it succeeded so the form can close. */
   onQuickAction: (action: AskQuickAction, args: Record<string, unknown>) => Promise<boolean>;
+  /** Runs a local command (/new, /summarize, ...); `/help` is handled here. */
+  onLocalCommand: (command: AskLocalCommand, args: string) => Promise<AskCommandOutcome>;
   actionBusy: boolean;
   onOpenImport: () => void;
-  /** No captain is selected: plain messages cannot be sent, quick actions still work. */
+  /** No captain is selected: plain messages cannot be sent, commands still work. */
   noCaptain: boolean;
   showThinking: boolean;
   onShowThinkingChange: (value: boolean) => void;
+}
+
+export interface ComposerResetOptions {
+  /** Text to show (default empty). */
+  text?: string;
+  focus?: boolean;
 }
 
 export interface ComposerHandle {
   /** Open a quick action as if it had been chosen from the `/` menu. */
   choose: (action: AskQuickAction) => void;
   focus: () => void;
+  /** The current draft. */
+  getText: () => string;
+  /** Replace the draft and close the menu, any open form, and the hint (a new or different conversation). */
+  reset: (options?: ComposerResetOptions) => void;
+}
+
+interface Hint {
+  text: string;
+  params?: Record<string, string>;
 }
 
 /**
- * The message composer (the dashboard's AskComposer). Plain text goes to the thread's captain; `/` opens the
- * quick-action menu, and each quick action opens its form in a sheet (or runs immediately when it needs no input).
+ * The message composer (the dashboard's AskComposer). Plain text goes to the thread's captain. Text starting with
+ * `/` is a command (shared lib/askCommands): the menu lists matching quick actions and local commands with the first
+ * one highlighted, Return or Send runs the highlighted entry or the exact command typed (with its arguments), and an
+ * unknown command shows a hint and keeps the text. Quick actions with input open their form in a sheet.
  */
 export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Composer(props, ref) {
-  const { quickActions, turnActive, stopping, onStop, onSend, onQuickAction, actionBusy, onOpenImport, noCaptain, showThinking, onShowThinkingChange } = props;
+  const { quickActions, turnActive, stopping, onStop, onSend, onQuickAction, onLocalCommand, actionBusy, onOpenImport, noCaptain, showThinking, onShowThinkingChange } = props;
   const { t } = useLocale();
   const { colors } = useTheme();
   const [input, setInput] = useState('');
   const [menuDismissed, setMenuDismissed] = useState(false);
   const [openForm, setOpenForm] = useState<AskQuickAction | null>(null);
+  const [hint, setHint] = useState<Hint | null>(null);
   const inputRef = useRef<TextInput>(null);
   // The message box and the Send (or Stop) button share one resting height: each is measured at its natural single-line
   // size and both are drawn at the larger of the two, so they match at every text size. A typed message can still grow
@@ -55,21 +84,53 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   useEffect(() => { setButtonHeight(0); setEmptyInputHeight(0); }, [fontScale]);
   const restingHeight = Math.max(MIN_TOUCH, buttonHeight, emptyInputHeight);
 
-  const matches = useMemo(() => filterQuickActions(quickActions, input), [quickActions, input]);
+  const catalog = useMemo(() => buildCommandCatalog(quickActions), [quickActions]);
+  const matches = useMemo(() => filterCommands(catalog, input), [catalog, input]);
   const menuOpen = !menuDismissed && !openForm && matches.length > 0;
+  // Touch has no arrow keys: the first match is highlighted and Return runs it, as on the dashboard.
+  const highlighted = menuOpen ? matches[0] : null;
+  const pending = resolveSubmit(catalog, input, highlighted);
   const formKind = openForm ? quickActionForm(openForm) : null;
 
+  function setText(text: string) {
+    setInput(text);
+    setMenuDismissed(false);
+  }
+
+  function reset(options?: ComposerResetOptions) {
+    setText(options?.text ?? '');
+    setOpenForm(null);
+    setHint(null);
+    if (options?.focus) inputRef.current?.focus();
+  }
+
   async function choose(action: AskQuickAction) {
-    setInput('');
+    setText('');
+    setHint(null);
     const kind = quickActionForm(action);
     if (kind === 'import') { onOpenImport(); return; }
     if (kind === 'none') { await onQuickAction(action, {}); return; }
     setOpenForm(action);
   }
 
+  async function runItem(item: AskCommandItem, args: string) {
+    if (item.action) { await choose(item.action); return; }
+    const local = item.local;
+    if (!local) return;
+    if (local.name === 'help') { reset({ text: '/', focus: true }); return; }
+    if (local.requiresArgs && !args) { reset({ text: `${local.command} `, focus: true }); return; }
+    // A new conversation must not inherit the command as the old conversation's saved draft.
+    if (local.name === 'new') setText('');
+    const outcome = await onLocalCommand(local, args);
+    if (outcome.ok) setText('');
+    setHint(outcome.hint ? { text: outcome.hint, params: outcome.hintParams } : null);
+  }
+
   useImperativeHandle(ref, () => ({
     choose: (action: AskQuickAction) => { void choose(action); },
     focus: () => inputRef.current?.focus(),
+    getText: () => input,
+    reset,
   }));
 
   async function submitForm(args: Record<string, unknown>) {
@@ -79,12 +140,20 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   }
 
   const trimmed = input.trim();
-  const canSend = !!trimmed && !noCaptain && !trimmed.startsWith('/') && !turnActive;
+  const canSendText = pending.kind === 'text' && !!trimmed && !noCaptain && !turnActive;
+  const canSubmit = pending.kind === 'command' || canSendText;
 
-  function send() {
-    if (!canSend) return;
+  function submit() {
+    if (pending.kind === 'command') { void runItem(pending.item, pending.args); return; }
+    if (pending.kind === 'unknown') {
+      const outcome = unknownCommandHint(pending.command);
+      setHint({ text: outcome.hint ?? '', params: outcome.hintParams });
+      return;
+    }
+    if (!canSendText) return;
     onSend(trimmed);
-    setInput('');
+    setText('');
+    setHint(null);
   }
 
   function measureInput(event: LayoutChangeEvent) {
@@ -100,31 +169,33 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   }
 
   const placeholder = noCaptain
-    ? t('Choose a captain to chat, or type / for quick actions')
-    : t('Message the captain, or type / for quick actions');
+    ? t('Choose a captain to chat, or type / for commands')
+    : t('Message the captain, or type / for commands');
 
   return (
     <View style={[styles.wrap, { borderTopColor: colors.border, backgroundColor: colors.surface }]} testID="ask-composer">
       {menuOpen ? (
-        <View style={[styles.menu, { borderColor: colors.border, backgroundColor: colors.surfaceRaised }]} accessibilityLabel={t('Quick actions')} testID="ask-quick-menu">
-          <AppText variant="caption" muted style={styles.menuHead}>{t('Quick actions')}</AppText>
-          {matches.map((action) => (
-            <Pressable
-              key={action.name}
-              testID={`ask-quick-${action.name}`}
-              accessibilityRole="button"
-              accessibilityLabel={`${action.command || `/${action.name}`}, ${action.title ? t(action.title) : action.name}`}
-              accessibilityHint={action.description ? t(action.description) : undefined}
-              onPress={() => void choose(action)}
-              style={({ pressed }) => [styles.option, { opacity: pressed ? 0.6 : 1 }]}
-            >
-              <AppText variant="mono" color="primary">{action.command || `/${action.name}`}</AppText>
-              <View style={styles.flex}>
-                <AppText variant="label">{action.title ? t(action.title) : action.name}</AppText>
-                {action.description ? <AppText variant="caption" muted numberOfLines={2}>{t(action.description)}</AppText> : null}
-              </View>
-            </Pressable>
-          ))}
+        <View style={[styles.menu, { borderColor: colors.border, backgroundColor: colors.surfaceRaised }]} accessibilityLabel={t('Commands')} testID="ask-quick-menu">
+          <AppText variant="caption" muted style={styles.menuHead}>{t('Commands')}</AppText>
+          <ScrollView style={styles.menuList} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
+            {matches.map((item) => (
+              <Pressable
+                key={item.key}
+                testID={`ask-quick-${item.local ? item.local.name : item.action?.name}`}
+                accessibilityRole="button"
+                accessibilityLabel={[`${item.command}${item.usage ? ` ${item.usage}` : ''}`, t(item.title), item.description ? t(item.description) : ''].filter(Boolean).join(', ')}
+                accessibilityState={{ selected: item === highlighted }}
+                onPress={() => void runItem(item, '')}
+                style={({ pressed }) => [styles.option, { borderLeftColor: item === highlighted ? colors.primary : colors.surfaceRaised, opacity: pressed ? 0.6 : 1 }]}
+              >
+                <AppText variant="mono" color="primary">{item.command}{item.usage ? ` ${item.usage}` : ''}</AppText>
+                <View style={styles.flex}>
+                  <AppText variant="label">{t(item.title)}</AppText>
+                  {item.description ? <AppText variant="caption" muted numberOfLines={2}>{t(item.description)}</AppText> : null}
+                </View>
+              </Pressable>
+            ))}
+          </ScrollView>
           <Button label={t('Close')} variant="ghost" onPress={() => setMenuDismissed(true)} />
         </View>
       ) : null}
@@ -141,8 +212,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             // Return (on-screen or a hardware keyboard) sends, as the Send button does, and keeps the keyboard up.
             returnKeyType="send"
             submitBehavior="submit"
-            onSubmitEditing={send}
-            onChangeText={(value) => { setInput(value); setMenuDismissed(false); }}
+            onSubmitEditing={submit}
+            onChangeText={(value) => { setText(value); setHint(null); }}
             onLayout={measureInput}
             style={[styles.input, typography.body, { minHeight: restingHeight, color: colors.text, borderColor: colors.control, backgroundColor: colors.background }]}
           />
@@ -163,13 +234,19 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           ) : null}
         </View>
         <View onLayout={measureButton} testID="ask-send-wrap">
-          {turnActive ? (
+          {turnActive && pending.kind !== 'command' ? (
             <Button label={stopping ? t('Stopping...') : t('Stop')} variant="secondary" onPress={onStop} disabled={stopping} testID="ask-stop" style={[styles.sendButton, { minHeight: restingHeight }]} />
           ) : (
-            <Button label={t('Send')} onPress={send} disabled={!canSend} testID="ask-send" style={[styles.sendButton, { minHeight: restingHeight }]} />
+            <Button label={t('Send')} onPress={submit} disabled={!canSubmit} testID="ask-send" style={[styles.sendButton, { minHeight: restingHeight }]} />
           )}
         </View>
       </View>
+
+      {hint ? (
+        <AppText variant="caption" muted accessibilityLiveRegion="polite" accessibilityRole="alert" testID="ask-composer-hint" style={styles.hint}>
+          {t(hint.text, hint.params)}
+        </AppText>
+      ) : null}
 
       <View style={styles.foot}>
         <View style={styles.toggle}>
@@ -188,10 +265,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           color="primary"
           accessibilityRole="button"
           testID="ask-quick-actions"
-          onPress={() => { setInput('/'); setMenuDismissed(false); inputRef.current?.focus(); }}
+          onPress={() => reset({ text: '/', focus: true })}
           style={styles.link}
         >
-          {t('Quick actions')}
+          {t('Commands')}
         </AppText>
       </View>
       <AppText variant="caption" muted style={styles.disclaimer}>{t('AI can make mistakes. Check answers.')}</AppText>
@@ -222,7 +299,10 @@ const styles = StyleSheet.create({
   wrap: { borderTopWidth: StyleSheet.hairlineWidth, paddingHorizontal: spacing.md, paddingTop: spacing.sm, paddingBottom: spacing.xs },
   menu: { borderWidth: 1, borderRadius: radius.md, marginBottom: spacing.sm, paddingHorizontal: spacing.sm },
   menuHead: { paddingTop: spacing.sm },
-  option: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: MIN_TOUCH, paddingVertical: spacing.xs },
+  menuList: { maxHeight: 280 },
+  hint: { marginTop: spacing.xs },
+  // The highlighted entry (what Return runs) has a primary bar on its left edge.
+  option: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: MIN_TOUCH, paddingVertical: spacing.xs, paddingLeft: spacing.xs, borderLeftWidth: 3 },
   flex: { flex: 1 },
   row: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm },
   inputWrap: { flex: 1, justifyContent: 'center' },
