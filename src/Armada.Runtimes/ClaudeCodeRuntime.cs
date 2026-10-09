@@ -44,8 +44,9 @@ namespace Armada.Runtimes
         /// <summary>
         /// When true, run in streaming-JSON mode (--output-format stream-json --include-partial-messages) so
         /// the caller can render the model's reply token-by-token and read a clean final message plus metrics
-        /// from the terminal "result" event. Used by interactive chat; missions leave this false so their
-        /// output stays human-readable and progress-signal parsing is unaffected.
+        /// from the terminal "result" event. Used by interactive chat, which reads the raw events. Missions leave this
+        /// false and set <see cref="BaseAgentRuntime.StructuredProgress"/> instead: stream-json without partial messages,
+        /// decoded into the same readable output as text mode plus live activity.
         /// </summary>
         public bool StreamJsonOutput { get; set; } = false;
 
@@ -118,6 +119,12 @@ namespace Armada.Runtimes
                 return fromStdout ? RuntimeProviderErrorParser.TryParseClaudeStreamJsonLine(line) : null;
             }
 
+            // A mission streaming its progress: stdout carries stream-json events (and the odd plain warning line).
+            if (StructuredProgressActive && fromStdout)
+            {
+                return RuntimeProviderErrorParser.TryParseClaudeStreamJsonLine(line) ?? RuntimeProviderErrorParser.TryParseClaudeTextLine(line);
+            }
+
             return RuntimeProviderErrorParser.TryParseClaudeTextLine(line);
         }
 
@@ -143,6 +150,13 @@ namespace Armada.Runtimes
                 args.Add("--output-format");
                 args.Add("stream-json");
                 args.Add("--include-partial-messages");
+            }
+            else if (StructuredProgressActive)
+            {
+                // A mission streaming its progress: one complete event per assistant message (text, thinking, tool
+                // calls) and the terminal result event with the final reply, without per-token deltas.
+                args.Add("--output-format");
+                args.Add("stream-json");
             }
 
             if (!String.IsNullOrEmpty(model))
@@ -183,6 +197,11 @@ namespace Armada.Runtimes
             // Reading the prompt from stdin preserves the full multi-line content on every platform.
             return args;
         }
+
+        /// <summary>
+        /// Chat's streaming-JSON mode reads the raw events itself.
+        /// </summary>
+        protected override bool InteractiveStructuredOutput => StreamJsonOutput;
 
         /// <summary>
         /// Deliver the prompt on stdin rather than as a command-line argument. Claude Code reads the prompt

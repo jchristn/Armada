@@ -98,12 +98,43 @@ The app has three windows, and every entry point opens the same ones:
 
 - **Armada Harbor** (the main window): the connection state as the header (**Connected**, **Connecting**,
   **Disconnected**, or **Error**, with the Admiral's address and a plain-language detail), one **Connect** /
-  **Disconnect** button, **Running now** (each job on this machine: a mission or an Ask turn, its runtime, and how long
-  it has run, with how many of `MaxConcurrentJobs` slots are in use), and **Activity** (the link's recent work, with
+  **Disconnect** button, **Running now** (each job on this machine, with how many of `MaxConcurrentJobs` slots are in
+  use; see **Running now** below), and **Activity** (the link's recent work, with
   Show details, Copy, Clear, and All Logs; see **The Activity log** below). **Dashboard**, **Status**, and
   **Settings** are in the header. Closing the window keeps Harbor running in the tray.
 - **Armada Harbor - Status**, with an **Overview** tab and a **Logs** tab.
 - **Armada Harbor - Settings**, with **General**, **Repositories**, and **Admiral** tabs.
+
+**Running now.** Each job running on this machine is one row, shown in the main window and on the Status window's
+Overview:
+
+```
+(o) Add rate limiting middleware                          [ClaudeCode]
+    PrettyId  >  Voyage "API hardening" (2 of 3)          12m 34s
+    Captain ada (claude-sonnet-4)  -  Implement stage
+    Branch armada/msn_mhq2k7c9xw4e8r1t    msn_mhq2k7c9xw4e8r1t [copy]
+    > Running tests: dotnet test src/PrettyId.sln
+                                       [Open in Dashboard] [View output]
+(o) Ask turn: "What MCP tools do you have for Armada?"    [Codex]
+    Captain grace (gpt-5)  -  conversation ath_...k3 [copy]   41s
+    > Calling tool armada_status
+```
+
+- The first line is the mission's title (or "Ask turn:" and the first line of the question) and the runtime; then the
+  vessel and the voyage with the mission's position in it, the elapsed time, the captain with its model and the
+  pipeline stage (or, for an Ask turn, the conversation), the branch and the mission ID, and the captain's latest
+  activity. These come from the launch's display fields (see [HARBOR_PROTOCOL.md](HARBOR_PROTOCOL.md)); with an older
+  Admiral that sends none, the row shows the kind of job and the captain's ID instead.
+- The `>` line is the captain's latest activity (a tool call with its command or path, text it wrote, or reasoning),
+  read from the runtime's structured output (Claude Code stream-json, Codex exec --json) and refreshed every second.
+  Missions stream it (see [Mission progress streaming](CAPTAINS.md#mission-progress-streaming)); Ask and chat turns,
+  which already stream JSON for the Admiral, are read for it too without changing what reaches the Admiral. Runtimes
+  without structured output show no `>` line.
+- A click on a row (or Enter or Space on it) shows its last five output lines (readable output and activity lines; the
+  raw events of an Ask turn are not shown); a second click hides them.
+- **Open in Dashboard** opens the mission (`/missions/{id}`) or the Ask conversation (`/ask/{id}`) under the dashboard
+  address in Settings > General. **View output** opens Status > Logs on the job's log in
+  `~/.armada-harbor/logs/jobs`, which records the same activity lines.
 
 The menus are in the macOS menu bar while a Harbor window is in front (the app menu is **Armada Harbor**); on Windows
 and Linux they are in a menu bar at the top of each Harbor window. The tray (menu bar) icon offers the windows and the

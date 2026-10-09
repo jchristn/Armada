@@ -2,6 +2,7 @@ namespace Test.Shared.Infrastructure
 {
     using System.Collections.Generic;
     using Armada.Core.Harbor;
+    using Armada.Core.Models;
     using Armada.Core.Services;
 
     /// <summary>
@@ -20,6 +21,11 @@ namespace Test.Shared.Infrastructure
         /// Output chunks received.
         /// </summary>
         public List<string> Output { get; } = new List<string>();
+
+        /// <summary>
+        /// Activities received.
+        /// </summary>
+        public List<RuntimeActivity> Activities { get; } = new List<RuntimeActivity>();
 
         /// <summary>
         /// Exit code reported by OnExited, or null.
@@ -45,6 +51,12 @@ namespace Test.Shared.Infrastructure
         public void OnOutput(HarborOutputStreamEnum stream, string data)
         {
             Output.Add(data);
+        }
+
+        /// <inheritdoc />
+        public void OnActivity(RuntimeActivity activity)
+        {
+            Activities.Add(activity);
         }
 
         /// <inheritdoc />

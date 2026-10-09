@@ -35,6 +35,7 @@ If the selected deployment disconnects or the tunnel drops, the proxy closes the
 - [Server-Pushed Events](#server-pushed-events)
   - [status.snapshot](#statussnapshot)
   - [mission.changed](#missionchanged)
+  - [mission.activity](#missionactivity)
   - [mission.status_changed](#missionstatus_changed)
   - [voyage.changed](#voyagechanged)
   - [captain.changed](#captainchanged)
@@ -340,7 +341,46 @@ Broadcast when a mission's status changes (e.g., assigned, started, completed, f
 | `data.title` | string \| null | Mission title |
 | `data.status` | string | New [MissionStatusEnum](#missionstatusenum) value |
 | `data.voyageId` | string \| null | Parent voyage ID, or null for a standalone mission |
+| `data.activity` | object \| null | The captain's current activity while it runs (see [mission.activity](#missionactivity)), or null |
 | `timestamp` | string | ISO 8601 UTC timestamp |
+
+---
+
+### mission.activity
+
+Broadcast while a mission's captain runs and its runtime streams structured output (Claude Code, Codex; see
+[Mission progress streaming](CAPTAINS.md#mission-progress-streaming)): the captain's latest activity, at most about once
+a second per mission (the newest wins). Not recorded as an event.
+
+```json
+{
+  "type": "mission.activity",
+  "data": {
+    "id": "msn_abc123def456ghi789jk",
+    "voyageId": "vyg_abc123def456ghi789jk",
+    "activity": {
+      "kind": "ToolCall",
+      "toolName": "Bash",
+      "description": "Running tests",
+      "detail": "dotnet test src/App.sln",
+      "summary": "Running tests: dotnet test src/App.sln",
+      "timestampUtc": "2026-03-07T12:35:00.000Z"
+    }
+  },
+  "timestamp": "2026-03-07T12:35:00.100Z"
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `data.id` | string | Mission ID |
+| `data.voyageId` | string \| null | Parent voyage ID |
+| `data.activity.kind` | string | `ToolCall`, `Text`, or `Thinking` |
+| `data.activity.toolName` | string \| null | Tool name of a tool call (for example `Bash`, `mcp__armada__armada_status`) |
+| `data.activity.description` | string \| null | The description the tool call gave (Claude Code's Bash description) |
+| `data.activity.detail` | string \| null | Short input of a tool call (the command, the path) or the first line of text or reasoning, at most 200 characters |
+| `data.activity.summary` | string | One line describing the activity |
+| `data.activity.timestampUtc` | string | When it was observed |
 
 ---
 

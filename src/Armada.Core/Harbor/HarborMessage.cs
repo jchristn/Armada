@@ -18,6 +18,7 @@ namespace Armada.Core.Harbor
     [JsonDerivedType(typeof(HarborStarted), "started")]
     [JsonDerivedType(typeof(HarborOutput), "output")]
     [JsonDerivedType(typeof(HarborExited), "exited")]
+    [JsonDerivedType(typeof(HarborActivity), "activity")]
     [JsonDerivedType(typeof(HarborGitResult), "gitResult")]
     [JsonDerivedType(typeof(HarborHeartbeat), "heartbeat")]
     [JsonDerivedType(typeof(HarborHeartbeatAck), "heartbeatAck")]

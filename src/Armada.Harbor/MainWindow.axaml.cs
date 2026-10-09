@@ -112,6 +112,11 @@ namespace Armada.Harbor
 
             Closing += OnWindowClosing;
             Opened += OnWindowOpened;
+            JobsList.OpenLink += OpenJobLink;
+            JobsList.ViewOutput += view =>
+            {
+                if (view.LogPath != null && Application.Current is App app) app.ShowJobLog(view.LogPath, view.MissionId);
+            };
 
             // Elapsed times tick while the window shows; nothing to do while it is hidden in the tray.
             _JobsTimer.Tick += (sender, args) => RefreshJobs();
@@ -269,7 +274,7 @@ namespace Armada.Harbor
         private void RefreshJobs()
         {
             List<HarborJobInfo> jobs = LiveJobs();
-            JobsList.Update(jobs, DateTime.UtcNow);
+            JobsList.Update(jobs, DateTime.UtcNow, _Settings.DashboardUrl);
             JobsCountText.Text = jobs.Count + " of " + _Settings.MaxConcurrentJobs + " slots in use";
         }
 
@@ -290,6 +295,11 @@ namespace Armada.Harbor
             UpdateConnectButton();
             SetLinkState(HarborLinkStateEnum.Idle);
             RaiseStateChanged();
+        }
+
+        private void OpenJobLink(string link)
+        {
+            if (!PlatformShell.Open(link, out string? error)) SetDetail("Could not open the dashboard: " + (error ?? "unknown error"));
         }
 
         private void OnOpenDashboardClick(object? sender, RoutedEventArgs e)

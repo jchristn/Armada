@@ -62,6 +62,9 @@ namespace Armada.Runtimes
         /// </summary>
         public event Action<int, ApiRuntimeToolEvent>? OnToolEvent;
 
+        /// <inheritdoc />
+        public event Action<int, RuntimeActivity>? OnActivity;
+
         /// <summary>
         /// Raised for each runtime diagnostic (MCP status, tool call/result echoes, warnings, errors, cancellation).
         /// Diagnostics also go to the readable output log and <see cref="OnOutputReceived"/>, but never to
@@ -556,6 +559,18 @@ namespace Armada.Runtimes
         private void EmitToolEvent(int processId, ApiRuntimeToolEvent toolEvent)
         {
             try { OnToolEvent?.Invoke(processId, toolEvent); } catch { }
+            if (toolEvent.Phase == ApiRuntimeToolPhaseEnum.Started && !String.IsNullOrWhiteSpace(toolEvent.Name))
+            {
+                RuntimeActivity activity = new RuntimeActivity
+                {
+                    Kind = Armada.Core.Enums.RuntimeActivityKindEnum.ToolCall,
+                    ToolName = toolEvent.Name,
+                    Detail = Armada.Core.Services.RuntimeActivityParser.FirstLine(toolEvent.Arguments, Armada.Core.Services.RuntimeActivityParser.MaxDetailChars),
+                    Summary = "Calling tool " + toolEvent.Name,
+                    TimestampUtc = DateTime.UtcNow
+                };
+                try { OnActivity?.Invoke(processId, activity); } catch { }
+            }
         }
 
         private static string Truncate(string? value, int max)

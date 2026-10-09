@@ -165,6 +165,8 @@ namespace Test.Shared.Suites.Services
 
             public void OnOutput(HarborOutputStreamEnum stream, string data) { }
 
+            public void OnActivity(Armada.Core.Models.RuntimeActivity activity) { }
+
             public void OnExited(int exitCode) { }
 
             public void OnFailed(string message) { }

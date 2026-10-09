@@ -319,6 +319,17 @@ namespace Armada.Harbor
             _Window.Activate();
         }
 
+        /// <summary>
+        /// Open Status &gt; Logs on a job's log (View output in the Running now list).
+        /// </summary>
+        /// <param name="path">The job's log file.</param>
+        /// <param name="entityId">The mission the job runs, or null.</param>
+        public void ShowJobLog(string path, string? entityId)
+        {
+            StatusWindow? window = ShowStatus(StatusTabEnum.Logs);
+            window?.ShowJobLog(path, entityId);
+        }
+
         private StatusWindow? ShowStatus(StatusTabEnum tab)
         {
             if (_Session == null) return null;

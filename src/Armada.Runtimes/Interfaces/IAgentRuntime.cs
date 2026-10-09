@@ -59,6 +59,13 @@ namespace Armada.Runtimes.Interfaces
         event Action<int, RuntimeProviderError>? OnProviderError;
 
         /// <summary>
+        /// Event raised when the captain reports what it is doing (a tool call it started, text it wrote, or reasoning),
+        /// read from its runtime's structured output. Raised only by runtimes and launches that have one (a mission with
+        /// structured progress, the in-process API-endpoint runtime's tool calls). Parameters: processId, activity.
+        /// </summary>
+        event Action<int, RuntimeActivity>? OnActivity;
+
+        /// <summary>
         /// Start an agent process with the given prompt in the specified working directory.
         /// Returns the process ID.
         /// </summary>

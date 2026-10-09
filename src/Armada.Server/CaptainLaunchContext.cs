@@ -67,6 +67,12 @@ namespace Armada.Server
         public string? MissionId { get; set; } = null;
 
         /// <summary>
+        /// What the launch is about (for an Ask turn, the conversation and the question), sent to a Harbor that runs it
+        /// for its Running now list; null for none.
+        /// </summary>
+        public HarborLaunchDisplay? Display { get; set; } = null;
+
+        /// <summary>
         /// Short name of the launch for logs and messages (for example "chat", "planning").
         /// </summary>
         public string Purpose

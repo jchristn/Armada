@@ -33,6 +33,12 @@ namespace Armada.Server
             set => _Time = value ?? throw new ArgumentNullException(nameof(Time));
         }
 
+        /// <summary>
+        /// The latest activity of each running mission's captain (from its runtime's structured output), read by the
+        /// mission REST route and the WebSocket mission events.
+        /// </summary>
+        public MissionActivityTracker MissionActivity { get; } = new MissionActivityTracker();
+
         #endregion
 
         #region Private-Members
@@ -121,6 +127,14 @@ namespace Armada.Server
         private const int _HarborDockProbeTimeoutMs = 15000;
 
         private System.Collections.Concurrent.ConcurrentDictionary<string, PendingLaunchInfo> _PendingLaunches = new System.Collections.Concurrent.ConcurrentDictionary<string, PendingLaunchInfo>();
+
+        /// <summary>
+        /// Per running mission, the throttle that broadcasts its captain's activity on the WebSocket (at most about once a
+        /// second, newest wins).
+        /// </summary>
+        private System.Collections.Concurrent.ConcurrentDictionary<string, LatestValueThrottle<RuntimeActivity>> _ActivityBroadcasts = new System.Collections.Concurrent.ConcurrentDictionary<string, LatestValueThrottle<RuntimeActivity>>(StringComparer.Ordinal);
+
+        private static readonly TimeSpan _ActivityBroadcastInterval = TimeSpan.FromSeconds(1);
 
         /// <summary>
         /// Maps process IDs to captain IDs for progress tracking.
@@ -674,8 +688,11 @@ namespace Armada.Server
             runtime.OnOutputReceived += HandleAgentHeartbeat;
             runtime.OnStdoutReceived += HandleAgentStdout;
             runtime.OnProviderError += HandleAgentProviderError;
+            runtime.OnActivity += HandleAgentActivity;
+            LatestValueThrottle<RuntimeActivity> activityBroadcast = BeginMissionActivity(mission);
             runtime.OnProcessExited += HandleAgentProcessExited;
             string exitedMissionId = mission.Id;
+            runtime.OnProcessExited += (exitedPid, exitCode) => EndMissionActivity(exitedMissionId, activityBroadcast);
             runtime.OnProcessExited += (exitedPid, exitCode) =>
             {
                 CliPermissionService? permissions = _CliPermissions;
@@ -773,6 +790,10 @@ namespace Armada.Server
 
                 if (runtime is BaseAgentRuntime hostedRuntime)
                 {
+                    // Stream the captain's structured output (Claude Code, Codex) so its activity is visible while it runs;
+                    // the runtime decodes it into the readable output text mode prints, so the final message is unchanged.
+                    hostedRuntime.StructuredProgress = true;
+
                     // Isolated launches write an Armada MCP URL; it must use the host the MCP listener is bound with.
                     hostedRuntime.McpHost = Armada.Core.Services.ArmadaMcpConfigBuilder.ClientHostFor(_Settings.Rest.Hostname);
                     if (missionToken != null)
@@ -790,6 +811,8 @@ namespace Armada.Server
                     // Tell the Harbor what it runs, for its job list and logs.
                     remoteRuntime.JobKind = Armada.Core.Harbor.HarborJobKindEnum.Mission;
                     remoteRuntime.MissionId = mission.Id;
+                    remoteRuntime.StructuredProgress = true;
+                    remoteRuntime.Display = await BuildMissionDisplayAsync(mission, captain, vessel, dock).ConfigureAwait(false);
                     if (missionToken != null)
                     {
                         // The Harbor binds the token against the MCP URL it was given in the handshake.
@@ -813,6 +836,7 @@ namespace Armada.Server
             {
                 _PendingLaunches.TryRemove(launchKey, out _);
                 _MissionFinalMessageFiles.TryRemove(mission.Id, out _);
+                EndMissionActivity(mission.Id, activityBroadcast);
 
                 // The launch fell back to the Admiral host only because the Harbor does not have the dock, and the
                 // Admiral host cannot run the runtime either: the mission cannot run anywhere until a setting changes.
@@ -849,6 +873,82 @@ namespace Armada.Server
             }
 
             return processId;
+        }
+
+        /// <summary>
+        /// Handle an activity a mission's captain reported (a tool call, text, or reasoning from its structured output):
+        /// record it as the mission's current activity, count it as output for stall detection, and broadcast it.
+        /// </summary>
+        /// <param name="processId">Process ID.</param>
+        /// <param name="activity">The activity.</param>
+        public void HandleAgentActivity(int processId, RuntimeActivity activity)
+        {
+            if (activity == null) return;
+            string? missionId = null;
+            lock (_ProcessToCaptain)
+            {
+                _ProcessToMission.TryGetValue(processId, out missionId);
+            }
+
+            if (String.IsNullOrEmpty(missionId)) return;
+            MissionActivity.Update(missionId, activity);
+
+            // A captain that streams its work is producing output even before it prints anything readable.
+            HandleAgentHeartbeat(processId, activity.Summary);
+
+            if (_ActivityBroadcasts.TryGetValue(missionId, out LatestValueThrottle<RuntimeActivity>? broadcast))
+                broadcast.Submit(activity);
+        }
+
+        /// <summary>
+        /// Start tracking a mission's activity for a launch: forget any left from an earlier run and set up its broadcast.
+        /// </summary>
+        private LatestValueThrottle<RuntimeActivity> BeginMissionActivity(Mission mission)
+        {
+            if (_ActivityBroadcasts.TryRemove(mission.Id, out LatestValueThrottle<RuntimeActivity>? earlier)) earlier.Dispose();
+            MissionActivity.Clear(mission.Id);
+            string missionId = mission.Id;
+            string? tenantId = mission.TenantId;
+            string? voyageId = mission.VoyageId;
+            LatestValueThrottle<RuntimeActivity> broadcast = new LatestValueThrottle<RuntimeActivity>(_ActivityBroadcastInterval, _Time,
+                activity => _WebSocketHub?.BroadcastMissionActivity(tenantId, missionId, voyageId, activity));
+            _ActivityBroadcasts[missionId] = broadcast;
+            return broadcast;
+        }
+
+        /// <summary>
+        /// Stop tracking a mission's activity: the captain of this launch stopped. A later launch of the same mission
+        /// (a relaunch) keeps its own tracking.
+        /// </summary>
+        private void EndMissionActivity(string missionId, LatestValueThrottle<RuntimeActivity> broadcast)
+        {
+            broadcast.Dispose();
+            if (_ActivityBroadcasts.TryRemove(new KeyValuePair<string, LatestValueThrottle<RuntimeActivity>>(missionId, broadcast)))
+                MissionActivity.Clear(missionId);
+        }
+
+        /// <summary>
+        /// The display fields a Harbor shows for a mission launch: the mission, vessel, voyage and position, captain, stage,
+        /// and branch. A lookup that fails leaves its fields out; it never stops the launch.
+        /// </summary>
+        private async Task<Armada.Core.Harbor.HarborLaunchDisplay> BuildMissionDisplayAsync(Mission mission, Captain captain, Vessel? vessel, Dock dock)
+        {
+            Voyage? voyage = null;
+            List<MissionSummary>? voyageMissions = null;
+            if (!String.IsNullOrEmpty(mission.VoyageId))
+            {
+                try
+                {
+                    voyage = await _Database.Voyages.ReadAsync(mission.VoyageId!).ConfigureAwait(false);
+                    voyageMissions = await _Database.Missions.EnumerateSummariesByVoyageAsync(mission.VoyageId!).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    _Logging.Debug(_Header + "could not read voyage " + mission.VoyageId + " for the launch display of mission " + mission.Id + ": " + ex.Message);
+                }
+            }
+
+            return HarborLaunchDisplayBuilder.ForMission(mission, captain, vessel, voyage, voyageMissions, dock.BranchName);
         }
 
         /// <summary>

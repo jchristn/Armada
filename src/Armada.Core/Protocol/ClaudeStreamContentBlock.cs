@@ -26,6 +26,11 @@ namespace Armada.Core.Protocol
         public const string TypeToolResult = "tool_result";
 
         /// <summary>
+        /// Block type for the model's reasoning.
+        /// </summary>
+        public const string TypeThinking = "thinking";
+
+        /// <summary>
         /// Block type (text, thinking, tool_use, tool_result).
         /// </summary>
         [JsonPropertyName("type")]
@@ -36,6 +41,12 @@ namespace Armada.Core.Protocol
         /// </summary>
         [JsonPropertyName("text")]
         public string? Text { get; set; } = null;
+
+        /// <summary>
+        /// Reasoning text of a thinking block, or null (also null or empty when the CLI redacts it).
+        /// </summary>
+        [JsonPropertyName("thinking")]
+        public string? Thinking { get; set; } = null;
 
         /// <summary>
         /// Tool call identifier (tool_use).

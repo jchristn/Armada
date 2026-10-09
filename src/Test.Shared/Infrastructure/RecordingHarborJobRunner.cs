@@ -5,13 +5,15 @@ namespace Test.Shared.Infrastructure
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Core.Harbor;
+    using Armada.Core.Models;
     using Armada.Core.Services;
 
     /// <summary>
     /// A Harbor job runner that records what the Admiral asked for (launch requests, started process ids, stops) and
-    /// delegates to a real runner, so a test can check both the request and its effect on the Harbor host.
+    /// delegates to a real runner, so a test can check both the request and its effect on the Harbor host. Passes on the
+    /// inner runner's job activity and log paths when it reports them.
     /// </summary>
-    public sealed class RecordingHarborJobRunner : IHarborJobRunner
+    public sealed class RecordingHarborJobRunner : IHarborJobRunner, IHarborJobProgressSource
     {
         #region Public-Members
 
@@ -30,6 +32,9 @@ namespace Test.Shared.Infrastructure
         /// </summary>
         public List<string> Stops { get; } = new List<string>();
 
+        /// <inheritdoc />
+        public event Action<string, RuntimeActivity>? ActivityReported;
+
         #endregion
 
         #region Private-Members
@@ -47,6 +52,7 @@ namespace Test.Shared.Infrastructure
         public RecordingHarborJobRunner(IHarborJobRunner inner)
         {
             _Inner = inner ?? throw new ArgumentNullException(nameof(inner));
+            if (_Inner is IHarborJobProgressSource progress) progress.ActivityReported += (jobId, activity) => ActivityReported?.Invoke(jobId, activity);
         }
 
         #endregion
@@ -81,6 +87,12 @@ namespace Test.Shared.Infrastructure
         {
             lock (Stops) Stops.Add(jobId);
             return _Inner.StopAsync(jobId, gracefulTimeoutMs, token);
+        }
+
+        /// <inheritdoc />
+        public string? LogPathOf(string jobId)
+        {
+            return _Inner is IHarborJobProgressSource progress ? progress.LogPathOf(jobId) : null;
         }
 
         /// <inheritdoc />

@@ -157,6 +157,83 @@ namespace Test.Shared.Suites.Services
                 AssertTrue(exited.TimeToFirstTokenMs!.Value >= 2000 && exited.TimeToFirstTokenMs.Value <= exited.DurationMs.Value, "first output is the monotonic 2 s: " + exited.TimeToFirstTokenMs.Value);
             }));
 
+            cases.Add(CaseAsync("structured_activity_is_first_output_and_reaches_the_admiral", "A mission that streams activity long before any readable output reports a first-output time at its first activity, shows the activity in Running now, and sends it to the Admiral only when asked", TestTags.Positive, async () =>
+            {
+                foreach (bool structured in new bool[] { true, false })
+                {
+                    JumpingTimeProvider time = new JumpingTimeProvider();
+                    ActivityJobRunner runner = new ActivityJobRunner(time);
+                    FakeTransport transport = new FakeTransport();
+                    transport.Enqueue(HarborProtocol.Serialize(new HarborLaunchRequest
+                    {
+                        JobId = "job-a",
+                        Runtime = "ClaudeCode",
+                        WorkingDirectory = "/repo",
+                        JobKind = "Mission",
+                        MissionId = "msn_a",
+                        StructuredProgress = structured,
+                        Display = new HarborLaunchDisplay { MissionTitle = "Stream it", CaptainName = "ada" }
+                    }));
+                    HarborLinkClient client = new HarborLinkClient("hbr_lc_act", "Rig", new List<HarborCapability>(), 4, new StubExecutor(new HostCommandResult()), CreateLogging(), 0, null, runner);
+                    client.Time = time;
+                    runner.Client = client;
+
+                    await client.RunSessionAsync(transport, CancellationToken.None).ConfigureAwait(false);
+
+                    HarborExited? exited = null;
+                    List<HarborActivity> activities = new List<HarborActivity>();
+                    foreach (string raw in transport.Sent)
+                    {
+                        HarborMessage message = HarborProtocol.Deserialize(raw);
+                        if (message is HarborExited e) exited = e;
+                        if (message is HarborActivity a) activities.Add(a);
+                    }
+
+                    AssertNotNull(exited, "the exit was reported");
+                    AssertTrue(exited!.TimeToFirstTokenMs!.Value >= 2000 && exited.TimeToFirstTokenMs.Value < 10000, "first output is the first activity at 2 s, not the final reply at 32 s: " + exited.TimeToFirstTokenMs.Value);
+                    AssertTrue(exited.DurationMs!.Value >= 32000, "the run took 32 s");
+
+                    HarborJobInfo seen = runner.SeenWhileRunning!;
+                    AssertEqual("Running tests: dotnet test", seen.Activity!.Summary, "Running now shows the activity while the job runs");
+                    AssertEqual("> Running tests: dotnet test", seen.RecentLines[seen.RecentLines.Count - 1]);
+                    AssertEqual("Stream it", seen.Display!.MissionTitle);
+                    AssertEqual("/logs/jobs/msn_a.log", seen.LogPath, "the job's log path comes from the runner");
+                    AssertEqual(0, client.LiveJobs().Count, "the job is gone after it exits");
+
+                    if (structured)
+                    {
+                        AssertEqual(1, activities.Count, "the activity went to the Admiral");
+                        AssertEqual("job-a", activities[0].JobId);
+                        AssertEqual("Running tests: dotnet test", activities[0].Activity.Summary);
+                    }
+                    else
+                    {
+                        AssertEqual(0, activities.Count, "no activity message for a launch that did not ask for it (an older Admiral)");
+                    }
+                }
+            }));
+
+            cases.Add(CaseAsync("running_now_hides_raw_protocol_stdout", "Running now keeps a job's readable output lines, but not the raw protocol events an interactive turn that streams JSON prints on stdout", TestTags.Negative, async () =>
+            {
+                foreach (bool streamsJson in new bool[] { false, true })
+                {
+                    JumpingTimeProvider time = new JumpingTimeProvider();
+                    ActivityJobRunner runner = new ActivityJobRunner(time);
+                    FakeTransport transport = new FakeTransport();
+                    transport.Enqueue(HarborProtocol.Serialize(new HarborLaunchRequest { JobId = "job-a", Runtime = "ClaudeCode", WorkingDirectory = "/repo", JobKind = "AskTurn", StreamJsonOutput = streamsJson }));
+                    HarborLinkClient client = new HarborLinkClient("hbr_lc_raw", "Rig", new List<HarborCapability>(), 4, new StubExecutor(new HostCommandResult()), CreateLogging(), 0, null, runner);
+                    client.Time = time;
+                    runner.Client = client;
+
+                    await client.RunSessionAsync(transport, CancellationToken.None).ConfigureAwait(false);
+
+                    List<string> lines = runner.SeenAfterOutput!.RecentLines;
+                    AssertEqual(!streamsJson, lines.Contains("All tests pass."), "stdout shown only when it is readable (streams JSON: " + streamsJson + ")");
+                    AssertTrue(lines.Contains("a stderr line"), "stderr is always readable");
+                    AssertTrue(lines.Contains("> Running tests: dotnet test"), "activity is always shown");
+                }
+            }));
+
             cases.Add(CaseAsync("launch_log_names_where_the_job_runs", "The Launch job log line names the directory the job runs in: the scratch directory Harbor creates (and the requested path it replaces), the requested directory, or that there is none", TestTags.Positive, async () =>
             {
                 string scratchRoot = Path.Combine(Path.GetTempPath(), "armada_lc_scratch_" + Guid.NewGuid().ToString("N"));
@@ -277,6 +354,45 @@ namespace Test.Shared.Suites.Services
             }
 
             public Task CloseAsync(CancellationToken token) => Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// Reports an activity 2 s after the start and its only readable output 30 s later, as a mission streaming its
+        /// progress does, and records the Running now entry while the job runs.
+        /// </summary>
+        private sealed class ActivityJobRunner : IHarborJobRunner, IHarborJobProgressSource
+        {
+            private readonly JumpingTimeProvider _Time;
+
+            public ActivityJobRunner(JumpingTimeProvider time) => _Time = time;
+
+            public event Action<string, RuntimeActivity>? ActivityReported;
+
+            public HarborLinkClient? Client { get; set; } = null;
+
+            public HarborJobInfo? SeenWhileRunning { get; private set; } = null;
+
+            public HarborJobInfo? SeenAfterOutput { get; private set; } = null;
+
+            public Task StartAsync(HarborLaunchRequest request, string? mcpBaseUrl, Action<int> onStarted, Action<HarborOutputStreamEnum, string> onOutput, Action<int> onExited, CancellationToken token)
+            {
+                onStarted(4444);
+                _Time.Advance(TimeSpan.FromSeconds(2));
+                ActivityReported?.Invoke(request.JobId, new RuntimeActivity { Kind = Armada.Core.Enums.RuntimeActivityKindEnum.ToolCall, ToolName = "Bash", Summary = "Running tests: dotnet test" });
+                SeenWhileRunning = Client!.LiveJobs().Find(j => j.JobId == request.JobId);
+                _Time.Advance(TimeSpan.FromSeconds(30));
+                onOutput(HarborOutputStreamEnum.Stdout, "All tests pass.");
+                onOutput(HarborOutputStreamEnum.Stderr, "a stderr line");
+                SeenAfterOutput = Client!.LiveJobs().Find(j => j.JobId == request.JobId);
+                onExited(0);
+                return Task.CompletedTask;
+            }
+
+            public Task StopAsync(string jobId, int gracefulTimeoutMs, CancellationToken token) => Task.CompletedTask;
+
+            public string? ResolveWorkingDirectory(HarborLaunchRequest request) => request.WorkingDirectory;
+
+            public string? LogPathOf(string jobId) => "/logs/jobs/msn_a.log";
         }
 
         private sealed class ScriptedJobRunner : IHarborJobRunner

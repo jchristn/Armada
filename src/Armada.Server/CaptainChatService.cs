@@ -241,6 +241,7 @@ namespace Armada.Server
                         CaptainLaunchContext launch = new CaptainLaunchContext(captain, "chat turn")
                         {
                             Kind = Armada.Core.Harbor.HarborJobKindEnum.AskTurn,
+                            Display = options.Display,
                             TenantId = options.TenantId ?? captain.TenantId,
                             UserId = options.UserId,
                             AllowScratchWorkingDirectory = true

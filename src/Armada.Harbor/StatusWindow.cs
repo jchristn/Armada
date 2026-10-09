@@ -61,6 +61,17 @@ namespace Armada.Harbor
             if (_TabItems.TryGetValue(tab, out TabItem? item)) _Tabs.SelectedItem = item;
         }
 
+        /// <summary>
+        /// Show the Logs tab on a job's log.
+        /// </summary>
+        /// <param name="path">The job's log file.</param>
+        /// <param name="entityId">The mission the job runs, or null.</param>
+        public void ShowJobLog(string path, string? entityId)
+        {
+            ShowTab(StatusTabEnum.Logs);
+            _Logs.ShowJobLog(path, entityId);
+        }
+
         #endregion
 
         #region Private-Methods

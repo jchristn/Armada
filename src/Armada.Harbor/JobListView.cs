@@ -3,21 +3,35 @@ namespace Armada.Harbor
     using System;
     using System.Collections.Generic;
     using Armada.Core.Harbor;
-    using Avalonia;
     using Avalonia.Controls;
-    using Avalonia.Layout;
-    using Avalonia.Media;
 
     /// <summary>
-    /// A compact list of the jobs running on this computer: what each is (a mission, an Ask turn), the runtime running
-    /// it, and how long it has been running. Shows a one-line note when nothing runs.
+    /// The jobs running on this computer, one <see cref="JobListRow"/> each: what each is (a mission's title, an Ask turn's
+    /// question), its runtime and elapsed time, its vessel and voyage, captain and stage, branch and IDs, its latest
+    /// activity, and Open in Dashboard and View output. A click on a row shows its last output lines. Shows a one-line
+    /// note when nothing runs.
     /// </summary>
     public class JobListView : UserControl
     {
+        #region Public-Members
+
+        /// <summary>
+        /// Raised with a dashboard link to open (Open in Dashboard).
+        /// </summary>
+        public event Action<string>? OpenLink;
+
+        /// <summary>
+        /// Raised with a job whose log to show (View output).
+        /// </summary>
+        public event Action<HarborRunningJobView>? ViewOutput;
+
+        #endregion
+
         #region Private-Members
 
         private readonly StackPanel _Rows = new StackPanel { Spacing = 2 };
         private readonly TextBlock _Empty;
+        private readonly HashSet<string> _Expanded = new HashSet<string>(StringComparer.Ordinal);
 
         #endregion
 
@@ -44,27 +58,48 @@ namespace Armada.Harbor
         /// </summary>
         /// <param name="jobs">Running jobs, oldest first.</param>
         /// <param name="nowUtc">Current time, UTC, for the elapsed times.</param>
-        public void Update(List<HarborJobInfo> jobs, DateTime nowUtc)
+        /// <param name="dashboardUrl">The dashboard address from Harbor's settings, for Open in Dashboard, or null.</param>
+        public void Update(List<HarborJobInfo> jobs, DateTime nowUtc, string? dashboardUrl)
         {
             if (jobs == null) throw new ArgumentNullException(nameof(jobs));
             _Empty.IsVisible = jobs.Count == 0;
 
-            // Rebuild only when the set of jobs changed; otherwise just tick the elapsed times.
+            // Rebuild only when the set of jobs changed; otherwise refresh each row in place (elapsed time, activity,
+            // output), so an expanded row stays expanded.
             bool same = _Rows.Children.Count == jobs.Count;
             for (int i = 0; same && i < jobs.Count; i++)
             {
-                if (_Rows.Children[i].Tag is not string id || !String.Equals(id, jobs[i].JobId, StringComparison.Ordinal)) same = false;
+                if (_Rows.Children[i] is not JobListRow row || !String.Equals(row.JobId, jobs[i].JobId, StringComparison.Ordinal)) same = false;
             }
 
             if (!same)
             {
+                HashSet<string> live = new HashSet<string>(StringComparer.Ordinal);
+                foreach (HarborJobInfo job in jobs) live.Add(job.JobId);
+                _Expanded.RemoveWhere(id => !live.Contains(id));
+
                 _Rows.Children.Clear();
-                foreach (HarborJobInfo job in jobs) _Rows.Children.Add(BuildRow(job));
+                foreach (HarborJobInfo job in jobs) _Rows.Children.Add(BuildRow(job.JobId));
             }
 
             for (int i = 0; i < jobs.Count; i++)
             {
-                if (_Rows.Children[i] is Grid row && row.Children[2] is TextBlock elapsed) elapsed.Text = jobs[i].Elapsed(nowUtc);
+                if (_Rows.Children[i] is JobListRow row) row.Apply(HarborRunningJobView.From(jobs[i], nowUtc, dashboardUrl));
+            }
+        }
+
+        /// <summary>
+        /// Expand or collapse a job's row (as a click on it does).
+        /// </summary>
+        /// <param name="jobId">Job.</param>
+        /// <param name="expanded">Whether to show its last output lines.</param>
+        public void SetExpanded(string jobId, bool expanded)
+        {
+            if (expanded) _Expanded.Add(jobId);
+            else _Expanded.Remove(jobId);
+            foreach (Control child in _Rows.Children)
+            {
+                if (child is JobListRow row && String.Equals(row.JobId, jobId, StringComparison.Ordinal)) row.IsExpanded = expanded;
             }
         }
 
@@ -72,63 +107,18 @@ namespace Armada.Harbor
 
         #region Private-Methods
 
-        private static Grid BuildRow(HarborJobInfo job)
+        private JobListRow BuildRow(string jobId)
         {
-            Grid row = new Grid
+            JobListRow row = new JobListRow(jobId);
+            row.IsExpanded = _Expanded.Contains(jobId);
+            row.ExpandedChanged += (sender, args) =>
             {
-                ColumnDefinitions = new ColumnDefinitions("*,Auto,64"),
-                ColumnSpacing = 10,
-                MinHeight = 30,
-                Tag = job.JobId
+                if (row.IsExpanded) _Expanded.Add(row.JobId);
+                else _Expanded.Remove(row.JobId);
             };
-
-            // What it is, then the IDs it carries, each copyable: the mission on the first line, the captain and the job
-            // below.
-            StackPanel what = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Spacing = 0 };
-            StackPanel title = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
-            title.Children.Add(new TextBlock { Text = job.KindName(), FontWeight = FontWeight.SemiBold, VerticalAlignment = VerticalAlignment.Center });
-            if (!String.IsNullOrEmpty(job.MissionId)) title.Children.Add(new CopyableIdText(job.MissionId, "Mission ID"));
-            what.Children.Add(title);
-
-            WrapPanel ids = new WrapPanel { Orientation = Orientation.Horizontal, ItemSpacing = 12 };
-            if (!String.IsNullOrEmpty(job.CaptainId)) ids.Children.Add(Labeled("Captain", new CopyableIdText(job.CaptainId, "Captain ID")));
-            if (!String.IsNullOrEmpty(job.JobId)) ids.Children.Add(Labeled("Job", new CopyableIdText(job.JobId, "Job ID")));
-            if (ids.Children.Count > 0) what.Children.Add(ids);
-
-            row.Children.Add(what);
-
-            TextBlock runtimeText = new TextBlock { Text = String.IsNullOrEmpty(job.Runtime) ? "Unknown runtime" : job.Runtime, FontSize = 12 };
-            runtimeText.Bind(TextBlock.ForegroundProperty, runtimeText.GetResourceObservable("HarborAccentSoftTextBrush"));
-            Border runtime = new Border
-            {
-                Child = runtimeText,
-                CornerRadius = new CornerRadius(10),
-                Padding = new Thickness(8, 2),
-                VerticalAlignment = VerticalAlignment.Center
-            };
-            runtime.Bind(Border.BackgroundProperty, runtime.GetResourceObservable("HarborAccentSoftBrush"));
-            Grid.SetColumn(runtime, 1);
-            row.Children.Add(runtime);
-
-            TextBlock elapsed = HarborUi.Secondary(new TextBlock
-            {
-                FontFamily = new FontFamily(HarborUi.MonospaceFonts),
-                FontSize = 12,
-                HorizontalAlignment = HorizontalAlignment.Right,
-                VerticalAlignment = VerticalAlignment.Center
-            });
-            ToolTip.SetTip(elapsed, "Running for this long");
-            Grid.SetColumn(elapsed, 2);
-            row.Children.Add(elapsed);
+            row.OpenLink += link => OpenLink?.Invoke(link);
+            row.ViewOutput += view => ViewOutput?.Invoke(view);
             return row;
-        }
-
-        private static StackPanel Labeled(string label, CopyableIdText id)
-        {
-            StackPanel panel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
-            panel.Children.Add(HarborUi.Secondary(new TextBlock { Text = label, FontSize = 11, VerticalAlignment = VerticalAlignment.Center }));
-            panel.Children.Add(id);
-            return panel;
         }
 
         #endregion

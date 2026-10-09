@@ -17,13 +17,14 @@ namespace Armada.Runtimes
     /// <see cref="RemoteAgentRuntime"/>: the Admiral sends a launch request, this runs the captain here, and
     /// reports started/output/exited over the link.
     /// </summary>
-    public class LocalHarborJobRunner : IHarborJobRunner
+    public class LocalHarborJobRunner : IHarborJobRunner, IHarborJobProgressSource
     {
         #region Private-Members
 
         private readonly IHostProcessExecutor _Executor;
         private readonly LoggingModule _Logging;
         private readonly ConcurrentDictionary<string, JobEntry> _Jobs = new ConcurrentDictionary<string, JobEntry>(StringComparer.Ordinal);
+        private readonly ConcurrentDictionary<string, string> _LogPaths = new ConcurrentDictionary<string, string>(StringComparer.Ordinal);
         private readonly string _ScratchRoot;
 
         // Bound the final-message artifact sent back over the link.
@@ -37,6 +38,9 @@ namespace Armada.Runtimes
         /// Where to write each job's output on this machine (the Harbor's jobs log directory), or null to write none.
         /// </summary>
         public HarborLogPaths? JobLogs { get; set; } = null;
+
+        /// <inheritdoc />
+        public event Action<string, Armada.Core.Models.RuntimeActivity>? ActivityReported;
 
         #endregion
 
@@ -128,6 +132,11 @@ namespace Armada.Runtimes
             else if (runtime is CodexRuntime codexRuntime && request.StreamJsonOutput)
                 codexRuntime.JsonOutput = true;
 
+            // A mission streaming its progress: the runtime decodes its structured output into the readable output
+            // reported below (as text mode prints it) and activities, which go to the Running now list and the Admiral.
+            if (runtime is BaseAgentRuntime structured && request.StructuredProgress)
+                structured.StructuredProgress = true;
+
             // Working directory: the requested one, or (for interactive launches that allow it) a per-job scratch
             // directory owned by this Harbor when the request names none or names a path that does not exist here (the
             // Admiral's own paths are not valid on this host).
@@ -161,6 +170,7 @@ namespace Armada.Runtimes
             {
                 jobLog = HarborJobLog.TryOpen(JobLogs, jobInfo, workingDirectory, out string? logError);
                 if (jobLog == null) _Logging.Warn("[LocalHarborJobRunner] could not open the log for job " + jobId + ": " + (logError ?? "unknown error").TrimEnd('.'));
+                else _LogPaths[jobId] = jobLog.FilePath;
             }
 
             Action<HarborOutputStreamEnum, string> report = (stream, line) =>
@@ -187,9 +197,33 @@ namespace Armada.Runtimes
                 runtime.OnOutputReceived += (processId, line) => report(HarborOutputStreamEnum.Stdout, line);
             }
 
+            runtime.OnActivity += (processId, activity) =>
+            {
+                jobLog?.WriteActivity(activity);
+                ReportActivity(jobId, activity);
+            };
+
+            // An interactive launch that streams JSON (an Ask or chat turn) hands the raw events to the Admiral, which
+            // reads them itself. Read the same events here for the Running now list only; the output is not changed.
+            if (request.StreamJsonOutput && (runtimeType == AgentRuntimeEnum.ClaudeCode || runtimeType == AgentRuntimeEnum.Codex))
+            {
+                MissionStreamDecoder? observer = MissionStreamDecoder.For(runtimeType);
+                object observerLock = new object();
+                if (observer != null)
+                {
+                    runtime.OnStdoutReceived += (processId, line) =>
+                    {
+                        MissionStreamDecodeResult observed;
+                        lock (observerLock) observed = observer.Decode(line, DateTime.UtcNow);
+                        foreach (Armada.Core.Models.RuntimeActivity activity in observed.Activities) ReportActivity(jobId, activity);
+                    };
+                }
+            }
+
             runtime.OnProcessExited += (processId, exitCode) =>
             {
                 _Jobs.TryRemove(jobId, out JobEntry? _);
+                _LogPaths.TryRemove(jobId, out string? _);
                 SendFinalMessage(finalMessageFilePath, report);
                 TryDeleteDirectory(scratchDirectory);
                 jobLog?.WriteExit(exitCode ?? -1, DateTime.UtcNow, jobInfo.StartedUtc);
@@ -251,6 +285,7 @@ namespace Armada.Runtimes
             }
             catch (Exception ex)
             {
+                _LogPaths.TryRemove(jobId, out string? _);
                 jobLog?.WriteNote("launch failed: " + ex.Message);
                 jobLog?.Dispose();
                 TryDeleteDirectory(scratchDirectory);
@@ -265,6 +300,13 @@ namespace Armada.Runtimes
             if (String.IsNullOrWhiteSpace(jobId)) return;
             if (_Jobs.TryRemove(jobId, out JobEntry? entry))
                 await entry!.Runtime.StopAsync(entry.ProcessId, token).ConfigureAwait(false);
+        }
+
+        /// <inheritdoc />
+        public string? LogPathOf(string jobId)
+        {
+            if (String.IsNullOrEmpty(jobId)) return null;
+            return _LogPaths.TryGetValue(jobId, out string? path) ? path : null;
         }
 
         /// <inheritdoc />
@@ -310,6 +352,12 @@ namespace Armada.Runtimes
             {
                 TryDeleteFile(finalMessageFilePath);
             }
+        }
+
+        private void ReportActivity(string jobId, Armada.Core.Models.RuntimeActivity activity)
+        {
+            try { ActivityReported?.Invoke(jobId, activity); }
+            catch (Exception e) { _Logging.Debug("[LocalHarborJobRunner] activity of job " + jobId + " not reported: " + e.Message.TrimEnd('.')); }
         }
 
         private static string SafeName(string jobId)
