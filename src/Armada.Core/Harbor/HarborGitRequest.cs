@@ -1,6 +1,7 @@
 namespace Armada.Core.Harbor
 {
     using System.Collections.Generic;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Server-to-Harbor request to run a git (or gh) command in a working directory on the Harbor host.
@@ -36,6 +37,23 @@ namespace Armada.Core.Harbor
         /// sender that predates the field means) lets it run until it exits.
         /// </summary>
         public int TimeoutMs { get; set; } = 0;
+
+        /// <summary>
+        /// Non-zero exit codes the sender treats as an answer, not a failure (for example 1 from <c>git grep</c> for no
+        /// match). The Harbor does not report them as failures in its activity log. Null or absent (a sender that
+        /// predates the field) means only 0 succeeds.
+        /// </summary>
+        public List<int>? ExpectedExitCodes { get; set; } = null;
+
+        /// <summary>
+        /// What the command is for, so the Harbor can present it: null or absent means routine git work.
+        /// </summary>
+        public HostCommandKindEnum? Kind { get; set; } = null;
+
+        /// <summary>
+        /// Optional short name for the command in the Harbor's activity log (for example the check's name), or null.
+        /// </summary>
+        public string? Label { get; set; } = null;
 
         #endregion
     }

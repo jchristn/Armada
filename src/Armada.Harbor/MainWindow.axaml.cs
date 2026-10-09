@@ -71,6 +71,9 @@ namespace Armada.Harbor
         private readonly HarborAppSettings _Settings;
         private readonly LoggingModule _Logging;
         private readonly HarborActivityLog _ActivityLog = new HarborActivityLog(_MaxLogLines);
+        // Shared by every session's link client, so a dock made in one session is still known when the next removes it.
+        private readonly HarborLogClassifier _LogClassifier = new HarborLogClassifier();
+        private bool _LoadingShowDetails = false;
         private CancellationTokenSource? _RunCts;
         private HarborLinkStateEnum _LinkState = HarborLinkStateEnum.Idle;
         private string? _McpUrl = null;
@@ -99,6 +102,10 @@ namespace Armada.Harbor
             InitializeComponent();
 
             _Logging = CreateLogging();
+            _ActivityLog.ShowDetails = _Settings.ShowActivityDetails;
+            _LoadingShowDetails = true;
+            ShowDetailsBox.IsChecked = _Settings.ShowActivityDetails;
+            _LoadingShowDetails = false;
             RefreshSettingsDisplay();
             UpdateConnectButton();
             SetLinkState(HarborLinkStateEnum.Idle);
@@ -208,13 +215,14 @@ namespace Armada.Harbor
         }
 
         /// <summary>
-        /// The most recent activity log lines, oldest first.
+        /// The most recent activity log lines in full detail (request IDs and full paths), oldest first, whichever view
+        /// the window shows.
         /// </summary>
         /// <param name="maxLines">Maximum number of lines.</param>
         /// <returns>Copy of the lines.</returns>
         public List<string> RecentActivity(int maxLines)
         {
-            return _ActivityLog.Recent(maxLines);
+            return _ActivityLog.Recent(maxLines, true);
         }
 
         #endregion
@@ -270,7 +278,7 @@ namespace Armada.Harbor
             if (_RunCts != null) return;
             _RunCts = new CancellationTokenSource();
             UpdateConnectButton();
-            AppendInfo(automatic ? "Auto-connecting on startup" : "Connect requested");
+            AppendInfo(automatic ? "Auto-connecting on startup" : "Connect requested", HarborLogCategoryEnum.Link, HarborLogOutcomeEnum.None);
             _ = RunLoopAsync(_RunCts.Token);
             RaiseStateChanged();
         }
@@ -335,6 +343,28 @@ namespace Armada.Harbor
             LogBox.Text = string.Empty;
         }
 
+        private void OnShowDetailsChanged(object? sender, RoutedEventArgs e)
+        {
+            if (_LoadingShowDetails) return;
+            bool show = ShowDetailsBox.IsChecked == true;
+            _ActivityLog.ShowDetails = show;
+            RenderActivity();
+            if (_Settings.ShowActivityDetails == show) return;
+            _Settings.ShowActivityDetails = show;
+            // Remembered across restarts; a failed save only loses the preference.
+            if (!_Settings.TrySave(out string? error))
+                _Logging.Warn("[Harbor] could not save the Show details preference: " + error);
+        }
+
+        private void RenderActivity()
+        {
+            string text = _ActivityLog.ToText();
+            LogBox.Text = text;
+            // Follow the newest line from its start: a caret at the very end also scrolls a long last line
+            // sideways, which cut the start off every line in view.
+            LogBox.CaretIndex = text.LastIndexOf('\n') + 1;
+        }
+
         private async Task RunLoopAsync(CancellationToken token)
         {
             LocalHostCommandExecutor executor = new LocalHostCommandExecutor();
@@ -364,6 +394,7 @@ namespace Armada.Harbor
                         jobRunner,
                         dockManager);
                     client.LinkStatistics = linkStatistics;
+                    client.LogClassifier = _LogClassifier;
                     _Client = client;
 
                     try
@@ -381,7 +412,7 @@ namespace Armada.Harbor
                         if (token.IsCancellationRequested) break;
                         SetLinkState(HarborLinkStateEnum.Disconnected);
                         SetDetail("The connection to the Admiral closed. Trying again in 3 seconds.");
-                        AppendInfo("Link closed; retrying in 3s");
+                        AppendInfo("Link closed; retrying in 3s", HarborLogCategoryEnum.Link, HarborLogOutcomeEnum.Failed);
                     }
                     catch (OperationCanceledException)
                     {
@@ -392,7 +423,7 @@ namespace Armada.Harbor
                         if (token.IsCancellationRequested) break;
                         SetLinkState(HarborLinkStateEnum.Error);
                         SetDetail(DescribeConnectError(ex));
-                        AppendInfo("Connect failed: " + ex.Message);
+                        AppendInfo("Connect failed: " + ex.Message, HarborLogCategoryEnum.Link, HarborLogOutcomeEnum.Failed);
                     }
 
                     SetMcp(client.McpBaseUrl);
@@ -459,7 +490,12 @@ namespace Armada.Harbor
 
         private void AppendInfo(string message)
         {
-            AppendLog(new HarborLogEntry(HarborLogDirection.Info, message));
+            AppendInfo(message, HarborLogCategoryEnum.General, HarborLogOutcomeEnum.None);
+        }
+
+        private void AppendInfo(string message, HarborLogCategoryEnum category, HarborLogOutcomeEnum outcome)
+        {
+            AppendLog(new HarborLogEntry(HarborLogDirection.Info, message) { Category = category, Outcome = outcome });
         }
 
         private void AppendLog(HarborLogEntry entry)
@@ -468,11 +504,7 @@ namespace Armada.Harbor
             Dispatcher.UIThread.Post(() =>
             {
                 _ActivityLog.Add(entry);
-                string text = _ActivityLog.ToText();
-                LogBox.Text = text;
-                // Follow the newest line from its start: a caret at the very end also scrolls a long last line
-                // sideways, which cut the start off every line in view.
-                LogBox.CaretIndex = text.LastIndexOf('\n') + 1;
+                RenderActivity();
             });
         }
 

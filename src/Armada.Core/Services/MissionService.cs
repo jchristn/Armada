@@ -4403,24 +4403,26 @@ namespace Armada.Core.Services
             // git ignores exclude rules for files it already tracks. When the repository commits its own
             // instruction file (for example CLAUDE.md), mark it skip-worktree in this dock so the generated
             // mission instructions can never be staged or committed by the captain.
-            int tracked = await RunGitExitCodeAsync(commands, worktreePath, token, "ls-files", "--error-unmatch", "--", instructionsFileName).ConfigureAwait(false);
+            // ls-files --error-unmatch exits 1 for a file git does not track: an answer, not a failure.
+            int tracked = await RunGitExitCodeAsync(commands, worktreePath, new int[] { 1 }, token, "ls-files", "--error-unmatch", "--", instructionsFileName).ConfigureAwait(false);
             if (tracked != 0) return;
 
-            int marked = await RunGitExitCodeAsync(commands, worktreePath, token, "update-index", "--skip-worktree", "--", instructionsFileName).ConfigureAwait(false);
+            int marked = await RunGitExitCodeAsync(commands, worktreePath, null, token, "update-index", "--skip-worktree", "--", instructionsFileName).ConfigureAwait(false);
             if (marked != 0)
             {
                 _Logging.Warn(_Header + "could not mark " + instructionsFileName + " skip-worktree in " + worktreePath + " (git exit code " + marked + ")");
             }
         }
 
-        private static async Task<int> RunGitExitCodeAsync(IHostCommandExecutor commands, string workingDirectory, CancellationToken token, params string[] args)
+        private static async Task<int> RunGitExitCodeAsync(IHostCommandExecutor commands, string workingDirectory, int[]? expectedExitCodes, CancellationToken token, params string[] args)
         {
             HostCommandResult result = await commands.RunAsync(new HostCommandRequest
             {
                 Executable = "git",
                 WorkingDirectory = workingDirectory,
                 Arguments = new List<string>(args),
-                TimeoutMs = 30000
+                TimeoutMs = 30000,
+                ExpectedExitCodes = expectedExitCodes != null ? new List<int>(expectedExitCodes) : new List<int>()
             }, token).ConfigureAwait(false);
             return result.ExitCode;
         }

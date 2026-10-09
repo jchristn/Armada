@@ -51,12 +51,35 @@ namespace Armada.Core.Services
             set => _TimeoutMs = value < 0 ? 0 : value;
         }
 
+        /// <summary>
+        /// Non-zero exit codes that are an answer rather than a failure, declared by the caller that interprets them (for
+        /// example 1 from <c>git show-ref --verify --quiet</c> for a missing ref, or from <c>git grep</c> for no match). A
+        /// Harbor does not report such an exit as a failure in its activity log. Never null; empty means only 0 succeeds.
+        /// </summary>
+        public List<int> ExpectedExitCodes
+        {
+            get => _ExpectedExitCodes;
+            set => _ExpectedExitCodes = value ?? new List<int>();
+        }
+
+        /// <summary>
+        /// What the command is for: routine git work (the default), a check run, or an operator's command. A Harbor
+        /// collapses routine work in its activity log and shows the others.
+        /// </summary>
+        public HostCommandKindEnum Kind { get; set; } = HostCommandKindEnum.Routine;
+
+        /// <summary>
+        /// Optional short name for the command in a Harbor's activity log (for example the check's name), or null.
+        /// </summary>
+        public string? Label { get; set; } = null;
+
         #endregion
 
         #region Private-Members
 
         private string _Executable = "git";
         private int _TimeoutMs = 120000;
+        private List<int> _ExpectedExitCodes = new List<int>();
 
         #endregion
 

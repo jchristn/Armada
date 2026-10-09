@@ -1,6 +1,7 @@
 namespace Armada.Core.Services
 {
     using System;
+    using System.Collections.Generic;
     using Armada.Core.Harbor;
 
     /// <summary>
@@ -48,7 +49,10 @@ namespace Armada.Core.Services
                 Executable = request.Executable,
                 WorkingDirectory = request.WorkingDirectory,
                 Arguments = request.Arguments,
-                TimeoutMs = request.TimeoutMs
+                TimeoutMs = request.TimeoutMs,
+                ExpectedExitCodes = request.ExpectedExitCodes.Count > 0 ? new List<int>(request.ExpectedExitCodes) : null,
+                Kind = request.Kind == HostCommandKindEnum.Routine ? null : request.Kind,
+                Label = String.IsNullOrWhiteSpace(request.Label) ? null : request.Label
             };
 
             // The Harbor stops the command at TimeoutMs; wait somewhat longer (up to 15 seconds more) so its result, rather

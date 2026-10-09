@@ -138,7 +138,9 @@ namespace Armada.Core.Services
                     Executable = "/bin/sh",
                     WorkingDirectory = worktreePath,
                     Arguments = new System.Collections.Generic.List<string> { "-lc", command },
-                    TimeoutMs = (int)Math.Min(int.MaxValue, Math.Max(1000, timeout.TotalMilliseconds))
+                    TimeoutMs = (int)Math.Min(int.MaxValue, Math.Max(1000, timeout.TotalMilliseconds)),
+                    Kind = HostCommandKindEnum.CheckRun,
+                    Label = "Definition of done " + phase
                 }, token).ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is InvalidOperationException || ex is TimeoutException)
