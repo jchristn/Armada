@@ -178,6 +178,17 @@ syntax).
   the captain cancels the prompt call (the request is cancelled at once). The card is re-sent through `ask.message` when
   the request is decided. Deleting the thread deletes its requests; decided ones are otherwise kept for
   `Retention.CliPermissionRequestRetentionDays` (default 90).
+- **When the request cannot be shown.** A request that nobody can see cannot be decided, so the prompt does not wait
+  for one. If storing the request or posting its card fails, the prompt is denied at once: the request is recorded as
+  `Denied` with `DecisionSource` `DeliveryFailed` and the reason as its `DecisionMessage`, a warning is logged,
+  `cli_permission.resolved` is sent (so the inbox and Approvals centers drop it), and the captain gets "Armada could
+  not show this permission request in the conversation (reason); denied." (for a mission prompt: "... to its
+  approvers ..."). A missing thread is such a failure. A transient database error (SQLite busy or locked after its busy
+  timeout, a provider deadlock or lock timeout; recognized by error code, `TransientDatabaseError`) is retried once
+  after `CliPermissionService.TransientRetryBackoff` (250 ms), only while that still fits before the request's expiry
+  on the monotonic clock. If an approver decides the stored request during the retry, that decision stands. A card
+  that is stored and linked but whose announcement failed counts as posted (it shows on the next read of the thread).
+  Prompts decided by a rule never post a card and are unaffected.
 - **The card** shows the tool, the command or input, the captain, an expiry countdown, and the status. A viewer who
   may decide gets **Allow once**, **Allow and remember** (admins only: a dialog with an editable rule pattern that
   defaults to the suggested rule, and a scope of Captain or Global; Vessel only for mission requests), and **Deny**

@@ -427,8 +427,9 @@ namespace Armada.Core.Services.Ask
         }
 
         /// <summary>
-        /// Append the CliPermission card of a CLI permission request: store the message, link the request to it (the
-        /// request stores the message id), then announce the message with the request attached.
+        /// Append the CliPermission card of a CLI permission request: store the message (unless a message with the
+        /// card's id is already stored, so a retry with the same card does not add a second one), link the request to
+        /// it (the request stores the message id), then announce the message with the request attached.
         /// </summary>
         /// <param name="thread">Thread.</param>
         /// <param name="card">Card message (Kind CliPermission).</param>
@@ -443,7 +444,10 @@ namespace Armada.Core.Services.Ask
             card.TenantId = thread.TenantId;
             card.UserId = thread.UserId;
             card.ThreadId = thread.Id;
-            card = await _Database.AskMessages.CreateAsync(card, true, token).ConfigureAwait(false);
+            // A retry after the message was stored but the link failed reuses the stored message instead of adding a
+            // second card.
+            AskMessage? existing = await _Database.AskMessages.ReadAsync(thread.TenantId!, card.Id, token).ConfigureAwait(false);
+            card = existing ?? await _Database.AskMessages.CreateAsync(card, true, token).ConfigureAwait(false);
             await _Database.CliPermissionRequests.UpdateMessageAsync(request.Id, card.Id, token).ConfigureAwait(false);
             request.MessageId = card.Id;
             await PopulateAsync(thread, new List<AskMessage> { card }, token).ConfigureAwait(false);

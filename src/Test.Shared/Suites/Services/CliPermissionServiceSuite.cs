@@ -153,30 +153,81 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(0, svc.GetInFlightPrompts().Count, "nothing in flight once decided");
             }));
 
-            cases.Add(Case("in_flight_prompt_reports_a_failed_card", "A prompt whose Ask card cannot be posted still waits, and the in-flight report says why the card is missing", async () =>
+            cases.Add(Case("prompt_for_a_missing_thread_is_denied_at_once", "A prompt whose Ask thread does not exist cannot show its card, so it is denied at once with the reason instead of waiting unseen until the timeout", async () =>
             {
                 using AskTestHarness h = await AskTestHarness.CreateAsync().ConfigureAwait(false);
                 CliPermissionService svc = Service(h);
+                List<TimeSpan> backoffs = GateRetryDelay(svc);
+                List<string> events = RecordEvents(svc);
                 AskThread thread = await NewThreadAsync(h, "usr_cpo10").ConfigureAwait(false);
                 CliPermissionPromptContext context = ThreadContext(thread, null);
                 context.ThreadId = "ath_missing_" + Guid.NewGuid().ToString("N").Substring(0, 8);
 
-                Task<CliPermissionPromptOutcome> prompt = svc.PromptAsync(context, "Bash", BashInput);
-                CliPermissionPromptProgress? waiting = null;
-                bool atWaiting = await AskTestHarness.WaitUntilAsync(() =>
-                {
-                    waiting = svc.GetInFlightPrompts().SingleOrDefault();
-                    return Task.FromResult(waiting != null && waiting.Stage == CliPermissionPromptStageEnum.Waiting);
-                }, 10000).ConfigureAwait(false);
-                AssertTrue(atWaiting, "the prompt is reported at Waiting (" + waiting?.Describe(DateTime.UtcNow) + ")");
-                AssertNull(waiting!.MessageId, "no card");
-                AssertNotNull(waiting.CardError, "the reason the card is missing");
-                AssertContains("not found", waiting.CardError!);
-                AssertFalse(prompt.IsCompleted, "the prompt still waits for a decision");
+                CliPermissionPromptOutcome outcome = await svc.PromptAsync(context, "Bash", BashInput).ConfigureAwait(false);
+                AssertFalse(outcome.Allowed, "denied");
+                AssertEqual("Armada could not show this permission request in the conversation (thread " + context.ThreadId + " was not found); denied.", outcome.Message);
+                AssertEqual(0, backoffs.Count, "a missing thread is not transient, so there is no retry");
+                await AssertDeliveryFailedAsync(h, svc, outcome, context.ThreadId!).ConfigureAwait(false);
+                AssertTrue(events.Contains(CliPermissionService.ResolvedEvent + " " + outcome.Request!.Id), "the resolution is announced so the Approvals center drops the request");
+                AssertFalse(events.Contains(CliPermissionService.RequestedEvent + " " + outcome.Request.Id), "it was never announced as waiting");
+            }));
 
-                await svc.DecideAsync(TenantAdmin("usr_cpa10"), waiting.RequestId, new CliPermissionDecisionRequest { Decision = CliPermissionDecisionEnum.Deny }).ConfigureAwait(false);
-                AssertFalse((await prompt.ConfigureAwait(false)).Allowed, "denied");
-                AssertEqual(0, svc.GetInFlightPrompts().Count, "nothing in flight once decided");
+            cases.Add(Case("card_post_retries_a_transient_failure", "A card post that fails once with SQLite busy is retried after the backoff, and the prompt then waits with its card", async () =>
+            {
+                using AskTestHarness h = await AskTestHarness.CreateAsync().ConfigureAwait(false);
+                CliPermissionService svc = Service(h);
+                List<TimeSpan> backoffs = GateRetryDelay(svc);
+                int attempts = 0;
+                svc.CardPoster = async (AskThread t, AskMessage card, CliPermissionRequest request, CancellationToken token) =>
+                {
+                    if (Interlocked.Increment(ref attempts) == 1) throw new Microsoft.Data.Sqlite.SqliteException("SQLite Error 5: 'database is locked'.", 5);
+                    return await h.Threads.AppendCliPermissionCardAsync(t, card, request, token).ConfigureAwait(false);
+                };
+                AskThread thread = await NewThreadAsync(h, "usr_cpo13").ConfigureAwait(false);
+
+                Task<CliPermissionPromptOutcome> prompt = svc.PromptAsync(ThreadContext(thread, null), "Bash", BashInput);
+                CliPermissionRequest pending = await WaitForPendingAsync(h, thread.Id).ConfigureAwait(false);
+                AssertEqual(2, Volatile.Read(ref attempts), "posted on the second attempt");
+                AssertEqual(1, backoffs.Count, "one backoff");
+                AssertEqual(CliPermissionService.TransientRetryBackoff, backoffs[0]);
+                AssertFalse(prompt.IsCompleted, "the prompt waits for a decision");
+                AssertEqual(1, (await h.Db.Driver.CliPermissionRequests.EnumerateAsync(new CliPermissionRequestQuery { ThreadId = thread.Id }).ConfigureAwait(false)).Count, "one request");
+                AskMessagePage page = (await h.Threads.EnumerateMessagesAsync(AskTestHarness.User("usr_cpo13", false), thread.Id, new AskMessageEnumerateRequest()).ConfigureAwait(false))!;
+                AssertEqual(1, page.Messages.Count(m => m.Kind == AskMessageKindEnum.CliPermission), "one card");
+
+                await svc.DecideAsync(TenantAdmin("usr_cpa13"), pending.Id, new CliPermissionDecisionRequest { Decision = CliPermissionDecisionEnum.AllowOnce }).ConfigureAwait(false);
+                AssertTrue((await prompt.ConfigureAwait(false)).Allowed, "allowed");
+            }));
+
+            cases.Add(Case("card_post_that_keeps_failing_denies", "A card post that keeps failing with SQLite busy is retried once, then the prompt is denied with the reason; the request is terminal and nothing stays pending", async () =>
+            {
+                using AskTestHarness h = await AskTestHarness.CreateAsync().ConfigureAwait(false);
+                CliPermissionService svc = Service(h);
+                List<TimeSpan> backoffs = GateRetryDelay(svc);
+                List<string> events = RecordEvents(svc);
+                int attempts = 0;
+                svc.CardPoster = (AskThread t, AskMessage card, CliPermissionRequest request, CancellationToken token) =>
+                {
+                    Interlocked.Increment(ref attempts);
+                    throw new Microsoft.Data.Sqlite.SqliteException("SQLite Error 5: 'database is locked'.", 5);
+                };
+                AuthContext owner = AskTestHarness.User("usr_cpo14", false);
+                AskThread thread = await h.Threads.CreateThreadAsync(owner, null).ConfigureAwait(false);
+
+                CliPermissionPromptOutcome outcome = await svc.PromptAsync(ThreadContext(thread, null), "Bash", BashInput).ConfigureAwait(false);
+                AssertFalse(outcome.Allowed, "denied");
+                AssertEqual("Armada could not show this permission request in the conversation (SQLite Error 5: 'database is locked'.); denied.", outcome.Message);
+                AssertEqual(2, Volatile.Read(ref attempts), "tried twice");
+                AssertEqual(1, backoffs.Count, "one backoff between the attempts");
+                await AssertDeliveryFailedAsync(h, svc, outcome, thread.Id).ConfigureAwait(false);
+                AssertTrue(events.Contains(CliPermissionService.ResolvedEvent + " " + outcome.Request!.Id), "the resolution is announced");
+
+                InboxService inbox = new InboxService(h.Db.Driver, h.Logging, h.Settings);
+                AssertFalse((await inbox.GetInboxAsync(TenantAdmin("usr_cpa14")).ConfigureAwait(false)).Any(i => i.Kind == InboxItemKinds.CliPermission), "no inbox item for the admin");
+                AssertFalse((await inbox.GetInboxAsync(owner).ConfigureAwait(false)).Any(i => i.Kind == InboxItemKinds.CliPermission), "no inbox item for the owner");
+                AskThreadDetail? detail = await h.Threads.GetThreadDetailAsync(owner, thread.Id).ConfigureAwait(false);
+                AssertEqual(0, detail!.PendingCliPermissions.Count, "nothing pending on the thread");
+                AssertEqual(0, await svc.SweepAsync().ConfigureAwait(false), "nothing left for the sweep");
             }));
 
             cases.Add(Case("timeout_denies","With no decision before the timeout the prompt is denied as Expired", async () =>
@@ -573,6 +624,44 @@ namespace Test.Shared.Suites.Services
             }
 
             throw new AssertionException(label + ": expected " + typeof(TException).Name + " but nothing was thrown");
+        }
+
+        private static List<TimeSpan> GateRetryDelay(CliPermissionService svc)
+        {
+            // Record each backoff and continue at once: the retry path runs without the test sleeping.
+            List<TimeSpan> backoffs = new List<TimeSpan>();
+            svc.RetryDelay = (TimeSpan delay, CancellationToken token) =>
+            {
+                lock (backoffs) backoffs.Add(delay);
+                return Task.CompletedTask;
+            };
+            return backoffs;
+        }
+
+        private static List<string> RecordEvents(CliPermissionService svc)
+        {
+            List<string> events = new List<string>();
+            svc.OnRequestEvent = (string eventType, CliPermissionRequest request) =>
+            {
+                lock (events) events.Add(eventType + " " + request.Id);
+            };
+            return events;
+        }
+
+        private static async Task AssertDeliveryFailedAsync(AskTestHarness h, CliPermissionService svc, CliPermissionPromptOutcome outcome, string threadId)
+        {
+            AssertNotNull(outcome.Request, "the request is returned");
+            CliPermissionRequest? stored = await h.Db.Driver.CliPermissionRequests.ReadAsync(outcome.Request!.Id).ConfigureAwait(false);
+            AssertNotNull(stored, "the prompt is recorded");
+            AssertEqual(CliPermissionRequestStatusEnum.Denied, stored!.Status, "terminal");
+            AssertEqual((CliPermissionDecisionSourceEnum?)CliPermissionDecisionSourceEnum.DeliveryFailed, stored.DecisionSource, "typed reason");
+            AssertEqual(outcome.Message, stored.DecisionMessage, "the reason is stored");
+            AssertNotNull(stored.DecidedUtc, "decided");
+            AssertNull(stored.MessageId, "no card");
+            AssertEqual(0, (await h.Db.Driver.CliPermissionRequests.EnumerateAsync(new CliPermissionRequestQuery { ThreadId = threadId, Status = CliPermissionRequestStatusEnum.Pending }).ConfigureAwait(false)).Count, "nothing pending");
+            AssertEqual(0, svc.WaitingCount, "nothing waiting");
+            AssertEqual(0, svc.GetInFlightPrompts().Count, "nothing in flight");
+            await AssertThrowsAsync<InvalidOperationException>(() => svc.DecideAsync(TenantAdmin("usr_cpa_df"), stored.Id, new CliPermissionDecisionRequest { Decision = CliPermissionDecisionEnum.AllowOnce }), "cannot be allowed afterwards").ConfigureAwait(false);
         }
 
         private static TestCaseDescriptor Case(string caseId, string displayName, Func<Task> body)

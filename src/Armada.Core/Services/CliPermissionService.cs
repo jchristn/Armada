@@ -3,6 +3,7 @@ namespace Armada.Core.Services
     using System;
     using System.Collections.Concurrent;
     using System.Collections.Generic;
+    using System.Diagnostics;
     using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
@@ -55,6 +56,31 @@ namespace Armada.Core.Services
         public TimeSpan? PromptTimeoutOverride { get; set; } = null;
 
         /// <summary>
+        /// Posts the CliPermission card of a thread-scoped request into its Ask thread, or null to use
+        /// <see cref="AskThreads"/> (<see cref="AskThreadService.AppendCliPermissionCardAsync"/>). The poster sets the
+        /// request's MessageId once the card is linked; a poster that throws before that leaves the card unposted.
+        /// </summary>
+        public Func<AskThread, AskMessage, CliPermissionRequest, CancellationToken, Task<AskMessage>>? CardPoster { get; set; } = null;
+
+        /// <summary>
+        /// Waits out the backoff before the one retry of a transient store or card failure (default
+        /// <see cref="Task.Delay(TimeSpan, CancellationToken)"/>). Tests replace it with a gate so no test sleeps.
+        /// </summary>
+        /// <exception cref="ArgumentNullException">Thrown when set to null.</exception>
+        public Func<TimeSpan, CancellationToken, Task> RetryDelay
+        {
+            get => _RetryDelay;
+            set => _RetryDelay = value ?? throw new ArgumentNullException(nameof(RetryDelay));
+        }
+
+        /// <summary>
+        /// Backoff before retrying a store or card post that failed with a transient database error (for example SQLite
+        /// "database is locked" after its busy timeout). There is one retry, and only while the backoff fits before the
+        /// prompt's expiry; after that the prompt is denied.
+        /// </summary>
+        public static readonly TimeSpan TransientRetryBackoff = TimeSpan.FromMilliseconds(250);
+
+        /// <summary>
         /// Number of prompts currently waiting in this process.
         /// </summary>
         public int WaitingCount => _Waiters.Count;
@@ -75,6 +101,7 @@ namespace Armada.Core.Services
         private readonly LoggingModule _Logging;
         private readonly ConcurrentDictionary<string, TaskCompletionSource<bool>> _Waiters = new ConcurrentDictionary<string, TaskCompletionSource<bool>>(StringComparer.Ordinal);
         private readonly ConcurrentDictionary<string, CliPermissionPromptProgress> _InFlight = new ConcurrentDictionary<string, CliPermissionPromptProgress>(StringComparer.Ordinal);
+        private Func<TimeSpan, CancellationToken, Task> _RetryDelay = (TimeSpan delay, CancellationToken token) => Task.Delay(delay, token);
 
         #endregion
 
@@ -101,7 +128,10 @@ namespace Armada.Core.Services
         /// <summary>
         /// Answer one permission prompt: a matching deny rule denies and a matching allow rule allows immediately;
         /// otherwise a pending request is stored, announced, and held until an approver decides, the prompt times out
-        /// (Permissions.PromptTimeoutSeconds), or <paramref name="token"/> is cancelled. Every prompt is recorded.
+        /// (Permissions.PromptTimeoutSeconds), or <paramref name="token"/> is cancelled. When the request cannot be shown
+        /// to anyone who could decide it (storing it or posting its Ask card fails, after one retry of a transient
+        /// failure), it is denied at once with <see cref="CliPermissionDecisionSourceEnum.DeliveryFailed"/> and the
+        /// reason. Every prompt is recorded.
         /// </summary>
         /// <param name="context">The captain session (resolved from its scoped token).</param>
         /// <param name="toolName">Tool name as the CLI reported it.</param>
@@ -144,6 +174,7 @@ namespace Armada.Core.Services
                 StageStartedUtc = request.CreatedUtc
             };
             _InFlight[request.Id] = progress;
+            Stopwatch clock = Stopwatch.StartNew();
             List<string> timings = new List<string>();
             try
             {
@@ -169,42 +200,63 @@ namespace Armada.Core.Services
 
                 TaskCompletionSource<bool> waiter = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
                 _Waiters[request.Id] = waiter;
+                CliPermissionPromptOutcome? undelivered = null;
                 try
                 {
+                    // A request nobody can see cannot be decided: when storing it (the approvers' inbox and Approvals
+                    // entry) or posting its Ask card fails, deny it now instead of holding the captain until the timeout.
                     Advance(progress, CliPermissionPromptStageEnum.Storing, timings);
-                    request = await _Database.CliPermissionRequests.CreateAsync(request, token).ConfigureAwait(false);
-                    _Logging.Info(_Header + "waiting for a decision on " + request.Id + " (" + request.ToolName + ") for captain " + request.CaptainId);
-                    Advance(progress, CliPermissionPromptStageEnum.PostingCard, timings);
-                    await PostCardAsync(request, progress).ConfigureAwait(false);
-                    Advance(progress, CliPermissionPromptStageEnum.Announcing, timings);
-                    Announce(RequestedEvent, request);
-                    Advance(progress, CliPermissionPromptStageEnum.Waiting, timings);
-                    TimeSpan setup = DateTime.UtcNow - progress.StartedUtc;
-                    if (setup > SlowSetupThreshold)
-                        _Logging.Warn(_Header + "slow prompt setup for " + request.Id + " (" + request.ToolName + "): " + (int)setup.TotalMilliseconds + " ms before waiting (" + String.Join(", ", timings) + ")");
-
-                    TimeSpan remaining = request.ExpiresUtc - DateTime.UtcNow;
-                    if (remaining < TimeSpan.Zero) remaining = TimeSpan.Zero;
-                    Task delay = Task.Delay(remaining, token);
-                    Task finished = await Task.WhenAny(waiter.Task, delay).ConfigureAwait(false);
-                    Advance(progress, CliPermissionPromptStageEnum.Resolving, timings);
-                    if (finished != waiter.Task)
+                    Exception? storeError = await RunWithRetryAsync(request, "store the request", async () =>
                     {
-                        bool cancelled = token.IsCancellationRequested;
-                        string message = cancelled
-                            ? "The permission request was cancelled before an approver decided."
-                            : "No approver decided within " + (int)Math.Ceiling(timeout.TotalSeconds) + " seconds; Armada denied the request. Ask an approver to allow it, or add an allow rule.";
-                        await _Database.CliPermissionRequests.TryDecideAsync(
-                            request.Id,
-                            cancelled ? CliPermissionRequestStatusEnum.Cancelled : CliPermissionRequestStatusEnum.Expired,
-                            cancelled ? CliPermissionDecisionSourceEnum.Cancelled : CliPermissionDecisionSourceEnum.Timeout,
-                            null, null, message, CancellationToken.None).ConfigureAwait(false);
+                        request = await _Database.CliPermissionRequests.CreateAsync(request, token).ConfigureAwait(false);
+                    }, clock, timeout, token).ConfigureAwait(false);
+                    if (storeError != null)
+                    {
+                        undelivered = await DenyUndeliveredAsync(request, false, storeError).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        _Logging.Info(_Header + "waiting for a decision on " + request.Id + " (" + request.ToolName + ") for captain " + request.CaptainId);
+                        Advance(progress, CliPermissionPromptStageEnum.PostingCard, timings);
+                        Exception? cardError = await PostCardAsync(request, progress, clock, timeout, token).ConfigureAwait(false);
+                        if (cardError != null)
+                            undelivered = await DenyUndeliveredAsync(request, true, cardError).ConfigureAwait(false);
+                    }
+
+                    if (undelivered == null)
+                    {
+                        Advance(progress, CliPermissionPromptStageEnum.Announcing, timings);
+                        Announce(RequestedEvent, request);
+                        Advance(progress, CliPermissionPromptStageEnum.Waiting, timings);
+                        TimeSpan setup = DateTime.UtcNow - progress.StartedUtc;
+                        if (setup > SlowSetupThreshold)
+                            _Logging.Warn(_Header + "slow prompt setup for " + request.Id + " (" + request.ToolName + "): " + (int)setup.TotalMilliseconds + " ms before waiting (" + String.Join(", ", timings) + ")");
+
+                        TimeSpan remaining = request.ExpiresUtc - DateTime.UtcNow;
+                        if (remaining < TimeSpan.Zero) remaining = TimeSpan.Zero;
+                        Task delay = Task.Delay(remaining, token);
+                        Task finished = await Task.WhenAny(waiter.Task, delay).ConfigureAwait(false);
+                        Advance(progress, CliPermissionPromptStageEnum.Resolving, timings);
+                        if (finished != waiter.Task)
+                        {
+                            bool cancelled = token.IsCancellationRequested;
+                            string message = cancelled
+                                ? "The permission request was cancelled before an approver decided."
+                                : "No approver decided within " + (int)Math.Ceiling(timeout.TotalSeconds) + " seconds; Armada denied the request. Ask an approver to allow it, or add an allow rule.";
+                            await _Database.CliPermissionRequests.TryDecideAsync(
+                                request.Id,
+                                cancelled ? CliPermissionRequestStatusEnum.Cancelled : CliPermissionRequestStatusEnum.Expired,
+                                cancelled ? CliPermissionDecisionSourceEnum.Cancelled : CliPermissionDecisionSourceEnum.Timeout,
+                                null, null, message, CancellationToken.None).ConfigureAwait(false);
+                        }
                     }
                 }
                 finally
                 {
                     _Waiters.TryRemove(request.Id, out TaskCompletionSource<bool>? _);
                 }
+
+                if (undelivered != null) return undelivered;
 
                 CliPermissionRequest final = await _Database.CliPermissionRequests.ReadAsync(request.Id, CancellationToken.None).ConfigureAwait(false) ?? request;
                 if (final.Status == CliPermissionRequestStatusEnum.Expired || final.Status == CliPermissionRequestStatusEnum.Cancelled)
@@ -647,34 +699,143 @@ namespace Armada.Core.Services
             return true;
         }
 
-        private async Task PostCardAsync(CliPermissionRequest request, CliPermissionPromptProgress progress)
+        private async Task<Exception?> PostCardAsync(CliPermissionRequest request, CliPermissionPromptProgress progress, Stopwatch clock, TimeSpan timeout, CancellationToken token)
         {
-            if (AskThreads == null || String.IsNullOrEmpty(request.ThreadId)) return;
-            try
+            if (String.IsNullOrEmpty(request.ThreadId)) return null;
+            Func<AskThread, AskMessage, CliPermissionRequest, CancellationToken, Task<AskMessage>>? poster = CardPoster;
+            if (poster == null && AskThreads != null) poster = AskThreads.AppendCliPermissionCardAsync;
+            if (poster == null) return null;
+
+            // One card instance across attempts: a retry after the card message was stored but not yet linked reuses
+            // it (AppendCliPermissionCardAsync skips storing a message that already exists) instead of adding a second.
+            AskMessage card = new AskMessage();
+            card.Role = AskMessageRoleEnum.System;
+            card.Kind = AskMessageKindEnum.CliPermission;
+            card.CaptainId = request.CaptainId;
+            card.ContentText = request.ToolName + ": " + request.SummaryText;
+
+            Exception? error = await RunWithRetryAsync(request, "post the permission card", async () =>
             {
-                AskThread? thread = await AskThreads.ReadThreadInternalAsync(request.ThreadId!).ConfigureAwait(false);
-                if (thread == null)
+                AskThread? thread = await _Database.AskThreads.ReadByIdAsync(request.ThreadId!, CancellationToken.None).ConfigureAwait(false);
+                if (thread == null) throw new KeyNotFoundException("thread " + request.ThreadId + " was not found");
+                try
                 {
-                    lock (progress) progress.CardError = "thread " + request.ThreadId + " not found";
-                    _Logging.Warn(_Header + "could not post the permission card for " + request.Id + ": thread " + request.ThreadId + " not found");
-                    return;
+                    // The card links to the request through the request's message id; set before the message is announced.
+                    AskMessage posted = await poster(thread, card, request, CancellationToken.None).ConfigureAwait(false);
+                    request.MessageId = posted.Id;
+                }
+                catch (Exception ex) when (!String.IsNullOrEmpty(request.MessageId))
+                {
+                    // The card is stored and linked; only announcing it failed. It shows on the next read of the thread,
+                    // so the request can still be decided.
+                    _Logging.Warn(_Header + "the permission card " + request.MessageId + " for " + request.Id + " is stored but was not announced: " + ex.Message);
                 }
 
-                AskMessage card = new AskMessage();
-                card.Role = AskMessageRoleEnum.System;
-                card.Kind = AskMessageKindEnum.CliPermission;
-                card.CaptainId = request.CaptainId;
-                card.ContentText = request.ToolName + ": " + request.SummaryText;
-                // The card links to the request through the request's message id; set it before the message is announced.
-                card = await AskThreads.AppendCliPermissionCardAsync(thread, card, request).ConfigureAwait(false);
-                request.MessageId = card.Id;
-                lock (progress) progress.MessageId = card.Id;
+                lock (progress) progress.MessageId = request.MessageId;
+            }, clock, timeout, token).ConfigureAwait(false);
+
+            if (error != null)
+            {
+                lock (progress) progress.CardError = error.GetType().Name + ": " + error.Message;
+            }
+
+            return error;
+        }
+
+        private async Task<Exception?> RunWithRetryAsync(CliPermissionRequest request, string step, Func<Task> attempt, Stopwatch clock, TimeSpan timeout, CancellationToken token)
+        {
+            for (int number = 1; ; number++)
+            {
+                long started = clock.ElapsedMilliseconds;
+                try
+                {
+                    await attempt().ConfigureAwait(false);
+                    return null;
+                }
+                catch (OperationCanceledException) when (token.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    // One retry, and only for a failure that may clear on its own (SQLite busy after its busy timeout,
+                    // a provider deadlock or lock timeout), and only while the backoff still fits before the expiry
+                    // (measured on the monotonic clock, so a wall-clock change cannot stretch it).
+                    bool transient = TransientDatabaseError.IsTransient(ex);
+                    TimeSpan backoff = TransientRetryBackoff;
+                    bool retry = transient && number < 2 && clock.Elapsed + backoff < timeout;
+                    _Logging.Warn(_Header + "could not " + step + " for " + request.Id + " (" + request.ToolName + "), attempt " + number
+                        + " after " + (clock.ElapsedMilliseconds - started) + " ms" + (transient ? " (transient)" : "") + ": " + ex.GetType().Name + ": " + ex.Message
+                        + (retry ? "; retrying in " + (int)backoff.TotalMilliseconds + " ms" : ""));
+                    if (!retry) return ex;
+                    await RetryDelay(backoff, CancellationToken.None).ConfigureAwait(false);
+                }
+            }
+        }
+
+        private async Task<CliPermissionPromptOutcome> DenyUndeliveredAsync(CliPermissionRequest request, bool stored, Exception error)
+        {
+            string reason = Clip(String.IsNullOrWhiteSpace(error.Message) ? error.GetType().Name : error.Message.Trim(), 500);
+            string message = String.IsNullOrEmpty(request.ThreadId)
+                ? "Armada could not show this permission request to its approvers (" + reason + "); denied."
+                : "Armada could not show this permission request in the conversation (" + reason + "); denied.";
+            _Logging.Warn(_Header + "denying " + request.Id + " (" + request.ToolName + ") for captain " + request.CaptainId + " without waiting: " + message);
+
+            DateTime now = DateTime.UtcNow;
+            CliPermissionRequest? final = null;
+            try
+            {
+                // Also when the store "failed": a write that committed but reported an error leaves a pending row.
+                bool decided = await _Database.CliPermissionRequests.TryDecideAsync(request.Id, CliPermissionRequestStatusEnum.Denied, CliPermissionDecisionSourceEnum.DeliveryFailed, null, null, message, CancellationToken.None).ConfigureAwait(false);
+                if (decided || stored)
+                {
+                    stored = true;
+                    final = await _Database.CliPermissionRequests.ReadAsync(request.Id, CancellationToken.None).ConfigureAwait(false);
+                }
+                else
+                {
+                    // Nothing was stored, so nothing is pending anywhere; record the prompt as denied for the history.
+                    request.Status = CliPermissionRequestStatusEnum.Denied;
+                    request.DecisionSource = CliPermissionDecisionSourceEnum.DeliveryFailed;
+                    request.DecisionMessage = message;
+                    request.DecidedUtc = now;
+                    final = await _Database.CliPermissionRequests.CreateAsync(request, CancellationToken.None).ConfigureAwait(false);
+                }
             }
             catch (Exception ex)
             {
-                lock (progress) progress.CardError = ex.GetType().Name + ": " + ex.Message;
-                _Logging.Warn(_Header + "could not post the permission card for " + request.Id + ": " + ex.Message);
+                _Logging.Warn(_Header + "could not record the denial of " + request.Id + ": " + ex.Message + (stored ? " (the sweep resolves the pending row)" : ""));
             }
+
+            if (final != null && final.Status == CliPermissionRequestStatusEnum.Allowed)
+            {
+                // An approver found the stored request (in the inbox or Approvals) and allowed it first: honor that.
+                return new CliPermissionPromptOutcome { Allowed = true, Message = String.Empty, Request = final };
+            }
+
+            if (final != null && final.Status != CliPermissionRequestStatusEnum.Pending && final.DecisionSource != CliPermissionDecisionSourceEnum.DeliveryFailed)
+            {
+                // Decided another way first (an approver's denial, or the session ended); that decision was announced.
+                return new CliPermissionPromptOutcome { Allowed = false, Message = DenialMessage(final), Request = final };
+            }
+
+            if (final != null && stored)
+            {
+                // The pending row was listed in the inbox and Approvals; announce its resolution so they drop it.
+                Announce(ResolvedEvent, final);
+                await RefreshCardAsync(final).ConfigureAwait(false);
+            }
+
+            if (final == null)
+            {
+                final = request;
+                final.Status = CliPermissionRequestStatusEnum.Denied;
+                final.DecisionSource = CliPermissionDecisionSourceEnum.DeliveryFailed;
+                final.DecisionMessage = message;
+                final.DecidedUtc = now;
+            }
+
+            return new CliPermissionPromptOutcome { Allowed = false, Message = message, Request = final };
         }
 
         private static void Advance(CliPermissionPromptProgress progress, CliPermissionPromptStageEnum stage, List<string> timings)
