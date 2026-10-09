@@ -13,10 +13,17 @@ namespace Armada.Core.Services
     using SyslogLogging;
 
     /// <summary>
-    /// Computes vessel readiness and workflow preflight warnings for planning, dispatch, and checks.
+    /// Computes vessel readiness and workflow preflight warnings for planning, dispatch, and checks. The checkout is
+    /// inspected where it lives (see <see cref="VesselHostResolver"/>): the working directory on the Admiral host, or a
+    /// checkout on a connected Harbor, whose git state, toolchains, and command dependencies are probed on that Harbor.
     /// </summary>
     public class VesselReadinessService
     {
+        /// <summary>
+        /// Finds where a vessel's checkout lives. When null, only the working directory on the Admiral host is considered.
+        /// </summary>
+        public VesselHostResolver? Hosts { get; set; } = null;
+
         private static readonly Regex _CommandSegmentSplit = new Regex(@"\s*(?:&&|\|\||;|\r?\n)\s*", RegexOptions.Compiled);
         private static readonly Regex _TokenRegex = new Regex("^\\s*(?:\"([^\"]+)\"|'([^']+)'|([^\\s]+))", RegexOptions.Compiled);
         private static readonly HashSet<string> _ShellBuiltins = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -58,7 +65,8 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
-        /// Evaluate vessel readiness for general use or for a specific check run.
+        /// Evaluate vessel readiness for general use or for a specific check run. The checkout is found with
+        /// <see cref="Hosts"/> when set (for the calling user's Harbors), otherwise on the Admiral host only.
         /// </summary>
         public async Task<VesselReadinessResult> EvaluateAsync(
             AuthContext auth,
@@ -72,6 +80,42 @@ namespace Armada.Core.Services
             if (auth == null) throw new ArgumentNullException(nameof(auth));
             if (vessel == null) throw new ArgumentNullException(nameof(vessel));
 
+            VesselHostResolution? resolution = null;
+            if (Hosts != null && !VesselHostResolver.HasAdmiralWorkingDirectory(vessel))
+                resolution = await Hosts.TryResolveAsync(vessel, auth.UserId, token).ConfigureAwait(false);
+
+            return await EvaluateCoreAsync(auth, vessel, resolution, explicitWorkflowProfileId, requestedCheckType, requestedEnvironmentName, includeWorkflowRequirements, token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Evaluate vessel readiness on a checkout already found (for example the one a check run is about to use).
+        /// </summary>
+        public Task<VesselReadinessResult> EvaluateAsync(
+            AuthContext auth,
+            Vessel vessel,
+            VesselHost host,
+            string? explicitWorkflowProfileId = null,
+            CheckRunTypeEnum? requestedCheckType = null,
+            string? requestedEnvironmentName = null,
+            bool includeWorkflowRequirements = true,
+            CancellationToken token = default)
+        {
+            if (auth == null) throw new ArgumentNullException(nameof(auth));
+            if (vessel == null) throw new ArgumentNullException(nameof(vessel));
+            if (host == null) throw new ArgumentNullException(nameof(host));
+            return EvaluateCoreAsync(auth, vessel, VesselHostResolution.Found(host), explicitWorkflowProfileId, requestedCheckType, requestedEnvironmentName, includeWorkflowRequirements, token);
+        }
+
+        private async Task<VesselReadinessResult> EvaluateCoreAsync(
+            AuthContext auth,
+            Vessel vessel,
+            VesselHostResolution? resolution,
+            string? explicitWorkflowProfileId,
+            CheckRunTypeEnum? requestedCheckType,
+            string? requestedEnvironmentName,
+            bool includeWorkflowRequirements,
+            CancellationToken token)
+        {
             VesselReadinessResult result = new VesselReadinessResult
             {
                 VesselId = vessel.Id,
@@ -80,18 +124,40 @@ namespace Armada.Core.Services
             };
 
             bool checkSpecific = requestedCheckType.HasValue;
+            VesselHost? harborHost = resolution?.Host != null && resolution.Host.IsHarbor ? resolution.Host : null;
 
             bool hasWorkingDirectory = !String.IsNullOrWhiteSpace(vessel.WorkingDirectory)
                 && Directory.Exists(vessel.WorkingDirectory);
-            result.HasWorkingDirectory = hasWorkingDirectory;
-            if (!hasWorkingDirectory)
+            if (resolution?.Host != null && !resolution.Host.IsHarbor) hasWorkingDirectory = true;
+            result.HasWorkingDirectory = hasWorkingDirectory || harborHost != null;
+            if (hasWorkingDirectory && harborHost == null) result.CheckoutPath = resolution?.Host?.WorkingDirectory ?? vessel.WorkingDirectory;
+
+            if (harborHost != null)
             {
+                result.CheckoutPath = harborHost.WorkingDirectory;
+                result.HarborId = harborHost.HarborId;
+                result.HarborName = harborHost.HarborName;
+                AddIssue(
+                    result,
+                    "working_directory_on_harbor",
+                    ReadinessSeverityEnum.Info,
+                    "Checkout on Harbor " + harborHost.HarborName,
+                    "Checks, Workspace, and readiness probes run in the checkout " + harborHost.WorkingDirectory + " on Harbor " + harborHost.HarborName
+                        + (String.IsNullOrWhiteSpace(vessel.WorkingDirectory)
+                            ? " (the vessel has no working directory on the Admiral host)."
+                            : " (the working directory " + vessel.WorkingDirectory + " does not exist on the Admiral host)."),
+                    harborHost.WorkingDirectory);
+                await PopulateHarborCheckoutAsync(result, harborHost, vessel.DefaultBranch, token).ConfigureAwait(false);
+            }
+            else if (!hasWorkingDirectory)
+            {
+                result.CheckoutErrorCode = resolution?.ErrorCode;
                 AddIssue(
                     result,
                     "working_directory_missing",
                     checkSpecific ? ReadinessSeverityEnum.Error : ReadinessSeverityEnum.Warning,
                     "Working directory unavailable",
-                    "This vessel does not have a configured working directory that exists on disk.",
+                    resolution?.Message ?? "This vessel does not have a configured working directory that exists on disk.",
                     vessel.WorkingDirectory);
             }
             else if (!LooksLikeGitWorkingTree(vessel.WorkingDirectory!))
@@ -106,7 +172,7 @@ namespace Armada.Core.Services
             }
             else
             {
-                await PopulateRepositoryStateAsync(result, vessel.WorkingDirectory!, vessel.DefaultBranch).ConfigureAwait(false);
+                await PopulateRepositoryStateAsync(result, new LocalHostCommandExecutor(), vessel.WorkingDirectory!, vessel.DefaultBranch).ConfigureAwait(false);
                 result.ToolchainProbes = DetectToolchains(vessel.WorkingDirectory!);
                 result.DetectedToolchains = result.ToolchainProbes
                     .Where(probe => probe.Available)
@@ -129,8 +195,12 @@ namespace Armada.Core.Services
 
             bool bareRepoExists = !String.IsNullOrWhiteSpace(vessel.LocalPath) && Directory.Exists(vessel.LocalPath);
             bool hasRepoUrl = !String.IsNullOrWhiteSpace(vessel.RepoUrl);
-            result.HasRepositoryContext = bareRepoExists || hasRepoUrl;
-            if (!bareRepoExists && !hasRepoUrl)
+            result.HasRepositoryContext = bareRepoExists || hasRepoUrl || harborHost != null;
+            if (harborHost != null)
+            {
+                // The repository is the Harbor's checkout; nothing on the Admiral host is needed.
+            }
+            else if (!bareRepoExists && !hasRepoUrl)
             {
                 AddIssue(
                     result,
@@ -271,7 +341,7 @@ namespace Armada.Core.Services
                 }
                 else
                 {
-                    foreach (string missingDependency in ProbeMissingCommandDependencies(command, vessel.WorkingDirectory, commandProbeCache))
+                    foreach (string missingDependency in await ProbeMissingCommandDependenciesAsync(command, vessel.WorkingDirectory, harborHost, commandProbeCache, token).ConfigureAwait(false))
                     {
                         AddIssue(
                             result,
@@ -287,7 +357,7 @@ namespace Armada.Core.Services
             {
                 foreach (string command in EnumerateConfiguredCommands(profile))
                 {
-                    foreach (string missingDependency in ProbeMissingCommandDependencies(command, vessel.WorkingDirectory, commandProbeCache))
+                    foreach (string missingDependency in await ProbeMissingCommandDependenciesAsync(command, vessel.WorkingDirectory, harborHost, commandProbeCache, token).ConfigureAwait(false))
                     {
                         AddIssue(
                             result,
@@ -607,22 +677,173 @@ namespace Armada.Core.Services
                 commands.Add(command.Trim());
         }
 
-        private static IEnumerable<string> ProbeMissingCommandDependencies(
+        private static async Task<List<string>> ProbeMissingCommandDependenciesAsync(
             string command,
             string? workingDirectory,
-            IDictionary<string, bool> commandProbeCache)
+            VesselHost? harborHost,
+            IDictionary<string, bool> commandProbeCache,
+            CancellationToken token)
         {
+            List<string> missing = new List<string>();
             foreach (string dependency in ExtractPrimaryDependencies(command))
             {
                 string cacheKey = dependency;
                 if (!commandProbeCache.TryGetValue(cacheKey, out bool available))
                 {
-                    available = IsDependencyAvailable(dependency, workingDirectory);
+                    available = harborHost != null
+                        ? await IsDependencyAvailableOnHostAsync(harborHost, dependency, token).ConfigureAwait(false)
+                        : IsDependencyAvailable(dependency, workingDirectory);
                     commandProbeCache[cacheKey] = available;
                 }
 
                 if (!available)
-                    yield return dependency;
+                    missing.Add(dependency);
+            }
+
+            return missing;
+        }
+
+        /// <summary>
+        /// Whether a command dependency exists on a Harbor: a relative path is looked up in the checkout, an absolute one
+        /// on the Harbor host, and a command name on the PATH of the Harbor user's login shell.
+        /// </summary>
+        private static async Task<bool> IsDependencyAvailableOnHostAsync(VesselHost host, string dependency, CancellationToken token)
+        {
+            if (String.IsNullOrWhiteSpace(dependency)) return true;
+
+            try
+            {
+                bool looksLikePath = dependency.Contains('/') || dependency.Contains('\\') || dependency.StartsWith(".");
+                if (looksLikePath && !Path.IsPathRooted(dependency) && !dependency.StartsWith("/", StringComparison.Ordinal))
+                {
+                    VesselCheckoutFileInfo info = await host.Files.StatAsync(dependency, token).ConfigureAwait(false);
+                    return info.Exists;
+                }
+
+                HostCommandResult result = await host.Commands.RunAsync(BuildHostProbe(host, looksLikePath ? "test -e \"$1\"" : "command -v \"$1\" >/dev/null 2>&1", dependency, looksLikePath), token).ConfigureAwait(false);
+                return result.Success;
+            }
+            catch (Exception ex) when (ex is InvalidOperationException || ex is UnauthorizedAccessException || ex is IOException)
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// A probe run through the host's login shell, with the probed name passed as an argument (never interpreted by the
+        /// shell): <c>/bin/sh -lc script sh name</c>, or <c>where name</c> / <c>if exist</c> on a Windows Harbor.
+        /// </summary>
+        private static HostCommandRequest BuildHostProbe(VesselHost host, string script, string argument, bool isPath)
+        {
+            if (host.IsWindows())
+            {
+                return new HostCommandRequest
+                {
+                    Executable = isPath ? "cmd.exe" : "where",
+                    WorkingDirectory = host.WorkingDirectory,
+                    Arguments = isPath ? new List<string> { "/c", "if", "exist", argument, "(exit 0)", "else", "(exit 1)" } : new List<string> { argument },
+                    TimeoutMs = 15000
+                };
+            }
+
+            return new HostCommandRequest
+            {
+                Executable = "/bin/sh",
+                WorkingDirectory = host.WorkingDirectory,
+                Arguments = new List<string> { "-lc", script, "sh", argument },
+                TimeoutMs = 15000
+            };
+        }
+
+        /// <summary>
+        /// Repository state, toolchains, and their versions for a checkout on a Harbor, probed on that Harbor.
+        /// </summary>
+        private async Task PopulateHarborCheckoutAsync(VesselReadinessResult result, VesselHost host, string? defaultBranch, CancellationToken token)
+        {
+            await PopulateRepositoryStateAsync(result, host.Commands, host.WorkingDirectory, defaultBranch).ConfigureAwait(false);
+
+            HashSet<string> rootFiles = new HashSet<string>(StringComparer.Ordinal);
+            try
+            {
+                WorkspaceTreeResult tree = await host.Files.GetTreeAsync(null, token).ConfigureAwait(false);
+                foreach (WorkspaceTreeEntry entry in tree.Entries)
+                {
+                    if (!entry.IsDirectory) rootFiles.Add(entry.Name);
+                }
+            }
+            catch (Exception ex) when (ex is InvalidOperationException || ex is UnauthorizedAccessException || ex is IOException)
+            {
+                _Logging.Debug("[VesselReadinessService] listing the checkout on " + host.HostLabel + " failed: " + ex.Message);
+            }
+
+            string? dotnetEvidence = null;
+            if (rootFiles.Contains("global.json")) dotnetEvidence = "global.json";
+            else dotnetEvidence = rootFiles.Where(name => name.EndsWith(".sln", StringComparison.OrdinalIgnoreCase)).OrderBy(name => name, StringComparer.Ordinal).FirstOrDefault();
+            if (dotnetEvidence == null)
+            {
+                try
+                {
+                    IReadOnlyList<string> projects = await host.Git.ListTrackedFilesAsync(host.WorkingDirectory, token).ConfigureAwait(false);
+                    dotnetEvidence = projects.FirstOrDefault(file => file.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase));
+                }
+                catch (Exception ex) when (ex is InvalidOperationException || ex is TimeoutException)
+                {
+                    _Logging.Debug("[VesselReadinessService] listing tracked files on " + host.HostLabel + " failed: " + ex.Message);
+                }
+            }
+
+            List<VesselToolchainProbe> probes = new List<VesselToolchainProbe>();
+            foreach (KeyValuePair<string, string> expected in ExpectedToolchains(name => rootFiles.Contains(name), dotnetEvidence))
+            {
+                VesselToolchainProbe probe = new VesselToolchainProbe { Name = expected.Key, Expected = true, Evidence = expected.Value };
+                await ProbeToolchainOnHostAsync(host, probe, token).ConfigureAwait(false);
+                probes.Add(probe);
+            }
+
+            result.ToolchainProbes = probes.OrderBy(probe => probe.Name, StringComparer.OrdinalIgnoreCase).ToList();
+            result.DetectedToolchains = result.ToolchainProbes
+                .Where(probe => probe.Available)
+                .Select(probe => probe.Name)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            foreach (VesselToolchainProbe probe in result.ToolchainProbes.Where(item => item.Expected && !item.Available))
+            {
+                AddIssue(
+                    result,
+                    "expected_toolchain_missing",
+                    ReadinessSeverityEnum.Warning,
+                    "Expected toolchain missing",
+                    "The repository appears to expect the '" + probe.Name + "' toolchain, but Armada could not find it on Harbor " + host.HarborName + ".",
+                    probe.Evidence ?? probe.Name);
+            }
+        }
+
+        private static async Task ProbeToolchainOnHostAsync(VesselHost host, VesselToolchainProbe probe, CancellationToken token)
+        {
+            try
+            {
+                HostCommandResult found = await host.Commands.RunAsync(BuildHostProbe(host, "command -v \"$1\" >/dev/null 2>&1", probe.Name, false), token).ConfigureAwait(false);
+                probe.Available = found.Success;
+                if (!probe.Available || !_VersionProbeArgs.TryGetValue(probe.Name, out string[]? args)) return;
+
+                HostCommandRequest version = host.IsWindows()
+                    ? new HostCommandRequest { Executable = probe.Name, WorkingDirectory = host.WorkingDirectory, Arguments = new List<string>(args), TimeoutMs = 15000 }
+                    : new HostCommandRequest { Executable = "/bin/sh", WorkingDirectory = host.WorkingDirectory, Arguments = new List<string> { "-lc", "\"$0\" \"$@\" 2>&1", probe.Name }, TimeoutMs = 15000 };
+                if (!host.IsWindows()) version.Arguments.AddRange(args);
+                HostCommandResult output = await host.Commands.RunAsync(version, token).ConfigureAwait(false);
+                string text = String.IsNullOrWhiteSpace(output.StandardOutput) ? output.StandardError : output.StandardOutput;
+                string line = text
+                    .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(item => item.Trim())
+                    .FirstOrDefault(item => !String.IsNullOrWhiteSpace(item))
+                    ?? String.Empty;
+                probe.Version = String.IsNullOrWhiteSpace(line) ? null : line;
+            }
+            catch (InvalidOperationException)
+            {
+                probe.Available = false;
             }
         }
 
@@ -720,11 +941,11 @@ namespace Armada.Core.Services
             return RuntimeDetectionService.IsCommandAvailable(dependency);
         }
 
-        private async Task PopulateRepositoryStateAsync(VesselReadinessResult result, string workingDirectory, string? defaultBranch)
+        private async Task PopulateRepositoryStateAsync(VesselReadinessResult result, IHostCommandExecutor commands, string workingDirectory, string? defaultBranch)
         {
             try
             {
-                string currentBranch = (await RunGitCommandAsync(workingDirectory, "rev-parse", "--abbrev-ref", "HEAD").ConfigureAwait(false)).Trim();
+                string currentBranch = (await RunGitCommandAsync(commands, workingDirectory, "rev-parse", "--abbrev-ref", "HEAD").ConfigureAwait(false)).Trim();
                 result.CurrentBranch = String.Equals(currentBranch, "HEAD", StringComparison.OrdinalIgnoreCase) ? null : currentBranch;
                 result.IsDetachedHead = String.Equals(currentBranch, "HEAD", StringComparison.OrdinalIgnoreCase);
                 if (result.IsDetachedHead == true)
@@ -745,7 +966,7 @@ namespace Armada.Core.Services
 
             try
             {
-                string statusOutput = await RunGitCommandAsync(workingDirectory, "status", "--porcelain").ConfigureAwait(false);
+                string statusOutput = await RunGitCommandAsync(commands, workingDirectory, "status", "--porcelain").ConfigureAwait(false);
                 result.HasUncommittedChanges = !String.IsNullOrWhiteSpace(statusOutput);
                 if (result.HasUncommittedChanges == true)
                 {
@@ -770,14 +991,14 @@ namespace Armada.Core.Services
             {
                 try
                 {
-                    await RunGitCommandAsync(workingDirectory, "fetch", "origin", "--quiet").ConfigureAwait(false);
+                    await RunGitCommandAsync(commands, workingDirectory, "fetch", "origin", "--quiet").ConfigureAwait(false);
                 }
                 catch
                 {
                 }
 
-                string aheadOutput = await RunGitCommandAsync(workingDirectory, "rev-list", "--count", "origin/" + defaultBranch + "..HEAD").ConfigureAwait(false);
-                string behindOutput = await RunGitCommandAsync(workingDirectory, "rev-list", "--count", "HEAD..origin/" + defaultBranch).ConfigureAwait(false);
+                string aheadOutput = await RunGitCommandAsync(commands, workingDirectory, "rev-list", "--count", "origin/" + defaultBranch + "..HEAD").ConfigureAwait(false);
+                string behindOutput = await RunGitCommandAsync(commands, workingDirectory, "rev-list", "--count", "HEAD..origin/" + defaultBranch).ConfigureAwait(false);
 
                 if (Int32.TryParse(aheadOutput.Trim(), out int ahead))
                     result.CommitsAhead = ahead;
@@ -793,65 +1014,43 @@ namespace Armada.Core.Services
         private static List<VesselToolchainProbe> DetectToolchains(string workingDirectory)
         {
             List<VesselToolchainProbe> results = new List<VesselToolchainProbe>();
+            string? dotnetEvidence = File.Exists(Path.Combine(workingDirectory, "global.json"))
+                ? "global.json"
+                : Directory.EnumerateFiles(workingDirectory, "*.sln", SearchOption.TopDirectoryOnly).FirstOrDefault()
+                    ?? Directory.EnumerateFiles(workingDirectory, "*.csproj", SearchOption.AllDirectories).FirstOrDefault();
 
-            AddToolchainProbeIfExpected(
-                results,
-                "dotnet",
-                File.Exists(Path.Combine(workingDirectory, "global.json"))
-                    ? "global.json"
-                    : Directory.EnumerateFiles(workingDirectory, "*.sln", SearchOption.TopDirectoryOnly).FirstOrDefault()
-                        ?? Directory.EnumerateFiles(workingDirectory, "*.csproj", SearchOption.AllDirectories).FirstOrDefault());
-
-            AddToolchainProbeIfExpected(
-                results,
-                "node",
-                File.Exists(Path.Combine(workingDirectory, "package.json")) ? "package.json" : null);
-            AddToolchainProbeIfExpected(
-                results,
-                "npm",
-                File.Exists(Path.Combine(workingDirectory, "package.json")) ? "package.json" : null);
-            AddToolchainProbeIfExpected(
-                results,
-                "pnpm",
-                File.Exists(Path.Combine(workingDirectory, "pnpm-lock.yaml")) ? "pnpm-lock.yaml" : null);
-            AddToolchainProbeIfExpected(
-                results,
-                "yarn",
-                File.Exists(Path.Combine(workingDirectory, "yarn.lock")) ? "yarn.lock" : null);
-            AddToolchainProbeIfExpected(
-                results,
-                "python",
-                File.Exists(Path.Combine(workingDirectory, "pyproject.toml"))
-                    ? "pyproject.toml"
-                    : File.Exists(Path.Combine(workingDirectory, "requirements.txt")) ? "requirements.txt" : null);
-            AddToolchainProbeIfExpected(
-                results,
-                "docker",
-                File.Exists(Path.Combine(workingDirectory, "Dockerfile")) ? "Dockerfile" : null);
-            AddToolchainProbeIfExpected(
-                results,
-                "cargo",
-                File.Exists(Path.Combine(workingDirectory, "Cargo.toml")) ? "Cargo.toml" : null);
-            AddToolchainProbeIfExpected(
-                results,
-                "go",
-                File.Exists(Path.Combine(workingDirectory, "go.mod")) ? "go.mod" : null);
-            AddToolchainProbeIfExpected(
-                results,
-                "java",
-                File.Exists(Path.Combine(workingDirectory, "pom.xml"))
-                    ? "pom.xml"
-                    : File.Exists(Path.Combine(workingDirectory, "build.gradle")) ? "build.gradle" : null);
-            AddToolchainProbeIfExpected(
-                results,
-                File.Exists(Path.Combine(workingDirectory, "pom.xml")) ? "mvn" : "gradle",
-                File.Exists(Path.Combine(workingDirectory, "pom.xml"))
-                    ? "pom.xml"
-                    : File.Exists(Path.Combine(workingDirectory, "build.gradle")) ? "build.gradle" : null);
+            foreach (KeyValuePair<string, string> expected in ExpectedToolchains(name => File.Exists(Path.Combine(workingDirectory, name)), dotnetEvidence))
+                AddToolchainProbeIfExpected(results, expected.Key, expected.Value);
 
             return results
                 .OrderBy(probe => probe.Name, StringComparer.OrdinalIgnoreCase)
                 .ToList();
+        }
+
+        /// <summary>
+        /// The toolchains a checkout appears to need, each with the file that says so, from which files are at its root.
+        /// </summary>
+        private static List<KeyValuePair<string, string>> ExpectedToolchains(Func<string, bool> rootFileExists, string? dotnetEvidence)
+        {
+            List<KeyValuePair<string, string>> expected = new List<KeyValuePair<string, string>>();
+            void Add(string name, string? evidence)
+            {
+                if (!String.IsNullOrWhiteSpace(evidence)) expected.Add(new KeyValuePair<string, string>(name, evidence!));
+            }
+
+            Add("dotnet", dotnetEvidence);
+            Add("node", rootFileExists("package.json") ? "package.json" : null);
+            Add("npm", rootFileExists("package.json") ? "package.json" : null);
+            Add("pnpm", rootFileExists("pnpm-lock.yaml") ? "pnpm-lock.yaml" : null);
+            Add("yarn", rootFileExists("yarn.lock") ? "yarn.lock" : null);
+            Add("python", rootFileExists("pyproject.toml") ? "pyproject.toml" : rootFileExists("requirements.txt") ? "requirements.txt" : null);
+            Add("docker", rootFileExists("Dockerfile") ? "Dockerfile" : null);
+            Add("cargo", rootFileExists("Cargo.toml") ? "Cargo.toml" : null);
+            Add("go", rootFileExists("go.mod") ? "go.mod" : null);
+            string? java = rootFileExists("pom.xml") ? "pom.xml" : rootFileExists("build.gradle") ? "build.gradle" : null;
+            Add("java", java);
+            Add(rootFileExists("pom.xml") ? "mvn" : "gradle", java);
+            return expected;
         }
 
         private static void AddToolchainProbeIfExpected(List<VesselToolchainProbe> probes, string toolchainName, string? evidence)
@@ -1076,31 +1275,18 @@ namespace Armada.Core.Services
             };
         }
 
-        private static async Task<string> RunGitCommandAsync(string workingDirectory, params string[] args)
+        private static async Task<string> RunGitCommandAsync(IHostCommandExecutor commands, string workingDirectory, params string[] args)
         {
-            ProcessStartInfo startInfo = new ProcessStartInfo("git")
+            HostCommandResult result = await commands.RunAsync(new HostCommandRequest
             {
+                Executable = "git",
                 WorkingDirectory = workingDirectory,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-            GitProcessEnvironment.Apply(startInfo);
-
-            foreach (string arg in args)
-            {
-                startInfo.ArgumentList.Add(arg);
-            }
-
-            using Process process = Process.Start(startInfo)
-                ?? throw new InvalidOperationException("Failed to start git.");
-            string output = await process.StandardOutput.ReadToEndAsync().ConfigureAwait(false);
-            string error = await process.StandardError.ReadToEndAsync().ConfigureAwait(false);
-            await process.WaitForExitAsync().ConfigureAwait(false);
-            if (process.ExitCode != 0)
-                throw new InvalidOperationException(String.IsNullOrWhiteSpace(error) ? "git failed." : error.Trim());
-            return output;
+                Arguments = new List<string>(args),
+                TimeoutMs = 60000
+            }).ConfigureAwait(false);
+            if (!result.Success)
+                throw new InvalidOperationException(String.IsNullOrWhiteSpace(result.StandardError) ? "git failed." : result.StandardError.Trim());
+            return result.StandardOutput;
         }
 
         private sealed class InputReferenceResolutionResult

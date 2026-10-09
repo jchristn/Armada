@@ -3,6 +3,7 @@ namespace Armada.Core.Services.Health
     using System;
     using System.Collections.Generic;
     using Armada.Core.Models;
+    using Armada.Core.Services;
     using Armada.Core.Services.Interfaces;
     using Armada.Core.Settings;
 
@@ -70,9 +71,19 @@ namespace Armada.Core.Services.Health
         public List<string> ExcludedDirectoryNames { get; }
 
         /// <summary>
-        /// Git service. Never null.
+        /// Git service for the host the evaluated path is on (a Harbor's when the checkout is on a Harbor). Never null.
         /// </summary>
-        public IGitService Git { get; }
+        public IGitService Git
+        {
+            get => _Git;
+            set => _Git = value ?? throw new ArgumentNullException(nameof(value));
+        }
+
+        /// <summary>
+        /// The Harbor host of the evaluated checkout, or null when the evaluated path is on the Admiral host. When set,
+        /// <see cref="Git"/> and dependency tools run on that Harbor.
+        /// </summary>
+        public VesselHost? Host { get; set; } = null;
 
         /// <summary>
         /// The health row being built by this evaluation. Criteria write their measured columns here. Never null.
@@ -106,6 +117,12 @@ namespace Armada.Core.Services.Health
 
         #endregion
 
+        #region Private-Members
+
+        private IGitService _Git;
+
+        #endregion
+
         #region Constructors-and-Factories
 
         /// <summary>
@@ -123,7 +140,7 @@ namespace Armada.Core.Services.Health
             if (String.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
             TenantId = tenantId;
             Settings = settings ?? throw new ArgumentNullException(nameof(settings));
-            Git = git ?? throw new ArgumentNullException(nameof(git));
+            _Git = git ?? throw new ArgumentNullException(nameof(git));
             ExcludedDirectoryNames = excludedDirectoryNames == null ? new List<string>() : new List<string>(excludedDirectoryNames);
             Health = new VesselHealth();
             Health.TenantId = tenantId;

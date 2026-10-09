@@ -14,9 +14,31 @@ namespace Armada.Core.Models
         public string VesselId { get; set; } = string.Empty;
 
         /// <summary>
-        /// Whether the vessel has a usable working directory on disk.
+        /// Whether the vessel has a usable checkout: its working directory on the Admiral host, or a checkout on a
+        /// connected Harbor that can serve it.
         /// </summary>
         public bool HasWorkingDirectory { get; set; }
+
+        /// <summary>
+        /// Where checks, Workspace, and readiness probes run: the working directory on the Admiral host, or the checkout's
+        /// path on <see cref="HarborId"/>. Null when there is none.
+        /// </summary>
+        public string? CheckoutPath { get; set; } = null;
+
+        /// <summary>
+        /// The Harbor that has the checkout, or null for the Admiral host (or when there is none).
+        /// </summary>
+        public string? HarborId { get; set; } = null;
+
+        /// <summary>
+        /// The Harbor as people know it ("Name (hbr_...)"), or null.
+        /// </summary>
+        public string? HarborName { get; set; } = null;
+
+        /// <summary>
+        /// Why there is no checkout Armada can use, or null when there is one (or when Harbors were not considered).
+        /// </summary>
+        public VesselCheckoutErrorCodeEnum? CheckoutErrorCode { get; set; } = null;
 
         /// <summary>
         /// Whether Armada has a usable bare repository path or can recover it from RepoUrl.

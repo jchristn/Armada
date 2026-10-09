@@ -11,7 +11,10 @@ namespace Armada.Core.Services
     using SyslogLogging;
 
     /// <summary>
-    /// Executes structured check runs using workflow profiles and persists the results.
+    /// Executes structured check runs using workflow profiles and persists the results. A run executes where the vessel's
+    /// checkout lives (see <see cref="VesselHostResolver"/>): in its working directory on the Admiral host, or, when the
+    /// Admiral has none, in the checkout of a connected Harbor that can serve the vessel, with the command, its output,
+    /// and the expected artifacts carried over the Harbor's link.
     /// </summary>
     public class CheckRunService
     {
@@ -20,12 +23,18 @@ namespace Armada.Core.Services
         /// </summary>
         public Action<CheckRun>? OnCheckRunChanged { get; set; }
 
+        /// <summary>
+        /// Finds where a vessel's checkout lives. When null, runs use the working directory on the Admiral host only.
+        /// </summary>
+        public VesselHostResolver? Hosts { get; set; } = null;
+
         private readonly string _Header = "[CheckRunService] ";
         private readonly DatabaseDriver _Database;
         private readonly WorkflowProfileService _WorkflowProfiles;
         private readonly VesselReadinessService _Readiness;
         private readonly LoggingModule _Logging;
         private readonly TimeSpan _DefaultTimeout = TimeSpan.FromMinutes(30);
+        private const long _MaxArtifactCopyBytes = 16L * 1024L * 1024L;
 
         /// <summary>
         /// Instantiate.
@@ -54,9 +63,16 @@ namespace Armada.Core.Services
             Vessel vessel = await ReadAccessibleVesselAsync(auth, request.VesselId, token).ConfigureAwait(false)
                 ?? throw new KeyNotFoundException("Vessel not found or not accessible.");
 
+            // Where the checkout is: the Admiral host, or a connected Harbor. Throws VesselCheckoutUnavailableException,
+            // whose message says what to set, when there is none.
+            VesselHost host = Hosts != null
+                ? await Hosts.ResolveAsync(vessel, auth.UserId, token).ConfigureAwait(false)
+                : VesselHostResolver.LocalOrThrow(vessel, _Logging);
+
             VesselReadinessResult readiness = await _Readiness.EvaluateAsync(
                 auth,
                 vessel,
+                host,
                 request.WorkflowProfileId,
                 String.IsNullOrWhiteSpace(request.CommandOverride) ? request.Type : null,
                 request.EnvironmentName,
@@ -72,9 +88,6 @@ namespace Armada.Core.Services
                     ? "This vessel is not ready for the requested check run."
                     : message);
             }
-
-            if (String.IsNullOrWhiteSpace(vessel.WorkingDirectory) || !Directory.Exists(vessel.WorkingDirectory))
-                throw new InvalidOperationException("This vessel does not have a usable working directory.");
 
             WorkflowProfile? profile = await _WorkflowProfiles.ResolveForVesselAsync(auth, vessel, request.WorkflowProfileId, token).ConfigureAwait(false);
             if (profile == null && String.IsNullOrWhiteSpace(request.CommandOverride))
@@ -100,7 +113,7 @@ namespace Armada.Core.Services
                 Status = CheckRunStatusEnum.Running,
                 EnvironmentName = request.EnvironmentName,
                 Command = command,
-                WorkingDirectory = vessel.WorkingDirectory,
+                WorkingDirectory = host.WorkingDirectory,
                 BranchName = request.BranchName,
                 CommitHash = request.CommitHash,
                 StartedUtc = DateTime.UtcNow,
@@ -116,6 +129,7 @@ namespace Armada.Core.Services
                 Source = "CheckRun",
                 Command = command,
                 WorkingDirectory = run.WorkingDirectory,
+                Host = host.HostLabel,
                 TenantId = run.TenantId,
                 UserId = run.UserId,
                 VesselId = run.VesselId,
@@ -128,7 +142,9 @@ namespace Armada.Core.Services
 
             try
             {
-                execution = await ExecuteCommandAsync(run.Command, run.WorkingDirectory!, _DefaultTimeout, token).ConfigureAwait(false);
+                execution = host.IsHarbor
+                    ? await ExecuteOnHostAsync(host, run.Command, _DefaultTimeout, token).ConfigureAwait(false)
+                    : await ExecuteCommandAsync(run.Command, run.WorkingDirectory!, _DefaultTimeout, token).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -147,9 +163,17 @@ namespace Armada.Core.Services
             run.CompletedUtc = DateTime.UtcNow;
             run.LastUpdateUtc = DateTime.UtcNow;
             run.Status = execution.ExitCode == 0 ? CheckRunStatusEnum.Passed : CheckRunStatusEnum.Failed;
-            run.Artifacts = CollectArtifacts(run.WorkingDirectory!, profile?.ExpectedArtifacts);
-            run.TestSummary = CheckRunParsingService.ParseTestSummary(run.Output, run.WorkingDirectory, run.Artifacts);
-            run.CoverageSummary = CheckRunParsingService.ParseCoverageSummary(run.WorkingDirectory, run.Artifacts);
+            if (host.IsHarbor)
+            {
+                await ParseHarborResultsAsync(host, run, profile?.ExpectedArtifacts, token).ConfigureAwait(false);
+            }
+            else
+            {
+                run.Artifacts = CollectArtifacts(run.WorkingDirectory!, profile?.ExpectedArtifacts);
+                run.TestSummary = CheckRunParsingService.ParseTestSummary(run.Output, run.WorkingDirectory, run.Artifacts);
+                run.CoverageSummary = CheckRunParsingService.ParseCoverageSummary(run.WorkingDirectory, run.Artifacts);
+            }
+
             run.Summary = BuildSummary(run, profile);
 
             run = await _Database.CheckRuns.UpdateAsync(run, token).ConfigureAwait(false);
@@ -438,6 +462,81 @@ namespace Armada.Core.Services
                 ExitCode = process.ExitCode,
                 Output = output
             };
+        }
+
+        /// <summary>
+        /// Run the check command through the host's login shell in the checkout (a Harbor, over its link).
+        /// </summary>
+        private async Task<CommandExecutionResult> ExecuteOnHostAsync(VesselHost host, string command, TimeSpan timeout, CancellationToken token)
+        {
+            int timeoutMs = Convert.ToInt32(Math.Min(timeout.TotalMilliseconds, Int32.MaxValue));
+            HostCommandResult result = await host.Commands.RunAsync(host.BuildShellCommand(command, timeoutMs, true), token).ConfigureAwait(false);
+            if (result.TimedOut)
+                throw new TimeoutException("Check command timed out after " + timeout.TotalMinutes.ToString("0") + " minutes on " + host.HostLabel + ".");
+
+            _Logging.Debug(_Header + "command on " + host.HostLabel + " exited with code " + result.ExitCode + ": " + FirstNonEmptyLine(result.StandardError, result.StandardOutput));
+            return new CommandExecutionResult
+            {
+                ExitCode = result.ExitCode,
+                Output = CombineOutput(result.StandardOutput, result.StandardError)
+            };
+        }
+
+        /// <summary>
+        /// Collect the expected artifacts from the checkout on a Harbor and parse test and coverage results from them: the
+        /// artifacts are stat'ed on the Harbor, copied (up to 16 MB each) into a temporary folder here, and parsed exactly as
+        /// artifacts on the Admiral host are.
+        /// </summary>
+        private async Task ParseHarborResultsAsync(VesselHost host, CheckRun run, List<string>? expectedArtifacts, CancellationToken token)
+        {
+            List<CheckRunArtifact> artifacts = new List<CheckRunArtifact>();
+            string copyRoot = Path.Combine(Path.GetTempPath(), "armada-check-" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                foreach (string relativePath in (expectedArtifacts ?? new List<string>()).Where(path => !String.IsNullOrWhiteSpace(path)))
+                {
+                    try
+                    {
+                        VesselCheckoutFileInfo info = await host.Files.StatAsync(relativePath, token).ConfigureAwait(false);
+                        if (!info.Exists || info.IsDirectory) continue;
+                        string normalized = relativePath.Replace('\\', '/');
+                        artifacts.Add(new CheckRunArtifact
+                        {
+                            Path = normalized,
+                            SizeBytes = info.SizeBytes ?? 0,
+                            LastWriteUtc = info.LastWriteUtc ?? DateTime.UtcNow
+                        });
+
+                        if ((info.SizeBytes ?? 0) > _MaxArtifactCopyBytes) continue;
+                        string? text = await host.Files.ReadTextAsync(normalized, _MaxArtifactCopyBytes, token).ConfigureAwait(false);
+                        if (text == null) continue;
+                        string local = Path.GetFullPath(Path.Combine(copyRoot, normalized.Replace('/', Path.DirectorySeparatorChar)));
+                        if (!PathContainment.IsInside(copyRoot, local)) continue;
+                        Directory.CreateDirectory(Path.GetDirectoryName(local)!);
+                        await File.WriteAllTextAsync(local, text, token).ConfigureAwait(false);
+                    }
+                    catch (Exception ex) when (ex is UnauthorizedAccessException || ex is IOException || ex is InvalidOperationException)
+                    {
+                        _Logging.Debug(_Header + "artifact " + relativePath + " on " + host.HostLabel + " skipped: " + ex.Message);
+                    }
+                }
+
+                run.Artifacts = artifacts;
+                string? parseRoot = Directory.Exists(copyRoot) ? copyRoot : null;
+                run.TestSummary = CheckRunParsingService.ParseTestSummary(run.Output, parseRoot, run.Artifacts);
+                run.CoverageSummary = CheckRunParsingService.ParseCoverageSummary(parseRoot, run.Artifacts);
+            }
+            finally
+            {
+                try
+                {
+                    if (Directory.Exists(copyRoot)) Directory.Delete(copyRoot, true);
+                }
+                catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+                {
+                    _Logging.Debug(_Header + "could not delete " + copyRoot + ": " + ex.Message);
+                }
+            }
         }
 
         private static string CombineOutput(string stdout, string stderr)

@@ -93,6 +93,13 @@ namespace Armada.Core.Services
         /// </summary>
         public bool KeepWorkingDirectory { get; set; } = false;
 
+        /// <summary>
+        /// Finds a vessel's checkout on a connected Harbor when it is not on this machine, so the manifest still lists the
+        /// repository's top-level manifests and README excerpt (read over the Harbor's link). When null, only this
+        /// machine's paths are read.
+        /// </summary>
+        public VesselHostResolver? Hosts { get; set; } = null;
+
         #endregion
 
         #region Private-Members
@@ -384,20 +391,40 @@ namespace Armada.Core.Services
                 string? path = !String.IsNullOrWhiteSpace(vessel.WorkingDirectory) ? vessel.WorkingDirectory : vessel.LocalPath;
                 bool exists = !String.IsNullOrWhiteSpace(path) && Directory.Exists(path);
 
+                // Not on this machine: a connected Harbor may have the checkout (split mode); read its manifests there.
+                VesselHost? harborHost = null;
+                if (!exists && Hosts != null)
+                {
+                    try
+                    {
+                        VesselHostResolution resolution = await Hosts.TryResolveAsync(vessel, vessel.UserId, token).ConfigureAwait(false);
+                        if (resolution.Host != null && resolution.Host.IsHarbor) harborHost = resolution.Host;
+                    }
+                    catch (Exception ex) when (!(ex is OperationCanceledException))
+                    {
+                        _Logging.Debug(_Header + "could not look for a Harbor checkout of " + vessel.Id + ": " + ex.Message);
+                    }
+                }
+
                 sb.AppendLine("## " + OneLine(vessel.Name));
                 sb.AppendLine();
                 sb.AppendLine("- Vessel ID: " + vessel.Id);
-                sb.AppendLine("- Path: " + (String.IsNullOrWhiteSpace(path) ? "(no local path)" : path) + (exists || String.IsNullOrWhiteSpace(path) ? "" : " (not found on this machine)"));
+                if (harborHost != null)
+                    sb.AppendLine("- Path: " + harborHost.WorkingDirectory + " (on Harbor " + OneLine(harborHost.HarborName ?? "") + ", not on this machine; the manifests and README below were read there)");
+                else
+                    sb.AppendLine("- Path: " + (String.IsNullOrWhiteSpace(path) ? "(no local path)" : path) + (exists || String.IsNullOrWhiteSpace(path) ? "" : " (not found on this machine)"));
                 sb.AppendLine("- Remote URL: " + (String.IsNullOrWhiteSpace(vessel.RepoUrl) ? "(none)" : OneLine(vessel.RepoUrl!)));
                 sb.AppendLine("- Default branch: " + OneLine(vessel.DefaultBranch));
 
-                List<string> manifests = exists ? DetectManifests(path!) : new List<string>();
+                List<string> rootFiles = new List<string>();
+                if (harborHost != null) rootFiles = await ListRootFilesAsync(harborHost, token).ConfigureAwait(false);
+                List<string> manifests = exists ? DetectManifests(path!) : FilterManifests(rootFiles);
                 List<string> languages = DetectLanguages(manifests);
                 sb.AppendLine("- Detected languages: " + (languages.Count > 0 ? String.Join(", ", languages) : "(unknown)"));
                 sb.AppendLine("- Top-level manifests: " + (manifests.Count > 0 ? String.Join(", ", manifests) : "(none found)"));
                 sb.AppendLine();
 
-                string? readme = exists ? ReadReadmeHead(path!) : null;
+                string? readme = exists ? ReadReadmeHead(path!) : (harborHost != null ? await ReadHarborReadmeHeadAsync(harborHost, rootFiles, token).ConfigureAwait(false) : null);
                 if (!String.IsNullOrWhiteSpace(readme))
                 {
                     sb.AppendLine("README (first " + _ReadmeLineLimit + " lines):");
@@ -1028,21 +1055,65 @@ namespace Armada.Core.Services
 
         private static List<string> DetectManifests(string path)
         {
-            List<string> found = new List<string>();
             try
             {
-                foreach (string file in Directory.EnumerateFiles(path).Select(Path.GetFileName).Where(n => !String.IsNullOrEmpty(n)).Select(n => n!).OrderBy(n => n, StringComparer.OrdinalIgnoreCase))
-                {
-                    if (_ManifestLanguages.ContainsKey(file) || _ManifestExtensions.ContainsKey(Path.GetExtension(file))) found.Add(file);
-                    if (found.Count >= 25) break;
-                }
+                return FilterManifests(Directory.EnumerateFiles(path).Select(Path.GetFileName).Where(n => !String.IsNullOrEmpty(n)).Select(n => n!));
             }
             catch (Exception)
             {
                 // Unreadable directories simply report no manifests.
+                return new List<string>();
+            }
+        }
+
+        private static List<string> FilterManifests(IEnumerable<string> fileNames)
+        {
+            List<string> found = new List<string>();
+            foreach (string file in fileNames.OrderBy(n => n, StringComparer.OrdinalIgnoreCase))
+            {
+                if (_ManifestLanguages.ContainsKey(file) || _ManifestExtensions.ContainsKey(Path.GetExtension(file))) found.Add(file);
+                if (found.Count >= 25) break;
             }
 
             return found;
+        }
+
+        private async Task<List<string>> ListRootFilesAsync(VesselHost host, CancellationToken token)
+        {
+            try
+            {
+                WorkspaceTreeResult tree = await host.Files.GetTreeAsync(null, token).ConfigureAwait(false);
+                return tree.Entries.Where(e => !e.IsDirectory).Select(e => e.Name).ToList();
+            }
+            catch (Exception ex) when (ex is InvalidOperationException || ex is UnauthorizedAccessException || ex is IOException)
+            {
+                _Logging.Debug(_Header + "could not list the checkout on " + host.HostLabel + ": " + ex.Message);
+                return new List<string>();
+            }
+        }
+
+        private async Task<string?> ReadHarborReadmeHeadAsync(VesselHost host, List<string> rootFiles, CancellationToken token)
+        {
+            if (_ReadmeLineLimit == 0) return null;
+            string? name = _ReadmeNames.FirstOrDefault(n => rootFiles.Contains(n))
+                ?? rootFiles.FirstOrDefault(f => f.StartsWith("readme", StringComparison.OrdinalIgnoreCase));
+            if (name == null) return null;
+
+            try
+            {
+                string? text = await host.Files.ReadTextAsync(name, 1024 * 1024, token).ConfigureAwait(false);
+                if (text == null) return null;
+                List<string> lines = text.Replace("\r\n", "\n").Split('\n')
+                    .Take(_ReadmeLineLimit)
+                    .Select(line => Truncate(line.Replace("````", "'''"), 400))
+                    .ToList();
+                return String.Join("\n", lines).TrimEnd();
+            }
+            catch (Exception ex) when (ex is InvalidOperationException || ex is UnauthorizedAccessException || ex is IOException)
+            {
+                _Logging.Debug(_Header + "could not read " + name + " on " + host.HostLabel + ": " + ex.Message);
+                return null;
+            }
         }
 
         private static List<string> DetectLanguages(List<string> manifests)

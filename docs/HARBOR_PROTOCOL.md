@@ -56,7 +56,7 @@ Server to Harbor:
 | `kill` | `HarborKillRequest` | terminate a captain (graceful window, then kill tree) |
 | `git` | `HarborGitRequest` | run a git/gh command in a working directory |
 | `dock` | `HarborDockRequest` | resolve a vessel's repository on the Harbor host, or create or remove a mission dock there |
-| `file` | `HarborFileRequest` | stat, read, or write a file in one of the Harbor's docks, or add a git exclude entry |
+| `file` | `HarborFileRequest` | stat, read, or write a file in one of the Harbor's docks, or add a git exclude entry; with a `root`, list, read, save, create, rename, delete, or search in a vessel's checkout |
 | `deferredLaunch` | `HarborDeferredLaunchRequest` | arm a one-shot cutover: after the Admiral exits, launch a new slot, health-check it, and roll back on failure |
 | `heartbeatAck` | `HarborHeartbeatAck` | acknowledge a heartbeat that carries a `sequence`, so the Harbor can time the link's round trip |
 
@@ -166,7 +166,10 @@ Harbor  -> gitResult { requestId, exitCode, standardOutput, standardError, timed
 
 `timeoutMs` (the Harbor stops the command after it; 0 or absent means the Harbor's default of 120 seconds) and
 `timedOut` are additive. A command that cannot start on the Harbor (a working directory that does not exist there, a
-missing executable) is answered with a failed `gitResult` (`exitCode` -1, the reason in `standardError`).
+missing executable) is answered with a failed `gitResult` (`exitCode` -1, the reason in `standardError`). The Harbor runs
+each `git` request off its receive loop, so a long command (a check run or a build) does not hold up launches, dock and
+file requests, or heartbeat acknowledgements; requests with the same working directory still run one at a time, in the
+order they arrived. Commands still running when the link closes are stopped.
 
 Harbor-side mission docks (only with a Harbor that advertises the `harbor-docks` capability):
 
@@ -192,6 +195,32 @@ file of the repository the dock belongs to. After `Provision` the Admiral sends 
 Harbor's paths) for everything else it does with the dock, and `launch` with the dock as the working directory. These
 messages are additive: the Admiral sends them only to a Harbor that advertised `harbor-docks`, so the protocol version
 stays `1.0`.
+
+Operations in a vessel's checkout (only with a Harbor that advertises the `harbor-checkouts` capability, which a Harbor
+with `harbor-docks` from this release advertises too):
+
+```
+Admiral -> file       { requestId, operation, root, path, vesselId, vesselName, repoUrl,
+                        content, newPath, expectedHash, query, maxResults, maxBytes }
+Harbor  -> fileResult { requestId, success, errorCode, exists, isDirectory, sizeBytes, lastWriteUtc, truncated,
+                        content, tree, file, saved, entry, search, message }
+```
+
+The Admiral uses these when the vessel has no working directory on its own host and a Harbor's `Resolve` reported a
+checkout (`Mapped` or `Discovered`) for it: check runs, Workspace, readiness, health, and the vessel branch views (see
+[HARBOR.md](HARBOR.md#checkouts-outside-missions)). Commands in the checkout (the check command, Workspace exec, git)
+are ordinary `git` requests with the checkout as the working directory.
+
+| Field | Meaning |
+|---|---|
+| `root` | The checkout (or a dock) the request is confined to, as an absolute path on the Harbor host. The Harbor accepts it only when it is inside its docks folder or is the checkout it maps the request's vessel to (it locates the vessel itself from `vesselId`, `vesselName`, and `repoUrl`, as for `Resolve`); any other root is refused. |
+| `path` | Relative to `root`; empty for the root itself. An absolute path, a path that leaves the root, a path through a symbolic link or junction, and `.git` are refused. |
+| `operation` | `Stat` and `Read` (root-relative; build output folders allowed; `Read` returns no content and `truncated: true` past `maxBytes`, default 8 MB), and the Workspace operations `List`, `ReadFile`, `SaveFile` (`content`, `expectedHash`), `CreateDirectory`, `Rename` (`newPath`), `Delete`, and `Search` (`query`, `maxResults`), which also hide `node_modules`, `bin`, `obj`, `dist`, and `coverage` as Workspace does on the Admiral. |
+| `tree`, `file`, `saved`, `entry`, `search` | The Workspace result of `List`, `ReadFile`, `SaveFile`, `CreateDirectory`/`Rename`/`Delete`, and `Search`: the same shapes as the REST Workspace routes. |
+| `errorCode` | Why a request failed: `Refused` (a path or root that is not allowed), `NotFound`, `Conflict` (the file changed after it was opened), `Invalid` (for example a directory where a file was expected), or `Failed`; `None` on success. The Admiral raises the same error the failure has on its own disk, so REST and MCP report it the same way. Dock file requests (without `root`) carry it too. |
+
+These fields and operations are additive: the Admiral sends them only to a Harbor that advertised `harbor-checkouts`,
+so the protocol version stays `1.0`.
 
 Delegate a rebuild cutover (health-gated rollback):
 

@@ -51,8 +51,18 @@ namespace Armada.Core.Models
         public List<WorkspaceActiveMission> ActiveMissions { get; set; } = new List<WorkspaceActiveMission>();
 
         /// <summary>
-        /// Optional status error when repository inspection fails.
+        /// Optional status error when repository inspection fails, or why the vessel has no checkout Armada can use.
         /// </summary>
         public string? Error { get; set; }
+
+        /// <summary>
+        /// The Harbor that has the checkout Workspace works in, or null for the Admiral host.
+        /// </summary>
+        public string? HarborId { get; set; }
+
+        /// <summary>
+        /// Where the checkout is: "Admiral", or "Harbor Name (hbr_...)".
+        /// </summary>
+        public string Host { get; set; } = "Admiral";
     }
 }

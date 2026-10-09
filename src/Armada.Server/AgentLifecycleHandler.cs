@@ -226,22 +226,45 @@ namespace Armada.Server
             if (captain == null) throw new ArgumentNullException(nameof(captain));
             if (vessel == null) throw new ArgumentNullException(nameof(vessel));
 
+            DockPlacementRequest request = new DockPlacementRequest(captain, vessel)
+            {
+                Purpose = "mission " + mission.Id,
+                TenantId = mission.TenantId,
+                UserId = mission.UserId,
+                BranchName = mission.BranchName,
+                BranchHarborId = await FindBranchHarborAsync(mission, vessel).ConfigureAwait(false)
+            };
+            return await ResolveDockPlacementAsync(request).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Choose where a dock is created for any captain work on a vessel (a mission, a planning session, or a Model
+        /// Context build), by the same rules as <see cref="ResolveDockPlacementAsync(Mission, Captain, Vessel)"/>.
+        /// </summary>
+        /// <param name="request">What the dock is for.</param>
+        /// <returns>The placement.</returns>
+        public async Task<DockPlacement> ResolveDockPlacementAsync(DockPlacementRequest request)
+        {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            Captain captain = request.Captain;
+            Vessel vessel = request.Vessel;
+
             HarborConnectionManager? harbors = _HarborConnections;
-            string? branchHarborId = await FindBranchHarborAsync(mission, vessel).ConfigureAwait(false);
+            string? branchHarborId = request.BranchHarborId;
             if (harbors == null || !harbors.HasConnectedHarbor())
             {
                 if (branchHarborId != null)
-                    return DockPlacement.WaitFor("its branch " + mission.BranchName + " is in the repository on Harbor " + branchHarborId + ", which is not connected; the mission runs when that Harbor reconnects");
+                    return DockPlacement.WaitFor("its branch " + request.BranchName + " is in the repository on Harbor " + branchHarborId + ", which is not connected; the work runs when that Harbor reconnects");
                 if (_Settings.RequireHarborForLaunch)
                     return DockPlacement.WaitFor("requireHarborForLaunch is on and no Harbor is connected");
                 return DockPlacement.OnAdmiral("no Harbor is connected");
             }
 
             CaptainLaunchRouter router = new CaptainLaunchRouter(_Settings, _RuntimeFactory, harbors, _EndpointResolver, _Logging);
-            CaptainLaunchContext context = new CaptainLaunchContext(captain, "mission " + mission.Id)
+            CaptainLaunchContext context = new CaptainLaunchContext(captain, request.Purpose)
             {
-                TenantId = mission.TenantId,
-                UserId = mission.UserId,
+                TenantId = request.TenantId,
+                UserId = request.UserId,
                 Vessel = vessel,
                 PinnedHarborId = branchHarborId,
                 AllowScratchWorkingDirectory = false
@@ -288,7 +311,7 @@ namespace Armada.Server
                     string source = resolved.Source == Armada.Core.Harbor.HarborRepositorySourceEnum.Clone
                         ? "its own clone " + resolved.RepositoryPath
                         : "checkout " + resolved.CheckoutPath;
-                    _Logging.Info(_Header + "mission " + mission.Id + " dock goes on Harbor " + harbor + ", which serves vessel " + vessel.Name + " from " + source + " (" + decision.Reason + ")");
+                    _Logging.Info(_Header + request.Purpose + " dock goes on Harbor " + harbor + ", which serves vessel " + vessel.Name + " from " + source + " (" + decision.Reason + ")");
                     return DockPlacement.OnHarbor(harborId, "Harbor " + harbor + " serves vessel " + vessel.Name + " from " + source);
                 }
 
@@ -297,7 +320,7 @@ namespace Armada.Server
 
             string why = refusals.Count > 0 ? String.Join("; ", refusals) : decision.Reason;
             if (branchHarborId != null)
-                return DockPlacement.WaitFor("its branch " + mission.BranchName + " is in the repository on Harbor " + harbors.Describe(branchHarborId) + ", which cannot take it now (" + why + ")");
+                return DockPlacement.WaitFor("its branch " + request.BranchName + " is in the repository on Harbor " + harbors.Describe(branchHarborId) + ", which cannot take it now (" + why + ")");
 
             if (olderHarborId != null && refusals.Count == 1)
                 return DockPlacement.OnAdmiral(why + "; the dock is created on the Admiral host");
@@ -306,7 +329,7 @@ namespace Armada.Server
                 return DockPlacement.WaitFor("requireHarborForLaunch is on and no connected Harbor can serve vessel " + vessel.Name + " (" + why + ")");
 
             if (refusals.Count > 0)
-                _Logging.Warn(_Header + "mission " + mission.Id + " dock goes on the Admiral host because no connected Harbor can serve vessel " + vessel.Name + ": " + why);
+                _Logging.Warn(_Header + request.Purpose + " dock goes on the Admiral host because no connected Harbor can serve vessel " + vessel.Name + ": " + why);
             return DockPlacement.OnAdmiral(why);
         }
 

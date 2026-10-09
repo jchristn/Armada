@@ -13,7 +13,8 @@ namespace Armada.Core.Services
     /// The Harbor side of Harbor-hosted mission docks. Resolves a vessel to a repository on this machine (a checkout named
     /// in the Harbor's settings, a checkout discovered under its root folders, or the Harbor's own bare clone), creates
     /// mission docks as git worktrees of that repository under the Harbor's docks directory, removes them, and reads and
-    /// writes files inside them for the Admiral.
+    /// writes files inside them for the Admiral. It also serves file operations in a vessel's checkout (Workspace, check-run
+    /// artifacts, readiness), confined to the checkout this Harbor maps the vessel to or to its docks directory.
     /// A dock made from the user's checkout never touches the checkout's working tree, index, or current branch: the
     /// checkout is only fetched (remote-tracking refs), and the mission branch and worktree are added to it.
     /// </summary>
@@ -29,6 +30,10 @@ namespace Armada.Core.Services
         private readonly IHostCommandExecutor _Commands;
         private readonly HarborRepositoryLocator _Locator;
         private readonly GitService _Git;
+        private readonly Dictionary<string, CachedCheckout> _CheckoutCache = new Dictionary<string, CachedCheckout>(StringComparer.Ordinal);
+        private readonly object _CheckoutCacheLock = new object();
+        private static readonly TimeSpan _CheckoutCacheTtl = TimeSpan.FromSeconds(15);
+        private const long _DefaultReadMaxBytes = 8L * 1024L * 1024L;
 
         #endregion
 
@@ -113,9 +118,16 @@ namespace Armada.Core.Services
             try
             {
                 HarborDockSettings settings = CurrentSettings();
+                if (!String.IsNullOrWhiteSpace(request.Root))
+                {
+                    await HandleCheckoutFileAsync(settings, request, result, token).ConfigureAwait(false);
+                    return result;
+                }
+
                 string path = request.Path ?? String.Empty;
                 if (!Path.IsPathFullyQualified(path) || !HarborDockSettings.IsSameOrUnder(path, settings.DocksDirectory))
                 {
+                    result.ErrorCode = HarborFileErrorCodeEnum.Refused;
                     result.Message = "refused: " + path + " is not inside the Harbor's docks folder (" + settings.DocksDirectory + ")";
                     return result;
                 }
@@ -144,7 +156,8 @@ namespace Armada.Core.Services
                         result.Success = true;
                         break;
                     default:
-                        result.Message = "unknown file operation " + request.Operation;
+                        result.ErrorCode = HarborFileErrorCodeEnum.Invalid;
+                        result.Message = "file operation " + request.Operation + " needs a checkout root";
                         break;
                 }
             }
@@ -152,13 +165,28 @@ namespace Armada.Core.Services
             {
                 throw;
             }
-            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is InvalidOperationException || ex is ArgumentException)
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is InvalidOperationException || ex is ArgumentException || ex is WorkspaceConflictException)
             {
                 result.Success = false;
+                result.ErrorCode = ErrorCodeFor(ex);
                 result.Message = ex.Message;
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// Map a file operation failure to the error code the Admiral reports it with.
+        /// </summary>
+        /// <param name="ex">Exception.</param>
+        /// <returns>The code.</returns>
+        public static HarborFileErrorCodeEnum ErrorCodeFor(Exception ex)
+        {
+            if (ex is WorkspaceConflictException) return HarborFileErrorCodeEnum.Conflict;
+            if (ex is UnauthorizedAccessException) return HarborFileErrorCodeEnum.Refused;
+            if (ex is FileNotFoundException || ex is DirectoryNotFoundException) return HarborFileErrorCodeEnum.NotFound;
+            if (ex is InvalidOperationException || ex is ArgumentException) return HarborFileErrorCodeEnum.Invalid;
+            return HarborFileErrorCodeEnum.Failed;
         }
 
         #endregion
@@ -173,6 +201,135 @@ namespace Armada.Core.Services
             if (String.IsNullOrWhiteSpace(settings.ReposDirectory) || !Path.IsPathFullyQualified(settings.ReposDirectory))
                 throw new InvalidOperationException("its clones folder is not an absolute path; set it in Harbor > Settings > Repositories");
             return settings;
+        }
+
+        /// <summary>
+        /// A file request in a checkout: the root must be inside the docks folder or be the checkout this Harbor maps the
+        /// request's vessel to, and every path is relative to the root (Workspace rules: no absolute paths, no way out of
+        /// the root, no symbolic links).
+        /// </summary>
+        private async Task HandleCheckoutFileAsync(HarborDockSettings settings, HarborFileRequest request, HarborFileResult result, CancellationToken token)
+        {
+            string root = request.Root!.Trim();
+            if (!Path.IsPathFullyQualified(root))
+            {
+                result.ErrorCode = HarborFileErrorCodeEnum.Refused;
+                result.Message = "refused: " + root + " is not an absolute path";
+                return;
+            }
+
+            root = Path.GetFullPath(root);
+            if (!HarborDockSettings.IsSameOrUnder(root, settings.DocksDirectory)
+                && !await IsVesselCheckoutAsync(settings, request, root, token).ConfigureAwait(false))
+            {
+                string vessel = !String.IsNullOrWhiteSpace(request.VesselName) ? request.VesselName! : (request.VesselId ?? "(none)");
+                result.ErrorCode = HarborFileErrorCodeEnum.Refused;
+                result.Message = "refused: " + root + " is not this Harbor's checkout of vessel " + vessel + " and not inside its docks folder (" + settings.DocksDirectory + ")";
+                return;
+            }
+
+            string path = request.Path ?? String.Empty;
+            switch (request.Operation)
+            {
+                case HarborFileOperationEnum.Stat:
+                    {
+                        string full = WorkspaceFileEngine.ResolveContainedPath(root, path);
+                        result.IsDirectory = Directory.Exists(full);
+                        result.Exists = result.IsDirectory || File.Exists(full);
+                        if (result.Exists && !result.IsDirectory)
+                        {
+                            FileInfo info = new FileInfo(full);
+                            result.SizeBytes = info.Length;
+                            result.LastWriteUtc = info.LastWriteTimeUtc;
+                        }
+
+                        result.Success = true;
+                        break;
+                    }
+                case HarborFileOperationEnum.Read:
+                    {
+                        string full = WorkspaceFileEngine.ResolveContainedPath(root, path);
+                        result.Exists = File.Exists(full);
+                        if (result.Exists)
+                        {
+                            FileInfo info = new FileInfo(full);
+                            long max = request.MaxBytes > 0 ? request.MaxBytes : _DefaultReadMaxBytes;
+                            result.SizeBytes = info.Length;
+                            result.LastWriteUtc = info.LastWriteTimeUtc;
+                            if (info.Length > max) result.Truncated = true;
+                            else result.Content = await File.ReadAllTextAsync(full, token).ConfigureAwait(false);
+                        }
+
+                        result.Success = true;
+                        break;
+                    }
+                case HarborFileOperationEnum.List:
+                    result.Tree = WorkspaceFileEngine.GetTree(root, path);
+                    result.Success = true;
+                    break;
+                case HarborFileOperationEnum.ReadFile:
+                    result.File = await WorkspaceFileEngine.GetFileAsync(root, path, token).ConfigureAwait(false);
+                    result.Success = true;
+                    break;
+                case HarborFileOperationEnum.SaveFile:
+                    result.Saved = await WorkspaceFileEngine.SaveFileAsync(root, new Armada.Core.Models.WorkspaceSaveRequest
+                    {
+                        Path = path,
+                        Content = request.Content ?? String.Empty,
+                        ExpectedHash = request.ExpectedHash
+                    }, token).ConfigureAwait(false);
+                    result.Success = true;
+                    break;
+                case HarborFileOperationEnum.CreateDirectory:
+                    result.Entry = WorkspaceFileEngine.CreateDirectory(root, new Armada.Core.Models.WorkspaceCreateDirectoryRequest { Path = path });
+                    result.Success = true;
+                    break;
+                case HarborFileOperationEnum.Rename:
+                    result.Entry = WorkspaceFileEngine.Rename(root, new Armada.Core.Models.WorkspaceRenameRequest { Path = path, NewPath = request.NewPath ?? String.Empty });
+                    result.Success = true;
+                    break;
+                case HarborFileOperationEnum.Delete:
+                    result.Entry = WorkspaceFileEngine.Delete(root, path);
+                    result.Success = true;
+                    break;
+                case HarborFileOperationEnum.Search:
+                    result.Search = await WorkspaceFileEngine.SearchAsync(root, request.Query ?? String.Empty, request.MaxResults, token).ConfigureAwait(false);
+                    result.Success = true;
+                    break;
+                default:
+                    result.ErrorCode = HarborFileErrorCodeEnum.Invalid;
+                    result.Message = "file operation " + request.Operation + " is not available in a checkout";
+                    break;
+            }
+        }
+
+        private async Task<bool> IsVesselCheckoutAsync(HarborDockSettings settings, HarborFileRequest request, string root, CancellationToken token)
+        {
+            if (String.IsNullOrWhiteSpace(request.VesselId) && String.IsNullOrWhiteSpace(request.VesselName)) return false;
+
+            string key = (request.VesselId ?? String.Empty) + "\n" + (request.VesselName ?? String.Empty) + "\n" + (request.RepoUrl ?? String.Empty);
+            string? checkout = null;
+            bool cached = false;
+            lock (_CheckoutCacheLock)
+            {
+                if (_CheckoutCache.TryGetValue(key, out CachedCheckout? entry) && entry.ExpiresUtc > DateTime.UtcNow)
+                {
+                    checkout = entry.CheckoutPath;
+                    cached = true;
+                }
+            }
+
+            if (!cached)
+            {
+                HarborRepositoryLocation location = await _Locator.LocateAsync(settings, request.VesselId ?? String.Empty, request.VesselName ?? String.Empty, request.RepoUrl, token).ConfigureAwait(false);
+                checkout = location.CheckoutPath;
+                lock (_CheckoutCacheLock)
+                {
+                    _CheckoutCache[key] = new CachedCheckout(checkout, DateTime.UtcNow.Add(_CheckoutCacheTtl));
+                }
+            }
+
+            return !String.IsNullOrWhiteSpace(checkout) && PathCanonicalizer.AreEquivalent(checkout!, root);
         }
 
         private async Task<HarborDockResult> ResolveAsync(HarborDockSettings settings, HarborDockRequest request, CancellationToken token)
@@ -440,6 +597,23 @@ namespace Armada.Core.Services
             catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
             {
                 _Logging.Warn(_Header + "could not delete " + path + ": " + ex.Message);
+            }
+        }
+
+        #endregion
+
+        #region Private-Types
+
+        private sealed class CachedCheckout
+        {
+            public string? CheckoutPath { get; }
+
+            public DateTime ExpiresUtc { get; }
+
+            public CachedCheckout(string? checkoutPath, DateTime expiresUtc)
+            {
+                CheckoutPath = checkoutPath;
+                ExpiresUtc = expiresUtc;
             }
         }
 

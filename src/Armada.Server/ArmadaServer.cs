@@ -141,6 +141,7 @@ namespace Armada.Server
         private PlanningSessionCoordinator _PlanningSessions = null!;
         private ObjectiveRefinementCoordinator _ObjectiveRefinementSessions = null!;
         private IWorkspaceService _Workspace = null!;
+        private VesselHostResolver? _VesselHosts = null;
         private RequestHistoryCaptureService _RequestHistoryCapture = null!;
         private WorkflowProfileService _WorkflowProfileService = null!;
         private ProjectProfileService _ProjectProfileService = null!;
@@ -320,6 +321,15 @@ namespace Armada.Server
             _HarborConnectionManager = new HarborConnectionManager(_HarborService, _Logging, harborMcpUrl);
             _HarborMetricsRecorder = new HarborMetricsRecorder(_Database, _Logging, _Settings.Harbor);
             _HarborConnectionManager.Metrics = _HarborMetricsRecorder;
+
+            // Operations that need a vessel's checkout outside a mission (check runs, Workspace, readiness, health, branch
+            // views) run where the checkout lives: the working directory on this host, or a connected Harbor's checkout.
+            _VesselHosts = new VesselHostResolver(_Database, _Settings, _Logging, _HarborConnectionManager);
+            _CheckRunService.Hosts = _VesselHosts;
+            _VesselReadinessService.Hosts = _VesselHosts;
+            healthEvaluator.Hosts = _VesselHosts;
+            _ManualLandingReconciler.Hosts = _VesselHosts;
+            if (_FleetCategorizationService is FleetCategorizationService categorization) categorization.Hosts = _VesselHosts;
             _HarborMetricsService = new HarborMetricsService(_Database, _HarborService, _Settings.Harbor);
             _HarborLinkEndpoint = new HarborLinkEndpoint(
                 _HarborConnectionManager,
@@ -577,6 +587,7 @@ namespace Armada.Server
                 EmitEventAsync,
                 _WebSocketHub);
             _PlanningSessions.LaunchRouter = _LaunchRouter;
+            _PlanningSessions.PlaceDockAsync = _AgentLifecycle.ResolveDockPlacementAsync;
             _ObjectiveRefinementSessions.LaunchRouter = _LaunchRouter;
 
             _CaptainTools = new CaptainToolService(
@@ -1197,7 +1208,8 @@ namespace Armada.Server
             // Vessels
             VesselContextService vesselContextService = new VesselContextService(_Database, _RuntimeFactory, _Docks, _PromptTemplateService, _Logging);
             vesselContextService.LaunchRouter = _LaunchRouter;
-            new VesselRoutes(_Database, _VesselReadinessService, _LandingPreviewService, EmitEventAsync, _JsonOptions, _Docks, vesselContextService, _Git, _Settings, _VesselService, _ManualLandingReconciler)
+            vesselContextService.PlaceDockAsync = _AgentLifecycle.ResolveDockPlacementAsync;
+            new VesselRoutes(_Database, _VesselReadinessService, _LandingPreviewService, EmitEventAsync, _JsonOptions, _Docks, vesselContextService, _Git, _Settings, _VesselService, _ManualLandingReconciler, _VesselHosts)
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Vessel import (bulk onboarding)
@@ -1205,7 +1217,7 @@ namespace Armada.Server
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Workspace
-            new WorkspaceRoutes(_Database, _Workspace, _JsonOptions)
+            new WorkspaceRoutes(_Database, _Workspace, _JsonOptions, _VesselHosts)
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Workflow profiles
