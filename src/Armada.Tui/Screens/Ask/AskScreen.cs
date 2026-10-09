@@ -10,6 +10,7 @@ namespace Armada.Tui.Screens.Ask
     using Armada.Tui.Input;
     using Armada.Tui.Modals;
     using Armada.Tui.Routing;
+    using Armada.Tui.Services;
     using Armada.Tui.Text;
     using Armada.Tui.Widgets;
     using TUIKit;
@@ -149,6 +150,7 @@ namespace Armada.Tui.Screens.Ask
             Composer.FormRequested += (s, action) => OpenForm(action);
             Composer.EscapePressed += (s, e) => OnComposerEscape();
             Composer.Sent += (s, e) => Transcript.ReturnToTail();
+            Composer.LocalCommandHandler = RunLocalCommand;
             ThreadList.CloseRequested += (s, e) => CloseOverlay();
             Ask.DraftChanged += OnDraftChanged;
             RebuildScope(Composer);
@@ -163,6 +165,8 @@ namespace Armada.Tui.Screens.Ask
         {
             Ask.Viewing = true;
             Ask.Open(Route.Param("threadId"));
+            // The composer shows this conversation's own draft (empty for a new conversation).
+            Composer.Text = Ask.ComposerDraft;
             Scope.Focus(Composer);
         }
 
@@ -191,7 +195,7 @@ namespace Armada.Tui.Screens.Ask
         {
             List<ArmadaCommand> list = new List<ArmadaCommand>();
             Func<bool> hasThread = () => Ask.Conversation.Thread != null;
-            list.Add(Cmd("ask.screen.new", "New conversation", () => Context.Navigate("/ask"), null, "n"));
+            list.Add(Cmd("ask.screen.new", "New conversation", () => StartNewConversation(false), null, "n"));
             list.Add(Cmd("ask.screen.rename", "Rename conversation", () => BeginTitleEdit(), hasThread, "e"));
             list.Add(Cmd("ask.screen.captain", "Choose captain...", () => PickCaptain(), () => !Ask.Conversation.TurnActive, "c"));
             list.Add(Cmd("ask.screen.auto-approve", "Toggle auto-approve", () => Ask.ToggleAutoApprove(), hasThread, "ctrl+y"));
@@ -206,7 +210,7 @@ namespace Armada.Tui.Screens.Ask
             list.Add(Cmd("ask.screen.review-approval", "Go to the oldest action waiting for approval", () => FocusOldestPending(), () => PendingApprovals + PendingPermissionRequests > 0, "alt+down"));
             list.Add(Cmd("ask.screen.stop", "Stop the captain", () => Ask.StopTurn(), () => Ask.Conversation.TurnActive, "ctrl+c"));
             list.Add(Cmd("ask.screen.thinking", "Toggle show thinking", () => Ask.ToggleShowThinking(), null, "alt+t", "ctrl+shift+t"));
-            list.Add(Cmd("ask.screen.quick", "Quick actions...", () => { Scope.Focus(Composer); Composer.Text = "/"; }, null));
+            list.Add(Cmd("ask.screen.quick", "Commands...", () => { Scope.Focus(Composer); Composer.Text = "/"; }, null));
             list.Add(Cmd("ask.screen.copy", "Copy conversation as Markdown", () => Context.Clipboard.Copy(Transcript.ConversationMarkdown(), "Conversation"), hasThread));
             list.Add(Cmd("ask.screen.mcp-help", "How to connect a captain over MCP", () => Context.External.OpenUrl(AskController.InstructionsUrl(Ask.ActiveCaptain?.Runtime)), null));
             foreach (AskQuickAction action in Ask.QuickActions)
@@ -218,6 +222,76 @@ namespace Armada.Tui.Screens.Ask
             }
 
             return list;
+        }
+
+        /// <summary>
+        /// Start a new conversation with an empty, focused composer (New, <c>n</c>, <c>/new</c>, <c>/clear</c>).
+        /// </summary>
+        /// <param name="keepCaptain">Keep the open conversation's captain.</param>
+        public void StartNewConversation(bool keepCaptain)
+        {
+            CloseForm();
+            Ask.NewConversation(keepCaptain);
+            Scope.Focus(Composer);
+        }
+
+        /// <summary>
+        /// Run a local command typed in the composer (the dashboard's <c>runLocalCommand</c>).
+        /// </summary>
+        /// <param name="command">Command.</param>
+        /// <param name="args">Arguments (empty for none).</param>
+        /// <returns>Outcome.</returns>
+        public AskCommandOutcome RunLocalCommand(AskLocalCommand command, string args)
+        {
+            AskThread? thread = Ask.Conversation.Thread;
+            string text = (args ?? "").Trim();
+            switch (command.Name)
+            {
+                case AskLocalCommandEnum.New:
+                    StartNewConversation(true);
+                    return new AskCommandOutcome(true);
+                case AskLocalCommandEnum.Help:
+                    Composer.Text = "/";
+                    return new AskCommandOutcome(true);
+                case AskLocalCommandEnum.Summarize:
+                    if (thread == null) return new AskCommandOutcome(false, "Nothing to summarize yet.");
+                    Ask.Summarize(thread);
+                    return new AskCommandOutcome(true);
+                case AskLocalCommandEnum.Rename:
+                    if (thread == null) return new AskCommandOutcome(false, "Nothing to rename yet. Send a message first.");
+                    if (text.Length == 0) return new AskCommandOutcome(false, "Type a title after /rename.");
+                    Ask.Rename(thread, text.Length > AskCommands.MaxTitleLength ? text.Substring(0, AskCommands.MaxTitleLength) : text);
+                    return new AskCommandOutcome(true);
+                case AskLocalCommandEnum.Archive:
+                    if (thread == null) return new AskCommandOutcome(false, "Nothing to archive yet.");
+                    if (thread.Archived) return new AskCommandOutcome(true, "This conversation is already archived.");
+                    Ask.ToggleArchive(thread);
+                    return new AskCommandOutcome(true, "Conversation archived.");
+                case AskLocalCommandEnum.Captain:
+                    if (Ask.Conversation.TurnActive) return new AskCommandOutcome(false, "Wait for the reply to finish before changing the captain.");
+                    if (text.Length == 0)
+                    {
+                        PickCaptain();
+                        return new AskCommandOutcome(true);
+                    }
+
+                    List<Captain> found = AskCommands.MatchCaptains(Ask.Captains, text);
+                    if (found.Count == 0) return new AskCommandOutcome(false, "No captain matches \"{{name}}\".", LocalizationArgs.Of("name", text));
+                    if (found.Count > 1)
+                    {
+                        PickCaptain(found);
+                        return new AskCommandOutcome(true, "Several captains match \"{{name}}\". Choose one.", LocalizationArgs.Of("name", text));
+                    }
+
+                    Ask.SetCaptain(found[0].Id);
+                    return new AskCommandOutcome(true, "Captain: {{name}}", LocalizationArgs.Of("name", found[0].Name));
+                case AskLocalCommandEnum.Thinking:
+                    if (!AskCommands.TryParseThinking(text, Ask.ShowThinking, out bool value)) return new AskCommandOutcome(false, "Use /thinking on or /thinking off.");
+                    if (value != Ask.ShowThinking) Ask.ToggleShowThinking();
+                    return new AskCommandOutcome(true, value ? "Show thinking is on." : "Show thinking is off.");
+                default:
+                    return new AskCommandOutcome(false);
+            }
         }
 
         /// <summary>
@@ -433,8 +507,20 @@ namespace Armada.Tui.Screens.Ask
         /// <returns>The picker.</returns>
         public PickerModal<string> PickCaptain()
         {
-            List<SelectOption<string>> options = new List<SelectOption<string>> { new SelectOption<string>("", Context.Loc.T("No captain (quick actions only)")) };
-            foreach (Captain c in Ask.Captains)
+            return PickCaptain(null);
+        }
+
+        /// <summary>
+        /// Pick the captain from a shortlist (the matches of an ambiguous <c>/captain</c>), or from every captain plus
+        /// "No captain (quick actions only)" for null.
+        /// </summary>
+        /// <param name="shortlist">Captains to offer, or null for all.</param>
+        /// <returns>The picker.</returns>
+        public PickerModal<string> PickCaptain(List<Captain>? shortlist)
+        {
+            List<SelectOption<string>> options = new List<SelectOption<string>>();
+            if (shortlist == null) options.Add(new SelectOption<string>("", Context.Loc.T("No captain (quick actions only)")));
+            foreach (Captain c in shortlist ?? Ask.Captains)
             {
                 string detail = !String.IsNullOrEmpty(c.Model) ? c.Model! : c.Runtime.ToString();
                 options.Add(new SelectOption<string>(c.Id, c.Name + " (" + detail + ")", c.State.ToString()));

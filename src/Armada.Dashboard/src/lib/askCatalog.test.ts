@@ -13,6 +13,7 @@ import quickMenuSource from '../components/ask/AskQuickActionMenu.tsx?raw';
 import dispatchSource from '../components/ask/AskDispatchForm.tsx?raw';
 import fleetActionSource from '../components/ask/AskFleetActionForm.tsx?raw';
 import quickActionsSource from './askQuickActions.ts?raw';
+import commandsSource from './askCommands.ts?raw';
 import askWorkSource from './askWork.ts?raw';
 import type { I18nCatalog } from '../i18n/runtime';
 
@@ -22,6 +23,8 @@ const LABEL = new RegExp(`\\blabel:\\s*${S}`, 'g');
 /** Quick-action titles and descriptions are rendered through `t`. */
 const META = new RegExp(`\\b(?:title|description):\\s*${S}`, 'g');
 const ERROR_LINE = /errors\.\w+ = (.*?);?$/gm;
+/** Local command hints (lib/askCommands) are rendered through `t` under the composer. */
+const HINT = new RegExp(`\\bhint:\\s*(?:value \\? ${S} : )?${S}`, 'g');
 
 const SOURCES = [
   pageSource, threadListSource, headerSource, stripSource, messageListSource, messageViewSource, confirmSource,
@@ -41,6 +44,8 @@ function askKeys(): string[] {
     for (const m of src.matchAll(LABEL)) add(m[1]);
   }
   for (const m of quickActionsSource.matchAll(META)) add(m[1]);
+  for (const m of commandsSource.matchAll(META)) add(m[1]);
+  for (const m of commandsSource.matchAll(HINT)) { add(m[1]); add(m[2]); }
   for (const line of quickActionsSource.matchAll(ERROR_LINE)) {
     for (const m of line[1].matchAll(new RegExp(S, 'g'))) add(m[1]);
   }
@@ -62,6 +67,9 @@ describe('Ask Armada i18n catalog', () => {
     expect(keys).toContain('Choose a vessel.');
     expect(keys).toContain('Start a voyage of one or more missions on a vessel');
     expect(keys).toContain('Unpin');
+    expect(keys).toContain('Unknown command {{command}}. Type / to see commands');
+    expect(keys).toContain('Show thinking is off.');
+    expect(keys).toContain('Start a new conversation with a fresh context (also /clear)');
   });
 
   it('has a translation for every string in every non-English locale', () => {

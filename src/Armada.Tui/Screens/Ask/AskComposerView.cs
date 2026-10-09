@@ -17,10 +17,13 @@ namespace Armada.Tui.Screens.Ask
     /// The Ask composer (W2.6, the dashboard's <c>AskComposer</c>): a multi-line TUIKit <see cref="TextEditor"/> where
     /// <c>Enter</c> sends and <c>Shift+Enter</c> or <c>Ctrl+J</c> inserts a newline (TUIKit's
     /// <see cref="SubmitKeyResolver"/>), <c>Ctrl+E</c> edits the draft in <c>$EDITOR</c>, <c>Up</c> on an empty composer
-    /// recalls earlier messages, and <c>/</c> opens the quick-action menu (<c>Up</c>/<c>Down</c>, <c>Enter</c>/<c>Tab</c>
-    /// choose, <c>Esc</c> dismisses). Choosing Dispatch or Fleet action raises <see cref="FormRequested"/>, Import opens
-    /// the import route, and anything else runs at once. The footer carries Show thinking, the quick actions hint, the
-    /// send or stop state, and "AI can make mistakes. Check answers." Not thread-safe.
+    /// recalls earlier messages, and <c>/</c> opens the command menu: quick actions and the local commands
+    /// (<see cref="AskCommands"/>; <c>Up</c>/<c>Down</c> move, <c>Enter</c>/<c>Tab</c> run the highlighted entry,
+    /// <c>Esc</c> dismisses). <c>Enter</c> on an exact command runs it with its arguments; an unknown command shows a
+    /// hint and keeps the text. Choosing Dispatch or Fleet action raises <see cref="FormRequested"/>, Import opens the
+    /// import route, <c>/help</c> opens the full menu, the other local commands go to
+    /// <see cref="LocalCommandHandler"/>, and other quick actions run at once. The footer carries Show thinking, the
+    /// commands hint, the send or stop state, and "AI can make mistakes. Check answers." Not thread-safe.
     /// </summary>
     public class AskComposerView : ArmadaWidget, IPasteTarget, ITextEntry
     {
@@ -54,11 +57,28 @@ namespace Armada.Tui.Screens.Ask
                 _Ask.ComposerDraft = Editor.Text;
                 _MenuDismissed = false;
                 _MenuIndex = 0;
+                Hint = null;
+                HintArgs = null;
             }
         }
 
         /// <summary>
-        /// The quick-action menu is open.
+        /// English hint shown above the editor (an unknown command, or what a local command did), or null.
+        /// </summary>
+        public string? Hint { get; private set; } = null;
+
+        /// <summary>
+        /// Placeholders of <see cref="Hint"/>, or null.
+        /// </summary>
+        public IDictionary<string, object?>? HintArgs { get; private set; } = null;
+
+        /// <summary>
+        /// Runs a local command (everything but <c>/help</c>, which the composer handles); set by the screen.
+        /// </summary>
+        public Func<AskLocalCommand, string, AskCommandOutcome>? LocalCommandHandler { get; set; } = null;
+
+        /// <summary>
+        /// The command menu is open.
         /// </summary>
         public bool MenuOpen
         {
@@ -121,12 +141,98 @@ namespace Armada.Tui.Screens.Ask
         #region Public-Methods
 
         /// <summary>
-        /// Quick actions matching the draft.
+        /// Menu entries (quick actions and local commands) matching the draft, exact matches first.
         /// </summary>
         /// <returns>Matches.</returns>
-        public List<AskQuickAction> Matches()
+        public List<AskCommandItem> Matches()
         {
-            return AskQuickActions.Filter(_Ask.QuickActions, Editor.Text);
+            return AskCommands.Filter(AskCommands.Catalog(_Ask.QuickActions), Editor.Text);
+        }
+
+        /// <summary>
+        /// What Enter would do with the draft now (the highlighted entry while the menu is open).
+        /// </summary>
+        /// <returns>Parse result.</returns>
+        public AskCommandParse Pending()
+        {
+            List<AskCommandItem> matches = Matches();
+            AskCommandItem? highlighted = !_MenuDismissed && matches.Count > 0 ? matches[Math.Min(_MenuIndex, matches.Count - 1)] : null;
+            return AskCommands.Resolve(AskCommands.Catalog(_Ask.QuickActions), Editor.Text, highlighted);
+        }
+
+        /// <summary>
+        /// Run what Enter runs: a command, the unknown-command hint, or a send.
+        /// </summary>
+        /// <returns>True when something ran or was sent.</returns>
+        public bool SubmitDraft()
+        {
+            AskCommandParse pending = Pending();
+            if (pending.Kind == AskCommandParseKindEnum.Command && pending.Item != null) return RunItem(pending.Item, pending.Args);
+            if (pending.Kind == AskCommandParseKindEnum.Unknown)
+            {
+                ShowOutcome(AskCommands.Unknown(pending.Typed));
+                return false;
+            }
+
+            return SendDraft();
+        }
+
+        /// <summary>
+        /// Run a menu entry: a quick action as <see cref="Choose"/> does, <c>/help</c> opens the full menu, a command
+        /// that needs arguments fills the composer, and other local commands go to <see cref="LocalCommandHandler"/>.
+        /// </summary>
+        /// <param name="item">Entry.</param>
+        /// <param name="args">Arguments (empty for none).</param>
+        /// <returns>True when the command ran.</returns>
+        public bool RunItem(AskCommandItem item, string args)
+        {
+            if (item == null) return false;
+            if (item.Action != null)
+            {
+                Choose(item.Action);
+                return true;
+            }
+
+            AskLocalCommand? local = item.Local;
+            if (local == null) return false;
+            if (local.Name == AskLocalCommandEnum.Help)
+            {
+                Text = "/";
+                return true;
+            }
+
+            if (local.RequiresArgs && String.IsNullOrEmpty(args))
+            {
+                Text = local.Command + " ";
+                return true;
+            }
+
+            // A new conversation must not inherit the command as the old conversation's saved draft.
+            if (local.Name == AskLocalCommandEnum.New) Text = "";
+            AskCommandOutcome outcome = LocalCommandHandler != null ? LocalCommandHandler(local, args ?? "") : new AskCommandOutcome(false);
+            if (outcome.Ok) Text = "";
+            ShowOutcome(outcome);
+            return outcome.Ok;
+        }
+
+        /// <summary>
+        /// Show a command's hint (or clear it).
+        /// </summary>
+        /// <param name="outcome">Outcome.</param>
+        public void ShowOutcome(AskCommandOutcome outcome)
+        {
+            Hint = outcome?.Hint;
+            HintArgs = outcome?.HintArgs;
+        }
+
+        /// <summary>
+        /// The hint as shown (translated), or empty.
+        /// </summary>
+        /// <returns>Text.</returns>
+        public string HintText()
+        {
+            if (String.IsNullOrEmpty(Hint)) return "";
+            return HintArgs != null ? Localizer.T(Hint!, HintArgs) : Localizer.T(Hint!);
         }
 
         /// <summary>
@@ -137,8 +243,9 @@ namespace Armada.Tui.Screens.Ask
         public int PreferredHeight(int width)
         {
             int menu = MenuOpen ? Math.Min(6, Matches().Count) + 1 : 0;
+            int hint = String.IsNullOrEmpty(Hint) ? 0 : 1;
             int lines = Math.Clamp(Editor.VisualLineCount(Math.Max(10, width - 2)), 1, 6);
-            return menu + lines + 1;
+            return menu + hint + lines + 1;
         }
 
         /// <summary>
@@ -214,7 +321,7 @@ namespace Armada.Tui.Screens.Ask
         {
             bool ctrl = (key.Modifiers & KeyModifiers.Ctrl) != 0;
             bool alt = (key.Modifiers & KeyModifiers.Alt) != 0;
-            List<AskQuickAction> matches = Matches();
+            List<AskCommandItem> matches = Matches();
             bool menu = !_MenuDismissed && matches.Count > 0;
             if (menu)
             {
@@ -231,9 +338,9 @@ namespace Armada.Tui.Screens.Ask
                     return true;
                 }
 
-                if ((key.Code == KeyCode.Enter && !alt) || (key.Code == KeyCode.Tab && key.Modifiers == KeyModifiers.None))
+                if (key.Code == KeyCode.Tab && key.Modifiers == KeyModifiers.None)
                 {
-                    Choose(matches[safe]);
+                    RunItem(matches[safe], "");
                     return true;
                 }
 
@@ -251,16 +358,9 @@ namespace Armada.Tui.Screens.Ask
             }
 
             SubmitDecision decision = Submit.Resolve(key);
-            if (decision == SubmitDecision.Submit && !alt)
+            if ((decision == SubmitDecision.Submit && !alt) || (menu && key.Code == KeyCode.Enter && !alt))
             {
-                if (Editor.Text.Trim().StartsWith("/", StringComparison.Ordinal))
-                {
-                    List<AskQuickAction> exact = _Ask.QuickActions.Where(a => AskQuickActions.CommandOf(a) == Editor.Text.Trim()).ToList();
-                    if (exact.Count == 1) Choose(exact[0]);
-                    return true;
-                }
-
-                SendDraft();
+                SubmitDraft();
                 return true;
             }
 
@@ -352,23 +452,29 @@ namespace Armada.Tui.Screens.Ask
             if (width < 10 || height < 2) return;
             SurfaceText.FillRect(surface, new Rect(0, 0, width, height), Theme.Text);
             int y = 0;
-            List<AskQuickAction> matches = Matches();
+            List<AskCommandItem> matches = Matches();
             if (!_MenuDismissed && matches.Count > 0)
             {
                 int rows = Math.Min(6, matches.Count);
-                SurfaceText.Draw(surface, 0, y++, T("Quick actions") + "  (Up/Down, Enter, Esc)", Theme.Muted, width);
+                SurfaceText.Draw(surface, 0, y++, T("Commands") + "  (Up/Down, Enter, Esc)", Theme.Muted, width);
                 int safe = Math.Min(_MenuIndex, matches.Count - 1);
                 int first = Math.Max(0, Math.Min(safe - rows + 1, matches.Count - rows));
                 for (int i = first; i < first + rows && y < height - 2; i++)
                 {
-                    AskQuickAction a = matches[i];
+                    AskCommandItem a = matches[i];
                     CellStyle style = i == safe ? Theme.Selection : Theme.MenuDropdown;
                     SurfaceText.FillRow(surface, 0, y, width, style);
-                    int x = SurfaceText.Draw(surface, 1, y, TextCells.PadRight(AskQuickActions.CommandOf(a), 15), style.WithForeground(Theme.Code.Foreground), width - 1) + 1;
-                    x += SurfaceText.Draw(surface, x, y, TextCells.PadRight(String.IsNullOrEmpty(a.Title) ? a.Name : T(a.Title), 14), style, width - x);
+                    string command = a.Usage.Length > 0 ? a.Command + " " + a.Usage : a.Command;
+                    int x = SurfaceText.Draw(surface, 1, y, TextCells.PadRight(command, 18), style.WithForeground(Theme.Code.Foreground), width - 1) + 1;
+                    x += SurfaceText.Draw(surface, x, y, TextCells.PadRight(T(a.Title), 18), style, width - x);
                     if (!String.IsNullOrEmpty(a.Description)) SurfaceText.Draw(surface, x, y, T(a.Description), style.WithForeground(Theme.Muted.Foreground), width - x);
                     y++;
                 }
+            }
+
+            if (!String.IsNullOrEmpty(Hint) && y < height - 2)
+            {
+                SurfaceText.Draw(surface, 0, y++, "! " + HintText(), Theme.Warning, width);
             }
 
             int editorRows = Math.Max(1, height - y - 1);
@@ -379,7 +485,7 @@ namespace Armada.Tui.Screens.Ask
             Editor.Render(new SurfaceView(surface, new Rect(2, y, width - 2, editorRows)));
             if (Editor.Text.Length == 0)
             {
-                string placeholder = _Ask.NoCaptain ? T("Choose a captain to chat, or type / for quick actions") : T("Message the captain, or type / for quick actions");
+                string placeholder = _Ask.NoCaptain ? T("Choose a captain to chat, or type / for commands") : T("Message the captain, or type / for commands");
                 SurfaceText.Draw(surface, IsFocused ? 3 : 2, y, placeholder, input.WithForeground(Theme.Muted.Foreground), width - 3);
             }
 
@@ -422,7 +528,9 @@ namespace Armada.Tui.Screens.Ask
             }
             else
             {
-                bool canSend = Editor.Text.Trim().Length > 0 && !_Ask.NoCaptain && !Editor.Text.Trim().StartsWith("/", StringComparison.Ordinal);
+                AskCommandParse pending = Pending();
+                bool canSend = pending.Kind == AskCommandParseKindEnum.Command
+                    || (pending.Kind == AskCommandParseKindEnum.Text && Editor.Text.Trim().Length > 0 && !_Ask.NoCaptain);
                 right = "Enter " + T("Send");
                 rightStyle = canSend ? Theme.Accent : Theme.Muted;
             }
@@ -439,7 +547,7 @@ namespace Armada.Tui.Screens.Ask
             }
 
             x += SurfaceText.Draw(surface, x, y, (_Ask.ShowThinking ? "[x] " : "[ ] ") + T("Show thinking") + " (Alt+T)   ", Theme.Muted, width - rw - 1 - x);
-            x += SurfaceText.Draw(surface, x, y, "/ " + T("Quick actions") + "   Ctrl+E " + T("Editor") + "   ", Theme.Muted, width - rw - 1 - x);
+            x += SurfaceText.Draw(surface, x, y, "/ " + T("Commands") + "   Ctrl+E " + T("Editor") + "   ", Theme.Muted, width - rw - 1 - x);
             SurfaceText.Draw(surface, x, y, T("AI can make mistakes. Check answers."), Theme.Muted, width - rw - 1 - x);
             SurfaceText.Draw(surface, width - rw, y, right, rightStyle, rw);
         }
@@ -456,6 +564,8 @@ namespace Armada.Tui.Screens.Ask
             _Ask.ComposerDraft = Editor.Text;
             _MenuDismissed = false;
             _MenuIndex = 0;
+            Hint = null;
+            HintArgs = null;
         }
 
         #endregion

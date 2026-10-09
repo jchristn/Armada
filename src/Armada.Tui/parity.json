@@ -77,7 +77,7 @@
       "status": "implemented",
       "tui": "AskScreen",
       "workstream": "W2",
-      "notes": "thread list, conversation, confirm and work cards, composer with quick actions, dock"
+      "notes": "thread list, conversation, confirm and work cards, composer with slash commands (quick actions plus /new, /clear, /help, /summarize, /rename, /archive, /captain, /thinking; shared rules mirrored in Ask/AskCommands.cs), a separate draft per conversation, dock"
     },
     {
       "kind": "route",

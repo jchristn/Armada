@@ -353,8 +353,10 @@ describe('AskArmada quick actions', () => {
     await screen.findByText('Fix the billing retry bug');
     const input = screen.getByRole('combobox', { name: 'Message' });
     fireEvent.change(input, { target: { value: '/' } });
-    const menu = screen.getByRole('listbox', { name: 'Quick actions' });
-    expect(within(menu).getAllByRole('option').map((o) => o.querySelector('code')?.textContent)).toEqual(['/dispatch', '/fleet-action', '/status', '/health', '/import']);
+    const menu = screen.getByRole('listbox', { name: 'Commands' });
+    expect(within(menu).getAllByRole('option').map((o) => o.querySelector('code')?.textContent)).toEqual([
+      '/dispatch', '/fleet-action', '/status', '/health', '/import', '/new', '/help', '/summarize', '/rename <title>', '/archive', '/captain <name>', '/thinking on|off',
+    ]);
     fireEvent.keyDown(input, { key: 'ArrowDown' });
     expect(within(menu).getAllByRole('option')[1]).toHaveAttribute('aria-selected', 'true');
     fireEvent.keyDown(input, { key: 'ArrowUp' });
@@ -394,5 +396,124 @@ describe('AskArmada quick actions', () => {
     fireEvent.change(input, { target: { value: '/imp' } });
     fireEvent.keyDown(input, { key: 'Enter' });
     expect(await screen.findByText('import wizard open')).toBeInTheDocument();
+  });
+});
+
+describe('AskArmada commands', () => {
+  async function openThread() {
+    renderAt('/ask/ath_1');
+    await screen.findByText('Fix the billing retry bug');
+    return screen.getByRole('combobox', { name: 'Message' }) as HTMLTextAreaElement;
+  }
+
+  function type(input: HTMLTextAreaElement, value: string) {
+    fireEvent.change(input, { target: { value } });
+  }
+
+  it('runs an exact command with Return, and Send is enabled for it', async () => {
+    vi.mocked(api.summarizeAskThread).mockResolvedValue(undefined as never);
+    const input = await openThread();
+    type(input, '/summarize');
+    expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled();
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => expect(api.summarizeAskThread).toHaveBeenCalledWith('ath_1'));
+    expect(input.value).toBe('');
+    expect(sendAskMessage).not.toHaveBeenCalled();
+  });
+
+  it('runs a command with arguments from the Send button', async () => {
+    vi.mocked(api.updateAskThread).mockImplementation(async (id, data) => ({ ...threads.find((t) => t.id === id)!, ...data } as AskThread));
+    const input = await openThread();
+    type(input, '/RENAME Billing retry fix');
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    await waitFor(() => expect(api.updateAskThread).toHaveBeenCalledWith('ath_1', { title: 'Billing retry fix' }));
+    expect(input.value).toBe('');
+  });
+
+  it('runs the highlighted menu entry with Return', async () => {
+    vi.mocked(runAskQuickAction).mockResolvedValue({ id: 'aap_h', threadId: 'ath_1', toolName: 'evaluate_vessel_health', source: 'QuickAction', status: 'Executed' });
+    const input = await openThread();
+    type(input, '/he');
+    const menu = screen.getByRole('listbox', { name: 'Commands' });
+    expect(within(menu).getAllByRole('option').map((o) => o.querySelector('code')?.textContent)).toEqual(['/health', '/help']);
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    // /help opens the full menu with descriptions.
+    expect(input.value).toBe('/');
+    expect(within(screen.getByRole('listbox', { name: 'Commands' })).getByText('List the commands you can type here')).toBeInTheDocument();
+    type(input, '/he');
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => expect(runAskQuickAction).toHaveBeenCalledWith('ath_1', 'evaluate_vessel_health', {}));
+  });
+
+  it('shows a hint for an unknown command and keeps the text', async () => {
+    const input = await openThread();
+    type(input, '/foo bar');
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(screen.getByText('Unknown command /foo. Type / to see commands')).toBeInTheDocument();
+    expect(input.value).toBe('/foo bar');
+    expect(sendAskMessage).not.toHaveBeenCalled();
+    type(input, '/foo');
+    expect(screen.queryByText('Unknown command /foo. Type / to see commands')).not.toBeInTheDocument();
+  });
+
+  it('/clear starts a new conversation with an empty composer and keeps the captain', async () => {
+    const input = await openThread();
+    type(input, '/clear');
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'New conversation' })).toBeInTheDocument());
+    const fresh = screen.getByRole('combobox', { name: 'Message' }) as HTMLTextAreaElement;
+    expect(fresh.value).toBe('');
+    expect(document.activeElement).toBe(fresh);
+    expect((screen.getByLabelText('Captain', { selector: 'select' }) as HTMLSelectElement).value).toBe('cpt_1');
+    // The old conversation stays in the list.
+    expect(threadRows().map((r) => r.getAttribute('title'))).toContain('Billing fix');
+  });
+
+  it('New conversation clears the draft, and each conversation keeps its own', async () => {
+    const input = await openThread();
+    type(input, 'half-written question');
+    fireEvent.click(screen.getByRole('button', { name: '+ New conversation' }));
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'New conversation' })).toBeInTheDocument());
+    const fresh = screen.getByRole('combobox', { name: 'Message' }) as HTMLTextAreaElement;
+    expect(fresh.value).toBe('');
+    type(fresh, 'draft for a new one');
+    fireEvent.click(screen.getByRole('button', { name: '+ New conversation' }));
+    expect(fresh.value).toBe('');
+    fireEvent.click(threadRows()[0]);
+    await screen.findByText('Fix the billing retry bug');
+    expect((screen.getByRole('combobox', { name: 'Message' }) as HTMLTextAreaElement).value).toBe('half-written question');
+    fireEvent.click(threadRows()[1]);
+    await waitFor(() => expect((screen.getByRole('combobox', { name: 'Message' }) as HTMLTextAreaElement).value).toBe(''));
+  });
+
+  it('thread commands on a new conversation explain why nothing happened', async () => {
+    renderAt('/ask');
+    await screen.findByText('Checkout tests');
+    const input = screen.getByRole('combobox', { name: 'Message' }) as HTMLTextAreaElement;
+    type(input, '/summarize');
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(await screen.findByText('Nothing to summarize yet.')).toBeInTheDocument();
+    expect(api.summarizeAskThread).not.toHaveBeenCalled();
+    expect(input.value).toBe('/summarize');
+  });
+
+  it('/thinking and /captain change the composer settings', async () => {
+    vi.mocked(api.listCaptains).mockResolvedValue(page([
+      { id: 'cpt_1', name: 'Ada', runtime: 'ClaudeCode', model: 'opus' } as never,
+      { id: 'cpt_2', name: 'Grace Hopper', runtime: 'ClaudeCode', model: 'opus' } as never,
+    ]));
+    vi.mocked(api.updateAskThread).mockImplementation(async (id, data) => ({ ...threads.find((t) => t.id === id)!, ...data } as AskThread));
+    const input = await openThread();
+    await waitFor(() => expect(screen.getByRole('option', { name: /Grace Hopper/ })).toBeInTheDocument());
+    type(input, '/thinking on');
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(await screen.findByText('Show thinking is on.')).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'Show thinking' })).toBeChecked();
+    type(input, '/captain hopper');
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => expect(api.updateAskThread).toHaveBeenCalledWith('ath_1', { captainId: 'cpt_2' }));
+    expect(await screen.findByText('Captain: Grace Hopper')).toBeInTheDocument();
   });
 });

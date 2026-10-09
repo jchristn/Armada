@@ -403,7 +403,7 @@ namespace Armada.Tui.Screens.Ask
             switch (c)
             {
                 case 'n':
-                    _Context.Navigate("/ask");
+                    _Ask.NewConversation();
                     CloseRequested?.Invoke(this, EventArgs.Empty);
                     return true;
                 case '/':

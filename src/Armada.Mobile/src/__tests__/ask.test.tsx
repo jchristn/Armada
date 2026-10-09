@@ -485,7 +485,8 @@ describe('Ask Armada', () => {
     await fireEvent.changeText(screen.getByTestId('ask-input'), '/st');
     expect(screen.getByTestId('ask-quick-menu')).toBeTruthy();
     expect(screen.queryByTestId('ask-quick-dispatch')).toBeNull();
-    expect(screen.getByTestId('ask-send')).toBeDisabled();
+    // The highlighted entry is runnable, so Send is enabled.
+    expect(screen.getByTestId('ask-send')).toBeEnabled();
     await act(async () => { await fireEvent.press(screen.getByTestId('ask-quick-status')); });
     expect(api.runAskQuickAction).toHaveBeenCalledWith('thr_q', 'status', {});
     await waitFor(() => expect(screen.getByText('Action result')).toBeTruthy());
@@ -833,3 +834,153 @@ describe('Ask Armada conversation list actions', () => {
     await waitFor(() => expect(api.enumerateAskThreads).toHaveBeenLastCalledWith(expect.objectContaining({ pageNumber: 1, includeArchived: true })));
   });
 });
+
+describe('Ask Armada slash commands', () => {
+  const input = () => screen.getByTestId('ask-input');
+  const ret = async () => { await act(async () => { fireEvent(input(), 'submitEditing'); }); };
+  const type = async (text: string) => { await fireEvent.changeText(input(), text); };
+
+  async function openThread() {
+    api.getAskThread.mockImplementation(async (id: string) => ({ thread: thread({ id, title: id === 'thr_2' ? 'Deploy plan' : 'Fleet status' }), trackedWork: [] }));
+    api.enumerateAskThreads.mockResolvedValue({ objects: [thread(), thread({ id: 'thr_2', title: 'Deploy plan' })], totalPages: 1 } as never);
+    api.enumerateAskMessages.mockResolvedValue({ messages: [message({ contentText: 'open one' })], hasMore: false });
+    await renderAsk('/ask/thr_1');
+    await waitFor(() => expect(screen.getByText('open one')).toBeTruthy());
+  }
+
+  it('Return runs an exact command (case-insensitive) and clears the box', async () => {
+    api.summarizeAskThread.mockResolvedValue(undefined as never);
+    await openThread();
+    await type('/Summarize');
+    expect(screen.getByTestId('ask-send')).toBeEnabled();
+    await ret();
+    expect(api.summarizeAskThread).toHaveBeenCalledWith('thr_1');
+    expect(api.sendAskMessage).not.toHaveBeenCalled();
+    expect(input().props.value).toBe('');
+  });
+
+  it('Send runs a command with arguments', async () => {
+    api.updateAskThread.mockImplementation(async (id: string, data: object) => ({ ...thread({ id }), ...data }) as AskThread);
+    await openThread();
+    await type('/rename Billing retry fix');
+    await act(async () => { await fireEvent.press(screen.getByTestId('ask-send')); });
+    expect(api.updateAskThread).toHaveBeenCalledWith('thr_1', { title: 'Billing retry fix' });
+    expect(input().props.value).toBe('');
+  });
+
+  it('/rename without a title fills the box so the title can be typed', async () => {
+    await openThread();
+    await type('/rename');
+    await ret();
+    expect(input().props.value).toBe('/rename ');
+    expect(api.updateAskThread).not.toHaveBeenCalled();
+  });
+
+  it('Return runs the first (highlighted) menu entry', async () => {
+    api.runAskQuickAction.mockResolvedValue(proposal({ id: 'prp_h', toolName: 'evaluate_vessel_health', source: 'QuickAction', status: 'Executed' }));
+    await openThread();
+    await type('/he');
+    expect(screen.getByTestId('ask-quick-health').props.accessibilityState).toMatchObject({ selected: true });
+    expect(screen.getByTestId('ask-quick-help').props.accessibilityState).toMatchObject({ selected: false });
+    await ret();
+    expect(api.runAskQuickAction).toHaveBeenCalledWith('thr_1', 'evaluate_vessel_health', {});
+  });
+
+  it('an unknown command shows a hint and keeps the text', async () => {
+    await openThread();
+    await type('/foo bar');
+    expect(screen.getByTestId('ask-send')).toBeDisabled();
+    await ret();
+    expect(screen.getByTestId('ask-composer-hint')).toHaveTextContent('Unknown command /foo. Type / to see commands');
+    expect(input().props.value).toBe('/foo bar');
+    expect(api.sendAskMessage).not.toHaveBeenCalled();
+    await type('/fo');
+    expect(screen.queryByTestId('ask-composer-hint')).toBeNull();
+  });
+
+  it('/help opens the menu with every command', async () => {
+    await openThread();
+    await type('/help');
+    await ret();
+    expect(input().props.value).toBe('/');
+    for (const name of ['dispatch', 'status', 'new', 'help', 'summarize', 'rename', 'archive', 'captain', 'thinking']) expect(screen.getByTestId(`ask-quick-${name}`)).toBeTruthy();
+  });
+
+  it('/clear starts a new conversation with an empty box and keeps the captain', async () => {
+    api.listCaptains.mockResolvedValue({ objects: [{ id: 'cpt_1', name: 'Ada', runtime: 'ClaudeCode' }, { id: 'cpt_2', name: 'Grace', runtime: 'ClaudeCode' }] } as never);
+    await AsyncStorage.setItem(ASK_PREF_KEYS.captain, JSON.stringify('cpt_2'));
+    await openThread();
+    await type('/clear');
+    await ret();
+    await waitFor(() => expect(screen.getByTestId('ask-empty')).toBeTruthy());
+    expect(input().props.value).toBe('');
+    expect(screen.getByTestId('ask-captain-bar-name')).toHaveTextContent(/Ada/);
+  });
+
+  it('New conversation starts empty, and each conversation keeps its own draft', async () => {
+    await openThread();
+    await type('half-written question');
+    await act(async () => { await fireEvent.press(screen.getByTestId('ask-open-list')); });
+    await act(async () => { await fireEvent.press(screen.getByTestId('ask-new-conversation')); });
+    await waitFor(() => expect(screen.getByTestId('ask-empty')).toBeTruthy());
+    expect(input().props.value).toBe('');
+    await type('a new draft');
+    await act(async () => { await fireEvent.press(screen.getByTestId('ask-open-list')); });
+    await act(async () => { await fireEvent.press(screen.getByTestId('ask-new-conversation')); });
+    expect(input().props.value).toBe('');
+    await act(async () => { await fireEvent.press(screen.getByTestId('ask-open-list')); });
+    await act(async () => { await fireEvent.press(screen.getByTestId('ask-thread-row-thr_1')); });
+    await waitFor(() => expect(input().props.value).toBe('half-written question'));
+    await act(async () => { await fireEvent.press(screen.getByTestId('ask-open-list')); });
+    await act(async () => { await fireEvent.press(screen.getByTestId('ask-thread-row-thr_2')); });
+    await waitFor(() => expect(input().props.value).toBe(''));
+  });
+
+  it('thread commands on a new conversation say why nothing happened', async () => {
+    await renderAsk();
+    await type('/summarize');
+    await ret();
+    expect(screen.getByTestId('ask-composer-hint')).toHaveTextContent('Nothing to summarize yet.');
+    expect(api.summarizeAskThread).not.toHaveBeenCalled();
+    await type('/archive');
+    await ret();
+    expect(screen.getByTestId('ask-composer-hint')).toHaveTextContent('Nothing to archive yet.');
+    expect(api.updateAskThread).not.toHaveBeenCalled();
+  });
+
+  it('/archive archives the open conversation', async () => {
+    api.updateAskThread.mockImplementation(async (id: string, data: object) => ({ ...thread({ id }), ...data }) as AskThread);
+    await openThread();
+    await type('/archive');
+    await ret();
+    expect(api.updateAskThread).toHaveBeenCalledWith('thr_1', { archived: true });
+    await waitFor(() => expect(screen.getByTestId('ask-composer-hint')).toHaveTextContent('Conversation archived.'));
+  });
+
+  it('/thinking toggles Show thinking, and /captain switches by name or opens the picker', async () => {
+    api.listCaptains.mockResolvedValue({ objects: [
+      { id: 'cpt_1', name: 'Ada', runtime: 'ClaudeCode' },
+      { id: 'cpt_2', name: 'Grace Hopper', runtime: 'ClaudeCode' },
+      { id: 'cpt_3', name: 'Grace Kelly', runtime: 'ClaudeCode' },
+    ] } as never);
+    api.updateAskThread.mockImplementation(async (id: string, data: object) => ({ ...thread({ id }), ...data }) as AskThread);
+    await openThread();
+    await waitFor(() => expect(api.listCaptains).toHaveBeenCalled());
+    await type('/thinking on');
+    await ret();
+    expect(screen.getByTestId('ask-show-thinking').props.value).toBe(true);
+    expect(screen.getByTestId('ask-composer-hint')).toHaveTextContent('Show thinking is on.');
+    await type('/captain grace');
+    await ret();
+    expect(screen.getByTestId('ask-captain-menu')).toBeTruthy();
+    expect(screen.getByTestId('ask-composer-hint')).toHaveTextContent('Several captains match "grace". Choose one.');
+    await type('/captain hopper');
+    await ret();
+    await waitFor(() => expect(api.updateAskThread).toHaveBeenCalledWith('thr_1', { captainId: 'cpt_2' }));
+    await type('/captain nobody');
+    await ret();
+    expect(screen.getByTestId('ask-composer-hint')).toHaveTextContent('No captain matches "nobody".');
+    expect(input().props.value).toBe('/captain nobody');
+  });
+});
+
