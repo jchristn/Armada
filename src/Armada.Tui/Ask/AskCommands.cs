@@ -17,6 +17,12 @@ namespace Armada.Tui.Ask
         #region Public-Members
 
         /// <summary>
+        /// The escape for a message that starts with a slash: a leading <c>//</c> sends the rest as text beginning with
+        /// one <c>/</c> (matches the dashboard's and mobile app's shared catalog).
+        /// </summary>
+        public const string Escape = "//";
+
+        /// <summary>
         /// Maximum conversation title length (the server's limit).
         /// </summary>
         public const int MaxTitleLength = 200;
@@ -29,6 +35,18 @@ namespace Armada.Tui.Ask
         #endregion
 
         #region Public-Methods
+
+        /// <summary>
+        /// The message to send for composer text that is not a command: trimmed, with a leading <c>//</c> turned into
+        /// <c>/</c>.
+        /// </summary>
+        /// <param name="input">Composer text.</param>
+        /// <returns>Message text.</returns>
+        public static string MessageText(string? input)
+        {
+            string text = (input ?? "").Trim();
+            return text.StartsWith(Escape, StringComparison.Ordinal) ? text.Substring(1) : text;
+        }
 
         /// <summary>
         /// The built-in local commands, in menu order.
@@ -103,7 +121,7 @@ namespace Armada.Tui.Ask
         /// <returns>Matches.</returns>
         public static List<AskCommandItem> Filter(IEnumerable<AskCommandItem> items, string? input)
         {
-            if (String.IsNullOrEmpty(input) || !input.StartsWith("/", StringComparison.Ordinal)) return new List<AskCommandItem>();
+            if (String.IsNullOrEmpty(input) || !input.StartsWith("/", StringComparison.Ordinal) || input.StartsWith(Escape, StringComparison.Ordinal)) return new List<AskCommandItem>();
             if (input.Any(Char.IsWhiteSpace)) return new List<AskCommandItem>();
             string typed = input.ToLowerInvariant();
             List<AskCommandItem> all = items.ToList();
@@ -126,7 +144,7 @@ namespace Armada.Tui.Ask
         {
             AskCommandParse result = new AskCommandParse();
             string text = (input ?? "").Trim();
-            if (!text.StartsWith("/", StringComparison.Ordinal)) return result;
+            if (!text.StartsWith("/", StringComparison.Ordinal) || text.StartsWith(Escape, StringComparison.Ordinal)) return result;
             int split = 0;
             while (split < text.Length && !Char.IsWhiteSpace(text[split])) split++;
             string word = text.Substring(0, split);

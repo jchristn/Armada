@@ -858,6 +858,9 @@ namespace Test.Shared.Suites.Tui
                 AssertEqual("/health,/help", String.Join(",", AskCommands.Filter(catalog, "/he").Select(i => i.Command)), "prefix matches");
                 AssertEqual("/new", String.Join(",", AskCommands.Filter(catalog, "/cl").Select(i => i.Command)), "alias prefix");
                 AssertEqual(0, AskCommands.Filter(catalog, "/rename x").Count, "menu closes once arguments are typed");
+                AssertEqual(0, AskCommands.Filter(catalog, "//new").Count, "a leading // opens no menu");
+                AssertEqual(AskCommandParseKindEnum.Text, AskCommands.Parse(catalog, "//Users/joel/notes.md").Kind, "a leading // is plain text");
+                AssertEqual("/Users/joel/notes.md", AskCommands.MessageText("  //Users/joel/notes.md "), "sent with one slash");
                 AskCommandParse rename = AskCommands.Parse(catalog, "  /RENAME  Billing fix ");
                 AssertEqual(AskCommandParseKindEnum.Command, rename.Kind, "exact command, any case");
                 AssertEqual(AskLocalCommandEnum.Rename, rename.Item!.Local!.Name, "rename");

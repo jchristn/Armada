@@ -669,11 +669,14 @@ namespace Armada.Tui.Ask
         /// confirmed or dropped on response.
         /// </summary>
         /// <param name="text">Text.</param>
-        /// <returns>False when nothing was sent (empty, no captain, a turn running, or a slash command).</returns>
+        /// <returns>False when nothing was sent (empty, no captain, a turn running, or a slash command). A leading
+        /// <c>//</c> is the escape for a message that starts with a slash: it is sent with one <c>/</c>.</returns>
         public bool Send(string text)
         {
-            string trimmed = (text ?? "").Trim();
-            if (trimmed.Length == 0 || NoCaptain || Conversation.TurnActive || trimmed.StartsWith("/", StringComparison.Ordinal)) return false;
+            string raw = (text ?? "").Trim();
+            if (raw.StartsWith("/", StringComparison.Ordinal) && !raw.StartsWith(AskCommands.Escape, StringComparison.Ordinal)) return false;
+            string trimmed = AskCommands.MessageText(raw);
+            if (trimmed.Length == 0 || NoCaptain || Conversation.TurnActive) return false;
             SentHistory.Add(trimmed);
             TuiTelemetry.RecordAskMessage();
             bool showThinking = ShowThinking;

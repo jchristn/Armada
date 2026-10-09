@@ -12,6 +12,7 @@ All notable changes to Armada are documented in this file.
 - One catalog for every client: `src/Armada.Dashboard/src/lib/askCommands.ts` (used by the dashboard and the mobile app; the TUI mirrors it in `Ask/AskCommands.cs`). A server quick action cannot take a local command's name.
 - Starting a new conversation by any path (New conversation, `/new`, `/clear`, `n` in the TUI, a link to `/ask`) clears the composer, the menu, and any hint, and focuses the message box. Each conversation keeps its own unsent draft, so switching back restores it and a new conversation never shows another conversation's text (the mobile app used to keep the old draft).
 - The menu and placeholders say "Commands" and "type / for commands"; every new string is translated in all locales. See "Slash commands" in `docs/ASK_ARMADA_HOME_BASE.md`.
+- A leading `//` sends a message that starts with a slash (a file path, for example) as text with a single `/`, in every client.
 
 ### Readiness shows where the checkout lives; health and check-run parsing fixes
 - Every readiness panel (dashboard, mobile app, TUI) now says where the vessel's checkout is: "Checkout: on Harbor Joels-MacBook-Pro at /Users/joel/Code/DocConverter" with the Harbor ID (dashboard copy button, selectable text in the app, `Y` Copy Harbor ID on the TUI vessel page), "on the Admiral at <path>", or the reason from `CheckoutErrorCode` when there is none. Readiness `HarborName` is now the Harbor's name alone; the ID is `HarborId`.

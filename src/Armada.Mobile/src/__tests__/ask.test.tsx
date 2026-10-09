@@ -902,6 +902,15 @@ describe('Ask Armada slash commands', () => {
     expect(screen.queryByTestId('ask-composer-hint')).toBeNull();
   });
 
+  it('a leading // sends a message that starts with a slash', async () => {
+    await openThread();
+    await type('//Users/joel/notes.md is broken');
+    expect(screen.queryByTestId('ask-composer-hint')).toBeNull();
+    await ret();
+    await waitFor(() => expect(api.sendAskMessage).toHaveBeenCalledWith(expect.any(String), '/Users/joel/notes.md is broken', false));
+    expect(input().props.value).toBe('');
+  });
+
   it('/help opens the menu with every command', async () => {
     await openThread();
     await type('/help');

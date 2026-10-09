@@ -123,7 +123,7 @@ export function buildCommandCatalog(quickActions: AskQuickAction[]): AskCommandI
 
 /** Menu entries for what the user typed: only while the text is a single `/word`; exact matches sort first. */
 export function filterCommands(items: AskCommandItem[], input: string): AskCommandItem[] {
-  if (!input.startsWith('/') || /\s/.test(input)) return [];
+  if (!input.startsWith('/') || input.startsWith(COMMAND_ESCAPE) || /\s/.test(input)) return [];
   const typed = input.toLowerCase();
   const exact = items.filter((i) => spellings(i).includes(typed));
   const prefix = items.filter((i) => !exact.includes(i) && (spellings(i).some((s) => s.startsWith(typed))
@@ -131,11 +131,20 @@ export function filterCommands(items: AskCommandItem[], input: string): AskComma
   return [...exact, ...prefix];
 }
 
+/** The escape for a message that starts with a slash: a leading `//` sends the rest as text beginning with one `/`. */
+export const COMMAND_ESCAPE = '//';
+
+/** The message to send for composer text that is not a command: trimmed, with a leading `//` turned into `/`. */
+export function messageText(input: string): string {
+  const text = input.trim();
+  return text.startsWith(COMMAND_ESCAPE) ? text.slice(1) : text;
+}
+
 /** Classify the composer text: plain text, a command with its arguments (case-insensitive, aliases included), or an
- * unknown command. */
+ * unknown command. Text starting with `//` is plain text (see {@link messageText}). */
 export function parseCommand(items: AskCommandItem[], input: string): AskCommandParse {
   const text = input.trim();
-  if (!text.startsWith('/')) return { kind: 'text' };
+  if (!text.startsWith('/') || text.startsWith(COMMAND_ESCAPE)) return { kind: 'text' };
   const match = /^(\S*)\s*([\s\S]*)$/.exec(text);
   const word = match ? match[1] : text;
   const args = match ? match[2].trim() : '';

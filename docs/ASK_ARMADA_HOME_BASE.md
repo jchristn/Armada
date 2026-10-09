@@ -354,6 +354,8 @@ The dashboard, the mobile app, and the TUI share one command catalog: the server
 
 Rules (every client):
 
+- To send a message that starts with a slash (a file path such as `/Users/me/notes.md`), start it with `//`: the
+  menu stays closed and the message is sent with a single `/`.
 - Typing `/` opens the menu; it narrows as you type (command, alias, or quick action name), exact matches first, and
   closes once arguments are typed. The first entry is highlighted; on the dashboard and in the TUI the arrow keys
   move the highlight. The mobile app highlights the first entry (React Native reports no arrow keys from a hardware

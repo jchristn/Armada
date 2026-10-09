@@ -5,6 +5,7 @@ import { quickActionForm } from '../../lib/askQuickActions';
 import {
   buildCommandCatalog,
   filterCommands,
+  messageText,
   resolveSubmit,
   unknownCommandHint,
   type AskCommandItem,
@@ -138,7 +139,7 @@ const AskComposer = forwardRef<AskComposerHandle, AskComposerProps>(function Ask
       return;
     }
     if (!canSendText) return;
-    onSend(input.trim());
+    onSend(messageText(input));
     setText('');
     setHint(null);
   }

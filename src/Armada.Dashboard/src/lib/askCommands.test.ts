@@ -4,6 +4,7 @@ import {
   filterCommands,
   LOCAL_COMMANDS,
   matchCaptains,
+  messageText,
   parseCommand,
   parseThinkingArg,
   resolveSubmit,
@@ -69,6 +70,14 @@ describe('command catalog', () => {
 });
 
 describe('parseCommand', () => {
+  it('a leading // escapes a message that starts with a slash: no menu, plain text, sent with one /', () => {
+    expect(parseCommand(catalog, '//Users/joel/notes.md is broken')).toEqual({ kind: 'text' });
+    expect(filterCommands(catalog, '//new')).toEqual([]);
+    expect(messageText('  //Users/joel/notes.md is broken ')).toBe('/Users/joel/notes.md is broken');
+    expect(messageText('plain text')).toBe('plain text');
+    expect(resolveSubmit(catalog, '//new', null)).toEqual({ kind: 'text' });
+  });
+
   it('treats text that does not start with / as a message', () => {
     expect(parseCommand(catalog, 'hello /new')).toEqual({ kind: 'text' });
   });
