@@ -59,7 +59,8 @@ namespace Armada.Core.Database.Sqlite.Implementations
             string nowIso = SqliteDatabaseDriver.ToIso8601(now);
             string expiresIso = SqliteDatabaseDriver.ToIso8601(expires);
 
-            using (SqliteConnection conn = new SqliteConnection(_Driver.ConnectionString))
+            using (SqliteWriteLease writeLease = await _Driver.WriteGate.EnterAsync(token).ConfigureAwait(false))
+            using (SqliteConnection conn = new SqliteProviderConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqliteCommand cmd = conn.CreateCommand())
@@ -102,7 +103,8 @@ namespace Armada.Core.Database.Sqlite.Implementations
             string nowIso = SqliteDatabaseDriver.ToIso8601(now);
             string newExpiresIso = SqliteDatabaseDriver.ToIso8601(now.Add(ttl));
 
-            using (SqliteConnection conn = new SqliteConnection(_Driver.ConnectionString))
+            using (SqliteWriteLease writeLease = await _Driver.WriteGate.EnterAsync(token).ConfigureAwait(false))
+            using (SqliteConnection conn = new SqliteProviderConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqliteCommand cmd = conn.CreateCommand())
@@ -125,7 +127,8 @@ namespace Armada.Core.Database.Sqlite.Implementations
             if (String.IsNullOrEmpty(name)) throw new ArgumentNullException(nameof(name));
             if (String.IsNullOrEmpty(holder)) throw new ArgumentNullException(nameof(holder));
 
-            using (SqliteConnection conn = new SqliteConnection(_Driver.ConnectionString))
+            using (SqliteWriteLease writeLease = await _Driver.WriteGate.EnterAsync(token).ConfigureAwait(false))
+            using (SqliteConnection conn = new SqliteProviderConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqliteCommand cmd = conn.CreateCommand())
@@ -143,7 +146,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
         {
             if (String.IsNullOrEmpty(name)) throw new ArgumentNullException(nameof(name));
 
-            using (SqliteConnection conn = new SqliteConnection(_Driver.ConnectionString))
+            using (SqliteConnection conn = new SqliteProviderConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqliteCommand cmd = conn.CreateCommand())
@@ -166,7 +169,8 @@ namespace Armada.Core.Database.Sqlite.Implementations
         {
             string nowIso = SqliteDatabaseDriver.ToIso8601(DateTime.UtcNow);
 
-            using (SqliteConnection conn = new SqliteConnection(_Driver.ConnectionString))
+            using (SqliteWriteLease writeLease = await _Driver.WriteGate.EnterAsync(token).ConfigureAwait(false))
+            using (SqliteConnection conn = new SqliteProviderConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqliteCommand cmd = conn.CreateCommand())

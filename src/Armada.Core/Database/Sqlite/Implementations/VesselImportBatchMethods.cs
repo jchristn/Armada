@@ -22,7 +22,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
         private static readonly string _Values = "@id, @tenant_id, @user_id, @status, @harbor_id, @fleet_id, @job_id, @requested_path_count, @candidate_count, @created_count, @skipped_count, @failed_count, @created_utc, @last_update_utc, @completed_utc, @discovery_job_id, @truncated, @error_message, @categorization_status, @categorization_captain_id, @categorization_job_id, @categorization_prompt, @categorization_apply_automatically, @categorization_error, @categorization_started_utc, @categorization_completed_utc";
 
         private readonly string _ConnectionString;
-        private readonly SemaphoreSlim? _WriteLock;
+        private readonly SqliteWriteGate _WriteGate;
 
         #endregion
 
@@ -40,7 +40,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             if (settings == null) throw new ArgumentNullException(nameof(settings));
             if (logging == null) throw new ArgumentNullException(nameof(logging));
             _ConnectionString = driver.ConnectionString;
-            _WriteLock = driver.WriteLock;
+            _WriteGate = driver.WriteGate;
         }
         #endregion
 
@@ -53,7 +53,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             if (String.IsNullOrEmpty(batch.Id)) batch.Id = Constants.IdGenerator.GenerateKSortable(Constants.VesselImportBatchIdPrefix, 24);
             batch.LastUpdateUtc = DateTime.UtcNow;
 
-            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteGate, async (SqliteConnection conn, SqliteTransaction tx) =>
             {
                 await SqliteCommandHelper.ExecuteAsync(conn, tx, "INSERT INTO vessel_import_batches (" + _Columns + ") VALUES (" + _Values + ");", cmd => Bind(cmd, batch), token).ConfigureAwait(false);
             }, token).ConfigureAwait(false);
@@ -95,7 +95,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             if (String.IsNullOrEmpty(batch.Id)) throw new ArgumentException("Batch identifier is required.", nameof(batch));
             batch.LastUpdateUtc = DateTime.UtcNow;
 
-            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteGate, async (SqliteConnection conn, SqliteTransaction tx) =>
             {
                 await SqliteCommandHelper.ExecuteAsync(conn, tx, @"UPDATE vessel_import_batches SET
                     tenant_id = @tenant_id, user_id = @user_id, status = @status, harbor_id = @harbor_id, fleet_id = @fleet_id,
@@ -117,7 +117,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
         public async Task DeleteAsync(string id, CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
-            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteGate, async (SqliteConnection conn, SqliteTransaction tx) =>
             {
                 await SqliteCommandHelper.ExecuteAsync(conn, tx, "DELETE FROM vessel_import_fleet_recommendation_vessels WHERE batch_id = @id;", cmd => SqliteCommandHelper.Add(cmd, "@id", id), token).ConfigureAwait(false);
                 await SqliteCommandHelper.ExecuteAsync(conn, tx, "DELETE FROM vessel_import_fleet_recommendations WHERE batch_id = @id;", cmd => SqliteCommandHelper.Add(cmd, "@id", id), token).ConfigureAwait(false);
@@ -131,7 +131,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
         {
             if (String.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
             if (String.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
-            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteGate, async (SqliteConnection conn, SqliteTransaction tx) =>
             {
                 Action<SqliteCommand> bind = cmd =>
                 {
@@ -167,7 +167,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             string where = " WHERE " + String.Join(" AND ", conditions);
             string direction = query.Order == EnumerationOrderEnum.CreatedAscending ? "ASC" : "DESC";
 
-            using (SqliteConnection conn = new SqliteConnection(_ConnectionString))
+            using (SqliteConnection conn = new SqliteProviderConnection(_ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 long total = await SqliteCommandHelper.CountAsync(conn, "SELECT COUNT(*) FROM vessel_import_batches" + where + ";", bind, token).ConfigureAwait(false);

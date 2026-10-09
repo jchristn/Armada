@@ -26,7 +26,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             (@id, @harbor_id, @event_type, @occurred_utc, @detail);";
 
         private readonly string _ConnectionString;
-        private readonly SemaphoreSlim? _WriteLock;
+        private readonly SqliteWriteGate _WriteGate;
 
         #endregion
 
@@ -45,7 +45,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             if (settings == null) throw new ArgumentNullException(nameof(settings));
             if (logging == null) throw new ArgumentNullException(nameof(logging));
             _ConnectionString = driver.ConnectionString;
-            _WriteLock = driver.WriteLock;
+            _WriteGate = driver.WriteGate;
         }
 
         #endregion
@@ -57,7 +57,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
         {
             if (linkEvent == null) throw new ArgumentNullException(nameof(linkEvent));
             if (String.IsNullOrEmpty(linkEvent.HarborId)) throw new ArgumentException("HarborId is required.", nameof(linkEvent));
-            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteGate, async (SqliteConnection conn, SqliteTransaction tx) =>
             {
                 await SqliteCommandHelper.ExecuteAsync(conn, tx, _Insert, cmd => Bind(cmd, linkEvent), token).ConfigureAwait(false);
             }, token).ConfigureAwait(false);
@@ -97,7 +97,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
         {
             if (String.IsNullOrEmpty(harborId)) throw new ArgumentNullException(nameof(harborId));
             int deleted = 0;
-            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteGate, async (SqliteConnection conn, SqliteTransaction tx) =>
             {
                 deleted = await SqliteCommandHelper.ExecuteAsync(conn, tx, "DELETE FROM harbor_link_events WHERE harbor_id = @harbor_id AND occurred_utc < @before_utc;",
                     cmd =>
@@ -122,7 +122,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
         {
             if (String.IsNullOrEmpty(harborId)) throw new ArgumentNullException(nameof(harborId));
             int deleted = 0;
-            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteGate, async (SqliteConnection conn, SqliteTransaction tx) =>
             {
                 deleted = await SqliteCommandHelper.ExecuteAsync(conn, tx, "DELETE FROM harbor_link_events WHERE harbor_id = @harbor_id;",
                     cmd => SqliteCommandHelper.Add(cmd, "@harbor_id", harborId), token).ConfigureAwait(false);

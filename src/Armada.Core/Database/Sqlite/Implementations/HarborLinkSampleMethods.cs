@@ -25,7 +25,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             (@id, @harbor_id, @bucket_start_utc, @heartbeat_count, @round_trip_count, @round_trip_total_ms, @round_trip_max_ms, @reconnect_count, @last_reconnect_utc, @created_utc);";
 
         private readonly string _ConnectionString;
-        private readonly SemaphoreSlim? _WriteLock;
+        private readonly SqliteWriteGate _WriteGate;
 
         #endregion
 
@@ -44,7 +44,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             if (settings == null) throw new ArgumentNullException(nameof(settings));
             if (logging == null) throw new ArgumentNullException(nameof(logging));
             _ConnectionString = driver.ConnectionString;
-            _WriteLock = driver.WriteLock;
+            _WriteGate = driver.WriteGate;
         }
 
         #endregion
@@ -56,7 +56,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
         {
             if (sample == null) throw new ArgumentNullException(nameof(sample));
             if (String.IsNullOrEmpty(sample.HarborId)) throw new ArgumentException("HarborId is required.", nameof(sample));
-            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteGate, async (SqliteConnection conn, SqliteTransaction tx) =>
             {
                 await SqliteCommandHelper.ExecuteAsync(conn, tx, _Insert, cmd => Bind(cmd, sample), token).ConfigureAwait(false);
             }, token).ConfigureAwait(false);
@@ -91,7 +91,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
         public async Task<int> DeleteBeforeAsync(DateTime cutoffUtc, CancellationToken token = default)
         {
             int deleted = 0;
-            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteGate, async (SqliteConnection conn, SqliteTransaction tx) =>
             {
                 deleted = await SqliteCommandHelper.ExecuteAsync(conn, tx, "DELETE FROM harbor_link_samples WHERE bucket_start_utc < @cutoff;",
                     cmd => SqliteCommandHelper.AddDate(cmd, "@cutoff", cutoffUtc), token).ConfigureAwait(false);
@@ -104,7 +104,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
         {
             if (String.IsNullOrEmpty(harborId)) throw new ArgumentNullException(nameof(harborId));
             int deleted = 0;
-            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteGate, async (SqliteConnection conn, SqliteTransaction tx) =>
             {
                 deleted = await SqliteCommandHelper.ExecuteAsync(conn, tx, "DELETE FROM harbor_link_samples WHERE harbor_id = @harbor_id;",
                     cmd => SqliteCommandHelper.Add(cmd, "@harbor_id", harborId), token).ConfigureAwait(false);

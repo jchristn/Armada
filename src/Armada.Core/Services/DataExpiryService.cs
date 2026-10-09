@@ -6,11 +6,13 @@ namespace Armada.Core.Services
     using System.Threading.Tasks;
     using Microsoft.Data.Sqlite;
     using SyslogLogging;
+    using Armada.Core.Database.Sqlite;
 
     /// <summary>
     /// Background service that purges old completed data from the database.
     /// Removes completed voyages, their missions, old signals, and old events
-    /// that exceed the configured retention period.
+    /// that exceed the configured retention period. Each DELETE enters the database's write gate on its own, so other
+    /// writers interleave between the statements instead of waiting for the whole sweep.
     /// </summary>
     public class DataExpiryService
     {
@@ -23,6 +25,7 @@ namespace Armada.Core.Services
         private string _Header = "[DataExpiryService] ";
         private LoggingModule _Logging;
         private string _ConnectionString;
+        private SqliteWriteGate _WriteGate;
         private int _RetentionDays;
 
         private static readonly string _Iso8601Format = "yyyy-MM-ddTHH:mm:ss.fffffffZ";
@@ -41,6 +44,7 @@ namespace Armada.Core.Services
         {
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
             _ConnectionString = connectionString ?? throw new ArgumentNullException(nameof(connectionString));
+            _WriteGate = SqliteWriteGate.ForConnectionString(connectionString);
             _RetentionDays = retentionDays;
         }
 
@@ -67,7 +71,7 @@ namespace Armada.Core.Services
 
             _Logging.Debug(_Header + "purging data older than " + cutoffStr);
 
-            using (SqliteConnection conn = new SqliteConnection(_ConnectionString))
+            using (SqliteConnection conn = new SqliteProviderConnection(_ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
 
@@ -142,6 +146,7 @@ namespace Armada.Core.Services
 
         private async Task<int> ExecuteDeleteAsync(SqliteConnection conn, string sql, string cutoff, CancellationToken token)
         {
+            using (SqliteWriteLease writeLease = await _WriteGate.EnterAsync(token).ConfigureAwait(false))
             using (SqliteCommand cmd = conn.CreateCommand())
             {
                 cmd.CommandText = sql;

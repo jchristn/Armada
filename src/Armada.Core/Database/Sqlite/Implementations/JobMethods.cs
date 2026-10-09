@@ -30,7 +30,8 @@ namespace Armada.Core.Database.Sqlite.Implementations
         public async Task<Job> CreateAsync(Job job, CancellationToken token = default)
         {
             if (job == null) throw new ArgumentNullException(nameof(job));
-            using (SqliteConnection conn = new SqliteConnection(_Driver.ConnectionString))
+            using (SqliteWriteLease writeLease = await _Driver.WriteGate.EnterAsync(token).ConfigureAwait(false))
+            using (SqliteConnection conn = new SqliteProviderConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqliteCommand cmd = conn.CreateCommand())
@@ -51,7 +52,8 @@ namespace Armada.Core.Database.Sqlite.Implementations
         public async Task<Job> UpdateAsync(Job job, CancellationToken token = default)
         {
             if (job == null) throw new ArgumentNullException(nameof(job));
-            using (SqliteConnection conn = new SqliteConnection(_Driver.ConnectionString))
+            using (SqliteWriteLease writeLease = await _Driver.WriteGate.EnterAsync(token).ConfigureAwait(false))
+            using (SqliteConnection conn = new SqliteProviderConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqliteCommand cmd = conn.CreateCommand())
@@ -85,7 +87,8 @@ namespace Armada.Core.Database.Sqlite.Implementations
             if (expectedStatuses == null) throw new ArgumentNullException(nameof(expectedStatuses));
             if (expectedStatuses.Count == 0) throw new ArgumentException("At least one expected status is required.", nameof(expectedStatuses));
 
-            using (SqliteConnection conn = new SqliteConnection(_Driver.ConnectionString))
+            using (SqliteWriteLease writeLease = await _Driver.WriteGate.EnterAsync(token).ConfigureAwait(false))
+            using (SqliteConnection conn = new SqliteProviderConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqliteCommand cmd = conn.CreateCommand())
@@ -126,7 +129,8 @@ namespace Armada.Core.Database.Sqlite.Implementations
         public async Task<bool> TryHeartbeatAsync(string id, int minimumProgress, DateTime lastUpdateUtc, CancellationToken token = default)
         {
             if (String.IsNullOrWhiteSpace(id)) throw new ArgumentNullException(nameof(id));
-            using (SqliteConnection conn = new SqliteConnection(_Driver.ConnectionString))
+            using (SqliteWriteLease writeLease = await _Driver.WriteGate.EnterAsync(token).ConfigureAwait(false))
+            using (SqliteConnection conn = new SqliteProviderConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqliteCommand cmd = conn.CreateCommand())
@@ -229,7 +233,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             string where = query.BuildWhereClause(out List<KeyValuePair<string, object>> parameters);
 
             long total;
-            using (SqliteConnection conn = new SqliteConnection(_Driver.ConnectionString))
+            using (SqliteConnection conn = new SqliteProviderConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqliteCommand cmd = conn.CreateCommand())
@@ -252,7 +256,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
         /// <inheritdoc />
         public async Task<bool> ExistsAnyAsync(CancellationToken token = default)
         {
-            using (SqliteConnection conn = new SqliteConnection(_Driver.ConnectionString))
+            using (SqliteConnection conn = new SqliteProviderConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqliteCommand cmd = conn.CreateCommand())
@@ -268,7 +272,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
         public async Task<bool> ExistsAsync(string id, CancellationToken token = default)
         {
             if (String.IsNullOrWhiteSpace(id)) throw new ArgumentNullException(nameof(id));
-            using (SqliteConnection conn = new SqliteConnection(_Driver.ConnectionString))
+            using (SqliteConnection conn = new SqliteProviderConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqliteCommand cmd = conn.CreateCommand())
@@ -283,7 +287,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
 
         private async Task<Job?> ReadInternalAsync(string sql, Action<SqliteCommand> parameterize, CancellationToken token)
         {
-            using (SqliteConnection conn = new SqliteConnection(_Driver.ConnectionString))
+            using (SqliteConnection conn = new SqliteProviderConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqliteCommand cmd = conn.CreateCommand())
@@ -304,7 +308,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
         private async Task<List<Job>> EnumerateInternalAsync(string sql, Action<SqliteCommand>? parameterize, CancellationToken token)
         {
             List<Job> results = new List<Job>();
-            using (SqliteConnection conn = new SqliteConnection(_Driver.ConnectionString))
+            using (SqliteConnection conn = new SqliteProviderConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqliteCommand cmd = conn.CreateCommand())
@@ -324,7 +328,8 @@ namespace Armada.Core.Database.Sqlite.Implementations
 
         private async Task ExecuteDeleteAsync(string sql, Action<SqliteCommand> parameterize, CancellationToken token)
         {
-            using (SqliteConnection conn = new SqliteConnection(_Driver.ConnectionString))
+            using (SqliteWriteLease writeLease = await _Driver.WriteGate.EnterAsync(token).ConfigureAwait(false))
+            using (SqliteConnection conn = new SqliteProviderConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqliteCommand cmd = conn.CreateCommand())

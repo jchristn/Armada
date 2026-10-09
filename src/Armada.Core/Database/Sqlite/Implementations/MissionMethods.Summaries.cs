@@ -25,7 +25,7 @@ LENGTH(COALESCE(agent_output, '')) AS agent_output_length";
         {
             if (String.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
 
-            using (SqliteConnection conn = new SqliteConnection(_Driver.ConnectionString))
+            using (SqliteConnection conn = new SqliteProviderConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqliteCommand cmd = conn.CreateCommand())
@@ -99,7 +99,7 @@ LENGTH(COALESCE(agent_output, '')) AS agent_output_length";
             if (String.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
             if (String.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
 
-            using (SqliteConnection conn = new SqliteConnection(_Driver.ConnectionString))
+            using (SqliteConnection conn = new SqliteProviderConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqliteCommand cmd = conn.CreateCommand())
@@ -181,7 +181,7 @@ LENGTH(COALESCE(agent_output, '')) AS agent_output_length";
             if (String.IsNullOrEmpty(userId)) throw new ArgumentNullException(nameof(userId));
             if (String.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
 
-            using (SqliteConnection conn = new SqliteConnection(_Driver.ConnectionString))
+            using (SqliteConnection conn = new SqliteProviderConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqliteCommand cmd = conn.CreateCommand())
@@ -256,7 +256,7 @@ LENGTH(COALESCE(agent_output, '')) AS agent_output_length";
         {
             query ??= new EnumerationQuery();
 
-            using (SqliteConnection conn = new SqliteConnection(_Driver.ConnectionString))
+            using (SqliteConnection conn = new SqliteProviderConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
 
@@ -298,7 +298,7 @@ LENGTH(COALESCE(agent_output, '')) AS agent_output_length";
         {
             List<MissionSummary> results = new List<MissionSummary>();
 
-            using (SqliteConnection conn = new SqliteConnection(_Driver.ConnectionString))
+            using (SqliteConnection conn = new SqliteProviderConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqliteCommand cmd = conn.CreateCommand())
@@ -322,7 +322,7 @@ LENGTH(COALESCE(agent_output, '')) AS agent_output_length";
         {
             List<MissionSummary> results = new List<MissionSummary>();
 
-            using (SqliteConnection conn = new SqliteConnection(_Driver.ConnectionString))
+            using (SqliteConnection conn = new SqliteProviderConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqliteCommand cmd = conn.CreateCommand())
@@ -350,7 +350,7 @@ LENGTH(COALESCE(agent_output, '')) AS agent_output_length";
         {
             Dictionary<MissionStatusEnum, int> results = new Dictionary<MissionStatusEnum, int>();
 
-            using (SqliteConnection conn = new SqliteConnection(_Driver.ConnectionString))
+            using (SqliteConnection conn = new SqliteProviderConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqliteCommand cmd = conn.CreateCommand())
@@ -384,7 +384,7 @@ LENGTH(COALESCE(agent_output, '')) AS agent_output_length";
             query ??= new MissionHistoryQuery();
             List<MissionHistoryPoint> results = new List<MissionHistoryPoint>();
 
-            using (SqliteConnection conn = new SqliteConnection(_Driver.ConnectionString))
+            using (SqliteConnection conn = new SqliteProviderConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqliteCommand cmd = conn.CreateCommand())

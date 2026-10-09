@@ -24,7 +24,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             (@id, @tenant_id, @batch_id, @path, @proposed_name, @remote_url, @default_branch, @candidate_status, @existing_vessel_id, @outcome, @outcome_reason, @outcome_message, @vessel_id, @selected, @created_utc, @last_update_utc);";
 
         private readonly string _ConnectionString;
-        private readonly SemaphoreSlim? _WriteLock;
+        private readonly SqliteWriteGate _WriteGate;
 
         #endregion
 
@@ -42,7 +42,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             if (settings == null) throw new ArgumentNullException(nameof(settings));
             if (logging == null) throw new ArgumentNullException(nameof(logging));
             _ConnectionString = driver.ConnectionString;
-            _WriteLock = driver.WriteLock;
+            _WriteGate = driver.WriteGate;
         }
         #endregion
 
@@ -54,7 +54,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             if (item == null) throw new ArgumentNullException(nameof(item));
             Prepare(item);
 
-            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteGate, async (SqliteConnection conn, SqliteTransaction tx) =>
             {
                 await SqliteCommandHelper.ExecuteAsync(conn, tx, _Insert, cmd => Bind(cmd, item), token).ConfigureAwait(false);
             }, token).ConfigureAwait(false);
@@ -73,7 +73,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
                 Prepare(item);
             }
 
-            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteGate, async (SqliteConnection conn, SqliteTransaction tx) =>
             {
                 foreach (VesselImportItem item in items)
                 {
@@ -119,7 +119,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             if (String.IsNullOrEmpty(item.Id)) throw new ArgumentException("Item identifier is required.", nameof(item));
             item.LastUpdateUtc = DateTime.UtcNow;
 
-            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteGate, async (SqliteConnection conn, SqliteTransaction tx) =>
             {
                 await SqliteCommandHelper.ExecuteAsync(conn, tx, @"UPDATE vessel_import_items SET
                     tenant_id = @tenant_id, batch_id = @batch_id, path = @path, proposed_name = @proposed_name,
@@ -153,7 +153,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
         {
             if (String.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
             if (String.IsNullOrEmpty(batchId)) throw new ArgumentNullException(nameof(batchId));
-            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteGate, async (SqliteConnection conn, SqliteTransaction tx) =>
             {
                 await SqliteCommandHelper.ExecuteAsync(conn, tx, "DELETE FROM vessel_import_items WHERE tenant_id = @tenant_id AND batch_id = @batch_id;", cmd =>
                 {

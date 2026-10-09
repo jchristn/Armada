@@ -379,9 +379,12 @@ namespace Armada.Server.Mcp.Tools
 
                 // Copy the backup into the live database page by page. Unlike overwriting the file, the online backup
                 // API takes the database lock, writes through the live WAL, and leaves connections other components
-                // hold open pointing at a consistent database.
+                // hold open pointing at a consistent database. The live database's write gate is held throughout so
+                // the restore queues with the server's own writers instead of contending with them.
+                string liveConnStr = "Data Source=" + settings.Database.Filename;
+                using (SqliteWriteLease writeLease = await SqliteWriteGate.ForConnectionString(liveConnStr).EnterAsync().ConfigureAwait(false))
                 using (SqliteConnection source = new SqliteConnection(validateConnStr))
-                using (SqliteConnection live = new SqliteConnection("Data Source=" + settings.Database.Filename))
+                using (SqliteConnection live = new SqliteProviderConnection(liveConnStr))
                 {
                     await source.OpenAsync().ConfigureAwait(false);
                     await live.OpenAsync().ConfigureAwait(false);

@@ -31,7 +31,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             WHERE tenant_id = @tenant_id AND id = @id;";
 
         private readonly string _ConnectionString;
-        private readonly SemaphoreSlim? _WriteLock;
+        private readonly SqliteWriteGate _WriteGate;
 
         #endregion
 
@@ -50,7 +50,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             if (settings == null) throw new ArgumentNullException(nameof(settings));
             if (logging == null) throw new ArgumentNullException(nameof(logging));
             _ConnectionString = driver.ConnectionString;
-            _WriteLock = driver.WriteLock;
+            _WriteGate = driver.WriteGate;
         }
 
         #endregion
@@ -65,7 +65,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             if (String.IsNullOrEmpty(thread.UserId)) throw new ArgumentException("UserId is required.", nameof(thread));
 
             thread.LastUpdateUtc = DateTime.UtcNow;
-            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteGate, async (SqliteConnection conn, SqliteTransaction tx) =>
             {
                 await SqliteCommandHelper.ExecuteAsync(conn, tx, _Insert, cmd => Bind(cmd, thread), token).ConfigureAwait(false);
             }, token).ConfigureAwait(false);
@@ -124,7 +124,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             if (String.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
 
             int updated = 0;
-            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteGate, async (SqliteConnection conn, SqliteTransaction tx) =>
             {
                 updated = await SqliteCommandHelper.ExecuteAsync(conn, tx,
                     "UPDATE ask_threads SET cli_permission_policy = @policy, last_update_utc = @now WHERE tenant_id = @tenant_id AND id = @id;",
@@ -146,7 +146,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             if (String.IsNullOrEmpty(thread.TenantId)) throw new ArgumentException("TenantId is required.", nameof(thread));
 
             thread.LastUpdateUtc = DateTime.UtcNow;
-            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteGate, async (SqliteConnection conn, SqliteTransaction tx) =>
             {
                 await SqliteCommandHelper.ExecuteAsync(conn, tx, _Update, cmd =>
                 {
@@ -190,7 +190,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             string where = " WHERE " + String.Join(" AND ", conditions);
             int offset = (request.PageNumber - 1) * request.PageSize;
 
-            using (SqliteConnection conn = new SqliteConnection(_ConnectionString))
+            using (SqliteConnection conn = new SqliteProviderConnection(_ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 long total = await SqliteCommandHelper.CountAsync(conn, "SELECT COUNT(*) FROM ask_threads" + where + ";", bind, token).ConfigureAwait(false);
@@ -216,7 +216,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             if (String.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
 
             int deleted = 0;
-            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteGate, async (SqliteConnection conn, SqliteTransaction tx) =>
             {
                 object? owner = await SqliteCommandHelper.ScalarAsync(conn, tx,
                     "SELECT id FROM ask_threads WHERE tenant_id = @tenant_id AND user_id = @user_id AND id = @id;",
@@ -252,7 +252,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             if (String.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
 
             int updated = 0;
-            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteGate, async (SqliteConnection conn, SqliteTransaction tx) =>
             {
                 updated = await SqliteCommandHelper.ExecuteAsync(conn, tx,
                     "UPDATE ask_threads SET unread_count = 0 WHERE tenant_id = @tenant_id AND user_id = @user_id AND id = @id;",

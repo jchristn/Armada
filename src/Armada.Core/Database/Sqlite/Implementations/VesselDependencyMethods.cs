@@ -19,7 +19,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
         #region Private-Members
 
         private readonly string _ConnectionString;
-        private readonly SemaphoreSlim? _WriteLock;
+        private readonly SqliteWriteGate _WriteGate;
 
         #endregion
 
@@ -37,7 +37,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             if (settings == null) throw new ArgumentNullException(nameof(settings));
             if (logging == null) throw new ArgumentNullException(nameof(logging));
             _ConnectionString = driver.ConnectionString;
-            _WriteLock = driver.WriteLock;
+            _WriteGate = driver.WriteGate;
         }
         #endregion
 
@@ -60,7 +60,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
                 dependency.LastUpdateUtc = now;
             }
 
-            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteGate, async (SqliteConnection conn, SqliteTransaction tx) =>
             {
                 await SqliteCommandHelper.ExecuteAsync(conn, tx, "DELETE FROM vessel_dependencies WHERE tenant_id = @tenant_id AND vessel_id = @vessel_id;", cmd =>
                 {
@@ -100,7 +100,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
         {
             if (String.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
             if (String.IsNullOrEmpty(vesselId)) throw new ArgumentNullException(nameof(vesselId));
-            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteGate, async (SqliteConnection conn, SqliteTransaction tx) =>
             {
                 await SqliteCommandHelper.ExecuteAsync(conn, tx, "DELETE FROM vessel_dependencies WHERE tenant_id = @tenant_id AND vessel_id = @vessel_id;", cmd =>
                 {

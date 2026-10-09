@@ -20,7 +20,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
         #region Private-Members
 
         private readonly string _ConnectionString;
-        private readonly SemaphoreSlim? _WriteLock;
+        private readonly SqliteWriteGate _WriteGate;
 
         #endregion
 
@@ -38,7 +38,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             if (settings == null) throw new ArgumentNullException(nameof(settings));
             if (logging == null) throw new ArgumentNullException(nameof(logging));
             _ConnectionString = driver.ConnectionString;
-            _WriteLock = driver.WriteLock;
+            _WriteGate = driver.WriteGate;
         }
         #endregion
 
@@ -52,7 +52,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             if (String.IsNullOrEmpty(healthOverride.TenantId)) throw new ArgumentException("TenantId is required.", nameof(healthOverride));
             healthOverride.LastUpdateUtc = DateTime.UtcNow;
 
-            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteGate, async (SqliteConnection conn, SqliteTransaction tx) =>
             {
                 List<VesselHealthOverride> existing = await SqliteCommandHelper.QueryAsync(conn, tx,
                     "SELECT * FROM vessel_health_overrides WHERE tenant_id = @tenant_id AND vessel_id = @vessel_id AND criterion = @criterion;",
@@ -102,7 +102,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
         {
             if (String.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
             if (String.IsNullOrEmpty(vesselId)) throw new ArgumentNullException(nameof(vesselId));
-            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteGate, async (SqliteConnection conn, SqliteTransaction tx) =>
             {
                 await SqliteCommandHelper.ExecuteAsync(conn, tx, "DELETE FROM vessel_health_overrides WHERE tenant_id = @tenant_id AND vessel_id = @vessel_id AND criterion = @criterion;", cmd =>
                 {
@@ -118,7 +118,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
         {
             if (String.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
             if (String.IsNullOrEmpty(vesselId)) throw new ArgumentNullException(nameof(vesselId));
-            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteGate, async (SqliteConnection conn, SqliteTransaction tx) =>
             {
                 await SqliteCommandHelper.ExecuteAsync(conn, tx, "DELETE FROM vessel_health_overrides WHERE tenant_id = @tenant_id AND vessel_id = @vessel_id;", cmd =>
                 {

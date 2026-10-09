@@ -4,6 +4,7 @@ namespace Test.Shared
     using System.Collections.Generic;
     using System.Linq;
     using System.Reflection;
+    using Armada.Core.Database.Sqlite;
     using Test.Shared.Infrastructure;
     using Touchstone.Core;
 
@@ -25,6 +26,19 @@ namespace Test.Shared
         public static IReadOnlyList<TestSuiteDescriptor> All
         {
             get { return _Build(); }
+        }
+
+        #endregion
+
+        #region Constructors-and-Factories
+
+        /// <summary>
+        /// Turn on the SQLite write audit for every test run: a write transaction committed by a flow that does not
+        /// hold the database's write gate fails, so a provider write path that bypasses the gate fails its test.
+        /// </summary>
+        static ArmadaTestSuites()
+        {
+            SqliteWriteGate.StrictAudit = true;
         }
 
         #endregion

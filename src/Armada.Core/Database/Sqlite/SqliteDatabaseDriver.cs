@@ -32,12 +32,13 @@ namespace Armada.Core.Database.Sqlite
         }
 
         /// <summary>
-        /// In-process write lock. Writers that use it queue for the SQLite database lock instead of contending
-        /// for it, which keeps concurrent multi-statement write transactions from failing with SQLITE_BUSY.
+        /// Write gate of this database. Every write the provider makes enters it first, so writers queue in order
+        /// instead of contending for the SQLite database lock (see <see cref="SqliteWriteGate"/>). Drivers and services
+        /// pointing at the same file share one gate.
         /// </summary>
-        internal SemaphoreSlim WriteLock
+        public SqliteWriteGate WriteGate
         {
-            get { return _Semaphore; }
+            get { return _WriteGate; }
         }
 
         #endregion
@@ -56,7 +57,7 @@ namespace Armada.Core.Database.Sqlite
         private DatabaseSettings _Settings;
         private string _ConnectionString;
         private LoggingModule _Logging;
-        private SemaphoreSlim _Semaphore = new SemaphoreSlim(1, 1);
+        private SqliteWriteGate _WriteGate;
         private bool _Disposed = false;
 
         private static readonly string _Iso8601Format = "yyyy-MM-ddTHH:mm:ss.fffffffZ";
@@ -75,6 +76,7 @@ namespace Armada.Core.Database.Sqlite
             _Settings = settings ?? throw new ArgumentNullException(nameof(settings));
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
             _ConnectionString = NormalizeConnectionString(settings.GetConnectionString());
+            _WriteGate = SqliteWriteGate.ForConnectionString(_ConnectionString);
 
             Fleets = new FleetMethods(this, _Settings, _Logging);
             Vessels = new VesselMethods(this, _Settings, _Logging);
@@ -143,6 +145,7 @@ namespace Armada.Core.Database.Sqlite
         {
             if (connectionString == null) throw new ArgumentNullException(nameof(connectionString));
             _ConnectionString = NormalizeConnectionString(connectionString);
+            _WriteGate = SqliteWriteGate.ForConnectionString(_ConnectionString);
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
             _Settings = new DatabaseSettings();
 
@@ -234,7 +237,8 @@ namespace Armada.Core.Database.Sqlite
         {
             _Logging.Debug(_Header + "initializing database");
 
-            using (SqliteConnection conn = new SqliteConnection(_ConnectionString))
+            using (SqliteWriteLease writeLease = await _WriteGate.EnterAsync(token).ConfigureAwait(false))
+            using (SqliteConnection conn = new SqliteProviderConnection(_ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
 
@@ -357,7 +361,7 @@ namespace Armada.Core.Database.Sqlite
         /// <returns>Current schema version number, or 0 if no migrations have been applied.</returns>
         public override async Task<int> GetSchemaVersionAsync(CancellationToken token = default)
         {
-            using (SqliteConnection conn = new SqliteConnection(_ConnectionString))
+            using (SqliteConnection conn = new SqliteProviderConnection(_ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
 
@@ -393,7 +397,6 @@ namespace Armada.Core.Database.Sqlite
         {
             if (_Disposed) return;
             _Disposed = true;
-            _Semaphore.Dispose();
             _Logging.Debug(_Header + "disposed");
         }
 
@@ -410,7 +413,8 @@ namespace Armada.Core.Database.Sqlite
         /// <inheritdoc />
         internal override async Task ReplayMigrationsAsync(CancellationToken token = default)
         {
-            using (SqliteConnection conn = new SqliteConnection(_ConnectionString))
+            using (SqliteWriteLease writeLease = await _WriteGate.EnterAsync(token).ConfigureAwait(false))
+            using (SqliteConnection conn = new SqliteProviderConnection(_ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 foreach (SchemaMigration migration in TableQueries.GetMigrations())

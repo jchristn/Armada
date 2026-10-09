@@ -27,7 +27,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             (@id, @tenant_id, @user_id, @captain_id, @mission_id, @voyage_id, @vessel_id, @thread_id, @message_id, @runtime, @tool_name, @input_text, @summary_text, @suggested_rule, @status, @decision_source, @rule_id, @decided_by_user_id, @decision_message, @expires_utc, @decided_utc, @created_utc, @last_update_utc);";
 
         private readonly string _ConnectionString;
-        private readonly SemaphoreSlim? _WriteLock;
+        private readonly SqliteWriteGate _WriteGate;
 
         #endregion
 
@@ -46,7 +46,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             if (settings == null) throw new ArgumentNullException(nameof(settings));
             if (logging == null) throw new ArgumentNullException(nameof(logging));
             _ConnectionString = driver.ConnectionString;
-            _WriteLock = driver.WriteLock;
+            _WriteGate = driver.WriteGate;
         }
 
         #endregion
@@ -58,7 +58,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
         {
             if (request == null) throw new ArgumentNullException(nameof(request));
             request.LastUpdateUtc = DateTime.UtcNow;
-            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteGate, async (SqliteConnection conn, SqliteTransaction tx) =>
             {
                 await SqliteCommandHelper.ExecuteAsync(conn, tx, _Insert, cmd => Bind(cmd, request), token).ConfigureAwait(false);
             }, token).ConfigureAwait(false);
@@ -79,7 +79,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
         public async Task UpdateMessageAsync(string id, string? messageId, CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
-            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteGate, async (SqliteConnection conn, SqliteTransaction tx) =>
             {
                 await SqliteCommandHelper.ExecuteAsync(conn, tx,
                     "UPDATE cli_permission_requests SET message_id = @message_id, last_update_utc = @now WHERE id = @id;",
@@ -100,7 +100,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
 
             int updated = 0;
             DateTime now = DateTime.UtcNow;
-            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteGate, async (SqliteConnection conn, SqliteTransaction tx) =>
             {
                 updated = await SqliteCommandHelper.ExecuteAsync(conn, tx,
                     "UPDATE cli_permission_requests SET status = @status, decision_source = @source, rule_id = @rule_id, decided_by_user_id = @decided_by_user_id, decision_message = @message, decided_utc = @now, last_update_utc = @now WHERE id = @id AND status = @pending;",
@@ -149,7 +149,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
         public async Task<int> DeleteFinishedBeforeAsync(DateTime cutoffUtc, CancellationToken token = default)
         {
             int deleted = 0;
-            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteGate, async (SqliteConnection conn, SqliteTransaction tx) =>
             {
                 deleted = await SqliteCommandHelper.ExecuteAsync(conn, tx,
                     "DELETE FROM cli_permission_requests WHERE status <> @pending AND (decided_utc < @cutoff OR (decided_utc IS NULL AND created_utc < @cutoff));",
