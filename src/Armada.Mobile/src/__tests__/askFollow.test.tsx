@@ -262,6 +262,28 @@ describe('MessageList following the newest message', () => {
     }
   });
 
+  it('"New messages" scrolls with animation that a repeat left from an earlier follow scroll does not cut short', async () => {
+    jest.useFakeTimers();
+    try {
+      const { rerender } = await render(<List messages={page} />);
+      await layout(300);
+      // A follow scroll that schedules a repeat (the native view has not reported the end yet)...
+      await contentSize(1000);
+      // ...then, before that repeat runs, the reader drags up and a new message arrives.
+      await drag(200, 1000);
+      await rerender(<List messages={[...page, message('m4')]} />);
+      await contentSize(1350);
+      scrollToOffset.mockClear();
+
+      await fireEvent.press(screen.getByTestId('ask-new-messages'));
+      expect(scrollToOffset).toHaveBeenLastCalledWith({ offset: 1050, animated: true });
+      await act(async () => { jest.advanceTimersByTime(1000); });
+      expect(scrollToOffset).toHaveBeenCalledTimes(1);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('a scroll event caused by content growth does not stop following', async () => {
     await render(<List messages={page} />);
     await layout(300);

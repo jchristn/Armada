@@ -108,7 +108,16 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(funct
   const scrollTo = useCallback((scroll: FollowScroll | null) => {
     if (!scroll) return;
     listRef.current?.scrollToOffset(scroll);
-    if (!scroll.animated) settle();
+    if (!scroll.animated) {
+      settle();
+      return;
+    }
+    // An animated scroll (the reader asked for the newest message) replaces any repeat still scheduled from an earlier
+    // instant scroll: its next frame would jump to the end and cut the animation short.
+    if (frameRef.current !== null) {
+      clearTimeout(frameRef.current);
+      frameRef.current = null;
+    }
   }, [settle]);
 
   // Before the new content's layout events arrive: older messages loaded above keep the reader's place, and another
