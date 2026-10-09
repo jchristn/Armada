@@ -39,7 +39,16 @@ export interface ConversationState {
   turnActive: boolean;
   /** Last turn failure reported by the server, shown inline until the next turn. */
   turnError: string | null;
+  /**
+   * Turns the socket reported finished (completed, failed, cancelled), newest last, at most CLOSED_TURN_LIMIT.
+   * A fast turn can finish before the send's HTTP response returns its turnId, and a REST snapshot can be older
+   * than the socket's terminal event; neither may bring a finished turn back.
+   */
+  closedTurnIds: string[];
 }
+
+/** How many finished turn ids the conversation remembers. */
+export const CLOSED_TURN_LIMIT = 50;
 
 export type ConversationAction =
   | { type: 'reset'; threadId: string | null }
@@ -70,6 +79,7 @@ export function initialConversation(threadId: string | null = null): Conversatio
     streaming: null,
     turnActive: false,
     turnError: null,
+    closedTurnIds: [],
   };
 }
 
@@ -158,6 +168,16 @@ function emptyStream(turnId: string): StreamingTurn {
   return { turnId, text: '', thinking: '', tools: [], finished: false, finalMessageId: null };
 }
 
+function isClosedTurn(state: ConversationState, turnId: string | null | undefined): boolean {
+  return !!turnId && state.closedTurnIds.includes(turnId);
+}
+
+function closeTurn(list: string[], turnId: string): string[] {
+  const next = list.filter((id) => id !== turnId);
+  next.push(turnId);
+  return next.length > CLOSED_TURN_LIMIT ? next.slice(next.length - CLOSED_TURN_LIMIT) : next;
+}
+
 /** Pure reducer for the open conversation. Events for other threads are ignored. */
 export function conversationReducer(state: ConversationState, action: ConversationAction): ConversationState {
   switch (action.type) {
@@ -173,7 +193,9 @@ export function conversationReducer(state: ConversationState, action: Conversati
       // `activeTurnId` is optional in the contract: when the server reports it, it is authoritative; when it is
       // absent, keep what the socket already told us.
       const reportsTurn = !!thread && Object.prototype.hasOwnProperty.call(thread, 'activeTurnId');
-      const activeTurn = thread?.activeTurnId ?? null;
+      // A snapshot taken before the socket reported the turn finished must not revive it.
+      const reported = thread?.activeTurnId ?? null;
+      const activeTurn = isClosedTurn(state, reported) ? null : reported;
       let streaming = state.streaming && !state.streaming.finished ? state.streaming : null;
       let turnActive = state.turnActive;
       if (reportsTurn) {
@@ -232,6 +254,8 @@ export function conversationReducer(state: ConversationState, action: Conversati
     case 'confirmUser': {
       const messages = state.messages.map((m) => (m.id === action.localId && action.messageId ? { ...m, id: action.messageId, isLocal: undefined } : m));
       const deduped = mergeMessages([], messages);
+      // The socket already reported this turn finished (a reply faster than the send's round trip): keep it ended.
+      if (isClosedTurn(state, action.turnId)) return { ...state, messages: deduped };
       const streaming = action.turnId && (!state.streaming || state.streaming.turnId !== action.turnId)
         ? (state.streaming && !state.streaming.finished && state.streaming.text === '' ? { ...state.streaming, turnId: action.turnId } : emptyStream(action.turnId))
         : state.streaming;
@@ -274,6 +298,8 @@ function applyEvent(state: ConversationState, event: AskEvent): ConversationStat
     case 'ask.chunk':
     case 'ask.thinking':
     case 'ask.tool': {
+      // Late events for a turn that already finished are ignored, even after its stream was replaced.
+      if (isClosedTurn(state, event.turnId)) return state;
       let stream = state.streaming && state.streaming.turnId === event.turnId ? state.streaming : null;
       if (!stream) {
         // A late event for a turn that already closed is ignored; otherwise start following the new turn.
@@ -294,7 +320,8 @@ function applyEvent(state: ConversationState, event: AskEvent): ConversationStat
     case 'ask.turn': {
       if (event.state === 'started') {
         const streaming = state.streaming && state.streaming.turnId === event.turnId ? state.streaming : emptyStream(event.turnId);
-        return { ...state, streaming, turnActive: true, turnError: null };
+        const closedTurnIds = isClosedTurn(state, event.turnId) ? state.closedTurnIds.filter((id) => id !== event.turnId) : state.closedTurnIds;
+        return { ...state, streaming, turnActive: true, turnError: null, closedTurnIds };
       }
       const failed = event.state === 'failed';
       const alreadyPersisted = event.messageId ? state.messages.some((m) => m.id === event.messageId) : false;
@@ -302,7 +329,7 @@ function applyEvent(state: ConversationState, event: AskEvent): ConversationStat
         ? { ...state.streaming, finished: true, finalMessageId: event.messageId }
         : state.streaming;
       if (alreadyPersisted || (streaming && !streaming.text && streaming.tools.length === 0 && streaming.finished)) streaming = null;
-      return { ...state, streaming, turnActive: false, turnError: failed ? (event.error ?? 'failed') : null };
+      return { ...state, streaming, turnActive: false, turnError: failed ? (event.error ?? 'failed') : null, closedTurnIds: closeTurn(state.closedTurnIds, event.turnId) };
     }
 
     case 'ask.message': {

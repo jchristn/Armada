@@ -1,5 +1,5 @@
 import { parseAskEvent, parseTurnState, type AskEvent } from './askEvents';
-import { conversationReducer, initialConversation, isLocalMessage, mergeMessages, proposalForMessage, workCardHosts, type ConversationState } from './askConversation';
+import { CLOSED_TURN_LIMIT, conversationReducer, initialConversation, isLocalMessage, mergeMessages, proposalForMessage, workCardHosts, type ConversationState } from './askConversation';
 import { applyActivityEvent, applyThreadUpdate, isThreadWorking, sortThreads } from './askThreads';
 import { isWorkActive, statusCounts, workProgress, workRoute } from './askWork';
 import type { AskMessage, AskThread, AskThreadDetail, AskWorkSnapshot } from '../types/models';
@@ -229,6 +229,63 @@ describe('optimistic messages (isLocal flag, not an id prefix)', () => {
     state = conversationReducer(state, { type: 'confirmUser', localId: 'pending-b', messageId: 'amg_1', turnId: null });
     expect(state.messages[0].id).toBe('amg_1');
     expect(isLocalMessage(state.messages[0])).toBe(false);
+  });
+});
+
+describe('a turn that finishes before the send returns', () => {
+  /** Optimistic send, then the whole turn arrives on the socket before the send's HTTP response. */
+  function fastTurn(): ConversationState {
+    let state = loaded();
+    state = conversationReducer(state, { type: 'optimisticUser', message: msg('local-1', 1, { role: 'User', contentText: 'hi', isLocal: true }) });
+    expect(state.turnActive).toBe(true);
+    state = conversationReducer(state, { type: 'event', event: ev('ask.turn', { threadId: 'ath_1', turnId: 't1', state: 'started' }) });
+    state = conversationReducer(state, { type: 'event', event: ev('ask.message', { threadId: 'ath_1', message: msg('amg_1', 1, { role: 'User', contentText: 'hi' }) }) });
+    state = conversationReducer(state, { type: 'event', event: ev('ask.chunk', { threadId: 'ath_1', turnId: 't1', delta: 'Hello' }) });
+    state = conversationReducer(state, { type: 'event', event: ev('ask.message', { threadId: 'ath_1', message: msg('amg_2', 2, { contentText: 'Hello' }) }) });
+    state = conversationReducer(state, { type: 'event', event: ev('ask.turn', { threadId: 'ath_1', turnId: 't1', state: 'completed', messageId: 'amg_2' }) });
+    return state;
+  }
+
+  it('stays ended and shows the reply when the turn id arrives after the completion', () => {
+    let state = fastTurn();
+    state = conversationReducer(state, { type: 'confirmUser', localId: 'local-1', messageId: 'amg_1', turnId: 't1' });
+    expect(state.turnActive).toBe(false);
+    expect(state.streaming).toBeNull();
+    expect(state.messages.map((m) => m.id)).toEqual(['amg_1', 'amg_2']);
+  });
+
+  it('ignores late stream events for the finished turn', () => {
+    let state = fastTurn();
+    state = conversationReducer(state, { type: 'event', event: ev('ask.chunk', { threadId: 'ath_1', turnId: 't1', delta: 'late' }) });
+    expect(state.turnActive).toBe(false);
+    expect(state.streaming).toBeNull();
+  });
+
+  it('a snapshot loaded before the completion does not revive the turn', () => {
+    let state = fastTurn();
+    state = conversationReducer(state, {
+      type: 'loaded', threadId: 'ath_1', detail: { thread: thread('ath_1', { activeTurnId: 't1' }), trackedWork: [] }, messages: [], hasMore: false,
+    });
+    expect(state.turnActive).toBe(false);
+    expect(state.streaming).toBeNull();
+  });
+
+  it('a later turn still becomes active from the send response', () => {
+    let state = fastTurn();
+    state = conversationReducer(state, { type: 'confirmUser', localId: 'local-1', messageId: 'amg_1', turnId: 't1' });
+    state = conversationReducer(state, { type: 'optimisticUser', message: msg('local-2', 3, { role: 'User', contentText: 'again', isLocal: true }) });
+    state = conversationReducer(state, { type: 'confirmUser', localId: 'local-2', messageId: 'amg_3', turnId: 't2' });
+    expect(state.turnActive).toBe(true);
+    expect(state.streaming?.turnId).toBe('t2');
+  });
+
+  it('remembers a bounded number of finished turns', () => {
+    let state = loaded();
+    for (let i = 0; i < CLOSED_TURN_LIMIT + 5; i++) {
+      state = conversationReducer(state, { type: 'event', event: ev('ask.turn', { threadId: 'ath_1', turnId: `t${i}`, state: 'completed' }) });
+    }
+    expect(state.closedTurnIds).toHaveLength(CLOSED_TURN_LIMIT);
+    expect(state.closedTurnIds[CLOSED_TURN_LIMIT - 1]).toBe(`t${CLOSED_TURN_LIMIT + 4}`);
   });
 });
 

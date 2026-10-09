@@ -299,6 +299,31 @@ describe('AskArmada conversation', () => {
     expect(screen.getByText('Two of four missions are done.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Stop' })).toBeInTheDocument();
   });
+
+  it('a reply that finishes before the send returns ends the turn and shows the reply', async () => {
+    let resolveSend: (value: { messageId: string; turnId: string }) => void = () => undefined;
+    vi.mocked(sendAskMessage).mockReturnValue(new Promise((resolve) => { resolveSend = resolve; }));
+    renderAt('/ask/ath_1');
+    await screen.findByText('Fix the billing retry bug');
+    const input = screen.getByRole('combobox', { name: 'Message' });
+    fireEvent.change(input, { target: { value: 'ping' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => expect(sendAskMessage).toHaveBeenCalledWith('ath_1', 'ping', false));
+    expect(screen.getByRole('button', { name: 'Stop' })).toBeInTheDocument();
+
+    // The whole turn arrives on the socket while the send's HTTP response is still in flight.
+    const user: AskMessage = { id: 'amg_20', threadId: 'ath_1', sequence: 9, role: 'User', kind: 'Text', contentText: 'ping' };
+    const reply: AskMessage = { id: 'amg_21', threadId: 'ath_1', sequence: 10, role: 'Assistant', kind: 'Text', contentText: 'pong' };
+    vi.mocked(enumerateAskMessages).mockResolvedValue({ messages: [...messages, user, reply], hasMore: false });
+    emit('ask.turn', { threadId: 'ath_1', turnId: 'turn_fast', state: 'started' });
+    emit('ask.message', { threadId: 'ath_1', message: user });
+    emit('ask.message', { threadId: 'ath_1', message: reply });
+    emit('ask.turn', { threadId: 'ath_1', turnId: 'turn_fast', state: 'completed', messageId: 'amg_21' });
+
+    await act(async () => { resolveSend({ messageId: 'amg_20', turnId: 'turn_fast' }); });
+    expect(await screen.findByText('pong')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Stop' })).toBeNull();
+  });
 });
 
 describe('AskArmada integration fixes', () => {

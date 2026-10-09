@@ -710,7 +710,55 @@ namespace Test.Shared.Suites.Tui
                 }
             }));
 
-            cases.Add(TuiCase.Sync(Suite, "new_conversation_send", "Sending from a new conversation creates the thread with the draft captain and follows it", () =>
+            cases.Add(TuiCase.Sync(Suite, "fast_turn_before_send_returns", "A turn that finishes before the send's response returns its turn id stays ended and shows the reply", () =>
+            {
+                AskFixtures fx = new AskFixtures();
+                fx.AddThread(AskFixtures.Thread("ath_1", "TUIKit fixes"));
+                using (TuiTestHost host = TuiCase.SignedIn(140, 50, "/ask/ath_1", fx.Stub))
+                {
+                    AskController ask = host.Tui.Ask;
+                    EventPump events = host.Tui.Context.Events;
+                    host.PumpUntil(() => ask.Conversation.Thread != null && ask.Captains.Count > 0);
+                    AskMessage user = AskFixtures.Message("amg_fast_q", "ath_1", 1, AskMessageRoleEnum.User, AskMessageKindEnum.Text, "ping");
+                    AskMessage reply = AskFixtures.Message("amg_fast_a", "ath_1", 2, AskMessageRoleEnum.Assistant, AskMessageKindEnum.Text, "pong");
+                    // The whole turn reaches the socket while the send's HTTP response is still in flight: the events are
+                    // queued on the UI dispatcher before the send's continuation.
+                    fx.Stub.On("POST", "/api/v1/ask/threads/ath_1/messages", body =>
+                    {
+                        events.Inject(AskFixtures.EventJson("ask.turn", "{\"threadId\":\"ath_1\",\"turnId\":\"atn_fast\",\"state\":\"started\"}"));
+                        events.Inject(AskFixtures.Event("ask.message", new AskMessageEvent { ThreadId = "ath_1", Message = user }));
+                        events.Inject(AskFixtures.EventJson("ask.chunk", "{\"threadId\":\"ath_1\",\"turnId\":\"atn_fast\",\"delta\":\"pong\"}"));
+                        events.Inject(AskFixtures.Event("ask.message", new AskMessageEvent { ThreadId = "ath_1", Message = reply }));
+                        events.Inject(AskFixtures.EventJson("ask.turn", "{\"threadId\":\"ath_1\",\"turnId\":\"atn_fast\",\"state\":\"completed\",\"messageId\":\"amg_fast_a\"}"));
+                        return StubHttpHandler.Response(System.Net.HttpStatusCode.OK, "{\"MessageId\":\"amg_fast_q\",\"TurnId\":\"atn_fast\"}");
+                    });
+                    host.Type("ping").Press("enter");
+                    AssertTrue(host.PumpUntil(() => ask.Conversation.Messages.Any(m => m.Id == "amg_fast_a") && !ask.Conversation.Messages.Any(m => AskConversation.IsLocal(m))), "reply shown and the send confirmed");
+                    host.Pump();
+                    AssertFalse(ask.Conversation.TurnActive, "the finished turn is not revived by the send response");
+                    AssertNull(ask.Conversation.Streaming, "no stream for the finished turn");
+                    TuiCase.NotContains(host.Screen(), "Ctrl+C Stop", "no stop hint");
+                }
+            }));
+
+            cases.Add(TuiCase.Sync(Suite, "fast_turn_stale_snapshot", "A conversation snapshot taken before the turn finished does not revive it", () =>
+            {
+                AskConversation conv = new AskConversation("ath_1");
+                conv.OptimisticUser(AskFixtures.Message("local-1", "ath_1", 1, AskMessageRoleEnum.User, AskMessageKindEnum.Text, "ping"));
+                conv.Apply(AskEventParser.Parse(AskFixtures.EventJson("ask.turn", "{\"threadId\":\"ath_1\",\"turnId\":\"atn_1\",\"state\":\"started\"}"))!, DateTime.UtcNow);
+                conv.Apply(AskEventParser.Parse(AskFixtures.EventJson("ask.turn", "{\"threadId\":\"ath_1\",\"turnId\":\"atn_1\",\"state\":\"completed\"}"))!, DateTime.UtcNow);
+                AskThreadDetail detail = new AskThreadDetail();
+                detail.Thread = AskFixtures.Thread("ath_1", "TUIKit fixes");
+                detail.Thread.ActiveTurnId = "atn_1";
+                conv.Loaded("ath_1", detail, new List<AskMessage>(), false, DateTime.UtcNow);
+                AssertFalse(conv.TurnActive, "stale snapshot ignored for a finished turn");
+                AssertNull(conv.Streaming, "no stream");
+                detail.Thread.ActiveTurnId = "atn_2";
+                conv.Loaded("ath_1", detail, new List<AskMessage>(), false, DateTime.UtcNow);
+                AssertTrue(conv.TurnActive, "a different running turn is still followed");
+            }));
+
+            cases.Add(TuiCase.Sync(Suite, "new_conversation_send","Sending from a new conversation creates the thread with the draft captain and follows it", () =>
             {
                 AskFixtures fx = new AskFixtures();
                 fx.AddThread(AskFixtures.Thread("ath_new", "New conversation"));
