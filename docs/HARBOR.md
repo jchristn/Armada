@@ -83,6 +83,7 @@ PascalCase and case-sensitive: a camelCase key is ignored and replaced with the 
 | `UserId` / `TenantId` | Sent at connect as `x-user-guid` and `x-tenant-guid`. The Admiral does not read `x-user-guid`: the owning user always comes from the `AccessKey` credential (none without one), so set `AccessKey` to one of your credentials when the Harbor must count as yours for `requireHarborForLaunch`. `TenantId` applies only to a credential-less loopback Harbor or when the credential is a global admin; otherwise the credential's tenant applies. |
 | `Capabilities` | Runtimes and host tools advertised at handshake (e.g. `git`, `claude`). Default `["git"]`. Drives capability-based routing. |
 | `Appearance` | Window color scheme: `System` (default), `Light`, or `Dark`. |
+| `ShowActivityDetails` | Whether the main window's Activity log shows every request and result with request IDs and full paths (`true`) or the summary (`false`, the default). Set by the Activity log's **Show details** box. |
 | `MaxConcurrentJobs` | Maximum concurrent jobs this Harbor will accept, advertised at handshake. Default 4. |
 | `HeartbeatIntervalMs` | Heartbeat interval in milliseconds; `0` disables heartbeats. Default 15000. |
 | `AccessKey` / `Secret` | `AccessKey` is an Armada credential (a bearer token from Server > Credentials, or the local API key); the Harbor registers under that credential's tenant and user. Leave it empty only for a Harbor on the same machine as a localhost-bound Admiral; a Harbor connecting from another host is refused without one. `Secret` is sent as `x-secret-key` but not used for authentication today, and is never logged. |
@@ -99,7 +100,7 @@ The app has three windows, and every entry point opens the same ones:
   **Disconnected**, or **Error**, with the Admiral's address and a plain-language detail), one **Connect** /
   **Disconnect** button, **Running now** (each job on this machine: a mission or an Ask turn, its runtime, and how long
   it has run, with how many of `MaxConcurrentJobs` slots are in use), and **Activity** (the link's recent work, with
-  Copy, Clear, and All Logs; consecutive heartbeats collapse into one line with a count). **Dashboard**, **Status**, and
+  Show details, Copy, Clear, and All Logs; see **The Activity log** below). **Dashboard**, **Status**, and
   **Settings** are in the header. Closing the window keeps Harbor running in the tray.
 - **Armada Harbor - Status**, with an **Overview** tab and a **Logs** tab.
 - **Armada Harbor - Settings**, with **General**, **Repositories**, and **Admiral** tabs.
@@ -172,6 +173,33 @@ work over the network.
 `http://`, `wss://` becomes `https://`). For a same-machine Admiral, Harbor uses the local API key from its
 `settings.json`; otherwise it uses the Harbor's `AccessKey`. Reading and changing settings and restarting need an admin
 credential, the captain and mission counts need any credential, and the health line needs none.
+
+**The Activity log.** The main window's Activity log tells the story at a glance by default (the summary view):
+
+- A request and its result are one line without the request ID, for example
+  `Check run Build in DocConverter: /bin/sh -lc dotnet build -> exit 0`, and a launch and its start are one line,
+  `Mission msn_mv092791 started in DocConverter (ClaudeCode)`.
+- Routine git and file work is not shown one command at a time. A run of it in the same dock or checkout is one line
+  that counts the commands in place, as heartbeats do: `DocConverter msn_mv092791: prepared dock (14 git commands, 2 file
+  writes)` before the job starts, `worked in dock` while it runs, and `landed and cleaned up (6 git commands)` after it
+  exits. A line for the dock, its job, or a failure ends the run; later work starts a new line.
+- Paths are short: a dock is `DocConverter/msn_mv092791...`, a vessel's checkout is the vessel's name, a job's scratch
+  directory is `scratch`, and the home folder is `~`.
+- A failure always gets its own line, even inside a run, with the command and its exit code (`git push -u origin HEAD
+  -> failed (exit 128)`). A non-zero exit that the Admiral declared an expected answer (for example 1 from `git grep`
+  or `git show-ref --verify --quiet` for no match, or from `git ls-files --error-unmatch` for an untracked file) is not
+  a failure.
+- Shown: connecting, the handshake, settings saved, job launches, starts, and exits (`Mission msn_mv092791 exited ok in
+  36.7s (first output 36.4s)`, `Ask turn started (ClaudeCode)`), docks made and removed, check runs and other commands
+  an operator asked for, failures, and heartbeats (consecutive heartbeats collapse into one line with a count).
+
+**Show details**, in the Activity header, shows every entry as logged instead: each request and result, with request
+IDs and full paths. Harbor remembers the choice (`ShowActivityDetails` in `settings.json`). Copy copies the view shown;
+Help > Copy Diagnostics always includes the detailed lines. Harbor's log file always has full detail. Entries are
+classified by typed fields set where they are logged (a level, a category, an outcome, the request ID that pairs a
+request with its result, and the vessel, mission, job, and directory they are about), never by reading the message; the
+Admiral declares what a command is for and which exit codes are answers in the `git` message (see
+[HARBOR_PROTOCOL.md](HARBOR_PROTOCOL.md)).
 
 **Harbor's logs.** The link, the job runner, and the activity log are written to `~/.armada-harbor/logs/harbor.log.<date>`
 (one file per day, like the Admiral's `admiral.log.<date>`). Each job's output (stdout, stderr lines marked `[stderr]`,
