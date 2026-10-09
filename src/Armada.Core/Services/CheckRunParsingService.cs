@@ -26,8 +26,18 @@ namespace Armada.Core.Services
             @"(?<count>\d+)\s+(?<kind>failed|passed|skipped|error|errors|xfailed|xpassed)",
             RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+        // Jest prints "Tests:       1 failed, 6 passed, 7 total" (after a "Test Suites:" line); Vitest prints
+        // "      Tests  1 failed | 6 passed (7)" (after a "Test Files" line). Only the per-test line is wanted.
         private static readonly Regex _JavascriptTestsLineRegex = new Regex(
-            @"(?im)^Tests?\s+(?<body>[^\r\n]+)\r?$",
+            @"(?im)^[ \t]*Tests?(?![ \t]+(?:Suites|Files)\b)[ \t]*:?[ \t]+(?<body>[^\r\n]*?)[ \t]*\r?$",
+            RegexOptions.Compiled);
+
+        private static readonly Regex _VitestTotalRegex = new Regex(
+            @"\((?<total>\d+)\)\s*$",
+            RegexOptions.Compiled);
+
+        private static readonly Regex _JavascriptDurationLineRegex = new Regex(
+            @"(?im)^[ \t]*(?:Duration|Time:)[ \t]+(?<value>\d+(?:\.\d+)?[ \t]*(?:ms|s|m)\b)",
             RegexOptions.Compiled);
 
         private static readonly Regex _JavascriptTokenRegex = new Regex(
@@ -185,25 +195,40 @@ namespace Armada.Core.Services
 
         private static CheckRunTestSummary? ParseJavascriptSummary(string output)
         {
-            Match testsLine = _JavascriptTestsLineRegex.Matches(output).Cast<Match>().LastOrDefault(m => m.Success) ?? Match.Empty;
-            if (!testsLine.Success)
-                return null;
+            // The last per-test summary line that carries counts wins (watch mode and reruns print several).
+            List<Match> lines = _JavascriptTestsLineRegex.Matches(output).Cast<Match>().Where(m => m.Success).ToList();
+            for (int i = lines.Count - 1; i >= 0; i--)
+            {
+                CheckRunTestSummary? summary = ParseJavascriptTestsLine(lines[i].Groups["body"].Value);
+                if (summary == null)
+                    continue;
 
+                Match durationMatch = _JavascriptDurationLineRegex.Matches(output).Cast<Match>().LastOrDefault(m => m.Success) ?? Match.Empty;
+                if (durationMatch.Success)
+                    summary.DurationMs = ParseDurationMilliseconds(durationMatch.Groups["value"].Value);
+                return summary;
+            }
+
+            return null;
+        }
+
+        private static CheckRunTestSummary? ParseJavascriptTestsLine(string body)
+        {
             int? passed = null;
             int? failed = null;
             int? skipped = null;
             int? total = null;
 
-            foreach (Match token in _JavascriptTokenRegex.Matches(testsLine.Groups["body"].Value))
+            foreach (Match token in _JavascriptTokenRegex.Matches(body))
             {
                 int count = Int32.Parse(token.Groups["count"].Value, CultureInfo.InvariantCulture);
                 switch (token.Groups["kind"].Value.ToLowerInvariant())
                 {
                     case "passed":
-                        passed = count;
+                        passed = (passed ?? 0) + count;
                         break;
                     case "failed":
-                        failed = count;
+                        failed = (failed ?? 0) + count;
                         break;
                     case "skipped":
                     case "todo":
@@ -218,23 +243,22 @@ namespace Armada.Core.Services
             if (!passed.HasValue && !failed.HasValue && !skipped.HasValue)
                 return null;
 
+            if (!total.HasValue)
+            {
+                Match vitestTotal = _VitestTotalRegex.Match(body);
+                if (vitestTotal.Success)
+                    total = Int32.Parse(vitestTotal.Groups["total"].Value, CultureInfo.InvariantCulture);
+            }
+
             total ??= (passed ?? 0) + (failed ?? 0) + (skipped ?? 0);
-            long? durationMs = null;
-            string? durationLine = output
-                .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
-                .Reverse()
-                .FirstOrDefault(line => line.TrimStart().StartsWith("Duration", StringComparison.OrdinalIgnoreCase));
-            if (!String.IsNullOrWhiteSpace(durationLine))
-                durationMs = ParseDurationMilliseconds(durationLine);
 
             return new CheckRunTestSummary
             {
                 Format = "javascript",
-                Passed = passed,
-                Failed = failed,
-                Skipped = skipped,
-                Total = total,
-                DurationMs = durationMs
+                Passed = passed ?? 0,
+                Failed = failed ?? 0,
+                Skipped = skipped ?? 0,
+                Total = total
             };
         }
 
