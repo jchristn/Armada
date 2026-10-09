@@ -63,6 +63,12 @@ namespace Armada.Harbor
         public HarborAppearanceEnum Appearance { get; set; } = HarborAppearanceEnum.System;
 
         /// <summary>
+        /// Whether the main window's Activity log shows every request and result (with request IDs and full paths)
+        /// instead of the summary. Set by its Show details box.
+        /// </summary>
+        public bool ShowActivityDetails { get; set; } = false;
+
+        /// <summary>
         /// Heartbeat interval in milliseconds; 0 disables heartbeats.
         /// </summary>
         public int HeartbeatIntervalMs { get; set; } = 15000;
@@ -239,6 +245,7 @@ namespace Armada.Harbor
             TenantId = other.TenantId;
             Capabilities = new List<string>(other.Capabilities ?? new List<string>());
             Appearance = other.Appearance;
+            ShowActivityDetails = other.ShowActivityDetails;
             HeartbeatIntervalMs = other.HeartbeatIntervalMs;
             MaxConcurrentJobs = other.MaxConcurrentJobs;
             AccessKey = other.AccessKey;

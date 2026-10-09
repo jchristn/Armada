@@ -112,6 +112,9 @@ namespace Armada.Harbor
             errors = edited.Validate();
             if (errors.Count > 0) return false;
 
+            // The settings editor does not edit the Activity log's Show details choice; keep the live one, which the
+            // main window may have changed while the editor was open.
+            edited.ShowActivityDetails = Settings.ShowActivityDetails;
             bool linkChanged = LinkSettingsDiffer(Settings, edited);
             HarborAppSettings previous = Settings.Clone();
             Settings.CopyFrom(edited);

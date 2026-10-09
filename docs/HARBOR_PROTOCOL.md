@@ -160,7 +160,8 @@ once with the Harbor's message instead of waiting for `started`.
 Delegate a git operation:
 
 ```
-Admiral -> git       { requestId, executable: "git", workingDirectory, arguments: ["worktree","add", ...], timeoutMs }
+Admiral -> git       { requestId, executable: "git", workingDirectory, arguments: ["worktree","add", ...], timeoutMs,
+                       expectedExitCodes, kind, label }
 Harbor  -> gitResult { requestId, exitCode, standardOutput, standardError, timedOut }
 ```
 
@@ -170,6 +171,15 @@ missing executable) is answered with a failed `gitResult` (`exitCode` -1, the re
 each `git` request off its receive loop, so a long command (a check run or a build) does not hold up launches, dock and
 file requests, or heartbeat acknowledgements; requests with the same working directory still run one at a time, in the
 order they arrived. Commands still running when the link closes are stopped.
+
+`expectedExitCodes`, `kind`, and `label` are optional and additive; they only change how the Harbor presents the command
+in its activity log, not how it runs or what `gitResult` reports. `expectedExitCodes` lists non-zero exit codes the
+Admiral reads as an answer rather than a failure (for example `[1]` for `git grep`, `git show-ref --verify --quiet`,
+`git merge-base --is-ancestor`, or `git ls-files --error-unmatch`, and `[128]` for `git rev-parse --git-dir` outside a
+repository); the Harbor does not show such an exit as a failure. `kind` is `Routine` (the default when absent: git work
+behind a mission, dock, or checkout, which the Harbor collapses into one line per dock), `CheckRun` (a check run's
+command), or `Command` (a command an operator asked for, such as a fleet action or a Workspace command); check runs and
+commands get their own line. `label` is a short name for the line, such as the check's name.
 
 Harbor-side mission docks (only with a Harbor that advertises the `harbor-docks` capability):
 

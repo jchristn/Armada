@@ -710,6 +710,8 @@ namespace Armada.Core.Services
             HostCommandRequest request = selection.IsRemote
                 ? FleetActionShellCommandBuilder.BuildRemote(rendered, workingDirectory, timeoutMs, selection.HarborOsPlatform)
                 : FleetActionShellCommandBuilder.BuildLocal(rendered, workingDirectory, timeoutMs);
+            request.Kind = HostCommandKindEnum.Command;
+            request.Label = "Fleet action";
 
             await CommandAudit.RecordAsync(_Database, new CommandAuditRecord
             {

@@ -53,6 +53,17 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
+        /// Builds the link's log entries with their typed fields and remembers which directories are docks and checkouts.
+        /// A Harbor runs one client per session, so the owner of the reconnect loop sets the same instance on every
+        /// session's client (a dock made in one session can be removed in the next); by default each client has its own.
+        /// </summary>
+        public HarborLogClassifier LogClassifier
+        {
+            get => _LogClassifier;
+            set => _LogClassifier = value ?? throw new ArgumentNullException(nameof(LogClassifier));
+        }
+
+        /// <summary>
         /// Round-trip time of the most recent acknowledged heartbeat in the current session, in milliseconds, or null.
         /// </summary>
         public long? LastRoundTripMs
@@ -84,6 +95,7 @@ namespace Armada.Core.Services
         private Channel<HarborMessage>? _Outbound;
         private TimeProvider _Time = TimeProvider.System;
         private HarborLinkStatistics _LinkStatistics = new HarborLinkStatistics();
+        private HarborLogClassifier _LogClassifier = new HarborLogClassifier();
         private readonly object _HeartbeatLock = new object();
         private readonly Dictionary<long, long> _HeartbeatSentTimestamps = new Dictionary<long, long>();
         private long _HeartbeatSequence = 0;
@@ -195,7 +207,7 @@ namespace Armada.Core.Services
 
                 Enqueue(BuildHandshake());
                 _Logging.Debug(_Header + "harbor " + _HarborId + " sent handshake");
-                Log(HarborLogDirection.Out, "Handshake sent (harbor " + _HarborId + ")");
+                LogEntry(_LogClassifier.Link(HarborLogDirection.Out, "Handshake sent (harbor " + _HarborId + ")"));
 
                 try
                 {
@@ -261,12 +273,12 @@ namespace Armada.Core.Services
                 if (!ack.Accepted)
                 {
                     _Logging.Warn(_Header + "handshake rejected: " + (ack.Reason ?? "unspecified"));
-                    Log(HarborLogDirection.In, "Handshake rejected: " + (ack.Reason ?? "unspecified"));
+                    LogEntry(_LogClassifier.Link(HarborLogDirection.In, "Handshake rejected: " + (ack.Reason ?? "unspecified"), HarborLogOutcomeEnum.Failed));
                 }
                 else
                 {
                     _Logging.Info(_Header + "handshake accepted; mcp=" + (ack.McpBaseUrl ?? "(none)"));
-                    Log(HarborLogDirection.In, "Handshake accepted by Admiral. MCP=" + (ack.McpBaseUrl ?? "(none)"));
+                    LogEntry(_LogClassifier.Link(HarborLogDirection.In, "Handshake accepted by Admiral. MCP=" + (ack.McpBaseUrl ?? "(none)"), HarborLogOutcomeEnum.Ok));
                     _LinkStatistics.RecordAccepted(_Time.GetUtcNow().UtcDateTime);
                     _OnConnected?.Invoke();
                 }
@@ -301,7 +313,7 @@ namespace Armada.Core.Services
             {
                 if (_JobRunner != null)
                 {
-                    Log(HarborLogDirection.In, "Stop job " + kill.JobId);
+                    LogEntry(_LogClassifier.Stop(kill.JobId));
                     try
                     {
                         await _JobRunner.StopAsync(kill.JobId, kill.GracefulTimeoutMs, token).ConfigureAwait(false);
@@ -347,9 +359,7 @@ namespace Armada.Core.Services
 
             try
             {
-                Log(HarborLogDirection.In, "Work: " + git.Executable + " " + String.Join(" ", git.Arguments)
-                    + (String.IsNullOrEmpty(git.WorkingDirectory) ? " (in the Harbor's current directory)" : " (in " + git.WorkingDirectory + ")")
-                    + " [req " + git.RequestId + "]");
+                LogEntry(_LogClassifier.GitRequest(git));
 
                 HostCommandResult result;
                 try
@@ -380,7 +390,7 @@ namespace Armada.Core.Services
                     TimedOut = result.TimedOut
                 });
 
-                Log(HarborLogDirection.Out, "Result: exit " + result.ExitCode + (result.TimedOut ? " (timed out)" : "") + " [req " + git.RequestId + "]");
+                LogEntry(_LogClassifier.GitResult(git, result));
             }
             catch (OperationCanceledException)
             {
@@ -393,10 +403,7 @@ namespace Armada.Core.Services
 
         private async Task HandleDockAsync(HarborDockRequest dock, CancellationToken token)
         {
-            Log(HarborLogDirection.In, "Dock " + dock.Operation + " for vessel " + dock.VesselName
-                + (String.IsNullOrEmpty(dock.BranchName) ? "" : " branch " + dock.BranchName)
-                + (String.IsNullOrEmpty(dock.WorktreePath) ? "" : " at " + dock.WorktreePath)
-                + " [req " + dock.RequestId + "]");
+            LogEntry(_LogClassifier.DockRequest(dock));
 
             HarborDockResult result;
             if (_Docks == null)
@@ -421,7 +428,7 @@ namespace Armada.Core.Services
             }
 
             Enqueue(result);
-            Log(HarborLogDirection.Out, DescribeDockResult(dock, result) + " [req " + dock.RequestId + "]");
+            LogEntry(_LogClassifier.DockResult(dock, result));
         }
 
         private async Task HandleFileAsync(HarborFileRequest file, CancellationToken token)
@@ -452,36 +459,7 @@ namespace Armada.Core.Services
 
             // Reads and stats are frequent and uninteresting; writes and refusals are worth a line.
             if (file.Operation == HarborFileOperationEnum.Write || file.Operation == HarborFileOperationEnum.AddGitExclude || !result.Success)
-                Log(HarborLogDirection.In, "File " + file.Operation + " " + file.Path + (result.Success ? "" : " failed: " + result.Message) + " [req " + file.RequestId + "]");
-        }
-
-        private static string DescribeDockResult(HarborDockRequest request, HarborDockResult result)
-        {
-            if (!result.Success) return "Dock " + request.Operation + " failed: " + (result.Message ?? "no reason given");
-            switch (request.Operation)
-            {
-                case HarborDockOperationEnum.Provision:
-                    return "Dock ready at " + result.WorktreePath + " (" + DescribeSource(result) + ")";
-                case HarborDockOperationEnum.Reclaim:
-                    return "Dock removed at " + result.WorktreePath;
-                default:
-                    return "Vessel " + request.VesselName + " served from " + DescribeSource(result);
-            }
-        }
-
-        private static string DescribeSource(HarborDockResult result)
-        {
-            switch (result.Source)
-            {
-                case HarborRepositorySourceEnum.Mapped:
-                    return "mapped checkout " + result.CheckoutPath;
-                case HarborRepositorySourceEnum.Discovered:
-                    return "discovered checkout " + result.CheckoutPath;
-                case HarborRepositorySourceEnum.Clone:
-                    return "Harbor clone " + result.RepositoryPath;
-                default:
-                    return "no repository";
-            }
+                LogEntry(_LogClassifier.FileResult(file, result));
         }
 
         private void HandleDeferredLaunch(HarborDeferredLaunchRequest deferred)
@@ -494,7 +472,8 @@ namespace Armada.Core.Services
                 Armed = armed,
                 Message = armed ? null : "Launch executable not found: " + deferred.LaunchExePath
             });
-            Log(HarborLogDirection.Out, "Deferred launch " + (armed ? "armed" : "declined (launch executable not found: " + deferred.LaunchExePath + ")") + " [req " + deferred.RequestId + "]");
+            LogEntry(_LogClassifier.Link(HarborLogDirection.Out, "Deferred launch " + (armed ? "armed" : "declined (launch executable not found: " + deferred.LaunchExePath + ")") + " [req " + deferred.RequestId + "]",
+                armed ? HarborLogOutcomeEnum.Ok : HarborLogOutcomeEnum.Failed));
 
             if (!armed) return;
 
@@ -604,7 +583,10 @@ namespace Armada.Core.Services
 
         private async Task HandleLaunchAsync(HarborLaunchRequest launch, CancellationToken token)
         {
-            Log(HarborLogDirection.In, "Launch job " + launch.JobId + " (runtime " + launch.Runtime + ") " + DescribeLaunchDirectory(launch));
+            string? resolvedDirectory = _JobRunner != null
+                ? _JobRunner.ResolveWorkingDirectory(launch)
+                : (String.IsNullOrWhiteSpace(launch.WorkingDirectory) ? null : launch.WorkingDirectory);
+            LogEntry(_LogClassifier.Launch(launch, resolvedDirectory, _Time.GetUtcNow().UtcDateTime));
 
             if (_JobRunner == null)
             {
@@ -614,7 +596,7 @@ namespace Armada.Core.Services
                     JobId = launch.JobId,
                     Message = "Captain launch is not enabled on this Harbor build."
                 });
-                Log(HarborLogDirection.Out, "Refused launch " + launch.JobId + " (captain delegation not enabled)");
+                LogEntry(_LogClassifier.LaunchRefused(launch));
                 return;
             }
 
@@ -632,7 +614,7 @@ namespace Armada.Core.Services
                     {
                         AddLiveJob(launch);
                         Enqueue(new HarborStarted { CorrelationId = launch.CorrelationId, JobId = launch.JobId, ProcessId = processId });
-                        Log(HarborLogDirection.Out, "Started job " + launch.JobId + " (pid " + processId + ")");
+                        LogEntry(_LogClassifier.Started(launch, processId));
                     },
                     (stream, data) =>
                     {
@@ -649,9 +631,7 @@ namespace Armada.Core.Services
                             ? (long?)null
                             : (long)TimeSpan.FromTicks(firstOutput).TotalMilliseconds;
                         Enqueue(new HarborExited { JobId = launch.JobId, ExitCode = exitCode, DurationMs = durationMs, TimeToFirstTokenMs = ttftMs });
-                        Log(HarborLogDirection.Out, "Exited job " + launch.JobId + " (code " + exitCode
-                            + ", runtime " + FormatDuration(durationMs)
-                            + (ttftMs.HasValue ? ", first output " + FormatDuration(ttftMs.Value) : "") + ")");
+                        LogEntry(_LogClassifier.Exited(launch, exitCode, durationMs, ttftMs));
                     },
                     token).ConfigureAwait(false);
             }
@@ -659,7 +639,7 @@ namespace Armada.Core.Services
             {
                 RemoveLiveJob(launch.JobId);
                 Enqueue(new HarborError { CorrelationId = launch.CorrelationId, JobId = launch.JobId, Message = e.Message });
-                Log(HarborLogDirection.Out, "Launch " + launch.JobId + " failed: " + e.Message);
+                LogEntry(_LogClassifier.LaunchFailed(launch, e.Message));
             }
         }
 
@@ -696,7 +676,7 @@ namespace Armada.Core.Services
                 {
                     await Task.Delay(_HeartbeatIntervalMs, token).ConfigureAwait(false);
                     Enqueue(BuildHeartbeat());
-                    LogEntry(new HarborLogEntry(HarborLogDirection.Out, "Heartbeat") { IsHeartbeat = true });
+                    LogEntry(_LogClassifier.Heartbeat());
                 }
                 catch (OperationCanceledException)
                 {
@@ -778,17 +758,6 @@ namespace Armada.Core.Services
             _Outbound?.Writer.TryWrite(message);
         }
 
-        private static string FormatDuration(long milliseconds)
-        {
-            if (milliseconds < 1000) return milliseconds + "ms";
-            double seconds = milliseconds / 1000.0;
-            if (seconds < 60) return seconds.ToString("0.0") + "s";
-            long totalSeconds = milliseconds / 1000;
-            long minutes = totalSeconds / 60;
-            long remainderSeconds = totalSeconds % 60;
-            return minutes + "m" + remainderSeconds + "s";
-        }
-
         private void AddLiveJob(HarborLaunchRequest launch)
         {
             HarborJobInfo job = HarborJobInfo.FromLaunch(launch, _Time.GetUtcNow().UtcDateTime);
@@ -803,29 +772,6 @@ namespace Armada.Core.Services
         private List<string> SnapshotLiveJobs()
         {
             lock (_JobLock) { return new List<string>(_LiveJobs.Keys); }
-        }
-
-        /// <summary>
-        /// Describe where a launch runs on this host, for the activity log: the requested working directory, the per-job
-        /// scratch directory the job runner creates (naming the requested path when it does not exist here), or that the
-        /// request names no working directory.
-        /// </summary>
-        private string DescribeLaunchDirectory(HarborLaunchRequest launch)
-        {
-            string requested = launch.WorkingDirectory ?? String.Empty;
-            string? resolved = _JobRunner != null ? _JobRunner.ResolveWorkingDirectory(launch) : (String.IsNullOrWhiteSpace(requested) ? null : requested);
-            if (String.IsNullOrWhiteSpace(resolved))
-                return "with no working directory";
-            if (String.Equals(resolved, requested, StringComparison.Ordinal))
-                return "in " + resolved;
-            if (String.IsNullOrWhiteSpace(requested))
-                return "in scratch directory " + resolved;
-            return "in scratch directory " + resolved + " (requested " + requested + " does not exist on this host)";
-        }
-
-        private void Log(HarborLogDirection direction, string message)
-        {
-            LogEntry(new HarborLogEntry(direction, message));
         }
 
         private void LogEntry(HarborLogEntry entry)

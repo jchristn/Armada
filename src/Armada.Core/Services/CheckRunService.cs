@@ -143,7 +143,7 @@ namespace Armada.Core.Services
             try
             {
                 execution = host.IsHarbor
-                    ? await ExecuteOnHostAsync(host, run.Command, _DefaultTimeout, token).ConfigureAwait(false)
+                    ? await ExecuteOnHostAsync(host, run.Command, String.IsNullOrWhiteSpace(run.Label) ? run.Type.ToString() : run.Label!, _DefaultTimeout, token).ConfigureAwait(false)
                     : await ExecuteCommandAsync(run.Command, run.WorkingDirectory!, _DefaultTimeout, token).ConfigureAwait(false);
             }
             catch (Exception ex)
@@ -467,10 +467,13 @@ namespace Armada.Core.Services
         /// <summary>
         /// Run the check command through the host's login shell in the checkout (a Harbor, over its link).
         /// </summary>
-        private async Task<CommandExecutionResult> ExecuteOnHostAsync(VesselHost host, string command, TimeSpan timeout, CancellationToken token)
+        private async Task<CommandExecutionResult> ExecuteOnHostAsync(VesselHost host, string command, string label, TimeSpan timeout, CancellationToken token)
         {
             int timeoutMs = Convert.ToInt32(Math.Min(timeout.TotalMilliseconds, Int32.MaxValue));
-            HostCommandResult result = await host.Commands.RunAsync(host.BuildShellCommand(command, timeoutMs, true), token).ConfigureAwait(false);
+            HostCommandRequest request = host.BuildShellCommand(command, timeoutMs, true);
+            request.Kind = HostCommandKindEnum.CheckRun;
+            request.Label = label;
+            HostCommandResult result = await host.Commands.RunAsync(request, token).ConfigureAwait(false);
             if (result.TimedOut)
                 throw new TimeoutException("Check command timed out after " + timeout.TotalMinutes.ToString("0") + " minutes on " + host.HostLabel + ".");
 

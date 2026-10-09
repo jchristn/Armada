@@ -65,11 +65,14 @@
     <!-- What the link has been doing. -->
     <Border Grid.Row="3" Classes="card">
       <Grid RowDefinitions="Auto,*" RowSpacing="8">
-        <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="6">
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="6">
           <TextBlock Grid.Column="0" Classes="title" Text="Activity" VerticalAlignment="Center" />
-          <Button Grid.Column="1" Content="Copy" Click="OnCopyLogClick" ToolTip.Tip="Copy the activity to the clipboard" />
-          <Button Grid.Column="2" Content="Clear" Click="OnClearLogClick" ToolTip.Tip="Clear this list (the log files are kept)" />
-          <Button Grid.Column="3" Content="All Logs" Click="OnLogsClick" ToolTip.Tip="Harbor's log, the logs of jobs run here, and the Admiral's logs" />
+          <CheckBox Grid.Column="1" x:Name="ShowDetailsBox" Content="Show details" Margin="0,0,6,0" VerticalAlignment="Center"
+                    IsCheckedChanged="OnShowDetailsChanged"
+                    ToolTip.Tip="Show every request and result, with request IDs and full paths (Harbor's log file always has them)" />
+          <Button Grid.Column="2" Content="Copy" Click="OnCopyLogClick" ToolTip.Tip="Copy the activity shown to the clipboard" />
+          <Button Grid.Column="3" Content="Clear" Click="OnClearLogClick" ToolTip.Tip="Clear this list (the log files are kept)" />
+          <Button Grid.Column="4" Content="All Logs" Click="OnLogsClick" ToolTip.Tip="Harbor's log, the logs of jobs run here, and the Admiral's logs" />
         </Grid>
         <TextBox Grid.Row="1" x:Name="LogBox" Classes="mono" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap"
                  Foreground="{DynamicResource HarborSecondaryTextBrush}"

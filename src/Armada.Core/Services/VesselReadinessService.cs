@@ -742,7 +742,9 @@ namespace Armada.Core.Services
                     Executable = isPath ? "cmd.exe" : "where",
                     WorkingDirectory = host.WorkingDirectory,
                     Arguments = isPath ? new List<string> { "/c", "if", "exist", argument, "(exit 0)", "else", "(exit 1)" } : new List<string> { argument },
-                    TimeoutMs = 15000
+                    TimeoutMs = 15000,
+                    // Exit 1 answers "not there".
+                    ExpectedExitCodes = new List<int> { 1 }
                 };
             }
 
@@ -751,7 +753,9 @@ namespace Armada.Core.Services
                 Executable = "/bin/sh",
                 WorkingDirectory = host.WorkingDirectory,
                 Arguments = new List<string> { "-lc", script, "sh", argument },
-                TimeoutMs = 15000
+                TimeoutMs = 15000,
+                // Exit 1 answers "not there".
+                ExpectedExitCodes = new List<int> { 1 }
             };
         }
 

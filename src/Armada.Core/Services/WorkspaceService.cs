@@ -321,7 +321,10 @@ namespace Armada.Core.Services
             Stopwatch stopwatch = Stopwatch.StartNew();
             try
             {
-                HostCommandResult run = await host.Commands.RunAsync(host.BuildShellCommand(request.Command, timeoutSeconds * 1000, false), token).ConfigureAwait(false);
+                HostCommandRequest command = host.BuildShellCommand(request.Command, timeoutSeconds * 1000, false);
+                command.Kind = HostCommandKindEnum.Command;
+                command.Label = "Workspace";
+                HostCommandResult run = await host.Commands.RunAsync(command, token).ConfigureAwait(false);
                 result.ExitCode = run.TimedOut ? -1 : run.ExitCode;
                 result.TimedOut = run.TimedOut;
                 result.Stdout = Truncate(run.StandardOutput);
