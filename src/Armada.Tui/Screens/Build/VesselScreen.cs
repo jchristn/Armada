@@ -17,7 +17,8 @@ namespace Armada.Tui.Screens.Build
     /// <summary>
     /// A vessel's page (W4.4, <c>/vessels/:id</c>), the dashboard's VesselDetail: Manage Objectives, Manage Fleet,
     /// Onboarding, Run Check, Open Workspace, Health (the health inspector with Re-evaluate), and History as buttons, plus Edit,
-    /// Duplicate, View JSON, and Delete; the Readiness and Landing Preview panels, every field (branch prefixes and
+    /// Duplicate, View JSON, Delete, Copy ID, and Copy Harbor ID (when a Harbor has the checkout); the Readiness and
+    /// Landing Preview panels, every field (branch prefixes and
     /// policies, auto-approve, the auto-land and Definition-of-Done gates, the GitHub token state), the context
     /// blocks (project context, style guide, protected branches, dock boundary, model context), and the vessel's
     /// missions. <c>?edit=1</c> (after Duplicate) opens the edit form once. Not thread-safe.
@@ -138,6 +139,7 @@ namespace Armada.Tui.Screens.Build
             Action("json", "View JSON", () => ShowJson(Tr("Vessel: {{name}}", LocalizationArgs.Of("name", Vessel!.Name)), Vessel), "j", () => Vessel != null);
             Action("delete", "Delete", Delete, "del", () => Vessel != null, false, true);
             Action("copy-id", "Copy ID", () => Copy(VesselId, "Vessel ID"), "y");
+            Action("copy-harbor-id", "Copy Harbor ID", () => Copy(Readiness?.HarborId, "Harbor ID"), "Y", () => !String.IsNullOrEmpty(Readiness?.HarborId));
 
             Overview.Builder = BuildOverview;
             ContextView.Builder = BuildContext;

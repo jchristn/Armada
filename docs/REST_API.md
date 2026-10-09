@@ -2063,7 +2063,7 @@ Return readiness warnings and blocking issues for a vessel, optionally scoped to
 | `environmentName` | string | Optional environment name for deploy, rollback, smoke-test, or health-check readiness |
 | `includeWorkflowRequirements` | bool | When `false`, only vessel and repository basics are evaluated (default: `true`) |
 
-**Response:** `200 OK` - `VesselReadinessResult`. When the vessel has no working directory on the Admiral host and a connected Harbor has a checkout of it, `HasWorkingDirectory` is true, `HarborId`, `HarborName`, and `CheckoutPath` name the Harbor and its path, an Info issue `working_directory_on_harbor` says so, and git state, toolchains, and command dependencies are probed on the Harbor. When neither exists, the `working_directory_missing` issue carries the reason and what to set, and `CheckoutErrorCode` is `NoHarborConnected` or `NoHarborCheckout`.
+**Response:** `200 OK` - `VesselReadinessResult`. When the vessel has no working directory on the Admiral host and a connected Harbor has a checkout of it, `HasWorkingDirectory` is true, `HarborId`, `HarborName` (the Harbor's name alone), and `CheckoutPath` name the Harbor and its path, an Info issue `working_directory_on_harbor` says so, and git state, toolchains, and command dependencies are probed on the Harbor. When neither exists, the `working_directory_missing` issue carries the reason and what to set, and `CheckoutErrorCode` is `NoHarborConnected` or `NoHarborCheckout`.
 **Error:** `400` - Invalid `checkType`
 **Error:** `404` - Vessel not found
 

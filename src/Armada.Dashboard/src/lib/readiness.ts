@@ -1,5 +1,5 @@
 /** Pure helpers of the readiness panel (vessel readiness shown on Dispatch, vessel pages, onboarding, and the app). */
-import type { VesselReadinessResult, VesselSetupChecklistItem, WorkflowInputReferenceProvider } from '../types/models';
+import type { VesselCheckoutErrorCode, VesselReadinessResult, VesselSetupChecklistItem, WorkflowInputReferenceProvider } from '../types/models';
 
 /** Overall tone of a vessel readiness result: errors block, warnings need attention. */
 export type ReadinessTone = 'ready' | 'warning' | 'error';
@@ -53,6 +53,50 @@ export function readinessDriftSummary(readiness: VesselReadinessResult | null): 
   return readiness && (readiness.commitsAhead != null || readiness.commitsBehind != null)
     ? `${readiness.commitsAhead ?? 0} ahead / ${readiness.commitsBehind ?? 0} behind`
     : null;
+}
+
+/**
+ * Where the vessel's checkout lives, from readiness: on a Harbor (with its ID and path), on the Admiral host (with the
+ * working directory), or unavailable (with the typed reason). Texts are English templates, translated at render time.
+ */
+export type ReadinessCheckout =
+  | { kind: 'harbor'; harborId: string; harborName: string; path: string | null }
+  | { kind: 'admiral'; path: string }
+  | { kind: 'unavailable'; code: VesselCheckoutErrorCode | null; reason: string };
+
+export function readinessCheckout(readiness: VesselReadinessResult | null): ReadinessCheckout | null {
+  if (!readiness) return null;
+  if (readiness.harborId) {
+    return { kind: 'harbor', harborId: readiness.harborId, harborName: readiness.harborName || readiness.harborId, path: readiness.checkoutPath ?? null };
+  }
+  if (readiness.checkoutPath) return { kind: 'admiral', path: readiness.checkoutPath };
+  // An Admiral from before checkout reporting sends no path; there is nothing to say then.
+  if (readiness.hasWorkingDirectory) return null;
+  const code = readiness.checkoutErrorCode ?? null;
+  return { kind: 'unavailable', code, reason: checkoutUnavailableReason(code) };
+}
+
+/** English reason no checkout is available, from the typed checkoutErrorCode. */
+export function checkoutUnavailableReason(code: VesselCheckoutErrorCode | string | null | undefined): string {
+  switch (code) {
+    case 'NoHarborConnected':
+      return 'Unavailable: no Harbor is connected, and the vessel has no working directory on the Admiral';
+    case 'NoHarborCheckout':
+      return 'Unavailable: no connected Harbor has a checkout of this vessel, and it has no working directory on the Admiral';
+    default:
+      return 'Unavailable: the vessel has no working directory on the Admiral';
+  }
+}
+
+/** The English template and parameters of the checkout line ("on Harbor {{name}} at {{path}}", ...). */
+export function readinessCheckoutText(checkout: ReadinessCheckout): { template: string; params?: Record<string, string> } {
+  if (checkout.kind === 'harbor') {
+    return checkout.path
+      ? { template: 'on Harbor {{name}} at {{path}}', params: { name: checkout.harborName, path: checkout.path } }
+      : { template: 'on Harbor {{name}}', params: { name: checkout.harborName } };
+  }
+  if (checkout.kind === 'admiral') return { template: 'on the Admiral at {{path}}', params: { path: checkout.path } };
+  return { template: checkout.reason };
 }
 
 /** A titled group of onboarding checklist items (by item code). */

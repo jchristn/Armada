@@ -1926,9 +1926,20 @@ export interface VesselDeploymentMetadata {
   hasRollbackVerificationCommand: boolean;
 }
 
+/** Why no checkout of a vessel is available (no working directory on the Admiral, and no connected Harbor serves it). */
+export type VesselCheckoutErrorCode = 'NoHarborConnected' | 'NoHarborCheckout';
+
 export interface VesselReadinessResult {
   vesselId: string;
   hasWorkingDirectory: boolean;
+  /** Where checks, Workspace, and readiness probes run: the Admiral's working directory or the Harbor's checkout. */
+  checkoutPath: string | null;
+  /** The Harbor that has the checkout, or null for the Admiral host (or when there is none). */
+  harborId: string | null;
+  /** That Harbor's name, or null. */
+  harborName: string | null;
+  /** Why there is no checkout, or null when there is one (or Harbors were not considered). */
+  checkoutErrorCode: VesselCheckoutErrorCode | null;
   hasRepositoryContext: boolean;
   workflowProfileId: string | null;
   workflowProfileName: string | null;

@@ -415,8 +415,14 @@ Admiral. Every file operation goes through the Harbor's file protocol, and the H
 only when it is the checkout it maps that vessel to (or inside its docks folder), and refuses absolute paths, paths that
 leave the root, symbolic links, and `.git` (see [HARBOR_PROTOCOL.md](HARBOR_PROTOCOL.md)). Workspace exec keeps its
 tenant-administrator rule, and every command still writes an `audit.command` event, whose `host` names the Harbor.
-Readiness reports the vessel as having a checkout, names the Harbor and its path (`harborId`, `harborName`,
-`checkoutPath`, and an Info issue), and probes git state, toolchains, and command dependencies on the Harbor.
+Readiness reports the vessel as having a checkout, names the Harbor and its path (`harborId`, `harborName` (the
+Harbor's name alone), `checkoutPath`, and an Info issue), and probes git state, toolchains, and command dependencies on
+the Harbor. The dashboard, the mobile app, and the TUI show it in every readiness panel as "Checkout: on Harbor
+Joels-MacBook-Pro at /Users/joel/Code/DocConverter" with the Harbor ID (a copy button in the dashboard, selectable text
+in the app, and `Y` Copy Harbor ID on the TUI vessel page), as "on the Admiral at <path>" when the working directory is
+on the Admiral host, or with the reason from `checkoutErrorCode` when there is none. Vessel health on a Harbor checkout
+runs the dependency tools there and decides `RestoreRequired` from `obj/project.assets.json` in the Harbor's checkout
+(read with a `Stat` file request), never from the Admiral's disk.
 
 When neither has a checkout, the operation fails with a reason that says what to set, for example:
 

@@ -31,7 +31,7 @@ namespace Armada.Core.Models
         public string? HarborId { get; set; } = null;
 
         /// <summary>
-        /// The Harbor as people know it ("Name (hbr_...)"), or null.
+        /// The Harbor's name (without its identifier, which is <see cref="HarborId"/>), or null.
         /// </summary>
         public string? HarborName { get; set; } = null;
 

@@ -64,7 +64,8 @@ const WEB = vessel({ id: 'vsl_2', name: 'web', repoUrl: 'https://git/web.git', l
 
 function readiness(over: Partial<VesselReadinessResult> = {}): VesselReadinessResult {
   return {
-    vesselId: 'vsl_1', hasWorkingDirectory: true, hasRepositoryContext: true, workflowProfileId: null, workflowProfileName: 'Default',
+    vesselId: 'vsl_1', hasWorkingDirectory: true, checkoutPath: '/Users/joel/Code/api', harborId: 'hbr_mac', harborName: 'Joels-MacBook-Pro', checkoutErrorCode: null,
+    hasRepositoryContext: true, workflowProfileId: null, workflowProfileName: 'Default',
     workflowProfileScope: null, requestedCheckType: null, requestedEnvironmentName: null, availableCheckTypes: ['Build'], currentBranch: 'main',
     hasUncommittedChanges: false, isDetachedHead: false, commitsAhead: 1, commitsBehind: 0, detectedToolchains: ['dotnet'], toolchainProbes: [],
     deploymentEnvironments: [], deploymentMetadata: null,
@@ -240,6 +241,9 @@ describe('Vessel detail', () => {
     expect(within(screen.getByTestId('vessel-detail-landing-mode')).getByText('LocalMerge')).toBeTruthy();
     await waitFor(() => expect(screen.getByText('Needs Attention')).toBeTruthy());
     expect(screen.getByText('TOKEN (1Password)')).toBeTruthy();
+    expect(screen.getByTestId('readiness-checkout').props.children).toBe('on Harbor Joels-MacBook-Pro at /Users/joel/Code/api');
+    expect(screen.getByTestId('readiness-checkout-harbor-id').props.children).toBe('hbr_mac');
+    expect(screen.getByTestId('readiness-checkout-harbor-id').props.selectable).toBe(true);
     expect(screen.getByText('Ready To Land')).toBeTruthy();
     expect(screen.getByTestId('vessel-mission-msn_1')).toBeTruthy();
 
@@ -251,6 +255,14 @@ describe('Vessel detail', () => {
     await waitFor(() => expect(api.updateVessel).toHaveBeenCalledTimes(1));
     expect(api.updateVessel.mock.calls[0][0]).toBe('vsl_1');
     expect(api.updateVessel.mock.calls[0][1]).toMatchObject({ id: 'vsl_1', landingMode: 'MergeQueue', workingDirectory: '/work/api' });
+  });
+
+  it('shows the typed reason when no checkout is available', async () => {
+    api.getVesselReadiness.mockResolvedValue(readiness({ hasWorkingDirectory: false, checkoutPath: null, harborId: null, harborName: null, checkoutErrorCode: 'NoHarborConnected' }));
+    await render(<BuildProviders><VesselDetailView id="vsl_1" /></BuildProviders>);
+    await waitFor(() => expect(screen.getByTestId('readiness-checkout')).toBeTruthy());
+    expect(screen.getByTestId('readiness-checkout').props.children).toContain('no Harbor is connected');
+    expect(screen.queryByTestId('readiness-checkout-harbor-id')).toBeNull();
   });
 
   it('opens the edit form for ?edit=1 once', async () => {

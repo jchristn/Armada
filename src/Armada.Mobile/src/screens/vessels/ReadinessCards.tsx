@@ -8,6 +8,8 @@ import {
   readinessTone,
   readinessBranchSummary,
   readinessDriftSummary,
+  readinessCheckout,
+  readinessCheckoutText,
 } from '@dashboard/lib/readiness';
 import { AppText, Button, Section, StatusBadge } from '../../components/ui';
 import type { StatusTone } from '../../components/ui/StatusBadge';
@@ -79,7 +81,8 @@ export function ChecklistItem({ item }: { item: VesselSetupChecklistItem }) {
 
 /**
  * Vessel readiness (the dashboard's ReadinessPanel): the overall verdict, resolved workflow profile, onboarding
- * progress, working directory / context / check types, branch and drift, toolchains and probes, environments,
+ * progress, working directory / context / check types, where the checkout lives (Harbor with its selectable ID, the
+ * Admiral, or the typed reason none is available), branch and drift, toolchains and probes, environments,
  * delivery coverage, the setup checklist, and the issues with their related values.
  */
 export function ReadinessCard({ title, readiness, loading = false, emptyMessage, testID }: {
@@ -91,6 +94,8 @@ export function ReadinessCard({ title, readiness, loading = false, emptyMessage,
   const tone = readinessTone(readiness);
   const branchSummary = readinessBranchSummary(readiness);
   const drift = readinessDriftSummary(readiness);
+  const checkout = readinessCheckout(readiness);
+  const checkoutText = checkout ? readinessCheckoutText(checkout) : null;
   return (
     <Section title={title}>
       <View style={styles.body} testID={testID}>
@@ -122,6 +127,19 @@ export function ReadinessCard({ title, readiness, loading = false, emptyMessage,
                 readiness.availableCheckTypes.length > 0 ? t('{{count}} check type(s) available', { count: readiness.availableCheckTypes.length }) : null,
               ].filter(Boolean).join(' \u00B7 ')}
             </AppText>
+            {checkout && checkoutText ? (
+              <Line label={t('Checkout')}>
+                <AppText selectable color={checkout.kind === 'unavailable' ? 'warning' : 'text'} testID="readiness-checkout">
+                  {t(checkoutText.template, checkoutText.params)}
+                </AppText>
+                {checkout.kind === 'harbor' ? (
+                  <AppText variant="caption" muted>
+                    {`${t('Harbor ID')}: `}
+                    <AppText selectable variant="mono" testID="readiness-checkout-harbor-id">{checkout.harborId}</AppText>
+                  </AppText>
+                ) : null}
+              </Line>
+            ) : null}
             {readiness.availableCheckTypes.length > 0 ? <Chips items={readiness.availableCheckTypes} /> : null}
             {branchSummary ? <Line label={t('Branch')}><AppText style={typography.mono}>{branchSummary}</AppText></Line> : null}
             {drift ? <Line label={t('Remote drift')}>{drift}</Line> : null}

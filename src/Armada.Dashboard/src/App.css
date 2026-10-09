@@ -2425,6 +2425,30 @@ table.table-dense td { padding-left: 0.45rem; padding-right: 0.45rem; }
     font-size: 0.8rem;
 }
 
+.readiness-checkout {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+    margin-bottom: 0.75rem;
+    font-size: 0.88rem;
+    overflow-wrap: anywhere;
+}
+
+.readiness-checkout-label {
+    font-weight: 600;
+}
+
+.readiness-checkout.unavailable .readiness-checkout-where {
+    color: var(--text-muted);
+}
+
+.readiness-checkout-id {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
 .readiness-available-types {
     display: flex;
     flex-wrap: wrap;

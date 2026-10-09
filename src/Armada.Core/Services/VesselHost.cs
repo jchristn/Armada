@@ -31,6 +31,22 @@ namespace Armada.Core.Services
         public string? HarborName { get; }
 
         /// <summary>
+        /// The Harbor's name alone (<see cref="HarborName"/> without its " (hbr_...)" suffix; the identifier when the
+        /// Harbor has no other name), or null for the Admiral host.
+        /// </summary>
+        public string? HarborDisplayName
+        {
+            get
+            {
+                if (HarborId == null || HarborName == null) return null;
+                string suffix = " (" + HarborId + ")";
+                return HarborName.EndsWith(suffix, StringComparison.Ordinal) && HarborName.Length > suffix.Length
+                    ? HarborName.Substring(0, HarborName.Length - suffix.Length)
+                    : HarborName;
+            }
+        }
+
+        /// <summary>
         /// Whether the checkout is on a Harbor.
         /// </summary>
         public bool IsHarbor
