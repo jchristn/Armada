@@ -44,6 +44,12 @@ namespace Armada.Server.WebSocket
         /// </summary>
         public int ConnectionCount => _Clients.Count;
 
+        /// <summary>
+        /// Looks up a running mission's current captain activity (see <see cref="MissionActivityTracker"/>), so
+        /// <c>mission.changed</c> events carry it; null when not set or when the captain reports none.
+        /// </summary>
+        public Func<string, RuntimeActivity?>? MissionActivityLookup { get; set; } = null;
+
         #endregion
 
         #region Private-Members
@@ -362,12 +368,32 @@ namespace Armada.Server.WebSocket
                 id = mission.Id,
                 title = mission.Title,
                 status = statusOverride ?? mission.Status.ToString(),
-                voyageId = mission.VoyageId
+                voyageId = mission.VoyageId,
+                activity = MissionActivityLookup?.Invoke(mission.Id)
             });
             RaiseEntityChanged("mission", mission.Id);
             MissionStatusEnum? effective = null;
             if (!String.IsNullOrEmpty(statusOverride) && Enum.TryParse<MissionStatusEnum>(statusOverride, true, out MissionStatusEnum parsed)) effective = parsed;
             FeedPush(push => push.OnMissionChanged(mission, effective));
+        }
+
+        /// <summary>
+        /// Broadcast a running mission's latest captain activity (a tool call, text, or reasoning from its runtime's
+        /// structured output) to the mission's tenant as <c>mission.activity</c>. The caller throttles it.
+        /// </summary>
+        /// <param name="tenantId">The mission's tenant.</param>
+        /// <param name="missionId">Mission identifier.</param>
+        /// <param name="voyageId">The mission's voyage, or null.</param>
+        /// <param name="activity">The activity.</param>
+        public void BroadcastMissionActivity(string? tenantId, string missionId, string? voyageId, RuntimeActivity activity)
+        {
+            if (String.IsNullOrEmpty(missionId) || activity == null) return;
+            BroadcastToTenant(tenantId, "mission.activity", new
+            {
+                id = missionId,
+                voyageId = voyageId,
+                activity = activity
+            });
         }
 
         /// <summary>

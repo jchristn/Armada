@@ -1,6 +1,7 @@
 namespace Armada.Core.Services
 {
     using Armada.Core.Harbor;
+    using Armada.Core.Models;
 
     /// <summary>
     /// Receives the lifecycle of a delegated captain job as the Harbor reports it back over the link. The
@@ -21,6 +22,12 @@ namespace Armada.Core.Services
         /// <param name="stream">Which standard stream the chunk came from.</param>
         /// <param name="data">The output chunk.</param>
         void OnOutput(HarborOutputStreamEnum stream, string data);
+
+        /// <summary>
+        /// The job's latest activity arrived (only for a launch that asked for structured progress).
+        /// </summary>
+        /// <param name="activity">The activity.</param>
+        void OnActivity(RuntimeActivity activity);
 
         /// <summary>
         /// The captain process exited.

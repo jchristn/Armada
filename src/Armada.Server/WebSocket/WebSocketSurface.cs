@@ -135,7 +135,8 @@ namespace Armada.Server.WebSocket
             events.Add(new WebSocketEventDescriptor("status.snapshot", "connection", false, "ArmadaStatus", new[] { "allTenants" }, false));
 
             // Entity change events with dedicated payloads
-            events.Add(new WebSocketEventDescriptor("mission.changed", "tenant", false, null, new[] { "id", "title", "status", "voyageId" }, false));
+            events.Add(new WebSocketEventDescriptor("mission.changed", "tenant", false, null, new[] { "id", "title", "status", "voyageId", "activity" }, false));
+            events.Add(new WebSocketEventDescriptor("mission.activity", "tenant", false, null, new[] { "id", "voyageId", "activity" }, false));
             events.Add(new WebSocketEventDescriptor("voyage.changed", "tenant", false, null, new[] { "id", "title", "status" }, false));
             events.Add(new WebSocketEventDescriptor("captain.changed", "tenant", false, null, new[] { "id", "name", "state" }, false));
             events.Add(new WebSocketEventDescriptor("check-run.changed", "tenant", false, "CheckRun", null, false));

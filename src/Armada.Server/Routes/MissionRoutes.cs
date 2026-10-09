@@ -50,6 +50,12 @@ namespace Armada.Server.Routes
         }
 
         /// <summary>
+        /// Looks up a running mission's current captain activity, returned on the single-mission route as Activity; null
+        /// when not set.
+        /// </summary>
+        public Func<string, RuntimeActivity?>? MissionActivityLookup { get; set; } = null;
+
+        /// <summary>
         /// Instantiate.
         /// </summary>
         /// <param name="database">Database driver.</param>
@@ -406,12 +412,13 @@ namespace Armada.Server.Routes
                 mission.DiffSnapshot = null;
                 mission.PlaybookSnapshots = await _database.Playbooks.GetMissionSnapshotsAsync(id).ConfigureAwait(false);
                 mission.AssignmentBlocker = await ComputeAssignmentBlockerAsync(mission).ConfigureAwait(false);
+                mission.Activity = MissionActivityLookup?.Invoke(mission.Id);
                 return (object)mission;
             },
             api => api
                 .WithTag("Missions")
                 .WithSummary("Get a mission")
-                .WithDescription("Returns a single mission by ID. A Pending mission carries AssignmentBlocker, the server's explanation of why no captain has taken it yet.")
+                .WithDescription("Returns a single mission by ID. A Pending mission carries AssignmentBlocker, the server's explanation of why no captain has taken it yet. A mission whose captain is running carries Activity, the captain's latest tool call, text, or reasoning when its runtime streams structured output.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Mission ID (msn_ prefix)"))
                 .WithResponse(200, OpenApiJson.For<Mission>("Mission details"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())

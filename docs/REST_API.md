@@ -3149,6 +3149,13 @@ yet. `Reason` is one of `AwaitingDispatch`, `VesselMissing`, `VesselMisconfigure
 (`State`, `Detail`, and the `MissionId`, `PlanningSessionId`, `RefinementSessionId`, `ObjectiveId`, or
 `QuarantineUntilUtc` and `QuarantineReason` that hold it). The field is absent for other statuses and in list responses.
 
+A mission whose captain is running also carries `Activity` when its runtime streams structured output (Claude Code and
+Codex missions; see [Mission progress streaming](CAPTAINS.md#mission-progress-streaming)): the captain's latest tool
+call, text, or reasoning, kept in memory while it runs (not stored). `Kind` is `ToolCall`, `Text`, or `Thinking`;
+`ToolName`, `Description`, and `Detail` (the command or path, at most 200 characters) describe a tool call; `Summary` is
+one line such as `Running tests: dotnet test src/App.sln`; `TimestampUtc` is when it was observed. The field is absent
+when the captain is not running and in list responses; the `mission.activity` WebSocket event carries updates.
+
 ```json
 "AssignmentBlocker": {
   "Reason": "NoIdleCaptain",

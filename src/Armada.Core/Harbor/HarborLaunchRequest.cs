@@ -142,6 +142,21 @@ namespace Armada.Core.Harbor
         /// </summary>
         public bool ReturnFinalMessage { get; set; } = false;
 
+        /// <summary>
+        /// Whether a mission runs with its runtime's structured output (Claude Code stream-json, Codex exec --json) so its
+        /// progress can be seen while it runs. The Harbor decodes it: it reports the readable output the CLI prints in
+        /// text mode on the <c>Stdout</c> stream as before (the final reply, protocol lines), and the captain's latest
+        /// activity as <c>activity</c> messages. Ignored for runtimes without structured output, which stay plain text.
+        /// Default false; a Harbor that predates it ignores it and runs plain text, which the Admiral also reads.
+        /// </summary>
+        public bool StructuredProgress { get; set; } = false;
+
+        /// <summary>
+        /// What the launch is about (mission title, vessel, voyage, captain, stage, branch, or the Ask conversation and
+        /// question), for the Harbor's Running now list. Informational and optional; null from an Admiral that predates it.
+        /// </summary>
+        public HarborLaunchDisplay? Display { get; set; } = null;
+
         #endregion
     }
 }

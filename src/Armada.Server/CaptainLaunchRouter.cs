@@ -153,6 +153,7 @@ namespace Armada.Server
                 remote.UseScratchWorkingDirectory = context.AllowScratchWorkingDirectory;
                 remote.JobKind = context.Kind;
                 remote.MissionId = context.MissionId;
+                remote.Display = context.Display;
                 remote.OnProcessStarted += processId => _ActiveRemote[processId] = remote;
                 remote.OnProcessExited += (processId, exitCode) => _ActiveRemote.TryRemove(new KeyValuePair<int, RemoteAgentRuntime>(processId, remote));
                 return new CaptainLaunchTarget(remote, decision.HarborId, decision.Reason);

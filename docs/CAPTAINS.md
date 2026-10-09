@@ -188,12 +188,14 @@ MCP server at `http://<host>:<mcpPort>/mcp` (`localhost` unless the Admiral is b
 ### Claude Code
 
 ```
-claude --print --verbose [--output-format stream-json --include-partial-messages] [--model <model>]
+claude --print --verbose [--output-format stream-json [--include-partial-messages]] [--model <model>]
     (--dangerously-skip-permissions | --permission-mode acceptEdits --allowedTools mcp__armada
      [--permission-prompt-tool mcp__armada__cli_permission_prompt])
 ```
 
-The stream-json flags are added only for Ask and interactive planning turns. Without auto-approve (the `Refuse` and
+Missions run with `--output-format stream-json` so their progress is visible while they run (see
+[Mission progress streaming](#mission-progress-streaming)); Ask and interactive planning turns add
+`--include-partial-messages` to stream the reply token by token. Without auto-approve (the `Refuse` and
 `ApproveInArmada` policies, see [CLI tool permissions](#cli-tool-permissions)) Claude Code accepts file edits, allows
 Armada's own MCP tools, and refuses any other tool, including shell commands, that the project's Claude Code settings do
 not allow; print mode refuses rather than prompts. Under `ApproveInArmada` the launch adds `--permission-prompt-tool
@@ -212,8 +214,11 @@ Guides: [INSTRUCTIONS_FOR_CLAUDE_CODE.md](INSTRUCTIONS_FOR_CLAUDE_CODE.md),
 ### Codex
 
 ```
-codex exec --skip-git-repo-check --sandbox workspace-write [--model <model>] [-c model_reasoning_effort=<level>] [--output-last-message <file>]
+codex exec --skip-git-repo-check [--json] --sandbox workspace-write [--model <model>] [-c model_reasoning_effort=<level>] [--output-last-message <file>]
 ```
+
+`--json` is added for missions (see [Mission progress streaming](#mission-progress-streaming)) and for Ask and chat
+turns, which read its typed events.
 
 The approval mode defaults to `full-auto`, sent as `--sandbox workspace-write` (Codex 0.159 removed the `--full-auto`
 alias from `codex exec`, which never prompts). A captain without auto-approve always gets `--sandbox workspace-write`,
@@ -295,6 +300,33 @@ process, and a task-plan pair. The model comes from the endpoint; a captain-leve
 supplies `ARMADA_MCP_URL` and `ARMADA_MCP_TOKEN`, the loop also connects to Armada's own MCP server as that caller and
 exposes its tools to the model. Ask turns always supply them; missions supply them while `Mcp.MissionScopedTokens` is
 on (the default), and otherwise a mission run by an API-endpoint captain has the coding tools only.
+
+## Mission progress streaming
+
+In text mode a captain prints nothing until it finishes (Claude Code's `--print` prints only the final reply), so a
+mission looked silent until the end. Missions therefore run with the runtime's structured output where it has one, and
+Armada decodes it as it arrives:
+
+| Runtime | Mission launch | Readable output (as text mode printed it) | Activity |
+|---|---|---|---|
+| Claude Code | `--output-format stream-json` (with the existing `--verbose`, without partial messages) | the terminal `result` event's text | each `assistant` message's text, thinking, and `tool_use` blocks |
+| Codex | `exec --json` (the final message is still written to `--output-last-message`) | on stdout, the turn's last `agent_message`, printed when the turn completes or fails (or when the process ends first), and an `error` event's message; on stderr, each `agent_message` as it completes, as text mode's transcript showed it | `command_execution` and `mcp_tool_call` items as they start; `reasoning`, `file_change`, and `agent_message` items as they complete |
+| Gemini, Cursor, Mux, OpenCode | unchanged | unchanged (plain text, or Mux's own events) | none |
+| ApiEndpoint | unchanged | unchanged | each tool call as it starts |
+
+The decoded readable lines are what text mode printed, so the mission's final message, `AgentOutput`, the
+`[ARMADA:...]` protocol lines in it, the diff capture, and landing work exactly as before. A plain line in a structured
+stream (a CLI warning, or a CLI that ignores the flag) is passed through as text. The mission log gets the readable
+lines plus one `> ` line per activity, never the raw JSON. Each activity is typed (`RuntimeActivity`: `Kind` ToolCall,
+Text, or Thinking; `ToolName`; `Description`; `Detail`, the short input such as the command for Bash or the path for
+an edit; and a one-line `Summary` such as `Running tests: dotnet test src/App.sln`), parsed by
+`RuntimeActivityParser` in Core from the same stream models Ask turns use.
+
+The latest activity counts as output for stall detection, is the mission's `Activity` on `GET /api/v1/missions/{id}`
+and on the `mission.changed` WebSocket event, and is broadcast as `mission.activity` at most about once a second. On a
+Harbor the Harbor decodes the stream: it reports the readable lines as ordinary output and the activity as `activity`
+messages (see [HARBOR_PROTOCOL.md](HARBOR_PROTOCOL.md)), and shows it in its Running now list. A mission's time to
+first output is now the time to its first activity, not to its final reply.
 
 ## Running agents safely
 

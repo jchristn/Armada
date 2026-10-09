@@ -201,6 +201,38 @@ namespace Armada.Harbor
 
         #endregion
 
+        #region Public-Methods
+
+        /// <summary>
+        /// Show a job's log: select the jobs run on this computer, select the file when it is listed, and open it.
+        /// </summary>
+        /// <param name="path">The job's log file.</param>
+        /// <param name="entityId">The mission the job runs, or null.</param>
+        public void ShowJobLog(string path, string? entityId)
+        {
+            if (String.IsNullOrEmpty(path)) return;
+            if (_Category.ItemsSource is IEnumerable<LogSource> sources)
+            {
+                LogSource? jobs = sources.FirstOrDefault(source => source.Kind == LogSourceEnum.HarborJobs);
+                if (jobs != null && !ReferenceEquals(_Category.SelectedItem, jobs)) _Category.SelectedItem = jobs;
+            }
+
+            RefreshList();
+            if (_Files.ItemsSource is IEnumerable<LogFileEntry> entries)
+            {
+                LogFileEntry? entry = entries.FirstOrDefault(e => String.Equals(e.Path, path, StringComparison.Ordinal));
+                if (entry != null)
+                {
+                    _Files.SelectedItem = entry;
+                    if (String.Equals(_CurrentPath, path, StringComparison.Ordinal)) return;
+                }
+            }
+
+            if (!String.Equals(_CurrentPath, path, StringComparison.Ordinal)) Open(path, entityId);
+        }
+
+        #endregion
+
         #region Private-Methods
 
         private void OnSessionChanged(object? sender, EventArgs e)

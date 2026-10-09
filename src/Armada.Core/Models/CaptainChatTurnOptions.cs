@@ -92,6 +92,12 @@ namespace Armada.Core.Models
         /// </summary>
         public Action<CaptainToolActivity>? OnTool { get; set; } = null;
 
+        /// <summary>
+        /// What the turn is about (the Ask conversation and the user's question), sent to a Harbor that runs it for its
+        /// Running now list; null for none.
+        /// </summary>
+        public Armada.Core.Harbor.HarborLaunchDisplay? Display { get; set; } = null;
+
         #endregion
 
         #region Private-Members

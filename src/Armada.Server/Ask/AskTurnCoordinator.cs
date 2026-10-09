@@ -327,6 +327,7 @@ namespace Armada.Server.Ask
                 options.UserId = thread.UserId;
                 options.McpSessionToken = MintToken(thread);
                 options.TimeoutMs = _Settings.Ask.NarrationTimeoutSeconds * 1000;
+                options.Display = HarborLaunchDisplayBuilder.ForAskTurn(thread.Id, null, captain);
 
                 using (CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(token))
                 {
@@ -497,6 +498,22 @@ namespace Armada.Server.Ask
             }
         }
 
+        /// <summary>
+        /// The user message a turn answers: the one at <paramref name="userSequence"/>, else the latest user message.
+        /// </summary>
+        private static string? QuestionOf(List<AskMessage> history, int? userSequence)
+        {
+            AskMessage? question = null;
+            foreach (AskMessage message in history)
+            {
+                if (message.Role != AskMessageRoleEnum.User) continue;
+                if (userSequence.HasValue && message.Sequence == userSequence.Value) return message.ContentText;
+                question = message;
+            }
+
+            return question?.ContentText;
+        }
+
         private async Task RunTurnAsync(AskThread thread, AskTurnHandle handle, int? userSequence, string? note, bool showThinking, AskMessageKindEnum replyKind, string? trackedWorkId)
         {
             string state = "failed";
@@ -538,6 +555,7 @@ namespace Armada.Server.Ask
                 options.UserId = thread.UserId;
                 options.McpSessionToken = MintToken(thread);
                 options.TimeoutMs = _Settings.Ask.TurnTimeoutMinutes * 60000;
+                options.Display = HarborLaunchDisplayBuilder.ForAskTurn(thread.Id, QuestionOf(history, userSequence), captain);
                 string turnId = handle.TurnId;
                 options.OnChunk = delta => Emit(thread, "ask.chunk", new { threadId = thread.Id, turnId, delta });
                 options.OnThinking = delta => Emit(thread, "ask.thinking", new { threadId = thread.Id, turnId, delta });
@@ -653,6 +671,7 @@ namespace Armada.Server.Ask
                         options.UserId = thread.UserId;
                         options.McpSessionToken = MintToken(thread);
                         options.TimeoutMs = _Settings.Ask.TurnTimeoutMinutes * 60000;
+                        options.Display = HarborLaunchDisplayBuilder.ForAskTurn(thread.Id, null, captain);
                         CaptainChatTurnResult result = await _Runner.RunTurnAsync(options, handle.Cancellation.Token).ConfigureAwait(false);
                         if (result.Response.Success && !String.IsNullOrWhiteSpace(result.Response.Reply))
                         {

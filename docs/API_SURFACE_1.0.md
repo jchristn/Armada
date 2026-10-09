@@ -28,9 +28,9 @@ administrator).
 | MCP tools | 156 | 6 |
 | WebSocket endpoints | 2 | 1 |
 | WebSocket commands | 61 | 0 |
-| WebSocket event types | 67 | 0 |
+| WebSocket event types | 68 | 0 |
 | CLI commands | 63 | 0 |
-| Settings keys | 187 | 12 |
+| Settings keys | 188 | 12 |
 
 ## REST API
 
@@ -630,8 +630,9 @@ Generic events carry a `message` and the payload `{ entityType, entityId, captai
 | `incident.changed` | tenant | `Incident` |
 | `merge.batch_purged` | tenant | generic |
 | `merge.purged` | tenant | generic |
+| `mission.activity` | tenant | `id`, `voyageId`, `activity` |
 | `mission.batch_deleted` | tenant | generic |
-| `mission.changed` | tenant | `id`, `title`, `status`, `voyageId` |
+| `mission.changed` | tenant | `id`, `title`, `status`, `voyageId`, `activity` |
 | `mission.completed` | tenant | generic |
 | `mission.deleted` | tenant | generic |
 | `mission.landing_failed` | tenant | generic |
@@ -764,6 +765,7 @@ install with the home directory written as `~`; defaults are not frozen (see COM
 | `ask.narrateMilestones` | bool | `true` |  |
 | `ask.narrationTimeoutSeconds` | int | `60` |  |
 | `ask.proposalExpiryMinutes` | int | `60` |  |
+| `ask.reportResultsOnCompletion` | bool | `true` |  |
 | `ask.trackerIntervalSeconds` | int | `5` |  |
 | `ask.turnTimeoutMinutes` | int | `15` |  |
 | `autoMergePullRequests` | bool | `false` |  |

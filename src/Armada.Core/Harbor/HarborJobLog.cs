@@ -100,6 +100,16 @@ namespace Armada.Core.Harbor
         }
 
         /// <summary>
+        /// Write one activity of the job (from its runtime's structured output) as "&gt; " and its summary.
+        /// </summary>
+        /// <param name="activity">Activity.</param>
+        public void WriteActivity(Armada.Core.Models.RuntimeActivity activity)
+        {
+            if (activity == null) return;
+            Write("> " + activity.Summary);
+        }
+
+        /// <summary>
         /// Write the closing line with the exit code and run time.
         /// </summary>
         /// <param name="exitCode">Exit code.</param>

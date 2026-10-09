@@ -82,6 +82,15 @@ namespace Armada.Harbor
             jobsHeader.Children.Add(_JobsValue);
             harborBody.Children.Add(jobsHeader);
             harborBody.Children.Add(_Jobs);
+            _Jobs.OpenLink += link =>
+            {
+                if (!PlatformShell.Open(link, out string? error))
+                    _ = HarborDialog.ShowMessageAsync(TopLevel.GetTopLevel(this) as Window, "Could not open the dashboard", error ?? "Unknown error");
+            };
+            _Jobs.ViewOutput += view =>
+            {
+                if (view.LogPath != null && TopLevel.GetTopLevel(this) is StatusWindow window) window.ShowJobLog(view.LogPath, view.MissionId);
+            };
 
             Grid admiral = HarborUi.DetailGrid();
             _RestValue = new UrlTextBox(null, "REST address", true);
@@ -164,7 +173,7 @@ namespace Armada.Harbor
             _McpValue.IsVisible = hasMcp;
             _McpNote.IsVisible = !hasMcp;
             List<HarborJobInfo> jobs = _Session.Window.LiveJobs();
-            _Jobs.Update(jobs, DateTime.UtcNow);
+            _Jobs.Update(jobs, DateTime.UtcNow, settings.DashboardUrl);
             _JobsValue.Text = jobs.Count + " of " + settings.MaxConcurrentJobs + " slots in use";
             string? harborLog = new HarborLogPaths(HarborAppSettings.LogDirectory()).FindLatestHarborLog();
             _HarborLogValue.Text = harborLog ?? HarborAppSettings.LogDirectory() + " (no log yet)";

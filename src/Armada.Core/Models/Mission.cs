@@ -246,6 +246,15 @@ namespace Armada.Core.Models
         public MissionAssignmentBlocker? AssignmentBlocker { get; set; } = null;
 
         /// <summary>
+        /// What the mission's captain is doing right now (its latest tool call, text, or reasoning, read from its
+        /// runtime's structured output). Computed by the server when a single mission is read and carried by the
+        /// mission.changed and mission.activity WebSocket events (not stored); null when the captain is not running, its
+        /// runtime has no structured output, and in list responses.
+        /// </summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public RuntimeActivity? Activity { get; set; } = null;
+
+        /// <summary>
         /// Creation timestamp in UTC.
         /// </summary>
         public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;

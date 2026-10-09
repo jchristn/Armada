@@ -8,6 +8,7 @@ namespace Armada.Core.Services
     using System.Net.Http;
     using System.Runtime.InteropServices;
     using System.Threading.Channels;
+    using Armada.Core.Enums;
     using Armada.Core.Harbor;
     using Armada.Core.Models;
     using SyslogLogging;
@@ -88,6 +89,8 @@ namespace Armada.Core.Services
         private readonly Action<HarborLogEntry>? _OnLog;
         private readonly Dictionary<string, HarborJobInfo> _LiveJobs = new Dictionary<string, HarborJobInfo>(StringComparer.Ordinal);
         private readonly object _JobLock = new object();
+        private readonly ConcurrentDictionary<string, Action<RuntimeActivity>> _ActivityHandlers = new ConcurrentDictionary<string, Action<RuntimeActivity>>(StringComparer.Ordinal);
+        private static readonly TimeSpan _ActivityInterval = TimeSpan.FromSeconds(1);
         private readonly ConcurrentDictionary<string, SemaphoreSlim> _CommandLocks = new ConcurrentDictionary<string, SemaphoreSlim>(StringComparer.OrdinalIgnoreCase);
         private readonly ConcurrentDictionary<Task, byte> _CommandsInFlight = new ConcurrentDictionary<Task, byte>();
         private CancellationTokenSource? _SessionCommands = null;
@@ -149,6 +152,7 @@ namespace Armada.Core.Services
             _HeartbeatIntervalMs = heartbeatIntervalMs < 0 ? 0 : heartbeatIntervalMs;
             _OnLog = onLog;
             _JobRunner = jobRunner;
+            if (_JobRunner is IHarborJobProgressSource progress) progress.ActivityReported += OnJobActivity;
         }
 
         #endregion
@@ -604,6 +608,26 @@ namespace Armada.Core.Services
             // slept while the job ran.
             long started = _Time.GetTimestamp();
             long firstOutputElapsedTicks = -1;
+            string jobId = launch.JobId;
+
+            // An interactive launch that streams JSON (an Ask or chat turn) prints protocol events on stdout, which the
+            // Admiral reads; Running now shows their activity instead of the raw events.
+            AgentRuntimeEnum? launchRuntime = launch.RuntimeType;
+            bool stdoutIsProtocol = launch.StreamJsonOutput && launchRuntime.HasValue && MissionStreamDecoder.Supports(launchRuntime.Value);
+
+            // The job's activity (from its runtime's structured output) updates the Running now list at once and, when
+            // the Admiral asked for structured progress, goes to the Admiral at most about once a second (newest wins).
+            LatestValueThrottle<RuntimeActivity>? activityToAdmiral = launch.StructuredProgress
+                ? new LatestValueThrottle<RuntimeActivity>(_ActivityInterval, _Time, activity => Enqueue(new HarborActivity { JobId = jobId, Activity = activity }))
+                : null;
+            _ActivityHandlers[jobId] = activity =>
+            {
+                // Structured output counts as output for the time to first output: a captain that streams its work has
+                // started answering even though it prints nothing readable until it finishes.
+                System.Threading.Interlocked.CompareExchange(ref firstOutputElapsedTicks, _Time.GetElapsedTime(started).Ticks, -1);
+                UpdateLiveJob(jobId, job => job.SetActivity(activity));
+                activityToAdmiral?.Submit(activity);
+            };
 
             try
             {
@@ -620,10 +644,13 @@ namespace Armada.Core.Services
                     {
                         // Record the time to first output once (time-to-first-token proxy).
                         System.Threading.Interlocked.CompareExchange(ref firstOutputElapsedTicks, _Time.GetElapsedTime(started).Ticks, -1);
+                        bool readable = stream == HarborOutputStreamEnum.Stderr || (stream == HarborOutputStreamEnum.Stdout && !stdoutIsProtocol);
+                        if (readable) UpdateLiveJob(jobId, job => job.AddRecentLine(data));
                         Enqueue(new HarborOutput { JobId = launch.JobId, Stream = stream, Data = data });
                     },
                     exitCode =>
                     {
+                        EndActivity(jobId, activityToAdmiral);
                         RemoveLiveJob(launch.JobId);
                         long durationMs = (long)_Time.GetElapsedTime(started).TotalMilliseconds;
                         long firstOutput = System.Threading.Interlocked.Read(ref firstOutputElapsedTicks);
@@ -637,9 +664,34 @@ namespace Armada.Core.Services
             }
             catch (Exception e)
             {
+                EndActivity(jobId, activityToAdmiral);
                 RemoveLiveJob(launch.JobId);
                 Enqueue(new HarborError { CorrelationId = launch.CorrelationId, JobId = launch.JobId, Message = e.Message });
                 LogEntry(_LogClassifier.LaunchFailed(launch, e.Message));
+            }
+        }
+
+        private void OnJobActivity(string jobId, RuntimeActivity activity)
+        {
+            if (String.IsNullOrEmpty(jobId) || activity == null) return;
+            if (_ActivityHandlers.TryGetValue(jobId, out Action<RuntimeActivity>? handler))
+            {
+                try { handler(activity); }
+                catch (Exception e) { _Logging.Debug(_Header + "activity of job " + jobId + " not recorded: " + e.Message.TrimEnd('.')); }
+            }
+        }
+
+        private void EndActivity(string jobId, LatestValueThrottle<RuntimeActivity>? activityToAdmiral)
+        {
+            _ActivityHandlers.TryRemove(jobId, out Action<RuntimeActivity>? _);
+            activityToAdmiral?.Dispose();
+        }
+
+        private void UpdateLiveJob(string jobId, Action<HarborJobInfo> update)
+        {
+            lock (_JobLock)
+            {
+                if (_LiveJobs.TryGetValue(jobId, out HarborJobInfo? job)) update(job);
             }
         }
 
@@ -761,6 +813,7 @@ namespace Armada.Core.Services
         private void AddLiveJob(HarborLaunchRequest launch)
         {
             HarborJobInfo job = HarborJobInfo.FromLaunch(launch, _Time.GetUtcNow().UtcDateTime);
+            if (_JobRunner is IHarborJobProgressSource progress) job.LogPath = progress.LogPathOf(launch.JobId);
             lock (_JobLock) { _LiveJobs[launch.JobId] = job; }
         }
 

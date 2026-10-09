@@ -65,6 +65,23 @@ namespace Armada.Runtimes
         public event Action<int, RuntimeProviderError>? OnProviderError;
 
         /// <summary>
+        /// Event raised for each activity the captain reports in its structured output (a tool call it started, text it
+        /// wrote, or reasoning) while <see cref="StructuredProgress"/> is in effect.
+        /// </summary>
+        public event Action<int, RuntimeActivity>? OnActivity;
+
+        /// <summary>
+        /// When true, a mission launch runs the CLI with its structured output (Claude Code stream-json, Codex exec
+        /// --json) so its progress is visible while it runs. Each structured stdout line is decoded
+        /// (<see cref="Armada.Core.Services.MissionStreamDecoder"/>): the readable output the CLI prints in text mode (the
+        /// final reply, protocol lines) is raised on <see cref="OnOutputReceived"/> and <see cref="OnStdoutReceived"/> and
+        /// written to the log as before, and each activity is raised on <see cref="OnActivity"/> and written to the log as
+        /// "&gt; " and its summary. Ignored by runtimes without structured output and by an interactive launch that
+        /// already streams JSON (chat). Default false.
+        /// </summary>
+        public bool StructuredProgress { get; set; } = false;
+
+        /// <summary>
         /// Milliseconds to wait for an agent process to exit gracefully (after closing stdin) before it
         /// is force-killed during <see cref="StopAsync"/>. Defaults to 10000 (10s) for production. Test
         /// harnesses lower this so recalling agents does not block on the full graceful window. Clamped to
@@ -324,6 +341,10 @@ namespace Armada.Runtimes
 
             Process process = new Process { StartInfo = startInfo };
 
+            // Mission progress: decode structured stdout into the readable output text mode prints plus activities.
+            Armada.Core.Services.MissionStreamDecoder? decoder = StructuredProgressActive ? Armada.Core.Services.MissionStreamDecoder.For(RuntimeType) : null;
+            object decoderLock = new object();
+
             // Captured once after Start: the Exited handler disposes the Process, after which reading process.Id throws.
             // Handlers used to read process.Id on every line, so a line delivered after the exit (common for the last
             // lines of a short-lived process) threw inside the swallowed try and was silently dropped.
@@ -332,6 +353,24 @@ namespace Armada.Runtimes
 
             process.OutputDataReceived += (sender, e) =>
             {
+                if (!String.IsNullOrEmpty(e.Data) && decoder != null)
+                {
+                    _Logging.Debug(_Header + "[stdout] " + e.Data);
+                    RaiseProviderErrorIfAny(launchedPid, e.Data, true);
+                    Armada.Core.Services.MissionStreamDecodeResult decoded;
+                    lock (decoderLock) decoded = decoder.Decode(e.Data, DateTime.UtcNow);
+                    if (decoded.Structured)
+                    {
+                        RaiseDecoded(launchedPid, decoded, logWriter);
+                        return;
+                    }
+
+                    // Plain text in a structured stream (a CLI warning): handled as text-mode output below, without
+                    // parsing it for a provider error a second time.
+                    RaisePlainStdout(launchedPid, e.Data, logWriter);
+                    return;
+                }
+
                 if (!String.IsNullOrEmpty(e.Data))
                 {
                     _Logging.Debug(_Header + "[stdout] " + e.Data);
@@ -385,6 +424,14 @@ namespace Armada.Runtimes
                 }
                 catch (OperationCanceledException) { }
                 catch (InvalidOperationException) { }
+
+                // Output a structured stream still held (a Codex message whose turn never completed).
+                if (decoder != null)
+                {
+                    Armada.Core.Services.MissionStreamDecodeResult rest;
+                    lock (decoderLock) rest = decoder.Flush(DateTime.UtcNow);
+                    RaiseDecoded(launchedPid, rest, logWriter);
+                }
 
                 int? code = null;
                 int processId = launchedPid;
@@ -561,6 +608,20 @@ namespace Armada.Runtimes
         protected bool ShowThinking { get; private set; }
 
         /// <summary>
+        /// Whether this launch already asked the CLI for structured output for an interactive consumer (Claude Code
+        /// stream-json for chat, Codex exec --json), which reads the raw events itself. The default is false.
+        /// </summary>
+        protected virtual bool InteractiveStructuredOutput => false;
+
+        /// <summary>
+        /// Whether this launch decodes structured output for mission progress: <see cref="StructuredProgress"/> is set,
+        /// the runtime has structured output, and no interactive consumer reads the raw events.
+        /// </summary>
+        protected bool StructuredProgressActive => StructuredProgress
+            && !InteractiveStructuredOutput
+            && Armada.Core.Services.MissionStreamDecoder.Supports(RuntimeType);
+
+        /// <summary>
         /// Build runtime-specific command-line arguments.
         /// </summary>
         protected abstract List<string> BuildArguments(
@@ -674,6 +735,63 @@ namespace Armada.Runtimes
             {
                 return null;
             }
+        }
+
+        /// <summary>
+        /// Raise what a decoded structured stdout line stands for: each activity (logged as "&gt; " and its summary), each
+        /// transcript line (raised as stderr), then each readable output line (logged and raised as stdout).
+        /// </summary>
+        private void RaiseDecoded(int processId, Armada.Core.Services.MissionStreamDecodeResult decoded, StreamWriter? logWriter)
+        {
+            foreach (RuntimeActivity activity in decoded.Activities)
+            {
+                try { logWriter?.WriteLine("> " + activity.Summary); }
+                catch (ObjectDisposedException) { }
+
+                try { OnActivity?.Invoke(processId, activity); }
+                catch (Exception ex) { _Logging.Warn(_Header + "error in OnActivity handler for process " + processId + ": " + ex.Message); }
+            }
+
+            foreach (string line in decoded.TranscriptLines)
+            {
+                RaiseTranscriptLine(processId, line, logWriter);
+            }
+
+            foreach (string line in decoded.OutputLines)
+            {
+                RaisePlainStdout(processId, line, logWriter);
+            }
+        }
+
+        /// <summary>
+        /// Log a decoded transcript line and raise it as text mode raised the CLI's stderr transcript: on
+        /// <see cref="OnOutputReceived"/> and <see cref="OnStderrReceived"/>, never as stdout.
+        /// </summary>
+        private void RaiseTranscriptLine(int processId, string line, StreamWriter? logWriter)
+        {
+            try { logWriter?.WriteLine("[stderr] " + line); }
+            catch (ObjectDisposedException) { }
+
+            try { OnOutputReceived?.Invoke(processId, line); }
+            catch { }
+
+            try { OnStderrReceived?.Invoke(processId, line); }
+            catch { }
+        }
+
+        /// <summary>
+        /// Log a readable stdout line and raise it on <see cref="OnOutputReceived"/> and <see cref="OnStdoutReceived"/>.
+        /// </summary>
+        private void RaisePlainStdout(int processId, string line, StreamWriter? logWriter)
+        {
+            try { logWriter?.WriteLine(line); }
+            catch (ObjectDisposedException) { }
+
+            try { OnOutputReceived?.Invoke(processId, line); }
+            catch { }
+
+            try { OnStdoutReceived?.Invoke(processId, line); }
+            catch { }
         }
 
         private void RaiseProviderErrorIfAny(int processId, string line, bool fromStdout)

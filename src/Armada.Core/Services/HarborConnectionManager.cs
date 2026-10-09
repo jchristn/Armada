@@ -220,6 +220,15 @@ namespace Armada.Core.Services
                 return;
             }
 
+            if (message is HarborActivity activity)
+            {
+                // Structured activity is output too: it counts toward the job's time to first output.
+                Metrics?.OnOutput(activity.JobId);
+                if (activity.Activity != null && _JobListeners.TryGetValue(activity.JobId, out IHarborJobListener? activityListener))
+                    activityListener.OnActivity(activity.Activity);
+                return;
+            }
+
             if (message is HarborExited exited)
             {
                 if (Metrics != null) await Metrics.OnExitedAsync(exited, token).ConfigureAwait(false);

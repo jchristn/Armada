@@ -11462,6 +11462,18 @@
         "generic": true
       },
       {
+        "type": "mission.activity",
+        "scope": "tenant",
+        "hasMessage": false,
+        "payloadType": null,
+        "fields": [
+          "id",
+          "voyageId",
+          "activity"
+        ],
+        "generic": false
+      },
+      {
         "type": "mission.batch_deleted",
         "scope": "tenant",
         "hasMessage": true,
@@ -11485,7 +11497,8 @@
           "id",
           "title",
           "status",
-          "voyageId"
+          "voyageId",
+          "activity"
         ],
         "generic": false
       },
@@ -17178,6 +17191,12 @@
       "key": "ask.proposalExpiryMinutes",
       "type": "int",
       "default": "60",
+      "experimental": false
+    },
+    {
+      "key": "ask.reportResultsOnCompletion",
+      "type": "bool",
+      "default": "true",
       "experimental": false
     },
     {

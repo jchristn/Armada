@@ -43,8 +43,9 @@ namespace Armada.Runtimes
         /// <summary>
         /// When true, run 'codex exec --json' so stdout carries one typed JSONL event per line (items as they start and
         /// complete, and turn.completed with the turn's token usage). Used by interactive chat turns so the server can
-        /// record per-turn telemetry and tool calls; missions leave this false so their output stays human-readable.
-        /// The final message is still written to the --output-last-message file.
+        /// record per-turn telemetry and tool calls from the raw events. Missions leave this false and set
+        /// <see cref="BaseAgentRuntime.StructuredProgress"/> instead (the same --json flag, decoded into readable output
+        /// plus live activity). The final message is still written to the --output-last-message file.
         /// </summary>
         public bool JsonOutput { get; set; } = false;
 
@@ -105,7 +106,8 @@ namespace Armada.Runtimes
             // the flag changes nothing for them.
             args.Add("--skip-git-repo-check");
 
-            if (JsonOutput) args.Add("--json");
+            // Chat turns read the JSONL events themselves; a mission streaming its progress has them decoded.
+            if (JsonOutput || StructuredProgressActive) args.Add("--json");
 
             if (!CaptainRuntimeOptions.GetAutoApprove(captain))
             {
@@ -156,6 +158,11 @@ namespace Armada.Runtimes
             // 'codex exec' reads the prompt from stdin when no positional prompt is supplied.
             return args;
         }
+
+        /// <summary>
+        /// Chat's 'codex exec --json' mode reads the raw events itself.
+        /// </summary>
+        protected override bool InteractiveStructuredOutput => JsonOutput;
 
         /// <summary>
         /// Deliver the prompt on stdin rather than as a command-line argument. 'codex exec' reads the prompt

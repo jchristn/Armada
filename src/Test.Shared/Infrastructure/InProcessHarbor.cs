@@ -36,6 +36,11 @@ namespace Test.Shared.Infrastructure
         /// </summary>
         public string ScratchRoot { get; }
 
+        /// <summary>
+        /// The Harbor's link client (its live jobs are what the Running now list shows).
+        /// </summary>
+        public HarborLinkClient Client { get; }
+
         #endregion
 
         #region Private-Members
@@ -48,9 +53,10 @@ namespace Test.Shared.Infrastructure
 
         #region Constructors-and-Factories
 
-        private InProcessHarbor(string harborId, RecordingHarborJobRunner runner, string scratchRoot, LoopbackHarborTransport transport)
+        private InProcessHarbor(string harborId, RecordingHarborJobRunner runner, string scratchRoot, LoopbackHarborTransport transport, HarborLinkClient client)
         {
             HarborId = harborId;
+            Client = client;
             Runner = runner;
             ScratchRoot = scratchRoot;
             _Transport = transport;
@@ -90,7 +96,7 @@ namespace Test.Shared.Infrastructure
 
             HarborLinkClient client = new HarborLinkClient(harborId, harborId, advertised, 4, commands ?? new LocalHostCommandExecutor(), logging, 0, null, runner, docks);
             LoopbackHarborTransport transport = new LoopbackHarborTransport(manager, harborId, tenantId, userId);
-            InProcessHarbor harbor = new InProcessHarbor(harborId, runner, scratchRoot, transport);
+            InProcessHarbor harbor = new InProcessHarbor(harborId, runner, scratchRoot, transport, client);
 
             TaskCompletionSource<bool> connected = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             harbor._SessionTask = Task.Run(() => client.RunSessionAsync(transport, harbor._Session.Token, () => connected.TrySetResult(true)));

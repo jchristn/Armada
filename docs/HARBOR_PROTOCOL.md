@@ -67,6 +67,7 @@ Harbor to server:
 | `handshake` | `HarborHandshake` | identify the Harbor; advertise capabilities and capacity |
 | `started` | `HarborStarted` | a launched process started (reports host PID) |
 | `output` | `HarborOutput` | a chunk of stdout or stderr for a job |
+| `activity` | `HarborActivity` | the latest activity of a job that asked for structured progress (a tool call, text, or reasoning) |
 | `exited` | `HarborExited` | a captain process exited (exit code, plus optional `durationMs` and `timeToFirstTokenMs`) |
 | `gitResult` | `HarborGitResult` | the result of a git/gh request |
 | `dockResult` | `HarborDockResult` | the result of a dock request |
@@ -121,9 +122,10 @@ Run a captain:
 Admiral -> launch { jobId, runtime, workingDirectory, model, prompt, promptViaStdin, arguments, environment,
                     inferenceEndpoint, autoApprove, mcpSessionToken,
                     scratchWorkingDirectory, streamJsonOutput, showThinking, returnFinalMessage,
-                    jobKind, missionId, captainId }
+                    jobKind, missionId, captainId, structuredProgress, display }
 Harbor  -> started { jobId, processId }
 Harbor  -> output  { jobId, stream: "Stdout", data }   (repeated; stream is "Stdout" or "Stderr")
+Harbor  -> activity { jobId, activity }                (repeated, only with structuredProgress; at most ~1/s per job)
 Admiral -> stdin   { jobId, data }                      (optional)
 Admiral -> kill    { jobId, gracefulTimeoutMs }         (optional)
 Harbor  -> output  { jobId, stream: "FinalMessage", data }   (once, only when returnFinalMessage was set)
@@ -145,6 +147,31 @@ label the job on the Harbor.
 | `jobKind` | What the launch is for, as a string: `Mission`, `AskTurn`, `Planning`, `Refinement`, `ContextBuild`, or `Other`. Informational: the Harbor shows it in its job list and names its job logs with it. A value the Harbor does not know is treated as unknown, never refused. |
 | `missionId` | The mission a `Mission` launch runs. Informational. |
 | `captainId` | The captain the launch runs as. Informational. |
+| `structuredProgress` | Run a mission with the runtime's structured output (Claude Code `--output-format stream-json`, Codex `exec --json`) and decode it on the Harbor: the readable output the CLI prints in text mode (Claude Code's final reply, Codex's last agent message) goes out on the `Stdout` stream as before, and the captain's latest activity as `activity` messages. Ignored for other runtimes, which stay plain text. A Harbor that predates it ignores it and runs plain text, which the Admiral reads the same way; an Admiral that predates it never sets it, so it never receives `activity`. See [Mission progress streaming](CAPTAINS.md#mission-progress-streaming). |
+| `display` | What the launch is about, for the Harbor's Running now list: an optional object whose fields are all optional strings or numbers. Informational only; a Harbor that predates it ignores it. See the table below. |
+
+`display` fields (the Admiral fills the ones that apply; null ones are omitted):
+
+| Field | Meaning |
+|---|---|
+| `missionTitle` | The mission's title. |
+| `vesselName` | The mission's vessel. |
+| `voyageId`, `voyageTitle` | The mission's voyage. |
+| `voyagePosition`, `voyageMissionCount` | The mission's position in its voyage (from 1, by creation order) and how many missions the voyage has ("2 of 3"). |
+| `captainName`, `captainModel` | The captain and the model it runs (when it names one). |
+| `stage` | The pipeline stage or persona the mission runs as (for example `Implement`, `Judge`). |
+| `branchName` | The branch the mission works on. |
+| `askThreadId` | The Ask Armada conversation of an Ask turn (also set for its narration and summary turns). |
+| `askQuestion` | The user's question of an Ask turn: its first line, at most 200 characters. |
+
+`activity` carries `jobId` and `activity`, a `RuntimeActivity`: `kind` (`ToolCall`, `Text`, or `Thinking`),
+`toolName`, `description` (the description a tool call gave, such as Claude Code's Bash description), `detail` (the short
+input of a tool call, such as the command or file path, or the first line of text or reasoning, at most 200
+characters), `summary` (one line, for example `Running tests: dotnet test src/App.sln`), and `timestampUtc`. The Harbor
+sends at most one per job per second, newest wins, and none after `exited`. The Admiral records it as the mission's
+current activity, counts it as output for stall detection and for the job's time to first output, and mirrors it into
+the mission log as a `> ` line. `exited.timeToFirstTokenMs` counts the first activity as output, so a mission that
+streams its work reports when it started answering, not when it printed its final reply.
 
 A Harbor reports stdout lines on the `Stdout` stream and stderr lines on the `Stderr` stream (a Harbor that predates the
 split reports both as `Stdout`). The Admiral's mission lifecycle reads both; chat and planning read only `Stdout`.

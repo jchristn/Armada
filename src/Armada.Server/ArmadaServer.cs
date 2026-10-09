@@ -572,6 +572,7 @@ namespace Armada.Server
                 () => { OnStopping?.Invoke(); _TokenSource.Cancel(); },
                 (authHeader, tokenHeader, apiKeyHeader) => _AuthenticationService.AuthenticateAsync(authHeader, tokenHeader, apiKeyHeader));
             _AgentLifecycle.SetWebSocketHub(_WebSocketHub);
+            _WebSocketHub.MissionActivityLookup = _AgentLifecycle.MissionActivity.Get;
             _MissionLanding.SetWebSocketHub(_WebSocketHub);
             missionService.OnReviewRequested = _WebSocketHub.BroadcastApprovalNeeded;
             _CheckRunService.OnCheckRunChanged = _WebSocketHub.BroadcastCheckRunChange;
@@ -1318,6 +1319,7 @@ namespace Armada.Server
 
             // Missions
             new MissionRoutes(_Database, _Admiral, _MissionService, _Settings, _Git, _LandingService, _LandingPreviewService, _GitHubIntegrationService, EmitEventAsync, EmitMissionStatusChangedAsync, _MissionLanding.HandleMissionCompleteAsync, _WebSocketHub, _Logging, _JsonOptions)
+                { MissionActivityLookup = _AgentLifecycle.MissionActivity.Get }
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Captains

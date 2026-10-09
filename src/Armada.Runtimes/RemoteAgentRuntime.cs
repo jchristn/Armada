@@ -47,6 +47,9 @@ namespace Armada.Runtimes
         /// <inheritdoc />
         public event Action<int, RuntimeProviderError>? OnProviderError;
 
+        /// <inheritdoc />
+        public event Action<int, RuntimeActivity>? OnActivity;
+
         /// <summary>
         /// Mission-scoped MCP session token to ship with the launch so the Harbor binds the captain's Armada MCP
         /// connection to it, or null.
@@ -75,6 +78,19 @@ namespace Armada.Runtimes
         /// The mission the launch runs, when it is a mission; sent to the Harbor for its job list and logs.
         /// </summary>
         public string? MissionId { get; set; } = null;
+
+        /// <summary>
+        /// Whether a mission runs with its runtime's structured output on the Harbor (see
+        /// <see cref="HarborLaunchRequest.StructuredProgress"/>): the Harbor reports readable output as before and the
+        /// captain's activity, raised on <see cref="OnActivity"/>. Sent only for runtimes that have structured output.
+        /// </summary>
+        public bool StructuredProgress { get; set; } = false;
+
+        /// <summary>
+        /// What the launch is about, for the Harbor's Running now list (see <see cref="HarborLaunchRequest.Display"/>), or
+        /// null.
+        /// </summary>
+        public HarborLaunchDisplay? Display { get; set; } = null;
 
         /// <summary>
         /// The Harbor this runtime launches on.
@@ -166,7 +182,9 @@ namespace Armada.Runtimes
                 ReturnFinalMessage = _FinalMessageFilePath != null,
                 JobKind = JobKind.ToString(),
                 MissionId = String.IsNullOrWhiteSpace(MissionId) ? null : MissionId,
-                CaptainId = captain != null && !String.IsNullOrWhiteSpace(captain.Id) ? captain.Id : null
+                CaptainId = captain != null && !String.IsNullOrWhiteSpace(captain.Id) ? captain.Id : null,
+                StructuredProgress = StructuredProgress && MissionStreamDecoder.Supports(_RuntimeType),
+                Display = Display != null && !Display.IsEmpty() ? Display.Clone() : null
             };
 
             // API-endpoint captains have no CLI on the Harbor; ship the resolved endpoint so the Harbor can
@@ -276,6 +294,19 @@ namespace Armada.Runtimes
                     catch { }
                 }
             }
+        }
+
+        /// <summary>
+        /// The Harbor reported the job's latest activity: mirror it into the mission log and raise <see cref="OnActivity"/>.
+        /// Implemented explicitly because the runtime's <see cref="OnActivity"/> event has the same name.
+        /// </summary>
+        /// <param name="activity">The activity.</param>
+        void IHarborJobListener.OnActivity(RuntimeActivity activity)
+        {
+            if (activity == null) return;
+            WriteLog("> " + activity.Summary);
+            try { OnActivity?.Invoke(_ProcessId, activity); }
+            catch { }
         }
 
         /// <inheritdoc />
