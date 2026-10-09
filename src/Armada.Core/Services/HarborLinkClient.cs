@@ -1,6 +1,7 @@
 namespace Armada.Core.Services
 {
     using System;
+    using System.Collections.Concurrent;
     using System.Collections.Generic;
     using System.Diagnostics;
     using System.IO;
@@ -76,6 +77,9 @@ namespace Armada.Core.Services
         private readonly Action<HarborLogEntry>? _OnLog;
         private readonly Dictionary<string, HarborJobInfo> _LiveJobs = new Dictionary<string, HarborJobInfo>(StringComparer.Ordinal);
         private readonly object _JobLock = new object();
+        private readonly ConcurrentDictionary<string, SemaphoreSlim> _CommandLocks = new ConcurrentDictionary<string, SemaphoreSlim>(StringComparer.OrdinalIgnoreCase);
+        private readonly ConcurrentDictionary<Task, byte> _CommandsInFlight = new ConcurrentDictionary<Task, byte>();
+        private CancellationTokenSource? _SessionCommands = null;
         private Action? _OnConnected;
         private Channel<HarborMessage>? _Outbound;
         private TimeProvider _Time = TimeProvider.System;
@@ -183,7 +187,9 @@ namespace Armada.Core.Services
             await transport.ConnectAsync(token).ConfigureAwait(false);
 
             using (CancellationTokenSource sessionCts = CancellationTokenSource.CreateLinkedTokenSource(token))
+            using (CancellationTokenSource commandCts = CancellationTokenSource.CreateLinkedTokenSource(token))
             {
+                _SessionCommands = commandCts;
                 Task pump = SendPumpAsync(transport, outbound, sessionCts.Token);
                 Task heartbeat = _HeartbeatIntervalMs > 0 ? HeartbeatLoopAsync(sessionCts.Token) : Task.CompletedTask;
 
@@ -214,6 +220,11 @@ namespace Armada.Core.Services
                 }
                 finally
                 {
+                    // Commands still running belong to this link: nobody can read their results once it is gone. Stop
+                    // them, and let the ones that finish send their results before the outbound queue closes.
+                    commandCts.Cancel();
+                    try { await Task.WhenAll(_CommandsInFlight.Keys).ConfigureAwait(false); } catch { }
+                    _SessionCommands = null;
                     outbound.Writer.TryComplete();
                     try { await pump.ConfigureAwait(false); } catch { }
                     sessionCts.Cancel();
@@ -270,40 +281,13 @@ namespace Armada.Core.Services
 
             if (message is HarborGitRequest git)
             {
-                Log(HarborLogDirection.In, "Work: " + git.Executable + " " + String.Join(" ", git.Arguments)
-                    + (String.IsNullOrEmpty(git.WorkingDirectory) ? " (in the Harbor's current directory)" : " (in " + git.WorkingDirectory + ")")
-                    + " [req " + git.RequestId + "]");
-
-                HostCommandResult result;
-                try
-                {
-                    HostCommandRequest command = new HostCommandRequest
-                    {
-                        Executable = git.Executable,
-                        WorkingDirectory = git.WorkingDirectory,
-                        Arguments = git.Arguments
-                    };
-                    if (git.TimeoutMs > 0) command.TimeoutMs = git.TimeoutMs;
-                    result = await _CommandExecutor.RunAsync(command, token).ConfigureAwait(false);
-                }
-                catch (Exception e) when (!(e is OperationCanceledException))
-                {
-                    // A command that cannot start (a working directory that does not exist here, a missing executable)
-                    // is a failed result, not the end of the link.
-                    result = new HostCommandResult { ExitCode = -1, StandardError = e.Message };
-                }
-
-                Enqueue(new HarborGitResult
-                {
-                    CorrelationId = git.CorrelationId,
-                    RequestId = git.RequestId,
-                    ExitCode = result.ExitCode,
-                    StandardOutput = result.StandardOutput,
-                    StandardError = result.StandardError,
-                    TimedOut = result.TimedOut
-                });
-
-                Log(HarborLogDirection.Out, "Result: exit " + result.ExitCode + (result.TimedOut ? " (timed out)" : "") + " [req " + git.RequestId + "]");
+                // A command can run for a long time (a check run, a build): run it off the receive loop so launches,
+                // dock and file requests, and heartbeat acknowledgements keep flowing, one at a time per working
+                // directory so commands in the same folder keep their order.
+                CancellationToken commandToken = _SessionCommands?.Token ?? token;
+                Task work = Task.Run(() => HandleGitAsync(git, commandToken));
+                _CommandsInFlight.TryAdd(work, 0);
+                _ = work.ContinueWith(done => _CommandsInFlight.TryRemove(done, out byte _), TaskScheduler.Default);
                 return;
             }
 
@@ -350,6 +334,61 @@ namespace Armada.Core.Services
             }
 
             _Logging.Debug(_Header + "ignoring message " + message.GetType().Name);
+        }
+
+        private async Task HandleGitAsync(HarborGitRequest git, CancellationToken token)
+        {
+            string key = String.IsNullOrWhiteSpace(git.WorkingDirectory) ? String.Empty : git.WorkingDirectory.Trim().TrimEnd('/', '\\');
+            SemaphoreSlim gate = _CommandLocks.GetOrAdd(key, _ => new SemaphoreSlim(1, 1));
+
+            // Not cancellable: a command already received is always handed to the executor, which stops it when the link
+            // closes (and a command that finishes anyway still reports its result while the link can send).
+            await gate.WaitAsync().ConfigureAwait(false);
+
+            try
+            {
+                Log(HarborLogDirection.In, "Work: " + git.Executable + " " + String.Join(" ", git.Arguments)
+                    + (String.IsNullOrEmpty(git.WorkingDirectory) ? " (in the Harbor's current directory)" : " (in " + git.WorkingDirectory + ")")
+                    + " [req " + git.RequestId + "]");
+
+                HostCommandResult result;
+                try
+                {
+                    HostCommandRequest command = new HostCommandRequest
+                    {
+                        Executable = git.Executable,
+                        WorkingDirectory = git.WorkingDirectory,
+                        Arguments = git.Arguments
+                    };
+                    if (git.TimeoutMs > 0) command.TimeoutMs = git.TimeoutMs;
+                    result = await _CommandExecutor.RunAsync(command, token).ConfigureAwait(false);
+                }
+                catch (Exception e) when (!(e is OperationCanceledException))
+                {
+                    // A command that cannot start (a working directory that does not exist here, a missing executable)
+                    // is a failed result, not the end of the link.
+                    result = new HostCommandResult { ExitCode = -1, StandardError = e.Message };
+                }
+
+                Enqueue(new HarborGitResult
+                {
+                    CorrelationId = git.CorrelationId,
+                    RequestId = git.RequestId,
+                    ExitCode = result.ExitCode,
+                    StandardOutput = result.StandardOutput,
+                    StandardError = result.StandardError,
+                    TimedOut = result.TimedOut
+                });
+
+                Log(HarborLogDirection.Out, "Result: exit " + result.ExitCode + (result.TimedOut ? " (timed out)" : "") + " [req " + git.RequestId + "]");
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            finally
+            {
+                gate.Release();
+            }
         }
 
         private async Task HandleDockAsync(HarborDockRequest dock, CancellationToken token)
