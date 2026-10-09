@@ -1,0 +1,153 @@
+# The Ask transcript follows new messages (scripts/mobile/run-e2e.sh --ask-follow). A stub ClaudeCode captain
+# (scripts/mobile/stub-claude.py on the Admiral's PATH as "claude") answers every message with a reply taller than
+# the transcript: in one piece, or streamed when the message says "stream". After each arrival the newest line must
+# sit above the composer, that is, in view:
+#   - the user's own send and the captain's reply arriving whole (the case that used to stay below the composer: the
+#     list scrolled to the end of the content it had before the reply was mounted);
+#   - a streamed reply;
+#   - messages the app did not ask for, delivered over the WebSocket while the app is idle, as tracker milestones and
+#     work reports are: a /status result and a conversation turn, both posted from the host.
+# Then the reader scrolls up: the next arrival leaves them where they are and offers "New messages", which brings
+# the newest message back into view.
+appId: ${APP_ID}
+name: ask-follow
+---
+# The captain exists before sign-in, so Ask lists it when it first loads.
+- runScript:
+    file: ../scripts/ask-follow-captain.js
+- runFlow: ../01-sign-in.yaml
+- tapOn:
+    id: "tab-ask"
+- extendedWaitUntil:
+    visible:
+      id: "ask-captain-bar"
+    timeout: 20000
+- tapOn:
+    id: "ask-captain-bar"
+- extendedWaitUntil:
+    visible: "ask-follow-captain.*"
+    timeout: 10000
+- tapOn: "ask-follow-captain.*"
+- extendedWaitUntil:
+    visible:
+      id: "ask-captain-bar-name"
+      text: "ask-follow-captain.*"
+    timeout: 10000
+
+# Own sends, replies arriving whole, keyboard up.
+- tapOn:
+    id: "ask-input"
+- runFlow: ../common/dismiss-keyboard-tips.yaml
+- inputText: "alpha"
+- tapOn:
+    id: "ask-send"
+- extendedWaitUntil:
+    visible:
+      text: "End of reply to .lpha\\."
+      above:
+        id: "ask-composer"
+    timeout: 30000
+- takeScreenshot: ask-follow-1-alpha
+# The previous turn has ended (Send is back in place of Stop).
+- extendedWaitUntil:
+    visible:
+      id: "ask-send"
+    timeout: 30000
+- tapOn:
+    id: "ask-input"
+- inputText: "bravo"
+- tapOn:
+    id: "ask-send"
+- extendedWaitUntil:
+    visible:
+      text: "End of reply to .ravo\\."
+      above:
+        id: "ask-composer"
+    timeout: 30000
+- takeScreenshot: ask-follow-2-bravo
+
+# A streamed reply (several seconds of text deltas, then the committed message). (The Android keyboard may capitalize
+# the first letter of a message, so the checks match any first letter.)
+# The previous turn has ended (Send is back in place of Stop).
+- extendedWaitUntil:
+    visible:
+      id: "ask-send"
+    timeout: 30000
+- tapOn:
+    id: "ask-input"
+- inputText: "charlie stream"
+- tapOn:
+    id: "ask-send"
+- extendedWaitUntil:
+    visible:
+      text: "End of reply to .harlie stream\\."
+      above:
+        id: "ask-composer"
+    timeout: 30000
+- takeScreenshot: ask-follow-3-charlie
+
+# Messages the app did not ask for, delivered over the WebSocket while the app is idle.
+- extendedWaitUntil:
+    visible:
+      id: "ask-send"
+    timeout: 30000
+- hideKeyboard
+- waitForAnimationToEnd:
+    timeout: 5000
+- runScript:
+    file: ../scripts/ask-post.js
+- extendedWaitUntil:
+    visible:
+      text: "Ran now\\."
+      above:
+        id: "ask-composer"
+    timeout: 30000
+- takeScreenshot: ask-follow-4-status
+- extendedWaitUntil:
+    visible:
+      id: "ask-send"
+    timeout: 30000
+- runScript:
+    file: ../scripts/ask-post.js
+    env:
+      MESSAGE: "delta"
+- extendedWaitUntil:
+    visible:
+      text: "End of reply to delta\\."
+      above:
+        id: "ask-composer"
+    timeout: 30000
+- takeScreenshot: ask-follow-5-delta
+
+# Scrolled up to read: the next arrival (a message posted from the host and the captain's streamed reply) leaves the
+# reader where they are and offers "New messages", which brings the newest message back into view.
+- swipe:
+    from:
+      id: "ask-transcript"
+    direction: DOWN
+- waitForAnimationToEnd:
+    timeout: 5000
+- runScript:
+    file: ../scripts/ask-post.js
+    env:
+      MESSAGE: "echo stream"
+- extendedWaitUntil:
+    visible:
+      id: "ask-new-messages"
+    timeout: 30000
+- assertNotVisible:
+    text: "Reply to: echo stream\\."
+    above:
+      id: "ask-composer"
+- takeScreenshot: ask-follow-6-new-messages
+- tapOn:
+    id: "ask-new-messages"
+- extendedWaitUntil:
+    visible:
+      text: "End of reply to echo stream\\."
+      above:
+        id: "ask-composer"
+    timeout: 30000
+- assertNotVisible:
+    id: "ask-new-messages"
+- takeScreenshot: ask-follow-7-echo

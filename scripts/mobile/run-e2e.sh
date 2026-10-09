@@ -21,11 +21,17 @@
 # src/Armada.Mobile/e2e/proxy with PROXY_URL, PROXY_PASSWORD, and PROXY_INSTANCE: sign in to the proxy, pick the
 # Admiral, sign in to it through the relay, and load screens over the relayed REST API and WebSocket.
 #
+# With --ask-follow it starts the Admiral with scripts/mobile/stub-claude.py first on its PATH as "claude" (a scripted
+# ClaudeCode captain that answers Ask messages with long replies, whole or streamed), and after the flows above runs
+# src/Armada.Mobile/e2e/ask-follow: the Ask transcript keeps the newest message in view as replies, quick-action
+# results, and messages delivered over the WebSocket arrive, and offers "New messages" to a reader scrolled up.
+#
 # Usage:
 #   scripts/mobile/run-e2e.sh --platform ios [--device "iPhone 17"] [--port 44010] [--no-app-build] [--no-server-build]
 #   scripts/mobile/run-e2e.sh --platform android [--avd Armada_Phone] [--port 44010] [--no-app-build]
 #   scripts/mobile/run-e2e.sh --platform both
 #   scripts/mobile/run-e2e.sh --platform ios --proxy [--proxy-port 44020] [--proxy-only]
+#   scripts/mobile/run-e2e.sh --platform ios --ask-follow [--ask-follow-only]
 # Options:
 #   --keep            leave the Admiral, simulator, and emulator running (prints how to stop them)
 #   --output DIR      Maestro reports and screenshots (default: a temp directory, printed at the end)
@@ -35,6 +41,8 @@
 #   --push-sim        iOS only: also run src/Armada.Mobile/e2e/push-sim, delivering simulated pushes with
 #                     `xcrun simctl push` (an APNs payload shaped like Expo's) while the tap flows run
 #   --push-sim-only   run only the push-sim flows
+#   --ask-follow      also run the Ask follow flows against a scripted stub captain
+#   --ask-follow-only run only the Ask follow flows
 #
 # Requirements: .NET 10 SDK, Node 24, Xcode + CocoaPods (iOS), Android SDK + JDK 17 (Android), Maestro
 # (curl -fsSL https://get.maestro.mobile.dev | bash). See src/Armada.Mobile/README.md.
@@ -62,6 +70,8 @@ PROXY_INSTANCE="armada-e2e"
 PROXY_PID=""
 PUSH_SIM=0
 PUSH_SIM_ONLY=0
+ASK_FOLLOW=0
+ASK_FOLLOW_ONLY=0
 APP_ID="${ARMADA_MOBILE_BUNDLE_ID:-com.armada.mobile}"
 
 while [ $# -gt 0 ]; do
@@ -80,7 +90,9 @@ while [ $# -gt 0 ]; do
     --proxy-port) PROXY_PORT="$2"; shift 2 ;;
     --push-sim) PUSH_SIM=1; shift ;;
     --push-sim-only) PUSH_SIM=1; PUSH_SIM_ONLY=1; shift ;;
-    -h|--help) sed -n '2,30p' "$0"; exit 0 ;;
+    --ask-follow) ASK_FOLLOW=1; shift ;;
+    --ask-follow-only) ASK_FOLLOW=1; ASK_FOLLOW_ONLY=1; shift ;;
+    -h|--help) sed -n '2,45p' "$0"; exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
 done
@@ -194,8 +206,16 @@ start_admiral() {
   "telemetry": { "enabled": false, "prometheusEnabled": false }${REMOTE_CONTROL_JSON}
 }
 JSON
+  local admiral_path="$PATH"
+  if [ "$ASK_FOLLOW" = "1" ]; then
+    # Captains the Admiral launches as "claude" run the scripted stub (the Ask follow flows), never a real agent.
+    mkdir -p "${DATA_DIR}/stub-bin"
+    printf '#!/bin/sh\nexec python3 "%s" "$@"\n' "${SCRIPT_DIR}/stub-claude.py" > "${DATA_DIR}/stub-bin/claude"
+    chmod +x "${DATA_DIR}/stub-bin/claude"
+    admiral_path="${DATA_DIR}/stub-bin:${PATH}"
+  fi
   log "starting Admiral on 127.0.0.1:${PORT} (data ${DATA_DIR})"
-  ARMADA_DATA_DIR="$DATA_DIR" dotnet "${REPO_ROOT}/src/Armada.Server/bin/Release/${FRAMEWORK}/Armada.Server.dll" \
+  PATH="$admiral_path" ARMADA_DATA_DIR="$DATA_DIR" dotnet "${REPO_ROOT}/src/Armada.Server/bin/Release/${FRAMEWORK}/Armada.Server.dll" \
     > "${DATA_DIR}/server-console.log" 2>&1 &
   SERVER_PID=$!
   for _ in $(seq 1 240); do
@@ -246,12 +266,21 @@ seed_admiral() {
 
 run_flows() {
   local platform="$1" device="$2" server_url="$3" proxy_url="$4"
-  if [ "$PROXY_ONLY" != "1" ] && [ "$PUSH_SIM_ONLY" != "1" ]; then
+  if [ "$PROXY_ONLY" != "1" ] && [ "$PUSH_SIM_ONLY" != "1" ] && [ "$ASK_FOLLOW_ONLY" != "1" ]; then
     log "running Maestro flows on ${platform} (${device}) against ${server_url}"
     if ! maestro --device "$device" test "$FLOWS" \
         -e SERVER_URL="$server_url" -e HOST_SERVER_URL="http://127.0.0.1:${PORT}" -e APP_ID="$APP_ID" -e PLATFORM="$platform" \
         --format junit --output "${OUTPUT}/${platform}-report.xml" \
         --test-output-dir "${OUTPUT}/${platform}"; then
+      STATUS=1
+    fi
+  fi
+  if [ "$ASK_FOLLOW" = "1" ]; then
+    log "running Maestro Ask follow flows on ${platform} (${device}) against ${server_url}"
+    if ! maestro --device "$device" test "${MOBILE}/e2e/ask-follow" \
+        -e SERVER_URL="$server_url" -e HOST_SERVER_URL="http://127.0.0.1:${PORT}" -e APP_ID="$APP_ID" -e PLATFORM="$platform" \
+        --format junit --output "${OUTPUT}/${platform}-ask-follow-report.xml" \
+        --test-output-dir "${OUTPUT}/${platform}-ask-follow"; then
       STATUS=1
     fi
   fi

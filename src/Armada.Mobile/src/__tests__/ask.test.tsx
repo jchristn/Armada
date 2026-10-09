@@ -392,19 +392,23 @@ describe('Ask Armada', () => {
 
   it('the transcript keeps its newest message in view when its viewport shrinks (the keyboard opening)', async () => {
     const { FlatList } = jest.requireActual<typeof import('react-native')>('react-native');
-    const scrollToEnd = jest.spyOn(FlatList.prototype, 'scrollToEnd');
+    const scrollToOffset = jest.spyOn(FlatList.prototype, 'scrollToOffset');
     api.enumerateAskMessages.mockResolvedValue({ messages: [message({}), message({ id: 'msg_2', sequence: 2, role: 'Assistant', contentText: 'Latest reply.' })], hasMore: false });
     await renderAsk('/ask/thr_1');
     await waitFor(() => expect(screen.getByText('Latest reply.')).toBeTruthy());
-    scrollToEnd.mockClear();
-    await act(async () => { fireEvent(screen.getByTestId('ask-transcript'), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 390, height: 240 } } }); });
-    expect(scrollToEnd).toHaveBeenCalledWith({ animated: false });
-    // Scrolled up to read older messages: a layout change leaves the position alone.
-    await act(async () => { fireEvent.scroll(screen.getByTestId('ask-transcript'), { nativeEvent: { contentOffset: { y: 0 }, contentSize: { height: 2000, width: 390 }, layoutMeasurement: { height: 240, width: 390 } } }); });
-    scrollToEnd.mockClear();
-    await act(async () => { fireEvent(screen.getByTestId('ask-transcript'), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 390, height: 500 } } }); });
-    expect(scrollToEnd).not.toHaveBeenCalled();
-    scrollToEnd.mockRestore();
+    await fireEvent(screen.getByTestId('ask-transcript'), 'contentSizeChange', 390, 2000);
+    scrollToOffset.mockClear();
+    await fireEvent(screen.getByTestId('ask-transcript'), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 390, height: 240 } } });
+    expect(scrollToOffset).toHaveBeenCalledWith({ offset: 1760, animated: false });
+    // Scrolled up (a drag) to read older messages: a layout change leaves the position alone.
+    const up = { nativeEvent: { contentOffset: { y: 0 }, contentSize: { height: 2000, width: 390 }, layoutMeasurement: { height: 240, width: 390 } } };
+    await fireEvent(screen.getByTestId('ask-transcript'), 'scrollBeginDrag', up);
+    await fireEvent.scroll(screen.getByTestId('ask-transcript'), up);
+    await fireEvent(screen.getByTestId('ask-transcript'), 'scrollEndDrag', up);
+    scrollToOffset.mockClear();
+    await fireEvent(screen.getByTestId('ask-transcript'), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 390, height: 500 } } });
+    expect(scrollToOffset).not.toHaveBeenCalled();
+    scrollToOffset.mockRestore();
   });
 
   it('a failed send drops the optimistic message and reports the error', async () => {
