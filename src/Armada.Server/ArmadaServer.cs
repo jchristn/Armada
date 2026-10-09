@@ -57,6 +57,15 @@ namespace Armada.Server
         }
 
         /// <summary>
+        /// The Admiral service whose health check the heartbeat loop runs every HeartbeatIntervalSeconds. End-to-end
+        /// tests run one health check directly instead of waiting for the next heartbeat.
+        /// </summary>
+        internal IAdmiralService Admiral
+        {
+            get { return _Admiral; }
+        }
+
+        /// <summary>
         /// MCP tool names registered on the HTTP MCP server, in registration order (populated by <see cref="StartAsync"/>).
         /// Used by the authorization coverage test to prove every tool has a declared requirement.
         /// </summary>
@@ -613,6 +622,7 @@ namespace Armada.Server
             _AskActions.OnWorkLinked = _AskTracker.OnWorkLinkedAsync;
             _AskActions.OnProposalApproved = _AskTurns.StartFollowUpAsync;
             _AskTracker.Narrate = _AskTurns.NarrateAsync;
+            _AskTracker.ReportResult = request => _AskTurns.ScheduleReportAsync(request);
             _WebSocketHub.EntityChanged += _AskTracker.OnEntityChanged;
 
             // CLI tool permissions: captains' permission prompts become requests that approvers decide; events reach the

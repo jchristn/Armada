@@ -49,6 +49,14 @@ namespace Armada.Core.Enums
         /// A CLI permission prompt of the thread's captain waiting for (or decided by) an approver (permission card).
         /// </summary>
         [EnumMember(Value = "CliPermission")]
-        CliPermission
+        CliPermission,
+
+        /// <summary>
+        /// The captain's report of the outcome of work this conversation started, written by an automatic follow-up turn
+        /// when the work finishes (Ask.ReportResultsOnCompletion). Clients render it like a captain reply with a "Report"
+        /// label; clients that do not know this kind render it as plain assistant text.
+        /// </summary>
+        [EnumMember(Value = "WorkReport")]
+        WorkReport
     }
 }

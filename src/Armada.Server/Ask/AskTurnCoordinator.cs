@@ -21,7 +21,8 @@ namespace Armada.Server.Ask
     /// thread's persisted messages (last Ask.HistoryTurns messages plus the thread summary), a thread-scoped Armada MCP
     /// token so state-changing tool calls become proposals, owner-scoped streaming (ask.chunk, ask.thinking, ask.tool,
     /// ask.turn), persistence of the reply and its tool calls, cancellation, summaries, follow-up turns after an
-    /// approval, and short milestone narration when the captain is idle.
+    /// approval, short milestone narration when the captain is idle, and the captain's report of finished work
+    /// (<see cref="ScheduleReportAsync"/>), queued behind a running turn and run at most once per tracked item.
     /// </summary>
     /// <remarks>Thread safety: running turns and captain usage are tracked in concurrent dictionaries; all public
     /// methods may be called concurrently.</remarks>
@@ -37,6 +38,13 @@ namespace Armada.Server.Ask
             + "Read-only tools run immediately. Any tool that changes state is not executed right away: it becomes a proposal that the user approves or rejects in this conversation. "
             + "When a tool result says \"Proposed as aap_... and waiting for the user's approval\", do not retry the call; tell the user in one or two sentences what you proposed and that it is waiting for their approval. "
             + "Work started from this conversation is tracked here automatically, so you do not need to poll it. Keep answers short and concrete.";
+
+        /// <summary>
+        /// Instructions of a report turn, after the results of the finished work.
+        /// </summary>
+        public const string ReportInstructions =
+            "Tell the user the outcome in two to four sentences: lead with the result (for example how many tests passed, what failed and why, or where the change landed). "
+            + "Suggest one next step only if something failed. Do not start new work or propose actions; use a read-only tool only if you need one more detail.";
 
         /// <summary>
         /// CLI permission service: pending permission prompts of a thread are cancelled when its turn ends. Null leaves
@@ -58,6 +66,9 @@ namespace Armada.Server.Ask
         private readonly LoggingModule _Logging;
         private readonly ConcurrentDictionary<string, AskTurnHandle> _Running = new ConcurrentDictionary<string, AskTurnHandle>(StringComparer.Ordinal);
         private readonly ConcurrentDictionary<string, int> _CaptainUsage = new ConcurrentDictionary<string, int>(StringComparer.Ordinal);
+        private readonly ConcurrentDictionary<string, DateTime> _ReportedWork = new ConcurrentDictionary<string, DateTime>(StringComparer.Ordinal);
+        private readonly Dictionary<string, List<AskReportRequest>> _PendingReports = new Dictionary<string, List<AskReportRequest>>(StringComparer.Ordinal);
+        private readonly object _ReportLock = new object();
 
         #endregion
 
@@ -148,7 +159,7 @@ namespace Armada.Server.Ask
             response.TurnId = handle.TurnId;
             bool showThinking = request?.ShowThinking == true;
             AskThread turnThread = thread;
-            _ = Task.Run(() => RunTurnAsync(turnThread, handle, userMessage.Sequence, null, showThinking));
+            _ = Task.Run(() => RunTurnAsync(turnThread, handle, userMessage.Sequence, null, showThinking, AskMessageKindEnum.Text, null));
             return new AskTurnStart(202, response, null);
         }
 
@@ -210,8 +221,74 @@ namespace Armada.Server.Ask
                 : "It failed: " + Clip(proposal.ErrorText ?? proposal.ResultText, 1000);
             string note = "The user approved " + proposal.Id + " (" + proposal.SummaryText + "). " + outcome
                 + " Continue the conversation: tell the user in one or two sentences what happened and what to expect next. Do not repeat the action.";
-            _ = Task.Run(() => RunTurnAsync(thread, handle, null, note, false));
+            _ = Task.Run(() => RunTurnAsync(thread, handle, null, note, false, AskMessageKindEnum.Text, null));
             return Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// Schedule the captain's report of finished tracked work (after its final milestone was posted): a follow-up
+        /// turn whose reply is a WorkReport message linked to the work. Not scheduled when Ask.ReportResultsOnCompletion
+        /// is off, the thread has no captain, or a report for the work was already scheduled. A scheduled report waits
+        /// while another turn runs in the thread and starts when that turn ends; when it is about to start it is skipped
+        /// if the setting was turned off, the thread was archived or deleted or lost its captain, the user posted a
+        /// message after the final milestone, or a report for the work is already in the thread. The turn follows the
+        /// thread's CLI permission policy and records its telemetry like any turn.
+        /// </summary>
+        /// <param name="request">The finished work and its final milestone.</param>
+        /// <returns>True when the report was queued (it may still be skipped when it is about to start).</returns>
+        /// <exception cref="ArgumentNullException">Thrown when request is null.</exception>
+        public async Task<bool> ScheduleReportAsync(AskReportRequest request)
+        {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            if (!_Settings.Ask.ReportResultsOnCompletion) return false;
+            if (String.IsNullOrEmpty(request.Thread.CaptainId)) return false;
+            if (!_ReportedWork.TryAdd(request.Work.Id, DateTime.UtcNow)) return false;
+
+            lock (_ReportLock)
+            {
+                if (!_PendingReports.TryGetValue(request.Thread.Id, out List<AskReportRequest>? queue))
+                {
+                    queue = new List<AskReportRequest>();
+                    _PendingReports[request.Thread.Id] = queue;
+                }
+
+                queue.Add(request);
+            }
+
+            await DrainReportsAsync(request.Thread.Id).ConfigureAwait(false);
+            return true;
+        }
+
+        /// <summary>
+        /// Number of reports waiting in a thread (queued behind a running turn).
+        /// </summary>
+        /// <param name="threadId">Thread identifier.</param>
+        /// <returns>The count.</returns>
+        public int PendingReportCount(string threadId)
+        {
+            if (String.IsNullOrEmpty(threadId)) return 0;
+            lock (_ReportLock)
+            {
+                return _PendingReports.TryGetValue(threadId, out List<AskReportRequest>? queue) ? queue.Count : 0;
+            }
+        }
+
+        /// <summary>
+        /// The note given to the captain in a report turn: the results of the finished work and
+        /// <see cref="ReportInstructions"/>.
+        /// </summary>
+        /// <param name="snapshot">Final snapshot of the work.</param>
+        /// <param name="result">Result of the work, or null.</param>
+        /// <returns>The note.</returns>
+        public static string BuildReportNote(AskWorkSnapshot snapshot, AskWorkResult? result)
+        {
+            if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
+            StringBuilder builder = new StringBuilder();
+            builder.AppendLine("Work this conversation started has finished. Results:");
+            builder.AppendLine(AskWorkOutcomeFormatter.FormatReportContext(snapshot, result));
+            builder.AppendLine();
+            builder.Append(ReportInstructions);
+            return builder.ToString();
         }
 
         /// <summary>
@@ -420,7 +497,7 @@ namespace Armada.Server.Ask
             }
         }
 
-        private async Task RunTurnAsync(AskThread thread, AskTurnHandle handle, int? userSequence, string? note, bool showThinking)
+        private async Task RunTurnAsync(AskThread thread, AskTurnHandle handle, int? userSequence, string? note, bool showThinking, AskMessageKindEnum replyKind, string? trackedWorkId)
         {
             string state = "failed";
             string? messageId = null;
@@ -436,8 +513,9 @@ namespace Armada.Server.Ask
                 // that introduced them instead of above it.
                 AskMessage reservation = new AskMessage();
                 reservation.Role = AskMessageRoleEnum.Assistant;
-                reservation.Kind = AskMessageKindEnum.Text;
+                reservation.Kind = replyKind;
                 reservation.CaptainId = handle.CaptainId;
+                reservation.TrackedWorkId = trackedWorkId;
                 reservation.ContentText = String.Empty;
                 placeholder = await _Threads.AppendMessageAsync(thread, reservation, true).ConfigureAwait(false);
                 messageId = placeholder.Id;
@@ -472,7 +550,7 @@ namespace Armada.Server.Ask
                 if (result.Response.Success)
                 {
                     reply.Role = AskMessageRoleEnum.Assistant;
-                    reply.Kind = AskMessageKindEnum.Text;
+                    reply.Kind = replyKind;
                     reply.ContentText = result.Response.Reply;
                     reply.ThinkingText = result.Response.Thinking;
                     reply.Metrics = result.Response.Metrics;
@@ -531,6 +609,7 @@ namespace Armada.Server.Ask
                 Emit(thread, "ask.turn", new { threadId = thread.Id, turnId = handle.TurnId, state, messageId, error });
                 try { await _Threads.EmitThreadAsync(thread.Id).ConfigureAwait(false); }
                 catch { }
+                StartQueuedReports(thread.Id);
             }
         }
 
@@ -603,6 +682,7 @@ namespace Armada.Server.Ask
                 Emit(thread, "ask.turn", new { threadId = thread.Id, turnId = handle.TurnId, state, messageId, error });
                 try { await _Threads.EmitThreadAsync(thread.Id).ConfigureAwait(false); }
                 catch { }
+                StartQueuedReports(thread.Id);
             }
         }
 
@@ -619,6 +699,93 @@ namespace Armada.Server.Ask
             if (userMessages.Count > 1) builder.AppendLine("- Latest request: " + Clip(userMessages.Last().ContentText, 200));
             foreach (AskMessage result in results.TakeLast(5)) builder.AppendLine("- " + Clip(result.ContentText, 200));
             return builder.ToString().TrimEnd();
+        }
+
+        private void StartQueuedReports(string threadId)
+        {
+            if (PendingReportCount(threadId) < 1) return;
+            _ = Task.Run(() => DrainReportsAsync(threadId));
+        }
+
+        private async Task DrainReportsAsync(string threadId)
+        {
+            while (true)
+            {
+                if (_Running.ContainsKey(threadId)) return;
+                AskReportRequest? next = null;
+                lock (_ReportLock)
+                {
+                    if (!_PendingReports.TryGetValue(threadId, out List<AskReportRequest>? queue) || queue.Count < 1) return;
+                    next = queue[0];
+                    queue.RemoveAt(0);
+                    if (queue.Count < 1) _PendingReports.Remove(threadId);
+                }
+
+                AskReportOutcomeEnum outcome;
+                try
+                {
+                    outcome = await TryStartReportAsync(next).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    _Logging.Warn(_Header + "report of " + next.Work.Id + " in thread " + threadId + " could not start: " + ex.Message);
+                    outcome = AskReportOutcomeEnum.Skipped;
+                }
+
+                if (outcome == AskReportOutcomeEnum.Started) return;
+                if (outcome == AskReportOutcomeEnum.Busy)
+                {
+                    // A turn started meanwhile: put the report back at the front; that turn's end starts it.
+                    lock (_ReportLock)
+                    {
+                        if (!_PendingReports.TryGetValue(threadId, out List<AskReportRequest>? queue))
+                        {
+                            queue = new List<AskReportRequest>();
+                            _PendingReports[threadId] = queue;
+                        }
+
+                        queue.Insert(0, next);
+                    }
+
+                    // The turn may have ended between the failed reservation and the re-queue.
+                    if (_Running.ContainsKey(threadId)) return;
+                }
+            }
+        }
+
+        private async Task<AskReportOutcomeEnum> TryStartReportAsync(AskReportRequest request)
+        {
+            string workId = request.Work.Id;
+            if (!_Settings.Ask.ReportResultsOnCompletion) return Skip(request, "reports are turned off");
+            AskThread? thread = await _Threads.ReadThreadInternalAsync(request.Thread.Id).ConfigureAwait(false);
+            if (thread == null) return Skip(request, "the thread was deleted");
+            if (thread.Archived) return Skip(request, "the thread is archived");
+            if (String.IsNullOrEmpty(thread.CaptainId)) return Skip(request, "the thread has no captain");
+
+            List<AskMessage> recent = await _Threads.ReadRecentMessagesAsync(thread, 200).ConfigureAwait(false);
+            if (recent.Any(m => m.Role == AskMessageRoleEnum.User && m.Sequence > request.MilestoneSequence))
+                return Skip(request, "the user posted after the work finished");
+            if (recent.Any(m => m.Kind == AskMessageKindEnum.WorkReport && String.Equals(m.TrackedWorkId, workId, StringComparison.Ordinal)))
+                return Skip(request, "a report already exists");
+
+            AskTurnHandle handle = new AskTurnHandle(thread.Id, thread.CaptainId, "Report");
+            if (!_Running.TryAdd(thread.Id, handle))
+            {
+                try { handle.Cancellation.Dispose(); }
+                catch { }
+                return AskReportOutcomeEnum.Busy;
+            }
+
+            string note = BuildReportNote(request.Snapshot, request.Result);
+            AskThread reportThread = thread;
+            _ = Task.Run(() => RunTurnAsync(reportThread, handle, null, note, false, AskMessageKindEnum.WorkReport, workId));
+            return AskReportOutcomeEnum.Started;
+        }
+
+        private AskReportOutcomeEnum Skip(AskReportRequest request, string reason)
+        {
+            _Logging.Debug(_Header + "report of " + request.Work.Id + " in thread " + request.Thread.Id + " skipped: " + reason);
+            return AskReportOutcomeEnum.Skipped;
         }
 
         private string? MintToken(AskThread thread)

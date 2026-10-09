@@ -126,6 +126,12 @@ namespace Armada.Client.Models
         public Armada.Core.Settings.CliPermissionSettings? Permissions { get; set; } = null;
 
         /// <summary>
+        /// Ask Armada settings (history window, proposal expiry, tracker interval, milestone narration, result reports,
+        /// timeouts), or null when the server predates them.
+        /// </summary>
+        public Armada.Core.Settings.AskSettings? Ask { get; set; } = null;
+
+        /// <summary>
         /// Push notification settings (ExpoAccessToken redacted when set).
         /// </summary>
         public Armada.Core.Settings.PushSettings? Push { get; set; } = null;

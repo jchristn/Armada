@@ -18,7 +18,10 @@ namespace Armada.Server.Ask
     /// (mission, voyage, captain, check run, merge entry) and sweeps every Ask.TrackerIntervalSeconds so nothing is
     /// missed. For each item it builds the work snapshot, compares its hash with the stored one, and on change pushes
     /// ask.work to the owner, updates the row, and posts a WorkUpdate message per milestone (worded by the thread's
-    /// captain when idle, otherwise a deterministic sentence). The sweep also expires pending proposals.
+    /// captain when idle, otherwise a deterministic sentence). The final milestone of a voyage, mission, or fleet action
+    /// run that succeeded or failed is never narrated: it carries the deterministic outcome block (see
+    /// <see cref="AskWorkOutcomeFormatter"/>) and is then handed to <see cref="ReportResult"/> for the captain's report.
+    /// The sweep also expires pending proposals.
     /// </summary>
     /// <remarks>Thread safety: refreshes of one tracked item are serialized by a per-item lock; milestone messages of one
     /// thread are posted in order on a per-thread chain.</remarks>
@@ -37,6 +40,17 @@ namespace Armada.Server.Ask
         /// </summary>
         public Func<AskThread, string, AskWorkSnapshot, CancellationToken, Task<string?>>? Narrate { get; set; } = null;
 
+        /// <summary>
+        /// Called after the final milestone of work with an outcome was posted (see
+        /// <see cref="AskWorkOutcomeFormatter.HasOutcome"/>), to schedule the captain's report, or null.
+        /// </summary>
+        public Func<AskReportRequest, Task>? ReportResult { get; set; } = null;
+
+        /// <summary>
+        /// Builds the results of finished work.
+        /// </summary>
+        public AskWorkResultBuilder Results => _Results;
+
         #endregion
 
         #region Private-Members
@@ -46,6 +60,7 @@ namespace Armada.Server.Ask
         private readonly AskThreadService _Threads;
         private readonly ArmadaSettings _Settings;
         private readonly LoggingModule _Logging;
+        private readonly AskWorkResultBuilder _Results;
         private readonly ConcurrentDictionary<string, SemaphoreSlim> _ItemLocks = new ConcurrentDictionary<string, SemaphoreSlim>(StringComparer.Ordinal);
         private readonly ConcurrentDictionary<string, AskWorkSnapshot> _LastSnapshots = new ConcurrentDictionary<string, AskWorkSnapshot>(StringComparer.Ordinal);
         private readonly ConcurrentDictionary<string, Task> _ThreadChains = new ConcurrentDictionary<string, Task>(StringComparer.Ordinal);
@@ -71,6 +86,7 @@ namespace Armada.Server.Ask
             _Threads = threads ?? throw new ArgumentNullException(nameof(threads));
             _Settings = settings ?? throw new ArgumentNullException(nameof(settings));
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
+            _Results = new AskWorkResultBuilder(database);
         }
 
         #endregion
@@ -318,7 +334,18 @@ namespace Armada.Server.Ask
                 {
                     string text = milestone.Text;
                     string? captainId = null;
-                    Func<AskThread, string, AskWorkSnapshot, CancellationToken, Task<string?>>? narrate = Narrate;
+                    bool withOutcome = milestone.Terminal && AskWorkOutcomeFormatter.HasOutcome(snapshot);
+                    AskWorkResult? result = null;
+                    if (withOutcome)
+                    {
+                        // The final milestone states the outcome in typed, deterministic terms; the captain's voice is its
+                        // report (a separate turn), so this one is not narrated.
+                        try { result = await _Results.BuildAsync(work, snapshot, _Cts?.Token ?? CancellationToken.None).ConfigureAwait(false); }
+                        catch (Exception ex) when (!(ex is OperationCanceledException)) { _Logging.Warn(_Header + "result of " + work.Id + " could not be built: " + ex.Message); }
+                        text = AskWorkOutcomeFormatter.AppendOutcome(milestone.Text, snapshot, result);
+                    }
+
+                    Func<AskThread, string, AskWorkSnapshot, CancellationToken, Task<string?>>? narrate = withOutcome ? null : Narrate;
                     if (narrate != null)
                     {
                         string? narrated = null;
@@ -337,7 +364,14 @@ namespace Armada.Server.Ask
                     message.ContentText = text;
                     message.TrackedWorkId = work.Id;
                     message.CaptainId = captainId;
-                    await _Threads.AppendMessageAsync(thread, message, true).ConfigureAwait(false);
+                    message = await _Threads.AppendMessageAsync(thread, message, true).ConfigureAwait(false);
+
+                    Func<AskReportRequest, Task>? report = ReportResult;
+                    if (withOutcome && report != null)
+                    {
+                        try { await report(new AskReportRequest(thread, work, snapshot, result, message.Sequence)).ConfigureAwait(false); }
+                        catch (Exception ex) when (!(ex is OperationCanceledException)) { _Logging.Warn(_Header + "report of " + work.Id + " could not be scheduled: " + ex.Message); }
+                    }
                 }
             }
             catch (Exception ex)
