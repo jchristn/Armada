@@ -6,6 +6,7 @@ namespace Test.Shared.Suites.Services
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Core;
+    using Armada.Core.Database.Sqlite;
     using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Core.Services;
@@ -104,13 +105,13 @@ namespace Test.Shared.Suites.Services
                 AskThread thread = await NewThreadAsync(h, "usr_cpo9").ConfigureAwait(false);
                 AssertEqual(0, svc.GetInFlightPrompts().Count, "nothing in flight before the prompt");
 
-                // Hold the SQLite in-process write lock (the gate every locked write queues on) so the prompt stalls while
-                // storing its request, the way a long writer stalls it on a busy server.
+                // Hold the SQLite write gate (every write queues on it) so the prompt stalls while storing its request,
+                // the way a long writer stalls it on a busy server.
                 Armada.Core.Database.Sqlite.SqliteDatabaseDriver? sqlite = h.Db.Driver as Armada.Core.Database.Sqlite.SqliteDatabaseDriver;
                 Task<CliPermissionPromptOutcome> prompt;
                 if (sqlite != null)
                 {
-                    await sqlite.WriteLock.WaitAsync().ConfigureAwait(false);
+                    SqliteWriteLease held = await HoldWriteGateAsync(sqlite.WriteGate).ConfigureAwait(false);
                     try
                     {
                         prompt = svc.PromptAsync(ThreadContext(thread, null), "Bash", BashInput);
@@ -128,7 +129,7 @@ namespace Test.Shared.Suites.Services
                     }
                     finally
                     {
-                        sqlite.WriteLock.Release();
+                        held.Dispose();
                     }
                 }
                 else
@@ -569,6 +570,15 @@ namespace Test.Shared.Suites.Services
                 CaptainId = captain?.Id,
                 Runtime = AgentRuntimeEnum.ClaudeCode
             };
+        }
+
+        /// <summary>
+        /// Take the write gate from a separate async method, so the caller's flow does not carry the lease: work the
+        /// caller starts while it holds the gate then queues on it like any other writer.
+        /// </summary>
+        private static async Task<SqliteWriteLease> HoldWriteGateAsync(SqliteWriteGate gate)
+        {
+            return await gate.EnterAsync().ConfigureAwait(false);
         }
 
         private static async Task<CliPermissionRequest> WaitForPendingAsync(AskTestHarness h, string threadId)

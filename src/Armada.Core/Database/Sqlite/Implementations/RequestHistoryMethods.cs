@@ -23,6 +23,30 @@ namespace Armada.Core.Database.Sqlite.Implementations
         private readonly SqliteDatabaseDriver _Driver;
         private readonly DatabaseSettings _Settings;
         private readonly LoggingModule _Logging;
+        private readonly object _PendingLock = new object();
+        private List<RequestHistoryPendingInsert> _Pending = new List<RequestHistoryPendingInsert>();
+        private bool _Flushing = false;
+
+        private const int _MaxBatchSize = 256;
+        private const int _DeleteChunkSize = 1000;
+
+        private const string _InsertEntrySql = @"INSERT INTO request_history (
+                                id, tenant_id, user_id, credential_id, principal_display, auth_method, method, route, route_template,
+                                query_string, status_code, duration_ms, request_size_bytes, response_size_bytes, request_content_type,
+                                response_content_type, is_success, client_ip, correlation_id, created_utc
+                            ) VALUES (
+                                @id, @tenant_id, @user_id, @credential_id, @principal_display, @auth_method, @method, @route, @route_template,
+                                @query_string, @status_code, @duration_ms, @request_size_bytes, @response_size_bytes, @request_content_type,
+                                @response_content_type, @is_success, @client_ip, @correlation_id, @created_utc
+                            );";
+
+        private const string _InsertDetailSql = @"INSERT INTO request_history_detail (
+                                    request_history_id, path_params_json, query_params_json, request_headers_json, response_headers_json,
+                                    request_body_text, response_body_text, request_body_truncated, response_body_truncated
+                                ) VALUES (
+                                    @request_history_id, @path_params_json, @query_params_json, @request_headers_json, @response_headers_json,
+                                    @request_body_text, @response_body_text, @request_body_truncated, @response_body_truncated
+                                );";
 
         #endregion
 
@@ -43,52 +67,39 @@ namespace Armada.Core.Database.Sqlite.Implementations
         #region Public-Methods
 
         /// <inheritdoc />
+        /// <remarks>
+        /// Inserts are group-committed: concurrent calls (one per captured REST request) are queued and written by a
+        /// single flusher in one transaction per batch under the database's write gate, so a burst of requests costs
+        /// one turn at the gate instead of one each. The call still completes only once its row is committed.
+        /// Cancelling the token stops the wait, not the insert.
+        /// </remarks>
         public async Task<RequestHistoryRecord> CreateAsync(RequestHistoryEntry entry, RequestHistoryDetail? detail, CancellationToken token = default)
         {
             if (entry == null) throw new ArgumentNullException(nameof(entry));
+            token.ThrowIfCancellationRequested();
 
-            using (SqliteConnection conn = new SqliteConnection(_Driver.ConnectionString))
+            RequestHistoryPendingInsert pending = new RequestHistoryPendingInsert(entry, detail);
+            bool startFlusher = false;
+            lock (_PendingLock)
             {
-                await conn.OpenAsync(token).ConfigureAwait(false);
-                using (SqliteTransaction tx = conn.BeginTransaction())
+                _Pending.Add(pending);
+                if (!_Flushing)
                 {
-                    using (SqliteCommand cmd = conn.CreateCommand())
-                    {
-                        cmd.Transaction = tx;
-                        cmd.CommandText = @"INSERT INTO request_history (
-                                id, tenant_id, user_id, credential_id, principal_display, auth_method, method, route, route_template,
-                                query_string, status_code, duration_ms, request_size_bytes, response_size_bytes, request_content_type,
-                                response_content_type, is_success, client_ip, correlation_id, created_utc
-                            ) VALUES (
-                                @id, @tenant_id, @user_id, @credential_id, @principal_display, @auth_method, @method, @route, @route_template,
-                                @query_string, @status_code, @duration_ms, @request_size_bytes, @response_size_bytes, @request_content_type,
-                                @response_content_type, @is_success, @client_ip, @correlation_id, @created_utc
-                            );";
-                        BindEntry(cmd, entry);
-                        await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
-                    }
-
-                    if (detail != null)
-                    {
-                        using (SqliteCommand cmd = conn.CreateCommand())
-                        {
-                            cmd.Transaction = tx;
-                            cmd.CommandText = @"INSERT INTO request_history_detail (
-                                    request_history_id, path_params_json, query_params_json, request_headers_json, response_headers_json,
-                                    request_body_text, response_body_text, request_body_truncated, response_body_truncated
-                                ) VALUES (
-                                    @request_history_id, @path_params_json, @query_params_json, @request_headers_json, @response_headers_json,
-                                    @request_body_text, @response_body_text, @request_body_truncated, @response_body_truncated
-                                );";
-                            BindDetail(cmd, detail);
-                            await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
-                        }
-                    }
-
-                    tx.Commit();
+                    _Flushing = true;
+                    startFlusher = true;
                 }
             }
 
+            if (startFlusher)
+            {
+                // The flusher runs on a clean execution context: it must not inherit the caller's write-gate marker.
+                using (ExecutionContext.SuppressFlow())
+                {
+                    _ = Task.Run(FlushPendingAsync);
+                }
+            }
+
+            await pending.Completion.Task.WaitAsync(token).ConfigureAwait(false);
             return new RequestHistoryRecord { Entry = entry, Detail = detail };
         }
 
@@ -97,7 +108,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
         {
             if (string.IsNullOrWhiteSpace(id)) throw new ArgumentNullException(nameof(id));
 
-            using (SqliteConnection conn = new SqliteConnection(_Driver.ConnectionString))
+            using (SqliteConnection conn = new SqliteProviderConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
 
@@ -140,7 +151,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
         {
             query ??= new RequestHistoryQuery();
 
-            using (SqliteConnection conn = new SqliteConnection(_Driver.ConnectionString))
+            using (SqliteConnection conn = new SqliteProviderConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
 
@@ -185,7 +196,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
         {
             query ??= new RequestHistoryQuery();
 
-            using (SqliteConnection conn = new SqliteConnection(_Driver.ConnectionString))
+            using (SqliteConnection conn = new SqliteProviderConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
 
@@ -215,7 +226,8 @@ namespace Armada.Core.Database.Sqlite.Implementations
         {
             if (string.IsNullOrWhiteSpace(id)) throw new ArgumentNullException(nameof(id));
 
-            using (SqliteConnection conn = new SqliteConnection(_Driver.ConnectionString))
+            using (SqliteWriteLease writeLease = await _Driver.WriteGate.EnterAsync(token).ConfigureAwait(false))
+            using (SqliteConnection conn = new SqliteProviderConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 List<string> conditions = new List<string> { "id = @id" };
@@ -232,31 +244,142 @@ namespace Armada.Core.Database.Sqlite.Implementations
         }
 
         /// <inheritdoc />
+        /// <remarks>
+        /// Deletes in chunks, each its own transaction and its own turn at the write gate, so a large retention sweep
+        /// never holds the gate for long: writers queued behind it wait for one chunk, not the whole sweep.
+        /// </remarks>
         public async Task<int> DeleteByFilterAsync(RequestHistoryQuery query, CancellationToken token = default)
         {
             query ??= new RequestHistoryQuery();
 
-            using (SqliteConnection conn = new SqliteConnection(_Driver.ConnectionString))
+            List<string> conditions = new List<string>();
+            List<SqliteParameter> parameters = new List<SqliteParameter>();
+            ApplyQueryFilters(query, conditions, parameters);
+            string whereClause = conditions.Count > 0 ? " WHERE " + string.Join(" AND ", conditions) : string.Empty;
+            string sql = "DELETE FROM request_history WHERE rowid IN (SELECT rowid FROM request_history" + whereClause
+                + " LIMIT " + _DeleteChunkSize + ");";
+
+            int total = 0;
+            while (true)
             {
-                await conn.OpenAsync(token).ConfigureAwait(false);
-
-                List<string> conditions = new List<string>();
-                List<SqliteParameter> parameters = new List<SqliteParameter>();
-                ApplyQueryFilters(query, conditions, parameters);
-                string whereClause = conditions.Count > 0 ? " WHERE " + string.Join(" AND ", conditions) : string.Empty;
-
-                using (SqliteCommand cmd = conn.CreateCommand())
+                int deleted;
+                using (SqliteWriteLease writeLease = await _Driver.WriteGate.EnterAsync(token).ConfigureAwait(false))
+                using (SqliteConnection conn = new SqliteProviderConnection(_Driver.ConnectionString))
                 {
-                    cmd.CommandText = "DELETE FROM request_history" + whereClause + ";";
-                    foreach (SqliteParameter parameter in parameters) cmd.Parameters.Add(parameter);
-                    return await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+                    await conn.OpenAsync(token).ConfigureAwait(false);
+                    using (SqliteCommand cmd = conn.CreateCommand())
+                    {
+                        cmd.CommandText = sql;
+                        foreach (SqliteParameter parameter in parameters)
+                            cmd.Parameters.Add(new SqliteParameter(parameter.ParameterName, parameter.Value));
+                        deleted = await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+                    }
                 }
+
+                total += deleted;
+                if (deleted < _DeleteChunkSize) return total;
             }
         }
 
         #endregion
 
         #region Private-Methods
+
+        /// <summary>
+        /// Write queued inserts until the queue is empty. Each pass takes the write gate, then takes everything queued
+        /// so far (up to the batch size) and commits it in one transaction. If the batch fails, its rows are retried one
+        /// at a time so only the failing row reports the error.
+        /// </summary>
+        private async Task FlushPendingAsync()
+        {
+            while (true)
+            {
+                using (SqliteWriteLease writeLease = await _Driver.WriteGate.EnterAsync().ConfigureAwait(false))
+                {
+                    List<RequestHistoryPendingInsert> batch;
+                    lock (_PendingLock)
+                    {
+                        if (_Pending.Count == 0)
+                        {
+                            _Flushing = false;
+                            return;
+                        }
+
+                        if (_Pending.Count <= _MaxBatchSize)
+                        {
+                            batch = _Pending;
+                            _Pending = new List<RequestHistoryPendingInsert>();
+                        }
+                        else
+                        {
+                            batch = _Pending.GetRange(0, _MaxBatchSize);
+                            _Pending.RemoveRange(0, _MaxBatchSize);
+                        }
+                    }
+
+                    try
+                    {
+                        await InsertBatchAsync(batch).ConfigureAwait(false);
+                        foreach (RequestHistoryPendingInsert pending in batch) pending.Completion.TrySetResult(true);
+                    }
+                    catch (Exception batchEx)
+                    {
+                        if (batch.Count == 1)
+                        {
+                            batch[0].Completion.TrySetException(batchEx);
+                            continue;
+                        }
+
+                        foreach (RequestHistoryPendingInsert pending in batch)
+                        {
+                            try
+                            {
+                                await InsertBatchAsync(new List<RequestHistoryPendingInsert> { pending }).ConfigureAwait(false);
+                                pending.Completion.TrySetResult(true);
+                            }
+                            catch (Exception ex)
+                            {
+                                pending.Completion.TrySetException(ex);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        private async Task InsertBatchAsync(List<RequestHistoryPendingInsert> batch)
+        {
+            using (SqliteConnection conn = new SqliteProviderConnection(_Driver.ConnectionString))
+            {
+                await conn.OpenAsync().ConfigureAwait(false);
+                using (SqliteTransaction tx = conn.BeginTransaction())
+                {
+                    foreach (RequestHistoryPendingInsert pending in batch)
+                    {
+                        using (SqliteCommand cmd = conn.CreateCommand())
+                        {
+                            cmd.Transaction = tx;
+                            cmd.CommandText = _InsertEntrySql;
+                            BindEntry(cmd, pending.Entry);
+                            await cmd.ExecuteNonQueryAsync().ConfigureAwait(false);
+                        }
+
+                        if (pending.Detail != null)
+                        {
+                            using (SqliteCommand cmd = conn.CreateCommand())
+                            {
+                                cmd.Transaction = tx;
+                                cmd.CommandText = _InsertDetailSql;
+                                BindDetail(cmd, pending.Detail);
+                                await cmd.ExecuteNonQueryAsync().ConfigureAwait(false);
+                            }
+                        }
+                    }
+
+                    tx.Commit();
+                }
+            }
+        }
 
         private static void BindEntry(SqliteCommand cmd, RequestHistoryEntry entry)
         {

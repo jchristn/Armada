@@ -51,7 +51,8 @@ namespace Armada.Core.Database.Sqlite.Implementations
         {
             if (armadaEvent == null) throw new ArgumentNullException(nameof(armadaEvent));
 
-            using (SqliteConnection conn = new SqliteConnection(_Driver.ConnectionString))
+            using (SqliteWriteLease writeLease = await _Driver.WriteGate.EnterAsync(token).ConfigureAwait(false))
+            using (SqliteConnection conn = new SqliteProviderConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqliteCommand cmd = conn.CreateCommand())
@@ -83,7 +84,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
         {
             if (string.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
 
-            using (SqliteConnection conn = new SqliteConnection(_Driver.ConnectionString))
+            using (SqliteConnection conn = new SqliteProviderConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqliteCommand cmd = conn.CreateCommand())
@@ -106,7 +107,8 @@ namespace Armada.Core.Database.Sqlite.Implementations
         {
             if (string.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
 
-            using (SqliteConnection conn = new SqliteConnection(_Driver.ConnectionString))
+            using (SqliteWriteLease writeLease = await _Driver.WriteGate.EnterAsync(token).ConfigureAwait(false))
+            using (SqliteConnection conn = new SqliteProviderConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqliteCommand cmd = conn.CreateCommand())
@@ -197,7 +199,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
         {
             if (query == null) query = new EnumerationQuery();
 
-            using (SqliteConnection conn = new SqliteConnection(_Driver.ConnectionString))
+            using (SqliteConnection conn = new SqliteProviderConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
 
@@ -276,7 +278,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
         {
             if (string.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
             if (string.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
-            using (SqliteConnection conn = new SqliteConnection(_Driver.ConnectionString))
+            using (SqliteConnection conn = new SqliteProviderConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqliteCommand cmd = conn.CreateCommand())
@@ -299,7 +301,8 @@ namespace Armada.Core.Database.Sqlite.Implementations
         {
             if (string.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
             if (string.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
-            using (SqliteConnection conn = new SqliteConnection(_Driver.ConnectionString))
+            using (SqliteWriteLease writeLease = await _Driver.WriteGate.EnterAsync(token).ConfigureAwait(false))
+            using (SqliteConnection conn = new SqliteProviderConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqliteCommand cmd = conn.CreateCommand())
@@ -317,7 +320,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
         {
             if (string.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
             List<ArmadaEvent> results = new List<ArmadaEvent>();
-            using (SqliteConnection conn = new SqliteConnection(_Driver.ConnectionString))
+            using (SqliteConnection conn = new SqliteProviderConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqliteCommand cmd = conn.CreateCommand())
@@ -339,7 +342,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
         {
             if (string.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
             if (query == null) query = new EnumerationQuery();
-            using (SqliteConnection conn = new SqliteConnection(_Driver.ConnectionString))
+            using (SqliteConnection conn = new SqliteProviderConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 List<string> conditions = new List<string> { "tenant_id = @tenantId" };
@@ -500,7 +503,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             if (string.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
             if (string.IsNullOrEmpty(userId)) throw new ArgumentNullException(nameof(userId));
             if (string.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
-            using (SqliteConnection conn = new SqliteConnection(_Driver.ConnectionString))
+            using (SqliteConnection conn = new SqliteProviderConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqliteCommand cmd = conn.CreateCommand())
@@ -525,7 +528,8 @@ namespace Armada.Core.Database.Sqlite.Implementations
             if (string.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
             if (string.IsNullOrEmpty(userId)) throw new ArgumentNullException(nameof(userId));
             if (string.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
-            using (SqliteConnection conn = new SqliteConnection(_Driver.ConnectionString))
+            using (SqliteWriteLease writeLease = await _Driver.WriteGate.EnterAsync(token).ConfigureAwait(false))
+            using (SqliteConnection conn = new SqliteProviderConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqliteCommand cmd = conn.CreateCommand())
@@ -545,7 +549,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             if (string.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
             if (string.IsNullOrEmpty(userId)) throw new ArgumentNullException(nameof(userId));
             List<ArmadaEvent> results = new List<ArmadaEvent>();
-            using (SqliteConnection conn = new SqliteConnection(_Driver.ConnectionString))
+            using (SqliteConnection conn = new SqliteProviderConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqliteCommand cmd = conn.CreateCommand())
@@ -569,7 +573,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             if (string.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
             if (string.IsNullOrEmpty(userId)) throw new ArgumentNullException(nameof(userId));
             if (query == null) query = new EnumerationQuery();
-            using (SqliteConnection conn = new SqliteConnection(_Driver.ConnectionString))
+            using (SqliteConnection conn = new SqliteProviderConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 List<string> conditions = new List<string> { "tenant_id = @tenantId", "user_id = @userId" };
@@ -641,7 +645,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
         {
             List<ArmadaEvent> results = new List<ArmadaEvent>();
 
-            using (SqliteConnection conn = new SqliteConnection(_Driver.ConnectionString))
+            using (SqliteConnection conn = new SqliteProviderConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqliteCommand cmd = conn.CreateCommand())

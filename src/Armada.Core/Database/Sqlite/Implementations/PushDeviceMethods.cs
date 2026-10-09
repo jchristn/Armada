@@ -32,7 +32,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             WHERE id = @id;";
 
         private readonly string _ConnectionString;
-        private readonly SemaphoreSlim? _WriteLock;
+        private readonly SqliteWriteGate _WriteGate;
 
         #endregion
 
@@ -51,7 +51,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             if (settings == null) throw new ArgumentNullException(nameof(settings));
             if (logging == null) throw new ArgumentNullException(nameof(logging));
             _ConnectionString = driver.ConnectionString;
-            _WriteLock = driver.WriteLock;
+            _WriteGate = driver.WriteGate;
         }
 
         #endregion
@@ -64,7 +64,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             if (device == null) throw new ArgumentNullException(nameof(device));
             if (String.IsNullOrEmpty(device.ExpoPushToken)) throw new ArgumentException("ExpoPushToken is required.", nameof(device));
             device.LastUpdateUtc = DateTime.UtcNow;
-            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteGate, async (SqliteConnection conn, SqliteTransaction tx) =>
             {
                 await SqliteCommandHelper.ExecuteAsync(conn, tx, _Insert, cmd => Bind(cmd, device), token).ConfigureAwait(false);
             }, token).ConfigureAwait(false);
@@ -96,7 +96,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
         {
             if (device == null) throw new ArgumentNullException(nameof(device));
             device.LastUpdateUtc = DateTime.UtcNow;
-            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteGate, async (SqliteConnection conn, SqliteTransaction tx) =>
             {
                 await SqliteCommandHelper.ExecuteAsync(conn, tx, _Update, cmd => Bind(cmd, device), token).ConfigureAwait(false);
             }, token).ConfigureAwait(false);
@@ -108,7 +108,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
         {
             if (String.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
             int updated = 0;
-            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteGate, async (SqliteConnection conn, SqliteTransaction tx) =>
             {
                 updated = await SqliteCommandHelper.ExecuteAsync(conn, tx,
                     "UPDATE push_devices SET active = @active, last_update_utc = @now WHERE id = @id;",
@@ -127,7 +127,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
         {
             if (String.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
             int deleted = 0;
-            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteGate, async (SqliteConnection conn, SqliteTransaction tx) =>
             {
                 deleted = await SqliteCommandHelper.ExecuteAsync(conn, tx, "DELETE FROM push_devices WHERE id = @id;",
                     cmd => SqliteCommandHelper.Add(cmd, "@id", id), token).ConfigureAwait(false);
@@ -141,7 +141,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             if (String.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
             if (String.IsNullOrEmpty(userId)) throw new ArgumentNullException(nameof(userId));
             int deleted = 0;
-            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteGate, async (SqliteConnection conn, SqliteTransaction tx) =>
             {
                 deleted = await SqliteCommandHelper.ExecuteAsync(conn, tx, "DELETE FROM push_devices WHERE tenant_id = @tenant_id AND user_id = @user_id;",
                     cmd =>
@@ -158,7 +158,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
         {
             if (String.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
             int deleted = 0;
-            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteGate, async (SqliteConnection conn, SqliteTransaction tx) =>
             {
                 deleted = await SqliteCommandHelper.ExecuteAsync(conn, tx, "DELETE FROM push_devices WHERE tenant_id = @tenant_id;",
                     cmd => SqliteCommandHelper.Add(cmd, "@tenant_id", tenantId), token).ConfigureAwait(false);

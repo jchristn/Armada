@@ -27,7 +27,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             (@id, @tenant_id, @user_id, @thread_id, @sequence, @role, @kind, @content_text, @thinking_text, @proposal_id, @tracked_work_id, @captain_id, @duration_ms, @ttft_ms, @first_text_ms, @streaming_ms, @tokens_per_second, @input_tokens, @output_tokens, @cached_tokens, @tokens_estimated, @cost_usd, @tool_call_count, @tool_time_ms, @created_utc, @last_update_utc);";
 
         private readonly string _ConnectionString;
-        private readonly SemaphoreSlim? _WriteLock;
+        private readonly SqliteWriteGate _WriteGate;
 
         #endregion
 
@@ -46,7 +46,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             if (settings == null) throw new ArgumentNullException(nameof(settings));
             if (logging == null) throw new ArgumentNullException(nameof(logging));
             _ConnectionString = driver.ConnectionString;
-            _WriteLock = driver.WriteLock;
+            _WriteGate = driver.WriteGate;
         }
 
         #endregion
@@ -64,7 +64,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             message.CreatedUtc = now;
             message.LastUpdateUtc = now;
 
-            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteGate, async (SqliteConnection conn, SqliteTransaction tx) =>
             {
                 int touched = await SqliteCommandHelper.ExecuteAsync(conn, tx,
                     "UPDATE ask_threads SET message_count = message_count + 1, unread_count = unread_count + @unread, last_message_utc = @now, last_update_utc = @now WHERE tenant_id = @tenant_id AND id = @thread_id;",
@@ -111,7 +111,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             if (String.IsNullOrEmpty(message.TenantId)) throw new ArgumentException("TenantId is required.", nameof(message));
 
             message.LastUpdateUtc = DateTime.UtcNow;
-            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteGate, async (SqliteConnection conn, SqliteTransaction tx) =>
             {
                 await SqliteCommandHelper.ExecuteAsync(conn, tx,
                     "UPDATE ask_messages SET kind = @kind, content_text = @content_text, thinking_text = @thinking_text, proposal_id = @proposal_id, tracked_work_id = @tracked_work_id, captain_id = @captain_id, duration_ms = @duration_ms, ttft_ms = @ttft_ms, first_text_ms = @first_text_ms, streaming_ms = @streaming_ms, tokens_per_second = @tokens_per_second, input_tokens = @input_tokens, output_tokens = @output_tokens, cached_tokens = @cached_tokens, tokens_estimated = @tokens_estimated, cost_usd = @cost_usd, tool_call_count = @tool_call_count, tool_time_ms = @tool_time_ms, last_update_utc = @last_update_utc WHERE tenant_id = @tenant_id AND id = @id;",

@@ -19,7 +19,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
         #region Private-Members
 
         private readonly string _ConnectionString;
-        private readonly SemaphoreSlim? _WriteLock;
+        private readonly SqliteWriteGate _WriteGate;
 
         #endregion
 
@@ -37,7 +37,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             if (settings == null) throw new ArgumentNullException(nameof(settings));
             if (logging == null) throw new ArgumentNullException(nameof(logging));
             _ConnectionString = driver.ConnectionString;
-            _WriteLock = driver.WriteLock;
+            _WriteGate = driver.WriteGate;
         }
         #endregion
 
@@ -50,7 +50,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             if (String.IsNullOrEmpty(target.Id)) target.Id = Constants.IdGenerator.GenerateKSortable(Constants.FleetActionRunTargetIdPrefix, 24);
             target.LastUpdateUtc = DateTime.UtcNow;
 
-            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteGate, async (SqliteConnection conn, SqliteTransaction tx) =>
             {
                 await SqliteCommandHelper.ExecuteAsync(conn, tx, @"INSERT INTO fleet_action_run_targets
                     (id, tenant_id, run_id, vessel_id, vessel_name, status, skip_reason, failure_reason, rendered_text, exit_code, output_text, error_text, output_truncated, voyage_id, started_utc, completed_utc, duration_ms, created_utc, last_update_utc)
@@ -96,7 +96,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             if (String.IsNullOrEmpty(target.Id)) throw new ArgumentException("Target identifier is required.", nameof(target));
             target.LastUpdateUtc = DateTime.UtcNow;
 
-            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteGate, async (SqliteConnection conn, SqliteTransaction tx) =>
             {
                 await SqliteCommandHelper.ExecuteAsync(conn, tx, @"UPDATE fleet_action_run_targets SET
                     tenant_id = @tenant_id, run_id = @run_id, vessel_id = @vessel_id, vessel_name = @vessel_name,
@@ -129,7 +129,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
                 if (status.HasValue) SqliteCommandHelper.Add(cmd, "@status", status.Value.ToString());
             };
 
-            using (SqliteConnection conn = new SqliteConnection(_ConnectionString))
+            using (SqliteConnection conn = new SqliteProviderConnection(_ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 long total = await SqliteCommandHelper.CountAsync(conn, "SELECT COUNT(*) FROM fleet_action_run_targets" + where + ";", bind, token).ConfigureAwait(false);
@@ -154,7 +154,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
         public async Task DeleteByRunAsync(string runId, CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(runId)) throw new ArgumentNullException(nameof(runId));
-            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteGate, async (SqliteConnection conn, SqliteTransaction tx) =>
             {
                 await SqliteCommandHelper.ExecuteAsync(conn, tx, "DELETE FROM fleet_action_run_targets WHERE run_id = @run_id;", cmd => SqliteCommandHelper.Add(cmd, "@run_id", runId), token).ConfigureAwait(false);
             }, token).ConfigureAwait(false);

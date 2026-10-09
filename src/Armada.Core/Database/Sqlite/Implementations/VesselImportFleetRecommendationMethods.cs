@@ -30,7 +30,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             (@recommendation_id, @tenant_id, @batch_id, @vessel_id, @sort_order);";
 
         private readonly string _ConnectionString;
-        private readonly SemaphoreSlim? _WriteLock;
+        private readonly SqliteWriteGate _WriteGate;
 
         #endregion
 
@@ -49,7 +49,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             if (settings == null) throw new ArgumentNullException(nameof(settings));
             if (logging == null) throw new ArgumentNullException(nameof(logging));
             _ConnectionString = driver.ConnectionString;
-            _WriteLock = driver.WriteLock;
+            _WriteGate = driver.WriteGate;
         }
 
         #endregion
@@ -73,7 +73,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
                 recommendation.LastUpdateUtc = now;
             }
 
-            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteGate, async (SqliteConnection conn, SqliteTransaction tx) =>
             {
                 Action<SqliteCommand> bindBatch = cmd =>
                 {
@@ -143,7 +143,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             if (String.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
             if (String.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
 
-            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteGate, async (SqliteConnection conn, SqliteTransaction tx) =>
             {
                 await SqliteCommandHelper.ExecuteAsync(conn, tx,
                     "UPDATE vessel_import_fleet_recommendations SET applied_fleet_id = @applied_fleet_id, last_update_utc = @last_update_utc WHERE tenant_id = @tenant_id AND id = @id;",
@@ -163,7 +163,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             if (String.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
             if (String.IsNullOrEmpty(batchId)) throw new ArgumentNullException(nameof(batchId));
 
-            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteGate, async (SqliteConnection conn, SqliteTransaction tx) =>
             {
                 Action<SqliteCommand> bind = cmd =>
                 {

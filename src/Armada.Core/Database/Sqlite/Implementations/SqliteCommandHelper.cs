@@ -7,7 +7,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
     using Microsoft.Data.Sqlite;
     /// <summary>
     /// Provider-specific command plumbing shared by the SQLite implementations of the vessel import, fleet action,
-    /// and vessel health methods: transactional writes (under the driver's write lock where the provider needs one), typed parameter binding,
+    /// and vessel health methods: transactional writes (under the database's write gate), typed parameter binding,
     /// typed column reads, and paging syntax.
     /// </summary>
     internal static class SqliteCommandHelper
@@ -15,31 +15,26 @@ namespace Armada.Core.Database.Sqlite.Implementations
         #region Internal-Methods
 
         /// <summary>
-        /// Run a unit of work inside a transaction. The driver's write lock is held for the duration so concurrent
-        /// in-process writers queue instead of contending for the SQLite database lock.
+        /// Run a unit of work inside a transaction. The database's write gate is held for the duration so concurrent
+        /// in-process writers queue in order instead of contending for the SQLite database lock.
         /// </summary>
         internal static async Task WriteAsync(
             string connectionString,
-            SemaphoreSlim? writeLock,
+            SqliteWriteGate writeGate,
             Func<SqliteConnection, SqliteTransaction, Task> work,
             CancellationToken token)
         {
-            if (writeLock != null) await writeLock.WaitAsync(token).ConfigureAwait(false);
-            try
+            if (writeGate == null) throw new ArgumentNullException(nameof(writeGate));
+
+            using (SqliteWriteLease writeLease = await writeGate.EnterAsync(token).ConfigureAwait(false))
+            using (SqliteConnection conn = new SqliteProviderConnection(connectionString))
             {
-                using (SqliteConnection conn = new SqliteConnection(connectionString))
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                using (SqliteTransaction tx = (SqliteTransaction)await conn.BeginTransactionAsync(token).ConfigureAwait(false))
                 {
-                    await conn.OpenAsync(token).ConfigureAwait(false);
-                    using (SqliteTransaction tx = (SqliteTransaction)await conn.BeginTransactionAsync(token).ConfigureAwait(false))
-                    {
-                        await work(conn, tx).ConfigureAwait(false);
-                        await tx.CommitAsync(token).ConfigureAwait(false);
-                    }
+                    await work(conn, tx).ConfigureAwait(false);
+                    await tx.CommitAsync(token).ConfigureAwait(false);
                 }
-            }
-            finally
-            {
-                if (writeLock != null) writeLock.Release();
             }
         }
 
@@ -78,7 +73,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
         /// </summary>
         internal static async Task<List<T>> QueryAsync<T>(string connectionString, string sql, Action<SqliteCommand>? bind, Func<SqliteDataReader, T> map, CancellationToken token)
         {
-            using (SqliteConnection conn = new SqliteConnection(connectionString))
+            using (SqliteConnection conn = new SqliteProviderConnection(connectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 return await QueryAsync(conn, sql, bind, map, token).ConfigureAwait(false);

@@ -27,7 +27,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             (@id, @tenant_id, @scope, @vessel_id, @captain_id, @pattern, @action, @description, @created_by_user_id, @created_utc, @last_update_utc);";
 
         private readonly string _ConnectionString;
-        private readonly SemaphoreSlim? _WriteLock;
+        private readonly SqliteWriteGate _WriteGate;
 
         #endregion
 
@@ -46,7 +46,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             if (settings == null) throw new ArgumentNullException(nameof(settings));
             if (logging == null) throw new ArgumentNullException(nameof(logging));
             _ConnectionString = driver.ConnectionString;
-            _WriteLock = driver.WriteLock;
+            _WriteGate = driver.WriteGate;
         }
 
         #endregion
@@ -58,7 +58,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
         {
             if (rule == null) throw new ArgumentNullException(nameof(rule));
             rule.LastUpdateUtc = DateTime.UtcNow;
-            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteGate, async (SqliteConnection conn, SqliteTransaction tx) =>
             {
                 await SqliteCommandHelper.ExecuteAsync(conn, tx, _Insert, cmd => Bind(cmd, rule), token).ConfigureAwait(false);
             }, token).ConfigureAwait(false);
@@ -80,7 +80,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
         {
             if (rule == null) throw new ArgumentNullException(nameof(rule));
             rule.LastUpdateUtc = DateTime.UtcNow;
-            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteGate, async (SqliteConnection conn, SqliteTransaction tx) =>
             {
                 await SqliteCommandHelper.ExecuteAsync(conn, tx,
                     "UPDATE cli_permission_rules SET pattern = @pattern, action = @action, description = @description, last_update_utc = @last_update_utc WHERE id = @id;",
@@ -101,7 +101,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
         {
             if (String.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
             int deleted = 0;
-            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteGate, async (SqliteConnection conn, SqliteTransaction tx) =>
             {
                 deleted = await SqliteCommandHelper.ExecuteAsync(conn, tx, "DELETE FROM cli_permission_rules WHERE id = @id;",
                     cmd => SqliteCommandHelper.Add(cmd, "@id", id), token).ConfigureAwait(false);

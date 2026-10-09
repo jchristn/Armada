@@ -27,7 +27,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             (@id, @tenant_id, @user_id, @thread_id, @entity_type, @entity_id, @title, @status, @state, @snapshot_hash, @last_change_utc, @completed_utc, @created_utc, @last_update_utc);";
 
         private readonly string _ConnectionString;
-        private readonly SemaphoreSlim? _WriteLock;
+        private readonly SqliteWriteGate _WriteGate;
 
         #endregion
 
@@ -46,7 +46,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             if (settings == null) throw new ArgumentNullException(nameof(settings));
             if (logging == null) throw new ArgumentNullException(nameof(logging));
             _ConnectionString = driver.ConnectionString;
-            _WriteLock = driver.WriteLock;
+            _WriteGate = driver.WriteGate;
         }
 
         #endregion
@@ -67,7 +67,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             work.LastUpdateUtc = DateTime.UtcNow;
             try
             {
-                await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
+                await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteGate, async (SqliteConnection conn, SqliteTransaction tx) =>
                 {
                     object? present = await SqliteCommandHelper.ScalarAsync(conn, tx,
                         "SELECT id FROM ask_tracked_work WHERE thread_id = @thread_id AND entity_type = @entity_type AND entity_id = @entity_id;",
@@ -109,7 +109,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             if (String.IsNullOrEmpty(work.TenantId)) throw new ArgumentException("TenantId is required.", nameof(work));
 
             work.LastUpdateUtc = DateTime.UtcNow;
-            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteGate, async (SqliteConnection conn, SqliteTransaction tx) =>
             {
                 await SqliteCommandHelper.ExecuteAsync(conn, tx,
                     "UPDATE ask_tracked_work SET title = @title, status = @status, state = @state, snapshot_hash = @snapshot_hash, last_change_utc = @last_change_utc, completed_utc = @completed_utc, last_update_utc = @last_update_utc WHERE tenant_id = @tenant_id AND id = @id;",

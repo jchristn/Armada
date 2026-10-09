@@ -25,7 +25,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             (@id, @tenant_id, @user_id, @message_id, @thread_id, @call_id, @tool_name, @arguments_text, @result_text, @ok, @elapsed_ms, @permission_denied, @created_utc, @last_update_utc);";
 
         private readonly string _ConnectionString;
-        private readonly SemaphoreSlim? _WriteLock;
+        private readonly SqliteWriteGate _WriteGate;
 
         #endregion
 
@@ -44,7 +44,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             if (settings == null) throw new ArgumentNullException(nameof(settings));
             if (logging == null) throw new ArgumentNullException(nameof(logging));
             _ConnectionString = driver.ConnectionString;
-            _WriteLock = driver.WriteLock;
+            _WriteGate = driver.WriteGate;
         }
 
         #endregion
@@ -66,7 +66,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
                 call.LastUpdateUtc = now;
             }
 
-            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqliteConnection conn, SqliteTransaction tx) =>
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteGate, async (SqliteConnection conn, SqliteTransaction tx) =>
             {
                 foreach (AskMessageToolCall call in calls)
                 {
