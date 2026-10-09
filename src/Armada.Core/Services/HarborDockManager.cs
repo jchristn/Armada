@@ -165,7 +165,7 @@ namespace Armada.Core.Services
             {
                 throw;
             }
-            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is InvalidOperationException || ex is ArgumentException)
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is InvalidOperationException || ex is ArgumentException || ex is WorkspaceConflictException)
             {
                 result.Success = false;
                 result.ErrorCode = ErrorCodeFor(ex);
