@@ -364,6 +364,57 @@ A dock that is already pinned to a Harbor never moves to another Harbor. If that
 registered, a relaunch of a dock created on the Admiral runs on the Admiral host when `requireHarborForLaunch` is off (a
 warning names the pinned Harbor) and is refused when it is on; a dock created on the Harbor waits for it.
 
+## Checkouts outside missions
+
+Missions are not the only work that needs a vessel's code. Check runs (including the ones Ask Armada starts with
+`run_check`), Workspace (browse, read, save, search, exec, changes, and diff), readiness, vessel health, the vessel's
+git status and branch, history, push, and merge views, the manual-landing check, and fleet categorization all work in
+the vessel's checkout. Armada finds it the same way for all of them:
+
+1. **The Admiral host**, when the vessel's working directory exists there (as before; also when a Harbor on the same
+   machine could serve it).
+2. Otherwise **a connected Harbor that has a checkout of the vessel**: a folder named for it in Harbor > Settings >
+   Repositories, or one discovered under a root folder by its remote URL. The Admiral asks Harbors as it does for a
+   mission dock (`Resolve`), and uses the first that reports a checkout: the Harbor that owns the vessel's most recent
+   docks, then the vessel's preferred Harbor, then the others by name. A Harbor's own bare clone does not count: it has
+   no working tree. Harbors are scoped as launch routing scopes them: the vessel's tenant or a shared Harbor, and with
+   `requireHarborForLaunch` only the requesting user's Harbors. A Harbor's answer is remembered for 30 seconds.
+
+On a Harbor, commands run there in the checkout (a check runs through `/bin/sh -lc`, so the user's login PATH applies,
+and Workspace exec through `/bin/sh -c`; `cmd.exe /c` on a Windows Harbor) and their output and exit code come back over
+the link. A check run's expected artifacts are read from the Harbor and parsed for test and coverage results as on the
+Admiral. Every file operation goes through the Harbor's file protocol, and the Harbor confines it: it accepts a root
+only when it is the checkout it maps that vessel to (or inside its docks folder), and refuses absolute paths, paths that
+leave the root, symbolic links, and `.git` (see [HARBOR_PROTOCOL.md](HARBOR_PROTOCOL.md)). Workspace exec keeps its
+tenant-administrator rule, and every command still writes an `audit.command` event, whose `host` names the Harbor.
+Readiness reports the vessel as having a checkout, names the Harbor and its path (`harborId`, `harborName`,
+`checkoutPath`, and an Info issue), and probes git state, toolchains, and command dependencies on the Harbor.
+
+When neither has a checkout, the operation fails with a reason that says what to set, for example:
+
+> No connected Harbor has a checkout of DocConverter; in Harbor > Settings > Repositories set its folder or add a root
+> folder that contains it (it has no working directory on the Admiral host; Harbor Mac (hbr_...): it has no checkout of
+> vessel DocConverter, only its own clone for mission docks).
+
+or, with no Harbor connected, "No connected Harbor has a checkout of DocConverter, and it has no working directory on
+the Admiral host; start Harbor on the machine that has the checkout and, in Harbor > Settings > Repositories, set its
+folder or add a root folder that contains it." REST returns 409 with `data.code` `VesselCheckoutUnavailable` and
+`data.reason` `NoHarborConnected` or `NoHarborCheckout`; MCP tools (and so Ask Armada) return an `Unavailable` tool error
+with `code` `VesselCheckoutUnavailable.NoHarborConnected` or `VesselCheckoutUnavailable.NoHarborCheckout` and the same
+message. Readiness reports it as the `working_directory_missing` issue with `checkoutErrorCode`; the read-only views
+(Workspace status, git status, branches, and history) return it in their `error` field.
+
+Planning sessions and Model Context builds create their docks the way missions do: on a connected Harbor that can serve
+the vessel (the captain then runs in that dock there), or on the Admiral host. With `requireHarborForLaunch` on and no
+Harbor able to serve the vessel, the session or build fails at once with the reason instead of starting without the
+code.
+
+What stays on the Admiral: the merge queue (it tests and merges in the Admiral's own clone), fleet actions (they run on
+the vessel's preferred Harbor in the working directory as configured), objective refinement sessions (they run in a
+scratch directory when the working directory is not on the captain's host), and workflow inputs (environment variables
+and files a workflow profile requires are checked on the Admiral, where secrets are resolved). A Harbor from before
+checkout operations (no `harbor-checkouts` capability) is never asked; update it.
+
 ## Harbor disconnects
 
 When a Harbor's link closes, the Admiral marks the Harbor `Disconnected`, fails any git or deferred-launch request

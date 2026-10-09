@@ -3884,6 +3884,7 @@ Start a structured check run for a vessel using the resolved workflow profile or
 
 - This uses the default MCP tenant-admin context.
 - Workflow readiness and command validation still apply, so invalid vessel/workflow/input combinations are returned as MCP tool errors.
+- The check runs in the vessel's working directory on the Admiral host, or, when that does not exist (split mode), in the checkout of a connected Harbor that can serve the vessel. When neither exists the tool returns an `Unavailable` error with `code` `VesselCheckoutUnavailable.NoHarborConnected` or `VesselCheckoutUnavailable.NoHarborCheckout` and a message that says what to set (for example "No connected Harbor has a checkout of DocConverter; in Harbor > Settings > Repositories set its folder or add a root folder that contains it ..."). See [HARBOR.md](HARBOR.md#checkouts-outside-missions).
 
 ---
 

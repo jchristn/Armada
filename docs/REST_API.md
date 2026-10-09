@@ -276,7 +276,7 @@ without a declaration requires a global admin. The complete per-route list is th
 | `/api/v1/missions` | GET, POST `.../enumerate` | Authenticated | Tenant-scoped reads. Every create, update, delete, and action route under the prefix is TenantAdmin |
 | `/api/v1/voyages` | GET, POST `.../enumerate` | Authenticated | Tenant-scoped reads. Every create, update, delete, and action route under the prefix is TenantAdmin |
 | `/api/v1/docks` | GET, POST `.../enumerate` | Authenticated | Tenant-scoped reads. Every create, update, delete, and action route under the prefix is TenantAdmin |
-| `/api/v1/workspace/vessels/{vesselId}/...` | ALL | Authenticated | Vessel-scoped workspace browsing/editing rooted at the vessel working directory |
+| `/api/v1/workspace/vessels/{vesselId}/...` | ALL | Authenticated | Vessel-scoped workspace browsing/editing rooted at the vessel's checkout (its working directory on the Admiral host, or a connected Harbor's checkout) |
 | `/api/v1/planning-sessions` | GET | Authenticated | Planning-session list in caller scope |
 | `/api/v1/planning-sessions` | POST | TenantAdmin | Create one planning session in caller scope |
 | `/api/v1/planning-sessions/{id}` | GET | Authenticated | Read one planning session in caller scope |
@@ -2050,7 +2050,7 @@ Return readiness warnings and blocking issues for a vessel, optionally scoped to
 | `environmentName` | string | Optional environment name for deploy, rollback, smoke-test, or health-check readiness |
 | `includeWorkflowRequirements` | bool | When `false`, only vessel and repository basics are evaluated (default: `true`) |
 
-**Response:** `200 OK` - `VesselReadinessResult`
+**Response:** `200 OK` - `VesselReadinessResult`. When the vessel has no working directory on the Admiral host and a connected Harbor has a checkout of it, `HasWorkingDirectory` is true, `HarborId`, `HarborName`, and `CheckoutPath` name the Harbor and its path, an Info issue `working_directory_on_harbor` says so, and git state, toolchains, and command dependencies are probed on the Harbor. When neither exists, the `working_directory_missing` issue carries the reason and what to set, and `CheckoutErrorCode` is `NoHarborConnected` or `NoHarborCheckout`.
 **Error:** `400` - Invalid `checkType`
 **Error:** `404` - Vessel not found
 
@@ -6425,7 +6425,9 @@ curl -X POST -H "X-Api-Key: your-key" \
 
 ### Workspace
 
-Workspace is a first-class REST surface for browsing and editing a vessel working tree. All paths are repository-relative, normalized to forward slashes, and constrained to the vessel `workingDirectory`. Armada blocks traversal outside that root and reserves `.git` internals.
+Workspace is a first-class REST surface for browsing and editing a vessel working tree. All paths are repository-relative, normalized to forward slashes, and constrained to the vessel's checkout. Armada blocks traversal outside that root and reserves `.git` internals.
+
+The checkout is the vessel `workingDirectory` when it exists on the Admiral host; otherwise it is the checkout of a connected Harbor that can serve the vessel (split mode), and every route below runs there with the same rules, the Harbor confining each request to that checkout (see [HARBOR.md](HARBOR.md#checkouts-outside-missions)). When neither exists, the routes return `409 Conflict` with `Data` a `VesselCheckoutErrorDetail` (`Code` `VesselCheckoutUnavailable`, `Reason` `NoHarborConnected` or `NoHarborCheckout`, `VesselId`, `VesselName`, `HarborReasons`) and a `Message` that says what to set; `GET .../status` instead returns `200` with `HasWorkingDirectory: false` and the reason in `Error`. `WorkspaceStatusResult` and `WorkspaceExecResult` carry `Host` (`Admiral` or `Harbor Name (hbr_...)`), and the status also `HarborId`.
 
 #### GET /api/v1/workspace/vessels/{vesselId}/tree
 
@@ -6486,7 +6488,8 @@ Execute a shell command in the vessel working tree (the in-browser dock terminal
 | `TimeoutSeconds` | int | no | Timeout before the command (and its process tree) is killed. Clamped to `[1, 600]` (default: `60`) |
 
 - Response: `200 OK` - `WorkspaceExecResult`
-- Errors: `403 Forbidden` when the caller is not a tenant administrator; `404 Not Found` when the vessel is not found
+- Errors: `403 Forbidden` when the caller is not a tenant administrator; `404 Not Found` when the vessel is not found; `409 Conflict` (`VesselCheckoutErrorDetail`) when the vessel has no checkout on the Admiral host or a connected Harbor
+- The `audit.command` event's `host` names the Harbor when the command ran on one.
 
 #### POST /api/v1/workspace/vessels/{vesselId}/directory
 
@@ -7063,7 +7066,8 @@ Execute one structured check run.
 ```
 
 - Response: `201 Created` - `CheckRun`
-- Errors: `400 Bad Request` when readiness, workflow resolution, or command validation fails
+- Errors: `400 Bad Request` when readiness, workflow resolution, or command validation fails; `409 Conflict` with `Data` a `VesselCheckoutErrorDetail` (`Code` `VesselCheckoutUnavailable`, `Reason` `NoHarborConnected` or `NoHarborCheckout`) when the vessel has no working directory on the Admiral host and no connected Harbor has a checkout of it; the `Message` says what to set
+- The check runs in the vessel's working directory on the Admiral host, or, when that does not exist, in the checkout of a connected Harbor that can serve the vessel (through the Harbor's login shell; `WorkingDirectory` is then the path on the Harbor, and expected artifacts are read from the Harbor). See [HARBOR.md](HARBOR.md#checkouts-outside-missions).
 
 #### POST /api/v1/check-runs/import
 
