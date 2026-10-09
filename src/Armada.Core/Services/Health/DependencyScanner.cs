@@ -114,7 +114,16 @@ namespace Armada.Core.Services.Health
                     mode == DependencyScanModeEnum.Outdated ? "--outdated" : "--vulnerable", "--format", "json"
                 };
                 DependencyToolResult result = await runner.RunAsync(_DotnetExecutable, args, root, timeout, token).ConfigureAwait(false);
-                DependencyScanResult part = DotnetListParser.Interpret(result, mode, root, timeout, ResolveCoveredProjects(inventory, root, target));
+                List<string> covered = ResolveCoveredProjects(inventory, root, target);
+                Func<string, bool>? assetsFileExists = null;
+                if (context.Host != null)
+                {
+                    // Whether restore has run is decided from the Harbor's checkout, not the Admiral's disk.
+                    HashSet<string> present = await FindAssetsFilesAsync(context.Host, root, DotnetListParser.RestoreCheckProjects(result, covered), token).ConfigureAwait(false);
+                    assetsFileExists = project => present.Contains(project);
+                }
+
+                DependencyScanResult part = DotnetListParser.Interpret(result, mode, root, timeout, covered, assetsFileExists);
                 Absorb(merged, part);
                 if (part.ErrorCode == VesselHealthDetailCodes.ToolMissing) break;
             }
@@ -221,6 +230,58 @@ namespace Armada.Core.Services.Health
         #endregion
 
         #region Private-Methods
+
+        /// <summary>
+        /// Of the given project files (absolute paths on the host), those whose <c>obj/project.assets.json</c> exists in
+        /// the host's checkout. A project outside the checkout, or one the host cannot answer for, counts as present, so an
+        /// unanswered question never reports RestoreRequired.
+        /// </summary>
+        private static async Task<HashSet<string>> FindAssetsFilesAsync(VesselHost host, string root, List<string> projects, CancellationToken token)
+        {
+            HashSet<string> present = new HashSet<string>(StringComparer.Ordinal);
+            foreach (string project in projects)
+            {
+                token.ThrowIfCancellationRequested();
+                string? directory = DotnetListParser.GetProjectDirectory(project);
+                string? relative = directory == null ? null : MakeCheckoutRelative(root, directory, host.IsWindows());
+                if (relative == null)
+                {
+                    present.Add(project);
+                    continue;
+                }
+
+                string assets = (relative.Length == 0 ? String.Empty : relative + "/") + "obj/project.assets.json";
+                try
+                {
+                    VesselCheckoutFileInfo info = await host.Files.StatAsync(assets, token).ConfigureAwait(false);
+                    if (info.Exists && !info.IsDirectory) present.Add(project);
+                }
+                catch (OperationCanceledException) when (token.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception)
+                {
+                    present.Add(project);
+                }
+            }
+
+            return present;
+        }
+
+        /// <summary>
+        /// A host path made relative to the checkout root with forward slashes ("" for the root itself), or null when it
+        /// is not inside the root. Works on the host's path form, which can differ from this machine's.
+        /// </summary>
+        private static string? MakeCheckoutRelative(string root, string path, bool ignoreCase)
+        {
+            string normalizedRoot = root.Replace('\\', '/').TrimEnd('/');
+            string normalizedPath = path.Replace('\\', '/').TrimEnd('/');
+            StringComparison comparison = ignoreCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+            if (String.Equals(normalizedRoot, normalizedPath, comparison)) return String.Empty;
+            if (!normalizedPath.StartsWith(normalizedRoot + "/", comparison)) return null;
+            return normalizedPath.Substring(normalizedRoot.Length + 1);
+        }
 
         private static void Absorb(DependencyScanResult merged, DependencyScanResult part)
         {

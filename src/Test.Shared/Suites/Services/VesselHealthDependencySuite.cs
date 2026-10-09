@@ -165,6 +165,29 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(45L, DotnetListParser.Interpret(failures[6], DependencyScanModeEnum.Outdated, "/repo", 45, unrestored).ErrorValue!.Value, "timeout value");
             }));
 
+            cases.Add(Case("restore_check_uses_supplied_host_lookup", "The restore check asks the supplied lookup (the Harbor's checkout) and never this machine's disk", TestTags.Negative, () =>
+            {
+                // Paths from a Harbor, including a Windows one, that do not exist on this machine.
+                string unixProject = "/harbor-only/checkout/src/App/App.csproj";
+                string windowsProject = "C:\\Code\\DocConverter\\App.csproj";
+                List<string> asked = new List<string>();
+                DependencyToolResult failed = Completed(1, VesselHealthJsonFixtures.DotnetRestoreFailed);
+
+                DependencyScanResult present = DotnetListParser.Interpret(failed, DependencyScanModeEnum.Outdated, "/harbor-only/checkout", 45,
+                    new List<string> { unixProject, windowsProject }, project => { asked.Add(project); return true; });
+                AssertEqual(VesselHealthDetailCodes.ToolFailed, present.ErrorCode, "restored on the Harbor although absent here");
+                AssertEqual(2, asked.Count, "both projects were asked about");
+
+                DependencyScanResult missing = DotnetListParser.Interpret(failed, DependencyScanModeEnum.Outdated, "/harbor-only/checkout", 45,
+                    new List<string> { unixProject }, project => false);
+                AssertEqual(VesselHealthDetailCodes.RestoreRequired, missing.ErrorCode);
+
+                AssertEqual(2, DotnetListParser.RestoreCheckProjects(failed, new List<string> { unixProject, windowsProject, "relative/App.csproj" }).Count, "absolute paths from any host");
+                AssertEqual(0, DotnetListParser.RestoreCheckProjects(Completed(0, VesselHealthJsonFixtures.DotnetOutdated), new List<string> { unixProject }).Count, "no check for a successful run");
+                AssertEqual("C:\\Code\\DocConverter", DotnetListParser.GetProjectDirectory(windowsProject));
+                AssertEqual("/harbor-only/checkout/src/App", DotnetListParser.GetProjectDirectory(unixProject));
+            }));
+
             cases.Add(Case("dotnet_json_extraction_is_string_aware", "dotnet list JSON after a log line containing braces is still extracted", TestTags.Positive, () =>
             {
                 string noisy = "info: building {target} for net8.0\n" + VesselHealthJsonFixtures.DotnetOutdated + "\ntrailing note }";

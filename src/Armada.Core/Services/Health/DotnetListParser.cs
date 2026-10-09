@@ -56,27 +56,35 @@ namespace Armada.Core.Services.Health
         /// <exception cref="ArgumentNullException">Thrown when result is null.</exception>
         public static DependencyScanResult Interpret(DependencyToolResult result, DependencyScanModeEnum mode, string? repositoryRoot, int timeoutSeconds, IEnumerable<string>? projectFiles)
         {
+            return Interpret(result, mode, repositoryRoot, timeoutSeconds, projectFiles, null);
+        }
+
+        /// <summary>
+        /// Interpret one dotnet list package invocation, deciding whether a project has <c>obj/project.assets.json</c>
+        /// through <paramref name="assetsFileExists"/>. A checkout on a Harbor answers that from the Harbor (see
+        /// <see cref="RestoreCheckProjects"/>); null checks this machine's disk.
+        /// </summary>
+        /// <param name="result">Tool result.</param>
+        /// <param name="mode">Outdated or vulnerable.</param>
+        /// <param name="repositoryRoot">Repository root used to make project paths relative, or null.</param>
+        /// <param name="timeoutSeconds">Configured timeout, reported with a Timeout error.</param>
+        /// <param name="projectFiles">Absolute paths of the project files the invocation covers, or null.</param>
+        /// <param name="assetsFileExists">Given a project file's absolute path, whether its <c>obj/project.assets.json</c>
+        /// exists; null checks this machine's disk.</param>
+        /// <returns>The scan result.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when result is null.</exception>
+        public static DependencyScanResult Interpret(DependencyToolResult result, DependencyScanModeEnum mode, string? repositoryRoot, int timeoutSeconds, IEnumerable<string>? projectFiles, Func<string, bool>? assetsFileExists)
+        {
             if (result == null) throw new ArgumentNullException(nameof(result));
             if (result.Outcome == DependencyToolOutcomeEnum.ToolMissing) return DependencyScanResult.Failed(VesselHealthDetailCodes.ToolMissing);
             if (result.Outcome == DependencyToolOutcomeEnum.TimedOut) return DependencyScanResult.Failed(VesselHealthDetailCodes.Timeout, timeoutSeconds);
 
-            string? json = DependencyJson.ExtractObject(result.StandardOutput);
-            DotnetListReport? report = null;
-            if (json != null)
-            {
-                try
-                {
-                    report = JsonSerializer.Deserialize<DotnetListReport>(json, DependencyJson.Options);
-                }
-                catch (JsonException)
-                {
-                    report = null;
-                }
-            }
+            Func<string, bool> exists = assetsFileExists ?? LocalAssetsFileExists;
+            DotnetListReport? report = ReadReport(result);
 
             if (report == null)
             {
-                if (result.ExitCode != 0 && AnyAssetsFileMissing(projectFiles, null)) return DependencyScanResult.Failed(VesselHealthDetailCodes.RestoreRequired);
+                if (result.ExitCode != 0 && AnyAssetsFileMissing(projectFiles, null, exists)) return DependencyScanResult.Failed(VesselHealthDetailCodes.RestoreRequired);
                 if (result.ExitCode != 0) return DependencyScanResult.Failed(VesselHealthDetailCodes.ToolFailed, result.ExitCode);
                 return DependencyScanResult.Failed(VesselHealthDetailCodes.ParseError);
             }
@@ -88,7 +96,7 @@ namespace Armada.Core.Services.Health
                 .Where(p => p != null && String.Equals(p.Level, "error", StringComparison.OrdinalIgnoreCase))
                 .ToList();
             bool failed = errors.Count > 0 || result.ExitCode != 0;
-            if (failed && AnyAssetsFileMissing(projectFiles, report.Projects))
+            if (failed && AnyAssetsFileMissing(projectFiles, report.Projects, exists))
                 scan.AddFailure(VesselHealthDetailCodes.RestoreRequired, null);
             else if (errors.Count > 0)
                 scan.AddFailure(VesselHealthDetailCodes.ToolFailed, result.ExitCode != 0 ? result.ExitCode : 1);
@@ -116,6 +124,42 @@ namespace Armada.Core.Services.Health
             }
 
             return scan;
+        }
+
+        /// <summary>
+        /// The project files whose <c>obj/project.assets.json</c> decides whether a failed run is RestoreRequired: the
+        /// covered projects and the projects named in the report, with absolute paths. Empty when the run did not fail
+        /// (no restore check is needed), so a caller that checks another host's disk asks only when it matters.
+        /// </summary>
+        /// <param name="result">Tool result.</param>
+        /// <param name="projectFiles">Absolute paths of the project files the invocation covers, or null.</param>
+        /// <returns>Distinct absolute project file paths.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when result is null.</exception>
+        public static List<string> RestoreCheckProjects(DependencyToolResult result, IEnumerable<string>? projectFiles)
+        {
+            if (result == null) throw new ArgumentNullException(nameof(result));
+            if (result.Outcome == DependencyToolOutcomeEnum.ToolMissing || result.Outcome == DependencyToolOutcomeEnum.TimedOut) return new List<string>();
+
+            DotnetListReport? report = ReadReport(result);
+            if (report == null)
+                return result.ExitCode != 0 ? CollectProjects(projectFiles, null) : new List<string>();
+
+            bool anyError = (report.Problems ?? new List<DotnetListProblem>())
+                .Any(p => p != null && String.Equals(p.Level, "error", StringComparison.OrdinalIgnoreCase));
+            return anyError || result.ExitCode != 0 ? CollectProjects(projectFiles, report.Projects) : new List<string>();
+        }
+
+        /// <summary>
+        /// The directory of a project file path from any host: the part before the last slash or backslash, or null.
+        /// </summary>
+        /// <param name="projectFile">Absolute project file path.</param>
+        /// <returns>The directory, or null when the path has none.</returns>
+        public static string? GetProjectDirectory(string? projectFile)
+        {
+            if (String.IsNullOrWhiteSpace(projectFile)) return null;
+            int index = Math.Max(projectFile.LastIndexOf('/'), projectFile.LastIndexOf('\\'));
+            if (index <= 0) return null;
+            return projectFile.Substring(0, index);
         }
 
         /// <summary>
@@ -197,7 +241,17 @@ namespace Armada.Core.Services.Health
         /// Whether any covered project lacks <c>obj/project.assets.json</c>. Projects come from the caller and from the
         /// report; relative or empty paths are skipped. False when no project is known (the cause cannot be decided).
         /// </summary>
-        private static bool AnyAssetsFileMissing(IEnumerable<string>? projectFiles, List<DotnetListProject>? reportProjects)
+        private static bool AnyAssetsFileMissing(IEnumerable<string>? projectFiles, List<DotnetListProject>? reportProjects, Func<string, bool> assetsFileExists)
+        {
+            foreach (string path in CollectProjects(projectFiles, reportProjects))
+            {
+                if (!assetsFileExists(path)) return true;
+            }
+
+            return false;
+        }
+
+        private static List<string> CollectProjects(IEnumerable<string>? projectFiles, List<DotnetListProject>? reportProjects)
         {
             List<string> paths = new List<string>();
             if (projectFiles != null) paths.AddRange(projectFiles);
@@ -209,15 +263,44 @@ namespace Armada.Core.Services.Health
                 }
             }
 
+            List<string> projects = new List<string>();
             foreach (string path in paths)
             {
-                if (String.IsNullOrWhiteSpace(path) || !Path.IsPathRooted(path)) continue;
-                string? directory = Path.GetDirectoryName(path);
-                if (String.IsNullOrEmpty(directory)) continue;
-                if (!File.Exists(Path.Combine(directory, "obj", "project.assets.json"))) return true;
+                if (String.IsNullOrWhiteSpace(path) || !IsAbsolute(path)) continue;
+                if (GetProjectDirectory(path) == null) continue;
+                if (!projects.Contains(path, StringComparer.Ordinal)) projects.Add(path);
             }
 
-            return false;
+            return projects;
+        }
+
+        private static bool IsAbsolute(string path)
+        {
+            // A path from a Harbor can come from another operating system than this one.
+            if (Path.IsPathRooted(path)) return true;
+            if (path.StartsWith("/", StringComparison.Ordinal) || path.StartsWith("\\", StringComparison.Ordinal)) return true;
+            return path.Length >= 3 && Char.IsLetter(path[0]) && path[1] == ':' && (path[2] == '\\' || path[2] == '/');
+        }
+
+        private static bool LocalAssetsFileExists(string projectFile)
+        {
+            string? directory = Path.GetDirectoryName(projectFile);
+            if (String.IsNullOrEmpty(directory)) return true;
+            return File.Exists(Path.Combine(directory, "obj", "project.assets.json"));
+        }
+
+        private static DotnetListReport? ReadReport(DependencyToolResult result)
+        {
+            string? json = DependencyJson.ExtractObject(result.StandardOutput);
+            if (json == null) return null;
+            try
+            {
+                return JsonSerializer.Deserialize<DotnetListReport>(json, DependencyJson.Options);
+            }
+            catch (JsonException)
+            {
+                return null;
+            }
         }
 
         private static string? MakeRelative(string? path, string? root)
