@@ -138,6 +138,55 @@ namespace Test.Shared.Suites.E2E
                 }
             }));
 
+            cases.Add(CaseAsync("thread_prompt_card_failure_denies_at_once", "When the Ask card of a thread captain's prompt cannot be posted, the MCP call returns deny with the reason at once instead of waiting for the timeout, and nothing is left pending", async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this).ConfigureAwait(false);
+                E2ETenantUser admin = await E2ETenantUser.CreateAsync(fx.AuthClient, "cpf-admin", true).ConfigureAwait(false);
+                E2ETenantUser owner = await E2ETenantUser.CreateAsync(fx.AuthClient, "cpf-owner", false, admin.TenantId).ConfigureAwait(false);
+                using HttpClient a = admin.CreateClient(fx.BaseUrl);
+                using HttpClient o = owner.CreateClient(fx.BaseUrl);
+                AskThread thread = await JsonHelper.DeserializeAsync<AskThread>(await o.PostAsync("/api/v1/ask/threads", JsonHelper.ToJsonContent(new { })).ConfigureAwait(false)).ConfigureAwait(false);
+
+                // Fail the card post for this thread only (the server is shared with the other cases), with an error
+                // that is not transient, so there is no retry backoff either.
+                CliPermissionService svc = fx.Server.CliPermissions!;
+                Func<AskThread, AskMessage, CliPermissionRequest, CancellationToken, Task<AskMessage>>? previous = svc.CardPoster;
+                Armada.Core.Services.Ask.AskThreadService threads = svc.AskThreads!;
+                svc.CardPoster = (AskThread t, AskMessage card, CliPermissionRequest request, CancellationToken token) =>
+                {
+                    if (t.Id == thread.Id) throw new InvalidOperationException("card store unavailable");
+                    return previous != null ? previous(t, card, request, token) : threads.AppendCliPermissionCardAsync(t, card, request, token);
+                };
+                try
+                {
+                    using (McpToolClient mcp = new McpToolClient("http://127.0.0.1:" + fx.McpPort + "/mcp", ThreadToken(fx, owner, thread.Id)))
+                    {
+                        await mcp.InitializeAsync().ConfigureAwait(false);
+                        System.Diagnostics.Stopwatch elapsed = System.Diagnostics.Stopwatch.StartNew();
+                        McpToolCallResult result = await mcp.CallToolResultAsync("cli_permission_prompt", "{\"tool_name\":\"Bash\",\"input\":{\"command\":\"git push origin main\"}}").ConfigureAwait(false);
+                        elapsed.Stop();
+                        AssertFalse(result.IsError, result.Text);
+                        PromptAnswer answer = JsonHelper.Deserialize<PromptAnswer>(result.Text);
+                        AssertEqual("deny", answer.Behavior, result.Text);
+                        AssertEqual("Armada could not show this permission request in the conversation (card store unavailable); denied.", answer.Message);
+                        AssertTrue(elapsed.Elapsed < TimeSpan.FromSeconds(30), "answered at once, not after the prompt timeout (" + (int)elapsed.Elapsed.TotalMilliseconds + " ms)");
+                    }
+                }
+                finally
+                {
+                    svc.CardPoster = previous;
+                }
+
+                List<CliPermissionRequest> recorded = await JsonHelper.DeserializeAsync<List<CliPermissionRequest>>(await a.GetAsync("/api/v1/cli-permissions/requests?threadId=" + thread.Id).ConfigureAwait(false)).ConfigureAwait(false);
+                CliPermissionRequest denied = recorded.Single();
+                AssertEqual(CliPermissionRequestStatusEnum.Denied, denied.Status);
+                AssertEqual((CliPermissionDecisionSourceEnum?)CliPermissionDecisionSourceEnum.DeliveryFailed, denied.DecisionSource);
+                AssertFalse(denied.CanDecide, "not decidable");
+                AssertTrue(denied.DecidedUtc.HasValue && denied.DecidedUtc.Value - denied.CreatedUtc < TimeSpan.FromSeconds(30), "decided right after it was stored, long before it would expire");
+                List<InboxItem> inbox = await JsonHelper.DeserializeAsync<List<InboxItem>>(await a.GetAsync("/api/v1/inbox").ConfigureAwait(false)).ConfigureAwait(false);
+                AssertFalse(inbox.Any(i => i.Kind == InboxItemKinds.CliPermission && i.EntityId == denied.Id), "no phantom inbox item");
+            }));
+
             cases.Add(CaseAsync("mission_prompt_and_rules", "A mission captain's prompt is decided by rules (allow and deny) without waiting and records the mission and vessel", async () =>
             {
                 E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this).ConfigureAwait(false);

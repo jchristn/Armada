@@ -3351,7 +3351,7 @@ export type CliPermissionFallbackReason = 'RuntimeUnsupported' | 'NoSessionToken
 /** Wire values of CliPermissionRequestStatusEnum. */
 export type CliPermissionRequestStatus = 'Pending' | 'Allowed' | 'Denied' | 'Expired' | 'Cancelled';
 /** Wire values of CliPermissionDecisionSourceEnum. */
-export type CliPermissionDecisionSource = 'Approver' | 'AllowRule' | 'DenyRule' | 'Timeout' | 'Cancelled';
+export type CliPermissionDecisionSource = 'Approver' | 'AllowRule' | 'DenyRule' | 'Timeout' | 'Cancelled' | 'DeliveryFailed';
 /** Wire values of CliPermissionDecisionEnum. */
 export type CliPermissionDecision = 'AllowOnce' | 'AllowAndRemember' | 'Deny';
 /** Wire values of CliPermissionRuleScopeEnum. */

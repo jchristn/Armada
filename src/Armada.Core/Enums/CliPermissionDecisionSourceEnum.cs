@@ -37,6 +37,14 @@ namespace Armada.Core.Enums
         /// The session ended before a decision.
         /// </summary>
         [EnumMember(Value = "Cancelled")]
-        Cancelled
+        Cancelled,
+
+        /// <summary>
+        /// Armada could not show the request to anyone who could decide it (storing the request or posting its Ask card
+        /// failed, after one retry of a transient failure), so it was denied at once instead of waiting unseen until the
+        /// timeout. The decision message names the reason.
+        /// </summary>
+        [EnumMember(Value = "DeliveryFailed")]
+        DeliveryFailed
     }
 }
