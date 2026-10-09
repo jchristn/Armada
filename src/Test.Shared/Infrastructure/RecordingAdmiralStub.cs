@@ -79,9 +79,10 @@ namespace Test.Shared.Infrastructure
         public void Dispose()
         {
             _Cancellation.Cancel();
-            try { _Listener.Stop(); } catch { }
-            try { _Loop.Wait(TimeSpan.FromSeconds(5)); } catch { }
+            // Close alone (not Stop then Close): on the managed HttpListener, Close after Stop looks the endpoint up again and
+            // re-binds the port, so it throws "Address already in use" if another socket took the port in between.
             _Listener.Close();
+            try { _Loop.Wait(TimeSpan.FromSeconds(5)); } catch { }
             _Cancellation.Dispose();
         }
 

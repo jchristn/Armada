@@ -444,13 +444,10 @@ namespace Test.Shared.Suites.Services
             {
                 _Cancellation.Cancel();
 
-                try
-                {
-                    _Listener.Stop();
-                }
-                catch
-                {
-                }
+                // Close alone (not Stop then Close): on the managed HttpListener, Close after Stop looks the endpoint up again and
+                // re-binds the port, so it throws "Address already in use" if another socket took the port in between.
+                // Closing also ends the accept loop's pending GetContextAsync.
+                _Listener.Close();
 
                 try
                 {
@@ -460,7 +457,6 @@ namespace Test.Shared.Suites.Services
                 {
                 }
 
-                _Listener.Close();
                 _Cancellation.Dispose();
             }
 

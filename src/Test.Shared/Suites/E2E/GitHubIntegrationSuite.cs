@@ -463,14 +463,8 @@ namespace Test.Shared.Suites.E2E
             public void Dispose()
             {
                 _TokenSource.Cancel();
-                try
-                {
-                    _Listener.Stop();
-                }
-                catch
-                {
-                }
-
+                // Close alone (not Stop then Close): on the managed HttpListener, Close after Stop looks the endpoint up again and
+                // re-binds the port, so it throws "Address already in use" if another socket took the port in between.
                 try
                 {
                     _Listener.Close();
