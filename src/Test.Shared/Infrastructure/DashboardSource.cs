@@ -166,6 +166,11 @@ namespace Test.Shared.Infrastructure
                 foreach (Match f in Regex.Matches(retention.Groups[1].Value, "'([a-zA-Z]+)'")) fields.Add("settings.retention." + f.Groups[1].Value);
             }
 
+            // ASK_FIELDS (the edited Ask Armada settings) lives in lib/settingsRanges.ts too; mirrors dashboard_surfaces.py.
+            Match ask = Regex.Match(ranges, "const ASK_FIELDS: AskSettingsField\\[\\] = \\[([^\\]]*)\\]");
+            if (!ask.Success) throw new InvalidOperationException("ASK_FIELDS not found in the dashboard source; update SettingsFields().");
+            foreach (Match f in Regex.Matches(ask.Groups[1].Value, "'([a-zA-Z]+)'")) fields.Add("settings.ask." + f.Groups[1].Value);
+
             return fields.OrderBy(s => s, StringComparer.Ordinal).ToList();
         }
     }
