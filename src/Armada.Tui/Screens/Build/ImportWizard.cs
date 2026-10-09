@@ -193,6 +193,12 @@ namespace Armada.Tui.Screens.Build
         /// </summary>
         public bool Polling { get; private set; } = false;
 
+        /// <summary>
+        /// Batch poll responses received so far, including stale ones that were discarded because a newer poll had
+        /// already been applied or polling was stopped.
+        /// </summary>
+        public int PollResponses { get; private set; } = 0;
+
         /// <inheritdoc />
         public override bool CanFocus { get; set; } = true;
 
@@ -246,6 +252,8 @@ namespace Armada.Tui.Screens.Build
         private string? _PollingBatchId = null;
         private string _RecommendationKey = "";
         private int _PollMilliseconds = 2000;
+        private long _PollIssued = 0;
+        private long _PollApplied = 0;
 
         #endregion
 
@@ -617,8 +625,13 @@ namespace Armada.Tui.Screens.Build
         /// <param name="batchId">Batch id.</param>
         public void Poll(string batchId)
         {
+            // Polls can overlap (a manual refresh during a timer poll) and their responses can arrive in any order.
+            // Only a response newer than the last one applied counts, so a stale "Importing" can never overwrite a
+            // "Completed" that already stopped polling.
+            long sequence = ++_PollIssued;
             Call((c, t) => c.GetVesselImportBatchAsync(batchId, t), detail =>
             {
+                if (!AcceptPollResponse(sequence)) return;
                 if (detail?.Batch == null) return;
                 string? previous = _LastStatus;
                 _LastStatus = detail.Batch.Status.ToString();
@@ -648,7 +661,11 @@ namespace Armada.Tui.Screens.Build
                 ApplyBatchDetail(detail);
                 if (previous == "Importing" && detail.Batch.Status != VesselImportBatchStatusEnum.Importing) ToastImportFinished(detail.Batch);
                 if (!ImportText.IsBusy(detail.Batch)) StopPolling();
-            }, null, ex => _PollError = String.IsNullOrEmpty(ex.Message) ? Tr("Failed to refresh import progress.") : ex.Message);
+            }, null, ex =>
+            {
+                if (!AcceptPollResponse(sequence)) return;
+                _PollError = String.IsNullOrEmpty(ex.Message) ? Tr("Failed to refresh import progress.") : ex.Message;
+            });
         }
 
         /// <inheritdoc />
@@ -1222,6 +1239,8 @@ namespace Armada.Tui.Screens.Build
             _PollTimer = new Timer(_ => Context.Dispatcher.Post(() =>
             {
                 if (!IsLive || _PollingBatchId != batchId) return;
+                // One poll at a time: a tick while the previous poll is still out waits for the next tick.
+                if (_PollIssued > _PollApplied) return;
                 Poll(batchId);
             }), null, PollMilliseconds, PollMilliseconds);
         }
@@ -1232,6 +1251,16 @@ namespace Armada.Tui.Screens.Build
             _PollTimer = null;
             _PollingBatchId = null;
             Polling = false;
+            // Responses to polls still out belong to the polling that just ended.
+            _PollApplied = _PollIssued;
+        }
+
+        private bool AcceptPollResponse(long sequence)
+        {
+            PollResponses++;
+            if (sequence <= _PollApplied) return false;
+            _PollApplied = sequence;
+            return true;
         }
 
         private async Task<GridPage<VesselImportBatch>> LoadHistoryAsync(GridQuery query, CancellationToken token)
@@ -1383,9 +1412,8 @@ namespace Armada.Tui.Screens.Build
         {
             if (Batch == null) return;
             string id = Batch.Id;
-            _LastStatus = Batch.Status.ToString();
-            Poll(id);
             StartPolling(id, Batch.Status.ToString());
+            Poll(id);
         }
 
         private void RenderSource(ISurface surface, Rect rect)
