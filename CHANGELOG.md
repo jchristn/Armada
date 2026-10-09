@@ -104,6 +104,7 @@ All notable changes to Armada are documented in this file.
 
 ### Fixes
 - A CLI permission prompt whose request cannot be shown to anyone who could decide it is now denied at once instead of blocking the captain until the prompt timeout (about 600 s). Before, when posting the Ask card failed (the thread was missing, or SQLite reported "database is locked" after its busy timeout), the error was swallowed and the request stayed Pending with no card. Now a transient database failure is retried once after a short backoff, and then the captain gets "Armada could not show this permission request in the conversation (reason); denied." (mission prompts whose request cannot be stored get the same answer, naming the approvers). The request is recorded as `Denied` with the new decision source `DeliveryFailed` and the reason, a warning is logged, and `cli_permission.resolved` is sent so the inbox and Approvals centers show nothing pending.
+- Captains no longer stop to ask about low-stakes choices with a sensible default (for example which framework to run a multi-targeted .NET project with). The built-in `ask.system` prompt gains a "Making decisions" section and `mission.rules` says a mission cannot wait on answers: choose the default, say what was chosen, and ask only when a choice is risky, hard to undo, changes shared state, or the request is genuinely ambiguous. Untouched built-in templates are upgraded on startup; edited templates are left as they are (Prompt Templates > Reset to default picks up the new text).
 
 ---
 

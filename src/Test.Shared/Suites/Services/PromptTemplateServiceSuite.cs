@@ -258,6 +258,46 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("decision_guidance_and_upgrade", "ask.system and mission.rules tell captains to choose sensible defaults instead of asking; untouched earlier built-ins are upgraded and operator edits kept", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    LoggingModule logging = new LoggingModule();
+                    PromptTemplateService templates = new PromptTemplateService(testDb.Driver, logging);
+                    await templates.SeedDefaultsAsync().ConfigureAwait(false);
+
+                    PromptTemplate? ask = await testDb.Driver.PromptTemplates.ReadByNameAsync("ask.system").ConfigureAwait(false);
+                    PromptTemplate? rules = await testDb.Driver.PromptTemplates.ReadByNameAsync("mission.rules").ConfigureAwait(false);
+                    AssertContains("## Making decisions", ask!.Content, "new installs: Ask decides low-stakes choices");
+                    AssertContains("dotnet --list-sdks", ask.Content, "the multi-target example");
+                    AssertContains("You cannot ask the operator questions during a mission", rules!.Content, "new installs: missions decide");
+
+                    System.Reflection.BindingFlags privateStatic = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static;
+                    string askScope = (string)typeof(PromptTemplateService).GetField("_AskSystemScopeDefault", privateStatic)!.GetValue(null)!;
+                    string rulesLegacy = (string)typeof(PromptTemplateService).GetField("_MissionRulesLegacyDefault", privateStatic)!.GetValue(null)!;
+                    AssertFalse(askScope.Contains("## Making decisions"), "the earlier Ask default lacks the guidance");
+                    AssertFalse(rulesLegacy.Contains("You cannot ask the operator"), "the earlier rules lack the guidance");
+
+                    ask.Content = askScope;
+                    rules.Content = rulesLegacy;
+                    await testDb.Driver.PromptTemplates.UpdateAsync(ask).ConfigureAwait(false);
+                    await testDb.Driver.PromptTemplates.UpdateAsync(rules).ConfigureAwait(false);
+                    await templates.SeedDefaultsAsync().ConfigureAwait(false);
+                    ask = await testDb.Driver.PromptTemplates.ReadByNameAsync("ask.system").ConfigureAwait(false);
+                    rules = await testDb.Driver.PromptTemplates.ReadByNameAsync("mission.rules").ConfigureAwait(false);
+                    AssertContains("## Making decisions", ask!.Content, "untouched earlier Ask built-in upgraded");
+                    AssertEqual(PromptTemplateService.MissionRulesDefault, rules!.Content, "untouched earlier rules built-in upgraded");
+
+                    rules.Content = rulesLegacy + "- Always ask before choosing a framework\n";
+                    await testDb.Driver.PromptTemplates.UpdateAsync(rules).ConfigureAwait(false);
+                    await templates.SeedDefaultsAsync().ConfigureAwait(false);
+                    rules = await testDb.Driver.PromptTemplates.ReadByNameAsync("mission.rules").ConfigureAwait(false);
+                    AssertEqual(rulesLegacy + "- Always ask before choosing a framework\n", rules!.Content, "operator edit kept");
+                    PromptTemplate? resolved = await templates.ResolveAsync("mission.rules").ConfigureAwait(false);
+                    AssertEqual(rules.Content, resolved!.Content, "the stored template is what prompts use");
+                }
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
                 displayName: "Prompt Template Service",
