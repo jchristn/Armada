@@ -383,7 +383,8 @@ namespace Armada.Tui.Ask
             if (detail?.Thread != null)
             {
                 Thread = detail.Thread;
-                string? activeTurn = String.IsNullOrEmpty(detail.Thread.ActiveTurnId) ? null : detail.Thread.ActiveTurnId;
+                // A snapshot taken before the socket reported the turn finished must not revive it.
+                string? activeTurn = String.IsNullOrEmpty(detail.Thread.ActiveTurnId) || _ClosedTurns.Contains(detail.Thread.ActiveTurnId!) ? null : detail.Thread.ActiveTurnId;
                 AskStreamingTurn? streaming = Streaming != null && !Streaming.Finished ? Streaming : null;
                 TurnActive = activeTurn != null;
                 Streaming = activeTurn != null ? (streaming != null && streaming.TurnId == activeTurn ? streaming : new AskStreamingTurn(activeTurn, nowUtc)) : null;
@@ -493,6 +494,14 @@ namespace Armada.Tui.Ask
             }
 
             Messages = MergeMessages(new List<AskMessage>(), Messages);
+
+            // The socket already reported this turn finished (a reply faster than the send's round trip): keep it ended.
+            if (!String.IsNullOrEmpty(turnId) && _ClosedTurns.Contains(turnId!))
+            {
+                Changed();
+                return;
+            }
+
             if (!String.IsNullOrEmpty(turnId) && (Streaming == null || Streaming.TurnId != turnId))
             {
                 if (Streaming != null && !Streaming.Finished && Streaming.TextLength == 0 && Streaming.Tools.Count == 0)

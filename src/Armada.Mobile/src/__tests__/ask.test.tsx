@@ -307,6 +307,35 @@ describe('Ask Armada', () => {
     expect(screen.getByTestId('ask-send')).toBeTruthy();
   });
 
+  it('a reply that finishes before the send returns ends the turn: no Stop, no waiting line, the reply shown', async () => {
+    api.getAskThread.mockResolvedValue({ thread: thread(), trackedWork: [] });
+    let resolveSend: (value: { messageId: string; turnId: string }) => void = () => undefined;
+    api.sendAskMessage.mockReturnValue(new Promise((resolve) => { resolveSend = resolve; }));
+    await renderAsk('/ask/thr_1');
+    await waitFor(() => expect(api.enumerateAskMessages).toHaveBeenCalled());
+
+    await fireEvent.changeText(screen.getByTestId('ask-input'), 'ping');
+    await act(async () => { await fireEvent.press(screen.getByTestId('ask-send')); });
+    expect(screen.getByTestId('ask-stop')).toBeTruthy();
+
+    // The whole turn arrives on the socket while the send's HTTP response is still in flight.
+    const persisted = [
+      message({ id: 'msg_20', sequence: 1, contentText: 'ping' }),
+      message({ id: 'msg_21', sequence: 2, role: 'Assistant', contentText: 'pong', captainId: 'cpt_1' }),
+    ];
+    api.enumerateAskMessages.mockResolvedValue({ messages: persisted, hasMore: false });
+    await emit('ask.turn', { threadId: 'thr_1', turnId: 'turn_fast', state: 'started' });
+    await emit('ask.message', { threadId: 'thr_1', message: persisted[0] });
+    await emit('ask.message', { threadId: 'thr_1', message: persisted[1] });
+    await emit('ask.turn', { threadId: 'thr_1', turnId: 'turn_fast', state: 'completed', messageId: 'msg_21' });
+
+    await act(async () => { resolveSend({ messageId: 'msg_20', turnId: 'turn_fast' }); });
+    await waitFor(() => expect(screen.getByText('pong')).toBeTruthy());
+    expect(screen.queryByTestId('ask-stop')).toBeNull();
+    expect(screen.queryByTestId('ask-waiting')).toBeNull();
+    expect(screen.getByTestId('ask-send')).toBeTruthy();
+  });
+
   it('a captain reply shows its turn duration and, behind an (i), its turn statistics with tool calls and tool time', async () => {
     api.enumerateAskMessages.mockResolvedValue({
       messages: [
