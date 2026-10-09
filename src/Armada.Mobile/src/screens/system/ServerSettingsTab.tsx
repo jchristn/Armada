@@ -13,7 +13,7 @@ import { useSocket } from '../../socket/SocketContext';
 import { resourceStyles } from '../../components/resource/styles';
 import { AgentSettingsSection, PlanningSessionSection, RebuildSettingsSection, ServerConfigSection } from './ServerConfigSections';
 import { BackupSection, McpSection, PathsSection, ServerActionsSection, ServerStatusSection } from './ServerOperationsSections';
-import { CliPermissionSettingsSection, FleetActionSettingsSection, ImportSettingsSection, RepositoryHealthSettingsSection, RetentionSettingsSection } from './ServerPolicySections';
+import { AskSettingsSection, CliPermissionSettingsSection, FleetActionSettingsSection, ImportSettingsSection, RepositoryHealthSettingsSection, RetentionSettingsSection } from './ServerPolicySections';
 import { PushSettingsSection, RemoteControlSection } from './ServerSecretSections';
 import type { MobileServerSettings } from './settingsModel';
 
@@ -35,9 +35,9 @@ async function setupIncomplete(): Promise<boolean> {
 /**
  * Settings > Server (the dashboard's Server page): health and ports, server configuration, rebuild settings, agent
  * settings with the Default Landing Mode, planning sessions, repository health, vessel import, fleet actions, CLI
- * tool permissions (admins), retention, remote control, push notifications, MCP snippets, system paths, backup and
- * restore, and server actions (admins). Each section saves on its own. Through Armada.Proxy the local settings and
- * actions are locked, as on the dashboard.
+ * tool permissions (admins), retention, Ask Armada, remote control, push notifications, MCP snippets, system paths,
+ * backup and restore, and server actions (admins). Each section saves on its own. Through Armada.Proxy the local
+ * settings and actions are locked, as on the dashboard.
  */
 export function ServerSettingsTab() {
   const { t } = useLocale();
@@ -95,6 +95,7 @@ export function ServerSettingsTab() {
           <FleetActionSettingsSection {...section} />
           {isAdmin ? <CliPermissionSettingsSection {...section} /> : null}
           <RetentionSettingsSection {...section} />
+          <AskSettingsSection {...section} />
           <RemoteControlSection {...section} health={health} onHealthRefresh={() => { void getHealth().then((h) => onHealth(h as unknown as HealthInfo)).catch(() => undefined); }} />
           <PushSettingsSection {...section} />
           <McpSection health={health} settings={settings!} proxyMode={proxyMode} />

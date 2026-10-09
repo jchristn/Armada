@@ -1,4 +1,5 @@
 import type {
+  AskSettingsData,
   CliPermissionSettingsData,
   FleetActionSettingsData,
   RepositoryHealthSettings,
@@ -10,8 +11,8 @@ import { PROMPT_TIMEOUT_RANGE } from './cliPermissions';
 import { msg } from './health/healthText';
 
 /**
- * Defaults, ranges, and validation of the Server settings sections (Vessel Import, Fleet Actions, Retention, CLI tool
- * permissions, Repository Health), shared by the dashboard sections and the mobile app. Ranges mirror the backend
+ * Defaults, ranges, and validation of the Server settings sections (Vessel Import, Fleet Actions, Retention, Ask Armada,
+ * CLI tool permissions, Repository Health), shared by the dashboard sections and the mobile app. Ranges mirror the backend
  * clamps.
  */
 
@@ -75,6 +76,87 @@ export function validateRetentionDraft(draft: RetentionDraft): Partial<Record<Re
     if (error) errors[field] = error;
   }
   return errors;
+}
+
+/** Server defaults of the Ask group (AskSettings.cs). */
+export const ASK_DEFAULTS: AskSettingsData = {
+  historyTurns: 20,
+  proposalExpiryMinutes: 60,
+  trackerIntervalSeconds: 5,
+  narrateMilestones: true,
+  reportResultsOnCompletion: true,
+  captainAutoApprove: false,
+  narrationTimeoutSeconds: 60,
+  turnTimeoutMinutes: 15,
+};
+
+export type AskNumberField = 'historyTurns' | 'proposalExpiryMinutes' | 'trackerIntervalSeconds' | 'narrationTimeoutSeconds' | 'turnTimeoutMinutes';
+export type AskToggleField = 'reportResultsOnCompletion' | 'narrateMilestones';
+/** The Ask fields the settings sections edit; captainAutoApprove is preserved but never edited. */
+export type AskSettingsField = AskToggleField | AskNumberField;
+
+/** Ranges mirror the clamps in AskSettings.cs. */
+export const ASK_RANGES: Record<AskNumberField, NumberField> = {
+  historyTurns: { key: 'historyTurns', min: 2, max: 200 },
+  proposalExpiryMinutes: { key: 'proposalExpiryMinutes', min: 1, max: 1440 },
+  trackerIntervalSeconds: { key: 'trackerIntervalSeconds', min: 2, max: 300 },
+  narrationTimeoutSeconds: { key: 'narrationTimeoutSeconds', min: 10, max: 600 },
+  turnTimeoutMinutes: { key: 'turnTimeoutMinutes', min: 1, max: 120 },
+};
+
+/** The edited Ask fields in display order (toggles first). */
+export const ASK_FIELDS: AskSettingsField[] = ['reportResultsOnCompletion', 'narrateMilestones', 'historyTurns', 'proposalExpiryMinutes', 'trackerIntervalSeconds', 'narrationTimeoutSeconds', 'turnTimeoutMinutes'];
+
+export const ASK_NUMBER_FIELDS: AskNumberField[] = ['historyTurns', 'proposalExpiryMinutes', 'trackerIntervalSeconds', 'narrationTimeoutSeconds', 'turnTimeoutMinutes'];
+
+/** Edit state of the Ask section: toggles as booleans, numbers as the typed text. */
+export type AskDraft = Record<AskToggleField, boolean> & Record<AskNumberField, string>;
+
+/** The Ask group from the server merged over the defaults (older servers send none). */
+export function mergeAskSettings(source: Partial<AskSettingsData> | null | undefined): AskSettingsData {
+  return { ...ASK_DEFAULTS, ...(source ?? {}) };
+}
+
+/** The draft of an Ask group (or of the defaults when the server sent none). */
+export function askDraftFrom(source: Partial<AskSettingsData> | null | undefined): AskDraft {
+  const v = mergeAskSettings(source);
+  return {
+    reportResultsOnCompletion: !!v.reportResultsOnCompletion,
+    narrateMilestones: !!v.narrateMilestones,
+    historyTurns: String(v.historyTurns),
+    proposalExpiryMinutes: String(v.proposalExpiryMinutes),
+    trackerIntervalSeconds: String(v.trackerIntervalSeconds),
+    narrationTimeoutSeconds: String(v.narrationTimeoutSeconds),
+    turnTimeoutMinutes: String(v.turnTimeoutMinutes),
+  };
+}
+
+/** Field errors for an Ask draft: 'range' for a value that is not a whole number within the field's range. */
+export function validateAskDraft(draft: AskDraft): Partial<Record<AskNumberField, string>> {
+  const errors: Partial<Record<AskNumberField, string>> = {};
+  for (const field of ASK_NUMBER_FIELDS) {
+    const error = rangeError(draft[field], ASK_RANGES[field]);
+    if (error) errors[field] = error;
+  }
+  return errors;
+}
+
+/**
+ * The full Ask group to PUT: the server replaces the whole group, so every field is sent, and captainAutoApprove is
+ * carried over unchanged from what the server returned (false when it sent none).
+ */
+export function askSettingsPayload(draft: AskDraft, source: Partial<AskSettingsData> | null | undefined): AskSettingsData {
+  const base = mergeAskSettings(source);
+  return {
+    historyTurns: Number(draft.historyTurns),
+    proposalExpiryMinutes: Number(draft.proposalExpiryMinutes),
+    trackerIntervalSeconds: Number(draft.trackerIntervalSeconds),
+    narrateMilestones: draft.narrateMilestones,
+    reportResultsOnCompletion: draft.reportResultsOnCompletion,
+    captainAutoApprove: !!base.captainAutoApprove,
+    narrationTimeoutSeconds: Number(draft.narrationTimeoutSeconds),
+    turnTimeoutMinutes: Number(draft.turnTimeoutMinutes),
+  };
 }
 
 /** Server defaults of the Permissions group (CliPermissionSettings). */

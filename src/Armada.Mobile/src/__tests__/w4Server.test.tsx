@@ -200,6 +200,36 @@ describe('Settings > Server', () => {
     expect(api.resetServer).toHaveBeenCalled();
   });
 
+  it('the Ask Armada section saves the whole group and keeps captainAutoApprove as the server sent it', async () => {
+    const ask = { historyTurns: 30, proposalExpiryMinutes: 90, trackerIntervalSeconds: 10, narrateMilestones: true, reportResultsOnCompletion: true, captainAutoApprove: true, narrationTimeoutSeconds: 45, turnTimeoutMinutes: 20 };
+    api.getSettings.mockResolvedValue(settings({ ask }) as never);
+    const h = await renderW4Routes(ROUTES, '/server');
+    await waitFor(() => expect(screen.getByTestId('settings-ask-save')).toBeTruthy());
+    expect(screen.getByTestId('settings-ask-historyTurns').props.value).toBe('30');
+    expect(screen.getByTestId('settings-ask-save')).toBeDisabled();
+
+    await fireEvent(screen.getByTestId('settings-ask-reportResultsOnCompletion'), 'valueChange', false);
+    await fireEvent.changeText(screen.getByTestId('settings-ask-turnTimeoutMinutes'), '121');
+    expect(screen.getByText('Must be a whole number from 1 to 120.')).toBeTruthy();
+    expect(screen.getByTestId('settings-ask-save')).toBeDisabled();
+    await fireEvent.changeText(screen.getByTestId('settings-ask-turnTimeoutMinutes'), '30');
+    await act(async () => { await fireEvent.press(screen.getByTestId('settings-ask-save')); });
+
+    expect(api.updateSettings).toHaveBeenCalledWith({ ask: { ...ask, reportResultsOnCompletion: false, turnTimeoutMinutes: 30 } });
+    await waitFor(() => expect(h.notifications().toasts.map((x) => x.message)).toContain('Ask Armada settings saved and applied.'));
+  });
+
+  it('an older server without the Ask group shows the defaults and still saves the full object', async () => {
+    await renderW4Routes(ROUTES, '/server');
+    await waitFor(() => expect(screen.getByTestId('settings-ask-save')).toBeTruthy());
+    expect(screen.getByTestId('settings-ask-proposalExpiryMinutes').props.value).toBe('60');
+    await fireEvent(screen.getByTestId('settings-ask-narrateMilestones'), 'valueChange', false);
+    await act(async () => { await fireEvent.press(screen.getByTestId('settings-ask-save')); });
+    expect(api.updateSettings).toHaveBeenCalledWith({
+      ask: { historyTurns: 20, proposalExpiryMinutes: 60, trackerIntervalSeconds: 5, narrateMilestones: false, reportResultsOnCompletion: true, captainAutoApprove: false, narrationTimeoutSeconds: 60, turnTimeoutMinutes: 15 },
+    });
+  });
+
   it('tenant admins get no backup, server actions, or CLI permission defaults', async () => {
     await renderW4Routes(ROUTES, '/server', 'tenantAdmin');
     await waitFor(() => expect(screen.getByTestId('settings-agent-save')).toBeTruthy());

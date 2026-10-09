@@ -136,6 +136,20 @@ describe('message helpers', () => {
     ]);
     expect(hosts).toEqual({ atw_1: 'm2', atw_2: 'm3' });
   });
+
+  it('workCardHosts never puts the card on a WorkReport while another message references the work', () => {
+    expect(workCardHosts([
+      msg('m1', 1, { kind: 'ActionResult', trackedWorkId: 'atw_1' }),
+      msg('m2', 2, { kind: 'WorkReport', trackedWorkId: 'atw_1' }),
+    ])).toEqual({ atw_1: 'm1' });
+    // A report that arrives before the result in the page still does not take the card.
+    expect(workCardHosts([
+      msg('r', 1, { kind: 'WorkReport', trackedWorkId: 'atw_1' }),
+      msg('u', 2, { kind: 'WorkUpdate', trackedWorkId: 'atw_1' }),
+    ])).toEqual({ atw_1: 'u' });
+    // Only when nothing else is loaded does the report carry the card, so the work stays reachable.
+    expect(workCardHosts([msg('r', 1, { kind: 'WorkReport', trackedWorkId: 'atw_2' })])).toEqual({ atw_2: 'r' });
+  });
 });
 
 describe('thread list helpers', () => {

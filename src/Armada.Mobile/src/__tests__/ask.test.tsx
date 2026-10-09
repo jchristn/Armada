@@ -573,6 +573,61 @@ describe('Ask Armada', () => {
     expect(screen.getByText('Fix login')).toBeTruthy();
   });
 
+  it('a WorkReport renders as a captain reply tagged Report; the live card stays on the message that started the work', async () => {
+    const outcome = [
+      'Voyage "Run tests" finished (1 of 1 missions done).',
+      '',
+      '**Outcome** (took 3m 12s)',
+      '- Mission "Run Test.Automated" on DocConverter: complete, landed. Took 3m 05s.',
+      '  - UnitTest check "Test.Automated" passed (exit code 0, 2m 40s): 412 passed, 0 failed of 412 tests.',
+      '  - Captain\'s final message: "All 412 tests passed."',
+    ].join('\n');
+    api.getAskThread.mockResolvedValue({ thread: thread(), trackedWork: [{ id: 'trk_1', threadId: 'thr_1', entityType: 'Voyage', entityId: 'vyg_1', title: 'Run tests', status: 'Complete', state: 'Finished' }] });
+    api.getAskWorkSnapshot.mockResolvedValue(null as never);
+    api.enumerateAskMessages.mockResolvedValue({
+      messages: [
+        message({ id: 'msg_a', sequence: 1, role: 'Assistant', contentText: 'Starting the run.', captainId: 'cpt_1' }),
+        message({ id: 'msg_r', sequence: 2, role: 'System', kind: 'ActionResult', trackedWorkId: 'trk_1', contentText: 'Dispatched.' }),
+        message({ id: 'msg_u', sequence: 3, role: 'System', kind: 'WorkUpdate', trackedWorkId: 'trk_1', contentText: outcome }),
+        message({
+          id: 'msg_w', sequence: 4, role: 'Assistant', kind: 'WorkReport', trackedWorkId: 'trk_1', captainId: 'cpt_1', durationMs: 4200,
+          contentText: 'The voyage finished and all 412 tests passed.',
+          toolCalls: [{ callId: 'c9', toolName: 'armada_voyage_status', ok: true, resultText: '{}', elapsedMs: 300 }],
+        }),
+      ],
+      hasMore: false,
+    });
+    await renderAsk('/ask/thr_1');
+    await waitFor(() => expect(screen.getByText('The voyage finished and all 412 tests passed.')).toBeTruthy());
+
+    // Same captain bubble as a reply (duration, tool chips, statistics), plus the Report tag.
+    const report = screen.getByTestId('ask-msg-4');
+    expect(within(report).getByTestId('ask-msg-4-report')).toHaveTextContent('Report');
+    expect(within(report).getByLabelText('Turn duration 4.2s')).toBeTruthy();
+    expect(within(report).getByTestId('tool-chip-c9')).toBeTruthy();
+    expect(within(report).getByTestId('ask-msg-4-stats-toggle')).toBeTruthy();
+    // A plain reply has no tag.
+    expect(screen.queryByTestId('ask-msg-1-report')).toBeNull();
+
+    // The card is hosted by the ActionResult, never by the report.
+    expect(within(screen.getByTestId('ask-msg-2')).getByTestId('work-card-trk_1')).toBeTruthy();
+    expect(within(report).queryByTestId('work-card-trk_1')).toBeNull();
+
+    // The multi-line outcome milestone renders its outcome lines, nested list included.
+    const milestone = screen.getByTestId('ask-msg-3');
+    expect(within(milestone).getByText(/Mission "Run Test\.Automated" on DocConverter: complete, landed\. Took 3m 05s\./)).toBeTruthy();
+    expect(within(milestone).getByText(/UnitTest check "Test\.Automated" passed \(exit code 0, 2m 40s\): 412 passed, 0 failed of 412 tests\./)).toBeTruthy();
+    expect(within(milestone).getByText(/Captain's final message: "All 412 tests passed\."/)).toBeTruthy();
+  });
+
+  it('a WorkReport arriving live is announced as a report', async () => {
+    await renderAsk('/ask/thr_1');
+    await waitFor(() => expect(api.enumerateAskMessages).toHaveBeenCalled());
+    await emit('ask.message', { threadId: 'thr_1', message: message({ id: 'msg_w', sequence: 5, role: 'Assistant', kind: 'WorkReport', trackedWorkId: 'trk_1', captainId: 'cpt_1', contentText: 'All 412 tests passed.' }) });
+    await waitFor(() => expect(screen.getByTestId('ask-msg-5-report')).toBeTruthy());
+    expect(AccessibilityInfo.announceForAccessibilityWithOptions).toHaveBeenCalledWith('Report: All 412 tests passed.', { queue: true });
+  });
+
   it('a failed turn is shown inline', async () => {
     api.getAskThread.mockResolvedValue({ thread: thread({ activeTurnId: 'turn_9' }), trackedWork: [] });
     await renderAsk('/ask/thr_1');

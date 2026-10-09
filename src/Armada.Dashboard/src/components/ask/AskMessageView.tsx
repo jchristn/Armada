@@ -31,7 +31,8 @@ interface AskMessageViewProps {
 
 /**
  * One persisted message, rendered by kind: text (Markdown for the captain, plain for the user), tool-call chips,
- * confirm cards, action results, milestone updates, summaries, and errors.
+ * confirm cards, action results, milestone updates, work reports (a captain reply with a Report tag), summaries, and
+ * errors.
  */
 export default function AskMessageView({ message, proposal, captainName, proposalBusy, onApprove, onReject, workCard, onShowWork, cliRequest, onCliDecided, permissionDeniedNote }: AskMessageViewProps) {
   const { t, formatRelativeTime, formatDateTime } = useLocale();
@@ -155,13 +156,15 @@ export default function AskMessageView({ message, proposal, captainName, proposa
     );
   }
 
-  // Assistant text (and any unknown kind): tool chips, optional thinking, Markdown body.
+  // Assistant text, the captain's automatic WorkReport (same bubble plus a Report tag), and any unknown kind: tool
+  // chips, optional thinking, Markdown body.
+  const isReport = kind === 'WorkReport';
   const tools = toolCallsToEvents(message.toolCalls);
   // The reply's turn statistics behind an (i), as on a Planning reply: the full set when the Admiral recorded the
   // turn's telemetry, otherwise (older replies) the turn's total and its tool calls (lib/chatMetrics).
   const stats = askTurnStatistics(t, message);
   return (
-    <article className="ask-msg ask-msg-assistant" data-sequence={message.sequence}>
+    <article className={isReport ? 'ask-msg ask-msg-assistant ask-msg-report' : 'ask-msg ask-msg-assistant'} data-sequence={message.sequence}>
       <ChatToolChips
         tools={tools}
         runningLabel={t('running…')}
@@ -174,6 +177,7 @@ export default function AskMessageView({ message, proposal, captainName, proposa
       <div className="ask-bubble ask-bubble-assistant">
         <div className="ask-bubble-head text-dim">
           <span>{captainName || t('Captain')}</span>
+          {isReport && <span className="ask-report-tag" title={t('Posted automatically when the work finished')}>{t('Report')}</span>}
           {message.durationMs != null && <span title={t('Turn duration')}>{formatDuration(message.durationMs)}</span>}
           {stats.length > 0 && <ChatMetricsInfo rows={stats} />}
           {when}

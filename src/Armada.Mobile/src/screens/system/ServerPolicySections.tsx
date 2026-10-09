@@ -3,6 +3,9 @@ import type { CliPermissionPolicy, VesselHealthCriterion } from '@dashboard/type
 import { bypassWarning, policyLabel, PROMPT_TIMEOUT_RANGE } from '@dashboard/lib/cliPermissions';
 import { criterionLabel, formatCount, HEALTH_CRITERIA } from '@dashboard/lib/health/healthText';
 import {
+  ASK_RANGES,
+  askDraftFrom,
+  askSettingsPayload,
   CLI_PERMISSION_DEFAULTS,
   FLEET_ACTION_RANGES,
   FLEET_DEFAULTS,
@@ -15,9 +18,12 @@ import {
   repositoryHealthCrossErrors,
   RETENTION_DEFAULTS,
   RETENTION_RANGE,
+  validateAskDraft,
   validateRange,
   validateRetentionDraft,
   validPromptTimeout,
+  type AskDraft,
+  type AskNumberField,
   type NumberField as RangeDef,
   type RetentionDraft,
 } from '@dashboard/lib/settingsRanges';
@@ -164,6 +170,47 @@ export function RetentionSettingsSection({ settings, locked, onSaved }: SectionP
           }, t('Retention settings saved and applied.'));
           if (ok) draft.reset();
         }}
+      />
+    </SettingsSection>
+  );
+}
+
+/**
+ * Ask Armada (`Ask`): result reports, milestone narration, history window, proposal expiry, tracking interval, and
+ * timeouts. The server replaces the whole group, so the save sends every field and carries captainAutoApprove over
+ * unchanged (governed by the CLI permission policy, never edited here).
+ */
+export function AskSettingsSection({ settings, locked, onSaved }: SectionProps) {
+  const { t } = useLocale();
+  const rangeText = useRangeText();
+  const draft = useDraft<AskDraft>(askDraftFrom(settings.ask));
+  const { save, saving } = useSettingsSave(onSaved);
+  const v = draft.value;
+  const errors = validateAskDraft(v);
+  const valid = Object.keys(errors).length === 0;
+  const field = (key: AskNumberField, label: string, help: string) => (
+    <NumberField label={label} hint={help} error={errors[key] ? rangeText(ASK_RANGES[key]) : null} value={v[key]} onChange={(x) => draft.set({ [key]: x } as Partial<AskDraft>)} disabled={locked} testID={`settings-ask-${key}`} />
+  );
+  return (
+    <SettingsSection title={t('Ask Armada')} description={t('How Ask Armada conversations follow and report on the work they start. Changes apply immediately.')} testID="settings-ask">
+      <SwitchField label={t('Report results when work finishes')} hint={t('When work started from a conversation finishes, its captain posts a short report of the outcome. The final progress update always includes the outcome.')} value={v.reportResultsOnCompletion} onChange={(x) => draft.set({ reportResultsOnCompletion: x })} disabled={locked} testID="settings-ask-reportResultsOnCompletion" />
+      <SwitchField label={t('Narrate milestones')} hint={t('The captain writes progress updates in its own words when it is idle; otherwise a plain sentence is posted.')} value={v.narrateMilestones} onChange={(x) => draft.set({ narrateMilestones: x })} disabled={locked} testID="settings-ask-narrateMilestones" />
+      {field('historyTurns', t('Conversation history (messages)'), t('Recent messages replayed to the captain each turn; older history is represented by the thread summary (2-200, default 20).'))}
+      {field('proposalExpiryMinutes', t('Proposal expiry (minutes)'), t('How long a pending action proposal waits for a decision before it expires (1-1440, default 60).'))}
+      {field('trackerIntervalSeconds', t('Work tracking interval (seconds)'), t('Seconds between checks of tracked work; changes are also picked up immediately (2-300, default 5).'))}
+      {field('narrationTimeoutSeconds', t('Narration timeout (seconds)'), t('Longest a milestone narration may take before the plain sentence is used instead (10-600, default 60).'))}
+      {field('turnTimeoutMinutes', t('Turn timeout (minutes)'), t('Longest a captain turn may run before it is stopped and marked failed (1-120, default 15).'))}
+      <SaveRow
+        label={t('Save Ask Armada Settings')}
+        saving={saving}
+        disabled={locked || !valid || !draft.dirty}
+        dirty={draft.dirty}
+        onDiscard={draft.reset}
+        onSave={async () => {
+          const ok = await save({ ask: askSettingsPayload(v, settings.ask) }, t('Ask Armada settings saved and applied.'));
+          if (ok) draft.reset();
+        }}
+        testID="settings-ask-save"
       />
     </SettingsSection>
   );

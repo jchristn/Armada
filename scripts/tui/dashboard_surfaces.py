@@ -108,4 +108,10 @@ def settings_fields():
     if m:
         for f in re.findall(r"'([a-zA-Z]+)'", m.group(1)):
             fields.add("settings.retention." + f)
+    # ASK_FIELDS (the edited Ask Armada settings) lives in lib/settingsRanges.ts too.
+    m = re.search(r"const ASK_FIELDS: AskSettingsField\[\] = \[([^\]]*)\]", ret)
+    if not m:
+        raise SystemExit("dashboard_surfaces: ASK_FIELDS not found; update settings_fields()")
+    for f in re.findall(r"'([a-zA-Z]+)'", m.group(1)):
+        fields.add("settings.ask." + f)
     return sorted(fields)
