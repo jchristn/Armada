@@ -1,6 +1,8 @@
 import { Link } from 'react-router-dom';
 import type { VesselReadinessResult } from '../../types/models';
-import { formatInputProvider, readinessBranchSummary, readinessDriftSummary, readinessLabel, readinessTone } from '../../lib/readiness';
+import { formatInputProvider, readinessBranchSummary, readinessCheckout, readinessCheckoutText, readinessDriftSummary, readinessLabel, readinessTone } from '../../lib/readiness';
+import { useLocale } from '../../context/LocaleContext';
+import CopyButton from './CopyButton';
 
 interface ReadinessPanelProps {
   title: string;
@@ -16,6 +18,9 @@ export default function ReadinessPanel(props: ReadinessPanelProps) {
   const label = readinessLabel(readiness);
   const branchSummary = readinessBranchSummary(readiness);
   const aheadBehindSummary = readinessDriftSummary(readiness);
+  const { t } = useLocale();
+  const checkout = readinessCheckout(readiness);
+  const checkoutText = checkout ? readinessCheckoutText(checkout) : null;
 
   return (
     <div className={`card readiness-panel${compact ? ' compact' : ''}`}>
@@ -50,6 +55,20 @@ export default function ReadinessPanel(props: ReadinessPanelProps) {
               <span>{readiness.availableCheckTypes.length} check type(s) available</span>
             )}
           </div>
+
+          {checkout && checkoutText && (
+            <div className={`readiness-checkout${checkout.kind === 'unavailable' ? ' unavailable' : ''}`} data-testid="readiness-checkout">
+              <span className="readiness-checkout-label">{t('Checkout')}:</span>
+              <span className="readiness-checkout-where">{t(checkoutText.template, checkoutText.params)}</span>
+              {checkout.kind === 'harbor' && (
+                <span className="readiness-checkout-id">
+                  <span className="text-dim">{t('Harbor ID')}</span>
+                  <code>{checkout.harborId}</code>
+                  <CopyButton text={checkout.harborId} title="Copy Harbor ID" />
+                </span>
+              )}
+            </div>
+          )}
 
           {readiness.availableCheckTypes.length > 0 && !compact && (
             <div className="readiness-available-types">

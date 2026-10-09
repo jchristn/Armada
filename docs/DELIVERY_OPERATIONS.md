@@ -208,6 +208,14 @@ When you need to understand what happened after the fact, use:
 - `Activity` (All Activity) for cross-entity chronology
 - `Activity` (API Requests) for API- and server-level request evidence
 - `Delivery > Checks` for execution logs, parsed results, and artifacts
+
+A check run's test counts come from a structured result artifact when one is collected (TRX, JUnit XML, NUnit XML, or
+a Jest or Vitest JSON report), and otherwise from the command's console summary: `dotnet test`, pytest, Jest, Vitest,
+cargo, Maven Surefire, and the NUnit console runner, with LF or CRLF line endings. For JavaScript, Armada reads the
+per-test line, Jest's `Tests:       1 failed, 2 skipped, 1 todo, 5 passed, 9 total` or Vitest's
+`      Tests  1 failed | 5 passed | 2 skipped | 1 todo (9)`, never Jest's `Test Suites:` or Vitest's `Test Files` line.
+Skipped and todo tests count as skipped, the total is Jest's `total` or Vitest's number in parentheses, and the
+duration comes from Jest's `Time:` or the first value on Vitest's `Duration` line.
 - `Delivery > Releases` for what was intended to ship
 - `Delivery > Deployments` for what actually rolled out
 - `Delivery > Incidents` for failure, recovery, and postmortem context

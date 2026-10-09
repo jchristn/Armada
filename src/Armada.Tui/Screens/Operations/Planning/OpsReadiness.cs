@@ -6,12 +6,14 @@ namespace Armada.Tui.Screens.Operations
     using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Tui.Modals;
+    using Armada.Tui.Services;
     using Armada.Tui.Theming;
     using TUIKit;
 
     /// <summary>
     /// The dashboard's ReadinessPanel as document lines: tone pill (Ready, Needs Attention, Blocked, Unknown),
-    /// resolved workflow profile, onboarding progress, availability summary, branch and drift, toolchains, probes,
+    /// resolved workflow profile, onboarding progress, availability summary, where the checkout lives (Harbor and its ID,
+    /// the Admiral, or the typed reason none is available), branch and drift, toolchains, probes,
     /// environments, delivery coverage, setup checklist, and issues. The compact form is what Dispatch and Planning
     /// show inline; the full form opens in a viewer. Use on the UI loop.
     /// </summary>
@@ -91,6 +93,12 @@ namespace Armada.Tui.Screens.Operations
             };
             if (readiness.AvailableCheckTypes.Count > 0) summary.Add(readiness.AvailableCheckTypes.Count + " " + doc.Loc.T("check type(s) available"));
             doc.Text(String.Join("  |  ", summary), theme.Text);
+            string? checkout = CheckoutText(readiness, doc.Loc);
+            if (checkout != null)
+            {
+                doc.Field("Checkout", checkout, String.IsNullOrEmpty(readiness.CheckoutPath) && String.IsNullOrEmpty(readiness.HarborId) ? theme.Warning : (CellStyle?)null);
+                if (!String.IsNullOrEmpty(readiness.HarborId)) doc.Field("Harbor ID", readiness.HarborId, theme.Code);
+            }
 
             if (!compact)
             {
@@ -148,6 +156,46 @@ namespace Armada.Tui.Screens.Operations
             }
 
             return doc;
+        }
+
+        /// <summary>
+        /// Where the vessel's checkout lives, localized (the dashboard's readinessCheckout): "on Harbor Name at /path",
+        /// "on the Admiral at /path", or the typed reason none is available. Null when there is nothing to say (an
+        /// Admiral that does not report the checkout).
+        /// </summary>
+        /// <param name="readiness">Readiness, or null.</param>
+        /// <param name="loc">Localizer.</param>
+        /// <returns>The text, or null.</returns>
+        public static string? CheckoutText(VesselReadinessResult? readiness, ITextLocalizer loc)
+        {
+            if (loc == null) throw new ArgumentNullException(nameof(loc));
+            if (readiness == null) return null;
+            if (!String.IsNullOrEmpty(readiness.HarborId))
+            {
+                string name = String.IsNullOrEmpty(readiness.HarborName) ? readiness.HarborId : readiness.HarborName;
+                return String.IsNullOrEmpty(readiness.CheckoutPath)
+                    ? loc.T("on Harbor {{name}}", LocalizationArgs.Of("name", name))
+                    : loc.T("on Harbor {{name}} at {{path}}", LocalizationArgs.Of("name", name, "path", readiness.CheckoutPath));
+            }
+
+            if (!String.IsNullOrEmpty(readiness.CheckoutPath)) return loc.T("on the Admiral at {{path}}", LocalizationArgs.Of("path", readiness.CheckoutPath));
+            if (readiness.HasWorkingDirectory) return null;
+            return loc.T(CheckoutUnavailableReason(readiness.CheckoutErrorCode));
+        }
+
+        /// <summary>
+        /// English reason no checkout is available, from the typed error code (the dashboard's checkoutUnavailableReason).
+        /// </summary>
+        /// <param name="code">Error code, or null.</param>
+        /// <returns>English text.</returns>
+        public static string CheckoutUnavailableReason(VesselCheckoutErrorCodeEnum? code)
+        {
+            switch (code)
+            {
+                case VesselCheckoutErrorCodeEnum.NoHarborConnected: return "Unavailable: no Harbor is connected, and the vessel has no working directory on the Admiral";
+                case VesselCheckoutErrorCodeEnum.NoHarborCheckout: return "Unavailable: no connected Harbor has a checkout of this vessel, and it has no working directory on the Admiral";
+                default: return "Unavailable: the vessel has no working directory on the Admiral";
+            }
         }
 
         /// <summary>

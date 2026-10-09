@@ -8,6 +8,8 @@ import {
   nextChecklistItem,
   readinessBranchSummary,
   readinessDriftSummary,
+  readinessCheckout,
+  readinessCheckoutText,
 } from './readiness';
 
 function item(code: string, isSatisfied: boolean): VesselSetupChecklistItem {
@@ -16,7 +18,7 @@ function item(code: string, isSatisfied: boolean): VesselSetupChecklistItem {
 
 function readiness(over: Partial<VesselReadinessResult> = {}): VesselReadinessResult {
   return {
-    vesselId: 'vsl_1', hasWorkingDirectory: true, hasRepositoryContext: true, workflowProfileId: null, workflowProfileName: null,
+    vesselId: 'vsl_1', hasWorkingDirectory: true, checkoutPath: null, harborId: null, harborName: null, checkoutErrorCode: null, hasRepositoryContext: true, workflowProfileId: null, workflowProfileName: null,
     workflowProfileScope: null, requestedCheckType: null, requestedEnvironmentName: null, availableCheckTypes: [], currentBranch: null,
     hasUncommittedChanges: null, isDetachedHead: null, commitsAhead: null, commitsBehind: null, detectedToolchains: [], toolchainProbes: [],
     deploymentEnvironments: [], deploymentMetadata: null, setupChecklist: [], issues: [], setupChecklistSatisfiedCount: 0,
@@ -41,6 +43,21 @@ describe('readiness helpers', () => {
     expect(formatInputProvider('AzureKeyVaultSecret')).toBe('Azure Key Vault');
     expect(formatInputProvider('Custom')).toBe('Custom');
     expect(formatInputProvider(null)).toBe('Input');
+  });
+
+  it('says where the checkout lives', () => {
+    expect(readinessCheckout(null)).toBeNull();
+    const harbor = readinessCheckout(readiness({ harborId: 'hbr_1', harborName: 'Mac', checkoutPath: '/Users/j/Code/app' }))!;
+    expect(harbor).toEqual({ kind: 'harbor', harborId: 'hbr_1', harborName: 'Mac', path: '/Users/j/Code/app' });
+    expect(readinessCheckoutText(harbor)).toEqual({ template: 'on Harbor {{name}} at {{path}}', params: { name: 'Mac', path: '/Users/j/Code/app' } });
+    expect(readinessCheckout(readiness({ harborId: 'hbr_1' }))).toMatchObject({ kind: 'harbor', harborName: 'hbr_1', path: null });
+    const admiral = readinessCheckout(readiness({ checkoutPath: '/srv/app' }))!;
+    expect(readinessCheckoutText(admiral)).toEqual({ template: 'on the Admiral at {{path}}', params: { path: '/srv/app' } });
+    const none = readinessCheckout(readiness({ hasWorkingDirectory: false, checkoutErrorCode: 'NoHarborConnected' }))!;
+    expect(none).toMatchObject({ kind: 'unavailable', code: 'NoHarborConnected' });
+    expect(readinessCheckoutText(none).template).toContain('no Harbor is connected');
+    expect(readinessCheckoutText(readinessCheckout(readiness({ hasWorkingDirectory: false }))!).template).toContain('no working directory on the Admiral');
+    expect(readinessCheckout(readiness())).toBeNull();
   });
 
   it('summarizes branch and drift', () => {

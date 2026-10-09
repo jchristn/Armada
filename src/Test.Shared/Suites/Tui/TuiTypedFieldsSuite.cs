@@ -21,6 +21,7 @@ namespace Test.Shared.Suites.Tui
     using Armada.Tui.Screens.Kit;
     using Armada.Tui.Screens.Operations;
     using Armada.Tui.Services;
+    using Armada.Tui.Theming;
     using Armada.Tui.Widgets;
     using Test.Shared.Infrastructure;
     using Touchstone.Core;
@@ -192,6 +193,24 @@ namespace Test.Shared.Suites.Tui
                 AssertEqual(" (File path)", OpsReadiness.ProviderSuffix(WorkflowInputReferenceProviderEnum.FilePath), "file");
                 AssertEqual(" (1Password)", OpsReadiness.ProviderSuffix(WorkflowInputReferenceProviderEnum.OnePassword), "provider without a prefix form");
                 AssertEqual("", OpsReadiness.ProviderSuffix(null), "a command such as \"env: X=1 make\" gets no provider label");
+            }));
+
+            cases.Add(TuiCase.Sync(Suite, "readiness_checkout_location", "Readiness says where the checkout lives: the Harbor with its ID, the Admiral, or the typed reason", () =>
+            {
+                LocalizationService loc = new LocalizationService();
+                VesselReadinessResult harbor = new VesselReadinessResult { VesselId = "vsl_1", HasWorkingDirectory = true, HarborId = "hbr_mac", HarborName = "Joels-MacBook-Pro", CheckoutPath = "/Users/joel/Code/DocConverter" };
+                AssertEqual("on Harbor Joels-MacBook-Pro at /Users/joel/Code/DocConverter", OpsReadiness.CheckoutText(harbor, loc));
+                OpsDocument doc = OpsReadiness.Build(new OpsDocument(ThemePalettes.Dark(), loc), "Readiness", harbor, false, "none", true);
+                string text = String.Join("\n", doc.Lines.Select(l => l.ToPlainString()));
+                AssertContains("on Harbor Joels-MacBook-Pro at /Users/joel/Code/DocConverter", text, "checkout line");
+                AssertContains("hbr_mac", text, "the Harbor ID is shown");
+
+                VesselReadinessResult admiral = new VesselReadinessResult { VesselId = "vsl_1", HasWorkingDirectory = true, CheckoutPath = "/srv/repos/app" };
+                AssertEqual("on the Admiral at /srv/repos/app", OpsReadiness.CheckoutText(admiral, loc));
+
+                VesselReadinessResult none = new VesselReadinessResult { VesselId = "vsl_1", HasWorkingDirectory = false, CheckoutErrorCode = VesselCheckoutErrorCodeEnum.NoHarborCheckout };
+                AssertContains("no connected Harbor has a checkout of this vessel", OpsReadiness.CheckoutText(none, loc)!, "typed reason");
+                AssertNull(OpsReadiness.CheckoutText(new VesselReadinessResult { HasWorkingDirectory = true }, loc), "nothing to say without a reported path");
             }));
 
             cases.Add(TuiCase.Sync(Suite, "objective_source_number", "GitHub source number is exposed on the objective", () =>

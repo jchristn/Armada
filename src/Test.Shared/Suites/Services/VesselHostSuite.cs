@@ -59,6 +59,30 @@ namespace Test.Shared.Suites.Services
                 AssertTrue(PathCanonicalizer.AreEquivalent(git.Checkout, host.WorkingDirectory), "the vessel's working directory");
             }));
 
+            cases.Add(CaseAsync("host_display_name_drops_identifier", "A Harbor host's display name is its name without the identifier suffix", TestTags.Positive, () =>
+            {
+                Vessel vessel = new Vessel("app", String.Empty);
+                FakeHostCommandExecutor commands = new FakeHostCommandExecutor();
+                LoggingModule logging = new LoggingModule();
+                logging.Settings.EnableConsole = false;
+                string root = TestTemp.NewDirectory("vessel-host-name");
+                try
+                {
+                    VesselHost named = new VesselHost(vessel, "hbr_mac", "Joels-MacBook-Pro (hbr_mac)", root, HarborRepositorySourceEnum.Mapped, null, commands, new GitService(logging), new LocalCheckoutFiles(root));
+                    AssertEqual("Joels-MacBook-Pro", named.HarborDisplayName);
+                    VesselHost unnamed = new VesselHost(vessel, "hbr_mac", null, root, HarborRepositorySourceEnum.Mapped, null, commands, new GitService(logging), new LocalCheckoutFiles(root));
+                    AssertEqual("hbr_mac", unnamed.HarborDisplayName);
+                    VesselHost admiral = new VesselHost(vessel, null, null, root, HarborRepositorySourceEnum.None, null, commands, new GitService(logging), new LocalCheckoutFiles(root));
+                    AssertNull(admiral.HarborDisplayName);
+                }
+                finally
+                {
+                    TestTemp.TryDelete(root);
+                }
+
+                return Task.CompletedTask;
+            }));
+
             cases.Add(CaseAsync("resolver_finds_mapped_harbor_checkout", "With no working directory on the Admiral, the resolver uses the checkout a connected Harbor maps the vessel to", TestTags.Positive, async () =>
             {
                 using HarborDockGitFixture git = await HarborDockGitFixture.CreateAsync().ConfigureAwait(false);
@@ -387,7 +411,7 @@ namespace Test.Shared.Suites.Services
                 AssertTrue(result.HasWorkingDirectory);
                 AssertTrue(result.HasRepositoryContext);
                 AssertEqual("hbr_vh_ready", result.HarborId);
-                AssertContains("hbr_vh_ready", result.HarborName ?? String.Empty);
+                AssertEqual("hbr_vh_ready", result.HarborName, "the Harbor's name alone (this Harbor is named for its ID)");
                 AssertTrue(PathCanonicalizer.AreEquivalent(git.Checkout, result.CheckoutPath!), "the Harbor's path");
                 AssertTrue(result.Issues.Any(i => i.Code == "working_directory_on_harbor" && i.Severity == ReadinessSeverityEnum.Info), "an Info issue names the Harbor");
                 AssertEqual("main", result.CurrentBranch, "git state came from the Harbor");
@@ -438,6 +462,49 @@ namespace Test.Shared.Suites.Services
                 AssertNotEqual(VesselHealthStatusEnum.Unknown, workingTree!.Status, "it read the Harbor's working tree");
             }));
 
+            cases.Add(CaseAsync("health_restore_check_uses_harbor_checkout", "The dotnet RestoreRequired check reads obj/project.assets.json in the Harbor's checkout, with no working directory on the Admiral", TestTags.Negative, async () =>
+            {
+                using HarborDockGitFixture git = await HarborDockGitFixture.CreateAsync().ConfigureAwait(false);
+                using Scenario s = await Scenario.CreateAsync(git).ConfigureAwait(false);
+                await HarborDockGitFixture.CommitFileAsync(git.Checkout, "App.csproj", "<Project Sdk=\"Microsoft.NET.Sdk\"></Project>\n", "add project").ConfigureAwait(false);
+
+                // The Harbor runs git for real and answers dotnet with a failed list run (as when restore has not run).
+                LocalHostCommandExecutor local = new LocalHostCommandExecutor();
+                FakeHostCommandExecutor harborCommands = new FakeHostCommandExecutor();
+                harborCommands.Handler = request => String.Equals(request.Executable, "dotnet", StringComparison.Ordinal)
+                    ? FakeHostCommandExecutor.Result(1, VesselHealthJsonFixtures.DotnetRestoreFailed)
+                    : local.RunAsync(request).GetAwaiter().GetResult();
+                using InProcessHarbor harbor = await s.ConnectAsync("hbr_vh_restore", s.MappedSettings("app"), null, null, harborCommands).ConfigureAwait(false);
+                Vessel vessel = await s.CreateVesselAsync("app", null, null).ConfigureAwait(false);
+
+                FakeHostCommandExecutor admiralCommands = new FakeHostCommandExecutor();
+                admiralCommands.Handler = request => throw new AssertionException("dependency tools must not run on the Admiral: " + request.Executable);
+                DependencyScanner scanner = new DependencyScanner(new DependencyToolRunner(admiralCommands));
+                VesselHealthEvaluator evaluator = new VesselHealthEvaluator(
+                    s.Db.Driver,
+                    new GitService(s.Logging),
+                    s.Settings,
+                    new List<IVesselHealthCriterion> { new DependenciesCriterion(scanner) },
+                    s.Logging);
+                evaluator.Hosts = s.Resolver;
+                s.Settings.RepositoryHealth.FetchBeforeEvaluate = false;
+
+                // No obj/project.assets.json in the Harbor's checkout: restore is required.
+                await evaluator.EvaluateAsync(vessel, true).ConfigureAwait(false);
+                VesselHealthFinding missing = await ReadFindingAsync(s, vessel, VesselHealthCriterionEnum.Dependencies).ConfigureAwait(false);
+                AssertEqual(VesselHealthStatusEnum.Unknown, missing.Status);
+                AssertEqual(VesselHealthDetailCodes.RestoreRequired, missing.DetailCode, "the Harbor's checkout has not been restored");
+                AssertTrue(harborCommands.Requests.Any(r => r.Executable == "dotnet"), "dotnet ran on the Harbor");
+                AssertEqual(0, admiralCommands.Requests.Count, "nothing ran on the Admiral");
+
+                // After restore on the Harbor, the same failure is a tool failure, not RestoreRequired.
+                Directory.CreateDirectory(Path.Combine(git.Checkout, "obj"));
+                await File.WriteAllTextAsync(Path.Combine(git.Checkout, "obj", "project.assets.json"), "{}").ConfigureAwait(false);
+                await evaluator.EvaluateAsync(vessel, true).ConfigureAwait(false);
+                VesselHealthFinding restored = await ReadFindingAsync(s, vessel, VesselHealthCriterionEnum.Dependencies).ConfigureAwait(false);
+                AssertEqual(VesselHealthDetailCodes.ToolFailed, restored.DetailCode, "the Harbor's checkout has project.assets.json");
+            }));
+
             cases.Add(CaseAsync("long_command_does_not_block_the_link", "A long command on the Harbor (a check run) does not hold up file requests while it runs", TestTags.Positive, async () =>
             {
                 if (OperatingSystem.IsWindows()) return;
@@ -478,6 +545,14 @@ namespace Test.Shared.Suites.Services
             }
 
             throw new AssertionException("Expected " + typeof(T).Name);
+        }
+
+        private static async Task<VesselHealthFinding> ReadFindingAsync(Scenario s, Vessel vessel, VesselHealthCriterionEnum criterion)
+        {
+            List<VesselHealthFinding> findings = await s.Db.Driver.VesselHealthFindings.ReadByVesselAsync(vessel.TenantId ?? Constants.DefaultTenantId, vessel.Id).ConfigureAwait(false);
+            VesselHealthFinding? finding = findings.FirstOrDefault(f => f.Criterion == criterion);
+            if (finding == null) throw new AssertionException("no " + criterion + " finding");
+            return finding;
         }
 
         private static TestCaseDescriptor CaseAsync(string caseId, string displayName, string tag, Func<Task> body)
@@ -551,11 +626,11 @@ namespace Test.Shared.Suites.Services
                 return ConnectAsync(harborId, MappedSettings("app"), null, null);
             }
 
-            public Task<InProcessHarbor> ConnectAsync(string harborId, HarborDockSettings settings, string? tenantId, string? userId)
+            public Task<InProcessHarbor> ConnectAsync(string harborId, HarborDockSettings settings, string? tenantId, string? userId, IHostCommandExecutor? commands = null)
             {
                 HarborDockManager docks = new HarborDockManager(() => settings, Logging);
                 return InProcessHarbor.ConnectAsync(Manager, harborId, tenantId, userId, new AgentRuntimeFactory(Logging),
-                    new List<string> { "ClaudeCode", "git" }, Logging, null, null, docks);
+                    new List<string> { "ClaudeCode", "git" }, Logging, commands, null, docks);
             }
 
             public async Task<Vessel> CreateVesselAsync(string name, string? repoUrl, string? workingDirectory)

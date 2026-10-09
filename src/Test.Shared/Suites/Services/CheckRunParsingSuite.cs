@@ -76,7 +76,6 @@ namespace Test.Shared.Suites.Services
                 CheckRunTestSummary? jest = CheckRunParsingService.ParseTestSummary("RUN  v2\r\nTests  7 passed (7)\r\n");
                 AssertNotNull(jest, "jest summary with CRLF");
                 AssertEqual(7, jest!.Passed);
-                
 
                 // Each CRLF result matches the same text with LF endings.
                 foreach (string text in new[] { "Passed!  - Failed:     0, Passed:     3, Skipped:     1, Total:     4, Duration: 1.5 s\r\n", "===== 4 passed, 1 failed in 0.52s =====\r\n", "Tests  7 passed (7)\r\n" })
@@ -86,6 +85,100 @@ namespace Test.Shared.Suites.Services
                     AssertEqual(lf?.Total, crlf?.Total, "total for " + text.Trim());
                     AssertEqual(lf?.DurationMs, crlf?.DurationMs, "duration for " + text.Trim());
                 }
+            }));
+
+            cases.Add(Case("jest_console_summary_parsed", "Jest's console summary (Tests: with a colon) parses and wins over the Test Suites line", TestTags.Positive, () =>
+            {
+                string output =
+                    " PASS  src/math.test.js\n" +
+                    " PASS  src/strings.test.js\n" +
+                    "\n" +
+                    "Test Suites: 2 passed, 2 total\n" +
+                    "Tests:       7 passed, 7 total\n" +
+                    "Snapshots:   0 total\n" +
+                    "Time:        1.234 s\n" +
+                    "Ran all test suites.\n";
+                CheckRunTestSummary? summary = CheckRunParsingService.ParseTestSummary(output);
+                AssertNotNull(summary, "jest summary expected");
+                AssertEqual("javascript", summary!.Format);
+                AssertEqual(7, summary.Passed);
+                AssertEqual(0, summary.Failed);
+                AssertEqual(0, summary.Skipped);
+                AssertEqual(7, summary.Total);
+                AssertEqual(1234L, summary.DurationMs);
+
+                CheckRunTestSummary? crlf = CheckRunParsingService.ParseTestSummary(output.Replace("\n", "\r\n"));
+                AssertNotNull(crlf, "jest summary with CRLF");
+                AssertEqual(7, crlf!.Total);
+                AssertEqual(1234L, crlf.DurationMs);
+            }));
+
+            cases.Add(Case("jest_console_failing_run_parsed", "A failing Jest run reports failed, skipped, and todo counts from the Tests: line", TestTags.Negative, () =>
+            {
+                string output =
+                    " FAIL  src/math.test.js\r\n" +
+                    "  \u25cf math > adds\r\n" +
+                    "\r\n" +
+                    "    expect(received).toBe(expected) // Object.is equality\r\n" +
+                    "\r\n" +
+                    " PASS  src/strings.test.js\r\n" +
+                    "\r\n" +
+                    "Test Suites: 1 failed, 1 passed, 2 total\r\n" +
+                    "Tests:       1 failed, 2 skipped, 1 todo, 5 passed, 9 total\r\n" +
+                    "Snapshots:   0 total\r\n" +
+                    "Time:        2.5 s, estimated 3 s\r\n" +
+                    "Ran all test suites.\r\n";
+                CheckRunTestSummary? summary = CheckRunParsingService.ParseTestSummary(output);
+                AssertNotNull(summary, "jest summary expected");
+                AssertEqual(5, summary!.Passed);
+                AssertEqual(1, summary.Failed);
+                AssertEqual(3, summary.Skipped);
+                AssertEqual(9, summary.Total);
+                AssertEqual(2500L, summary.DurationMs);
+            }));
+
+            cases.Add(Case("vitest_console_summary_parsed", "Vitest's indented Tests line parses, with the total in parentheses, over the Test Files line", TestTags.Positive, () =>
+            {
+                string output =
+                    "\n" +
+                    " RUN  v1.6.0 /work/app\n" +
+                    "\n" +
+                    " \u2713 src/math.test.ts  (4 tests) 3ms\n" +
+                    " \u2713 src/strings.test.ts  (3 tests) 2ms\n" +
+                    "\n" +
+                    " Test Files  2 passed (2)\n" +
+                    "      Tests  7 passed (7)\n" +
+                    "   Start at  10:15:02\n" +
+                    "   Duration  412ms (transform 55ms, setup 0ms, collect 80ms, tests 5ms, environment 0ms, prepare 120ms)\n";
+                CheckRunTestSummary? summary = CheckRunParsingService.ParseTestSummary(output);
+                AssertNotNull(summary, "vitest summary expected");
+                AssertEqual(7, summary!.Passed);
+                AssertEqual(0, summary.Failed);
+                AssertEqual(7, summary.Total);
+                AssertEqual(412L, summary.DurationMs);
+
+                CheckRunTestSummary? singleSpace = CheckRunParsingService.ParseTestSummary(" Tests  7 passed (7)\r\n");
+                AssertNotNull(singleSpace, "vitest line with one leading space");
+                AssertEqual(7, singleSpace!.Total);
+            }));
+
+            cases.Add(Case("vitest_console_failing_run_parsed", "A failing Vitest run reports failed, skipped, and todo counts and the parenthesized total", TestTags.Negative, () =>
+            {
+                string output =
+                    " FAIL  src/math.test.ts > math > adds\r\n" +
+                    "AssertionError: expected 3 to be 4 // Object.is equality\r\n" +
+                    "\r\n" +
+                    " Test Files  1 failed | 1 passed (2)\r\n" +
+                    "      Tests  1 failed | 5 passed | 2 skipped | 1 todo (9)\r\n" +
+                    "   Start at  10:15:02\r\n" +
+                    "   Duration  1.52s (transform 55ms, setup 0ms, collect 80ms, tests 5ms)\r\n";
+                CheckRunTestSummary? summary = CheckRunParsingService.ParseTestSummary(output);
+                AssertNotNull(summary, "vitest summary expected");
+                AssertEqual(5, summary!.Passed);
+                AssertEqual(1, summary.Failed);
+                AssertEqual(3, summary.Skipped);
+                AssertEqual(9, summary.Total);
+                AssertEqual(1520L, summary.DurationMs);
             }));
 
             cases.Add(Case("jest_json_artifact_parsed", "A Jest JSON report artifact is parsed into typed counts", TestTags.Positive, () =>

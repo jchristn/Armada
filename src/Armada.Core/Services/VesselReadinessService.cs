@@ -136,7 +136,7 @@ namespace Armada.Core.Services
             {
                 result.CheckoutPath = harborHost.WorkingDirectory;
                 result.HarborId = harborHost.HarborId;
-                result.HarborName = harborHost.HarborName;
+                result.HarborName = harborHost.HarborDisplayName;
                 AddIssue(
                     result,
                     "working_directory_on_harbor",
