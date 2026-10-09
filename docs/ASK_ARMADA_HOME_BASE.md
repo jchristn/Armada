@@ -59,7 +59,7 @@ All rows carry `tenant_id`, `user_id` (owner), `created_utc`, `last_update_utc`.
 | Table | Prefix | Columns |
 |---|---|---|
 | `ask_threads` | `ath_` | `title`, `captain_id` (nullable), `auto_approve` (bool, default false), `summary_text` (nullable), `summary_utc`, `pinned` (bool), `archived` (bool), `last_message_utc`, `message_count`, `unread_count` (updates posted while the user was not viewing) |
-| `ask_messages` | `amg_` | `thread_id`, `sequence` (int, per thread, monotonic), `role` (`User`, `Assistant`, `System`), `kind` (`Text`, `ActionProposal`, `ActionResult`, `WorkUpdate`, `Summary`, `Error`), `content_text`, `thinking_text` (nullable), `proposal_id` (nullable), `tracked_work_id` (nullable), `captain_id` (nullable), `duration_ms` (nullable) |
+| `ask_messages` | `amg_` | `thread_id`, `sequence` (int, per thread, monotonic), `role` (`User`, `Assistant`, `System`), `kind` (`Text`, `ActionProposal`, `ActionResult`, `WorkUpdate`, `Summary`, `Error`; later `CliPermission` and `WorkReport`), `content_text`, `thinking_text` (nullable), `proposal_id` (nullable), `tracked_work_id` (nullable), `captain_id` (nullable), `duration_ms` (nullable) |
 | `ask_messages` (migration v82) | | turn telemetry of captain replies, all nullable: `ttft_ms`, `first_text_ms`, `streaming_ms`, `tokens_per_second`, `input_tokens`, `output_tokens`, `cached_tokens`, `tokens_estimated`, `cost_usd`, `tool_call_count`, `tool_time_ms` (the total is `duration_ms`); read and written as `AskMessage.Metrics` (see "Turn telemetry") |
 | `ask_message_tool_calls` | `atc_` | `message_id`, `thread_id`, `call_id`, `tool_name`, `arguments_text`, `result_text`, `ok` (nullable bool), `elapsed_ms` |
 | `ask_action_proposals` | `aap_` | `thread_id`, `message_id`, `tool_name`, `arguments_text`, `summary_text` (one-line human description), `source` (`Captain`, `QuickAction`), `status` (`Pending`, `Approved`, `Rejected`, `Expired`, `Executed`, `Failed`), `result_text`, `error_text`, `decided_by_user_id`, `decided_utc`, `executed_utc` |
@@ -212,6 +212,37 @@ syntax).
   succeeded / failed / was cancelled. The message is written by the thread's captain when it is idle
   (`Ask.NarrateMilestones`, default true, with a short timeout) and otherwise is a deterministic sentence.
   When the user is not looking at the thread its `unread_count` increases and the thread list shows it.
+- **Results without being asked.** The final milestone of a voyage, mission, or fleet action run that succeeded or
+  failed is never narrated: it is the deterministic sentence followed by an **Outcome** block built only from typed
+  fields (`AskWorkResultBuilder` reads the rows, `AskWorkOutcomeFormatter` words them), so it works without a captain:
+  elapsed time; per mission (failed ones first, up to 10) its vessel, status, landing outcome and pull request URL,
+  failure reason, and runtime, each finished check run with its type, label, status, exit code, duration, and test
+  counts (or its summary when it recorded none), and a short excerpt of the captain's final message
+  (`Mission.AgentOutput`); per fleet action target its status, exit code, and reason. Example:
+
+  ```
+  Voyage "Run Test.Automated in DocConverter" finished (1 of 1 missions done).
+
+  **Outcome** (took 3m 12s)
+  - Mission "Run Test.Automated" on DocConverter: complete, landed. Took 3m 05s.
+    - UnitTest check "Test.Automated" passed (exit code 0, 2m 40s): 412 passed, 0 failed of 412 tests.
+    - Captain's final message: "All 412 tests passed in DocConverter."
+  ```
+
+- **Captain report-back.** When the thread has a captain and `Ask.ReportResultsOnCompletion` is on (default), the
+  final milestone is followed by a short captain turn (`AskTurnCoordinator.ScheduleReportAsync`) whose prompt carries
+  the results (the work's state and counts, each mission's ids, vessel, captain, status, landing, pull request, branch,
+  runtime, diff size counted from the captured diff, failure reason, check runs with test results, and the first 2000
+  characters of its final message) and asks for the outcome in two to four sentences, with one next step only if
+  something failed. The reply is a `WorkReport` message (role `Assistant`, `TrackedWorkId` set) that clients render as a
+  captain reply with a **Report** tag. Rules: at most one report per tracked item (an in-memory set, plus a check for an
+  existing `WorkReport` of the item in the thread, so a restart never repeats one); a report waits while any other turn
+  runs in the thread and starts when that turn ends; when it is about to start it is skipped if the setting was turned
+  off, the thread was archived or deleted or lost its captain, or the user posted a message after the final milestone
+  (they already asked). It is a normal turn: the thread's CLI permission policy and approval prompts apply, a
+  state-changing tool call still becomes a proposal, `ask.turn` events and the reply's telemetry are recorded as for any
+  reply, and a failure posts an `Error` message. Cancelled work, jobs, and import batches get neither the outcome block
+  nor a report (their milestone says everything they record).
 - Voyage snapshot: voyage id, title, status, counts by mission status, and per mission: id, title, status,
   persona/pipeline stage, captain id and name, branch, latest check run status, merge-queue entry status,
   PR URL, landing outcome, failure reason, started/completed times. Fleet action run snapshot: run status,
@@ -277,7 +308,8 @@ default.
 - Messages render by kind: text (markdown), tool-call chips (existing), **confirm cards** (tool, one-line
   summary, expandable exact arguments, Approve / Reject, then the outcome), **work cards** (live: header
   with status and progress bar, per-mission rows with status, captain, stage, checks, merge/landing, PR
-  link, failure reason, and links to the normal detail pages), **milestone messages**, summaries, errors.
+  link, failure reason, and links to the normal detail pages), **milestone messages** (the final one with its
+  **Outcome** block), the captain's **report** of finished work (a captain reply tagged "Report"), summaries, errors.
 - Composer: `/` opens the quick-action menu; each quick action opens an inline form (vessel picker and
   mission list for `/dispatch`, action + vessel picker for `/fleet-action`, etc.). Typing plain text sends
   to the captain. Stop button cancels a running turn.
@@ -293,7 +325,8 @@ header with the Auto-approve toggle, streaming transcript with confirm cards (`a
 live work cards, and a composer with `/` quick actions and inline Dispatch and Fleet action forms. The Ask
 dock (`Ctrl+J`) follows the active thread from any screen, and the Approvals center (`Ctrl+A`) lists pending
 proposals next to mission reviews and deployment approvals. With a captain reply selected, the status bar shows
-`i Statistics`, and `i` opens or closes its turn statistics under the reply header. See `docs/TUI.md`.
+`i Statistics`, and `i` opens or closes its turn statistics under the reply header. The captain's report of finished
+work reads like any reply, tagged `[Report]` after the captain's name. See `docs/TUI.md`.
 
 CLI tool permissions in the TUI: the header's CLI tools line shows the thread policy and the effective one (`p`
 changes it; Bypass only for admins, after the warning). Permission cards have clickable **[Allow once]**, **[Allow and
@@ -362,9 +395,14 @@ request in a conversation you are not looking at toasts and rings.
 | `ProposalExpiryMinutes` | 60 | 1-1440 |
 | `TrackerIntervalSeconds` | 5 | 2-300 |
 | `NarrateMilestones` | true | -- |
+| `ReportResultsOnCompletion` | true | -- (when false only the final milestone, which always carries the outcome, is posted; see "Live monitoring") |
 | `CaptainAutoApprove` | false | -- (when false, a captain-level `Bypass` and the captain's legacy `autoApprove` are ignored for turns and narrations; see "CLI tool permissions" above and docs/SECURITY_REVIEW.md, O-02) |
 | `NarrationTimeoutSeconds` | 60 | 10-600 |
 | `TurnTimeoutMinutes` | 15 | 1-120 |
+
+These are edited in the **Ask Armada** section of the Server settings in the dashboard, the mobile app, and the TUI
+(`GET`/`PUT /api/v1/settings`, group `ask`, which a `PUT` replaces whole). `CaptainAutoApprove` is not shown there;
+clients send back the value the server returned.
 
 CLI tool permissions are configured in `ArmadaSettings.Permissions`: `AskDefaultPolicy` (default `ApproveInArmada`),
 `MissionDefaultPolicy` (default `Bypass`), `AllowOwnerApproval` (default false), and `PromptTimeoutSeconds` (default
@@ -388,6 +426,7 @@ archived or deleted.
 | 2026-10-04 | backend agent | P5.1 | REST_API.md, MCP_API.md, WEBSOCKET_API.md, Postman "Ask Threads" folder, CHANGELOG. README Ask section left for the dashboard merge. |
 | 2026-10-04 | orchestrator | P5.2 | Integration run through the real dashboard (Playwright, Chromium, 1512 px) against a throwaway server (ports 57890/57891) with a real Claude Code captain and a temp repo with a bare origin, vessel `LocalMerge` with auto-land on. Three conversations: (1) captain proposed `dispatch`, confirm card in about 6 s, approved, mission ran, landing failed because the first temp repo had no `origin` (test setup; the thread reported it correctly, including a captain-written explanation); (2) same flow in a new conversation through "Mission landed" and "voyage complete", commit verified on origin; (3) after fixes, order verified and rename, summarize, and delete exercised. Fixed during integration: the "not connected to Armada over MCP" banner was shown for Claude Code captains even though the server connects them per turn; the captain's reply was persisted when the turn ended, so a confirm card approved while the captain was still writing (and the resulting updates) sorted above the reply; the reply's position is now reserved when the turn starts. Full suite 2889/2889, dashboard 218/218. |
 | 2026-10-05 | cli-permissions agent | -- | CLI tool permissions in Ask: turns resolve `Refuse` / `ApproveInArmada` / `Bypass` (thread, captain, `Ask.CaptainAutoApprove` legacy mapping, `Permissions.AskDefaultPolicy` default `ApproveInArmada`); Claude Code permission prompts become `CliPermission` cards decided by admins (owners when `Permissions.AllowOwnerApproval`); `[x!]` explanations from typed permission denials; CLI tools control in the conversation header; narrations and summaries never prompt. Migration 78. |
+| 2026-10-08 | ask-report agent | -- | Ask reports results on its own: the final milestone of a voyage, mission, or fleet action run carries a deterministic Outcome block from typed rows (status, failure reason, check runs and test counts, landing and pull request, the captain's final message, elapsed time), and the thread's captain follows it with a `WorkReport` turn (once per item, queued behind a running turn, skipped when the user already posted, the thread is archived or deleted, or `Ask.ReportResultsOnCompletion` is off). Ask settings group in the settings API and in the dashboard, mobile, and TUI Server settings. |
 | 2026-10-08 | ask-telemetry agent | -- | Per-turn telemetry on Ask replies: `ChatTurnTelemetryRecorder` in Core, shared by Ask, captain chat, and Planning turns (Admiral host and Harbor); migration 82 on all four providers; Codex chat turns run `codex exec --json` for usage and tool calls; dashboard (i) popover on every reply, the mobile (i) panel with the full set, and `i` in the TUI. |
 
 ## UI assumptions (dashboard, 2026-10-04)

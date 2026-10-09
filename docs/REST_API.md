@@ -1237,7 +1237,7 @@ Returns current server settings including ports, agent configuration, system pat
 
 #### PUT /api/v1/settings
 
-Accepts partial updates to editable server settings and saves them to `settings.json`. Editable top-level fields: `AdmiralPort`, `McpPort`, `MaxCaptains`, `HeartbeatIntervalSeconds`, `StallThresholdMinutes`, `IdleCaptainTimeoutSeconds`, `PlanningSessionInactivityTimeoutMinutes`, `PlanningSessionAbandonmentTimeoutMinutes`, `PlanningSessionRetentionDays`, `LandingMode` (the global landing mode: `LocalMerge`, `MergeAndPush`, `PullRequest`, `MergeQueue`, or `None`), `SelfVesselId`, `RebuildSlotRetentionCount`, `RemoteControl`, `Import`, `FleetActions`, `RepositoryHealth`, `Retention`, `Permissions`, and `Push`; omitted fields are unchanged. When `RemoteControl` is supplied, it replaces the full `RemoteControl` settings object (send `Password` or `EnrollmentToken` as `********` to keep the stored value). When `Import` is supplied, it replaces the full `Import` (vessel import) settings object; see [Vessel Import](#vessel-import) for the fields and their ranges. When `FleetActions` is supplied, it replaces the full `FleetActions` object (omitted fields take their defaults; values are clamped: `MaxConcurrency` 1-32, `DefaultTimeoutSeconds` 5-7200, `MaxOutputBytes` 1024-1048576, `RunRetentionDays` 1-3650) and applies immediately.
+Accepts partial updates to editable server settings and saves them to `settings.json`. Editable top-level fields: `AdmiralPort`, `McpPort`, `MaxCaptains`, `HeartbeatIntervalSeconds`, `StallThresholdMinutes`, `IdleCaptainTimeoutSeconds`, `PlanningSessionInactivityTimeoutMinutes`, `PlanningSessionAbandonmentTimeoutMinutes`, `PlanningSessionRetentionDays`, `LandingMode` (the global landing mode: `LocalMerge`, `MergeAndPush`, `PullRequest`, `MergeQueue`, or `None`), `SelfVesselId`, `RebuildSlotRetentionCount`, `RemoteControl`, `Import`, `FleetActions`, `RepositoryHealth`, `Retention`, `Permissions`, `Ask`, and `Push`; omitted fields are unchanged. When `RemoteControl` is supplied, it replaces the full `RemoteControl` settings object (send `Password` or `EnrollmentToken` as `********` to keep the stored value). When `Import` is supplied, it replaces the full `Import` (vessel import) settings object; see [Vessel Import](#vessel-import) for the fields and their ranges. When `FleetActions` is supplied, it replaces the full `FleetActions` object (omitted fields take their defaults; values are clamped: `MaxConcurrency` 1-32, `DefaultTimeoutSeconds` 5-7200, `MaxOutputBytes` 1024-1048576, `RunRetentionDays` 1-3650) and applies immediately.
 
 **Permission:** AdminOnly
 
@@ -1271,6 +1271,19 @@ CLI tool permission settings (see [CLI Permissions](#cli-permissions) and [CAPTA
 | `MissionDefaultPolicy` | `Bypass` | Policy for missions when neither the vessel's `AutoApprove` override nor the captain (policy or explicit `autoApprove`) sets one. `Bypass` is the behavior before CLI tool permissions. |
 | `AllowOwnerApproval` | `false` | When true, the owner of the Ask thread or mission may allow once or deny its requests. Global admins and the tenant's tenant admins can always decide; remembering a decision as a rule always needs an admin. |
 | `PromptTimeoutSeconds` | 600 | Seconds a permission request waits before it expires and is denied. Clamped to 10..3600. |
+
+Ask Armada settings (see [Ask Armada threads](#ask-armada-threads) and [ASK_ARMADA_HOME_BASE.md](ASK_ARMADA_HOME_BASE.md#settings-armadasettingsask)): `GET /api/v1/settings` returns an `Ask` object, and when `Ask` is supplied on PUT it replaces the whole object (omitted fields take their defaults, so send back `CaptainAutoApprove` as returned to keep it). Out-of-range values are clamped, and every value applies live.
+
+| Field | Default | Effect |
+|-------|---------|--------|
+| `HistoryTurns` | 20 | Recent messages replayed to the captain each turn. Clamped to 2..200. |
+| `ProposalExpiryMinutes` | 60 | Minutes a pending action proposal waits for a decision. Clamped to 1..1440. |
+| `TrackerIntervalSeconds` | 5 | Seconds between work-tracker sweeps. Clamped to 2..300. |
+| `NarrateMilestones` | `true` | Milestones are worded by the thread's captain when it is idle. The final milestone of a voyage, mission, or fleet action run is never narrated (it carries the deterministic outcome). |
+| `ReportResultsOnCompletion` | `true` | After the final milestone of a voyage, mission, or fleet action run that succeeded or failed, the thread's captain posts a short report of the outcome (a `WorkReport` message). When false only the final milestone, which always carries the outcome, is posted. |
+| `CaptainAutoApprove` | `false` | Legacy captain auto-approve for Ask turns (see CLI tool permissions). Not shown by the clients' settings forms. |
+| `NarrationTimeoutSeconds` | 60 | Seconds a milestone narration may take before the deterministic sentence is used. Clamped to 10..600. |
+| `TurnTimeoutMinutes` | 15 | Minutes a captain turn may run before it is stopped and marked failed. Clamped to 1..120. |
 
 Push notification settings (see [Push Notifications](#push-notifications)): `GET /api/v1/settings` returns a `Push` object with
 `ExpoAccessToken` redacted as `********` when one is set, and when `Push` is supplied on PUT it replaces the whole object
@@ -3999,7 +4012,14 @@ the MCP API, for example `{ "ToolName": "dispatch", "Arguments": { "title": "...
 When a snapshot changes, `ask.work` is pushed; milestones (work started, a mission failed, produced its work, landed,
 opened a pull request, or could not land, and the item succeeded, failed, or was cancelled) post `WorkUpdate` messages, worded by the
 thread's captain when it is idle (`Ask.NarrateMilestones`, bounded by `Ask.NarrationTimeoutSeconds`) and otherwise a
-deterministic sentence. Captain and Armada messages increment `UnreadCount`; `POST .../read` resets it.
+deterministic sentence. The final milestone of a voyage, mission, or fleet action run that succeeded or failed is not
+narrated: after the sentence it carries an **Outcome** block built from typed fields (elapsed time; per mission its
+vessel, status, landing and pull request, failure reason, runtime, finished check runs with exit code and test counts,
+and an excerpt of the captain's final message; per fleet action target its status, exit code, and reason). When the
+thread has a captain and `Ask.ReportResultsOnCompletion` is on, a short captain turn then reports the outcome as a
+`WorkReport` message linked to the work (`TrackedWorkId`): once per tracked item, after any running turn ends, and not
+when the user posted after the final milestone or the thread was archived or deleted. It is a normal turn (`ask.turn`
+events, CLI permission policy, telemetry). Captain and Armada messages increment `UnreadCount`; `POST .../read` resets it.
 
 **CLI tool permissions.** The CLI's own tools (shell commands, web fetches, file tools outside its temporary working
 directory) follow the turn's CLI tool permission policy, resolved in this order: the thread's `CliPermissionPolicy`; the
@@ -4027,7 +4047,8 @@ for the next turn, or null without a captain), `SummaryText`, `SummaryUtc`, `Pin
 PendingCliPermissions: CliPermissionRequest[] (pending requests of the thread's captain, newest first) }`.
 
 `AskMessage`: `Id` (amg_), `ThreadId`, `Sequence` (per-thread, strictly increasing), `Role` (`User`, `Assistant`,
-`System`), `Kind` (`Text`, `ActionProposal`, `ActionResult`, `WorkUpdate`, `Summary`, `Error`, `CliPermission`),
+`System`), `Kind` (`Text`, `ActionProposal`, `ActionResult`, `WorkUpdate`, `Summary`, `Error`, `CliPermission`,
+`WorkReport` (the captain's automatic report of finished work; clients that do not know it render it as assistant text)),
 `ContentText`, `ThinkingText`, `ProposalId`, `TrackedWorkId`, `CaptainId`, `DurationMs`, `Metrics`, `CreatedUtc`,
 `LastUpdateUtc`, plus embedded `ToolCalls` (`AskMessageToolCall`: `Id` atc_, `CallId`, `ToolName`, `ArgumentsText`, `ResultText`, `Ok`,
 `ElapsedMs`, `PermissionDenied` (true when the CLI refused the call because the turn's CLI tool permission policy did not
