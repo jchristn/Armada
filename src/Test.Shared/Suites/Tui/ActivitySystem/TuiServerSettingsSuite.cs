@@ -151,6 +151,40 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                 }
             }));
 
+            cases.Add(TuiCase.Sync(Suite, "ask_save", "Ask Armada shows the server's values, validates ranges, and saves the whole group keeping captain auto-approve", () =>
+            {
+                StubHttpHandler stub = Stub();
+                using (TuiTestHost host = Open(stub, out ServerSettingsScreen screen))
+                {
+                    AssertTrue(screen.AskReportResults.Value, "report results loaded");
+                    AssertEqual("30", screen.AskHistoryTurns.Value, "history loaded");
+                    AssertFalse(screen.Groups["ask"].CanSave(), "clean group cannot save");
+
+                    screen.Form.Scope.Focus(screen.AskHistoryTurns);
+                    host.Press("ctrl+u").Type("1");
+                    AssertEqual("Must be a whole number from 2 to 200.", screen.AskHistoryTurns.FieldError, "range message");
+                    host.Press("ctrl+s");
+                    host.Pump();
+                    AssertEqual(0, stub.CountFor("PUT", "/api/v1/settings"), "blocked while invalid");
+                    host.Press("ctrl+u").Type("40");
+
+                    screen.AskReportResults.SetValue(false, true);
+                    AssertTrue(screen.Groups["ask"].IsDirty, "dirty");
+                    screen.Form.Scope.Focus(screen.AskHistoryTurns);
+                    host.Press("ctrl+s");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("PUT", "/api/v1/settings") == 1), "PUT sent");
+                    StubRequest put = stub.Last("PUT", "/api/v1/settings");
+                    ServerSettingsAskBody? ask = put.BodyAs<ServerSettingsUpdateBody>().Ask;
+                    AssertNotNull(ask, "ask group sent: " + put.Body);
+                    AssertEqual(false, ask!.ReportResultsOnCompletion, "report results off: " + put.Body);
+                    AssertEqual(true, ask.NarrateMilestones, "narration kept: " + put.Body);
+                    AssertEqual(40, ask.HistoryTurns, "history: " + put.Body);
+                    AssertEqual(15, ask.TurnTimeoutMinutes, "whole group sent: " + put.Body);
+                    AssertEqual(true, ask.CaptainAutoApprove, "captain auto-approve round-trips: " + put.Body);
+                    AssertTrue(TuiToasts.WaitForSuccess(host, "Ask Armada settings saved and applied."), "success toast");
+                }
+            }));
+
             cases.Add(TuiCase.Sync(Suite, "backup_to_file", "Backup Now saves the server's ZIP to the chosen path", () =>
             {
                 StubHttpHandler stub = Stub();
@@ -355,7 +389,8 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                 + "\"FleetActions\":{\"MaxConcurrency\":8,\"DefaultTimeoutSeconds\":300,\"MaxOutputBytes\":65536,\"RunRetentionDays\":30},"
                 + "\"RepositoryHealth\":{\"IntervalMinutes\":360,\"MaxConcurrency\":4,\"FetchBeforeEvaluate\":true,\"DependencyMaxAgeHours\":24,\"DependencyCommandTimeoutSeconds\":120,\"StaleBranchDays\":90,\"MissionWindowDays\":7,"
                 + "\"ScoredCriteria\":[\"GitDivergence\",\"WorkingTree\",\"Branches\",\"Dependencies\"],\"Thresholds\":{\"BehindWarn\":1,\"BehindFail\":21,\"StaleBranchWarn\":4,\"StaleBranchFail\":11,\"MissionFailureWarn\":1,\"MissionFailureFail\":3}},"
-                + "\"Retention\":{\"AskThreadArchiveAfterDays\":90,\"AskThreadDeleteAfterDays\":0,\"JobRetentionDays\":45,\"ImportBatchRetentionDays\":90}}";
+                + "\"Retention\":{\"AskThreadArchiveAfterDays\":90,\"AskThreadDeleteAfterDays\":0,\"JobRetentionDays\":45,\"ImportBatchRetentionDays\":90},"
+                + "\"Ask\":{\"HistoryTurns\":30,\"ProposalExpiryMinutes\":60,\"TrackerIntervalSeconds\":5,\"NarrateMilestones\":true,\"ReportResultsOnCompletion\":true,\"CaptainAutoApprove\":true,\"NarrationTimeoutSeconds\":60,\"TurnTimeoutMinutes\":15}}";
             stub.Json("GET", "/api/v1/settings", settings);
             stub.On("PUT", "/api/v1/settings", body => StubHttpHandler.Response(HttpStatusCode.OK, settings));
             stub.Json("GET", "/api/v1/vessels", "{\"Objects\":[{\"Id\":\"vsl_self\",\"Name\":\"armada\"},{\"Id\":\"vsl_2\",\"Name\":\"other\"}],\"TotalRecords\":2}");

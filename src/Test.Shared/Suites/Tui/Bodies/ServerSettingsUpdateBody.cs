@@ -22,6 +22,11 @@ namespace Test.Shared.Suites.Tui.Bodies
         /// </summary>
         public ServerSettingsRetentionBody? Retention { get; set; } = null;
 
+        /// <summary>
+        /// Ask group.
+        /// </summary>
+        public ServerSettingsAskBody? Ask { get; set; } = null;
+
         #endregion
     }
 }

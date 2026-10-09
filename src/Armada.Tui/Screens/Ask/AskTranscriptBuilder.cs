@@ -361,7 +361,7 @@ namespace Armada.Tui.Screens.Ask
             block.CopyText = text;
             List<StyledText> lines = block.Lines;
 
-            if (message.Kind == AskMessageKindEnum.Text && message.Role == AskMessageRoleEnum.Assistant && text.Trim().Length == 0 && (message.ToolCalls == null || message.ToolCalls.Count == 0))
+            if ((message.Kind == AskMessageKindEnum.Text || message.Kind == AskMessageKindEnum.WorkReport) && message.Role == AskMessageRoleEnum.Assistant && text.Trim().Length == 0 && (message.ToolCalls == null || message.ToolCalls.Count == 0))
                 return null;
 
             if (message.Kind == AskMessageKindEnum.ActionProposal)
@@ -427,6 +427,9 @@ namespace Armada.Tui.Screens.Ask
                 if (chips.Count > 0) lines.AddRange(ToolChips(chips, view.ExpandedTools.Contains(block.Key), theme, loc, w, conv.Thread?.CliPermission));
                 string name = ask.CaptainName(message.CaptainId) ?? ask.ActiveCaptain?.Name ?? loc.T("Captain");
                 StyledText head = StyledText.From(name, theme.Success.WithAttribute(CellAttributes.Bold, true));
+                // The captain's automatic report of finished work (Ask.ReportResultsOnCompletion) reads like any reply,
+                // tagged so it is clear nobody asked for it.
+                if (message.Kind == AskMessageKindEnum.WorkReport) head = head.Append(StyledText.From("  [" + loc.T("Report") + "]", theme.Info));
                 if (message.DurationMs != null) head = head.Append(StyledText.From("  " + AskTurnMetrics.FormatDuration(message.DurationMs), theme.Muted));
                 lines.Add(Header(head, when, theme, w));
                 // The server's recorded turn statistics (i toggles them); a reply without them keeps the line the TUI
