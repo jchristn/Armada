@@ -60,6 +60,34 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(3, summary.Total);
             }));
 
+            cases.Add(Case("console_text_with_windows_line_endings", "Console summaries with CRLF line endings (output from a Windows host) parse like LF output", TestTags.Positive, () =>
+            {
+                CheckRunTestSummary? dotnet = CheckRunParsingService.ParseTestSummary("Build succeeded.\r\nPassed!  - Failed:     0, Passed:     3, Skipped:     1, Total:     4, Duration: 1.5 s\r\nDone.\r\n");
+                AssertNotNull(dotnet, "dotnet summary with CRLF");
+                AssertEqual("dotnet", dotnet!.Format);
+                AssertEqual(3, dotnet.Passed);
+                AssertEqual(4, dotnet.Total);
+
+                CheckRunTestSummary? pytest = CheckRunParsingService.ParseTestSummary("collected 5 items\r\n===== 4 passed, 1 failed in 0.52s =====\r\n");
+                AssertNotNull(pytest, "pytest summary with CRLF");
+                AssertEqual(4, pytest!.Passed);
+                AssertEqual(1, pytest.Failed);
+
+                CheckRunTestSummary? jest = CheckRunParsingService.ParseTestSummary("RUN  v2\r\nTests  7 passed (7)\r\n");
+                AssertNotNull(jest, "jest summary with CRLF");
+                AssertEqual(7, jest!.Passed);
+                
+
+                // Each CRLF result matches the same text with LF endings.
+                foreach (string text in new[] { "Passed!  - Failed:     0, Passed:     3, Skipped:     1, Total:     4, Duration: 1.5 s\r\n", "===== 4 passed, 1 failed in 0.52s =====\r\n", "Tests  7 passed (7)\r\n" })
+                {
+                    CheckRunTestSummary? crlf = CheckRunParsingService.ParseTestSummary(text);
+                    CheckRunTestSummary? lf = CheckRunParsingService.ParseTestSummary(text.Replace("\r\n", "\n"));
+                    AssertEqual(lf?.Total, crlf?.Total, "total for " + text.Trim());
+                    AssertEqual(lf?.DurationMs, crlf?.DurationMs, "duration for " + text.Trim());
+                }
+            }));
+
             cases.Add(Case("jest_json_artifact_parsed", "A Jest JSON report artifact is parsed into typed counts", TestTags.Positive, () =>
             {
                 string root = TestTemp.NewDirectory("checkrun-parse");

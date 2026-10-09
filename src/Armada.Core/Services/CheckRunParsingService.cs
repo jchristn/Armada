@@ -15,11 +15,11 @@ namespace Armada.Core.Services
     public static class CheckRunParsingService
     {
         private static readonly Regex _DotNetSummaryRegex = new Regex(
-            @"(?im)^(?:Passed|Failed)!\s*-\s*Failed:\s*(?<failed>\d+),\s*Passed:\s*(?<passed>\d+),\s*Skipped:\s*(?<skipped>\d+),\s*Total:\s*(?<total>\d+),\s*Duration:\s*(?<duration>[^\r\n]+)$",
+            @"(?im)^(?:Passed|Failed)!\s*-\s*Failed:\s*(?<failed>\d+),\s*Passed:\s*(?<passed>\d+),\s*Skipped:\s*(?<skipped>\d+),\s*Total:\s*(?<total>\d+),\s*Duration:\s*(?<duration>[^\r\n]+)\r?$",
             RegexOptions.Compiled);
 
         private static readonly Regex _PytestSummaryRegex = new Regex(
-            @"(?im)^=+\s*(?<body>.+?)\s+in\s+(?<duration>[0-9A-Za-z\.\:\s]+)\s*=+$",
+            @"(?im)^=+\s*(?<body>.+?)\s+in\s+(?<duration>[0-9A-Za-z\.\:\s]+)\s*=+\r?$",
             RegexOptions.Compiled);
 
         private static readonly Regex _PytestTokenRegex = new Regex(
@@ -27,7 +27,7 @@ namespace Armada.Core.Services
             RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
         private static readonly Regex _JavascriptTestsLineRegex = new Regex(
-            @"(?im)^Tests?\s+(?<body>.+)$",
+            @"(?im)^Tests?\s+(?<body>[^\r\n]+)\r?$",
             RegexOptions.Compiled);
 
         private static readonly Regex _JavascriptTokenRegex = new Regex(
