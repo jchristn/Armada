@@ -177,14 +177,17 @@ namespace Test.Shared.Suites.Services
                     Name = "Harbor checks",
                     Scope = WorkflowProfileScopeEnum.Vessel,
                     VesselId = vessel.Id,
-                    UnitTestCommand = "printf 'Passed!  - Failed: 0, Passed: 3, Skipped: 1, Total: 4, Duration: 1.5 s\\n'"
+                    // Runs in the platform shell (cmd on Windows), so only syntax both shells share; the artifact is written
+                    // into the Harbor's checkout below, where the run's artifact collection finds it.
+                    UnitTestCommand = "echo Passed!  - Failed: 0, Passed: 3, Skipped: 1, Total: 4, Duration: 1.5 s"
                         + " && echo on-stderr 1>&2"
-                        + " && mkdir -p out"
-                        + " && printf '<coverage line-rate=\"0.75\" branch-rate=\"0.5\" lines-covered=\"15\" lines-valid=\"20\" branches-covered=\"4\" branches-valid=\"8\"></coverage>' > out/coverage.cobertura.xml"
-                        + " && test -f README.md",
+                        + " && git ls-files --error-unmatch README.md",
                     ExpectedArtifacts = new List<string> { "out/coverage.cobertura.xml", "out/missing.xml" }
                 };
                 await s.Db.Driver.WorkflowProfiles.CreateAsync(profile).ConfigureAwait(false);
+                Directory.CreateDirectory(Path.Combine(git.Checkout, "out"));
+                File.WriteAllText(Path.Combine(git.Checkout, "out", "coverage.cobertura.xml"),
+                    "<coverage line-rate=\"0.75\" branch-rate=\"0.5\" lines-covered=\"15\" lines-valid=\"20\" branches-covered=\"4\" branches-valid=\"8\"></coverage>");
 
                 CheckRun run = await s.CheckRuns.RunAsync(s.Admin, new CheckRunRequest { VesselId = vessel.Id, Type = CheckRunTypeEnum.UnitTest, Label = "Unit tests" }).ConfigureAwait(false);
 
@@ -293,9 +296,10 @@ namespace Test.Shared.Suites.Services
                 VesselHost host = await s.Resolver.ResolveAsync(vessel, null).ConfigureAwait(false);
                 WorkspaceService workspace = new WorkspaceService();
 
-                WorkspaceExecResult exec = await workspace.ExecAsync(host, new WorkspaceExecRequest { Command = "echo exec-marker && pwd", TimeoutSeconds = 30 }).ConfigureAwait(false);
+                WorkspaceExecResult exec = await workspace.ExecAsync(host, new WorkspaceExecRequest { Command = "echo exec-marker && git rev-parse --show-toplevel", TimeoutSeconds = 30 }).ConfigureAwait(false);
                 AssertEqual(0, exec.ExitCode, exec.Stderr);
                 AssertContains("exec-marker", exec.Stdout);
+                // git prints the same path form in every shell (pwd in Git Bash on Windows prints /c/...).
                 string pwd = exec.Stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(l => l.Trim()).Last();
                 AssertTrue(PathCanonicalizer.AreEquivalent(git.Checkout, pwd), "ran in the Harbor's checkout (" + pwd + ")");
                 AssertContains("hbr_vh_exec", exec.Host);
