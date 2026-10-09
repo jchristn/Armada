@@ -200,6 +200,55 @@ namespace Test.Shared.Suites.Tui.Build
                 }
             }));
 
+            cases.Add(TuiCase.Sync(Suite, "stale_poll_ignored", "A batch poll answered after a newer one does not roll the results back to Importing", () =>
+            {
+                StubHttpHandler stub = Stub(() => 0);
+                using (TuiTestHost host = TuiCase.SignedIn(170, 50, "/vessels/import", stub))
+                using (ManualResetEventSlim releaseStale = new ManualResetEventSlim(false))
+                {
+                    AssertTrue(host.WaitForText("Folders on the Admiral host, one per line"), "source");
+                    ImportWizard wizard = (ImportWizard)host.Tui.Shell.Screen!;
+                    wizard.PollMilliseconds = 50;
+                    wizard.Scope.Focus(wizard.PasteArea);
+                    host.Type("/repos").Press("ctrl+s");
+                    AssertTrue(host.WaitForText("[2 Review]", 8000), "review\n" + host.Screen());
+
+                    // The test drives the polls itself: the timer interval outlasts the test.
+                    wizard.PollMilliseconds = 60000;
+                    host.Press("ctrl+s");
+                    AssertTrue(host.WaitForText("[3 Results]", 8000), "results\n" + host.Screen());
+
+                    // The first poll is answered "Importing" only after the second has answered "Completed".
+                    string importing = "{\"Batch\":{\"Id\":\"vib_1\",\"Status\":\"Importing\",\"CandidateCount\":2,\"CreatedUtc\":\"2026-10-04T10:00:00Z\",\"LastUpdateUtc\":\"2026-10-04T10:00:00Z\"},\"Items\":[],\"Hints\":[],\"FleetRecommendations\":[]}";
+                    string done = "{\"Batch\":{\"Id\":\"vib_1\",\"Status\":\"Completed\",\"CandidateCount\":2,\"CreatedCount\":1,\"SkippedCount\":1,\"CreatedUtc\":\"2026-10-04T10:00:00Z\",\"LastUpdateUtc\":\"2026-10-04T10:00:00Z\"}," +
+                        "\"Items\":[{\"Id\":\"vii_1\",\"Path\":\"/repos/api-service\",\"ProposedName\":\"api-service\",\"CandidateStatus\":\"New\",\"Outcome\":\"Created\",\"VesselId\":\"vsl_new\",\"Selected\":true}],\"Hints\":[],\"FleetRecommendations\":[]}";
+                    int answered = 0;
+                    stub.On("GET", "/api/v1/vessels/import/batches/vib_1", b =>
+                    {
+                        if (Interlocked.Increment(ref answered) == 1)
+                        {
+                            AssertTrue(releaseStale.Wait(30000), "the stale poll was released");
+                            return StubHttpHandler.Response(HttpStatusCode.OK, importing);
+                        }
+
+                        return StubHttpHandler.Response(HttpStatusCode.OK, done);
+                    });
+
+                    int before = stub.CountFor("GET", "/api/v1/vessels/import/batches/vib_1");
+                    wizard.Poll("vib_1");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("GET", "/api/v1/vessels/import/batches/vib_1") == before + 1), "first poll sent");
+                    wizard.Poll("vib_1");
+                    AssertTrue(host.PumpUntil(() => wizard.ResultGrid.Rows.Any(i => i.VesselId == "vsl_new")), "the newer poll shows the created vessel\n" + host.Screen());
+                    int responses = wizard.PollResponses;
+
+                    releaseStale.Set();
+                    AssertTrue(host.PumpUntil(() => wizard.PollResponses == responses + 1), "the stale poll answered");
+                    AssertEqual(Armada.Core.Enums.VesselImportBatchStatusEnum.Completed, wizard.Batch?.Status, "the batch stays Completed");
+                    AssertTrue(wizard.ResultGrid.Rows.Any(i => i.VesselId == "vsl_new"), "the created vessel stays in the results\n" + host.Screen());
+                    TuiCase.NotContains(host.Screen(), "[Importing]", "no rollback to Importing");
+                }
+            }));
+
             return new TestSuiteDescriptor(suiteId: Suite, displayName: "TUI import wizard", cases: cases);
         }
 
