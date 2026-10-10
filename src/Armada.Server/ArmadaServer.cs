@@ -143,7 +143,7 @@ namespace Armada.Server
         private IPromptTemplateService _PromptTemplateService = null!;
         private PersonaSeedService _PersonaSeedService = null!;
         private LogRotationService _LogRotation = null!;
-        private DataExpiryService _DataExpiry = null!;
+        private DataExpiryService? _DataExpiry = null;
         private RetentionService _Retention = null!;
         private RemoteTunnelManager _RemoteTunnel = null!;
         private RemoteDashboardRelayService _RemoteDashboardRelay = null!;
@@ -401,7 +401,11 @@ namespace Armada.Server
 
             // Initialize log rotation and data expiry
             _LogRotation = new LogRotationService(_Logging, _Settings.MaxLogFileSizeBytes, _Settings.MaxLogFileCount);
-            _DataExpiry = new DataExpiryService(_Logging, _Settings.Database.GetConnectionString(), _Settings.DataRetentionDays);
+            // DataExpiryService talks to SQLite directly (its write gate parses a SQLite connection string), so it exists
+            // only for SQLite; constructing it with a server provider's connection string threw and stopped startup.
+            _DataExpiry = _Settings.Database.Type == DatabaseTypeEnum.Sqlite
+                ? new DataExpiryService(_Logging, _Settings.Database.GetConnectionString(), _Settings.DataRetentionDays)
+                : null;
             _Retention = new RetentionService(_Database, _Settings, _Logging);
 
             // Initialize handler classes (WebSocketHub is created later, so pass null initially)
@@ -2048,7 +2052,7 @@ namespace Armada.Server
                     {
                         // DataExpiryService talks to SQLite directly; on server providers it would throw and skip the
                         // rest of this block, so it only runs for SQLite and each step is isolated.
-                        if (_Settings.Database.Type == DatabaseTypeEnum.Sqlite)
+                        if (_DataExpiry != null)
                         {
                             try { await _DataExpiry.PurgeExpiredDataAsync(token).ConfigureAwait(false); }
                             catch (Exception expiryEx) when (!(expiryEx is OperationCanceledException)) { _Logging.Warn(_Header + "data expiry error: " + expiryEx.Message); }

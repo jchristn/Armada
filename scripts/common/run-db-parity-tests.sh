@@ -69,6 +69,10 @@ run_suite() {
     echo "  ${label}: NO RESULT (see below)"; tail -20 "$out"
   else
     echo "  ${label}: ${total}"
+    # Name the failing tests and their messages, so a failed run says what failed without the result files.
+    if grep -q '^Failed Tests:' "$out"; then
+      sed -n '/^Failed Tests:/,$p' "$out" | head -60 | sed 's/^/    /'
+    fi
   fi
   SUMMARY+=("${label} :: ${total:-NO RESULT}")
   return $code
