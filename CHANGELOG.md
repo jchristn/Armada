@@ -4,6 +4,12 @@ All notable changes to Armada are documented in this file.
 
 ---
 
+## Unreleased
+
+### Manual completion of an intermediate voyage stage
+
+- **A Complete request on a stage that another voyage mission depends on uses the shared completion service.** `PUT /api/v1/missions/{id}/status` reads the dependent stage and the assigned captain in the caller's scope, then calls `MissionService.HandleCompletionAsync` while the mission is still in a status that service can claim. The response, the progress signal, and the `mission.status_changed` event report the saved status. The stage stays `WorkProduced` while the next stage is prepared. A missing, stale, or out-of-scope captain is `409` and the mission is unchanged. A Complete request with no dependent stage keeps the current path, including an active-dock landing and a no-dock audit event.
+
 ## v1.2.0 (2026-10-27)
 
 v1.2.0 is about model evaluation: knowing how well each model does the work it is given, and handing work to it in a

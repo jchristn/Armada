@@ -5,6 +5,7 @@ namespace Test.Shared.Suites.E2E
     using System.Linq;
     using System.Net;
     using System.Net.Http;
+    using System.Net.Http.Headers;
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Core.Enums;
@@ -141,6 +142,202 @@ namespace Test.Shared.Suites.E2E
                 AssertTrue(count >= 1, "Expected at least 1 mission.manual_complete_no_dock event for mission " + missionId);
             }));
 
+            // === Manual Complete Of An Intermediate Voyage Stage ===
+
+            cases.Add(CaseAsync("manual_complete_intermediate_stage_uses_shared_handoff", "ManualComplete_IntermediateStage_UsesSharedHandoff", TestTags.Positive, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
+                HttpClient authClient = fx.AuthClient;
+                string suffix = Guid.NewGuid().ToString("N");
+                string workerId = "handoffw" + suffix;
+                string reviewerId = "handoffr" + suffix;
+                Voyage voyage = await CreateBareVoyageAsync(authClient, "intermediate handoff " + suffix);
+                Captain captain = await CreateOwningCaptainAsync(authClient, "intermediate handoff captain " + suffix, workerId);
+                Mission worker = await PostMissionAsync(authClient, new
+                {
+                    Id = workerId,
+                    Title = "intermediate worker " + suffix,
+                    VoyageId = voyage.Id,
+                    CaptainId = captain.Id,
+                    Persona = "Worker",
+                    Status = "InProgress"
+                });
+                AssertEqual(workerId, worker.Id, "worker id is the id the captain owns");
+                AssertEqual(MissionStatusEnum.InProgress, worker.Status, "worker starts in progress");
+                Mission reviewer = await PostMissionAsync(authClient, new
+                {
+                    Id = reviewerId,
+                    Title = "intermediate reviewer " + suffix,
+                    Description = "downstream reviewer",
+                    VoyageId = voyage.Id,
+                    DependsOnMissionId = workerId,
+                    Persona = "Judge",
+                    Status = "Pending"
+                });
+                AssertEqual(reviewerId, reviewer.Id, "reviewer id");
+                AssertEqual("downstream reviewer", reviewer.Description, "reviewer has no prior-stage context yet");
+
+                HttpResponseMessage complete = await TransitionAsync(authClient, workerId, "Complete");
+                AssertStatusCode(HttpStatusCode.OK, complete);
+                Mission responseMission = await JsonHelper.DeserializeAsync<Mission>(complete);
+                AssertEqual(MissionStatusEnum.WorkProduced, responseMission.Status, "response reports the saved nonterminal status");
+
+                Mission persisted = await GetMissionAsync(authClient, workerId);
+                AssertEqual(MissionStatusEnum.WorkProduced, persisted.Status, "shared completion leaves the worker at WorkProduced");
+                AssertTrue(persisted.CompletedUtc == null, "an intermediate stage is not terminal");
+                AssertTrue(String.IsNullOrEmpty(persisted.DockId), "this handoff has no landing dock");
+
+                Mission downstream = await GetMissionAsync(authClient, reviewerId);
+                AssertTrue(downstream.Status == MissionStatusEnum.Pending || downstream.Status == MissionStatusEnum.Assigned,
+                    "shared handoff leaves the reviewer pending or assigned, status " + downstream.Status);
+                AssertTrue((downstream.Description ?? String.Empty).Contains("Prior Stage Output", StringComparison.Ordinal),
+                    "shared handoff prepares the reviewer with the prior stage");
+                AssertTrue((downstream.Description ?? String.Empty).Contains(workerId, StringComparison.Ordinal),
+                    "prepared reviewer names the completed worker");
+
+                EnumerationResult<ArmadaEvent> events = await GetTypedAsync<EnumerationResult<ArmadaEvent>>(authClient,
+                    "/api/v1/events?type=mission.status_changed&missionId=" + Uri.EscapeDataString(workerId) + "&pageSize=50");
+                MissionStatusChangedPayload? handoff = (events.Objects ?? new List<ArmadaEvent>())
+                    .Where(evt => evt.EventType == "mission.status_changed" && evt.MissionId == workerId && !String.IsNullOrEmpty(evt.Payload))
+                    .Select(evt => JsonHelper.Deserialize<MissionStatusChangedPayload>(evt.Payload!))
+                    .FirstOrDefault(payload => payload.Status == MissionStatusEnum.WorkProduced);
+                AssertNotNull(handoff, "status event reports the persisted WorkProduced state");
+                AssertEqual(MissionStatusEnum.InProgress, handoff!.PreviousStatus, "status event records the prior in-progress state");
+
+                EnumerationResult<ArmadaEvent> skippedLanding = await GetTypedAsync<EnumerationResult<ArmadaEvent>>(authClient,
+                    "/api/v1/events?type=mission.manual_complete_no_dock&missionId=" + Uri.EscapeDataString(workerId) + "&pageSize=50");
+                int skippedCount = 0;
+                foreach (ArmadaEvent evt in skippedLanding.Objects ?? new List<ArmadaEvent>())
+                {
+                    if (evt.MissionId == workerId) skippedCount++;
+                }
+                AssertEqual(0, skippedCount, "intermediate handoff does not record a terminal no-dock completion");
+            }));
+
+            cases.Add(CaseAsync("manual_complete_intermediate_stage_refuses_missing_captain", "ManualComplete_IntermediateStage_RefusesMissingCaptain", TestTags.Negative, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
+                HttpClient authClient = fx.AuthClient;
+                string suffix = Guid.NewGuid().ToString("N");
+                string workerId = "missingw" + suffix;
+                string reviewerId = "missingr" + suffix;
+                Voyage voyage = await CreateBareVoyageAsync(authClient, "missing captain handoff " + suffix);
+                Mission worker = await PostMissionAsync(authClient, new
+                {
+                    Id = workerId,
+                    Title = "worker without captain " + suffix,
+                    VoyageId = voyage.Id,
+                    Persona = "Worker",
+                    Status = "InProgress"
+                });
+                Mission reviewer = await PostMissionAsync(authClient, new
+                {
+                    Id = reviewerId,
+                    Title = "reviewer without captain " + suffix,
+                    Description = "unprepared reviewer",
+                    VoyageId = voyage.Id,
+                    DependsOnMissionId = worker.Id,
+                    Persona = "Judge",
+                    Status = "Pending"
+                });
+
+                HttpResponseMessage complete = await TransitionAsync(authClient, worker.Id!, "Complete");
+                await E2eApiErrorAssert.ExpectAsync(complete, HttpStatusCode.Conflict, "missing assigned captain refuses intermediate completion").ConfigureAwait(false);
+
+                Mission persisted = await GetMissionAsync(authClient, worker.Id!);
+                AssertEqual(MissionStatusEnum.InProgress, persisted.Status, "a refused handoff leaves the worker in progress");
+                AssertTrue(persisted.CompletedUtc == null, "a refused handoff does not complete the worker");
+                Mission downstream = await GetMissionAsync(authClient, reviewer.Id!);
+                AssertEqual("unprepared reviewer", downstream.Description, "a refused handoff does not prepare the reviewer");
+                AssertEqual(MissionStatusEnum.Pending, downstream.Status, "a refused handoff does not assign the reviewer");
+            }));
+
+            cases.Add(CaseAsync("manual_complete_intermediate_stage_refuses_stale_captain", "ManualComplete_IntermediateStage_RefusesStaleCaptain", TestTags.Negative, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
+                HttpClient authClient = fx.AuthClient;
+                string suffix = Guid.NewGuid().ToString("N");
+                string workerId = "stalew" + suffix;
+                string reviewerId = "staler" + suffix;
+                Voyage voyage = await CreateBareVoyageAsync(authClient, "stale captain handoff " + suffix);
+                Captain captain = await CreateOwningCaptainAsync(authClient, "stale handoff captain " + suffix, "staleother" + suffix);
+                Mission worker = await PostMissionAsync(authClient, new
+                {
+                    Id = workerId,
+                    Title = "worker with stale captain " + suffix,
+                    VoyageId = voyage.Id,
+                    CaptainId = captain.Id,
+                    Persona = "Worker",
+                    Status = "InProgress"
+                });
+                Mission reviewer = await PostMissionAsync(authClient, new
+                {
+                    Id = reviewerId,
+                    Title = "reviewer with stale captain " + suffix,
+                    Description = "unprepared reviewer",
+                    VoyageId = voyage.Id,
+                    DependsOnMissionId = worker.Id,
+                    Persona = "Judge",
+                    Status = "Pending"
+                });
+
+                HttpResponseMessage complete = await TransitionAsync(authClient, worker.Id!, "Complete");
+                await E2eApiErrorAssert.ExpectAsync(complete, HttpStatusCode.Conflict, "captain that does not own the mission refuses intermediate completion").ConfigureAwait(false);
+
+                Mission persisted = await GetMissionAsync(authClient, worker.Id!);
+                AssertEqual(MissionStatusEnum.InProgress, persisted.Status, "a stale captain does not change the worker");
+                AssertEqual(captain.Id, persisted.CaptainId, "a stale captain does not clear the assignment");
+                Mission downstream = await GetMissionAsync(authClient, reviewer.Id!);
+                AssertEqual("unprepared reviewer", downstream.Description, "a stale captain does not prepare the reviewer");
+            }));
+
+            cases.Add(CaseAsync("manual_complete_intermediate_stage_refuses_captain_outside_caller_scope", "ManualComplete_IntermediateStage_RefusesCaptainOutsideCallerScope", TestTags.Negative, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
+                HttpClient authClient = fx.AuthClient;
+                string suffix = Guid.NewGuid().ToString("N");
+                string workerId = "scopew" + suffix;
+                string reviewerId = "scoper" + suffix;
+                Captain foreignCaptain = await CreateOwningCaptainAsync(authClient, "foreign handoff captain " + suffix, workerId);
+                string tenantId = await CreateTenantAsync(authClient, suffix);
+                string bearer = await CreateTenantAdminBearerAsync(authClient, tenantId, suffix);
+                using HttpClient tenantAdmin = new HttpClient();
+                tenantAdmin.BaseAddress = new Uri(fx.BaseUrl);
+                tenantAdmin.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", bearer);
+                tenantAdmin.Timeout = TimeSpan.FromSeconds(30);
+
+                Voyage voyage = await CreateBareVoyageAsync(tenantAdmin, "scoped handoff " + suffix);
+                Mission worker = await PostMissionAsync(tenantAdmin, new
+                {
+                    Id = workerId,
+                    Title = "worker with foreign captain " + suffix,
+                    VoyageId = voyage.Id,
+                    CaptainId = foreignCaptain.Id,
+                    Persona = "Worker",
+                    Status = "InProgress"
+                });
+                Mission reviewer = await PostMissionAsync(tenantAdmin, new
+                {
+                    Id = reviewerId,
+                    Title = "reviewer with foreign captain " + suffix,
+                    Description = "unprepared reviewer",
+                    VoyageId = voyage.Id,
+                    DependsOnMissionId = worker.Id,
+                    Persona = "Judge",
+                    Status = "Pending"
+                });
+
+                HttpResponseMessage complete = await TransitionAsync(tenantAdmin, worker.Id!, "Complete");
+                await E2eApiErrorAssert.ExpectAsync(complete, HttpStatusCode.Conflict, "captain outside the caller scope refuses intermediate completion").ConfigureAwait(false);
+
+                Mission persisted = await GetMissionAsync(tenantAdmin, worker.Id!);
+                AssertEqual(MissionStatusEnum.InProgress, persisted.Status, "an out-of-scope captain does not change the worker");
+                AssertEqual(foreignCaptain.Id, persisted.CaptainId, "an out-of-scope refusal keeps the stored captain id");
+                Mission downstream = await GetMissionAsync(tenantAdmin, reviewer.Id!);
+                AssertEqual("unprepared reviewer", downstream.Description, "an out-of-scope captain does not prepare the reviewer");
+                AssertEqual(MissionStatusEnum.Pending, downstream.Status, "an out-of-scope captain does not assign the reviewer");
+            }));
+
             // === MergeQueue Auto-Enqueue ===
 
             cases.Add(CaseAsync("merge_queue_vessel_landing_mode_creates_entry", "MergeQueue_VesselLandingMode_CreatesEntry", TestTags.Positive, async () =>
@@ -262,6 +459,78 @@ namespace Test.Shared.Suites.E2E
             }
 
             return missionId;
+        }
+
+        private static async Task<Voyage> CreateBareVoyageAsync(HttpClient client, string title)
+        {
+            HttpResponseMessage resp = await client.PostAsync("/api/v1/voyages", JsonHelper.ToJsonContent(new { Title = title })).ConfigureAwait(false);
+            string body = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
+            AssertTrue(resp.StatusCode == HttpStatusCode.Created, "create voyage " + (int)resp.StatusCode + ": " + body);
+            return JsonHelper.Deserialize<Voyage>(body);
+        }
+
+        private static async Task<Captain> CreateOwningCaptainAsync(HttpClient client, string name, string currentMissionId)
+        {
+            HttpResponseMessage resp = await client.PostAsync("/api/v1/captains", JsonHelper.ToJsonContent(new
+            {
+                Name = name,
+                Runtime = "ClaudeCode",
+                State = "Working",
+                CurrentMissionId = currentMissionId
+            })).ConfigureAwait(false);
+            string body = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
+            AssertTrue(resp.StatusCode == HttpStatusCode.Created, "create captain " + (int)resp.StatusCode + ": " + body);
+            Captain captain = JsonHelper.Deserialize<Captain>(body);
+            AssertEqual(currentMissionId, captain.CurrentMissionId, "captain records the mission it owns");
+            return captain;
+        }
+
+        private static async Task<Mission> PostMissionAsync(HttpClient client, object body)
+        {
+            HttpResponseMessage resp = await client.PostAsync("/api/v1/missions", JsonHelper.ToJsonContent(body)).ConfigureAwait(false);
+            string text = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
+            AssertTrue(resp.IsSuccessStatusCode, "create mission " + (int)resp.StatusCode + ": " + text);
+            MissionCreateResponse wrapper = JsonHelper.Deserialize<MissionCreateResponse>(text);
+            if (wrapper.Mission != null && !String.IsNullOrEmpty(wrapper.Mission.Id))
+                return wrapper.Mission;
+            return JsonHelper.Deserialize<Mission>(text);
+        }
+
+        private static async Task<string> CreateTenantAsync(HttpClient adminClient, string suffix)
+        {
+            HttpResponseMessage response = await adminClient.PostAsync("/api/v1/tenants",
+                JsonHelper.ToJsonContent(new { Name = "handoff-" + suffix.Substring(0, 8) })).ConfigureAwait(false);
+            string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            AssertTrue(response.StatusCode == HttpStatusCode.Created, "create tenant " + (int)response.StatusCode + ": " + body);
+            TenantMetadata tenant = JsonHelper.Deserialize<TenantMetadata>(body);
+            return tenant.Id;
+        }
+
+        private static async Task<string> CreateTenantAdminBearerAsync(HttpClient adminClient, string tenantId, string suffix)
+        {
+            string email = "handoff-" + suffix.Substring(0, 8) + "@example.invalid";
+            HttpResponseMessage userResponse = await adminClient.PostAsync("/api/v1/users", JsonHelper.ToJsonContent(new
+            {
+                TenantId = tenantId,
+                Email = email,
+                PasswordSha256 = UserMaster.ComputePasswordHash("handoff-pass"),
+                IsTenantAdmin = true
+            })).ConfigureAwait(false);
+            string userBody = await userResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+            AssertTrue(userResponse.StatusCode == HttpStatusCode.Created, "create tenant admin " + (int)userResponse.StatusCode + ": " + userBody);
+            UserMaster user = JsonHelper.Deserialize<UserMaster>(userBody);
+
+            HttpResponseMessage credentialResponse = await adminClient.PostAsync("/api/v1/credentials", JsonHelper.ToJsonContent(new
+            {
+                TenantId = tenantId,
+                UserId = user.Id,
+                Name = "handoff-" + suffix.Substring(0, 8)
+            })).ConfigureAwait(false);
+            string credentialBody = await credentialResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+            AssertTrue(credentialResponse.StatusCode == HttpStatusCode.Created, "create credential " + (int)credentialResponse.StatusCode + ": " + credentialBody);
+            Credential credential = JsonHelper.Deserialize<Credential>(credentialBody);
+            AssertFalse(String.IsNullOrEmpty(credential.BearerToken), "credential bearer token");
+            return credential.BearerToken!;
         }
 
         private static async Task<Mission> CreateMissionAsync(HttpClient authClient, string title)

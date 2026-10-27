@@ -3315,9 +3315,10 @@ Transition a mission to a new status. Only valid transitions are allowed.
 |---|---|---|---|
 | `Status` | string | yes | Target status name |
 
-**Response:** `200 OK` - [Mission](#mission)
+**Response:** `200 OK` - [Mission](#mission). The body is the saved mission. When another mission in the voyage depends on this one, `Complete` hands the stage to the shared completion service. The saved status stays nonterminal (`WorkProduced`) while that next stage is prepared.
 **Error:** `400` - Invalid transition or invalid status name
 **Error:** `404` - Mission not found
+**Error:** `409` - The mission has a dependent stage and the assigned captain is missing, does not own this mission, or is outside the caller's scope. The mission is unchanged.
 
 **Valid Status Transitions:**
 

@@ -190,6 +190,53 @@ namespace Armada.Server.Routes
             return MissionStateMachine.IsValidTransition(current, target);
         }
 
+        private async Task<Mission?> ReadCallerMissionAsync(AuthContext ctx, string id)
+        {
+            if (ctx.IsAdmin)
+                return await _database.Missions.ReadAsync(id).ConfigureAwait(false);
+            if (ctx.IsTenantAdmin)
+                return await _database.Missions.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false);
+            return await _database.Missions.ReadAsync(ctx.TenantId!, ctx.UserId!, id).ConfigureAwait(false);
+        }
+
+        private async Task<Captain?> ReadCallerCaptainAsync(AuthContext ctx, string? captainId)
+        {
+            if (String.IsNullOrWhiteSpace(captainId)) return null;
+            if (ctx.IsAdmin)
+                return await _database.Captains.ReadAsync(captainId).ConfigureAwait(false);
+            if (ctx.IsTenantAdmin)
+                return await _database.Captains.ReadAsync(ctx.TenantId!, captainId).ConfigureAwait(false);
+            return await _database.Captains.ReadAsync(ctx.TenantId!, ctx.UserId!, captainId).ConfigureAwait(false);
+        }
+
+        private async Task<bool> HasCallerVisibleDependentStageAsync(AuthContext ctx, Mission mission)
+        {
+            if (String.IsNullOrEmpty(mission.VoyageId)) return false;
+
+            List<Mission> voyageMissions;
+            if (ctx.IsAdmin)
+                voyageMissions = await _database.Missions.EnumerateByVoyageAsync(mission.VoyageId).ConfigureAwait(false);
+            else if (ctx.IsTenantAdmin)
+                voyageMissions = await _database.Missions.EnumerateByVoyageAsync(ctx.TenantId!, mission.VoyageId).ConfigureAwait(false);
+            else
+            {
+                List<Mission> tenantMissions = await _database.Missions.EnumerateByVoyageAsync(ctx.TenantId!, mission.VoyageId).ConfigureAwait(false);
+                voyageMissions = new List<Mission>();
+                foreach (Mission candidate in tenantMissions)
+                {
+                    if (String.Equals(candidate.UserId, ctx.UserId, StringComparison.Ordinal))
+                        voyageMissions.Add(candidate);
+                }
+            }
+
+            foreach (Mission candidate in voyageMissions)
+            {
+                if (String.Equals(candidate.DependsOnMissionId, mission.Id, StringComparison.Ordinal))
+                    return true;
+            }
+            return false;
+        }
+
         /// <summary>
         /// Register routes with the application.
         /// </summary>
@@ -620,6 +667,38 @@ namespace Armada.Server.Routes
                 if (!valid)
                     { req.Http.Response.StatusCode = 400; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Invalid transition from " + mission.Status + " to " + newStatus }; }
 
+                // An intermediate stage stays nonterminal. The shared completion service claims the
+                // current status itself; writing WorkProduced here would make that claim a no-op.
+                if (newStatus == MissionStatusEnum.Complete
+                    && await HasCallerVisibleDependentStageAsync(ctx, mission).ConfigureAwait(false))
+                {
+                    Captain? completionCaptain = await ReadCallerCaptainAsync(ctx, mission.CaptainId).ConfigureAwait(false);
+                    if (completionCaptain == null
+                        || !String.Equals(completionCaptain.CurrentMissionId, mission.Id, StringComparison.Ordinal))
+                    {
+                        req.Http.Response.StatusCode = 409;
+                        return new ApiErrorResponse { Error = ApiResultEnum.Conflict, Message = "Assigned captain cannot be confirmed for manual completion of an intermediate stage" };
+                    }
+
+                    await _missionService.HandleCompletionAsync(completionCaptain, mission.Id).ConfigureAwait(false);
+
+                    Mission? handedOff = await ReadCallerMissionAsync(ctx, id).ConfigureAwait(false);
+                    if (handedOff == null)
+                        { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Mission not found after handoff" }; }
+                    mission = handedOff;
+
+                    Signal handoffSignal = new Signal(SignalTypeEnum.Progress, "Mission " + id + " manual completion handed off as " + mission.Status);
+                    if (!String.IsNullOrEmpty(mission.CaptainId)) handoffSignal.FromCaptainId = mission.CaptainId;
+                    await _database.Signals.CreateAsync(handoffSignal).ConfigureAwait(false);
+
+                    await _emitMissionStatusChanged(mission, previousStatus, "Mission " + id + " manually completed - handed off as " + mission.Status).ConfigureAwait(false);
+
+                    if (_webSocketHub != null)
+                        _webSocketHub.BroadcastMissionChange(mission, mission.Status.ToString());
+
+                    return (object)mission;
+                }
+
                 // If manually transitioning to Complete and an active dock exists, route through
                 // the full landing pipeline (PR creation, merge, branch cleanup, dock reclaim)
                 // instead of just mutating the status. This ensures manual completion has the
@@ -720,12 +799,13 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Missions")
                 .WithSummary("Transition mission status")
-                .WithDescription("Transitions a mission to a new status. Valid transitions: Pending→Assigned, Assigned→InProgress, InProgress→Testing/Review/Complete/Failed, Testing→Review/InProgress/Complete/Failed, Review→Complete/InProgress/Failed. Most states allow →Cancelled.")
+                .WithDescription("Transitions a mission to a new status. Valid transitions: Pending→Assigned, Assigned→InProgress, InProgress→Testing/Review/Complete/Failed, Testing→Review/InProgress/Complete/Failed, Review→Complete/InProgress/Failed. Most states allow →Cancelled. Complete on a mission that has a dependent voyage stage hands that stage to the shared completion service and returns the saved mission. The request is refused when the assigned captain cannot be confirmed in the caller's scope.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Mission ID (msn_ prefix)"))
                 .WithRequestBody(OpenApiJson.BodyFor<StatusTransitionRequest>("Target status", true))
                 .WithResponse(200, OpenApiJson.For<Mission>("Updated mission"))
                 .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("Assigned captain cannot be confirmed"))
                 .WithSecurity("ApiKey"));
 
             app.Post<MissionReviewDecisionRequest>("/api/v1/missions/{id}/review/approve", async (ApiRequest req) =>

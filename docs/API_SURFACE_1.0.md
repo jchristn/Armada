@@ -227,7 +227,7 @@ Base path `/api/v1`. Request and response bodies are PascalCase JSON; errors are
 | POST | `/api/v1/missions/{id}/retry-landing` | TenantAdmin |  | 200 `Object`, 400, 404, 409 `ApiErrorResponse` |  |
 | POST | `/api/v1/missions/{id}/review/approve` | TenantAdmin | `MissionReviewDecisionRequest` (optional) | 200 `Mission`, 400, 404 |  |
 | POST | `/api/v1/missions/{id}/review/deny` | TenantAdmin | `MissionReviewDecisionRequest` (optional) | 200 `Mission`, 400, 404 |  |
-| PUT | `/api/v1/missions/{id}/status` | TenantAdmin | `StatusTransitionRequest` | 200 `Mission`, 400, 404 |  |
+| PUT | `/api/v1/missions/{id}/status` | TenantAdmin | `StatusTransitionRequest` | 200 `Mission`, 400, 404, 409 `ApiErrorResponse` |  |
 | GET | `/api/v1/model-endpoints` | Authenticated |  | 200 `List<ModelEndpoint>` |  |
 | POST | `/api/v1/model-endpoints` | Authenticated | `ModelEndpoint` | 201 `ModelEndpoint`, 400 |  |
 | POST | `/api/v1/model-endpoints/enumerate` | Authenticated | `EnumerationQuery` (optional) | 200 `EnumerationResult<ModelEndpoint>` |  |
