@@ -6,8 +6,8 @@ namespace Armada.Core.BlackBox
     /// <summary>
     /// One enrichment step of the black box pipeline (git forensics, attempts, evidence, related entries). Enrichers record
     /// facts only; interpretation belongs to <see cref="IBlackBoxAdvisor"/>. An enricher that throws marks the entry
-    /// EnrichmentFailed (the sweeper retries with backoff). Implementations must be thread-safe.
-    /// TODO(blackbox-wave2: enrichment) git forensics, conflict attribution, attempts, evidence objects.
+    /// EnrichmentFailed (the sweeper retries with backoff). Implementations must be thread-safe. The built-in enrichers
+    /// are in Armada.Core.BlackBox.Enrichment (BlackBoxEnricherCatalog).
     /// </summary>
     public interface IBlackBoxEnricher
     {

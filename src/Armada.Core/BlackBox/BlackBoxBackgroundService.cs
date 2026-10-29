@@ -8,7 +8,7 @@ namespace Armada.Core.BlackBox
 
     /// <summary>
     /// Runs the black box background work in the Admiral: the enrichment queue worker, the sweeper every
-    /// BlackBox.Sweeper.IntervalSeconds and garbage collection every BlackBox.Retention.GcIntervalMinutes. Intervals and
+    /// BlackBox.Sweeper.IntervalSeconds (followed by the re-analysis of entries with older rules) and garbage collection every BlackBox.Retention.GcIntervalMinutes. Intervals and
     /// BlackBox.Enabled are read on every tick, so settings changes apply without a restart. Thread-safe.
     /// </summary>
     public class BlackBoxBackgroundService : IDisposable
@@ -19,6 +19,11 @@ namespace Armada.Core.BlackBox
         /// Storage migrator whose unfinished jobs resume on <see cref="Start"/> and stop on <see cref="StopAsync"/>, or null.
         /// </summary>
         public Armada.Core.BlackBox.Storage.BlackBoxStorageMigrator? Migrator { get; set; } = null;
+
+        /// <summary>
+        /// Background re-analysis of entries analyzed with older rules, run after each sweep, or null.
+        /// </summary>
+        public BlackBoxReanalyzer? Reanalyzer { get; set; } = null;
 
         #endregion
 
@@ -117,6 +122,8 @@ namespace Armada.Core.BlackBox
                 {
                     await Task.Delay(TimeSpan.FromSeconds(_Settings.BlackBox.Sweeper.IntervalSeconds), token).ConfigureAwait(false);
                     if (_Settings.BlackBox.Enabled) await _Sweeper.SweepAsync(token).ConfigureAwait(false);
+                    BlackBoxReanalyzer? reanalyzer = Reanalyzer;
+                    if (_Settings.BlackBox.Enabled && reanalyzer != null) await reanalyzer.RunOnceAsync(token).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException) when (token.IsCancellationRequested)
                 {

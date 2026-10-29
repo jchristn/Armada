@@ -4,6 +4,7 @@ namespace Armada.Core.Services
     using System.Collections.Generic;
     using System.Threading;
     using System.Threading.Tasks;
+    using Armada.Core.BlackBox;
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
@@ -34,6 +35,7 @@ namespace Armada.Core.Services
             if (admiral == null) throw new ArgumentNullException(nameof(admiral));
             if (voyage == null) throw new ArgumentNullException(nameof(voyage));
 
+            VoyageStatusEnum statusBefore = voyage.Status;
             voyage.Status = VoyageStatusEnum.Cancelled;
             voyage.CompletedUtc = DateTime.UtcNow;
             voyage.LastUpdateUtc = DateTime.UtcNow;
@@ -57,6 +59,14 @@ namespace Armada.Core.Services
                     result.NotCancelledMissions++;
                     if (result.FirstNotCancelledReason == null) result.FirstNotCancelledReason = mission.Id + ": " + ex.Message;
                 }
+            }
+
+            // An operator cancellation: recorded after its missions (each recorded by CancelMissionAsync), triaged External.
+            if (statusBefore != VoyageStatusEnum.Cancelled)
+            {
+                await admiral.BlackBox.RecordVoyageFailureAsync(result.Voyage, statusBefore, BlackBoxStepEnum.Cancelled,
+                    "Cancelled by an operator: " + result.CancelledMissions + " mission(s) cancelled" + (result.NotCancelledMissions > 0 ? ", " + result.NotCancelledMissions + " could not be" : "") + ".",
+                    context => context.Note = result.FirstNotCancelledReason, token).ConfigureAwait(false);
             }
 
             return result;

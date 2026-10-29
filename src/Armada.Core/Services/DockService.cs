@@ -29,6 +29,9 @@ namespace Armada.Core.Services
         private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, SemaphoreSlim> _RepoProvisionLocks =
             new System.Collections.Concurrent.ConcurrentDictionary<string, SemaphoreSlim>(StringComparer.OrdinalIgnoreCase);
 
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, DockProvisionFailure> _ProvisionFailures =
+            new System.Collections.Concurrent.ConcurrentDictionary<string, DockProvisionFailure>(StringComparer.Ordinal);
+
         private string _Header = "[DockService] ";
         private LoggingModule _Logging;
         private DatabaseDriver _Database;
@@ -75,6 +78,8 @@ namespace Armada.Core.Services
             string normalizedRepoPath = Path.GetFullPath(repoPath);
             SemaphoreSlim repoLock = _RepoProvisionLocks.GetOrAdd(normalizedRepoPath, _ => new SemaphoreSlim(1, 1));
             bool repoLockAcquired = false;
+            BlackBoxStepEnum step = BlackBoxStepEnum.DockProvision;
+            if (!String.IsNullOrEmpty(missionId)) _ProvisionFailures.TryRemove(missionId, out DockProvisionFailure? _);
 
             try
             {
@@ -225,8 +230,10 @@ namespace Armada.Core.Services
 
                 // Create worktree. If the branch already exists, GitService will attach to it
                 // instead of recreating it so downstream pipeline stages and retries preserve work.
+                step = BlackBoxStepEnum.WorktreeCreate;
                 await _Git.CreateWorktreeAsync(repoPath, worktreePath, branchName, vessel.DefaultBranch, token).ConfigureAwait(false);
 
+                step = BlackBoxStepEnum.StartCommitRecord;
                 string? headCommit = await _Git.GetHeadCommitHashAsync(worktreePath, token).ConfigureAwait(false);
                 if (String.IsNullOrEmpty(headCommit))
                 {
@@ -240,6 +247,8 @@ namespace Armada.Core.Services
                 dock.CaptainId = captain.Id;
                 dock.WorktreePath = worktreePath;
                 dock.BranchName = branchName;
+                // The start commit is durable on the dock (scope checks and the black box read it after a restart).
+                DockStartCommit.Write(dock, headCommit, vessel.DefaultBranch);
                 dock = await _Database.Docks.CreateAsync(dock, token).ConfigureAwait(false);
 
                 try
@@ -258,6 +267,17 @@ namespace Armada.Core.Services
             catch (Exception ex)
             {
                 _Logging.Warn(_Header + "provisioning failed for vessel " + vessel.Id + " captain " + captain.Id + " repo " + (vessel.RepoUrl ?? "unknown") + ": " + ex.ToString());
+                if (!String.IsNullOrEmpty(missionId))
+                {
+                    _ProvisionFailures[missionId] = new DockProvisionFailure
+                    {
+                        MissionId = missionId,
+                        Step = step,
+                        Exception = ex,
+                        WorktreePath = worktreePath,
+                        WorktreeExisted = Directory.Exists(worktreePath)
+                    };
+                }
 
                 // Clean up partial state -- remove worktree directory if it was partially created
                 if (Directory.Exists(worktreePath))
@@ -315,6 +335,7 @@ namespace Armada.Core.Services
             dock.RepositoryPath = result.RepositoryPath;
             dock.CheckoutPath = result.CheckoutPath;
             dock.BranchName = branchName;
+            if (!String.IsNullOrEmpty(result.HeadCommit)) DockStartCommit.Write(dock, result.HeadCommit, vessel.DefaultBranch);
             dock = await _Database.Docks.CreateAsync(dock, token).ConfigureAwait(false);
 
             if (!String.IsNullOrEmpty(result.HeadCommit))
@@ -421,6 +442,13 @@ namespace Armada.Core.Services
                 + (primary != null ? " (mission " + primary.Id + " " + primary.Status + ")" : ""),
                 dock, lease, reclaimCaller, forceReason, false, token).ConfigureAwait(false);
             return true;
+        }
+
+        /// <inheritdoc />
+        public DockProvisionFailure? TakeProvisionFailure(string missionId)
+        {
+            if (String.IsNullOrEmpty(missionId)) return null;
+            return _ProvisionFailures.TryRemove(missionId, out DockProvisionFailure? failure) ? failure : null;
         }
 
         /// <inheritdoc />

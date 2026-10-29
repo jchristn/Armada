@@ -63,6 +63,16 @@ namespace Armada.Core.Models
         public DateTime? CreatedUtc { get; set; } = null;
 
         /// <summary>
+        /// Where the attempt came from (BlackBox, StageOutcome, Handoff, Rescue), or null.
+        /// </summary>
+        public string? Source { get; set; } = null;
+
+        /// <summary>
+        /// Stage disposition or handoff verdict, or null.
+        /// </summary>
+        public string? Disposition { get; set; } = null;
+
+        /// <summary>
         /// Instantiate.
         /// </summary>
         public BlackBoxAttempt()

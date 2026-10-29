@@ -3,7 +3,7 @@ namespace Armada.Core.BlackBox
     using Armada.Core.Models;
 
     /// <summary>
-    /// Default advisor until the rule catalog lands: no findings, rules version 0. Thread-safe.
+    /// Advisor with nothing to say (no findings, rules version 0): the pipeline default when no advisor is set, and a test stand-in. BlackBoxRuntime installs <see cref="BlackBoxAdvisor"/>. Thread-safe.
     /// </summary>
     public class NoOpBlackBoxAdvisor : IBlackBoxAdvisor
     {

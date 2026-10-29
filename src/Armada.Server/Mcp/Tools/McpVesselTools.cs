@@ -155,7 +155,8 @@ namespace Armada.Server.Mcp.Tools
                         definitionOfDoneTimeoutSeconds = new { type = "integer", description = "Per-phase timeout in seconds for each Definition-of-Done command (clamped to 30..7200)" },
                         testCommand = new { type = "string", description = "Per-vessel override for the Test intent (beats a repo script and the ecosystem default)" },
                         lintCommand = new { type = "string", description = "Per-vessel override for the Lint intent (beats a repo script and the ecosystem default)" },
-                        auditCommand = new { type = "string", description = "Per-vessel override for the Audit intent (beats a repo script and the ecosystem default)" }
+                        auditCommand = new { type = "string", description = "Per-vessel override for the Audit intent (beats a repo script and the ecosystem default)" },
+                        landingMode = new { type = "string", description = "Landing mode override for this vessel: " + McpToolHelpers.EnumNames<Armada.Core.Enums.LandingModeEnum>() + ", or Default to clear it so the global setting applies" }
                     },
                     required = new[] { "vesselId" }
                 },
@@ -219,6 +220,15 @@ namespace Armada.Server.Mcp.Tools
                         vessel.LintCommand = String.IsNullOrWhiteSpace(request.LintCommand) ? null : request.LintCommand;
                     if (request.AuditCommand != null)
                         vessel.AuditCommand = String.IsNullOrWhiteSpace(request.AuditCommand) ? null : request.AuditCommand;
+                    if (request.LandingMode != null)
+                    {
+                        if (String.IsNullOrWhiteSpace(request.LandingMode) || String.Equals(request.LandingMode.Trim(), "Default", StringComparison.OrdinalIgnoreCase))
+                            vessel.LandingMode = null;
+                        else if (Enum.TryParse<Armada.Core.Enums.LandingModeEnum>(request.LandingMode.Trim(), true, out Armada.Core.Enums.LandingModeEnum landingMode) && Enum.IsDefined(typeof(Armada.Core.Enums.LandingModeEnum), landingMode))
+                            vessel.LandingMode = landingMode;
+                        else
+                            return (object)McpToolError.InvalidArgument("landingMode must be one of " + McpToolHelpers.EnumNames<Armada.Core.Enums.LandingModeEnum>() + ", or Default.");
+                    }
                     await DuplicateEntityGuard.EnsureVesselNameAvailableAsync(database, vessel).ConfigureAwait(false);
                     vessel = await database.Vessels.UpdateAsync(vessel).ConfigureAwait(false);
                     if (blackBoxHooks != null) await blackBoxHooks.OnVesselUpdatedAsync(vessel.Id).ConfigureAwait(false);

@@ -21,7 +21,7 @@
           "maxLength": 2000
         },
         "arguments": {
-          "description": "Tool arguments as text.",
+          "description": "Tool arguments as text; when the action runs, true, false and whole numbers become JSON booleans and numbers.",
           "type": [
             "object"
           ],
@@ -294,6 +294,22 @@
             "null"
           ],
           "format": "date-time"
+        },
+        "source": {
+          "description": "Where the attempt came from (BlackBox, StageOutcome, Handoff, Rescue), or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "disposition": {
+          "description": "Stage disposition or handoff verdict, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
         }
       },
       "required": [
@@ -728,7 +744,7 @@
       ],
       "properties": {
         "id": {
-          "description": "Recommendation id within the entry (for example cr1).",
+          "description": "Stable recommendation id: the rule id in lower case, a dot and a key (for example bbx-land-001.landing-mode).",
           "type": [
             "string"
           ],
@@ -957,6 +973,43 @@
           "description": "Total target commits since start before capping.",
           "type": [
             "integer"
+          ]
+        },
+        "concurrentMissions": {
+          "description": "Other missions on the vessel that were active during this mission's run and touched the same files (from their diff snapshot or branch), landed or not; null when not analyzed.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/BlackBoxConflictingMission"
+          },
+          "maxItems": 25
+        },
+        "conflictedParentDirectories": {
+          "description": "The parent directory of each conflicted file, with counts (any depth); null when not analyzed.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/BlackBoxDirectoryCount"
+          },
+          "maxItems": 100
+        },
+        "deepestConflictedDirectory": {
+          "description": "The deepest directory holding at least two conflicted files, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "deepestConflictedDirectoryFileCount": {
+          "description": "Conflicted files under DeepestConflictedDirectory, or null.",
+          "type": [
+            "integer",
+            "null"
           ]
         }
       },
@@ -2874,7 +2927,7 @@
           "maxLength": 2000
         },
         "sourcePointers": {
-          "description": "Source pointers (file, method).",
+          "description": "Source pointers (repository-relative file:method).",
           "type": [
             "array"
           ],
@@ -3511,7 +3564,7 @@
       ],
       "properties": {
         "id": {
-          "description": "Path id within the entry (for example rp1).",
+          "description": "Stable path id: the rule id in lower case, a dot and a key (for example bbx-land-001.stash-retry).",
           "type": [
             "string"
           ],
@@ -3642,13 +3695,41 @@
           "type": [
             "boolean"
           ]
+        },
+        "recommendationId": {
+          "description": "Recommendation applied, when the run applied a configuration recommendation (PathId then holds the same id).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "stepsRun": {
+          "description": "Steps the run executed (0 for a dry run).",
+          "type": [
+            "integer"
+          ]
+        },
+        "stepsFailed": {
+          "description": "Steps that failed.",
+          "type": [
+            "integer"
+          ]
+        },
+        "userId": {
+          "description": "User who ran it, or null.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
         "entryId",
         "pathId",
         "dryRun",
-        "succeeded"
+        "succeeded",
+        "stepsRun",
+        "stepsFailed"
       ]
     },
     "BlackBoxRecoveryStep": {
@@ -4630,6 +4711,41 @@
             "null"
           ],
           "maxLength": 2000
+        },
+        "redispatchAttempts": {
+          "description": "Redispatch attempts the mission used, or null when unknown.",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "outputRepairAttempts": {
+          "description": "Output repair attempts the mission used, or null when unknown.",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "noOpRedispatchAttempts": {
+          "description": "No-op redispatch attempts the mission used, or null when unknown.",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "rescueChain": {
+          "description": "Rescue chain: the mission's ancestors by ParentMissionId, nearest first; null when not analyzed.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "string"
+            ],
+            "maxLength": 1024
+          },
+          "maxItems": 20
         }
       },
       "required": [
@@ -5095,6 +5211,44 @@
             "null"
           ],
           "format": "date-time"
+        },
+        "branchExists": {
+          "description": "Whether the mission branch still exists in the repository, or null when unknown.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "commitsAheadOfTarget": {
+          "description": "Commits the branch is ahead of the target, or null.",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "inspectedHost": {
+          "description": "Host the workspace was inspected on at enrichment (Admiral or Harbor:{id}), or null when not inspected.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "inspectionNote": {
+          "description": "Why workspace facts are unknown or partial (for example a disconnected Harbor), or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "targetMovementNote": {
+          "description": "Why target movement since the start commit was not read (for example no start commit), or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
         }
       },
       "required": [

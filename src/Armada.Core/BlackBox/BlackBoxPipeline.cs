@@ -33,6 +33,7 @@ namespace Armada.Core.BlackBox
         private readonly LoggingModule _Logging;
         private readonly List<IBlackBoxEnricher> _Enrichers;
         private IBlackBoxAdvisor _Advisor;
+        private int _SummaryTimeoutMs = 30000;
 
         #endregion
 
@@ -45,6 +46,21 @@ namespace Armada.Core.BlackBox
         {
             get => _Advisor;
             set => _Advisor = value ?? new NoOpBlackBoxAdvisor();
+        }
+
+        /// <summary>
+        /// Writes the optional model-written summary when BlackBox.SummaryEndpointId is set, or null to always keep the
+        /// rules summary. Failures and timeouts fall back silently to the rules summary.
+        /// </summary>
+        public IBlackBoxSummaryWriter? SummaryWriter { get; set; } = null;
+
+        /// <summary>
+        /// Time the model-written summary may take, in milliseconds. Default 30000, minimum 1000, maximum 300000.
+        /// </summary>
+        public int SummaryTimeoutMs
+        {
+            get => _SummaryTimeoutMs;
+            set => _SummaryTimeoutMs = Math.Clamp(value, 1000, 300000);
         }
 
         /// <summary>
@@ -136,32 +152,46 @@ namespace Armada.Core.BlackBox
 
             await AddRelatedAsync(entry, record, token).ConfigureAwait(false);
 
-            BlackBoxAnalysis? analysis = null;
-            try
-            {
-                analysis = _Advisor.Analyze(record);
-            }
-            catch (Exception e)
-            {
-                _Logging.Warn(_Header + "advisor failed on " + entry.Id + ": " + e.Message);
-            }
-            if (analysis != null)
-            {
-                record.Analysis = analysis;
-                if (analysis.Triage != null && analysis.Triage.Verdict != BlackBoxTriageEnum.Unknown) entry.Triage = analysis.Triage.Verdict;
-                entry.Summary = BlackBoxLimits.Clip(analysis.Summary, BlackBoxLimits.MaxSummaryChars);
-            }
-            record.RulesVersion = _Advisor.RulesVersion;
-            entry.RulesVersion = _Advisor.RulesVersion;
-            entry.State = BlackBoxStateEnum.Analyzed;
-            entry.AnalyzedUtc = DateTime.UtcNow;
-            record.State = entry.State;
+            await AnalyzeAsync(entry, record, token).ConfigureAwait(false);
 
             await _Writer.WriteAsync(entry, record, context.Objects, CancellationToken.None, token).ConfigureAwait(false);
-            if (context.Files.Count > 0) await _Database.BlackBoxFiles.CreateManyAsync(context.Files.Take(Armada.Core.Services.CollectionLimits.MaxRequestItems).ToList(), token).ConfigureAwait(false);
-            if (context.Links.Count > 0) await _Database.BlackBoxLinks.CreateManyAsync(context.Links.Take(Armada.Core.Services.CollectionLimits.MaxRequestItems).ToList(), token).ConfigureAwait(false);
+            // Enrichers emit the entry's complete row sets (the file-rows enricher re-emits the captured roles), so they
+            // replace the stored rows and a re-run never duplicates them.
+            if (context.Files.Count > 0)
+            {
+                await _Database.BlackBoxFiles.DeleteByEntryAsync(entry.Id, token).ConfigureAwait(false);
+                await _Database.BlackBoxFiles.CreateManyAsync(context.Files.Take(Armada.Core.Services.CollectionLimits.MaxRequestItems).ToList(), token).ConfigureAwait(false);
+            }
+            if (context.Links.Count > 0)
+            {
+                await _Database.BlackBoxLinks.DeleteByEntryAsync(entry.Id, token).ConfigureAwait(false);
+                await _Database.BlackBoxLinks.CreateManyAsync(context.Links.Take(Armada.Core.Services.CollectionLimits.MaxRequestItems).ToList(), token).ConfigureAwait(false);
+            }
 
             await _Events.EmitAsync(BlackBoxEventTypes.Analyzed, "Black box analyzed: " + entry.Id, entry.TenantId, entry.Id, entry.MissionId, entry.VoyageId, entry.VesselId,
+                new BlackBoxAnalyzedPayload { EntryId = entry.Id, MissionId = entry.MissionId, VoyageId = entry.VoyageId, State = entry.State, Triage = entry.Triage, RulesVersion = entry.RulesVersion }, token).ConfigureAwait(false);
+            return entry;
+        }
+
+        /// <summary>
+        /// Re-run only the advisor (and the optional model-written summary) over an entry's stored record and rewrite
+        /// record.json, the briefs and the entry's triage, summary and rules version. Enrichers do not run again, so no
+        /// file or link rows are added. Used when the rules version changes (<see cref="BlackBoxReanalyzer"/>). Emits
+        /// blackbox.analyzed.
+        /// </summary>
+        /// <param name="entryId">Entry id.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The updated entry, or null when it does not exist or is being deleted.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when entryId is null or empty.</exception>
+        public async Task<BlackBoxEntry?> ReanalyzeAsync(string entryId, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(entryId)) throw new ArgumentNullException(nameof(entryId));
+            BlackBoxEntry? entry = await _Database.BlackBoxEntries.ReadAsync(entryId, null, false, token).ConfigureAwait(false);
+            if (entry == null) return null;
+            BlackBoxRecord record = await LoadRecordAsync(entry, token).ConfigureAwait(false);
+            await AnalyzeAsync(entry, record, token).ConfigureAwait(false);
+            await _Writer.WriteAsync(entry, record, null, CancellationToken.None, token).ConfigureAwait(false);
+            await _Events.EmitAsync(BlackBoxEventTypes.Analyzed, "Black box re-analyzed: " + entry.Id, entry.TenantId, entry.Id, entry.MissionId, entry.VoyageId, entry.VesselId,
                 new BlackBoxAnalyzedPayload { EntryId = entry.Id, MissionId = entry.MissionId, VoyageId = entry.VoyageId, State = entry.State, Triage = entry.Triage, RulesVersion = entry.RulesVersion }, token).ConfigureAwait(false);
             return entry;
         }
@@ -194,6 +224,53 @@ namespace Armada.Core.BlackBox
         #endregion
 
         #region Private-Methods
+
+        private async Task AnalyzeAsync(BlackBoxEntry entry, BlackBoxRecord record, CancellationToken token)
+        {
+            BlackBoxAnalysis? analysis = null;
+            try
+            {
+                analysis = _Advisor.Analyze(record);
+            }
+            catch (Exception e) when (!(e is OperationCanceledException))
+            {
+                _Logging.Warn(_Header + "advisor failed on " + entry.Id + ": " + e.Message);
+            }
+            if (analysis != null)
+            {
+                await WriteModelSummaryAsync(entry, record, analysis, token).ConfigureAwait(false);
+                record.Analysis = analysis;
+                entry.Triage = analysis.Triage?.Verdict ?? BlackBoxTriageEnum.Unknown;
+                entry.Summary = BlackBoxLimits.Clip(analysis.Summary, BlackBoxLimits.MaxSummaryChars);
+            }
+            record.RulesVersion = _Advisor.RulesVersion;
+            entry.RulesVersion = _Advisor.RulesVersion;
+            entry.State = BlackBoxStateEnum.Analyzed;
+            entry.AnalyzedUtc = DateTime.UtcNow;
+            record.State = entry.State;
+        }
+
+        private async Task WriteModelSummaryAsync(BlackBoxEntry entry, BlackBoxRecord record, BlackBoxAnalysis analysis, CancellationToken token)
+        {
+            string? endpointId = _Settings.SummaryEndpointId;
+            IBlackBoxSummaryWriter? writer = SummaryWriter;
+            if (String.IsNullOrEmpty(endpointId) || writer == null) return;
+            try
+            {
+                using (CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(token))
+                {
+                    timeout.CancelAfter(_SummaryTimeoutMs);
+                    string? text = await writer.WriteSummaryAsync(endpointId!, record, analysis, timeout.Token).ConfigureAwait(false);
+                    if (String.IsNullOrWhiteSpace(text)) return;
+                    analysis.Summary = BlackBoxLimits.Clip(text!.Trim().Replace('\u2014', '-').Replace('\u2013', '-'), BlackBoxLimits.MaxSummaryChars);
+                    analysis.SummaryIsModelWritten = true;
+                }
+            }
+            catch (Exception e) when (!token.IsCancellationRequested)
+            {
+                _Logging.Debug(_Header + "model-written summary for " + entry.Id + " failed, keeping the rules summary: " + e.GetType().Name + ": " + e.Message);
+            }
+        }
 
         private async Task AddRelatedAsync(BlackBoxEntry entry, BlackBoxRecord record, CancellationToken token)
         {

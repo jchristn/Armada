@@ -5,15 +5,18 @@ namespace Armada.Core.BlackBox
     using System.IO;
     using System.IO.Compression;
     using System.Linq;
+    using System.Security.Cryptography;
     using System.Text;
     using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
+    using Armada.Core.Authorization;
     using Armada.Core.BlackBox.Storage;
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Core.Services;
+    using Armada.Core.Services.Interfaces;
     using Armada.Core.Settings;
     using SyslogLogging;
 
@@ -22,6 +25,40 @@ namespace Armada.Core.BlackBox
     /// </summary>
     public class BlackBoxService : IBlackBoxService
     {
+        #region Public-Members
+
+        /// <summary>
+        /// Runs recorded recovery and recommendation actions as the caller (the Admiral wires one that invokes the MCP tool
+        /// handler), or null; confirmed runs then fail with NotImplementedException.
+        /// </summary>
+        public IBlackBoxActionExecutor? ActionExecutor { get; set; } = null;
+
+        /// <summary>
+        /// Authorization service used to check every recorded action against its tool's declared requirement
+        /// (McpToolAuthorizationRegistry) before anything runs.
+        /// </summary>
+        public IAuthorizationService Authorization
+        {
+            get => _Authorization;
+            set => _Authorization = value ?? new AuthorizationService();
+        }
+
+        /// <summary>
+        /// Confirm tokens of dry runs (10-minute, single-use).
+        /// </summary>
+        public BlackBoxConfirmationStore Confirmations { get; } = new BlackBoxConfirmationStore();
+
+        /// <summary>
+        /// Redactor used for exported fixtures (the runtime's, with registered secrets).
+        /// </summary>
+        public BlackBoxRedactor Redactor
+        {
+            get => _Redactor;
+            set => _Redactor = value ?? new BlackBoxRedactor();
+        }
+
+        #endregion
+
         #region Private-Members
 
         private readonly string _Header = "[BlackBoxService] ";
@@ -36,6 +73,8 @@ namespace Armada.Core.BlackBox
         private readonly BlackBoxStorageMigrator _Migrator;
         private readonly IBlackBoxEventSink _Events;
         private readonly LoggingModule _Logging;
+        private IAuthorizationService _Authorization = new AuthorizationService();
+        private BlackBoxRedactor _Redactor = new BlackBoxRedactor();
 
         #endregion
 
@@ -562,19 +601,119 @@ namespace Armada.Core.BlackBox
         }
 
         /// <inheritdoc />
-        public Task<BlackBoxRecoveryRunResult> RunRecoveryAsync(AuthContext caller, string entryId, string pathId, BlackBoxRecoveryRunRequest request, CancellationToken token = default)
+        public async Task<BlackBoxRecoveryRunResult> RunRecoveryAsync(AuthContext caller, string entryId, string pathId, BlackBoxRecoveryRunRequest request, CancellationToken token = default)
         {
-            // TODO(blackbox-wave2: recovery): dry run returns the plan and a confirm token (10 minutes, bound to the entry,
-            // path and mission version); the real run authorizes and runs each step's action, annotates the entry and emits
-            // blackbox.recovery_run. Refuse dataLossRisk paths without AcknowledgeDataLoss (BlackBoxConfirmationException).
-            throw new NotImplementedException("Black box recovery runs are not implemented yet. TODO(blackbox-wave2: recovery)");
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            if (String.IsNullOrWhiteSpace(pathId)) throw new ArgumentException("pathId is required.", nameof(pathId));
+            BlackBoxEntry entry = await ReadVisibleAsync(caller, entryId, token).ConfigureAwait(false);
+            BlackBoxRecord record = await _Pipeline.LoadRecordAsync(entry, token).ConfigureAwait(false);
+            BlackBoxRecoveryPath path = record.Analysis?.RecoveryPaths.FirstOrDefault(p => String.Equals(p.Id, pathId.Trim(), StringComparison.Ordinal))
+                ?? throw new BlackBoxNotFoundException("Recovery path " + pathId + " is not recorded on black box entry " + entry.Id + ".");
+            List<BlackBoxRecoveryStep> plan = path.Steps.OrderBy(s => s.Order).Take(BlackBoxLimits.MaxRecoverySteps).ToList();
+            foreach (BlackBoxRecoveryStep step in plan.Where(s => s.Action != null)) ValidateAction(entry, record, step.Action!, "Recovery path " + path.Id + " step " + step.Order);
+            foreach (BlackBoxRecoveryStep step in plan.Where(s => s.Action != null)) AuthorizeAction(caller, step.Action!, "Recovery path " + path.Id + " step " + step.Order);
+            string version = await SubjectVersionAsync(entry, false, token).ConfigureAwait(false);
+            string planHash = PlanHash(plan.Select(s => s.Action != null ? BlackBoxRuleTemplate.McpCommand(s.Action) : "manual:" + s.Description));
+            bool dataLoss = path.DataLossRisk || plan.Any(s => s.DataLossRisk);
+
+            BlackBoxRecoveryRunResult result = new BlackBoxRecoveryRunResult { EntryId = entry.Id, PathId = path.Id, Plan = plan };
+            if (request.DryRun)
+            {
+                BlackBoxPendingConfirmation pending = Confirmations.Issue(BlackBoxConfirmationStore.RecoveryKind, entry.Id, path.Id, version, planHash, caller);
+                result.DryRun = true;
+                result.Succeeded = true;
+                result.ConfirmToken = pending.Token;
+                result.ConfirmTokenExpiresUtc = pending.ExpiresUtc;
+                result.Message = "Would run: " + DescribePlan(plan) + ". Confirm with confirmToken before " + pending.ExpiresUtc.ToString("u") + (dataLoss ? "; this path has data-loss risk, so confirm with acknowledgeDataLoss=true only after the user agrees." : ".");
+                await EmitRecoveryAsync(entry, path.Id, null, true, true, 0, 0, caller, token).ConfigureAwait(false);
+                return result;
+            }
+
+            if (String.IsNullOrWhiteSpace(request.ConfirmToken)) throw new BlackBoxConfirmationException("A confirmToken is required: run run_blackbox_recovery with dryRun=true first and confirm with the token it returns.");
+            if (dataLoss && !request.AcknowledgeDataLoss) throw new BlackBoxConfirmationException("Recovery path " + path.Id + " can lose work; confirm again with acknowledgeDataLoss=true after the user agrees.");
+            BlackBoxPendingConfirmation confirmed = Confirmations.Consume(request.ConfirmToken, BlackBoxConfirmationStore.RecoveryKind, entry.Id, path.Id, caller);
+            if (!String.Equals(confirmed.SubjectVersion, version, StringComparison.Ordinal))
+                throw new BlackBoxConfirmationException("The " + (entry.MissionId != null ? "mission" : "voyage") + " changed since the dry run; check its state and run a new dry run.");
+            if (!String.Equals(confirmed.PlanHash, planHash, StringComparison.Ordinal))
+                throw new BlackBoxConfirmationException("Recovery path " + path.Id + " changed since the dry run (the entry was re-analyzed); run a new dry run.");
+            IBlackBoxActionExecutor executor = ActionExecutor ?? throw new NotImplementedException("Running black box recovery actions is not available on this host (no action executor is wired).");
+
+            bool failed = false;
+            int ran = 0;
+            int failures = 0;
+            foreach (BlackBoxRecoveryStep step in plan)
+            {
+                BlackBoxRecoveryStepResult stepResult;
+                if (failed)
+                {
+                    stepResult = new BlackBoxRecoveryStepResult { Order = step.Order, Tool = step.Action?.Tool, Succeeded = false, Message = "Not run: an earlier step failed." };
+                }
+                else if (step.Action == null)
+                {
+                    stepResult = new BlackBoxRecoveryStepResult { Order = step.Order, Succeeded = true, Message = "Manual step, not run by Armada: " + step.Description };
+                }
+                else
+                {
+                    stepResult = await ExecuteAsync(executor, caller, step.Action, token).ConfigureAwait(false);
+                    stepResult.Order = step.Order;
+                    ran++;
+                    if (!stepResult.Succeeded) { failed = true; failures++; }
+                }
+                result.StepResults.Add(stepResult);
+            }
+            result.Succeeded = !failed;
+            result.Message = (failed ? "Recovery path " + path.Id + " stopped at a failed step." : "Recovery path " + path.Id + " ran.") + " " + ran + " of " + plan.Count(s => s.Action != null) + " Armada steps ran.";
+            string note = "Ran recovery path " + path.Id + " (" + path.Title + "): " + (result.Succeeded ? "succeeded" : "failed") + ". "
+                + String.Join(" ", result.StepResults.Select(r => r.Order + ". " + (r.Tool ?? "manual") + ": " + (r.Succeeded ? "ok" : "failed") + (String.IsNullOrWhiteSpace(r.Message) ? String.Empty : " (" + BlackBoxLimits.Clip(r.Message!.Replace('\n', ' '), 300) + ")")));
+            await AnnotateAsync(caller, entry, note, request.AuthorKind, token).ConfigureAwait(false);
+            await EmitRecoveryAsync(entry, path.Id, null, false, result.Succeeded, ran, failures, caller, token).ConfigureAwait(false);
+            return result;
         }
 
         /// <inheritdoc />
-        public Task<BlackBoxRecommendationApplyResult> ApplyRecommendationAsync(AuthContext caller, string entryId, string recommendationId, BlackBoxRecommendationApplyRequest request, CancellationToken token = default)
+        public async Task<BlackBoxRecommendationApplyResult> ApplyRecommendationAsync(AuthContext caller, string entryId, string recommendationId, BlackBoxRecommendationApplyRequest request, CancellationToken token = default)
         {
-            // TODO(blackbox-wave2: recovery): same dry-run and confirm-token flow as RunRecoveryAsync for ApplyAction.
-            throw new NotImplementedException("Applying black box recommendations is not implemented yet. TODO(blackbox-wave2: recovery)");
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            if (String.IsNullOrWhiteSpace(recommendationId)) throw new ArgumentException("recommendationId is required.", nameof(recommendationId));
+            BlackBoxEntry entry = await ReadVisibleAsync(caller, entryId, token).ConfigureAwait(false);
+            BlackBoxRecord record = await _Pipeline.LoadRecordAsync(entry, token).ConfigureAwait(false);
+            BlackBoxConfigRecommendation rec = record.Analysis?.ConfigRecommendations.FirstOrDefault(r => String.Equals(r.Id, recommendationId.Trim(), StringComparison.Ordinal))
+                ?? throw new BlackBoxNotFoundException("Recommendation " + recommendationId + " is not recorded on black box entry " + entry.Id + ".");
+            if (rec.ApplyAction == null) throw new ArgumentException("Recommendation " + rec.Id + " is advice only and cannot be applied automatically: " + (rec.HowToApply ?? rec.Rationale ?? "apply it by hand."), nameof(recommendationId));
+            ValidateAction(entry, record, rec.ApplyAction, "Recommendation " + rec.Id);
+            AuthorizeAction(caller, rec.ApplyAction, "Recommendation " + rec.Id);
+            string version = await SubjectVersionAsync(entry, true, token).ConfigureAwait(false);
+            string planHash = PlanHash(new[] { BlackBoxRuleTemplate.McpCommand(rec.ApplyAction) });
+
+            BlackBoxRecommendationApplyResult result = new BlackBoxRecommendationApplyResult { EntryId = entry.Id, RecommendationId = rec.Id, Action = rec.ApplyAction };
+            if (request.DryRun)
+            {
+                BlackBoxPendingConfirmation pending = Confirmations.Issue(BlackBoxConfirmationStore.RecommendationKind, entry.Id, rec.Id, version, planHash, caller);
+                result.DryRun = true;
+                result.Succeeded = true;
+                result.ConfirmToken = pending.Token;
+                result.ConfirmTokenExpiresUtc = pending.ExpiresUtc;
+                result.Message = "Would run " + BlackBoxRuleTemplate.McpCommand(rec.ApplyAction) + " (set " + rec.Setting + " from " + (rec.CurrentValue ?? "unset") + " to " + (rec.SuggestedValue ?? "?") + "). Confirm with confirmToken before " + pending.ExpiresUtc.ToString("u") + ".";
+                await EmitRecoveryAsync(entry, rec.Id, rec.Id, true, true, 0, 0, caller, token).ConfigureAwait(false);
+                return result;
+            }
+
+            if (String.IsNullOrWhiteSpace(request.ConfirmToken)) throw new BlackBoxConfirmationException("A confirmToken is required: run apply_blackbox_recommendation with dryRun=true first and confirm with the token it returns.");
+            BlackBoxPendingConfirmation confirmed = Confirmations.Consume(request.ConfirmToken, BlackBoxConfirmationStore.RecommendationKind, entry.Id, rec.Id, caller);
+            if (!String.Equals(confirmed.SubjectVersion, version, StringComparison.Ordinal))
+                throw new BlackBoxConfirmationException("The mission or vessel changed since the dry run; check the current configuration and run a new dry run.");
+            if (!String.Equals(confirmed.PlanHash, planHash, StringComparison.Ordinal))
+                throw new BlackBoxConfirmationException("Recommendation " + rec.Id + " changed since the dry run (the entry was re-analyzed); run a new dry run.");
+            IBlackBoxActionExecutor executor = ActionExecutor ?? throw new NotImplementedException("Applying black box recommendations is not available on this host (no action executor is wired).");
+
+            BlackBoxRecoveryStepResult outcome = await ExecuteAsync(executor, caller, rec.ApplyAction, token).ConfigureAwait(false);
+            result.Succeeded = outcome.Succeeded;
+            result.Message = outcome.Message;
+            string note = "Applied recommendation " + rec.Id + " (" + rec.Setting + " to " + (rec.SuggestedValue ?? "?") + " on the " + rec.Scope.ToString().ToLowerInvariant() + "): " + (outcome.Succeeded ? "succeeded" : "failed")
+                + (String.IsNullOrWhiteSpace(outcome.Message) ? "." : " (" + BlackBoxLimits.Clip(outcome.Message!.Replace('\n', ' '), 500) + ").");
+            await AnnotateAsync(caller, entry, note, request.AuthorKind, token).ConfigureAwait(false);
+            await EmitRecoveryAsync(entry, rec.Id, rec.Id, false, outcome.Succeeded, 1, outcome.Succeeded ? 0 : 1, caller, token).ConfigureAwait(false);
+            return result;
         }
 
         /// <inheritdoc />
@@ -588,33 +727,116 @@ namespace Armada.Core.BlackBox
             filter.PageSize = max;
             filter.Order = EnumerationOrderEnum.CreatedDescending;
             EnumerationResult<BlackBoxEntry> page = await _Database.BlackBoxEntries.EnumerateAsync(filter, token).ConfigureAwait(false);
-            List<IGrouping<string, BlackBoxEntry>> groups = page.Objects.GroupBy(e => e.Fingerprint ?? e.Id).OrderByDescending(g => g.Count()).ToList();
-            BlackBoxBundleResult result = new BlackBoxBundleResult { Format = r.Format == BlackBoxBundleFormatEnum.Json ? BlackBoxBundleFormatEnum.Json : BlackBoxBundleFormatEnum.Markdown, EntryCount = page.Objects.Count, FingerprintCount = groups.Count };
+            List<BlackBoxEntry> entries = page.Objects.Take(max).ToList();
+            List<List<BlackBoxEntry>> groups = entries.GroupBy(e => e.Fingerprint ?? e.Id, StringComparer.Ordinal)
+                .Select(g => g.OrderByDescending(e => e.CreatedUtc).ToList())
+                .OrderByDescending(g => g.Count).ThenByDescending(g => g[0].CreatedUtc).ToList();
+            BlackBoxBundleResult result = new BlackBoxBundleResult
+            {
+                Format = r.Format == BlackBoxBundleFormatEnum.Json ? BlackBoxBundleFormatEnum.Json : BlackBoxBundleFormatEnum.Markdown,
+                EntryCount = entries.Count,
+                FingerprintCount = groups.Count,
+                Truncated = page.TotalRecords > entries.Count
+            };
+
             if (result.Format == BlackBoxBundleFormatEnum.Json)
             {
-                List<BlackBoxEntrySummary> summaries = page.Objects.Select(Summarize).ToList();
-                result.Content = JsonSerializer.Serialize(summaries, BlackBoxJson.Options);
+                List<BlackBoxBundleGroup> jsonGroups = new List<BlackBoxBundleGroup>();
+                foreach (List<BlackBoxEntry> group in groups)
+                {
+                    BlackBoxEntry newest = group[0];
+                    BlackBoxRecord record = await _Pipeline.LoadRecordAsync(newest, token).ConfigureAwait(false);
+                    jsonGroups.Add(new BlackBoxBundleGroup
+                    {
+                        Fingerprint = newest.Fingerprint ?? newest.Id,
+                        Count = group.Count,
+                        FirstSeenUtc = group[group.Count - 1].CreatedUtc,
+                        LastSeenUtc = newest.CreatedUtc,
+                        ArmadaVersions = group.Select(e => e.ArmadaVersion ?? "unknown").Distinct(StringComparer.Ordinal).Take(BlackBoxLimits.MaxBundleVersions).ToList(),
+                        Triage = record.Analysis?.Triage?.Verdict ?? newest.Triage,
+                        RuleIds = record.Analysis?.Why.Select(w => w.RuleId).Distinct(StringComparer.Ordinal).Take(BlackBoxLimits.MaxFindings).ToList() ?? new List<string>(),
+                        Newest = Summarize(newest),
+                        Improvements = record.Analysis?.ArmadaImprovements.Take(BlackBoxLimits.MaxImprovements).ToList() ?? new List<BlackBoxImprovement>(),
+                        Site = record.Site,
+                        Others = group.Skip(1).Select(Summarize).ToList()
+                    });
+                }
+                BlackBoxBundleDocument doc = new BlackBoxBundleDocument { Preamble = BundlePreamble(entries.Count, groups.Count), EntryCount = entries.Count, FingerprintCount = groups.Count, Groups = jsonGroups };
+                result.Content = JsonSerializer.Serialize(doc, BlackBoxJson.Options).Replace('—', '-');
                 return result;
             }
+
             StringBuilder sb = new StringBuilder();
             sb.Append("# Armada black box maintainer bundle\n\n");
-            sb.Append("These are ").Append(page.Objects.Count).Append(" black box entries in ").Append(groups.Count).Append(" failure modes (grouped by fingerprint). ");
-            sb.Append("Rank the Armada improvements they suggest, check each against the source at the build commits listed, and write each accepted one as an Armada mission brief with a test.\n\n");
-            foreach (IGrouping<string, BlackBoxEntry> group in groups)
+            sb.Append(BundlePreamble(entries.Count, groups.Count)).Append("\n\n");
+            foreach (List<BlackBoxEntry> group in groups)
             {
-                List<BlackBoxEntry> entries = group.OrderByDescending(e => e.CreatedUtc).ToList();
-                BlackBoxEntry newest = entries[0];
-                sb.Append("## ").Append(newest.Phase).Append(" / ").Append(newest.Step).Append(newest.FailureKind.HasValue ? " / " + newest.FailureKind.Value : String.Empty).Append(" (").Append(entries.Count).Append(" entries)\n\n");
-                sb.Append("- First seen ").Append(entries.Last().CreatedUtc.ToString("u")).Append(", last seen ").Append(newest.CreatedUtc.ToString("u")).Append('\n');
-                sb.Append("- Armada versions: ").Append(String.Join(", ", entries.Select(e => e.ArmadaVersion ?? "unknown").Distinct().Take(10))).Append("\n\n");
+                BlackBoxEntry newest = group[0];
                 BlackBoxRecord record = await _Pipeline.LoadRecordAsync(newest, token).ConfigureAwait(false);
-                sb.Append(_Renderer.Render(newest, record, BlackBoxAudienceEnum.Maintainer, r.RedactHosts).Replace("\n# ", "\n### ").Replace("\n## ", "\n#### ")).Append('\n');
-                foreach (BlackBoxEntry other in entries.Skip(1)) sb.Append("- ").Append(other.Id).Append(" ").Append(other.CreatedUtc.ToString("u")).Append(": ").Append((other.ReasonExcerpt ?? String.Empty).Replace('\n', ' ')).Append('\n');
+                sb.Append("## ").Append(newest.Phase).Append(" / ").Append(newest.Step).Append(newest.FailureKind.HasValue ? " / " + newest.FailureKind.Value : String.Empty).Append(" (").Append(group.Count).Append(group.Count == 1 ? " entry" : " entries").Append(")\n\n");
+                sb.Append("- Fingerprint: ").Append(newest.Fingerprint ?? "none").Append('\n');
+                sb.Append("- First seen ").Append(group[group.Count - 1].CreatedUtc.ToString("u")).Append(", last seen ").Append(newest.CreatedUtc.ToString("u")).Append('\n');
+                sb.Append("- Armada versions: ").Append(String.Join(", ", group.Select(e => e.ArmadaVersion ?? "unknown").Distinct(StringComparer.Ordinal).Take(BlackBoxLimits.MaxBundleVersions))).Append('\n');
+                if (record.Analysis != null) sb.Append("- Triage: ").Append(record.Analysis.Triage?.Verdict ?? newest.Triage).Append("; rules: ").Append(String.Join(", ", record.Analysis.Why.Select(w => w.RuleId).Distinct(StringComparer.Ordinal))).Append('\n');
                 sb.Append('\n');
-                if (Encoding.UTF8.GetByteCount(sb.ToString()) > 1048576) { result.Truncated = true; break; }
+                sb.Append(_Renderer.Render(newest, record, BlackBoxAudienceEnum.Maintainer, r.RedactHosts).Replace("\n# ", "\n### ").Replace("\n## ", "\n#### ").Replace("# Armada maintainer brief", "### Armada maintainer brief")).Append('\n');
+                if (group.Count > 1)
+                {
+                    sb.Append("Other entries with this fingerprint:\n\n");
+                    foreach (BlackBoxEntry other in group.Skip(1)) sb.Append("- ").Append(other.Id).Append(' ').Append(other.CreatedUtc.ToString("u")).Append(" (").Append(other.ArmadaVersion ?? "unknown").Append("): ").Append(OneLine(BlackBoxLimits.Clip(other.ReasonExcerpt, 200) ?? String.Empty)).Append('\n');
+                    sb.Append('\n');
+                }
+                if (Encoding.UTF8.GetByteCount(sb.ToString()) > BlackBoxLimits.MaxBundleBytes) { result.Truncated = true; break; }
             }
-            result.Content = sb.ToString().Replace('—', '-');
+            string content = sb.ToString().Replace('—', '-').Replace('–', '-');
+            if (r.RedactHosts) content = BlackBoxBriefRenderer.RedactHosts(content);
+            result.Content = content;
             return result;
+        }
+
+        /// <inheritdoc />
+        public async Task<BlackBoxFingerprintTrend> GetFingerprintTrendAsync(AuthContext caller, string fingerprint, CancellationToken token = default)
+        {
+            RequireCaller(caller);
+            if (String.IsNullOrWhiteSpace(fingerprint)) throw new ArgumentException("fingerprint is required.", nameof(fingerprint));
+            BlackBoxFingerprintTrend trend = new BlackBoxFingerprintTrend { Fingerprint = fingerprint.Trim() };
+            List<BlackBoxEntry> entries = new List<BlackBoxEntry>();
+            int pageNumber = 1;
+            while (entries.Count < BlackBoxLimits.MaxTrendEntries)
+            {
+                BlackBoxEnumerateRequest query = Scope(caller, new BlackBoxEnumerateRequest { Fingerprint = trend.Fingerprint, PageNumber = pageNumber, PageSize = 100, Order = EnumerationOrderEnum.CreatedDescending });
+                EnumerationResult<BlackBoxEntry> page = await _Database.BlackBoxEntries.EnumerateAsync(query, token).ConfigureAwait(false);
+                entries.AddRange(page.Objects.Take(BlackBoxLimits.MaxTrendEntries - entries.Count));
+                if (page.Objects.Count == 0 || pageNumber >= page.TotalPages) break;
+                if (entries.Count >= BlackBoxLimits.MaxTrendEntries) { trend.Truncated = page.TotalRecords > entries.Count; break; }
+                pageNumber++;
+            }
+            trend.Total = entries.Count;
+            if (entries.Count > 0)
+            {
+                trend.Phase = entries[0].Phase;
+                trend.Step = entries[0].Step;
+            }
+            trend.Versions = entries.GroupBy(e => String.IsNullOrWhiteSpace(e.ArmadaVersion) ? "unknown" : e.ArmadaVersion!, StringComparer.Ordinal)
+                .Select(g => new BlackBoxVersionCount
+                {
+                    ArmadaVersion = g.Key,
+                    Count = g.Count(),
+                    OpenCount = g.Count(e => e.Resolution == BlackBoxResolutionEnum.Open),
+                    ArmadaFixedCount = g.Count(e => e.Resolution == BlackBoxResolutionEnum.ArmadaFixed),
+                    FirstSeenUtc = g.Min(e => e.CreatedUtc),
+                    LastSeenUtc = g.Max(e => e.CreatedUtc)
+                })
+                .OrderBy(v => v.FirstSeenUtc).Take(BlackBoxLimits.MaxTrendVersions).ToList();
+            return trend;
+        }
+
+        /// <inheritdoc />
+        public async Task<BlackBoxFixture> ExportFixtureAsync(AuthContext caller, string entryId, string? name = null, CancellationToken token = default)
+        {
+            BlackBoxEntry entry = await ReadVisibleAsync(caller, entryId, token).ConfigureAwait(false);
+            BlackBoxRecord record = await _Pipeline.LoadRecordAsync(entry, token).ConfigureAwait(false);
+            return BlackBoxFixtureExporter.Build(record, _Pipeline.Advisor, name, null, entry.MissionId ?? entry.VoyageId ?? entry.Id, _Redactor);
         }
 
         /// <inheritdoc />
@@ -700,6 +922,122 @@ namespace Armada.Core.BlackBox
         #endregion
 
         #region Private-Methods
+
+        private static void ValidateAction(BlackBoxEntry entry, BlackBoxRecord record, BlackBoxAction action, string label)
+        {
+            if (!BlackBoxActionCommands.IsSupported(action.Tool)) throw new ArgumentException(label + " names tool " + action.Tool + ", which recovery runs do not allow.");
+            if (action.Arguments.Count > BlackBoxLimits.MaxActionArguments) throw new ArgumentException(label + " has too many arguments.");
+            string? missionId = entry.MissionId ?? record.Subject?.MissionId;
+            string? vesselId = entry.VesselId ?? record.Subject?.VesselId;
+            string? dockId = record.Workspace?.DockId ?? record.Subject?.DockId ?? entry.DockId;
+            if (action.Arguments.TryGetValue("missionId", out string? m) && !String.Equals(m, missionId, StringComparison.Ordinal))
+                throw new ArgumentException(label + " targets mission " + m + ", not this entry's mission " + (missionId ?? "(none)") + ".");
+            if (action.Arguments.TryGetValue("vesselId", out string? v) && !String.Equals(v, vesselId, StringComparison.Ordinal))
+                throw new ArgumentException(label + " targets vessel " + v + ", not this entry's vessel " + (vesselId ?? "(none)") + ".");
+            if (action.Arguments.TryGetValue("dockId", out string? d) && !String.Equals(d, dockId, StringComparison.Ordinal))
+                throw new ArgumentException(label + " targets dock " + d + ", not this entry's dock " + (dockId ?? "(none)") + ".");
+        }
+
+        private void AuthorizeAction(AuthContext caller, BlackBoxAction action, string label)
+        {
+            AuthorizationRequirement requirement = McpToolAuthorizationRegistry.GetOrDefault(action.Tool);
+            if (_Authorization.IsAuthorized(caller, requirement)) return;
+            string needed = requirement.Level == PermissionLevel.AdminOnly ? "an admin" : (requirement.Level == PermissionLevel.TenantAdmin ? "a tenant admin or admin" : "an authenticated caller");
+            throw new UnauthorizedAccessException(label + " runs " + action.Tool + ", which requires " + needed + "; you could not call it directly, so the black box cannot run it for you.");
+        }
+
+        private async Task<string> SubjectVersionAsync(BlackBoxEntry entry, bool includeVessel, CancellationToken token)
+        {
+            StringBuilder sb = new StringBuilder();
+            if (!String.IsNullOrEmpty(entry.MissionId))
+            {
+                Mission? mission = await _Database.Missions.ReadAsync(entry.MissionId!, token).ConfigureAwait(false);
+                sb.Append("msn:").Append(mission == null ? "missing" : mission.Status + "@" + mission.LastUpdateUtc.Ticks.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            }
+            else if (!String.IsNullOrEmpty(entry.VoyageId))
+            {
+                Voyage? voyage = await _Database.Voyages.ReadAsync(entry.VoyageId!, token).ConfigureAwait(false);
+                sb.Append("vyg:").Append(voyage == null ? "missing" : voyage.Status + "@" + voyage.LastUpdateUtc.Ticks.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            }
+            if (includeVessel && !String.IsNullOrEmpty(entry.VesselId))
+            {
+                Vessel? vessel = await _Database.Vessels.ReadAsync(entry.VesselId!, token).ConfigureAwait(false);
+                sb.Append("|vsl:").Append(vessel == null ? "missing" : vessel.LastUpdateUtc.Ticks.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            }
+            return sb.ToString();
+        }
+
+        private static string PlanHash(IEnumerable<string> steps)
+        {
+            byte[] bytes = Encoding.UTF8.GetBytes(String.Join("\n", steps));
+            return Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+        }
+
+        private static string DescribePlan(List<BlackBoxRecoveryStep> plan)
+        {
+            if (plan.Count == 0) return "nothing (the path has no steps)";
+            return String.Join(", then ", plan.Select(s => s.Action != null ? BlackBoxRuleTemplate.McpCommand(s.Action) : "(manual) " + OneLine(s.Description)));
+        }
+
+        private static async Task<BlackBoxRecoveryStepResult> ExecuteAsync(IBlackBoxActionExecutor executor, AuthContext caller, BlackBoxAction action, CancellationToken token)
+        {
+            try
+            {
+                BlackBoxRecoveryStepResult result = await executor.ExecuteAsync(caller, action, token).ConfigureAwait(false) ?? new BlackBoxRecoveryStepResult { Succeeded = false, Message = "The executor returned no result." };
+                if (String.IsNullOrEmpty(result.Tool)) result.Tool = action.Tool;
+                result.Message = BlackBoxLimits.Clip(result.Message, BlackBoxLimits.MaxReasonExcerptChars);
+                return result;
+            }
+            catch (Exception e) when (!(e is OperationCanceledException && token.IsCancellationRequested))
+            {
+                return new BlackBoxRecoveryStepResult { Tool = action.Tool, Succeeded = false, Message = e.GetType().Name + ": " + BlackBoxLimits.Clip(e.Message, BlackBoxLimits.MaxReasonExcerptChars) };
+            }
+        }
+
+        private async Task AnnotateAsync(AuthContext caller, BlackBoxEntry entry, string body, BlackBoxNoteAuthorKindEnum? authorKind, CancellationToken token)
+        {
+            BlackBoxNoteAuthorKindEnum author = authorKind.HasValue && authorKind.Value != BlackBoxNoteAuthorKindEnum.Unknown ? authorKind.Value : BlackBoxNoteAuthorKindEnum.Agent;
+            BlackBoxNote note = new BlackBoxNote
+            {
+                EntryId = entry.Id,
+                TenantId = entry.TenantId,
+                UserId = caller.UserId,
+                AuthorKind = author,
+                Body = BlackBoxLimits.Clip(body.Replace('\u2014', '-'), BlackBoxLimits.MaxNoteChars) ?? String.Empty,
+                CreatedUtc = DateTime.UtcNow
+            };
+            try
+            {
+                await _Database.BlackBoxNotes.CreateAsync(note, token).ConfigureAwait(false);
+            }
+            catch (Exception e) when (!(e is OperationCanceledException))
+            {
+                _Logging.Warn(_Header + "could not annotate " + entry.Id + " with the recovery outcome: " + e.Message);
+            }
+        }
+
+        private async Task EmitRecoveryAsync(BlackBoxEntry entry, string pathId, string? recommendationId, bool dryRun, bool succeeded, int stepsRun, int stepsFailed, AuthContext caller, CancellationToken token)
+        {
+            string what = recommendationId != null ? "Recommendation " + recommendationId : "Recovery path " + pathId;
+            string message = what + (dryRun ? " dry run" : (succeeded ? " ran" : " failed")) + " on black box entry " + entry.Id;
+            await _Events.EmitAsync(BlackBoxEventTypes.RecoveryRun, message, entry.TenantId, entry.Id, entry.MissionId, entry.VoyageId, entry.VesselId,
+                new BlackBoxRecoveryRunPayload { EntryId = entry.Id, PathId = pathId, RecommendationId = recommendationId, DryRun = dryRun, Succeeded = succeeded, StepsRun = stepsRun, StepsFailed = stepsFailed, UserId = caller.UserId }, token).ConfigureAwait(false);
+        }
+
+        private static string BundlePreamble(int entries, int groups)
+        {
+            return "These are " + entries + " Armada black box entries in " + groups + " failure modes, grouped by fingerprint (most frequent first). "
+                + "You are asked to improve Armada itself. Rank the Armada improvements these failures suggest by impact (occurrences, severity, triage ArmadaDefect first), "
+                + "check each hypothesis against the Armada source at the build commits listed, and discard the ones the evidence does not support. "
+                + "Write each accepted improvement as an Armada mission brief: a title, the failure modes and entry ids it fixes, the code sites (file and method), "
+                + "the change, and a test that reproduces the failure (a black box fixture under src/Test.Shared/Fixtures/BlackBox when it fits). "
+                + "If a failure needs a new advisor rule, write it in BlackBoxRuleCatalog format (id, match, why, recommendation, recovery paths, triage vote).";
+        }
+
+        private static string OneLine(string value)
+        {
+            return (value ?? String.Empty).Replace("\r", " ").Replace("\n", " ");
+        }
 
         private static void RequireAdmin(AuthContext caller)
         {

@@ -5,6 +5,7 @@ namespace Armada.Core.Services
     using System.Globalization;
     using System.Text.Json;
     using SyslogLogging;
+    using Armada.Core.BlackBox;
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
@@ -38,6 +39,11 @@ namespace Armada.Core.Services
         /// for the same WebSocket broadcasts the landing handler sends. Exceptions it throws are logged and ignored.
         /// </summary>
         public Func<Mission, Task>? OnMissionReconciled { get; set; } = null;
+
+        /// <summary>
+        /// Black box capture for missions the queue moves to LandingFailed, or null.
+        /// </summary>
+        public IBlackBoxCapture? BlackBox { get; set; } = null;
 
         #endregion
 
@@ -627,7 +633,7 @@ namespace Armada.Core.Services
                 await CleanupWorktreeAsync(host, repoPath, integrationPath, integrationBranch, token).ConfigureAwait(false);
                 MergeQueueFailure failure = NewFailure(entry, step, MergeQueueFailureClassifier.Classify(step, ex),
                     "Merge queue entry " + entry.Id + ": " + ex.Message, targetCommit);
-                await ReconcileMissionStatusAsync(entry.MissionId, MissionStatusEnum.LandingFailed, failure.Reason, token, entry.TenantId, failure).ConfigureAwait(false);
+                await ReconcileMissionStatusAsync(entry.MissionId, MissionStatusEnum.LandingFailed, failure.Reason, token, entry.TenantId, failure, ex).ConfigureAwait(false);
             }
             finally
             {
@@ -678,7 +684,7 @@ namespace Armada.Core.Services
                 // Reconcile linked mission to LandingFailed: a refused push is an environment failure, not a conflict.
                 MergeQueueFailure failure = NewFailure(entry, MergeQueueFailureStepEnum.Publication, MissionFailureKindEnum.Infra,
                     "Merge queue landing failed: " + ex.Message, targetCommit);
-                await ReconcileMissionStatusAsync(entry.MissionId, MissionStatusEnum.LandingFailed, failure.Reason, token, entry.TenantId, failure).ConfigureAwait(false);
+                await ReconcileMissionStatusAsync(entry.MissionId, MissionStatusEnum.LandingFailed, failure.Reason, token, entry.TenantId, failure, ex).ConfigureAwait(false);
                 return;
             }
 
@@ -699,7 +705,7 @@ namespace Armada.Core.Services
         /// <see cref="OnMissionReconciled"/>. A LandingFailed reconciliation records the failure's kind on the mission and
         /// the structured failure as the event payload.
         /// </summary>
-        private async Task ReconcileMissionStatusAsync(string? missionId, MissionStatusEnum targetStatus, string reason, CancellationToken token, string? tenantId = null, MergeQueueFailure? failure = null)
+        private async Task ReconcileMissionStatusAsync(string? missionId, MissionStatusEnum targetStatus, string reason, CancellationToken token, string? tenantId = null, MergeQueueFailure? failure = null, Exception? exception = null)
         {
             if (String.IsNullOrEmpty(missionId)) return;
 
@@ -736,6 +742,23 @@ namespace Armada.Core.Services
                 }
                 if (!await _Database.Missions.TryUpdateIfUnchangedAsync(mission, version, new[] { previous }, token).ConfigureAwait(false)) return;
                 _Logging.Info(_Header + "reconciled mission " + missionId + " to " + targetStatus + ": " + reason);
+                if (targetStatus == MissionStatusEnum.LandingFailed)
+                {
+                    await BlackBox.RecordMissionFailureAsync(mission, previous, BlackBoxSiteFacts.MergeQueueStepOf(failure), context =>
+                    {
+                        context.MergeEntryId = failure?.MergeEntryId;
+                        BlackBoxSiteFacts.ApplyException(context, exception);
+                        if (failure != null)
+                        {
+                            context.GitFacts ??= new BlackBoxGitFacts();
+                            foreach (string file in failure.ConflictedFiles)
+                                if (!context.GitFacts.ConflictedFiles.Contains(file)) context.GitFacts.ConflictedFiles.Add(file);
+                            context.GitFacts.TargetTipAfter ??= failure.TargetCommit;
+                            if (failure.Step == MergeQueueFailureStepEnum.Merge) context.GitFacts.GitOperation ??= "merge --no-ff " + failure.BranchName;
+                            context.Note = "Merge queue entry " + failure.MergeEntryId + " (" + failure.BranchName + " into " + failure.TargetBranch + ") failed at " + failure.Step + ".";
+                        }
+                    }, token).ConfigureAwait(false);
+                }
             }
             catch (Exception ex)
             {

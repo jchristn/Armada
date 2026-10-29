@@ -72,6 +72,29 @@ namespace Armada.Core.Models
         /// </summary>
         public int TargetCommitTotal { get; set; } = 0;
 
+        /// <summary>
+        /// Other missions on the vessel that were active during this mission's run and touched the same files (from
+        /// their diff snapshot or branch), landed or not; null when not analyzed.
+        /// </summary>
+        [CollectionBound(BlackBoxLimits.MaxConflictingMissions, Reason = "Capped by BlackBoxRecordBounder")]
+        public List<BlackBoxConflictingMission>? ConcurrentMissions { get; set; } = null;
+
+        /// <summary>
+        /// The parent directory of each conflicted file, with counts (any depth); null when not analyzed.
+        /// </summary>
+        [CollectionBound(BlackBoxLimits.MaxConflictedDirectories, Reason = "Capped by BlackBoxRecordBounder")]
+        public List<BlackBoxDirectoryCount>? ConflictedParentDirectories { get; set; } = null;
+
+        /// <summary>
+        /// The deepest directory holding at least two conflicted files, or null.
+        /// </summary>
+        public string? DeepestConflictedDirectory { get; set; } = null;
+
+        /// <summary>
+        /// Conflicted files under <see cref="DeepestConflictedDirectory"/>, or null.
+        /// </summary>
+        public int? DeepestConflictedDirectoryFileCount { get; set; } = null;
+
         private List<string> _ConflictedFiles = new List<string>();
         private List<BlackBoxDirectoryCount> _ConflictedDirectories = new List<BlackBoxDirectoryCount>();
         private List<BlackBoxConflictingMission> _ConflictingMissions = new List<BlackBoxConflictingMission>();

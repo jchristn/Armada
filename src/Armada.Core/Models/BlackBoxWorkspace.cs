@@ -117,6 +117,31 @@ namespace Armada.Core.Models
         /// </summary>
         public DateTime? HarborLastSeenUtc { get; set; } = null;
 
+        /// <summary>
+        /// Whether the mission branch still exists in the repository, or null when unknown.
+        /// </summary>
+        public bool? BranchExists { get; set; } = null;
+
+        /// <summary>
+        /// Commits the branch is ahead of the target, or null.
+        /// </summary>
+        public int? CommitsAheadOfTarget { get; set; } = null;
+
+        /// <summary>
+        /// Host the workspace was inspected on at enrichment (Admiral or Harbor:{id}), or null when not inspected.
+        /// </summary>
+        public string? InspectedHost { get; set; } = null;
+
+        /// <summary>
+        /// Why workspace facts are unknown or partial (for example a disconnected Harbor), or null.
+        /// </summary>
+        public string? InspectionNote { get; set; } = null;
+
+        /// <summary>
+        /// Why target movement since the start commit was not read (for example no start commit), or null.
+        /// </summary>
+        public string? TargetMovementNote { get; set; } = null;
+
         private List<string> _DirtyPaths = new List<string>();
 
         /// <summary>
