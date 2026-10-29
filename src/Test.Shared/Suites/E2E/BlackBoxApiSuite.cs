@@ -721,6 +721,7 @@ namespace Test.Shared.Suites.E2E
                 using (HttpResponseMessage response = await a.PutAsync("/api/v1/missions/" + rest.Id + "/status", JsonHelper.ToJsonContent(new { Status = "Failed" })).ConfigureAwait(false))
                     AssertStatusCode(HttpStatusCode.OK, response, "REST transition");
                 await ExpectOperatorEntryAsync(a, rest.Id, BlackBoxStepEnum.OperatorTransition, "REST", MissionStatusEnum.InProgress).ConfigureAwait(false);
+                await ExpectOneStatusChangedAsync(rest.Id, MissionStatusEnum.Failed, MissionStatusEnum.InProgress, "REST").ConfigureAwait(false);
 
                 Mission mcp = await CreateMissionAsync("transition-mcp", MissionStatusEnum.InProgress, null).ConfigureAwait(false);
                 using (McpToolClient client = Mcp(_AdminA!))
@@ -730,6 +731,7 @@ namespace Test.Shared.Suites.E2E
                 }
 
                 await ExpectOperatorEntryAsync(a, mcp.Id, BlackBoxStepEnum.OperatorTransition, "MCP", MissionStatusEnum.InProgress).ConfigureAwait(false);
+                await ExpectOneStatusChangedAsync(mcp.Id, MissionStatusEnum.Cancelled, MissionStatusEnum.InProgress, "MCP").ConfigureAwait(false);
 
                 Mission ws = await CreateMissionAsync("transition-ws", MissionStatusEnum.InProgress, null).ConfigureAwait(false);
                 using (ClientWebSocket socket = await E2EServerFixture.ConnectAuthenticatedWebSocketAsync(_Fx.RestPort).ConfigureAwait(false))
@@ -740,12 +742,14 @@ namespace Test.Shared.Suites.E2E
                 }
 
                 await ExpectOperatorEntryAsync(a, ws.Id, BlackBoxStepEnum.OperatorTransition, "WebSocket", MissionStatusEnum.InProgress).ConfigureAwait(false);
+                await ExpectOneStatusChangedAsync(ws.Id, MissionStatusEnum.Failed, MissionStatusEnum.InProgress, "WebSocket").ConfigureAwait(false);
 
                 Mission notCaptured = await CreateMissionAsync("transition-none", MissionStatusEnum.Assigned, null).ConfigureAwait(false);
                 using (HttpResponseMessage response = await a.PutAsync("/api/v1/missions/" + notCaptured.Id + "/status", JsonHelper.ToJsonContent(new { Status = "InProgress" })).ConfigureAwait(false))
                     AssertStatusCode(HttpStatusCode.OK, response, "REST transition to InProgress");
                 EnumerationResult<BlackBoxEntrySummary> none = await GetJsonAsync<EnumerationResult<BlackBoxEntrySummary>>(a, "/api/v1/blackbox?missionId=" + notCaptured.Id).ConfigureAwait(false);
                 AssertEqual(0L, none.TotalRecords, "a transition to InProgress is not captured");
+                await ExpectOneStatusChangedAsync(notCaptured.Id, MissionStatusEnum.InProgress, MissionStatusEnum.Assigned, "REST (not captured)").ConfigureAwait(false);
             }));
 
             cases.Add(CaseAsync("vessel_deletion_captured", "Deleting a vessel over REST, MCP and WebSocket captures each active mission it cancels as External/VesselDeleted, and the entry outlives the mission row", TestTags.Positive, async () =>
@@ -924,6 +928,16 @@ namespace Test.Shared.Suites.E2E
         private void RequireSetup()
         {
             if (_Fx == null || _Mission == null || String.IsNullOrEmpty(_EntryId)) throw new InvalidOperationException("setup_capture_entries did not run");
+        }
+
+        private async Task ExpectOneStatusChangedAsync(string missionId, MissionStatusEnum status, MissionStatusEnum previous, string label)
+        {
+            using DatabaseDriver db = await OpenDatabaseAsync().ConfigureAwait(false);
+            EnumerationResult<ArmadaEvent> page = await db.Events.EnumerateAsync(new EnumerationQuery { MissionId = missionId, EventType = "mission.status_changed", PageSize = 50 }).ConfigureAwait(false);
+            AssertEqual(1, page.Objects.Count, label + ": exactly one mission.status_changed per transition");
+            MissionStatusChangedPayload payload = JsonHelper.Deserialize<MissionStatusChangedPayload>(page.Objects[0].Payload!);
+            AssertEqual(status, payload.Status, label + ": Status");
+            AssertEqual(previous, payload.PreviousStatus, label + ": PreviousStatus");
         }
 
         private async Task<DatabaseDriver> OpenDatabaseAsync()

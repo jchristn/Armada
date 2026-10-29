@@ -34,8 +34,22 @@ namespace Armada.Server
         }
 
         /// <summary>
+        /// Whether <see cref="RecordTransitionAsync"/> emits <c>mission.status_changed</c> for a transition to
+        /// <paramref name="status"/>: the capture emits it (with PreviousStatus) for every transition it captures, so a
+        /// surface that also emits the event must skip it when this is true, or one transition produces two events.
+        /// </summary>
+        /// <param name="capture">Capture service, or null.</param>
+        /// <param name="status">Target status.</param>
+        /// <returns>True when the capture emits the event.</returns>
+        public static bool EmitsStatusChanged(IBlackBoxCapture? capture, MissionStatusEnum status)
+        {
+            return capture != null && CapturesTransitionTo(status);
+        }
+
+        /// <summary>
         /// Capture a manual status transition (call after the mission row is written). Does nothing for a target status
-        /// <see cref="CapturesTransitionTo"/> does not capture.
+        /// <see cref="CapturesTransitionTo"/> does not capture. The capture emits <c>mission.status_changed</c>; see
+        /// <see cref="EmitsStatusChanged"/>.
         /// </summary>
         /// <param name="capture">Capture service, or null (no-op).</param>
         /// <param name="mission">Mission after the transition.</param>
