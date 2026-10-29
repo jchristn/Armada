@@ -158,6 +158,7 @@
 .blackbox-filters input, .blackbox-filters select { width: 100%; box-sizing: border-box; }
 
 .blackbox-saved { display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; margin-bottom: 0.75rem; }
+.blackbox-saved select, .blackbox-saved input { width: auto; max-width: 16rem; }
 
 .blackbox-stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr)); gap: 0.6rem; margin-bottom: 0.9rem; }
 

@@ -398,7 +398,7 @@ export default function BlackBoxPanel({ missionId, voyageId, entryId, fallbackRe
           {mechanism?.gitOperation && <><dt>{t('Git operation')}</dt><dd className="mono">{mechanism.gitOperation}</dd></>}
           {mechanism?.runtimeFailureKind && <><dt>{t('Runtime failure')}</dt><dd>{mechanism.runtimeFailureKind}</dd></>}
           {mechanism?.exitCode != null && <><dt>{t('Exit code')}</dt><dd>{mechanism.exitCode}</dd></>}
-          {classification?.suspectedCause && classification.suspectedCause !== 'Unknown' && <><dt>{t('Suspected cause')}</dt><dd>{t(classification.suspectedCause)}{classification.causeRuleId ? <span className="blackbox-rule"> {classification.causeRuleId}</span> : null}</dd></>}
+          {classification?.suspectedCause && classification.suspectedCause !== 'Unknown' && classification.suspectedCause !== 'None' && <><dt>{t('Suspected cause')}</dt><dd>{t(classification.suspectedCause)}{classification.causeRuleId ? <span className="blackbox-rule"> {classification.causeRuleId}</span> : null}</dd></>}
         </dl>
         {classification?.rawReason && <pre className="blackbox-pre mission-failure-reason" data-failure-kind={entry.failureKind ?? fallbackKind ?? undefined} data-i18n-skip="true">{classification.rawReason}</pre>}
         {mechanism?.gitStderrTail && <pre className="blackbox-pre" data-i18n-skip="true" aria-label={t('Git output')}>{mechanism.gitStderrTail}</pre>}
