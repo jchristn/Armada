@@ -308,7 +308,7 @@ namespace Test.Shared.Suites.Services
                 Mission pending = await t.Driver.Missions.CreateAsync(new Mission("cancel me") { Status = MissionStatusEnum.Pending }).ConfigureAwait(false);
                 await s.Admiral.CancelMissionAsync(pending).ConfigureAwait(false);
                 BlackBoxEntry cancel = await CurrentAsync(t.Driver, pending.Id).ConfigureAwait(false);
-                AssertEntry(cancel, BlackBoxPhaseEnum.External, BlackBoxStepEnum.OperatorTransition, null, "Pending", "Cancelled");
+                AssertEntry(cancel, BlackBoxPhaseEnum.External, BlackBoxStepEnum.OperatorTransition, MissionFailureKindEnum.OperatorAction, "Pending", "Cancelled");
                 AssertEqual(BlackBoxTriageEnum.External, cancel.Triage);
 
                 Captain captain = await t.Driver.Captains.CreateAsync(new Captain("bb-recall-" + Short()) { State = CaptainStateEnum.Working }).ConfigureAwait(false);
@@ -713,7 +713,10 @@ namespace Test.Shared.Suites.Services
             BlackBoxEntry entry = (await t.Driver.BlackBoxEntries.ReadAsync(id!).ConfigureAwait(false))!;
             AssertEqual(row.Phase, entry.Phase); AssertEqual(row.Step, entry.Step);
             AssertEqual(row.Before, entry.StatusBefore); AssertEqual(row.After, entry.StatusAfter);
-            if (!row.Voyage) AssertEqual(row.Kind, entry.FailureKind);
+            // A mission row with no kind gets OperatorAction for an operator stop or an External-phase step; any other
+            // step keeps the row's kind (null stays null).
+            MissionFailureKindEnum? expectedKind = row.Kind ?? ((row.Step == BlackBoxStepEnum.OperatorStop || row.Phase == BlackBoxPhaseEnum.External) ? MissionFailureKindEnum.OperatorAction : (MissionFailureKindEnum?)null);
+            if (!row.Voyage) AssertEqual(expectedKind, entry.FailureKind, "kind of " + row.Step);
             BlackBoxRecord record = await bb.Pipeline.LoadRecordAsync(entry).ConfigureAwait(false);
             AssertEqual(row.CapturedIn, record.Site!.SourceFile, "site file");
             AssertEqual(42, record.Site.SourceLine);

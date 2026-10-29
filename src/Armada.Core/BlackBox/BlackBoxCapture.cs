@@ -300,7 +300,7 @@ namespace Armada.Core.BlackBox
                 VesselName = vessel?.Name,
                 Phase = phase,
                 Step = context.Step,
-                FailureKind = mission.FailureKind,
+                FailureKind = EffectiveKind(mission, context.Step),
                 StatusBefore = context.StatusBefore?.ToString(),
                 StatusAfter = mission.Status.ToString(),
                 Triage = IsOperatorOrExternal(mission, context.Step) ? BlackBoxTriageEnum.External : BlackBoxTriageEnum.Unknown,
@@ -311,8 +311,20 @@ namespace Armada.Core.BlackBox
                 CreatedUtc = record.CreatedUtc
             };
             entry.StoragePrefix = PrefixFor(entry);
-            entry.Fingerprint = BlackBoxFingerprint.Compute(phase, context.Step, mission.FailureKind, context.CallerMember, mission.FailureReason ?? context.Reason);
+            entry.Fingerprint = BlackBoxFingerprint.Compute(phase, context.Step, entry.FailureKind, context.CallerMember, mission.FailureReason ?? context.Reason);
             return entry;
+        }
+
+        /// <summary>
+        /// The failure kind recorded on the entry: the mission's, or OperatorAction for an operator stop or an
+        /// External-phase step (a manual transition, a deleted vessel) when the mission row has none, so every surface
+        /// shows a kind instead of a blank.
+        /// </summary>
+        private static MissionFailureKindEnum? EffectiveKind(Mission mission, BlackBoxStepEnum step)
+        {
+            if (mission.FailureKind.HasValue) return mission.FailureKind;
+            if (step == BlackBoxStepEnum.OperatorStop || BlackBoxTaxonomy.PhaseOf(step) == BlackBoxPhaseEnum.External) return MissionFailureKindEnum.OperatorAction;
+            return null;
         }
 
         /// <summary>
@@ -444,7 +456,7 @@ namespace Armada.Core.BlackBox
             record.Mechanism = MechanismOf(context.Exception, context.ExitCode, context.RuntimeFailureKind, context.FailingCommand, context.CommandExitCode, context.CommandOutput, context.GitFacts?.GitOperation, context.GitFacts?.GitStderr);
             record.Classification = new BlackBoxClassification
             {
-                Kind = mission.FailureKind,
+                Kind = EffectiveKind(mission, context.Step),
                 RawReason = mission.FailureReason ?? context.Reason,
                 SuspectedCause = context.SuspectedCause ?? FailureCauseEnum.None,
                 CauseRuleId = context.CauseRuleId,

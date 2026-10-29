@@ -291,6 +291,11 @@ export default function BlackBoxPanel({ missionId, voyageId, entryId, fallbackRe
   const site = record?.site;
   const mechanism = record?.mechanism;
   const classification = record?.classification;
+  const hasSuspectedCause = !!classification?.suspectedCause && classification.suspectedCause !== 'Unknown' && classification.suspectedCause !== 'None';
+  const hasMechanismFields = !!(mechanism?.exceptionType || mechanism?.failingCommand || mechanism?.gitOperation || mechanism?.runtimeFailureKind)
+    || mechanism?.exitCode != null || hasSuspectedCause;
+  const hasMechanism = hasMechanismFields || !!classification?.rawReason || !!mechanism?.gitStderrTail || !!mechanism?.commandOutputTail
+    || (!!mechanism?.stackFrames?.length && audience !== 'user');
   const workspace = record?.workspace;
   const conflict = record?.conflict;
   const configValues = record?.configuration?.values ?? [];
@@ -392,14 +397,15 @@ export default function BlackBoxPanel({ missionId, voyageId, entryId, fallbackRe
       </Section>
 
       <Section title={t('How')} tooltip={t('The mechanism: the exception, the failing command or git operation, and the recorded reason.')} testId="blackbox-how">
-        <dl className="blackbox-kv">
+        {!hasMechanism && <p className="text-dim" style={{ margin: 0 }}>{t('No mechanism was recorded for this failure.')}</p>}
+        {hasMechanismFields && <dl className="blackbox-kv">
           {mechanism?.exceptionType && <><dt>{t('Exception')}</dt><dd className="mono">{mechanism.exceptionType}{mechanism.exceptionMessage ? `: ${mechanism.exceptionMessage}` : ''}</dd></>}
           {mechanism?.failingCommand && <><dt>{t('Failing command')}</dt><dd className="mono">{mechanism.failingCommand}{mechanism.commandExitCode != null ? ` (${t('exit {{code}}', { code: mechanism.commandExitCode })})` : ''}</dd></>}
           {mechanism?.gitOperation && <><dt>{t('Git operation')}</dt><dd className="mono">{mechanism.gitOperation}</dd></>}
           {mechanism?.runtimeFailureKind && <><dt>{t('Runtime failure')}</dt><dd>{mechanism.runtimeFailureKind}</dd></>}
           {mechanism?.exitCode != null && <><dt>{t('Exit code')}</dt><dd>{mechanism.exitCode}</dd></>}
-          {classification?.suspectedCause && classification.suspectedCause !== 'Unknown' && classification.suspectedCause !== 'None' && <><dt>{t('Suspected cause')}</dt><dd>{t(classification.suspectedCause)}{classification.causeRuleId ? <span className="blackbox-rule"> {classification.causeRuleId}</span> : null}</dd></>}
-        </dl>
+          {hasSuspectedCause && <><dt>{t('Suspected cause')}</dt><dd>{t(classification!.suspectedCause!)}{classification!.causeRuleId ? <span className="blackbox-rule"> {classification!.causeRuleId}</span> : null}</dd></>}
+        </dl>}
         {classification?.rawReason && <pre className="blackbox-pre mission-failure-reason" data-failure-kind={entry.failureKind ?? fallbackKind ?? undefined} data-i18n-skip="true">{classification.rawReason}</pre>}
         {mechanism?.gitStderrTail && <pre className="blackbox-pre" data-i18n-skip="true" aria-label={t('Git output')}>{mechanism.gitStderrTail}</pre>}
         {mechanism?.commandOutputTail && <pre className="blackbox-pre" data-i18n-skip="true" aria-label={t('Command output')}>{mechanism.commandOutputTail}</pre>}

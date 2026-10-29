@@ -125,6 +125,23 @@ describe('BlackBoxPanel sections', () => {
     expect(within(screen.getByTestId('blackbox-recovery')).getByText('Waiting for the analysis.')).toBeInTheDocument();
   });
 
+  it('says when no mechanism was recorded and shows the operator kind', async () => {
+    vi.mocked(getMissionBlackBox).mockResolvedValue(blackBoxEntryFixture({
+      phase: 'External', step: 'OperatorTransition', failureKind: 'OperatorAction',
+      record: { entryId: 'bbx_2', schemaVersion: 1, mechanism: {}, classification: { kind: 'OperatorAction' } } as never,
+    }));
+    renderPanel();
+    const how = await screen.findByTestId('blackbox-how');
+    expect(within(how).getByText('No mechanism was recorded for this failure.')).toBeInTheDocument();
+    expect(screen.getAllByText('OperatorAction').length).toBeGreaterThan(0);
+  });
+
+  it('does not say no mechanism when one was recorded', async () => {
+    renderPanel();
+    const how = await screen.findByTestId('blackbox-how');
+    expect(within(how).queryByText('No mechanism was recorded for this failure.')).not.toBeInTheDocument();
+  });
+
   it('does not show the pending notice once analyzed', async () => {
     renderPanel();
     await screen.findByTestId('blackbox-summary');

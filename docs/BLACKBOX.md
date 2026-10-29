@@ -828,6 +828,9 @@ Site conventions (every failure write in plan 5.1 is wired; `Services.BlackBoxCa
   attempted, an expired landing deferral, a used-up rescue budget. `StatusAfter` is the status the mission kept.
 - Triage: operator stops and cancellations (`OperatorStop`, the External phase, kind `OperatorAction`, a voyage
   `Cancelled`) are `External`.
+- Kind: an `OperatorStop` or External-phase entry (`OperatorTransition`, `VesselDeleted`) whose mission row has no
+  `FailureKind` records `FailureKind` `OperatorAction` on the entry and in `classification.kind`, so every surface shows
+  a kind.
 - Every mission capture whose status changed emits `mission.status_changed` with `MissionStatusChangedPayload`
   (`PreviousStatus`), through `BlackBoxCapture.MissionStatusChanged` (the Admiral's `EmitMissionStatusChangedAsync`) or as
   an event row, whether or not the black box is enabled.
