@@ -166,3 +166,55 @@
   .blackbox-kv { grid-template-columns: minmax(0, 1fr); }
   .blackbox-kv dt { margin-top: 0.3rem; }
 }
+
+/* Dispatch preview and warnings (overlap preview, brief lint, dispatch response warnings). */
+.dispatch-preview {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--yellow);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+  padding: 0.6rem 0.8rem;
+  margin: 0.5rem 0 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-width: 0;
+}
+.dispatch-preview-compact { margin: 0.4rem 0 0; padding: 0.45rem 0.65rem; font-size: 0.85rem; }
+.dispatch-preview-head { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.dispatch-warnings { display: flex; flex-direction: column; gap: 0.5rem; min-width: 0; }
+.dispatch-warnings h5 { margin: 0 0 0.2rem; font-size: 0.85rem; }
+.dispatch-warnings li { overflow-wrap: anywhere; }
+
+/* Insight sections on the entry panel: timeline, attempt diff, nearby successes. */
+.blackbox-timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.3rem; }
+.blackbox-timeline li { display: grid; grid-template-columns: minmax(9rem, auto) auto 1fr; gap: 0.5rem; align-items: baseline; font-size: 0.85rem; min-width: 0; }
+.blackbox-timeline li > span:last-child { overflow-wrap: anywhere; min-width: 0; }
+.blackbox-diff-table { width: 100%; border-collapse: collapse; font-size: 0.84rem; table-layout: fixed; }
+.blackbox-diff-table th, .blackbox-diff-table td { border-bottom: 1px solid var(--border); padding: 0.3rem 0.4rem; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+.blackbox-diff-table td.blackbox-diff-old { background: var(--tag-failed-bg); color: var(--tag-failed-fg); }
+.blackbox-diff-table td.blackbox-diff-new { background: var(--tag-complete-bg); color: var(--tag-complete-fg); }
+.blackbox-diff-files { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: 0.6rem; margin-top: 0.5rem; }
+.blackbox-diff-picker { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: flex-end; margin-bottom: 0.5rem; }
+.blackbox-pager { display: flex; gap: 0.4rem; align-items: center; margin-top: 0.4rem; font-size: 0.82rem; }
+.blackbox-rate { display: inline-block; min-width: 3.2rem; }
+.blackbox-rate-bar { display: inline-block; height: 0.45rem; border-radius: 999px; background: var(--bg-hover); width: 5rem; vertical-align: middle; overflow: hidden; margin-left: 0.35rem; }
+.blackbox-rate-bar > span { display: block; height: 100%; background: var(--green); }
+
+/* Voyage cascade graph (SVG layered layout). */
+.cascade-graph { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-card); }
+.cascade-graph svg { display: block; }
+.cascade-node rect { fill: var(--bg-hover); stroke: var(--border); stroke-width: 1.5; }
+.cascade-node.cascade-node-failed rect { fill: var(--tag-failed-bg); stroke: var(--red); }
+.cascade-node.cascade-node-blocked rect { fill: var(--tag-review-bg); stroke: var(--yellow); }
+.cascade-node.cascade-node-complete rect { fill: var(--tag-complete-bg); stroke: var(--green); }
+.cascade-node.cascade-node-root rect { stroke-width: 3; }
+.cascade-node text { fill: var(--text); font-size: 12px; font-family: var(--font); }
+.cascade-node text.cascade-node-sub { fill: var(--text-dim); font-size: 11px; }
+.cascade-node a:focus-visible rect { outline: none; stroke: var(--accent); stroke-width: 3; }
+.cascade-edge { fill: none; stroke: var(--text-dim); stroke-width: 1.5; }
+.cascade-edge-CancelledBecause { stroke: var(--red); }
+.cascade-edge-BlockedBy { stroke: var(--yellow); stroke-dasharray: 5 3; }
+.cascade-edge-Sibling { stroke: var(--accent); stroke-dasharray: 2 3; }
+.cascade-legend { display: flex; gap: 0.9rem; flex-wrap: wrap; font-size: 0.8rem; margin: 0.4rem 0; }
+.cascade-legend svg { vertical-align: middle; margin-right: 0.25rem; }
