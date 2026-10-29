@@ -880,6 +880,8 @@ namespace Armada.Server
             _McpServer.RateLimits.ToolCallsPerSecond = _Settings.Mcp.ToolCallsPerSecond;
             _McpServer.AuthenticationHandler = AuthenticateMcpRequestAsync;
             RegisterMcpTools();
+            // Black box resources and prompts (Voltaic resource templates and prompts; plan 8.2).
+            if (_BlackBox != null) Armada.Server.Mcp.Tools.McpBlackBoxResources.Register(_McpServer, _BlackBox.Service);
 
             StartMcpListener();
             _Logging.Info(_Header + "MCP server started on port " + _Settings.McpPort);
@@ -2074,7 +2076,8 @@ namespace Armada.Server
                 _HarborJobControl,
                 _StageOutcomeAccess,
                 _ModelProbeAccess,
-                _BatteryAccess);
+                _BatteryAccess,
+                _BlackBox?.Service);
         }
 
         /// <summary>

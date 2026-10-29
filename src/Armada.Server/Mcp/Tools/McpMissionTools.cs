@@ -40,7 +40,7 @@ namespace Armada.Server.Mcp.Tools
         {
             register(
                 "mission_status",
-                "Get status of a specific mission",
+                "Get status of a specific mission. LastBlackBoxEntryId names its current black box entry when it failed (read it with get_blackbox).",
                 new
                 {
                     type = "object",
