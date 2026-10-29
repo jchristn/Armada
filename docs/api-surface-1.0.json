@@ -908,6 +908,39 @@
     },
     {
       "method": "GET",
+      "route": "/api/v1/blackbox/recovery-stats",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "EnumerationResult<BlackBoxRecoveryStat>"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Get black box recovery statistics",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/blackbox/recovery-stats/enumerate",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": "BlackBoxRecoveryStatsRequest",
+      "requestRequired": false,
+      "responses": {
+        "200": "EnumerationResult<BlackBoxRecoveryStat>",
+        "400": ""
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Enumerate black box recovery statistics",
+      "experimental": false
+    },
+    {
+      "method": "GET",
       "route": "/api/v1/blackbox/retention",
       "auth": "TenantAdmin",
       "resource": "BlackBox:Read",
@@ -1051,6 +1084,24 @@
     },
     {
       "method": "GET",
+      "route": "/api/v1/blackbox/{id}/diff/{otherId}",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "BlackBoxAttemptDiff",
+        "400": "",
+        "404": ""
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Diff two black box entries",
+      "experimental": false
+    },
+    {
+      "method": "GET",
       "route": "/api/v1/blackbox/{id}/download",
       "auth": "Authenticated",
       "resource": "BlackBox:Read",
@@ -1082,6 +1133,41 @@
         "BlackBox"
       ],
       "summary": "Export a black box entry as a regression fixture",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/blackbox/{id}/nearby-successes",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "EnumerationResult<BlackBoxNearbySuccess>",
+        "404": ""
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "List an entry's nearby successes",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/blackbox/{id}/nearby-successes/enumerate",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": "EnumerationQuery",
+      "requestRequired": false,
+      "responses": {
+        "200": "EnumerationResult<BlackBoxNearbySuccess>",
+        "400": "",
+        "404": ""
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Enumerate an entry's nearby successes",
       "experimental": false
     },
     {
@@ -1299,6 +1385,41 @@
         "BlackBox"
       ],
       "summary": "Get one section of a black box record",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/blackbox/{id}/timeline",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "BlackBoxTimelinePage",
+        "404": ""
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Get an entry's combined timeline",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/blackbox/{id}/timeline/enumerate",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": "EnumerationQuery",
+      "requestRequired": false,
+      "responses": {
+        "200": "BlackBoxTimelinePage",
+        "400": "",
+        "404": ""
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Enumerate an entry's combined timeline",
       "experimental": false
     },
     {
@@ -3660,6 +3781,24 @@
         "Missions"
       ],
       "summary": "Get aggregated mission history",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/missions/lint-brief",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": "BriefLintRequest",
+      "requestRequired": true,
+      "responses": {
+        "200": "BriefLintResult",
+        "400": "",
+        "404": ""
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Lint a mission brief",
       "experimental": false
     },
     {
@@ -7149,6 +7288,42 @@
       "experimental": false
     },
     {
+      "method": "GET",
+      "route": "/api/v1/vessels/{id}/blackbox-doctor",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "BlackBoxDoctorPage",
+        "400": "",
+        "404": ""
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Get the vessel's black box configuration doctor",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/vessels/{id}/blackbox-doctor/enumerate",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": "BlackBoxDoctorRequest",
+      "requestRequired": false,
+      "responses": {
+        "200": "BlackBoxDoctorPage",
+        "400": "",
+        "404": ""
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Enumerate the vessel's black box configuration doctor",
+      "experimental": false
+    },
+    {
       "method": "POST",
       "route": "/api/v1/vessels/{id}/branches/enumerate",
       "auth": "Authenticated",
@@ -7472,6 +7647,24 @@
       "experimental": false
     },
     {
+      "method": "POST",
+      "route": "/api/v1/vessels/{id}/overlap-preview",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": "MissionOverlapPreviewRequest",
+      "requestRequired": true,
+      "responses": {
+        "200": "MissionOverlapPreview",
+        "400": "",
+        "404": ""
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Preview a mission's overlaps",
+      "experimental": false
+    },
+    {
       "method": "GET",
       "route": "/api/v1/vessels/{id}/readiness",
       "auth": "Authenticated",
@@ -7487,6 +7680,41 @@
         "Vessels"
       ],
       "summary": "Get vessel readiness",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/vessels/{id}/reservations",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "VesselReservationPage",
+        "404": ""
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "List vessel reservations",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/vessels/{id}/reservations/enumerate",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": "EnumerationQuery",
+      "requestRequired": false,
+      "responses": {
+        "200": "VesselReservationPage",
+        "400": "",
+        "404": ""
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Enumerate vessel reservations",
       "experimental": false
     },
     {
@@ -7641,6 +7869,23 @@
         "BlackBox"
       ],
       "summary": "Get the FIX THIS brief of a voyage's current black box entry",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/voyages/{id}/blackbox/cascade",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "BlackBoxCascadeGraph",
+        "404": ""
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Get a voyage's black box cascade graph",
       "experimental": false
     },
     {
@@ -8177,6 +8422,11 @@
           "required": true
         },
         {
+          "name": "serializeOverlappingMissions",
+          "type": "boolean",
+          "required": false
+        },
+        {
           "name": "styleGuide",
           "type": "string",
           "required": false
@@ -8221,7 +8471,7 @@
           "required": false
         }
       ],
-      "description": "Add a note to a black box entry (body 1-8000 characters; recorded with authorKind Agent). Annotate what you found and what you did, so the next reader does not repeat it. Name the entry with entryId (bbx_ prefix), or with missionId or voyageId for that mission's or voyage's current entry.",
+      "description": "Add a note to a black box entry (body 1-8000 characters; recorded with authorKind Agent, or AskArmada from an Ask Armada conversation). Annotate what you found and what you did, so the next reader does not repeat it. Name the entry with entryId (bbx_ prefix), or with missionId or voyageId for that mission's or voyage's current entry.",
       "experimental": false
     },
     {
@@ -10422,6 +10672,25 @@
       "experimental": false
     },
     {
+      "name": "diff_blackbox_entries",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "arguments": [
+        {
+          "name": "entryId",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "otherEntryId",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "description": "Compare two black box entries (two attempts of a mission, or any two you can see): what differs in captain, runtime, model, persona, status, phase and step, Armada version, failure kind and fingerprint, base commit and target tips, every effective configuration value, and the files each mission changed. At most 100 differences and 200 files per side.",
+      "experimental": false
+    },
+    {
       "name": "discover_vessels",
       "auth": "TenantAdmin",
       "resource": "VesselImport:Execute",
@@ -11121,6 +11390,35 @@
       "experimental": false
     },
     {
+      "name": "get_blackbox_recovery_stats",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "arguments": [
+        {
+          "name": "pageNumber",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "pageSize",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "ruleId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "vesselId",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "Get one page of black box recovery path statistics over the confirmed recovery runs you can see: per rule and path, runs, succeeded (the mission completed afterwards), failed, pending, expired and successRate; most runs first. The advisor breaks ties between equally weighted recovery paths with these rates.",
+      "experimental": false
+    },
+    {
       "name": "get_blackbox_retention",
       "auth": "TenantAdmin",
       "resource": "BlackBox:Read",
@@ -11134,6 +11432,35 @@
       "resource": "BlackBox:Read",
       "arguments": [],
       "description": "Get the black box storage status: the configured target, its health, whether writes fall back to the database, and bytes per target. Global admins only.",
+      "experimental": false
+    },
+    {
+      "name": "get_blackbox_timeline",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "arguments": [
+        {
+          "name": "entryId",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "order",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "pageNumber",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "pageSize",
+          "type": "integer",
+          "required": false
+        }
+      ],
+      "description": "Get one page of a black box entry's combined timeline: the entry (captured, enriched, analyzed, resolved) and its notes, the mission or voyage and their events, the dock, the merge queue entry, the captain's events in the mission's window and the Harbor link events, in one order (oldest first unless order is CreatedDescending). Each source is capped at 200 items and the timeline at 1000; sources and truncated say where a cut applied.",
       "experimental": false
     },
     {
@@ -11579,6 +11906,49 @@
       "experimental": false
     },
     {
+      "name": "get_vessel_blackbox_doctor",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "arguments": [
+        {
+          "name": "pageNumber",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "pageSize",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "vesselId",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "windowDays",
+          "type": "integer",
+          "required": false
+        }
+      ],
+      "description": "Get a vessel's black box configuration doctor: the configuration recommendations that recur across its black box entries in a window (windowDays 1 to 365, default 30), one row per rule and setting with count, first and last seen, the suggested value and the newest entry as the example (apply it with apply_blackbox_recommendation). Most frequent first, paged; the newest 200 entries are read (entriesScanned, scanTruncated).",
+      "experimental": false
+    },
+    {
+      "name": "get_voyage_blackbox_cascade",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "arguments": [
+        {
+          "name": "voyageId",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "description": "Get a voyage's black box cascade graph: its missions (status, failure kind, current black box entry; at most 200) and the edges between them (DependsOn, CancelledBecause, BlockedBy, Sibling), with the cascade root (the earliest failure with no failed dependency) and its entry. Use it to see which failure took the others down.",
+      "experimental": false
+    },
+    {
       "name": "get_workflow_profile",
       "auth": "Authenticated",
       "resource": "WorkflowProfile:Read",
@@ -11657,6 +12027,35 @@
         }
       ],
       "description": "Import candidates from a discover_vessels batch as vessels. Pass the candidate paths to import, or allNew=true to import every candidate with status New. Each vessel gets RepoUrl = origin URL (or the local path), WorkingDirectory = the discovered path, and no LocalPath. Paths that already have a vessel are skipped. Large selections run as a background job (returns jobId; poll the batch with enumerate entityType vessel_import_batch or get the job). Requires tenant admin.",
+      "experimental": false
+    },
+    {
+      "name": "lint_mission_brief",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "arguments": [
+        {
+          "name": "dependsOnMissionId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "vesselId",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "Lint a mission brief before dispatch: BRIEF-DEP-001 dependency language (\"after mission 2 lands\", \"depends on\", \"mission N\") without dependsOnMissionId, BRIEF-NOOP-001 a verification-only brief that is likely to fail as NoOp, BRIEF-PATH-001 a path whose top-level directory the vessel does not have (needs vesselId), BRIEF-PATH-002 a host or parent-relative path. At most 50 findings with a suggestion each. Warnings only; dispatch runs the same lint and never refuses a brief.",
       "experimental": false
     },
     {
@@ -12302,6 +12701,30 @@
       "experimental": false
     },
     {
+      "name": "list_blackbox_nearby_successes",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "arguments": [
+        {
+          "name": "entryId",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "pageNumber",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "pageSize",
+          "type": "integer",
+          "required": false
+        }
+      ],
+      "description": "List one page of the successful landings near a failure (success flight recorder): same vessel, within blackBox.nearbySuccessWindowHours of the failure, that changed files the failure also touched; most overlap first, then closest in time. Each has the mission, landed time, hours from the failure, base and landed commits, run time and the overlapping files.",
+      "experimental": false
+    },
+    {
       "name": "list_blackbox_notes",
       "auth": "Authenticated",
       "resource": "BlackBox:Read",
@@ -12697,6 +13120,30 @@
       "experimental": false
     },
     {
+      "name": "list_vessel_reservations",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "arguments": [
+        {
+          "name": "pageNumber",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "pageSize",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "vesselId",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "description": "List one page of a vessel's soft directory reservations: active missions whose scoped files sit in a directory the black box marks as a conflict hotspot (threshold blackBox.hotspotReservationThreshold; 0 turns reservations off). A mission dispatched into a reserved directory is warned, or chained after the reserving mission when the vessel has serializeOverlappingMissions. Ordered by directory then mission id; returns the page shape plus threshold, hotDirectoryCount, activeMissionsScanned and scanTruncated.",
+      "experimental": false
+    },
+    {
       "name": "list_voyage_progress",
       "auth": "Authenticated",
       "resource": "Voyage:Read",
@@ -12824,6 +13271,40 @@
         }
       ],
       "description": "Pin (pinned true, the default) or unpin (pinned false) a black box entry. Garbage collection never deletes a pinned entry. Name the entry with entryId (bbx_ prefix), or with missionId or voyageId for that mission's or voyage's current entry.",
+      "experimental": false
+    },
+    {
+      "name": "preview_mission_overlap",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "arguments": [
+        {
+          "name": "dependsOnMissionId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "excludeMissionId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "vesselId",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "description": "Before dispatching a mission, preview what it would overlap on a vessel: its likely files (scoped-files directive plus repository paths in the brief that exist in the vessel), the active missions whose files it shares, black box conflict hotspots and directories reserved by active missions, strongest first (at most 50), the mission dispatch would chain it after when the vessel has serializeOverlappingMissions (suggestedDependsOnMissionId), and the brief lint findings. Read-only: nothing is dispatched. dispatch and create_mission return the same warnings as overlapWarnings.",
       "experimental": false
     },
     {
@@ -15491,6 +15972,11 @@
         {
           "name": "repoUrl",
           "type": "string",
+          "required": false
+        },
+        {
+          "name": "serializeOverlappingMissions",
+          "type": "boolean",
           "required": false
         },
         {
@@ -18252,6 +18738,1910 @@
       ]
     },
     {
+      "command": "blackbox backfill",
+      "description": "Backfill entries for past failures",
+      "parameters": [
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "max",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "since",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "blackbox bundle",
+      "description": "Build the maintainer bundle (up to 50 entries by fingerprint)",
+      "parameters": [
+        {
+          "kind": "option",
+          "name": "before",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "captain",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "fingerprint",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "format",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "kind",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "max",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "mission",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "output",
+          "short": "o",
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "phase",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "pinned",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "redact-hosts",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "resolution",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "since",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "step",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "triage",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "vessel",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "voyage",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "blackbox cat",
+      "description": "Print an evidence object (or a byte range) to stdout",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "id",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "argument",
+          "name": "name",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "length",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int64?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "offset",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int64?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "blackbox delete",
+      "description": "Delete entries and their evidence",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "ids",
+          "short": null,
+          "valueKind": "vector",
+          "type": "String[]",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "blackbox download",
+      "description": "Download an entry as a .zip",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "id",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "output",
+          "short": "o",
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "blackbox export-fixture",
+      "description": "Export an entry as a sanitized regression fixture",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "id",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "name",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "output",
+          "short": "o",
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "blackbox gc",
+      "description": "Run garbage collection now (--dry-run reports what would go)",
+      "parameters": [
+        {
+          "kind": "option",
+          "name": "dry-run",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "blackbox list",
+      "description": "List black box entries, newest first",
+      "parameters": [
+        {
+          "kind": "option",
+          "name": "before",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "captain",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "fingerprint",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "kind",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "mission",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "phase",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "pinned",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "resolution",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "since",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "step",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "triage",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "vessel",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "voyage",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "blackbox note",
+      "description": "Add a note to an entry",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "id",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "argument",
+          "name": "text",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "blackbox objects",
+      "description": "List an entry's evidence objects",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "id",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "blackbox pin",
+      "description": "Pin entries (kept by garbage collection)",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "ids",
+          "short": null,
+          "valueKind": "vector",
+          "type": "String[]",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "blackbox purge",
+      "description": "Purge entries by filter (dry run unless --execute)",
+      "parameters": [
+        {
+          "kind": "option",
+          "name": "before",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "captain",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "execute",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "fingerprint",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "include-pinned",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "kind",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "max",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "mission",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "phase",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "pinned",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "resolution",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "since",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "step",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "triage",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "vessel",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "voyage",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "yes",
+          "short": "y",
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "blackbox recover",
+      "description": "Run a recovery path (dry run unless --execute)",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "id",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "argument",
+          "name": "pathId",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "acknowledge-data-loss",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "execute",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "yes",
+          "short": "y",
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "blackbox resolve",
+      "description": "Resolve an entry",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "id",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "link",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "note",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "resolution",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "blackbox retention",
+      "description": "Show the retention policy, usage, and garbage collection runs",
+      "parameters": [
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "blackbox show",
+      "description": "Show the black box entry of a mission, voyage, or entry id",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "id",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "audience",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "brief",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "redact-hosts",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "blackbox storage migrate",
+      "description": "Migrate objects to another storage target",
+      "parameters": [
+        {
+          "kind": "option",
+          "name": "batch-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "delete-source",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "from",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "to",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "blackbox storage migration",
+      "description": "Show a storage migration job",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "id",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "blackbox storage status",
+      "description": "Show the storage target, health, and usage",
+      "parameters": [
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "blackbox unpin",
+      "description": "Unpin entries",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "ids",
+          "short": null,
+          "valueKind": "vector",
+          "type": "String[]",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
       "command": "captain add",
       "description": "Recruit a new captain",
       "parameters": [
@@ -20126,6 +22516,100 @@
       ]
     },
     {
+      "command": "mission failure",
+      "description": "Show the mission's black box entry (alias of blackbox show)",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "id",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "audience",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "brief",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "redact-hosts",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
       "command": "mission list",
       "description": "List missions",
       "parameters": [
@@ -21930,6 +24414,100 @@
       ]
     },
     {
+      "command": "voyage failure",
+      "description": "Show the voyage's black box entry (alias of blackbox show)",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "id",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "audience",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "brief",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "redact-hosts",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
       "command": "voyage list",
       "description": "List all voyages",
       "parameters": [
@@ -22376,6 +24954,24 @@
       "experimental": false
     },
     {
+      "key": "blackBox.hotspotReservationThreshold",
+      "type": "int",
+      "default": "3",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.insightIntervalSeconds",
+      "type": "int",
+      "default": "60",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.nearbySuccessWindowHours",
+      "type": "int",
+      "default": "24",
+      "experimental": false
+    },
+    {
       "key": "blackBox.retention",
       "type": "object",
       "default": null,
@@ -22715,6 +25311,12 @@
         "Nfs",
         "Unknown"
       ]
+    },
+    {
+      "key": "blackBox.successRetentionDays",
+      "type": "int",
+      "default": "7",
+      "experimental": false
     },
     {
       "key": "blackBox.summaryEndpointId",

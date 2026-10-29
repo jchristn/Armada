@@ -8971,6 +8971,20 @@ tr.row-muted td { opacity: 0.72; }
 }
 .ask-work-loading { font-size: 0.78rem; margin: 0; }
 .ask-work-card-footer { display: flex; justify-content: space-between; gap: 0.75rem; font-size: 0.72rem; }
+/* Ask Armada black box card (components/ask/AskBlackBoxCard.tsx) */
+.ask-blackbox { display: flex; flex-direction: column; gap: 0.5rem; min-width: 0; }
+.ask-blackbox-chips { list-style: none; display: flex; flex-wrap: wrap; gap: 0.3rem; margin: 0; padding: 0; }
+.ask-blackbox-chip { display: inline-flex; gap: 0.3rem; align-items: baseline; padding: 0.1rem 0.45rem; border: 1px solid var(--border); border-radius: 999px; font-size: 0.72rem; }
+.ask-blackbox-chip.is-bad { border-color: color-mix(in srgb, var(--red) 45%, var(--border)); color: var(--red); }
+.ask-blackbox-chip.is-warn { border-color: color-mix(in srgb, var(--yellow) 45%, var(--border)); }
+.ask-blackbox-chip.is-good { border-color: color-mix(in srgb, var(--green) 45%, var(--border)); color: var(--green); }
+.ask-blackbox-facts dd { overflow-wrap: anywhere; }
+.ask-blackbox-heading { margin: 0.25rem 0 0.15rem; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-dim); }
+.ask-blackbox-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.8rem; min-width: 0; }
+.ask-blackbox-list li { overflow-wrap: anywhere; }
+.ask-blackbox-list.mono { font-family: var(--mono); font-size: 0.74rem; }
+.ask-blackbox-action-row { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; flex-wrap: wrap; }
+.ask-blackbox-followups { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; }
 
 /* Composer */
 .ask-composer { flex-shrink: 0; display: flex; flex-direction: column; gap: 0.45rem; margin-top: 0.5rem; }

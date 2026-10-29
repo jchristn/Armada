@@ -24,13 +24,13 @@ administrator).
 
 | Surface | Total | Experimental |
 |---|---|---|
-| REST routes | 475 | 15 |
-| MCP tools | 233 | 8 |
+| REST routes | 489 | 15 |
+| MCP tools | 242 | 8 |
 | WebSocket endpoints | 2 | 1 |
 | WebSocket commands | 65 | 0 |
 | WebSocket event types | 76 | 0 |
-| CLI commands | 63 | 0 |
-| Settings keys | 281 | 12 |
+| CLI commands | 85 | 0 |
+| Settings keys | 285 | 12 |
 
 ## REST API
 
@@ -92,6 +92,8 @@ Base path `/api/v1`. Request and response bodies are PascalCase JSON; errors are
 | POST | `/api/v1/blackbox/gc` | AdminOnly | `BlackBoxGcRunRequest` (optional) | 200 `BlackBoxGcReport`, 403 `ApiErrorResponse` |  |
 | POST | `/api/v1/blackbox/hotspots/enumerate` | Authenticated | `BlackBoxHotspotEnumerateRequest` (optional) | 200 `EnumerationResult<BlackBoxHotspot>`, 400 |  |
 | POST | `/api/v1/blackbox/purge` | AdminOnly | `BlackBoxPurgeRequest` (optional) | 200 `BlackBoxPurgeResult`, 403 `ApiErrorResponse` |  |
+| GET | `/api/v1/blackbox/recovery-stats` | Authenticated |  | 200 `EnumerationResult<BlackBoxRecoveryStat>` |  |
+| POST | `/api/v1/blackbox/recovery-stats/enumerate` | Authenticated | `BlackBoxRecoveryStatsRequest` (optional) | 200 `EnumerationResult<BlackBoxRecoveryStat>`, 400 |  |
 | GET | `/api/v1/blackbox/retention` | TenantAdmin |  | 200 `BlackBoxRetentionStatus`, 403 `ApiErrorResponse` |  |
 | POST | `/api/v1/blackbox/search` | Authenticated | `BlackBoxSearchRequest` | 200 `EnumerationResult<BlackBoxEntrySummary>`, 400 `ApiErrorResponse` |  |
 | GET | `/api/v1/blackbox/storage` | AdminOnly |  | 200 `BlackBoxStorageStatus`, 403 `ApiErrorResponse` |  |
@@ -100,8 +102,11 @@ Base path `/api/v1`. Request and response bodies are PascalCase JSON; errors are
 | DELETE | `/api/v1/blackbox/{id}` | TenantAdmin |  | 200 `BlackBoxDeleteResult`, 403 `ApiErrorResponse`, 404 `ApiErrorResponse` |  |
 | GET | `/api/v1/blackbox/{id}` | Authenticated |  | 200 `BlackBoxEntry`, 404 `ApiErrorResponse`, 409 `ApiErrorResponse` |  |
 | GET | `/api/v1/blackbox/{id}/brief` | Authenticated |  | 200 `string`, 400 `ApiErrorResponse`, 404 `ApiErrorResponse` |  |
+| GET | `/api/v1/blackbox/{id}/diff/{otherId}` | Authenticated |  | 200 `BlackBoxAttemptDiff`, 400, 404 |  |
 | GET | `/api/v1/blackbox/{id}/download` | Authenticated |  | 200 `string`, 404 `ApiErrorResponse` |  |
 | POST | `/api/v1/blackbox/{id}/export-fixture` | AdminOnly | `BlackBoxFixtureExportRequest` (optional) | 200 `BlackBoxFixture`, 403 `ApiErrorResponse`, 404 `ApiErrorResponse` |  |
+| GET | `/api/v1/blackbox/{id}/nearby-successes` | Authenticated |  | 200 `EnumerationResult<BlackBoxNearbySuccess>`, 404 |  |
+| POST | `/api/v1/blackbox/{id}/nearby-successes/enumerate` | Authenticated | `EnumerationQuery` (optional) | 200 `EnumerationResult<BlackBoxNearbySuccess>`, 400, 404 |  |
 | GET | `/api/v1/blackbox/{id}/notes` | Authenticated |  | 200 `EnumerationResult<BlackBoxNote>`, 404 `ApiErrorResponse` |  |
 | POST | `/api/v1/blackbox/{id}/notes` | Authenticated | `BlackBoxNoteAddRequest` | 200 `BlackBoxNote`, 400 `ApiErrorResponse`, 404 `ApiErrorResponse` |  |
 | POST | `/api/v1/blackbox/{id}/notes/enumerate` | Authenticated | `EnumerationQuery` (optional) | 200 `EnumerationResult<BlackBoxNote>`, 404 `ApiErrorResponse` |  |
@@ -114,6 +119,8 @@ Base path `/api/v1`. Request and response bodies are PascalCase JSON; errors are
 | POST | `/api/v1/blackbox/{id}/recovery/{pathId}` | Authenticated | `BlackBoxRecoveryRunRequest` (optional) | 200 `BlackBoxRecoveryRunResult`, 400 `ApiErrorResponse`, 404 `ApiErrorResponse`, 409 `ApiErrorResponse`, 503 `ApiStatusErrorResponse` |  |
 | POST | `/api/v1/blackbox/{id}/resolve` | Authenticated | `BlackBoxResolveRequest` | 200 `BlackBoxEntry`, 400 `ApiErrorResponse`, 404 `ApiErrorResponse` |  |
 | GET | `/api/v1/blackbox/{id}/sections/{section}` | Authenticated |  | 200 `BlackBoxSectionResult`, 400 `ApiErrorResponse`, 404 `ApiErrorResponse` |  |
+| GET | `/api/v1/blackbox/{id}/timeline` | Authenticated |  | 200 `BlackBoxTimelinePage`, 404 |  |
+| POST | `/api/v1/blackbox/{id}/timeline/enumerate` | Authenticated | `EnumerationQuery` (optional) | 200 `BlackBoxTimelinePage`, 400, 404 |  |
 | POST | `/api/v1/blackbox/{id}/unpin` | Authenticated |  | 200 `BlackBoxEntry`, 404 `ApiErrorResponse` |  |
 | GET | `/api/v1/captains` | Authenticated |  | 200 `EnumerationResult<Captain>` |  |
 | POST | `/api/v1/captains` | TenantAdmin | `Captain` | 201 `Captain`, 400, 409 `ApiErrorResponse` |  |
@@ -254,6 +261,7 @@ Base path `/api/v1`. Request and response bodies are PascalCase JSON; errors are
 | POST | `/api/v1/missions/delete/multiple` | TenantAdmin | `DeleteMultipleRequest` | 200 `DeleteMultipleResult`, 400 |  |
 | POST | `/api/v1/missions/enumerate` | Authenticated | `EnumerationQuery` (optional) |  |  |
 | GET | `/api/v1/missions/history` | Authenticated |  | 200 `MissionHistorySummaryResult`, 400 |  |
+| POST | `/api/v1/missions/lint-brief` | Authenticated | `BriefLintRequest` | 200 `BriefLintResult`, 400, 404 |  |
 | GET | `/api/v1/missions/summaries` | Authenticated |  | 200 `EnumerationResult<MissionSummary>` |  |
 | POST | `/api/v1/missions/summaries/enumerate` | Authenticated | `EnumerationQuery` (optional) | 200 `EnumerationResult<MissionSummary>` |  |
 | DELETE | `/api/v1/missions/{id}` | TenantAdmin |  | 200 `Mission`, 404 |  |
@@ -458,6 +466,8 @@ Base path `/api/v1`. Request and response bodies are PascalCase JSON; errors are
 | DELETE | `/api/v1/vessels/{id}` | TenantAdmin |  | 204, 404 |  |
 | GET | `/api/v1/vessels/{id}` | Authenticated |  | 200 `Vessel`, 404 |  |
 | PUT | `/api/v1/vessels/{id}` | TenantAdmin | `Vessel` | 200 `Vessel`, 404, 409 `ApiErrorResponse` |  |
+| GET | `/api/v1/vessels/{id}/blackbox-doctor` | Authenticated |  | 200 `BlackBoxDoctorPage`, 400, 404 |  |
+| POST | `/api/v1/vessels/{id}/blackbox-doctor/enumerate` | Authenticated | `BlackBoxDoctorRequest` (optional) | 200 `BlackBoxDoctorPage`, 400, 404 |  |
 | POST | `/api/v1/vessels/{id}/branches/enumerate` | Authenticated | `EnumerationQuery` (optional) | 200 `BranchEnumerationResult`, 404 |  |
 | POST | `/api/v1/vessels/{id}/branches/merge` | TenantAdmin |  | 200, 400, 404, 422 `ApiStatusErrorResponse`, 503 `ApiStatusErrorResponse` |  |
 | POST | `/api/v1/vessels/{id}/branches/push` | TenantAdmin |  | 200, 400, 404, 422 `ApiStatusErrorResponse`, 503 `ApiStatusErrorResponse` |  |
@@ -476,7 +486,10 @@ Base path `/api/v1`. Request and response bodies are PascalCase JSON; errors are
 | GET | `/api/v1/vessels/{id}/history/activity` | Authenticated |  | 200 `VesselCommitActivity`, 400 `ApiErrorResponse`, 404, 503 `ApiStatusErrorResponse` |  |
 | GET | `/api/v1/vessels/{id}/history/commits` | Authenticated |  | 200 `VesselCommitPage`, 400 `ApiErrorResponse`, 404, 503 `ApiStatusErrorResponse` |  |
 | GET | `/api/v1/vessels/{id}/landing-preview` | Authenticated |  | 200 `LandingPreviewResult`, 404 |  |
+| POST | `/api/v1/vessels/{id}/overlap-preview` | Authenticated | `MissionOverlapPreviewRequest` | 200 `MissionOverlapPreview`, 400, 404 |  |
 | GET | `/api/v1/vessels/{id}/readiness` | Authenticated |  | 200 `VesselReadinessResult`, 400, 404 |  |
+| GET | `/api/v1/vessels/{id}/reservations` | Authenticated |  | 200 `VesselReservationPage`, 404 |  |
+| POST | `/api/v1/vessels/{id}/reservations/enumerate` | Authenticated | `EnumerationQuery` (optional) | 200 `VesselReservationPage`, 400, 404 |  |
 | GET | `/api/v1/voyages` | Authenticated |  | 200 `EnumerationResult<Voyage>` |  |
 | POST | `/api/v1/voyages` | TenantAdmin | `VoyageRequest` | 201 `Voyage`, 400, 404 |  |
 | POST | `/api/v1/voyages/delete/multiple` | TenantAdmin | `DeleteMultipleRequest` | 200 `DeleteMultipleResult`, 400 |  |
@@ -486,6 +499,7 @@ Base path `/api/v1`. Request and response bodies are PascalCase JSON; errors are
 | GET | `/api/v1/voyages/{id}` | Authenticated |  | 200 `VoyageProgress`, 404 |  |
 | GET | `/api/v1/voyages/{id}/blackbox` | Authenticated |  | 200 `BlackBoxEntry`, 404 `ApiErrorResponse`, 409 `ApiErrorResponse` |  |
 | GET | `/api/v1/voyages/{id}/blackbox/brief` | Authenticated |  | 200 `string`, 400 `ApiErrorResponse`, 404 `ApiErrorResponse` |  |
+| GET | `/api/v1/voyages/{id}/blackbox/cascade` | Authenticated |  | 200 `BlackBoxCascadeGraph`, 404 |  |
 | DELETE | `/api/v1/voyages/{id}/purge` | TenantAdmin |  | 200 `Object`, 404, 409 `Object` |  |
 | GET | `/api/v1/whoami` | Authenticated |  |  |  |
 | GET | `/api/v1/workflow-profiles` | Authenticated |  | 200 `EnumerationResult<WorkflowProfile>` |  |
@@ -521,7 +535,7 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 
 | Tool | Auth | Arguments | Status |
 |---|---|---|---|
-| `add_vessel` | TenantAdmin | `allowConcurrentMissions: boolean`, `auditCommand: string`, `autoApprove: boolean`, `defaultBranch: string`, `defaultPipelineId: string`, `enableModelContext: boolean`, `fleetId*: string`, `gitHubTokenOverride: string`, `lintCommand: string`, `name*: string`, `projectContext: string`, `repoUrl*: string`, `styleGuide: string`, `testCommand: string`, `workingDirectory: string` |  |
+| `add_vessel` | TenantAdmin | `allowConcurrentMissions: boolean`, `auditCommand: string`, `autoApprove: boolean`, `defaultBranch: string`, `defaultPipelineId: string`, `enableModelContext: boolean`, `fleetId*: string`, `gitHubTokenOverride: string`, `lintCommand: string`, `name*: string`, `projectContext: string`, `repoUrl*: string`, `serializeOverlappingMissions: boolean`, `styleGuide: string`, `testCommand: string`, `workingDirectory: string` |  |
 | `annotate_blackbox` | Authenticated | `body*: string`, `entryId: string`, `missionId: string`, `voyageId: string` |  |
 | `apply_backlog_refinement_summary` | TenantAdmin | `endSession: boolean`, `markMessageSelected: boolean`, `messageId: string`, `promoteBacklogState: boolean`, `sessionId*: string` |  |
 | `apply_blackbox_recommendation` | Authenticated | `confirmToken: string`, `dryRun: boolean`, `entryId: string`, `missionId: string`, `recommendationId*: string`, `voyageId: string` |  |
@@ -591,6 +605,7 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `delete_workflow_profile` | TenantAdmin | `id*: string` |  |
 | `delete_workflow_profiles` | TenantAdmin | `ids*: array<string>` |  |
 | `deny_mission_review` | TenantAdmin | `action: string`, `comment: string`, `missionId*: string` |  |
+| `diff_blackbox_entries` | Authenticated | `entryId*: string`, `otherEntryId*: string` |  |
 | `discover_vessels` | TenantAdmin | `directories: array<string>`, `maxDepth: integer`, `roots: array<string>`, `runInBackground: boolean` |  |
 | `dispatch` | TenantAdmin | `approvalOptions: object`, `captainAssignments: array<object>`, `description: string`, `isEvaluation: boolean`, `landingMode: string`, `missions: array<object>`, `objectiveId: string`, `pipeline: string`, `pipelineId: string`, `selectedPlaybooks: array<object>`, `title*: string`, `vesselId: string` |  |
 | `dispatch_backlog_planning_session` | TenantAdmin | `description: string`, `messageId: string`, `sessionId*: string`, `title: string` |  |
@@ -612,8 +627,10 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `get_blackbox` | Authenticated | `audience: string`, `entryId: string`, `format: string`, `missionId: string`, `redactHosts: boolean`, `voyageId: string` |  |
 | `get_blackbox_bundle` | Authenticated | `captainId: string`, `createdAfter: string`, `createdBefore: string`, `fingerprint: string`, `fleetId: string`, `format: string`, `isCurrent: boolean`, `kind: string`, `max: integer`, `missionId: string`, `path: string`, `phase: string`, `pinned: boolean`, `redactHosts: boolean`, `resolution: string`, `state: string`, `step: string`, `subjectType: string`, `triage: string`, `vesselId: string`, `voyageId: string` |  |
 | `get_blackbox_fingerprint_trend` | Authenticated | `fingerprint*: string` |  |
+| `get_blackbox_recovery_stats` | Authenticated | `pageNumber: integer`, `pageSize: integer`, `ruleId: string`, `vesselId: string` |  |
 | `get_blackbox_retention` | TenantAdmin |  |  |
 | `get_blackbox_storage` | AdminOnly |  |  |
+| `get_blackbox_timeline` | Authenticated | `entryId*: string`, `order: string`, `pageNumber: integer`, `pageSize: integer` |  |
 | `get_captain` | Authenticated | `captainId*: string` |  |
 | `get_captain_log` | Authenticated | `captainId*: string`, `lines: integer`, `offset: integer` |  |
 | `get_captain_tools` | Authenticated | `captainId*: string`, `pageNumber: integer`, `pageSize: integer`, `refresh: boolean`, `sourceKind: string` |  |
@@ -642,9 +659,12 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `get_runbook_execution` | Authenticated | `runbookExecutionId*: string` |  |
 | `get_stage_outcome` | Authenticated | `outcomeId*: string` |  |
 | `get_vessel` | Authenticated | `vesselId*: string` |  |
+| `get_vessel_blackbox_doctor` | Authenticated | `pageNumber: integer`, `pageSize: integer`, `vesselId*: string`, `windowDays: integer` |  |
+| `get_voyage_blackbox_cascade` | Authenticated | `voyageId*: string` |  |
 | `get_workflow_profile` | Authenticated | `id*: string` |  |
 | `health_check_model_endpoints` | Authenticated |  |  |
 | `import_vessels` | TenantAdmin | `allNew: boolean`, `applyFleetsAutomatically: boolean`, `batchId*: string`, `captainId: string`, `categorize: boolean`, `defaultPipelineId: string`, `fleetId: string`, `landingMode: string`, `paths: array<string>`, `prompt: string` |  |
+| `lint_mission_brief` | Authenticated | `dependsOnMissionId: string`, `description: string`, `title: string`, `vesselId: string` |  |
 | `list_ask_messages` | Authenticated | `beforeSequence: integer`, `pageSize: integer`, `threadId*: string` |  |
 | `list_ask_proposals` | Authenticated | `order: string`, `pageNumber: integer`, `pageSize: integer`, `status: string`, `threadId*: string` |  |
 | `list_ask_quick_actions` | Authenticated |  |  |
@@ -662,6 +682,7 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `list_blackbox_entries` | Authenticated | `captainId: string`, `createdAfter: string`, `createdBefore: string`, `fingerprint: string`, `fleetId: string`, `isCurrent: boolean`, `kind: string`, `missionId: string`, `order: string`, `pageNumber: integer`, `pageSize: integer`, `path: string`, `phase: string`, `pinned: boolean`, `resolution: string`, `state: string`, `step: string`, `subjectType: string`, `triage: string`, `vesselId: string`, `voyageId: string` |  |
 | `list_blackbox_fingerprints` | Authenticated | `createdAfter: string`, `createdBefore: string`, `order: string`, `pageNumber: integer`, `pageSize: integer`, `resolution: string`, `vesselId: string` |  |
 | `list_blackbox_hotspots` | Authenticated | `createdAfter: string`, `createdBefore: string`, `order: string`, `pageNumber: integer`, `pageSize: integer`, `role: string`, `vesselId: string` |  |
+| `list_blackbox_nearby_successes` | Authenticated | `entryId*: string`, `pageNumber: integer`, `pageSize: integer` |  |
 | `list_blackbox_notes` | Authenticated | `entryId: string`, `missionId: string`, `order: string`, `pageNumber: integer`, `pageSize: integer`, `voyageId: string` |  |
 | `list_blackbox_objects` | Authenticated | `entryId: string`, `missionId: string`, `order: string`, `pageNumber: integer`, `pageSize: integer`, `voyageId: string` |  |
 | `list_failure_cause_rules` | Authenticated | `pageNumber: integer`, `pageSize: integer` |  |
@@ -672,11 +693,13 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `list_prompt_templates` | Authenticated | `category: string`, `pageNumber: integer`, `pageSize: integer` |  |
 | `list_stage_outcomes` | Authenticated | `captainId: string`, `causeSource: string`, `disposition: string`, `fromUtc: string`, `isEvaluation: boolean`, `missionId: string`, `model: string`, `pageNumber: integer`, `pageSize: integer`, `persona: string`, `suspectedCause: string`, `tenantId: string`, `toUtc: string`, `vesselId: string`, `voyageId: string` |  |
 | `list_vessel_dependencies` | Authenticated | `pageNumber: integer`, `pageSize: integer`, `vesselId*: string` |  |
+| `list_vessel_reservations` | Authenticated | `pageNumber: integer`, `pageSize: integer`, `vesselId*: string` |  |
 | `list_voyage_progress` | Authenticated | `order: string`, `pageNumber: integer`, `pageSize: integer`, `status: string` |  |
 | `mark_ask_thread_read` | Authenticated | `threadId*: string` |  |
 | `mission_status` | Authenticated | `missionId*: string` |  |
 | `papercut_summary` | Authenticated | `category: string`, `limit: integer`, `minSeverity: string`, `scanLimit: integer`, `sinceHours: integer`, `ungrouped: boolean`, `vesselId: string` |  |
 | `pin_blackbox` | Authenticated | `entryId: string`, `missionId: string`, `pinned: boolean`, `voyageId: string` |  |
+| `preview_mission_overlap` | Authenticated | `dependsOnMissionId: string`, `description: string`, `excludeMissionId: string`, `title: string`, `vesselId*: string` |  |
 | `preview_workflow_profile` | Authenticated | `vesselId*: string`, `workflowProfileId: string` |  |
 | `process_merge_entry` | TenantAdmin | `entryId*: string` |  |
 | `process_merge_queue` | TenantAdmin |  |  |
@@ -746,7 +769,7 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `update_pipeline` | Authenticated | `description: string`, `name*: string`, `stages: array<object>` |  |
 | `update_playbook` | TenantAdmin | `active: boolean`, `content: string`, `description: string`, `fileName: string`, `id*: string` |  |
 | `update_prompt_template` | Authenticated | `content*: string`, `description: string`, `name*: string` |  |
-| `update_vessel` | TenantAdmin | `allowConcurrentMissions: boolean`, `auditCommand: string`, `autoApprove: boolean`, `autoLandEnabled: boolean`, `autoLandMaxFiles: integer`, `autoLandMaxLines: integer`, `autoLandPathAllowGlobs: array<string>`, `autoLandPathDenyGlobs: array<string>`, `clearAutoApprove: boolean`, `defaultBranch: string`, `defaultPipelineId: string`, `definitionOfDoneBuildCommand: string`, `definitionOfDoneEnabled: boolean`, `definitionOfDoneTestCommand: string`, `definitionOfDoneTimeoutSeconds: integer`, `enableModelContext: boolean`, `gitHubTokenOverride: string`, `landingMode: string`, `lintCommand: string`, `modelContext: string`, `name: string`, `projectContext: string`, `repoUrl: string`, `styleGuide: string`, `testCommand: string`, `vesselId*: string`, `workingDirectory: string` |  |
+| `update_vessel` | TenantAdmin | `allowConcurrentMissions: boolean`, `auditCommand: string`, `autoApprove: boolean`, `autoLandEnabled: boolean`, `autoLandMaxFiles: integer`, `autoLandMaxLines: integer`, `autoLandPathAllowGlobs: array<string>`, `autoLandPathDenyGlobs: array<string>`, `clearAutoApprove: boolean`, `defaultBranch: string`, `defaultPipelineId: string`, `definitionOfDoneBuildCommand: string`, `definitionOfDoneEnabled: boolean`, `definitionOfDoneTestCommand: string`, `definitionOfDoneTimeoutSeconds: integer`, `enableModelContext: boolean`, `gitHubTokenOverride: string`, `landingMode: string`, `lintCommand: string`, `modelContext: string`, `name: string`, `projectContext: string`, `repoUrl: string`, `serializeOverlappingMissions: boolean`, `styleGuide: string`, `testCommand: string`, `vesselId*: string`, `workingDirectory: string` |  |
 | `update_vessel_context` | TenantAdmin | `modelContext: string`, `projectContext: string`, `styleGuide: string`, `vesselId*: string` |  |
 | `update_workflow_profile` | TenantAdmin | `abbreviatedUnitTestCommand: string`, `active: boolean`, `buildCommand: string`, `changelogGenerationCommand: string`, `deploymentVerificationCommand: string`, `description: string`, `e2eTestCommand: string`, `environments: array<object>`, `expectedArtifacts: array<string>`, `fleetId: string`, `id*: string`, `integrationTestCommand: string`, `isDefault: boolean`, `languageHints: array<string>`, `lintCommand: string`, `migrationCommand: string`, `name: string`, `ownershipScope: string`, `packageCommand: string`, `performanceCommand: string`, `publishArtifactCommand: string`, `releaseVersioningCommand: string`, `requiredInputs: array<object>`, `rollbackVerificationCommand: string`, `scope: string`, `securityScanCommand: string`, `unitTestCommand: string`, `vesselId: string` |  |
 | `validate_model_endpoint` | Authenticated | `endpointId*: string` |  |
@@ -878,6 +901,26 @@ Commands of the `armada` CLI (Helm). `*` marks a required argument or option. Gl
 | `armada backlog reorder` | `<backlog>*` | `--json`, `--page`, `--page-size`, `--profile`, `--rank\|-r`, `--server`, `--token`, `--verbose` |
 | `armada backlog show` | `<backlog>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
 | `armada backlog update` | `<backlog>*` | `--acceptance`, `--backlog-state`, `--blocked-by`, `--category`, `--constraint`, `--description\|-d`, `--due-utc`, `--effort`, `--evidence`, `--fleet`, `--json`, `--kind`, `--non-goal`, `--owner`, `--page`, `--page-size`, `--parent`, `--pipeline`, `--priority`, `--profile`, `--rank`, `--server`, `--status`, `--summary`, `--tag`, `--target-version`, `--title\|-t`, `--token`, `--verbose`, `--vessel` |
+| `armada blackbox backfill` |  | `--json`, `--max`, `--page`, `--page-size`, `--profile`, `--server`, `--since`, `--token`, `--verbose` |
+| `armada blackbox bundle` |  | `--before`, `--captain`, `--fingerprint`, `--format`, `--json`, `--kind`, `--max`, `--mission`, `--output\|-o`, `--page`, `--page-size`, `--phase`, `--pinned`, `--profile`, `--redact-hosts`, `--resolution`, `--server`, `--since`, `--step`, `--token`, `--triage`, `--verbose`, `--vessel`, `--voyage` |
+| `armada blackbox cat` | `<id>*` `<name>*` | `--json`, `--length`, `--offset`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada blackbox delete` | `<ids>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada blackbox download` | `<id>*` | `--json`, `--output\|-o`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada blackbox export-fixture` | `<id>*` | `--json`, `--name`, `--output\|-o`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada blackbox gc` |  | `--dry-run`, `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada blackbox list` |  | `--before`, `--captain`, `--fingerprint`, `--json`, `--kind`, `--mission`, `--page`, `--page-size`, `--phase`, `--pinned`, `--profile`, `--resolution`, `--server`, `--since`, `--step`, `--token`, `--triage`, `--verbose`, `--vessel`, `--voyage` |
+| `armada blackbox note` | `<id>*` `<text>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada blackbox objects` | `<id>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada blackbox pin` | `<ids>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada blackbox purge` |  | `--before`, `--captain`, `--execute`, `--fingerprint`, `--include-pinned`, `--json`, `--kind`, `--max`, `--mission`, `--page`, `--page-size`, `--phase`, `--pinned`, `--profile`, `--resolution`, `--server`, `--since`, `--step`, `--token`, `--triage`, `--verbose`, `--vessel`, `--voyage`, `--yes\|-y` |
+| `armada blackbox recover` | `<id>*` `<pathId>*` | `--acknowledge-data-loss`, `--execute`, `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose`, `--yes\|-y` |
+| `armada blackbox resolve` | `<id>*` | `--json`, `--link`, `--note`, `--page`, `--page-size`, `--profile`, `--resolution`, `--server`, `--token`, `--verbose` |
+| `armada blackbox retention` |  | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada blackbox show` | `<id>*` | `--audience`, `--brief`, `--json`, `--page`, `--page-size`, `--profile`, `--redact-hosts`, `--server`, `--token`, `--verbose` |
+| `armada blackbox storage migrate` |  | `--batch-size`, `--delete-source`, `--from`, `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--to`, `--token`, `--verbose` |
+| `armada blackbox storage migration` | `<id>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada blackbox storage status` |  | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada blackbox unpin` | `<ids>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
 | `armada captain add` | `<name>*` | `--json`, `--model\|-m`, `--model-endpoint`, `--mux-adapter-type`, `--mux-approval-policy`, `--mux-base-url`, `--mux-config-dir`, `--mux-endpoint`, `--mux-max-tokens`, `--mux-system-prompt-path`, `--mux-temperature`, `--page`, `--page-size`, `--profile`, `--runtime\|-r`, `--server`, `--token`, `--verbose` |
 | `armada captain list` |  | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
 | `armada captain remove` | `<captain>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
@@ -901,6 +944,7 @@ Commands of the `armada` CLI (Helm). `*` marks a required argument or option. Gl
 | `armada mcp stdio` |  | `--profile`, `--server`, `--token` |
 | `armada mission cancel` | `<mission>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
 | `armada mission create` | `<title>*` | `--description\|-d`, `--json`, `--page`, `--page-size`, `--priority\|-p`, `--profile`, `--server`, `--token`, `--verbose`, `--vessel\|-v`, `--voyage` |
+| `armada mission failure` | `<id>*` | `--audience`, `--brief`, `--json`, `--page`, `--page-size`, `--profile`, `--redact-hosts`, `--server`, `--token`, `--verbose` |
 | `armada mission list` |  | `--captain\|-c`, `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--status\|-s`, `--token`, `--verbose`, `--vessel\|-v`, `--voyage` |
 | `armada mission restart` | `<mission>*` | `--description\|-d`, `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--title\|-t`, `--token`, `--verbose` |
 | `armada mission retry` | `<mission>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
@@ -927,6 +971,7 @@ Commands of the `armada` CLI (Helm). `*` marks a required argument or option. Gl
 | `armada vessel remove` | `<vessel>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
 | `armada voyage cancel` | `<voyage>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
 | `armada voyage create` | `<title>*` | `--json`, `--mission\|-m`, `--page`, `--page-size`, `--playbook\|-p`, `--profile`, `--server`, `--token`, `--verbose`, `--vessel\|-v` |
+| `armada voyage failure` | `<id>*` | `--audience`, `--brief`, `--json`, `--page`, `--page-size`, `--profile`, `--redact-hosts`, `--server`, `--token`, `--verbose` |
 | `armada voyage list` |  | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--status\|-s`, `--token`, `--verbose` |
 | `armada voyage retry` | `<voyage>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
 | `armada voyage show` | `<voyage>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
@@ -963,6 +1008,9 @@ install with the home directory written as `~`; defaults are not frozen (see COM
 | `blackBox` | object |  |  |
 | `blackBox.captureTimeoutMs` | int | `2000` |  |
 | `blackBox.enabled` | bool | `true` |  |
+| `blackBox.hotspotReservationThreshold` | int | `3` |  |
+| `blackBox.insightIntervalSeconds` | int | `60` |  |
+| `blackBox.nearbySuccessWindowHours` | int | `24` |  |
 | `blackBox.retention` | object |  |  |
 | `blackBox.retention.deleteWithMission` | bool | `false` |  |
 | `blackBox.retention.deleteWithVessel` | bool | `true` |  |
@@ -1018,6 +1066,7 @@ install with the home directory written as `~`; defaults are not frozen (see COM
 | `blackBox.storage.s3.usePathStyle` | bool | `true` |  |
 | `blackBox.storage.s3.useSsl` | bool | `true` |  |
 | `blackBox.storage.target` | enum BlackBoxStorageTargetEnum (Database\|Disk\|S3\|AzureBlob\|GoogleCloud\|Cifs\|Nfs\|Unknown) | `"Database"` |  |
+| `blackBox.successRetentionDays` | int | `7` |  |
 | `blackBox.summaryEndpointId` | string | `null` |  |
 | `blackBox.sweeper` | object |  |  |
 | `blackBox.sweeper.intervalSeconds` | int | `60` |  |

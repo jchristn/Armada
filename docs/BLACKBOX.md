@@ -177,7 +177,7 @@ Three ways to get a brief:
 
 1. The dashboard black box panel on the mission page: **Copy FIX THIS** (also on Inbox failure rows).
 2. A terminal: `curl -s -H "Authorization: Bearer $TOKEN" http://localhost:7890/api/v1/missions/msn_x/blackbox/brief | pbcopy`
-   (or `armada blackbox show msn_x --brief | pbcopy` once the Helm commands land, section 4).
+   (or `armada blackbox show msn_x --brief | pbcopy`, section 4).
 3. MCP: `get_blackbox {"missionId": "msn_x", "format": "brief"}`.
 
 ## 4. Where to find entries
@@ -185,8 +185,8 @@ Three ways to get a brief:
 | Surface | Where | Status |
 |---|---|---|
 | Dashboard | Mission and voyage detail black box panel; Black Box page under Operations; entry page `/blackbox/{id}`; settings | Available |
-| TUI | Mission and voyage Failure tab; Black Box screen | Pending (TUI work) |
-| Helm CLI | `armada blackbox ...`, `armada mission failure <id>`, `armada voyage failure <id>` | Pending (Helm work) |
+| TUI | Mission and voyage Failure tab; Black Box screen (`g b`); entry screen; Settings and Storage sections | Available |
+| Helm CLI | `armada blackbox ...`, `armada mission failure <id>`, `armada voyage failure <id>` | Available |
 | VS Code | The Armada extension (`src/Armada.VSCode`) | Available |
 | Mobile | Mission and voyage detail panel, Black Box list and entry screens | Available |
 | REST | `/api/v1/missions/{id}/blackbox`, `/api/v1/voyages/{id}/blackbox`, `/api/v1/blackbox/...` | Available |
@@ -217,43 +217,56 @@ policy. **Inbox** failure rows have Copy FIX THIS and Ask Armada actions, and th
 
 ### TUI
 
-<!-- TODO(blackbox-docs): bb-tui. Replace with the shipped keys and screens. -->
+**Failure tab** (mission and voyage screens; `]` moves to it). It shows the entry's status, where it failed, triage,
+resolution, the ranked recovery paths and the user audience brief. While the tab has focus its keys run before the
+screen's and the status bar lists them: `c` copies the FIX THIS (agent) brief to the clipboard (OSC 52), `x` exports
+it to a file (default `blackbox-{entryId}.md` in the current directory), `r` lists the recovery paths (choosing one
+dry runs it and shows the plan; confirming runs it with the confirm token, and a data-loss path asks you to type
+`LOSE DATA` first; notes are written as Operator), `a` opens Ask Armada with the prompt filled in, `j` shows the entry
+as JSON, `s` resolves, `p` pins or unpins, `n` adds a note and `o` opens the entry. Every action is also in the `.`
+menu and the palette. Without an entry the tab says so and the screen's own keys (for example `r` Restart) apply.
 
-**Pending (TUI work).** Planned (plan 11.2): a **Failure** tab on the mission and voyage screens showing the user
-audience, with keys in the focus hints: `c` copies the brief (OSC 52), `x` exports it to a file, `r` lists recovery
-paths, `a` opens Ask Armada, `j` shows JSON; a Black Box screen with filters, fingerprints and a paged object viewer;
-retention and storage sections on the admin screen.
+**Black Box screen** (`/blackbox`, `g b`): server-paged entries filtered by vessel, triage, resolution, phase and
+fingerprint; `F` opens the fingerprints view (choosing one filters the list, `X` clears it); Enter opens an entry.
+**Entry screen** (`/blackbox/{id}`): the Brief tab (the same keys), the Objects tab (Enter opens a paged viewer that
+reads 64 KB at a time; `]` and `[` move between chunks) and Notes; `w` downloads the .zip, `f` lists similar failures.
+
+**Settings and Storage.** Settings has a **Black Box Retention** section (retention days, resolved retention, max
+entries per vessel, max total size, GC interval, keep latest, delete with mission or vessel). The Storage tab lists the
+storage target, health, usage, retention and garbage collection runs, and `G` runs a garbage collection dry run.
+Storage target credentials are edited in the dashboard or the settings file.
 
 ### Helm CLI
 
-<!-- TODO(blackbox-docs): bb-tui. Replace with the shipped command reference. -->
-
-**Pending (Helm work).** Planned commands (plan 11.3):
-
 ```
-armada blackbox show <missionId|voyageId|entryId> [--brief] [--audience agent|user|maintainer] [--json]
-armada blackbox list [--vessel] [--kind] [--triage] [--since] [--page] [--page-size]
+armada blackbox show <missionId|voyageId|entryId> [--brief] [--audience agent|user|maintainer] [--redact-hosts] [--json]
+armada blackbox list [--vessel] [--voyage] [--mission] [--captain] [--kind] [--triage] [--phase] [--step]
+                     [--resolution] [--fingerprint] [--pinned] [--since 30d] [--before 2026-09-01] [--page] [--page-size]
 armada blackbox objects <entryId>
-armada blackbox cat <entryId> <name> [--offset] [--length]
+armada blackbox cat <entryId> <name> [--offset N] [--length N]
 armada blackbox download <entryId> [-o file.zip]
-armada blackbox recover <entryId> <pathId> [--execute]
+armada blackbox recover <entryId> <pathId> [--execute [--yes] [--acknowledge-data-loss]]
 armada blackbox resolve <entryId> --resolution Resolved [--note] [--link]
 armada blackbox note <entryId> "<text>"
 armada blackbox pin|unpin|delete <entryId...>
-armada blackbox purge [filters] [--execute]
+armada blackbox purge [filters] [--include-pinned] [--max N] [--execute [--yes]]
 armada blackbox gc [--dry-run]
 armada blackbox retention
-armada blackbox storage [status|migrate --to <target>]
-armada blackbox bundle [filters] [-o bundle.md]
-armada blackbox backfill [--since 30d]
-armada blackbox export-fixture <entryId>
-armada mission failure <id>
-armada voyage failure <id>
+armada blackbox storage status | migrate --to <target> [--from] [--delete-source] | migration <id>
+armada blackbox bundle [filters] [--max N] [--format markdown|json] [-o bundle.md]
+armada blackbox backfill [--since 30d] [--max N]
+armada blackbox export-fixture <entryId> [--name] [-o dir]
+armada mission failure <id>        (alias of blackbox show for a mission)
+armada voyage failure <id>         (alias of blackbox show for a voyage)
 ```
 
-`armada blackbox show msn_x --brief | pbcopy` is the terminal path to "paste into an agent and say FIX THIS". Until
-it lands, use the REST brief route shown in section 3. The recovery commands already recorded in entries
-(`armada mission restart ...` and friends) are existing Helm commands.
+`armada blackbox show msn_x --brief | pbcopy` is the terminal path to "paste into an agent and say FIX THIS": with
+`--brief` (and `--json`, `cat` and `bundle` without `-o`) stdout holds only the payload and every status line goes to
+stderr. Exit codes: 0 success, 1 failure or bad option, 2 credential (401 or 403) or target error, 3 not found (404),
+4 refused. `recover` and `purge` are dry runs by default; `--execute` asks to confirm (`--yes` answers for you and is
+required when the console is not interactive), and `recover` refuses a data-loss path without
+`--acknowledge-data-loss`. `export-fixture` writes `{name}.json` into `src/Test.Shared/Fixtures/BlackBox` when run
+inside the Armada repository, else into `-o`.
 
 ### VS Code
 
@@ -405,16 +418,23 @@ The captain reads the summary, then only the sections it needs, and answers with
 why (the findings with rule ids and confidence), its opinion (labeled as opinion), what could have been done
 differently (what you can change and what Armada should change), and next steps as proposals.
 
-<!-- TODO(blackbox-docs): bb-ask. Replace with the shipped slash command, prompt guidance, card and entry points. -->
+Admin-level reads (`get_blackbox_retention` for tenant admins, `get_blackbox_storage` and `export_blackbox_fixture`
+for admins) run as you: from Ask they are refused when you lack the role, never proposed.
 
-**Pending (Ask Armada work).** Planned (plan section 10): a `/blackbox` quick action (`missionId`, optional
-`question`) that maps to `get_blackbox`; a "Black box" section in the Ask Armada system prompt with the answer shape
-above and the rule never to invent files, commits or missions that are not in the entry; a black box card with status
-chips, conflicting missions and recovery buttons, and mission ids in a thread linked to their entries; "Ask Armada
-about this failure" from the dashboard panel, Inbox failure rows, the TUI Failure tab and VS Code, each opening a
-thread prefilled with the prompt above; follow-ups "Fix it", "Apply the configuration change", "Draft an Armada fix
-mission" and "Compare with similar failures"; and an offer to save the opinion as a note (`authorKind` AskArmada).
-The VS Code extension and the mobile app already open Ask Armada with the prompt (mobile through `/ask?prompt=`).
+- **`/blackbox <missionId> [question]`** shows the entry's card in the conversation (`get_blackbox`) and then sends
+  your question, if any, to the captain. On the dashboard `/blackbox` alone opens a form listing recent failures.
+- **The card** shows status chips (triage and confidence, kind, step, capture mode, resolution), where and how it
+  failed, the findings, the conflicting missions and files, the ranked recovery paths and the configuration
+  recommendations, Copy FIX THIS, and the follow-ups: **Fix it** and **Apply the configuration change** create a
+  proposal (approving it runs a dry run, then confirms it); **Draft an Armada fix mission** and **Compare with similar
+  failures** ask the captain. A mission id mentioned in the conversation links its entry's card automatically.
+- **Prompt guidance**: the built-in `ask.system` template has a "Black box" section with the answer shape above, the
+  rule never to invent files, commits or missions that are not in the entry, saying so when a fact is missing (for
+  example an entry captured by the sweeper), offering the mission's FailureReason when there is no entry, and offering
+  to save the opinion as a note (a proposal; the note's `authorKind` is AskArmada). A customized template gets the
+  section appended to the turn prompt.
+- **Entry points**: "Ask Armada about this failure" on the dashboard panel and Inbox, the TUI, VS Code and mobile open
+  a new conversation with the prompt above in the message box (`/ask?prompt=<text>`, removed from the URL once read).
 
 ## 8. Storage targets
 
@@ -715,33 +735,48 @@ Metrics on the Admiral's Prometheus endpoint: `armada_blackbox_entries_total{pha
 | Old entries do not reflect new rules | Entries analyzed with an older rules version are re-analyzed in the background after each sweep; `reanalyze` forces one. |
 | The database grows | Check `GET /api/v1/blackbox/retention`, lower `retentionDays` or `maxTotalBytes`, run `POST /api/v1/blackbox/gc {"DryRun": true}` to preview, or move objects to an external target. |
 
-## 12. Planned extensions
+## 12. Prevention, forensics and operations
 
-<!-- TODO(blackbox-docs): bb-ext. Replace with the shipped routes (BlackBoxInsightRoutes.cs) and tools (McpBlackBoxInsightTools.cs). -->
+Built on the black box (plan section 13); the developer contract is in section 13.21. Every read is scoped like the
+entry reads (a user sees their own entries, vessels and voyages) and every MCP tool below is read-only, so Ask Armada
+calls them without a proposal.
 
-**Pending (extensions work).** Planned user-facing behavior from plan section 13; none of these is merged on this
-branch yet:
+- **Overlap warnings at dispatch.** Before a mission is created, Armada estimates the files it will touch (its
+  `Touch only ...` directive and the repository paths its brief names that exist in the vessel) and compares them with
+  the vessel's active missions, the directories the black box marks as conflict hotspots and the directories active
+  missions reserve. The warnings come back as `OverlapWarnings` on `POST /api/v1/missions`, `POST /api/v1/voyages`,
+  MCP `create_mission` and `dispatch`. Preview them first with `POST /api/v1/vessels/{id}/overlap-preview` or
+  `preview_mission_overlap`.
+- **Chaining overlapping missions.** Set `serializeOverlappingMissions` on the vessel (REST, `add_vessel`,
+  `update_vessel`) and a mission that overlaps an active one is dispatched with `DependsOnMissionId` set to it, so it
+  starts after that mission lands. A dependency you set yourself is never replaced.
+- **Soft directory reservations.** An active mission whose scoped files sit in a hotspot directory (at least
+  `blackBox.hotspotReservationThreshold` entries, default 3, 0 turns it off) reserves it; a second mission there is
+  warned or chained. List them with `GET /api/v1/vessels/{id}/reservations` or `list_vessel_reservations`.
+- **Brief linter.** `POST /api/v1/missions/lint-brief` or `lint_mission_brief` flags dependency language without a
+  dependency ("after mission 2 lands"), verification-only briefs that tend to fail as NoOp (dispatch those as Audit or
+  Research), host paths, and paths the vessel does not have. Dispatch runs the same lint and returns
+  `BriefLintWarnings`; it never blocks.
+- **Configuration doctor.** `GET /api/v1/vessels/{id}/blackbox-doctor` or `get_vessel_blackbox_doctor` lists the
+  recommendations that keep recurring on a vessel ("BBX-LAND-001 recommended LandingMode PullRequest 6 times this
+  month"), with an example entry to apply it from.
+- **Attempt diff.** `GET /api/v1/blackbox/{id}/diff/{otherId}` or `diff_blackbox_entries`: what changed between two
+  attempts (captain, model, base commit, configuration, changed files, step).
+- **Nearby successes.** Successful landings are kept for `blackBox.successRetentionDays` (default 7, 0 off); a failure
+  lists the landings on the same vessel around it that touched the same files (`Related.NearbySuccesses`,
+  `GET /api/v1/blackbox/{id}/nearby-successes`, `list_blackbox_nearby_successes`).
+- **Combined timeline.** `GET /api/v1/blackbox/{id}/timeline` or `get_blackbox_timeline`: one ordered timeline across
+  the entry and its notes, the mission, the dock, the merge queue entry, the captain and the Harbor link.
+- **Voyage cascade graph.** `GET /api/v1/voyages/{id}/blackbox/cascade` or `get_voyage_blackbox_cascade`: which failure
+  took the others down (DependsOn, CancelledBecause, BlockedBy and Sibling edges, each mission with its entry).
+- **Runbook linkage.** Add a line `blackbox: bbx-land-001.pull-request` (a recovery path, a rule id, a failure step or
+  a failure kind) to a runbook's description and the matching recovery path starts that runbook when you run it.
+- **Recovery outcomes.** Every confirmed recovery run is followed until the mission's next terminal status and noted on
+  the entry; `GET /api/v1/blackbox/recovery-stats` or `get_blackbox_recovery_stats` shows each path's success rate,
+  which the advisor uses to rank equally strong paths.
 
-- **Overlap warning at dispatch**: a new mission's likely files (scoped files, paths named in the brief, recent path
-  commits) are compared with active missions and the vessel's hotspots; dispatch results, the dashboard dispatch
-  dialog and MCP `dispatch` warn, and with `Vessel.SerializeOverlappingMissions=true` overlapping missions are chained
-  with `DependsOnMissionId`.
-- **Soft directory reservations** for hotspot directories.
-- **Brief linter**: flags "after mission N lands" without a dependency, verification-only briefs (NoOp risk) and paths
-  outside the vessel.
-- **Configuration doctor**: per-vessel recommendations that recur across entries ("BBX-LAND-001 fired 6 times this
-  month on vessel Armada").
-- **Attempt diff**: what changed between two attempts (configuration, captain, model, base commit, files).
-- **Success records**: minimal records of successful landings kept for 7 days, to compare failures with nearby
-  successes.
-- **Combined timeline** across mission, dock, merge entry, captain and Harbor link.
-- **Voyage cascade graph**: the root failure, cancelled dependents and blocked siblings, each linked to its entry.
-- **Runbook linkage**: recovery paths that map to a runbook start it (`start_runbook_execution`).
-- **Recovery outcome tracking**: which path was taken and whether it worked, used to rank paths.
-
-Already available from the same plan section: the maintainer bundle (`POST /api/v1/blackbox/bundle`,
-`get_blackbox_bundle`), fingerprint trends per Armada version, regression fixtures (`export-fixture`) and the
-Prometheus metrics.
+The maintainer bundle (`POST /api/v1/blackbox/bundle`, `get_blackbox_bundle`), fingerprint trends per Armada version,
+regression fixtures (`export-fixture`) and the Prometheus metrics come from the same plan section.
 
 # Part 2: developer contract
 
@@ -1301,7 +1336,9 @@ portmapper), UserId 0, GroupId 0)), `Retention` (`BlackBoxRetentionSettings`: `R
 (0 to 3650, 0 keeps forever), `ResolvedRetentionDays` 30, `KeepLatestPerMission` true, `MaxEntriesPerVessel` 1000,
 `MaxTotalBytes` 1 GB, `DeleteWithMission` false, `DeleteWithVessel` true, `GcIntervalMinutes` 60, `GcBatchSize` 200,
 `OrphanGraceHours` 24), `Sweeper` (`BlackBoxSweeperSettings`: `IntervalSeconds` 60, `PageSize` 100,
-`MaxEnrichmentAttempts` 5), `SummaryEndpointId` (null). Out-of-range values are clamped in the setters. Secrets
+`MaxEnrichmentAttempts` 5), `SummaryEndpointId` (null), `HotspotReservationThreshold` (3, 0 to 1000, 0 turns
+reservations off), `SuccessRetentionDays` (7, 0 to 90, 0 turns the success recorder off), `NearbySuccessWindowHours` (24,
+1 to 168) and `InsightIntervalSeconds` (60, 5 to 3600) (section 13.21). Out-of-range values are clamped in the setters. Secrets
 (S3 AccessKey and SecretKey, Azure AccessKey and ConnectionString, Google CredentialsPath, CIFS Password) are masked as
 `********` in `GET /api/v1/settings` and kept when written back masked through `PUT /api/v1/settings` (`blackBox`);
 `BlackBoxRuntime` registers them with the redactor so they never reach an entry.
@@ -1605,13 +1642,227 @@ database-resident objects are read, checked, copied to `{prefix}/{name}` and che
 before switching the entry. A corrupt or unreadable object fails only its entry (`FailedEntries`, `LastError`), which
 stays where it was; the job ends Completed, or Failed when any entry failed. Every step leaves every object readable.
 
+### 13.21 Prevention, forensics and operations (plan 13)
+
+All in `Armada.Core.BlackBox`, built by `BlackBoxInsights` (`runtime.Insights`: `Analyzer`, `DispatchAdvisor`,
+`Service`, `Successes`, `PathStats`, `Outcomes`, `Runbooks`, `NearbySuccessEnricher`, `Background`). The constructor
+wires itself in: it adds the nearby-success enricher to the pipeline, sets `Pipeline.AnalysisHook` to the runbook linker,
+`Advisor.PathStats` to the path statistics and `Service.RecoveryObserver` to the outcome tracker. The Admiral sets
+`AdmiralService.DispatchAdvisor = runtime.Insights.DispatchAdvisor`, registers `BlackBoxInsightRoutes` (before
+`BlackBoxRoutes`, so `/api/v1/blackbox/recovery-stats` wins over `/api/v1/blackbox/{id}`) and
+`McpBlackBoxInsightTools`, and starts and stops `Insights.Background` with the other black box workers. Every read
+goes through `BlackBoxInsightService`, which scopes like `BlackBoxService` (global admin all tenants, tenant admin the
+tenant, user their own entries, vessels and voyages; anything else is `BlackBoxNotFoundException` for an entry and
+`KeyNotFoundException` for a vessel or voyage, REST 404 and MCP NotFound). Limits are constants in
+`BlackBoxInsightLimits`.
+
+```csharp
+Task<MissionOverlapPreview> PreviewOverlapAsync(AuthContext caller, string vesselId, MissionOverlapPreviewRequest? request, CancellationToken token = default);
+Task<VesselReservationPage> EnumerateReservationsAsync(AuthContext caller, string vesselId, EnumerationQuery? query, CancellationToken token = default);
+Task<BriefLintResult> LintBriefAsync(AuthContext caller, BriefLintRequest request, CancellationToken token = default);
+Task<BlackBoxDoctorPage> GetDoctorAsync(AuthContext caller, string vesselId, int? windowDays, EnumerationQuery? query, CancellationToken token = default);
+Task<BlackBoxAttemptDiff> DiffAsync(AuthContext caller, string entryId, string otherEntryId, CancellationToken token = default);
+Task<EnumerationResult<BlackBoxNearbySuccess>> EnumerateNearbySuccessesAsync(AuthContext caller, string entryId, EnumerationQuery? query, CancellationToken token = default);
+Task<BlackBoxTimelinePage> GetTimelineAsync(AuthContext caller, string entryId, EnumerationQuery? query, CancellationToken token = default);
+Task<BlackBoxCascadeGraph> GetVoyageCascadeAsync(AuthContext caller, string voyageId, CancellationToken token = default);
+Task<EnumerationResult<BlackBoxRecoveryStat>> EnumerateRecoveryStatsAsync(AuthContext caller, string? ruleId, string? vesselId, EnumerationQuery? query, CancellationToken token = default);
+```
+
+Surfaces (REST tag `BlackBox`, every MCP tool read-only and in `AskToolPolicy`'s read-only allowlist, authorization
+`Authenticated`, resource `BlackBox`; client methods in `ArmadaClient.BlackBoxInsights.cs`):
+
+| Feature | REST | MCP | Armada.Client |
+|---|---|---|---|
+| Overlap preview | `POST /api/v1/vessels/{id}/overlap-preview` | `preview_mission_overlap` | `PreviewMissionOverlapAsync` |
+| Reservations | `GET /api/v1/vessels/{id}/reservations`, `POST .../reservations/enumerate` | `list_vessel_reservations` | `ListVesselReservationsAsync` |
+| Brief lint | `POST /api/v1/missions/lint-brief` | `lint_mission_brief` | `LintMissionBriefAsync` |
+| Configuration doctor | `GET /api/v1/vessels/{id}/blackbox-doctor`, `POST .../blackbox-doctor/enumerate` | `get_vessel_blackbox_doctor` | `GetVesselBlackBoxDoctorAsync` |
+| Attempt diff | `GET /api/v1/blackbox/{id}/diff/{otherId}` | `diff_blackbox_entries` | `DiffBlackBoxEntriesAsync` |
+| Nearby successes | `GET /api/v1/blackbox/{id}/nearby-successes`, `POST .../nearby-successes/enumerate` | `list_blackbox_nearby_successes` | `ListBlackBoxNearbySuccessesAsync` |
+| Timeline | `GET /api/v1/blackbox/{id}/timeline`, `POST .../timeline/enumerate` | `get_blackbox_timeline` | `GetBlackBoxTimelineAsync` |
+| Cascade graph | `GET /api/v1/voyages/{id}/blackbox/cascade` | `get_voyage_blackbox_cascade` | `GetVoyageBlackBoxCascadeAsync` |
+| Recovery statistics | `GET /api/v1/blackbox/recovery-stats`, `POST .../recovery-stats/enumerate` | `get_blackbox_recovery_stats` | `GetBlackBoxRecoveryStatsAsync` |
+
+#### Overlap warnings and chaining (13.1.1)
+
+`MissionOverlapAnalyzer.LoadAsync(vessel, excludeMissionId)` builds a `VesselOverlapContext`: the vessel's tracked files
+(`ListTrackedFilesAsync` on the Admiral's repository through `VesselGitInspector`, cached five minutes; null for a
+vessel without a local repository), its active missions (`VesselGitInspector.ActiveMissionStatuses`, newest 200,
+`ActiveMissionsTruncated`), each with a `MissionFileSet` of likely files (its scoped-files directive through
+`MissionService.ParseMissionScopedFiles`, brief paths that exist in the tracked files, its dock's
+`GitAnchorsSnapshot.RecentPathCommits`, and its `DiffSnapshot` or, for at most ten missions without one, its branch
+from its start commit or merge base), the vessel's hotspot directories (`EnumerateHotspotsAsync`, Conflicted rows, top
+1000) and the reservations they produce. `LikelyFiles(title, description, tracked)` gives a new mission's set (scoped
+files plus verified brief paths; directories when a brief names one). `Compare(context, likely, dependsOn, missionId)`
+is pure: an `ActiveMission` warning per active mission sharing files (paths compared case-insensitively, a bare scoped
+file name matches anywhere, a directory overlaps the files under it), a `Reservation` warning per reserved directory
+the mission touches, a `Hotspot` warning per hot directory it touches (entries at least the reservation threshold, or 3
+when reservations are off); ordered ActiveMission, Reservation, Hotspot, larger overlap first; at most 50
+(`WarningCount` has the total). `SuggestedDependsOnMissionId` is the overlapping active mission (ActiveMission or
+Reservation, never a bare hotspot) with the most overlapping files, newest on a tie; none when a dependency is set.
+
+`BlackBoxDispatchAdvisor` (`IMissionDispatchAdvisor`, `Armada.Core.Services.Interfaces`) runs just before each
+dispatched mission is created: `AdmiralService.DispatchMissionAsync`, every mission of a standard voyage and the first
+stage of each pipeline mission. It returns `MissionDispatchAdvice` (OverlapWarnings, BriefLintWarnings,
+SerializedAfterMissionId). When `Vessel.SerializeOverlappingMissions` is true and the mission has no
+`DependsOnMissionId`, it sets it to the suggestion and marks that warning `Serialized`; the mission then waits for the
+overlapping one with the semantics of an explicit dependency (in the same voyage that includes the pipeline handoff
+rules). An explicit dependency is never replaced. The Admiral copies the advice onto the created mission
+(`Mission.OverlapWarnings`, `Mission.BriefLintWarnings`, each warning's `MissionId` set) and collects a voyage's onto
+`Voyage.OverlapWarnings` and `Voyage.BriefLintWarnings` (at most 50 each). Both are transient (`JsonIgnore` when null,
+never stored) and appear on REST `POST /api/v1/missions` and `POST /api/v1/voyages`, MCP `create_mission` and
+`dispatch`, and any other caller of the Admiral's dispatch methods. An advisor that throws is logged and the dispatch continues without
+advice. `SerializeOverlappingMissions` (migration 105, `vessels.serialize_overlapping_missions`, default false) is set
+with `PUT /api/v1/vessels/{id}`, `add_vessel` and `update_vessel` (`serializeOverlappingMissions`).
+
+#### Soft directory reservations (13.1.2)
+
+An active mission reserves each directory of its scoped files whose hotspot row has at least
+`blackBox.hotspotReservationThreshold` entries (default 3, 0 turns reservations off). `VesselReservationPage`
+(`EnumerationResult<VesselReservation>` plus Threshold, HotDirectoryCount, ActiveMissionsScanned, ScanTruncated) lists
+them by directory then mission id; a page is cut from the computed set with an exact total. A mission touching a
+reserved directory gets a `Reservation` warning, and is chained after the reserving mission when the vessel serializes.
+
+#### Brief linter (13.1.3)
+
+`MissionBriefLinter.Lint(title, description, dependsOnMissionId, tracked, mode)` is pure. Rules: `BRIEF-DEP-001`
+dependency language ("after mission 2 lands", "once X is merged", "depends on", "mission N", a `msn_` id) without
+`DependsOnMissionId` (at most five findings); `BRIEF-NOOP-001` a verify, check or report brief with no change verb, or
+a "do not change" brief (skipped for Audit and Research missions); `BRIEF-PATH-001` a multi-segment path whose first
+segment the vessel does not have (only with tracked files); `BRIEF-PATH-002` a host path (`/Users/...`, `C:\...`,
+`~/...`) or a parent-relative `../` path. Every finding has a severity (Warning), message, excerpt (200 characters) and
+suggestion; at most 50. Dispatch runs the same lint; it never blocks.
+
+#### Configuration doctor (13.1.4)
+
+`GetDoctorAsync` reads the records of the caller's newest 200 entries on the vessel in the window (`windowDays` 1 to
+365, default 30; outside is `ArgumentOutOfRangeException`, REST 400) and groups their configuration recommendations by
+rule id and setting: `BlackBoxDoctorFinding` (Key, RuleId, RecommendationId and the current and suggested value and
+rationale of the newest entry, Count, FirstSeenUtc, LastSeenUtc, ExampleEntryId, ExampleMissionId, Applicable).
+Most frequent first, then newest. `BlackBoxDoctorPage` adds WindowDays, EntriesInWindow, EntriesScanned and
+ScanTruncated.
+
+#### Attempt diff (13.3.5)
+
+`DiffAsync` compares two visible entries (the same id twice is `ArgumentException`): subject (captain id, name,
+runtime, model, endpoint, persona, Harbor, branch), status before and after, site (phase, step, host, method, Armada
+version and commit), classification (kind, suspected cause, fingerprint, triage), workspace (start commit, target tips,
+branch tip, mission commit, commits behind), conflicted file total, and every effective configuration value. At most
+100 `BlackBoxDiffField`s. Changed files come from each entry's ChangedByMission rows: only-in-each (200 each, with
+counts) and in-both count; `ChangedFilesKnown` is false when either side has none.
+
+#### Success flight recorder and nearby successes (13.3.6)
+
+`BlackBoxSuccessRecorder.RunOnceAsync` reads the newest 200 `mission.completed` events (every landing path records
+one) and `RecordAsync(mission)` writes a `BlackBoxSuccess` (`bbs_` id, migration 106 `blackbox_successes`) for a
+Complete mission not yet recorded for that landing: vessel, mission, voyage, captain, title, base commit
+(`StartCommit`), landed commit (`CommitHash`), target branch, changed files (diff snapshot, else start..landed commit on
+the Admiral; 200 kept with the total), created, started and landed times and the queue, run and total milliseconds.
+Records expire `blackBox.successRetentionDays` after landing (default 7, 0 to 90; 0 records nothing and the next
+cleanup deletes every record). `CleanupAsync` deletes expired records. `BlackBoxNearbySuccessEnricher` (after the
+built-in enrichers) compares a mission entry's files (its file rows except ChangedByConflictingMission, conflicted
+files, out-of-scope files and dirty paths) with the successes on the vessel within
+`blackBox.nearbySuccessWindowHours` (default 24, 1 to 168) of the capture (200 compared) and writes
+`Related.NearbySuccesses` (ten, most overlap first, then closest in time) and `Related.NearbySuccessTotal`.
+`EnumerateNearbySuccessesAsync` pages the same set (users see their own missions' successes).
+
+#### Combined timeline (13.3.7)
+
+`GetTimelineAsync` merges `BlackBoxTimelineItem`s (TimestampUtc, Source, Kind, Message, EntityId) from the entry
+(captured, enriched, analyzed, resolved), its notes, the mission row (created, started, finished) and its events (or the
+voyage and, for a voyage entry, its events), the dock row and its `dock` events, the merge entry row (queued, tests
+started, finished) and its `merge_entry` events, the captain's events from the mission's creation to ten minutes after
+the capture (only events without a mission or for this mission), and the Harbor link events in that window plus the
+last one before it (`harbor_link_events`). An event appears once. Each source is capped at 200 and the timeline at
+1000 (`Sources` counts with Truncated per source, `Truncated`). Ordered by time, source, entity id and kind in the
+query's order; REST defaults to oldest first when no `order` is given, MCP takes `order`.
+
+#### Voyage cascade graph (13.3.8)
+
+`GetVoyageCascadeAsync` reads the voyage's first 200 missions (oldest first) and `BuildCascade` (pure) returns
+`BlackBoxCascadeGraph`: nodes (`BlackBoxCascadeNode`: status, failure kind, current entry, dependency, IsRoot), the root
+(the earliest Failed or LandingFailed mission with no failed ancestor) and its entry, the voyage's entry, and edges
+(`BlackBoxCascadeEdge`): CancelledBecause (dependency and dependent both stopped), BlockedBy (dependency stopped,
+dependent Pending or Blocked), DependsOn (otherwise), and Sibling from the root to each other stopped mission without
+a dependency that is not downstream of the root. At most 1000 edges; `Truncated` when either cap applied.
+
+#### Runbook linkage (13.4.9)
+
+`BlackBoxRunbookLinker` (`IBlackBoxAnalysisHook`, run by the pipeline after the advisor) links each recovery path to
+the best active runbook the entry's owner can see (200 read): a tag line `blackbox: <tags>` in the runbook's
+description or overview naming the path id (strongest), the rule id, the failure step or the failure kind; then a
+title containing the rule id, then a title containing the step name. The path gets `RunbookId` and `RunbookTitle`.
+`BlackBoxService.RunRecoveryAsync` then plans `BlackBoxRunbookLinker.RunbookPlan`: one `start_runbook_execution` step
+(runbookId, title, notes naming the entry and path, incidentId when the entry has one; REST
+`POST /api/v1/runbooks/{id}/executions`) instead of the path's tool steps. `start_runbook_execution` is in
+`BlackBoxActionCommands.SupportedTools` and is authorized like a direct call (tenant admin).
+
+#### Recovery outcome tracking (13.4.10)
+
+`BlackBoxRecoveryOutcomeTracker` (`IBlackBoxRecoveryObserver`, called after every confirmed run) writes a
+`BlackBoxRecoveryOutcome` (`bro_` id, migration 106 `blackbox_recovery_outcomes`): Pending when every step succeeded,
+RunFailed at once otherwise. `SettleAsync` (200 Pending per pass, oldest first) settles one when the mission has a newer
+black box entry (Failed), is Complete since the run (Succeeded), or is Failed, LandingFailed or Cancelled since the run
+(Failed); a voyage entry uses the voyage's status; a deleted subject or seven days without a terminal status is
+Expired. Each settled outcome adds a System note to the entry. `BlackBoxPathStatsCache` holds rates for the 1000
+most-run paths (succeeded over settled, at least three settled runs); the advisor (`BlackBoxAdvisor.PathStats`, and the
+`pathStats` argument of the static `Analyze`) orders paths of equally weighted rules by rate (unknown counts as 0.5) and
+records `SuccessRate` and `TrackedRuns` on each path; without rates the catalog order stands. Statistics
+(`BlackBoxRecoveryStat`: Runs, Succeeded, Failed, Pending, Expired, SuccessRate, LastRunUtc per rule and path) are
+grouped and paged in SQL, scoped to the caller's runs (a user's own, a tenant admin's tenant).
+
+`BlackBoxInsightBackgroundService` runs every `blackBox.insightIntervalSeconds` (default 60, 5 to 3600) while
+`blackBox.enabled`: success recording, success cleanup, outcome settling, a path statistics refresh, and once a day the
+deletion of outcomes older than a year.
+
+Database: `IBlackBoxSuccessMethods` (`DatabaseDriver.BlackBoxSuccesses`: CreateAsync, ReadAsync, ReadLatestByMissionAsync,
+EnumerateByVesselAsync (window, tenant and owner scope, newest first), CountAsync, DeleteExpiredAsync) and
+`IBlackBoxRecoveryOutcomeMethods` (`DatabaseDriver.BlackBoxRecoveryOutcomes`: CreateAsync, ReadAsync,
+EnumerateByEntryAsync, EnumeratePendingAsync, SettleAsync (Pending only), EnumerateStatsAsync, DeleteByEntryAsync,
+DeleteCreatedBeforeAsync), shared SQL in `BlackBoxSuccessMethodsBase` and `BlackBoxRecoveryOutcomeMethodsBase`.
+
+Tests: `Services.BlackBoxPrevention`, `Services.BlackBoxForensicsExtensions`, `Services.BlackBoxOperations`,
+`Database.BlackBoxInsights` (all four providers), `E2E.BlackBoxInsightsApi`, `Client.Contract.BlackBoxInsights`, and the
+new tools in `E2E.McpTenantIsolation`.
+
+### 13.22 Ask Armada
+
+Plan section 10. The pieces, in `Armada.Core.Services.Ask` unless noted:
+
+- **Policy** (`AskToolPolicy`): every BlackBox tool the MCP authorization registry declares as a Read (the 13 of
+  `McpBlackBoxTools.ReadTools` plus `export_blackbox_fixture`) runs without approval; every other black box tool
+  (recovery, recommendation, resolve, annotate, pin, delete, purge, gc, reanalyze) becomes a proposal. The
+  admin-level reads stay allowlisted because the gate wraps the registry check: a thread call runs as the thread
+  owner, so `get_blackbox_retention` (TenantAdmin) and `get_blackbox_storage` / `export_blackbox_fixture` (AdminOnly)
+  are refused with Forbidden for an owner without the role (`E2E.AskThreads` admin_reads_keep_caller_authorization).
+- **Prompt** (`AskBlackBoxGuidance.Section`): the "## Black box" section of the built-in `ask.system` template (get
+  the summary first, read only the needed sections, page evidence, answer with What happened / Why / My opinion /
+  What could have been done differently / Next steps, never invent files, commits or missions, say when facts are
+  missing, offer FailureReason when there is no entry, offer to save the opinion as a note). An untouched earlier
+  built-in is upgraded at startup; `AskTurnCoordinator.BuildPrompt` appends the section to a customized template that
+  lacks the heading, so operator edits keep working.
+- **Quick action** `/blackbox` (`AskQuickActionCatalog`): `missionId` (type `mission`, required) and `question` (text,
+  optional) mapping to `get_blackbox`; `question` is removed before the tool runs (the client sends it to the captain).
+- **Card**: tracked entity `BlackBox` (`AskTrackedEntityTypeEnum`). `AskWorkSnapshotBuilder.BlackBox` (the
+  `IBlackBoxService`) reads the entry as the thread's owner into `AskWorkSnapshot.BlackBox` (`AskBlackBoxCard`: the
+  digest, conflicting missions, the first conflicted files, recommendations, note count and the follow-ups from
+  `AskBlackBoxGuidance.FollowUps`: Fix it and Apply as proposals, Draft an Armada fix mission and Compare with
+  similar failures as messages). The card's state is Succeeded for Resolved and ArmadaFixed, otherwise Failed.
+- **Linking** (`AskWorkLinker`, `Armada.Server.Ask.AskActionService`): `get_blackbox` links the card (as a quick action,
+  an approved proposal, or a thread read); the write tools refresh it; `LinkMentionedBlackBoxesAsync` links the cards
+  of mentioned missions (`AskTurnCoordinator.OnConversationText`).
+- **Approval**: an approved `run_blackbox_recovery` or `apply_blackbox_recommendation` proposal runs the dry run, then
+  confirms it with its token (`DryRunThenConfirmAsync`); `McpBlackBoxTools.CallerAuthorKind` attributes Ask notes to
+  AskArmada.
+- **Tests**: `Services.AskBlackBox` (plan 16.8), `Services.PromptTemplateService`, `Tui.Ask`, dashboard
+  `AskBlackBoxCard.test.tsx`, `askBlackBox.test.ts` and `AskArmada.test.tsx`; the prompt evaluation script has a
+  `blackbox` case whose grounding check flags files, commits and missions that are not in the entry.
+
 ## 14. Open items
 
 Grep for `TODO(blackbox-docs)` in this document and `TODO(blackbox-wave2` in code.
 
 | Owner | Item | Where |
 |---|---|---|
-| TUI and Helm | Failure tab, Black Box screen, `armada blackbox ...` commands including `export-fixture` (section 4) | `src/Armada.Tui`, `src/Armada.Helm` |
-| Ask Armada | `/blackbox` quick action, prompt guidance, card and entry points (section 7) | `src/Armada.Core/Services/Ask` |
-| extensions | Overlap warning, reservations, brief linter, configuration doctor, attempt diff, success records, timeline, cascade graph, runbook linkage, recovery outcome tracking (section 12) | `BlackBoxInsightRoutes.cs`, `McpBlackBoxInsightTools.cs` |
+| Insight UIs | Dashboard dispatch dialog overlap warnings, reservations, doctor, timeline and cascade views; TUI and Helm commands (section 12) | `src/Armada.Dashboard`, `src/Armada.Tui`, `src/Armada.Helm` |
 | MCP resources | Typed errors for resource reads of a missing entry or object (they return JSON-RPC -32603 today) | `McpBlackBoxResources.cs` |

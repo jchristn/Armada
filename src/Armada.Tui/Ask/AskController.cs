@@ -1277,6 +1277,27 @@ namespace Armada.Tui.Ask
         }
 
         /// <summary>
+        /// Open a new conversation with <paramref name="prompt"/> pre-filled in the composer (the Failure tab's "Ask Armada
+        /// about this failure"). Nothing is sent until the user presses Enter.
+        /// </summary>
+        /// <param name="prompt">Composer text.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="prompt"/> is null.</exception>
+        public void AskWithPrompt(string prompt)
+        {
+            if (prompt == null) throw new ArgumentNullException(nameof(prompt));
+            if (Conversation.ThreadId == null && Context.Router.Current?.Route.ScreenName == "AskScreen")
+            {
+                // Already on a new conversation: the route does not change, so fill the composer in place.
+                ComposerDraft = prompt;
+                DraftChanged?.Invoke(this, prompt);
+                return;
+            }
+
+            _NewDraftSeed = prompt;
+            Context.Navigate("/ask");
+        }
+
+        /// <summary>
         /// "Ask about this": open a new conversation with the current screen's context pre-filled in the composer
         /// (the entity's name is looked up for vessels, missions, voyages, captains, and fleets).
         /// </summary>

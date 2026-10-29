@@ -486,33 +486,35 @@ v1.0.0 is the first stable release: security hardening, a frozen and documented 
 
 ### v1.1.0 to v1.2.0
 
-**Nothing to migrate by hand.** The new schema migrations (96 to 104, including 103 and 104 for the black box) run automatically at startup, with SQLite backed up first, and every new column has a default. Docker installs pull the `v1.2.0` images (`jchristn77/armada-server:v1.2.0`, `jchristn77/armada-dashboard:v1.2.0`, `jchristn77/armada-proxy:v1.2.0`): `git pull`, then `docker/update.sh` (or `docker\update.bat`). Update each Harbor along with the Admiral.
+**Nothing to migrate by hand.** The new schema migrations (96 to 106, including 103 to 106 for the black box) run automatically at startup, with SQLite backed up first, and every new column has a default. Docker installs pull the `v1.2.0` images (`jchristn77/armada-server:v1.2.0`, `jchristn77/armada-dashboard:v1.2.0`, `jchristn77/armada-proxy:v1.2.0`): `git pull`, then `docker/update.sh` (or `docker\update.bat`). Update each Harbor along with the Admiral.
 
 **Behavior changes worth knowing:**
 - Every stage attempt is recorded as a stage outcome with its provenance and a suspected cause; failure-cause rules are data you can edit, and the built-in rules are restored at startup if deleted.
 - A Judge may now review work its own captain authored when no other eligible captain is idle. Set `ExcludeReviewAuthorsFromJudge` to true to keep the old exclusion.
 - Whole-list GET routes and `list_*` MCP tools are deprecated in favor of paged `enumerate` replacements; they keep working until 2.0.
 
-**New settings worth reviewing:** `ExcludeReviewAuthorsFromJudge` (default false), `StageCheckTimeoutMinutes` (default 15), and the `Evaluation` group (budget and concurrency for Quick probes and the fixture battery, overall and per inference host, plus `BatteryDirectory`). The black box adds the `blackBox` group (`enabled`, `captureTimeoutMs`, `storage`, `retention`, `sweeper`, `summaryEndpointId`; defaults keep entries in the database for 180 days); see [the black box notes](#the-mission-and-voyage-black-box-migrations-103-and-104) below.
+**New settings worth reviewing:** `ExcludeReviewAuthorsFromJudge` (default false), `StageCheckTimeoutMinutes` (default 15), and the `Evaluation` group (budget and concurrency for Quick probes and the fixture battery, overall and per inference host, plus `BatteryDirectory`). The black box adds the `blackBox` group (`enabled`, `captureTimeoutMs`, `storage`, `retention`, `sweeper`, `summaryEndpointId`; defaults keep entries in the database for 180 days); see [the black box notes](#the-mission-and-voyage-black-box-migrations-103-to-106) below.
 
-#### The mission and voyage black box (migrations 103 and 104)
+#### The mission and voyage black box (migrations 103 to 106)
 
 v1.2.0 adds the mission and voyage black box: when a mission or voyage fails, the Admiral writes an entry with
 where, how and why it failed, the FIX THIS brief, and ranked recovery paths. It needs no action to turn on, and there
 are no breaking changes: every new table, column, field and setting is additive. What it is and how to use it are in
 [BLACKBOX.md](BLACKBOX.md).
 
-**Database.** Two schema migrations run at startup on SQLite, PostgreSQL, MySQL and SQL Server, through the normal
+**Database.** Four schema migrations run at startup on SQLite, PostgreSQL, MySQL and SQL Server, through the normal
 [upgrade procedure](#how-an-upgrade-runs). SQLite is copied to `backups/pre-migration-*` first. On a server provider,
 take a dump first ([Server providers: dump first](#server-providers-dump-first)); with
 `database.requireBackupConfirmationForMigrations` on, the Admiral refuses to migrate until
 `database.confirmedBackupForSchemaVersion` (or `ARMADA_CONFIRM_BACKUP_FOR_SCHEMA_VERSION`) is at least the target
-version it prints (104 when you come straight to this release).
+version it prints (106 when you come straight to this release).
 
 | Migration | Adds |
 |---|---|
 | 103 | Tables `blackbox_entries`, `blackbox_objects` (object bytes in a BLOB column for the Database storage target; unique on `entry_id, name`), `blackbox_files`, `blackbox_links` and `blackbox_notes`, with their indexes. Nullable columns `missions.last_blackbox_entry_id`, `missions.start_commit`, `voyages.last_blackbox_entry_id` and `vessels.blackbox_retention_days`. |
 | 104 | Table `blackbox_migrations`: one row per storage migration job, so a job resumes after a restart. |
+| 105 | Column `vessels.serialize_overlapping_missions` (default false): chain a dispatched mission after an overlapping active mission. |
+| 106 | Tables `blackbox_successes` (a minimal record of each successful landing, kept `blackBox.successRetentionDays`, default 7) and `blackbox_recovery_outcomes` (which recovery path ran and whether the mission later succeeded). |
 
 No migration rewrites existing rows. The new nullable columns start empty, so missions and voyages that failed before
 the upgrade have no entry until they are captured (see backfill below).

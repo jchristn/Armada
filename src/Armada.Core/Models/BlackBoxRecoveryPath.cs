@@ -72,6 +72,29 @@ namespace Armada.Core.Models
         /// </summary>
         public string? RuleId { get; set; } = null;
 
+        /// <summary>
+        /// Runbook (pbk_ prefix) this path maps to, or null. Set after analysis when a runbook of the entry's tenant names
+        /// the path, its rule, the failure step or the failure kind (see docs/BLACKBOX.md, runbook linkage). A confirmed
+        /// run then starts the runbook (start_runbook_execution) instead of the path's tool steps.
+        /// </summary>
+        public string? RunbookId { get; set; } = null;
+
+        /// <summary>
+        /// Title of the linked runbook, or null.
+        /// </summary>
+        public string? RunbookTitle { get; set; } = null;
+
+        /// <summary>
+        /// Observed success rate of this path (missions that completed after a confirmed run, over settled runs), or
+        /// null when fewer than three runs have settled. The advisor uses it to break ties between equally weighted paths.
+        /// </summary>
+        public double? SuccessRate { get; set; } = null;
+
+        /// <summary>
+        /// Settled runs behind SuccessRate.
+        /// </summary>
+        public int TrackedRuns { get; set; } = 0;
+
         private List<string> _Preconditions = new List<string>();
         private List<BlackBoxRecoveryStep> _Steps = new List<BlackBoxRecoveryStep>();
 

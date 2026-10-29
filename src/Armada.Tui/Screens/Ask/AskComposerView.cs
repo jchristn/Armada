@@ -189,6 +189,17 @@ namespace Armada.Tui.Screens.Ask
             if (item == null) return false;
             if (item.Action != null)
             {
+                if (AskQuickActions.FormFor(item.Action) == AskQuickActionFormEnum.BlackBox && AskQuickActions.TryParseBlackBox(args, out string missionId, out string question))
+                {
+                    Text = "";
+                    ShowOutcome(new AskCommandOutcome(true));
+                    JsonObject blackBoxArgs = new JsonObject { ["missionId"] = missionId };
+                    if (question.Length > 0) blackBoxArgs["question"] = question;
+                    // The card is shown first; the question then goes to the captain as a message.
+                    _Ask.RunQuickAction(item.Action, blackBoxArgs, ok => { if (ok && question.Length > 0) _Ask.Send(question); });
+                    return true;
+                }
+
                 Choose(item.Action);
                 return true;
             }
@@ -264,6 +275,11 @@ namespace Armada.Tui.Screens.Ask
                     return;
                 case AskQuickActionFormEnum.None:
                     _Ask.RunQuickAction(action, new JsonObject());
+                    return;
+                case AskQuickActionFormEnum.BlackBox:
+                    // Typed with its arguments: put the command in the composer and say what it needs.
+                    Text = AskQuickActions.CommandOf(action) + " ";
+                    ShowOutcome(new AskCommandOutcome(false, "Choose a failed mission or type its id (msn_...)."));
                     return;
                 default:
                     FormRequested?.Invoke(this, action);

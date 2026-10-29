@@ -1058,6 +1058,11 @@ armada captain stop-all
 # Retry a failed mission, or every failed mission in a voyage
 armada mission retry msn_abc123
 armada voyage retry "API Hardening"
+
+# Read a failure's black box, copy its FIX THIS brief for an agent, and dry run a recovery path
+armada mission failure msn_abc123
+armada blackbox show msn_abc123 --brief | pbcopy
+armada blackbox recover bbx_abc123 <pathId>            # add --execute to run it
 ```
 
 `--runtime` (on `captain add`, `captain update`, and `config set DefaultRuntime`) also accepts the enum names such as `ClaudeCode`; an unknown value is an error. An `api` captain needs an inference endpoint, chosen with `--model-endpoint <endpoint-id>`, in the dashboard or TUI, or through the REST and MCP captain APIs. Mux captains require a named endpoint, validated through `mux probe --require-tools`, and can target a non-default Mux config directory with `--mux-config-dir`. See [docs/CAPTAINS.md](docs/CAPTAINS.md) for what each runtime supports.

@@ -43,6 +43,7 @@ vi.mock('../api/client', async (importOriginal) => {
     listVessels: vi.fn(),
     listPipelines: vi.fn(),
     enumerateFleetActions: vi.fn(),
+    listBlackBox: vi.fn(),
   };
 });
 
@@ -1189,5 +1190,91 @@ describe('AskArmada conversation cards survive navigating away and back', () => 
     expect(screen.getByText('Approval needed')).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Voyage: Billing fix voyage' })).toBeInTheDocument();
     expect(screen.getByText('Captain runtime crashed.')).toBeInTheDocument();
+  });
+});
+
+describe('AskArmada black box', () => {
+  const BLACKBOX_ACTION = { name: 'blackbox', command: '/blackbox', toolName: 'get_blackbox', title: 'Black box of a failure', description: 'Show the black box of a failed mission here, then ask the captain your question about it.', readOnly: true };
+
+  function SearchProbe() {
+    const location = useLocation();
+    return <output data-testid="search">{location.search}</output>;
+  }
+
+  async function settle() {
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
+  }
+
+  it('pre-fills a new conversation from ?prompt= and clears it from the URL', async () => {
+    localStorage.setItem(LAST_THREAD_KEY, 'ath_1');
+    const prompt = 'Show me the pertinent details from the black box for mission msn_9 and give me your opinion on why it failed and what could have been done differently';
+    render(
+      <MemoryRouter initialEntries={[`/ask?prompt=${encodeURIComponent(prompt)}`]}>
+        <Routes>
+          <Route path="/ask/:threadId?" element={<AskArmada />} />
+        </Routes>
+        <LocationProbe />
+        <SearchProbe />
+      </MemoryRouter>,
+    );
+    await screen.findByText('Checkout tests');
+    await waitFor(() => expect((screen.getByRole('combobox', { name: 'Message' }) as HTMLTextAreaElement).value).toBe(prompt));
+    await settle();
+    expect(currentPath()).toBe('/ask');
+    expect(screen.getByTestId('search').textContent).toBe('');
+    expect(getAskThread).not.toHaveBeenCalled();
+    expect(sendAskMessage).not.toHaveBeenCalled();
+  });
+
+  it('/blackbox with a mission id runs get_blackbox, then sends the question to the captain', async () => {
+    vi.mocked(api.getAskQuickActions).mockResolvedValue([BLACKBOX_ACTION]);
+    vi.mocked(runAskQuickAction).mockResolvedValue({ id: 'aap_bb', threadId: 'ath_1', toolName: 'get_blackbox', source: 'QuickAction', status: 'Executed' });
+    vi.mocked(sendAskMessage).mockResolvedValue({ messageId: 'amg_30', turnId: 'turn_bb' });
+    renderAt('/ask/ath_1');
+    await screen.findByText('Fix the billing retry bug');
+    const input = screen.getByRole('combobox', { name: 'Message' }) as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: '/' } });
+    await waitFor(() => expect(within(screen.getByRole('listbox', { name: 'Commands' })).getByText('/blackbox')).toBeInTheDocument());
+    fireEvent.change(input, { target: { value: '/blackbox msn_77 why did it fail?' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => expect(runAskQuickAction).toHaveBeenCalledWith('ath_1', 'get_blackbox', { missionId: 'msn_77', question: 'why did it fail?' }));
+    await waitFor(() => expect(sendAskMessage).toHaveBeenCalledWith('ath_1', 'why did it fail?', false));
+  });
+
+  it('/blackbox without a mission id opens its form', async () => {
+    vi.mocked(api.getAskQuickActions).mockResolvedValue([BLACKBOX_ACTION]);
+    vi.mocked(api.listBlackBox).mockResolvedValue(page([{ id: 'bbx_1', missionId: 'msn_5', missionTitle: 'Add retry' } as never]));
+    vi.mocked(runAskQuickAction).mockResolvedValue({ id: 'aap_bb', threadId: 'ath_1', toolName: 'get_blackbox', source: 'QuickAction', status: 'Executed' });
+    renderAt('/ask/ath_1');
+    await screen.findByText('Fix the billing retry bug');
+    const input = screen.getByRole('combobox', { name: 'Message' }) as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: '/' } });
+    await waitFor(() => expect(within(screen.getByRole('listbox', { name: 'Commands' })).getByText('/blackbox')).toBeInTheDocument());
+    fireEvent.change(input, { target: { value: '/blackbox' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    const form = await screen.findByRole('form', { name: 'Black box of a failure' });
+    fireEvent.click(within(form).getByRole('button', { name: 'Show black box' }));
+    expect(within(form).getByText('Choose a failed mission or type its id (msn_...).')).toBeInTheDocument();
+    expect(runAskQuickAction).not.toHaveBeenCalled();
+    fireEvent.change(within(form).getByRole('combobox'), { target: { value: 'msn_5' } });
+    fireEvent.click(within(form).getByRole('button', { name: 'Show black box' }));
+    await waitFor(() => expect(runAskQuickAction).toHaveBeenCalledWith('ath_1', 'get_blackbox', { missionId: 'msn_5' }));
+    expect(sendAskMessage).not.toHaveBeenCalled();
+  });
+
+  it('a black box card proposes Fix it through the actions endpoint (a Pending proposal, nothing runs)', async () => {
+    const bbWork = { id: 'atw_bb', threadId: 'ath_1', entityType: 'BlackBox', entityId: 'bbx_1', title: 'Add retry', status: 'LandingFailed', state: 'Failed',
+      snapshot: { entityType: 'BlackBox', entityId: 'bbx_1', status: 'LandingFailed', state: 'Failed', missions: [], targets: [], blackBox: {
+        digest: { entryId: 'bbx_1', missionId: 'msn_1', recoveryPaths: [{ id: 'p1', rank: 1, title: 'Rebase and retry' }] },
+        followUps: [{ name: 'fix', label: 'Fix it', toolName: 'run_blackbox_recovery', argumentsText: '{"entryId":"bbx_1","pathId":"p1"}' }],
+      } } };
+    vi.mocked(getAskThread).mockResolvedValue({ ...detail, trackedWork: [...(detail.trackedWork ?? []), bbWork] } as never);
+    vi.mocked(enumerateAskMessages).mockResolvedValue({ messages: [...messages, { id: 'amg_bb', threadId: 'ath_1', sequence: 9, role: 'System', kind: 'WorkUpdate', trackedWorkId: 'atw_bb', contentText: 'Black box of mission msn_1.' }], hasMore: false });
+    vi.mocked(runAskQuickAction).mockResolvedValue({ id: 'aap_fix', threadId: 'ath_1', toolName: 'run_blackbox_recovery', summaryText: 'Run recovery path p1', source: 'QuickAction', status: 'Pending' });
+    renderAt('/ask/ath_1');
+    const followUps = await screen.findByRole('group', { name: 'Follow-ups' });
+    fireEvent.click(within(followUps).getByRole('button', { name: 'Fix it' }));
+    await waitFor(() => expect(runAskQuickAction).toHaveBeenCalledWith('ath_1', 'run_blackbox_recovery', { entryId: 'bbx_1', pathId: 'p1' }, { propose: true }));
+    expect(approveAskProposal).not.toHaveBeenCalled();
   });
 });

@@ -24,6 +24,13 @@ namespace Armada.Core.Services
         /// </summary>
         public IBlackBoxCapture? BlackBox { get; set; } = null;
 
+        /// <summary>
+        /// Consulted just before each dispatched mission is created (black box prevention: overlap warnings, brief lint,
+        /// optional chaining after an overlapping mission), or null. Its findings are returned on the dispatched mission
+        /// and voyage (OverlapWarnings, BriefLintWarnings); it never blocks a dispatch.
+        /// </summary>
+        public IMissionDispatchAdvisor? DispatchAdvisor { get; set; } = null;
+
         /// <inheritdoc />
         public Func<Captain, Mission, Dock, Task<int>>? OnLaunchAgent
         {
@@ -274,6 +281,8 @@ namespace Armada.Core.Services
             _Logging.Info(_Header + "created voyage " + voyage.Id + ": " + title);
 
             // Create missions
+            List<MissionOverlapWarning> voyageWarnings = new List<MissionOverlapWarning>();
+            List<BriefLintFinding> voyageLint = new List<BriefLintFinding>();
             foreach (MissionDescription md in missionDescriptions)
             {
                 Mission mission = new Mission(md.Title, md.Description);
@@ -293,7 +302,9 @@ namespace Armada.Core.Services
 
                 if (!String.IsNullOrWhiteSpace(md.Persona))
                     mission.Persona = md.Persona!.Trim();
+                MissionDispatchAdvice? advice = await AdviseDispatchAsync(mission, vessel, token).ConfigureAwait(false);
                 mission = await _Database.Missions.CreateAsync(mission, token).ConfigureAwait(false);
+                ApplyDispatchAdvice(mission, advice, voyageWarnings, voyageLint);
                 await PersistMissionPlaybooksAsync(mission, voyage.SelectedPlaybooks, token).ConfigureAwait(false);
                 _Logging.Info(_Header + "created mission " + mission.Id + ": " + md.Title);
 
@@ -314,6 +325,8 @@ namespace Armada.Core.Services
 
             voyage.LastUpdateUtc = DateTime.UtcNow;
             await _Database.Voyages.UpdateAsync(voyage, token).ConfigureAwait(false);
+            voyage.OverlapWarnings = voyageWarnings.Count > 0 ? voyageWarnings.Take(BlackBoxInsightLimits.MaxOverlapWarnings).ToList() : null;
+            voyage.BriefLintWarnings = voyageLint.Count > 0 ? voyageLint.Take(BlackBoxInsightLimits.MaxLintFindings).ToList() : null;
 
             return voyage;
         }
@@ -394,6 +407,8 @@ namespace Armada.Core.Services
                 await _Database.Playbooks.SetVoyageSelectionsAsync(voyage.Id, voyage.SelectedPlaybooks, token).ConfigureAwait(false);
             }
             _Logging.Info(_Header + "created pipeline voyage " + voyage.Id + ": " + title + " (pipeline: " + pipeline.Name + ")");
+            List<MissionOverlapWarning> voyageWarnings = new List<MissionOverlapWarning>();
+            List<BriefLintFinding> voyageLint = new List<BriefLintFinding>();
 
             foreach (MissionDescription md in missionDescriptions)
             {
@@ -426,14 +441,17 @@ namespace Armada.Core.Services
                     if (previousMissionId == null) mission.RequestedCaptainId = md.RequestedCaptainId;
 
                     // Only the first stage starts as Pending; dependent stages also start as Pending
-                    // but won't be assigned until their dependency completes
+                    // but won't be assigned until their dependency completes. The first stage is checked for overlaps.
+                    MissionDispatchAdvice? advice = previousMissionId == null ? await AdviseDispatchAsync(mission, vessel, token).ConfigureAwait(false) : null;
                     mission = await _Database.Missions.CreateAsync(mission, token).ConfigureAwait(false);
+                    ApplyDispatchAdvice(mission, advice, voyageWarnings, voyageLint);
                     await PersistMissionPlaybooksAsync(mission, voyage.SelectedPlaybooks, token).ConfigureAwait(false);
                     _Logging.Info(_Header + "created pipeline mission " + mission.Id + ": " + mission.Title +
                         " (stage " + stage.Order + "/" + pipeline.Stages.Count + ", persona: " + stagePersonaName +
                         (previousMissionId != null ? ", depends on: " + previousMissionId : "") + ")");
 
-                    // Try to auto-assign only if no dependency (first stage)
+                    // Try to auto-assign only if no dependency (first stage); a first stage chained after an
+                    // overlapping mission waits for it like any dependent mission.
                     if (previousMissionId == null)
                     {
                         await _Missions.TryAssignAsync(mission, vessel, token).ConfigureAwait(false);
@@ -456,6 +474,8 @@ namespace Armada.Core.Services
 
             voyage.LastUpdateUtc = DateTime.UtcNow;
             await _Database.Voyages.UpdateAsync(voyage, token).ConfigureAwait(false);
+            voyage.OverlapWarnings = voyageWarnings.Count > 0 ? voyageWarnings.Take(BlackBoxInsightLimits.MaxOverlapWarnings).ToList() : null;
+            voyage.BriefLintWarnings = voyageLint.Count > 0 ? voyageLint.Take(BlackBoxInsightLimits.MaxLintFindings).ToList() : null;
 
             return voyage;
         }
@@ -477,13 +497,17 @@ namespace Armada.Core.Services
                 if (owner != null && owner.IsEvaluation) mission.IsEvaluation = true;
             }
 
+            mission.OverlapWarnings = null;
+            mission.BriefLintWarnings = null;
+            Vessel? dispatchVessel = String.IsNullOrEmpty(mission.VesselId) ? null : await _Database.Vessels.ReadAsync(mission.VesselId, token).ConfigureAwait(false);
+            MissionDispatchAdvice? advice = dispatchVessel != null ? await AdviseDispatchAsync(mission, dispatchVessel, token).ConfigureAwait(false) : null;
             mission = await _Database.Missions.CreateAsync(mission, token).ConfigureAwait(false);
             await PersistMissionPlaybooksAsync(mission, mission.SelectedPlaybooks, token).ConfigureAwait(false);
             _Logging.Info(_Header + "created mission " + mission.Id + ": " + mission.Title);
 
             if (!String.IsNullOrEmpty(mission.VesselId))
             {
-                Vessel? vessel = await _Database.Vessels.ReadAsync(mission.VesselId, token).ConfigureAwait(false);
+                Vessel? vessel = dispatchVessel;
                 if (vessel != null)
                 {
                     bool assigned = await _Missions.TryAssignAsync(mission, vessel, token).ConfigureAwait(false);
@@ -505,7 +529,33 @@ namespace Armada.Core.Services
                 }
             }
 
+            ApplyDispatchAdvice(mission, advice, null, null);
             return mission;
+        }
+
+        private async Task<MissionDispatchAdvice?> AdviseDispatchAsync(Mission mission, Vessel vessel, CancellationToken token)
+        {
+            IMissionDispatchAdvisor? advisor = DispatchAdvisor;
+            if (advisor == null) return null;
+            try
+            {
+                return await advisor.AdviseAsync(mission, vessel, token).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (!(ex is OperationCanceledException && token.IsCancellationRequested))
+            {
+                _Logging.Warn(_Header + "dispatch advisor failed for mission \"" + mission.Title + "\" on vessel " + vessel.Id + " (dispatch continues): " + ex.Message);
+                return null;
+            }
+        }
+
+        private static void ApplyDispatchAdvice(Mission mission, MissionDispatchAdvice? advice, List<MissionOverlapWarning>? voyageWarnings, List<BriefLintFinding>? voyageLint)
+        {
+            if (advice == null) return;
+            foreach (MissionOverlapWarning w in advice.OverlapWarnings) w.MissionId = mission.Id;
+            mission.OverlapWarnings = advice.OverlapWarnings.Count > 0 ? advice.OverlapWarnings.Take(BlackBoxInsightLimits.MaxOverlapWarnings).ToList() : null;
+            mission.BriefLintWarnings = advice.BriefLintWarnings.Count > 0 ? advice.BriefLintWarnings.Take(BlackBoxInsightLimits.MaxLintFindings).ToList() : null;
+            if (voyageWarnings != null) voyageWarnings.AddRange(advice.OverlapWarnings);
+            if (voyageLint != null) voyageLint.AddRange(advice.BriefLintWarnings);
         }
 
         private static void RequireDispatchLimits(List<MissionDescription> missionDescriptions, List<SelectedPlaybook>? selectedPlaybooks)

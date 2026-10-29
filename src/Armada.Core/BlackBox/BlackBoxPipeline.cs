@@ -55,6 +55,12 @@ namespace Armada.Core.BlackBox
         public IBlackBoxSummaryWriter? SummaryWriter { get; set; } = null;
 
         /// <summary>
+        /// Runs after the advisor and before the record is written (runbook linkage), or null. A hook that throws is
+        /// logged and the analysis is kept as the advisor produced it.
+        /// </summary>
+        public IBlackBoxAnalysisHook? AnalysisHook { get; set; } = null;
+
+        /// <summary>
         /// Time the model-written summary may take, in milliseconds. Default 30000, minimum 1000, maximum 300000.
         /// </summary>
         public int SummaryTimeoutMs
@@ -238,6 +244,18 @@ namespace Armada.Core.BlackBox
             }
             if (analysis != null)
             {
+                IBlackBoxAnalysisHook? hook = AnalysisHook;
+                if (hook != null)
+                {
+                    try
+                    {
+                        await hook.OnAnalyzedAsync(entry, record, analysis, token).ConfigureAwait(false);
+                    }
+                    catch (Exception e) when (!(e is OperationCanceledException && token.IsCancellationRequested))
+                    {
+                        _Logging.Warn(_Header + "analysis hook failed on " + entry.Id + ": " + e.Message);
+                    }
+                }
                 await WriteModelSummaryAsync(entry, record, analysis, token).ConfigureAwait(false);
                 record.Analysis = analysis;
                 entry.Triage = analysis.Triage?.Verdict ?? BlackBoxTriageEnum.Unknown;

@@ -15,6 +15,9 @@ import fleetActionSource from '../components/ask/AskFleetActionForm.tsx?raw';
 import quickActionsSource from './askQuickActions.ts?raw';
 import commandsSource from './askCommands.ts?raw';
 import askWorkSource from './askWork.ts?raw';
+import blackBoxCardSource from '../components/ask/AskBlackBoxCard.tsx?raw';
+import blackBoxFormSource from '../components/ask/AskBlackBoxForm.tsx?raw';
+import askBlackBoxSource from './askBlackBox.ts?raw';
 import type { I18nCatalog } from '../i18n/runtime';
 
 const S = "'((?:[^'\\\\]|\\\\.)*)'";
@@ -29,7 +32,18 @@ const HINT = new RegExp(`\\bhint:\\s*(?:value \\? ${S} : )?${S}`, 'g');
 const SOURCES = [
   pageSource, threadListSource, headerSource, stripSource, messageListSource, messageViewSource, confirmSource,
   workCardSource, composerSource, quickMenuSource, dispatchSource, fleetActionSource, askWorkSource,
+  blackBoxCardSource, blackBoxFormSource,
 ];
+
+/** Black box card strings that reach `t` as values: chip labels and tooltips (lib/askBlackBox), finding confidences,
+ * the server's follow-up labels (AskBlackBoxGuidance.FollowUps), the /blackbox catalog entry, and form errors. */
+const BLACKBOX_VALUES = [
+  'High', 'Medium', 'Low',
+  'Fix it', 'Apply the configuration change', 'Draft an Armada fix mission', 'Compare with similar failures',
+  'Black box of a failure', 'Show the black box of a failed mission here, then ask the captain your question about it.',
+  'Choose a failed mission or type its id (msn_...).',
+];
+const CHIP = new RegExp(`\\b(?:label|title):\\s*${S}`, 'g');
 
 /** Every literal the Ask Armada home base passes to the translator. */
 function askKeys(): string[] {
@@ -43,6 +57,8 @@ function askKeys(): string[] {
     for (const m of src.matchAll(CALL)) add(m[1]);
     for (const m of src.matchAll(LABEL)) add(m[1]);
   }
+  for (const m of askBlackBoxSource.matchAll(CHIP)) add(m[1]);
+  for (const key of BLACKBOX_VALUES) add(key);
   for (const m of quickActionsSource.matchAll(META)) add(m[1]);
   for (const m of commandsSource.matchAll(META)) add(m[1]);
   for (const m of commandsSource.matchAll(HINT)) { add(m[1]); add(m[2]); }
@@ -70,6 +86,8 @@ describe('Ask Armada i18n catalog', () => {
     expect(keys).toContain('Unknown command {{command}}. Type / to see commands');
     expect(keys).toContain('Show thinking is off.');
     expect(keys).toContain('Start a new conversation with a fresh context (also /clear)');
+    expect(keys).toContain('Copy FIX THIS');
+    expect(keys).toContain('Recorded after the fact, so some facts (such as the workspace and the captain log) may be missing.');
   });
 
   it('has a translation for every string in every non-English locale', () => {

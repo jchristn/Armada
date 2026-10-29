@@ -255,9 +255,14 @@ describe('Ask Armada helpers and events', () => {
     );
   });
 
-  it('builds the Ask URL without a prefill parameter while the dashboard has none', () => {
-    assert.strictEqual(ASK_PREFILL_QUERY_PARAM, null);
-    assert.deepStrictEqual(dashboardAskUrl('http://h:7890/dashboard/', 'p'), { url: 'http://h:7890/dashboard/ask', prefilled: false });
+  it('builds the Ask URL with the dashboard prefill parameter, encoding the prompt', () => {
+    assert.strictEqual(ASK_PREFILL_QUERY_PARAM, 'prompt');
+    assert.deepStrictEqual(dashboardAskUrl('http://h:7890/dashboard/', 'p'), { url: 'http://h:7890/dashboard/ask?prompt=p', prefilled: true });
+    const prompt = askArmadaPrompt('msn_a&b');
+    const built = dashboardAskUrl('http://h:7890/dashboard', prompt);
+    assert.strictEqual(built.prefilled, true);
+    assert.strictEqual(new URL(built.url).searchParams.get('prompt'), prompt, 'round-trips through the query string');
+    assert.ok(!built.url.includes(' '), 'spaces are encoded');
   });
 
   it('lists the black box WebSocket events', () => {

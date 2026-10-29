@@ -1876,8 +1876,9 @@ export const markAskThreadRead = (id: string) => post<void>(`${askThreadPath(id)
 export const markAskThreadUnread = (id: string) => post<AskThread>(`${askThreadPath(id)}/unread`, {});
 
 /** Run a quick action; the submitted form is the confirmation, so the result is already executed. */
-export const runAskQuickAction = (id: string, toolName: string, args: Record<string, unknown>) =>
-  post<AskActionProposal>(`${askThreadPath(id)}/actions`, { ToolName: toolName, Arguments: args }, { timeout: 120000 });
+/** Run a quick action, or with `propose` create a Pending proposal the user approves (black box card buttons). */
+export const runAskQuickAction = (id: string, toolName: string, args: Record<string, unknown>, options?: { propose?: boolean }) =>
+  post<AskActionProposal>(`${askThreadPath(id)}/actions`, options?.propose ? { ToolName: toolName, Arguments: args, Propose: true } : { ToolName: toolName, Arguments: args }, { timeout: 120000 });
 
 export const approveAskProposal = (id: string, proposalId: string) =>
   post<AskActionProposal>(`${askThreadPath(id)}/proposals/${encodeURIComponent(proposalId)}/approve`, {}, { timeout: 120000 });

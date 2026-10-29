@@ -19,7 +19,8 @@ namespace Armada.Core.BlackBox
         /// </summary>
         public static IReadOnlyList<string> SupportedTools { get; } = new List<string>
         {
-            "retry_landing", "restart_mission", "cancel_mission", "unstick_dock", "repair_dock", "update_vessel", "update_mission"
+            "retry_landing", "restart_mission", "cancel_mission", "unstick_dock", "repair_dock", "update_vessel", "update_mission",
+            "start_runbook_execution"
         };
 
         /// <summary>
@@ -62,6 +63,7 @@ namespace Armada.Core.BlackBox
                 case "repair_dock": return dockId == null ? null : "POST /api/v1/docks/" + dockId + "/repair";
                 case "update_vessel": return vesselId == null ? null : "PUT /api/v1/vessels/" + vesselId + " " + Body(action, "vesselId");
                 case "update_mission": return missionId == null ? null : "PUT /api/v1/missions/" + missionId + " " + Body(action, "missionId");
+                case "start_runbook_execution": return Arg(action, "runbookId") == null ? null : "POST /api/v1/runbooks/" + Arg(action, "runbookId") + "/executions " + Body(action, "runbookId");
                 default: return null;
             }
         }

@@ -559,6 +559,7 @@ namespace Armada.Server
                 concreteCapture.MissionStatusChanged = EmitMissionStatusChangedAsync;
             }
             admiralService.BlackBox = blackBoxCapture;
+            admiralService.DispatchAdvisor = _BlackBox.Insights.DispatchAdvisor;
             if (captainService is CaptainService concreteCaptains) concreteCaptains.BlackBox = blackBoxCapture;
             if (voyageService is VoyageService concreteVoyages) concreteVoyages.BlackBox = blackBoxCapture;
             if (_MergeQueue is MergeQueueService concreteQueue) concreteQueue.BlackBox = blackBoxCapture;
@@ -821,6 +822,11 @@ namespace Armada.Server
             _WebSocketHub.SetCliPermissionService(_CliPermissions);
             _WebSocketHub.SetMissionService(_MissionService);
             _WebSocketHub.SetBlackBoxService(_BlackBox?.Service, _BlackBox?.Capture);
+
+            // Ask Armada black box cards: read as the thread's owner; mentioned missions with an entry link their card.
+            _AskThreads.Snapshots.BlackBox = _BlackBox?.Service;
+            _AskActions.BlackBox = _BlackBox?.Service;
+            _AskTurns.OnConversationText = (thread, text) => _AskActions.LinkMentionedBlackBoxesAsync(thread, text);
             _AskThreads.SessionTokensAvailable = _SessionTokenService != null;
             _AskThreads.HarborPromptSupport = (tenantId, runtime) => _HarborConnectionManager != null && _HarborConnectionManager.AnyHarborCanPrompt(tenantId, runtime);
 
@@ -965,6 +971,7 @@ namespace Armada.Server
 
             _StorageInventory.Start();
             _BlackBox?.Background.Start();
+            _BlackBox?.Insights.Background.Start();
 
             // Start health check loop
             _HealthCheckTask = HealthCheckLoopAsync(_TokenSource.Token);
@@ -1014,6 +1021,7 @@ namespace Armada.Server
             try
             {
                 _BlackBox?.Background.StopAsync().GetAwaiter().GetResult();
+                _BlackBox?.Insights.Background.StopAsync().GetAwaiter().GetResult();
                 _BlackBox?.Dispose();
             }
             catch (Exception ex)
@@ -1593,6 +1601,10 @@ namespace Armada.Server
                 { MissionActivityLookup = _AgentLifecycle.MissionActivity.Get, DockHosts = new DockHostResolver(_Git, _Logging, _HarborConnectionManager), BlackBox = _BlackBox?.Capture, BlackBoxHooks = _BlackBox?.Hooks }
                 .Register(_App, authenticate, _AuthorizationService);
 
+            // Black box prevention, forensics and operations reads. Registered before BlackBoxRoutes so the literal
+            // /api/v1/blackbox/recovery-stats is matched before GET /api/v1/blackbox/{id}.
+            if (_BlackBox != null) new BlackBoxInsightRoutes(_BlackBox.Insights.Service).Register(_App, authenticate, _AuthorizationService);
+
             // Mission and voyage black box
             new BlackBoxRoutes(_BlackBox?.Service, _JsonOptions)
                 .Register(_App, authenticate, _AuthorizationService);
@@ -2101,7 +2113,8 @@ namespace Armada.Server
                 _BatteryAccess,
                 _BlackBox?.Service,
                 _BlackBox?.Capture,
-                _BlackBox?.Hooks);
+                _BlackBox?.Hooks,
+                _BlackBox?.Insights.Service);
         }
 
         /// <summary>

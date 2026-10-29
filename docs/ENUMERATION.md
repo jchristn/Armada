@@ -218,6 +218,17 @@ internal services); reads return only what writes allowed.
 | `GET /api/v1/blackbox/retention`, `GET /api/v1/blackbox/storage`, MCP `get_blackbox_retention`, `get_blackbox_storage` | **Fixed**: counts; `Usage` at most one row per storage target (7) | `E2E.BlackBox/rest_global_admin_routes`, `BlackBoxStorageStatus` |
 | Backup manifest `blackBox` section (`GET /api/v1/backup`, MCP `backup`) and the restore result's `BlackBox` section | **Fixed**: `ExternalEntryRefs` at most 10000 with `ExternalEntryRefsTruncated`, `ExternalTargets` at most 7; the restore result lists at most 100 external entry ids | `Services.BlackBoxStorageTargets/backup_inventory`, `BlackBoxBackupInventory` |
 
+### Black box insights (plan 13)
+
+| Surface | Change | Evidence |
+|---|---|---|
+| REST `GET`/`POST .../reservations(/enumerate)`, MCP `list_vessel_reservations` | Computed from at most 200 active missions and 1000 hotspot directories (`ScanTruncated`); page cut with an exact total | `Services.BlackBoxPrevention/hotspots_and_reservations` |
+| REST `GET`/`POST .../blackbox-doctor(/enumerate)`, MCP `get_vessel_blackbox_doctor` | Aggregated from the newest 200 entries in the window (`EntriesScanned`, `ScanTruncated`); paged | `Services.BlackBoxPrevention/doctor_groups_recurring_recommendations` |
+| REST `GET /api/v1/blackbox/recovery-stats` and its enumerate twin, MCP `get_blackbox_recovery_stats` | Grouped and paged in SQL | `Database.BlackBoxInsights/recovery_outcomes` |
+| REST `GET`/`POST .../nearby-successes(/enumerate)`, MCP `list_blackbox_nearby_successes` | At most 200 success records compared, read in a SQL page; page cut with an exact total | `Services.BlackBoxForensicsExtensions/nearby_successes` |
+| REST `GET`/`POST .../timeline(/enumerate)`, MCP `get_blackbox_timeline` | Each source capped at 200 and the merge at 1000 (`Sources`, `Truncated`); paged | `Services.BlackBoxForensicsExtensions/timeline_merges_sources` |
+| Overlap preview, brief lint, attempt diff, cascade graph, dispatch `OverlapWarnings` and `BriefLintWarnings` | Fixed: 50 warnings, 200 likely files, 50 findings, 100 differences and 200 files per side, 200 nodes and 1000 edges, each with its total | `E2E.ResponseShape`, `Services.BlackBoxPrevention/lint_quiet_on_clean_briefs`, `Services.BlackBoxForensicsExtensions/cascade_graph` |
+
 ### Deliberately left, with reasons
 
 - `GET /api/v1/history` and `POST /api/v1/history/enumerate` return a bounded page, but the server still walks its 13

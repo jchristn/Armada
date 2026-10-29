@@ -315,14 +315,16 @@ describe('Entry picking, resolve, notes and Ask Armada', () => {
     assert.deepStrictEqual(mock.requests[0].body, { Body: 'looked at it' });
   });
 
-  it('copies the canonical prompt and opens the dashboard Ask page', async () => {
+  it('opens the dashboard Ask page with the canonical prompt pre-filled, without touching the clipboard', async () => {
+    const before = fake.clipboard;
     const result = await commands(new MockFetch()).askArmada(NODE);
-    assert.deepStrictEqual(result, { url: 'http://armada.test:7890/dashboard/ask', prefilled: false });
-    assert.strictEqual(fake.clipboard, askArmadaPrompt('msn_x'));
-    assert.deepStrictEqual(fake.openedExternal, ['http://armada.test:7890/dashboard/ask']);
+    const url = 'http://armada.test:7890/dashboard/ask?prompt=' + encodeURIComponent(askArmadaPrompt('msn_x'));
+    assert.deepStrictEqual(result, { url, prefilled: true });
+    assert.deepStrictEqual(fake.openedExternal, [url]);
+    assert.strictEqual(fake.clipboard, before, 'nothing copied when the page is pre-filled');
   });
 
-  it('still copies the prompt when the browser cannot be opened', async () => {
+  it('copies the prompt when the browser cannot be opened', async () => {
     fake.openExternalResult = false;
     await commands(new MockFetch()).askArmada(NODE);
     assert.strictEqual(fake.clipboard, askArmadaPrompt('msn_x'));

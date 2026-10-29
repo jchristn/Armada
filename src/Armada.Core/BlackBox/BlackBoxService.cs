@@ -34,6 +34,12 @@ namespace Armada.Core.BlackBox
         public IBlackBoxActionExecutor? ActionExecutor { get; set; } = null;
 
         /// <summary>
+        /// Told about every confirmed recovery run (recovery outcome tracking), or null. An observer that throws is
+        /// logged and ignored.
+        /// </summary>
+        public IBlackBoxRecoveryObserver? RecoveryObserver { get; set; } = null;
+
+        /// <summary>
         /// Authorization service used to check every recorded action against its tool's declared requirement
         /// (McpToolAuthorizationRegistry) before anything runs.
         /// </summary>
@@ -609,7 +615,10 @@ namespace Armada.Core.BlackBox
             BlackBoxRecord record = await _Pipeline.LoadRecordAsync(entry, token).ConfigureAwait(false);
             BlackBoxRecoveryPath path = record.Analysis?.RecoveryPaths.FirstOrDefault(p => String.Equals(p.Id, pathId.Trim(), StringComparison.Ordinal))
                 ?? throw new BlackBoxNotFoundException("Recovery path " + pathId + " is not recorded on black box entry " + entry.Id + ".");
-            List<BlackBoxRecoveryStep> plan = path.Steps.OrderBy(s => s.Order).Take(BlackBoxLimits.MaxRecoverySteps).ToList();
+            // A path linked to a runbook starts the runbook instead of running its own tool steps.
+            List<BlackBoxRecoveryStep> plan = !String.IsNullOrEmpty(path.RunbookId)
+                ? BlackBoxRunbookLinker.RunbookPlan(entry, path)
+                : path.Steps.OrderBy(s => s.Order).Take(BlackBoxLimits.MaxRecoverySteps).ToList();
             foreach (BlackBoxRecoveryStep step in plan.Where(s => s.Action != null)) ValidateAction(entry, record, step.Action!, "Recovery path " + path.Id + " step " + step.Order);
             foreach (BlackBoxRecoveryStep step in plan.Where(s => s.Action != null)) AuthorizeAction(caller, step.Action!, "Recovery path " + path.Id + " step " + step.Order);
             string version = await SubjectVersionAsync(entry, false, token).ConfigureAwait(false);
@@ -692,6 +701,18 @@ namespace Armada.Core.BlackBox
                 + String.Join(" ", result.StepResults.Select(r => r.Order + ". " + (r.Tool ?? "manual") + ": " + (r.Succeeded ? "ok" : "failed") + (String.IsNullOrWhiteSpace(r.Message) ? String.Empty : " (" + BlackBoxLimits.Clip(r.Message!.Replace('\n', ' '), 300) + ")")));
             await AnnotateAsync(caller, entry, note, request.AuthorKind, token).ConfigureAwait(false);
             await EmitRecoveryAsync(entry, path.Id, null, false, result.Succeeded, ran, failures, caller, token).ConfigureAwait(false);
+            IBlackBoxRecoveryObserver? observer = RecoveryObserver;
+            if (observer != null)
+            {
+                try
+                {
+                    await observer.OnRecoveryRunAsync(caller, entry, path, result, token).ConfigureAwait(false);
+                }
+                catch (Exception e) when (!(e is OperationCanceledException && token.IsCancellationRequested))
+                {
+                    _Logging.Warn(_Header + "recovery observer failed for " + entry.Id + " path " + path.Id + ": " + e.Message);
+                }
+            }
             return result;
         }
 

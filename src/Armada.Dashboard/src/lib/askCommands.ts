@@ -108,7 +108,7 @@ export function buildCommandCatalog(quickActions: AskQuickAction[]): AskCommandI
       key: `quick:${action.name}`,
       command,
       aliases: [],
-      usage: '',
+      usage: action.name.toLowerCase() === 'blackbox' ? '<missionId> [question]' : '',
       title: action.title || action.name,
       description: action.description || '',
       local: null,
