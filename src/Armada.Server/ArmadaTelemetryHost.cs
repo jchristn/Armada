@@ -2,10 +2,12 @@ namespace Armada.Server
 {
     using System;
     using System.Collections.Generic;
+    using System.Threading;
     using Microsoft.Extensions.Logging;
     using Radiant;
     using SyslogLogging;
     using Armada.Core;
+    using Armada.Core.Services;
     using Armada.Core.Settings;
 
     /// <summary>
@@ -35,6 +37,11 @@ namespace Armada.Server
             set => _AdditionalSources = value ?? new List<string>();
         }
 
+        /// <summary>
+        /// Number of log entries that could not be handed to the log exporter since this host was created.
+        /// </summary>
+        public long LogForwardingFailures => Interlocked.Read(ref _LogForwardingFailures);
+
         #endregion
 
         #region Private-Members
@@ -45,10 +52,12 @@ namespace Armada.Server
         private List<string> _AdditionalSources = new List<string>();
 
         // When log export is active, we forward the SyslogLogging stream into a Radiant ILogger so every
-        // _Logging.* line (including full-stack exception logs) is shipped to Loki/OTLP alongside the
-        // console/file/syslog sinks. Held so we can unsubscribe on dispose.
+        // _Logging.* line is shipped to Loki/OTLP alongside the console/file/syslog sinks. Message text and
+        // exception text are redacted into one structured value. The exception object is not exported.
+        // Held so we can unsubscribe on dispose.
         private Microsoft.Extensions.Logging.ILogger? _LokiLogger = null;
         private Action<LogEntry>? _MessageForwarder = null;
+        private long _LogForwardingFailures = 0;
 
         #endregion
 
@@ -149,8 +158,9 @@ namespace Armada.Server
         /// <summary>
         /// Forward one SyslogLogging entry into the Radiant log exporter (Loki/OTLP). Info and above only, so
         /// Debug chatter (including Radiant's own diagnostic callback, which logs at Debug) is not shipped and
-        /// cannot form a feedback loop. The raw message is passed as a single structured value so it is never
-        /// parsed as a message template.
+        /// cannot form a feedback loop. The message and any exception text are redacted and passed as one
+        /// structured value, without the exception object, so the text is never parsed as a message template.
+        /// A forwarding failure is counted and is not written back through the same logging module.
         /// </summary>
         private void ForwardLogEntry(LogEntry entry)
         {
@@ -161,12 +171,21 @@ namespace Armada.Server
 
             try
             {
+                string text = entry.Message ?? String.Empty;
+                if (entry.Exception != null)
+                {
+                    text = text + Environment.NewLine + entry.Exception.ToString();
+                }
+
+                string redacted = SecretRedactor.Redact(text);
                 LogLevel level = ToLogLevel(entry.Severity);
-                logger.Log(level, entry.Exception, "{ArmadaMessage}", entry.Message ?? String.Empty);
+                logger.Log(level, "{ArmadaMessage}", redacted);
             }
             catch
             {
-                // Never let log forwarding throw back into the caller's logging path.
+                // Never let log forwarding throw back into the caller's logging path, and never log the
+                // failure through the same module. The count is the record of the failure.
+                Interlocked.Increment(ref _LogForwardingFailures);
             }
         }
 
