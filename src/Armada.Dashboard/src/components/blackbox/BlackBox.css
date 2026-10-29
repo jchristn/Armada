@@ -187,13 +187,15 @@
 .dispatch-warnings li { overflow-wrap: anywhere; }
 
 /* Insight sections on the entry panel: timeline, attempt diff, nearby successes. */
+.data-table td.blackbox-wrap-cell { white-space: normal; overflow-wrap: anywhere; min-width: 16rem; }
 .blackbox-timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.3rem; }
 .blackbox-timeline li { display: grid; grid-template-columns: minmax(9rem, auto) auto 1fr; gap: 0.5rem; align-items: baseline; font-size: 0.85rem; min-width: 0; }
 .blackbox-timeline li > span:last-child { overflow-wrap: anywhere; min-width: 0; }
 .blackbox-diff-table { width: 100%; border-collapse: collapse; font-size: 0.84rem; table-layout: fixed; }
 .blackbox-diff-table th, .blackbox-diff-table td { border-bottom: 1px solid var(--border); padding: 0.3rem 0.4rem; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
-.blackbox-diff-table td.blackbox-diff-old { background: var(--tag-failed-bg); color: var(--tag-failed-fg); }
-.blackbox-diff-table td.blackbox-diff-new { background: var(--tag-complete-bg); color: var(--tag-complete-fg); }
+.blackbox-diff-table th { text-transform: none; letter-spacing: normal; font-weight: 600; }
+.blackbox-diff-table td.blackbox-diff-new { border-left: 3px solid var(--accent); }
+.blackbox-diff-table td.blackbox-diff-old { border-left: 3px solid var(--border); color: var(--text-dim); }
 .blackbox-diff-files { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: 0.6rem; margin-top: 0.5rem; }
 .blackbox-diff-picker { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: flex-end; margin-bottom: 0.5rem; }
 .blackbox-pager { display: flex; gap: 0.4rem; align-items: center; margin-top: 0.4rem; font-size: 0.82rem; }

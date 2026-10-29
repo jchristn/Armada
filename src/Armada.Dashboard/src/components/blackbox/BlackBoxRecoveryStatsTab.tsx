@@ -31,7 +31,7 @@ export default function BlackBoxRecoveryStatsTab({ vessels }: { vessels: Vessel[
   );
 
   const columns: DataTableColumn<BlackBoxRecoveryStat>[] = [
-    { key: 'rule', label: t('Rule'), cellClassName: 'mono', interactive: true, render: (r) => r.ruleId ? <button type="button" className="btn-link mono" onClick={() => { setRuleInput(r.ruleId ?? ''); setRuleId(r.ruleId ?? ''); }} title={t('Show only this rule.')}>{r.ruleId}</button> : '-' },
+    { key: 'rule', label: t('Rule'), cellClassName: 'mono cell-nowrap', interactive: true, render: (r) => r.ruleId ? <button type="button" className="btn-link mono" onClick={() => { setRuleInput(r.ruleId ?? ''); setRuleId(r.ruleId ?? ''); }} title={t('Show only this rule.')}>{r.ruleId}</button> : '-' },
     { key: 'path', label: t('Recovery path'), required: true, cellClassName: 'mono', render: (r) => r.pathId },
     { key: 'runs', label: t('Runs'), render: (r) => r.runs },
     { key: 'succeeded', label: t('Succeeded'), render: (r) => r.succeeded },

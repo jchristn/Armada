@@ -44,7 +44,7 @@ export default function BlackBoxTimeline({ entryId }: { entryId: string }) {
     { key: 'source', label: t('Source'), render: (r) => <span className="blackbox-chip">{t(SOURCE_LABEL[r.source] ?? r.source)}</span> },
     { key: 'kind', label: t('Kind'), cellClassName: 'mono', render: (r) => r.kind },
     {
-      key: 'message', label: t('Message'), required: true, interactive: true,
+      key: 'message', label: t('Message'), required: true, interactive: true, cellClassName: 'blackbox-wrap-cell',
       render: (r) => {
         const href = timelineEntityHref(r.entityId);
         return <span>{r.message}{r.entityId && <> {href ? <Link to={href} className="mono text-dim">{r.entityId}</Link> : <span className="mono text-dim">{r.entityId}</span>}</>}</span>;

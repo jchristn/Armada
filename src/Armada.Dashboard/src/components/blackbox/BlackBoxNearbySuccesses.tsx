@@ -30,7 +30,7 @@ export default function BlackBoxNearbySuccesses({ entryId }: { entryId: string }
   const columns: DataTableColumn<BlackBoxNearbySuccess>[] = [
     { key: 'mission', label: t('Mission'), required: true, interactive: true, render: (r) => <Link to={`/missions/${encodeURIComponent(r.missionId)}`} title={t('Open the mission that landed.')}>{r.missionTitle || r.missionId}</Link> },
     { key: 'landed', label: t('Landed'), cellClassName: 'cell-nowrap', render: (r) => <span title={formatDateTime(r.landedUtc)}>{formatHoursFromFailure(r.hoursFromFailure, t)}</span> },
-    { key: 'files', label: t('Shared files'), render: (r) => <span className="mono" title={r.overlappingFiles.join('\n')}>{r.overlappingFileCount}{r.overlappingFiles.length ? ` · ${r.overlappingFiles.slice(0, 3).join(', ')}${r.overlappingFileCount > 3 ? ', ...' : ''}` : ''}</span> },
+    { key: 'files', label: t('Shared files'), cellClassName: 'blackbox-wrap-cell', render: (r) => <span className="mono" title={r.overlappingFiles.join('\n')}>{r.overlappingFileCount}{r.overlappingFiles.length ? ` · ${r.overlappingFiles.slice(0, 3).join(', ')}${r.overlappingFileCount > 3 ? ', ...' : ''}` : ''}</span> },
     { key: 'commit', label: t('Landed commit'), cellClassName: 'mono text-dim', render: (r) => r.targetCommit ? r.targetCommit.slice(0, 10) : '-' },
   ];
 

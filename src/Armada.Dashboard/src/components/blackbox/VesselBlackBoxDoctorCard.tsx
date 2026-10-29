@@ -29,7 +29,7 @@ export default function VesselBlackBoxDoctorCard({ vesselId, onApplied }: { vess
 
   const columns: DataTableColumn<BlackBoxDoctorFinding>[] = [
     {
-      key: 'recommendation', label: t('Recommendation'), required: true,
+      key: 'recommendation', label: t('Recommendation'), required: true, cellClassName: 'blackbox-wrap-cell',
       render: (r) => (
         <div>
           <strong className="mono">{r.setting}</strong>{r.suggestedValue != null && <> {r.currentValue != null ? <span className="mono text-dim">{r.currentValue}</span> : null} {'->'} <span className="mono">{r.suggestedValue}</span></>}
@@ -37,7 +37,7 @@ export default function VesselBlackBoxDoctorCard({ vesselId, onApplied }: { vess
         </div>
       ),
     },
-    { key: 'rule', label: t('Rule'), cellClassName: 'mono', render: (r) => r.ruleId ?? '-' },
+    { key: 'rule', label: t('Rule'), cellClassName: 'mono cell-nowrap', render: (r) => r.ruleId ?? '-' },
     { key: 'count', label: t('Times'), headerTitle: t('How many entries in the window recommended this.'), render: (r) => r.count },
     { key: 'lastSeen', label: t('Last seen'), cellClassName: 'cell-nowrap', render: (r) => <span title={t('First seen {{time}}', { time: formatDateTime(r.firstSeenUtc) })}>{formatDateTime(r.lastSeenUtc)}</span> },
     {
