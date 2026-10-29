@@ -1,9 +1,47 @@
 # Plan: Mission and voyage black box
 
-Status: in progress on branch `feature/blackbox` (2026-10-29). Scorecard items "GitHub issue filing with dedupe" and
-"Replay" were removed from scope on 2026-10-29. Paths marked (NEW) do not exist; every other path
-and line number was read from `main` at commit bd2e7c1ac. Target release: **v1.2.0** (see section 14 for what that
-means for the already-built v1.2.0 images).
+Status: **implemented** on branch `feature/blackbox` and released in **v1.2.0** (2026-10-29). Scorecard items
+"GitHub issue filing with dedupe" and "Replay" were removed from scope on 2026-10-29. Paths marked (NEW) did not exist
+when the plan was written; other paths and line numbers were read from `main` at commit bd2e7c1ac and may have moved.
+The user and developer documentation is [docs/BLACKBOX.md](docs/BLACKBOX.md); the consumer schema is
+[docs/BLACKBOX_SCHEMA.md](docs/BLACKBOX_SCHEMA.md) and `docs/blackbox-record.schema.json`.
+
+### Implementation notes and deviations
+
+Where this plan and the code differ, the code and docs/BLACKBOX.md are authoritative.
+
+- **Migrations:** 103 (black box tables and the mission, voyage and vessel columns), 104 (`blackbox_migrations`, storage
+  migration jobs), 105 (`vessels.serialize_overlapping_missions`), 106 (`blackbox_successes`,
+  `blackbox_recovery_outcomes`). The plan named only 103.
+- **Database layer:** each provider has its own thin method classes; the SQL lives in shared base classes over a
+  per-provider dialect.
+- **Paging:** out-of-range page sizes are normalized to 1..1000 as `docs/ENUMERATION.md` specifies, not rejected as
+  16.6 row 8 said; more than 1000 ids in a bulk delete is still a 400.
+- **Recovery path ids** are stable rule-derived ids such as `bbx-land-001.stash-retry`, not `rp1`. Confirm tokens are
+  held in memory, so an Admiral restart invalidates outstanding dry runs. Preconditions are checked on the dry run and
+  again on confirm.
+- **Rule catalog:** 42 rules at version 1 (every phase has at least one), more than the 14 starter rules in 6.2.
+- **MCP resources and prompts** are supported by Voltaic 2.4.0 and are exposed (four resources, `review_blackbox`,
+  `explain_blackbox`). A missing resource returns JSON-RPC -32002.
+- **Ask Armada:** the quick action catalog had 5 actions, not 10; `/blackbox` makes 6. Admin-level reads
+  (`get_blackbox_retention`, `get_blackbox_storage`, `export_blackbox_fixture`) stay on the read-only allowlist because
+  the call runs as the thread owner and is refused without the role.
+- **Object ETags** are the SHA-256 of the returned bytes; the stored hash is in `X-BlackBox-Stored-Sha256`.
+- **Doctor** has 12 checks (the new "Black Box Storage" check).
+- **`MaxLandingRetries`** is now read: a landing deferred on a dirty checkout retries automatically at most this many
+  times (default 3).
+- **Concurrency:** "exactly one current entry" and the per-entry lock shared by enrichment and storage migration hold
+  within one Admiral process, not across processes.
+- **Storage inventory** counts Database-target bytes inside the database file as well as in the black box row.
+- **Emulators:** the Google Cloud Storage enumerate and orphan-sweep cases are skipped against fake-gcs-server
+  (intermittent timestamp parsing in the emulator); every other target passes the shared store contract suite.
+- **Extensions (section 13)** were implemented except items 6 (GitHub issues) and 13 (Replay); settings
+  `hotspotReservationThreshold`, `successRetentionDays`, `nearbySuccessWindowHours` and `insightIntervalSeconds` were
+  added under `blackBox`. `BlackBoxInsightRoutes` must be registered before `BlackBoxRoutes`.
+- **Clients:** the dashboard client has one function per `ArmadaClient` method and no POST `/enumerate` twins (the
+  server routes exist).
+- **Fixtures** for the real failures in 16.10 were reconstructed from this plan and the conversation record, since the
+  missions had been deleted.
 
 ## Contents
 
