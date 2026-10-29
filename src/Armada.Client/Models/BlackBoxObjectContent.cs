@@ -4,7 +4,7 @@ namespace Armada.Client.Models
 
     /// <summary>
     /// One read of a black box object (GET /api/v1/blackbox/{id}/objects/{name}): the bytes of the requested range, the
-    /// object's content type, its ETag (SHA-256), and where the next read starts.
+    /// object's content type, its ETag (the SHA-256 of the bytes returned), and where the next read starts.
     /// </summary>
     public class BlackBoxObjectContent
     {
@@ -21,9 +21,14 @@ namespace Armada.Client.Models
         public string ContentType { get; set; } = "application/octet-stream";
 
         /// <summary>
-        /// ETag (the object's SHA-256, without quotes), or null.
+        /// ETag (the SHA-256 of <see cref="Content"/>, the bytes returned, without quotes), or null.
         /// </summary>
         public string? ETag { get; set; } = null;
+
+        /// <summary>
+        /// The stored object's SHA-256 (X-BlackBox-Stored-Sha256, over its stored, possibly gzip-encoded bytes), or null.
+        /// </summary>
+        public string? StoredSha256 { get; set; } = null;
 
         /// <summary>
         /// Byte offset of <see cref="Content"/> in the object.

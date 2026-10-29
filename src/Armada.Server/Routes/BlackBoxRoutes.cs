@@ -228,13 +228,16 @@ namespace Armada.Server.Routes
                 req.Http.Response.Headers.Add("X-BlackBox-Offset", read.Offset.ToString(CultureInfo.InvariantCulture));
                 long next = read.Offset + read.Data.LongLength;
                 if (next < read.TotalBytes && read.Data.LongLength > 0) req.Http.Response.Headers.Add("X-BlackBox-Next-Offset", next.ToString(CultureInfo.InvariantCulture));
-                string etag = String.IsNullOrEmpty(read.Object.Sha256) ? Sha256Hex(read.Data) : read.Object.Sha256!;
+                // The ETag identifies the representation returned (these decoded bytes, this range); the stored
+                // object's SHA-256 (over its stored, possibly gzip-encoded bytes) is verified on read and sent apart.
+                if (!String.IsNullOrEmpty(read.Object.Sha256)) req.Http.Response.Headers.Add("X-BlackBox-Stored-Sha256", read.Object.Sha256);
+                string etag = Sha256Hex(read.Data);
                 return await SendBytesAsync(req, read.Data, String.IsNullOrEmpty(read.Object.ContentType) ? "application/octet-stream" : read.Object.ContentType, etag, null).ConfigureAwait(false);
             }),
             api => api
                 .WithTag(Tag)
                 .WithSummary("Read a black box object")
-                .WithDescription("The object's bytes with its own Content-Type and ETag (its SHA-256). Encode a name with a folder as one path segment (evidence%2Fgit-status.txt). offset and length page through a large object: at most 1 MB per read (default 1 MB); X-BlackBox-Total-Bytes, X-BlackBox-Offset and, when more remains, X-BlackBox-Next-Offset say where the next read starts. 400 InvalidArgument for a negative offset or a length outside 1 to 1048576; 404 BlackBoxNotFound for an unknown entry or object; 409 BlackBoxObjectCorrupt when the SHA-256 does not match; 410 BlackBoxObjectMissing when the store lost it; 503 BlackBoxStoreUnavailable.")
+                .WithDescription("The object's bytes with its own Content-Type and ETag (the SHA-256 of the bytes returned, so a range has its own ETag; X-BlackBox-Stored-Sha256 is the stored object's SHA-256, verified on read). Encode a name with a folder as one path segment (evidence%2Fgit-status.txt). offset and length page through a large object: at most 1 MB per read (default 1 MB); X-BlackBox-Total-Bytes, X-BlackBox-Offset and, when more remains, X-BlackBox-Next-Offset say where the next read starts. 400 InvalidArgument for a negative offset or a length outside 1 to 1048576; 404 BlackBoxNotFound for an unknown entry or object; 409 BlackBoxObjectCorrupt when the SHA-256 does not match; 410 BlackBoxObjectMissing when the store lost it; 503 BlackBoxStoreUnavailable.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", EntryIdDescription))
                 .WithParameter(OpenApiParameterMetadata.Path("name", "Object name, URL-encoded (for example record.json or evidence%2Fdiff.patch)"))
                 .WithParameter(OpenApiParameterMetadata.Query("offset", "Byte offset (default 0)", false, OpenApiSchemaMetadata.Integer()))

@@ -204,6 +204,7 @@ namespace Armada.Client
                 content.Name = name;
                 content.ContentType = response.Content.Headers.ContentType?.MediaType ?? "application/octet-stream";
                 content.ETag = response.Headers.ETag?.Tag?.Trim('"');
+                content.StoredSha256 = response.Headers.TryGetValues("X-BlackBox-Stored-Sha256", out IEnumerable<string>? stored) ? stored.FirstOrDefault() : null;
                 content.Content = await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
                 content.Offset = HeaderLong(response, "X-BlackBox-Offset") ?? (offset ?? 0);
                 content.TotalBytes = HeaderLong(response, "X-BlackBox-Total-Bytes") ?? content.Content.LongLength;

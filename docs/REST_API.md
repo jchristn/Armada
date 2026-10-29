@@ -5325,7 +5325,8 @@ segment: `evidence%2Fgit-status.txt`, not `evidence/git-status.txt`.
 
 | Response header | Meaning |
 |---|---|
-| `ETag` | The stored object's SHA-256 (quoted). It is computed over the stored (gzip-encoded) bytes, so it identifies the object but is not a checksum of the decoded body; `If-None-Match` with it answers `304 Not Modified` |
+| `ETag` | The SHA-256 of the bytes in this response (quoted): the decoded object, or the range `offset` and `length` selected, so each range has its own ETag and it is a checksum of the body you received; `If-None-Match` with it answers `304 Not Modified` |
+| `X-BlackBox-Stored-Sha256` | The stored object's SHA-256, computed over the stored (gzip-encoded when `blackBox.storage.compress` is on) bytes; the Admiral verifies it on every read (`409` `BlackBoxObjectCorrupt` on a mismatch). It identifies the object, not the body |
 | `X-BlackBox-Total-Bytes` | The object's decoded size |
 | `X-BlackBox-Offset` | Where this read started |
 | `X-BlackBox-Next-Offset` | Present while more remains: the `offset` of the next read |

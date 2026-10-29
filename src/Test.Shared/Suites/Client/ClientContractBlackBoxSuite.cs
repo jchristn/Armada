@@ -82,6 +82,9 @@ namespace Test.Shared.Suites.Client
                 AssertEqual(1000L, first.NextOffset, "next offset header");
                 AssertEqual("text/plain", first.ContentType, "content type");
                 AssertNotNull(first.ETag, "ETag");
+                AssertEqual(Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(first.Content)).ToLowerInvariant(), first.ETag, "ETag is the SHA-256 of the range returned");
+                AssertNotNull(first.StoredSha256, "stored SHA-256 header");
+                AssertNotEqual(first.ETag, (await c.ReadBlackBoxObjectAsync(seeded.EntryId, "evidence/contract.log", first.NextOffset)).ETag, "each range has its own ETag");
                 BlackBoxObjectContent rest = await c.ReadBlackBoxObjectAsync(seeded.EntryId, "evidence/contract.log", first.NextOffset);
                 AssertEqual(1500, rest.Content.Length, "rest");
                 AssertNull(rest.NextOffset, "end reached");

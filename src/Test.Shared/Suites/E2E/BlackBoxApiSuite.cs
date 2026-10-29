@@ -157,6 +157,23 @@ namespace Test.Shared.Suites.E2E
                     AssertEqual("application/json", record.Content.Headers.ContentType?.MediaType, "object content type");
                     AssertTrue(record.Headers.ETag != null, "object ETag");
                     AssertContains(_EntryId, body, "record.json names the entry");
+                    byte[] bytes = await record.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
+                    string expected = "\"" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)).ToLowerInvariant() + "\"";
+                    AssertEqual(expected, record.Headers.ETag!.Tag, "the ETag is the SHA-256 of the bytes returned");
+                    string stored = record.Headers.GetValues("X-BlackBox-Stored-Sha256").Single();
+                    AssertNotEqual(expected.Trim('"'), stored, "the stored (gzip) SHA-256 differs from the returned bytes' and is not the ETag");
+                    using (HttpRequestMessage conditional = new HttpRequestMessage(HttpMethod.Get, "/api/v1/blackbox/" + _EntryId + "/objects/record.json"))
+                    {
+                        conditional.Headers.TryAddWithoutValidation("If-None-Match", expected);
+                        using HttpResponseMessage notModified = await ua.SendAsync(conditional).ConfigureAwait(false);
+                        AssertEqual(HttpStatusCode.NotModified, notModified.StatusCode, "If-None-Match with the ETag");
+                    }
+                    using (HttpRequestMessage storedMatch = new HttpRequestMessage(HttpMethod.Get, "/api/v1/blackbox/" + _EntryId + "/objects/record.json"))
+                    {
+                        storedMatch.Headers.TryAddWithoutValidation("If-None-Match", "\"" + stored + "\"");
+                        using HttpResponseMessage full = await ua.SendAsync(storedMatch).ConfigureAwait(false);
+                        AssertEqual(HttpStatusCode.OK, full.StatusCode, "the stored SHA-256 is not the representation's validator");
+                    }
                 }
 
                 // A 3 MB object read at most 1 MB at a time, following X-BlackBox-Next-Offset to the end.
@@ -191,6 +208,7 @@ namespace Test.Shared.Suites.E2E
                     byte[] data = await ranged.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
                     AssertEqual(5, data.Length, "explicit length");
                     AssertTrue(data.SequenceEqual(BigObject().Skip(10).Take(5)), "ranged bytes");
+                    AssertEqual("\"" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(data)).ToLowerInvariant() + "\"", ranged.Headers.ETag?.Tag, "a range's ETag is the SHA-256 of the range returned");
                 }
 
                 await ExpectErrorAsync(ua, HttpMethod.Get, "/api/v1/blackbox/" + _EntryId + "/objects/record.json?offset=-1", null, HttpStatusCode.BadRequest, "InvalidArgument", "offset").ConfigureAwait(false);

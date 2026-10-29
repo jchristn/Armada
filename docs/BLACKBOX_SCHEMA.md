@@ -660,7 +660,9 @@ Other shapes, defined in `src/Armada.Core/Models` and shown with examples in [RE
 | `BlackBoxErrorDetail` (`code`, `field`) | `Data` of every REST error: `BlackBoxNotFound` (404), `BlackBoxDeleting`, `BlackBoxObjectCorrupt`, `BlackBoxConfirmationRequired` (409), `BlackBoxObjectMissing` (410), `BlackBoxStoreUnavailable` (503), `NotImplemented` (501), `InvalidArgument` (400, with `field`), `CollectionLimitExceeded` (400) |
 
 REST object reads also return `X-BlackBox-Total-Bytes`, `X-BlackBox-Offset` and, when more remains,
-`X-BlackBox-Next-Offset`, with the object's own `Content-Type` and `ETag` (its SHA-256).
+`X-BlackBox-Next-Offset`, with the object's own `Content-Type`, an `ETag` that is the SHA-256 of the bytes returned
+(the decoded range), and `X-BlackBox-Stored-Sha256`, the stored object's SHA-256 (over its stored, possibly
+gzip-encoded bytes), which the Admiral verifies on read.
 
 ### BlackBoxEntry
 
