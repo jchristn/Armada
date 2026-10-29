@@ -14,10 +14,8 @@ import {
   BLACKBOX_SUBJECT_TYPES,
   BLACKBOX_TRIAGES,
   activeBlackBoxFilters,
-  loadBlackBoxSavedFilters,
-  storeBlackBoxSavedFilters,
-  type BlackBoxSavedFilter,
 } from '../../lib/blackbox';
+import { loadBlackBoxSavedFilters, storeBlackBoxSavedFilters, type BlackBoxSavedFilter } from './savedFilters';
 import { useBlackBoxLive } from '../../lib/useBlackBoxLive';
 import DataTable, { type DataTableColumn } from '../shared/DataTable';
 import { EmptyState, ErrorState, LoadingState } from '../shared/StateBlocks';
