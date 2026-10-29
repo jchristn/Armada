@@ -118,6 +118,7 @@ namespace Armada.Core.Services.Ask
             "get_blackbox_bundle",
             "list_blackbox_hotspots",
             "list_blackbox_fingerprints",
+            "get_blackbox_fingerprint_trend",
             "get_blackbox_retention",
             "get_blackbox_storage"
         };

@@ -117,7 +117,8 @@ namespace Test.Shared.Suites.E2E
             "get_blackbox_bundle",
             "list_blackbox_hotspots",
             "list_blackbox_fingerprints",
-            "purge_blackbox"
+            "purge_blackbox",
+            "export_blackbox_fixture"
         };
 
         // Every entity type the enumerate tool accepts (fleet_action_run_target needs a run id and is checked by id).

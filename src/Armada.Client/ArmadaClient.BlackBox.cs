@@ -415,6 +415,33 @@ namespace Armada.Client
         }
 
         /// <summary>
+        /// Dashboard <c>getBlackBoxFingerprintTrend</c>: GET /api/v1/blackbox/fingerprints/{fingerprint}/trend. Occurrences of
+        /// one failure mode per Armada version.
+        /// </summary>
+        /// <param name="fingerprint">Fingerprint.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The trend.</returns>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        public Task<BlackBoxFingerprintTrend?> GetBlackBoxFingerprintTrendAsync(string fingerprint, CancellationToken token = default)
+        {
+            return GetAsync<BlackBoxFingerprintTrend>($"/api/v1/blackbox/fingerprints/{E(fingerprint)}/trend", null, token);
+        }
+
+        /// <summary>
+        /// Dashboard <c>exportBlackBoxFixture</c>: POST /api/v1/blackbox/{id}/export-fixture. The entry as a sanitized
+        /// regression fixture (global admin).
+        /// </summary>
+        /// <param name="entryId">Entry id (bbx_ prefix).</param>
+        /// <param name="name">Fixture name, or null for the mission id.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The fixture.</returns>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        public Task<BlackBoxFixture?> ExportBlackBoxFixtureAsync(string entryId, string? name = null, CancellationToken token = default)
+        {
+            return PostAsync<BlackBoxFixture>($"/api/v1/blackbox/{E(entryId)}/export-fixture", new BlackBoxFixtureExportRequest { Name = name }, null, token);
+        }
+
+        /// <summary>
         /// Dashboard <c>pinBlackBox</c>: POST /api/v1/blackbox/{id}/pin. Garbage collection keeps a pinned entry.
         /// </summary>
         /// <param name="entryId">Entry id (bbx_ prefix).</param>

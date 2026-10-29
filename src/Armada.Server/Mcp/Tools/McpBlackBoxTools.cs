@@ -26,7 +26,7 @@ namespace Armada.Server.Mcp.Tools
         {
             "get_blackbox", "read_blackbox_section", "list_blackbox_objects", "read_blackbox_object", "list_blackbox_entries",
             "search_blackbox", "list_blackbox_notes", "get_blackbox_bundle", "list_blackbox_hotspots", "list_blackbox_fingerprints",
-            "get_blackbox_retention", "get_blackbox_storage"
+            "get_blackbox_fingerprint_trend", "get_blackbox_retention", "get_blackbox_storage"
         };
 
         /// <summary>
@@ -257,6 +257,20 @@ namespace Armada.Server.Mcp.Tools
                 }));
 
             register(
+                "get_blackbox_fingerprint_trend",
+                "Get the trend of one black box failure mode: occurrences of the fingerprint per Armada version (ordered by first sighting, with open and ArmadaFixed counts; at most 1000 entries and 100 versions), to see whether a release fixed it.",
+                Schema(new Dictionary<string, object>
+                {
+                    ["fingerprint"] = new { type = "string", description = "Failure fingerprint (from an entry or list_blackbox_fingerprints)" }
+                }, "fingerprint"),
+                (args) => Run(service, async svc =>
+                {
+                    BlackBoxFingerprintArgs request = Read<BlackBoxFingerprintArgs>(args);
+                    if (String.IsNullOrWhiteSpace(request.Fingerprint)) return McpToolError.InvalidArgument("fingerprint is required.");
+                    return await svc.GetFingerprintTrendAsync(McpToolHelpers.ResolveCallerContext(), request.Fingerprint!.Trim()).ConfigureAwait(false);
+                }));
+
+            register(
                 "get_blackbox_retention",
                 "Get the black box retention status: the policy, entry counts (total, pinned, deleting, expired), bytes, the next garbage collection run and the last run's report. Tenant admins see their tenant; global admins every tenant.",
                 new { type = "object", properties = new { } },
@@ -309,7 +323,7 @@ namespace Armada.Server.Mcp.Tools
 
             register(
                 "run_blackbox_recovery",
-                "Run one recovery path recorded in a black box entry's analysis (pathId, for example rp1). It never takes a free-form command: only the steps recorded in the entry run, each authorized as if you had called that tool directly. Always dry run first (dryRun defaults to true): the dry run returns the plan and a confirmToken (10 minutes, bound to the entry, the path and the mission's current version, so a mission that changed must be re-checked). Tell the user what will happen, then run with dryRun false and that confirmToken. A path marked dataLossRisk (deleting a branch, forcing a dock reclaim) is refused without acknowledgeDataLoss true; confirm with the user before setting it. Every run is annotated on the entry. Conflict with Code BlackBoxConfirmationRequired without a valid token or acknowledgement. " + SafetyGuidance + " " + TargetHint,
+                "Run one recovery path recorded in a black box entry's analysis (pathId, for example bbx-land-001.stash-retry). It never takes a free-form command: only the steps recorded in the entry run, each authorized as if you had called that tool directly. Always dry run first (dryRun defaults to true): the dry run returns the plan and a confirmToken (10 minutes, bound to the entry, the path and the mission's current version, so a mission that changed must be re-checked). Tell the user what will happen, then run with dryRun false and that confirmToken. A path marked dataLossRisk (deleting a branch, forcing a dock reclaim) is refused without acknowledgeDataLoss true; confirm with the user before setting it. Every dry run and run is annotated on the entry (authorKind Agent). A token is single use; a missing, expired, used or foreign token, a mission that changed, or a re-analyzed plan is Conflict with Code BlackBoxConfirmationRequired: dry run again. " + SafetyGuidance + " " + TargetHint,
                 Schema(TargetProperties(new Dictionary<string, object>
                 {
                     ["pathId"] = new { type = "string", description = "Recovery path id from the entry's analysis" },
@@ -327,7 +341,8 @@ namespace Armada.Server.Mcp.Tools
                     {
                         DryRun = request.DryRun ?? true,
                         ConfirmToken = request.ConfirmToken,
-                        AcknowledgeDataLoss = request.AcknowledgeDataLoss ?? false
+                        AcknowledgeDataLoss = request.AcknowledgeDataLoss ?? false,
+                        AuthorKind = BlackBoxNoteAuthorKindEnum.Agent
                     };
                     return await svc.RunRecoveryAsync(caller, entryId, request.PathId!.Trim(), body).ConfigureAwait(false);
                 }));
@@ -347,7 +362,7 @@ namespace Armada.Server.Mcp.Tools
                     BlackBoxRecommendationArgs request = Read<BlackBoxRecommendationArgs>(args);
                     if (String.IsNullOrWhiteSpace(request.RecommendationId)) return McpToolError.InvalidArgument("recommendationId is required.");
                     string entryId = await ResolveAsync(svc, caller, request).ConfigureAwait(false);
-                    BlackBoxRecommendationApplyRequest body = new BlackBoxRecommendationApplyRequest { DryRun = request.DryRun ?? true, ConfirmToken = request.ConfirmToken };
+                    BlackBoxRecommendationApplyRequest body = new BlackBoxRecommendationApplyRequest { DryRun = request.DryRun ?? true, ConfirmToken = request.ConfirmToken, AuthorKind = BlackBoxNoteAuthorKindEnum.Agent };
                     return await svc.ApplyRecommendationAsync(caller, entryId, request.RecommendationId!.Trim(), body).ConfigureAwait(false);
                 }));
 
@@ -420,6 +435,21 @@ namespace Armada.Server.Mcp.Tools
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     BlackBoxGcArgs request = Read<BlackBoxGcArgs>(args);
                     return await svc.RunGcAsync(caller, new BlackBoxGcRunRequest { DryRun = request.DryRun ?? false }).ConfigureAwait(false);
+                }));
+
+            register(
+                "export_blackbox_fixture",
+                "Export a black box entry as a sanitized regression fixture (record without secrets, tenant and user ids, host paths or repository URL, plus the rule ids and triage the advisor produces now), to add under src/Test.Shared/Fixtures/BlackBox with a test. Global admins only. " + TargetHint,
+                Schema(TargetProperties(new Dictionary<string, object>
+                {
+                    ["name"] = new { type = "string", description = "Fixture name (file name without .json; default the mission id)" }
+                })),
+                (args) => Run(service, async svc =>
+                {
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
+                    BlackBoxFixtureArgs request = Read<BlackBoxFixtureArgs>(args);
+                    string entryId = await ResolveAsync(svc, caller, request).ConfigureAwait(false);
+                    return await svc.ExportFixtureAsync(caller, entryId, String.IsNullOrWhiteSpace(request.Name) ? null : request.Name!.Trim()).ConfigureAwait(false);
                 }));
 
             register(

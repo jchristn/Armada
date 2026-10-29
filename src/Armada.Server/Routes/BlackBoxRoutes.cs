@@ -344,6 +344,17 @@ namespace Armada.Server.Routes
                 .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithSecurity("ApiKey"));
 
+            app.Get("/api/v1/blackbox/fingerprints/{fingerprint}/trend", Handle(authenticate, authz, async (req, ctx, svc) =>
+                (object?)await svc.GetFingerprintTrendAsync(ctx, Param(req, "fingerprint")).ConfigureAwait(false)),
+            api => api
+                .WithTag(Tag)
+                .WithSummary("Get the trend of a black box failure mode")
+                .WithDescription("Occurrences of one fingerprint per Armada version (ordered by first sighting, each with open and ArmadaFixed counts; at most 1000 entries and 100 versions), scoped to what the caller can see, so a maintainer can tell whether a release fixed it.")
+                .WithParameter(OpenApiParameterMetadata.Path("fingerprint", "Failure fingerprint"))
+                .WithResponse(200, OpenApiJson.For<BlackBoxFingerprintTrend>("The trend"))
+                .WithResponse(400, OpenApiJson.For<ApiErrorResponse>("InvalidArgument"))
+                .WithSecurity("ApiKey"));
+
             app.Post("/api/v1/blackbox/fingerprints/enumerate", Handle(authenticate, authz, async (req, ctx, svc) =>
                 (object?)await svc.EnumerateFingerprintsAsync(ctx, ReadPagedBody<BlackBoxFingerprintEnumerateRequest>(req)).ConfigureAwait(false)),
             api => api
@@ -396,6 +407,7 @@ namespace Armada.Server.Routes
             {
                 string id = Param(req, "id");
                 BlackBoxRecoveryRunRequest body = ReadBody<BlackBoxRecoveryRunRequest>(req);
+                if (!body.AuthorKind.HasValue) body.AuthorKind = BlackBoxNoteAuthorKindEnum.Operator;
                 // Visibility first, so an entry the caller cannot see is 404 whatever the state of the recovery runner.
                 BlackBoxEntry entry = await svc.GetEntryAsync(ctx, id, false).ConfigureAwait(false);
                 return await svc.RunRecoveryAsync(ctx, entry.Id, Param(req, "pathId"), body).ConfigureAwait(false);
@@ -403,10 +415,10 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag(Tag)
                 .WithSummary("Run a recovery path of a black box entry")
-                .WithDescription("Runs one recovery path recorded in the entry's analysis; never a free-form command. dryRun defaults to true and returns the plan (each step's tool and arguments) and a confirmToken that expires in 10 minutes and binds the entry, the path and the mission's current version. The real run (dryRun false) requires that token and, for a path marked dataLossRisk, acknowledgeDataLoss true; each step is authorized as if the caller had called that tool directly. Every run is noted on the entry and emits blackbox.recovery_run. 409 BlackBoxConfirmationRequired without a valid token or acknowledgement; 501 NotImplemented on a server where the recovery runner is not merged yet.")
+                .WithDescription("Runs one recovery path recorded in the entry's analysis; never a free-form command. dryRun defaults to true and returns the plan (each step's tool and arguments) and a confirmToken that expires in 10 minutes and binds the entry, the path and the mission's current version. The real run (dryRun false) requires that token and, for a path marked dataLossRisk, acknowledgeDataLoss true; each step is authorized as if the caller had called that tool directly. Every dry run and run is noted on the entry (authorKind, default Operator) and emits blackbox.recovery_run. A token is single use and is refused when expired, for another entry, path or caller, or when the mission or the plan changed since the dry run: 409 BlackBoxConfirmationRequired asks for a new dry run. 403 when the caller may not call a step's tool; 400 when the path names an unsupported tool or another subject; 404 for an unknown path.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", EntryIdDescription))
-                .WithParameter(OpenApiParameterMetadata.Path("pathId", "Recovery path ID from the entry's analysis (for example rp1)"))
-                .WithRequestBody(OpenApiJson.BodyFor<BlackBoxRecoveryRunRequest>("dryRun (default true), confirmToken, acknowledgeDataLoss", false))
+                .WithParameter(OpenApiParameterMetadata.Path("pathId", "Recovery path ID from the entry's analysis (for example bbx-land-001.stash-retry)"))
+                .WithRequestBody(OpenApiJson.BodyFor<BlackBoxRecoveryRunRequest>("dryRun (default true), confirmToken, acknowledgeDataLoss, authorKind (default Operator)", false))
                 .WithResponse(200, OpenApiJson.For<BlackBoxRecoveryRunResult>("Plan (dry run) or step results"))
                 .WithResponse(400, OpenApiJson.For<ApiErrorResponse>("InvalidArgument"))
                 .WithResponse(404, OpenApiJson.For<ApiErrorResponse>("BlackBoxNotFound"))
@@ -418,16 +430,17 @@ namespace Armada.Server.Routes
             {
                 string id = Param(req, "id");
                 BlackBoxRecommendationApplyRequest body = ReadBody<BlackBoxRecommendationApplyRequest>(req);
+                if (!body.AuthorKind.HasValue) body.AuthorKind = BlackBoxNoteAuthorKindEnum.Operator;
                 BlackBoxEntry entry = await svc.GetEntryAsync(ctx, id, false).ConfigureAwait(false);
                 return await svc.ApplyRecommendationAsync(ctx, entry.Id, Param(req, "recommendationId"), body).ConfigureAwait(false);
             }),
             api => api
                 .WithTag(Tag)
                 .WithSummary("Apply a configuration recommendation of a black box entry")
-                .WithDescription("Applies one configuration recommendation's recorded applyAction (for example an update_vessel patch), with the same flow as recovery: dryRun defaults to true and returns the action and a confirmToken (10 minutes); the real run requires the token and is authorized as the underlying tool. 409 BlackBoxConfirmationRequired without a valid token; 501 NotImplemented on a server where it is not merged yet.")
+                .WithDescription("Applies one configuration recommendation's recorded applyAction (for example an update_vessel patch), with the same flow as recovery: dryRun defaults to true and returns the action and a confirmToken (10 minutes); the real run requires the token and is authorized as the underlying tool. 409 BlackBoxConfirmationRequired without a valid token; 400 for an advice-only recommendation; 404 for an unknown recommendation.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", EntryIdDescription))
                 .WithParameter(OpenApiParameterMetadata.Path("recommendationId", "Recommendation ID from the entry's analysis"))
-                .WithRequestBody(OpenApiJson.BodyFor<BlackBoxRecommendationApplyRequest>("dryRun (default true) and confirmToken", false))
+                .WithRequestBody(OpenApiJson.BodyFor<BlackBoxRecommendationApplyRequest>("dryRun (default true), confirmToken, authorKind (default Operator)", false))
                 .WithResponse(200, OpenApiJson.For<BlackBoxRecommendationApplyResult>("Action (dry run) or result"))
                 .WithResponse(404, OpenApiJson.For<ApiErrorResponse>("BlackBoxNotFound"))
                 .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("BlackBoxConfirmationRequired"))
@@ -443,6 +456,22 @@ namespace Armada.Server.Routes
                 .WithParameter(OpenApiParameterMetadata.Path("id", EntryIdDescription))
                 .WithResponse(200, OpenApiJson.For<BlackBoxEntry>("The re-analyzed entry"))
                 .WithResponse(403, OpenApiJson.For<ApiErrorResponse>("Not a tenant admin"))
+                .WithResponse(404, OpenApiJson.For<ApiErrorResponse>("BlackBoxNotFound"))
+                .WithSecurity("ApiKey"));
+
+            app.Post("/api/v1/blackbox/{id}/export-fixture", Handle(authenticate, authz, async (req, ctx, svc) =>
+            {
+                BlackBoxFixtureExportRequest body = ReadBody<BlackBoxFixtureExportRequest>(req);
+                return await svc.ExportFixtureAsync(ctx, Param(req, "id"), String.IsNullOrWhiteSpace(body.Name) ? null : body.Name.Trim()).ConfigureAwait(false);
+            }),
+            api => api
+                .WithTag(Tag)
+                .WithSummary("Export a black box entry as a regression fixture")
+                .WithDescription("The entry as a sanitized fixture (record with secrets, tenant and user ids, host paths and the repository URL removed, plus the rule ids and triage the advisor produces now) for src/Test.Shared/Fixtures/BlackBox. Global admins only.")
+                .WithParameter(OpenApiParameterMetadata.Path("id", EntryIdDescription))
+                .WithRequestBody(OpenApiJson.BodyFor<BlackBoxFixtureExportRequest>("Fixture name (optional)", false))
+                .WithResponse(200, OpenApiJson.For<BlackBoxFixture>("The fixture"))
+                .WithResponse(403, OpenApiJson.For<ApiErrorResponse>("Not a global admin"))
                 .WithResponse(404, OpenApiJson.For<ApiErrorResponse>("BlackBoxNotFound"))
                 .WithSecurity("ApiKey"));
 

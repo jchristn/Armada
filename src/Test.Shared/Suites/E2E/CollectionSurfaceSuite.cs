@@ -58,6 +58,7 @@ namespace Test.Shared.Suites.E2E
             ["GET /api/v1/blackbox/{id}/download"] = "One entry's zip (at most 128 objects of bounded size)",
             ["GET /api/v1/blackbox/retention"] = "Retention status snapshot (counts and the last report)",
             ["GET /api/v1/blackbox/storage"] = "Storage status snapshot (at most one usage row per target)",
+            ["GET /api/v1/blackbox/fingerprints/{fingerprint}/trend"] = "One failure mode's counts per Armada version (at most 100 versions)",
             ["GET /api/v1/missions/{id}/evaluate-autoland"] = "One decision",
             ["GET /api/v1/missions/{id}/diff"] = "One mission's diff",
             ["GET /api/v1/missions/{id}/log"] = "Log read bounded by lines (1-5000) with offset paging",

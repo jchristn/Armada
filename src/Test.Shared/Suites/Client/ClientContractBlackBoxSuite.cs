@@ -111,6 +111,11 @@ namespace Test.Shared.Suites.Client
                 EnumerationResult<BlackBoxHotspot> hotspots = (await c.EnumerateBlackBoxHotspotsAsync(new BlackBoxHotspotEnumerateRequest { Role = BlackBoxFileRoleEnum.OutOfScope, PageSize = 50 }))!;
                 AssertTrue(hotspots.Objects.Any(h => h.Directory == "lib/contract"), "hotspot role sent");
                 AssertNotNull(await c.EnumerateBlackBoxFingerprintsAsync(new BlackBoxFingerprintEnumerateRequest { PageSize = 5 }), "fingerprints");
+                BlackBoxEntry fingerprinted = (await c.GetBlackBoxAsync(seeded.EntryId, false))!;
+                BlackBoxFingerprintTrend trend = (await c.GetBlackBoxFingerprintTrendAsync(fingerprinted.Fingerprint!))!;
+                AssertTrue(trend.Total >= 1, "fingerprint trend");
+                BlackBoxFixture fixture = (await c.ExportBlackBoxFixtureAsync(seeded.EntryId, "contract-fixture"))!;
+                AssertEqual("contract-fixture", fixture.Name, "fixture name sent");
 
                 BlackBoxNote note = (await c.AddBlackBoxNoteAsync(seeded.EntryId, new BlackBoxNoteAddRequest { Body = "contract note" }))!;
                 AssertEqual("contract note", note.Body, "note");
@@ -144,7 +149,7 @@ namespace Test.Shared.Suites.Client
                 AssertEqual("CollectionLimitExceeded", limit.Code, "limit code");
             }));
 
-            cases.Add(Case("typed_errors", "404, 400, 409, 410 and 501 replies carry the black box code", async (c, fx) =>
+            cases.Add(Case("typed_errors", "404, 400, 409, 410 and 501 replies carry the black box code (recovery: unknown path 404, confirmed without a token 409)", async (c, fx) =>
             {
                 BlackBoxSeed seeded = await SeedAsync(fx).ConfigureAwait(false);
                 ArmadaApiException notFound = await ClientContract.ExpectErrorAsync(() => c.GetMissionBlackBoxAsync("msn_missing_" + ClientContract.Suffix()), "unknown mission", 404, 404);
@@ -154,11 +159,16 @@ namespace Test.Shared.Suites.Client
                 ArmadaApiException missing = await ClientContract.ExpectErrorAsync(() => c.ReadBlackBoxObjectAsync(seeded.EntryId, "evidence/missing.log"), "missing object", 410, 410);
                 AssertEqual(BlackBoxObjectMissingException.ErrorCode, missing.Code, "410 code");
 
-                // TODO(blackbox-wave2: recovery): flip to the dry-run plan and confirm-token assertions when bb-advisor merges.
-                ArmadaApiException recovery = await ClientContract.ExpectErrorAsync(() => c.RunBlackBoxRecoveryAsync(seeded.EntryId, "rp1"), "recovery", 501, 501);
-                AssertEqual("NotImplemented", recovery.Code, "501 code");
-                ArmadaApiException recommendation = await ClientContract.ExpectErrorAsync(() => c.ApplyBlackBoxRecommendationAsync(seeded.EntryId, "rc1", new BlackBoxRecommendationApplyRequest { DryRun = true }), "recommendation", 501, 501);
-                AssertEqual("NotImplemented", recommendation.Code, "501 code");
+                ArmadaApiException unknownPath = await ClientContract.ExpectErrorAsync(() => c.RunBlackBoxRecoveryAsync(seeded.EntryId, "no-such-path"), "unknown recovery path", 404, 404);
+                AssertEqual(BlackBoxNotFoundException.ErrorCode, unknownPath.Code, "404 code");
+                ArmadaApiException unknownRecommendation = await ClientContract.ExpectErrorAsync(() => c.ApplyBlackBoxRecommendationAsync(seeded.EntryId, "no-such-recommendation", new BlackBoxRecommendationApplyRequest { DryRun = true }), "unknown recommendation", 404, 404);
+                AssertEqual(BlackBoxNotFoundException.ErrorCode, unknownRecommendation.Code, "404 code");
+                BlackBoxRecoveryPath? path = (await c.GetBlackBoxAsync(seeded.EntryId))!.Record?.Analysis?.RecoveryPaths.FirstOrDefault(p => !p.DataLossRisk && p.Steps.Any(st => st.Action != null));
+                AssertNotNull(path, "a runnable recovery path");
+                BlackBoxRecoveryRunResult dry = (await c.RunBlackBoxRecoveryAsync(seeded.EntryId, path!.Id))!;
+                AssertTrue(dry.DryRun && !String.IsNullOrEmpty(dry.ConfirmToken), "dry run by default with a token");
+                ArmadaApiException noToken = await ClientContract.ExpectErrorAsync(() => c.RunBlackBoxRecoveryAsync(seeded.EntryId, path.Id, new BlackBoxRecoveryRunRequest { DryRun = false, AuthorKind = BlackBoxNoteAuthorKindEnum.Operator }), "confirmed without a token", 409, 409);
+                AssertEqual(BlackBoxConfirmationException.ErrorCode, noToken.Code, "409 code");
                 // TODO(blackbox-wave2: storage): flip to the job assertions when bb-storage merges storage migration.
                 await ClientContract.ExpectErrorAsync(() => c.MigrateBlackBoxStorageAsync(new BlackBoxStorageMigrationRequest { To = BlackBoxStorageTargetEnum.Disk }), "migrate", 501, 501);
                 await ClientContract.ExpectErrorAsync(() => c.GetBlackBoxStorageMigrationAsync("bbm_missing"), "migration job", 501, 501);

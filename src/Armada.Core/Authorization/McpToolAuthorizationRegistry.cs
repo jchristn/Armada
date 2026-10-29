@@ -150,6 +150,8 @@ namespace Armada.Core.Authorization
             Add("purge_blackbox", "BlackBox", ResourceOperationEnum.Delete, PermissionLevel.AdminOnly);
             Add("run_blackbox_gc", "BlackBox", ResourceOperationEnum.Execute, PermissionLevel.AdminOnly);
             Add("reanalyze_blackbox", "BlackBox", ResourceOperationEnum.Execute, PermissionLevel.TenantAdmin);
+            Add("get_blackbox_fingerprint_trend", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("export_blackbox_fixture", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.AdminOnly);
 
             // Writes to caller-owned resources (memories, model endpoints, harbors), scoped to the caller in the tool handlers
             Add("create_memory", "Memory", ResourceOperationEnum.Create, PermissionLevel.Authenticated);

@@ -552,7 +552,7 @@ namespace Armada.Server
             admiralService.OnLandingIntegritySweep = landingIntegrity.SweepAsync;
 
             // Every service that writes a mission or voyage failure records it in the black box.
-            Armada.Core.BlackBox.IBlackBoxCapture blackBoxCapture = _BlackBox.Capture;
+            Armada.Core.BlackBox.IBlackBoxCapture blackBoxCapture = _BlackBox!.Capture;
             if (blackBoxCapture is Armada.Core.BlackBox.BlackBoxCapture concreteCapture)
             {
                 concreteCapture.Harbors = _HarborConnectionManager;

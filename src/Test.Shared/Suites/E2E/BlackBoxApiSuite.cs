@@ -389,23 +389,52 @@ namespace Test.Shared.Suites.E2E
                 BlackBoxBackfillResult backfill = await PostJsonAsync<BlackBoxBackfillResult>(admin, "/api/v1/blackbox/backfill", new { MaxSubjects = 5 }).ConfigureAwait(false);
                 AssertEqual(BlackBoxCaptureModeEnum.Backfill, backfill.Mode, "backfill mode");
 
+                BlackBoxEntry main = await GetJsonAsync<BlackBoxEntry>(admin, "/api/v1/blackbox/" + _EntryId + "?includeRecord=false").ConfigureAwait(false);
+                BlackBoxFingerprintTrend trend = await GetJsonAsync<BlackBoxFingerprintTrend>(admin, "/api/v1/blackbox/fingerprints/" + Uri.EscapeDataString(main.Fingerprint!) + "/trend").ConfigureAwait(false);
+                AssertEqual(main.Fingerprint, trend.Fingerprint, "trend fingerprint");
+                AssertTrue(trend.Total >= 1 && trend.Versions.Count >= 1, "trend counts per version");
+                BlackBoxFixture fixture = await PostJsonAsync<BlackBoxFixture>(admin, "/api/v1/blackbox/" + _EntryId + "/export-fixture", new { Name = "bbapi-rest" }).ConfigureAwait(false);
+                AssertEqual("bbapi-rest", fixture.Name, "fixture name");
+                using (HttpClient tenantAdmin = _AdminA!.CreateClient(_Fx.BaseUrl))
+                    await ExpectStatusAsync(tenantAdmin, "POST /api/v1/blackbox/" + _EntryId + "/export-fixture", HttpStatusCode.Forbidden).ConfigureAwait(false);
+
                 // TODO(blackbox-wave2: storage): flip to the job assertions when bb-storage merges StartStorageMigrationAsync.
                 await ExpectErrorAsync(admin, HttpMethod.Post, "/api/v1/blackbox/storage/migrate", new { To = "Disk" }, HttpStatusCode.NotImplemented, "NotImplemented", null).ConfigureAwait(false);
                 await ExpectErrorAsync(admin, HttpMethod.Get, "/api/v1/blackbox/storage/migrations/bbm_x", null, HttpStatusCode.NotImplemented, "NotImplemented", null).ConfigureAwait(false);
             }));
 
-            cases.Add(CaseAsync("rest_recovery_refused_until_runner_merges", "Recovery and recommendation runs are refused: 404 for an invisible entry, 501 NotImplemented while the runner is not merged", TestTags.Negative, async () =>
+            cases.Add(CaseAsync("rest_recovery_dry_run_and_confirm", "Recovery: dry run returns a plan and a token; a confirmed run without, with a bogus or with a used token is 409; the token runs the recorded steps once, notes the entry (Operator) and emits blackbox.recovery_run; a caller who may not run a step is 403; unknown path and recommendation are 404", TestTags.Negative, async () =>
             {
                 RequireSetup();
-                using HttpClient ua = _UserA!.CreateClient(_Fx!.BaseUrl);
-                await ExpectErrorAsync(ua, HttpMethod.Post, "/api/v1/blackbox/bbx_doesnotexist/recovery/rp1", new { DryRun = true }, HttpStatusCode.NotFound, BlackBoxNotFoundException.ErrorCode, null).ConfigureAwait(false);
-                // TODO(blackbox-wave2: recovery): when bb-advisor merges RunRecoveryAsync / ApplyRecommendationAsync, flip these to:
-                // a real run without a dry run, with an expired token and with another path's token is 409
-                // BlackBoxConfirmationRequired; a dataLossRisk path without acknowledgeDataLoss is refused; dry run then
-                // confirm calls the steps once, adds a note and emits blackbox.recovery_run.
-                await ExpectErrorAsync(ua, HttpMethod.Post, "/api/v1/blackbox/" + _EntryId + "/recovery/rp1", new { DryRun = true }, HttpStatusCode.NotImplemented, "NotImplemented", null).ConfigureAwait(false);
-                await ExpectErrorAsync(ua, HttpMethod.Post, "/api/v1/blackbox/" + _EntryId + "/recovery/rp1", new { DryRun = false, ConfirmToken = "bogus" }, HttpStatusCode.NotImplemented, "NotImplemented", null).ConfigureAwait(false);
-                await ExpectErrorAsync(ua, HttpMethod.Post, "/api/v1/blackbox/" + _EntryId + "/recommendations/rc1/apply", new { }, HttpStatusCode.NotImplemented, "NotImplemented", null).ConfigureAwait(false);
+                using HttpClient a = _AdminA!.CreateClient(_Fx!.BaseUrl);
+                using HttpClient ua = _UserA!.CreateClient(_Fx.BaseUrl);
+                RecoveryTarget target = await CaptureRecoveryTargetAsync(a, "rest").ConfigureAwait(false);
+                string route = "/api/v1/blackbox/" + target.EntryId + "/recovery/" + Uri.EscapeDataString(target.PathId);
+                await ExpectErrorAsync(ua, HttpMethod.Post, route, new { DryRun = true }, HttpStatusCode.Forbidden, "", null).ConfigureAwait(false);
+
+                BlackBoxRecoveryRunResult dry = await PostJsonAsync<BlackBoxRecoveryRunResult>(a, route, new { }).ConfigureAwait(false);
+                AssertTrue(dry.DryRun, "dry run by default");
+                AssertTrue(dry.Plan.Count > 0, "the plan lists the recorded steps");
+                AssertTrue(!String.IsNullOrEmpty(dry.ConfirmToken), "a confirm token");
+                AssertNotNull(dry.ConfirmTokenExpiresUtc, "token expiry");
+
+                string confirmation = BlackBoxConfirmationException.ErrorCode;
+                await ExpectErrorAsync(a, HttpMethod.Post, route, new { DryRun = false }, HttpStatusCode.Conflict, confirmation, null).ConfigureAwait(false);
+                await ExpectErrorAsync(a, HttpMethod.Post, route, new { DryRun = false, ConfirmToken = "bbc_bogus" }, HttpStatusCode.Conflict, confirmation, null).ConfigureAwait(false);
+                await ExpectErrorAsync(a, HttpMethod.Post, "/api/v1/blackbox/" + target.EntryId + "/recovery/no-such-path", new { DryRun = true }, HttpStatusCode.NotFound, BlackBoxNotFoundException.ErrorCode, null).ConfigureAwait(false);
+                await ExpectErrorAsync(a, HttpMethod.Post, "/api/v1/blackbox/" + target.EntryId + "/recommendations/no-such-recommendation/apply", new { DryRun = true }, HttpStatusCode.NotFound, BlackBoxNotFoundException.ErrorCode, null).ConfigureAwait(false);
+
+                // The token is not consumed by a refused call without it, so it still confirms the run once.
+                BlackBoxRecoveryRunResult dry2 = await PostJsonAsync<BlackBoxRecoveryRunResult>(a, route, new { DryRun = true }).ConfigureAwait(false);
+                BlackBoxRecoveryRunResult run = await PostJsonAsync<BlackBoxRecoveryRunResult>(a, route, new { DryRun = false, ConfirmToken = dry2.ConfirmToken }).ConfigureAwait(false);
+                AssertFalse(run.DryRun, "a real run");
+                AssertEqual(dry2.Plan.Count, run.StepResults.Count, "one result per step");
+                await ExpectErrorAsync(a, HttpMethod.Post, route, new { DryRun = false, ConfirmToken = dry2.ConfirmToken }, HttpStatusCode.Conflict, confirmation, null).ConfigureAwait(false);
+
+                EnumerationResult<BlackBoxNote> notes = await GetJsonAsync<EnumerationResult<BlackBoxNote>>(a, "/api/v1/blackbox/" + target.EntryId + "/notes?pageSize=50").ConfigureAwait(false);
+                AssertTrue(notes.Objects.Any(n => n.AuthorKind == BlackBoxNoteAuthorKindEnum.Operator), "REST recovery runs are noted as Operator: " + String.Join(" | ", notes.Objects.Select(n => n.AuthorKind + " " + n.Body)));
+                EnumerationResult<ArmadaEvent> events = await GetJsonAsync<EnumerationResult<ArmadaEvent>>(_Fx.AuthClient, "/api/v1/events?type=blackbox.recovery_run&pageSize=100").ConfigureAwait(false);
+                AssertTrue(events.Objects.Any(e => e.EntityId == target.EntryId), "blackbox.recovery_run emitted for the entry");
             }));
 
             cases.Add(CaseAsync("mcp_read_tools", "get_blackbox (summary, brief, json), sections, objects, 64 KB chunk paging of a 3 MB object, lists and enumerate blackbox", TestTags.Positive, async () =>
@@ -525,10 +554,24 @@ namespace Test.Shared.Suites.E2E
                 BlackBoxRetentionStatus retention = await OkAsync<BlackBoxRetentionStatus>(admin, "get_blackbox_retention", new { }).ConfigureAwait(false);
                 AssertTrue(retention.TotalEntries >= 2, "get_blackbox_retention");
 
-                // TODO(blackbox-wave2: recovery): flip to dry run then confirm (one call of each step, a note, blackbox.recovery_run)
-                // and the refusals (no dry run, expired or foreign token, dataLossRisk without acknowledgeDataLoss) when bb-advisor merges.
-                await ErrorAsync(user, "run_blackbox_recovery", new { entryId = _EntryId, pathId = "rp1" }, McpToolErrorCodeEnum.Unavailable, "NotImplemented").ConfigureAwait(false);
-                await ErrorAsync(user, "apply_blackbox_recommendation", new { entryId = _EntryId, recommendationId = "rc1" }, McpToolErrorCodeEnum.Unavailable, "NotImplemented").ConfigureAwait(false);
+                using (HttpClient adminRest = _AdminA!.CreateClient(_Fx!.BaseUrl))
+                {
+                    RecoveryTarget target = await CaptureRecoveryTargetAsync(adminRest, "mcp").ConfigureAwait(false);
+                    await ErrorAsync(user, "run_blackbox_recovery", new { entryId = target.EntryId, pathId = target.PathId }, McpToolErrorCodeEnum.Forbidden, null).ConfigureAwait(false);
+                    BlackBoxRecoveryRunResult dry = await OkAsync<BlackBoxRecoveryRunResult>(admin, "run_blackbox_recovery", new { entryId = target.EntryId, pathId = target.PathId }).ConfigureAwait(false);
+                    AssertTrue(dry.DryRun && !String.IsNullOrEmpty(dry.ConfirmToken), "MCP dry run by default");
+                    await ErrorAsync(admin, "run_blackbox_recovery", new { entryId = target.EntryId, pathId = target.PathId, dryRun = false }, McpToolErrorCodeEnum.Conflict, BlackBoxConfirmationException.ErrorCode).ConfigureAwait(false);
+                    BlackBoxRecoveryRunResult run = await OkAsync<BlackBoxRecoveryRunResult>(admin, "run_blackbox_recovery", new { entryId = target.EntryId, pathId = target.PathId, dryRun = false, confirmToken = dry.ConfirmToken }).ConfigureAwait(false);
+                    AssertFalse(run.DryRun, "MCP real run");
+                    await ErrorAsync(admin, "run_blackbox_recovery", new { entryId = target.EntryId, pathId = target.PathId, dryRun = false, confirmToken = dry.ConfirmToken }, McpToolErrorCodeEnum.Conflict, BlackBoxConfirmationException.ErrorCode).ConfigureAwait(false);
+                    EnumerationResult<BlackBoxNote> notes = await OkAsync<EnumerationResult<BlackBoxNote>>(admin, "list_blackbox_notes", new { entryId = target.EntryId, pageSize = 50 }).ConfigureAwait(false);
+                    AssertTrue(notes.Objects.Any(n => n.AuthorKind == BlackBoxNoteAuthorKindEnum.Agent), "MCP recovery runs are noted as Agent");
+                    await ErrorAsync(admin, "apply_blackbox_recommendation", new { entryId = target.EntryId, recommendationId = "no-such-recommendation" }, McpToolErrorCodeEnum.NotFound, BlackBoxNotFoundException.ErrorCode).ConfigureAwait(false);
+                }
+
+                BlackBoxFingerprintTrend trend = await OkAsync<BlackBoxFingerprintTrend>(user, "get_blackbox_fingerprint_trend", new { fingerprint = (await OkAsync<BlackBoxEntry>(user, "pin_blackbox", new { entryId = _EntryId, pinned = false }).ConfigureAwait(false)).Fingerprint }).ConfigureAwait(false);
+                AssertTrue(trend.Total >= 1, "fingerprint trend counts the entry");
+                await ErrorAsync(admin, "export_blackbox_fixture", new { entryId = _EntryId }, McpToolErrorCodeEnum.Forbidden, null).ConfigureAwait(false);
                 await RefusedAsync(user, "run_blackbox_recovery", new { entryId = _EntryId }).ConfigureAwait(false);
 
                 using McpToolClient root = new McpToolClient("http://127.0.0.1:" + _Fx!.McpPort + "/mcp", null, new Dictionary<string, string> { ["X-Api-Key"] = _Fx.ApiKey });
@@ -538,6 +581,9 @@ namespace Test.Shared.Suites.E2E
                 BlackBoxPurgeResult purge = await OkAsync<BlackBoxPurgeResult>(root, "purge_blackbox", new { missionId = _Mission.Id }).ConfigureAwait(false);
                 AssertTrue(purge.DryRun && purge.Deleted == 0, "purge_blackbox is a dry run by default");
                 BlackBoxStorageStatus storage = await OkAsync<BlackBoxStorageStatus>(root, "get_blackbox_storage", new { }).ConfigureAwait(false);
+                BlackBoxFixture fixture = await OkAsync<BlackBoxFixture>(root, "export_blackbox_fixture", new { entryId = _EntryId, name = "bbapi-fixture" }).ConfigureAwait(false);
+                AssertEqual("bbapi-fixture", fixture.Name, "export_blackbox_fixture name");
+                AssertFalse(JsonHelper.Serialize(fixture).Contains(_UserA!.TenantId, StringComparison.Ordinal), "the fixture drops the tenant id");
                 AssertEqual(BlackBoxStorageTargetEnum.Database, storage.Target, "get_blackbox_storage");
                 VoyageStatusProbe voyage = await OkAsync<VoyageStatusProbe>(root, "voyage_status", new { voyageId = _Voyage!.Id }).ConfigureAwait(false);
                 AssertEqual(_VoyageEntryId, voyage.Voyage?.LastBlackBoxEntryId, "voyage_status summary carries LastBlackBoxEntryId");
@@ -807,6 +853,25 @@ namespace Test.Shared.Suites.E2E
             AssertContains(surface, brief, surface + " named in the brief's note");
         }
 
+        private async Task<RecoveryTarget> CaptureRecoveryTargetAsync(HttpClient admin, string label)
+        {
+            Mission mission = await CreateMissionAsync("recovery-" + label, MissionStatusEnum.Failed, null).ConfigureAwait(false);
+            mission.FailureKind = MissionFailureKindEnum.ScopeViolation;
+            mission.FailureReason = "Mission modified files outside its scoped file list: src/feature/c.cs";
+            BlackBoxCaptureContext context = new BlackBoxCaptureContext { Mission = mission, StatusBefore = MissionStatusEnum.InProgress, Step = BlackBoxStepEnum.ScopeViolation };
+            context.OutOfScopeFiles.Add("src/feature/c.cs");
+            string entryId = (await _Fx!.Server.BlackBox!.Capture.CaptureMissionFailureAsync(context).ConfigureAwait(false))!;
+            await _Fx.Server.BlackBox.Queue.DrainAsync().ConfigureAwait(false);
+            BlackBoxEntry entry = await GetJsonAsync<BlackBoxEntry>(admin, "/api/v1/blackbox/" + entryId).ConfigureAwait(false);
+            List<BlackBoxRecoveryPath> paths = entry.Record?.Analysis?.RecoveryPaths ?? new List<BlackBoxRecoveryPath>();
+            BlackBoxRecoveryPath? path = paths.FirstOrDefault(p => !p.DataLossRisk && p.Steps.Any(st => st.Action != null && !String.IsNullOrEmpty(st.Action.Tool)));
+            AssertNotNull(path, "the advisor records a runnable recovery path for a scope violation: " + String.Join(", ", paths.Select(p => p.Id)));
+            RecoveryTarget target = new RecoveryTarget();
+            target.EntryId = entryId;
+            target.PathId = path!.Id;
+            return target;
+        }
+
         private static byte[] BigObject()
         {
             StringBuilder sb = new StringBuilder(BigObjectBytes);
@@ -875,7 +940,7 @@ namespace Test.Shared.Suites.E2E
             string text = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
             AssertEqual(status, response.StatusCode, method + " " + path + ": " + text);
             BlackBoxApiErrorBody error = JsonHelper.Deserialize<BlackBoxApiErrorBody>(text);
-            AssertEqual(code, error.Data?.Code, method + " " + path + " code: " + text);
+            if (code.Length > 0) AssertEqual(code, error.Data?.Code, method + " " + path + " code: " + text);
             if (field != null) AssertEqual(field, error.Data?.Field, method + " " + path + " field: " + text);
             return text;
         }
