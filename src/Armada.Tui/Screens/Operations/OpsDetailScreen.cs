@@ -224,6 +224,8 @@ namespace Armada.Tui.Screens.Operations
             bool typing = leaf is TextInput || leaf is OpsTextArea || (leaf is ScrollTextView scroll && scroll.Searching);
             if (!typing)
             {
+                // A focused panel that owns keys (the Failure tab) runs them before the screen's single-key actions.
+                if (CurrentPanel is IPanelKeyHandler owner && ReferenceEquals(leaf, CurrentPanel) && owner.HandlePanelKey(key)) return true;
                 if (key.Code == KeyCode.Character && key.Modifiers == KeyModifiers.None && key.Rune == '.')
                 {
                     ShowActionMenu();

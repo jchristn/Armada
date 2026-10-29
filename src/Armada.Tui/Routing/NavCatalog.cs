@@ -106,7 +106,7 @@ namespace Armada.Tui.Routing
                     new NavItem("/fleet-actions", "Fleet Actions", "Run a command or mission across many vessels and watch each run", "F", "f"),
                     new NavItem("/missions", "Missions", "Work units, plus Voyages and the full Merge Queue as tabs", "M", "m"),
                     new NavItem("/activity", "Activity", "One log across requests, events, signals, and history, plus background jobs on the Jobs tab", "~", "y"),
-                    new NavItem("/blackbox", "Black Box", "Failure records for missions and voyages: where, how and why each failed, and how to recover", "B"),
+                    new NavItem("/blackbox", "Black Box", "Failure records for missions and voyages: where, how and why each failed, and how to recover", "B", "b"),
                 }));
             sections.Add(new NavSection("fleet", "BUILD",
                 new[] { "/fleets", "/vessels", "/workspace", "/captains", "/docks", "/delivery", "/checks", "/environments", "/deployments", "/releases", "/incidents", "/runbooks" },

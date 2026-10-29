@@ -24,6 +24,11 @@ namespace Test.Shared.Infrastructure
         /// </summary>
         public string StandardOutput { get; set; } = String.Empty;
 
+        /// <summary>
+        /// Captured standard error.
+        /// </summary>
+        public string StandardError { get; set; } = String.Empty;
+
         #endregion
     }
 }

@@ -209,6 +209,30 @@ namespace Armada.Tui.Screens.Admin
         /// <summary>Retention: decided CLI tool permission requests.</summary>
         public InputField RetentionCliPermissions { get; } = new InputField();
 
+        /// <summary>Black box retention: days until an unpinned entry expires.</summary>
+        public InputField BlackBoxRetentionDays { get; } = new InputField();
+
+        /// <summary>Black box retention: days after resolution until a resolved entry expires.</summary>
+        public InputField BlackBoxResolvedRetentionDays { get; } = new InputField();
+
+        /// <summary>Black box retention: most entries per vessel.</summary>
+        public InputField BlackBoxMaxEntriesPerVessel { get; } = new InputField();
+
+        /// <summary>Black box retention: global cap in megabytes.</summary>
+        public InputField BlackBoxMaxTotalMegabytes { get; } = new InputField();
+
+        /// <summary>Black box retention: minutes between garbage collection runs.</summary>
+        public InputField BlackBoxGcInterval { get; } = new InputField();
+
+        /// <summary>Black box retention: keep the current entry of a mission that still exists.</summary>
+        public ToggleField BlackBoxKeepLatest { get; } = new ToggleField();
+
+        /// <summary>Black box retention: delete a mission's entries when it is purged.</summary>
+        public ToggleField BlackBoxDeleteWithMission { get; } = new ToggleField();
+
+        /// <summary>Black box retention: delete a vessel's entries when it is deleted.</summary>
+        public ToggleField BlackBoxDeleteWithVessel { get; } = new ToggleField();
+
         /// <summary>Ask Armada: the captain reports the outcome of finished work.</summary>
         public ToggleField AskReportResults { get; } = new ToggleField();
 
@@ -618,6 +642,7 @@ namespace Armada.Tui.Screens.Admin
             BuildImportAndFleet();
             BuildCliPermissions();
             BuildRetention();
+            BuildBlackBoxRetention();
             BuildAsk();
             BuildRemoteControl();
             BuildMcp();
@@ -786,6 +811,26 @@ namespace Armada.Tui.Screens.Admin
             AddNumber(g, "Job retention (days)", RetentionJobs, "Finished background jobs older than this are deleted; the latest of each kind is kept (0-3650, default 30).", range);
             AddNumber(g, "Import history retention (days)", RetentionImports, "Finished vessel import batches older than this are deleted; imported vessels are not affected (0-3650, default 90).", range);
             AddNumber(g, "CLI permission request retention (days)", RetentionCliPermissions, "Decided, expired, and cancelled CLI tool permission requests older than this are deleted; pending ones are kept (0-3650, default 90).", range);
+            AddButtons(g);
+        }
+
+        private void BuildBlackBoxRetention()
+        {
+            Form.AddSection("Black Box Retention");
+            AddNote("How long the black box keeps failure records and when garbage collection removes them. Pinned entries never expire. Storage status and a GC dry run are on the Storage tab. Changes apply immediately.");
+            ServerSettingsGroup g = Group("blackBox", "Save Black Box Retention", SaveBlackBoxRetention, () => DiscardGroup("blackBox"));
+            g.RequireDirty = true;
+            AddNumber(g, "Retention (days)", BlackBoxRetentionDays, "Age at which an unpinned entry expires; 0 keeps entries forever (0-3650, default 180).", v => ServerSettingsRules.WholeNumberRange(Context.Loc, v, 0, 3650));
+            AddNumber(g, "Resolved retention (days)", BlackBoxResolvedRetentionDays, "Days after resolution at which a resolved entry expires, when sooner; 0 means resolution does not shorten retention (0-3650, default 30).", v => ServerSettingsRules.WholeNumberRange(Context.Loc, v, 0, 3650));
+            AddNumber(g, "Max entries per vessel", BlackBoxMaxEntriesPerVessel, "Above it the oldest unpinned, non-current entries are evicted (10-100000, default 1000).", v => ServerSettingsRules.WholeNumberRange(Context.Loc, v, 10, 100000));
+            AddNumber(g, "Max total size (MB)", BlackBoxMaxTotalMegabytes, "Global cap on stored bytes; above it the oldest unpinned resolved entries go first (16-1048576, default 1024).", v => ServerSettingsRules.WholeNumberRange(Context.Loc, v, 16, 1048576));
+            AddNumber(g, "GC interval (minutes)", BlackBoxGcInterval, "Minutes between garbage collection runs (5-1440, default 60).", v => ServerSettingsRules.WholeNumberRange(Context.Loc, v, 5, 1440));
+            BlackBoxKeepLatest.Caption = "Keep the latest entry of each mission";
+            AddTracked(g, "Keep the latest entry of each mission", BlackBoxKeepLatest, "The current entry of a mission or voyage that still exists is kept past expiry.");
+            BlackBoxDeleteWithMission.Caption = "Delete with the mission";
+            AddTracked(g, "Delete with the mission", BlackBoxDeleteWithMission, "When a mission is purged, delete its entries too.");
+            BlackBoxDeleteWithVessel.Caption = "Delete with the vessel";
+            AddTracked(g, "Delete with the vessel", BlackBoxDeleteWithVessel, "When a vessel is deleted, delete its entries.");
             AddButtons(g);
         }
 
@@ -1066,6 +1111,18 @@ namespace Armada.Tui.Screens.Admin
                 RetentionImports.Value = Num(r.ImportBatchRetentionDays);
                 RetentionCliPermissions.Value = Num(r.CliPermissionRequestRetentionDays);
             });
+            Apply("blackBox", force, () =>
+            {
+                BlackBoxRetentionSettings r = s.BlackBox?.Retention ?? new BlackBoxRetentionSettings();
+                BlackBoxRetentionDays.Value = Num(r.RetentionDays);
+                BlackBoxResolvedRetentionDays.Value = Num(r.ResolvedRetentionDays);
+                BlackBoxMaxEntriesPerVessel.Value = Num(r.MaxEntriesPerVessel);
+                BlackBoxMaxTotalMegabytes.Value = Num((int)Math.Min(Int32.MaxValue, r.MaxTotalBytes / (1024L * 1024L)));
+                BlackBoxGcInterval.Value = Num(r.GcIntervalMinutes);
+                BlackBoxKeepLatest.SetValue(r.KeepLatestPerMission, false);
+                BlackBoxDeleteWithMission.SetValue(r.DeleteWithMission, false);
+                BlackBoxDeleteWithVessel.SetValue(r.DeleteWithVessel, false);
+            });
             // The ask group is saved whole; keep the stored captain auto-approve (not edited here) so a save never changes it.
             _AskCaptainAutoApprove = s.Ask?.CaptainAutoApprove ?? false;
             Apply("ask", force, () =>
@@ -1309,6 +1366,7 @@ namespace Armada.Tui.Screens.Admin
                 case "import": return "Save Import Settings";
                 case "fleetActions": return "Save Fleet Action Settings";
                 case "retention": return "Save Retention Settings";
+                case "blackBox": return "Save Black Box Retention";
                 case "permissions": return "Save CLI Tool Permissions";
                 case "ask": return "Save Ask Armada Settings";
                 default: return "Save Remote Control Settings";
@@ -1448,6 +1506,32 @@ namespace Armada.Tui.Screens.Admin
                 d.Retention = r;
                 return d;
             }, "Retention settings saved and applied.");
+        }
+
+        private void SaveBlackBoxRetention()
+        {
+            SaveWith(_Groups["blackBox"], () =>
+            {
+                // The black box object is saved whole: start from the loaded settings (storage secrets come back masked and
+                // the server keeps the stored ones) and change only the retention fields edited here.
+                BlackBoxSettings? loaded = Settings?.BlackBox;
+                if (loaded == null) throw new ArgumentException(Context.Loc.T("The server did not report black box settings."));
+                BlackBoxSettings b = new BlackBoxSettings();
+                b.CopyFrom(loaded);
+                BlackBoxRetentionSettings r = loaded.Retention.Clone();
+                r.RetentionDays = IntOf(BlackBoxRetentionDays);
+                r.ResolvedRetentionDays = IntOf(BlackBoxResolvedRetentionDays);
+                r.MaxEntriesPerVessel = IntOf(BlackBoxMaxEntriesPerVessel);
+                r.MaxTotalBytes = (long)IntOf(BlackBoxMaxTotalMegabytes) * 1024L * 1024L;
+                r.GcIntervalMinutes = IntOf(BlackBoxGcInterval);
+                r.KeepLatestPerMission = BlackBoxKeepLatest.Value;
+                r.DeleteWithMission = BlackBoxDeleteWithMission.Value;
+                r.DeleteWithVessel = BlackBoxDeleteWithVessel.Value;
+                b.Retention = r;
+                SettingsData d = new SettingsData();
+                d.BlackBox = b;
+                return d;
+            }, "Black box retention saved and applied.");
         }
 
         private void SaveAsk()

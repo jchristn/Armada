@@ -177,7 +177,7 @@ Three ways to get a brief:
 
 1. The dashboard black box panel on the mission page: **Copy FIX THIS** (also on Inbox failure rows).
 2. A terminal: `curl -s -H "Authorization: Bearer $TOKEN" http://localhost:7890/api/v1/missions/msn_x/blackbox/brief | pbcopy`
-   (or `armada blackbox show msn_x --brief | pbcopy` once the Helm commands land, section 4).
+   (or `armada blackbox show msn_x --brief | pbcopy`, section 4).
 3. MCP: `get_blackbox {"missionId": "msn_x", "format": "brief"}`.
 
 ## 4. Where to find entries
@@ -185,8 +185,8 @@ Three ways to get a brief:
 | Surface | Where | Status |
 |---|---|---|
 | Dashboard | Mission and voyage detail black box panel; Black Box page under Operations; entry page `/blackbox/{id}`; settings | Available |
-| TUI | Mission and voyage Failure tab; Black Box screen | Pending (TUI work) |
-| Helm CLI | `armada blackbox ...`, `armada mission failure <id>`, `armada voyage failure <id>` | Pending (Helm work) |
+| TUI | Mission and voyage Failure tab; Black Box screen (`g b`); entry screen; Settings and Storage sections | Available |
+| Helm CLI | `armada blackbox ...`, `armada mission failure <id>`, `armada voyage failure <id>` | Available |
 | VS Code | The Armada extension (`src/Armada.VSCode`) | Available |
 | Mobile | Mission and voyage detail panel, Black Box list and entry screens | Available |
 | REST | `/api/v1/missions/{id}/blackbox`, `/api/v1/voyages/{id}/blackbox`, `/api/v1/blackbox/...` | Available |
@@ -217,43 +217,56 @@ policy. **Inbox** failure rows have Copy FIX THIS and Ask Armada actions, and th
 
 ### TUI
 
-<!-- TODO(blackbox-docs): bb-tui. Replace with the shipped keys and screens. -->
+**Failure tab** (mission and voyage screens; `]` moves to it). It shows the entry's status, where it failed, triage,
+resolution, the ranked recovery paths and the user audience brief. While the tab has focus its keys run before the
+screen's and the status bar lists them: `c` copies the FIX THIS (agent) brief to the clipboard (OSC 52), `x` exports
+it to a file (default `blackbox-{entryId}.md` in the current directory), `r` lists the recovery paths (choosing one
+dry runs it and shows the plan; confirming runs it with the confirm token, and a data-loss path asks you to type
+`LOSE DATA` first; notes are written as Operator), `a` opens Ask Armada with the prompt filled in, `j` shows the entry
+as JSON, `s` resolves, `p` pins or unpins, `n` adds a note and `o` opens the entry. Every action is also in the `.`
+menu and the palette. Without an entry the tab says so and the screen's own keys (for example `r` Restart) apply.
 
-**Pending (TUI work).** Planned (plan 11.2): a **Failure** tab on the mission and voyage screens showing the user
-audience, with keys in the focus hints: `c` copies the brief (OSC 52), `x` exports it to a file, `r` lists recovery
-paths, `a` opens Ask Armada, `j` shows JSON; a Black Box screen with filters, fingerprints and a paged object viewer;
-retention and storage sections on the admin screen.
+**Black Box screen** (`/blackbox`, `g b`): server-paged entries filtered by vessel, triage, resolution, phase and
+fingerprint; `F` opens the fingerprints view (choosing one filters the list, `X` clears it); Enter opens an entry.
+**Entry screen** (`/blackbox/{id}`): the Brief tab (the same keys), the Objects tab (Enter opens a paged viewer that
+reads 64 KB at a time; `]` and `[` move between chunks) and Notes; `w` downloads the .zip, `f` lists similar failures.
+
+**Settings and Storage.** Settings has a **Black Box Retention** section (retention days, resolved retention, max
+entries per vessel, max total size, GC interval, keep latest, delete with mission or vessel). The Storage tab lists the
+storage target, health, usage, retention and garbage collection runs, and `G` runs a garbage collection dry run.
+Storage target credentials are edited in the dashboard or the settings file.
 
 ### Helm CLI
 
-<!-- TODO(blackbox-docs): bb-tui. Replace with the shipped command reference. -->
-
-**Pending (Helm work).** Planned commands (plan 11.3):
-
 ```
-armada blackbox show <missionId|voyageId|entryId> [--brief] [--audience agent|user|maintainer] [--json]
-armada blackbox list [--vessel] [--kind] [--triage] [--since] [--page] [--page-size]
+armada blackbox show <missionId|voyageId|entryId> [--brief] [--audience agent|user|maintainer] [--redact-hosts] [--json]
+armada blackbox list [--vessel] [--voyage] [--mission] [--captain] [--kind] [--triage] [--phase] [--step]
+                     [--resolution] [--fingerprint] [--pinned] [--since 30d] [--before 2026-09-01] [--page] [--page-size]
 armada blackbox objects <entryId>
-armada blackbox cat <entryId> <name> [--offset] [--length]
+armada blackbox cat <entryId> <name> [--offset N] [--length N]
 armada blackbox download <entryId> [-o file.zip]
-armada blackbox recover <entryId> <pathId> [--execute]
+armada blackbox recover <entryId> <pathId> [--execute [--yes] [--acknowledge-data-loss]]
 armada blackbox resolve <entryId> --resolution Resolved [--note] [--link]
 armada blackbox note <entryId> "<text>"
 armada blackbox pin|unpin|delete <entryId...>
-armada blackbox purge [filters] [--execute]
+armada blackbox purge [filters] [--include-pinned] [--max N] [--execute [--yes]]
 armada blackbox gc [--dry-run]
 armada blackbox retention
-armada blackbox storage [status|migrate --to <target>]
-armada blackbox bundle [filters] [-o bundle.md]
-armada blackbox backfill [--since 30d]
-armada blackbox export-fixture <entryId>
-armada mission failure <id>
-armada voyage failure <id>
+armada blackbox storage status | migrate --to <target> [--from] [--delete-source] | migration <id>
+armada blackbox bundle [filters] [--max N] [--format markdown|json] [-o bundle.md]
+armada blackbox backfill [--since 30d] [--max N]
+armada blackbox export-fixture <entryId> [--name] [-o dir]
+armada mission failure <id>        (alias of blackbox show for a mission)
+armada voyage failure <id>         (alias of blackbox show for a voyage)
 ```
 
-`armada blackbox show msn_x --brief | pbcopy` is the terminal path to "paste into an agent and say FIX THIS". Until
-it lands, use the REST brief route shown in section 3. The recovery commands already recorded in entries
-(`armada mission restart ...` and friends) are existing Helm commands.
+`armada blackbox show msn_x --brief | pbcopy` is the terminal path to "paste into an agent and say FIX THIS": with
+`--brief` (and `--json`, `cat` and `bundle` without `-o`) stdout holds only the payload and every status line goes to
+stderr. Exit codes: 0 success, 1 failure or bad option, 2 credential (401 or 403) or target error, 3 not found (404),
+4 refused. `recover` and `purge` are dry runs by default; `--execute` asks to confirm (`--yes` answers for you and is
+required when the console is not interactive), and `recover` refuses a data-loss path without
+`--acknowledge-data-loss`. `export-fixture` writes `{name}.json` into `src/Test.Shared/Fixtures/BlackBox` when run
+inside the Armada repository, else into `-o`.
 
 ### VS Code
 
@@ -1836,6 +1849,5 @@ Grep for `TODO(blackbox-docs)` in this document and `TODO(blackbox-wave2` in cod
 
 | Owner | Item | Where |
 |---|---|---|
-| TUI and Helm | Failure tab, Black Box screen, `armada blackbox ...` commands including `export-fixture` (section 4) | `src/Armada.Tui`, `src/Armada.Helm` |
 | Insight UIs | Dashboard dispatch dialog overlap warnings, reservations, doctor, timeline and cascade views; TUI and Helm commands (section 12) | `src/Armada.Dashboard`, `src/Armada.Tui`, `src/Armada.Helm` |
 | MCP resources | Typed errors for resource reads of a missing entry or object (they return JSON-RPC -32603 today) | `McpBlackBoxResources.cs` |

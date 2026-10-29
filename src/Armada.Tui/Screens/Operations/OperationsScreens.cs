@@ -4,7 +4,7 @@ namespace Armada.Tui.Screens.Operations
 
     /// <summary>
     /// Registers the OPERATIONS screens (W3: Home, Needs You, Planning, Dispatch, Backlog, Fleet Actions, Missions,
-    /// Voyages, Merge Queue, and Jobs) with the screen factory, keeping the composition root's change to one line.
+    /// Voyages, Merge Queue, Black Box, and Jobs) with the screen factory, keeping the composition root's change to one line.
     /// </summary>
     public static class OperationsScreens
     {
@@ -35,6 +35,8 @@ namespace Armada.Tui.Screens.Operations
             screens.Register("VoyageCreateScreen", (m, c) => new VoyageCreateScreen(m, c));
             screens.Register("MergeQueueScreen", (m, c) => new MergeQueueScreen(m, c));
             screens.Register("MergeEntryScreen", (m, c) => new MergeEntryScreen(m, c));
+            screens.Register("BlackBoxScreen", (m, c) => new BlackBoxScreen(m, c));
+            screens.Register("BlackBoxEntryScreen", (m, c) => new BlackBoxEntryScreen(m, c));
         }
 
         #endregion
