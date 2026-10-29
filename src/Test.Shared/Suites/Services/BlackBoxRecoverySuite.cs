@@ -76,6 +76,15 @@ namespace Test.Shared.Suites.Services
             {
                 using BlackBoxRecoveryFixture f = await BlackBoxRecoveryFixture.CreateAsync().ConfigureAwait(false);
                 await AssertThrowsAsync<BlackBoxConfirmationException>(() => f.Service.RunRecoveryAsync(f.Admin, f.EntryId, PullRequestPath, Confirm(null)), "no dry run").ConfigureAwait(false);
+                foreach (string message in new[]
+                {
+                    await RefusalMessageAsync(() => f.Service.RunRecoveryAsync(f.Admin, f.EntryId, PullRequestPath, Confirm(null))).ConfigureAwait(false),
+                    await RefusalMessageAsync(() => f.Service.ApplyRecommendationAsync(f.Admin, f.EntryId, LandingModeRec, new BlackBoxRecommendationApplyRequest { DryRun = false })).ConfigureAwait(false)
+                })
+                {
+                    AssertContains("dry run", message, "the refusal says to dry run first");
+                    AssertFalse(message.Contains("run_blackbox_recovery", StringComparison.Ordinal) || message.Contains("apply_blackbox_recommendation", StringComparison.Ordinal), "the refusal is surface-neutral (REST, MCP, dashboard): " + message);
+                }
                 await AssertThrowsAsync<BlackBoxConfirmationException>(() => f.Service.RunRecoveryAsync(f.Admin, f.EntryId, PullRequestPath, Confirm("bbc_made_up")), "made-up token").ConfigureAwait(false);
 
                 BlackBoxRecoveryRunResult dry = await DryAsync(f, PullRequestPath).ConfigureAwait(false);
@@ -261,6 +270,19 @@ namespace Test.Shared.Suites.Services
         private static Task<BlackBoxRecoveryRunResult> DryAsync(BlackBoxRecoveryFixture f, string pathId)
         {
             return f.Service.RunRecoveryAsync(f.Admin, f.EntryId, pathId, new BlackBoxRecoveryRunRequest());
+        }
+
+        private static async Task<string> RefusalMessageAsync(Func<Task> call)
+        {
+            try
+            {
+                await call().ConfigureAwait(false);
+            }
+            catch (BlackBoxConfirmationException e)
+            {
+                return e.Message;
+            }
+            throw new InvalidOperationException("expected a BlackBoxConfirmationException");
         }
 
         private static BlackBoxRecoveryRunRequest Confirm(string? token)

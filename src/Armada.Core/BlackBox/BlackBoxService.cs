@@ -641,7 +641,7 @@ namespace Armada.Core.BlackBox
                 return result;
             }
 
-            if (String.IsNullOrWhiteSpace(request.ConfirmToken)) throw new BlackBoxConfirmationException("A confirmToken is required: run run_blackbox_recovery with dryRun=true first and confirm with the token it returns.");
+            if (String.IsNullOrWhiteSpace(request.ConfirmToken)) throw new BlackBoxConfirmationException("A confirmToken is required: do a dry run of this recovery path first (dryRun true) and confirm with the token it returns.");
             if (dataLoss && !request.AcknowledgeDataLoss) throw new BlackBoxConfirmationException("Recovery path " + path.Id + " can lose work; confirm again with acknowledgeDataLoss=true after the user agrees.");
             BlackBoxPendingConfirmation confirmed = Confirmations.Consume(request.ConfirmToken, BlackBoxConfirmationStore.RecoveryKind, entry.Id, path.Id, caller);
             if (!String.Equals(confirmed.SubjectVersion, version, StringComparison.Ordinal))
@@ -723,7 +723,7 @@ namespace Armada.Core.BlackBox
                 return result;
             }
 
-            if (String.IsNullOrWhiteSpace(request.ConfirmToken)) throw new BlackBoxConfirmationException("A confirmToken is required: run apply_blackbox_recommendation with dryRun=true first and confirm with the token it returns.");
+            if (String.IsNullOrWhiteSpace(request.ConfirmToken)) throw new BlackBoxConfirmationException("A confirmToken is required: do a dry run of this recommendation first (dryRun true) and confirm with the token it returns.");
             BlackBoxPendingConfirmation confirmed = Confirmations.Consume(request.ConfirmToken, BlackBoxConfirmationStore.RecommendationKind, entry.Id, rec.Id, caller);
             if (!String.Equals(confirmed.SubjectVersion, version, StringComparison.Ordinal))
                 throw new BlackBoxConfirmationException("The mission or vessel changed since the dry run; check the current configuration and run a new dry run.");

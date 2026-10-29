@@ -2114,7 +2114,7 @@ or foreign one):
 
 ```json
 {
-  "Error": "A confirmToken is required: run run_blackbox_recovery with dryRun=true first and confirm with the token it returns.",
+  "Error": "A confirmToken is required: do a dry run of this recovery path first (dryRun true) and confirm with the token it returns.",
   "ErrorCode": "Conflict",
   "Code": "BlackBoxConfirmationRequired",
   "StatusCode": null

@@ -423,7 +423,9 @@ namespace Test.Shared.Suites.E2E
                 AssertNotNull(dry.ConfirmTokenExpiresUtc, "token expiry");
 
                 string confirmation = BlackBoxConfirmationException.ErrorCode;
-                await ExpectErrorAsync(a, HttpMethod.Post, route, new { DryRun = false }, HttpStatusCode.Conflict, confirmation, null).ConfigureAwait(false);
+                string noToken = await ExpectErrorAsync(a, HttpMethod.Post, route, new { DryRun = false }, HttpStatusCode.Conflict, confirmation, null).ConfigureAwait(false);
+                AssertContains("dry run", noToken, "the 409 says to dry run first");
+                AssertFalse(noToken.Contains("run_blackbox_recovery", StringComparison.Ordinal), "the REST 409 does not name the MCP tool: " + noToken);
                 await ExpectErrorAsync(a, HttpMethod.Post, route, new { DryRun = false, ConfirmToken = "bbc_bogus" }, HttpStatusCode.Conflict, confirmation, null).ConfigureAwait(false);
                 await ExpectErrorAsync(a, HttpMethod.Post, "/api/v1/blackbox/" + target.EntryId + "/recovery/no-such-path", new { DryRun = true }, HttpStatusCode.NotFound, BlackBoxNotFoundException.ErrorCode, null).ConfigureAwait(false);
                 await ExpectErrorAsync(a, HttpMethod.Post, "/api/v1/blackbox/" + target.EntryId + "/recommendations/no-such-recommendation/apply", new { DryRun = true }, HttpStatusCode.NotFound, BlackBoxNotFoundException.ErrorCode, null).ConfigureAwait(false);

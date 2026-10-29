@@ -5570,7 +5570,7 @@ A confirmed call without a token, and a reused token:
   "Error": "Conflict",
   "StatusCode": 409,
   "Description": "The request conflicts with the current state of the resource.",
-  "Message": "A confirmToken is required: run run_blackbox_recovery with dryRun=true first and confirm with the token it returns.",
+  "Message": "A confirmToken is required: do a dry run of this recovery path first (dryRun true) and confirm with the token it returns.",
   "Data": { "Code": "BlackBoxConfirmationRequired" }
 }
 ```

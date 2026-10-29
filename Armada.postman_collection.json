@@ -16208,7 +16208,7 @@
                                     "value": "application/json"
                                 }
                             ],
-                            "body": "{\n  \"Error\": \"Conflict\",\n  \"StatusCode\": 409,\n  \"Description\": \"The request conflicts with the current state of the resource.\",\n  \"Message\": \"A confirmToken is required: run run_blackbox_recovery with dryRun=true first and confirm with the token it returns.\",\n  \"Data\": {\n    \"Code\": \"BlackBoxConfirmationRequired\"\n  }\n}"
+                            "body": "{\n  \"Error\": \"Conflict\",\n  \"StatusCode\": 409,\n  \"Description\": \"The request conflicts with the current state of the resource.\",\n  \"Message\": \"A confirmToken is required: do a dry run of this recovery path first (dryRun true) and confirm with the token it returns.\",\n  \"Data\": {\n    \"Code\": \"BlackBoxConfirmationRequired\"\n  }\n}"
                         }
                     ]
                 },
