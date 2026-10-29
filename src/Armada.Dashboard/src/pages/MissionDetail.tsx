@@ -413,13 +413,13 @@ export default function MissionDetail() {
     if (!mission) return;
     setConfirm({
       open: true,
-      title: t('Delete Mission'),
-      message: t('Permanently delete mission "{{title}}"? This cannot be undone.', { title: mission.title }),
+      title: t('Cancel Mission'),
+      message: t('Cancel mission "{{title}}"? Its status will become Cancelled and the mission record will be kept.', { title: mission.title }),
       onConfirm: async () => {
         setConfirm(c => ({ ...c, open: false }));
         try {
           await deleteMission(mission.id);
-          pushToast('warning', t('Mission "{{title}}" deleted.', { title: mission.title }));
+          pushToast('warning', t('Mission "{{title}}" cancelled. The record remains with Cancelled status.', { title: mission.title }));
           navigate('/missions');
         } catch (e: unknown) {
           setError(t('Delete failed: {{message}}', { message: e instanceof Error ? e.message : String(e) }));

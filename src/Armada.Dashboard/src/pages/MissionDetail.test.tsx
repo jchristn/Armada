@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import MissionDetail from './MissionDetail';
-import { getHarbor, getMission, getMissionLandingPreview, listCaptains, listCheckRuns, listDeployments, listVessels, purgeMission, retryMissionLanding } from '../api/client';
+import { deleteMission, getHarbor, getMission, getMissionLandingPreview, listCaptains, listCheckRuns, listDeployments, listVessels, purgeMission, retryMissionLanding } from '../api/client';
 import { translateTemplate } from '../i18n/runtime';
 import type { Captain, Harbor, LandingPreviewResult, Mission } from '../types/models';
 
@@ -37,7 +37,8 @@ const localeValue = {
   formatRelativeTime: (v: string | null | undefined) => v ?? '',
 };
 vi.mock('../context/LocaleContext', () => ({ useLocale: () => localeValue }));
-vi.mock('../context/NotificationContext', () => ({ useNotifications: () => ({ pushToast: vi.fn() }) }));
+const pushToast = vi.fn();
+vi.mock('../context/NotificationContext', () => ({ useNotifications: () => ({ pushToast }) }));
 vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ isAdmin: true, isTenantAdmin: true }) }));
 vi.mock('../context/WebSocketContext', () => ({
   useWebSocket: () => ({ connected: true, reconnectCount: 0, send: vi.fn(), subscribe: () => () => {} }),
@@ -195,6 +196,35 @@ describe('MissionDetail waiting and landing', () => {
     expect(await screen.findByRole('button', { name: 'Land' })).toBeInTheDocument();
     expect(await screen.findByText('Ready To Land')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Merge in Manage Branches' })).not.toBeInTheDocument();
+  });
+});
+
+describe('MissionDetail cancellation wording', () => {
+  beforeEach(() => {
+    vi.mocked(getMission).mockResolvedValue(mission({ status: 'InProgress' }));
+    vi.mocked(getMissionLandingPreview).mockResolvedValue(preview({ missionStatus: 'InProgress' }));
+    vi.mocked(listVessels).mockResolvedValue(emptyPage as never);
+    vi.mocked(listCaptains).mockResolvedValue(emptyPage as never);
+    vi.mocked(listCheckRuns).mockResolvedValue(emptyPage as never);
+    vi.mocked(listDeployments).mockResolvedValue(emptyPage as never);
+    vi.mocked(deleteMission).mockResolvedValue(undefined as never);
+    pushToast.mockClear();
+  });
+
+  it('explains that Delete cancels and keeps the mission, then reports cancellation', async () => {
+    renderPage();
+    await screen.findByRole('heading', { name: 'Add request logging' });
+    fireEvent.click(screen.getByRole('button', { name: 'Actions' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete' }));
+
+    const dialog = screen.getByRole('alertdialog');
+    expect(within(dialog).getByText(/status will become Cancelled and the mission record will be kept/i)).toBeInTheDocument();
+    expect(within(dialog).queryByText(/permanently delete|cannot be undone/i)).not.toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Yes' }));
+
+    await waitFor(() => expect(deleteMission).toHaveBeenCalledWith('msn_1'));
+    expect(purgeMission).not.toHaveBeenCalled();
+    expect(pushToast).toHaveBeenCalledWith('warning', 'Mission "Add request logging" cancelled. The record remains with Cancelled status.');
   });
 });
 
