@@ -62,7 +62,7 @@ export function usePagedInsight<T, P extends PagedInsightResult<T>>(
     } finally {
       if (current === sequence.current) setLoading(false);
     }
-  }, [pageNumber, pageSize, enabled, shownKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pageNumber, pageSize, enabled, shownKey]);
 
   useEffect(() => { void reload(); }, [reload]);
 
