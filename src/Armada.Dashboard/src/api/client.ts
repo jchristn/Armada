@@ -244,6 +244,20 @@ import type {
   BlackBoxStorageStatus,
   BlackBoxFingerprintTrend,
   BlackBoxFixture,
+  BlackBoxAttemptDiff,
+  BlackBoxCascadeGraph,
+  BlackBoxDoctorPage,
+  BlackBoxDoctorQuery,
+  BlackBoxNearbySuccess,
+  BlackBoxRecoveryStat,
+  BlackBoxRecoveryStatsQuery,
+  BlackBoxTimelinePage,
+  BlackBoxTimelineQuery,
+  BriefLintRequest,
+  BriefLintResult,
+  MissionOverlapPreview,
+  MissionOverlapPreviewRequest,
+  VesselReservationPage,
 } from '../types/blackbox';
 import { MAX_PAGE_SIZE, MAX_PAGES } from './paging';
 
@@ -1654,6 +1668,70 @@ export const backfillBlackBox = (request?: BlackBoxBackfillRequest) =>
     ...(request?.since ? { Since: request.since } : {}),
     ...(request?.maxSubjects !== undefined ? { MaxSubjects: request.maxSubjects } : {}),
   });
+
+// Black box prevention, forensics and operations (BLACKBOX.md section 12; routes in BlackBoxInsightRoutes.cs). A vessel,
+// voyage or entry the caller cannot see is 404. Collections are paged (pageSize 1 to 1000, default 10).
+
+/** Preview a mission's overlaps with the vessel's active work and its brief lint findings; nothing is dispatched. */
+export const previewMissionOverlap = (vesselId: string, request: MissionOverlapPreviewRequest) =>
+  post<MissionOverlapPreview>(`/api/v1/vessels/${encodeURIComponent(vesselId)}/overlap-preview`, {
+    Title: request.title ?? null,
+    Description: request.description ?? null,
+    ...(request.dependsOnMissionId ? { DependsOnMissionId: request.dependsOnMissionId } : {}),
+    ...(request.excludeMissionId ? { ExcludeMissionId: request.excludeMissionId } : {}),
+  });
+/** One page of the vessel's soft directory reservations (active missions in conflict hotspot directories). */
+export const listVesselReservations = (vesselId: string, params?: { pageNumber?: number; pageSize?: number }) =>
+  get<VesselReservationPage>(`/api/v1/vessels/${encodeURIComponent(vesselId)}/reservations${blackBoxQuery({ pageNumber: params?.pageNumber, pageSize: params?.pageSize })}`);
+/** POST twin of listVesselReservations. */
+export const enumerateVesselReservations = (vesselId: string, query?: { pageNumber?: number; pageSize?: number }) =>
+  post<VesselReservationPage>(`/api/v1/vessels/${encodeURIComponent(vesselId)}/reservations/enumerate`, blackBoxPagedBody(query));
+/** Lint a mission brief (warnings only; dispatch never refuses a brief because of them). */
+export const lintMissionBrief = (request: BriefLintRequest) =>
+  post<BriefLintResult>('/api/v1/missions/lint-brief', {
+    Title: request.title ?? null,
+    Description: request.description ?? null,
+    ...(request.vesselId ? { VesselId: request.vesselId } : {}),
+    ...(request.dependsOnMissionId ? { DependsOnMissionId: request.dependsOnMissionId } : {}),
+    ...(request.voyageId ? { VoyageId: request.voyageId } : {}),
+  });
+/** One page of the configuration recommendations that recur on a vessel (windowDays 1 to 365, default 30). */
+export const getVesselBlackBoxDoctor = (vesselId: string, query?: BlackBoxDoctorQuery) =>
+  get<BlackBoxDoctorPage>(`/api/v1/vessels/${encodeURIComponent(vesselId)}/blackbox-doctor${blackBoxQuery({ windowDays: query?.windowDays, pageNumber: query?.pageNumber, pageSize: query?.pageSize })}`);
+/** POST twin of getVesselBlackBoxDoctor. */
+export const enumerateVesselBlackBoxDoctor = (vesselId: string, query?: BlackBoxDoctorQuery) =>
+  post<BlackBoxDoctorPage>(`/api/v1/vessels/${encodeURIComponent(vesselId)}/blackbox-doctor/enumerate`, {
+    ...blackBoxPagedBody(query),
+    ...(query?.windowDays !== undefined ? { WindowDays: query.windowDays } : {}),
+  });
+/** One page of recovery path statistics (runs and success rates per rule and path), most runs first. */
+export const getBlackBoxRecoveryStats = (query?: BlackBoxRecoveryStatsQuery) =>
+  get<EnumerationResult<BlackBoxRecoveryStat>>(`${BLACKBOX}/recovery-stats${blackBoxQuery({ ruleId: query?.ruleId, vesselId: query?.vesselId, pageNumber: query?.pageNumber, pageSize: query?.pageSize })}`);
+/** POST twin of getBlackBoxRecoveryStats. */
+export const enumerateBlackBoxRecoveryStats = (query?: BlackBoxRecoveryStatsQuery) =>
+  post<EnumerationResult<BlackBoxRecoveryStat>>(`${BLACKBOX}/recovery-stats/enumerate`, {
+    ...blackBoxPagedBody(query),
+    ...(query?.ruleId ? { RuleId: query.ruleId } : {}),
+    ...(query?.vesselId ? { VesselId: query.vesselId } : {}),
+  });
+/** What changed between two entries (two attempts of one mission, or any two the caller can see). */
+export const diffBlackBoxEntries = (entryId: string, otherEntryId: string) =>
+  get<BlackBoxAttemptDiff>(`${BLACKBOX}/${encodeURIComponent(entryId)}/diff/${encodeURIComponent(otherEntryId)}`);
+/** One page of the successful landings near a failure that changed the same files, most overlap first. */
+export const listBlackBoxNearbySuccesses = (entryId: string, params?: { pageNumber?: number; pageSize?: number }) =>
+  get<EnumerationResult<BlackBoxNearbySuccess>>(`${BLACKBOX}/${encodeURIComponent(entryId)}/nearby-successes${blackBoxQuery({ pageNumber: params?.pageNumber, pageSize: params?.pageSize })}`);
+/** POST twin of listBlackBoxNearbySuccesses. */
+export const enumerateBlackBoxNearbySuccesses = (entryId: string, query?: { pageNumber?: number; pageSize?: number }) =>
+  post<EnumerationResult<BlackBoxNearbySuccess>>(`${BLACKBOX}/${encodeURIComponent(entryId)}/nearby-successes/enumerate`, blackBoxPagedBody(query));
+/** One page of the entry's combined timeline (entry, notes, mission, dock, merge entry, captain, Harbor); oldest first by default. */
+export const getBlackBoxTimeline = (entryId: string, query?: BlackBoxTimelineQuery) =>
+  get<BlackBoxTimelinePage>(`${BLACKBOX}/${encodeURIComponent(entryId)}/timeline${blackBoxQuery({ order: query?.order, pageNumber: query?.pageNumber, pageSize: query?.pageSize })}`);
+/** POST twin of getBlackBoxTimeline (oldest first unless order is CreatedDescending). */
+export const enumerateBlackBoxTimeline = (entryId: string, query?: BlackBoxTimelineQuery) =>
+  post<BlackBoxTimelinePage>(`${BLACKBOX}/${encodeURIComponent(entryId)}/timeline/enumerate`, blackBoxPagedBody(query));
+/** The voyage's cascade graph: its missions and the DependsOn, CancelledBecause, BlockedBy and Sibling edges between them. */
+export const getVoyageBlackBoxCascade = (voyageId: string) =>
+  get<BlackBoxCascadeGraph>(`/api/v1/voyages/${encodeURIComponent(voyageId)}/blackbox/cascade`);
 
 // ==================== Voyages ====================
 export const listVoyages = (params?: { pageNumber?: number; pageSize?: number; filters?: Record<string, string> }) =>

@@ -1,4 +1,4 @@
-import type { BlackBoxConflictingMission, BlackBoxFinding, BlackBoxRecoveryPath } from './blackbox';
+import type { BlackBoxConflictingMission, BlackBoxFinding, BlackBoxRecoveryPath, BriefLintFinding, MissionOverlapWarning } from './blackbox';
 export interface RunApprovalOptions {
   approveAll: boolean;
   timeoutSeconds: number;
@@ -197,6 +197,8 @@ export interface Vessel {
   /** Per-vessel override for the Audit intent. */
   auditCommand?: string | null;
   allowConcurrentMissions: boolean;
+  /** Chain a mission that overlaps an active one after it (DependsOnMissionId) at dispatch. */
+  serializeOverlappingMissions?: boolean;
   /** Per-vessel auto-approve override for missions; null or absent uses the captain setting. */
   autoApprove?: boolean | null;
   defaultPipelineId: string | null;
@@ -328,6 +330,10 @@ export interface CaptainToolsQuery {
 export type MissionMode = 'Implementation' | 'Audit' | 'Research';
 
 export interface Mission {
+  /** Overlap warnings dispatch returned for this mission (transient; only on the create response). */
+  overlapWarnings?: MissionOverlapWarning[] | null;
+  /** Brief lint findings dispatch returned for this mission (transient; only on the create response). */
+  briefLintWarnings?: BriefLintFinding[] | null;
   id: string;
   tenantId: string | null;
   userId?: string | null;
@@ -525,6 +531,10 @@ export interface TokenUsageSummaryResult {
 
 export interface Voyage {
   approvalOptions?: RunApprovalOptions | null;
+  /** Overlap warnings dispatch returned for the voyage's missions (transient; only on the create response). */
+  overlapWarnings?: MissionOverlapWarning[] | null;
+  /** Brief lint findings dispatch returned for the voyage's missions (transient; only on the create response). */
+  briefLintWarnings?: BriefLintFinding[] | null;
   id: string;
   tenantId: string | null;
   title: string;
