@@ -309,7 +309,7 @@ namespace Armada.Core.BlackBox
                 CreatedUtc = record.CreatedUtc
             };
             entry.StoragePrefix = PrefixFor(entry);
-            entry.Fingerprint = BlackBoxFingerprint.Compute(phase, context.Step, mission.FailureKind, context.CallerMember, mission.FailureReason);
+            entry.Fingerprint = BlackBoxFingerprint.Compute(phase, context.Step, mission.FailureKind, context.CallerMember, mission.FailureReason ?? context.Reason);
             return entry;
         }
 
@@ -399,7 +399,7 @@ namespace Armada.Core.BlackBox
             record.Classification = new BlackBoxClassification
             {
                 Kind = mission.FailureKind,
-                RawReason = mission.FailureReason,
+                RawReason = mission.FailureReason ?? context.Reason,
                 SuspectedCause = context.SuspectedCause ?? FailureCauseEnum.None,
                 CauseRuleId = context.CauseRuleId,
                 IsTransient = context.RuntimeFailureKind.HasValue ? (context.RuntimeFailureKind.Value == RuntimeFailureKindEnum.Transient || context.RuntimeFailureKind.Value == RuntimeFailureKindEnum.UsageLimit || context.RuntimeFailureKind.Value == RuntimeFailureKindEnum.ModelUnavailable) : (bool?)null

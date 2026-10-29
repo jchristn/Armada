@@ -63,6 +63,14 @@ namespace Armada.Core.Services.Interfaces
         Task<bool?> WorktreeExistsAsync(Dock dock, CancellationToken token = default) => Task.FromResult<bool?>(null);
 
         /// <summary>
+        /// Take (and forget) why the last provisioning for a mission failed, or null when none is recorded. ProvisionAsync
+        /// returns null on failure; this says which step failed and with what exception.
+        /// </summary>
+        /// <param name="missionId">Mission identifier.</param>
+        /// <returns>The failure, or null.</returns>
+        DockProvisionFailure? TakeProvisionFailure(string missionId) => null;
+
+        /// <summary>
         /// Recreate a dock's missing worktree from its branch, on the dock's own host, at the dock's recorded path. Never
         /// creates a branch: when the branch is missing from the dock's repository the restore fails. A restored dock is
         /// recorded as a dock.repaired event.

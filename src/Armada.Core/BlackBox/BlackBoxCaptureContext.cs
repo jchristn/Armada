@@ -130,6 +130,12 @@ namespace Armada.Core.BlackBox
         public string? CauseRuleId { get; set; } = null;
 
         /// <summary>
+        /// Why it failed, when the site does not write Mission.FailureReason (a non-terminal entry such as a provisioning
+        /// failure that returns the mission to Pending), or null. Mission.FailureReason wins when set.
+        /// </summary>
+        public string? Reason { get; set; } = null;
+
+        /// <summary>
         /// Free-text note added to the record's capture notes, or null.
         /// </summary>
         public string? Note { get; set; } = null;
