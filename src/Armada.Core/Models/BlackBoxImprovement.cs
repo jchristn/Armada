@@ -28,7 +28,7 @@ namespace Armada.Core.Models
         public string? Evidence { get; set; } = null;
 
         /// <summary>
-        /// Source pointers (file, method).
+        /// Source pointers (repository-relative file:method).
         /// </summary>
         [CollectionBound(BlackBoxLimits.MaxSourcePointers, Reason = "Capped by BlackBoxRecordBounder")]
         public List<string> SourcePointers

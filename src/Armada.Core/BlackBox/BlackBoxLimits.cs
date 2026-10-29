@@ -119,6 +119,18 @@ namespace Armada.Core.BlackBox
         /// <summary>Entries per maintainer bundle.</summary>
         public const int MaxBundleEntries = 50;
 
+        /// <summary>Armada versions listed per maintainer bundle group.</summary>
+        public const int MaxBundleVersions = 10;
+
+        /// <summary>Most UTF-8 bytes of a Markdown maintainer bundle before later groups are left out.</summary>
+        public const int MaxBundleBytes = 1048576;
+
+        /// <summary>Entries of one fingerprint counted by a fingerprint trend.</summary>
+        public const int MaxTrendEntries = 1000;
+
+        /// <summary>Armada versions listed by a fingerprint trend.</summary>
+        public const int MaxTrendVersions = 100;
+
         /// <summary>Sample entry ids reported by purge and garbage collection.</summary>
         public const int MaxSampleIds = 100;
 

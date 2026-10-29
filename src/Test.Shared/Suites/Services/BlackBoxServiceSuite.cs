@@ -163,7 +163,7 @@ namespace Test.Shared.Suites.Services
                 await AssertThrowsAsync<CollectionLimitExceededException>(() => svc.DeleteManyAsync(user, tooMany), "1001 ids").ConfigureAwait(false);
             }));
 
-            cases.Add(Case("status_aggregates_and_wave2", "Retention and storage status, fingerprints and hot spots are tenant-scoped; wave-two operations say they are not implemented", TestTags.Negative, async () =>
+            cases.Add(Case("status_aggregates_and_wave2", "Retention and storage status, fingerprints and hot spots are tenant-scoped; storage migration says it is not implemented; recovery on an unknown entry is not found", TestTags.Negative, async () =>
             {
                 using TestDatabase t = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
                 using BlackBoxRuntime bb = BlackBoxTestKit.Runtime(t.Driver);
@@ -182,8 +182,8 @@ namespace Test.Shared.Suites.Services
                 AssertTrue(gc.DryRun, "gc dry run");
                 BlackBoxBundleResult bundle = await svc.GetBundleAsync(user, new BlackBoxBundleRequest()).ConfigureAwait(false);
                 AssertEqual(1, bundle.EntryCount); AssertContains("maintainer bundle", bundle.Content);
-                await AssertThrowsAsync<NotImplementedException>(() => svc.RunRecoveryAsync(user, "bbx_x", "rp1", new BlackBoxRecoveryRunRequest()), "recovery").ConfigureAwait(false);
-                await AssertThrowsAsync<NotImplementedException>(() => svc.ApplyRecommendationAsync(user, "bbx_x", "cr1", new BlackBoxRecommendationApplyRequest()), "recommendation").ConfigureAwait(false);
+                await AssertThrowsAsync<BlackBoxNotFoundException>(() => svc.RunRecoveryAsync(user, "bbx_x", "rp1", new BlackBoxRecoveryRunRequest()), "recovery on an unknown entry (Services.BlackBoxRecovery covers runs)").ConfigureAwait(false);
+                await AssertThrowsAsync<BlackBoxNotFoundException>(() => svc.ApplyRecommendationAsync(user, "bbx_x", "cr1", new BlackBoxRecommendationApplyRequest()), "recommendation on an unknown entry").ConfigureAwait(false);
                 await AssertThrowsAsync<NotImplementedException>(() => svc.StartStorageMigrationAsync(user, new BlackBoxStorageMigrationRequest()), "migration").ConfigureAwait(false);
                 BlackBoxSettings masked = BlackBoxSettingsSecrets.Mask(new BlackBoxSettings { Storage = new BlackBoxStorageSettings { S3 = new BlackBoxS3Settings { SecretKey = "realsecret", AccessKey = "AKIAREAL" } } }, "********");
                 AssertEqual("********", masked.Storage.S3.SecretKey); AssertNull(masked.Storage.Cifs.Password, "unset stays null");

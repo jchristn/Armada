@@ -1,0 +1,70 @@
+{
+  "name": "scope-001-false-violation",
+  "description": "Garrison msn_mvsqzal6_b1BfR4tnZ29: a false ScopeViolation whose out-of-scope list held a blank entry and a file that was in the mission's scope.",
+  "source": "msn_mvsqzal6_b1BfR4tnZ29 (Garrison; reconstructed from MISSION_BLACKBOX_PLAN.md 16.10)",
+  "rulesVersion": 1,
+  "expectedRuleIds": [
+    "BBX-SCOPE-001"
+  ],
+  "expectedTriage": "ArmadaDefect",
+  "record": {
+    "entryId": "bbx_fixture_scope001",
+    "schemaVersion": 1,
+    "captureMode": "Inline",
+    "state": "Captured",
+    "createdUtc": "2026-10-28T23:40:12Z",
+    "subject": {
+      "subjectType": "Mission",
+      "missionId": "msn_mvsqzal6_b1BfR4tnZ29",
+      "title": "Expose the protocol tools on the Garrison MCP server",
+      "vesselId": "vsl_fixture_garrison",
+      "vesselName": "Garrison",
+      "vesselDefaultBranch": "main",
+      "captainId": "cpt_fixture_codex",
+      "captainRuntime": "Codex",
+      "attempt": 1,
+      "isRescue": false,
+      "branchName": "armada/msn_mvsqzal6_b1BfR4tnZ29"
+    },
+    "status": {
+      "before": "InProgress",
+      "after": "Failed",
+      "changedUtc": "2026-10-28T23:40:12Z"
+    },
+    "site": {
+      "phase": "Completion",
+      "step": "ScopeViolation",
+      "hostKind": "Admiral",
+      "host": "Admiral",
+      "component": "MissionService",
+      "method": "TryFailMissionForScopeViolationAsync",
+      "sourceFile": "src/Armada.Core/Services/MissionService.cs",
+      "armadaVersion": "1.1.0"
+    },
+    "classification": {
+      "kind": "ScopeViolation",
+      "rawReason": "Mission modified files outside its scoped file list: , src/Garrison.Server/Protocols/GarrisonMcpServer.cs",
+      "suspectedCause": "None"
+    },
+    "workspace": {
+      "branchName": "armada/msn_mvsqzal6_b1BfR4tnZ29",
+      "startCommit": "e4f1a20",
+      "startCommitSource": "Mission",
+      "targetBranch": "main",
+      "dirtyPaths": [],
+      "dirtyPathTotal": 0
+    },
+    "scope": {
+      "scopedFiles": [
+        "src/Garrison.Server/Protocols/GarrisonMcpServer.cs",
+        "src/Garrison.Server/Protocols/ProtocolToolCatalog.cs"
+      ],
+      "outOfScopeFiles": [
+        "",
+        "src/Garrison.Server/Protocols/GarrisonMcpServer.cs"
+      ],
+      "outOfScopeFileTotal": 2,
+      "boundaryFindings": []
+    }
+  }
+}

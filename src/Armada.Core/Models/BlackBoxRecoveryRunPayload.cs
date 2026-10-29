@@ -33,6 +33,26 @@ namespace Armada.Core.Models
         public bool Succeeded { get; set; } = false;
 
         /// <summary>
+        /// Recommendation applied, when the run applied a configuration recommendation (PathId then holds the same id).
+        /// </summary>
+        public string? RecommendationId { get; set; } = null;
+
+        /// <summary>
+        /// Steps the run executed (0 for a dry run).
+        /// </summary>
+        public int StepsRun { get; set; } = 0;
+
+        /// <summary>
+        /// Steps that failed.
+        /// </summary>
+        public int StepsFailed { get; set; } = 0;
+
+        /// <summary>
+        /// User who ran it, or null.
+        /// </summary>
+        public string? UserId { get; set; } = null;
+
+        /// <summary>
         /// Instantiate.
         /// </summary>
         public BlackBoxRecoveryRunPayload()

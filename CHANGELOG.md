@@ -10,6 +10,15 @@ All notable changes to Armada are documented in this file.
 - After building and verifying both Harbor DMGs, `build-harbor-app.sh` installs the native app into `~/Applications`, staging and signature-checking a fresh bundle before replacement. `--no-install` opts out, and `--no-build` remains verification-only.
 - Helm's NuGet tool package preserves battery fixture `.gitignore` and `.gitattributes` files instead of excluding them with NU5119 warnings. Installer verification checks every packaged framework for those files.
 
+### Black box advisor, triage and recovery actions
+
+- Every black box entry is analyzed by a versioned rule catalog (42 rules, `BBX-LAND-001` to `BBX-UNKNOWN-001`, every failure phase covered): why findings with confidence and evidence, configuration recommendations, Armada improvement hypotheses with source pointers, ranked recovery paths with MCP, REST and CLI commands, a weighted triage verdict (a tie reports Unknown and both candidates) and a plain-language summary. Entries analyzed with older rules are re-analyzed in the background.
+- Recovery paths and configuration recommendations run only the action recorded in the entry: a dry run returns the plan and a 10-minute, single-use confirm token bound to the entry, the path and the mission version; the confirmed run re-checks the mission, refuses data-loss paths without `acknowledgeDataLoss`, authorizes every step as if the caller called the tool directly, annotates the entry and emits `blackbox.recovery_run`.
+- The effective configuration in an entry names the source of every value (mission, voyage, vessel, workflow profile, captain, persona, global or default), with the landing handler's precedence.
+- With `blackBox.summaryEndpointId` set, a model endpoint writes the entry summary (labeled model-written); any failure keeps the rules summary.
+- The user brief leads with what you can do and drops rule ids, source pointers and stack frames; the maintainer brief leads with the code site, triage, rule ids, fingerprint and occurrences. The maintainer bundle groups up to 50 entries by fingerprint and asks for ranked Armada mission briefs; fingerprint trends count a failure mode per Armada version; entries export as sanitized regression fixtures.
+- `update_vessel` accepts `landingMode` (or `Default` to clear the vessel's override).
+
 ### Black box evidence fixes
 
 - A verified fast-forward into a dirty target checkout reports the checkout's real `git status --porcelain` paths (tracked and untracked) in `GitDirtyCheckoutException.ModifiedPaths`, instead of parsing a sentence into a garbage path.
