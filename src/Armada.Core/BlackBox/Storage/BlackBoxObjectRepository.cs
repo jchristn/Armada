@@ -67,7 +67,7 @@ namespace Armada.Core.BlackBox.Storage
                 EntryId = entry.Id,
                 TenantId = entry.TenantId,
                 Name = BlackBoxLimits.Clip(name, 255)!,
-                ContentType = String.IsNullOrEmpty(contentType) ? "application/octet-stream" : contentType,
+                ContentType = String.IsNullOrEmpty(contentType) ? "application/octet-stream" : BlackBoxLimits.Clip(contentType, 255)!,
                 ContentEncoding = encoded.ContentEncoding,
                 SizeBytes = encoded.Data.LongLength,
                 UncompressedBytes = encoded.UncompressedBytes,

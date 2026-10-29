@@ -1128,7 +1128,7 @@ namespace Armada.Core.Database.Mysql
                         entry_id VARCHAR(64) NOT NULL,
                         tenant_id VARCHAR(64),
                         name VARCHAR(255) NOT NULL,
-                        content_type VARCHAR(64) NOT NULL,
+                        content_type VARCHAR(255) NOT NULL,
                         content_encoding VARCHAR(64) NOT NULL,
                         size_bytes BIGINT NOT NULL DEFAULT 0,
                         uncompressed_bytes BIGINT NOT NULL DEFAULT 0,

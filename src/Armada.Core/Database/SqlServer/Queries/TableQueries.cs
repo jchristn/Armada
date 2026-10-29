@@ -2096,7 +2096,7 @@ namespace Armada.Core.Database.SqlServer.Queries
                         entry_id NVARCHAR(64) NOT NULL,
                         tenant_id NVARCHAR(64),
                         name NVARCHAR(255) NOT NULL,
-                        content_type NVARCHAR(64) NOT NULL,
+                        content_type NVARCHAR(255) NOT NULL,
                         content_encoding NVARCHAR(64) NOT NULL,
                         size_bytes BIGINT NOT NULL DEFAULT 0,
                         uncompressed_bytes BIGINT NOT NULL DEFAULT 0,
