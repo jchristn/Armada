@@ -427,6 +427,9 @@ namespace Test.Shared.Suites.Services
                 mission.RedispatchAttempts = 2;
                 mission.TotalRuntimeMs = 500;
                 await db.Missions.UpdateAsync(mission).ConfigureAwait(false);
+                string metadata = Path.Combine(h.Settings.LogDirectory, "docks");
+                Directory.CreateDirectory(metadata);
+                File.WriteAllText(Path.Combine(metadata, mission.DockId + ".start"), "1111111111111111111111111111111111111111\n");
 
                 await h.Missions.HandleCompletionAsync(captain, mission.Id).ConfigureAwait(false);
 
