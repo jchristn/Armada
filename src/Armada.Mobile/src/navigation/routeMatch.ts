@@ -1,6 +1,21 @@
 import { DASHBOARD_ROUTES } from './dashboardRoutes.generated';
 import type { DashboardRoute } from './routeTypes';
 
+/**
+ * Black box routes (MISSION_BLACKBOX_PLAN.md 11.1 and 11.5), served by the app before the dashboard's App.tsx lists
+ * them; once it does, the generated table carries them and these entries are skipped.
+ */
+const BLACKBOX_ROUTES: DashboardRoute[] = [
+  { pattern: '/blackbox', dashboard: '/blackbox', tab: 'work', title: 'Black Box', workstream: 'W2.2', redirect: null, file: '(app)/(work)/blackbox/index.tsx' },
+  { pattern: '/blackbox/:id', dashboard: '/blackbox/:id', tab: 'work', title: 'Black Box', workstream: 'W2.2', redirect: null, file: '(app)/(work)/blackbox/[id].tsx' },
+];
+
+/** Every route a link may open: the generated dashboard table plus the black box routes it does not list yet. */
+export const APP_ROUTE_TABLE: DashboardRoute[] = [
+  ...DASHBOARD_ROUTES,
+  ...BLACKBOX_ROUTES.filter((r) => !DASHBOARD_ROUTES.some((d) => d.pattern === r.pattern)),
+];
+
 export interface RouteMatch {
   route: DashboardRoute;
   params: Record<string, string>;
@@ -30,7 +45,7 @@ export function decodeParam(segment: string): string | null {
  * Find the dashboard route for an app path; static segments beat parameters (as in both routers). A parameter that
  * does not decode to a single safe segment matches nothing (see decodeParam).
  */
-export function matchRoute(path: string, routes: DashboardRoute[] = DASHBOARD_ROUTES): RouteMatch | null {
+export function matchRoute(path: string, routes: DashboardRoute[] = APP_ROUTE_TABLE): RouteMatch | null {
   const clean = path.split(/[?#]/)[0];
   const parts = split(clean);
   let best: RouteMatch | null = null;
@@ -66,5 +81,5 @@ export function matchRoute(path: string, routes: DashboardRoute[] = DASHBOARD_RO
 
 /** The route entry for a pattern (for screens that know their own pattern). */
 export function routeByPattern(pattern: string): DashboardRoute | undefined {
-  return DASHBOARD_ROUTES.find((r) => r.pattern === pattern);
+  return APP_ROUTE_TABLE.find((r) => r.pattern === pattern);
 }
