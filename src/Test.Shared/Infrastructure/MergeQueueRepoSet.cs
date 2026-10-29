@@ -76,6 +76,23 @@ namespace Test.Shared.Infrastructure
         }
 
         /// <summary>
+        /// Create and push a branch to origin without creating a local vessel branch.
+        /// </summary>
+        /// <param name="branch">Branch name.</param>
+        /// <param name="file">Relative file path.</param>
+        /// <param name="content">File content.</param>
+        public void PushRemoteOnlyBranch(string branch, string file, string content)
+        {
+            Git(Work, "fetch", "-q", "origin");
+            Git(Work, "checkout", "-q", "-B", branch, "origin/main");
+            File.WriteAllText(Path.Combine(Work, file), content);
+            Git(Work, "add", file);
+            Git(Work, "commit", "-q", "-m", "Change " + file + " on " + branch);
+            Git(Work, "push", "-q", "origin", branch + ":refs/heads/" + branch);
+            Git(Work, "checkout", "-q", "--detach", "origin/main");
+        }
+
+        /// <summary>
         /// Commit a change on origin's main.
         /// </summary>
         /// <param name="file">Relative file path.</param>

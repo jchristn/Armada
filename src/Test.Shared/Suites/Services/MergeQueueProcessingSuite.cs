@@ -58,6 +58,44 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("remote_only_branch_lands_and_completes_mission", "Branch present only on origin lands and completes the mission", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    MergeQueueRepoSet repos = MergeQueueRepoSet.Create();
+                    repos.PushRemoteOnlyBranch("feature/remote-only", "remote-only.txt", "remote change\n");
+                    MergeQueueService queue = CreateQueue(testDb.Driver);
+                    Mission mission = await CreateMissionAsync(testDb.Driver, repos).ConfigureAwait(false);
+                    MergeEntry entry = await EnqueueAsync(queue, testDb.Driver, repos, "feature/remote-only", mission.Id, null).ConfigureAwait(false);
+
+                    MergeEntry? processed = await queue.ProcessSingleAsync(entry.Id).ConfigureAwait(false);
+
+                    AssertEqual(MergeStatusEnum.Landed, processed!.Status, "entry status; output: " + processed.TestOutput);
+                    AssertTrue(repos.OriginHasFile("main", "remote-only.txt"), "origin main contains the landed change");
+                    Mission? updated = await testDb.Driver.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
+                    AssertEqual(MissionStatusEnum.Complete, updated!.Status);
+                }
+            }));
+
+            cases.Add(CaseAsync("missing_branch_reports_not_found", "Missing branch is reported as not found", TestTags.Negative, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    MergeQueueRepoSet repos = MergeQueueRepoSet.Create();
+                    MergeQueueService queue = CreateQueue(testDb.Driver);
+                    Mission mission = await CreateMissionAsync(testDb.Driver, repos).ConfigureAwait(false);
+                    MergeEntry entry = await EnqueueAsync(queue, testDb.Driver, repos, "feature/missing", mission.Id, null).ConfigureAwait(false);
+
+                    MergeEntry? processed = await queue.ProcessSingleAsync(entry.Id).ConfigureAwait(false);
+
+                    AssertEqual(MergeStatusEnum.Failed, processed!.Status);
+                    AssertContains("Branch not found", processed.TestOutput ?? "");
+                    AssertFalse((processed.TestOutput ?? "").Contains("Merge conflict", StringComparison.OrdinalIgnoreCase), "missing branch is not a content conflict");
+                    Mission? updated = await testDb.Driver.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
+                    AssertEqual(MissionStatusEnum.LandingFailed, updated!.Status);
+                }
+            }));
+
             cases.Add(CaseAsync("conflict_fails_entry_and_mission", "Merge conflict fails the entry and marks the mission LandingFailed", TestTags.Negative, async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
