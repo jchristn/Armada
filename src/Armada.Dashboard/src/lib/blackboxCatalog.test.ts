@@ -13,6 +13,14 @@ import settings from '../components/settings/BlackBoxSettings.tsx?raw';
 import blackBoxPage from '../pages/BlackBox.tsx?raw';
 import entryPage from '../pages/BlackBoxEntry.tsx?raw';
 import blackBoxLib from './blackbox.ts?raw';
+import dispatchWarnings from '../components/blackbox/DispatchWarnings.tsx?raw';
+import timeline from '../components/blackbox/BlackBoxTimeline.tsx?raw';
+import attemptDiff from '../components/blackbox/BlackBoxAttemptDiff.tsx?raw';
+import nearbySuccesses from '../components/blackbox/BlackBoxNearbySuccesses.tsx?raw';
+import reservationsCard from '../components/blackbox/VesselReservationsCard.tsx?raw';
+import doctorCard from '../components/blackbox/VesselBlackBoxDoctorCard.tsx?raw';
+import cascadeGraph from '../components/blackbox/VoyageCascadeGraph.tsx?raw';
+import recoveryStatsTab from '../components/blackbox/BlackBoxRecoveryStatsTab.tsx?raw';
 import type { I18nCatalog } from '../i18n/runtime';
 
 const S = "'((?:[^'\\\\]|\\\\.)*)'";
@@ -20,7 +28,24 @@ const CALL = new RegExp(`\\bt\\(\\s*${S}`, 'g');
 const FIELD = new RegExp(`\\b(?:title|hint|confirmLabel|label|tooltip|help):\\s*${S}`, 'g');
 const PROP = /\b(?:title|confirmLabel|ariaLabel|refreshTitle)="([^"]+)"/g;
 
-const SOURCES = [panel, actionDialog, evidence, notes, resolveDialog, entriesTab, fingerprintsTab, hotspotsTab, retentionTab, settings, blackBoxPage, entryPage, blackBoxLib];
+const SOURCES = [
+  panel, actionDialog, evidence, notes, resolveDialog, entriesTab, fingerprintsTab, hotspotsTab, retentionTab, settings, blackBoxPage, entryPage, blackBoxLib,
+  dispatchWarnings, timeline, attemptDiff, nearbySuccesses, reservationsCard, doctorCard, cascadeGraph, recoveryStatsTab,
+];
+
+/** Label maps (Record<Kind, string>) in the insight components, passed to t() as data. */
+const LABEL_MAPS = [dispatchWarnings, timeline, cascadeGraph];
+const MAP_BLOCK = /Record<\w+, string> = \{([\s\S]*?)\n\};/g;
+const MAP_VALUE = new RegExp(`:\\s*${S}`, 'g');
+
+/** Insight strings used on pages outside the black box sources (dispatch, vessel form, voyage page). */
+const INSIGHT_PAGE_KEYS = [
+  'Serialize Overlapping Missions',
+  'When a new mission overlaps an active mission on this vessel (shared files or a reserved hotspot directory), dispatch chains it after that mission so it starts once that one lands. Off (the default) dispatches it right away with an overlap warning. A dependency you set yourself is never replaced.',
+  'Dispatched voyage with {{missionCount}}, with {{count}} warning(s)',
+  'Cascade graph',
+  "Which failure took the others down: the voyage's missions and the dependency, cancellation, blocking and sibling edges between them.",
+];
 
 /** Strings passed to t() as data: the nav item, the retention stat labels and the settings field labels. */
 const SHARED_KEYS = [
@@ -32,7 +57,12 @@ const SHARED_KEYS = [
 ];
 
 function blackBoxKeys(): string[] {
-  const keys = new Set<string>(SHARED_KEYS);
+  const keys = new Set<string>([...SHARED_KEYS, ...INSIGHT_PAGE_KEYS]);
+  for (const source of LABEL_MAPS) {
+    for (const block of source.matchAll(MAP_BLOCK)) {
+      for (const m of block[1].matchAll(MAP_VALUE)) keys.add(m[1].replace(/\\'/g, "'"));
+    }
+  }
   for (const source of SOURCES) {
     for (const re of [CALL, FIELD]) {
       for (const m of source.matchAll(re)) {
@@ -58,6 +88,10 @@ describe('Black box i18n catalog', () => {
     expect(keys).toContain('What would have prevented it');
     expect(keys).toContain('I understand that this can delete work that cannot be recovered.');
     expect(keys).toContain('Save Black Box Settings');
+    expect(keys).toContain('Overlap warnings');
+    expect(keys).toContain('Sibling failure');
+    expect(keys).toContain('Merge entry');
+    expect(keys).toContain('Serialize Overlapping Missions');
     expect(keys.length).toBeGreaterThan(300);
   });
 
