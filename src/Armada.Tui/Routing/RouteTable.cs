@@ -162,6 +162,8 @@ namespace Armada.Tui.Routing
             r.Add(Screen("/skills/:id", "Skill", "SkillScreen", "W6.3"));
             r.Add(Screen("/ask/:threadId?", "Ask Armada", "AskScreen", "W2"));
             r.Add(Screen("/inbox", "Needs You", "InboxScreen", "W3.2"));
+            r.Add(Screen("/blackbox", "Black Box", "BlackBoxScreen", "BB"));
+            r.Add(Screen("/blackbox/:id", "Black Box Entry", "BlackBoxScreen", "BB"));
             r.Add(Hub("/delivery", "Delivery", delivery));
             r.Add(Hub("/fleet-actions", "Fleet Actions", fleetActions));
             r.Add(Screen("/fleet-actions/runs/:id", "Fleet Action Run", "FleetActionRunScreen", "W3.7"));

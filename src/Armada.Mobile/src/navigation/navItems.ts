@@ -75,32 +75,8 @@ export const HOME_ITEM: MobileNavItem = { key: 'home', to: appPathFor(dashboardM
 export const PREFERENCES_ITEM: MobileNavItem = { key: 'preferences', to: '/preferences', label: 'Preferences', icon: 'color-palette-outline' };
 export const PROFILES_ITEM: MobileNavItem = { key: 'profiles', to: '/profiles', label: 'Servers', icon: 'swap-horizontal-outline' };
 
-/**
- * Black Box (recent failure records, MISSION_BLACKBOX_PLAN.md 11.5), listed under OPERATIONS after Missions. The
- * dashboard's nav model is used as is once it lists /blackbox itself; until then the app adds the item.
- */
-export const BLACKBOX_ITEM: MobileNavItem = {
-  key: '/blackbox',
-  to: '/blackbox',
-  label: 'Black Box',
-  icon: 'file-tray-full-outline',
-  tooltip: 'What happened when missions and voyages failed, and how to recover',
-};
-
-/** Adds the Black Box item to OPERATIONS when the shared nav model does not list it yet. */
-export function withBlackBox(sections: MobileNavSection[]): MobileNavSection[] {
-  if (sections.some((s) => s.items.some((i) => i.to === BLACKBOX_ITEM.to))) return sections;
-  return sections.map((s) => {
-    if (s.key !== 'operations') return s;
-    const at = s.items.findIndex((i) => i.to === '/missions');
-    const items = [...s.items];
-    items.splice(at >= 0 ? at + 1 : items.length, 0, BLACKBOX_ITEM);
-    return { ...s, items };
-  });
-}
-
 /** Every dashboard nav section, in dashboard order. */
-export const NAV_SECTIONS: MobileNavSection[] = withBlackBox(navModelSections.map(fromSection));
+export const NAV_SECTIONS: MobileNavSection[] = navModelSections.map(fromSection);
 
 /** Which phone tab lists each section (Work: day-to-day operations; More: setup and administration). */
 export const SECTION_TAB: Record<string, TabKey> = {

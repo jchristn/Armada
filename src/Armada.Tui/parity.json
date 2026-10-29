@@ -97,6 +97,22 @@
     },
     {
       "kind": "route",
+      "key": "/blackbox",
+      "status": "not-applicable",
+      "tui": "BlackBoxScreen",
+      "workstream": "BB",
+      "notes": "TUI BlackBoxScreen comes with the TUI black box work (MISSION_BLACKBOX_PLAN.md 11.2); the route opens a placeholder until then"
+    },
+    {
+      "kind": "route",
+      "key": "/blackbox/:id",
+      "status": "not-applicable",
+      "tui": "BlackBoxScreen",
+      "workstream": "BB",
+      "notes": "TUI BlackBoxScreen comes with the TUI black box work (MISSION_BLACKBOX_PLAN.md 11.2); the route opens a placeholder until then"
+    },
+    {
+      "kind": "route",
       "key": "/captains",
       "status": "implemented",
       "tui": "HubScreen",
@@ -4782,6 +4798,14 @@
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.blackBox",
+      "status": "not-applicable",
+      "tui": "ServerSettingsScreen",
+      "workstream": "W7.7",
+      "notes": "Black box storage and retention are edited on the dashboard Settings page; the TUI admin section comes with the TUI black box work"
     },
     {
       "kind": "setting",
