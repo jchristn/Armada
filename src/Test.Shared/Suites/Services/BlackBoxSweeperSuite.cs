@@ -73,7 +73,48 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(0, (await bb.Sweeper.BackfillAsync(DateTime.UtcNow.AddDays(1), 10).ConfigureAwait(false)).Captured, "since filter");
             }));
 
+            cases.Add(Case("recovers_exit_code", "A swept or backfilled crash recovers the exit code from FailureReason or the captain.process_exited event, so the analysis does not say unknown; a text with no code leaves it unset", TestTags.Positive, async () =>
+            {
+                using TestDatabase t = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                using BlackBoxRuntime bb = BlackBoxTestKit.Runtime(t.Driver);
+                Mission fromReason = await BlackBoxTestKit.FailedMissionAsync(t.Driver, null, null, MissionFailureKindEnum.Crash, "Agent process exited with code 134.").ConfigureAwait(false);
+                Mission fromEvent = await BlackBoxTestKit.FailedMissionAsync(t.Driver, null, null, MissionFailureKindEnum.Crash, "The agent stopped before finishing.").ConfigureAwait(false);
+                ArmadaEvent exited = new ArmadaEvent("captain.process_exited", "Agent process 4242 exited with code 137 for captain bb-captain");
+                exited.MissionId = fromEvent.Id;
+                await t.Driver.Events.CreateAsync(exited).ConfigureAwait(false);
+                Mission unknown = await BlackBoxTestKit.FailedMissionAsync(t.Driver, null, null, MissionFailureKindEnum.Crash, "Agent process exited with code unknown.").ConfigureAwait(false);
+
+                BlackBoxBackfillResult sweep = await bb.Sweeper.SweepAsync().ConfigureAwait(false);
+                AssertEqual(3, sweep.Captured, "three crashes captured");
+                await bb.Queue.DrainAsync().ConfigureAwait(false);
+
+                BlackBoxRecord reasonRecord = await RecordAsync(t, bb, fromReason.Id).ConfigureAwait(false);
+                AssertEqual(134, reasonRecord.Mechanism?.ExitCode, "exit code parsed from FailureReason");
+                AssertTrue(reasonRecord.Truncation.Notes.Any(n => n.Contains("Exit code 134 recovered from the mission's failure reason", StringComparison.Ordinal)), "the recovery is noted");
+                string reasonWhy = String.Join(" ", reasonRecord.Analysis!.Why.Select(w => w.Statement));
+                AssertContains("exited with code 134", reasonWhy, "the analysis names the code");
+                AssertFalse(reasonWhy.Contains("code unknown", StringComparison.Ordinal), "the analysis does not say unknown");
+
+                BlackBoxRecord eventRecord = await RecordAsync(t, bb, fromEvent.Id).ConfigureAwait(false);
+                AssertEqual(137, eventRecord.Mechanism?.ExitCode, "exit code parsed from captain.process_exited");
+                AssertTrue(eventRecord.Truncation.Notes.Any(n => n.Contains("captain.process_exited", StringComparison.Ordinal)), "the event source is noted");
+
+                BlackBoxRecord unknownRecord = await RecordAsync(t, bb, unknown.Id).ConfigureAwait(false);
+                AssertNull(unknownRecord.Mechanism?.ExitCode, "no code in the text leaves it unset");
+
+                AssertEqual(1, BlackBoxRecoveredFacts.ParseExitCode("exit code: 1"), "exit code: 1");
+                AssertEqual(-1, BlackBoxRecoveredFacts.ParseExitCode("Process exited with code -1"), "negative code");
+                AssertNull(BlackBoxRecoveredFacts.ParseExitCode("exited with code unknown"), "unknown");
+                AssertNull(BlackBoxRecoveredFacts.ParseExitCode(null), "null");
+            }));
+
             return new TestSuiteDescriptor(suiteId: SuiteId, displayName: "Black box sweeper", cases: cases);
+        }
+
+        private static async Task<BlackBoxRecord> RecordAsync(TestDatabase t, BlackBoxRuntime bb, string missionId)
+        {
+            BlackBoxEntry entry = (await t.Driver.BlackBoxEntries.ReadCurrentByMissionAsync(missionId).ConfigureAwait(false))!;
+            return await bb.Pipeline.LoadRecordAsync(entry).ConfigureAwait(false);
         }
 
         private static TestCaseDescriptor Case(string caseId, string displayName, string tag, Func<Task> body)
