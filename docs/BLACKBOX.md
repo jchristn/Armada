@@ -710,7 +710,7 @@ Grep for `TODO(blackbox-wave2` to find each placeholder in code.
 | capture sites | Done: every failure write in plan 5.1 is wired (see 3.2); `VesselDeleted` waits on the vessel routes and MCP tools | `VesselRoutes`, `McpVesselTools` |
 | enrichment | Done: git forensics, conflict attribution, attempts, evidence objects, configuration with sources, optional model-written summary | `BlackBoxPipeline` |
 | advisor and recovery | Done: rule catalog, advisor, triage, recovery runs and recommendation applies (see 3.13 to 3.16) | `BlackBoxService` |
-| CLI | `armada blackbox export-fixture <id>`: call `ExportFixtureAsync` and write it with `BlackBoxFixtureExporter.WriteAsync` into `src/Test.Shared/Fixtures/BlackBox` | Helm |
+| CLI | Done: every `armada blackbox` command of plan 11.3 plus `mission failure` and `voyage failure`; `export-fixture` writes through `BlackBoxFixtureExporter.WriteAsync` into `src/Test.Shared/Fixtures/BlackBox` inside the repository (else `-o`) | Helm (`BlackBox*Command`), `Services.HelmBlackBox` |
 | surfaces | `GetFingerprintTrendAsync` (REST/MCP route), the recovery and recommendation tools (`run_blackbox_recovery`, `apply_blackbox_recommendation`); pass `authorKind` Operator from human UIs | REST, MCP, dashboard |
 | storage | Blobject targets (Disk, S3, AzureBlob, GoogleCloud, Cifs, Nfs), storage migration job, doctor check, storage inventory | `BlackBoxStoreFactory.CreateBuiltIn`, `BlackBoxService.StartStorageMigrationAsync`, `GetStorageMigrationAsync` |
 | gc | Quotas, vessel and mission cascades, orphan sweep, expiry recompute on policy change | `BlackBoxGarbageCollector.EnforceQuotasAsync`, `CascadeAsync`, `SweepOrphansAsync` |
