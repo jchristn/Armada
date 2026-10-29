@@ -28,9 +28,9 @@ administrator).
 | MCP tools | 210 | 8 |
 | WebSocket endpoints | 2 | 1 |
 | WebSocket commands | 62 | 0 |
-| WebSocket event types | 68 | 0 |
+| WebSocket event types | 76 | 0 |
 | CLI commands | 63 | 0 |
-| Settings keys | 218 | 12 |
+| Settings keys | 272 | 12 |
 
 ## REST API
 
@@ -731,6 +731,14 @@ Generic events carry a `message` and the payload `{ entityType, entityId, captai
 | `ask.tool` | user | `threadId`, `turnId`, `phase`, `id`, `name`, `arguments`, `ok`, `elapsedMs`, `result`, `permissionDenied` |
 | `ask.turn` | user | `threadId`, `turnId`, `state`, `messageId`, `error` |
 | `ask.work` | user | `threadId`, `trackedWorkId`, `snapshot`, `trackedWork` |
+| `blackbox.analyzed` | tenant | `BlackBoxAnalyzedPayload` + `entryId`, `missionId`, `voyageId`, `state`, `triage`, `rulesVersion` |
+| `blackbox.capture_failed` | tenant | `BlackBoxCaptureFailedPayload` + `missionId`, `voyageId`, `step`, `error` |
+| `blackbox.captured` | tenant | `BlackBoxCapturedPayload` + `entryId`, `missionId`, `voyageId`, `vesselId`, `phase`, `step`, `kind`, `attempt`, `captureMode` |
+| `blackbox.deleted` | tenant | `BlackBoxDeletedPayload` + `entryId`, `missionId`, `voyageId`, `reason` |
+| `blackbox.gc_completed` | tenant | `BlackBoxGcReport` + `dryRun`, `startedUtc`, `finishedUtc`, `durationMs`, `expired`, `evicted`, `cascaded`, `retriedDeletes`, `orphansRemoved`, `objectsMissing`, `bytesFreed`, `failures`, `candidateEntryIds`, `errors` |
+| `blackbox.recovery_run` | tenant | `BlackBoxRecoveryRunPayload` + `entryId`, `pathId`, `dryRun`, `succeeded` |
+| `blackbox.resolved` | tenant | `BlackBoxResolvedPayload` + `entryId`, `missionId`, `voyageId`, `resolution` |
+| `blackbox.storage_fallback` | tenant | `BlackBoxStorageFallbackPayload` + `entryId`, `from`, `to`, `error` |
 | `captain.batch_deleted` | tenant | generic |
 | `captain.changed` | tenant | `id`, `name`, `state` |
 | `captain.launched` | tenant | generic |
@@ -890,6 +898,60 @@ install with the home directory written as `~`; defaults are not frozen (see COM
 | `ask.trackerIntervalSeconds` | int | `5` |  |
 | `ask.turnTimeoutMinutes` | int | `15` |  |
 | `autoMergePullRequests` | bool | `false` |  |
+| `blackBox` | object |  |  |
+| `blackBox.captureTimeoutMs` | int | `2000` |  |
+| `blackBox.enabled` | bool | `true` |  |
+| `blackBox.retention` | object |  |  |
+| `blackBox.retention.deleteWithMission` | bool | `false` |  |
+| `blackBox.retention.deleteWithVessel` | bool | `true` |  |
+| `blackBox.retention.gcBatchSize` | int | `200` |  |
+| `blackBox.retention.gcIntervalMinutes` | int | `60` |  |
+| `blackBox.retention.keepLatestPerMission` | bool | `true` |  |
+| `blackBox.retention.maxEntriesPerVessel` | int | `1000` |  |
+| `blackBox.retention.maxTotalBytes` | long | `1073741824` |  |
+| `blackBox.retention.orphanGraceHours` | int | `24` |  |
+| `blackBox.retention.resolvedRetentionDays` | int | `30` |  |
+| `blackBox.retention.retentionDays` | int | `180` |  |
+| `blackBox.storage` | object |  |  |
+| `blackBox.storage.azureBlob` | object |  |  |
+| `blackBox.storage.azureBlob.accessKey` | string | `null` |  |
+| `blackBox.storage.azureBlob.accountName` | string | `null` |  |
+| `blackBox.storage.azureBlob.connectionString` | string | `null` |  |
+| `blackBox.storage.azureBlob.container` | string | `null` |  |
+| `blackBox.storage.cifs` | object |  |  |
+| `blackBox.storage.cifs.domain` | string | `null` |  |
+| `blackBox.storage.cifs.hostname` | string | `null` |  |
+| `blackBox.storage.cifs.password` | string | `null` |  |
+| `blackBox.storage.cifs.share` | string | `null` |  |
+| `blackBox.storage.cifs.username` | string | `null` |  |
+| `blackBox.storage.compress` | bool | `true` |  |
+| `blackBox.storage.disk` | object |  |  |
+| `blackBox.storage.disk.directory` | string | `null` |  |
+| `blackBox.storage.fallbackToDatabase` | bool | `true` |  |
+| `blackBox.storage.googleCloud` | object |  |  |
+| `blackBox.storage.googleCloud.bucket` | string | `null` |  |
+| `blackBox.storage.googleCloud.credentialsPath` | string | `null` |  |
+| `blackBox.storage.googleCloud.projectId` | string | `null` |  |
+| `blackBox.storage.keyPrefix` | string | `"armada/blackbox"` |  |
+| `blackBox.storage.maxEntryBytes` | int | `8388608` |  |
+| `blackBox.storage.maxEvidenceObjectBytes` | int | `1048576` |  |
+| `blackBox.storage.nfs` | object |  |  |
+| `blackBox.storage.nfs.exportPath` | string | `null` |  |
+| `blackBox.storage.nfs.hostname` | string | `null` |  |
+| `blackBox.storage.s3` | object |  |  |
+| `blackBox.storage.s3.accessKey` | string | `null` |  |
+| `blackBox.storage.s3.bucket` | string | `null` |  |
+| `blackBox.storage.s3.endpoint` | string | `null` |  |
+| `blackBox.storage.s3.region` | string | `"us-east-1"` |  |
+| `blackBox.storage.s3.secretKey` | string | `null` |  |
+| `blackBox.storage.s3.usePathStyle` | bool | `true` |  |
+| `blackBox.storage.s3.useSsl` | bool | `true` |  |
+| `blackBox.storage.target` | enum BlackBoxStorageTargetEnum (Database\|Disk\|S3\|AzureBlob\|GoogleCloud\|Cifs\|Nfs\|Unknown) | `"Database"` |  |
+| `blackBox.summaryEndpointId` | string | `null` |  |
+| `blackBox.sweeper` | object |  |  |
+| `blackBox.sweeper.intervalSeconds` | int | `60` |  |
+| `blackBox.sweeper.maxEnrichmentAttempts` | int | `5` |  |
+| `blackBox.sweeper.pageSize` | int | `100` |  |
 | `blockDependentsOfFailedStages` | bool | `false` |  |
 | `branchCleanupPolicy` | enum BranchCleanupPolicyEnum (LocalOnly\|LocalAndRemote\|None) | `"LocalOnly"` |  |
 | `captainCrashLoopThreshold` | int | `3` |  |

@@ -14413,6 +14413,127 @@
         "generic": false
       },
       {
+        "type": "blackbox.analyzed",
+        "scope": "tenant",
+        "hasMessage": true,
+        "payloadType": "BlackBoxAnalyzedPayload",
+        "fields": [
+          "entryId",
+          "missionId",
+          "voyageId",
+          "state",
+          "triage",
+          "rulesVersion"
+        ],
+        "generic": false
+      },
+      {
+        "type": "blackbox.capture_failed",
+        "scope": "tenant",
+        "hasMessage": true,
+        "payloadType": "BlackBoxCaptureFailedPayload",
+        "fields": [
+          "missionId",
+          "voyageId",
+          "step",
+          "error"
+        ],
+        "generic": false
+      },
+      {
+        "type": "blackbox.captured",
+        "scope": "tenant",
+        "hasMessage": true,
+        "payloadType": "BlackBoxCapturedPayload",
+        "fields": [
+          "entryId",
+          "missionId",
+          "voyageId",
+          "vesselId",
+          "phase",
+          "step",
+          "kind",
+          "attempt",
+          "captureMode"
+        ],
+        "generic": false
+      },
+      {
+        "type": "blackbox.deleted",
+        "scope": "tenant",
+        "hasMessage": true,
+        "payloadType": "BlackBoxDeletedPayload",
+        "fields": [
+          "entryId",
+          "missionId",
+          "voyageId",
+          "reason"
+        ],
+        "generic": false
+      },
+      {
+        "type": "blackbox.gc_completed",
+        "scope": "tenant",
+        "hasMessage": true,
+        "payloadType": "BlackBoxGcReport",
+        "fields": [
+          "dryRun",
+          "startedUtc",
+          "finishedUtc",
+          "durationMs",
+          "expired",
+          "evicted",
+          "cascaded",
+          "retriedDeletes",
+          "orphansRemoved",
+          "objectsMissing",
+          "bytesFreed",
+          "failures",
+          "candidateEntryIds",
+          "errors"
+        ],
+        "generic": false
+      },
+      {
+        "type": "blackbox.recovery_run",
+        "scope": "tenant",
+        "hasMessage": true,
+        "payloadType": "BlackBoxRecoveryRunPayload",
+        "fields": [
+          "entryId",
+          "pathId",
+          "dryRun",
+          "succeeded"
+        ],
+        "generic": false
+      },
+      {
+        "type": "blackbox.resolved",
+        "scope": "tenant",
+        "hasMessage": true,
+        "payloadType": "BlackBoxResolvedPayload",
+        "fields": [
+          "entryId",
+          "missionId",
+          "voyageId",
+          "resolution"
+        ],
+        "generic": false
+      },
+      {
+        "type": "blackbox.storage_fallback",
+        "scope": "tenant",
+        "hasMessage": true,
+        "payloadType": "BlackBoxStorageFallbackPayload",
+        "fields": [
+          "entryId",
+          "from",
+          "to",
+          "error"
+        ],
+        "generic": false
+      },
+      {
         "type": "captain.batch_deleted",
         "scope": "tenant",
         "hasMessage": true,
@@ -20508,6 +20629,341 @@
       "key": "autoMergePullRequests",
       "type": "bool",
       "default": "false",
+      "experimental": false
+    },
+    {
+      "key": "blackBox",
+      "type": "object",
+      "default": null,
+      "experimental": false
+    },
+    {
+      "key": "blackBox.captureTimeoutMs",
+      "type": "int",
+      "default": "2000",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.enabled",
+      "type": "bool",
+      "default": "true",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.retention",
+      "type": "object",
+      "default": null,
+      "experimental": false
+    },
+    {
+      "key": "blackBox.retention.deleteWithMission",
+      "type": "bool",
+      "default": "false",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.retention.deleteWithVessel",
+      "type": "bool",
+      "default": "true",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.retention.gcBatchSize",
+      "type": "int",
+      "default": "200",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.retention.gcIntervalMinutes",
+      "type": "int",
+      "default": "60",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.retention.keepLatestPerMission",
+      "type": "bool",
+      "default": "true",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.retention.maxEntriesPerVessel",
+      "type": "int",
+      "default": "1000",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.retention.maxTotalBytes",
+      "type": "long",
+      "default": "1073741824",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.retention.orphanGraceHours",
+      "type": "int",
+      "default": "24",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.retention.resolvedRetentionDays",
+      "type": "int",
+      "default": "30",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.retention.retentionDays",
+      "type": "int",
+      "default": "180",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage",
+      "type": "object",
+      "default": null,
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.azureBlob",
+      "type": "object",
+      "default": null,
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.azureBlob.accessKey",
+      "type": "string",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.azureBlob.accountName",
+      "type": "string",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.azureBlob.connectionString",
+      "type": "string",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.azureBlob.container",
+      "type": "string",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.cifs",
+      "type": "object",
+      "default": null,
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.cifs.domain",
+      "type": "string",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.cifs.hostname",
+      "type": "string",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.cifs.password",
+      "type": "string",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.cifs.share",
+      "type": "string",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.cifs.username",
+      "type": "string",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.compress",
+      "type": "bool",
+      "default": "true",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.disk",
+      "type": "object",
+      "default": null,
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.disk.directory",
+      "type": "string",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.fallbackToDatabase",
+      "type": "bool",
+      "default": "true",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.googleCloud",
+      "type": "object",
+      "default": null,
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.googleCloud.bucket",
+      "type": "string",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.googleCloud.credentialsPath",
+      "type": "string",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.googleCloud.projectId",
+      "type": "string",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.keyPrefix",
+      "type": "string",
+      "default": "\"armada/blackbox\"",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.maxEntryBytes",
+      "type": "int",
+      "default": "8388608",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.maxEvidenceObjectBytes",
+      "type": "int",
+      "default": "1048576",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.nfs",
+      "type": "object",
+      "default": null,
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.nfs.exportPath",
+      "type": "string",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.nfs.hostname",
+      "type": "string",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.s3",
+      "type": "object",
+      "default": null,
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.s3.accessKey",
+      "type": "string",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.s3.bucket",
+      "type": "string",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.s3.endpoint",
+      "type": "string",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.s3.region",
+      "type": "string",
+      "default": "\"us-east-1\"",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.s3.secretKey",
+      "type": "string",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.s3.usePathStyle",
+      "type": "bool",
+      "default": "true",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.s3.useSsl",
+      "type": "bool",
+      "default": "true",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.target",
+      "type": "enum BlackBoxStorageTargetEnum (Database|Disk|S3|AzureBlob|GoogleCloud|Cifs|Nfs|Unknown)",
+      "default": "\"Database\"",
+      "experimental": false,
+      "enumName": "BlackBoxStorageTargetEnum",
+      "enumValues": [
+        "Database",
+        "Disk",
+        "S3",
+        "AzureBlob",
+        "GoogleCloud",
+        "Cifs",
+        "Nfs",
+        "Unknown"
+      ]
+    },
+    {
+      "key": "blackBox.summaryEndpointId",
+      "type": "string",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.sweeper",
+      "type": "object",
+      "default": null,
+      "experimental": false
+    },
+    {
+      "key": "blackBox.sweeper.intervalSeconds",
+      "type": "int",
+      "default": "60",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.sweeper.maxEnrichmentAttempts",
+      "type": "int",
+      "default": "5",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.sweeper.pageSize",
+      "type": "int",
+      "default": "100",
       "experimental": false
     },
     {
