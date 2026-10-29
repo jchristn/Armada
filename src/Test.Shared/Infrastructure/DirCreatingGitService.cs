@@ -126,5 +126,9 @@ namespace Test.Shared.Infrastructure
         public Task<VesselCommitActivity> GetCommitActivityAsync(string repoPath, string branch, DateTime fromDate, DateTime toDate, int utcOffsetMinutes, CancellationToken token = default) => Task.FromResult(new VesselCommitActivity { Branch = branch });
         /// <summary>Read a commit page (always empty).</summary>
         public Task<GitCommitLogPage> GetCommitLogAsync(string repoPath, string tipSha, long? untilUnixSeconds, int skip, int limit, CancellationToken token = default) => Task.FromResult(new GitCommitLogPage());
+        /// <summary>Find a merge base (always null).</summary>
+        public Task<string?> GetMergeBaseAsync(string repoPath, string a, string b, CancellationToken token = default) => Task.FromResult<string?>(null);
+        /// <summary>Read a commit range (always null).</summary>
+        public Task<GitCommitRange?> GetCommitRangeAsync(string repoPath, string fromRef, string toRef, int limit, CancellationToken token = default) => Task.FromResult<GitCommitRange?>(null);
     }
 }

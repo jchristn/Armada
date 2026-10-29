@@ -993,6 +993,34 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
+        /// The state of a Harbor's link right now: Linked when it was heard from recently, Silent when it has been quiet
+        /// for more than half of its stale-link timeout (the sweep drops it at the full timeout), NotLinked otherwise.
+        /// </summary>
+        /// <param name="harborId">Harbor identifier.</param>
+        /// <returns>The link state.</returns>
+        public HarborLinkStateEnum GetLinkState(string harborId)
+        {
+            if (String.IsNullOrWhiteSpace(harborId)) return HarborLinkStateEnum.Unknown;
+            if (!_Connections.TryGetValue(harborId, out HarborConnection? connection) || connection == null) return HarborLinkStateEnum.NotLinked;
+            TimeSpan? staleAfter = connection.StaleAfter(_MinimumStaleLinkTimeout);
+            if (!staleAfter.HasValue) return HarborLinkStateEnum.Linked;
+            TimeSpan silence = _Clock() - connection.LastSeenUtc;
+            return silence > TimeSpan.FromTicks(staleAfter.Value.Ticks / 2) ? HarborLinkStateEnum.Silent : HarborLinkStateEnum.Linked;
+        }
+
+        /// <summary>
+        /// When a linked Harbor was last heard from, or null when it is not linked.
+        /// </summary>
+        /// <param name="harborId">Harbor identifier.</param>
+        /// <returns>The last time the link carried a message (UTC), or null.</returns>
+        public DateTime? GetLinkLastSeenUtc(string harborId)
+        {
+            if (String.IsNullOrWhiteSpace(harborId)) return null;
+            if (_Connections.TryGetValue(harborId, out HarborConnection? connection) && connection != null) return connection.LastSeenUtc;
+            return null;
+        }
+
+        /// <summary>
         /// Number of jobs a linked Harbor currently reports running, or 0 when it is not linked.
         /// </summary>
         /// <param name="harborId">Harbor identifier.</param>

@@ -61,16 +61,16 @@ is on; reads always return the decoded bytes. `sha256` is over the stored (encod
 | `brief.md` | text/markdown | FIX THIS brief, agent audience: triage preamble, evidence, recovery paths, answer instructions. Targets 12 KB, at most 40 KB. |
 | `brief.user.md` | text/markdown | Operator audience: plain language, no stack frames or source pointers. |
 | `brief.maintainer.md` | text/markdown | Maintainer audience: build identity, source pointers, Armada improvement hypotheses. |
-| `evidence/agent-output.txt` | text/plain | Tail of the captain's output. |
-| `evidence/mission.log` | text/plain | Tail of the mission log. |
-| `evidence/diff.patch` | text/x-diff | The mission's diff. |
-| `evidence/diffstat.txt` | text/plain | Diff stat. |
-| `evidence/check-<n>.txt` | text/plain | Output of stage check n. |
-| `evidence/verification-<n>.txt` | text/plain | Output of landing verification n. |
-| `evidence/merge-entry.txt` | text/plain | Merge-queue entry test output. |
-| `evidence/git-status.txt` | text/plain | git status of the worktree or checkout. |
-| `evidence/target-commits.txt` | text/plain | Target commits since the mission started. |
-| `evidence/events.json` | application/json | The relevant events. |
+| `evidence/agent-output.txt` | text/plain | The captain's output (capture), or its last 256 KB (enrichment, when capture did not store it). |
+| `evidence/mission.log` | text/plain | The last 256 KB of the mission log, starting at a line. |
+| `evidence/diff.patch` | text/x-diff | The mission's diff (its diff snapshot, or the worktree against the target). |
+| `evidence/diffstat.txt` | text/plain | Per-file insertions and deletions of the diff, and totals. |
+| `evidence/check-<n>.txt` | text/plain | Check run n of the mission (or captured stage check n): status, command, exit code, output tail. |
+| `evidence/verification-<n>.txt` | text/plain | Landing verification receipt n (`mission.landing_verification`): status, commit, command, exit code, output. |
+| `evidence/merge-entry.txt` | text/plain | The merge-queue entry (status, branch, target, test command and exit code) and its test output. |
+| `evidence/git-status.txt` | text/plain | `git status --porcelain` of the worktree and of the target checkout, on the host that owns them. |
+| `evidence/target-commits.txt` | text/plain | Target commits since the start commit (up to 500): SHA, date, author, subject, Armada mission or outside Armada, changed paths. |
+| `evidence/events.json` | application/json | The newest 50 events of the mission (or voyage), black box events excluded, as `BlackBoxEventRef` objects. |
 | `manifest.json` | application/json | Only inside a `.zip` download: `BlackBoxDownloadManifest` (entry id, schema version, objects with name, content type, size and SHA-256). |
 
 Evidence objects are at most `blackBox.storage.maxEvidenceObjectBytes` (default 1 MB) uncompressed; larger content
@@ -146,6 +146,10 @@ Identity section of a black box record: the failed mission or voyage and everyth
 | `isRescue` | boolean | no | yes |  | Whether the mission is a rescue. |
 | `parentMissionId` | string | yes | no | at most 2000 chars | Parent mission, or null. |
 | `branchName` | string | yes | no | at most 2000 chars | Mission branch, or null. |
+| `redispatchAttempts` | integer | yes | no |  | Redispatch attempts the mission used, or null when unknown (enrichment). |
+| `outputRepairAttempts` | integer | yes | no |  | Output repair attempts the mission used, or null when unknown (enrichment). |
+| `noOpRedispatchAttempts` | integer | yes | no |  | No-op redispatch attempts the mission used, or null when unknown (enrichment). |
+| `rescueChain` | array of string or null | yes | no | at most 20 items; each at most 1024 chars | The mission's ancestors by ParentMissionId, nearest first; null when not analyzed. |
 
 ### BlackBoxStatusChange
 
@@ -241,6 +245,11 @@ Workspace section: dock, worktree, branch and target state at the failure.
 | `dirtyPathTotal` | integer | no | yes |  | Total dirty paths before capping. |
 | `harborLinkState` | string | yes | no | at most 2000 chars | Harbor link state for Harbor-hosted docks, or null. |
 | `harborLastSeenUtc` | string (date-time, UTC) | yes | no |  | When the Harbor was last seen (UTC), or null. |
+| `branchExists` | boolean | yes | no |  | Whether the mission branch still exists in the repository, or null when unknown. |
+| `commitsAheadOfTarget` | integer | yes | no |  | Commits the branch is ahead of the target, or null. |
+| `inspectedHost` | string | yes | no | at most 2000 chars | Host the workspace was inspected on at enrichment (`Admiral` or `Harbor:{id}`), or null when it could not be inspected. |
+| `inspectionNote` | string | yes | no | at most 2000 chars | Why workspace facts are unknown or partial (a disconnected Harbor, a deleted branch or worktree), or null. |
+| `targetMovementNote` | string | yes | no | at most 2000 chars | Why target movement since the start commit was or was not read (for example no start commit), or null. |
 
 ### BlackBoxConflict
 
@@ -256,6 +265,10 @@ Conflict section: conflicted files and directories and the missions that collide
 | `conflictingMissions` | array of [BlackBoxConflictingMission](#blackboxconflictingmission) | no | yes | at most 25 items | Missions whose landed commits touched the same files. |
 | `targetCommitsSinceStart` | array of [BlackBoxCommitRef](#blackboxcommitref) | no | yes | at most 50 items | Commits on the target since the mission started. |
 | `targetCommitTotal` | integer | no | yes |  | Total target commits since start before capping. |
+| `concurrentMissions` | array of [BlackBoxConflictingMission](#blackboxconflictingmission) or null | yes | no | at most 25 items | Other missions active during this mission's run that touched the same files (landed or not); null when not analyzed. |
+| `conflictedParentDirectories` | array of [BlackBoxDirectoryCount](#blackboxdirectorycount) or null | yes | no | at most 100 items | Each conflicted file's parent directory with counts (any depth); null when not analyzed. |
+| `deepestConflictedDirectory` | string | yes | no | at most 2000 chars | The deepest directory holding at least two conflicted files, or null. |
+| `deepestConflictedDirectoryFileCount` | integer | yes | no |  | Conflicted files under `deepestConflictedDirectory`, or null. |
 
 ### BlackBoxDirectoryCount
 
@@ -264,7 +277,7 @@ A directory and how many conflicted files it holds.
 | Field | Type | Null | Required | Bounds | Description |
 |---|---|---|---|---|---|
 | `directory` | string | no | yes | at most 2000 chars | Directory (repository-relative, forward slashes; empty for the root). |
-| `depth` | integer | no | yes |  | Depth (1 to 3). |
+| `depth` | integer | no | yes |  | Depth (1 to 3 in `conflictedDirectories`; any depth in `conflictedParentDirectories`, 0 for the root). |
 | `fileCount` | integer | no | yes |  | Conflicted files under it. |
 
 ### BlackBoxConflictingMission
@@ -339,6 +352,8 @@ A prior attempt of the subject, or a link in its rescue chain.
 | `model` | string | yes | no | at most 2000 chars | Model, or null. |
 | `durationMs` | integer | yes | no |  | Duration in milliseconds, or null. |
 | `createdUtc` | string (date-time, UTC) | yes | no |  | When (UTC), or null. |
+| `source` | string | yes | no | at most 2000 chars | Where the attempt came from (`BlackBox`, `StageOutcome`, `Handoff`), or null. |
+| `disposition` | string | yes | no | at most 2000 chars | Stage disposition, handoff verdict or black box step, or null. |
 
 ### BlackBoxEvidenceIndex
 

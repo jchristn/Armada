@@ -38,7 +38,16 @@ namespace Armada.Core.Services
         /// Test hook: resolve a Harbor host (null = not reachable). When unset, a Harbor is reachable only while it is
         /// connected through <see cref="DockHostResolver.Harbors"/>.
         /// </summary>
-        public Func<string, DockHost?>? HarborHostOverride { get; set; } = null;
+        public Func<string, DockHost?>? HarborHostOverride
+        {
+            get => _Inspector.HarborHostOverride;
+            set => _Inspector.HarborHostOverride = value;
+        }
+
+        /// <summary>
+        /// The host-aware git inspector the cleanup classifies with (shared with the black box enrichers).
+        /// </summary>
+        public VesselGitInspector Inspector => _Inspector;
 
         #endregion
 
@@ -50,13 +59,7 @@ namespace Armada.Core.Services
         private readonly IDockService _Docks;
         private readonly DockHostResolver _Hosts;
         private readonly LoggingModule _Logging;
-
-        private static readonly HashSet<MissionStatusEnum> _ActiveMissionStatuses = new HashSet<MissionStatusEnum>
-        {
-            MissionStatusEnum.Pending, MissionStatusEnum.Assigned, MissionStatusEnum.InProgress, MissionStatusEnum.WorkProduced,
-            MissionStatusEnum.PullRequestOpen, MissionStatusEnum.Testing, MissionStatusEnum.Review, MissionStatusEnum.Blocked,
-            MissionStatusEnum.Verifying
-        };
+        private readonly VesselGitInspector _Inspector;
 
         private static readonly HashSet<string> _ProtectedBranchNames = new HashSet<string>(StringComparer.Ordinal) { "main", "master", "develop", "trunk" };
 
@@ -80,6 +83,7 @@ namespace Armada.Core.Services
             _Docks = docks ?? throw new ArgumentNullException(nameof(docks));
             _Hosts = hosts ?? throw new ArgumentNullException(nameof(hosts));
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
+            _Inspector = new VesselGitInspector(database, hosts, logging);
         }
 
         #endregion
@@ -238,7 +242,7 @@ namespace Armada.Core.Services
 
         private async Task<string?> RemoveAsync(Vessel vessel, VesselCleanupResource resource, CancellationToken token)
         {
-            DockHost? host = ResolveHost(resource.HarborId);
+            DockHost? host = _Inspector.ResolveHost(resource.HarborId);
             if (host == null) return "Harbor " + resource.HarborId + " is not connected.";
 
             if (resource.ResourceType == VesselCleanupResourceTypeEnum.Dock)
@@ -291,37 +295,7 @@ namespace Armada.Core.Services
             List<VesselCleanupResource> resources = new List<VesselCleanupResource>();
 
             // Repositories to inspect: the Admiral's bare clone plus each Harbor repository a dock was created from.
-            List<RepoState> repos = new List<RepoState>();
-            if (!String.IsNullOrWhiteSpace(vessel.LocalPath) && Directory.Exists(vessel.LocalPath))
-                repos.Add(new RepoState { HarborId = null, Path = vessel.LocalPath! });
-            foreach (Dock dock in snap.VesselDocks)
-            {
-                if (!DockHostResolver.IsHarborDock(dock)) continue;
-                if (repos.Any(r => r.HarborId == dock.HarborId && SamePath(r.Path, dock.RepositoryPath!, true))) continue;
-                repos.Add(new RepoState { HarborId = dock.HarborId, Path = dock.RepositoryPath! });
-            }
-
-            foreach (RepoState repo in repos)
-            {
-                repo.Host = ResolveHost(repo.HarborId);
-                if (repo.Host == null) continue;
-                try
-                {
-                    repo.Worktrees = await repo.Host.Git.ListWorktreeEntriesAsync(repo.Path, token).ConfigureAwait(false);
-                }
-                catch (Exception ex) when (!(ex is OperationCanceledException))
-                {
-                    repo.Error = "could not list worktrees: " + ex.Message;
-                }
-                try
-                {
-                    repo.Branches = await repo.Host.Git.ListBranchTipsAsync(repo.Path, vessel.DefaultBranch, token).ConfigureAwait(false);
-                }
-                catch (Exception ex) when (!(ex is OperationCanceledException))
-                {
-                    repo.Error = (repo.Error == null ? "" : repo.Error + "; ") + "could not list branches: " + ex.Message;
-                }
-            }
+            List<VesselRepositoryState> repos = await _Inspector.LoadRepositoriesAsync(vessel, snap.VesselDocks, token).ConfigureAwait(false);
 
             foreach (Dock dock in snap.VesselDocks)
             {
@@ -330,7 +304,7 @@ namespace Armada.Core.Services
                 resources.Add(await ClassifyDockAsync(vessel, dock, key, snap, repos, token).ConfigureAwait(false));
             }
 
-            foreach (RepoState repo in repos)
+            foreach (VesselRepositoryState repo in repos)
             {
                 string hostKey = repo.HarborId ?? AdmiralHostKey;
                 if (repo.Host == null || repo.Error != null)
@@ -376,7 +350,7 @@ namespace Armada.Core.Services
             return resources;
         }
 
-        private async Task<VesselCleanupResource> ClassifyDockAsync(Vessel vessel, Dock dock, string key, CleanupSnapshot snap, List<RepoState> repos, CancellationToken token)
+        private async Task<VesselCleanupResource> ClassifyDockAsync(Vessel vessel, Dock dock, string key, CleanupSnapshot snap, List<VesselRepositoryState> repos, CancellationToken token)
         {
             bool local = !DockHostResolver.IsHarborDock(dock);
             VesselCleanupResource r = new VesselCleanupResource
@@ -408,7 +382,7 @@ namespace Armada.Core.Services
                 return Classify(r, VesselCleanupDispositionEnum.InUse, "Dock is " + dock.State + ".");
             if (dock.Active)
                 return Classify(r, VesselCleanupDispositionEnum.InUse, "Dock is still active (not yet reclaimed); it may be reused.");
-            string? use = await DescribeWorkReferenceAsync(missions, dock.BranchName, snap, token).ConfigureAwait(false);
+            string? use = await _Inspector.DescribeWorkReferenceAsync(missions, dock.BranchName, snap.MergeEntries, token).ConfigureAwait(false);
             if (use != null) return Classify(r, VesselCleanupDispositionEnum.InUse, use);
 
             if (!String.IsNullOrEmpty(dock.WorktreePath))
@@ -426,7 +400,7 @@ namespace Armada.Core.Services
                 if (unsafePath != null) return Classify(r, VesselCleanupDispositionEnum.Unknown, unsafePath);
             }
 
-            DockHost? host = ResolveHost(r.HarborId);
+            DockHost? host = _Inspector.ResolveHost(r.HarborId);
             if (host == null)
                 return Classify(r, VesselCleanupDispositionEnum.Unknown, "Harbor " + r.HarborId + " is not connected; the worktree cannot be inspected.");
 
@@ -447,13 +421,13 @@ namespace Armada.Core.Services
                 return Classify(r, VesselCleanupDispositionEnum.Safe, "Inactive dock record; its worktree no longer exists" + MissionSuffix(r) + ".");
 
             if (local) r.SizeBytes = MeasureDirectory(dock.WorktreePath!);
-            RepoState? repo = repos.FirstOrDefault(x => x.HarborId == r.HarborId && x.Path != null && r.RepositoryPath != null && SamePath(x.Path, r.RepositoryPath, local));
-            string? risk = await DescribeWorktreeRiskAsync(vessel, host, dock.WorktreePath!, repo, token).ConfigureAwait(false);
+            VesselRepositoryState? repo = repos.FirstOrDefault(x => x.HarborId == r.HarborId && x.Path != null && r.RepositoryPath != null && SamePath(x.Path, r.RepositoryPath, local));
+            string? risk = await _Inspector.DescribeWorktreeRiskAsync(vessel, host, dock.WorktreePath!, repo, token).ConfigureAwait(false);
             if (risk != null) return Classify(r, VesselCleanupDispositionEnum.Unknown, risk);
             return Classify(r, VesselCleanupDispositionEnum.Safe, "Inactive dock; worktree is clean and its commits are merged or kept on a branch" + MissionSuffix(r) + ".");
         }
 
-        private async Task<VesselCleanupResource> ClassifyOrphanWorktreeAsync(Vessel vessel, GitWorktreeEntry entry, string key, RepoState repo, CleanupSnapshot snap, CancellationToken token)
+        private async Task<VesselCleanupResource> ClassifyOrphanWorktreeAsync(Vessel vessel, GitWorktreeEntry entry, string key, VesselRepositoryState repo, CleanupSnapshot snap, CancellationToken token)
         {
             bool local = repo.HarborId == null;
             string? branch = BranchFromRef(entry.BranchRef);
@@ -470,7 +444,7 @@ namespace Armada.Core.Services
 
             List<Mission> missions = branch == null ? new List<Mission>() : snap.Missions.Where(m => m.BranchName == branch).OrderByDescending(m => m.LastUpdateUtc).ToList();
             AttachMission(r, missions);
-            string? use = await DescribeWorkReferenceAsync(missions, branch, snap, token).ConfigureAwait(false);
+            string? use = await _Inspector.DescribeWorkReferenceAsync(missions, branch, snap.MergeEntries, token).ConfigureAwait(false);
             if (use != null) return Classify(r, VesselCleanupDispositionEnum.InUse, use);
             Captain? holder = branch == null ? null : snap.Captains.FirstOrDefault(c => c.State != CaptainStateEnum.Idle && missions.Any(m => m.Id == c.CurrentMissionId));
             if (holder != null) return Classify(r, VesselCleanupDispositionEnum.InUse, "Captain " + holder.Id + " is working on this branch.");
@@ -499,12 +473,12 @@ namespace Armada.Core.Services
                 return Classify(r, VesselCleanupDispositionEnum.Safe, "Stale worktree registration with no dock record; the directory no longer exists (prune).");
 
             if (local) r.SizeBytes = MeasureDirectory(entry.Path);
-            string? risk = await DescribeWorktreeRiskAsync(vessel, repo.Host!, entry.Path, repo, token).ConfigureAwait(false);
+            string? risk = await _Inspector.DescribeWorktreeRiskAsync(vessel, repo.Host!, entry.Path, repo, token).ConfigureAwait(false);
             if (risk != null) return Classify(r, VesselCleanupDispositionEnum.Unknown, risk);
             return Classify(r, VesselCleanupDispositionEnum.Safe, "Orphaned worktree with no dock record; clean, and its commits are merged or kept on a branch.");
         }
 
-        private async Task<VesselCleanupResource> ClassifyBranchAsync(Vessel vessel, BranchInfo branch, string key, RepoState repo, CleanupSnapshot snap, CancellationToken token)
+        private async Task<VesselCleanupResource> ClassifyBranchAsync(Vessel vessel, BranchInfo branch, string key, VesselRepositoryState repo, CleanupSnapshot snap, CancellationToken token)
         {
             VesselCleanupResource r = new VesselCleanupResource
             {
@@ -531,116 +505,21 @@ namespace Armada.Core.Services
                 r.DockId = dockRef.Id;
                 return Classify(r, VesselCleanupDispositionEnum.InUse, "Dock " + dockRef.Id + " still references this branch; clean up the dock first.");
             }
-            string? use = await DescribeWorkReferenceAsync(missions, branch.Name, snap, token).ConfigureAwait(false);
+            string? use = await _Inspector.DescribeWorkReferenceAsync(missions, branch.Name, snap.MergeEntries, token).ConfigureAwait(false);
             if (use != null) return Classify(r, VesselCleanupDispositionEnum.InUse, use);
             if (branch.Name.StartsWith(ManagedBranchPrefix + "merge-queue/", StringComparison.Ordinal))
             {
-                MergeEntry? pending = snap.MergeEntries.FirstOrDefault(e => IsLiveMergeEntry(e));
+                MergeEntry? pending = snap.MergeEntries.FirstOrDefault(e => VesselGitInspector.IsLiveMergeEntry(e));
                 if (pending != null)
                     return Classify(r, VesselCleanupDispositionEnum.InUse, "Merge-queue integration branch while merge entry " + pending.Id + " is " + pending.Status + ".");
             }
 
-            bool? merged = await IsMergedAsync(repo.Host!.Git, repo.Path, branch.Name, vessel.DefaultBranch, token).ConfigureAwait(false);
+            bool? merged = await _Inspector.IsMergedAsync(repo.Host!.Git, repo.Path, branch.Name, vessel.DefaultBranch, token).ConfigureAwait(false);
             if (merged == null)
                 return Classify(r, VesselCleanupDispositionEnum.Unknown, "Could not compare the branch with " + vessel.DefaultBranch + ".");
             if (merged == false)
                 return Classify(r, VesselCleanupDispositionEnum.Unknown, "Has commits that are not on " + vessel.DefaultBranch + " (unmerged work); local branch only, remote untouched.");
             return Classify(r, VesselCleanupDispositionEnum.Safe, "Fully merged into " + vessel.DefaultBranch + " and not used by any work" + MissionSuffix(r) + "; deletes the local branch only.");
-        }
-
-        /// <summary>
-        /// Why a worktree directory cannot be proven disposable, or null when it is clean and its HEAD is merged into the
-        /// default branch or is the tip of a branch that cleanup keeps.
-        /// </summary>
-        private async Task<string?> DescribeWorktreeRiskAsync(Vessel vessel, DockHost host, string worktreePath, RepoState? repo, CancellationToken token)
-        {
-            GitWorkingTreeStatus status;
-            try
-            {
-                status = await host.Git.GetWorkingTreeStatusAsync(worktreePath, token).ConfigureAwait(false);
-            }
-            catch (Exception ex) when (!(ex is OperationCanceledException))
-            {
-                return "Could not read the worktree status (" + ex.Message + "); it may hold uncommitted work.";
-            }
-            if (!status.IsClean)
-                return "Worktree has uncommitted changes (" + status.ModifiedCount + " modified, " + status.UntrackedCount + " untracked).";
-
-            string? head;
-            try
-            {
-                head = await host.Git.GetHeadCommitHashAsync(worktreePath, token).ConfigureAwait(false);
-            }
-            catch (Exception ex) when (!(ex is OperationCanceledException))
-            {
-                return "Could not read the worktree HEAD: " + ex.Message;
-            }
-            if (String.IsNullOrWhiteSpace(head)) return "Could not read the worktree HEAD.";
-
-            bool? merged = await IsMergedAsync(host.Git, worktreePath, head!, vessel.DefaultBranch, token).ConfigureAwait(false);
-            if (merged == true) return null;
-
-            string? branch;
-            try
-            {
-                branch = await host.Git.GetCurrentBranchAsync(worktreePath, token).ConfigureAwait(false);
-            }
-            catch (Exception ex) when (!(ex is OperationCanceledException))
-            {
-                branch = null;
-                _Logging.Debug(_Header + "could not read the branch of " + worktreePath + ": " + ex.Message);
-            }
-            if (!String.IsNullOrWhiteSpace(branch) && branch != "HEAD" && repo?.Host != null)
-            {
-                string? tip = null;
-                try
-                {
-                    tip = await repo.Host.Git.ResolveBranchTipAsync(repo.Path, branch!, token).ConfigureAwait(false);
-                }
-                catch (Exception ex) when (!(ex is OperationCanceledException))
-                {
-                    _Logging.Debug(_Header + "could not resolve " + branch + ": " + ex.Message);
-                }
-                if (tip != null && String.Equals(tip.Trim(), head!.Trim(), StringComparison.OrdinalIgnoreCase)) return null;
-            }
-
-            return merged == null
-                ? "Could not prove the worktree's commits are merged into " + vessel.DefaultBranch + "."
-                : "Worktree HEAD has commits that are neither merged into " + vessel.DefaultBranch + " nor kept on a branch.";
-        }
-
-        /// <summary>
-        /// Reason the given missions, branch, or merge queue still need the resource, or null.
-        /// </summary>
-        private async Task<string?> DescribeWorkReferenceAsync(List<Mission> missions, string? branch, CleanupSnapshot snap, CancellationToken token)
-        {
-            foreach (Mission m in missions)
-            {
-                if (_ActiveMissionStatuses.Contains(m.Status))
-                    return "Mission " + m.Id + " is " + m.Status + ".";
-                if (m.Status == MissionStatusEnum.LandingFailed)
-                    return "Mission " + m.Id + " is LandingFailed; landing can still be retried.";
-            }
-
-            foreach (MergeEntry e in snap.MergeEntries)
-            {
-                bool refers = (!String.IsNullOrEmpty(branch) && e.BranchName == branch)
-                    || (!String.IsNullOrEmpty(e.MissionId) && missions.Any(m => m.Id == e.MissionId));
-                if (!refers) continue;
-                if (IsLiveMergeEntry(e))
-                    return "Merge-queue entry " + e.Id + " is " + e.Status + ".";
-                if (e.Status == MergeStatusEnum.Failed)
-                    return "Merge-queue entry " + e.Id + " failed and can still be retried; resolve or remove it first.";
-            }
-
-            foreach (string voyageId in missions.Where(m => !String.IsNullOrEmpty(m.VoyageId)).Select(m => m.VoyageId!).Distinct())
-            {
-                Voyage? voyage = await _Database.Voyages.ReadAsync(voyageId, token).ConfigureAwait(false);
-                if (voyage != null && (voyage.Status == VoyageStatusEnum.Open || voyage.Status == VoyageStatusEnum.InProgress))
-                    return "Voyage " + voyage.Id + " is " + voyage.Status + " and may still use this work.";
-            }
-
-            return null;
         }
 
         /// <summary>
@@ -675,26 +554,6 @@ namespace Armada.Core.Services
             return false;
         }
 
-        private async Task<bool?> IsMergedAsync(IGitService git, string repoPath, string reference, string defaultBranch, CancellationToken token)
-        {
-            bool? local = null;
-            bool? remote = null;
-            try
-            {
-                local = await git.IsAncestorAsync(repoPath, reference, defaultBranch, token).ConfigureAwait(false);
-                if (local == true) return true;
-                remote = await git.IsAncestorAsync(repoPath, reference, "refs/remotes/origin/" + defaultBranch, token).ConfigureAwait(false);
-                if (remote == true) return true;
-            }
-            catch (Exception ex) when (!(ex is OperationCanceledException))
-            {
-                _Logging.Debug(_Header + "could not compare " + reference + " with " + defaultBranch + " in " + repoPath + ": " + ex.Message);
-                return null;
-            }
-            if (local == false || remote == false) return false;
-            return null;
-        }
-
         private async Task<CleanupSnapshot> LoadSnapshotAsync(Vessel vessel, CancellationToken token)
         {
             CleanupSnapshot snap = new CleanupSnapshot();
@@ -715,24 +574,11 @@ namespace Armada.Core.Services
             return snap;
         }
 
-        private DockHost? ResolveHost(string? harborId)
-        {
-            if (String.IsNullOrWhiteSpace(harborId)) return _Hosts.Local;
-            if (HarborHostOverride != null) return HarborHostOverride(harborId!);
-            if (_Hosts.Harbors == null || !_Hosts.Harbors.IsConnected(harborId!)) return null;
-            return _Hosts.ForHarbor(harborId!);
-        }
-
         private bool IsManagedBranch(Vessel vessel, BranchInfo branch)
         {
             if (branch == null || String.IsNullOrWhiteSpace(branch.Name)) return false;
             if (branch.IsDefault || branch.Name == vessel.DefaultBranch || _ProtectedBranchNames.Contains(branch.Name)) return false;
             return branch.Name.StartsWith(ManagedBranchPrefix, StringComparison.Ordinal);
-        }
-
-        private static bool IsLiveMergeEntry(MergeEntry e)
-        {
-            return e.Status == MergeStatusEnum.Queued || e.Status == MergeStatusEnum.Testing || e.Status == MergeStatusEnum.Passed;
         }
 
         private static void AttachMission(VesselCleanupResource r, List<Mission> missions)
@@ -817,13 +663,12 @@ namespace Armada.Core.Services
 
         private static string Normalize(string path, bool local)
         {
-            string p = local ? PathCanonicalizer.Canonicalize(path) : path;
-            return p.Replace('\\', '/').TrimEnd('/');
+            return VesselGitInspector.NormalizePath(path, local);
         }
 
         private static bool SamePath(string a, string b, bool local)
         {
-            return String.Equals(Normalize(a, local), Normalize(b, local), StringComparison.OrdinalIgnoreCase);
+            return VesselGitInspector.SamePath(a, b, local);
         }
 
         /// <summary>
@@ -876,16 +721,6 @@ namespace Armada.Core.Services
             public List<Mission> Missions { get; set; } = new List<Mission>();
             public List<MergeEntry> MergeEntries { get; set; } = new List<MergeEntry>();
             public List<Captain> Captains { get; set; } = new List<Captain>();
-        }
-
-        private sealed class RepoState
-        {
-            public string? HarborId { get; set; } = null;
-            public string Path { get; set; } = string.Empty;
-            public DockHost? Host { get; set; } = null;
-            public IReadOnlyList<GitWorktreeEntry>? Worktrees { get; set; } = null;
-            public IReadOnlyList<BranchInfo>? Branches { get; set; } = null;
-            public string? Error { get; set; } = null;
         }
 
         #endregion

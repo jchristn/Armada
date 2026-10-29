@@ -158,8 +158,18 @@ namespace Armada.Core.BlackBox
             record.State = entry.State;
 
             await _Writer.WriteAsync(entry, record, context.Objects, CancellationToken.None, token).ConfigureAwait(false);
-            if (context.Files.Count > 0) await _Database.BlackBoxFiles.CreateManyAsync(context.Files.Take(Armada.Core.Services.CollectionLimits.MaxRequestItems).ToList(), token).ConfigureAwait(false);
-            if (context.Links.Count > 0) await _Database.BlackBoxLinks.CreateManyAsync(context.Links.Take(Armada.Core.Services.CollectionLimits.MaxRequestItems).ToList(), token).ConfigureAwait(false);
+            // Enrichers emit the entry's complete row sets (the file-rows enricher re-emits the captured roles), so they
+            // replace the stored rows and a re-run never duplicates them.
+            if (context.Files.Count > 0)
+            {
+                await _Database.BlackBoxFiles.DeleteByEntryAsync(entry.Id, token).ConfigureAwait(false);
+                await _Database.BlackBoxFiles.CreateManyAsync(context.Files.Take(Armada.Core.Services.CollectionLimits.MaxRequestItems).ToList(), token).ConfigureAwait(false);
+            }
+            if (context.Links.Count > 0)
+            {
+                await _Database.BlackBoxLinks.DeleteByEntryAsync(entry.Id, token).ConfigureAwait(false);
+                await _Database.BlackBoxLinks.CreateManyAsync(context.Links.Take(Armada.Core.Services.CollectionLimits.MaxRequestItems).ToList(), token).ConfigureAwait(false);
+            }
 
             await _Events.EmitAsync(BlackBoxEventTypes.Analyzed, "Black box analyzed: " + entry.Id, entry.TenantId, entry.Id, entry.MissionId, entry.VoyageId, entry.VesselId,
                 new BlackBoxAnalyzedPayload { EntryId = entry.Id, MissionId = entry.MissionId, VoyageId = entry.VoyageId, State = entry.State, Triage = entry.Triage, RulesVersion = entry.RulesVersion }, token).ConfigureAwait(false);

@@ -199,6 +199,8 @@ namespace Armada.Core.Services
                         Dock? anchorDock = await _Database.Docks.ReadAsync(mission.DockId!, token).ConfigureAwait(false);
                         if (anchorDock != null)
                         {
+                            // The start commit was recorded at provision; a later render (a resume) must not move it.
+                            snapshot.StartCommit = DockStartCommit.FromDock(anchorDock) ?? snapshot.StartCommit;
                             anchorDock.GitAnchorsJson = System.Text.Json.JsonSerializer.Serialize(snapshot);
                             anchorDock.LastUpdateUtc = DateTime.UtcNow;
                             await _Database.Docks.UpdateAsync(anchorDock, token).ConfigureAwait(false);

@@ -30,6 +30,19 @@ namespace Armada.Core.BlackBox
         /// </summary>
         public IBlackBoxEnrichmentQueue? Enrichment { get; set; } = null;
 
+        /// <summary>
+        /// Harbor links, or null. When set, a Harbor-hosted dock's entry records the link state and when the Harbor was
+        /// last heard from at the moment of failure (Workspace.HarborLinkState, Workspace.HarborLastSeenUtc).
+        /// </summary>
+        public Armada.Core.Services.HarborConnectionManager? Harbors { get; set; } = null;
+
+        /// <summary>
+        /// Records and broadcasts mission.status_changed (mission after the change, previous status, message), or null
+        /// to record the event row only. Every mission capture whose status changed emits it with the previous status, so
+        /// the status timeline is complete; it runs whether or not the black box is enabled and never throws.
+        /// </summary>
+        public Func<Mission, MissionStatusEnum?, string, Task>? MissionStatusChanged { get; set; } = null;
+
         #endregion
 
         #region Private-Members
@@ -42,6 +55,10 @@ namespace Armada.Core.BlackBox
         private readonly IBlackBoxVersionProvider _Version;
         private readonly BlackBoxRedactor _Redactor;
         private readonly LoggingModule _Logging;
+        private static readonly System.Text.Json.JsonSerializerOptions _StatusPayloadOptions = new System.Text.Json.JsonSerializerOptions
+        {
+            PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase
+        };
 
         #endregion
 
@@ -77,8 +94,9 @@ namespace Armada.Core.BlackBox
         public async Task<string?> CaptureMissionFailureAsync(BlackBoxCaptureContext context, CancellationToken token = default)
         {
             if (context == null || context.Mission == null) return null;
-            if (!_Settings.BlackBox.Enabled) return null;
             Mission mission = context.Mission;
+            await EmitStatusChangedAsync(mission, context.StatusBefore, context.Step).ConfigureAwait(false);
+            if (!_Settings.BlackBox.Enabled) return null;
             try
             {
                 using (CancellationTokenSource budgetSource = CancellationTokenSource.CreateLinkedTokenSource(token))
@@ -95,7 +113,8 @@ namespace Armada.Core.BlackBox
                     try
                     {
                         if (vessel == null && !String.IsNullOrEmpty(mission.VesselId)) vessel = await _Database.Vessels.ReadAsync(mission.VesselId, budget).ConfigureAwait(false);
-                        if (captain == null && !String.IsNullOrEmpty(mission.CaptainId)) captain = await _Database.Captains.ReadAsync(mission.CaptainId, budget).ConfigureAwait(false);
+                        string? captainId = mission.CaptainId ?? context.CaptainId;
+                        if (captain == null && !String.IsNullOrEmpty(captainId)) captain = await _Database.Captains.ReadAsync(captainId, budget).ConfigureAwait(false);
                         if (voyage == null && !String.IsNullOrEmpty(mission.VoyageId)) voyage = await _Database.Voyages.ReadAsync(mission.VoyageId, budget).ConfigureAwait(false);
                         if (dock == null && !String.IsNullOrEmpty(mission.DockId)) dock = await _Database.Docks.ReadAsync(mission.DockId, budget).ConfigureAwait(false);
                         string? harborId = dock?.HarborId ?? mission.AssignedHarborId;
@@ -182,6 +201,7 @@ namespace Armada.Core.BlackBox
                         FailureKind = root?.FailureKind,
                         StatusBefore = context.StatusBefore?.ToString(),
                         StatusAfter = voyage.Status.ToString(),
+                        Triage = context.Step == BlackBoxStepEnum.Cancelled ? BlackBoxTriageEnum.External : BlackBoxTriageEnum.Unknown,
                         CaptureMode = context.CaptureMode,
                         StorageTarget = _Settings.BlackBox.Storage.Target,
                         ArmadaVersion = _Version.Version,
@@ -267,9 +287,9 @@ namespace Armada.Core.BlackBox
                 VoyageId = mission.VoyageId,
                 VesselId = mission.VesselId,
                 FleetId = vessel?.FleetId,
-                CaptainId = mission.CaptainId,
+                CaptainId = mission.CaptainId ?? context.CaptainId ?? context.Captain?.Id,
                 HarborId = context.Dock?.HarborId ?? mission.AssignedHarborId,
-                DockId = mission.DockId,
+                DockId = mission.DockId ?? context.Dock?.Id,
                 MergeEntryId = context.MergeEntryId,
                 IncidentId = context.IncidentId,
                 StageOutcomeId = context.StageOutcomeId,
@@ -281,7 +301,7 @@ namespace Armada.Core.BlackBox
                 FailureKind = mission.FailureKind,
                 StatusBefore = context.StatusBefore?.ToString(),
                 StatusAfter = mission.Status.ToString(),
-                Triage = mission.FailureKind == MissionFailureKindEnum.OperatorAction ? BlackBoxTriageEnum.External : BlackBoxTriageEnum.Unknown,
+                Triage = IsOperatorOrExternal(mission, context.Step) ? BlackBoxTriageEnum.External : BlackBoxTriageEnum.Unknown,
                 CaptureMode = context.CaptureMode,
                 StorageTarget = _Settings.BlackBox.Storage.Target,
                 ArmadaVersion = _Version.Version,
@@ -289,8 +309,49 @@ namespace Armada.Core.BlackBox
                 CreatedUtc = record.CreatedUtc
             };
             entry.StoragePrefix = PrefixFor(entry);
-            entry.Fingerprint = BlackBoxFingerprint.Compute(phase, context.Step, mission.FailureKind, context.CallerMember, mission.FailureReason);
+            entry.Fingerprint = BlackBoxFingerprint.Compute(phase, context.Step, mission.FailureKind, context.CallerMember, mission.FailureReason ?? context.Reason);
             return entry;
+        }
+
+        /// <summary>
+        /// Operator stops and cancellations, and failures caused outside Armada (a deleted vessel, a manual transition),
+        /// are triaged External (plan open question 1) so they stay out of defect bundles.
+        /// </summary>
+        private static bool IsOperatorOrExternal(Mission mission, BlackBoxStepEnum step)
+        {
+            if (mission.FailureKind == MissionFailureKindEnum.OperatorAction) return true;
+            if (step == BlackBoxStepEnum.OperatorStop) return true;
+            return BlackBoxTaxonomy.PhaseOf(step) == BlackBoxPhaseEnum.External;
+        }
+
+        private async Task EmitStatusChangedAsync(Mission mission, MissionStatusEnum? previous, BlackBoxStepEnum step)
+        {
+            if (previous.HasValue && previous.Value == mission.Status) return;
+            string message = "Mission " + mission.Status + " (" + step + "): " + mission.Title;
+            try
+            {
+                if (MissionStatusChanged != null)
+                {
+                    await MissionStatusChanged(mission, previous, message).ConfigureAwait(false);
+                    return;
+                }
+
+                ArmadaEvent evt = new ArmadaEvent("mission.status_changed", message);
+                evt.TenantId = mission.TenantId;
+                evt.UserId = mission.UserId;
+                evt.EntityType = "mission";
+                evt.EntityId = mission.Id;
+                evt.CaptainId = mission.CaptainId;
+                evt.MissionId = mission.Id;
+                evt.VesselId = mission.VesselId;
+                evt.VoyageId = mission.VoyageId;
+                evt.Payload = System.Text.Json.JsonSerializer.Serialize(new MissionStatusChangedPayload { Status = mission.Status, PreviousStatus = previous }, _StatusPayloadOptions);
+                await _Database.Events.CreateAsync(evt, CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (Exception e)
+            {
+                _Logging.Warn(_Header + "mission.status_changed for " + mission.Id + " could not be emitted: " + e.Message);
+            }
         }
 
         private string? PrefixFor(BlackBoxEntry entry)
@@ -315,7 +376,7 @@ namespace Armada.Core.BlackBox
                 VesselRepoUrl = vessel?.RepoUrl,
                 VesselDefaultBranch = vessel?.DefaultBranch,
                 FleetId = vessel?.FleetId,
-                CaptainId = mission.CaptainId,
+                CaptainId = mission.CaptainId ?? captain?.Id ?? context.CaptainId,
                 CaptainName = captain?.Name,
                 CaptainRuntime = captain?.Runtime.ToString(),
                 CaptainModel = captain?.Model,
@@ -323,7 +384,7 @@ namespace Armada.Core.BlackBox
                 Persona = mission.Persona,
                 HarborId = harbor?.Id ?? entry.HarborId,
                 HarborName = harbor?.Name,
-                DockId = mission.DockId,
+                DockId = mission.DockId ?? dock?.Id,
                 MergeEntryId = context.MergeEntryId,
                 IncidentId = context.IncidentId,
                 StageOutcomeId = context.StageOutcomeId,
@@ -338,13 +399,14 @@ namespace Armada.Core.BlackBox
             record.Classification = new BlackBoxClassification
             {
                 Kind = mission.FailureKind,
-                RawReason = mission.FailureReason,
+                RawReason = mission.FailureReason ?? context.Reason,
                 SuspectedCause = context.SuspectedCause ?? FailureCauseEnum.None,
                 CauseRuleId = context.CauseRuleId,
                 IsTransient = context.RuntimeFailureKind.HasValue ? (context.RuntimeFailureKind.Value == RuntimeFailureKindEnum.Transient || context.RuntimeFailureKind.Value == RuntimeFailureKindEnum.UsageLimit || context.RuntimeFailureKind.Value == RuntimeFailureKindEnum.ModelUnavailable) : (bool?)null
             };
             record.Configuration = ConfigurationOf(mission, vessel, voyage, captain);
             record.Workspace = WorkspaceOf(mission, vessel, dock, context.GitFacts);
+            AddHarborLink(record.Workspace, harbor?.Id ?? entry.HarborId, harbor);
             record.Conflict = ConflictOf(context.GitFacts);
             if (context.ScopedFiles.Count > 0 || context.OutOfScopeFiles.Count > 0 || context.BoundaryFindings.Count > 0)
             {
@@ -470,8 +532,8 @@ namespace Armada.Core.BlackBox
                 BranchName = mission.BranchName ?? dock?.BranchName,
                 BranchTip = facts?.BranchTip,
                 MissionCommit = mission.CommitHash,
-                StartCommit = mission.StartCommit,
-                StartCommitSource = mission.StartCommit != null ? "Mission" : null,
+                StartCommit = mission.StartCommit ?? Armada.Core.Services.DockStartCommit.FromDock(dock),
+                StartCommitSource = mission.StartCommit != null ? "Mission" : Armada.Core.Services.DockStartCommit.FromDock(dock) != null ? "DockAnchors" : null,
                 TargetBranch = vessel?.DefaultBranch,
                 TargetTipAtStart = facts?.TargetTipBefore,
                 TargetTipAtFailure = facts?.TargetTipAfter ?? facts?.TargetTipBefore
@@ -483,6 +545,27 @@ namespace Armada.Core.BlackBox
                 w.DirtyPaths = facts.DirtyPaths.Select(NormalizePath).Take(BlackBoxLimits.MaxDirtyPaths).ToList();
             }
             return w;
+        }
+
+        private void AddHarborLink(BlackBoxWorkspace workspace, string? harborId, Harbor? harbor)
+        {
+            if (String.IsNullOrEmpty(harborId)) return;
+            try
+            {
+                if (Harbors != null)
+                {
+                    workspace.HarborLinkState = Harbors.GetLinkState(harborId!).ToString();
+                    workspace.HarborLastSeenUtc = Harbors.GetLinkLastSeenUtc(harborId!) ?? harbor?.LastSeenUtc;
+                }
+                else
+                {
+                    workspace.HarborLastSeenUtc = harbor?.LastSeenUtc;
+                }
+            }
+            catch (Exception e)
+            {
+                _Logging.Debug(_Header + "Harbor link state of " + harborId + " could not be read: " + e.Message);
+            }
         }
 
         private static BlackBoxConflict? ConflictOf(BlackBoxGitFacts? facts)

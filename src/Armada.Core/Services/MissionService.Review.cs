@@ -4,6 +4,7 @@ namespace Armada.Core.Services
     using System.Text.Json;
     using SyslogLogging;
     using Armada.Core;
+    using Armada.Core.BlackBox;
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
@@ -84,6 +85,11 @@ namespace Armada.Core.Services
                 mission.CompletedUtc = DateTime.UtcNow;
                 mission.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+                await RecordFailureAsync(mission, MissionStatusEnum.WorkProduced, BlackBoxStepEnum.ReviewApprovedDockMissing, null, context =>
+                {
+                    context.GitFacts = new BlackBoxGitFacts { WorktreeExisted = false };
+                    context.Note = "The review was approved but dock " + (mission.DockId ?? "(none)") + " could not be read.";
+                }, token).ConfigureAwait(false);
                 await UpdateVoyageTerminalStatusAsync(mission.VoyageId, token).ConfigureAwait(false);
                 return mission;
             }
@@ -287,6 +293,9 @@ namespace Armada.Core.Services
 
             if (effectiveAction == ReviewDenyActionEnum.FailPipeline)
             {
+                // The approval timer's default answer arrives without a reviewer once the deadline has passed.
+                bool timedOut = reviewedByUserId == null && mission.ReviewDeadlineUtc.HasValue && mission.ReviewDeadlineUtc.Value <= DateTime.UtcNow;
+                MissionStatusEnum deniedStatusBefore = mission.Status;
                 mission.Status = MissionStatusEnum.Failed;
                 mission.FailureReason = BuildReviewDeniedFailureReason(reviewComment);
                 mission.FailureKind = MissionFailureKindEnum.ReviewDenied;
@@ -295,6 +304,10 @@ namespace Armada.Core.Services
                 mission.DockId = null;
                 mission.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+                await RecordFailureAsync(mission, deniedStatusBefore, timedOut ? BlackBoxStepEnum.ReviewTimeout : BlackBoxStepEnum.ReviewDenied, dock, context =>
+                {
+                    context.Note = timedOut ? "The approval timer expired and its default answer denied the review." : "Denied by " + (reviewedByUserId ?? "a reviewer") + ".";
+                }, token).ConfigureAwait(false);
 
                 await CancelDependentPipelineStagesAsync(mission, token).ConfigureAwait(false);
                 await UpdateVoyageTerminalStatusAsync(mission.VoyageId, token).ConfigureAwait(false);
