@@ -106,8 +106,8 @@ namespace Armada.Client
         }
 
         /// <summary>
-        /// POST /api/v1/blackbox/{entryId}/timeline/enumerate: one page of an entry's combined timeline (oldest first
-        /// unless the query asks for CreatedDescending).
+        /// POST /api/v1/blackbox/{entryId}/timeline/enumerate: one page of an entry's combined timeline, in the
+        /// query's Order (a null query is oldest first).
         /// </summary>
         /// <param name="entryId">Entry id.</param>
         /// <param name="query">Order and paging; null is oldest first, first page of 10.</param>

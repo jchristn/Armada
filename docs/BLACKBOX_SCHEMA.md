@@ -505,6 +505,10 @@ A ranked recovery path with exact commands and a machine-readable action.
 | `dataLossRisk` | boolean | no | yes |  | Whether any step can lose data (requires acknowledgeDataLoss). |
 | `expectedOutcome` | string | yes | no | at most 2000 chars | Expected outcome. |
 | `ruleId` | string | yes | no | at most 2000 chars | Rule that produced it. |
+| `runbookId` | string | yes | no | at most 2000 chars | Runbook this path maps to (runbook linkage); a confirmed run starts it instead of the steps. |
+| `runbookTitle` | string | yes | no | at most 2000 chars | Title of the linked runbook. |
+| `successRate` | number | yes | no |  | Observed success rate (completed after a confirmed run, over settled runs), or null under three settled runs. |
+| `trackedRuns` | integer | no | yes |  | Settled runs behind successRate. |
 
 ### BlackBoxRecoveryStep
 
@@ -552,6 +556,25 @@ Related section: fingerprint, similar entries and cascade.
 | `occurrencesLast30Days` | integer | no | yes |  | Entries with the same fingerprint in the last 30 days. |
 | `cascadeRootEntryId` | string | yes | no | at most 2000 chars | Cascade root entry, or null. |
 | `downstreamMissionIds` | array of string | no | yes | at most 100 items; each at most 1024 chars | Missions downstream of the cascade. |
+| `nearbySuccesses` | array of [BlackBoxNearbySuccess](#blackboxnearbysuccess) | no | yes | at most 10 items | Successful landings on the same vessel within blackBox.nearbySuccessWindowHours that changed files the failure touched, most overlap first. |
+| `nearbySuccessTotal` | integer | no | yes |  | Nearby successes found. |
+
+### BlackBoxNearbySuccess
+
+A successful landing near the failure (success flight recorder).
+
+| Field | Type | Null | Required | Bounds | Description |
+|---|---|---|---|---|---|
+| `successId` | string | no | yes | at most 2000 chars | Success record (bbs_ prefix). |
+| `missionId` | string | no | yes | at most 2000 chars | Mission that landed. |
+| `missionTitle` | string | yes | no | at most 500 chars | Its title. |
+| `landedUtc` | date-time | no | yes |  | When it landed. |
+| `hoursFromFailure` | number | no | yes |  | Hours between the landing and the failure (negative before the failure). |
+| `baseCommit` | string | yes | no | at most 2000 chars | Its start commit. |
+| `targetCommit` | string | yes | no | at most 2000 chars | Its landed commit. |
+| `runMs` | integer | yes | no |  | Its run time in milliseconds. |
+| `overlappingFiles` | array of string | no | yes | at most 20 items; each at most 1024 chars | Files it changed that the failure also touched. |
+| `overlappingFileCount` | integer | no | yes |  | How many files overlap. |
 
 ### BlackBoxSimilarEntry
 
