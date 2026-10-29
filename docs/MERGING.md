@@ -47,7 +47,7 @@ Terminal states: `Landed`, `Failed`, `Cancelled`.
    5. If the merge conflicts, mark the entry `Failed` and move on.
    6. Run the configured test command (if any) through the platform shell (`/bin/sh -c` or `cmd.exe /c`). If tests fail, mark `Failed`.
    7. Push the integration branch to update the target (`git push origin integration:target`).
-   8. Mark the entry `Landed`.
+   8. Mark the entry `Landed`. The queue reads the integration commit before the push. When the Landed write fails, it fetches the target and checks that this commit is an ancestor of the current target tip. A later commit on the target still counts. When the commit is contained, the queue writes Landed once more and moves the linked mission to `Complete`. When that write also fails, the queue logs the error, leaves the stored entry status unchanged, and does not move the target ref. When the commit is not contained, the entry is marked `Failed`.
    9. Clean up the temporary worktree.
 
 Every git and test subprocess run by the queue has a hard 10-minute timeout; a hung command is killed and the entry is marked `Failed` instead of wedging the queue.
@@ -74,9 +74,10 @@ Because each entry is landed immediately, the next entry in the same group alway
 | **Merge conflict** | Entry marked `Failed` with message. Worktree cleaned up. Linked mission moves to `LandingFailed`. Next entry in the same group continues. |
 | **Test failure** | Entry marked `Failed` with exit code and output truncated to 4096 characters. Worktree cleaned up. Linked mission moves to `LandingFailed`. Next entry continues. |
 | **Push failure** | Entry marked `Failed` with error message. Linked mission moves to `LandingFailed`. Typically means the remote rejected the push (force-push protection, etc.). |
+| **Landed write fails after the push** | The queue fetches the target and checks that the integration commit is an ancestor of the current tip. When it is, the queue writes `Landed` again and moves the linked mission to `Complete`. A later commit on the target still counts. The target ref is not moved. When the second write also fails, the queue logs the error and leaves the stored entry unchanged. When the commit is not in the target, the entry is marked `Failed`. |
 | **Timeout** | A git or test subprocess that runs longer than 10 minutes is killed; the entry is marked `Failed`. |
 | **Vessel not found** | All entries in the group are marked `Failed` with a message indicating the repository path for the vessel could not be resolved. |
-| **Unexpected exception** | Entry marked `Failed` with error message. Best-effort worktree cleanup. Processing continues to the next entry. Group-level exceptions are caught by `ProcessGroupSafeAsync` and logged as warnings. |
+| **Unexpected exception** | Entry marked `Failed` with error message, except for the Landed-write case above when the integration commit is already in the target. Best-effort worktree cleanup. Processing continues to the next entry. Group-level exceptions are caught by `ProcessGroupSafeAsync` and logged as warnings. |
 
 ---
 

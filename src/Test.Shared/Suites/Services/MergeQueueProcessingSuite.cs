@@ -2,10 +2,13 @@ namespace Test.Shared.Suites.Services
 {
     using System;
     using System.Collections.Generic;
-    using System.IO;
+    using System.Globalization;
+    using System.Reflection;
+    using System.Runtime.ExceptionServices;
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Core.Database;
+    using Armada.Core.Database.Interfaces;
     using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Core.Services;
@@ -126,6 +129,14 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("landed_write_failure_after_target_advances_stays_landed", "A failed Landed write after the target advances still records Landed", TestTags.Positive, () =>
+                RunAdvancingTargetWriteFailureAsync(1, MergeStatusEnum.Landed, MissionStatusEnum.Complete)));
+
+            cases.Add(CaseAsync("second_landed_write_failure_does_not_record_failed", "A second failed Landed write does not record Failed", TestTags.Negative, () =>
+                RunAdvancingTargetWriteFailureAsync(2, MergeStatusEnum.Testing, MissionStatusEnum.WorkProduced)));
+
+            cases.Add(CaseAsync("push_rejection_stays_failed", "A rejected push stays Failed and leaves the target unchanged", TestTags.Negative, RunPushRejectionAsync));
+
             cases.Add(CaseAsync("passing_integration_receipt", "Merge queue persists passing checks against the exact SHA pushed to origin", TestTags.Positive, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync();
@@ -207,7 +218,7 @@ namespace Test.Shared.Suites.Services
 
         #region Private-Methods
 
-        private static MergeQueueService CreateQueue(DatabaseDriver db)
+        private static MergeQueueService CreateQueue(DatabaseDriver db, int failLandedWrites = 0, Action? beforeLandedWriteFailure = null)
         {
             LoggingModule logging = new LoggingModule();
             logging.Settings.EnableConsole = false;
@@ -215,7 +226,116 @@ namespace Test.Shared.Suites.Services
             settings.DocksDirectory = TestTemp.NewDirectory("mq_docks");
             settings.ReposDirectory = TestTemp.NewDirectory("mq_repos");
             settings.MergeQueueTestCommand = null;
-            return new MergeQueueService(logging, db, settings, new GitService(logging));
+            DatabaseDriver driver = db;
+            if (failLandedWrites > 0)
+            {
+                IMergeEntryMethods hooked = LandedUpdateFailureProxy.Create(db.MergeEntries, failLandedWrites, beforeLandedWriteFailure);
+                driver = new MergeEntryHookDriver(db, hooked);
+            }
+
+            return new MergeQueueService(logging, driver, settings, new GitService(logging));
+        }
+
+        private static async Task RunAdvancingTargetWriteFailureAsync(int failures, MergeStatusEnum expectedStatus, MissionStatusEnum expectedMission)
+        {
+            using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+            {
+                MergeQueueRepoSet repos = MergeQueueRepoSet.Create();
+                repos.PushBranch("feature/landed-write", "landed.txt", "landed change\n");
+                string? integrationCommit = null;
+                MergeQueueService queue = CreateQueue(testDb.Driver, failures, () =>
+                {
+                    if (integrationCommit != null) return;
+                    integrationCommit = repos.OriginHead("main");
+                    repos.AdvanceMain("later.txt", "later change\n");
+                });
+                Mission mission = await CreateMissionAsync(testDb.Driver, repos).ConfigureAwait(false);
+                MergeEntry entry = await EnqueueAsync(queue, testDb.Driver, repos, "feature/landed-write", mission.Id, null).ConfigureAwait(false);
+
+                MergeEntry? processed = await queue.ProcessSingleAsync(entry.Id).ConfigureAwait(false);
+
+                AssertNotNull(integrationCommit, "the push updated the target before the Landed write");
+                AssertEqual(expectedStatus, processed!.Status, "entry status; output: " + processed.TestOutput);
+                Mission? updated = await testDb.Driver.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
+                AssertEqual(expectedMission, updated!.Status, "mission status");
+                if (expectedMission == MissionStatusEnum.WorkProduced)
+                {
+                    AssertNull(updated.FailureReason, "mission failure reason");
+                    AssertNull(updated.FailureKind, "mission failure kind");
+                }
+
+                AssertTargetContainsIntegration(repos, integrationCommit, "landed.txt", "later.txt");
+            }
+        }
+
+        private static async Task RunPushRejectionAsync()
+        {
+            using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+            {
+                MergeQueueRepoSet repos = MergeQueueRepoSet.Create();
+                repos.PushBranch("feature/push-rejected", "rejected.txt", "rejected change\n");
+                string hooks = repos.InstallPushRejectionHook();
+                MergeQueueService queue = CreateQueue(testDb.Driver);
+                Mission mission = await CreateMissionAsync(testDb.Driver, repos).ConfigureAwait(false);
+                MergeEntry entry = await EnqueueAsync(queue, testDb.Driver, repos, "feature/push-rejected", mission.Id, null).ConfigureAwait(false);
+                string mainBefore = repos.OriginHead("main");
+                string? previousCount;
+                string? previousKey;
+                string? previousValue;
+                string index;
+                SetHooksPath(hooks, out previousCount, out previousKey, out previousValue, out index);
+                try
+                {
+                    MergeEntry? processed = await queue.ProcessSingleAsync(entry.Id).ConfigureAwait(false);
+
+                    AssertEqual(MergeStatusEnum.Failed, processed!.Status, "entry status; output: " + processed.TestOutput);
+                    AssertContains("Landing failed", processed.TestOutput ?? "");
+                    AssertEqual(mainBefore, repos.OriginHead("main"), "origin main unchanged");
+                    AssertFalse(repos.OriginHasFile("main", "rejected.txt"), "rejected change is not on the target");
+                    Mission? updated = await testDb.Driver.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
+                    AssertEqual(MissionStatusEnum.LandingFailed, updated!.Status, "mission status");
+                }
+                finally
+                {
+                    RestoreHooksPath(previousCount, previousKey, previousValue, index);
+                }
+            }
+        }
+
+        private static void AssertTargetContainsIntegration(MergeQueueRepoSet repos, string integrationCommit, string featureFile, string laterFile)
+        {
+            string tip = repos.OriginHead("main");
+            AssertNotEqual(integrationCommit, tip, "a later commit advances the target");
+            AssertTrue(repos.HasCommit(integrationCommit), "integration commit remains on origin");
+            AssertTrue(repos.HasCommit(tip), "later commit remains on origin");
+            AssertTrue(repos.IsAncestor(integrationCommit, tip), "integration commit is an ancestor of the target tip");
+            AssertTrue(repos.OriginHasFile("main", featureFile), featureFile + " is on the target");
+            AssertTrue(repos.OriginHasFile("main", laterFile), laterFile + " is on the target");
+        }
+
+        private static void SetHooksPath(string hooksPath, out string? previousCount, out string? previousKey, out string? previousValue, out string index)
+        {
+            previousCount = Environment.GetEnvironmentVariable("GIT_CONFIG_COUNT");
+            int count = 0;
+            if (!String.IsNullOrWhiteSpace(previousCount))
+            {
+                Int32.TryParse(previousCount, NumberStyles.Integer, CultureInfo.InvariantCulture, out count);
+            }
+
+            if (count < 0) count = 0;
+            index = count.ToString(CultureInfo.InvariantCulture);
+            previousKey = Environment.GetEnvironmentVariable("GIT_CONFIG_KEY_" + index);
+            previousValue = Environment.GetEnvironmentVariable("GIT_CONFIG_VALUE_" + index);
+            Environment.SetEnvironmentVariable("GIT_CONFIG_KEY_" + index, "core.hooksPath");
+            Environment.SetEnvironmentVariable("GIT_CONFIG_VALUE_" + index, hooksPath);
+            Environment.SetEnvironmentVariable("GIT_CONFIG_COUNT", (count + 1).ToString(CultureInfo.InvariantCulture));
+        }
+
+        private static void RestoreHooksPath(string? previousCount, string? previousKey, string? previousValue, string index)
+        {
+            Environment.SetEnvironmentVariable("GIT_CONFIG_COUNT", previousCount);
+            Environment.SetEnvironmentVariable("GIT_CONFIG_KEY_" + index, previousKey);
+            Environment.SetEnvironmentVariable("GIT_CONFIG_VALUE_" + index, previousValue);
         }
 
         private static async Task<Mission> CreateMissionAsync(DatabaseDriver db, MergeQueueRepoSet repos)
@@ -262,6 +382,136 @@ namespace Test.Shared.Suites.Services
                 displayName: displayName,
                 executeAsync: (CancellationToken ct) => body(),
                 tags: new List<string> { tag, TestTags.Process });
+        }
+
+        /// <summary>
+        /// Fails the first <paramref name="failures"/> merge-entry updates whose status is Landed. Other writes pass
+        /// through. The hook runs once, before the first failed write.
+        /// </summary>
+        public class LandedUpdateFailureProxy : DispatchProxy
+        {
+            private IMergeEntryMethods _Inner = null!;
+            private int _RemainingFailures;
+            private Action? _BeforeFailure;
+
+            /// <summary>
+            /// Wrap merge-entry methods so Landed updates fail the requested number of times.
+            /// </summary>
+            /// <param name="inner">Real merge-entry methods.</param>
+            /// <param name="failures">How many Landed updates throw.</param>
+            /// <param name="beforeFailure">Runs once, before the first thrown update.</param>
+            /// <returns>The wrapping methods.</returns>
+            public static IMergeEntryMethods Create(IMergeEntryMethods inner, int failures, Action? beforeFailure)
+            {
+                if (inner == null) throw new ArgumentNullException(nameof(inner));
+                if (failures < 1) throw new ArgumentOutOfRangeException(nameof(failures));
+
+                IMergeEntryMethods proxy = DispatchProxy.Create<IMergeEntryMethods, LandedUpdateFailureProxy>();
+                LandedUpdateFailureProxy state = (LandedUpdateFailureProxy)(object)proxy;
+                state._Inner = inner;
+                state._RemainingFailures = failures;
+                state._BeforeFailure = beforeFailure;
+                return proxy;
+            }
+
+            /// <summary>
+            /// Forward a call, or throw for a Landed update while failures remain.
+            /// </summary>
+            /// <param name="targetMethod">Interface method.</param>
+            /// <param name="args">Arguments.</param>
+            /// <returns>The inner result.</returns>
+            protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
+            {
+                if (targetMethod == null) throw new ArgumentNullException(nameof(targetMethod));
+                if ((String.Equals(targetMethod.Name, "UpdateAsync", StringComparison.Ordinal)
+                    || String.Equals(targetMethod.Name, "TryUpdateIfUnchangedAsync", StringComparison.Ordinal))
+                    && args != null
+                    && args.Length > 0
+                    && args[0] is MergeEntry entry
+                    && entry.Status == MergeStatusEnum.Landed
+                    && _RemainingFailures > 0)
+                {
+                    _RemainingFailures--;
+                    Action? hook = _BeforeFailure;
+                    _BeforeFailure = null;
+                    if (hook != null) hook();
+                    throw new InvalidOperationException("Landed merge-entry update failed");
+                }
+
+                try
+                {
+                    return targetMethod.Invoke(_Inner, args);
+                }
+                catch (TargetInvocationException ex) when (ex.InnerException != null)
+                {
+                    ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
+                    throw;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Database driver that shares a real driver's accessors except merge entries.
+        /// Disposing it leaves the inner driver open.
+        /// </summary>
+        private sealed class MergeEntryHookDriver : DatabaseDriver
+        {
+            private readonly DatabaseDriver _Inner;
+
+            /// <summary>
+            /// Instantiate over an initialized driver.
+            /// </summary>
+            /// <param name="inner">Real driver.</param>
+            /// <param name="mergeEntries">Merge-entry methods the queue should use.</param>
+            public MergeEntryHookDriver(DatabaseDriver inner, IMergeEntryMethods mergeEntries)
+            {
+                if (inner == null) throw new ArgumentNullException(nameof(inner));
+                if (mergeEntries == null) throw new ArgumentNullException(nameof(mergeEntries));
+                _Inner = inner;
+                foreach (PropertyInfo property in typeof(DatabaseDriver).GetProperties(BindingFlags.Public | BindingFlags.Instance))
+                {
+                    MethodInfo? setter = property.GetSetMethod(true);
+                    if (setter == null || property.GetIndexParameters().Length > 0) continue;
+                    setter.Invoke(this, new object?[] { property.GetValue(inner) });
+                }
+
+                MergeEntries = mergeEntries;
+            }
+
+            /// <inheritdoc />
+            public override Task InitializeAsync(CancellationToken token = default)
+            {
+                return _Inner.InitializeAsync(token);
+            }
+
+            /// <inheritdoc />
+            public override Task<int> GetSchemaVersionAsync(CancellationToken token = default)
+            {
+                return _Inner.GetSchemaVersionAsync(token);
+            }
+
+            /// <inheritdoc />
+            public override int GetLatestSchemaVersion()
+            {
+                return _Inner.GetLatestSchemaVersion();
+            }
+
+            /// <inheritdoc />
+            public override void Dispose()
+            {
+            }
+
+            /// <inheritdoc />
+            internal override IReadOnlyList<SchemaMigration> GetMigrationsForVerification()
+            {
+                return _Inner.GetMigrationsForVerification();
+            }
+
+            /// <inheritdoc />
+            internal override Task ReplayMigrationsAsync(CancellationToken token = default)
+            {
+                return _Inner.ReplayMigrationsAsync(token);
+            }
         }
 
         #endregion

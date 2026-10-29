@@ -102,6 +102,47 @@ namespace Test.Shared.Infrastructure
         }
 
         /// <summary>
+        /// True when <paramref name="ancestor"/> is an ancestor of <paramref name="descendant"/> on origin, including
+        /// when the two commits are equal.
+        /// </summary>
+        /// <param name="ancestor">Commit id that should be contained.</param>
+        /// <param name="descendant">Commit id of the later tip.</param>
+        /// <returns>True when git reports the ancestor relationship.</returns>
+        public bool IsAncestor(string ancestor, string descendant)
+        {
+            return GitExitCode(Origin, "merge-base", "--is-ancestor", ancestor, descendant) == 0;
+        }
+
+        /// <summary>
+        /// True when origin has the commit object.
+        /// </summary>
+        /// <param name="commit">Commit id.</param>
+        /// <returns>True when the object exists.</returns>
+        public bool HasCommit(string commit)
+        {
+            return GitExitCode(Origin, "cat-file", "-e", commit + "^{commit}") == 0;
+        }
+
+        /// <summary>
+        /// Install a pre-receive hook on origin that rejects every push, and point this repository at that hook.
+        /// </summary>
+        /// <returns>The hook directory. Set <c>core.hooksPath</c> to this path for the push under test, then restore it.</returns>
+        public string InstallPushRejectionHook()
+        {
+            string hooks = Path.Combine(Origin, "reject-hooks");
+            Directory.CreateDirectory(hooks);
+            string hook = Path.Combine(hooks, "pre-receive");
+            File.WriteAllText(hook, "#!/bin/sh\nexit 1\n");
+            if (!OperatingSystem.IsWindows())
+            {
+                File.SetUnixFileMode(hook, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            }
+
+            Git(Origin, "config", "core.hooksPath", hooks);
+            return hooks;
+        }
+
+        /// <summary>
         /// True when a file exists in the tree of an origin branch.
         /// </summary>
         /// <param name="branch">Branch name.</param>
@@ -123,6 +164,26 @@ namespace Test.Shared.Infrastructure
 
         private static string Git(string workingDirectory, params string[] args)
         {
+            string stdout;
+            string stderr;
+            int exitCode = RunGit(workingDirectory, out stdout, out stderr, args);
+            if (exitCode != 0)
+            {
+                throw new InvalidOperationException("git " + String.Join(" ", args) + " failed in " + workingDirectory + ": " + stderr);
+            }
+
+            return stdout;
+        }
+
+        private static int GitExitCode(string workingDirectory, params string[] args)
+        {
+            string stdout;
+            string stderr;
+            return RunGit(workingDirectory, out stdout, out stderr, args);
+        }
+
+        private static int RunGit(string workingDirectory, out string stdout, out string stderr, params string[] args)
+        {
             ProcessStartInfo info = new ProcessStartInfo("git");
             foreach (string arg in args) info.ArgumentList.Add(arg);
             info.WorkingDirectory = workingDirectory;
@@ -132,14 +193,10 @@ namespace Test.Shared.Infrastructure
             info.Environment["GIT_TERMINAL_PROMPT"] = "0";
             using (Process process = Process.Start(info)!)
             {
-                string stdout = process.StandardOutput.ReadToEnd();
-                string stderr = process.StandardError.ReadToEnd();
+                stdout = process.StandardOutput.ReadToEnd();
+                stderr = process.StandardError.ReadToEnd();
                 process.WaitForExit();
-                if (process.ExitCode != 0)
-                {
-                    throw new InvalidOperationException("git " + String.Join(" ", args) + " failed in " + workingDirectory + ": " + stderr);
-                }
-                return stdout;
+                return process.ExitCode;
             }
         }
 
