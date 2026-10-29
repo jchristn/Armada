@@ -9,6 +9,7 @@ All notable changes to Armada are documented in this file.
 - macOS Harbor bundles store the pi permission-gate extension in `Contents/Resources/Pi`, and pi resolves it there as well as beside portable binaries. This prevents ARM64 code signing from treating TypeScript resources as unsigned nested code. The DMG verifier checks the resource layout.
 - After building and verifying both Harbor DMGs, `build-harbor-app.sh` installs the native app into `~/Applications`, staging and signature-checking a fresh bundle before replacement. `--no-install` opts out, and `--no-build` remains verification-only.
 - Helm's NuGet tool package preserves battery fixture `.gitignore` and `.gitattributes` files instead of excluding them with NU5119 warnings. Installer verification checks every packaged framework for those files.
+- A dashboard detail page keeps the record for the route that was requested last. Mission, captain, vessel, fleet, voyage, dock, and event pages clear the previous record when the route changes and show the loading state until that route's request returns. A refresh of the same record does not apply an older response. Mission and voyage refreshes keep the current record on screen.
 
 ### Landing failure prevention
 

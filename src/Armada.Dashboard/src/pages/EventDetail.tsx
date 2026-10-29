@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   apiErrorMessage,
@@ -30,6 +30,8 @@ export default function EventDetail() {
   const [captains, setCaptains] = useState<Captain[]>([]);
   const [vessels, setVessels] = useState<Vessel[]>([]);
   const [error, setError] = useState('');
+  const requestGenerationRef = useRef(0);
+  const loadedEventIdRef = useRef<string | null>(null);
   const [jsonView, setJsonView] = useState<{ title: string; data: unknown } | null>(null);
   const [confirmAction, setConfirmAction] = useState<{ message: string; action: () => void } | null>(null);
 
@@ -47,7 +49,21 @@ export default function EventDetail() {
 
   useEffect(() => {
     if (!id) return;
-    getEvent(id).then(setEvent).catch(() => setError(t('Failed to load event.')));
+    const generation = ++requestGenerationRef.current;
+    const routeId = id;
+    const current = () => generation === requestGenerationRef.current;
+    if (loadedEventIdRef.current !== routeId) {
+      setEvent(null);
+      setError('');
+    }
+    getEvent(routeId).then((event) => {
+      if (!current()) return;
+      loadedEventIdRef.current = routeId;
+      setEvent(event);
+    }).catch(() => {
+      if (!current()) return;
+      setError(t('Failed to load event.'));
+    });
     listAll(listCaptains).then(r => setCaptains(r.objects || [])).catch(() => {});
     listAll(listVessels).then(r => setVessels(r.objects || [])).catch(() => {});
   }, [id, t]);

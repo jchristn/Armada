@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { getFleet, listVessels, listPipelines, createFleet, updateFleet, deleteFleet, apiErrorMessage } from '../api/client';
 import { listAll } from '../api/paging';
@@ -26,6 +26,8 @@ export default function FleetDetail() {
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const requestGenerationRef = useRef(0);
+  const loadedFleetIdRef = useRef<string | null>(null);
 
   // Edit modal
   const [showForm, setShowForm] = useState(false);
@@ -39,26 +41,37 @@ export default function FleetDetail() {
 
   const load = useCallback(async () => {
     if (!id) return;
+    const generation = ++requestGenerationRef.current;
+    const routeId = id;
+    const isNewRoute = loadedFleetIdRef.current !== routeId;
+    const current = () => generation === requestGenerationRef.current;
+    if (isNewRoute) {
+      setFleet(null);
+      setVessels([]);
+      setError('');
+    }
+    setLoading(true);
     try {
-      setLoading(true);
-      const isInitialLoad = !fleet;
       let found: Fleet | null = null;
       try {
-        found = await getFleet(id);
+        found = await getFleet(routeId);
       } catch {
         found = null;
       }
+      if (!current()) return;
       if (!found) { setError(t('Fleet not found.')); setLoading(false); return; }
-      const [vResult, pResult] = await Promise.all([listAll(listVessels, { filters: { fleetId: id } }), listAll(listPipelines)]);
+      const [vResult, pResult] = await Promise.all([listAll(listVessels, { filters: { fleetId: routeId } }), listAll(listPipelines)]);
+      if (!current()) return;
       setFleet(found);
       // The server filters by fleet; keep the client check so a route that ignores the filter cannot leak others.
-      setVessels(vResult.objects.filter(v => v.fleetId === id));
+      setVessels(vResult.objects.filter(v => v.fleetId === routeId));
       setPipelines(pResult.objects);
-      if (isInitialLoad) setError('');
+      loadedFleetIdRef.current = routeId;
     } catch {
+      if (!current()) return;
       setError(t('Failed to load fleet.'));
     } finally {
-      setLoading(false);
+      if (current()) setLoading(false);
     }
   }, [id, t]);
 

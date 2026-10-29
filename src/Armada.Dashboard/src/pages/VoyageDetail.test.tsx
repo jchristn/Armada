@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom';
 import VoyageDetail from './VoyageDetail';
 import { getMission, getVoyage, listCaptains, listMissions, listVessels } from '../api/client';
 import { translateTemplate } from '../i18n/runtime';
@@ -185,5 +185,69 @@ describe('VoyageDetail missions table', () => {
     expect(within(menu).getByRole('menuitemcheckbox', { name: /Mission/ })).toHaveAttribute('aria-disabled', 'true');
     // The row action buttons are a fixed column, not offered in the chooser.
     expect(within(menu).queryByRole('menuitemcheckbox', { name: /Actions/ })).toBeNull();
+  });
+});
+
+interface Deferred<T> { promise: Promise<T>; resolve: (value: T) => void }
+
+function deferred<T>(): Deferred<T> {
+  let resolve: (value: T) => void = () => {};
+  const promise = new Promise<T>((res) => { resolve = res; });
+  return { promise, resolve };
+}
+
+describe('VoyageDetail route load order', () => {
+  const voyages = new Map<string, Deferred<unknown>>();
+
+  function gate(id: string): Deferred<unknown> {
+    let entry = voyages.get(id);
+    if (!entry) {
+      entry = deferred<unknown>();
+      voyages.set(id, entry);
+    }
+    return entry;
+  }
+
+  beforeEach(() => {
+    voyages.clear();
+    handlers.clear();
+    vi.mocked(listVessels).mockResolvedValue({ success: true, pageNumber: 1, pageSize: 1000, totalPages: 1, totalRecords: 0, totalMs: 1, objects: [] });
+    vi.mocked(listCaptains).mockResolvedValue({ success: true, pageNumber: 1, pageSize: 1000, totalPages: 1, totalRecords: 0, totalMs: 1, objects: [] });
+    vi.mocked(getVoyage).mockImplementation((id: string) => gate(id).promise as never);
+  });
+
+  it('keeps the newer voyage when the older request finishes last', async () => {
+    function Harness() {
+      const navigate = useNavigate();
+      return (
+        <>
+          <button type="button" onClick={() => navigate('/voyages/vyg_b')}>Open route B</button>
+          <Routes>
+            <Route path="/voyages/:id" element={<VoyageDetail />} />
+          </Routes>
+        </>
+      );
+    }
+
+    render(
+      <MemoryRouter initialEntries={['/voyages/vyg_a']}>
+        <Harness />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Open route B' }));
+
+    await act(async () => {
+      gate('vyg_b').resolve({ voyage: { ...voyage('InProgress'), id: 'vyg_b', title: 'Voyage Beta' }, missions: [] });
+    });
+    expect(await screen.findByRole('heading', { name: 'Voyage Beta' })).toBeInTheDocument();
+
+    await act(async () => {
+      gate('vyg_a').resolve({ voyage: { ...voyage('InProgress'), id: 'vyg_a', title: 'Voyage Alpha' }, missions: [] });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Voyage Beta' })).toBeInTheDocument();
+      expect(screen.queryByRole('heading', { name: 'Voyage Alpha' })).not.toBeInTheDocument();
+    });
   });
 });

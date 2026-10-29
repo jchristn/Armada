@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { getVessel, listFleets, listMissionSummaries, listPipelines, createVessel, deleteVessel, getVesselReadiness, getVesselLandingPreview } from '../api/client';
 import { listAll } from '../api/paging';
@@ -40,6 +40,8 @@ export default function VesselDetail() {
   const [landingPreview, setLandingPreview] = useState<LandingPreviewResult | null>(null);
   const [loadingReadiness, setLoadingReadiness] = useState(false);
   const [loadingLandingPreview, setLoadingLandingPreview] = useState(false);
+  const requestGenerationRef = useRef(0);
+  const loadedVesselIdRef = useRef<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -61,38 +63,52 @@ export default function VesselDetail() {
 
   const load = useCallback(async () => {
     if (!id) return;
+    const generation = ++requestGenerationRef.current;
+    const routeId = id;
+    const isNewRoute = loadedVesselIdRef.current !== routeId;
+    const current = () => generation === requestGenerationRef.current;
+    if (isNewRoute) {
+      setVessel(null);
+      setReadiness(null);
+      setLandingPreview(null);
+      setLoadingReadiness(false);
+      setLoadingLandingPreview(false);
+      setError('');
+    }
+    setLoading(true);
     try {
-      setLoading(true);
-      const isInitialLoad = !vessel;
       let found: Vessel | null = null;
       try {
-        found = await getVessel(id);
+        found = await getVessel(routeId);
       } catch {
         found = null;
       }
+      if (!current()) return;
       if (!found) { setError(t('Vessel not found.')); setLoading(false); return; }
       const [fResult, pResult] = await Promise.all([
         listAll(listFleets),
         listAll(listPipelines),
       ]);
+      if (!current()) return;
       setVessel(found);
       setFleets(fResult.objects);
       setPipelines(pResult.objects);
+      loadedVesselIdRef.current = routeId;
       setLoadingReadiness(true);
-      getVesselReadiness(id)
-        .then((result) => setReadiness(result))
-        .catch(() => setReadiness(null))
-        .finally(() => setLoadingReadiness(false));
+      getVesselReadiness(routeId)
+        .then((result) => { if (current()) setReadiness(result); })
+        .catch(() => { if (current()) setReadiness(null); })
+        .finally(() => { if (current()) setLoadingReadiness(false); });
       setLoadingLandingPreview(true);
-      getVesselLandingPreview(id, found.defaultBranch || null)
-        .then((result) => setLandingPreview(result))
-        .catch(() => setLandingPreview(null))
-        .finally(() => setLoadingLandingPreview(false));
-      if (isInitialLoad) setError('');
+      getVesselLandingPreview(routeId, found.defaultBranch || null)
+        .then((result) => { if (current()) setLandingPreview(result); })
+        .catch(() => { if (current()) setLandingPreview(null); })
+        .finally(() => { if (current()) setLoadingLandingPreview(false); });
     } catch {
+      if (!current()) return;
       setError(t('Failed to load vessel.'));
     } finally {
-      setLoading(false);
+      if (current()) setLoading(false);
     }
   }, [id, t]);
 

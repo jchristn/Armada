@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   apiErrorMessage,
@@ -73,6 +73,8 @@ export default function CaptainDetail() {
   const [missions, setMissions] = useState<MissionSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const requestGenerationRef = useRef(0);
+  const loadedCaptainIdRef = useRef<string | null>(null);
 
   // Edit
   const [showForm, setShowForm] = useState(false);
@@ -101,30 +103,47 @@ export default function CaptainDetail() {
 
   const load = useCallback(async () => {
     if (!id) return;
+    const generation = ++requestGenerationRef.current;
+    const routeId = id;
+    const isNewRoute = loadedCaptainIdRef.current !== routeId;
+    const current = () => generation === requestGenerationRef.current;
+    if (isNewRoute) {
+      setCaptain(null);
+      setCurrentMission(null);
+      setMissions([]);
+      setError('');
+    }
+    setLoading(true);
     try {
-      setLoading(true);
-      const isInitialLoad = !captain;
-      const cap = await getCaptain(id);
+      const cap = await getCaptain(routeId);
+      if (!current()) return;
       setCaptain(cap);
-      // Load current mission if set
       if (cap.currentMissionId) {
         try {
           const m = await getMission(cap.currentMissionId);
+          if (!current()) return;
           setCurrentMission(m);
-        } catch { setCurrentMission(null); }
+        } catch {
+          if (!current()) return;
+          setCurrentMission(null);
+        }
       } else {
         setCurrentMission(null);
       }
-      // Load missions assigned to this captain
       try {
-        const mResult = await listMissionSummaries({ pageSize: 100, filters: { captainId: id } });
+        const mResult = await listMissionSummaries({ pageSize: 100, filters: { captainId: routeId } });
+        if (!current()) return;
         setMissions(mResult.objects || []);
-      } catch { setMissions([]); }
-      if (isInitialLoad) setError('');
+      } catch {
+        if (!current()) return;
+        setMissions([]);
+      }
+      loadedCaptainIdRef.current = routeId;
     } catch {
+      if (!current()) return;
       setError(t('Failed to load captain.'));
     } finally {
-      setLoading(false);
+      if (current()) setLoading(false);
     }
   }, [id, t]);
 

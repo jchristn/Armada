@@ -75,32 +75,50 @@ export default function VoyageDetail() {
   const captainName = useCallback((cid: string | null | undefined) => cid ? captainMap.get(cid) || cid.slice(0, 8) : '-', [captainMap]);
 
   const loadedVoyageIdRef = useRef<string | null>(null);
+  const requestGenerationRef = useRef(0);
   const loadVoyage = useCallback(async () => {
     if (!id) return;
-    // Show the loading state only on a voyage's first load; live refreshes update the page in place.
-    if (loadedVoyageIdRef.current !== id) setLoading(true);
+    const generation = ++requestGenerationRef.current;
+    const routeId = id;
+    const isNewRoute = loadedVoyageIdRef.current !== routeId;
+    const current = () => generation === requestGenerationRef.current;
+    // Show the loading state only when the route changes. A live refresh updates the page in place.
+    if (isNewRoute) {
+      setLoading(true);
+      setVoyage(null);
+      setDetail(null);
+      setMissions([]);
+      setVoyageSnapshots([]);
+      setError('');
+    }
     try {
       // The voyage detail carries counts only; the missions table reads one server page at a time.
-      const parts = splitVoyageResponse(await getVoyage(id));
+      const parts = splitVoyageResponse(await getVoyage(routeId));
+      if (!current()) return;
       setVoyage(parts.voyage);
       setDetail(parts.detail);
       try {
-        const page = await listMissions({ pageNumber: missionPage.pageNumber, pageSize: missionPage.pageSize, filters: { voyageId: id, order: 'CreatedAscending' } });
+        const page = await listMissions({ pageNumber: missionPage.pageNumber, pageSize: missionPage.pageSize, filters: { voyageId: routeId, order: 'CreatedAscending' } });
+        if (!current()) return;
         setMissions(page.objects || []);
         setMissionPage(p => ({ ...p, totalPages: page.totalPages, totalRecords: page.totalRecords }));
         // List reads carry no playbook snapshots; any mission's detail does (each gets the voyage's selections).
         const firstMission = (page.objects || [])[0];
         if (missionPage.pageNumber === 1) {
-          setVoyageSnapshots(firstMission ? ((await getMission(firstMission.id).catch(() => null))?.playbookSnapshots || []) : []);
+          const snapshots = firstMission ? ((await getMission(firstMission.id).catch(() => null))?.playbookSnapshots || []) : [];
+          if (!current()) return;
+          setVoyageSnapshots(snapshots);
         }
       } catch {
+        if (!current()) return;
         setMissions([]);
       }
-      loadedVoyageIdRef.current = id;
+      loadedVoyageIdRef.current = routeId;
     } catch (e: unknown) {
+      if (!current()) return;
       setError(t('Failed to load voyage: {{message}}', { message: e instanceof Error ? e.message : String(e) }));
     } finally {
-      setLoading(false);
+      if (current()) setLoading(false);
     }
   }, [id, t, missionPage.pageNumber, missionPage.pageSize]);
 

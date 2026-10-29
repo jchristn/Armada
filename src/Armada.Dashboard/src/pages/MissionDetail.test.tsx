@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom';
 import MissionDetail from './MissionDetail';
 import { getHarbor, getMission, getMissionLandingPreview, listCaptains, listCheckRuns, listDeployments, listVessels, purgeMission, retryMissionLanding } from '../api/client';
 import { translateTemplate } from '../i18n/runtime';
@@ -270,5 +270,93 @@ describe('MissionDetail Harbor and captain runtime', () => {
     await act(async () => { finish(); });
     await waitFor(() => expect(screen.queryByRole('alertdialog', { name: 'Purging mission' })).not.toBeInTheDocument());
     expect(purgeMission).toHaveBeenCalledTimes(1);
+  });
+});
+
+interface Deferred<T> { promise: Promise<T>; resolve: (value: T) => void }
+
+function deferred<T>(): Deferred<T> {
+  let resolve: (value: T) => void = () => {};
+  const promise = new Promise<T>((res) => { resolve = res; });
+  return { promise, resolve };
+}
+
+describe('MissionDetail route load order', () => {
+  const missions = new Map<string, Deferred<Mission>>();
+  const previews = new Map<string, Deferred<LandingPreviewResult>>();
+
+  function gate<T>(store: Map<string, Deferred<T>>, id: string): Deferred<T> {
+    let entry = store.get(id);
+    if (!entry) {
+      entry = deferred<T>();
+      store.set(id, entry);
+    }
+    return entry;
+  }
+
+  beforeEach(() => {
+    missions.clear();
+    previews.clear();
+    vi.mocked(listVessels).mockResolvedValue(emptyPage as never);
+    vi.mocked(listCaptains).mockResolvedValue(emptyPage as never);
+    vi.mocked(listCheckRuns).mockResolvedValue(emptyPage as never);
+    vi.mocked(listDeployments).mockResolvedValue(emptyPage as never);
+    vi.mocked(getMission).mockImplementation((id: string) => gate(missions, id).promise);
+    vi.mocked(getMissionLandingPreview).mockImplementation((id: string) => gate(previews, id).promise);
+  });
+
+  it('keeps the newer mission and its landing preview when the older request finishes last', async () => {
+    function Harness() {
+      const navigate = useNavigate();
+      return (
+        <>
+          <button type="button" onClick={() => navigate('/missions/msn_b')}>Open route B</button>
+          <Routes>
+            <Route path="/missions/:id" element={<MissionDetail />} />
+          </Routes>
+        </>
+      );
+    }
+
+    render(
+      <MemoryRouter initialEntries={['/missions/msn_a']}>
+        <Harness />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open route B' }));
+
+    await act(async () => {
+      gate(missions, 'msn_b').resolve(mission({ id: 'msn_b', title: 'Mission Beta', status: 'WorkProduced', branchName: 'feature-b' }));
+    });
+    expect(await screen.findByRole('heading', { name: 'Mission Beta' })).toBeInTheDocument();
+
+    await act(async () => {
+      gate(previews, 'msn_b').resolve(preview({
+        missionId: 'msn_b', sourceBranch: 'feature-b', targetBranch: 'main',
+        isReadyToLand: true, effectiveLandingMode: 'LocalMerge', manualLandingOnly: false, missionStatus: 'WorkProduced',
+      }));
+    });
+    expect(await screen.findByText('feature-b -> main')).toBeInTheDocument();
+
+    await act(async () => {
+      gate(missions, 'msn_a').resolve(mission({ id: 'msn_a', title: 'Mission Alpha', status: 'WorkProduced', branchName: 'feature-a' }));
+    });
+    await act(async () => {
+      const latePreview = previews.get('msn_a');
+      if (latePreview) {
+        latePreview.resolve(preview({
+          missionId: 'msn_a', sourceBranch: 'feature-a', targetBranch: 'main',
+          isReadyToLand: false, effectiveLandingMode: 'None', manualLandingOnly: true, missionStatus: 'WorkProduced',
+        }));
+      }
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Mission Beta' })).toBeInTheDocument();
+      expect(screen.queryByRole('heading', { name: 'Mission Alpha' })).not.toBeInTheDocument();
+      expect(screen.getByText('feature-b -> main')).toBeInTheDocument();
+      expect(screen.queryByText('feature-a -> main')).not.toBeInTheDocument();
+    });
   });
 });

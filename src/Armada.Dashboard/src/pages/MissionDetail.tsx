@@ -76,7 +76,8 @@ export default function MissionDetail() {
   // Log viewer (shared modal)
   const [logModal, setLogModal] = useState<{ open: boolean; title: string; missionId: string; content: string; totalLines: number; lineCount: number }>({ open: false, title: '', missionId: '', content: '', totalLines: 0, lineCount: 200 });
   const [instructionsModal, setInstructionsModal] = useState<{ open: boolean; title: string; content: string }>({ open: false, title: '', content: '' });
-  const missionLoadedRef = useRef(false);
+  const requestGenerationRef = useRef(0);
+  const loadedMissionIdRef = useRef<string | null>(null);
 
   // Transition
   const [showTransition, setShowTransition] = useState(false);
@@ -128,24 +129,34 @@ export default function MissionDetail() {
 
   const loadMission = useCallback(async () => {
     if (!id) return;
-    // Only show loading spinner on initial load, not background refreshes
-    const isInitialLoad = !missionLoadedRef.current;
-    if (isInitialLoad) setLoading(true);
+    const generation = ++requestGenerationRef.current;
+    const routeId = id;
+    // Show the loading state only when the route changes. A refresh of the same mission keeps the record on screen.
+    const isInitialLoad = loadedMissionIdRef.current !== routeId;
+    if (isInitialLoad) {
+      setLoading(true);
+      setMission(null);
+      setLandingPreview(null);
+      setLoadingLandingPreview(false);
+    }
+    const current = () => generation === requestGenerationRef.current;
     try {
-      const m = await getMission(id);
+      const m = await getMission(routeId);
+      if (!current()) return;
       setMission(m);
       setLoadingLandingPreview(true);
-      getMissionLandingPreview(id)
-        .then((result) => setLandingPreview(result))
-        .catch(() => setLandingPreview(null))
-        .finally(() => setLoadingLandingPreview(false));
-      missionLoadedRef.current = true;
-      // Only clear error on initial load -- don't dismiss user-facing errors from actions
+      getMissionLandingPreview(routeId)
+        .then((result) => { if (current()) setLandingPreview(result); })
+        .catch(() => { if (current()) setLandingPreview(null); })
+        .finally(() => { if (current()) setLoadingLandingPreview(false); });
+      loadedMissionIdRef.current = routeId;
+      // Only clear error on the first load of this route -- don't dismiss user-facing errors from actions
       if (isInitialLoad) setError('');
     } catch (e: unknown) {
+      if (!current()) return;
       if (isInitialLoad) setError(t('Failed to load mission: {{message}}', { message: e instanceof Error ? e.message : String(e) }));
     } finally {
-      setLoading(false);
+      if (current()) setLoading(false);
     }
   }, [id, t]);
 
