@@ -372,7 +372,7 @@ namespace Test.Shared.Suites.E2E
                     AssertEqual(HttpStatusCode.Unauthorized, unauthenticated.StatusCode, "no credential");
             }));
 
-            cases.Add(CaseAsync("rest_global_admin_routes", "Storage, retention, GC dry run, purge dry run and backfill for a global admin; storage migration answers 501 until it merges", TestTags.Positive, async () =>
+            cases.Add(CaseAsync("rest_global_admin_routes", "Storage, retention, GC dry run, purge dry run and backfill for a global admin; storage migration starts a job and reports it by id", TestTags.Positive, async () =>
             {
                 RequireSetup();
                 HttpClient admin = _Fx!.AuthClient;
@@ -398,9 +398,13 @@ namespace Test.Shared.Suites.E2E
                 using (HttpClient tenantAdmin = _AdminA!.CreateClient(_Fx.BaseUrl))
                     await ExpectStatusAsync(tenantAdmin, "POST /api/v1/blackbox/" + _EntryId + "/export-fixture", HttpStatusCode.Forbidden).ConfigureAwait(false);
 
-                // TODO(blackbox-wave2: storage): flip to the job assertions when bb-storage merges StartStorageMigrationAsync.
-                await ExpectErrorAsync(admin, HttpMethod.Post, "/api/v1/blackbox/storage/migrate", new { To = "Disk" }, HttpStatusCode.NotImplemented, "NotImplemented", null).ConfigureAwait(false);
-                await ExpectErrorAsync(admin, HttpMethod.Get, "/api/v1/blackbox/storage/migrations/bbm_x", null, HttpStatusCode.NotImplemented, "NotImplemented", null).ConfigureAwait(false);
+                // Migrate from an empty source (Disk) so the shared fixture's entries stay on the database target.
+                BlackBoxStorageMigrationJob job = await PostJsonAsync<BlackBoxStorageMigrationJob>(admin, "/api/v1/blackbox/storage/migrate", new { From = "Disk", To = "Database" }).ConfigureAwait(false);
+                AssertTrue(!String.IsNullOrEmpty(job.Id) && job.Id.StartsWith("bbm_", StringComparison.Ordinal), "migration job id");
+                AssertEqual(BlackBoxStorageTargetEnum.Database, job.To, "migration target");
+                BlackBoxStorageMigrationJob status = await GetJsonAsync<BlackBoxStorageMigrationJob>(admin, "/api/v1/blackbox/storage/migrations/" + job.Id).ConfigureAwait(false);
+                AssertEqual(job.Id, status.Id, "migration status by id");
+                await ExpectStatusAsync(admin, "GET /api/v1/blackbox/storage/migrations/bbm_x", HttpStatusCode.NotFound).ConfigureAwait(false);
             }));
 
             cases.Add(CaseAsync("rest_recovery_dry_run_and_confirm", "Recovery: dry run returns a plan and a token; a confirmed run without, with a bogus or with a used token is 409; the token runs the recorded steps once, notes the entry (Operator) and emits blackbox.recovery_run; a caller who may not run a step is 403; unknown path and recommendation are 404", TestTags.Negative, async () =>
@@ -725,6 +729,11 @@ namespace Test.Shared.Suites.E2E
             {
                 RequireSetup();
                 using HttpClient a = _AdminA!.CreateClient(_Fx!.BaseUrl);
+                // deleteWithVessel (default true) would remove the entries with the vessel; keep them to inspect the capture.
+                bool deleteWithVessel = _Fx.Settings.BlackBox.Retention.DeleteWithVessel;
+                _Fx.Settings.BlackBox.Retention.DeleteWithVessel = false;
+                try
+                {
                 foreach (string surface in new[] { "REST", "MCP", "WebSocket" })
                 {
                     Vessel vessel;
@@ -759,6 +768,11 @@ namespace Test.Shared.Suites.E2E
                     }
 
                     await ExpectOperatorEntryAsync(a, mission.Id, BlackBoxStepEnum.VesselDeleted, surface, MissionStatusEnum.Pending).ConfigureAwait(false);
+                }
+                }
+                finally
+                {
+                    _Fx.Settings.BlackBox.Retention.DeleteWithVessel = deleteWithVessel;
                 }
             }));
 

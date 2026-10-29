@@ -80,11 +80,10 @@ namespace Test.Shared.Suites.Services
                 Vessel vessel = await NewVesselAsync(t).ConfigureAwait(false);
                 DateTime t0 = DateTime.UtcNow.AddDays(-5);
                 List<BlackBoxEntry> entries = new List<BlackBoxEntry>();
-                for (int i = 0; i < 14; i++) entries.Add(await RawAsync(t, vessel.Id, t0.AddMinutes(i), current: false).ConfigureAwait(false));
+                // UpdateAsync never writes is_current, so the current entry is created current.
+                for (int i = 0; i < 14; i++) entries.Add(await RawAsync(t, vessel.Id, t0.AddMinutes(i), current: i == 1).ConfigureAwait(false));
                 await t.Driver.BlackBoxEntries.UpdatePinnedAsync(entries[0].Id, true, null).ConfigureAwait(false);
                 BlackBoxEntry current = entries[1];
-                current.IsCurrent = true;
-                await t.Driver.BlackBoxEntries.UpdateAsync(current).ConfigureAwait(false);
                 Vessel other = await NewVesselAsync(t).ConfigureAwait(false);
                 await RawAsync(t, other.Id, t0, current: false).ConfigureAwait(false);
 

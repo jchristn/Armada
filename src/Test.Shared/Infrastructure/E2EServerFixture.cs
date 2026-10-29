@@ -93,6 +93,11 @@ namespace Test.Shared.Infrastructure
         public string TempDir { get; private set; } = "";
 
         /// <summary>
+        /// The settings object the fixture's server runs with. Suites that change a setting must restore it.
+        /// </summary>
+        public ArmadaSettings Settings { get; private set; } = null!;
+
+        /// <summary>
         /// The stub agent runtime every CLI captain runtime of this server launches (see <see cref="StubAgentProcesses"/>).
         /// Dispatch in E2E tests never starts a real agent CLI: the result is the same whether or not Claude Code,
         /// Codex, or another CLI is installed on the machine running the tests, and no model is ever called.
@@ -305,6 +310,7 @@ namespace Test.Shared.Infrastructure
             logging.Settings.LogFilename = logPath;
 
             ArmadaSettings settings = new ArmadaSettings();
+            Settings = settings;
             settings.DataDirectory = TempDir;
             // Keep any settings save (PUT /api/v1/settings, restore) inside the temp directory, never ~/.armada.
             settings.SettingsFilePath = Path.Combine(TempDir, "settings.json");
