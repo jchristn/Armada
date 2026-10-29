@@ -52,11 +52,26 @@ namespace Armada.Core.Settings
             set => _Password = String.IsNullOrWhiteSpace(value) ? null : value.Trim();
         }
 
+        /// <summary>
+        /// SMB port (1 to 65535, default 445).
+        /// </summary>
+        public int Port
+        {
+            get => _Port;
+            set => _Port = Math.Clamp(value, 1, 65535);
+        }
+
         private string? _Hostname = null;
         private string? _Share = null;
         private string? _Domain = null;
         private string? _Username = null;
         private string? _Password = null;
+        private int _Port = 445;
+
+        /// <summary>
+        /// Prefer SMB 3 encryption when the server and platform support it (default true).
+        /// </summary>
+        public bool PreferEncryption { get; set; } = true;
 
         /// <summary>
         /// Instantiate with defaults.
