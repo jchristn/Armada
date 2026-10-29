@@ -1306,6 +1306,86 @@ namespace Test.Shared.Suites.E2E
                 AssertTrue(data.CancelledMissions >= 0 && data.CancelledMissions <= 1, "CancelledMissions counts at most the voyage's one mission: " + data.CancelledMissions);
             }));
 
+            cases.Add(CaseAsync("armada_cancel_voyage_broadcasts_changes_and_leaves_running_mission", "ArmadaCancelVoyage_BroadcastsChangesAndLeavesRunningMission", TestTags.Positive, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
+                // The voyage and missions are created through REST with the API key, so MCP uses the same credential to see them.
+                using HttpClient mcpClient = new HttpClient { BaseAddress = fx.McpClient.BaseAddress };
+                mcpClient.DefaultRequestHeaders.Add("X-Api-Key", fx.ApiKey);
+                string sessionId = await InitMcpSessionAsync(mcpClient).ConfigureAwait(false);
+
+                // Dispatch assigns only a Pending mission. A Blocked mission stays in the set cancel_voyage
+                // cancels, and an InProgress mission stays outside that set.
+                string suffix = Guid.NewGuid().ToString("N").Substring(0, 8);
+                string fleetId = await RestCreateFleetAsync(mcpClient, sessionId, "CancelBroadcastFleet").ConfigureAwait(false);
+                string vesselId = await RestCreateVesselAsync(mcpClient, sessionId, fleetId, "CancelBroadcastVessel").ConfigureAwait(false);
+
+                HttpResponseMessage voyageResponse = await fx.AuthClient.PostAsync("/api/v1/voyages",
+                    JsonHelper.ToJsonContent(new { Title = "CancelBroadcastVoyage-" + suffix, Description = "Voyage for cancellation broadcast" })).ConfigureAwait(false);
+                string voyageBody = await voyageResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+                AssertEqual(HttpStatusCode.Created, voyageResponse.StatusCode, "bare voyage is created: " + voyageBody);
+                Voyage voyage = JsonHelper.Deserialize<Voyage>(voyageBody);
+
+                HttpResponseMessage blockedResponse = await fx.AuthClient.PostAsync("/api/v1/missions",
+                    JsonHelper.ToJsonContent(new
+                    {
+                        Title = "CancelBroadcastBlocked-" + suffix,
+                        Description = "Mission cancelled with the voyage",
+                        VesselId = vesselId,
+                        VoyageId = voyage.Id,
+                        Status = "Blocked"
+                    })).ConfigureAwait(false);
+                string blockedBody = await blockedResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+                AssertEqual(HttpStatusCode.Created, blockedResponse.StatusCode, "blocked mission is created: " + blockedBody);
+                Mission blockedMission = ReadCreatedMission(blockedBody);
+                AssertEqual(voyage.Id, blockedMission.VoyageId, "the cancelled mission belongs to the voyage");
+                AssertEqual(vesselId, blockedMission.VesselId, "the cancelled mission belongs to the vessel");
+                AssertEqual(MissionStatusEnum.Blocked, blockedMission.Status, "the cancelled mission is Blocked");
+
+                HttpResponseMessage runningResponse = await fx.AuthClient.PostAsync("/api/v1/missions",
+                    JsonHelper.ToJsonContent(new
+                    {
+                        Title = "CancelBroadcastRunning-" + suffix,
+                        Description = "Mission left running during voyage cancellation",
+                        VesselId = vesselId,
+                        VoyageId = voyage.Id,
+                        Status = "InProgress"
+                    })).ConfigureAwait(false);
+                string runningBody = await runningResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+                AssertEqual(HttpStatusCode.Created, runningResponse.StatusCode, "running mission is created: " + runningBody);
+                Mission runningMission = ReadCreatedMission(runningBody);
+                AssertEqual(voyage.Id, runningMission.VoyageId, "the running mission belongs to the voyage");
+                AssertEqual(MissionStatusEnum.InProgress, runningMission.Status, "the running mission is InProgress");
+
+                using (WebSocketTestClient subscriber = await WebSocketTestClient.ConnectAsync(fx.RestPort, null,
+                    new Dictionary<string, string> { ["X-Api-Key"] = fx.ApiKey }).ConfigureAwait(false))
+                {
+                    await subscriber.SendAsync(new { Route = "subscribe" }).ConfigureAwait(false);
+                    string? snapshot = await subscriber.WaitForAsync(message => message.Contains("status.snapshot"), 10000).ConfigureAwait(false);
+                    AssertNotNull(snapshot, "WebSocket subscriber receives its status snapshot before cancellation");
+
+                    JsonElement cancelResult = await CallToolAsync(mcpClient, sessionId, "cancel_voyage", new { voyageId = voyage.Id }).ConfigureAwait(false);
+                    string cancelText = GetToolResultText(cancelResult);
+                    CancelVoyageResponse cancelled = JsonHelper.Deserialize<CancelVoyageResponse>(cancelText);
+                    AssertEqual(voyage.Id, cancelled.Voyage?.Id, "MCP cancellation returns the voyage: " + cancelText);
+                    AssertEqual(1, cancelled.CancelledMissions, "MCP cancellation cancels the blocked mission: " + cancelText);
+
+                    string? voyageEvent = await subscriber.WaitForAsync(message => message.Contains("voyage.changed") && message.Contains(voyage.Id) && message.Contains("Cancelled"), 10000).ConfigureAwait(false);
+                    AssertNotNull(voyageEvent, "MCP cancellation broadcasts the updated voyage");
+                    string? missionEvent = await subscriber.WaitForAsync(message => message.Contains("mission.changed") && message.Contains(blockedMission.Id) && message.Contains("Cancelled"), 10000).ConfigureAwait(false);
+                    AssertNotNull(missionEvent, "MCP cancellation broadcasts the cancelled mission");
+
+                    Mission runningAfter = JsonHelper.Deserialize<Mission>(GetToolResultText(
+                        await CallToolAsync(mcpClient, sessionId, "mission_status", new { missionId = runningMission.Id }).ConfigureAwait(false)));
+                    AssertEqual(MissionStatusEnum.InProgress, runningAfter.Status, "the running mission remains InProgress");
+                    Mission blockedAfter = JsonHelper.Deserialize<Mission>(GetToolResultText(
+                        await CallToolAsync(mcpClient, sessionId, "mission_status", new { missionId = blockedMission.Id }).ConfigureAwait(false)));
+                    AssertEqual(MissionStatusEnum.Cancelled, blockedAfter.Status, "the blocked mission is Cancelled");
+                    AssertTrue(!subscriber.Received().Exists(message => message.Contains("mission.changed") && message.Contains(runningMission.Id)),
+                        "an InProgress mission has no cancellation event");
+                }
+            }));
+
             cases.Add(CaseAsync("armada_cancel_voyage_verify_status_via_rest", "ArmadaCancelVoyage_VerifyStatusViaRest", TestTags.Positive, async () =>
             {
                 E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);

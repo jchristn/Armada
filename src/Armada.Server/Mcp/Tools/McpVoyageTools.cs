@@ -14,6 +14,7 @@ namespace Armada.Server.Mcp.Tools
     using Armada.Core.Services;
     using Armada.Core.Services.Interfaces;
     using Armada.Core.Settings;
+    using Armada.Server.WebSocket;
 
     /// <summary>
     /// Registers MCP tools for voyage operations (dispatch, status, cancel, purge).
@@ -33,7 +34,8 @@ namespace Armada.Server.Mcp.Tools
         /// <param name="database">Database driver for voyage data access.</param>
         /// <param name="admiral">Admiral service for voyage orchestration.</param>
         /// <param name="settings">Optional settings for log/diff cleanup during purge.</param>
-        public static void Register(RegisterToolDelegate register, DatabaseDriver database, IAdmiralService admiral, ArmadaSettings? settings = null)
+        /// <param name="webSocketHub">Optional WebSocket hub. When set, cancellation broadcasts the updated voyage and each cancelled mission.</param>
+        public static void Register(RegisterToolDelegate register, DatabaseDriver database, IAdmiralService admiral, ArmadaSettings? settings = null, ArmadaWebSocketHub? webSocketHub = null)
         {
             register(
                 "dispatch",
@@ -280,6 +282,15 @@ namespace Armada.Server.Mcp.Tools
 
                     // Cancel only pending/assigned/blocked missions (in-progress work is left running)
                     VoyageCancelResult cancel = await VoyageCancellation.CancelAsync(database, admiral, voyage, McpCallerScope.IsGlobal(caller) ? null : caller.TenantId).ConfigureAwait(false);
+                    if (webSocketHub != null)
+                    {
+                        webSocketHub.BroadcastVoyageChange(cancel.Voyage, VoyageStatusEnum.Cancelled.ToString());
+                        foreach (Mission cancelledMission in cancel.Cancelled)
+                        {
+                            webSocketHub.BroadcastMissionChange(cancelledMission, MissionStatusEnum.Cancelled.ToString());
+                        }
+                    }
+
                     return (object)cancel;
                 });
 

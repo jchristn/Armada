@@ -79,6 +79,7 @@ namespace Armada.Server.Mcp
         /// <param name="battery">Optional fixture battery access service; without it list_battery_packs, run_battery and get_battery_run answer Unavailable.</param>
         /// <param name="cliPermissionService">Optional CLI permission service; without it the CLI permission tools are
         /// registered and answer a typed Unavailable error.</param>
+        /// <param name="webSocketHub">Optional WebSocket hub used for live MCP voyage updates.</param>
         public static void RegisterAll(
             RegisterToolDelegate register,
             DatabaseDriver database,
@@ -117,7 +118,8 @@ namespace Armada.Server.Mcp
             HarborJobControlService? harborJobs = null,
             StageOutcomeAccessService? stageOutcomes = null,
             ModelProbeAccessService? modelProbes = null,
-            BatteryAccessService? battery = null)
+            BatteryAccessService? battery = null,
+            Armada.Server.WebSocket.ArmadaWebSocketHub? webSocketHub = null)
         {
             if (register == null) throw new ArgumentNullException(nameof(register));
             register = MapToolExceptions(MarkExperimental(register));
@@ -126,7 +128,7 @@ namespace Armada.Server.Mcp
             McpFleetTools.Register(register, database);
             McpVesselTools.Register(register, database, dockService, vesselService, settings, admiral);
             if (vesselImportService != null) McpVesselImportTools.Register(register, vesselImportService, fleetCategorizationService);
-            McpVoyageTools.Register(register, database, admiral, settings);
+            McpVoyageTools.Register(register, database, admiral, settings, webSocketHub);
             McpMissionTools.Register(register, database, admiral, settings, git, landingService, missionService);
             McpCaptainTools.Register(register, database, admiral, settings, onStopCaptain, agentLifecycle, captainToolService);
             McpSignalTools.Register(register, database);
