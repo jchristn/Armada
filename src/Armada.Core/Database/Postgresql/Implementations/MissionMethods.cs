@@ -184,7 +184,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 using (NpgsqlCommand cmd = new NpgsqlCommand())
                 {
                     cmd.Connection = conn;
-                    cmd.CommandText = "UPDATE missions SET process_id = NULL, last_update_utc = @last_update_utc WHERE id = @id AND process_id = @process_id;";
+                    cmd.CommandText = "UPDATE missions SET process_id = NULL, process_started_utc = NULL, last_update_utc = @last_update_utc WHERE id = @id AND process_id = @process_id;";
                     cmd.Parameters.AddWithValue("@id", missionId);
                     cmd.Parameters.AddWithValue("@process_id", processId);
                     cmd.Parameters.AddWithValue("@last_update_utc", DateTime.UtcNow);
@@ -792,10 +792,10 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 cmd.Transaction = tx;
                 cmd.Connection = conn;
                 cmd.CommandText = @"INSERT INTO missions (id, tenant_id, user_id, voyage_id, vessel_id, captain_id, requested_captain_id, assigned_harbor_id, title, description,
-                    status, mode, priority, parent_mission_id, branch_name, dock_id, process_id,
+                    status, mode, priority, parent_mission_id, branch_name, dock_id, process_id, process_started_utc,
                     pr_url, commit_hash, diff_snapshot, agent_output, persona, depends_on_mission_id, failure_reason, failure_kind, wait_for_voyage_workers, requires_review, review_deny_action, review_comment, reviewed_by_user_id, review_requested_utc, reviewed_utc, review_deadline_utc, total_runtime_ms, redispatch_attempts, output_repair_attempts, noop_redispatch_attempts, is_rescue, is_evaluation, rework_round, rework_escalated, tier, created_utc, started_utc, completed_utc, last_update_utc)
                     VALUES (@id, @tenant_id, @user_id, @voyage_id, @vessel_id, @captain_id, @requested_captain_id, @assigned_harbor_id, @title, @description,
-                    @status, @mode, @priority, @parent_mission_id, @branch_name, @dock_id, @process_id,
+                    @status, @mode, @priority, @parent_mission_id, @branch_name, @dock_id, @process_id, @process_started_utc,
                     @pr_url, @commit_hash, @diff_snapshot, @agent_output, @persona, @depends_on_mission_id, @failure_reason, @failure_kind, @wait_for_voyage_workers, @requires_review, @review_deny_action, @review_comment, @reviewed_by_user_id, @review_requested_utc, @reviewed_utc, @review_deadline_utc, @total_runtime_ms, @redispatch_attempts, @output_repair_attempts, @noop_redispatch_attempts, @is_rescue, @is_evaluation, @rework_round, @rework_escalated, @tier, @created_utc, @started_utc, @completed_utc, @last_update_utc);";
                 AddMissionParameters(cmd, mission);
                 await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
@@ -828,7 +828,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                         title = @title, description = @description, status = @status,
                         mode = @mode,
                         priority = @priority, parent_mission_id = @parent_mission_id,
-                        branch_name = @branch_name, dock_id = @dock_id, process_id = @process_id,
+                        branch_name = @branch_name, dock_id = @dock_id, process_id = @process_id, process_started_utc = @process_started_utc,
                         pr_url = @pr_url, commit_hash = @commit_hash, diff_snapshot = @diff_snapshot,
                         agent_output = @agent_output,
                         persona = @persona, depends_on_mission_id = @depends_on_mission_id,
@@ -888,6 +888,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
             cmd.Parameters.AddWithValue("@branch_name", (object?)mission.BranchName ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@dock_id", (object?)mission.DockId ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@process_id", mission.ProcessId.HasValue ? (object)mission.ProcessId.Value : DBNull.Value);
+            cmd.Parameters.AddWithValue("@process_started_utc", (object?)mission.ProcessStartedUtc ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@pr_url", (object?)mission.PrUrl ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@commit_hash", (object?)mission.CommitHash ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@diff_snapshot", (object?)mission.DiffSnapshot ?? DBNull.Value);
@@ -1005,6 +1006,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
             mission.BranchName = NullableString(reader["branch_name"]);
             mission.DockId = NullableString(reader["dock_id"]);
             mission.ProcessId = NullableInt(reader["process_id"]);
+            mission.ProcessStartedUtc = NullableDateTime(reader["process_started_utc"]);
             mission.PrUrl = NullableString(reader["pr_url"]);
             mission.CommitHash = NullableString(reader["commit_hash"]);
             mission.DiffSnapshot = NullableString(reader["diff_snapshot"]);

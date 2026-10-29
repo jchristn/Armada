@@ -151,9 +151,48 @@ namespace Armada.Core.Models
         public string? CurrentDockId { get; set; } = null;
 
         /// <summary>
-        /// Operating system process identifier.
+        /// Operating system process identifier. Changing the id clears <see cref="ProcessStartedUtc"/>.
         /// </summary>
-        public int? ProcessId { get; set; } = null;
+        public int? ProcessId
+        {
+            get
+            {
+                return _ProcessId;
+            }
+
+            set
+            {
+                if (_ProcessId != value) _ProcessStartedUtc = null;
+                _ProcessId = value;
+            }
+        }
+
+        /// <summary>
+        /// UTC start time of <see cref="ProcessId"/>, captured when that process was launched.
+        /// </summary>
+        public DateTime? ProcessStartedUtc
+        {
+            get
+            {
+                return _ProcessStartedUtc;
+            }
+
+            set
+            {
+                _ProcessStartedUtc = value;
+            }
+        }
+
+        /// <summary>
+        /// Record a process id and the start time captured for that same launch.
+        /// </summary>
+        /// <param name="processId">Operating system process id, or null when the launch is cleared.</param>
+        /// <param name="processStartedUtc">UTC start time of that process.</param>
+        public void SetProcess(int? processId, DateTime? processStartedUtc)
+        {
+            ProcessId = processId;
+            ProcessStartedUtc = processStartedUtc;
+        }
 
         /// <summary>
         /// Number of auto-recovery attempts for the current mission.
@@ -204,6 +243,8 @@ namespace Armada.Core.Models
         private string _Name = "Captain";
         private string? _Model = null;
         private string? _ModelEndpointId = null;
+        private int? _ProcessId = null;
+        private DateTime? _ProcessStartedUtc = null;
 
         #endregion
 

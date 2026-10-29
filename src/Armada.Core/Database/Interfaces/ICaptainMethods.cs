@@ -119,10 +119,11 @@ namespace Armada.Core.Database.Interfaces
         /// <param name="captainId">Captain identifier.</param>
         /// <param name="missionId">Mission the caller expects the captain to hold.</param>
         /// <param name="processId">Process handle.</param>
+        /// <param name="processStartedUtc">UTC start time captured for that process. Null clears a stored start time.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>True when the process handle was recorded.</returns>
         /// <exception cref="ArgumentNullException">Thrown when captainId or missionId is null or empty.</exception>
-        Task<bool> TrySetProcessAsync(string captainId, string missionId, int processId, CancellationToken token = default);
+        Task<bool> TrySetProcessAsync(string captainId, string missionId, int processId, DateTime? processStartedUtc = null, CancellationToken token = default);
 
         /// <summary>
         /// Read a captain by tenant and identifier (tenant-scoped).

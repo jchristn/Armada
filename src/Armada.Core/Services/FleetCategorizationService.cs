@@ -8,6 +8,7 @@ namespace Armada.Core.Services
     using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
+    using Armada.Core;
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
@@ -896,7 +897,7 @@ namespace Armada.Core.Services
             {
                 Captain? captain = await _Database.Captains.ReadAsync(tenantId, captainId).ConfigureAwait(false);
                 if (captain == null || captain.State != CaptainStateEnum.Analyzing) return;
-                captain.ProcessId = processId;
+                captain.SetProcess(processId, ProcessSupervisor.GetLaunchStartUtc(processId));
                 await _Database.Captains.UpdateAsync(captain).ConfigureAwait(false);
             }
             catch (Exception ex)

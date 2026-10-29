@@ -538,6 +538,14 @@ namespace Armada.Runtimes
                 throw new InvalidOperationException("Failed to start agent process: " + command);
             }
             launchedPid = process.Id;
+            try
+            {
+                Armada.Core.ProcessSupervisor.RecordLaunch(launchedPid, process.StartTime.ToUniversalTime());
+            }
+            catch (Exception ex)
+            {
+                _Logging.Warn(_Header + "process " + launchedPid + " start time was not recorded: " + ex.Message);
+            }
 
             try { OnProcessStarted?.Invoke(launchedPid); }
             catch (Exception ex) { _Logging.Warn(_Header + "error in OnProcessStarted handler for process " + launchedPid + ": " + ex.ToString()); }
@@ -578,9 +586,9 @@ namespace Armada.Runtimes
         }
 
         /// <summary>
-        /// Stop an agent process gracefully.
+        /// Stop an agent process gracefully when its start time is the recorded launch.
         /// </summary>
-        public virtual async Task StopAsync(int processId, CancellationToken token = default)
+        public virtual async Task<AgentStopResult> StopAsync(int processId, CancellationToken token = default)
         {
             Process process;
             try
@@ -590,19 +598,31 @@ namespace Armada.Runtimes
             catch (ArgumentException)
             {
                 _Logging.Debug(_Header + "process " + processId + " already exited");
-                return;
+                Armada.Core.ProcessSupervisor.ForgetLaunch(processId);
+                return AgentStopResult.NotRunning();
             }
 
             using (process)
             {
+                Armada.Core.Enums.LaunchedProcessIdentityEnum identity = Armada.Core.ProcessSupervisor.Classify(process, processId);
+                if (identity == Armada.Core.Enums.LaunchedProcessIdentityEnum.NotRunning)
+                {
+                    _Logging.Debug(_Header + "process " + processId + " already exited");
+                    Armada.Core.ProcessSupervisor.ForgetLaunch(processId);
+                    return AgentStopResult.NotRunning();
+                }
+
+                if (identity != Armada.Core.Enums.LaunchedProcessIdentityEnum.Verified)
+                {
+                    string reason = identity == Armada.Core.Enums.LaunchedProcessIdentityEnum.Reused
+                        ? AgentStopResult.IdentifierReusedReason
+                        : AgentStopResult.IdentityUnverifiedReason;
+                    _Logging.Warn(_Header + "refused to stop process " + processId + " reason " + reason);
+                    return AgentStopResult.Refused(reason);
+                }
+
                 try
                 {
-                    if (process.HasExited)
-                    {
-                        _Logging.Debug(_Header + "process " + processId + " already exited");
-                        return;
-                    }
-
                     // Ask the agent to shut down cleanly first (SIGTERM on Unix; CLIs flush their session and exit), then
                     // wait without blocking a thread, and only force-kill the whole tree if it is still running.
                     RequestGracefulExit(processId);
@@ -625,15 +645,26 @@ namespace Armada.Runtimes
                         process.Kill(entireProcessTree: true);
                     }
 
+                    if (!process.HasExited)
+                    {
+                        _Logging.Warn(_Header + "process " + processId + " was still running after the stop attempt");
+                        return AgentStopResult.Refused(AgentStopResult.KillFailedReason);
+                    }
+
+                    Armada.Core.ProcessSupervisor.ForgetLaunch(processId);
                     _Logging.Info(_Header + "stopped process " + processId);
+                    return AgentStopResult.Stopped();
                 }
                 catch (InvalidOperationException)
                 {
                     _Logging.Debug(_Header + "process " + processId + " exited while stopping");
+                    Armada.Core.ProcessSupervisor.ForgetLaunch(processId);
+                    return AgentStopResult.Stopped();
                 }
                 catch (Exception ex)
                 {
                     _Logging.Warn(_Header + "error stopping process " + processId + ": " + ex.ToString());
+                    return AgentStopResult.Refused(AgentStopResult.KillFailedReason);
                 }
             }
         }
@@ -727,16 +758,7 @@ namespace Armada.Runtimes
             // Non-positive ids are never a real child process. On macOS/Linux, GetProcessById(-1) can
             // succeed because kill(-1, 0) addresses every process the caller may signal.
             if (processId <= 0) return Task.FromResult(false);
-
-            try
-            {
-                Process process = Process.GetProcessById(processId);
-                return Task.FromResult(!process.HasExited);
-            }
-            catch (ArgumentException)
-            {
-                return Task.FromResult(false);
-            }
+            return Task.FromResult(Armada.Core.ProcessSupervisor.IsTrackedProcessAlive(processId));
         }
 
         #endregion

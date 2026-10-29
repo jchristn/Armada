@@ -297,7 +297,13 @@ namespace Armada.Server
 
                 if (finished != exitSource.Task)
                 {
-                    try { await runtime.StopAsync(processId, CancellationToken.None).ConfigureAwait(false); } catch { }
+                    try
+                    {
+                        AgentStopResult stopped = await runtime.StopAsync(processId, CancellationToken.None).ConfigureAwait(false);
+                        if (!stopped.Cleared)
+                            _Logging.Warn(_Header + "refused to stop process " + processId + " reason " + stopped.Reason);
+                    }
+                    catch { }
                     if (token.IsCancellationRequested) throw new OperationCanceledException(token);
                     throw new TimeoutException("Building the Model Context timed out before the captain finished.");
                 }

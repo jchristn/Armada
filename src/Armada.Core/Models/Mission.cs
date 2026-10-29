@@ -175,9 +175,48 @@ namespace Armada.Core.Models
         public string? DockId { get; set; } = null;
 
         /// <summary>
-        /// Operating system process identifier for the agent working this mission.
+        /// Operating system process identifier for the agent working this mission. Changing the id clears <see cref="ProcessStartedUtc"/>.
         /// </summary>
-        public int? ProcessId { get; set; } = null;
+        public int? ProcessId
+        {
+            get
+            {
+                return _ProcessId;
+            }
+
+            set
+            {
+                if (_ProcessId != value) _ProcessStartedUtc = null;
+                _ProcessId = value;
+            }
+        }
+
+        /// <summary>
+        /// UTC start time of <see cref="ProcessId"/>, captured when that process was launched.
+        /// </summary>
+        public DateTime? ProcessStartedUtc
+        {
+            get
+            {
+                return _ProcessStartedUtc;
+            }
+
+            set
+            {
+                _ProcessStartedUtc = value;
+            }
+        }
+
+        /// <summary>
+        /// Record a process id and the start time captured for that same launch.
+        /// </summary>
+        /// <param name="processId">Operating system process id, or null when the launch is cleared.</param>
+        /// <param name="processStartedUtc">UTC start time of that process.</param>
+        public void SetProcess(int? processId, DateTime? processStartedUtc)
+        {
+            ProcessId = processId;
+            ProcessStartedUtc = processStartedUtc;
+        }
 
         /// <summary>
         /// Pull request URL if created.
@@ -353,6 +392,8 @@ namespace Armada.Core.Models
         #region Private-Members
 
         private int _ReworkRound = 0;
+        private int? _ProcessId = null;
+        private DateTime? _ProcessStartedUtc = null;
         private string _Id = Constants.IdGenerator.GenerateKSortable(Constants.MissionIdPrefix, 24);
         private string _Title = "New Mission";
         private DateTime? _StartedUtc = null;

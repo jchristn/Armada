@@ -2,9 +2,11 @@ namespace Test.Shared.Suites.Services
 {
     using System;
     using System.Collections.Generic;
+    using System.Diagnostics;
     using System.IO;
     using System.Threading;
     using System.Threading.Tasks;
+    using Armada.Core;
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
@@ -227,6 +229,56 @@ namespace Test.Shared.Suites.Services
                 }));
             }
 
+            cases.Add(CaseAsync("reused_process_id_is_not_a_live_agent", "A live process that starts one second after the stored launch is not left in progress", TestTags.Negative, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                using (StandInProcess standIn = StartStandIn())
+                {
+                    DatabaseDriver db = testDb.Driver;
+                    ArmadaSettings settings = new ArmadaSettings();
+                    string root = TestTemp.NewDirectory("reused-pid");
+                    settings.DocksDirectory = root;
+                    settings.ReposDirectory = root;
+                    settings.MaxMissionRuntimeMinutes = 0;
+                    LoggingModule logging = new LoggingModule();
+                    logging.Settings.EnableConsole = false;
+                    StubGitService git = new StubGitService { IsRepositoryResult = true };
+                    IDockService docks = new DockService(logging, db, settings, git);
+                    CaptainService captains = new CaptainService(logging, db, settings, git, docks);
+                    IMissionService missions = new MissionService(logging, db, settings, docks, captains);
+                    IVoyageService voyages = new VoyageService(logging, db);
+                    AdmiralService admiral = new AdmiralService(logging, db, settings, captains, missions, voyages, docks);
+
+                    Vessel vessel = await db.Vessels.CreateAsync(new Vessel("reused-pid-vessel", "https://github.com/test/repo.git")).ConfigureAwait(false);
+                    ProcessSupervisor.ForgetLaunch(standIn.Process.Id);
+                    DateTime startedUtc = standIn.Process.StartTime.ToUniversalTime().AddSeconds(-1);
+                    Captain captain = new Captain("reused-pid-captain");
+                    captain.State = CaptainStateEnum.Working;
+                    captain.SetProcess(standIn.Process.Id, startedUtc);
+                    captain.LastHeartbeatUtc = DateTime.UtcNow;
+                    captain = await db.Captains.CreateAsync(captain).ConfigureAwait(false);
+
+                    Mission mission = new Mission("Reused process");
+                    mission.VesselId = vessel.Id;
+                    mission.CaptainId = captain.Id;
+                    mission.Status = MissionStatusEnum.InProgress;
+                    mission.StartedUtc = DateTime.UtcNow;
+                    mission.SetProcess(standIn.Process.Id, startedUtc);
+                    mission = await db.Missions.CreateAsync(mission).ConfigureAwait(false);
+                    captain.CurrentMissionId = mission.Id;
+                    await db.Captains.UpdateAsync(captain).ConfigureAwait(false);
+
+                    await admiral.HealthCheckAsync().ConfigureAwait(false);
+
+                    bool exited = standIn.Process.WaitForExit(400);
+                    AssertFalse(exited, "a process that starts one second after the stored launch is not stopped");
+                    AssertFalse(standIn.Process.HasExited, "the stand-in process is still alive");
+                    Mission? stored = await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
+                    AssertEqual(MissionStatusEnum.Pending, stored!.Status, "the mission is no longer treated as the live process");
+                    TestTemp.TryDelete(root);
+                }
+            }));
+
             return new TestSuiteDescriptor(suiteId: SuiteId, displayName: "Stalled Captain Recovery", cases: cases);
         }
 
@@ -241,6 +293,69 @@ namespace Test.Shared.Suites.Services
             settings.ReposDirectory = Path.Combine(Path.GetTempPath(), "armada_test_repos_" + Guid.NewGuid().ToString("N"));
             settings.MaxMissionRuntimeMinutes = 0;
             return settings;
+        }
+
+        private static StandInProcess StartStandIn()
+        {
+            string directory = TestTemp.NewDirectory("reused-pid-process");
+            ProcessStartInfo start = new ProcessStartInfo();
+            start.UseShellExecute = false;
+            start.CreateNoWindow = true;
+            start.RedirectStandardOutput = true;
+            start.RedirectStandardError = true;
+            start.WorkingDirectory = directory;
+            start.Environment.Clear();
+            if (OperatingSystem.IsWindows())
+            {
+                string systemRoot = Environment.GetEnvironmentVariable("SystemRoot") ?? @"C:\Windows";
+                start.FileName = Path.Combine(systemRoot, "System32", "cmd.exe");
+                start.ArgumentList.Add("/c");
+                start.ArgumentList.Add("ping -n 40 127.0.0.1 >NUL");
+                start.Environment["SystemRoot"] = systemRoot;
+                start.Environment["PATH"] = Path.Combine(systemRoot, "System32");
+            }
+            else
+            {
+                start.FileName = "/bin/sleep";
+                start.ArgumentList.Add("40");
+            }
+
+            Process process = new Process();
+            process.StartInfo = start;
+            process.EnableRaisingEvents = true;
+            process.OutputDataReceived += (_, _) => { };
+            process.ErrorDataReceived += (_, _) => { };
+            process.Start();
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+            return new StandInProcess(process, directory);
+        }
+
+        private sealed class StandInProcess : IDisposable
+        {
+            private readonly string _Directory;
+
+            public StandInProcess(Process process, string directory)
+            {
+                Process = process ?? throw new ArgumentNullException(nameof(process));
+                _Directory = directory ?? throw new ArgumentNullException(nameof(directory));
+            }
+
+            public Process Process { get; }
+
+            public void Dispose()
+            {
+                try
+                {
+                    if (!Process.HasExited) Process.Kill(entireProcessTree: true);
+                }
+                catch (InvalidOperationException)
+                {
+                }
+
+                Process.Dispose();
+                TestTemp.TryDelete(_Directory);
+            }
         }
 
         private static TestCaseDescriptor CaseAsync(string caseId, string displayName, string tag, Func<Task> body)

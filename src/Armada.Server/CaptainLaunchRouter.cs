@@ -214,24 +214,27 @@ namespace Armada.Server
         /// <param name="runtime">Captain runtime type.</param>
         /// <param name="processId">Process id.</param>
         /// <param name="token">Cancellation token.</param>
-        public async Task StopAsync(AgentRuntimeEnum runtime, int processId, CancellationToken token = default)
+        /// <returns>Whether the recorded process was stopped, was already gone, or was left running.</returns>
+        public async Task<AgentStopResult> StopAsync(AgentRuntimeEnum runtime, int processId, CancellationToken token = default)
         {
             // A launch this router sent to a Harbor: stop it through its own runtime, which also reports the exit to
             // whoever is waiting for it.
             if (_ActiveRemote.TryGetValue(processId, out RemoteAgentRuntime? active))
             {
-                await active.StopAsync(processId, token).ConfigureAwait(false);
-                return;
+                return await active.StopAsync(processId, token).ConfigureAwait(false);
             }
 
             if (_Harbors != null && _Harbors.TryGetHarborForProcess(processId, out string? harborId) && !String.IsNullOrWhiteSpace(harborId))
             {
                 await _Harbors.KillByProcessIdAsync(processId, 10000, token).ConfigureAwait(false);
-                return;
+                return AgentStopResult.Stopped();
             }
 
             IAgentRuntime local = _RuntimeFactory.Create(runtime);
-            await local.StopAsync(processId, token).ConfigureAwait(false);
+            AgentStopResult stopped = await local.StopAsync(processId, token).ConfigureAwait(false);
+            if (!stopped.Cleared)
+                _Logging.Warn(_Header + "refused to stop process " + processId + " reason " + stopped.Reason);
+            return stopped;
         }
 
         /// <summary>

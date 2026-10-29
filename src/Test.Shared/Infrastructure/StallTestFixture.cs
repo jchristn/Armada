@@ -2,6 +2,7 @@ namespace Test.Shared.Infrastructure
 {
     using System;
     using System.Collections.Generic;
+    using System.Diagnostics;
     using System.IO;
     using System.Threading.Tasks;
     using Armada.Core.Database;
@@ -84,6 +85,7 @@ namespace Test.Shared.Infrastructure
             captain.State = CaptainStateEnum.Working;
             // The test process is the "agent": alive for the whole test, and never actually stopped.
             captain.ProcessId = Environment.ProcessId;
+            captain.ProcessStartedUtc = Process.GetCurrentProcess().StartTime.ToUniversalTime();
             captain.LastHeartbeatUtc = lastHeartbeatUtc;
             captain = await db.Captains.CreateAsync(captain).ConfigureAwait(false);
 
@@ -102,6 +104,7 @@ namespace Test.Shared.Infrastructure
             mission.Status = MissionStatusEnum.InProgress;
             mission.StartedUtc = DateTime.UtcNow.AddMinutes(-30);
             mission.ProcessId = Environment.ProcessId;
+            mission.ProcessStartedUtc = captain.ProcessStartedUtc;
             mission = await db.Missions.CreateAsync(mission).ConfigureAwait(false);
 
             captain.CurrentMissionId = mission.Id;

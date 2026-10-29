@@ -694,8 +694,10 @@ namespace Test.Shared.Suites.Services
                     BaseAgentRuntime.GracefulStopTimeoutMs = 5000;
                     using (Process polite = Process.Start(new ProcessStartInfo("sleep", "30") { UseShellExecute = false })!)
                     {
+                        Armada.Core.ProcessSupervisor.RecordLaunch(polite.Id, polite.StartTime.ToUniversalTime());
                         Stopwatch watch = Stopwatch.StartNew();
-                        await runtime.StopAsync(polite.Id).ConfigureAwait(false);
+                        AgentStopResult politeStop = await runtime.StopAsync(polite.Id).ConfigureAwait(false);
+                        AssertEqual(AgentStopOutcomeEnum.Stopped, politeStop.Outcome, "the recorded launch is stopped");
                         AssertTrue(polite.WaitForExit(2000), "the process stopped");
                         AssertTrue(watch.Elapsed < TimeSpan.FromSeconds(4), "SIGTERM ended it well before the forced-stop deadline (" + watch.Elapsed.TotalMilliseconds.ToString("0") + " ms)");
                     }
@@ -706,6 +708,7 @@ namespace Test.Shared.Suites.Services
                     stubbornInfo.ArgumentList.Add("trap '' TERM; sleep 30");
                     using (Process stubborn = Process.Start(stubbornInfo)!)
                     {
+                        Armada.Core.ProcessSupervisor.RecordLaunch(stubborn.Id, stubborn.StartTime.ToUniversalTime());
                         await Task.Delay(200).ConfigureAwait(false);
                         await runtime.StopAsync(stubborn.Id).ConfigureAwait(false);
                         AssertTrue(stubborn.WaitForExit(3000), "a process that ignores SIGTERM is killed after the deadline");

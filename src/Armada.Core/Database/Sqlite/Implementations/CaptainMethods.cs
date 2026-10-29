@@ -58,8 +58,8 @@ namespace Armada.Core.Database.Sqlite.Implementations
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqliteCommand cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = @"INSERT INTO captains (id, tenant_id, user_id, name, runtime, model, model_endpoint_id, reasoning_effort, tier, system_instructions, allowed_personas, preferred_persona, runtime_options_json, cli_permission_policy, state, current_mission_id, current_dock_id, process_id, recovery_attempts, quarantine_until_utc, quarantine_reason, last_heartbeat_utc, created_utc, last_update_utc, last_process_alive_utc)
-                            VALUES (@id, @tenant_id, @user_id, @name, @runtime, @model, @model_endpoint_id, @reasoning_effort, @tier, @system_instructions, @allowed_personas, @preferred_persona, @runtime_options_json, @cli_permission_policy, @state, @current_mission_id, @current_dock_id, @process_id, @recovery_attempts, @quarantine_until_utc, @quarantine_reason, @last_heartbeat_utc, @created_utc, @last_update_utc, @last_process_alive_utc);";
+                    cmd.CommandText = @"INSERT INTO captains (id, tenant_id, user_id, name, runtime, model, model_endpoint_id, reasoning_effort, tier, system_instructions, allowed_personas, preferred_persona, runtime_options_json, cli_permission_policy, state, current_mission_id, current_dock_id, process_id, process_started_utc, recovery_attempts, quarantine_until_utc, quarantine_reason, last_heartbeat_utc, created_utc, last_update_utc, last_process_alive_utc)
+                            VALUES (@id, @tenant_id, @user_id, @name, @runtime, @model, @model_endpoint_id, @reasoning_effort, @tier, @system_instructions, @allowed_personas, @preferred_persona, @runtime_options_json, @cli_permission_policy, @state, @current_mission_id, @current_dock_id, @process_id, @process_started_utc, @recovery_attempts, @quarantine_until_utc, @quarantine_reason, @last_heartbeat_utc, @created_utc, @last_update_utc, @last_process_alive_utc);";
                     cmd.Parameters.AddWithValue("@id", captain.Id);
                     cmd.Parameters.AddWithValue("@tenant_id", (object?)captain.TenantId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@user_id", (object?)captain.UserId ?? DBNull.Value);
@@ -78,6 +78,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
                     cmd.Parameters.AddWithValue("@current_mission_id", (object?)captain.CurrentMissionId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@current_dock_id", (object?)captain.CurrentDockId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@process_id", captain.ProcessId.HasValue ? (object)captain.ProcessId.Value : DBNull.Value);
+                    cmd.Parameters.AddWithValue("@process_started_utc", captain.ProcessStartedUtc.HasValue ? (object)SqliteDatabaseDriver.ToIso8601(captain.ProcessStartedUtc.Value) : DBNull.Value);
                     cmd.Parameters.AddWithValue("@recovery_attempts", captain.RecoveryAttempts);
                     cmd.Parameters.AddWithValue("@quarantine_until_utc", captain.QuarantineUntilUtc.HasValue ? (object)SqliteDatabaseDriver.ToIso8601(captain.QuarantineUntilUtc.Value) : DBNull.Value);
                     cmd.Parameters.AddWithValue("@quarantine_reason", (object?)captain.QuarantineReason ?? DBNull.Value);
@@ -166,7 +167,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
                             state = @state,
                             current_mission_id = @current_mission_id,
                             current_dock_id = @current_dock_id,
-                            process_id = @process_id,
+                            process_id = @process_id, process_started_utc = @process_started_utc,
                             recovery_attempts = @recovery_attempts,
                             quarantine_until_utc = @quarantine_until_utc,
                             quarantine_reason = @quarantine_reason,
@@ -191,6 +192,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
                     cmd.Parameters.AddWithValue("@current_mission_id", (object?)captain.CurrentMissionId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@current_dock_id", (object?)captain.CurrentDockId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@process_id", captain.ProcessId.HasValue ? (object)captain.ProcessId.Value : DBNull.Value);
+                    cmd.Parameters.AddWithValue("@process_started_utc", captain.ProcessStartedUtc.HasValue ? (object)SqliteDatabaseDriver.ToIso8601(captain.ProcessStartedUtc.Value) : DBNull.Value);
                     cmd.Parameters.AddWithValue("@recovery_attempts", captain.RecoveryAttempts);
                     cmd.Parameters.AddWithValue("@quarantine_until_utc", captain.QuarantineUntilUtc.HasValue ? (object)SqliteDatabaseDriver.ToIso8601(captain.QuarantineUntilUtc.Value) : DBNull.Value);
                     cmd.Parameters.AddWithValue("@quarantine_reason", (object?)captain.QuarantineReason ?? DBNull.Value);
@@ -479,7 +481,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
                         state = 'Idle',
                         current_mission_id = NULL,
                         current_dock_id = NULL,
-                        process_id = NULL,
+                        process_id = NULL, process_started_utc = NULL,
                         recovery_attempts = 0,
                         last_update_utc = @last_update_utc
                         WHERE id = @id AND current_mission_id = @current_mission_id AND state IN ('Working', 'Stalled', 'Stopping');";
@@ -522,7 +524,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
         }
 
         /// <inheritdoc />
-        public async Task<bool> TrySetProcessAsync(string captainId, string missionId, int processId, CancellationToken token = default)
+        public async Task<bool> TrySetProcessAsync(string captainId, string missionId, int processId, DateTime? processStartedUtc = null, CancellationToken token = default)
         {
             if (string.IsNullOrEmpty(captainId)) throw new ArgumentNullException(nameof(captainId));
             if (string.IsNullOrEmpty(missionId)) throw new ArgumentNullException(nameof(missionId));
@@ -536,12 +538,13 @@ namespace Armada.Core.Database.Sqlite.Implementations
                 using (SqliteCommand cmd = conn.CreateCommand())
                 {
                     cmd.CommandText = @"UPDATE captains SET
-                        process_id = @process_id,
+                        process_id = @process_id, process_started_utc = @process_started_utc,
                         last_update_utc = @last_update_utc
                         WHERE id = @id AND current_mission_id = @current_mission_id AND state IN ('Working', 'Stalled', 'Stopping');";
                     cmd.Parameters.AddWithValue("@id", captainId);
                     cmd.Parameters.AddWithValue("@current_mission_id", missionId);
                     cmd.Parameters.AddWithValue("@process_id", processId);
+                    cmd.Parameters.AddWithValue("@process_started_utc", processStartedUtc.HasValue ? (object)SqliteDatabaseDriver.ToIso8601(processStartedUtc.Value) : DBNull.Value);
                     cmd.Parameters.AddWithValue("@last_update_utc", SqliteDatabaseDriver.ToIso8601(now));
                     int rowsAffected = await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                     return rowsAffected > 0;
@@ -845,7 +848,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
                 {
                     cmd.CommandText = @"UPDATE captains SET
                         state = 'Idle',
-                        process_id = NULL,
+                        process_id = NULL, process_started_utc = NULL,
                         last_update_utc = @last_update_utc
                         WHERE tenant_id = @tenantId AND id = @id AND state = @state;";
                     cmd.Parameters.AddWithValue("@tenantId", tenantId);

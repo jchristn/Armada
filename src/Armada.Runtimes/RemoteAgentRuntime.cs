@@ -302,7 +302,7 @@ namespace Armada.Runtimes
         }
 
         /// <inheritdoc />
-        public async Task StopAsync(int processId, CancellationToken token = default)
+        public async Task<AgentStopResult> StopAsync(int processId, CancellationToken token = default)
         {
             // This instance launched the job: stop it by its job id, which cannot collide with another Harbor's process
             // id. Otherwise (a runtime created only to stop a process) resolve the job from the process id.
@@ -319,10 +319,11 @@ namespace Armada.Runtimes
                     // here, as a local process kill would, so a caller waiting for it (a planning turn) finishes.
                     OnExited(-1);
                 }
-                return;
+                return AgentStopResult.Stopped();
             }
 
             await _Manager.KillByProcessIdAsync(processId, 10000, token).ConfigureAwait(false);
+            return AgentStopResult.Stopped();
         }
 
         /// <summary>Whether this mission was intentionally stopped, including an intent restored after restart.</summary>

@@ -164,7 +164,9 @@ namespace Armada.Server
                     _Logging.Info(_Header + "stopping captain " + captain.Id + " process " + processId + (result.Cancelled ? " (cancelled)" : " (time limit reached)"));
                     try
                     {
-                        await Task.Run(() => runtime.StopAsync(processId, CancellationToken.None)).ConfigureAwait(false);
+                        AgentStopResult stopped = await runtime.StopAsync(processId, CancellationToken.None).ConfigureAwait(false);
+                        if (!stopped.Cleared)
+                            _Logging.Warn(_Header + "refused to stop process " + processId + " reason " + stopped.Reason);
                     }
                     catch (Exception ex)
                     {

@@ -2,9 +2,13 @@ namespace Test.Shared.Suites.Runtimes
 {
     using System;
     using System.Collections.Generic;
+    using System.Diagnostics;
     using System.IO;
     using System.Threading;
     using System.Threading.Tasks;
+    using Armada.Core;
+    using Armada.Core.Enums;
+    using Armada.Core.Models;
     using SyslogLogging;
     using Test.Shared.Infrastructure;
     using Touchstone.Core;
@@ -282,6 +286,114 @@ namespace Test.Shared.Suites.Runtimes
                 AssertEqual(7, exitCode ?? -1, "the agent's exit is reported with its exit code");
             }));
 
+            cases.Add(CaseAsync("stop_without_launch_identity_leaves_process_running", "StopAsync leaves a live process running when no launch start time is recorded", TestTags.Negative, async () =>
+            {
+                using (StandInProcess standIn = StartStandIn())
+                {
+                    ProcessSupervisor.ForgetLaunch(standIn.Process.Id);
+                    TestAgentRuntime runtime = new TestAgentRuntime(CreateLogging());
+                    AgentStopResult stopped = await runtime.StopAsync(standIn.Process.Id).ConfigureAwait(false);
+                    AssertEqual(AgentStopOutcomeEnum.Refused, stopped.Outcome, "a stop with no recorded launch start time is refused");
+                    AssertEqual(AgentStopResult.IdentityUnverifiedReason, stopped.Reason, "the refusal names the missing launch identity");
+                    bool exited = standIn.Process.WaitForExit(400);
+                    AssertFalse(exited, "a stop with no recorded launch start time must leave the process running");
+                    AssertFalse(standIn.Process.HasExited, "the stand-in process is still alive after the refused stop");
+                }
+            }));
+
+            cases.Add(CaseAsync("different_start_time_is_not_the_tracked_process", "A live process whose start time differs from the recorded launch is not the tracked process", TestTags.Negative, async () =>
+            {
+                using (StandInProcess standIn = StartStandIn())
+                {
+                    ProcessSupervisor.ForgetLaunch(standIn.Process.Id);
+                    DateTime startUtc = standIn.Process.StartTime.ToUniversalTime();
+                    bool mismatched = ProcessSupervisor.IsTrackedProcessAlive(standIn.Process.Id, startUtc.AddSeconds(-30));
+                    AssertFalse(mismatched, "a start time 30 seconds away is a different process, not the recorded launch");
+                    bool matched = ProcessSupervisor.IsTrackedProcessAlive(standIn.Process.Id, startUtc);
+                    AssertTrue(matched, "the process start time itself identifies the tracked process");
+                }
+            }));
+
+            cases.Add(CaseAsync("one_second_start_time_difference_is_not_the_tracked_process", "A process that starts one second after the recorded launch is not the tracked process", TestTags.Negative, async () =>
+            {
+                using (StandInProcess standIn = StartStandIn())
+                {
+                    ProcessSupervisor.ForgetLaunch(standIn.Process.Id);
+                    DateTime startUtc = standIn.Process.StartTime.ToUniversalTime();
+                    bool reused = ProcessSupervisor.IsTrackedProcessAlive(standIn.Process.Id, startUtc.AddSeconds(-1));
+                    AssertFalse(reused, "a process with a one-second start-time difference must not match");
+                    ProcessSupervisor.RecordLaunch(standIn.Process.Id, startUtc.AddSeconds(-1));
+                    try
+                    {
+                        TestAgentRuntime runtime = new TestAgentRuntime(CreateLogging());
+                        AgentStopResult stopped = await runtime.StopAsync(standIn.Process.Id).ConfigureAwait(false);
+                        AssertEqual(AgentStopOutcomeEnum.Refused, stopped.Outcome, "a one-second start-time difference refuses the stop");
+                        AssertEqual(AgentStopResult.IdentifierReusedReason, stopped.Reason, "the refusal names the reused process id");
+                        bool exited = standIn.Process.WaitForExit(400);
+                        AssertFalse(exited, "a process that starts one second after the recorded launch is left running");
+                        AssertFalse(standIn.Process.HasExited, "the stand-in process is still alive");
+                    }
+                    finally
+                    {
+                        ProcessSupervisor.ForgetLaunch(standIn.Process.Id);
+                    }
+                }
+            }));
+
+            cases.Add(CaseAsync("missing_start_identity_is_not_a_live_tracked_process", "A live process with no recorded launch start time is not reported alive", TestTags.Negative, async () =>
+            {
+                using (StandInProcess standIn = StartStandIn())
+                {
+                    ProcessSupervisor.ForgetLaunch(standIn.Process.Id);
+                    bool alive = ProcessSupervisor.IsTrackedProcessAlive(standIn.Process.Id, null);
+                    AssertFalse(alive, "liveness requires a recorded launch start time");
+                }
+            }));
+
+            cases.Add(CaseAsync("recorded_start_time_stops_the_process", "StopAsync stops a live process when the recorded start time matches", TestTags.Positive, async () =>
+            {
+                using (StandInProcess standIn = StartStandIn())
+                {
+                    DateTime startUtc = standIn.Process.StartTime.ToUniversalTime();
+                    ProcessSupervisor.RecordLaunch(standIn.Process.Id, startUtc);
+                    try
+                    {
+                        TestAgentRuntime runtime = new TestAgentRuntime(CreateLogging());
+                        AgentStopResult stopped = await runtime.StopAsync(standIn.Process.Id).ConfigureAwait(false);
+                        AssertEqual(AgentStopOutcomeEnum.Stopped, stopped.Outcome, "a matching launch start time allows the stop");
+                        bool exited = standIn.Process.WaitForExit(2000);
+                        AssertTrue(exited || standIn.Process.HasExited, "the recorded process exits");
+                    }
+                    finally
+                    {
+                        ProcessSupervisor.ForgetLaunch(standIn.Process.Id);
+                    }
+                }
+            }));
+
+            cases.Add(CaseAsync("recorded_different_start_time_leaves_the_process_running", "StopAsync leaves a live process running when the recorded start time differs", TestTags.Negative, async () =>
+            {
+                using (StandInProcess standIn = StartStandIn())
+                {
+                    DateTime startUtc = standIn.Process.StartTime.ToUniversalTime();
+                    ProcessSupervisor.RecordLaunch(standIn.Process.Id, startUtc.AddSeconds(-30));
+                    try
+                    {
+                        TestAgentRuntime runtime = new TestAgentRuntime(CreateLogging());
+                        AgentStopResult stopped = await runtime.StopAsync(standIn.Process.Id).ConfigureAwait(false);
+                        AssertEqual(AgentStopOutcomeEnum.Refused, stopped.Outcome, "a different recorded start time refuses the stop");
+                        AssertEqual(AgentStopResult.IdentifierReusedReason, stopped.Reason, "the refusal names the reused process id");
+                        bool exited = standIn.Process.WaitForExit(400);
+                        AssertFalse(exited, "the process is left running");
+                        AssertFalse(standIn.Process.HasExited, "the stand-in process is still alive");
+                    }
+                    finally
+                    {
+                        ProcessSupervisor.ForgetLaunch(standIn.Process.Id);
+                    }
+                }
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
                 displayName: "Base Agent Runtime",
@@ -313,6 +425,74 @@ namespace Test.Shared.Suites.Runtimes
             LoggingModule logging = new LoggingModule();
             logging.Settings.EnableConsole = false;
             return logging;
+        }
+
+        /// <summary>
+        /// Start a process that stays alive until disposed. The child environment is set explicitly and does not
+        /// inherit the host environment.
+        /// </summary>
+        private static StandInProcess StartStandIn()
+        {
+            string directory = TestTemp.NewDirectory("launch-identity");
+            ProcessStartInfo start = new ProcessStartInfo();
+            start.UseShellExecute = false;
+            start.CreateNoWindow = true;
+            start.RedirectStandardOutput = true;
+            start.RedirectStandardError = true;
+            start.WorkingDirectory = directory;
+            start.Environment.Clear();
+            if (OperatingSystem.IsWindows())
+            {
+                string systemRoot = Environment.GetEnvironmentVariable("SystemRoot") ?? @"C:\Windows";
+                start.FileName = Path.Combine(systemRoot, "System32", "cmd.exe");
+                start.ArgumentList.Add("/c");
+                start.ArgumentList.Add("ping -n 40 127.0.0.1 >NUL");
+                start.Environment["SystemRoot"] = systemRoot;
+                start.Environment["PATH"] = Path.Combine(systemRoot, "System32");
+            }
+            else
+            {
+                start.FileName = "/bin/sleep";
+                start.ArgumentList.Add("40");
+            }
+
+            Process process = new Process();
+            process.StartInfo = start;
+            process.EnableRaisingEvents = true;
+            process.OutputDataReceived += (_, _) => { };
+            process.ErrorDataReceived += (_, _) => { };
+            bool started = process.Start();
+            AssertTrue(started, "the stand-in process starts");
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+            return new StandInProcess(process, directory);
+        }
+
+        private sealed class StandInProcess : IDisposable
+        {
+            private readonly string _Directory;
+
+            public StandInProcess(Process process, string directory)
+            {
+                Process = process ?? throw new ArgumentNullException(nameof(process));
+                _Directory = directory ?? throw new ArgumentNullException(nameof(directory));
+            }
+
+            public Process Process { get; }
+
+            public void Dispose()
+            {
+                try
+                {
+                    if (!Process.HasExited) Process.Kill(entireProcessTree: true);
+                }
+                catch (InvalidOperationException)
+                {
+                }
+
+                Process.Dispose();
+                TestTemp.TryDelete(_Directory);
+            }
         }
 
         private static TestCaseDescriptor Case(string caseId, string displayName, string tag, Action body)

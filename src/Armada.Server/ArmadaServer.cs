@@ -278,6 +278,8 @@ namespace Armada.Server
             await new MigrationBackupService(_Settings, _Logging).PrepareAsync(_Database).ConfigureAwait(false);
             await _Database.InitializeAsync().ConfigureAwait(false);
             _Logging.Debug(_Header + "database initialized");
+            ProcessLaunchIdentityRestoreResult restored = await ProcessLaunchIdentityRestore.RestoreAsync(_Database).ConfigureAwait(false);
+            _Logging.Info(_Header + "restored " + restored.RestoredCount + " process launch identities; " + restored.UnverifiedCount + " stored process ids have no start time");
 
             // Ensure a local API key exists so trusted local clients (the armada CLI) can authenticate
             // to the REST API, and a session token encryption key exists so sign-ins survive a restart.

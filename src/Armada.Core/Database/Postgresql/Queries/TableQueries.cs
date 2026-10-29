@@ -2072,7 +2072,10 @@ namespace Armada.Core.Database.Postgresql.Queries
                     );",
                     @"CREATE INDEX IF NOT EXISTS idx_runbook_executions_tenant_user ON runbook_executions(tenant_id, user_id);",
                     @"CREATE INDEX IF NOT EXISTS idx_runbook_executions_runbook ON runbook_executions(runbook_id);",
-                    @"CREATE INDEX IF NOT EXISTS idx_runbook_executions_last_update ON runbook_executions(last_update_utc DESC, id DESC);")
+                    @"CREATE INDEX IF NOT EXISTS idx_runbook_executions_last_update ON runbook_executions(last_update_utc DESC, id DESC);"),
+                new SchemaMigration(103, "Add process_started_utc beside process_id on captains and missions",
+                    @"ALTER TABLE captains ADD COLUMN IF NOT EXISTS process_started_utc TIMESTAMP NULL;",
+                    @"ALTER TABLE missions ADD COLUMN IF NOT EXISTS process_started_utc TIMESTAMP NULL;")
 
 
             };

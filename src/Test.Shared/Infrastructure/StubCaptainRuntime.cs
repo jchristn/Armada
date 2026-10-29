@@ -154,15 +154,16 @@ namespace Test.Shared.Infrastructure
         }
 
         /// <inheritdoc />
-        public override Task StopAsync(int processId, CancellationToken token = default)
+        public override Task<AgentStopResult> StopAsync(int processId, CancellationToken token = default)
         {
             if (_Running.TryGetValue(processId, out CancellationTokenSource? cts))
             {
                 try { cts.Cancel(); }
                 catch (ObjectDisposedException) { }
+                return Task.FromResult(AgentStopResult.Stopped());
             }
 
-            return Task.CompletedTask;
+            return Task.FromResult(AgentStopResult.NotRunning());
         }
 
         /// <inheritdoc />

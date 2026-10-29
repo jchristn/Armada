@@ -869,7 +869,7 @@ namespace Armada.Server
                 await _Database.PlanningSessions.UpdateAsync(session).ConfigureAwait(false);
                 BroadcastSessionChanged(session);
 
-                captain.ProcessId = processId;
+                captain.SetProcess(processId, Armada.Core.ProcessSupervisor.GetLaunchStartUtc(processId));
                 captain.LastHeartbeatUtc = DateTime.UtcNow;
                 captain.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.Captains.UpdateAsync(captain).ConfigureAwait(false);
@@ -1250,7 +1250,13 @@ namespace Armada.Server
                 await _Database.PlanningSessions.UpdateAsync(session, token).ConfigureAwait(false);
                 BroadcastSessionChanged(session);
 
-                captain.ProcessId = processId;
+                DateTime? processStartedUtc = null;
+                if (processId.HasValue)
+                {
+                    processStartedUtc = Armada.Core.ProcessSupervisor.GetLaunchStartUtc(processId.Value);
+                }
+
+                captain.SetProcess(processId, processStartedUtc);
                 captain.LastHeartbeatUtc = DateTime.UtcNow;
                 captain.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.Captains.UpdateAsync(captain, token).ConfigureAwait(false);

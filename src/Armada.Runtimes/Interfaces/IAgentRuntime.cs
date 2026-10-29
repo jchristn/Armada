@@ -95,11 +95,12 @@ namespace Armada.Runtimes.Interfaces
             CancellationToken token = default);
 
         /// <summary>
-        /// Stop an agent process gracefully.
+        /// Stop an agent process gracefully when it is the recorded launch.
         /// </summary>
         /// <param name="processId">Process ID to stop.</param>
         /// <param name="token">Cancellation token.</param>
-        Task StopAsync(int processId, CancellationToken token = default);
+        /// <returns>Whether the recorded process was stopped, was already gone, or was left running.</returns>
+        Task<AgentStopResult> StopAsync(int processId, CancellationToken token = default);
 
         /// <summary>
         /// Check if an agent process is still running.

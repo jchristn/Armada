@@ -167,7 +167,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqlCommand cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = "UPDATE missions SET process_id = NULL, last_update_utc = @last_update_utc WHERE id = @id AND process_id = @process_id;";
+                    cmd.CommandText = "UPDATE missions SET process_id = NULL, process_started_utc = NULL, last_update_utc = @last_update_utc WHERE id = @id AND process_id = @process_id;";
                     cmd.Parameters.AddWithValue("@id", missionId);
                     cmd.Parameters.AddWithValue("@process_id", processId);
                     cmd.Parameters.AddWithValue("@last_update_utc", SqlServerDatabaseDriver.ToIso8601(DateTime.UtcNow));
@@ -913,7 +913,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                         parent_mission_id = @parent_mission_id,
                         branch_name = @branch_name,
                         dock_id = @dock_id,
-                        process_id = @process_id,
+                        process_id = @process_id, process_started_utc = @process_started_utc,
                         pr_url = @pr_url,
                         commit_hash = @commit_hash,
                         diff_snapshot = @diff_snapshot,
@@ -961,6 +961,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                     cmd.Parameters.AddWithValue("@branch_name", (object?)mission.BranchName ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@dock_id", (object?)mission.DockId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@process_id", mission.ProcessId.HasValue ? (object)mission.ProcessId.Value : DBNull.Value);
+                    cmd.Parameters.AddWithValue("@process_started_utc", mission.ProcessStartedUtc.HasValue ? (object)SqlServerDatabaseDriver.ToIso8601(mission.ProcessStartedUtc.Value) : DBNull.Value);
                     cmd.Parameters.AddWithValue("@pr_url", (object?)mission.PrUrl ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@commit_hash", (object?)mission.CommitHash ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@diff_snapshot", (object?)mission.DiffSnapshot ?? DBNull.Value);
@@ -1016,8 +1017,8 @@ namespace Armada.Core.Database.SqlServer.Implementations
             using (SqlCommand cmd = conn.CreateCommand())
             {
                 cmd.Transaction = tx;
-                cmd.CommandText = @"INSERT INTO missions (id, tenant_id, user_id, voyage_id, vessel_id, captain_id, requested_captain_id, assigned_harbor_id, title, description, status, mode, priority, redispatch_attempts, output_repair_attempts, noop_redispatch_attempts, is_rescue, is_evaluation, rework_round, rework_escalated, tier, parent_mission_id, branch_name, dock_id, process_id, pr_url, commit_hash, diff_snapshot, agent_output, persona, depends_on_mission_id, failure_reason, failure_kind, wait_for_voyage_workers, requires_review, review_deny_action, review_comment, reviewed_by_user_id, review_requested_utc, reviewed_utc, review_deadline_utc, total_runtime_ms, created_utc, started_utc, completed_utc, last_update_utc)
-                    VALUES (@id, @tenant_id, @user_id, @voyage_id, @vessel_id, @captain_id, @requested_captain_id, @assigned_harbor_id, @title, @description, @status, @mode, @priority, @redispatch_attempts, @output_repair_attempts, @noop_redispatch_attempts, @is_rescue, @is_evaluation, @rework_round, @rework_escalated, @tier, @parent_mission_id, @branch_name, @dock_id, @process_id, @pr_url, @commit_hash, @diff_snapshot, @agent_output, @persona, @depends_on_mission_id, @failure_reason, @failure_kind, @wait_for_voyage_workers, @requires_review, @review_deny_action, @review_comment, @reviewed_by_user_id, @review_requested_utc, @reviewed_utc, @review_deadline_utc, @total_runtime_ms, @created_utc, @started_utc, @completed_utc, @last_update_utc);";
+                cmd.CommandText = @"INSERT INTO missions (id, tenant_id, user_id, voyage_id, vessel_id, captain_id, requested_captain_id, assigned_harbor_id, title, description, status, mode, priority, redispatch_attempts, output_repair_attempts, noop_redispatch_attempts, is_rescue, is_evaluation, rework_round, rework_escalated, tier, parent_mission_id, branch_name, dock_id, process_id, process_started_utc, pr_url, commit_hash, diff_snapshot, agent_output, persona, depends_on_mission_id, failure_reason, failure_kind, wait_for_voyage_workers, requires_review, review_deny_action, review_comment, reviewed_by_user_id, review_requested_utc, reviewed_utc, review_deadline_utc, total_runtime_ms, created_utc, started_utc, completed_utc, last_update_utc)
+                    VALUES (@id, @tenant_id, @user_id, @voyage_id, @vessel_id, @captain_id, @requested_captain_id, @assigned_harbor_id, @title, @description, @status, @mode, @priority, @redispatch_attempts, @output_repair_attempts, @noop_redispatch_attempts, @is_rescue, @is_evaluation, @rework_round, @rework_escalated, @tier, @parent_mission_id, @branch_name, @dock_id, @process_id, @process_started_utc, @pr_url, @commit_hash, @diff_snapshot, @agent_output, @persona, @depends_on_mission_id, @failure_reason, @failure_kind, @wait_for_voyage_workers, @requires_review, @review_deny_action, @review_comment, @reviewed_by_user_id, @review_requested_utc, @reviewed_utc, @review_deadline_utc, @total_runtime_ms, @created_utc, @started_utc, @completed_utc, @last_update_utc);";
                 cmd.Parameters.AddWithValue("@id", mission.Id);
                 cmd.Parameters.AddWithValue("@tenant_id", (object?)mission.TenantId ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("@user_id", (object?)mission.UserId ?? DBNull.Value);
@@ -1043,6 +1044,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                 cmd.Parameters.AddWithValue("@branch_name", (object?)mission.BranchName ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("@dock_id", (object?)mission.DockId ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("@process_id", mission.ProcessId.HasValue ? (object)mission.ProcessId.Value : DBNull.Value);
+                cmd.Parameters.AddWithValue("@process_started_utc", mission.ProcessStartedUtc.HasValue ? (object)SqlServerDatabaseDriver.ToIso8601(mission.ProcessStartedUtc.Value) : DBNull.Value);
                 cmd.Parameters.AddWithValue("@pr_url", (object?)mission.PrUrl ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("@commit_hash", (object?)mission.CommitHash ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("@diff_snapshot", (object?)mission.DiffSnapshot ?? DBNull.Value);

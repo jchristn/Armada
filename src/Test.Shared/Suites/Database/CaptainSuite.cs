@@ -382,6 +382,33 @@ namespace Test.Shared.Suites.Database
                 }
             }));
 
+            cases.Add(CaseAsync("captain_process_start_round_trip", "A captain stores a process id with its launch start time and clears that start time when the id changes", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    DatabaseDriver db = testDb.Driver;
+                    DateTime startedUtc = new DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc);
+                    Captain captain = new Captain("launch-identity");
+                    captain.SetProcess(4242, startedUtc);
+                    await db.Captains.CreateAsync(captain);
+
+                    Captain? created = await db.Captains.ReadAsync(captain.Id);
+                    AssertEqual(4242, created!.ProcessId);
+                    AssertTrue(SameUtcSecond(startedUtc, created.ProcessStartedUtc), "the launch start time persists on create");
+
+                    AssertTrue(await db.Captains.TryClaimAsync(captain.Id, "msn_launch", null));
+                    AssertTrue(await db.Captains.TrySetProcessAsync(captain.Id, "msn_launch", 5150, startedUtc.AddMinutes(1)));
+                    Captain? replaced = await db.Captains.ReadAsync(captain.Id);
+                    AssertEqual(5150, replaced!.ProcessId);
+                    AssertTrue(SameUtcSecond(startedUtc.AddMinutes(1), replaced.ProcessStartedUtc), "TrySetProcess stores the new start time");
+
+                    AssertTrue(await db.Captains.TrySetProcessAsync(captain.Id, "msn_launch", 5151, null));
+                    Captain? cleared = await db.Captains.ReadAsync(captain.Id);
+                    AssertEqual(5151, cleared!.ProcessId);
+                    AssertNull(cleared.ProcessStartedUtc, "a new process id without a start time clears the stored start time");
+                }
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
                 displayName: "Captain Tests",
@@ -391,6 +418,20 @@ namespace Test.Shared.Suites.Database
         #endregion
 
         #region Private-Methods
+
+        private static bool SameUtcSecond(DateTime expectedUtc, DateTime? actual)
+        {
+            if (!actual.HasValue) return false;
+            DateTime observed = actual.Value;
+            if (observed.Kind == DateTimeKind.Local) observed = observed.ToUniversalTime();
+            else observed = DateTime.SpecifyKind(observed, DateTimeKind.Utc);
+            return expectedUtc.Year == observed.Year
+                && expectedUtc.Month == observed.Month
+                && expectedUtc.Day == observed.Day
+                && expectedUtc.Hour == observed.Hour
+                && expectedUtc.Minute == observed.Minute
+                && expectedUtc.Second == observed.Second;
+        }
 
         private static TestCaseDescriptor CaseAsync(string caseId, string displayName, string tag, Func<Task> body)
         {

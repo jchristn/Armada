@@ -2035,7 +2035,10 @@ namespace Armada.Core.Database.SqlServer.Queries
                     );",
                     @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_runbook_executions_tenant_user') CREATE INDEX idx_runbook_executions_tenant_user ON runbook_executions(tenant_id, user_id);",
                     @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_runbook_executions_runbook') CREATE INDEX idx_runbook_executions_runbook ON runbook_executions(runbook_id);",
-                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_runbook_executions_last_update') CREATE INDEX idx_runbook_executions_last_update ON runbook_executions(last_update_utc, id);")
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_runbook_executions_last_update') CREATE INDEX idx_runbook_executions_last_update ON runbook_executions(last_update_utc, id);"),
+                new SchemaMigration(103, "Add process_started_utc beside process_id on captains and missions",
+                    @"IF COL_LENGTH('captains', 'process_started_utc') IS NULL ALTER TABLE captains ADD process_started_utc NVARCHAR(64) NULL;",
+                    @"IF COL_LENGTH('missions', 'process_started_utc') IS NULL ALTER TABLE missions ADD process_started_utc NVARCHAR(64) NULL;")
 
 
             };

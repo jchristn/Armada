@@ -10,6 +10,10 @@ All notable changes to Armada are documented in this file.
 - After building and verifying both Harbor DMGs, `build-harbor-app.sh` installs the native app into `~/Applications`, staging and signature-checking a fresh bundle before replacement. `--no-install` opts out, and `--no-build` remains verification-only.
 - Helm's NuGet tool package preserves battery fixture `.gitignore` and `.gitattributes` files instead of excluding them with NU5119 warnings. Installer verification checks every packaged framework for those files.
 
+### Process launch identity
+
+- A local agent stop or a liveness check succeeds only when the live process start time matches the start time captured at that launch. A start time one second away is a different process. A missing, unreadable, or different start time leaves the process running and is reported as `process_identity_unverified` or `process_identifier_reused`. Captains and missions store that start time beside the process id. Changing or clearing the process id clears the stored start time. Rows that already have a process id and no start time stay unverified, so a later stop does not signal that process.
+
 ### Landing failure prevention
 
 - Every dashboard and TUI delete, bulk delete and purge now shows a progress modal (for example "Deleting vessel" or "Deleting 12 missions": "This may take some time while related records are cleaned up.") that stays up until the server answers, cannot be dismissed while pending, and offers Retry and Dismiss if the delete fails. Duplicate submissions are ignored. Ask Armada uses the same shared dialog.

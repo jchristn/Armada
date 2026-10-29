@@ -86,6 +86,11 @@ namespace Armada.Core.Models
         public int? ProcessId { get; set; } = null;
 
         /// <summary>
+        /// UTC start time of <see cref="ProcessId"/>, captured when that process was launched.
+        /// </summary>
+        public DateTime? ProcessStartedUtc { get; set; } = null;
+
+        /// <summary>
         /// Pull request URL if created.
         /// </summary>
         public string? PrUrl { get; set; } = null;

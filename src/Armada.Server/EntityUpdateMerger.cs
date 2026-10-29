@@ -135,7 +135,7 @@ namespace Armada.Server
             incoming.State = existing.State;
             incoming.CurrentMissionId = existing.CurrentMissionId;
             incoming.CurrentDockId = existing.CurrentDockId;
-            incoming.ProcessId = existing.ProcessId;
+            incoming.SetProcess(existing.ProcessId, existing.ProcessStartedUtc);
             incoming.RecoveryAttempts = existing.RecoveryAttempts;
             incoming.QuarantineUntilUtc = existing.QuarantineUntilUtc;
             incoming.QuarantineReason = existing.QuarantineReason;

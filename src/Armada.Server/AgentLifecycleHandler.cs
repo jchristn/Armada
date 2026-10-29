@@ -784,7 +784,9 @@ namespace Armada.Server
                 {
                     try
                     {
-                        await runtime.StopAsync(processId.Value, CancellationToken.None).ConfigureAwait(false);
+                        AgentStopResult stopped = await runtime.StopAsync(processId.Value, CancellationToken.None).ConfigureAwait(false);
+                        if (!stopped.Cleared)
+                            _Logging.Warn(_Header + "refused to stop process " + processId.Value + " reason " + stopped.Reason);
                     }
                     catch { }
                 }
@@ -896,7 +898,7 @@ namespace Armada.Server
                 {
                     if (!job.EndedUtc.HasValue) continue;
                     MissionStatusEnum observed = mission.Status;
-                    mission.ProcessId = captain.ProcessId;
+                    mission.SetProcess(captain.ProcessId, captain.ProcessStartedUtc);
                     if (!await _Database.Missions.TryUpdateIfStatusAsync(mission, new[] { observed }, token).ConfigureAwait(false)) continue;
                 }
 
@@ -1339,15 +1341,7 @@ namespace Armada.Server
         /// </summary>
         private static bool IsTrackedProcessAlive(int processId)
         {
-            try
-            {
-                using Process process = Process.GetProcessById(processId);
-                return !process.HasExited;
-            }
-            catch
-            {
-                return false;
-            }
+            return ProcessSupervisor.IsTrackedProcessAlive(processId);
         }
 
         /// <summary>
@@ -1756,7 +1750,12 @@ namespace Armada.Server
                     {
                         IHostProcessExecutor stopExecutor = ResolveStopExecutor(processId);
                         Armada.Runtimes.Interfaces.IAgentRuntime runtime = stopExecutor.CreateRuntime(captain.Runtime);
-                        await runtime.StopAsync(processId).ConfigureAwait(false);
+                        AgentStopResult stopped = await runtime.StopAsync(processId).ConfigureAwait(false);
+                        if (!stopped.Cleared)
+                        {
+                            _Logging.Warn(_Header + "refused to stop process " + processId + " for captain " + captain.Id + " reason " + stopped.Reason);
+                            return;
+                        }
                     }
                 }
                 lock (_ProcessToCaptain)

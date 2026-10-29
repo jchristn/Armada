@@ -825,12 +825,13 @@ namespace Armada.Core.Services
             // A failure past this point must not roll back: the agent is running and its exit handler owns the outcome.
             try
             {
-                if (await _Database.Captains.TrySetProcessAsync(captain.Id, mission.Id, processId, CancellationToken.None).ConfigureAwait(false))
+                DateTime? processStartedUtc = ProcessSupervisor.GetLaunchStartUtc(processId);
+                if (await _Database.Captains.TrySetProcessAsync(captain.Id, mission.Id, processId, processStartedUtc, CancellationToken.None).ConfigureAwait(false))
                 {
-                    captain.ProcessId = processId;
+                    captain.SetProcess(processId, processStartedUtc);
                 }
 
-                mission.ProcessId = processId;
+                mission.SetProcess(processId, processStartedUtc);
                 mission.Status = MissionStatusEnum.InProgress;
                 mission.StartedUtc = DateTime.UtcNow;
                 mission.LastUpdateUtc = DateTime.UtcNow;
@@ -839,7 +840,7 @@ namespace Armada.Core.Services
                 if (currentMission != null)
                 {
                     _Logging.Info(_Header + "mission " + mission.Id + " already moved to " + currentMission.Status + " before its launch was recorded (agent process " + processId + " finished first); keeping that state");
-                    mission.ProcessId = currentMission.ProcessId;
+                    mission.SetProcess(currentMission.ProcessId, currentMission.ProcessStartedUtc);
                     mission.Status = currentMission.Status;
                     mission.StartedUtc = currentMission.StartedUtc;
                     mission.LastUpdateUtc = currentMission.LastUpdateUtc;

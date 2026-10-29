@@ -817,6 +817,44 @@ namespace Test.Shared.Suites.Database
                 }
             }));
 
+            cases.Add(CaseAsync("mission_process_start_round_trip", "A mission stores a process id with its launch start time and clears that start time when the id changes", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    DatabaseDriver db = testDb.Driver;
+                    MissionTestPrerequisites prereqs = await CreatePrerequisitesAsync(db);
+                    DateTime startedUtc = new DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc);
+
+                    Mission mission = new Mission("Launch identity");
+                    mission.VesselId = prereqs.Vessel.Id;
+                    mission.VoyageId = prereqs.Voyage.Id;
+                    mission.Status = MissionStatusEnum.InProgress;
+                    mission.SetProcess(4242, startedUtc);
+                    await db.Missions.CreateAsync(mission);
+
+                    Mission? created = await db.Missions.ReadAsync(mission.Id);
+                    AssertEqual(4242, created!.ProcessId);
+                    AssertTrue(SameUtcSecond(startedUtc, created.ProcessStartedUtc), "the launch start time persists on create");
+
+                    MissionSummary? summary = await db.Missions.ReadSummaryAsync(mission.Id);
+                    AssertEqual(4242, summary!.ProcessId);
+                    AssertTrue(SameUtcSecond(startedUtc, summary.ProcessStartedUtc), "the summary keeps the launch start time");
+
+                    created.SetProcess(5150, null);
+                    await db.Missions.UpdateAsync(created);
+                    Mission? cleared = await db.Missions.ReadAsync(mission.Id);
+                    AssertEqual(5150, cleared!.ProcessId);
+                    AssertNull(cleared.ProcessStartedUtc, "a new process id without a start time clears the stored start time");
+
+                    cleared.SetProcess(5150, startedUtc);
+                    await db.Missions.UpdateAsync(cleared);
+                    AssertTrue(await db.Missions.TryClaimProcessExitAsync(mission.Id, 5150), "the recorded process exit can be claimed");
+                    Mission? claimed = await db.Missions.ReadAsync(mission.Id);
+                    AssertNull(claimed!.ProcessId, "the claim clears the process id");
+                    AssertNull(claimed.ProcessStartedUtc, "the claim clears the launch start time");
+                }
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
                 displayName: "Mission Database",
@@ -826,6 +864,20 @@ namespace Test.Shared.Suites.Database
         #endregion
 
         #region Private-Methods
+
+        private static bool SameUtcSecond(DateTime expectedUtc, DateTime? actual)
+        {
+            if (!actual.HasValue) return false;
+            DateTime observed = actual.Value;
+            if (observed.Kind == DateTimeKind.Local) observed = observed.ToUniversalTime();
+            else observed = DateTime.SpecifyKind(observed, DateTimeKind.Utc);
+            return expectedUtc.Year == observed.Year
+                && expectedUtc.Month == observed.Month
+                && expectedUtc.Day == observed.Day
+                && expectedUtc.Hour == observed.Hour
+                && expectedUtc.Minute == observed.Minute
+                && expectedUtc.Second == observed.Second;
+        }
 
         private static async Task<MissionTestPrerequisites> CreatePrerequisitesAsync(DatabaseDriver db)
         {

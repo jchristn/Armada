@@ -12,7 +12,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
     {
         private const string MissionSummarySelectColumns = @"
 id, tenant_id, user_id, voyage_id, vessel_id, captain_id, title, status, priority,
-parent_mission_id, branch_name, dock_id, process_id, pr_url, commit_hash,
+parent_mission_id, branch_name, dock_id, process_id, process_started_utc, pr_url, commit_hash,
 persona, depends_on_mission_id, failure_reason, failure_kind, is_evaluation, requires_review, review_deny_action,
 review_comment, reviewed_by_user_id, review_requested_utc, review_deadline_utc, reviewed_utc,
 created_utc, started_utc, completed_utc, total_runtime_ms, last_update_utc,
@@ -566,6 +566,7 @@ LEN(COALESCE(agent_output, '')) AS agent_output_length";
                 BranchName = SqlServerDatabaseDriver.NullableString(reader["branch_name"]),
                 DockId = SqlServerDatabaseDriver.NullableString(reader["dock_id"]),
                 ProcessId = reader["process_id"] == DBNull.Value ? null : Convert.ToInt32(reader["process_id"]),
+                ProcessStartedUtc = SqlServerDatabaseDriver.FromIso8601Nullable(reader["process_started_utc"]),
                 PrUrl = SqlServerDatabaseDriver.NullableString(reader["pr_url"]),
                 CommitHash = SqlServerDatabaseDriver.NullableString(reader["commit_hash"]),
                 Persona = SqlServerDatabaseDriver.NullableString(reader["persona"]),

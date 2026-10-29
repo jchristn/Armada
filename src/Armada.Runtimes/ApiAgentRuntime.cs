@@ -276,9 +276,10 @@ namespace Armada.Runtimes
         }
 
         /// <inheritdoc />
-        public async Task StopAsync(int processId, CancellationToken token = default)
+        public async Task<AgentStopResult> StopAsync(int processId, CancellationToken token = default)
         {
-            if (_Running.TryGetValue(processId, out CancellationTokenSource? cts))
+            bool known = _Running.TryGetValue(processId, out CancellationTokenSource? cts);
+            if (known && cts != null)
             {
                 try { cts.Cancel(); } catch { }
             }
@@ -289,7 +290,10 @@ namespace Armada.Runtimes
             {
                 Task finished = await Task.WhenAny(loop, Task.Delay(_StopWaitLimit, token)).ConfigureAwait(false);
                 if (finished != loop) _Logging.Warn(_Header + "process " + processId + " did not finish within " + _StopWaitLimit.TotalSeconds + " s of the stop request");
+                return AgentStopResult.Stopped();
             }
+
+            return known ? AgentStopResult.Stopped() : AgentStopResult.NotRunning();
         }
 
         /// <inheritdoc />

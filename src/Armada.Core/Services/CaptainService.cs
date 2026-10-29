@@ -314,11 +314,12 @@ namespace Armada.Core.Services
                         // A fast agent can exit (and its handler move the mission on and release the captain) before
                         // this returns: record the relaunch only while the captain still holds the mission and the
                         // mission is still in the state it was relaunched from.
-                        if (await _Database.Captains.TrySetProcessAsync(captain.Id, mission.Id, processId, token).ConfigureAwait(false))
-                            captain.ProcessId = processId;
+                        DateTime? processStartedUtc = ProcessSupervisor.GetLaunchStartUtc(processId);
+                        if (await _Database.Captains.TrySetProcessAsync(captain.Id, mission.Id, processId, processStartedUtc, token).ConfigureAwait(false))
+                            captain.SetProcess(processId, processStartedUtc);
 
                         MissionStatusEnum relaunchedFrom = mission.Status;
-                        mission.ProcessId = processId;
+                        mission.SetProcess(processId, processStartedUtc);
                         mission.Status = MissionStatusEnum.InProgress;
                         mission.LastUpdateUtc = DateTime.UtcNow;
                         if (!await _Database.Missions.TryUpdateIfStatusAsync(mission, new MissionStatusEnum[] { relaunchedFrom, MissionStatusEnum.Assigned, MissionStatusEnum.InProgress }, token).ConfigureAwait(false))
