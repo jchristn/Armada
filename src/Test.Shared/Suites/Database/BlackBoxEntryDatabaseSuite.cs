@@ -130,7 +130,9 @@ namespace Test.Shared.Suites.Database
                     seen.AddRange((await db.BlackBoxEntries.EnumerateAsync(all).ConfigureAwait(false)).Objects.Select(o => o.Id));
                 }
                 AssertEqual(12, seen.Distinct().Count(), "equal timestamps: no overlap or gap across pages");
-                AssertEqual(String.Join(",", ids.OrderByDescending(x => x, StringComparer.Ordinal)), String.Join(",", seen), "id tie-break, descending");
+                BlackBoxEnumerateRequest single = new BlackBoxEnumerateRequest { TenantId = "ten_p", PageSize = 100 };
+                AssertEqual(String.Join(",", (await db.BlackBoxEntries.EnumerateAsync(single).ConfigureAwait(false)).Objects.Select(o => o.Id)), String.Join(",", seen), "pages concatenate to the single-page order (id tie-break in the provider's collation)");
+                AssertEqual(String.Join(",", ids.OrderBy(x => x, StringComparer.Ordinal)), String.Join(",", seen.OrderBy(x => x, StringComparer.Ordinal)), "every row once");
                 all.PageNumber = 4;
                 EnumerationResult<BlackBoxEntry> past = await db.BlackBoxEntries.EnumerateAsync(all).ConfigureAwait(false);
                 AssertEqual(0, past.Objects.Count, "page past the end is empty"); AssertEqual(12L, past.TotalRecords, "with totals");
