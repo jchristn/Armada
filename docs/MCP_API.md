@@ -157,6 +157,32 @@ If/when MCP-over-tunnel is added, this document will gain explicit routed-tool s
     - [run_battery](#run_battery)
     - [get_battery_run](#get_battery_run)
     - [list_battery_results](#list_battery_results)
+  - **Black Box**
+    - [get_blackbox](#get_blackbox)
+    - [read_blackbox_section](#read_blackbox_section)
+    - [list_blackbox_objects](#list_blackbox_objects)
+    - [read_blackbox_object](#read_blackbox_object)
+    - [list_blackbox_entries](#list_blackbox_entries)
+    - [search_blackbox](#search_blackbox)
+    - [list_blackbox_notes](#list_blackbox_notes)
+    - [get_blackbox_bundle](#get_blackbox_bundle)
+    - [list_blackbox_hotspots](#list_blackbox_hotspots)
+    - [list_blackbox_fingerprints](#list_blackbox_fingerprints)
+    - [get_blackbox_fingerprint_trend](#get_blackbox_fingerprint_trend)
+    - [get_blackbox_retention](#get_blackbox_retention)
+    - [get_blackbox_storage](#get_blackbox_storage)
+    - [annotate_blackbox](#annotate_blackbox)
+    - [resolve_blackbox](#resolve_blackbox)
+    - [run_blackbox_recovery](#run_blackbox_recovery)
+    - [apply_blackbox_recommendation](#apply_blackbox_recommendation)
+    - [pin_blackbox](#pin_blackbox)
+    - [delete_blackbox_entries](#delete_blackbox_entries)
+    - [purge_blackbox](#purge_blackbox)
+    - [run_blackbox_gc](#run_blackbox_gc)
+    - [export_blackbox_fixture](#export_blackbox_fixture)
+    - [reanalyze_blackbox](#reanalyze_blackbox)
+    - [Resources and prompts](#resources-and-prompts)
+    - [Reviewing a black box and taking action](#reviewing-a-black-box-and-taking-action)
   - **Ask Armada**
     - [list_ask_threads](#list_ask_threads)
     - [get_ask_thread](#get_ask_thread)
@@ -333,7 +359,7 @@ The legacy `/rpc` + `/events` (separate SSE) endpoints remain served for older c
 
 ### Stdio Transport
 
-Armada also supports an MCP stdio transport (`armada mcp stdio`) for direct process-based communication. Both transports register the same tool names via `McpToolRegistrar`. The stdio server runs standalone against the database (no Admiral process), so the tools that need the Admiral answer `ErrorCode` `Unavailable` over stdio: `stop_server`, and the fleet action tools (`create_fleet_action`, `update_fleet_action`, `delete_fleet_action`, `run_fleet_action`, `fleet_action_run_status`, `cancel_fleet_action_run`), whose runs are executed and tracked by the Admiral's runner. Use stdio when running Armada as a child process of an MCP client.
+Armada also supports an MCP stdio transport (`armada mcp stdio`) for direct process-based communication. Both transports register the same tool names via `McpToolRegistrar`. The stdio server runs standalone against the database (no Admiral process), so the tools that need the Admiral answer `ErrorCode` `Unavailable` over stdio: `stop_server`, and the fleet action tools (`create_fleet_action`, `update_fleet_action`, `delete_fleet_action`, `run_fleet_action`, `fleet_action_run_status`, `cancel_fleet_action_run`), whose runs are executed and tracked by the Admiral's runner, and the [black box](#black-box) tools (and `enumerate` `entityType` `blackbox`), which need the Admiral's black box service. The black box resources and prompts are not served over stdio. Use stdio when running Armada as a child process of an MCP client.
 
 ### Port Configuration
 
@@ -369,9 +395,9 @@ call against the caller (including Ask Armada proposals executed after approval)
 
 | Level | Tools |
 |---|---|
-| Authenticated | Reads (`status`, `enumerate`, `get_*`, `list_*`, `mission_status`, `voyage_status`, logs, diffs, `vessel_health`, `search_memory`, `token_usage_summary`, ...), writes to caller-owned resources (memories, model endpoints, harbors), persona, pipeline, and prompt-template writes (as on REST: a regular user creates only `UserSpecific` ones and edits only their own), and `cli_permission_prompt` and `decide_cli_permission_request` (the handlers check the caller; see [CLI Permissions](#cli-permissions)) |
-| TenantAdmin | Every other write or execution (dispatch, captains, missions, voyages, docks, merge queue, signals, events, objectives, backlog, playbooks, workflow profiles (including `validate_workflow_profile`, as on REST), releases, deployments, runbooks, check runs, fleet actions, vessel import, vessel health) |
-| AdminOnly | `backup`, `restore`, `stop_server` (a credential is required even on loopback; use `X-Api-Key` from `settings.json`) |
+| Authenticated | Reads (`status`, `enumerate`, `get_*`, `list_*`, `mission_status`, `voyage_status`, logs, diffs, `vessel_health`, `search_memory`, `token_usage_summary`, ...), writes to caller-owned resources (memories, model endpoints, harbors), persona, pipeline, and prompt-template writes (as on REST: a regular user creates only `UserSpecific` ones and edits only their own), and `cli_permission_prompt` and `decide_cli_permission_request` (the handlers check the caller; see [CLI Permissions](#cli-permissions)), and the black box readers plus `annotate_blackbox`, `resolve_blackbox`, `pin_blackbox`, `run_blackbox_recovery` and `apply_blackbox_recommendation` (a recovery step is then authorized as its own tool; see [Black Box](#black-box)) |
+| TenantAdmin | Every other write or execution (dispatch, captains, missions, voyages, docks, merge queue, signals, events, objectives, backlog, playbooks, workflow profiles (including `validate_workflow_profile`, as on REST), releases, deployments, runbooks, check runs, fleet actions, vessel import, vessel health), and the black box `get_blackbox_retention`, `delete_blackbox_entries` and `reanalyze_blackbox` |
+| AdminOnly | `backup`, `restore`, `stop_server` (a credential is required even on loopback; use `X-Api-Key` from `settings.json`), and the black box `get_blackbox_storage`, `purge_blackbox`, `run_blackbox_gc` and `export_blackbox_fixture` |
 
 A denied call returns an `McpToolError` with `ErrorCode` `Forbidden` whose message names the required level. The full per-tool list is in
 [SECURITY_REVIEW.md](SECURITY_REVIEW.md#mcp-tools); a test fails when a registered tool has no declaration.
@@ -430,7 +456,10 @@ handler is registered through the Ask gate, which checks that claim:
   `list_backlog_planning_session_messages`, `list_objectives`, `list_prompt_templates`,
   plus `get_cli_permission_request`), and the Ask Armada
   readers (`list_ask_threads`, `get_ask_thread`, `list_ask_messages`, `list_ask_quick_actions`, `get_ask_work`,
-  `list_ask_work`, `list_ask_work_missions`, `list_ask_work_targets`, `list_ask_proposals`, `list_ask_tool_calls`). The list lives in
+  `list_ask_work`, `list_ask_work_missions`, `list_ask_work_targets`, `list_ask_proposals`, `list_ask_tool_calls`), and the black box
+  readers (`get_blackbox`, `read_blackbox_section`, `list_blackbox_objects`, `read_blackbox_object`,
+  `list_blackbox_entries`, `search_blackbox`, `list_blackbox_notes`, `get_blackbox_bundle`, `list_blackbox_hotspots`,
+  `list_blackbox_fingerprints`, `get_blackbox_fingerprint_trend`, `get_blackbox_retention`, `get_blackbox_storage`). The list lives in
   `AskToolPolicy`; any tool not on it (including tools added later) is treated as state-changing.
 - **`cli_permission_prompt`** (the captain CLI's own permission prompt) runs without becoming a proposal: an approver
   answers it as a [CLI permission request](#cli-permissions).
@@ -718,7 +747,7 @@ No parameters required.
 
 ### enumerate
 
-Paginated enumeration of any entity type with filtering and sorting. This is the MCP equivalent of the `POST /api/v1/{entity}/enumerate` REST endpoints. Returns paginated results with total counts, page metadata, and query timing. Supports: inbox (the needs-you items, most urgent first; replaces the removed `inbox` tool), cli_permission_rules (replaces the removed `list_cli_permission_rules`), cli_permission_requests (replaces the removed `list_cli_permission_requests`), objectives (aliases `backlog`, `backlog_item`, `backlog_items`), fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, harbors, playbooks, personas, memories, prompt_templates, pipelines, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions, jobs, model_endpoints, vessel_import_batch, fleet_action, fleet_action_run, fleet_action_run_target, vessel_health.
+Paginated enumeration of any entity type with filtering and sorting. This is the MCP equivalent of the `POST /api/v1/{entity}/enumerate` REST endpoints. Returns paginated results with total counts, page metadata, and query timing. Supports: inbox (the needs-you items, most urgent first; replaces the removed `inbox` tool), cli_permission_rules (replaces the removed `list_cli_permission_rules`), cli_permission_requests (replaces the removed `list_cli_permission_requests`), objectives (aliases `backlog`, `backlog_item`, `backlog_items`), fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, harbors, playbooks, personas, memories, prompt_templates, pipelines, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions, jobs, model_endpoints, vessel_import_batch, fleet_action, fleet_action_run, fleet_action_run_target, vessel_health, blackbox (black box entry summaries, newest first; see [Black Box](#black-box)).
 
 **Input Schema:**
 
@@ -726,14 +755,14 @@ Paginated enumeration of any entity type with filtering and sorting. This is the
 {
   "type": "object",
   "properties": {
-    "entityType": { "type": "string", "description": "Entity type to enumerate (inbox [the needs-you items, most urgent first], cli_permission_rules [vesselId and captainId filter], cli_permission_requests [newest first; status, missionId, threadId, captainId, vesselId filter], objectives [aliases backlog, backlog_item, backlog_items], fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, harbors, playbooks, personas, memories, prompt_templates, pipelines, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions, jobs, model_endpoints, vessel_import_batch, fleet_action, fleet_action_run, fleet_action_run_target, vessel_health)" },
+    "entityType": { "type": "string", "description": "Entity type to enumerate (inbox [the needs-you items, most urgent first], cli_permission_rules [vesselId and captainId filter], cli_permission_requests [newest first; status, missionId, threadId, captainId, vesselId filter], objectives [aliases backlog, backlog_item, backlog_items], fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, harbors, playbooks, personas, memories, prompt_templates, pipelines, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions, jobs, model_endpoints, vessel_import_batch, fleet_action, fleet_action_run, fleet_action_run_target, vessel_health, blackbox [black box entry summaries; status filters resolution, search matches reason, summary and notes])" },
     "pageNumber": { "type": "integer", "description": "Page number (1-based, default 1)" },
     "pageSize": { "type": "integer", "description": "Results per page (default 10, normalized into 1..1000; a few entity types apply their REST route's lower maximum, and the result's PageSize reports the size used)" },
     "order": { "type": "string", "description": "Sort order: CreatedAscending, CreatedDescending" },
     "createdAfter": { "type": "string", "description": "ISO 8601 timestamp filter" },
     "createdBefore": { "type": "string", "description": "ISO 8601 timestamp filter" },
     "status": { "type": "string", "description": "Filter by status (entity-specific)" },
-    "search": { "type": "string", "description": "Free-text search where supported (releases, deployments, incidents, runbooks, runbook_executions, memories, objectives; vessel name for vessel_health)" },
+    "search": { "type": "string", "description": "Free-text search where supported (releases, deployments, incidents, runbooks, runbook_executions, memories, objectives; vessel name for vessel_health; reason, summary and notes for blackbox)" },
     "fleetId": { "type": "string", "description": "Filter by fleet ID (vessels)" },
     "vesselId": { "type": "string", "description": "Filter by vessel ID (missions, docks)" },
     "captainId": { "type": "string", "description": "Filter by captain ID (missions, events, signals)" },
@@ -794,6 +823,7 @@ Paginated enumeration of any entity type with filtering and sorting. This is the
 | `fleet_action_run` | `status` (Pending/Running/Completed/CompletedWithFailures/Cancelled/Failed), `createdAfter`, `createdBefore` |
 | `fleet_action_run_target` | `runId` (required), `status` (Pending/Skipped/Running/Succeeded/Failed/Cancelled/TimedOut) |
 | `vessel_health` (aliases `vessel-health`, `health`) | `status` (overall status: Pass/Warn/Fail/NotApplicable/Unknown), `fleetId`, `search` (vessel name substring). Every active vessel appears, including never-evaluated ones. Rows are sorted by vessel name; for richer filters and sorting use `POST /api/v1/vessel-health/enumerate` |
+| `blackbox` (aliases `black_box`, `blackbox_entries`, `blackbox-entries`) | `status` (the resolution: Open/Resolved/Duplicate/WontFix/ArmadaFixed; `InvalidArgument` otherwise), `search` (case-insensitive substring of the reason, summary and notes), `fleetId`, `vesselId`, `voyageId`, `missionId`, `captainId`, `createdAfter`, `createdBefore`, `order`. Rows are `BlackBoxEntrySummary` objects, visible to the caller exactly as with [list_blackbox_entries](#list_blackbox_entries), which takes the richer filters (phase, step, kind, triage, fingerprint, path, pinned, isCurrent). `Unavailable` when the black box is not running (always over stdio) |
 
 **Page contract (docs/ENUMERATION.md):** every `entityType` returns the same page shape as the REST enumerate routes:
 `PageNumber`, `PageSize`, `TotalPages`, `TotalRecords`, `Objects` (plus `Success` and `TotalMs`). `pageSize` defaults to
@@ -1455,6 +1485,911 @@ missing run or another tenant's run.
 
 ---
 
+## Black Box
+
+A black box entry (`bbx_`) records where, how and why a mission or voyage failed, with evidence and the advisor's
+analysis (findings, a triage verdict, configuration recommendations and ranked recovery paths). The REST equivalents,
+the entry and record shapes, and every limit are in [REST_API.md](REST_API.md#black-box); concepts are in
+[BLACKBOX.md](BLACKBOX.md). Every tool calls `IBlackBoxService` as the MCP caller, so tenant scope and visibility match
+REST: a global admin sees every tenant, a tenant admin their tenant, and a regular user their own entries; an entry the
+caller cannot see is `NotFound` with `Code` `BlackBoxNotFound`, never `Forbidden`.
+
+**Naming the entry.** Tools that act on one entry take `entryId` (`bbx_`), or `missionId` / `voyageId` for that mission's
+or voyage's **current** entry. One of the three is required (`InvalidArgument` otherwise). `mission_status` and
+`voyage_status` carry `LastBlackBoxEntryId`, so a client can find the entry from the mission.
+
+**Errors** are `McpToolError`s with the black box code in `Code`:
+
+| `ErrorCode` | `Code` | When |
+|---|---|---|
+| `NotFound` | `BlackBoxNotFound` | The entry, the mission's or voyage's entry, the object, the recovery path or the recommendation does not exist or is not visible |
+| `NotFound` | `BlackBoxObjectMissing` | The object's row exists but the store lost its bytes |
+| `Conflict` | `BlackBoxDeleting` | The entry is being deleted |
+| `Conflict` | `BlackBoxObjectCorrupt` | The object's bytes do not match its SHA-256 |
+| `Conflict` | `BlackBoxConfirmationRequired` | A confirmed recovery or recommendation run without a valid `confirmToken` (missing, expired, used, another caller's, or the mission or plan changed), or a `dataLossRisk` path without `acknowledgeDataLoss` |
+| `Unavailable` | `BlackBoxStoreUnavailable` | The storage target is unreachable |
+| `Unavailable` | `NotImplemented` | A confirmed run on a server with no action executor wired |
+| `Unavailable` | null | The black box is not available on this server (every tool on the stdio server) |
+| `InvalidArgument` | null, or `CollectionLimitExceeded` | A missing or invalid argument (format, audience, section, resolution, order, offset, length, a note body outside 1 to 8000 characters, a search query outside 1 to 200); more than 1000 `entryIds` is `CollectionLimitExceeded` |
+| `Forbidden` | null | The tool's permission level, or a recovery step whose tool the caller could not call directly |
+
+```json
+{
+  "Error": "Black box entry bbx_doesnotexist_0000000000 not found.",
+  "ErrorCode": "NotFound",
+  "Code": "BlackBoxNotFound",
+  "StatusCode": null
+}
+```
+
+**Permissions** (`McpToolAuthorizationRegistry`, resource `BlackBox`):
+
+| Tool | Level |
+|---|---|
+| `get_blackbox`, `read_blackbox_section`, `list_blackbox_objects`, `read_blackbox_object`, `list_blackbox_entries`, `search_blackbox`, `list_blackbox_notes`, `get_blackbox_bundle`, `list_blackbox_hotspots`, `list_blackbox_fingerprints`, `get_blackbox_fingerprint_trend` | Authenticated |
+| `annotate_blackbox`, `resolve_blackbox`, `pin_blackbox` | Authenticated |
+| `run_blackbox_recovery`, `apply_blackbox_recommendation` | Authenticated; each recorded step is then authorized as its own tool (`restart_mission`, `retry_landing`, `update_vessel` and the other supported tools are TenantAdmin) |
+| `get_blackbox_retention`, `delete_blackbox_entries`, `reanalyze_blackbox` | TenantAdmin |
+| `get_blackbox_storage`, `purge_blackbox`, `run_blackbox_gc`, `export_blackbox_fixture` | AdminOnly |
+
+**Ask Armada.** The 13 read tools (`get_blackbox`, `read_blackbox_section`, `list_blackbox_objects`,
+`read_blackbox_object`, `list_blackbox_entries`, `search_blackbox`, `list_blackbox_notes`, `get_blackbox_bundle`,
+`list_blackbox_hotspots`, `list_blackbox_fingerprints`, `get_blackbox_fingerprint_trend`, `get_blackbox_retention`,
+`get_blackbox_storage`) are on the Ask read-only allowlist (`AskToolPolicy`), so they run directly inside an Ask
+conversation (still subject to their permission level). The write tools become proposals there.
+
+**Stdio.** `armada mcp stdio` registers the same 23 tools without the service, so each answers `Unavailable`; the
+resources and prompts below are served only by the Admiral's HTTP MCP server.
+
+### get_blackbox
+
+Start here when asked why something failed.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `entryId` / `missionId` / `voyageId` | string | One of them | The entry, or the current entry of a mission or voyage |
+| `format` | string | No | `summary` (default, about 2 KB), `brief` or `json` |
+| `audience` | string | No | Brief audience for `format` `brief`: `agent` (default), `user` or `maintainer` |
+| `redactHosts` | boolean | No | Strip absolute paths, host names and user names from the brief (default false) |
+
+**Response:** `summary` returns a `BlackBoxDigest`: where it failed (phase, step, host, source file and method), how
+(mechanism), status before and after, why (the top findings), the triage verdict and confidence, and the top recovery
+paths. `brief` returns `{ EntryId, Audience, ContentType, Brief }` (the Markdown FIX THIS brief, rendered live).
+`json` returns the full `BlackBoxRecord`.
+
+```json
+{ "missionId": "msn_mvu1fjp0_9Wd6Uuyp262", "format": "summary" }
+```
+
+```json
+{
+  "EntryId": "bbx_mvu1ftcv_zcdofOBmjhY",
+  "SubjectType": "Mission",
+  "MissionId": "msn_mvu1fjp0_9Wd6Uuyp262",
+  "VoyageId": "vyg_mvu1fjoz_xO6urNkcaHp",
+  "Title": "Retry landings deferred on a dirty checkout",
+  "VesselName": "demo-api",
+  "Attempt": 1,
+  "CaptureMode": "Backfill",
+  "State": "Analyzed",
+  "Phase": "Execution",
+  "Step": "ProcessCrash",
+  "Host": "Admiral",
+  "SourceFile": null,
+  "SourceLine": null,
+  "Method": null,
+  "Kind": "Crash",
+  "Reason": "Captain process exited with code 134 after 4m12s while running dotnet test (Test.Automated aborted: Fatal error. System.AccessViolationException in SQLitePCL.raw.sqlite3_step). Retry once the test host is stable.",
+  "Mechanism": null,
+  "StatusBefore": null,
+  "StatusAfter": "Failed",
+  "Triage": "Transient",
+  "TriageConfidence": "Low",
+  "Summary": "Mission \"Retry landings deferred on a dirty checkout\" (msn_mvu1fjp0_9Wd6Uuyp262) failed during Execution at step ProcessCrash (kind Crash). The captain's process exited with code unknown before finishing. Triage: Transient (low confidence). Suggested next step: restart the mission (bbx-exec-006.restart).",
+  "Why": [
+    { "RuleId": "BBX-EXEC-006", "Statement": "The captain's process exited with code unknown before finishing.", "Confidence": "Medium", "EvidenceRefs": [ "mechanism.exitCode", "evidence/agent-output.txt" ] }
+  ],
+  "RecoveryPaths": [
+    {
+      "Id": "bbx-exec-006.restart",
+      "Rank": 1,
+      "Title": "Restart the mission",
+      "Preconditions": [],
+      "Steps": [
+        {
+          "Order": 1,
+          "Description": "Restart msn_mvu1fjp0_9Wd6Uuyp262.",
+          "McpCommand": "restart_mission {\"missionId\": \"msn_mvu1fjp0_9Wd6Uuyp262\"}",
+          "RestCommand": "POST /api/v1/missions/msn_mvu1fjp0_9Wd6Uuyp262/restart",
+          "CliCommand": "armada mission restart msn_mvu1fjp0_9Wd6Uuyp262",
+          "Action": { "Tool": "restart_mission", "Arguments": { "missionId": "msn_mvu1fjp0_9Wd6Uuyp262" } },
+          "DataLossRisk": false
+        }
+      ],
+      "Action": { "Tool": "restart_mission", "Arguments": { "missionId": "msn_mvu1fjp0_9Wd6Uuyp262" } },
+      "Risk": "Low",
+      "DataLossRisk": false,
+      "ExpectedOutcome": "A fresh process runs the mission.",
+      "RuleId": "BBX-EXEC-006"
+    }
+  ],
+  "ConflictedFileTotal": 0,
+  "ObjectCount": 5,
+  "Resolution": "Resolved",
+  "CreatedUtc": "2026-10-29T21:11:05.310433Z"
+}
+```
+
+`format` `brief` with `audience` `user`:
+
+```json
+{
+  "EntryId": "bbx_mvu1ftcv_zcdofOBmjhY",
+  "Audience": "User",
+  "ContentType": "text/markdown",
+  "Brief": "# What went wrong: Retry landings deferred on a dirty checkout (mission msn_mvu1fjp0_9Wd6Uuyp262)\n\nThis is what Armada recorded when the mission failed, and what you can do next.\n\n## Summary\n\n..."
+}
+```
+
+`InvalidArgument` for another `format` or `audience`; `NotFound` (`BlackBoxNotFound`) when there is no entry.
+
+### read_blackbox_section
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `entryId` / `missionId` / `voyageId` | string | One of them | The entry |
+| `section` | string | Yes | `Subject`, `Status`, `Site`, `Mechanism`, `Classification`, `Workspace` (dirty paths, checkout), `Conflict` (conflicted files and the missions that landed them), `Scope`, `Configuration` (each setting and where it came from), `Attempts`, `Evidence` (the object index), `Analysis` (findings, triage, recovery paths, recommendations), `Related`, `Voyage`, `Redaction` or `Truncation` (case-insensitive) |
+
+**Response:** a `BlackBoxSectionResult`: the record with the header fields and the requested section; the other
+sections are null (`Attempts` is an empty list, and `Redaction` and `Truncation` are always present).
+
+```json
+{ "entryId": "bbx_mvu1ftcv_zcdofOBmjhY", "section": "Mechanism" }
+```
+
+```json
+{
+  "EntryId": "bbx_mvu1ftcv_zcdofOBmjhY",
+  "Section": "Mechanism",
+  "Record": {
+    "EntryId": "bbx_mvu1ftcv_zcdofOBmjhY",
+    "SchemaVersion": 1,
+    "RulesVersion": 1,
+    "CaptureMode": "Backfill",
+    "State": "Analyzed",
+    "CreatedUtc": "2026-10-29T21:11:05.310433Z",
+    "Subject": null,
+    "Status": null,
+    "Site": null,
+    "Mechanism": { "ExceptionType": null, "ExceptionMessage": null, "StackFrames": [], "ExitCode": null, "RuntimeFailureKind": null, "FailingCommand": null, "CommandExitCode": null, "CommandOutputTail": null, "GitOperation": null, "GitStderrTail": null },
+    "Classification": null,
+    "Workspace": null,
+    "Conflict": null,
+    "Scope": null,
+    "Configuration": null,
+    "Attempts": [],
+    "Evidence": null,
+    "Analysis": null,
+    "Related": null,
+    "Voyage": null,
+    "Redaction": { "RulesApplied": [], "RedactedCount": 0 },
+    "Truncation": { "Fields": [], "FieldTotal": 0, "TimedOut": false, "Notes": [] }
+  }
+}
+```
+
+### list_blackbox_objects
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `entryId` / `missionId` / `voyageId` | string | One of them | The entry |
+| `pageNumber`, `pageSize` | integer | No | Paging (page size 1-1000, default 10; out-of-range values are normalized) |
+| `order` | string | No | `CreatedDescending` (default) or `CreatedAscending` |
+
+**Response:** `EnumerationResult<BlackBoxObjectSummary>` (`Name`, `ContentType`, `ContentEncoding`, `SizeBytes` stored,
+`UncompressedBytes`, `Sha256`, `IsMissing`, `CreatedUtc`):
+
+```json
+{
+  "Success": true,
+  "PageNumber": 1,
+  "PageSize": 10,
+  "TotalPages": 1,
+  "TotalRecords": 5,
+  "Objects": [
+    { "Name": "brief.md", "ContentType": "text/markdown", "ContentEncoding": "gzip", "SizeBytes": 2720, "UncompressedBytes": 6450, "Sha256": "0d9b1fd5d99d9bb7a46a0f68703c085c971a22d630d2dc9c73deda2c84a7d9d0", "IsMissing": false, "CreatedUtc": "2026-10-29T21:11:39.855168Z" },
+    { "Name": "evidence/events.json", "ContentType": "application/json", "ContentEncoding": "gzip", "SizeBytes": 303, "UncompressedBytes": 892, "Sha256": "5e24fe18f6c54c862503ff3203ef61ff55bd21ad5fcb5f96e5140441fa70f326", "IsMissing": false, "CreatedUtc": "2026-10-29T21:11:39.855526Z" },
+    { "Name": "record.json", "ContentType": "application/json", "ContentEncoding": "gzip", "SizeBytes": 3165, "UncompressedBytes": 11635, "Sha256": "942dfae0729b7a51a2a59c67441fa499513fbd9378e060fb28b0bbe29b88aed2", "IsMissing": false, "CreatedUtc": "2026-10-29T21:11:39.854618Z" }
+  ],
+  "TotalMs": 0
+}
+```
+
+(Trimmed to three of the five objects.) The stored `brief*.md` objects are snapshots written at capture and analysis;
+`get_blackbox` `format` `brief` renders the brief live with the newest notes.
+
+### read_blackbox_object
+
+Read a chunk of one object without flooding context.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `entryId` / `missionId` / `voyageId` | string | One of them | The entry |
+| `name` | string | Yes | Object name, unencoded (for example `evidence/git-status.txt`) |
+| `offset` | integer | No | Byte offset (default 0; not negative) |
+| `length` | integer | No | Bytes to read, 1-65536 (default 65536, 64 KB) |
+
+**Response:** a `BlackBoxObjectChunk`: `Content` (UTF-8 text for text objects, cut back to a character boundary;
+base64 otherwise, with `Encoding` `utf-8` or `base64`), `Offset`, `Length` (bytes returned), `TotalBytes`, `Sha256`, and
+`NextOffset` while more remains (null at the end). Call again with `offset` = `NextOffset` to page through a large log.
+
+```json
+{ "entryId": "bbx_mvu1ftcv_zcdofOBmjhY", "name": "brief.md", "length": 400 }
+```
+
+```json
+{
+  "EntryId": "bbx_mvu1ftcv_zcdofOBmjhY",
+  "Name": "brief.md",
+  "ContentType": "text/markdown",
+  "Offset": 0,
+  "Length": 400,
+  "TotalBytes": 6450,
+  "NextOffset": 400,
+  "Encoding": "utf-8",
+  "Content": "# FIX THIS: Retry landings deferred on a dirty checkout (mission msn_mvu1fjp0_9Wd6Uuyp262)\n\nYou are asked to FIX THIS. This brief is a self-contained black box entry from Armada, a multi-agent orchestration system. It records where, how and why a mission failed, with evidence.\n\nBefore changing anything, triage the failure. Decide which one it is, and say why, quoting the evidence below:\n\n1. **User",
+  "Sha256": "0d9b1fd5d99d9bb7a46a0f68703c085c971a22d630d2dc9c73deda2c84a7d9d0"
+}
+```
+
+`InvalidArgument` without `name`, for a negative `offset` or a `length` outside 1-65536; `NotFound`
+(`BlackBoxNotFound`, or `BlackBoxObjectMissing` when the store lost the bytes); `Conflict` (`BlackBoxObjectCorrupt`);
+`Unavailable` (`BlackBoxStoreUnavailable`).
+
+### list_blackbox_entries
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `vesselId`, `voyageId`, `missionId`, `captainId`, `fleetId` | string | No | Id filters |
+| `subjectType` | string | No | `Mission` or `Voyage` |
+| `phase` | string | No | `Dispatch`, `Provision`, `Execution`, `Completion`, `Review`, `Handoff`, `Landing`, `MergeQueue`, `Recovery`, `Voyage`, `External` |
+| `step` | string | No | `BlackBoxStepEnum` name (for example `DirtyCheckout`) |
+| `kind` | string | No | `MissionFailureKindEnum` name |
+| `triage` | string | No | `Unknown`, `UserConfig`, `MissionBrief`, `Transient`, `ArmadaDefect`, `External` |
+| `resolution` | string | No | `Open`, `Resolved`, `Duplicate`, `WontFix`, `ArmadaFixed` |
+| `state` | string | No | `Captured`, `Enriched`, `Analyzed`, `EnrichmentFailed`, `ObjectMissing` |
+| `fingerprint` | string | No | Entries of the same failure mode |
+| `pinned`, `isCurrent` | boolean | No | Pinned or current entries only (true), or the others (false) |
+| `path` | string | No | Repository path recorded in any file role |
+| `createdAfter`, `createdBefore` | string | No | ISO 8601 (inclusive / exclusive) |
+| `pageNumber`, `pageSize`, `order` | | No | Paging (1-1000, default 10), `CreatedDescending` (default) or `CreatedAscending` |
+
+The `BlackBoxEnumerateRequest` fields the schema does not list (`harborId`, `captureMode`) are also accepted.
+**Response:** `EnumerationResult<BlackBoxEntrySummary>`, newest first:
+
+```json
+{ "vesselId": "vsl_mvu1ffz5_4Vb0gY5fhKv", "isCurrent": true, "pageSize": 5 }
+```
+
+```json
+{
+  "Success": true,
+  "PageNumber": 1,
+  "PageSize": 5,
+  "TotalPages": 1,
+  "TotalRecords": 3,
+  "Objects": [
+    {
+      "Id": "bbx_mvu1ftew_95PyT7WmtrV",
+      "SubjectType": "Voyage",
+      "MissionId": null,
+      "VoyageId": "vyg_mvu1fjoz_xO6urNkcaHp",
+      "VesselId": "vsl_mvu1ffz5_4Vb0gY5fhKv",
+      "CaptainId": null,
+      "MissionTitle": "Harden landing retries",
+      "VesselName": "demo-api",
+      "Attempt": 1,
+      "IsCurrent": true,
+      "Phase": "Voyage",
+      "Step": "SettlementFailed",
+      "FailureKind": "Crash",
+      "StatusBefore": null,
+      "StatusAfter": "Failed",
+      "Triage": "Transient",
+      "Fingerprint": "bcb7be821991076ba7d7551c9c5714b099bddaa13843c800b1bd4ee271e37329",
+      "CaptureMode": "Backfill",
+      "State": "Analyzed",
+      "Resolution": "Open",
+      "Pinned": false,
+      "ReasonExcerpt": "Mission msn_mvu1fjp0_9Wd6Uuyp262 failed: Captain process exited with code 134 after 4m12s while running dotnet test ...",
+      "TotalBytes": 9199,
+      "ObjectCount": 5,
+      "CreatedUtc": "2026-10-29T21:11:05.382585Z",
+      "ExpiresUtc": "2027-04-27T21:11:05.382585Z"
+    }
+  ],
+  "TotalMs": 0
+}
+```
+
+(Trimmed to one row.)
+
+### search_blackbox
+
+Full-text search (case-insensitive substring) over the reason, summary and notes of the visible entries.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `query` | string | Yes | 1-200 characters |
+| filters and paging | | No | As [list_blackbox_entries](#list_blackbox_entries) |
+
+```json
+{ "query": "SQLitePCL", "pageSize": 5 }
+```
+
+**Response:** `EnumerationResult<BlackBoxEntrySummary>` (rows as above). `InvalidArgument` for an empty or over-long
+query.
+
+### list_blackbox_notes
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `entryId` / `missionId` / `voyageId` | string | One of them | The entry |
+| `pageNumber`, `pageSize`, `order` | | No | Paging (1-1000, default 10) |
+
+**Response:** `EnumerationResult<BlackBoxNote>`, newest first. Every recovery dry run and run adds a note:
+
+```json
+{
+  "Success": true,
+  "PageNumber": 1,
+  "PageSize": 10,
+  "TotalPages": 1,
+  "TotalRecords": 2,
+  "Objects": [
+    {
+      "Id": "bbn_mvu1gjz0_6I5xZubo4wF",
+      "EntryId": "bbx_mvu1ftcv_zcdofOBmjhY",
+      "TenantId": "default",
+      "UserId": "default",
+      "AuthorKind": "Operator",
+      "Body": "Ran recovery path bbx-exec-006.restart (Restart the mission): succeeded. 1. restart_mission: ok ({\"id\":\"msn_mvu1fjp0_9Wd6Uuyp262\", ...)",
+      "CreatedUtc": "2026-10-29T21:11:39.804858Z"
+    },
+    {
+      "Id": "bbn_mvu1gjri_gmnRF09pl9P",
+      "EntryId": "bbx_mvu1ftcv_zcdofOBmjhY",
+      "TenantId": "default",
+      "UserId": "default",
+      "AuthorKind": "Operator",
+      "Body": "Reproduced locally: the test host crashes in SQLitePCL under parallel suites. Restarting after pinning the native library.",
+      "CreatedUtc": "2026-10-29T21:11:39.5342Z"
+    }
+  ],
+  "TotalMs": 0
+}
+```
+
+### get_blackbox_bundle
+
+A maintainer bundle: up to `max` of the newest matching entries grouped by fingerprint, to rank Armada improvements and
+write them as mission briefs on the Armada vessel.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| filters | | No | The [list_blackbox_entries](#list_blackbox_entries) filters |
+| `max` | integer | No | Entries, 1-50 (default 50) |
+| `format` | string | No | `Markdown` (default) or `Json` |
+| `redactHosts` | boolean | No | Strip absolute paths, host names and user names (default false) |
+
+**Response:** `{ Format, EntryCount, FingerprintCount, Content, Truncated }`; `Content` is capped at 1 MB. With
+`format` `Json`, `Content` is a camelCase JSON document (`preamble`, `entryCount`, `fingerprintCount`, `groups`):
+
+```json
+{
+  "Format": "Json",
+  "EntryCount": 3,
+  "FingerprintCount": 3,
+  "Content": "{\n  \"preamble\": \"These are 3 Armada black box entries in 3 failure modes, grouped by fingerprint (most frequent first). You are asked to improve Armada itself. ...\",\n  \"entryCount\": 3,\n  \"fingerprintCount\": 3,\n  \"groups\": [ ... ]\n}",
+  "Truncated": false
+}
+```
+
+### list_blackbox_hotspots
+
+Directories that recur in failures, most files first.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `vesselId` | string | No | Vessel filter |
+| `role` | string | No | `Conflicted` (the default when omitted), `DirtyInCheckout`, `OutOfScope`, `ChangedByMission`, `ChangedByConflictingMission`, `BoundaryViolation` |
+| `createdAfter`, `createdBefore` | string | No | ISO 8601 |
+| `pageNumber`, `pageSize`, `order` | | No | Paging (1-1000, default 10) |
+
+**Response:** `EnumerationResult<BlackBoxHotspot>` (`VesselId`, `Directory`, `FileCount`, `EntryCount`, `LastSeenUtc`):
+
+```json
+{
+  "Success": true,
+  "PageNumber": 1,
+  "PageSize": 5,
+  "TotalPages": 1,
+  "TotalRecords": 2,
+  "Objects": [
+    { "VesselId": "vsl_mvu1ffz5_4Vb0gY5fhKv", "Directory": "src/Armada.Server/Routes", "FileCount": 12, "EntryCount": 1, "LastSeenUtc": "2026-10-29T21:11:05.310433Z" },
+    { "VesselId": "vsl_mvu1ffz5_4Vb0gY5fhKv", "Directory": "src/Armada.Core/Services", "FileCount": 8, "EntryCount": 1, "LastSeenUtc": "2026-10-29T21:11:05.310433Z" }
+  ],
+  "TotalMs": 0
+}
+```
+
+### list_blackbox_fingerprints
+
+Failure modes (entries grouped by fingerprint), by count, then last seen. Compare one mode's entries with
+`list_blackbox_entries {fingerprint}`.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `vesselId` | string | No | Vessel filter |
+| `resolution` | string | No | Count only entries with this resolution |
+| `createdAfter`, `createdBefore` | string | No | ISO 8601 |
+| `pageNumber`, `pageSize`, `order` | | No | Paging (1-1000, default 10) |
+
+```json
+{
+  "Success": true,
+  "PageNumber": 1,
+  "PageSize": 5,
+  "TotalPages": 1,
+  "TotalRecords": 3,
+  "Objects": [
+    { "Fingerprint": "0c0d4699f8052fede78fbc067119a0dd57940124eefd9ae8b0bfc8df8d7a0149", "Count": 1, "OpenCount": 1, "FirstSeenUtc": "2026-10-29T21:11:05.377352Z", "LastSeenUtc": "2026-10-29T21:11:05.377352Z", "LatestEntryId": "bbx_mvu1ftep_b5OtDr4leub", "Phase": "Handoff", "Step": "DependencyCancelled", "FailureKind": "DependencyFailed" }
+  ],
+  "TotalMs": 0
+}
+```
+
+(Trimmed to one row.)
+
+### get_blackbox_fingerprint_trend
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `fingerprint` | string | Yes | From an entry or `list_blackbox_fingerprints` |
+
+**Response:** occurrences per Armada version, ordered by first sighting, with open and `ArmadaFixed` counts (at most
+1000 entries and 100 versions; `Truncated` when cut):
+
+```json
+{
+  "Fingerprint": "bcb7be821991076ba7d7551c9c5714b099bddaa13843c800b1bd4ee271e37329",
+  "Phase": "Voyage",
+  "Step": "SettlementFailed",
+  "Total": 1,
+  "Truncated": false,
+  "Versions": [
+    { "ArmadaVersion": "1.2.0+5de469cff2709733b1ffb68fbc45d1303e9e41be", "Count": 1, "OpenCount": 1, "ArmadaFixedCount": 0, "FirstSeenUtc": "2026-10-29T21:11:05.382585Z", "LastSeenUtc": "2026-10-29T21:11:05.382585Z" }
+  ]
+}
+```
+
+### get_blackbox_retention
+
+No arguments. TenantAdmin: a tenant admin sees their tenant's counts, a global admin every tenant.
+
+```json
+{
+  "Policy": { "RetentionDays": 180, "ResolvedRetentionDays": 30, "KeepLatestPerMission": true, "MaxEntriesPerVessel": 1000, "MaxTotalBytes": 1073741824, "DeleteWithMission": false, "DeleteWithVessel": true, "GcIntervalMinutes": 60, "GcBatchSize": 200, "OrphanGraceHours": 24 },
+  "TotalEntries": 3,
+  "TotalBytes": 28653,
+  "PinnedEntries": 0,
+  "DeletingEntries": 0,
+  "ExpiredEntries": 0,
+  "LastRun": null,
+  "NextRunUtc": "2026-10-29T22:10:34.41649Z"
+}
+```
+
+### get_blackbox_storage
+
+No arguments. AdminOnly. The configured target for new entries, its health, `FallbackToDatabase`, entries and bytes per
+target (`Usage`, where existing entries are) and `ActiveMigrationId`:
+
+```json
+{
+  "Target": "Database",
+  "Health": { "Target": "Database", "Healthy": true, "Message": "Database store reachable.", "LatencyMs": 0, "CheckedUtc": "2026-10-29T21:12:14.102016Z" },
+  "FallbackToDatabase": true,
+  "Usage": [ { "Target": "Disk", "Entries": 3, "Bytes": 28653 } ],
+  "ActiveMigrationId": null
+}
+```
+
+(Captured after a storage migration moved every entry to `Disk` while the configured target stayed `Database`.)
+
+### annotate_blackbox
+
+Add a note (recorded with `AuthorKind` `Agent`). Annotate what you found and what you did, so the next reader does not
+repeat it.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `entryId` / `missionId` / `voyageId` | string | One of them | The entry |
+| `body` | string | Yes | Note text, 1-8000 characters |
+
+```json
+{ "entryId": "bbx_mvu1ftcv_zcdofOBmjhY", "body": "Agent: confirmed the crash is in the test host, not the mission change." }
+```
+
+```json
+{
+  "Id": "bbn_mvu1hafs_7Ea3fazlj3b",
+  "EntryId": "bbx_mvu1ftcv_zcdofOBmjhY",
+  "TenantId": "default",
+  "UserId": "default",
+  "AuthorKind": "Agent",
+  "Body": "Agent: confirmed the crash is in the test host, not the mission change.",
+  "CreatedUtc": "2026-10-29T21:12:14.104947Z"
+}
+```
+
+### resolve_blackbox
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `entryId` / `missionId` / `voyageId` | string | One of them | The entry |
+| `resolution` | string | Yes | `Open` (reopens), `Resolved`, `Duplicate`, `WontFix` or `ArmadaFixed` |
+| `note` | string | No | What fixed it (up to 2000 characters) |
+| `link` | string | No | The landed commit, a pull request or a mission (up to 1000 characters) |
+
+```json
+{ "missionId": "msn_mvu1fjp0_9Wd6Uuyp262", "resolution": "Resolved", "note": "Landed after restart.", "link": "msn_mvu1fjp0_9Wd6Uuyp262" }
+```
+
+**Response:** the updated `BlackBoxEntry` (`Record` null), with `Resolution`, `ResolutionNote`, `ResolutionLink`,
+`ResolvedUtc` and the recomputed `ExpiresUtc`; emits `blackbox.resolved`. `InvalidArgument` for another resolution.
+
+### run_blackbox_recovery
+
+Run one recovery path recorded in the entry's analysis. It never takes a free-form command: only the recorded steps
+run (tools `retry_landing`, `restart_mission`, `cancel_mission`, `unstick_dock`, `repair_dock`, `update_vessel`,
+`update_mission`, targeting the entry's own mission, vessel or dock), each authorized as if you had called that tool.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `entryId` / `missionId` / `voyageId` | string | One of them | The entry |
+| `pathId` | string | Yes | Recovery path id from the analysis (for example `bbx-land-001.stash-retry`) |
+| `dryRun` | boolean | No | Default **true**: return the plan and a `confirmToken` without acting |
+| `confirmToken` | string | When `dryRun` is false | The token from the dry run (`bbc_...`, 10 minutes, single use) |
+| `acknowledgeDataLoss` | boolean | For a `dataLossRisk` path | `true` after the user confirmed (paths that use `cancel_mission` or `unstick_dock`) |
+
+The token binds the entry, the path, the caller, the plan and the mission's current version. Pass `dryRun: false`
+explicitly to run: a call with a `confirmToken` but no `dryRun` is another dry run. Every dry run and run is annotated on
+the entry (`AuthorKind` `Agent`) and emits `blackbox.recovery_run`.
+
+Dry run:
+
+```json
+{ "entryId": "bbx_mvu1ftcv_zcdofOBmjhY", "pathId": "bbx-exec-006.restart", "dryRun": true }
+```
+
+```json
+{
+  "EntryId": "bbx_mvu1ftcv_zcdofOBmjhY",
+  "PathId": "bbx-exec-006.restart",
+  "DryRun": true,
+  "ConfirmToken": "bbc_55295476af829b0bce6827f00e3ef896",
+  "ConfirmTokenExpiresUtc": "2026-10-29T21:22:14.120578Z",
+  "Plan": [
+    {
+      "Order": 1,
+      "Description": "Restart msn_mvu1fjp0_9Wd6Uuyp262.",
+      "McpCommand": "restart_mission {\"missionId\": \"msn_mvu1fjp0_9Wd6Uuyp262\"}",
+      "RestCommand": "POST /api/v1/missions/msn_mvu1fjp0_9Wd6Uuyp262/restart",
+      "CliCommand": "armada mission restart msn_mvu1fjp0_9Wd6Uuyp262",
+      "Action": { "Tool": "restart_mission", "Arguments": { "missionId": "msn_mvu1fjp0_9Wd6Uuyp262" } },
+      "DataLossRisk": false
+    }
+  ],
+  "StepResults": [],
+  "Succeeded": true,
+  "Message": "Would run: restart_mission {\"missionId\": \"msn_mvu1fjp0_9Wd6Uuyp262\"}. Confirm with confirmToken before 2026-10-29 21:22:14Z."
+}
+```
+
+Confirm:
+
+```json
+{ "entryId": "bbx_mvu1ftcv_zcdofOBmjhY", "pathId": "bbx-exec-006.restart", "dryRun": false, "confirmToken": "bbc_55295476af829b0bce6827f00e3ef896" }
+```
+
+**Response:** `DryRun` false and `StepResults` (`Order`, `Tool`, `Succeeded`, `Message`); the first failed step stops
+the run and the rest report "Not run", and a manual step is reported, not run. Without a token (or with a used, expired
+or foreign one):
+
+```json
+{
+  "Error": "A confirmToken is required: run run_blackbox_recovery with dryRun=true first and confirm with the token it returns.",
+  "ErrorCode": "Conflict",
+  "Code": "BlackBoxConfirmationRequired",
+  "StatusCode": null
+}
+```
+
+`InvalidArgument` without `pathId`, or when a step names an unsupported tool or another subject; `NotFound` for an
+unknown path; `Forbidden` when you could not call a step's tool directly; `Unavailable` (`NotImplemented`) without an
+action executor.
+
+### apply_blackbox_recommendation
+
+Apply one configuration recommendation recorded in the analysis (`recommendationId`, for example
+`bbx-land-001.landing-mode`) to prevent the failure next time. It runs only the recorded `applyAction` (for example an
+`update_vessel` patch), authorized as that tool. Same flow as `run_blackbox_recovery`: dry run first, tell the user what
+will change, then call with `dryRun: false` and the token.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `entryId` / `missionId` / `voyageId` | string | One of them | The entry |
+| `recommendationId` | string | Yes | Recommendation id from the analysis |
+| `dryRun` | boolean | No | Default true |
+| `confirmToken` | string | When `dryRun` is false | The token from the dry run |
+
+**Response:** `{ EntryId, RecommendationId, DryRun, ConfirmToken, ConfirmTokenExpiresUtc, Action, Succeeded, Message }`.
+An unknown recommendation:
+
+```json
+{
+  "Error": "Recommendation nope is not recorded on black box entry bbx_mvu1ftcv_zcdofOBmjhY.",
+  "ErrorCode": "NotFound",
+  "Code": "BlackBoxNotFound",
+  "StatusCode": null
+}
+```
+
+`InvalidArgument` for an advice-only recommendation (no `applyAction`); `Conflict` (`BlackBoxConfirmationRequired`)
+without a valid token.
+
+### pin_blackbox
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `entryId` / `missionId` / `voyageId` | string | One of them | The entry |
+| `pinned` | boolean | No | `true` (default) to pin, `false` to unpin |
+
+**Response:** the updated `BlackBoxEntry` (`Record` null). Garbage collection never deletes a pinned entry: pinning
+clears `ExpiresUtc` and unpinning recomputes it.
+
+### delete_blackbox_entries
+
+Delete entries by id. This cannot be undone: pin entries you want to keep instead. TenantAdmin.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `entryIds` | string[] | Yes | Entries to delete (`bbx_`), at most 1000 |
+
+```json
+{ "entryIds": [ "bbx_doesnotexist_0000000000" ] }
+```
+
+```json
+{ "Requested": 1, "Deleted": 0, "Pending": 0, "BytesFreed": 0, "Skipped": [ "bbx_doesnotexist_0000000000" ] }
+```
+
+Missing or invisible ids are skipped. More than 1000 ids is `InvalidArgument` with `Code` `CollectionLimitExceeded`
+before anything is deleted. An entry whose store delete fails stays `Deleting` (counted in `Pending`) and is retried by
+garbage collection.
+
+### purge_blackbox
+
+Delete every entry matching the filters, oldest first. AdminOnly. Run the dry run, show the user the counts, and only
+then purge with `dryRun` false.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| filters | | No | The [list_blackbox_entries](#list_blackbox_entries) filters |
+| `dryRun` | boolean | No | Default **true**: report without deleting |
+| `includePinned` | boolean | No | Also delete pinned entries (default false) |
+| `maxEntries` | integer | No | 1-100000 (default 10000) |
+
+```json
+{ "DryRun": true, "Matched": 0, "Deleted": 0, "Pending": 0, "SkippedPinned": 0, "BytesFreed": 0, "SampleEntryIds": [] }
+```
+
+### run_blackbox_gc
+
+One garbage collection pass now (expiry, quotas, cascades, retried deletes, orphan sweep). AdminOnly. `dryRun`
+(default **false**) lists the candidates without deleting.
+
+```json
+{
+  "DryRun": true,
+  "StartedUtc": "2026-10-29T21:12:14.136134Z",
+  "FinishedUtc": "2026-10-29T21:12:14.141594Z",
+  "DurationMs": 5,
+  "Expired": 0,
+  "Evicted": 0,
+  "Cascaded": 0,
+  "RetriedDeletes": 0,
+  "OrphansRemoved": 0,
+  "ObjectsMissing": 0,
+  "BytesFreed": 0,
+  "Failures": 0,
+  "CandidateEntryIds": [],
+  "Errors": []
+}
+```
+
+### export_blackbox_fixture
+
+Export an entry as a sanitized regression fixture (record without secrets, tenant and user ids, host paths or
+repository URL, plus the rule ids and triage the advisor produces now), to add under
+`src/Test.Shared/Fixtures/BlackBox` with a test. AdminOnly.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `entryId` / `missionId` / `voyageId` | string | One of them | The entry |
+| `name` | string | No | Fixture name (file name without `.json`) |
+
+```json
+{
+  "Name": "exec-006-process-crash",
+  "Description": "Black box fixture for Execution / ProcessCrash.",
+  "Source": "msn_mvu1fjp0_9Wd6Uuyp262",
+  "RulesVersion": 1,
+  "ExpectedRuleIds": [ "BBX-EXEC-006" ],
+  "ExpectedTriage": "Transient",
+  "Record": { "EntryId": "bbx_mvu1ftcv_zcdofOBmjhY", "Subject": { "TenantId": null, "UserId": null, "VesselRepoUrl": "https://example.invalid/demo-api.git" } }
+}
+```
+
+(`Record` trimmed.)
+
+### reanalyze_blackbox
+
+Re-run enrichment and analysis with the current rules (rewrites `record.json` and the briefs). TenantAdmin. Takes
+`entryId`, `missionId` or `voyageId`. **Response:** the re-analyzed `BlackBoxEntry`; emits `blackbox.analyzed`.
+
+### Resources and prompts
+
+The Admiral's HTTP MCP server (not `armada mcp stdio`) also serves black box **resource templates** and **prompts**,
+registered when the black box is running. Every read runs as the MCP caller through `IBlackBoxService`.
+
+| URI template | MIME type | Content |
+|---|---|---|
+| `armada://blackbox/{entryId}/brief.md` | `text/markdown` | The FIX THIS brief (agent audience), rendered live |
+| `armada://blackbox/{entryId}/record.json` | `application/json` | The record, camelCase (the `record.json` serializer) |
+| `armada://blackbox/{entryId}/objects/{name}` | the object's | The first 64 KB of one object. URL-encode a name with a folder (`evidence%2Fgit-status.txt`). A text object longer than 64 KB ends with a `[first N of M bytes; read the rest with read_blackbox_object offset N]` line; a binary object is returned as a base64 `blob` |
+| `armada://missions/{missionId}/blackbox` | `application/json` | The digest (what `get_blackbox` `format` `summary` returns) of the mission's current entry, camelCase |
+
+`resources/list` is empty (there are no fixed resources); discover the templates with `resources/templates/list`:
+
+```json
+{ "jsonrpc": "2.0", "id": 32, "method": "resources/templates/list" }
+```
+
+```json
+{
+  "jsonrpc": "2.0",
+  "result": {
+    "resourceTemplates": [
+      { "uriTemplate": "armada://blackbox/{entryId}/brief.md", "name": "blackbox_brief", "description": "The FIX THIS brief (agent audience) of a black box entry, as Markdown.", "mimeType": "text/markdown" },
+      { "uriTemplate": "armada://blackbox/{entryId}/record.json", "name": "blackbox_record", "description": "The versioned record (record.json) of a black box entry.", "mimeType": "application/json" },
+      { "uriTemplate": "armada://blackbox/{entryId}/objects/{name}", "name": "blackbox_object", "description": "The first 64 KB of one object of a black box entry (URL-encode a name with a folder, for example evidence%2Fgit-status.txt). Page a larger object with the read_blackbox_object tool.", "mimeType": "text/plain" },
+      { "uriTemplate": "armada://missions/{missionId}/blackbox", "name": "mission_blackbox", "description": "The summary (digest) of a mission's current black box entry: where, how and why it failed, triage and the top recovery paths.", "mimeType": "application/json" }
+    ]
+  },
+  "id": 32
+}
+```
+
+`resources/read`:
+
+```json
+{ "jsonrpc": "2.0", "id": 33, "method": "resources/read", "params": { "uri": "armada://missions/msn_mvu1fjp0_9Wd6Uuyp262/blackbox" } }
+```
+
+```json
+{
+  "jsonrpc": "2.0",
+  "result": {
+    "contents": [
+      {
+        "uri": "armada://missions/msn_mvu1fjp0_9Wd6Uuyp262/blackbox",
+        "mimeType": "application/json",
+        "text": "{\n  \"entryId\": \"bbx_mvu1ftcv_zcdofOBmjhY\",\n  \"subjectType\": \"Mission\",\n  \"missionId\": \"msn_mvu1fjp0_9Wd6Uuyp262\",\n  \"phase\": \"Execution\",\n  \"step\": \"ProcessCrash\",\n  \"triage\": \"Transient\",\n  ...\n}"
+      }
+    ]
+  },
+  "id": 33
+}
+```
+
+A read for an entry or object that does not exist, or is not visible, currently fails with the generic JSON-RPC error
+`-32603` `Internal error`, not a typed `BlackBoxNotFound`; use the tools when the caller needs to tell the cases apart:
+
+```json
+{ "jsonrpc": "2.0", "error": { "code": -32603, "message": "Internal error" }, "id": 35 }
+```
+
+**Prompts.** `prompts/list` returns `review_blackbox` (arguments `missionId`, required, and `goal`: explain, fix,
+prevent, fix Armada, compare or clean up, default explain) and `explain_blackbox` (`missionId`). Both expand to one
+`user` message that carries the consumption flow below and the safety guidance.
+
+```json
+{ "jsonrpc": "2.0", "id": 37, "method": "prompts/get", "params": { "name": "review_blackbox", "arguments": { "missionId": "msn_mvu1fjp0_9Wd6Uuyp262", "goal": "fix it" } } }
+```
+
+```json
+{
+  "jsonrpc": "2.0",
+  "result": {
+    "description": "Review the black box of mission msn_mvu1fjp0_9Wd6Uuyp262",
+    "messages": [
+      {
+        "role": "user",
+        "content": {
+          "type": "text",
+          "text": "Review the black box for mission msn_mvu1fjp0_9Wd6Uuyp262 and fix it.\n\n1. Call get_blackbox {missionId: \"msn_mvu1fjp0_9Wd6Uuyp262\", format: \"summary\"} first.\n2. Read only the sections the goal needs with read_blackbox_section (Conflict, Workspace, Analysis), and page evidence with read_blackbox_object instead of loading it whole.\n3. Map the goal to tools: explain (get_blackbox summary or brief, sections, objects); fix or recover (run_blackbox_recovery with a ranked path: dry run, then confirm); prevent (apply_blackbox_recommendation: dry run, then confirm); fix Armada (get_blackbox {audience: maintainer}, then a mission on the Armada vessel with that brief); compare (list_blackbox_entries {fingerprint}, search_blackbox); clean up (resolve_blackbox, pin_blackbox, delete_blackbox_entries).\n\nRead the black box summary first. Quote evidence, not guesses. State the triage verdict and whether you agree. If you act, use only recovery paths or recommendations from the entry, do a dry run, tell the user what will happen, and confirm before running anything marked dataLossRisk. Annotate the entry with what you did.\n"
+        }
+      }
+    ]
+  },
+  "id": 37
+}
+```
+
+`explain_blackbox` asks for what happened, the quoted evidence, the triage verdict and whether you agree, an opinion
+clearly marked as such, and the recorded recovery paths and recommendations, and says "Do not run anything."
+
+### Reviewing a black box and taking action
+
+The flow for any MCP client asked to "review the black box for mission X and take action":
+
+```
+User:  Review the black box for mission msn_abc and fix it.
+Agent: get_blackbox {missionId: "msn_abc", format: "summary"}
+       -> where, how, why, triage UserConfig (High), recovery paths [bbx-land-001.stash-retry, bbx-land-001.pull-request]
+Agent: read_blackbox_section {entryId, section: "Workspace"}                  (dirty paths, checkout)
+Agent: read_blackbox_object {entryId, name: "evidence/git-status.txt"}        (64 KB at a time)
+       -> ..., NextOffset: 65536; read_blackbox_object {entryId, name, offset: 65536} until NextOffset is null
+Agent: run_blackbox_recovery {entryId, pathId: "bbx-land-001.pull-request", dryRun: true}
+       -> "Would run: update_vessel {...}, then retry_landing {...}"; ConfirmToken bbc_...
+Agent: (tells the user, or proceeds if told to act)
+       run_blackbox_recovery {entryId, pathId: "bbx-land-001.pull-request", dryRun: false, confirmToken: "bbc_..."}
+       -> per-step results; the entry is annotated automatically with what ran and the outcome
+Agent: resolve_blackbox {entryId, resolution: "Resolved", note: "...", link: "msn_abc landed at <sha>"}
+```
+
+| Goal | Tools |
+|---|---|
+| Explain it | `get_blackbox` (summary or brief), `read_blackbox_section`, `read_blackbox_object` |
+| Fix it, recover it | `run_blackbox_recovery` with a ranked path: dry run, then confirm |
+| Prevent it | `apply_blackbox_recommendation` (a configuration patch): dry run, then confirm |
+| Fix Armada | `get_blackbox {audience: "maintainer", format: "brief"}` or `get_blackbox_bundle`, then a mission on the Armada vessel with that brief |
+| Compare | `list_blackbox_entries {fingerprint}`, `list_blackbox_fingerprints`, `get_blackbox_fingerprint_trend`, `search_blackbox` |
+| Clean up | `resolve_blackbox`, `pin_blackbox`, `delete_blackbox_entries` |
+
+**Safety rules.** `run_blackbox_recovery` and `apply_blackbox_recommendation` run only actions recorded in the entry,
+never free-form commands; each step is authorized as if the caller called that tool directly; a dry run is required
+first, and the confirm token binds the entry, the path, the caller and the mission's current version, so a mission
+that changed since the dry run must be re-checked; steps that can lose work are marked `dataLossRisk` and are refused
+without `acknowledgeDataLoss: true`; every run is annotated on the entry and emits `blackbox.recovery_run`. The action
+tool descriptions and both prompts carry this guidance (`McpBlackBoxTools.SafetyGuidance`):
+
+> Read the black box summary first. Quote evidence, not guesses. State the triage verdict and whether you agree. If you
+> act, use only recovery paths or recommendations from the entry, do a dry run, tell the user what will happen, and
+> confirm before running anything marked dataLossRisk. Annotate the entry with what you did.
+
+> **Plan differences.** MISSION_BLACKBOX_PLAN.md section 9 shows the confirmed call as
+> `run_blackbox_recovery {entryId, pathId, confirmToken}`; in the code `dryRun` defaults to true even with a token, so
+> the confirmed call must pass `dryRun: false`. The plan's section 8.2 also lists neither `get_blackbox_fingerprint_trend`
+> nor `export_blackbox_fixture`, and treats the resources and prompts as conditional on Voltaic support; the code
+> registers all of them (resources and prompts on the HTTP server only), and `get_blackbox_retention` and
+> `get_blackbox_storage` require a tenant admin and a global admin even though they are on the Ask read-only list.
+
+---
+
+
 ## Ask Armada
 
 These tools manage Ask Armada conversations (`ath_`) over MCP, the same operations the dashboard, TUI, and mobile app
@@ -1854,7 +2789,7 @@ time with [enumerate](#enumerate) (`entityType` `missions`, `voyageId`).
 | Parameter | Type | Required | Default | Description |
 |---|---|---|---|---|
 | `voyageId` | string | Yes | -- | Voyage ID (prefix `vyg_`) |
-| `summary` | boolean | No | `true` | Trimmed voyage (`Id`, `Title`, `Description`, `Status`, `CreatedUtc`, `LastUpdateUtc`, `ApprovalOptions`, `IsEvaluation`) with the counts; `false` returns the full voyage with the counts |
+| `summary` | boolean | No | `true` | Trimmed voyage (`Id`, `Title`, `Description`, `Status`, `CreatedUtc`, `LastUpdateUtc`, `ApprovalOptions`, `IsEvaluation`, `LastBlackBoxEntryId`) with the counts; `false` returns the full voyage with the counts |
 
 `includeMissions: true` is rejected with `ErrorCode` `InvalidArgument` naming the replacement; the former
 `includeDescription`, `includeDiffs` and `includeLogs` flags are gone.
@@ -1882,7 +2817,7 @@ time with [enumerate](#enumerate) (`entityType` `missions`, `voyageId`).
 
 | Field | Type | Description |
 |---|---|---|
-| `Voyage` | object | [Voyage](#voyage) object (a subset of its fields in summary mode) |
+| `Voyage` | object | [Voyage](#voyage) object (a subset of its fields in summary mode). Both modes carry `LastBlackBoxEntryId`, the voyage's current [black box](#black-box) entry (null until a failure is captured) |
 | `TotalMissions` | int | Total number of missions in this voyage |
 | `MissionCountsByStatus` | object | Map of status string to count (at most one entry per mission status) |
 
@@ -1939,7 +2874,7 @@ Get status of a specific mission.
 |---|---|---|---|
 | `missionId` | string | Yes | Mission ID (prefix `msn_`) |
 
-**Response:** [Mission](#mission) object, or `{ "Error": "Mission not found", "ErrorCode": "NotFound" }` if the ID does not exist.
+**Response:** [Mission](#mission) object, or `{ "Error": "Mission not found", "ErrorCode": "NotFound" }` if the ID does not exist. `LastBlackBoxEntryId` names the mission's current [black box](#black-box) entry (`bbx_`) after a failure was captured (null otherwise); pass it, or the mission id, to `get_blackbox`.
 
 > **Note:** The `DiffSnapshot` field is excluded from status responses to keep payloads compact. Use `get_mission_diff` to retrieve the full diff.
 

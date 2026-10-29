@@ -598,6 +598,49 @@ before recovery starts (and, with `requireHarborForLaunch` on, for up to `maxRec
 before they fail). Lower `stallThresholdMinutes` to recover sooner, at the cost of flagging captains that are
 merely quiet.
 
+## Black box evidence on Harbor-hosted missions
+
+The black box (see [BLACKBOX.md](BLACKBOX.md)) works the same in split mode, with one rule: everything about an entry
+is decided and stored on the Admiral, and only git and file system reads go to the Harbor.
+
+**At the failure (capture).** The Admiral writes the entry from its own rows. For a mission whose dock or assignment
+names a Harbor, the record's site says `HostKind` `Harbor` and `Host` `Harbor:<harborId>`, the subject names the Harbor,
+and `workspace.harborLinkState` and `workspace.harborLastSeenUtc` record the link as the Admiral saw it at that moment
+(`Linked`, `Silent`, `NotLinked` or `Unknown`, from the Harbor connection manager, with the Harbor row's last-seen time
+as a fallback). Nothing waits on the Harbor during capture.
+
+**After the failure (enrichment).** The enrichers inspect the dock on the host that owns it, through the same
+`VesselGitInspector` and `DockHostResolver` the Admiral uses for landing and vessel cleanup:
+
+- A dock created on a Harbor (it records the Harbor and the repository path on that Harbor) is read on that Harbor.
+  Each git command (branch exists, branch tip, divergence from the target, `git status --porcelain`, unfinished merge
+  conflicts, changed files, commit ranges, the worktree diff) is delegated over the link as a host command
+  (`GitService` over `RemoteHostCommandExecutor`) and runs in the Harbor's repository and worktree; the worktree
+  existence check goes through the Harbor's dock file system the same way. Every other dock, including one created on
+  the Admiral and only launched by a Harbor that shares its file system, is read on the Admiral.
+- A checkout path recorded for a Harbor dock is read on the Harbor; any other checkout path is read on the Admiral.
+- Target movement (commits that landed on the target since the mission started), conflict attribution and concurrent
+  overlap (at most 10 branch reads of other missions) use the same owning host.
+- The mission log tail (`evidence/mission.log`) comes from the Admiral's own log directory
+  (`missions/<missionId>.log`), not from the Harbor; the agent output, diff snapshot, events and stage outcomes come
+  from the Admiral's database.
+
+**When the Harbor is not connected.** The Harbor resolves to no host, so nothing is read from it and nothing fails:
+`workspace.inspectedHost` is null, `workspace.inspectionNote` says "Harbor `<harborId>` is not connected; the
+worktree, branch and target state on it are unknown.", the same sentence goes into the record's truncation notes, and
+target movement is omitted with that reason. A fact the capture already recorded is kept; the rest stays unknown
+(null) rather than guessed. If the Harbor is connected but the worktree check itself fails, the note says the
+worktree on `Harbor:<harborId>` could not be checked, with the error, and the same applies. The `BBX-INFRA-001` rule matches a disconnected or unavailable Harbor and votes the triage
+`External`. When the Harbor is back, a tenant admin can re-read the dock with `POST /api/v1/blackbox/{id}/reanalyze`
+(MCP `reanalyze_blackbox`); facts captured at the failure still win over facts read later. An enricher that fails for
+any other reason (a git error on the Harbor, a timeout) also leaves a note instead of failing the entry.
+
+**Where the objects go.** The Admiral writes every object (`record.json`, the briefs, `evidence/git-status.txt`,
+`evidence/target-commits.txt` and the rest) to its own configured `blackBox.storage` target. Nothing is stored on the
+Harbor and the Harbor needs no black box settings. Text read from the Harbor is redacted like all evidence before it is
+written. Git output read from the Harbor is bounded like any other evidence: tails of 256 KB, file rows
+capped per role, and every object capped at `blackBox.storage.maxEvidenceObjectBytes`.
+
 ## Status
 
 The management surface and the host-runner app exist today: the `Harbor` entity and its persistence, the

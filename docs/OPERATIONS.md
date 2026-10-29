@@ -190,12 +190,214 @@ fills a disk.
 | Finished vessel import batches | `retention.importBatchRetentionDays` (0 disables) | 90 days |
 | Decided, expired, or cancelled CLI permission requests (pending ones are kept; a deleted Ask thread takes its requests with it) | `retention.cliPermissionRequestRetentionDays` (0 disables) | 90 days |
 | Pre-migration database backups | `database.migrationBackupRetentionCount` | 5 |
+| Black box entries (pinned entries are kept; see [Black box retention and storage](#black-box-retention-and-storage)) | `blackBox.retention.*` | 180 days; 30 days after resolution; 1000 per vessel; 1 GB in total |
 
 Vessel health findings history is not pruned today and grows with the evaluation schedule. Completed voyages,
 missions, signals, and events expire on SQLite only (`dataRetentionDays`); on PostgreSQL, MySQL, and SQL Server prune
 them with your own database jobs. On a busy install, check the size of the database and of `~/.armada/logs` monthly.
 Request history capture can be turned off entirely
 with `requestHistoryEnabled: false`.
+
+## Black box retention and storage
+
+The black box keeps one entry per failed mission or voyage attempt: an index row in `blackbox_entries` plus a few
+objects (`record.json`, the briefs, bounded evidence). The index rows are always in the Armada database; the object
+bytes go to the configured storage target, `Database` by default. Black box data has its own retention and garbage
+collector; `dataRetentionDays` and `retention.*` never touch it. The routes below that change or report on the whole
+install need a global admin, except `GET /api/v1/blackbox/retention` (tenant admins see their own tenant) and the
+per-entry routes (anyone who can see the entry). Every setting is in
+[UPGRADING.md](UPGRADING.md#the-mission-and-voyage-black-box-migrations-103-and-104).
+
+### Checking retention
+
+```bash
+curl -H "Authorization: Bearer <token>" http://127.0.0.1:7890/api/v1/blackbox/retention
+```
+
+```json
+{"Policy":{"RetentionDays":180,"ResolvedRetentionDays":30,"KeepLatestPerMission":true,"MaxEntriesPerVessel":1000,"MaxTotalBytes":1073741824,"DeleteWithMission":false,"DeleteWithVessel":true,"GcIntervalMinutes":60,"GcBatchSize":200,"OrphanGraceHours":24},"TotalEntries":3,"TotalBytes":28653,"PinnedEntries":0,"DeletingEntries":0,"ExpiredEntries":0,"NextRunUtc":"2026-10-29T22:10:34.416490Z"}
+```
+
+After the first garbage collection run the response also carries `LastRun`, that run's report. MCP: `get_blackbox_retention`.
+
+How an entry's expiry is set: `retentionDays` after capture (or the vessel's `BlackBoxRetentionDays` when set; 0 keeps
+forever), or `resolvedRetentionDays` after it was resolved when that is sooner. Pinned entries never expire. Expiry is
+recomputed when an entry is resolved, pinned or unpinned, when the retention settings change, and for one vessel's
+entries when its `BlackBoxRetentionDays` changes. With `keepLatestPerMission` (default), the current entry of a
+mission or voyage that still exists is kept past its expiry.
+
+### Garbage collection
+
+The collector runs every `gcIntervalMinutes` (default 60) while `blackBox.enabled` is true. Each run, in order:
+finishes deletes left in the Deleting state, deletes expired entries, enforces the quotas, deletes entries whose vessel
+was deleted (`deleteWithVessel`, default true) or whose mission row is gone (`deleteWithMission`, default false), sweeps
+orphaned objects from external stores, and marks entries whose objects have vanished from their store as
+ObjectMissing. It then emits `blackbox.gc_completed` with the counts.
+
+Run it on demand, dry run first. A dry run counts and samples what would go and deletes nothing:
+
+```bash
+curl -X POST -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  http://127.0.0.1:7890/api/v1/blackbox/gc -d '{"DryRun": true}'
+```
+
+```json
+{"DryRun":true,"StartedUtc":"2026-10-29T21:11:39.927512Z","FinishedUtc":"2026-10-29T21:11:39.933498Z","DurationMs":5,"Expired":0,"Evicted":0,"Cascaded":0,"RetriedDeletes":0,"OrphansRemoved":0,"ObjectsMissing":0,"BytesFreed":0,"Failures":0,"CandidateEntryIds":[],"Errors":[]}
+```
+
+`CandidateEntryIds` lists at most 100 ids. Send `{"DryRun": false}` (the default for this route) to run it for real.
+MCP: `run_blackbox_gc {"dryRun": true}`.
+
+**Quotas and what goes first.** When a vessel holds more than `maxEntriesPerVessel` (default 1000) entries, its oldest
+unpinned entries that are not the current entry of a mission are evicted down to the limit. Then, while the stored
+bytes of all entries exceed `maxTotalBytes` (default 1 GB), the oldest unpinned resolved entries go first, then the
+oldest unpinned entries of any resolution; with `keepLatestPerMission`, the current entry of a live mission or voyage
+stays. Pinned entries are never evicted. Deleting a tenant deletes all of its entries, pinned ones included.
+
+### Purging by filter
+
+`POST /api/v1/blackbox/purge` deletes every entry that matches the list filters (`VesselId`, `MissionId`, `Phase`,
+`Step`, `Triage`, `Resolution`, `CreatedBefore` and the rest of the `GET /api/v1/blackbox` filters), oldest first, up to
+`MaxEntries` (1 to 100000, default 10000). `DryRun` defaults to true, and pinned entries are skipped unless
+`IncludePinned` is true.
+
+```bash
+curl -X POST -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  http://127.0.0.1:7890/api/v1/blackbox/purge \
+  -d '{"VesselId": "vsl_mvu1ffz5_4Vb0gY5fhKv", "CreatedBefore": "2026-09-01T00:00:00Z"}'
+```
+
+```json
+{"DryRun":true,"Matched":0,"Deleted":0,"Pending":0,"SkippedPinned":0,"BytesFreed":0,"SampleEntryIds":[]}
+```
+
+Read `Matched` and `SampleEntryIds` (at most 100), then repeat with `"DryRun": false`. `Pending` counts entries whose
+store delete failed; they stay Deleting and the collector finishes them. MCP: `purge_blackbox`. To delete specific
+entries, use `DELETE /api/v1/blackbox/{id}` or `POST /api/v1/blackbox/delete {"Ids": [...]}` (at most 1000 ids; tenant
+admins), or MCP `delete_blackbox_entries`.
+
+### Pinning
+
+Pin an entry you want to keep (an incident you are still investigating, a regression fixture you have not exported):
+`POST /api/v1/blackbox/{id}/pin`, MCP `pin_blackbox {"entryId": "bbx_mvu1ftcv_zcdofOBmjhY"}`. A pinned entry has no
+expiry and is skipped by quotas, cascades and purges (unless `IncludePinned`). `POST /api/v1/blackbox/{id}/unpin` (or
+`pin_blackbox` with `"pinned": false`) recomputes its expiry from the policy.
+
+### Storage status and health
+
+```bash
+curl -H "Authorization: Bearer <token>" http://127.0.0.1:7890/api/v1/blackbox/storage
+```
+
+```json
+{"Target":"Database","Health":{"Target":"Database","Healthy":true,"Message":"Database store reachable.","LatencyMs":0,"CheckedUtc":"2026-10-29T21:11:39.911573Z"},"FallbackToDatabase":true,"Usage":[{"Target":"Database","Entries":3,"Bytes":28653}]}
+```
+
+`Usage` has one row per target that holds entries (entries written before a target change stay where they were
+written). MCP: `get_blackbox_storage`. The doctor check "Black Box Storage" in `GET /api/v1/doctor` runs the same
+health check: Pass when the configured target validates and answers, Fail with the misconfigured setting or the store's
+error plus what fallback will do, Warn when `blackBox.enabled` is false. The host storage report also lists one
+`BlackBox` location per target that holds entries.
+
+Choosing a target: keep `Database` unless the database should not hold the bytes. `Disk` writes under
+`{DataDirectory}/blackbox` (or `blackBox.storage.disk.directory`) on the Admiral host; `S3` (AWS or an S3-compatible
+store such as MinIO), `AzureBlob`, `GoogleCloud`, `Cifs` and `Nfs` take their settings under `blackBox.storage`. Objects
+are stored at `{keyPrefix}/{tenantId}/{vesselId or _}/{yyyy}/{MM}/{entryId}/{objectName}`. `PUT /api/v1/settings`
+refuses invalid storage settings (400 naming the setting) before it changes anything, and the new target applies to new
+entries only.
+
+**Fallback.** When a write to an external store fails and `fallbackToDatabase` is true (the default), the entry is
+written to the database instead and a `blackbox.storage_fallback` event (`entryId`, `from`, `to`, `error`) is emitted;
+watch for it after changing targets or when the store has an outage. With fallback off, `record.json` still goes to the
+database (so the capture is never lost), the evidence objects are marked missing, and the entry is ObjectMissing.
+
+### Migrating to another storage target
+
+Configure the new target in `blackBox.storage` first (the migration validates its settings and runs its health check
+before it starts), then start a job:
+
+```bash
+curl -X POST -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  http://127.0.0.1:7890/api/v1/blackbox/storage/migrate -d '{"To": "Disk", "DeleteSource": false, "BatchSize": 100}'
+```
+
+```json
+{"Id":"bbm_mvu1gk3j_HlaYvqBefrk","State":"Pending","To":"Disk","DeleteSource":false,"BatchSize":100,"TotalEntries":3,"MigratedEntries":0,"FailedEntries":0,"BytesCopied":0,"CreatedUtc":"2026-10-29T21:11:39.967161Z","LastUpdateUtc":"2026-10-29T21:11:39.967774Z"}
+```
+
+Poll it until `State` is `Completed` or `Failed`:
+
+```bash
+curl -H "Authorization: Bearer <token>" http://127.0.0.1:7890/api/v1/blackbox/storage/migrations/bbm_mvu1gk3j_HlaYvqBefrk
+```
+
+```json
+{"Id":"bbm_mvu1gk3j_HlaYvqBefrk","State":"Completed","To":"Disk","DeleteSource":false,"BatchSize":100,"TotalEntries":3,"MigratedEntries":3,"FailedEntries":0,"BytesCopied":28653,"LastEntryId":"bbx_mvu1ftew_95PyT7WmtrV","CreatedUtc":"2026-10-29T21:11:39.967161Z","StartedUtc":"2026-10-29T21:11:39.970439Z","FinishedUtc":"2026-10-29T21:11:39.982809Z","LastUpdateUtc":"2026-10-29T21:11:39.982810Z"}
+```
+
+- `To` is required; `From` (optional) limits the job to entries on one target. `BatchSize` defaults to 50 and is
+  clamped to 1 to 1000. `DeleteSource` **defaults to true**: send `false` to keep the source copies until you have
+  checked the new target.
+- Per entry, every object is read and checked against its SHA-256, written to the target, read back and checked again;
+  only then is the entry switched to the new target and (with `DeleteSource`) the source copy deleted. A corrupt or
+  unreadable object fails only its entry, which stays where it was and readable; the job ends `Failed` when any entry
+  failed (`FailedEntries`, `LastError`), so fix the cause and start the same migration again.
+- The job saves its cursor after every entry and resumes on the next Admiral start. Running it again skips entries
+  already moved. Only one migration runs at a time; starting the same one again returns the running job.
+- Migrating does not change `blackBox.storage.target`. Set it to the new target so new entries go there too.
+
+### Backups
+
+The SQLite backup (`GET /api/v1/backup`, MCP `backup`) contains the Database-target entries inside `armada.db`. Entries
+on an external target are not copied: their index rows are in the backup, and `manifest.json` gains a `blackBox`
+section (`databaseEntries`, `databaseBytes`, `externalEntries`, `externalTargets`, and `externalEntryRefs` with entry
+id, target, storage prefix, object count and bytes for at most 10000 entries, plus `externalEntryRefsTruncated`). Back
+up the external store with its own tools. A restore reports the same counts (and up to 100 external entry ids) in its
+`BlackBox` section and says in its message when restored entries point at objects outside the database. On
+PostgreSQL, MySQL and SQL Server, your database dump holds the Database-target entries.
+
+### Metrics
+
+With telemetry on, the Admiral exports (Prometheus names, see [TELEMETRY.md](TELEMETRY.md)):
+
+| Metric | Meaning |
+|---|---|
+| `armada_blackbox_entries_total{phase,step,kind,triage}` | Entries captured |
+| `armada_blackbox_capture_failures_total` | Captures that failed |
+| `armada_blackbox_bytes{target}` | Stored bytes per target, refreshed after each garbage collection run and each storage status read |
+| `armada_blackbox_gc_deleted_total{reason}` | Entries and orphaned objects deleted, by reason (`expired`, `evicted`, `cascaded`, `retried`, `orphan`) |
+
+A rise in `armada_blackbox_capture_failures_total` means failures are going unrecorded inline; the sweeper captures
+them later at lower fidelity.
+
+### Troubleshooting the black box
+
+**503 `BlackBoxStoreUnavailable`.** The entry's store could not be reached (or the black box is not running on this
+server). Read `GET /api/v1/blackbox/storage` and the "Black Box Storage" doctor check for the store's error; fix the
+endpoint, credentials or mount. Capture keeps working meanwhile when `fallbackToDatabase` is on.
+
+**410 `BlackBoxObjectMissing`.** The object's row exists but its bytes are gone from the store (deleted outside Armada,
+or a bucket or directory was replaced). The collector checks a rotating batch of `gcBatchSize` entries per run and marks such an
+entry ObjectMissing; the index row (phase, step, reason excerpt, summary, triage) still describes the failure. Restore the store from its backup to get the bytes back. A 409
+`BlackBoxObjectCorrupt` means the bytes are there but fail their SHA-256 check.
+
+**An entry stays Deleting.** A delete removes the external bytes before the rows; when the store refuses, the entry
+stays Deleting (hidden from lists, 409 `BlackBoxDeleting` on reads) and `GET /api/v1/blackbox/retention` counts it in
+`DeletingEntries`. Fix the store, then let the next run finish it or run `POST /api/v1/blackbox/gc {"DryRun": false}`
+(a dry run does not retry deletes).
+
+**An entry stays EnrichmentFailed.** Enrichment is retried by the sweeper with exponential backoff, up to
+`blackBox.sweeper.maxEnrichmentAttempts` (default 5). The panel and `GET /api/v1/blackbox/{id}` show `LastError`. A
+tenant admin can run it again with `POST /api/v1/blackbox/{id}/reanalyze` (MCP `reanalyze_blackbox`), and a backfill
+re-queues every entry whose enrichment did not finish. A failing enricher (an unreachable Harbor, a git command that
+fails) does not cause this state; it leaves a note in the record's `truncation.notes` instead.
+
+**An entry says it was captured by the sweeper or the backfill.** `CaptureMode` `Sweeper` means the failure site did
+not capture inline (the capture failed or timed out, or the path was not wired) and the sweeper found the failed
+mission later; `Backfill` means it came from `POST /api/v1/blackbox/backfill`. Both are built from the stored mission,
+dock and event rows, so the exception, the command output and the checkout state at the moment of failure are usually
+missing and the analysis has lower confidence. Git facts that still exist (the worktree, the branch, the target) are
+read during enrichment.
 
 ## Telemetry
 
@@ -271,6 +473,89 @@ Two signals need a different response than a repository fix:
 Judge missions do not file papercuts. A judge reports what it finds through
 its verdict, and splitting review feedback across two surfaces means the
 operator reads only one of them.
+
+## When a mission fails: the black box
+
+Start with the black box. When a mission or voyage fails, the Admiral writes an entry at the moment of failure (where:
+phase, step, host and code site; how: exception, exit code, failing command or git error; why: rule findings with
+confidence; a triage verdict saying whose fix it most likely is; and ranked recovery paths). Read it before you open
+logs: it quotes the evidence and names the next step.
+
+- **Dashboard:** the mission (or voyage) page has a Black box panel. **Copy FIX THIS** copies the brief for the selected
+  audience, ready to paste into a coding agent; **Ask Armada about this failure** opens Ask Armada with a prompt about
+  it; the panel also downloads the brief (.md) and every object (.zip), and resolves, pins and reanalyzes the entry.
+- **REST:** `GET /api/v1/missions/{id}/blackbox` (the entry and its record) and
+  `GET /api/v1/missions/{id}/blackbox/brief` (the FIX THIS brief as Markdown); the voyage routes are the same under
+  `/api/v1/voyages/{id}`. `?audience=agent` (default) is the brief for a captain fixing the work, `user` is the plain
+  account for an operator, `maintainer` is the Armada-defect view; `redactHosts=true` strips absolute paths, host and
+  user names before you share it.
+- **MCP:** `get_blackbox {"missionId": "msn_mvu1fjp0_9Wd6Uuyp262"}` returns a summary of about 2 KB; add
+  `"format": "brief"` for the brief or `"format": "json"` for the whole record, then `read_blackbox_section` and
+  `read_blackbox_object` for detail.
+
+```bash
+curl -H "Authorization: Bearer <token>" \
+  "http://127.0.0.1:7890/api/v1/missions/msn_mvu1fjp0_9Wd6Uuyp262/blackbox/brief?audience=user"
+```
+
+```markdown
+# What went wrong: Retry landings deferred on a dirty checkout (mission msn_mvu1fjp0_9Wd6Uuyp262)
+
+This is what Armada recorded when the mission failed, and what you can do next.
+
+## Summary
+
+Mission "Retry landings deferred on a dirty checkout" (msn_mvu1fjp0_9Wd6Uuyp262) failed during Execution at step
+ProcessCrash (kind Crash). ... Triage: Transient (low confidence). Suggested next step: restart the mission
+(bbx-exec-006.restart).
+
+## What you can do
+
+### 1. Restart the mission
+
+Risk: Low. Expected: A fresh process runs the mission.
+...
+```
+
+Capture writes the entry at once; enrichment (git state, conflicting missions, evidence) and analysis follow in the
+background, so a brand-new entry can show "Analysis is still running" for a few seconds. The panel fills in when the
+`blackbox.analyzed` event arrives. A 404 `BlackBoxNotFound` means no visible entry exists: the failure predates the
+upgrade and has not been swept yet (see the backfill in [UPGRADING.md](UPGRADING.md#the-mission-and-voyage-black-box-migrations-103-and-104)),
+the entry expired, or it belongs to another tenant.
+
+**Recovering: dry run, then confirm.** Run only a recovery path recorded in the entry, never a free-form command. The
+dry run returns the plan and a confirm token (single use, valid 10 minutes, bound to the entry, the path, you, and the
+mission's state):
+
+```bash
+curl -X POST -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  http://127.0.0.1:7890/api/v1/blackbox/bbx_mvu1ftcv_zcdofOBmjhY/recovery/bbx-exec-006.restart -d '{"DryRun": true}'
+```
+
+```json
+{"EntryId":"bbx_mvu1ftcv_zcdofOBmjhY","PathId":"bbx-exec-006.restart","DryRun":true,"ConfirmToken":"bbc_db902eef4c9155c21cce09b96116f9e4","ConfirmTokenExpiresUtc":"2026-10-29T21:21:39.754998Z","Plan":[{"Order":1,"Description":"Restart msn_mvu1fjp0_9Wd6Uuyp262.","McpCommand":"restart_mission {\"missionId\": \"msn_mvu1fjp0_9Wd6Uuyp262\"}","RestCommand":"POST /api/v1/missions/msn_mvu1fjp0_9Wd6Uuyp262/restart","CliCommand":"armada mission restart msn_mvu1fjp0_9Wd6Uuyp262","Action":{"Tool":"restart_mission","Arguments":{"missionId":"msn_mvu1fjp0_9Wd6Uuyp262"}},"DataLossRisk":false}],"StepResults":[],"Succeeded":true,"Message":"Would run: restart_mission {\"missionId\": \"msn_mvu1fjp0_9Wd6Uuyp262\"}. Confirm with confirmToken before 2026-10-29 21:21:39Z."}
+```
+
+Read the plan, then run it with `{"DryRun": false, "ConfirmToken": "bbc_db902eef4c9155c21cce09b96116f9e4"}`. A path
+with `DataLossRisk` (deleting a branch, forcing a dock reclaim) also needs `"AcknowledgeDataLoss": true`. Each step is
+authorized as if you had called its tool yourself (403 when you may not). A missing, used or expired token, or a
+mission or plan that changed since the dry run, is 409 `BlackBoxConfirmationRequired`: dry run again. Every dry run and
+run is noted on the entry and emits `blackbox.recovery_run`. Configuration recommendations (for example a vessel's
+landing mode) apply the same way through `POST /api/v1/blackbox/{id}/recommendations/{recommendationId}/apply`. MCP:
+`run_blackbox_recovery` and `apply_blackbox_recommendation`, with the same dry run and token.
+
+**Closing the loop.** Record the outcome so the next reader does not repeat the work:
+
+- Note what you found: `POST /api/v1/blackbox/{id}/notes {"Body": "..."}` (MCP `annotate_blackbox`).
+- Resolve: `POST /api/v1/blackbox/{id}/resolve {"Resolution": "Resolved", "Note": "Restarted after the test host fix", "Link": "<commit or PR>"}`
+  (`Open`, `Resolved`, `Duplicate`, `WontFix`, `ArmadaFixed`; MCP `resolve_blackbox`). A resolved entry expires
+  `blackBox.retention.resolvedRetentionDays` (default 30) after resolution.
+- Pin an entry you need to keep past retention: `POST /api/v1/blackbox/{id}/pin` (MCP `pin_blackbox`).
+
+Repeated failures of the same kind share a fingerprint: `POST /api/v1/blackbox/fingerprints/enumerate` (MCP
+`list_blackbox_fingerprints`) lists failure modes by count, and `POST /api/v1/blackbox/hotspots/enumerate` (MCP
+`list_blackbox_hotspots`) the directories that keep conflicting. Storage, retention and garbage collection are in
+[Black box retention and storage](#black-box-retention-and-storage); the full guide is [BLACKBOX.md](BLACKBOX.md).
 
 ## Troubleshooting
 

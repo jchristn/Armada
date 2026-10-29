@@ -1,0 +1,2220 @@
+{
+ "find": {
+  "code": 200,
+  "contentType": "application/json",
+  "headers": {},
+  "json": {
+   "Success": true,
+   "PageNumber": 1,
+   "PageSize": 1,
+   "TotalPages": 1,
+   "TotalRecords": 1,
+   "Objects": [
+    {
+     "Id": "bbx_mvu1ftcv_zcdofOBmjhY",
+     "SubjectType": "Mission",
+     "MissionId": "msn_mvu1fjp0_9Wd6Uuyp262",
+     "VoyageId": "vyg_mvu1fjoz_xO6urNkcaHp",
+     "VesselId": "vsl_mvu1ffz5_4Vb0gY5fhKv",
+     "MissionTitle": "Retry landings deferred on a dirty checkout",
+     "VesselName": "demo-api",
+     "Attempt": 1,
+     "IsCurrent": true,
+     "Phase": "Execution",
+     "Step": "ProcessCrash",
+     "FailureKind": "Crash",
+     "StatusAfter": "Failed",
+     "Triage": "Transient",
+     "Fingerprint": "9eab364095ddc8148f79ed0e7a81303bb19a5f115eba491962241d1a1403cead",
+     "CaptureMode": "Backfill",
+     "State": "Analyzed",
+     "Resolution": "Open",
+     "Pinned": false,
+     "ReasonExcerpt": "Captain process exited with code 134 after 4m12s while running dotnet test (Test.Automated aborted: Fatal error. System.AccessViolationException in SQLitePCL.raw.sqlite3_step). Retry once the test host is stable.",
+     "TotalBytes": 9635,
+     "ObjectCount": 5,
+     "CreatedUtc": "2026-10-29T21:11:05.310433Z",
+     "ExpiresUtc": "2027-04-27T21:11:05.310433Z"
+    }
+   ],
+   "TotalMs": 0
+  }
+ },
+ "analysis": {
+  "code": 200,
+  "contentType": "application/json",
+  "headers": {},
+  "json": {
+   "EntryId": "bbx_mvu1ftcv_zcdofOBmjhY",
+   "Section": "Analysis",
+   "Record": {
+    "EntryId": "bbx_mvu1ftcv_zcdofOBmjhY",
+    "SchemaVersion": 1,
+    "RulesVersion": 1,
+    "CaptureMode": "Backfill",
+    "State": "Analyzed",
+    "CreatedUtc": "2026-10-29T21:11:05.310433Z",
+    "Attempts": [],
+    "Analysis": {
+     "Summary": "Mission \"Retry landings deferred on a dirty checkout\" (msn_mvu1fjp0_9Wd6Uuyp262) failed during Execution at step ProcessCrash (kind Crash). The captain's process exited with code unknown before finishing. Triage: Transient (low confidence). Suggested next step: restart the mission (bbx-exec-006.restart).",
+     "SummaryIsModelWritten": false,
+     "Why": [
+      {
+       "RuleId": "BBX-EXEC-006",
+       "Statement": "The captain's process exited with code unknown before finishing.",
+       "Confidence": "Medium",
+       "EvidenceRefs": [
+        "mechanism.exitCode",
+        "evidence/agent-output.txt"
+       ]
+      }
+     ],
+     "ConfigRecommendations": [],
+     "ArmadaImprovements": [],
+     "RecoveryPaths": [
+      {
+       "Id": "bbx-exec-006.restart",
+       "Rank": 1,
+       "Title": "Restart the mission",
+       "Preconditions": [],
+       "Steps": [
+        {
+         "Order": 1,
+         "Description": "Restart msn_mvu1fjp0_9Wd6Uuyp262.",
+         "McpCommand": "restart_mission {\"missionId\": \"msn_mvu1fjp0_9Wd6Uuyp262\"}",
+         "RestCommand": "POST /api/v1/missions/msn_mvu1fjp0_9Wd6Uuyp262/restart",
+         "CliCommand": "armada mission restart msn_mvu1fjp0_9Wd6Uuyp262",
+         "Action": {
+          "Tool": "restart_mission",
+          "Arguments": {
+           "missionId": "msn_mvu1fjp0_9Wd6Uuyp262"
+          }
+         },
+         "DataLossRisk": false
+        }
+       ],
+       "Action": {
+        "Tool": "restart_mission",
+        "Arguments": {
+         "missionId": "msn_mvu1fjp0_9Wd6Uuyp262"
+        }
+       },
+       "Risk": "Low",
+       "DataLossRisk": false,
+       "ExpectedOutcome": "A fresh process runs the mission.",
+       "RuleId": "BBX-EXEC-006"
+      }
+     ],
+     "Triage": {
+      "Verdict": "Transient",
+      "Confidence": "Low",
+      "Votes": [
+       {
+        "RuleId": "BBX-EXEC-006",
+        "Verdict": "Transient",
+        "Weight": 1
+       }
+      ],
+      "TiedWith": []
+     }
+    },
+    "Redaction": {
+     "RulesApplied": [],
+     "RedactedCount": 0
+    },
+    "Truncation": {
+     "Fields": [],
+     "FieldTotal": 0,
+     "TimedOut": false,
+     "Notes": []
+    }
+   }
+  }
+ },
+ "objects": {
+  "code": 200,
+  "contentType": "application/json",
+  "headers": {},
+  "json": {
+   "Success": true,
+   "PageNumber": 1,
+   "PageSize": 25,
+   "TotalPages": 1,
+   "TotalRecords": 5,
+   "Objects": [
+    {
+     "Name": "brief.maintainer.md",
+     "ContentType": "text/markdown",
+     "ContentEncoding": "gzip",
+     "SizeBytes": 2215,
+     "UncompressedBytes": 5448,
+     "Sha256": "9cbfd53f78506886f69ab7902067d0e6865e75481805247c32ed908f25462ccf",
+     "IsMissing": false,
+     "CreatedUtc": "2026-10-29T21:11:05.436129Z"
+    },
+    {
+     "Name": "brief.md",
+     "ContentType": "text/markdown",
+     "ContentEncoding": "gzip",
+     "SizeBytes": 2670,
+     "UncompressedBytes": 6137,
+     "Sha256": "aa6e439179e77986aa71d896366db972e6ced280a0d4706f4074d10bb95be595",
+     "IsMissing": false,
+     "CreatedUtc": "2026-10-29T21:11:05.435857Z"
+    },
+    {
+     "Name": "brief.user.md",
+     "ContentType": "text/markdown",
+     "ContentEncoding": "gzip",
+     "SizeBytes": 1521,
+     "UncompressedBytes": 3584,
+     "Sha256": "dfa8f87bf36b4f29ba2daf26684d3de5aeb8ec43734c11ca59612919840ddab7",
+     "IsMissing": false,
+     "CreatedUtc": "2026-10-29T21:11:05.436002Z"
+    },
+    {
+     "Name": "evidence/events.json",
+     "ContentType": "application/json",
+     "ContentEncoding": "gzip",
+     "SizeBytes": 207,
+     "UncompressedBytes": 238,
+     "Sha256": "efcf0f7d2a43858636910889b4aea078a55ce48e738a0c4910beb6e25fbb0527",
+     "IsMissing": false,
+     "CreatedUtc": "2026-10-29T21:11:05.436198Z"
+    },
+    {
+     "Name": "record.json",
+     "ContentType": "application/json",
+     "ContentEncoding": "gzip",
+     "SizeBytes": 3022,
+     "UncompressedBytes": 10545,
+     "Sha256": "4b4a919cda321245e9d9fe725e3dfdc7b7c0533b85e8e1419b01ddf05cc81b3d",
+     "IsMissing": false,
+     "CreatedUtc": "2026-10-29T21:11:05.434517Z"
+    }
+   ],
+   "TotalMs": 0
+  }
+ },
+ "findVoyage": {
+  "code": 200,
+  "contentType": "application/json",
+  "headers": {},
+  "json": {
+   "Success": true,
+   "PageNumber": 1,
+   "PageSize": 1,
+   "TotalPages": 1,
+   "TotalRecords": 1,
+   "Objects": [
+    {
+     "Id": "bbx_mvu1ftew_95PyT7WmtrV",
+     "SubjectType": "Voyage",
+     "VoyageId": "vyg_mvu1fjoz_xO6urNkcaHp",
+     "VesselId": "vsl_mvu1ffz5_4Vb0gY5fhKv",
+     "MissionTitle": "Harden landing retries",
+     "VesselName": "demo-api",
+     "Attempt": 1,
+     "IsCurrent": true,
+     "Phase": "Voyage",
+     "Step": "SettlementFailed",
+     "FailureKind": "Crash",
+     "StatusAfter": "Failed",
+     "Triage": "Transient",
+     "Fingerprint": "bcb7be821991076ba7d7551c9c5714b099bddaa13843c800b1bd4ee271e37329",
+     "CaptureMode": "Backfill",
+     "State": "Analyzed",
+     "Resolution": "Open",
+     "Pinned": false,
+     "ReasonExcerpt": "Mission msn_mvu1fjp0_9Wd6Uuyp262 failed: Captain process exited with code 134 after 4m12s while running dotnet test (Test.Automated aborted: Fatal error. System.AccessViolationException in SQLitePCL.raw.sqlite3_step). Retry once the test host is stable.",
+     "TotalBytes": 9199,
+     "ObjectCount": 5,
+     "CreatedUtc": "2026-10-29T21:11:05.382585Z",
+     "ExpiresUtc": "2027-04-27T21:11:05.382585Z"
+    }
+   ],
+   "TotalMs": 0
+  }
+ },
+ "missionEntry": {
+  "code": 200,
+  "contentType": "application/json",
+  "headers": {},
+  "json": {
+   "Id": "bbx_mvu1ftcv_zcdofOBmjhY",
+   "TenantId": "default",
+   "UserId": "default",
+   "SubjectType": "Mission",
+   "MissionId": "msn_mvu1fjp0_9Wd6Uuyp262",
+   "VoyageId": "vyg_mvu1fjoz_xO6urNkcaHp",
+   "VesselId": "vsl_mvu1ffz5_4Vb0gY5fhKv",
+   "FleetId": "flt_mvu1fcwu_pUQGp88qTcb",
+   "MissionTitle": "Retry landings deferred on a dirty checkout",
+   "VesselName": "demo-api",
+   "Attempt": 1,
+   "IsCurrent": true,
+   "Phase": "Execution",
+   "Step": "ProcessCrash",
+   "FailureKind": "Crash",
+   "StatusAfter": "Failed",
+   "Triage": "Transient",
+   "Fingerprint": "9eab364095ddc8148f79ed0e7a81303bb19a5f115eba491962241d1a1403cead",
+   "CaptureMode": "Backfill",
+   "State": "Analyzed",
+   "Resolution": "Open",
+   "Pinned": false,
+   "StorageTarget": "Database",
+   "TotalBytes": 9635,
+   "ObjectCount": 5,
+   "SchemaVersion": 1,
+   "RulesVersion": 1,
+   "ArmadaVersion": "1.2.0+5de469cff2709733b1ffb68fbc45d1303e9e41be",
+   "ArmadaCommit": "5de469cff2709733b1ffb68fbc45d1303e9e41be",
+   "ReasonExcerpt": "Captain process exited with code 134 after 4m12s while running dotnet test (Test.Automated aborted: Fatal error. System.AccessViolationException in SQLitePCL.raw.sqlite3_step). Retry once the test host is stable.",
+   "Summary": "Mission \"Retry landings deferred on a dirty checkout\" (msn_mvu1fjp0_9Wd6Uuyp262) failed during Execution at step ProcessCrash (kind Crash). The captain's process exited with code unknown before finishing. Triage: Transient (low confidence). Suggested next step: restart the mission (bbx-exec-006.restart).",
+   "EnrichmentAttempts": 0,
+   "ExpiresUtc": "2027-04-27T21:11:05.310433Z",
+   "CreatedUtc": "2026-10-29T21:11:05.310433Z",
+   "EnrichedUtc": "2026-10-29T21:11:05.416673Z",
+   "AnalyzedUtc": "2026-10-29T21:11:05.430708Z",
+   "LastUpdateUtc": "2026-10-29T21:11:05.436313Z",
+   "Record": {
+    "EntryId": "bbx_mvu1ftcv_zcdofOBmjhY",
+    "SchemaVersion": 1,
+    "RulesVersion": 1,
+    "CaptureMode": "Backfill",
+    "State": "Analyzed",
+    "CreatedUtc": "2026-10-29T21:11:05.310433Z",
+    "Subject": {
+     "SubjectType": "Mission",
+     "TenantId": "default",
+     "UserId": "default",
+     "MissionId": "msn_mvu1fjp0_9Wd6Uuyp262",
+     "VoyageId": "vyg_mvu1fjoz_xO6urNkcaHp",
+     "Title": "Retry landings deferred on a dirty checkout",
+     "VoyageTitle": "Harden landing retries",
+     "VesselId": "vsl_mvu1ffz5_4Vb0gY5fhKv",
+     "VesselName": "demo-api",
+     "VesselRepoUrl": "/Users/alex/src/demo-api",
+     "VesselDefaultBranch": "main",
+     "FleetId": "flt_mvu1fcwu_pUQGp88qTcb",
+     "Attempt": 1,
+     "IsRescue": false,
+     "RedispatchAttempts": 0,
+     "OutputRepairAttempts": 0,
+     "NoOpRedispatchAttempts": 0
+    },
+    "Status": {
+     "After": "Failed",
+     "ChangedUtc": "2026-10-29T21:11:05.290000Z",
+     "Timeline": [
+      {
+       "Status": "Failed",
+       "Utc": "2026-10-29T21:11:05.290000Z",
+       "Source": "failure write"
+      }
+     ]
+    },
+    "Site": {
+     "Phase": "Execution",
+     "Step": "ProcessCrash",
+     "HostKind": "Admiral",
+     "Host": "Admiral",
+     "Component": "BlackBoxSweeper",
+     "ArmadaVersion": "1.2.0+5de469cff2709733b1ffb68fbc45d1303e9e41be",
+     "ArmadaCommit": "5de469cff2709733b1ffb68fbc45d1303e9e41be"
+    },
+    "Mechanism": {
+     "StackFrames": []
+    },
+    "Classification": {
+     "Kind": "Crash",
+     "RawReason": "Captain process exited with code 134 after 4m12s while running dotnet test (Test.Automated aborted: Fatal error. System.AccessViolationException in SQLitePCL.raw.sqlite3_step). Retry once the test host is stable.",
+     "SuspectedCause": "None"
+    },
+    "Workspace": {
+     "TargetBranch": "main",
+     "DirtyPaths": [],
+     "DirtyPathTotal": 0,
+     "InspectedHost": "Admiral",
+     "TargetMovementNote": "Target movement omitted: the mission's start commit was not recorded, so the commits that landed on the target since it started are unknown."
+    },
+    "Configuration": {
+     "Values": [
+      {
+       "Setting": "LandingMode",
+       "Value": "MergeAndPush",
+       "Source": "Global"
+      },
+      {
+       "Setting": "AutoPush",
+       "Value": "True",
+       "Source": "Default"
+      },
+      {
+       "Setting": "AutoMergePullRequests",
+       "Value": "False",
+       "Source": "Global"
+      },
+      {
+       "Setting": "BranchCleanupPolicy",
+       "Value": "LocalOnly",
+       "Source": "Global"
+      },
+      {
+       "Setting": "RequiresReview",
+       "Value": "False",
+       "Source": "Mission"
+      }
+     ]
+    },
+    "Attempts": [],
+    "Evidence": {
+     "Objects": [
+      {
+       "Name": "evidence/events.json",
+       "ContentType": "application/json",
+       "SizeBytes": 238,
+       "UncompressedBytes": 238,
+       "Excerpt": "[\n  {\n    \"eventId\": \"evt_mvu1ftcq_iIAw5pelHTf\",\n    \"eventType\": \"mission.status_changed\",\n    \"message\": \"Mission Failed (ProcessCrash): Retry landings deferred on a dirty checkout\",\n    \"createdUtc\": \"2026-10-29T21:11:05.306273Z\"\n  }\n]",
+       "Truncated": false
+      }
+     ],
+     "CheckResults": [],
+     "Papercuts": [],
+     "RelevantEvents": [
+      {
+       "EventId": "evt_mvu1ftcq_iIAw5pelHTf",
+       "EventType": "mission.status_changed",
+       "Message": "Mission Failed (ProcessCrash): Retry landings deferred on a dirty checkout",
+       "CreatedUtc": "2026-10-29T21:11:05.306273Z"
+      }
+     ]
+    },
+    "Analysis": {
+     "Summary": "Mission \"Retry landings deferred on a dirty checkout\" (msn_mvu1fjp0_9Wd6Uuyp262) failed during Execution at step ProcessCrash (kind Crash). The captain's process exited with code unknown before finishing. Triage: Transient (low confidence). Suggested next step: restart the mission (bbx-exec-006.restart).",
+     "SummaryIsModelWritten": false,
+     "Why": [
+      {
+       "RuleId": "BBX-EXEC-006",
+       "Statement": "The captain's process exited with code unknown before finishing.",
+       "Confidence": "Medium",
+       "EvidenceRefs": [
+        "mechanism.exitCode",
+        "evidence/agent-output.txt"
+       ]
+      }
+     ],
+     "ConfigRecommendations": [],
+     "ArmadaImprovements": [],
+     "RecoveryPaths": [
+      {
+       "Id": "bbx-exec-006.restart",
+       "Rank": 1,
+       "Title": "Restart the mission",
+       "Preconditions": [],
+       "Steps": [
+        {
+         "Order": 1,
+         "Description": "Restart msn_mvu1fjp0_9Wd6Uuyp262.",
+         "McpCommand": "restart_mission {\"missionId\": \"msn_mvu1fjp0_9Wd6Uuyp262\"}",
+         "RestCommand": "POST /api/v1/missions/msn_mvu1fjp0_9Wd6Uuyp262/restart",
+         "CliCommand": "armada mission restart msn_mvu1fjp0_9Wd6Uuyp262",
+         "Action": {
+          "Tool": "restart_mission",
+          "Arguments": {
+           "missionId": "msn_mvu1fjp0_9Wd6Uuyp262"
+          }
+         },
+         "DataLossRisk": false
+        }
+       ],
+       "Action": {
+        "Tool": "restart_mission",
+        "Arguments": {
+         "missionId": "msn_mvu1fjp0_9Wd6Uuyp262"
+        }
+       },
+       "Risk": "Low",
+       "DataLossRisk": false,
+       "ExpectedOutcome": "A fresh process runs the mission.",
+       "RuleId": "BBX-EXEC-006"
+      }
+     ],
+     "Triage": {
+      "Verdict": "Transient",
+      "Confidence": "Low",
+      "Votes": [
+       {
+        "RuleId": "BBX-EXEC-006",
+        "Verdict": "Transient",
+        "Weight": 1
+       }
+      ],
+      "TiedWith": []
+     }
+    },
+    "Related": {
+     "Fingerprint": "9eab364095ddc8148f79ed0e7a81303bb19a5f115eba491962241d1a1403cead",
+     "SimilarEntries": [],
+     "OccurrencesLast30Days": 1,
+     "DownstreamMissionIds": []
+    },
+    "Redaction": {
+     "RulesApplied": [],
+     "RedactedCount": 0
+    },
+    "Truncation": {
+     "Fields": [],
+     "FieldTotal": 0,
+     "TimedOut": false,
+     "Notes": [
+      "Captured by the backfill after the fact; the failure site's volatile facts (git state, exception, command output) are missing.",
+      "Target movement omitted: the mission's start commit was not recorded, so the commits that landed on the target since it started are unknown.",
+      "Concurrent overlap skipped: neither the conflicted files nor the mission's changed files are known."
+     ]
+    }
+   }
+  }
+ },
+ "missionBrief": {
+  "code": 200,
+  "contentType": "text/markdown; charset=utf-8",
+  "headers": {},
+  "text": "# FIX THIS: Retry landings deferred on a dirty checkout (mission msn_mvu1fjp0_9Wd6Uuyp262)\n\nYou are asked to FIX THIS. This brief is a self-contained black box entry from Armada, a multi-agent orchestration system. It records where, how and why a mission failed, with evidence.\n\nBefore changing anything, triage the failure. Decide which one it is, and say why, quoting the evidence below:\n\n1. **UserConfig**: the user's Armada configuration (vessel, captain, persona, landing mode, commands).\n2. **MissionBrief**: the mission brief or dependency ordering.\n3. **Transient**: a transient condition (provider, network, usage limit); retrying is likely to work.\n4. **ArmadaDefect**: a defect in Armada itself.\n5. **External**: an operator action or something outside Armada.\n\nThen act: for UserConfig or MissionBrief, propose the exact change; for Transient, the retry; for ArmadaDefect, locate the failure site in the Armada source at the build commit below and propose a fix with a test. Quote evidence, not guesses. Use only the recovery paths listed here when you act on the Armada installation, and confirm anything marked data-loss risk with the user first.\n\n## Summary\n\nMission \"Retry landings deferred on a dirty checkout\" (msn_mvu1fjp0_9Wd6Uuyp262) failed during Execution at step ProcessCrash (kind Crash). The captain's process exited with code unknown before finishing. Triage: Transient (low confidence). Suggested next step: restart the mission (bbx-exec-006.restart).\n\n- Mission failed during **Execution** at step **ProcessCrash** (kind Crash).\n- Status: unknown -> Failed.\n- Triage: Transient (confidence Low).\n- Captured by the backfill after the fact: lower fidelity, the failure site's volatile facts (git state, exception) may be missing.\n\n## Identity\n\n- Entry: bbx_mvu1ftcv_zcdofOBmjhY (attempt 1)\n- Mission: msn_mvu1fjp0_9Wd6Uuyp262\n- Voyage: vyg_mvu1fjoz_xO6urNkcaHp (Harden landing retries)\n- Vessel: demo-api (vsl_mvu1ffz5_4Vb0gY5fhKv)\n- Repository: /Users/alex/src/demo-api\n- Target branch: main\n\n## Where it failed\n\n- Phase / step: Execution / ProcessCrash\n- Host: Admiral\n- Armada build: 1.2.0+5de469cff2709733b1ffb68fbc45d1303e9e41be (commit 5de469cff2709733b1ffb68fbc45d1303e9e41be)\n\n## How it failed\n\nReason:\n\n```\nCaptain process exited with code 134 after 4m12s while running dotnet test (Test.Automated aborted: Fatal error. System.AccessViolationException in SQLitePCL.raw.sqlite3_step). Retry once the test host is stable.\n```\n\n\n## Status timeline\n\n- 2026-10-29 21:11:05Z Failed (failure write)\n\n## Why\n\n- The captain's process exited with code unknown before finishing. (rule BBX-EXEC-006, confidence Medium) Evidence: mechanism.exitCode, evidence/agent-output.txt\n- Triage votes: BBX-EXEC-006=Transientx1\n\n## Workspace\n\n- Target: main\n- Inspected on: Admiral\n- Target movement: Target movement omitted: the mission's start commit was not recorded, so the commits that landed on the target since it started are unknown.\n\n## Configuration in effect\n\n- LandingMode: `MergeAndPush` (Global)\n- AutoPush: `True` (Default)\n- AutoMergePullRequests: `False` (Global)\n- BranchCleanupPolicy: `LocalOnly` (Global)\n- RequiresReview: `False` (Mission)\n- WaitForVoyageWorkers: `False` (Mission)\n- MissionMode: `Implementation` (Mission)\n- AllowConcurrentMissions: `False` (Vessel)\n- RequirePassingChecksToLand: `False` (Vessel)\n- DefinitionOfDoneEnabled: `False` (Vessel)\n- AutoLandEnabled: `False` (Vessel)\n- StallThresholdMinutes: `10` (Global)\n- ToolWaitHardLimitMinutes: `60` (Global)\n- StageCheckTimeoutMinutes: `15` (Global)\n- MaxMissionRuntimeMinutes: `240` (Global)\n- MaxRecoveryAttempts: `3` (Global)\n- MaxMissionRecoveryAttempts: `2` (Global)\n- MaxLandingRetries: `3` (Global)\n- MaxNoOpRedispatchAttempts: `1` (Global)\n- MaxOutputRepairAttempts: `1` (Global)\n- ReviewTimeoutMinutes: `1440` (Global)\n- LandingDeferralDeadlineHours: `24` (Global)\n- MaxConcurrentMissions: `0` (Global)\n- BlockDependentsOfFailedStages: `False` (Global)\n- BlackBoxRetentionDays: `180` (Global)\n- WorkflowProfile: `demo-api: basic checks` (WorkflowProfile)\n- LintCommand: `git diff --check` (WorkflowProfile)\n\n## Recovery\n\n### 1. Restart the mission (bbx-exec-006.restart)\n\nRisk: Low. Expected: A fresh process runs the mission.\n\n1. Restart msn_mvu1fjp0_9Wd6Uuyp262.\n   - MCP: `restart_mission {\"missionId\": \"msn_mvu1fjp0_9Wd6Uuyp262\"}`\n   - CLI: `armada mission restart msn_mvu1fjp0_9Wd6Uuyp262`\n   - REST: `POST /api/v1/missions/msn_mvu1fjp0_9Wd6Uuyp262/restart`\n\nAction: `restart_mission {\"missionId\": \"msn_mvu1fjp0_9Wd6Uuyp262\"}` (run it with run_blackbox_recovery, dry run first)\n\n## Evidence\n\n- `evidence/events.json` (238 bytes): [   {     \"eventId\": \"evt_mvu1ftcq_iIAw5pelHTf\",     \"eventType\": \"mission.status_changed\",     \"message\": \"Mission Failed (ProcessCrash): Retry landings deferred on a dirty checkout\",     \"createdUtc ... (38 more characters in record.json)\n- 2026-10-29 21:11:05Z mission.status_changed: Mission Failed (ProcessCrash): Retry landings deferred on a dirty checkout\n\nRead an object with MCP `read_blackbox_object {\"entryId\": \"bbx_mvu1ftcv_zcdofOBmjhY\", \"name\": \"<name>\"}` (64 KB chunks) or REST `GET /api/v1/blackbox/bbx_mvu1ftcv_zcdofOBmjhY/objects/<name>`.\n\n## Related failures\n\n- Fingerprint: 9eab364095ddc8148f79ed0e7a81303bb19a5f115eba491962241d1a1403cead\n- Same failure in the last 30 days: 1\n\n## Notes on this record\n\n- Captured by the backfill after the fact; the failure site's volatile facts (git state, exception, command output) are missing.\n- Target movement omitted: the mission's start commit was not recorded, so the commits that landed on the target since it started are unknown.\n- Concurrent overlap skipped: neither the conflicted files nor the mission's changed files are known.\n\n## Your answer\n\nState the triage verdict (UserConfig, MissionBrief, Transient, ArmadaDefect or External) and the evidence for it, the root cause, the fix, and how to verify it. If you change the Armada installation, use the recovery paths above and annotate the entry with `annotate_blackbox` when done.\n"
+ },
+ "missionBriefUser": {
+  "code": 200,
+  "contentType": "text/markdown; charset=utf-8",
+  "headers": {},
+  "text": "# What went wrong: Retry landings deferred on a dirty checkout (mission msn_mvu1fjp0_9Wd6Uuyp262)\n\nThis is what Armada recorded when the mission failed, and what you can do next.\n\n## Summary\n\nMission \"Retry landings deferred on a dirty checkout\" (msn_mvu1fjp0_9Wd6Uuyp262) failed during Execution at step ProcessCrash (kind Crash). The captain's process exited with code unknown before finishing. Triage: Transient (low confidence). Suggested next step: restart the mission (bbx-exec-006.restart).\n\n- Mission failed during **Execution** at step **ProcessCrash** (kind Crash).\n- Status: unknown -> Failed.\n- Triage: Transient (confidence Low).\n- Captured by the backfill after the fact: lower fidelity, the failure site's volatile facts (git state, exception) may be missing.\n\n## What you can do\n\n### 1. Restart the mission\n\nRisk: Low. Expected: A fresh process runs the mission.\n\n1. Restart msn_mvu1fjp0_9Wd6Uuyp262.\n   - MCP: `restart_mission {\"missionId\": \"msn_mvu1fjp0_9Wd6Uuyp262\"}`\n   - CLI: `armada mission restart msn_mvu1fjp0_9Wd6Uuyp262`\n\n## Why\n\n- The captain's process exited with code unknown before finishing. (medium confidence)\n\n## Where it failed\n\n- Phase / step: Execution / ProcessCrash\n- Host: Admiral\n\n## How it failed\n\nReason:\n\n```\nCaptain process exited with code 134 after 4m12s while running dotnet test (Test.Automated aborted: Fatal error. System.AccessViolationException in SQLitePCL.raw.sqlite3_step). Retry once the test host is stable.\n```\n\n\n## Workspace\n\n- Target: main\n- Inspected on: Admiral\n- Target movement: Target movement omitted: the mission's start commit was not recorded, so the commits that landed on the target since it started are unknown.\n\n## Configuration in effect\n\n- LandingMode: `MergeAndPush` (Global)\n- AutoPush: `True` (Default)\n- AutoMergePullRequests: `False` (Global)\n- BranchCleanupPolicy: `LocalOnly` (Global)\n- RequiresReview: `False` (Mission)\n- WaitForVoyageWorkers: `False` (Mission)\n- MissionMode: `Implementation` (Mission)\n- AllowConcurrentMissions: `False` (Vessel)\n- RequirePassingChecksToLand: `False` (Vessel)\n- DefinitionOfDoneEnabled: `False` (Vessel)\n- AutoLandEnabled: `False` (Vessel)\n- StallThresholdMinutes: `10` (Global)\n- ToolWaitHardLimitMinutes: `60` (Global)\n- StageCheckTimeoutMinutes: `15` (Global)\n- MaxMissionRuntimeMinutes: `240` (Global)\n- MaxRecoveryAttempts: `3` (Global)\n- MaxMissionRecoveryAttempts: `2` (Global)\n- MaxLandingRetries: `3` (Global)\n- MaxNoOpRedispatchAttempts: `1` (Global)\n- MaxOutputRepairAttempts: `1` (Global)\n- ReviewTimeoutMinutes: `1440` (Global)\n- LandingDeferralDeadlineHours: `24` (Global)\n- MaxConcurrentMissions: `0` (Global)\n- BlockDependentsOfFailedStages: `False` (Global)\n- BlackBoxRetentionDays: `180` (Global)\n- WorkflowProfile: `demo-api: basic checks` (WorkflowProfile)\n- LintCommand: `git diff --check` (WorkflowProfile)\n\n## Evidence\n\n- `evidence/events.json` (238 bytes)\n\n## Related failures\n\n- Same failure in the last 30 days: 1\n\n## Identity\n\n- Entry: bbx_mvu1ftcv_zcdofOBmjhY (attempt 1)\n- Mission: msn_mvu1fjp0_9Wd6Uuyp262\n- Voyage: vyg_mvu1fjoz_xO6urNkcaHp (Harden landing retries)\n- Vessel: demo-api (vsl_mvu1ffz5_4Vb0gY5fhKv)\n- Target branch: main\n\n## Notes on this record\n\n- Captured by the backfill after the fact; the failure site's volatile facts (git state, exception, command output) are missing.\n- Target movement omitted: the mission's start commit was not recorded, so the commits that landed on the target since it started are unknown.\n- Concurrent overlap skipped: neither the conflicted files nor the mission's changed files are known.\n\n"
+ },
+ "missionEntries": {
+  "code": 200,
+  "contentType": "application/json",
+  "headers": {},
+  "json": {
+   "Success": true,
+   "PageNumber": 1,
+   "PageSize": 10,
+   "TotalPages": 1,
+   "TotalRecords": 1,
+   "Objects": [
+    {
+     "Id": "bbx_mvu1ftcv_zcdofOBmjhY",
+     "SubjectType": "Mission",
+     "MissionId": "msn_mvu1fjp0_9Wd6Uuyp262",
+     "VoyageId": "vyg_mvu1fjoz_xO6urNkcaHp",
+     "VesselId": "vsl_mvu1ffz5_4Vb0gY5fhKv",
+     "MissionTitle": "Retry landings deferred on a dirty checkout",
+     "VesselName": "demo-api",
+     "Attempt": 1,
+     "IsCurrent": true,
+     "Phase": "Execution",
+     "Step": "ProcessCrash",
+     "FailureKind": "Crash",
+     "StatusAfter": "Failed",
+     "Triage": "Transient",
+     "Fingerprint": "9eab364095ddc8148f79ed0e7a81303bb19a5f115eba491962241d1a1403cead",
+     "CaptureMode": "Backfill",
+     "State": "Analyzed",
+     "Resolution": "Open",
+     "Pinned": false,
+     "ReasonExcerpt": "Captain process exited with code 134 after 4m12s while running dotnet test (Test.Automated aborted: Fatal error. System.AccessViolationException in SQLitePCL.raw.sqlite3_step). Retry once the test host is stable.",
+     "TotalBytes": 9635,
+     "ObjectCount": 5,
+     "CreatedUtc": "2026-10-29T21:11:05.310433Z",
+     "ExpiresUtc": "2027-04-27T21:11:05.310433Z"
+    }
+   ],
+   "TotalMs": 0
+  }
+ },
+ "missionEntriesEnum": {
+  "code": 200,
+  "contentType": "application/json",
+  "headers": {},
+  "json": {
+   "Success": true,
+   "PageNumber": 1,
+   "PageSize": 10,
+   "TotalPages": 1,
+   "TotalRecords": 1,
+   "Objects": [
+    {
+     "Id": "bbx_mvu1ftcv_zcdofOBmjhY",
+     "SubjectType": "Mission",
+     "MissionId": "msn_mvu1fjp0_9Wd6Uuyp262",
+     "VoyageId": "vyg_mvu1fjoz_xO6urNkcaHp",
+     "VesselId": "vsl_mvu1ffz5_4Vb0gY5fhKv",
+     "MissionTitle": "Retry landings deferred on a dirty checkout",
+     "VesselName": "demo-api",
+     "Attempt": 1,
+     "IsCurrent": true,
+     "Phase": "Execution",
+     "Step": "ProcessCrash",
+     "FailureKind": "Crash",
+     "StatusAfter": "Failed",
+     "Triage": "Transient",
+     "Fingerprint": "9eab364095ddc8148f79ed0e7a81303bb19a5f115eba491962241d1a1403cead",
+     "CaptureMode": "Backfill",
+     "State": "Analyzed",
+     "Resolution": "Open",
+     "Pinned": false,
+     "ReasonExcerpt": "Captain process exited with code 134 after 4m12s while running dotnet test (Test.Automated aborted: Fatal error. System.AccessViolationException in SQLitePCL.raw.sqlite3_step). Retry once the test host is stable.",
+     "TotalBytes": 9635,
+     "ObjectCount": 5,
+     "CreatedUtc": "2026-10-29T21:11:05.310433Z",
+     "ExpiresUtc": "2027-04-27T21:11:05.310433Z"
+    }
+   ],
+   "TotalMs": 0
+  }
+ },
+ "mission": {
+  "code": 200,
+  "contentType": "application/json",
+  "headers": {},
+  "json": {
+   "Id": "msn_mvu1fjp0_9Wd6Uuyp262",
+   "TenantId": "default",
+   "UserId": "default",
+   "VoyageId": "vyg_mvu1fjoz_xO6urNkcaHp",
+   "VesselId": "vsl_mvu1ffz5_4Vb0gY5fhKv",
+   "Title": "Retry landings deferred on a dirty checkout",
+   "Description": "Touch only src/Armada.Core/Services/Landing.cs. Add bounded retries.",
+   "Status": "Pending",
+   "Mode": "Implementation",
+   "Priority": 100,
+   "RedispatchAttempts": 0,
+   "OutputRepairAttempts": 0,
+   "NoOpRedispatchAttempts": 0,
+   "IsRescue": false,
+   "IsEvaluation": false,
+   "ReworkRound": 0,
+   "ReworkEscalated": false,
+   "LastBlackBoxEntryId": "bbx_mvu1ftcv_zcdofOBmjhY",
+   "WaitForVoyageWorkers": false,
+   "RequiresReview": false,
+   "ReviewDenyAction": "RetryStage",
+   "SelectedPlaybooks": [],
+   "PlaybookSnapshots": [],
+   "AssignmentBlocker": {
+    "Reason": "NoCaptains",
+    "Summary": "Waiting for a captain: there are no captains. Create one to run missions.",
+    "BlockingMissionIds": [],
+    "BlockingMissionCount": 0,
+    "Captains": [],
+    "CaptainCount": 0,
+    "ComputedUtc": "2026-10-29T21:11:40.057672Z"
+   },
+   "CreatedUtc": "2026-10-29T21:10:52.788721Z",
+   "LastUpdateUtc": "2026-10-29T21:11:39.799249Z"
+  }
+ },
+ "voyageEntry": {
+  "code": 200,
+  "contentType": "application/json",
+  "headers": {},
+  "json": {
+   "Id": "bbx_mvu1ftew_95PyT7WmtrV",
+   "TenantId": "default",
+   "UserId": "default",
+   "SubjectType": "Voyage",
+   "VoyageId": "vyg_mvu1fjoz_xO6urNkcaHp",
+   "VesselId": "vsl_mvu1ffz5_4Vb0gY5fhKv",
+   "FleetId": "flt_mvu1fcwu_pUQGp88qTcb",
+   "MissionTitle": "Harden landing retries",
+   "VesselName": "demo-api",
+   "Attempt": 1,
+   "IsCurrent": true,
+   "Phase": "Voyage",
+   "Step": "SettlementFailed",
+   "FailureKind": "Crash",
+   "StatusAfter": "Failed",
+   "Triage": "Transient",
+   "Fingerprint": "bcb7be821991076ba7d7551c9c5714b099bddaa13843c800b1bd4ee271e37329",
+   "CaptureMode": "Backfill",
+   "State": "Analyzed",
+   "Resolution": "Open",
+   "Pinned": false,
+   "StorageTarget": "Database",
+   "TotalBytes": 9199,
+   "ObjectCount": 5,
+   "SchemaVersion": 1,
+   "RulesVersion": 1,
+   "ArmadaVersion": "1.2.0+5de469cff2709733b1ffb68fbc45d1303e9e41be",
+   "ArmadaCommit": "5de469cff2709733b1ffb68fbc45d1303e9e41be",
+   "ReasonExcerpt": "Mission msn_mvu1fjp0_9Wd6Uuyp262 failed: Captain process exited with code 134 after 4m12s while running dotnet test (Test.Automated aborted: Fatal error. System.AccessViolationException in SQLitePCL.raw.sqlite3_step). Retry once the test host is stable.",
+   "Summary": "Voyage \"Harden landing retries\" (vyg_mvu1fjoz_xO6urNkcaHp) failed during Voyage at step SettlementFailed (kind Crash). The captain's process exited with code unknown before finishing. The voyage stopped at step SettlementFailed (no halt reason recorded); start with the black box of msn_mvu1fjp0_9Wd6Uuyp262. Triage: Transient (low confidence). Suggested next step: recover the root mission first (bbx-voy-001.recover-root).",
+   "EnrichmentAttempts": 0,
+   "ExpiresUtc": "2027-04-27T21:11:05.382585Z",
+   "CreatedUtc": "2026-10-29T21:11:05.382585Z",
+   "EnrichedUtc": "2026-10-29T21:11:05.452267Z",
+   "AnalyzedUtc": "2026-10-29T21:11:05.452735Z",
+   "LastUpdateUtc": "2026-10-29T21:11:05.454426Z"
+  }
+ },
+ "voyageBrief": {
+  "code": 200,
+  "contentType": "text/markdown; charset=utf-8",
+  "headers": {},
+  "text": "# FIX THIS: Harden landing retries (voyage vyg_mvu1fjoz_xO6urNkcaHp)\n\nYou are asked to FIX THIS. This brief is a self-contained black box entry from Armada, a multi-agent orchestration system. It records where, how and why a voyage failed, with evidence.\n\nBefore changing anything, triage the failure. Decide which one it is, and say why, quoting the evidence below:\n\n1. **UserConfig**: the user's Armada configuration (vessel, captain, persona, landing mode, commands).\n2. **MissionBrief**: the mission brief or dependency ordering.\n3. **Transient**: a transient condition (provider, network, usage limit); retrying is likely to work.\n4. **ArmadaDefect**: a defect in Armada itself.\n5. **External**: an operator action or something outside Armada.\n\nThen act: for UserConfig or MissionBrief, propose the exact change; for Transient, the retry; for ArmadaDefect, locate the failure site in the Armada source at the build commit below and propose a fix with a test. Quote evidence, not guesses. Use only the recovery paths listed here when you act on the Armada installation, and confirm anything marked data-loss risk with the user first.\n\n## Summary\n\nVoyage \"Harden landing retries\" (vyg_mvu1fjoz_xO6urNkcaHp) failed during Voyage at step SettlementFailed (kind Crash). The captain's process exited with code unknown before finishing. The voyage stopped at step SettlementFailed (no halt reason recorded); start with the black box of msn_mvu1fjp0_9Wd6Uuyp262. Triage: Transient (low confidence). Suggested next step: recover the root mission first (bbx-voy-001.recover-root).\n\n- Voyage failed during **Voyage** at step **SettlementFailed** (kind Crash).\n- Status: unknown -> Failed.\n- Triage: Transient (confidence Low).\n- Captured by the backfill after the fact: lower fidelity, the failure site's volatile facts (git state, exception) may be missing.\n\n## Identity\n\n- Entry: bbx_mvu1ftew_95PyT7WmtrV (attempt 1)\n- Voyage: vyg_mvu1fjoz_xO6urNkcaHp (Harden landing retries)\n- Vessel: demo-api (vsl_mvu1ffz5_4Vb0gY5fhKv)\n- Repository: /Users/alex/src/demo-api\n- Target branch: main\n\n## Where it failed\n\n- Phase / step: Voyage / SettlementFailed\n- Host: Admiral\n- Armada build: 1.2.0+5de469cff2709733b1ffb68fbc45d1303e9e41be (commit 5de469cff2709733b1ffb68fbc45d1303e9e41be)\n\n## How it failed\n\nReason:\n\n```\nMission msn_mvu1fjp0_9Wd6Uuyp262 failed: Captain process exited with code 134 after 4m12s while running dotnet test (Test.Automated aborted: Fatal error. System.AccessViolationException in SQLitePCL.raw.sqlite3_step). Retry once the test host is stable.\n```\n\n\n## Status timeline\n\n- 2026-10-29 21:11:05Z Failed (failure write)\n\n## Why\n\n- The captain's process exited with code unknown before finishing. (rule BBX-EXEC-006, confidence Medium) Evidence: mechanism.exitCode, evidence/agent-output.txt\n- The voyage stopped at step SettlementFailed (no halt reason recorded); start with the black box of msn_mvu1fjp0_9Wd6Uuyp262. (rule BBX-VOY-001, confidence Medium) Evidence: voyage.cascadeRootMissionId, voyage.failedMissionEntryIds\n- Triage votes: BBX-EXEC-006=Transientx1\n\n## Configuration in effect\n\n- LandingMode: `MergeAndPush` (Global)\n- AutoPush: `True` (Default)\n- AutoMergePullRequests: `False` (Global)\n- BranchCleanupPolicy: `LocalOnly` (Global)\n- AllowConcurrentMissions: `False` (Vessel)\n- RequirePassingChecksToLand: `False` (Vessel)\n- DefinitionOfDoneEnabled: `False` (Vessel)\n- AutoLandEnabled: `False` (Vessel)\n- StallThresholdMinutes: `10` (Global)\n- ToolWaitHardLimitMinutes: `60` (Global)\n- StageCheckTimeoutMinutes: `15` (Global)\n- MaxMissionRuntimeMinutes: `240` (Global)\n- MaxRecoveryAttempts: `3` (Global)\n- MaxMissionRecoveryAttempts: `2` (Global)\n- MaxLandingRetries: `3` (Global)\n- MaxNoOpRedispatchAttempts: `1` (Global)\n- MaxOutputRepairAttempts: `1` (Global)\n- ReviewTimeoutMinutes: `1440` (Global)\n- LandingDeferralDeadlineHours: `24` (Global)\n- MaxConcurrentMissions: `0` (Global)\n- BlockDependentsOfFailedStages: `False` (Global)\n- BlackBoxRetentionDays: `180` (Global)\n- WorkflowProfile: `demo-api: basic checks` (WorkflowProfile)\n- LintCommand: `git diff --check` (WorkflowProfile)\n\n## Recovery\n\n### 1. Recover the root mission first (bbx-voy-001.recover-root)\n\nRisk: Low. Expected: The voyage continues once its root mission lands.\n\n1. Open get_blackbox {\"missionId\": \"msn_mvu1fjp0_9Wd6Uuyp262\"} and follow its recovery paths.\n\n## Evidence\n\n- `evidence/events.json` (465 bytes): [   {     \"eventId\": \"evt_mvu1ftep_XguRXMHez86\",     \"eventType\": \"mission.status_changed\",     \"message\": \"Mission Cancelled (DependencyCancelled): Document landing retries\",     \"createdUtc\": \"2026- ... (265 more characters in record.json)\n- 2026-10-29 21:11:05Z mission.status_changed: Mission Cancelled (DependencyCancelled): Document landing retries\n- 2026-10-29 21:11:05Z mission.status_changed: Mission Failed (ProcessCrash): Retry landings deferred on a dirty checkout\n\nRead an object with MCP `read_blackbox_object {\"entryId\": \"bbx_mvu1ftew_95PyT7WmtrV\", \"name\": \"<name>\"}` (64 KB chunks) or REST `GET /api/v1/blackbox/bbx_mvu1ftew_95PyT7WmtrV/objects/<name>`.\n\n## Related failures\n\n- Fingerprint: bcb7be821991076ba7d7551c9c5714b099bddaa13843c800b1bd4ee271e37329\n- Same failure in the last 30 days: 1\n\n## Notes on this record\n\n- Captured by the backfill; the failure site's volatile facts are missing.\n\n## Your answer\n\nState the triage verdict (UserConfig, MissionBrief, Transient, ArmadaDefect or External) and the evidence for it, the root cause, the fix, and how to verify it. If you change the Armada installation, use the recovery paths above and annotate the entry with `annotate_blackbox` when done.\n"
+ },
+ "entry": {
+  "code": 200,
+  "contentType": "application/json",
+  "headers": {},
+  "json": {
+   "Id": "bbx_mvu1ftcv_zcdofOBmjhY",
+   "TenantId": "default",
+   "UserId": "default",
+   "SubjectType": "Mission",
+   "MissionId": "msn_mvu1fjp0_9Wd6Uuyp262",
+   "VoyageId": "vyg_mvu1fjoz_xO6urNkcaHp",
+   "VesselId": "vsl_mvu1ffz5_4Vb0gY5fhKv",
+   "FleetId": "flt_mvu1fcwu_pUQGp88qTcb",
+   "MissionTitle": "Retry landings deferred on a dirty checkout",
+   "VesselName": "demo-api",
+   "Attempt": 1,
+   "IsCurrent": true,
+   "Phase": "Execution",
+   "Step": "ProcessCrash",
+   "FailureKind": "Crash",
+   "StatusAfter": "Failed",
+   "Triage": "Transient",
+   "Fingerprint": "9eab364095ddc8148f79ed0e7a81303bb19a5f115eba491962241d1a1403cead",
+   "CaptureMode": "Backfill",
+   "State": "Analyzed",
+   "Resolution": "Open",
+   "Pinned": false,
+   "StorageTarget": "Database",
+   "TotalBytes": 9635,
+   "ObjectCount": 5,
+   "SchemaVersion": 1,
+   "RulesVersion": 1,
+   "ArmadaVersion": "1.2.0+5de469cff2709733b1ffb68fbc45d1303e9e41be",
+   "ArmadaCommit": "5de469cff2709733b1ffb68fbc45d1303e9e41be",
+   "ReasonExcerpt": "Captain process exited with code 134 after 4m12s while running dotnet test (Test.Automated aborted: Fatal error. System.AccessViolationException in SQLitePCL.raw.sqlite3_step). Retry once the test host is stable.",
+   "Summary": "Mission \"Retry landings deferred on a dirty checkout\" (msn_mvu1fjp0_9Wd6Uuyp262) failed during Execution at step ProcessCrash (kind Crash). The captain's process exited with code unknown before finishing. Triage: Transient (low confidence). Suggested next step: restart the mission (bbx-exec-006.restart).",
+   "EnrichmentAttempts": 0,
+   "ExpiresUtc": "2027-04-27T21:11:05.310433Z",
+   "CreatedUtc": "2026-10-29T21:11:05.310433Z",
+   "EnrichedUtc": "2026-10-29T21:11:05.416673Z",
+   "AnalyzedUtc": "2026-10-29T21:11:05.430708Z",
+   "LastUpdateUtc": "2026-10-29T21:11:05.436313Z",
+   "Record": {
+    "EntryId": "bbx_mvu1ftcv_zcdofOBmjhY",
+    "SchemaVersion": 1,
+    "RulesVersion": 1,
+    "CaptureMode": "Backfill",
+    "State": "Analyzed",
+    "CreatedUtc": "2026-10-29T21:11:05.310433Z",
+    "Subject": {
+     "SubjectType": "Mission",
+     "TenantId": "default",
+     "UserId": "default",
+     "MissionId": "msn_mvu1fjp0_9Wd6Uuyp262",
+     "VoyageId": "vyg_mvu1fjoz_xO6urNkcaHp",
+     "Title": "Retry landings deferred on a dirty checkout",
+     "VoyageTitle": "Harden landing retries",
+     "VesselId": "vsl_mvu1ffz5_4Vb0gY5fhKv",
+     "VesselName": "demo-api",
+     "VesselRepoUrl": "/Users/alex/src/demo-api",
+     "VesselDefaultBranch": "main",
+     "FleetId": "flt_mvu1fcwu_pUQGp88qTcb",
+     "Attempt": 1,
+     "IsRescue": false,
+     "RedispatchAttempts": 0,
+     "OutputRepairAttempts": 0,
+     "NoOpRedispatchAttempts": 0
+    },
+    "Status": {
+     "After": "Failed",
+     "ChangedUtc": "2026-10-29T21:11:05.290000Z",
+     "Timeline": [
+      {
+       "Status": "Failed",
+       "Utc": "2026-10-29T21:11:05.290000Z",
+       "Source": "failure write"
+      }
+     ]
+    },
+    "Site": {
+     "Phase": "Execution",
+     "Step": "ProcessCrash",
+     "HostKind": "Admiral",
+     "Host": "Admiral",
+     "Component": "BlackBoxSweeper",
+     "ArmadaVersion": "1.2.0+5de469cff2709733b1ffb68fbc45d1303e9e41be",
+     "ArmadaCommit": "5de469cff2709733b1ffb68fbc45d1303e9e41be"
+    },
+    "Mechanism": {
+     "StackFrames": []
+    },
+    "Classification": {
+     "Kind": "Crash",
+     "RawReason": "Captain process exited with code 134 after 4m12s while running dotnet test (Test.Automated aborted: Fatal error. System.AccessViolationException in SQLitePCL.raw.sqlite3_step). Retry once the test host is stable.",
+     "SuspectedCause": "None"
+    },
+    "Workspace": {
+     "TargetBranch": "main",
+     "DirtyPaths": [],
+     "DirtyPathTotal": 0,
+     "InspectedHost": "Admiral",
+     "TargetMovementNote": "Target movement omitted: the mission's start commit was not recorded, so the commits that landed on the target since it started are unknown."
+    },
+    "Configuration": {
+     "Values": [
+      {
+       "Setting": "LandingMode",
+       "Value": "MergeAndPush",
+       "Source": "Global"
+      },
+      {
+       "Setting": "AutoPush",
+       "Value": "True",
+       "Source": "Default"
+      },
+      {
+       "Setting": "AutoMergePullRequests",
+       "Value": "False",
+       "Source": "Global"
+      },
+      {
+       "Setting": "BranchCleanupPolicy",
+       "Value": "LocalOnly",
+       "Source": "Global"
+      },
+      {
+       "Setting": "RequiresReview",
+       "Value": "False",
+       "Source": "Mission"
+      }
+     ]
+    },
+    "Attempts": [],
+    "Evidence": {
+     "Objects": [
+      {
+       "Name": "evidence/events.json",
+       "ContentType": "application/json",
+       "SizeBytes": 238,
+       "UncompressedBytes": 238,
+       "Excerpt": "[\n  {\n    \"eventId\": \"evt_mvu1ftcq_iIAw5pelHTf\",\n    \"eventType\": \"mission.status_changed\",\n    \"message\": \"Mission Failed (ProcessCrash): Retry landings deferred on a dirty checkout\",\n    \"createdUtc\": \"2026-10-29T21:11:05.306273Z\"\n  }\n]",
+       "Truncated": false
+      }
+     ],
+     "CheckResults": [],
+     "Papercuts": [],
+     "RelevantEvents": [
+      {
+       "EventId": "evt_mvu1ftcq_iIAw5pelHTf",
+       "EventType": "mission.status_changed",
+       "Message": "Mission Failed (ProcessCrash): Retry landings deferred on a dirty checkout",
+       "CreatedUtc": "2026-10-29T21:11:05.306273Z"
+      }
+     ]
+    },
+    "Analysis": {
+     "Summary": "Mission \"Retry landings deferred on a dirty checkout\" (msn_mvu1fjp0_9Wd6Uuyp262) failed during Execution at step ProcessCrash (kind Crash). The captain's process exited with code unknown before finishing. Triage: Transient (low confidence). Suggested next step: restart the mission (bbx-exec-006.restart).",
+     "SummaryIsModelWritten": false,
+     "Why": [
+      {
+       "RuleId": "BBX-EXEC-006",
+       "Statement": "The captain's process exited with code unknown before finishing.",
+       "Confidence": "Medium",
+       "EvidenceRefs": [
+        "mechanism.exitCode",
+        "evidence/agent-output.txt"
+       ]
+      }
+     ],
+     "ConfigRecommendations": [],
+     "ArmadaImprovements": [],
+     "RecoveryPaths": [
+      {
+       "Id": "bbx-exec-006.restart",
+       "Rank": 1,
+       "Title": "Restart the mission",
+       "Preconditions": [],
+       "Steps": [
+        {
+         "Order": 1,
+         "Description": "Restart msn_mvu1fjp0_9Wd6Uuyp262.",
+         "McpCommand": "restart_mission {\"missionId\": \"msn_mvu1fjp0_9Wd6Uuyp262\"}",
+         "RestCommand": "POST /api/v1/missions/msn_mvu1fjp0_9Wd6Uuyp262/restart",
+         "CliCommand": "armada mission restart msn_mvu1fjp0_9Wd6Uuyp262",
+         "Action": {
+          "Tool": "restart_mission",
+          "Arguments": {
+           "missionId": "msn_mvu1fjp0_9Wd6Uuyp262"
+          }
+         },
+         "DataLossRisk": false
+        }
+       ],
+       "Action": {
+        "Tool": "restart_mission",
+        "Arguments": {
+         "missionId": "msn_mvu1fjp0_9Wd6Uuyp262"
+        }
+       },
+       "Risk": "Low",
+       "DataLossRisk": false,
+       "ExpectedOutcome": "A fresh process runs the mission.",
+       "RuleId": "BBX-EXEC-006"
+      }
+     ],
+     "Triage": {
+      "Verdict": "Transient",
+      "Confidence": "Low",
+      "Votes": [
+       {
+        "RuleId": "BBX-EXEC-006",
+        "Verdict": "Transient",
+        "Weight": 1
+       }
+      ],
+      "TiedWith": []
+     }
+    },
+    "Related": {
+     "Fingerprint": "9eab364095ddc8148f79ed0e7a81303bb19a5f115eba491962241d1a1403cead",
+     "SimilarEntries": [],
+     "OccurrencesLast30Days": 1,
+     "DownstreamMissionIds": []
+    },
+    "Redaction": {
+     "RulesApplied": [],
+     "RedactedCount": 0
+    },
+    "Truncation": {
+     "Fields": [],
+     "FieldTotal": 0,
+     "TimedOut": false,
+     "Notes": [
+      "Captured by the backfill after the fact; the failure site's volatile facts (git state, exception, command output) are missing.",
+      "Target movement omitted: the mission's start commit was not recorded, so the commits that landed on the target since it started are unknown.",
+      "Concurrent overlap skipped: neither the conflicted files nor the mission's changed files are known."
+     ]
+    }
+   }
+  }
+ },
+ "entryBrief": {
+  "code": 200,
+  "contentType": "text/markdown; charset=utf-8",
+  "headers": {},
+  "text": "# Armada maintainer brief: Retry landings deferred on a dirty checkout (mission msn_mvu1fjp0_9Wd6Uuyp262)\n\nThis brief is for an Armada maintainer. Rank the Armada improvements below, check each hypothesis against the source at the build commit, and write each accepted one as an Armada mission brief with a test.\n\n## Code site and triage\n\n- Site: unknown (no caller site recorded)\n- Phase / step: Execution / ProcessCrash (kind Crash)\n- Armada build: 1.2.0+5de469cff2709733b1ffb68fbc45d1303e9e41be (commit 5de469cff2709733b1ffb68fbc45d1303e9e41be)\n- Triage: Transient (confidence Low)\n- Votes: BBX-EXEC-006=Transientx1\n- Rules: BBX-EXEC-006 (rules version 1)\n- Fingerprint: 9eab364095ddc8148f79ed0e7a81303bb19a5f115eba491962241d1a1403cead\n- Occurrences in the last 30 days: 1\n\n## Summary\n\nMission \"Retry landings deferred on a dirty checkout\" (msn_mvu1fjp0_9Wd6Uuyp262) failed during Execution at step ProcessCrash (kind Crash). The captain's process exited with code unknown before finishing. Triage: Transient (low confidence). Suggested next step: restart the mission (bbx-exec-006.restart).\n\n- Mission failed during **Execution** at step **ProcessCrash** (kind Crash).\n- Status: unknown -> Failed.\n- Triage: Transient (confidence Low).\n- Captured by the backfill after the fact: lower fidelity, the failure site's volatile facts (git state, exception) may be missing.\n\n## Why\n\n- The captain's process exited with code unknown before finishing. (rule BBX-EXEC-006, confidence Medium) Evidence: mechanism.exitCode, evidence/agent-output.txt\n- Triage votes: BBX-EXEC-006=Transientx1\n\n## How it failed\n\nReason:\n\n```\nCaptain process exited with code 134 after 4m12s while running dotnet test (Test.Automated aborted: Fatal error. System.AccessViolationException in SQLitePCL.raw.sqlite3_step). Retry once the test host is stable.\n```\n\n\n## Where it failed\n\n- Phase / step: Execution / ProcessCrash\n- Host: Admiral\n- Armada build: 1.2.0+5de469cff2709733b1ffb68fbc45d1303e9e41be (commit 5de469cff2709733b1ffb68fbc45d1303e9e41be)\n\n## Status timeline\n\n- 2026-10-29 21:11:05Z Failed (failure write)\n\n## Workspace\n\n- Target: main\n- Inspected on: Admiral\n- Target movement: Target movement omitted: the mission's start commit was not recorded, so the commits that landed on the target since it started are unknown.\n\n## Configuration in effect\n\n- LandingMode: `MergeAndPush` (Global)\n- AutoPush: `True` (Default)\n- AutoMergePullRequests: `False` (Global)\n- BranchCleanupPolicy: `LocalOnly` (Global)\n- RequiresReview: `False` (Mission)\n- WaitForVoyageWorkers: `False` (Mission)\n- MissionMode: `Implementation` (Mission)\n- AllowConcurrentMissions: `False` (Vessel)\n- RequirePassingChecksToLand: `False` (Vessel)\n- DefinitionOfDoneEnabled: `False` (Vessel)\n- AutoLandEnabled: `False` (Vessel)\n- StallThresholdMinutes: `10` (Global)\n- ToolWaitHardLimitMinutes: `60` (Global)\n- StageCheckTimeoutMinutes: `15` (Global)\n- MaxMissionRuntimeMinutes: `240` (Global)\n- MaxRecoveryAttempts: `3` (Global)\n- MaxMissionRecoveryAttempts: `2` (Global)\n- MaxLandingRetries: `3` (Global)\n- MaxNoOpRedispatchAttempts: `1` (Global)\n- MaxOutputRepairAttempts: `1` (Global)\n- ReviewTimeoutMinutes: `1440` (Global)\n- LandingDeferralDeadlineHours: `24` (Global)\n- MaxConcurrentMissions: `0` (Global)\n- BlockDependentsOfFailedStages: `False` (Global)\n- BlackBoxRetentionDays: `180` (Global)\n- WorkflowProfile: `demo-api: basic checks` (WorkflowProfile)\n- LintCommand: `git diff --check` (WorkflowProfile)\n\n## Recovery\n\n### 1. Restart the mission (bbx-exec-006.restart)\n\nRisk: Low. Expected: A fresh process runs the mission.\n\n1. Restart msn_mvu1fjp0_9Wd6Uuyp262.\n   - MCP: `restart_mission {\"missionId\": \"msn_mvu1fjp0_9Wd6Uuyp262\"}`\n   - CLI: `armada mission restart msn_mvu1fjp0_9Wd6Uuyp262`\n   - REST: `POST /api/v1/missions/msn_mvu1fjp0_9Wd6Uuyp262/restart`\n\nAction: `restart_mission {\"missionId\": \"msn_mvu1fjp0_9Wd6Uuyp262\"}` (run it with run_blackbox_recovery, dry run first)\n\n## Evidence\n\n- `evidence/events.json` (238 bytes): [   {     \"eventId\": \"evt_mvu1ftcq_iIAw5pelHTf\",     \"eventType\": \"mission.status_changed\",     \"message\": \"Mission Failed (ProcessCrash): Retry landings deferred on a dirty checkout\",     \"createdUtc ... (38 more characters in record.json)\n- 2026-10-29 21:11:05Z mission.status_changed: Mission Failed (ProcessCrash): Retry landings deferred on a dirty checkout\n\nRead an object with MCP `read_blackbox_object {\"entryId\": \"bbx_mvu1ftcv_zcdofOBmjhY\", \"name\": \"<name>\"}` (64 KB chunks) or REST `GET /api/v1/blackbox/bbx_mvu1ftcv_zcdofOBmjhY/objects/<name>`.\n\n## Related failures\n\n- Fingerprint: 9eab364095ddc8148f79ed0e7a81303bb19a5f115eba491962241d1a1403cead\n- Same failure in the last 30 days: 1\n\n## Identity\n\n- Entry: bbx_mvu1ftcv_zcdofOBmjhY (attempt 1)\n- Mission: msn_mvu1fjp0_9Wd6Uuyp262\n- Voyage: vyg_mvu1fjoz_xO6urNkcaHp (Harden landing retries)\n- Vessel: demo-api (vsl_mvu1ffz5_4Vb0gY5fhKv)\n- Repository: {path}\n- Target branch: main\n\n## Notes on this record\n\n- Captured by the backfill after the fact; the failure site's volatile facts (git state, exception, command output) are missing.\n- Target movement omitted: the mission's start commit was not recorded, so the commits that landed on the target since it started are unknown.\n- Concurrent overlap skipped: neither the conflicted files nor the mission's changed files are known.\n\n"
+ },
+ "sectionBogus": {
+  "code": 400,
+  "contentType": "application/json",
+  "headers": {},
+  "json": {
+   "Error": "BadRequest",
+   "StatusCode": 400,
+   "Description": "The request was invalid or malformed.",
+   "Message": "section must be one of Subject, Status, Site, Mechanism, Classification, Workspace, Conflict, Scope, Configuration, Attempts, Evidence, Analysis, Related, Voyage, Redaction or Truncation.",
+   "Data": {
+    "Code": "InvalidArgument",
+    "Field": "section"
+   }
+  }
+ },
+ "objectsEnum": {
+  "code": 200,
+  "contentType": "application/json",
+  "headers": {},
+  "json": {
+   "Success": true,
+   "PageNumber": 1,
+   "PageSize": 25,
+   "TotalPages": 1,
+   "TotalRecords": 5,
+   "Objects": [
+    {
+     "Name": "brief.maintainer.md",
+     "ContentType": "text/markdown",
+     "ContentEncoding": "gzip",
+     "SizeBytes": 2215,
+     "UncompressedBytes": 5448,
+     "Sha256": "9cbfd53f78506886f69ab7902067d0e6865e75481805247c32ed908f25462ccf",
+     "IsMissing": false,
+     "CreatedUtc": "2026-10-29T21:11:05.436129Z"
+    },
+    {
+     "Name": "brief.md",
+     "ContentType": "text/markdown",
+     "ContentEncoding": "gzip",
+     "SizeBytes": 2670,
+     "UncompressedBytes": 6137,
+     "Sha256": "aa6e439179e77986aa71d896366db972e6ced280a0d4706f4074d10bb95be595",
+     "IsMissing": false,
+     "CreatedUtc": "2026-10-29T21:11:05.435857Z"
+    },
+    {
+     "Name": "brief.user.md",
+     "ContentType": "text/markdown",
+     "ContentEncoding": "gzip",
+     "SizeBytes": 1521,
+     "UncompressedBytes": 3584,
+     "Sha256": "dfa8f87bf36b4f29ba2daf26684d3de5aeb8ec43734c11ca59612919840ddab7",
+     "IsMissing": false,
+     "CreatedUtc": "2026-10-29T21:11:05.436002Z"
+    },
+    {
+     "Name": "evidence/events.json",
+     "ContentType": "application/json",
+     "ContentEncoding": "gzip",
+     "SizeBytes": 207,
+     "UncompressedBytes": 238,
+     "Sha256": "efcf0f7d2a43858636910889b4aea078a55ce48e738a0c4910beb6e25fbb0527",
+     "IsMissing": false,
+     "CreatedUtc": "2026-10-29T21:11:05.436198Z"
+    },
+    {
+     "Name": "record.json",
+     "ContentType": "application/json",
+     "ContentEncoding": "gzip",
+     "SizeBytes": 3022,
+     "UncompressedBytes": 10545,
+     "Sha256": "4b4a919cda321245e9d9fe725e3dfdc7b7c0533b85e8e1419b01ddf05cc81b3d",
+     "IsMissing": false,
+     "CreatedUtc": "2026-10-29T21:11:05.434517Z"
+    }
+   ],
+   "TotalMs": 0
+  }
+ },
+ "object": {
+  "code": 200,
+  "contentType": "application/json",
+  "headers": {
+   "X-BlackBox-Total-Bytes": "10545",
+   "X-BlackBox-Offset": "0",
+   "ETag": "\"4b4a919cda321245e9d9fe725e3dfdc7b7c0533b85e8e1419b01ddf05cc81b3d\""
+  },
+  "json": {
+   "entryId": "bbx_mvu1ftcv_zcdofOBmjhY",
+   "schemaVersion": 1,
+   "rulesVersion": 1,
+   "captureMode": "Backfill",
+   "state": "Analyzed",
+   "createdUtc": "2026-10-29T21:11:05.310433Z",
+   "subject": {
+    "subjectType": "Mission",
+    "tenantId": "default",
+    "userId": "default",
+    "missionId": "msn_mvu1fjp0_9Wd6Uuyp262",
+    "voyageId": "vyg_mvu1fjoz_xO6urNkcaHp",
+    "title": "Retry landings deferred on a dirty checkout",
+    "voyageTitle": "Harden landing retries",
+    "vesselId": "vsl_mvu1ffz5_4Vb0gY5fhKv",
+    "vesselName": "demo-api",
+    "vesselRepoUrl": "/Users/alex/src/demo-api",
+    "vesselDefaultBranch": "main",
+    "fleetId": "flt_mvu1fcwu_pUQGp88qTcb",
+    "attempt": 1,
+    "isRescue": false,
+    "redispatchAttempts": 0,
+    "outputRepairAttempts": 0,
+    "noOpRedispatchAttempts": 0
+   },
+   "status": {
+    "after": "Failed",
+    "changedUtc": "2026-10-29T21:11:05.290000Z",
+    "timeline": [
+     {
+      "status": "Failed",
+      "utc": "2026-10-29T21:11:05.290000Z",
+      "source": "failure write"
+     }
+    ]
+   },
+   "site": {
+    "phase": "Execution",
+    "step": "ProcessCrash",
+    "hostKind": "Admiral",
+    "host": "Admiral",
+    "component": "BlackBoxSweeper",
+    "armadaVersion": "1.2.0+5de469cff2709733b1ffb68fbc45d1303e9e41be",
+    "armadaCommit": "5de469cff2709733b1ffb68fbc45d1303e9e41be"
+   },
+   "mechanism": {
+    "stackFrames": []
+   },
+   "classification": {
+    "kind": "Crash",
+    "rawReason": "Captain process exited with code 134 after 4m12s while running dotnet test (Test.Automated aborted: Fatal error. System.AccessViolationException in SQLitePCL.raw.sqlite3_step). Retry once the test host is stable.",
+    "suspectedCause": "None"
+   },
+   "workspace": {
+    "targetBranch": "main",
+    "dirtyPaths": [],
+    "dirtyPathTotal": 0,
+    "inspectedHost": "Admiral",
+    "targetMovementNote": "Target movement omitted: the mission's start commit was not recorded, so the commits that landed on the target since it started are unknown."
+   },
+   "configuration": {
+    "values": [
+     {
+      "setting": "LandingMode",
+      "value": "MergeAndPush",
+      "source": "Global"
+     },
+     {
+      "setting": "AutoPush",
+      "value": "True",
+      "source": "Default"
+     },
+     {
+      "setting": "AutoMergePullRequests",
+      "value": "False",
+      "source": "Global"
+     },
+     {
+      "setting": "BranchCleanupPolicy",
+      "value": "LocalOnly",
+      "source": "Global"
+     },
+     {
+      "setting": "RequiresReview",
+      "value": "False",
+      "source": "Mission"
+     }
+    ]
+   },
+   "attempts": [],
+   "evidence": {
+    "objects": [
+     {
+      "name": "evidence/events.json",
+      "contentType": "application/json",
+      "sizeBytes": 238,
+      "uncompressedBytes": 238,
+      "excerpt": "[\n  {\n    \"eventId\": \"evt_mvu1ftcq_iIAw5pelHTf\",\n    \"eventType\": \"mission.status_changed\",\n    \"message\": \"Mission Failed (ProcessCrash): Retry landings deferred on a dirty checkout\",\n    \"createdUtc\": \"2026-10-29T21:11:05.306273Z\"\n  }\n]",
+      "truncated": false
+     }
+    ],
+    "checkResults": [],
+    "papercuts": [],
+    "relevantEvents": [
+     {
+      "eventId": "evt_mvu1ftcq_iIAw5pelHTf",
+      "eventType": "mission.status_changed",
+      "message": "Mission Failed (ProcessCrash): Retry landings deferred on a dirty checkout",
+      "createdUtc": "2026-10-29T21:11:05.306273Z"
+     }
+    ]
+   },
+   "analysis": {
+    "summary": "Mission \"Retry landings deferred on a dirty checkout\" (msn_mvu1fjp0_9Wd6Uuyp262) failed during Execution at step ProcessCrash (kind Crash). The captain's process exited with code unknown before finishing. Triage: Transient (low confidence). Suggested next step: restart the mission (bbx-exec-006.restart).",
+    "summaryIsModelWritten": false,
+    "why": [
+     {
+      "ruleId": "BBX-EXEC-006",
+      "statement": "The captain's process exited with code unknown before finishing.",
+      "confidence": "Medium",
+      "evidenceRefs": [
+       "mechanism.exitCode",
+       "evidence/agent-output.txt"
+      ]
+     }
+    ],
+    "configRecommendations": [],
+    "armadaImprovements": [],
+    "recoveryPaths": [
+     {
+      "id": "bbx-exec-006.restart",
+      "rank": 1,
+      "title": "Restart the mission",
+      "preconditions": [],
+      "steps": [
+       {
+        "order": 1,
+        "description": "Restart msn_mvu1fjp0_9Wd6Uuyp262.",
+        "mcpCommand": "restart_mission {\"missionId\": \"msn_mvu1fjp0_9Wd6Uuyp262\"}",
+        "restCommand": "POST /api/v1/missions/msn_mvu1fjp0_9Wd6Uuyp262/restart",
+        "cliCommand": "armada mission restart msn_mvu1fjp0_9Wd6Uuyp262",
+        "action": {
+         "tool": "restart_mission",
+         "arguments": {
+          "missionId": "msn_mvu1fjp0_9Wd6Uuyp262"
+         }
+        },
+        "dataLossRisk": false
+       }
+      ],
+      "action": {
+       "tool": "restart_mission",
+       "arguments": {
+        "missionId": "msn_mvu1fjp0_9Wd6Uuyp262"
+       }
+      },
+      "risk": "Low",
+      "dataLossRisk": false,
+      "expectedOutcome": "A fresh process runs the mission.",
+      "ruleId": "BBX-EXEC-006"
+     }
+    ],
+    "triage": {
+     "verdict": "Transient",
+     "confidence": "Low",
+     "votes": [
+      {
+       "ruleId": "BBX-EXEC-006",
+       "verdict": "Transient",
+       "weight": 1
+      }
+     ],
+     "tiedWith": []
+    }
+   },
+   "related": {
+    "fingerprint": "9eab364095ddc8148f79ed0e7a81303bb19a5f115eba491962241d1a1403cead",
+    "similarEntries": [],
+    "occurrencesLast30Days": 1,
+    "downstreamMissionIds": []
+   },
+   "redaction": {
+    "rulesApplied": [],
+    "redactedCount": 0
+   },
+   "truncation": {
+    "fields": [],
+    "fieldTotal": 0,
+    "timedOut": false,
+    "notes": [
+     "Captured by the backfill after the fact; the failure site's volatile facts (git state, exception, command output) are missing.",
+     "Target movement omitted: the mission's start commit was not recorded, so the commits that landed on the target since it started are unknown.",
+     "Concurrent overlap skipped: neither the conflicted files nor the mission's changed files are known."
+    ]
+   }
+  }
+ },
+ "objectBrief": {
+  "code": 200,
+  "contentType": "text/markdown",
+  "headers": {
+   "X-BlackBox-Total-Bytes": "6137",
+   "X-BlackBox-Offset": "0"
+  },
+  "text": "# FIX THIS: Retry landings deferred on a dirty checkout (mission msn_mvu1fjp0_9Wd6Uuyp262)\n\nYou are asked to FIX THIS. This brief is a self-contained black box entry from Armada, a multi-agent orchestration system. It records where, how and why a mission failed, with evidence.\n\nBefore changing anything, triage the failure. Decide which one it is, and say why, quoting the evidence below:\n\n1. **UserConfig**: the user's Armada configuration (vessel, captain, persona, landing mode, commands).\n2. **MissionBrief**: the mission brief or dependency ordering.\n3. **Transient**: a transient condition (provider, network, usage limit); retrying is likely to work.\n4. **ArmadaDefect**: a defect in Armada itself.\n5. **External**: an operator action or something outside Armada.\n\nThen act: for UserConfig or MissionBrief, propose the exact change; for Transient, the retry; for ArmadaDefect, locate the failure site in the Armada source at the build commit below and propose a fix with a test. Quote evidence, not guesses. Use only the recovery paths listed here when you act on the Armada installation, and confirm anything marked data-loss risk with the user first.\n\n## Summary\n\nMission \"Retry landings deferred on a dirty checkout\" (msn_mvu1fjp0_9Wd6Uuyp262) failed during Execution at step ProcessCrash (kind Crash). The captain's process exited with code unknown before finishing. Triage: Transient (low confidence). Suggested next step: restart the mission (bbx-exec-006.restart).\n\n- Mission failed during **Execution** at step **ProcessCrash** (kind Crash).\n- Status: unknown -> Failed.\n- Triage: Transient (confidence Low).\n- Captured by the backfill after the fact: lower fidelity, the failure site's volatile facts (git state, exception) may be missing.\n\n## Identity\n\n- Entry: bbx_mvu1ftcv_zcdofOBmjhY (attempt 1)\n- Mission: msn_mvu1fjp0_9Wd6Uuyp262\n- Voyage: vyg_mvu1fjoz_xO6urNkcaHp (Harden landing retries)\n- Vessel: demo-api (vsl_mvu1ffz5_4Vb0gY5fhKv)\n- Repository: /Users/alex/src/demo-api\n- Target branch: main\n\n## Where it failed\n\n- Phase / step: Execution / ProcessCrash\n- Host: Admiral\n- Armada build: 1.2.0+5de469cff2709733b1ffb68fbc45d1303e9e41be (commit 5de469cff2709733b1ffb68fbc45d1303e9e41be)\n\n## How it failed\n\nReason:\n\n```\nCaptain process exited with code 134 after 4m12s while running dotnet test (Test.Automated aborted: Fatal error. System.AccessViolationException in SQLitePCL.raw.sqlite3_step). Retry once the test host is stable.\n```\n\n\n## Status timeline\n\n- 2026-10-29 21:11:05Z Failed (failure write)\n\n## Why\n\n- The captain's process exited with code unknown before finishing. (rule BBX-EXEC-006, confidence Medium) Evidence: mechanism.exitCode, evidence/agent-output.txt\n- Triage votes: BBX-EXEC-006=Transientx1\n\n## Workspace\n\n- Target: main\n- Inspected on: Admiral\n- Target movement: Target movement omitted: the mission's start commit was not recorded, so the commits that landed on the target since it started are unknown.\n\n## Configuration in effect\n\n- LandingMode: `MergeAndPush` (Global)\n- AutoPush: `True` (Default)\n- AutoMergePullRequests: `False` (Global)\n- BranchCleanupPolicy: `LocalOnly` (Global)\n- RequiresReview: `False` (Mission)\n- WaitForVoyageWorkers: `False` (Mission)\n- MissionMode: `Implementation` (Mission)\n- AllowConcurrentMissions: `False` (Vessel)\n- RequirePassingChecksToLand: `False` (Vessel)\n- DefinitionOfDoneEnabled: `False` (Vessel)\n- AutoLandEnabled: `False` (Vessel)\n- StallThresholdMinutes: `10` (Global)\n- ToolWaitHardLimitMinutes: `60` (Global)\n- StageCheckTimeoutMinutes: `15` (Global)\n- MaxMissionRuntimeMinutes: `240` (Global)\n- MaxRecoveryAttempts: `3` (Global)\n- MaxMissionRecoveryAttempts: `2` (Global)\n- MaxLandingRetries: `3` (Global)\n- MaxNoOpRedispatchAttempts: `1` (Global)\n- MaxOutputRepairAttempts: `1` (Global)\n- ReviewTimeoutMinutes: `1440` (Global)\n- LandingDeferralDeadlineHours: `24` (Global)\n- MaxConcurrentMissions: `0` (Global)\n- BlockDependentsOfFailedStages: `False` (Global)\n- BlackBoxRetentionDays: `180` (Global)\n- WorkflowProfile: `demo-api: basic checks` (WorkflowProfile)\n- LintCommand: `git diff --check` (WorkflowProfile)\n\n## Recovery\n\n### 1. Restart the mission (bbx-exec-006.restart)\n\nRisk: Low. Expected: A fresh process runs the mission.\n\n1. Restart msn_mvu1fjp0_9Wd6Uuyp262.\n   - MCP: `restart_mission {\"missionId\": \"msn_mvu1fjp0_9Wd6Uuyp262\"}`\n   - CLI: `armada mission restart msn_mvu1fjp0_9Wd6Uuyp262`\n   - REST: `POST /api/v1/missions/msn_mvu1fjp0_9Wd6Uuyp262/restart`\n\nAction: `restart_mission {\"missionId\": \"msn_mvu1fjp0_9Wd6Uuyp262\"}` (run it with run_blackbox_recovery, dry run first)\n\n## Evidence\n\n- `evidence/events.json` (238 bytes): [   {     \"eventId\": \"evt_mvu1ftcq_iIAw5pelHTf\",     \"eventType\": \"mission.status_changed\",     \"message\": \"Mission Failed (ProcessCrash): Retry landings deferred on a dirty checkout\",     \"createdUtc ... (38 more characters in record.json)\n- 2026-10-29 21:11:05Z mission.status_changed: Mission Failed (ProcessCrash): Retry landings deferred on a dirty checkout\n\nRead an object with MCP `read_blackbox_object {\"entryId\": \"bbx_mvu1ftcv_zcdofOBmjhY\", \"name\": \"<name>\"}` (64 KB chunks) or REST `GET /api/v1/blackbox/bbx_mvu1ftcv_zcdofOBmjhY/objects/<name>`.\n\n## Related failures\n\n- Fingerprint: 9eab364095ddc8148f79ed0e7a81303bb19a5f115eba491962241d1a1403cead\n- Same failure in the last 30 days: 1\n\n## Notes on this record\n\n- Captured by the backfill after the fact; the failure site's volatile facts (git state, exception, command output) are missing.\n- Target movement omitted: the mission's start commit was not recorded, so the commits that landed on the target since it started are unknown.\n- Concurrent overlap skipped: neither the conflicted files nor the mission's changed files are known.\n\n## Your answer\n\nState the triage verdict (UserConfig, MissionBrief, Transient, ArmadaDefect or External) and the evidence for it, the root cause, the fix, and how to verify it. If you change the Armada installation, use the recovery paths above and annotate the entry with `annotate_blackbox` when done.\n"
+ },
+ "download": {
+  "code": 200,
+  "contentType": "application/zip",
+  "headers": {
+   "Content-Disposition": "attachment; filename=\"bbx_mvu1ftcv_zcdofOBmjhY.zip\""
+  },
+  "base64": "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"
+ },
+ "noteAdd": {
+  "code": 200,
+  "contentType": "application/json",
+  "headers": {},
+  "json": {
+   "Id": "bbn_mvu1gjri_gmnRF09pl9P",
+   "EntryId": "bbx_mvu1ftcv_zcdofOBmjhY",
+   "TenantId": "default",
+   "UserId": "default",
+   "AuthorKind": "Operator",
+   "Body": "Reproduced locally: the test host crashes in SQLitePCL under parallel suites. Restarting after pinning the native library.",
+   "CreatedUtc": "2026-10-29T21:11:39.534200Z"
+  }
+ },
+ "notes": {
+  "code": 200,
+  "contentType": "application/json",
+  "headers": {},
+  "json": {
+   "Success": true,
+   "PageNumber": 1,
+   "PageSize": 10,
+   "TotalPages": 1,
+   "TotalRecords": 1,
+   "Objects": [
+    {
+     "Id": "bbn_mvu1gjri_gmnRF09pl9P",
+     "EntryId": "bbx_mvu1ftcv_zcdofOBmjhY",
+     "TenantId": "default",
+     "UserId": "default",
+     "AuthorKind": "Operator",
+     "Body": "Reproduced locally: the test host crashes in SQLitePCL under parallel suites. Restarting after pinning the native library.",
+     "CreatedUtc": "2026-10-29T21:11:39.534200Z"
+    }
+   ],
+   "TotalMs": 0
+  }
+ },
+ "notesEnum": {
+  "code": 200,
+  "contentType": "application/json",
+  "headers": {},
+  "json": {
+   "Success": true,
+   "PageNumber": 1,
+   "PageSize": 10,
+   "TotalPages": 1,
+   "TotalRecords": 1,
+   "Objects": [
+    {
+     "Id": "bbn_mvu1gjri_gmnRF09pl9P",
+     "EntryId": "bbx_mvu1ftcv_zcdofOBmjhY",
+     "TenantId": "default",
+     "UserId": "default",
+     "AuthorKind": "Operator",
+     "Body": "Reproduced locally: the test host crashes in SQLitePCL under parallel suites. Restarting after pinning the native library.",
+     "CreatedUtc": "2026-10-29T21:11:39.534200Z"
+    }
+   ],
+   "TotalMs": 0
+  }
+ },
+ "list": {
+  "code": 200,
+  "contentType": "application/json",
+  "headers": {},
+  "json": {
+   "Success": true,
+   "PageNumber": 1,
+   "PageSize": 10,
+   "TotalPages": 1,
+   "TotalRecords": 3,
+   "Objects": [
+    {
+     "Id": "bbx_mvu1ftew_95PyT7WmtrV",
+     "SubjectType": "Voyage",
+     "VoyageId": "vyg_mvu1fjoz_xO6urNkcaHp",
+     "VesselId": "vsl_mvu1ffz5_4Vb0gY5fhKv",
+     "MissionTitle": "Harden landing retries",
+     "VesselName": "demo-api",
+     "Attempt": 1,
+     "IsCurrent": true,
+     "Phase": "Voyage",
+     "Step": "SettlementFailed",
+     "FailureKind": "Crash",
+     "StatusAfter": "Failed",
+     "Triage": "Transient",
+     "Fingerprint": "bcb7be821991076ba7d7551c9c5714b099bddaa13843c800b1bd4ee271e37329",
+     "CaptureMode": "Backfill",
+     "State": "Analyzed",
+     "Resolution": "Open",
+     "Pinned": false,
+     "ReasonExcerpt": "Mission msn_mvu1fjp0_9Wd6Uuyp262 failed: Captain process exited with code 134 after 4m12s while running dotnet test (Test.Automated aborted: Fatal error. System.AccessViolationException in SQLitePCL.raw.sqlite3_step). Retry once the test host is stable.",
+     "TotalBytes": 9199,
+     "ObjectCount": 5,
+     "CreatedUtc": "2026-10-29T21:11:05.382585Z",
+     "ExpiresUtc": "2027-04-27T21:11:05.382585Z"
+    },
+    {
+     "Id": "bbx_mvu1ftep_b5OtDr4leub",
+     "SubjectType": "Mission",
+     "MissionId": "msn_mvu1fjpe_wAvcJzyllyF",
+     "VoyageId": "vyg_mvu1fjoz_xO6urNkcaHp",
+     "VesselId": "vsl_mvu1ffz5_4Vb0gY5fhKv",
+     "MissionTitle": "Document landing retries",
+     "VesselName": "demo-api",
+     "Attempt": 1,
+     "IsCurrent": true,
+     "Phase": "Handoff",
+     "Step": "DependencyCancelled",
+     "FailureKind": "DependencyFailed",
+     "StatusAfter": "Cancelled",
+     "Triage": "External",
+     "Fingerprint": "0c0d4699f8052fede78fbc067119a0dd57940124eefd9ae8b0bfc8df8d7a0149",
+     "CaptureMode": "Backfill",
+     "State": "Analyzed",
+     "Resolution": "Open",
+     "Pinned": false,
+     "ReasonExcerpt": "Cancelled because dependency msn_mvu1fjp0_9Wd6Uuyp262 failed.",
+     "TotalBytes": 9475,
+     "ObjectCount": 5,
+     "CreatedUtc": "2026-10-29T21:11:05.377352Z",
+     "ExpiresUtc": "2027-04-27T21:11:05.377352Z"
+    },
+    {
+     "Id": "bbx_mvu1ftcv_zcdofOBmjhY",
+     "SubjectType": "Mission",
+     "MissionId": "msn_mvu1fjp0_9Wd6Uuyp262",
+     "VoyageId": "vyg_mvu1fjoz_xO6urNkcaHp",
+     "VesselId": "vsl_mvu1ffz5_4Vb0gY5fhKv",
+     "MissionTitle": "Retry landings deferred on a dirty checkout",
+     "VesselName": "demo-api",
+     "Attempt": 1,
+     "IsCurrent": true,
+     "Phase": "Execution",
+     "Step": "ProcessCrash",
+     "FailureKind": "Crash",
+     "StatusAfter": "Failed",
+     "Triage": "Transient",
+     "Fingerprint": "9eab364095ddc8148f79ed0e7a81303bb19a5f115eba491962241d1a1403cead",
+     "CaptureMode": "Backfill",
+     "State": "Analyzed",
+     "Resolution": "Open",
+     "Pinned": false,
+     "ReasonExcerpt": "Captain process exited with code 134 after 4m12s while running dotnet test (Test.Automated aborted: Fatal error. System.AccessViolationException in SQLitePCL.raw.sqlite3_step). Retry once the test host is stable.",
+     "TotalBytes": 9635,
+     "ObjectCount": 5,
+     "CreatedUtc": "2026-10-29T21:11:05.310433Z",
+     "ExpiresUtc": "2027-04-27T21:11:05.310433Z"
+    }
+   ],
+   "TotalMs": 0
+  }
+ },
+ "listEnum": {
+  "code": 200,
+  "contentType": "application/json",
+  "headers": {},
+  "json": {
+   "Success": true,
+   "PageNumber": 1,
+   "PageSize": 10,
+   "TotalPages": 1,
+   "TotalRecords": 1,
+   "Objects": [
+    {
+     "Id": "bbx_mvu1ftcv_zcdofOBmjhY",
+     "SubjectType": "Mission",
+     "MissionId": "msn_mvu1fjp0_9Wd6Uuyp262",
+     "VoyageId": "vyg_mvu1fjoz_xO6urNkcaHp",
+     "VesselId": "vsl_mvu1ffz5_4Vb0gY5fhKv",
+     "MissionTitle": "Retry landings deferred on a dirty checkout",
+     "VesselName": "demo-api",
+     "Attempt": 1,
+     "IsCurrent": true,
+     "Phase": "Execution",
+     "Step": "ProcessCrash",
+     "FailureKind": "Crash",
+     "StatusAfter": "Failed",
+     "Triage": "Transient",
+     "Fingerprint": "9eab364095ddc8148f79ed0e7a81303bb19a5f115eba491962241d1a1403cead",
+     "CaptureMode": "Backfill",
+     "State": "Analyzed",
+     "Resolution": "Open",
+     "Pinned": false,
+     "ReasonExcerpt": "Captain process exited with code 134 after 4m12s while running dotnet test (Test.Automated aborted: Fatal error. System.AccessViolationException in SQLitePCL.raw.sqlite3_step). Retry once the test host is stable.",
+     "TotalBytes": 9635,
+     "ObjectCount": 5,
+     "CreatedUtc": "2026-10-29T21:11:05.310433Z",
+     "ExpiresUtc": "2027-04-27T21:11:05.310433Z"
+    }
+   ],
+   "TotalMs": 0
+  }
+ },
+ "search": {
+  "code": 200,
+  "contentType": "application/json",
+  "headers": {},
+  "json": {
+   "Success": true,
+   "PageNumber": 1,
+   "PageSize": 10,
+   "TotalPages": 1,
+   "TotalRecords": 2,
+   "Objects": [
+    {
+     "Id": "bbx_mvu1ftew_95PyT7WmtrV",
+     "SubjectType": "Voyage",
+     "VoyageId": "vyg_mvu1fjoz_xO6urNkcaHp",
+     "VesselId": "vsl_mvu1ffz5_4Vb0gY5fhKv",
+     "MissionTitle": "Harden landing retries",
+     "VesselName": "demo-api",
+     "Attempt": 1,
+     "IsCurrent": true,
+     "Phase": "Voyage",
+     "Step": "SettlementFailed",
+     "FailureKind": "Crash",
+     "StatusAfter": "Failed",
+     "Triage": "Transient",
+     "Fingerprint": "bcb7be821991076ba7d7551c9c5714b099bddaa13843c800b1bd4ee271e37329",
+     "CaptureMode": "Backfill",
+     "State": "Analyzed",
+     "Resolution": "Open",
+     "Pinned": false,
+     "ReasonExcerpt": "Mission msn_mvu1fjp0_9Wd6Uuyp262 failed: Captain process exited with code 134 after 4m12s while running dotnet test (Test.Automated aborted: Fatal error. System.AccessViolationException in SQLitePCL.raw.sqlite3_step). Retry once the test host is stable.",
+     "TotalBytes": 9199,
+     "ObjectCount": 5,
+     "CreatedUtc": "2026-10-29T21:11:05.382585Z",
+     "ExpiresUtc": "2027-04-27T21:11:05.382585Z"
+    },
+    {
+     "Id": "bbx_mvu1ftcv_zcdofOBmjhY",
+     "SubjectType": "Mission",
+     "MissionId": "msn_mvu1fjp0_9Wd6Uuyp262",
+     "VoyageId": "vyg_mvu1fjoz_xO6urNkcaHp",
+     "VesselId": "vsl_mvu1ffz5_4Vb0gY5fhKv",
+     "MissionTitle": "Retry landings deferred on a dirty checkout",
+     "VesselName": "demo-api",
+     "Attempt": 1,
+     "IsCurrent": true,
+     "Phase": "Execution",
+     "Step": "ProcessCrash",
+     "FailureKind": "Crash",
+     "StatusAfter": "Failed",
+     "Triage": "Transient",
+     "Fingerprint": "9eab364095ddc8148f79ed0e7a81303bb19a5f115eba491962241d1a1403cead",
+     "CaptureMode": "Backfill",
+     "State": "Analyzed",
+     "Resolution": "Open",
+     "Pinned": false,
+     "ReasonExcerpt": "Captain process exited with code 134 after 4m12s while running dotnet test (Test.Automated aborted: Fatal error. System.AccessViolationException in SQLitePCL.raw.sqlite3_step). Retry once the test host is stable.",
+     "TotalBytes": 9635,
+     "ObjectCount": 5,
+     "CreatedUtc": "2026-10-29T21:11:05.310433Z",
+     "ExpiresUtc": "2027-04-27T21:11:05.310433Z"
+    }
+   ],
+   "TotalMs": 0
+  }
+ },
+ "bundle": {
+  "code": 200,
+  "contentType": "application/json",
+  "headers": {},
+  "json": {
+   "Format": "Markdown",
+   "EntryCount": 3,
+   "FingerprintCount": 3,
+   "Content": "# Armada black box maintainer bundle\n\nThese are 3 Armada black box entries in 3 failure modes, grouped by fingerprint (most frequent first). You are asked to improve Armada itself. Rank the Armada improvements these failures suggest by impact (occurrences, severity, triage ArmadaDefect first), check each hypothesis against the Armada source at the build commits listed, and discard the ones the evidence does not support. Write each accepted improvement as an Armada mission brief: a title, the failure modes and entry ids it fixes, the code sites (file and method), the change, and a test that reproduces the failure (a black box fixture under src/Test.Shared/Fixtures/BlackBox when it fits). If a failure needs a new advisor rule, write it in BlackBoxRuleCatalog format (id, match, why, recommendation, recovery paths, triage vote).\n\n## Voyage / SettlementFailed / Crash (1 entry)\n\n- Fingerprint: bcb7be821991076ba7d7551c9c5714b099bddaa13843c800b1bd4ee271e37329\n- First seen 2026-10-29 21:11:05Z, last seen 2026-10-29 21:11:05Z\n- Armada versions: 1.2.0+5de469cff2709733b1ffb68fbc45d1303e9e41be\n- Triage: Transient; rules: BBX-EXEC-006, BBX-VOY-001\n\n### Armada maintainer brief: Harden landing retries (voyage vyg_mvu1fjoz_xO6urNkcaHp)\n\nThis brief is for an Armada maintainer. Rank the Armada improvements below, check each hypothesis against the source at the build commit, and write each accepted one as an Armada mission brief with a test.\n\n#### Code site and triage\n\n- Site: unknown (no caller site recorded)\n- Phase / step: Voyage / SettlementFailed (kind Crash)\n- Armada build: 1.2.0+5de469cff2709733b1ffb68fbc45d1303e9e41be (commit 5de469cff2709733b1ffb68fbc45d1303e9e41be)\n- Triage: Transient (confidence Low)\n- Votes: BBX-EXEC-006=Transientx1\n- Rules: BBX-EXEC-006, BBX-VOY-001 (rules version 1)\n- Fingerprint: bcb7be821991076ba7d7551c9c5714b099bddaa13843c800b1bd4ee271e37329\n- Occurrences in the last 30 days: 1\n\n#### Summary\n\nVoyage \"Harden landing retries\" (vyg_mvu1fjoz_xO6urNkcaHp) failed during Voyage at step SettlementFailed (kind Crash). The captain's process exited with code unknown before finishing. The voyage stopped at step SettlementFailed (no halt reason recorded); start with the black box of msn_mvu1fjp0_9Wd6Uuyp262. Triage: Transient (low confidence). Suggested next step: recover the root mission first (bbx-voy-001.recover-root).\n\n- Voyage failed during **Voyage** at step **SettlementFailed** (kind Crash).\n- Status: unknown -> Failed.\n- Triage: Transient (confidence Low).\n- Captured by the backfill after the fact: lower fidelity, the failure site's volatile facts (git state, exception) may be missing.\n\n#### Why\n\n- The captain's process exited with code unknown before finishing. (rule BBX-EXEC-006, confidence Medium) Evidence: mechanism.exitCode, evidence/agent-output.txt\n- The voyage stopped at step SettlementFailed (no halt reason recorded); start with the black box of msn_mvu1fjp0_9Wd6Uuyp262. (rule BBX-VOY-001, confidence Medium) Evidence: voyage.cascadeRootMissionId, voyage.failedMissionEntryIds\n- Triage votes: BBX-EXEC-006=Transientx1\n\n#### How it failed\n\nReason:\n\n```\nMission msn_mvu1fjp0_9Wd6Uuyp262 failed: Captain process exited with code 134 after 4m12s while running dotnet test (Test.Automated aborted: Fatal error. System.AccessViolationException in SQLitePCL.raw.sqlite3_step). Retry once the test host is stable.\n```\n\n\n#### Where it failed\n\n- Phase / step: Voyage / SettlementFailed\n- Host: Admiral\n- Armada build: 1.2.0+5de469cff2709733b1ffb68fbc45d1303e9e41be (commit 5de469cff2709733b1ffb68fbc45d1303e9e41be)\n\n#### Status timeline\n\n- 2026-10-29 21:11:05Z Failed (failure write)\n\n#### Configuration in effect\n\n- LandingMode: `MergeAndPush` (Global)\n- AutoPush: `True` (Default)\n- AutoMergePullRequests: `False` (Global)\n- BranchCleanupPolicy: `LocalOnly` (Global)\n- AllowConcurrentMissions: `False` (Vessel)\n- RequirePassingChecksToLand: `False` (Vessel)\n- DefinitionOfDoneEnabled: `False` (Vessel)\n- AutoLandEnabled: `False` (Vessel)\n- StallThresholdMinutes: `10` (Global)\n- ToolWaitHardLimitMinutes: `60` (Global)\n- StageCheckTimeoutMinutes: `15` (Global)\n- MaxMissionRuntimeMinutes: `240` (Global)\n- MaxRecoveryAttempts: `3` (Global)\n- MaxMissionRecoveryAttempts: `2` (Global)\n- MaxLandingRetries: `3` (Global)\n- MaxNoOpRedispatchAttempts: `1` (Global)\n- MaxOutputRepairAttempts: `1` (Global)\n- ReviewTimeoutMinutes: `1440` (Global)\n- LandingDeferralDeadlineHours: `24` (Global)\n- MaxConcurrentMissions: `0` (Global)\n- BlockDependentsOfFailedStages: `False` (Global)\n- BlackBoxRetentionDays: `180` (Global)\n- WorkflowProfile: `demo-api: basic checks` (WorkflowProfile)\n- LintCommand: `git diff --check` (WorkflowProfile)\n\n#### Recovery\n\n### 1. Recover the root mission first (bbx-voy-001.recover-root)\n\nRisk: Low. Expected: The voyage continues once its root mission lands.\n\n1. Open get_blackbox {\"missionId\": \"msn_mvu1fjp0_9Wd6Uuyp262\"} and follow its recovery paths.\n\n#### Evidence\n\n- `evidence/events.json` (465 bytes): [   {     \"eventId\": \"evt_mvu1ftep_XguRXMHez86\",     \"eventType\": \"mission.status_changed\",     \"message\": \"Mission Cancelled (DependencyCancelled): Document landing retries\",     \"createdUtc\": \"2026- ... (265 more characters in record.json)\n- 2026-10-29 21:11:05Z mission.status_changed: Mission Cancelled (DependencyCancelled): Document landing retries\n- 2026-10-29 21:11:05Z mission.status_changed: Mission Failed (ProcessCrash): Retry landings deferred on a dirty checkout\n\nRead an object with MCP `read_blackbox_object {\"entryId\": \"bbx_mvu1ftew_95PyT7WmtrV\", \"name\": \"<name>\"}` (64 KB chunks) or REST `GET /api/v1/blackbox/bbx_mvu1ftew_95PyT7WmtrV/objects/<name>`.\n\n#### Related failures\n\n- Fingerprint: bcb7be821991076ba7d7551c9c5714b099bddaa13843c800b1bd4ee271e37329\n- Same failure in the last 30 days: 1\n\n#### Identity\n\n- Entry: bbx_mvu1ftew_95PyT7WmtrV (attempt 1)\n- Voyage: vyg_mvu1fjoz_xO6urNkcaHp (Harden landing retries)\n- Vessel: demo-api (vsl_mvu1ffz5_4Vb0gY5fhKv)\n- Repository: {path}\n- Target branch: main\n\n#### Notes on this record\n\n- Captured by the backfill; the failure site's volatile facts are missing.\n\n\n\n(trimmed for the example)\n",
+   "Truncated": false
+  }
+ },
+ "hotspots": {
+  "code": 200,
+  "contentType": "application/json",
+  "headers": {},
+  "json": {
+   "Success": true,
+   "PageNumber": 1,
+   "PageSize": 10,
+   "TotalPages": 1,
+   "TotalRecords": 2,
+   "Objects": [
+    {
+     "VesselId": "vsl_mvu1ffz5_4Vb0gY5fhKv",
+     "Directory": "src/Armada.Server/Routes",
+     "FileCount": 3,
+     "EntryCount": 2,
+     "LastSeenUtc": "2026-10-29T21:11:05.310433Z"
+    },
+    {
+     "VesselId": "vsl_mvu1ffz5_4Vb0gY5fhKv",
+     "Directory": "docs",
+     "FileCount": 1,
+     "EntryCount": 1,
+     "LastSeenUtc": "2026-10-28T17:42:10.118204Z"
+    }
+   ],
+   "TotalMs": 0
+  }
+ },
+ "fingerprints": {
+  "code": 200,
+  "contentType": "application/json",
+  "headers": {},
+  "json": {
+   "Success": true,
+   "PageNumber": 1,
+   "PageSize": 10,
+   "TotalPages": 1,
+   "TotalRecords": 3,
+   "Objects": [
+    {
+     "Fingerprint": "bcb7be821991076ba7d7551c9c5714b099bddaa13843c800b1bd4ee271e37329",
+     "Count": 1,
+     "OpenCount": 1,
+     "FirstSeenUtc": "2026-10-29T21:11:05.382585Z",
+     "LastSeenUtc": "2026-10-29T21:11:05.382585Z",
+     "LatestEntryId": "bbx_mvu1ftew_95PyT7WmtrV",
+     "Phase": "Voyage",
+     "Step": "SettlementFailed",
+     "FailureKind": "Crash"
+    },
+    {
+     "Fingerprint": "0c0d4699f8052fede78fbc067119a0dd57940124eefd9ae8b0bfc8df8d7a0149",
+     "Count": 1,
+     "OpenCount": 1,
+     "FirstSeenUtc": "2026-10-29T21:11:05.377352Z",
+     "LastSeenUtc": "2026-10-29T21:11:05.377352Z",
+     "LatestEntryId": "bbx_mvu1ftep_b5OtDr4leub",
+     "Phase": "Handoff",
+     "Step": "DependencyCancelled",
+     "FailureKind": "DependencyFailed"
+    },
+    {
+     "Fingerprint": "9eab364095ddc8148f79ed0e7a81303bb19a5f115eba491962241d1a1403cead",
+     "Count": 1,
+     "OpenCount": 1,
+     "FirstSeenUtc": "2026-10-29T21:11:05.310433Z",
+     "LastSeenUtc": "2026-10-29T21:11:05.310433Z",
+     "LatestEntryId": "bbx_mvu1ftcv_zcdofOBmjhY",
+     "Phase": "Execution",
+     "Step": "ProcessCrash",
+     "FailureKind": "Crash"
+    }
+   ],
+   "TotalMs": 0
+  }
+ },
+ "trend": {
+  "code": 200,
+  "contentType": "application/json",
+  "headers": {},
+  "json": {
+   "Fingerprint": "9eab364095ddc8148f79ed0e7a81303bb19a5f115eba491962241d1a1403cead",
+   "Phase": "Execution",
+   "Step": "ProcessCrash",
+   "Total": 1,
+   "Truncated": false,
+   "Versions": [
+    {
+     "ArmadaVersion": "1.2.0+5de469cff2709733b1ffb68fbc45d1303e9e41be",
+     "Count": 1,
+     "OpenCount": 1,
+     "ArmadaFixedCount": 0,
+     "FirstSeenUtc": "2026-10-29T21:11:05.310433Z",
+     "LastSeenUtc": "2026-10-29T21:11:05.310433Z"
+    }
+   ]
+  }
+ },
+ "pin": {
+  "code": 200,
+  "contentType": "application/json",
+  "headers": {},
+  "json": {
+   "Id": "bbx_mvu1ftcv_zcdofOBmjhY",
+   "TenantId": "default",
+   "UserId": "default",
+   "SubjectType": "Mission",
+   "MissionId": "msn_mvu1fjp0_9Wd6Uuyp262",
+   "VoyageId": "vyg_mvu1fjoz_xO6urNkcaHp",
+   "VesselId": "vsl_mvu1ffz5_4Vb0gY5fhKv",
+   "FleetId": "flt_mvu1fcwu_pUQGp88qTcb",
+   "MissionTitle": "Retry landings deferred on a dirty checkout",
+   "VesselName": "demo-api",
+   "Attempt": 1,
+   "IsCurrent": true,
+   "Phase": "Execution",
+   "Step": "ProcessCrash",
+   "FailureKind": "Crash",
+   "StatusAfter": "Failed",
+   "Triage": "Transient",
+   "Fingerprint": "9eab364095ddc8148f79ed0e7a81303bb19a5f115eba491962241d1a1403cead",
+   "CaptureMode": "Backfill",
+   "State": "Analyzed",
+   "Resolution": "Open",
+   "Pinned": true,
+   "StorageTarget": "Database",
+   "TotalBytes": 9635,
+   "ObjectCount": 5,
+   "SchemaVersion": 1,
+   "RulesVersion": 1,
+   "ArmadaVersion": "1.2.0+5de469cff2709733b1ffb68fbc45d1303e9e41be",
+   "ArmadaCommit": "5de469cff2709733b1ffb68fbc45d1303e9e41be",
+   "ReasonExcerpt": "Captain process exited with code 134 after 4m12s while running dotnet test (Test.Automated aborted: Fatal error. System.AccessViolationException in SQLitePCL.raw.sqlite3_step). Retry once the test host is stable.",
+   "Summary": "Mission \"Retry landings deferred on a dirty checkout\" (msn_mvu1fjp0_9Wd6Uuyp262) failed during Execution at step ProcessCrash (kind Crash). The captain's process exited with code unknown before finishing. Triage: Transient (low confidence). Suggested next step: restart the mission (bbx-exec-006.restart).",
+   "EnrichmentAttempts": 0,
+   "CreatedUtc": "2026-10-29T21:11:05.310433Z",
+   "EnrichedUtc": "2026-10-29T21:11:05.416673Z",
+   "AnalyzedUtc": "2026-10-29T21:11:05.430708Z",
+   "LastUpdateUtc": "2026-10-29T21:11:39.705652Z"
+  }
+ },
+ "unpin": {
+  "code": 200,
+  "contentType": "application/json",
+  "headers": {},
+  "json": {
+   "Id": "bbx_mvu1ftcv_zcdofOBmjhY",
+   "TenantId": "default",
+   "UserId": "default",
+   "SubjectType": "Mission",
+   "MissionId": "msn_mvu1fjp0_9Wd6Uuyp262",
+   "VoyageId": "vyg_mvu1fjoz_xO6urNkcaHp",
+   "VesselId": "vsl_mvu1ffz5_4Vb0gY5fhKv",
+   "FleetId": "flt_mvu1fcwu_pUQGp88qTcb",
+   "MissionTitle": "Retry landings deferred on a dirty checkout",
+   "VesselName": "demo-api",
+   "Attempt": 1,
+   "IsCurrent": true,
+   "Phase": "Execution",
+   "Step": "ProcessCrash",
+   "FailureKind": "Crash",
+   "StatusAfter": "Failed",
+   "Triage": "Transient",
+   "Fingerprint": "9eab364095ddc8148f79ed0e7a81303bb19a5f115eba491962241d1a1403cead",
+   "CaptureMode": "Backfill",
+   "State": "Analyzed",
+   "Resolution": "Open",
+   "Pinned": false,
+   "StorageTarget": "Database",
+   "TotalBytes": 9635,
+   "ObjectCount": 5,
+   "SchemaVersion": 1,
+   "RulesVersion": 1,
+   "ArmadaVersion": "1.2.0+5de469cff2709733b1ffb68fbc45d1303e9e41be",
+   "ArmadaCommit": "5de469cff2709733b1ffb68fbc45d1303e9e41be",
+   "ReasonExcerpt": "Captain process exited with code 134 after 4m12s while running dotnet test (Test.Automated aborted: Fatal error. System.AccessViolationException in SQLitePCL.raw.sqlite3_step). Retry once the test host is stable.",
+   "Summary": "Mission \"Retry landings deferred on a dirty checkout\" (msn_mvu1fjp0_9Wd6Uuyp262) failed during Execution at step ProcessCrash (kind Crash). The captain's process exited with code unknown before finishing. Triage: Transient (low confidence). Suggested next step: restart the mission (bbx-exec-006.restart).",
+   "EnrichmentAttempts": 0,
+   "ExpiresUtc": "2027-04-27T21:11:05.310433Z",
+   "CreatedUtc": "2026-10-29T21:11:05.310433Z",
+   "EnrichedUtc": "2026-10-29T21:11:05.416673Z",
+   "AnalyzedUtc": "2026-10-29T21:11:05.430708Z",
+   "LastUpdateUtc": "2026-10-29T21:11:39.720699Z"
+  }
+ },
+ "recommendation": {
+  "code": 404,
+  "contentType": "application/json",
+  "headers": {},
+  "json": {
+   "Error": "NotFound",
+   "StatusCode": 404,
+   "Description": "The requested resource was not found.",
+   "Message": "Recommendation bbx-none.recommendation is not recorded on black box entry bbx_mvu1ftcv_zcdofOBmjhY.",
+   "Data": {
+    "Code": "BlackBoxNotFound"
+   }
+  }
+ },
+ "recoveryRefused": {
+  "code": 409,
+  "contentType": "application/json",
+  "headers": {},
+  "json": {
+   "Error": "Conflict",
+   "StatusCode": 409,
+   "Description": "The request conflicts with the current state of the resource.",
+   "Message": "A confirmToken is required: run run_blackbox_recovery with dryRun=true first and confirm with the token it returns.",
+   "Data": {
+    "Code": "BlackBoxConfirmationRequired"
+   }
+  }
+ },
+ "recoveryDry": {
+  "code": 200,
+  "contentType": "application/json",
+  "headers": {},
+  "json": {
+   "EntryId": "bbx_mvu1ftcv_zcdofOBmjhY",
+   "PathId": "bbx-exec-006.restart",
+   "DryRun": true,
+   "ConfirmToken": "bbc_db902eef4c9155c21cce09b96116f9e4",
+   "ConfirmTokenExpiresUtc": "2026-10-29T21:21:39.754998Z",
+   "Plan": [
+    {
+     "Order": 1,
+     "Description": "Restart msn_mvu1fjp0_9Wd6Uuyp262.",
+     "McpCommand": "restart_mission {\"missionId\": \"msn_mvu1fjp0_9Wd6Uuyp262\"}",
+     "RestCommand": "POST /api/v1/missions/msn_mvu1fjp0_9Wd6Uuyp262/restart",
+     "CliCommand": "armada mission restart msn_mvu1fjp0_9Wd6Uuyp262",
+     "Action": {
+      "Tool": "restart_mission",
+      "Arguments": {
+       "missionId": "msn_mvu1fjp0_9Wd6Uuyp262"
+      }
+     },
+     "DataLossRisk": false
+    }
+   ],
+   "StepResults": [],
+   "Succeeded": true,
+   "Message": "Would run: restart_mission {\"missionId\": \"msn_mvu1fjp0_9Wd6Uuyp262\"}. Confirm with confirmToken before 2026-10-29 21:21:39Z."
+  }
+ },
+ "recoveryRun": {
+  "code": 200,
+  "contentType": "application/json",
+  "headers": {},
+  "json": {
+   "EntryId": "bbx_mvu1ftcv_zcdofOBmjhY",
+   "PathId": "bbx-exec-006.restart",
+   "DryRun": false,
+   "Plan": [
+    {
+     "Order": 1,
+     "Description": "Restart msn_mvu1fjp0_9Wd6Uuyp262.",
+     "McpCommand": "restart_mission {\"missionId\": \"msn_mvu1fjp0_9Wd6Uuyp262\"}",
+     "RestCommand": "POST /api/v1/missions/msn_mvu1fjp0_9Wd6Uuyp262/restart",
+     "CliCommand": "armada mission restart msn_mvu1fjp0_9Wd6Uuyp262",
+     "Action": {
+      "Tool": "restart_mission",
+      "Arguments": {
+       "missionId": "msn_mvu1fjp0_9Wd6Uuyp262"
+      }
+     },
+     "DataLossRisk": false
+    }
+   ],
+   "StepResults": [
+    {
+     "Order": 1,
+     "Tool": "restart_mission",
+     "Succeeded": true,
+     "Message": "{\"id\":\"msn_mvu1fjp0_9Wd6Uuyp262\",\"tenantId\":\"default\",\"userId\":\"default\",\"voyageId\":\"vyg_mvu1fjoz_xO6urNkcaHp\",\"vesselId\":\"vsl_mvu1ffz5_4Vb0gY5fhKv\",\"captainId\":null,\"requestedCaptainId\":null,\"assignedHarborId\":null,\"title\":\"Retry landings deferred on a dirty checkout\",\"description\":\"Touch only src/..."
+    }
+   ],
+   "Succeeded": true,
+   "Message": "Recovery path bbx-exec-006.restart ran. 1 of 1 Armada steps ran."
+  }
+ },
+ "recoveryReuse": {
+  "code": 409,
+  "contentType": "application/json",
+  "headers": {},
+  "json": {
+   "Error": "Conflict",
+   "StatusCode": 409,
+   "Description": "The request conflicts with the current state of the resource.",
+   "Message": "The confirmToken is unknown or was already used; run a new dry run.",
+   "Data": {
+    "Code": "BlackBoxConfirmationRequired"
+   }
+  }
+ },
+ "resolve": {
+  "code": 200,
+  "contentType": "application/json",
+  "headers": {},
+  "json": {
+   "Id": "bbx_mvu1ftcv_zcdofOBmjhY",
+   "TenantId": "default",
+   "UserId": "default",
+   "SubjectType": "Mission",
+   "MissionId": "msn_mvu1fjp0_9Wd6Uuyp262",
+   "VoyageId": "vyg_mvu1fjoz_xO6urNkcaHp",
+   "VesselId": "vsl_mvu1ffz5_4Vb0gY5fhKv",
+   "FleetId": "flt_mvu1fcwu_pUQGp88qTcb",
+   "MissionTitle": "Retry landings deferred on a dirty checkout",
+   "VesselName": "demo-api",
+   "Attempt": 1,
+   "IsCurrent": true,
+   "Phase": "Execution",
+   "Step": "ProcessCrash",
+   "FailureKind": "Crash",
+   "StatusAfter": "Failed",
+   "Triage": "Transient",
+   "Fingerprint": "9eab364095ddc8148f79ed0e7a81303bb19a5f115eba491962241d1a1403cead",
+   "CaptureMode": "Backfill",
+   "State": "Analyzed",
+   "Resolution": "Resolved",
+   "ResolutionNote": "Restarted after pinning SQLitePCL; landed.",
+   "ResolutionLink": "https://github.com/example/demo-api/pull/42",
+   "Pinned": false,
+   "StorageTarget": "Database",
+   "TotalBytes": 9635,
+   "ObjectCount": 5,
+   "SchemaVersion": 1,
+   "RulesVersion": 1,
+   "ArmadaVersion": "1.2.0+5de469cff2709733b1ffb68fbc45d1303e9e41be",
+   "ArmadaCommit": "5de469cff2709733b1ffb68fbc45d1303e9e41be",
+   "ReasonExcerpt": "Captain process exited with code 134 after 4m12s while running dotnet test (Test.Automated aborted: Fatal error. System.AccessViolationException in SQLitePCL.raw.sqlite3_step). Retry once the test host is stable.",
+   "Summary": "Mission \"Retry landings deferred on a dirty checkout\" (msn_mvu1fjp0_9Wd6Uuyp262) failed during Execution at step ProcessCrash (kind Crash). The captain's process exited with code unknown before finishing. Triage: Transient (low confidence). Suggested next step: restart the mission (bbx-exec-006.restart).",
+   "EnrichmentAttempts": 0,
+   "ExpiresUtc": "2026-11-28T21:11:39.835334Z",
+   "CreatedUtc": "2026-10-29T21:11:05.310433Z",
+   "EnrichedUtc": "2026-10-29T21:11:05.416673Z",
+   "AnalyzedUtc": "2026-10-29T21:11:05.430708Z",
+   "ResolvedUtc": "2026-10-29T21:11:39.835334Z",
+   "LastUpdateUtc": "2026-10-29T21:11:39.835678Z"
+  }
+ },
+ "reanalyze": {
+  "code": 200,
+  "contentType": "application/json",
+  "headers": {},
+  "json": {
+   "Id": "bbx_mvu1ftcv_zcdofOBmjhY",
+   "TenantId": "default",
+   "UserId": "default",
+   "SubjectType": "Mission",
+   "MissionId": "msn_mvu1fjp0_9Wd6Uuyp262",
+   "VoyageId": "vyg_mvu1fjoz_xO6urNkcaHp",
+   "VesselId": "vsl_mvu1ffz5_4Vb0gY5fhKv",
+   "FleetId": "flt_mvu1fcwu_pUQGp88qTcb",
+   "MissionTitle": "Retry landings deferred on a dirty checkout",
+   "VesselName": "demo-api",
+   "Attempt": 1,
+   "IsCurrent": true,
+   "Phase": "Execution",
+   "Step": "ProcessCrash",
+   "FailureKind": "Crash",
+   "StatusAfter": "Failed",
+   "Triage": "Transient",
+   "Fingerprint": "9eab364095ddc8148f79ed0e7a81303bb19a5f115eba491962241d1a1403cead",
+   "CaptureMode": "Backfill",
+   "State": "Analyzed",
+   "Resolution": "Resolved",
+   "ResolutionNote": "Restarted after pinning SQLitePCL; landed.",
+   "ResolutionLink": "https://github.com/example/demo-api/pull/42",
+   "Pinned": false,
+   "StorageTarget": "Database",
+   "TotalBytes": 9979,
+   "ObjectCount": 5,
+   "SchemaVersion": 1,
+   "RulesVersion": 1,
+   "ArmadaVersion": "1.2.0+5de469cff2709733b1ffb68fbc45d1303e9e41be",
+   "ArmadaCommit": "5de469cff2709733b1ffb68fbc45d1303e9e41be",
+   "ReasonExcerpt": "Captain process exited with code 134 after 4m12s while running dotnet test (Test.Automated aborted: Fatal error. System.AccessViolationException in SQLitePCL.raw.sqlite3_step). Retry once the test host is stable.",
+   "Summary": "Mission \"Retry landings deferred on a dirty checkout\" (msn_mvu1fjp0_9Wd6Uuyp262) failed during Execution at step ProcessCrash (kind Crash). The captain's process exited with code unknown before finishing. Triage: Transient (low confidence). Suggested next step: restart the mission (bbx-exec-006.restart).",
+   "EnrichmentAttempts": 0,
+   "ExpiresUtc": "2026-11-28T21:11:39.835334Z",
+   "CreatedUtc": "2026-10-29T21:11:05.310433Z",
+   "EnrichedUtc": "2026-10-29T21:11:39.853358Z",
+   "AnalyzedUtc": "2026-10-29T21:11:39.853617Z",
+   "ResolvedUtc": "2026-10-29T21:11:39.835334Z",
+   "LastUpdateUtc": "2026-10-29T21:11:39.855839Z"
+  }
+ },
+ "fixture": {
+  "code": 200,
+  "contentType": "application/json",
+  "headers": {},
+  "json": {
+   "Name": "exec-006-process-crash",
+   "Description": "Black box fixture for Execution / ProcessCrash.",
+   "Source": "msn_mvu1fjp0_9Wd6Uuyp262",
+   "RulesVersion": 1,
+   "ExpectedRuleIds": [
+    "BBX-EXEC-006"
+   ],
+   "ExpectedTriage": "Transient",
+   "Record": {
+    "EntryId": "bbx_mvu1ftcv_zcdofOBmjhY",
+    "SchemaVersion": 1,
+    "RulesVersion": 1,
+    "CaptureMode": "Backfill",
+    "State": "Analyzed",
+    "CreatedUtc": "2026-10-29T21:11:05.310433Z",
+    "Subject": {
+     "SubjectType": "Mission",
+     "MissionId": "msn_mvu1fjp0_9Wd6Uuyp262",
+     "VoyageId": "vyg_mvu1fjoz_xO6urNkcaHp",
+     "Title": "Retry landings deferred on a dirty checkout",
+     "VoyageTitle": "Harden landing retries",
+     "VesselId": "vsl_mvu1ffz5_4Vb0gY5fhKv",
+     "VesselName": "demo-api",
+     "VesselRepoUrl": "https://example.invalid/demo-api.git",
+     "VesselDefaultBranch": "main",
+     "FleetId": "flt_mvu1fcwu_pUQGp88qTcb",
+     "Attempt": 1,
+     "IsRescue": false,
+     "RedispatchAttempts": 0,
+     "OutputRepairAttempts": 0,
+     "NoOpRedispatchAttempts": 0
+    },
+    "Status": {
+     "After": "Failed",
+     "ChangedUtc": "2026-10-29T21:11:05.290000Z",
+     "Timeline": [
+      {
+       "Status": "Failed",
+       "Utc": "2026-10-29T21:11:05.290000Z",
+       "Source": "failure write"
+      }
+     ]
+    },
+    "Site": {
+     "Phase": "Execution",
+     "Step": "ProcessCrash",
+     "HostKind": "Admiral",
+     "Host": "Admiral",
+     "Component": "BlackBoxSweeper",
+     "ArmadaVersion": "1.2.0+5de469cff2709733b1ffb68fbc45d1303e9e41be",
+     "ArmadaCommit": "5de469cff2709733b1ffb68fbc45d1303e9e41be"
+    },
+    "Mechanism": {
+     "StackFrames": []
+    },
+    "Classification": {
+     "Kind": "Crash",
+     "RawReason": "Captain process exited with code 134 after 4m12s while running dotnet test (Test.Automated aborted: Fatal error. System.AccessViolationException in SQLitePCL.raw.sqlite3_step). Retry once the test host is stable.",
+     "SuspectedCause": "None"
+    },
+    "Workspace": {
+     "TargetBranch": "main",
+     "DirtyPaths": [],
+     "DirtyPathTotal": 0,
+     "InspectedHost": "Admiral",
+     "TargetMovementNote": "Target movement omitted: the mission's start commit was not recorded, so the commits that landed on the target since it started are unknown."
+    },
+    "Configuration": {
+     "Values": [
+      {
+       "Setting": "LandingMode",
+       "Value": "MergeAndPush",
+       "Source": "Global"
+      },
+      {
+       "Setting": "AutoPush",
+       "Value": "True",
+       "Source": "Default"
+      },
+      {
+       "Setting": "AutoMergePullRequests",
+       "Value": "False",
+       "Source": "Global"
+      },
+      {
+       "Setting": "BranchCleanupPolicy",
+       "Value": "LocalOnly",
+       "Source": "Global"
+      },
+      {
+       "Setting": "RequiresReview",
+       "Value": "False",
+       "Source": "Mission"
+      }
+     ]
+    },
+    "Attempts": [],
+    "Evidence": {
+     "Objects": [
+      {
+       "Name": "evidence/events.json",
+       "ContentType": "application/json",
+       "SizeBytes": 892,
+       "UncompressedBytes": 892,
+       "Excerpt": "eatedUtc\": \"2026-10-29T21:11:14.481952Z\"\n  },\n  {\n    \"eventId\": \"evt_mvu1g0fi_lGGWbSChCAc\",\n    \"eventType\": \"incident.snapshot\",\n    \"message\": \"Mission recovery: Retry landings deferred on a dirty checkout\",\n    \"createdUtc\": \"2026-10-29T21:11:14.473415Z\"\n  },\n  {\n    \"eventId\": \"evt_mvu1ftcq_iIAw5pelHTf\",\n    \"eventType\": \"mission.status_changed\",\n    \"message\": \"Mission Failed (ProcessCrash): Retry landings deferred on a dirty checkout\",\n    \"createdUtc\": \"2026-10-29T21:11:05.306273Z\"\n  }\n]",
+       "Truncated": false
+      }
+     ],
+     "CheckResults": [],
+     "Papercuts": [],
+     "RelevantEvents": [
+      {
+       "EventId": "evt_mvu1g0fo_LL8TTyMhjub",
+       "EventType": "incident.snapshot",
+       "Message": "Mission recovery: Retry landings deferred on a dirty checkout",
+       "CreatedUtc": "2026-10-29T21:11:14.484261Z"
+      },
+      {
+       "EventId": "evt_mvu1g0fm_Z9amY5UcJDN",
+       "EventType": "incident.snapshot",
+       "Message": "Mission recovery: Retry landings deferred on a dirty checkout",
+       "CreatedUtc": "2026-10-29T21:11:14.481952Z"
+      },
+      {
+       "EventId": "evt_mvu1g0fi_lGGWbSChCAc",
+       "EventType": "incident.snapshot",
+       "Message": "Mission recovery: Retry landings deferred on a dirty checkout",
+       "CreatedUtc": "2026-10-29T21:11:14.473415Z"
+      },
+      {
+       "EventId": "evt_mvu1ftcq_iIAw5pelHTf",
+       "EventType": "mission.status_changed",
+       "Message": "Mission Failed (ProcessCrash): Retry landings deferred on a dirty checkout",
+       "CreatedUtc": "2026-10-29T21:11:05.306273Z"
+      }
+     ]
+    },
+    "Related": {
+     "Fingerprint": "9eab364095ddc8148f79ed0e7a81303bb19a5f115eba491962241d1a1403cead",
+     "SimilarEntries": [],
+     "OccurrencesLast30Days": 0,
+     "DownstreamMissionIds": []
+    },
+    "Redaction": {
+     "RulesApplied": [],
+     "RedactedCount": 0
+    },
+    "Truncation": {
+     "Fields": [],
+     "FieldTotal": 0,
+     "TimedOut": false,
+     "Notes": [
+      "Captured by the backfill after the fact; the failure site's volatile facts (git state, exception, command output) are missing.",
+      "Target movement omitted: the mission's start commit was not recorded, so the commits that landed on the target since it started are unknown.",
+      "Concurrent overlap skipped: neither the conflicted files nor the mission's changed files are known."
+     ]
+    }
+   }
+  }
+ },
+ "retention": {
+  "code": 200,
+  "contentType": "application/json",
+  "headers": {},
+  "json": {
+   "Policy": {
+    "RetentionDays": 180,
+    "ResolvedRetentionDays": 30,
+    "KeepLatestPerMission": true,
+    "MaxEntriesPerVessel": 1000,
+    "MaxTotalBytes": 1073741824,
+    "DeleteWithMission": false,
+    "DeleteWithVessel": true,
+    "GcIntervalMinutes": 60,
+    "GcBatchSize": 200,
+    "OrphanGraceHours": 24
+   },
+   "TotalEntries": 3,
+   "TotalBytes": 28653,
+   "PinnedEntries": 0,
+   "DeletingEntries": 0,
+   "ExpiredEntries": 0,
+   "NextRunUtc": "2026-10-29T22:10:34.416490Z"
+  }
+ },
+ "storage": {
+  "code": 200,
+  "contentType": "application/json",
+  "headers": {},
+  "json": {
+   "Target": "Database",
+   "Health": {
+    "Target": "Database",
+    "Healthy": true,
+    "Message": "Database store reachable.",
+    "LatencyMs": 0,
+    "CheckedUtc": "2026-10-29T21:11:39.911573Z"
+   },
+   "FallbackToDatabase": true,
+   "Usage": [
+    {
+     "Target": "Database",
+     "Entries": 3,
+     "Bytes": 28653
+    }
+   ]
+  }
+ },
+ "gc": {
+  "code": 200,
+  "contentType": "application/json",
+  "headers": {},
+  "json": {
+   "DryRun": true,
+   "StartedUtc": "2026-10-29T21:11:39.927512Z",
+   "FinishedUtc": "2026-10-29T21:11:39.933498Z",
+   "DurationMs": 5,
+   "Expired": 0,
+   "Evicted": 0,
+   "Cascaded": 0,
+   "RetriedDeletes": 0,
+   "OrphansRemoved": 0,
+   "ObjectsMissing": 0,
+   "BytesFreed": 0,
+   "Failures": 0,
+   "CandidateEntryIds": [],
+   "Errors": []
+  }
+ },
+ "purge": {
+  "code": 200,
+  "contentType": "application/json",
+  "headers": {},
+  "json": {
+   "DryRun": true,
+   "Matched": 0,
+   "Deleted": 0,
+   "Pending": 0,
+   "SkippedPinned": 0,
+   "BytesFreed": 0,
+   "SampleEntryIds": []
+  }
+ },
+ "migrate": {
+  "code": 200,
+  "contentType": "application/json",
+  "headers": {},
+  "json": {
+   "Id": "bbm_mvu1gk3j_HlaYvqBefrk",
+   "State": "Pending",
+   "To": "Disk",
+   "DeleteSource": false,
+   "BatchSize": 100,
+   "TotalEntries": 3,
+   "MigratedEntries": 0,
+   "FailedEntries": 0,
+   "BytesCopied": 0,
+   "CreatedUtc": "2026-10-29T21:11:39.967161Z",
+   "LastUpdateUtc": "2026-10-29T21:11:39.967774Z"
+  }
+ },
+ "migration": {
+  "code": 200,
+  "contentType": "application/json",
+  "headers": {},
+  "json": {
+   "Id": "bbm_mvu1gk3j_HlaYvqBefrk",
+   "State": "Completed",
+   "To": "Disk",
+   "DeleteSource": false,
+   "BatchSize": 100,
+   "TotalEntries": 3,
+   "MigratedEntries": 3,
+   "FailedEntries": 0,
+   "BytesCopied": 28653,
+   "LastEntryId": "bbx_mvu1ftew_95PyT7WmtrV",
+   "CreatedUtc": "2026-10-29T21:11:39.967161Z",
+   "StartedUtc": "2026-10-29T21:11:39.970439Z",
+   "FinishedUtc": "2026-10-29T21:11:39.982809Z",
+   "LastUpdateUtc": "2026-10-29T21:11:39.982810Z"
+  }
+ },
+ "backfill": {
+  "code": 200,
+  "contentType": "application/json",
+  "headers": {},
+  "json": {
+   "Mode": "Backfill",
+   "Scanned": 0,
+   "Captured": 0,
+   "Skipped": 0,
+   "Failed": 0,
+   "EnrichmentRequeued": 0,
+   "StartedUtc": "2026-10-29T21:11:40.016805Z",
+   "FinishedUtc": "2026-10-29T21:11:40.016934Z"
+  }
+ },
+ "deleteMany": {
+  "code": 200,
+  "contentType": "application/json",
+  "headers": {},
+  "json": {
+   "Requested": 1,
+   "Deleted": 0,
+   "Pending": 0,
+   "BytesFreed": 0,
+   "Skipped": [
+    "bbx_doesnotexist_0000000000"
+   ]
+  }
+ },
+ "deleteOne": {
+  "code": 404,
+  "contentType": "application/json",
+  "headers": {},
+  "json": {
+   "Error": "NotFound",
+   "StatusCode": 404,
+   "Description": "The requested resource was not found.",
+   "Message": "Black box entry bbx_doesnotexist_0000000000 not found.",
+   "Data": {
+    "Code": "BlackBoxNotFound"
+   }
+  }
+ },
+ "notFound": {
+  "code": 404,
+  "contentType": "application/json",
+  "headers": {},
+  "json": {
+   "Error": "NotFound",
+   "StatusCode": 404,
+   "Description": "The requested resource was not found.",
+   "Message": "Black box entry bbx_doesnotexist_0000000000 not found.",
+   "Data": {
+    "Code": "BlackBoxNotFound"
+   }
+  }
+ }
+}
