@@ -35,6 +35,18 @@ namespace Armada.Core.Services
         public const string DeferralExpiredEventType = "mission.landing_deferral_expired";
 
         /// <summary>
+        /// Event recorded each time the sweep retries a deferred landing automatically; counted against
+        /// <see cref="ArmadaSettings.MaxLandingRetries"/> for the deferral it belongs to.
+        /// </summary>
+        public const string AutoRetryEventType = "mission.landing_auto_retry";
+
+        /// <summary>
+        /// Event recorded once when a deferred landing has used all <see cref="ArmadaSettings.MaxLandingRetries"/>
+        /// automatic retries.
+        /// </summary>
+        public const string RetriesExhaustedEventType = "mission.landing_retries_exhausted";
+
+        /// <summary>
         /// Most dock directories checked for existence in one sweep.
         /// </summary>
         public int MaxDockChecksPerSweep { get; set; } = 25;
@@ -221,8 +233,10 @@ namespace Armada.Core.Services
 
         /// <summary>
         /// Retry each LandingFailed (Infra) mission whose landing was deferred on a dirty checkout, once the checkout is
-        /// clean and before the deadline. Records <see cref="DeferralExpiredEventType"/> once when the deadline passes.
-        /// Bounded by <see cref="MaxLandingRetriesPerSweep"/>.
+        /// clean and before the deadline, at most <see cref="ArmadaSettings.MaxLandingRetries"/> times per deferral
+        /// (0 disables automatic retries). Records <see cref="DeferralExpiredEventType"/> once when the deadline passes and
+        /// <see cref="RetriesExhaustedEventType"/> once when the retries are used up. Bounded by
+        /// <see cref="MaxLandingRetriesPerSweep"/>.
         /// </summary>
         /// <param name="token">Cancellation token.</param>
         /// <returns>Landings retried.</returns>
@@ -257,8 +271,26 @@ namespace Armada.Core.Services
 
                 if (!await IsCheckoutCleanAsync(deferral, token).ConfigureAwait(false)) continue;
 
+                // Each deferral episode (since its first refusal) gets at most MaxLandingRetries automatic retries; the
+                // count is read from the event log so it survives an Admiral restart.
+                long autoRetries = await CountEventsSinceAsync(mission.Id, AutoRetryEventType, deferral.FirstDeferredUtc, token).ConfigureAwait(false);
+                if (autoRetries >= _Settings.MaxLandingRetries)
+                {
+                    ArmadaEvent? exhausted = await LatestEventAsync(mission.Id, RetriesExhaustedEventType, token).ConfigureAwait(false);
+                    if (exhausted == null || exhausted.CreatedUtc < deferral.FirstDeferredUtc)
+                    {
+                        _Logging.Warn(_Header + "mission " + mission.Id + " used " + autoRetries + " of " + _Settings.MaxLandingRetries
+                            + " automatic landing retries; no more automatic retries");
+                        await EmitAsync(RetriesExhaustedEventType, "Stopped retrying the landing automatically after " + autoRetries + " of "
+                            + _Settings.MaxLandingRetries + " retries (maxLandingRetries). Retry landing manually.", mission, "mission", mission.Id, null, token).ConfigureAwait(false);
+                    }
+                    continue;
+                }
+
                 _LandingRetriedUtc[mission.Id] = now;
                 retried++;
+                await EmitAsync(AutoRetryEventType, "Retrying the deferred landing automatically (" + (autoRetries + 1) + " of " + _Settings.MaxLandingRetries + ")",
+                    mission, "mission", mission.Id, null, token).ConfigureAwait(false);
                 _Logging.Info(_Header + "checkout " + deferral.CheckoutPath + " is clean; retrying the deferred landing of mission " + mission.Id);
                 try
                 {
@@ -297,6 +329,18 @@ namespace Armada.Core.Services
                 Order = EnumerationOrderEnum.CreatedDescending
             }, token).ConfigureAwait(false);
             return events.Objects.FirstOrDefault();
+        }
+
+        private async Task<long> CountEventsSinceAsync(string missionId, string eventType, DateTime sinceUtc, CancellationToken token)
+        {
+            EnumerationResult<ArmadaEvent> events = await _Database.Events.EnumerateAsync(new EnumerationQuery
+            {
+                MissionId = missionId,
+                EventType = eventType,
+                CreatedAfter = sinceUtc.AddSeconds(-1),
+                PageSize = 1
+            }, token).ConfigureAwait(false);
+            return events.TotalRecords;
         }
 
         private async Task<bool> IsCheckoutCleanAsync(LandingDeferral deferral, CancellationToken token)

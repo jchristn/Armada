@@ -951,6 +951,7 @@ namespace Armada.Server.Routes
                         catch (InvalidOperationException ex) { errors.Add("Mission " + mission.Id + ": " + ex.Message); continue; }
                     }
                     mission.Status = Armada.Core.Enums.MissionStatusEnum.Cancelled;
+                    mission.FailureKind = Armada.Core.Enums.MissionFailureKindEnum.OperatorAction;
                     mission.FailureReason = "Vessel deleted";
                     mission.CompletedUtc = DateTime.UtcNow;
                     mission.LastUpdateUtc = DateTime.UtcNow;

@@ -261,20 +261,21 @@ namespace Armada.Server
                 {
                     try
                     {
-                        bool advanced = await LandingTargetSynchronization.SynchronizeAsync(git, dock.WorktreePath, vessel.DefaultBranch, effectivePush ? null : targetWorkDir).ConfigureAwait(false);
+                        LandingTargetSynchronizationResult synchronized = await LandingTargetSynchronization.SynchronizeAsync(git, dock.WorktreePath, vessel.DefaultBranch, effectivePush ? null : targetWorkDir).ConfigureAwait(false);
                         mission.CommitHash = await git.GetHeadCommitHashAsync(dock.WorktreePath).ConfigureAwait(false);
                         if (effectivePush && !String.IsNullOrEmpty(targetWorkDir))
                             await git.ValidatePublishedAncestryAsync(dock.WorktreePath!, targetWorkDir, vessel.DefaultBranch, mission.CommitHash!).ConfigureAwait(false);
                         mission.LastUpdateUtc = DateTime.UtcNow;
                         if (!await _Database.Missions.TryUpdateIfUnchangedAsync(mission, landingVersion, new[] { MissionStatusEnum.WorkProduced }).ConfigureAwait(false)) return;
                         landingVersion = mission.LastUpdateUtc;
-                        if (advanced)
+                        if (synchronized.Advanced)
                         {
                             await _Database.Events.CreateAsync(new ArmadaEvent("mission.landing_target_advanced",
                                 "Integrated the current target; landing verifies the resulting commit before publishing.")
                             {
                                 TenantId = mission.TenantId, UserId = mission.UserId, EntityType = "mission", EntityId = mission.Id,
-                                MissionId = mission.Id, VesselId = mission.VesselId, VoyageId = mission.VoyageId
+                                MissionId = mission.Id, VesselId = mission.VesselId, VoyageId = mission.VoyageId,
+                                Payload = System.Text.Json.JsonSerializer.Serialize(LandingTargetSynchronization.ToAdvancedPayload(synchronized, vessel.DefaultBranch))
                             }).ConfigureAwait(false);
                         }
                     }
@@ -464,6 +465,7 @@ namespace Armada.Server
                         // Keep the branch and the mission recoverable instead of reporting a successful merge.
                         mission.Status = MissionStatusEnum.WorkProduced;
                         mission.CompletedUtc = null;
+                        mission.FailureKind = MissionFailureKindEnum.Infra;
                         mission.FailureReason = !branchExists
                             ? "Landing was not attempted: the source branch could not be confirmed. Work remains unlanded."
                             : "Landing was not attempted: the mission diff snapshot is unavailable. Work remains unlanded.";

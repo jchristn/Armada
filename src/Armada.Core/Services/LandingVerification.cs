@@ -83,8 +83,9 @@ namespace Armada.Core.Services
                 bool passed = !result.TimedOut && result.ExitCode == 0 && unchanged && clean;
                 string status = result.TimedOut ? "TimedOut" : passed ? "Passed" : "Failed";
                 await RecordAsync(status, command, result.ExitCode, output, started).ConfigureAwait(false);
-                if (!passed) throw new InvalidOperationException("Landing verification " + status + " for commit " + sha + ": " + command
-                    + (!unchanged || !clean ? ". The check changed the commit or working tree; preserve and review the changes before retrying." : ". " + output[^Math.Min(4000, output.Length)..]));
+                if (!passed) throw new LandingVerificationException("Landing verification " + status + " for commit " + sha + ": " + command
+                    + (!unchanged || !clean ? ". The check changed the commit or working tree; preserve and review the changes before retrying." : ". " + output[^Math.Min(4000, output.Length)..]),
+                    status, command, result.TimedOut ? null : result.ExitCode, sha, !unchanged || !clean);
             }
             return sha;
 
