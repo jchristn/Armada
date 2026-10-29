@@ -337,11 +337,8 @@ namespace Armada.Server.Ask
                     }
 
                     AskWorkLink link = new AskWorkLink(AskTrackedEntityTypeEnum.BlackBox, entry.Id, false);
-                    if (await _Threads.FindTrackedWorkAsync(thread, link, token).ConfigureAwait(false) != null) continue;
-                    AskTrackedWork work = await _Threads.TrackWorkAsync(thread, link, token).ConfigureAwait(false);
-                    linked++;
-                    Func<AskTrackedWork, Task>? onLinked = OnWorkLinked;
-                    if (onLinked != null) await onLinked(work).ConfigureAwait(false);
+                    string title = String.IsNullOrWhiteSpace(entry.MissionTitle) ? String.Empty : " (\"" + entry.MissionTitle + "\")";
+                    if (await LinkCardAsync(thread, link, "Black box of mission " + missionId + title + ".", token).ConfigureAwait(false)) linked++;
                 }
             }
             catch (Exception ex) when (!(ex is OperationCanceledException))
@@ -540,7 +537,14 @@ namespace Armada.Server.Ask
             {
                 object read = await handler(args).ConfigureAwait(false);
                 if (AskWorkLinker.LinkedReadTools().Contains(name) && !(read is McpToolError))
-                    await LinkAsync(thread, name, argumentsText, Serialize(read), "read " + name, CancellationToken.None).ConfigureAwait(false);
+                {
+                    foreach (AskWorkLink link in AskWorkLinker.Resolve(name, argumentsText, Serialize(read)))
+                    {
+                        try { await LinkCardAsync(thread, link, "Black box entry " + link.EntityId + ".", CancellationToken.None).ConfigureAwait(false); }
+                        catch (Exception ex) when (!(ex is OperationCanceledException)) { _Logging.Warn(_Header + "card link for " + name + " failed: " + ex.Message); }
+                    }
+                }
+
                 return read;
             }
 
@@ -636,6 +640,25 @@ namespace Armada.Server.Ask
             }
 
             return primary;
+        }
+
+        /// <summary>
+        /// Link a card that no action created (a read, or a mission the conversation mentioned): track it once and post a
+        /// system message that hosts the card in the conversation. Returns false when the thread already tracks it.
+        /// </summary>
+        private async Task<bool> LinkCardAsync(AskThread thread, AskWorkLink link, string text, CancellationToken token)
+        {
+            if (await _Threads.FindTrackedWorkAsync(thread, link, token).ConfigureAwait(false) != null) return false;
+            AskTrackedWork work = await _Threads.TrackWorkAsync(thread, link, token).ConfigureAwait(false);
+            AskMessage card = new AskMessage();
+            card.Role = AskMessageRoleEnum.System;
+            card.Kind = AskMessageKindEnum.WorkUpdate;
+            card.ContentText = text;
+            card.TrackedWorkId = work.Id;
+            await _Threads.AppendMessageAsync(thread, card, false, null, token).ConfigureAwait(false);
+            Func<AskTrackedWork, Task>? linked = OnWorkLinked;
+            if (linked != null) await linked(work).ConfigureAwait(false);
+            return true;
         }
 
         private static bool RunsDryRunThenConfirm(string? toolName, string? argumentsText)

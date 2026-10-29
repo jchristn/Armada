@@ -116,7 +116,8 @@ namespace Test.Shared.Suites.Services
                 AskWorkSnapshot snapshot = (await s.H.Threads.GetWorkSnapshotAsync(s.Owner, s.Thread.Id, card.Id).ConfigureAwait(false))!;
                 AssertNotNull(snapshot.BlackBox, "card");
                 AssertEqual(s.EntryId, snapshot.BlackBox!.Digest.EntryId);
-                AssertEqual(0, (await MessagesOfKindAsync(s, AskMessageKindEnum.WorkUpdate).ConfigureAwait(false)), "a black box card posts no milestones");
+                AssertEqual(1, (await MessagesOfKindAsync(s, AskMessageKindEnum.WorkUpdate).ConfigureAwait(false)), "one message hosts the card; a black box card posts no milestones");
+                AssertEqual(1, s.H.Runner.Calls.Count, "and starts no report turn");
             }));
 
             cases.Add(Case("grounding_check_flags_invented_facts", "The grounding check flags a file, commit or mission that is not in the entry, and an answer that is missing a section or an opinion label", TestTags.Negative, async () =>
@@ -261,7 +262,12 @@ namespace Test.Shared.Suites.Services
                 object result = await s.H.CallAsync("get_blackbox", "{\"missionId\":\"" + s.MissionId + "\"}", s.Owner, s.Thread.Id).ConfigureAwait(false);
                 AssertTrue(result is BlackBoxDigest, "the digest, not a proposal: " + result);
                 AssertEqual(0L, (await s.H.Threads.EnumerateProposalsAsync(s.Owner, s.Thread.Id, new EnumerationQuery()).ConfigureAwait(false))!.TotalRecords, "no proposal for a read");
-                AssertEqual(s.EntryId, (await CardAsync(s, s.Thread).ConfigureAwait(false)).EntityId);
+                AskTrackedWork card = await CardAsync(s, s.Thread).ConfigureAwait(false);
+                AssertEqual(s.EntryId, card.EntityId);
+                AskMessage host = (await s.H.Threads.EnumerateMessagesAsync(s.Owner, s.Thread.Id, null).ConfigureAwait(false))!.Messages.Single(m => m.TrackedWorkId == card.Id);
+                AssertEqual(AskMessageRoleEnum.System, host.Role, "a system message hosts the card");
+                await s.H.CallAsync("get_blackbox", "{\"entryId\":\"" + s.EntryId + "\"}", s.Owner, s.Thread.Id).ConfigureAwait(false);
+                AssertEqual(1, (await s.H.Threads.EnumerateMessagesAsync(s.Owner, s.Thread.Id, null).ConfigureAwait(false))!.Messages.Count(m => m.TrackedWorkId == card.Id), "a second read does not repeat the card");
             }));
 
             cases.Add(Case("mentions_link_only_visible_entries", "Mission ids in a message link the cards of entries the owner can see, once each; another user's mission and an unknown mission link nothing", TestTags.Negative, async () =>
