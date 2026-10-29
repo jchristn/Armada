@@ -11,7 +11,7 @@ This document has two parts:
 
 - **Part 1, user guide** (sections 1 to 12): concepts, what an entry contains, the FIX THIS brief, where to find
   entries, recovery, MCP and Ask Armada usage, storage targets, retention and garbage collection, security,
-  troubleshooting and the planned extensions.
+  troubleshooting and the prevention, forensics and operations extensions.
 - **Part 2, developer contract** (section 13): the services, storage, database, models, events and rules the
   surfaces build on.
 
@@ -39,7 +39,7 @@ Part 1, user guide
 9. [Retention and garbage collection](#9-retention-and-garbage-collection)
 10. [Security and redaction](#10-security-and-redaction)
 11. [Troubleshooting](#11-troubleshooting)
-12. [Planned extensions](#12-planned-extensions)
+12. [Prevention, forensics and operations](#12-prevention-forensics-and-operations)
 
 Part 2, developer contract
 
@@ -191,7 +191,7 @@ Three ways to get a brief:
 | REST | `/api/v1/missions/{id}/blackbox`, `/api/v1/voyages/{id}/blackbox`, `/api/v1/blackbox/...` | Available |
 | MCP | 23 tools, 4 resources, 2 prompts | Available |
 | WebSocket | Commands `blackbox.get`, `blackbox.brief`, `blackbox.list`; eight `blackbox.*` events | Available |
-| Ask Armada | Black box read tools without approval; write tools as proposals | Read tools available; `/blackbox` pending |
+| Ask Armada | Black box read tools without approval; write tools as proposals; `/blackbox`; black box cards | Available |
 
 ### Dashboard
 
