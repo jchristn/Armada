@@ -1,0 +1,340 @@
+{
+  "name": "armada-vscode",
+  "displayName": "Armada",
+  "description": "Armada mission and voyage black box in VS Code: recent failures, FIX THIS briefs, recovery paths, conflict decorations and live updates.",
+  "version": "1.2.0",
+  "publisher": "jchristn",
+  "license": "MIT",
+  "icon": "media/icon.png",
+  "homepage": "https://github.com/jchristn/armada",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jchristn/armada.git",
+    "directory": "src/Armada.VSCode"
+  },
+  "bugs": {
+    "url": "https://github.com/jchristn/armada/issues"
+  },
+  "engines": {
+    "vscode": "^1.101.0",
+    "node": ">=22"
+  },
+  "categories": [
+    "Other",
+    "AI"
+  ],
+  "keywords": [
+    "armada",
+    "agents",
+    "black box",
+    "failures",
+    "orchestration"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "configuration": {
+      "title": "Armada",
+      "properties": {
+        "armada.url": {
+          "type": "string",
+          "default": "http://localhost:7890",
+          "description": "URL of the Armada Admiral (REST API). A trailing /dashboard is ignored.",
+          "order": 0
+        },
+        "armada.tenant": {
+          "type": "string",
+          "default": "",
+          "description": "Optional tenant id (ten_...). Admin credentials use it to narrow lists to one tenant; other credentials are already scoped to their own tenant.",
+          "order": 1
+        },
+        "armada.authHeader": {
+          "type": "string",
+          "enum": [
+            "Bearer",
+            "X-Api-Key"
+          ],
+          "enumDescriptions": [
+            "Send the key as Authorization: Bearer (credential tokens, recommended).",
+            "Send the key as X-Api-Key (the deprecated settings API key)."
+          ],
+          "default": "Bearer",
+          "description": "How the stored API key is sent. The key itself is kept in VS Code secret storage, never in settings.",
+          "order": 2
+        },
+        "armada.dashboardUrl": {
+          "type": "string",
+          "default": "",
+          "description": "Armada dashboard URL used by Ask Armada. Empty means armada.url followed by /dashboard."
+        },
+        "armada.briefAudience": {
+          "type": "string",
+          "enum": [
+            "agent",
+            "user",
+            "maintainer"
+          ],
+          "default": "agent",
+          "description": "Audience of the FIX THIS brief used by copy, editor and chat commands."
+        },
+        "armada.fixThis.openPreview": {
+          "type": "boolean",
+          "default": true,
+          "description": "Open a Markdown preview beside the FIX THIS editor."
+        },
+        "armada.failures.filterToWorkspaceVessel": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show only entries for the vessel whose repository (git remote URL) is open. Falls back to every vessel when none matches."
+        },
+        "armada.failures.includeResolved": {
+          "type": "boolean",
+          "default": false,
+          "description": "Also list resolved entries in the Armada Failures view."
+        },
+        "armada.failures.maxEntries": {
+          "type": "number",
+          "default": 50,
+          "minimum": 1,
+          "maximum": 500,
+          "description": "Maximum entries loaded per vessel."
+        },
+        "armada.liveUpdates.useWebSocket": {
+          "type": "boolean",
+          "default": true,
+          "description": "Listen for black box events on the Armada WebSocket. When the socket is unavailable the extension polls."
+        },
+        "armada.liveUpdates.pollIntervalSeconds": {
+          "type": "number",
+          "default": 60,
+          "minimum": 10,
+          "maximum": 3600,
+          "description": "Polling interval used when the WebSocket is disabled or down."
+        },
+        "armada.decorations.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Decorate files that conflicted in open entries and the vessel's hotspot directories."
+        },
+        "armada.decorations.hotspotLimit": {
+          "type": "number",
+          "default": 10,
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Number of hotspot directories to decorate (0 turns hotspot decorations off)."
+        },
+        "armada.notifications.onCapture": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show a notification when a black box entry is captured for the open repository's vessel."
+        }
+      }
+    },
+    "views": {
+      "explorer": [
+        {
+          "id": "armadaFailures",
+          "name": "Armada Failures",
+          "contextualTitle": "Armada"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "armadaFailures",
+        "contents": "Connect to an Armada Admiral to see mission and voyage failures for this repository.\n[Connect to Armada](command:armada.connect)",
+        "when": "!armada.connected"
+      }
+    ],
+    "commands": [
+      {
+        "command": "armada.connect",
+        "title": "Connect",
+        "category": "Armada",
+        "icon": "$(plug)"
+      },
+      {
+        "command": "armada.disconnect",
+        "title": "Disconnect",
+        "category": "Armada",
+        "icon": "$(debug-disconnect)"
+      },
+      {
+        "command": "armada.refreshFailures",
+        "title": "Refresh Failures",
+        "category": "Armada",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "armada.toggleWorkspaceFilter",
+        "title": "Toggle Workspace Vessel Filter",
+        "category": "Armada",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "armada.openEntry",
+        "title": "Open Black Box",
+        "category": "Armada"
+      },
+      {
+        "command": "armada.openBlackBox",
+        "title": "Open Black Box for Mission...",
+        "category": "Armada",
+        "icon": "$(open-preview)"
+      },
+      {
+        "command": "armada.copyFixThis",
+        "title": "Copy FIX THIS",
+        "category": "Armada",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "armada.openFixThisInEditor",
+        "title": "Open FIX THIS in Editor",
+        "category": "Armada",
+        "icon": "$(markdown)"
+      },
+      {
+        "command": "armada.sendFixThisToChat",
+        "title": "Send FIX THIS to Chat",
+        "category": "Armada",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "armada.runRecoveryPath",
+        "title": "Run Recovery Path...",
+        "category": "Armada",
+        "icon": "$(debug-restart)"
+      },
+      {
+        "command": "armada.resolveEntry",
+        "title": "Resolve Black Box Entry",
+        "category": "Armada",
+        "icon": "$(check)"
+      },
+      {
+        "command": "armada.addNote",
+        "title": "Add Note",
+        "category": "Armada",
+        "icon": "$(note)"
+      },
+      {
+        "command": "armada.askArmada",
+        "title": "Ask Armada about this failure",
+        "category": "Armada",
+        "icon": "$(question)"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "armada.openEntry",
+          "when": "false"
+        },
+        {
+          "command": "armada.disconnect",
+          "when": "armada.connected"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "armada.refreshFailures",
+          "when": "view == armadaFailures && armada.connected",
+          "group": "navigation@1"
+        },
+        {
+          "command": "armada.toggleWorkspaceFilter",
+          "when": "view == armadaFailures && armada.connected",
+          "group": "navigation@2"
+        },
+        {
+          "command": "armada.openBlackBox",
+          "when": "view == armadaFailures && armada.connected",
+          "group": "navigation@3"
+        },
+        {
+          "command": "armada.connect",
+          "when": "view == armadaFailures",
+          "group": "connection@1"
+        },
+        {
+          "command": "armada.disconnect",
+          "when": "view == armadaFailures && armada.connected",
+          "group": "connection@2"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "armada.copyFixThis",
+          "when": "view == armadaFailures && viewItem =~ /^armadaEntry/",
+          "group": "inline@1"
+        },
+        {
+          "command": "armada.runRecoveryPath",
+          "when": "view == armadaFailures && viewItem == armadaEntryOpen",
+          "group": "inline@2"
+        },
+        {
+          "command": "armada.openBlackBox",
+          "when": "view == armadaFailures && viewItem =~ /^armadaEntry/",
+          "group": "1_open@1"
+        },
+        {
+          "command": "armada.copyFixThis",
+          "when": "view == armadaFailures && viewItem =~ /^armadaEntry/",
+          "group": "2_fixthis@1"
+        },
+        {
+          "command": "armada.openFixThisInEditor",
+          "when": "view == armadaFailures && viewItem =~ /^armadaEntry/",
+          "group": "2_fixthis@2"
+        },
+        {
+          "command": "armada.sendFixThisToChat",
+          "when": "view == armadaFailures && viewItem =~ /^armadaEntry/",
+          "group": "2_fixthis@3"
+        },
+        {
+          "command": "armada.askArmada",
+          "when": "view == armadaFailures && viewItem =~ /^armadaEntry/",
+          "group": "2_fixthis@4"
+        },
+        {
+          "command": "armada.runRecoveryPath",
+          "when": "view == armadaFailures && viewItem == armadaEntryOpen",
+          "group": "3_act@1"
+        },
+        {
+          "command": "armada.resolveEntry",
+          "when": "view == armadaFailures && viewItem == armadaEntryOpen",
+          "group": "3_act@2"
+        },
+        {
+          "command": "armada.addNote",
+          "when": "view == armadaFailures && viewItem =~ /^armadaEntry/",
+          "group": "3_act@3"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc -p ./ --noEmit",
+    "bundle": "node esbuild.mjs --production",
+    "build": "npm run typecheck && npm run bundle",
+    "compile-tests": "tsc -p ./tsconfig.test.json",
+    "test": "npm run compile-tests && node --require ./out/test/setup.js --test \"out/test/unit/**/*.test.js\"",
+    "test:integration": "npm run build && npm run compile-tests && node ./out/test/integration/runTest.js",
+    "package": "vsce package --no-dependencies",
+    "vscode:prepublish": "npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.4",
+    "@types/vscode": "1.101.0",
+    "@vscode/test-electron": "3.1.0",
+    "@vscode/vsce": "3.9.2",
+    "esbuild": "0.28.2",
+    "typescript": "5.9.3"
+  }
+}
