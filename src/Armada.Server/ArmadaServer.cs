@@ -820,7 +820,7 @@ namespace Armada.Server
             _AgentLifecycle.SetCliPermissionService(_CliPermissions);
             _WebSocketHub.SetCliPermissionService(_CliPermissions);
             _WebSocketHub.SetMissionService(_MissionService);
-            _WebSocketHub.SetBlackBoxService(_BlackBox?.Service);
+            _WebSocketHub.SetBlackBoxService(_BlackBox?.Service, _BlackBox?.Capture);
             _AskThreads.SessionTokensAvailable = _SessionTokenService != null;
             _AskThreads.HarborPromptSupport = (tenantId, runtime) => _HarborConnectionManager != null && _HarborConnectionManager.AnyHarborCanPrompt(tenantId, runtime);
 
@@ -1472,6 +1472,7 @@ namespace Armada.Server
             vesselContextService.LaunchRouter = _LaunchRouter;
             vesselContextService.PlaceDockAsync = _AgentLifecycle.ResolveDockPlacementAsync;
             new VesselRoutes(_Database, _VesselReadinessService, _LandingPreviewService, EmitEventAsync, _JsonOptions, _Docks, vesselContextService, _Git, _Settings, _VesselService, _ManualLandingReconciler, _VesselHosts, _Admiral)
+                { BlackBox = _BlackBox?.Capture }
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Vessel import (bulk onboarding)
@@ -1586,7 +1587,7 @@ namespace Armada.Server
 
             // Missions
             new MissionRoutes(_Database, _Admiral, _MissionService, _Settings, _Git, _LandingService, _LandingPreviewService, _GitHubIntegrationService, EmitEventAsync, EmitMissionStatusChangedAsync, _MissionLanding.HandleMissionCompleteAsync, _WebSocketHub, _Logging, _JsonOptions)
-                { MissionActivityLookup = _AgentLifecycle.MissionActivity.Get, DockHosts = new DockHostResolver(_Git, _Logging, _HarborConnectionManager) }
+                { MissionActivityLookup = _AgentLifecycle.MissionActivity.Get, DockHosts = new DockHostResolver(_Git, _Logging, _HarborConnectionManager), BlackBox = _BlackBox?.Capture }
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Mission and voyage black box
@@ -2095,7 +2096,8 @@ namespace Armada.Server
                 _StageOutcomeAccess,
                 _ModelProbeAccess,
                 _BatteryAccess,
-                _BlackBox?.Service);
+                _BlackBox?.Service,
+                _BlackBox?.Capture);
         }
 
         /// <summary>

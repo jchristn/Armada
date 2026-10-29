@@ -32,7 +32,8 @@ namespace Armada.Server.Mcp.Tools
         /// <param name="vesselService">Optional shared vessel creation service. Defaults to a new <see cref="VesselService"/>.</param>
         /// <param name="settings">Settings (managed docks and repos directories for safe vessel cleanup).</param>
         /// <param name="admiral">Admiral service; deleting a vessel cancels its active missions through it so their agents stop.</param>
-        public static void Register(RegisterToolDelegate register, DatabaseDriver database, IDockService? dockService = null, IVesselService? vesselService = null, Armada.Core.Settings.ArmadaSettings? settings = null, IAdmiralService? admiral = null)
+        /// <param name="blackBox">Optional black box capture for the missions delete_vessel cancels (step VesselDeleted).</param>
+        public static void Register(RegisterToolDelegate register, DatabaseDriver database, IDockService? dockService = null, IVesselService? vesselService = null, Armada.Core.Settings.ArmadaSettings? settings = null, IAdmiralService? admiral = null, Armada.Core.BlackBox.IBlackBoxCapture? blackBox = null)
         {
             IVesselService creator = vesselService ?? new VesselService(database);
 
@@ -243,7 +244,7 @@ namespace Armada.Server.Mcp.Tools
                     Vessel? vessel = await McpCallerScope.ReadVesselAsync(database, caller, vesselId).ConfigureAwait(false);
                     if (vessel == null) return (object)McpToolError.NotFound("Vessel not found");
 
-                    List<string> warnings = await CleanupVesselResourcesAsync(vessel, database, dockService, settings, admiral).ConfigureAwait(false);
+                    List<string> warnings = await CleanupVesselResourcesAsync(vessel, database, dockService, settings, admiral, blackBox).ConfigureAwait(false);
 
                     await database.Vessels.DeleteAsync(vesselId).ConfigureAwait(false);
                     return (object)VesselDeleteResult.Create(vesselId, warnings);
@@ -284,7 +285,7 @@ namespace Armada.Server.Mcp.Tools
                             continue;
                         }
 
-                        await CleanupVesselResourcesAsync(vessel, database, dockService, settings, admiral).ConfigureAwait(false);
+                        await CleanupVesselResourcesAsync(vessel, database, dockService, settings, admiral, blackBox).ConfigureAwait(false);
                         await database.Vessels.DeleteAsync(id).ConfigureAwait(false);
                         result.Deleted++;
                     }
@@ -331,7 +332,7 @@ namespace Armada.Server.Mcp.Tools
         /// Cancels active missions, removes docks/worktrees, and deletes the bare repository.
         /// This method throws on failure -- vessel deletion should NOT proceed if cleanup fails.
         /// </summary>
-        private static async Task<List<string>> CleanupVesselResourcesAsync(Vessel vessel, DatabaseDriver database, IDockService? dockService, Armada.Core.Settings.ArmadaSettings? settings, IAdmiralService? admiral)
+        private static async Task<List<string>> CleanupVesselResourcesAsync(Vessel vessel, DatabaseDriver database, IDockService? dockService, Armada.Core.Settings.ArmadaSettings? settings, IAdmiralService? admiral, Armada.Core.BlackBox.IBlackBoxCapture? blackBox)
         {
             List<string> errors = new List<string>();
 
@@ -345,6 +346,9 @@ namespace Armada.Server.Mcp.Tools
                     || mission.Status == Armada.Core.Enums.MissionStatusEnum.Review
                     || mission.Status == Armada.Core.Enums.MissionStatusEnum.Testing)
                 {
+                    // Read before the cancel: CancelMissionAsync records its own OperatorTransition entry and sets Cancelled;
+                    // the VesselDeleted entry below supersedes it as the mission's current entry.
+                    Armada.Core.Enums.MissionStatusEnum statusBefore = mission.Status;
                     if (admiral != null)
                     {
                         // Stop the agent before the mission is cancelled; a failed stop is reported, not hidden.
@@ -357,6 +361,7 @@ namespace Armada.Server.Mcp.Tools
                     mission.CompletedUtc = DateTime.UtcNow;
                     mission.LastUpdateUtc = DateTime.UtcNow;
                     await database.Missions.UpdateAsync(mission).ConfigureAwait(false);
+                    await BlackBoxOperatorCapture.RecordVesselDeletedAsync(blackBox, mission, statusBefore, vessel, "MCP").ConfigureAwait(false);
                 }
             }
 

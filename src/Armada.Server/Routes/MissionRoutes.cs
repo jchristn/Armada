@@ -55,6 +55,12 @@ namespace Armada.Server.Routes
         /// </summary>
         public Func<string, RuntimeActivity?>? MissionActivityLookup { get; set; } = null;
 
+        /// <summary>
+        /// Black box capture for manual transitions to Failed, LandingFailed, Cancelled or Blocked (step
+        /// OperatorTransition), or null.
+        /// </summary>
+        public Armada.Core.BlackBox.IBlackBoxCapture? BlackBox { get; set; } = null;
+
         /// <summary>Resolve file and git operations on the dock's owning host.</summary>
         public DockHostResolver? DockHosts { get; set; } = null;
 
@@ -761,6 +767,7 @@ namespace Armada.Server.Routes
                 }
 
                 await _database.Missions.UpdateAsync(mission).ConfigureAwait(false);
+                await BlackBoxOperatorCapture.RecordTransitionAsync(BlackBox, mission, previousStatus, "REST").ConfigureAwait(false);
 
                 // Audit event: manual Complete without an active dock bypasses the landing pipeline.
                 // This is allowed (operators may need it after restarts/cleanup) but should be visible.

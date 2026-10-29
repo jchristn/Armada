@@ -640,6 +640,82 @@ namespace Test.Shared.Suites.E2E
                 await ExpectErrorAsync(a, HttpMethod.Delete, "/api/v1/blackbox/" + doomedEntry, null, HttpStatusCode.NotFound, BlackBoxNotFoundException.ErrorCode, null).ConfigureAwait(false);
             }));
 
+            cases.Add(CaseAsync("operator_transition_captured", "A manual transition to Failed, Cancelled or Blocked over REST, MCP and WebSocket is captured as External/OperatorTransition; a transition to InProgress is not", TestTags.Positive, async () =>
+            {
+                RequireSetup();
+                using HttpClient a = _AdminA!.CreateClient(_Fx!.BaseUrl);
+                Mission rest = await CreateMissionAsync("transition-rest", MissionStatusEnum.InProgress, null).ConfigureAwait(false);
+                using (HttpResponseMessage response = await a.PutAsync("/api/v1/missions/" + rest.Id + "/status", JsonHelper.ToJsonContent(new { Status = "Failed" })).ConfigureAwait(false))
+                    AssertStatusCode(HttpStatusCode.OK, response, "REST transition");
+                await ExpectOperatorEntryAsync(a, rest.Id, BlackBoxStepEnum.OperatorTransition, "REST", MissionStatusEnum.InProgress).ConfigureAwait(false);
+
+                Mission mcp = await CreateMissionAsync("transition-mcp", MissionStatusEnum.InProgress, null).ConfigureAwait(false);
+                using (McpToolClient client = Mcp(_AdminA!))
+                {
+                    await client.InitializeAsync().ConfigureAwait(false);
+                    await OkAsync<Mission>(client, "transition_mission_status", new { missionId = mcp.Id, status = "Cancelled" }).ConfigureAwait(false);
+                }
+
+                await ExpectOperatorEntryAsync(a, mcp.Id, BlackBoxStepEnum.OperatorTransition, "MCP", MissionStatusEnum.InProgress).ConfigureAwait(false);
+
+                Mission ws = await CreateMissionAsync("transition-ws", MissionStatusEnum.InProgress, null).ConfigureAwait(false);
+                using (ClientWebSocket socket = await E2EServerFixture.ConnectAuthenticatedWebSocketAsync(_Fx.RestPort).ConfigureAwait(false))
+                {
+                    string reply = await CommandAsync(socket, "transition_mission_status", new { Route = "command", Action = "transition_mission_status", Id = ws.Id, Status = "Failed" }).ConfigureAwait(false);
+                    AssertContains("command.result", reply, "WebSocket transition");
+                    await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", CancellationToken.None).ConfigureAwait(false);
+                }
+
+                await ExpectOperatorEntryAsync(a, ws.Id, BlackBoxStepEnum.OperatorTransition, "WebSocket", MissionStatusEnum.InProgress).ConfigureAwait(false);
+
+                Mission notCaptured = await CreateMissionAsync("transition-none", MissionStatusEnum.Assigned, null).ConfigureAwait(false);
+                using (HttpResponseMessage response = await a.PutAsync("/api/v1/missions/" + notCaptured.Id + "/status", JsonHelper.ToJsonContent(new { Status = "InProgress" })).ConfigureAwait(false))
+                    AssertStatusCode(HttpStatusCode.OK, response, "REST transition to InProgress");
+                EnumerationResult<BlackBoxEntrySummary> none = await GetJsonAsync<EnumerationResult<BlackBoxEntrySummary>>(a, "/api/v1/blackbox?missionId=" + notCaptured.Id).ConfigureAwait(false);
+                AssertEqual(0L, none.TotalRecords, "a transition to InProgress is not captured");
+            }));
+
+            cases.Add(CaseAsync("vessel_deletion_captured", "Deleting a vessel over REST, MCP and WebSocket captures each active mission it cancels as External/VesselDeleted, and the entry outlives the mission row", TestTags.Positive, async () =>
+            {
+                RequireSetup();
+                using HttpClient a = _AdminA!.CreateClient(_Fx!.BaseUrl);
+                foreach (string surface in new[] { "REST", "MCP", "WebSocket" })
+                {
+                    Vessel vessel;
+                    using (DatabaseDriver db = await OpenDatabaseAsync().ConfigureAwait(false))
+                    {
+                        vessel = new Vessel("bbapi-delete-" + surface.ToLowerInvariant() + "-" + Guid.NewGuid().ToString("N").Substring(0, 6), "https://example.invalid/bbapi-" + surface.ToLowerInvariant() + ".git");
+                        vessel.TenantId = _AdminA.TenantId;
+                        vessel.UserId = _AdminA.UserId;
+                        vessel = await db.Vessels.CreateAsync(vessel).ConfigureAwait(false);
+                    }
+
+                    Mission mission = await CreateMissionAsync("vessel-" + surface, MissionStatusEnum.Pending, vessel.Id).ConfigureAwait(false);
+                    if (surface == "REST")
+                    {
+                        using HttpResponseMessage response = await a.DeleteAsync("/api/v1/vessels/" + vessel.Id).ConfigureAwait(false);
+                        AssertTrue(response.IsSuccessStatusCode, "REST delete vessel: " + (int)response.StatusCode + " " + await response.Content.ReadAsStringAsync().ConfigureAwait(false));
+                    }
+                    else if (surface == "MCP")
+                    {
+                        using McpToolClient client = Mcp(_AdminA!);
+                        await client.InitializeAsync().ConfigureAwait(false);
+                        McpToolCallResult result = await client.CallToolResultAsync("delete_vessel", JsonHelper.Serialize(new { vesselId = vessel.Id })).ConfigureAwait(false);
+                        AssertFalse(result.IsError, "MCP delete_vessel: " + result.Text);
+                        AssertNull(McpToolResultProbe.From(result).ErrorCode, "MCP delete_vessel: " + result.Text);
+                    }
+                    else
+                    {
+                        using ClientWebSocket socket = await E2EServerFixture.ConnectAuthenticatedWebSocketAsync(_Fx.RestPort).ConfigureAwait(false);
+                        string reply = await CommandAsync(socket, "delete_vessel", new { Route = "command", Action = "delete_vessel", Id = vessel.Id }).ConfigureAwait(false);
+                        AssertContains("command.result", reply, "WebSocket delete_vessel");
+                        await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", CancellationToken.None).ConfigureAwait(false);
+                    }
+
+                    await ExpectOperatorEntryAsync(a, mission.Id, BlackBoxStepEnum.VesselDeleted, surface, MissionStatusEnum.Pending).ConfigureAwait(false);
+                }
+            }));
+
             return new TestSuiteDescriptor(suiteId: SuiteId, displayName: "Black box REST, MCP and WebSocket surfaces", cases: cases);
         }
 
@@ -701,6 +777,34 @@ namespace Test.Shared.Suites.E2E
             mission.FailureReason = "Mission modified files outside its scoped file list: src/feature/a.cs " + _Marker;
             mission.LastUpdateUtc = DateTime.UtcNow.AddSeconds(-5);
             return await db.Missions.CreateAsync(mission).ConfigureAwait(false);
+        }
+
+        private async Task<Mission> CreateMissionAsync(string label, MissionStatusEnum status, string? vesselId)
+        {
+            using (DatabaseDriver db = await OpenDatabaseAsync().ConfigureAwait(false))
+            {
+                Mission mission = new Mission("bbapi " + label + " mission", "Operator action " + _Marker);
+                mission.TenantId = _UserA!.TenantId;
+                mission.UserId = _UserA.UserId;
+                mission.Status = status;
+                mission.VesselId = vesselId;
+                return await db.Missions.CreateAsync(mission).ConfigureAwait(false);
+            }
+        }
+
+        private static async Task ExpectOperatorEntryAsync(HttpClient client, string missionId, BlackBoxStepEnum step, string surface, MissionStatusEnum statusBefore)
+        {
+            // The current entry (a vessel delete through REST or MCP first cancels through the admiral, whose own
+            // OperatorTransition entry the VesselDeleted entry supersedes).
+            EnumerationResult<BlackBoxEntrySummary> page = await GetJsonAsync<EnumerationResult<BlackBoxEntrySummary>>(client, "/api/v1/blackbox?isCurrent=true&missionId=" + missionId).ConfigureAwait(false);
+            AssertEqual(1L, page.TotalRecords, surface + ": one current entry for " + missionId);
+            BlackBoxEntrySummary entry = page.Objects.Single();
+            AssertEqual(statusBefore.ToString(), entry.StatusBefore, surface + " status before");
+            AssertEqual(step, entry.Step, surface + " step");
+            AssertEqual(BlackBoxPhaseEnum.External, entry.Phase, surface + " phase");
+            AssertEqual(BlackBoxTriageEnum.External, entry.Triage, surface + " triage");
+            string brief = await GetTextAsync(client, "/api/v1/blackbox/" + entry.Id + "/brief").ConfigureAwait(false);
+            AssertContains(surface, brief, surface + " named in the brief's note");
         }
 
         private static byte[] BigObject()

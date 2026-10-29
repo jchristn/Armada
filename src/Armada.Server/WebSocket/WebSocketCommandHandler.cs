@@ -46,6 +46,12 @@ namespace Armada.Server.WebSocket
         public Armada.Core.BlackBox.IBlackBoxService? BlackBox { get; set; } = null;
 
         /// <summary>
+        /// Black box capture for the operator actions of delete_vessel (step VesselDeleted) and transition_mission_status
+        /// (step OperatorTransition), or null.
+        /// </summary>
+        public Armada.Core.BlackBox.IBlackBoxCapture? BlackBoxCapture { get; set; } = null;
+
+        /// <summary>
         /// Instantiate the command handler.
         /// </summary>
         /// <param name="admiral">Admiral service for command handling.</param>
@@ -318,10 +324,14 @@ namespace Armada.Server.WebSocket
                         {
                             if (dvm.Status == MissionStatusEnum.Pending || dvm.Status == MissionStatusEnum.Blocked || dvm.Status == MissionStatusEnum.Assigned || dvm.Status == MissionStatusEnum.InProgress)
                             {
+                                MissionStatusEnum dvmBefore = dvm.Status;
                                 dvm.Status = MissionStatusEnum.Cancelled;
+                                dvm.FailureKind = MissionFailureKindEnum.OperatorAction;
+                                dvm.FailureReason = "Vessel deleted";
                                 dvm.CompletedUtc = DateTime.UtcNow;
                                 dvm.LastUpdateUtc = DateTime.UtcNow;
                                 await _Database.Missions.UpdateAsync(dvm).ConfigureAwait(false);
+                                await BlackBoxOperatorCapture.RecordVesselDeletedAsync(BlackBoxCapture, dvm, dvmBefore, delVessel, "WebSocket").ConfigureAwait(false);
                             }
                         }
                     }
@@ -586,11 +596,13 @@ namespace Armada.Server.WebSocket
                     }
                     else
                     {
+                        MissionStatusEnum tmBefore = tmMission.Status;
                         tmMission.Status = tmNewStatus;
                         tmMission.LastUpdateUtc = DateTime.UtcNow;
                         if (tmNewStatus == MissionStatusEnum.Complete || tmNewStatus == MissionStatusEnum.Failed || tmNewStatus == MissionStatusEnum.LandingFailed || tmNewStatus == MissionStatusEnum.Cancelled)
                             tmMission.CompletedUtc = DateTime.UtcNow;
                         await _Database.Missions.UpdateAsync(tmMission).ConfigureAwait(false);
+                        await BlackBoxOperatorCapture.RecordTransitionAsync(BlackBoxCapture, tmMission, tmBefore, "WebSocket").ConfigureAwait(false);
                         Signal tmSignal = new Signal(SignalTypeEnum.Progress, "Mission " + tmId + " transitioned to " + tmNewStatus);
                         if (!String.IsNullOrEmpty(tmMission.CaptainId)) tmSignal.FromCaptainId = tmMission.CaptainId;
                         await _Database.Signals.CreateAsync(tmSignal).ConfigureAwait(false);

@@ -279,9 +279,11 @@ namespace Armada.Server.WebSocket
         /// Provide the black box service for the blackbox.get, blackbox.brief and blackbox.list WebSocket commands.
         /// </summary>
         /// <param name="service">Service, or null.</param>
-        public void SetBlackBoxService(Armada.Core.BlackBox.IBlackBoxService? service)
+        /// <param name="capture">Capture for the operator actions of delete_vessel and transition_mission_status, or null.</param>
+        public void SetBlackBoxService(Armada.Core.BlackBox.IBlackBoxService? service, Armada.Core.BlackBox.IBlackBoxCapture? capture = null)
         {
             _CommandHandler.BlackBox = service;
+            _CommandHandler.BlackBoxCapture = capture;
         }
 
         /// <summary>
