@@ -83,12 +83,17 @@ namespace Test.Shared.Suites.Services
                 AssertEqual("a_b", BlackBoxKeyLayout.Segment("a b"));
                 BlackBoxStoreFactory factory = new BlackBoxStoreFactory(t.Driver, new BlackBoxSettings());
                 AssertTrue(factory.Get(BlackBoxStorageTargetEnum.Database) is DatabaseBlackBoxStore, "database");
-                foreach (BlackBoxStorageTargetEnum target in new[] { BlackBoxStorageTargetEnum.Disk, BlackBoxStorageTargetEnum.S3, BlackBoxStorageTargetEnum.AzureBlob, BlackBoxStorageTargetEnum.GoogleCloud, BlackBoxStorageTargetEnum.Cifs, BlackBoxStorageTargetEnum.Nfs, BlackBoxStorageTargetEnum.Unknown })
+                // Unconfigured external targets are refused with the settings that are missing; an unknown target is not supported.
+                foreach (BlackBoxStorageTargetEnum target in new[] { BlackBoxStorageTargetEnum.Disk, BlackBoxStorageTargetEnum.S3, BlackBoxStorageTargetEnum.AzureBlob, BlackBoxStorageTargetEnum.GoogleCloud, BlackBoxStorageTargetEnum.Cifs, BlackBoxStorageTargetEnum.Nfs })
                 {
-                    NotSupportedException? caught = null;
-                    try { factory.Get(target); } catch (NotSupportedException e) { caught = e; }
+                    BlackBoxStoreUnavailableException? caught = null;
+                    try { factory.Get(target); } catch (BlackBoxStoreUnavailableException e) { caught = e; }
                     AssertNotNull(caught, target + " refused");
+                    AssertContains("misconfigured", caught!.Message, target + " says why");
                 }
+                NotSupportedException? unknown = null;
+                try { factory.Get(BlackBoxStorageTargetEnum.Unknown); } catch (NotSupportedException e) { unknown = e; }
+                AssertNotNull(unknown, "Unknown refused");
             }));
 
             return new TestSuiteDescriptor(suiteId: SuiteId, displayName: "Black box storage", cases: cases);
