@@ -64,6 +64,18 @@ namespace Armada.Core.BlackBox
         }
 
         /// <summary>
+        /// The character cap the bounder applies to a record string property of this name (BlackBoxLimits; 2000 when the
+        /// name has no specific cap). Strings inside record lists are capped at BlackBoxLimits.MaxPathChars.
+        /// </summary>
+        /// <param name="propertyName">Property name.</param>
+        /// <returns>The cap in characters.</returns>
+        public static int StringCap(string propertyName)
+        {
+            if (propertyName == null) throw new ArgumentNullException(nameof(propertyName));
+            return _StringCaps.TryGetValue(propertyName, out int cap) ? cap : BlackBoxLimits.MaxShortTextChars;
+        }
+
+        /// <summary>
         /// Add a capture note (bounded; further notes are dropped once the limit is reached, counted in FieldTotal).
         /// </summary>
         /// <param name="truncation">Truncation section.</param>

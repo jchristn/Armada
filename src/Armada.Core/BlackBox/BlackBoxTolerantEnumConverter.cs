@@ -15,22 +15,40 @@ namespace Armada.Core.BlackBox
         /// </summary>
         public static TEnum Fallback { get; } = Enum.TryParse<TEnum>("Unknown", false, out TEnum unknown) ? unknown : default;
 
-        /// <inheritdoc />
-        public override TEnum Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        /// <summary>
+        /// Whether the enum has an Unknown member.
+        /// </summary>
+        public static bool HasUnknown { get; } = Enum.TryParse<TEnum>("Unknown", false, out TEnum _);
+
+        /// <summary>
+        /// Parse a name or number; false when this build does not know the value.
+        /// </summary>
+        /// <param name="reader">Reader positioned on the value.</param>
+        /// <param name="value">Parsed value.</param>
+        /// <returns>True when known.</returns>
+        public static bool TryReadKnown(ref Utf8JsonReader reader, out TEnum value)
         {
+            value = default;
             if (reader.TokenType == JsonTokenType.String)
             {
                 string? text = reader.GetString();
-                if (!String.IsNullOrEmpty(text) && Enum.TryParse<TEnum>(text, true, out TEnum parsed) && Enum.IsDefined(typeof(TEnum), parsed)) return parsed;
-                return Fallback;
+                if (!String.IsNullOrEmpty(text) && Enum.TryParse<TEnum>(text, true, out TEnum parsed) && Enum.IsDefined(typeof(TEnum), parsed)) { value = parsed; return true; }
+                return false;
             }
             if (reader.TokenType == JsonTokenType.Number && reader.TryGetInt64(out long number))
             {
-                TEnum value = (TEnum)Enum.ToObject(typeof(TEnum), number);
-                return Enum.IsDefined(typeof(TEnum), value) ? value : Fallback;
+                TEnum candidate = (TEnum)Enum.ToObject(typeof(TEnum), number);
+                if (Enum.IsDefined(typeof(TEnum), candidate)) { value = candidate; return true; }
+                return false;
             }
             reader.Skip();
-            return Fallback;
+            return false;
+        }
+
+        /// <inheritdoc />
+        public override TEnum Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            return TryReadKnown(ref reader, out TEnum value) ? value : Fallback;
         }
 
         /// <inheritdoc />

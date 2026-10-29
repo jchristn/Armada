@@ -311,7 +311,22 @@ Every string has a hard cap and every collection a `[CollectionBound(..., Reason
 - `brief.md` targets 12 KB with a 40 KB hard cap.
 - Nothing is dropped silently.
 
-### 4.5 Storage targets
+### 4.5 Schema and compatibility
+
+The black box is structured for applications to consume, with a documented schema (`docs/BLACKBOX_SCHEMA.md`) and a
+JSON Schema generated from the models (`docs/blackbox-record.schema.json`).
+
+- `record.json` carries `SchemaVersion`.
+- Additive changes (new optional fields, new enum values) keep the version. Renames, removals, and type or meaning
+  changes bump it.
+- Readers must ignore unknown fields and treat unknown enum values as `Unknown`; every black box enum has an `Unknown`
+  member, and Armada's reader (`BlackBoxJson`, with a tolerant enum converter) does this itself.
+- Armada can re-render older records: briefs are rendered live from `record.json`.
+- `GET .../blackbox/{id}?schemaVersion=N` is out of scope unless needed.
+- Every object has a stable name and content type, listed in the schema document, and downloads include
+  `manifest.json` (entry id, schema version, and every object with name, content type, size and SHA-256).
+
+### 4.6 Storage targets
 
 `IBlackBoxStore` (NEW, `src/Armada.Core/BlackBox/Storage/IBlackBoxStore.cs`):
 
@@ -1013,6 +1028,12 @@ The v1.2.0 introductory paragraph gains a sentence naming the black box as a hea
 
 ### 14.4 Other documentation
 
+- `docs/BLACKBOX_SCHEMA.md` (NEW): the consumer reference for the black box. Every object in an entry (record.json,
+  brief*.md, evidence/*, manifest.json in downloads), every BlackBoxRecord section and field with type, nullability,
+  bounds (max length, [CollectionBound] limits), enum values, units, and examples; the REST/MCP shapes (BlackBoxEntry,
+  BlackBoxEntrySummary, BlackBoxObjectSummary, chunk reads); event payloads; the versioning and compatibility policy.
+  `docs/blackbox-record.schema.json` (NEW): JSON Schema (draft 2020-12) for record.json, generated from the C# models,
+  plus schemas for the entry and summary shapes.
 - `docs/BLACKBOX.md` (NEW): concepts, the record schema with every section, the phase and step taxonomy, the rule
   catalog and how to add a rule, storage targets and configuration examples for each target, retention and GC,
   security and redaction, MCP and Ask usage patterns, troubleshooting.
@@ -1078,6 +1099,8 @@ Each phase ships on its own and leaves the repository green.
 12. Dashboard `BlackBoxPanel` with Copy FIX THIS on mission and voyage pages.
 13. Helm `armada blackbox show <id> --brief`.
 14. Basic retention: `retentionDays`, `keepLatestPerMission`, expiry GC on the Database target.
+15. Schema: `docs/BLACKBOX_SCHEMA.md` and `docs/blackbox-record.schema.json`, plus a test that regenerates the schema
+   from the models and fails on drift (like the API surface check).
 
 End of Phase 1: every failure produces a pasteable FIX THIS brief, stored in the database, readable everywhere that
 matters, and expired automatically.
@@ -1283,6 +1306,16 @@ Sanitized records built from:
 These missions were deleted on 2026-10-29, so the fixtures are reconstructed from this plan's descriptions and the
 conversation record, not exported.
 
+### 16.11 Schema (`Models.BlackBoxSchema`)
+
+| # | Type | Case | Expected |
+|---|---|---|---|
+| 1 | P | Schema generated from the models | Equals the committed `docs/blackbox-record.schema.json` |
+| 2 | P | A captured record | Validates against the schema |
+| 3 | P | A record with an extra unknown field | Still deserializes |
+| 4 | N | A record missing a required field | Fails validation |
+| 5 | N | An unknown enum value | Deserializes to `Unknown` instead of throwing |
+
 ## 17. Open questions
 
 1. Should operator cancellations produce entries? Proposal: yes, triage `External`, excluded from bundles by default.
@@ -1308,47 +1341,48 @@ user value.
 | 6 | Status before and after | Statuses at the failure write and the change time | 4 | 4 | 5 | 13 |
 | 7 | Failure site | Phase, step, host, file, method, line, build commit | 4 | 4 | 5 | 13 |
 | 8 | Mechanism | Exception, exit code, failing command, git operation and stderr | 4 | 4 | 5 | 13 |
-| 9 | Ask Armada explain | "Show me the pertinent details and your opinion" grounded in the entry | 3 | 5 | 4 | 12 |
-| 10 | Conflicted files | Files git reported as conflicted, bounded, with total | 3 | 5 | 4 | 12 |
-| 11 | Ranked recovery paths | Paths with preconditions, risk and exact commands | 3 | 5 | 4 | 12 |
-| 12 | Voyage roll-up | Missions by status, failed entries, cascade root, settlement rule | 3 | 5 | 4 | 12 |
-| 13 | Dashboard panel | Mission and voyage panels with copy, audience toggle, actions | 4 | 5 | 3 | 12 |
-| 14 | Conflicted directories | Directory rollup of conflicted files | 4 | 4 | 4 | 12 |
-| 15 | Evidence objects | Agent output, logs, check and verification output, git status, diff | 4 | 4 | 4 | 12 |
-| 16 | Basic retention and expiry | `retentionDays`, keep-latest, pinning | 4 | 4 | 4 | 12 |
-| 17 | REST retrieval routes | Entry, brief, sections, objects, enumerate, download | 4 | 3 | 5 | 12 |
-| 18 | Workspace state | Dock and worktree existence, branch tip, dirty paths, Harbor link | 3 | 4 | 5 | 12 |
-| 19 | Target movement | Start commit, target tips, commits landed since start | 3 | 4 | 5 | 12 |
-| 20 | Attempt history | Prior attempts, stage outcomes, rescue chain | 3 | 4 | 5 | 12 |
-| 21 | Build and environment identity | Armada version and commit, Harbor, runtime and git versions | 5 | 2 | 5 | 12 |
-| 22 | .NET client (SDK) methods | `Armada.Client` black box methods with contract tests | 4 | 3 | 5 | 12 |
-| 23 | Helm CLI | `armada blackbox show --brief` and the full command set | 4 | 4 | 3 | 11 |
-| 24 | Conflicting mission attribution | Which missions landed overlapping commits (trailers) or overlapped concurrently | 2 | 5 | 4 | 11 |
-| 25 | Plain-language summary | 3 to 6 sentences on what happened and what to do | 3 | 5 | 3 | 11 |
-| 26 | Preventive configuration recommendations | Setting, scope, current, suggested, how to apply | 2 | 5 | 4 | 11 |
-| 27 | MCP act: recovery and recommendations | Dry run, confirm token, annotation | 2 | 5 | 4 | 11 |
-| 28 | Triage verdict | UserConfig, MissionBrief, Transient, ArmadaDefect, External | 3 | 4 | 4 | 11 |
-| 29 | Effective configuration with sources | Settings that shaped the failure and where each came from | 3 | 3 | 5 | 11 |
-| 30 | Fingerprint and similar failures | Failure-mode hash, occurrences, similar entries and resolutions | 3 | 3 | 5 | 11 |
-| 31 | Maintainer bundle | Up to 50 entries grouped by fingerprint | 4 | 2 | 5 | 11 |
-| 32 | Postman collection and mock | Black Box folder, tests, examples, mock | 4 | 2 | 5 | 11 |
-| 33 | Notes and resolution tracking | Notes by operators and agents; resolution and link | 4 | 3 | 4 | 11 |
-| 34 | Full GC (quotas, cascades, orphans, dry run) | Two-phase delete and reports | 3 | 3 | 4 | 10 |
-| 35 | Redaction report | Which redaction rules fired and how often | 3 | 4 | 3 | 10 |
-| 36 | TUI Failure tab and list | Copy, export, recovery, Ask | 3 | 4 | 3 | 10 |
-| 37 | Status timeline | Every status change in the attempt | 3 | 3 | 4 | 10 |
-| 38 | External storage targets | Disk, S3 and compatible, Azure, GCS, CIFS, NFS through Blobject | 2 | 3 | 4 | 9 |
-| 39 | Armada behavior-change hypotheses | Improvement ideas with source pointers and severity | 2 | 2 | 5 | 9 |
-| 40 | Scope and boundary detail | Scoped files, out-of-scope files, boundary findings | 4 | 2 | 3 | 9 |
-| 41 | Conflict hotspots | Directories and files that conflict most per vessel | 3 | 3 | 3 | 9 |
-| 42 | Overlap warning at dispatch (extension) | Warn or chain missions touching hot or overlapping paths | 2 | 4 | 3 | 9 |
-| 43 | Regression fixture export (extension) | Real failures become advisor fixtures | 3 | 1 | 5 | 9 |
-| 44 | MCP resources and prompts | `armada://blackbox/...` resources, `review_blackbox` prompt (if Voltaic supports them) | 3 | 2 | 3 | 8 |
-| 45 | Storage migration between targets | Copy, verify, switch, delete; resumable | 2 | 2 | 4 | 8 |
-| 46 | Model-written summary (extension) | Labeled model summary over the entry | 3 | 3 | 2 | 8 |
-| 47 | VS Code extension | New extension: tree view, brief, recovery, file decorations | 1 | 4 | 2 | 7 |
-| 48 | Mobile | Detail, recovery, share | 3 | 2 | 2 | 7 |
-| 49 | Self-improvement mission (extension) | Dispatch an Armada mission from the maintainer bundle | 2 | 1 | 4 | 7 |
+| 9 | Documented, versioned schema | BLACKBOX_SCHEMA.md, JSON Schema, drift test, compatibility policy | 4 | 4 | 5 | 13 |
+| 10 | Ask Armada explain | "Show me the pertinent details and your opinion" grounded in the entry | 3 | 5 | 4 | 12 |
+| 11 | Conflicted files | Files git reported as conflicted, bounded, with total | 3 | 5 | 4 | 12 |
+| 12 | Ranked recovery paths | Paths with preconditions, risk and exact commands | 3 | 5 | 4 | 12 |
+| 13 | Voyage roll-up | Missions by status, failed entries, cascade root, settlement rule | 3 | 5 | 4 | 12 |
+| 14 | Dashboard panel | Mission and voyage panels with copy, audience toggle, actions | 4 | 5 | 3 | 12 |
+| 15 | Conflicted directories | Directory rollup of conflicted files | 4 | 4 | 4 | 12 |
+| 16 | Evidence objects | Agent output, logs, check and verification output, git status, diff | 4 | 4 | 4 | 12 |
+| 17 | Basic retention and expiry | `retentionDays`, keep-latest, pinning | 4 | 4 | 4 | 12 |
+| 18 | REST retrieval routes | Entry, brief, sections, objects, enumerate, download | 4 | 3 | 5 | 12 |
+| 19 | Workspace state | Dock and worktree existence, branch tip, dirty paths, Harbor link | 3 | 4 | 5 | 12 |
+| 20 | Target movement | Start commit, target tips, commits landed since start | 3 | 4 | 5 | 12 |
+| 21 | Attempt history | Prior attempts, stage outcomes, rescue chain | 3 | 4 | 5 | 12 |
+| 22 | Build and environment identity | Armada version and commit, Harbor, runtime and git versions | 5 | 2 | 5 | 12 |
+| 23 | .NET client (SDK) methods | `Armada.Client` black box methods with contract tests | 4 | 3 | 5 | 12 |
+| 24 | Helm CLI | `armada blackbox show --brief` and the full command set | 4 | 4 | 3 | 11 |
+| 25 | Conflicting mission attribution | Which missions landed overlapping commits (trailers) or overlapped concurrently | 2 | 5 | 4 | 11 |
+| 26 | Plain-language summary | 3 to 6 sentences on what happened and what to do | 3 | 5 | 3 | 11 |
+| 27 | Preventive configuration recommendations | Setting, scope, current, suggested, how to apply | 2 | 5 | 4 | 11 |
+| 28 | MCP act: recovery and recommendations | Dry run, confirm token, annotation | 2 | 5 | 4 | 11 |
+| 29 | Triage verdict | UserConfig, MissionBrief, Transient, ArmadaDefect, External | 3 | 4 | 4 | 11 |
+| 30 | Effective configuration with sources | Settings that shaped the failure and where each came from | 3 | 3 | 5 | 11 |
+| 31 | Fingerprint and similar failures | Failure-mode hash, occurrences, similar entries and resolutions | 3 | 3 | 5 | 11 |
+| 32 | Maintainer bundle | Up to 50 entries grouped by fingerprint | 4 | 2 | 5 | 11 |
+| 33 | Postman collection and mock | Black Box folder, tests, examples, mock | 4 | 2 | 5 | 11 |
+| 34 | Notes and resolution tracking | Notes by operators and agents; resolution and link | 4 | 3 | 4 | 11 |
+| 35 | Full GC (quotas, cascades, orphans, dry run) | Two-phase delete and reports | 3 | 3 | 4 | 10 |
+| 36 | Redaction report | Which redaction rules fired and how often | 3 | 4 | 3 | 10 |
+| 37 | TUI Failure tab and list | Copy, export, recovery, Ask | 3 | 4 | 3 | 10 |
+| 38 | Status timeline | Every status change in the attempt | 3 | 3 | 4 | 10 |
+| 39 | External storage targets | Disk, S3 and compatible, Azure, GCS, CIFS, NFS through Blobject | 2 | 3 | 4 | 9 |
+| 40 | Armada behavior-change hypotheses | Improvement ideas with source pointers and severity | 2 | 2 | 5 | 9 |
+| 41 | Scope and boundary detail | Scoped files, out-of-scope files, boundary findings | 4 | 2 | 3 | 9 |
+| 42 | Conflict hotspots | Directories and files that conflict most per vessel | 3 | 3 | 3 | 9 |
+| 43 | Overlap warning at dispatch (extension) | Warn or chain missions touching hot or overlapping paths | 2 | 4 | 3 | 9 |
+| 44 | Regression fixture export (extension) | Real failures become advisor fixtures | 3 | 1 | 5 | 9 |
+| 45 | MCP resources and prompts | `armada://blackbox/...` resources, `review_blackbox` prompt (if Voltaic supports them) | 3 | 2 | 3 | 8 |
+| 46 | Storage migration between targets | Copy, verify, switch, delete; resumable | 2 | 2 | 4 | 8 |
+| 47 | Model-written summary (extension) | Labeled model summary over the entry | 3 | 3 | 2 | 8 |
+| 48 | VS Code extension | New extension: tree view, brief, recovery, file decorations | 1 | 4 | 2 | 7 |
+| 49 | Mobile | Detail, recovery, share | 3 | 2 | 2 | 7 |
+| 50 | Self-improvement mission (extension) | Dispatch an Armada mission from the maintainer bundle | 2 | 1 | 4 | 7 |
 
 ## 19. Effort summary
 
