@@ -32,6 +32,16 @@ namespace Test.Shared.Infrastructure
         /// </summary>
         public string? ApiKey { get; set; } = null;
 
+        /// <summary>
+        /// Query string including the leading <c>?</c>, or empty.
+        /// </summary>
+        public string Query { get; set; } = "";
+
+        /// <summary>
+        /// Request body text, or empty.
+        /// </summary>
+        public string Body { get; set; } = "";
+
         #endregion
     }
 }
