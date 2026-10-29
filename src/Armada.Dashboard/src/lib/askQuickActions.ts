@@ -1,6 +1,6 @@
 import type { AskQuickAction } from '../types/models';
 
-export type QuickActionForm = 'dispatch' | 'fleet-action' | 'import' | 'none';
+export type QuickActionForm = 'dispatch' | 'fleet-action' | 'import' | 'blackbox' | 'none';
 
 /**
  * Built-in quick actions, used when `GET /ask/quick-actions` is unavailable and to fill gaps in the server's
@@ -41,6 +41,7 @@ export function quickActionForm(action: AskQuickAction): QuickActionForm {
   if (name === 'dispatch') return 'dispatch';
   if (name === 'fleet-action' || name === 'fleetaction' || name === 'fleet_action') return 'fleet-action';
   if (name === 'import') return 'import';
+  if (name === 'blackbox') return 'blackbox';
   return 'none';
 }
 

@@ -84,6 +84,20 @@ namespace Armada.Server.Mcp.Tools
             return null;
         }
 
+        /// <summary>
+        /// Who a note written by the current MCP call is attributed to: AskArmada for a call from an Ask Armada
+        /// conversation (a thread-scoped token, or an approved Ask proposal or quick action), otherwise Agent.
+        /// </summary>
+        /// <returns>The author kind.</returns>
+        public static BlackBoxNoteAuthorKindEnum CallerAuthorKind()
+        {
+            Voltaic.Core.RpcCallContext? context = Voltaic.Core.RpcCallContext.Current;
+            if (context?.Claims == null) return BlackBoxNoteAuthorKindEnum.Agent;
+            if (context.Claims.TryGetValue("askThreadId", out string? threadId) && !String.IsNullOrEmpty(threadId)) return BlackBoxNoteAuthorKindEnum.AskArmada;
+            if (context.Claims.TryGetValue("authMethod", out string? method) && String.Equals(method, "AskThread", StringComparison.Ordinal)) return BlackBoxNoteAuthorKindEnum.AskArmada;
+            return BlackBoxNoteAuthorKindEnum.Agent;
+        }
+
         #endregion
 
         #region Private-Methods
@@ -287,7 +301,7 @@ namespace Armada.Server.Mcp.Tools
         {
             register(
                 "annotate_blackbox",
-                "Add a note to a black box entry (body 1-8000 characters; recorded with authorKind Agent). Annotate what you found and what you did, so the next reader does not repeat it. " + TargetHint,
+                "Add a note to a black box entry (body 1-8000 characters; recorded with authorKind Agent, or AskArmada from an Ask Armada conversation). Annotate what you found and what you did, so the next reader does not repeat it. " + TargetHint,
                 Schema(TargetProperties(new Dictionary<string, object>
                 {
                     ["body"] = new { type = "string", description = "Note text (1-8000 characters)" }
@@ -298,7 +312,7 @@ namespace Armada.Server.Mcp.Tools
                     BlackBoxNoteArgs request = Read<BlackBoxNoteArgs>(args);
                     string entryId = await ResolveAsync(svc, caller, request).ConfigureAwait(false);
                     BlackBoxNoteAddRequest note = new BlackBoxNoteAddRequest { Body = request.Body ?? String.Empty };
-                    return await svc.AddNoteAsync(caller, entryId, note, BlackBoxNoteAuthorKindEnum.Agent).ConfigureAwait(false);
+                    return await svc.AddNoteAsync(caller, entryId, note, CallerAuthorKind()).ConfigureAwait(false);
                 }));
 
             register(
@@ -342,7 +356,7 @@ namespace Armada.Server.Mcp.Tools
                         DryRun = request.DryRun ?? true,
                         ConfirmToken = request.ConfirmToken,
                         AcknowledgeDataLoss = request.AcknowledgeDataLoss ?? false,
-                        AuthorKind = BlackBoxNoteAuthorKindEnum.Agent
+                        AuthorKind = CallerAuthorKind()
                     };
                     return await svc.RunRecoveryAsync(caller, entryId, request.PathId!.Trim(), body).ConfigureAwait(false);
                 }));
@@ -362,7 +376,7 @@ namespace Armada.Server.Mcp.Tools
                     BlackBoxRecommendationArgs request = Read<BlackBoxRecommendationArgs>(args);
                     if (String.IsNullOrWhiteSpace(request.RecommendationId)) return McpToolError.InvalidArgument("recommendationId is required.");
                     string entryId = await ResolveAsync(svc, caller, request).ConfigureAwait(false);
-                    BlackBoxRecommendationApplyRequest body = new BlackBoxRecommendationApplyRequest { DryRun = request.DryRun ?? true, ConfirmToken = request.ConfirmToken, AuthorKind = BlackBoxNoteAuthorKindEnum.Agent };
+                    BlackBoxRecommendationApplyRequest body = new BlackBoxRecommendationApplyRequest { DryRun = request.DryRun ?? true, ConfirmToken = request.ConfirmToken, AuthorKind = CallerAuthorKind() };
                     return await svc.ApplyRecommendationAsync(caller, entryId, request.RecommendationId!.Trim(), body).ConfigureAwait(false);
                 }));
 

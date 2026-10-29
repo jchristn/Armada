@@ -82,14 +82,15 @@ Build the package (see [Development](#development)) or take `armada-vscode-<vers
 | Armada: Run Recovery Path... | Dry run, show the plan, confirm, then run with the confirm token |
 | Armada: Resolve Black Box Entry | Set Resolved, Duplicate, WontFix or ArmadaFixed, with an optional note and link |
 | Armada: Add Note | Add a note to the entry |
-| Armada: Ask Armada about this failure | Copy the canonical prompt and open the dashboard Ask page |
+| Armada: Ask Armada about this failure | Open the dashboard Ask page with the canonical prompt pre-filled |
 
 Every entry command works from the tree view's context menu, from the entry view, or from the Command Palette (where
 it asks which entry).
 
 The Ask Armada prompt is: "Show me the pertinent details from the black box for mission {id} and give me your opinion
-on why it failed and what could have been done differently". The dashboard does not yet read a prompt from the URL, so
-the extension copies it for you to paste.
+on why it failed and what could have been done differently". The extension opens `/dashboard/ask?prompt=<prompt>`, which
+starts a new conversation with the prompt in the message box; if the browser cannot be opened, the prompt is copied to
+the clipboard instead.
 
 ## Errors
 

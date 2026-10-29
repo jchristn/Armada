@@ -72,11 +72,11 @@ export const BlackBoxEvents = {
 export const BLACKBOX_EVENT_TYPES: readonly string[] = Object.values(BlackBoxEvents);
 
 /**
- * The dashboard Ask page query parameter that pre-fills the composer. The dashboard (AskArmada.tsx) only accepts a
- * draft through router state today, so this is null and the extension copies the prompt instead. Set it (for
- * example to 'prompt') once the dashboard reads a query parameter.
+ * The dashboard Ask page query parameter that pre-fills the composer of a new conversation (AskArmada.tsx reads it
+ * and removes it from the URL; dashboard lib/askNavigation.ts ASK_PREFILL_QUERY_PARAM). Null would make the
+ * extension copy the prompt instead.
  */
-export const ASK_PREFILL_QUERY_PARAM: string | null = null;
+export const ASK_PREFILL_QUERY_PARAM: string | null = 'prompt';
 
 /** Canonical Ask Armada prompt (plan 10.3). */
 export function askArmadaPrompt(missionId: string): string {

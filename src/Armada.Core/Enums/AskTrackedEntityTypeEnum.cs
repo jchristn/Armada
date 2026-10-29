@@ -37,6 +37,12 @@ namespace Armada.Core.Enums
         /// A vessel import batch (vib_).
         /// </summary>
         [EnumMember(Value = "VesselImportBatch")]
-        VesselImportBatch
+        VesselImportBatch,
+
+        /// <summary>
+        /// A black box entry (bbx_) shown as a card: a read-only reference, not work, so it posts no milestones.
+        /// </summary>
+        [EnumMember(Value = "BlackBox")]
+        BlackBox
     }
 }

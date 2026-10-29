@@ -403,16 +403,23 @@ The captain reads the summary, then only the sections it needs, and answers with
 why (the findings with rule ids and confidence), its opinion (labeled as opinion), what could have been done
 differently (what you can change and what Armada should change), and next steps as proposals.
 
-<!-- TODO(blackbox-docs): bb-ask. Replace with the shipped slash command, prompt guidance, card and entry points. -->
+Admin-level reads (`get_blackbox_retention` for tenant admins, `get_blackbox_storage` and `export_blackbox_fixture`
+for admins) run as you: from Ask they are refused when you lack the role, never proposed.
 
-**Pending (Ask Armada work).** Planned (plan section 10): a `/blackbox` quick action (`missionId`, optional
-`question`) that maps to `get_blackbox`; a "Black box" section in the Ask Armada system prompt with the answer shape
-above and the rule never to invent files, commits or missions that are not in the entry; a black box card with status
-chips, conflicting missions and recovery buttons, and mission ids in a thread linked to their entries; "Ask Armada
-about this failure" from the dashboard panel, Inbox failure rows, the TUI Failure tab and VS Code, each opening a
-thread prefilled with the prompt above; follow-ups "Fix it", "Apply the configuration change", "Draft an Armada fix
-mission" and "Compare with similar failures"; and an offer to save the opinion as a note (`authorKind` AskArmada).
-The VS Code extension and the mobile app already open Ask Armada with the prompt (mobile through `/ask?prompt=`).
+- **`/blackbox <missionId> [question]`** shows the entry's card in the conversation (`get_blackbox`) and then sends
+  your question, if any, to the captain. On the dashboard `/blackbox` alone opens a form listing recent failures.
+- **The card** shows status chips (triage and confidence, kind, step, capture mode, resolution), where and how it
+  failed, the findings, the conflicting missions and files, the ranked recovery paths and the configuration
+  recommendations, Copy FIX THIS, and the follow-ups: **Fix it** and **Apply the configuration change** create a
+  proposal (approving it runs a dry run, then confirms it); **Draft an Armada fix mission** and **Compare with similar
+  failures** ask the captain. A mission id mentioned in the conversation links its entry's card automatically.
+- **Prompt guidance**: the built-in `ask.system` template has a "Black box" section with the answer shape above, the
+  rule never to invent files, commits or missions that are not in the entry, saying so when a fact is missing (for
+  example an entry captured by the sweeper), offering the mission's FailureReason when there is no entry, and offering
+  to save the opinion as a note (a proposal; the note's `authorKind` is AskArmada). A customized template gets the
+  section appended to the turn prompt.
+- **Entry points**: "Ask Armada about this failure" on the dashboard panel and Inbox, the TUI, VS Code and mobile open
+  a new conversation with the prompt above in the message box (`/ask?prompt=<text>`, removed from the URL once read).
 
 ## 8. Storage targets
 
@@ -1790,6 +1797,39 @@ Tests: `Services.BlackBoxPrevention`, `Services.BlackBoxForensicsExtensions`, `S
 `Database.BlackBoxInsights` (all four providers), `E2E.BlackBoxInsightsApi`, `Client.Contract.BlackBoxInsights`, and the
 new tools in `E2E.McpTenantIsolation`.
 
+### 13.22 Ask Armada
+
+Plan section 10. The pieces, in `Armada.Core.Services.Ask` unless noted:
+
+- **Policy** (`AskToolPolicy`): every BlackBox tool the MCP authorization registry declares as a Read (the 13 of
+  `McpBlackBoxTools.ReadTools` plus `export_blackbox_fixture`) runs without approval; every other black box tool
+  (recovery, recommendation, resolve, annotate, pin, delete, purge, gc, reanalyze) becomes a proposal. The
+  admin-level reads stay allowlisted because the gate wraps the registry check: a thread call runs as the thread
+  owner, so `get_blackbox_retention` (TenantAdmin) and `get_blackbox_storage` / `export_blackbox_fixture` (AdminOnly)
+  are refused with Forbidden for an owner without the role (`E2E.AskThreads` admin_reads_keep_caller_authorization).
+- **Prompt** (`AskBlackBoxGuidance.Section`): the "## Black box" section of the built-in `ask.system` template (get
+  the summary first, read only the needed sections, page evidence, answer with What happened / Why / My opinion /
+  What could have been done differently / Next steps, never invent files, commits or missions, say when facts are
+  missing, offer FailureReason when there is no entry, offer to save the opinion as a note). An untouched earlier
+  built-in is upgraded at startup; `AskTurnCoordinator.BuildPrompt` appends the section to a customized template that
+  lacks the heading, so operator edits keep working.
+- **Quick action** `/blackbox` (`AskQuickActionCatalog`): `missionId` (type `mission`, required) and `question` (text,
+  optional) mapping to `get_blackbox`; `question` is removed before the tool runs (the client sends it to the captain).
+- **Card**: tracked entity `BlackBox` (`AskTrackedEntityTypeEnum`). `AskWorkSnapshotBuilder.BlackBox` (the
+  `IBlackBoxService`) reads the entry as the thread's owner into `AskWorkSnapshot.BlackBox` (`AskBlackBoxCard`: the
+  digest, conflicting missions, the first conflicted files, recommendations, note count and the follow-ups from
+  `AskBlackBoxGuidance.FollowUps`: Fix it and Apply as proposals, Draft an Armada fix mission and Compare with
+  similar failures as messages). The card's state is Succeeded for Resolved and ArmadaFixed, otherwise Failed.
+- **Linking** (`AskWorkLinker`, `Armada.Server.Ask.AskActionService`): `get_blackbox` links the card (as a quick action,
+  an approved proposal, or a thread read); the write tools refresh it; `LinkMentionedBlackBoxesAsync` links the cards
+  of mentioned missions (`AskTurnCoordinator.OnConversationText`).
+- **Approval**: an approved `run_blackbox_recovery` or `apply_blackbox_recommendation` proposal runs the dry run, then
+  confirms it with its token (`DryRunThenConfirmAsync`); `McpBlackBoxTools.CallerAuthorKind` attributes Ask notes to
+  AskArmada.
+- **Tests**: `Services.AskBlackBox` (plan 16.8), `Services.PromptTemplateService`, `Tui.Ask`, dashboard
+  `AskBlackBoxCard.test.tsx`, `askBlackBox.test.ts` and `AskArmada.test.tsx`; the prompt evaluation script has a
+  `blackbox` case whose grounding check flags files, commits and missions that are not in the entry.
+
 ## 14. Open items
 
 Grep for `TODO(blackbox-docs)` in this document and `TODO(blackbox-wave2` in code.
@@ -1797,6 +1837,5 @@ Grep for `TODO(blackbox-docs)` in this document and `TODO(blackbox-wave2` in cod
 | Owner | Item | Where |
 |---|---|---|
 | TUI and Helm | Failure tab, Black Box screen, `armada blackbox ...` commands including `export-fixture` (section 4) | `src/Armada.Tui`, `src/Armada.Helm` |
-| Ask Armada | `/blackbox` quick action, prompt guidance, card and entry points (section 7) | `src/Armada.Core/Services/Ask` |
 | Insight UIs | Dashboard dispatch dialog overlap warnings, reservations, doctor, timeline and cascade views; TUI and Helm commands (section 12) | `src/Armada.Dashboard`, `src/Armada.Tui`, `src/Armada.Helm` |
 | MCP resources | Typed errors for resource reads of a missing entry or object (they return JSON-RPC -32603 today) | `McpBlackBoxResources.cs` |

@@ -59,6 +59,13 @@ namespace Armada.Server.Ask
         /// </summary>
         public HarborCheckoutDirectory? HarborCheckouts { get; set; } = null;
 
+        /// <summary>
+        /// Called with the text of each user message and captain reply, so the black box cards of the missions it
+        /// mentions can be linked (<see cref="AskActionService.LinkMentionedBlackBoxesAsync"/>). Null links none. Errors
+        /// are logged and never fail the turn.
+        /// </summary>
+        public Func<AskThread, string, Task>? OnConversationText { get; set; } = null;
+
         #endregion
 
         #region Private-Members
@@ -171,6 +178,7 @@ namespace Armada.Server.Ask
                 throw;
             }
 
+            await NotifyConversationTextAsync(thread, content).ConfigureAwait(false);
             AskMessageSendResponse response = new AskMessageSendResponse();
             response.MessageId = userMessage.Id;
             if (handle == null) return new AskTurnStart(202, response, null);
@@ -389,7 +397,8 @@ namespace Armada.Server.Ask
 
         /// <summary>
         /// Build the prompt for a thread turn, including the conversation focus: the work this conversation started
-        /// and the vessels involved, so follow-up questions such as "what's running?" can be scoped to them.
+        /// and the vessels involved, so follow-up questions such as "what's running?" can be scoped to them. The black
+        /// box section (<see cref="AskBlackBoxGuidance.Section"/>) is appended to a system prompt that lacks it.
         /// </summary>
         /// <param name="thread">Thread.</param>
         /// <param name="captain">Captain.</param>
@@ -401,7 +410,8 @@ namespace Armada.Server.Ask
         public static string BuildPrompt(AskThread thread, Captain captain, List<AskMessage> history, string? note, string? systemPrompt, string? focus)
         {
             StringBuilder builder = new StringBuilder();
-            if (!String.IsNullOrWhiteSpace(systemPrompt)) builder.AppendLine(systemPrompt.Trim()).AppendLine();
+            // A customized ask.system template that predates the black box guidance still gets it (appended once).
+            builder.AppendLine(AskBlackBoxGuidance.WithSection(systemPrompt?.Trim())).AppendLine();
             if (captain != null && !String.IsNullOrWhiteSpace(captain.SystemInstructions)) builder.AppendLine(captain.SystemInstructions.Trim()).AppendLine();
             builder.AppendLine(ThreadInstructions).AppendLine();
 
@@ -614,6 +624,7 @@ namespace Armada.Server.Ask
                 finishing = true;
                 reply = await FinishReplyAsync(thread, placeholder, reply, result.ToolCalls).ConfigureAwait(false);
                 messageId = reply.Id;
+                if (reply.Role == AskMessageRoleEnum.Assistant) await NotifyConversationTextAsync(thread, reply.ContentText).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -849,6 +860,20 @@ namespace Armada.Server.Ask
             {
                 _Logging.Warn(_Header + "could not mint a thread-scoped token for " + thread.Id + ": " + ex.Message);
                 return null;
+            }
+        }
+
+        private async Task NotifyConversationTextAsync(AskThread thread, string? text)
+        {
+            Func<AskThread, string, Task>? notify = OnConversationText;
+            if (notify == null || String.IsNullOrWhiteSpace(text)) return;
+            try
+            {
+                await notify(thread, text!).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _Logging.Debug(_Header + "conversation text handling for thread " + thread.Id + " failed: " + ex.Message);
             }
         }
 

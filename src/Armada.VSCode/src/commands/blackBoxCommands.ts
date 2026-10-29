@@ -230,7 +230,8 @@ export class BlackBoxCommands {
     }, false);
   }
 
-  /** Ask Armada about this failure: opens the dashboard Ask page, pre-filled when supported, otherwise copies the prompt. */
+  /** Ask Armada about this failure: opens the dashboard Ask page with the prompt pre-filled (?prompt=); copies the prompt
+   * when the dashboard cannot be pre-filled or the browser cannot be opened. */
   public async askArmada(arg?: unknown): Promise<{ url: string; prefilled: boolean } | undefined> {
     return this.guard(async () => {
       const entry = await this.pickEntry(arg, 'Ask Armada about this failure');
@@ -241,10 +242,11 @@ export class BlackBoxCommands {
       const target = dashboardAskUrl(settings.dashboardUrl, prompt);
       if (!target.prefilled) await vscode.env.clipboard.writeText(prompt);
       const opened = await vscode.env.openExternal(vscode.Uri.parse(target.url));
-      if (!target.prefilled) {
+      if (!opened && target.prefilled) await vscode.env.clipboard.writeText(prompt);
+      if (!target.prefilled || !opened) {
         void vscode.window.showInformationMessage(opened
           ? 'Armada: the Ask Armada prompt was copied. Paste it into the new conversation.'
-          : `Armada: could not open ${target.url}. The Ask Armada prompt was copied to the clipboard.`);
+          : `Armada: could not open the dashboard Ask page. The Ask Armada prompt was copied to the clipboard.`);
       }
       return target;
     }, undefined);

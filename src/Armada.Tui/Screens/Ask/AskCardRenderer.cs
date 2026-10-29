@@ -226,9 +226,11 @@ namespace Armada.Tui.Screens.Ask
                 body.AddRange(TextWrapper.Wrap(line, inner));
             }
 
+            int headerLines = 1;
+            if (snapshot?.BlackBox != null) BlackBoxBody(block, snapshot.BlackBox, lineOffset + headerLines, body, theme, loc, inner);
+
             List<AskWorkMissionSnapshot> missions = workRows?.Missions ?? new List<AskWorkMissionSnapshot>();
             List<AskWorkTargetSnapshot> targets = workRows?.Targets ?? new List<AskWorkTargetSnapshot>();
-            int headerLines = 1;
             if (missions.Count > 0)
             {
                 foreach (AskWorkMissionSnapshot m in missions)
@@ -261,7 +263,7 @@ namespace Armada.Tui.Screens.Ask
             int shownRows = missions.Count > 0 ? missions.Count : targets.Count;
             if (workRows != null && workRows.TotalRecords > shownRows)
                 body.Add(StyledText.From(loc.T("Showing {{shown}} of {{total}} rows; Enter opens the full list", LocalizationArgs.Of("shown", shownRows, "total", workRows.TotalRecords)), theme.Muted));
-            if (!String.IsNullOrEmpty(snapshot?.ErrorText)) body.AddRange(Para(snapshot!.ErrorText!, theme.Error, inner));
+            if (!String.IsNullOrEmpty(snapshot?.ErrorText) && snapshot!.BlackBox == null) body.AddRange(Para(snapshot.ErrorText!, theme.Error, inner));
             if (snapshot == null) body.Add(StyledText.From(loc.T("Loading live status..."), theme.Muted));
             DateTime? updated = snapshot?.CapturedUtc ?? work?.LastChangeUtc;
             StyledText footer = StyledText.Empty;
@@ -373,6 +375,58 @@ namespace Armada.Tui.Screens.Ask
                 case AskProposalStatusEnum.Pending: return "!";
                 default: return "-";
             }
+        }
+
+        /// <summary>
+        /// The black box card body (plan 10.3): status chips, where and how, the findings, conflicting missions (rows
+        /// that open the mission), and the ranked recovery paths, which the captain proposes when asked to fix it.
+        /// </summary>
+        private static void BlackBoxBody(AskBlock block, AskBlackBoxCard card, int firstLine, List<StyledText> body, ArmadaTheme theme, LocalizationService loc, int width)
+        {
+            BlackBoxDigest d = card.Digest;
+            StyledText chips = StyledText.Empty;
+            void Chip(string label, string? value, CellStyle style)
+            {
+                if (String.IsNullOrEmpty(value) || value == "Unknown") return;
+                chips = chips.Append(StyledText.From(loc.T(label) + " ", theme.Muted)).Append(StyledText.From(value + "   ", style));
+            }
+
+            Chip("Triage", d.TriageConfidence.HasValue ? d.Triage + " (" + d.TriageConfidence.Value + ")" : d.Triage.ToString(), theme.Warning);
+            Chip("Kind", d.Kind?.ToString(), theme.Error);
+            Chip("Step", d.Phase + " / " + d.Step, theme.Text);
+            if (d.CaptureMode != BlackBoxCaptureModeEnum.Inline) Chip("Captured by", d.CaptureMode.ToString(), theme.Warning);
+            Chip("Resolution", d.Resolution.ToString(), theme.Text);
+            if (chips.Width > 0) body.AddRange(TextWrapper.Wrap(chips, width));
+
+            string where = String.Join(" ", new[] { String.IsNullOrEmpty(d.SourceFile) ? null : d.SourceFile + (d.SourceLine.HasValue ? ":" + d.SourceLine.Value.ToString(CultureInfo.InvariantCulture) : ""), d.Method, d.Host }.Where(v => !String.IsNullOrEmpty(v)));
+            if (where.Length > 0) body.AddRange(Para(loc.T("Where") + ": " + where, theme.Text, width));
+            if (!String.IsNullOrEmpty(d.StatusBefore) || !String.IsNullOrEmpty(d.StatusAfter)) body.AddRange(Para(loc.T("Status") + ": " + (d.StatusBefore ?? "?") + " -> " + (d.StatusAfter ?? "?"), theme.Text, width));
+            if (!String.IsNullOrEmpty(d.Mechanism)) body.AddRange(Para(loc.T("How") + ": " + d.Mechanism, theme.Text, width));
+            if (!String.IsNullOrEmpty(d.Reason)) body.AddRange(Para(d.Reason!, theme.Error, width));
+            foreach (BlackBoxFinding finding in d.Why) body.AddRange(Para(loc.T("Why") + ": " + finding.RuleId + " (" + loc.T(finding.Confidence.ToString()) + ") " + finding.Statement, theme.Text, width));
+
+            if (card.ConflictingMissions.Count > 0) body.Add(StyledText.From(loc.T("Conflicting missions"), theme.Muted));
+            foreach (BlackBoxConflictingMission m in card.ConflictingMissions)
+            {
+                string text = "  " + (m.Title ?? m.MissionId ?? loc.T("Unknown change")) + (String.IsNullOrEmpty(m.CommitHash) ? "" : " " + m.CommitHash!.Substring(0, Math.Min(10, m.CommitHash.Length)));
+                List<StyledText> rows = Para(text, theme.Accent, width);
+                if (!String.IsNullOrEmpty(m.MissionId))
+                {
+                    block.RowLines.Add(firstLine + body.Count);
+                    block.RowHeights.Add(rows.Count);
+                    block.RowMissionIds.Add(m.MissionId);
+                    block.RowPrUrls.Add(null);
+                    block.RowRoutes.Add("/missions/" + Uri.EscapeDataString(m.MissionId!));
+                }
+
+                body.AddRange(rows);
+            }
+
+            if (d.RecoveryPaths.Count > 0) body.Add(StyledText.From(loc.T("Recovery paths"), theme.Muted));
+            foreach (BlackBoxRecoveryPath path in d.RecoveryPaths.OrderBy(p => p.Rank))
+                body.AddRange(Para("  " + path.Rank.ToString(CultureInfo.InvariantCulture) + ". " + path.Title + " (" + path.Id + ")" + (path.DataLossRisk ? " - " + loc.T("Risks data loss") : ""), path.DataLossRisk ? theme.Error : theme.Text, width));
+            if (card.FollowUps.Count > 0)
+                body.AddRange(Para(loc.T("Follow-ups") + ": " + String.Join(", ", card.FollowUps.Select(f => loc.T(f.Label))), theme.Muted, width));
         }
 
         private static List<StyledText> MissionRow(AskWorkMissionSnapshot m, ArmadaTheme theme, LocalizationService loc, int width)

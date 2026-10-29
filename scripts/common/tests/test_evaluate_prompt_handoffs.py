@@ -98,5 +98,51 @@ class EvaluationTests(unittest.TestCase):
         self.assertIn('downstreamWorker', result['cases'][0])
 
 
+    def _blackbox_case(self):
+        cases = json.loads((SCRIPT.parent / 'prompt-evaluations' / 'cases.json').read_text())
+        return next(c for c in cases if c['kind'] == 'blackbox')
+
+    def _grounded_reply(self):
+        return ('## What happened\nMission msn_eval_0001 could not land: src/Sync/Runner.cs and src/Sync/RunnerTests.cs '
+                'conflicted with msn_eval_0002 (commit 9b8e7d6c5a4f) in src/Armada.Core/Services/MissionLandingHandler.cs.\n'
+                '## Why\nbbx-land-003 (High) and bbx-dep-001 (Medium).\n'
+                '## My opinion\nIn my opinion the triage is right.\n'
+                '## What could have been done differently\nYou can set dependsOnMissionId. Armada should detect overlapping scopes.\n'
+                '## Next steps\n- bbx-land-003.rebase-retry\n')
+
+    def test_blackbox_case_scores_grounding(self):
+        case = self._blackbox_case()
+        result = MODULE.score(case, self._grounded_reply())
+        self.assertTrue(result['grounding']['grounded'], result['grounding'])
+        self.assertTrue(result['grounding']['shaped'], result['grounding'])
+        self.assertEqual(1.0, result['evidenceCoverage'])
+
+    def test_blackbox_grounding_flags_a_file_not_in_the_entry(self):
+        case = self._blackbox_case()
+        reply = self._grounded_reply() + 'Also src/Sync/Ghost.cs from deadbeef1234 by msn_ghost_0009.\n'
+        result = MODULE.score(case, reply)['grounding']
+        self.assertFalse(result['grounded'])
+        self.assertEqual(['src/Sync/Ghost.cs'], result['unknownFiles'])
+        self.assertEqual(['deadbeef1234'], result['unknownCommits'])
+        self.assertEqual(['msn_ghost_0009'], result['unknownMissions'])
+
+    def test_blackbox_grounding_flags_an_unlabeled_opinion(self):
+        reply = self._grounded_reply().replace('## My opinion\nIn my opinion', '## Thoughts\nProbably')
+        result = MODULE.score(self._blackbox_case(), reply)['grounding']
+        self.assertFalse(result['shaped'])
+        self.assertEqual(['My opinion'], result['missingHeadings'])
+
+    def test_blackbox_case_uses_its_own_improvement(self):
+        calls = []
+        case = self._blackbox_case()
+        def chat(base, token, captain, message):
+            calls.append(message)
+            return {'Success': True, 'Model': 'fixed', 'Reply': self._grounded_reply()}
+        with tempfile.TemporaryDirectory() as folder:
+            MODULE.evaluate([case], {}, 'http://test', 'secret', 'captain', Path(folder) / 'out.json', chat)
+        self.assertNotIn('## Black box', calls[0])
+        self.assertIn('## Black box', calls[1])
+
+
 if __name__ == '__main__':
     unittest.main()

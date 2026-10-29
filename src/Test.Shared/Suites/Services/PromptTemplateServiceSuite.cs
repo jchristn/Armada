@@ -311,6 +311,40 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("ask_system_blackbox_guidance_and_upgrade", "ask.system carries the black box section (plan 10.2); an untouched previous built-in is upgraded, and an operator edit is kept as written", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    LoggingModule logging = new LoggingModule();
+                    PromptTemplateService templates = new PromptTemplateService(testDb.Driver, logging);
+                    await templates.SeedDefaultsAsync().ConfigureAwait(false);
+                    PromptTemplate? row = await testDb.Driver.PromptTemplates.ReadByNameAsync("ask.system").ConfigureAwait(false);
+                    AssertContains(Armada.Core.Services.Ask.AskBlackBoxGuidance.Section, row!.Content, "new installs get the black box section");
+                    foreach (string heading in Armada.Core.Services.Ask.AskBlackBoxGuidance.AnswerHeadings) AssertContains(heading, row.Content, "answer heading " + heading);
+                    AssertContains("get_blackbox", row.Content);
+                    AssertContains("read_blackbox_object", row.Content);
+                    AssertContains("CaptureMode=Sweeper", row.Content);
+                    AssertContains("FailureReason", row.Content);
+                    AssertContains("annotate_blackbox", row.Content);
+                    AssertFalse(row.Content.Contains('\u2014'), "no em-dashes in the prompt");
+
+                    string recap = (string)typeof(PromptTemplateService).GetField("_AskSystemRecapDefault", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!.GetValue(null)!;
+                    AssertFalse(recap.Contains(Armada.Core.Services.Ask.AskBlackBoxGuidance.Heading), "the previous default lacks the section");
+                    row.Content = recap;
+                    await testDb.Driver.PromptTemplates.UpdateAsync(row).ConfigureAwait(false);
+                    await templates.SeedDefaultsAsync().ConfigureAwait(false);
+                    row = await testDb.Driver.PromptTemplates.ReadByNameAsync("ask.system").ConfigureAwait(false);
+                    AssertContains(Armada.Core.Services.Ask.AskBlackBoxGuidance.Heading, row!.Content, "untouched previous built-in upgraded");
+                    AssertEqual(1, CountOf(row.Content, Armada.Core.Services.Ask.AskBlackBoxGuidance.Heading), "the section appears once");
+
+                    row.Content = "My own Ask prompt.";
+                    await testDb.Driver.PromptTemplates.UpdateAsync(row).ConfigureAwait(false);
+                    await templates.SeedDefaultsAsync().ConfigureAwait(false);
+                    row = await testDb.Driver.PromptTemplates.ReadByNameAsync("ask.system").ConfigureAwait(false);
+                    AssertEqual("My own Ask prompt.", row!.Content, "operator edit kept (the turn prompt appends the section instead)");
+                }
+            }));
+
             cases.Add(CaseAsync("decision_guidance_and_upgrade", "ask.system and mission.rules tell captains to choose sensible defaults instead of asking; untouched earlier built-ins are upgraded and operator edits kept", TestTags.Positive, async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
@@ -623,6 +657,14 @@ namespace Test.Shared.Suites.Services
                 displayName: displayName,
                 executeAsync: (CancellationToken ct) => body(),
                 tags: new List<string> { tag });
+        }
+
+        private static int CountOf(string text, string value)
+        {
+            int count = 0;
+            int index = 0;
+            while ((index = text.IndexOf(value, index, StringComparison.Ordinal)) >= 0) { count++; index += value.Length; }
+            return count;
         }
 
         #endregion

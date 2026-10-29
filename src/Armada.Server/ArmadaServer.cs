@@ -822,6 +822,11 @@ namespace Armada.Server
             _WebSocketHub.SetCliPermissionService(_CliPermissions);
             _WebSocketHub.SetMissionService(_MissionService);
             _WebSocketHub.SetBlackBoxService(_BlackBox?.Service, _BlackBox?.Capture);
+
+            // Ask Armada black box cards: read as the thread's owner; mentioned missions with an entry link their card.
+            _AskThreads.Snapshots.BlackBox = _BlackBox?.Service;
+            _AskActions.BlackBox = _BlackBox?.Service;
+            _AskTurns.OnConversationText = (thread, text) => _AskActions.LinkMentionedBlackBoxesAsync(thread, text);
             _AskThreads.SessionTokensAvailable = _SessionTokenService != null;
             _AskThreads.HarborPromptSupport = (tenantId, runtime) => _HarborConnectionManager != null && _HarborConnectionManager.AnyHarborCanPrompt(tenantId, runtime);
 
