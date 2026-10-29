@@ -6,6 +6,7 @@ namespace Test.Shared.Suites.Tui
     using System.Linq;
     using System.Net;
     using Armada.Client;
+    using Armada.Client.Models;
     using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Tui.Modals;
@@ -364,13 +365,55 @@ namespace Test.Shared.Suites.Tui
                 }
             }));
 
+            cases.Add(TuiCase.Sync(Suite, "settings_black_box_retention", "Settings shows Black Box Retention and saves the whole black box object with only retention changed", () =>
+            {
+                StubHttpHandler stub = TuiFixtures.SignedInServer();
+                stub.Json("GET", "/api/v1/status/health", "{\"Status\":\"healthy\",\"Version\":\"1.2.0\",\"Ports\":{\"Admiral\":7890,\"Mcp\":7891}}");
+                string settings = "{\"AdmiralPort\":7890,\"McpPort\":7891,\"MaxCaptains\":4,\"BlackBox\":{\"Enabled\":true,\"Storage\":{\"Target\":\"Disk\",\"S3\":{\"SecretKey\":\"********\"}},"
+                    + "\"Retention\":{\"RetentionDays\":180,\"ResolvedRetentionDays\":30,\"MaxEntriesPerVessel\":1000,\"MaxTotalBytes\":1073741824,\"GcIntervalMinutes\":60,\"GcBatchSize\":250,\"KeepLatestPerMission\":true,\"DeleteWithMission\":false,\"DeleteWithVessel\":true}}}";
+                stub.Json("GET", "/api/v1/settings", settings);
+                stub.On("PUT", "/api/v1/settings", body => StubHttpHandler.Response(HttpStatusCode.OK, settings));
+                stub.Json("GET", "/api/v1/vessels", "{\"Objects\":[],\"TotalRecords\":0}");
+                using (TuiTestHost host = TuiCase.SignedIn(160, 50, "/server?tab=server", stub))
+                {
+                    ServerSettingsScreen? screen = null;
+                    AssertTrue(host.PumpUntil(() =>
+                    {
+                        Armada.Tui.Screens.ScreenBase? sb = host.Tui.Shell.Screen;
+                        if (sb is Armada.Tui.Screens.HubScreen hub) sb = hub.Content;
+                        screen = sb as ServerSettingsScreen;
+                        return screen != null && screen.Settings != null;
+                    }), "settings screen");
+                    host.Pump();
+                    AssertTrue(screen!.Form.Rows.Any(r => r.IsSection && r.Label == "Black Box Retention"), "section");
+                    AssertEqual("180", screen.BlackBoxRetentionDays.Value, "retention days");
+                    AssertEqual("1024", screen.BlackBoxMaxTotalMegabytes.Value, "megabytes");
+                    AssertTrue(screen.BlackBoxDeleteWithVessel.Value, "delete with vessel");
+                    screen.Form.Scope.Focus(screen.BlackBoxRetentionDays);
+                    host.Press("ctrl+u").Type("5000");
+                    host.Press("ctrl+s");
+                    host.Pump();
+                    AssertEqual(0, stub.CountFor("PUT", "/api/v1/settings"), "an out-of-range value blocks the save");
+                    host.Press("ctrl+u").Type("90");
+                    host.Screen();
+                    host.Press("ctrl+s");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("PUT", "/api/v1/settings") == 1), "PUT");
+                    SettingsData body = stub.LastBody<SettingsData>("PUT", "/api/v1/settings");
+                    AssertNotNull(body.BlackBox, "black box sent");
+                    AssertEqual(90, body.BlackBox!.Retention.RetentionDays, "edited");
+                    AssertEqual(250, body.BlackBox.Retention.GcBatchSize, "unedited retention kept");
+                    AssertEqual(BlackBoxStorageTargetEnum.Disk, body.BlackBox.Storage.Target, "storage kept");
+                    AssertNull(body.Retention, "only the black box group");
+                }
+            }));
+
             cases.Add(TuiCase.Sync(Suite, "navigation_and_prompt", "Black Box has a Go command (g b) and routes; the Ask prompt says voyage for a voyage id", () =>
             {
-                AssertTrue(Armada.Tui.Routing.NavCatalog.Shortcuts.Any(s => s.Item.To == "/blackbox" && s.Item.GoKey == "b"), "go shortcut g b");
+                AssertTrue(Armada.Tui.Routing.NavCatalog.AllItems().Any(i => i.To == "/blackbox" && i.GoKey == "b"), "sidebar item with go key g b");
                 using (TuiTestHost host = TuiCase.SignedIn(120, 40, "/inbox"))
                 {
                     Armada.Tui.Input.ArmadaCommand? go = host.Tui.Context.Commands.All().FirstOrDefault(c => c.Id == "go.blackbox");
-                    AssertNotNull(go, "go.blackbox command");
+                    AssertNotNull(go, "go command");
                     go!.Handler();
                     AssertTrue(host.PumpUntil(() => host.Tui.Context.Router.Current!.Path == "/blackbox"), "go.blackbox opens the list");
                 }

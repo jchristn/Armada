@@ -162,6 +162,12 @@ namespace Armada.Client.Models
         /// </summary>
         public Armada.Core.Settings.PushSettings? Push { get; set; } = null;
 
+        /// <summary>
+        /// Black box settings (capture, storage target with masked secrets, retention, sweeper), or null when the server
+        /// predates them. A PUT replaces the whole object; a masked secret keeps the stored one.
+        /// </summary>
+        public Armada.Core.Settings.BlackBoxSettings? BlackBox { get; set; } = null;
+
         #endregion
 
         #region Constructors-and-Factories
