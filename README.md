@@ -1063,6 +1063,11 @@ armada voyage retry "API Hardening"
 armada mission failure msn_abc123
 armada blackbox show msn_abc123 --brief | pbcopy
 armada blackbox recover bbx_abc123 <pathId>            # add --execute to run it
+
+# Before dispatch: preview a brief's overlaps on a vessel and lint it; after a failure: compare attempts and see the cascade
+armada vessel overlap-preview my-repo --brief-file brief.md
+armada blackbox diff bbx_abc123 bbx_def456
+armada voyage cascade vyg_abc123
 ```
 
 `--runtime` (on `captain add`, `captain update`, and `config set DefaultRuntime`) also accepts the enum names such as `ClaudeCode`; an unknown value is an error. An `api` captain needs an inference endpoint, chosen with `--model-endpoint <endpoint-id>`, in the dashboard or TUI, or through the REST and MCP captain APIs. Mux captains require a named endpoint, validated through `mux probe --require-tools`, and can target a non-default Mux config directory with `--mux-config-dir`. See [docs/CAPTAINS.md](docs/CAPTAINS.md) for what each runtime supports.
