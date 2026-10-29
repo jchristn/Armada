@@ -22,8 +22,7 @@ WebSocket commands and events are in [REST_API.md](REST_API.md), [MCP_API.md](MC
 [WEBSOCKET_API.md](WEBSOCKET_API.md). The design and phases are in `MISSION_BLACKBOX_PLAN.md`; where the plan and
 the code differ, this document describes the code.
 
-Places marked **Pending** describe surfaces that are designed but not merged on this branch yet; each names the work
-that delivers it and is replaced when that work lands (grep for `TODO(blackbox-docs)`).
+Work that is designed but not done yet is listed in section 14, Open items.
 
 ## Contents
 
@@ -1860,9 +1859,8 @@ Plan section 10. The pieces, in `Armada.Core.Services.Ask` unless noted:
 
 ## 14. Open items
 
-Grep for `TODO(blackbox-docs)` in this document and `TODO(blackbox-wave2` in code.
+Work not done yet:
 
 | Owner | Item | Where |
 |---|---|---|
 | Insight UIs | Dashboard dispatch dialog overlap warnings, reservations, doctor, timeline and cascade views; TUI and Helm commands (section 12) | `src/Armada.Dashboard`, `src/Armada.Tui`, `src/Armada.Helm` |
-| MCP resources | Typed errors for resource reads of a missing entry or object (they return JSON-RPC -32603 today) | `McpBlackBoxResources.cs` |

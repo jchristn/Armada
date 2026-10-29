@@ -5,7 +5,8 @@ namespace Armada.Core.Models
     /// <summary>
     /// Machine-readable detail carried in the Data field of a black box REST error: the stable error code
     /// (BlackBoxNotFound, BlackBoxDeleting, BlackBoxObjectCorrupt, BlackBoxObjectMissing, BlackBoxStoreUnavailable,
-    /// BlackBoxConfirmationRequired, InvalidArgument or NotImplemented) and, for a request validation error, the field.
+    /// BlackBoxActionsUnavailable, BlackBoxConfirmationRequired, InvalidArgument or CollectionLimitExceeded) and, for a
+    /// request validation error, the field.
     /// </summary>
     public class BlackBoxErrorDetail
     {
