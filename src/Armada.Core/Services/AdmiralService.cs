@@ -618,7 +618,13 @@ namespace Armada.Core.Services
         }
 
         /// <inheritdoc />
-        public async Task<Mission> CancelMissionAsync(Mission mission, CancellationToken token = default)
+        public Task<Mission> CancelMissionAsync(Mission mission, CancellationToken token = default)
+        {
+            return CancelMissionAsync(mission, null, token);
+        }
+
+        /// <inheritdoc />
+        public async Task<Mission> CancelMissionAsync(Mission mission, MissionCancelOptions? options, CancellationToken token = default)
         {
             if (mission == null) throw new ArgumentNullException(nameof(mission));
             MissionStatusEnum cancelStatusBefore = mission.Status;
@@ -668,15 +674,19 @@ namespace Armada.Core.Services
             mission.ProcessId = null;
             mission.CompletedUtc = DateTime.UtcNow;
             mission.LastUpdateUtc = DateTime.UtcNow;
+            if (options?.FailureKind != null) mission.FailureKind = options.FailureKind;
+            if (options?.FailureReason != null) mission.FailureReason = options.FailureReason;
             Mission cancelled = await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
             if (cancelStatusBefore != MissionStatusEnum.Cancelled)
             {
                 // An operator cancel: triaged External. A running agent was stopped (OperatorStop); otherwise the status
-                // was changed by hand (OperatorTransition).
-                await BlackBox.RecordMissionFailureAsync(cancelled, cancelStatusBefore, stoppedAgent ? BlackBoxStepEnum.OperatorStop : BlackBoxStepEnum.OperatorTransition, context =>
+                // was changed by hand (OperatorTransition). A caller with its own reason (a deleted vessel) names the step.
+                BlackBoxStepEnum step = options?.BlackBoxStep ?? (stoppedAgent ? BlackBoxStepEnum.OperatorStop : BlackBoxStepEnum.OperatorTransition);
+                await BlackBox.RecordMissionFailureAsync(cancelled, cancelStatusBefore, step, context =>
                 {
                     context.Captain = captain;
                     context.Reason = "Cancelled by an operator" + (stoppedAgent ? "; the running agent was stopped." : ".");
+                    options?.ConfigureCapture?.Invoke(context);
                 }, token).ConfigureAwait(false);
             }
             return cancelled;

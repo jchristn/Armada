@@ -1610,7 +1610,7 @@ export const unpinBlackBox = (entryId: string) =>
 /**
  * Run a recovery path recorded in the entry. dryRun defaults to true and returns the plan and a confirmToken (10
  * minutes); the real run needs that token, and acknowledgeDataLoss for a path marked dataLossRisk. 409
- * BlackBoxConfirmationRequired without them; 501 NotImplemented where the recovery runner is not merged yet.
+ * BlackBoxConfirmationRequired without them; 503 BlackBoxActionsUnavailable on a host that cannot run actions.
  */
 export const runBlackBoxRecovery = (entryId: string, pathId: string, request?: BlackBoxRecoveryRunRequest) =>
   post<BlackBoxRecoveryRunResult>(`${BLACKBOX}/${encodeURIComponent(entryId)}/recovery/${encodeURIComponent(pathId)}`, {
@@ -1651,7 +1651,7 @@ export const runBlackBoxGc = (dryRun = false) =>
 export const getBlackBoxRetention = () => get<BlackBoxRetentionStatus>(`${BLACKBOX}/retention`);
 /** Storage target, health, fallback and bytes per target (global admin). */
 export const getBlackBoxStorage = () => get<BlackBoxStorageStatus>(`${BLACKBOX}/storage`);
-/** Start a storage migration job (global admin); 501 NotImplemented where it is not merged yet. */
+/** Start a storage migration job (global admin); 400 for a bad target, 409 while one runs, 503 when the target is unhealthy. */
 export const migrateBlackBoxStorage = (request: BlackBoxStorageMigrationRequest) =>
   post<BlackBoxStorageMigrationJob>(`${BLACKBOX}/storage/migrate`, {
     To: request.to,

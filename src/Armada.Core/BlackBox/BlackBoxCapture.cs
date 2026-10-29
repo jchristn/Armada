@@ -126,6 +126,7 @@ namespace Armada.Core.BlackBox
                         BlackBoxRecordBounder.AddNote(record.Truncation, "Capture ran out of its time budget while reading the mission's vessel, captain, voyage, dock or Harbor.");
                     }
 
+                    await RecoverExitCodeAsync(record, mission, context, budget, token).ConfigureAwait(false);
                     BlackBoxEntry entry = BuildMissionEntry(mission, context, vessel, record);
                     BuildMissionRecord(record, entry, mission, context, vessel, captain, voyage, dock, harbor);
                     entry.ReasonExcerpt = BlackBoxLimits.Clip(_Redactor.Redact(record.Classification?.RawReason), BlackBoxLimits.MaxEntryReasonExcerptChars);
@@ -155,6 +156,14 @@ namespace Armada.Core.BlackBox
                 await EmitFailedAsync(mission.TenantId, mission.Id, mission.VoyageId, mission.VesselId, context.Step, e).ConfigureAwait(false);
                 return null;
             }
+        }
+
+        /// <inheritdoc />
+        public void ReportCaptureError(string? subjectId, Exception error)
+        {
+            if (error == null) return;
+            _Logging.Warn(_Header + "capture for " + (subjectId ?? "(unknown)") + " failed outside the capture: " + error.GetType().Name + ": " + error.Message);
+            BlackBoxMetrics.RecordCaptureFailure();
         }
 
         /// <inheritdoc />
@@ -299,7 +308,7 @@ namespace Armada.Core.BlackBox
                 VesselName = vessel?.Name,
                 Phase = phase,
                 Step = context.Step,
-                FailureKind = mission.FailureKind,
+                FailureKind = EffectiveKind(mission, context.Step),
                 StatusBefore = context.StatusBefore?.ToString(),
                 StatusAfter = mission.Status.ToString(),
                 Triage = IsOperatorOrExternal(mission, context.Step) ? BlackBoxTriageEnum.External : BlackBoxTriageEnum.Unknown,
@@ -310,8 +319,20 @@ namespace Armada.Core.BlackBox
                 CreatedUtc = record.CreatedUtc
             };
             entry.StoragePrefix = PrefixFor(entry);
-            entry.Fingerprint = BlackBoxFingerprint.Compute(phase, context.Step, mission.FailureKind, context.CallerMember, mission.FailureReason ?? context.Reason);
+            entry.Fingerprint = BlackBoxFingerprint.Compute(phase, context.Step, entry.FailureKind, context.CallerMember, mission.FailureReason ?? context.Reason);
             return entry;
+        }
+
+        /// <summary>
+        /// The failure kind recorded on the entry: the mission's, or OperatorAction for an operator stop or an
+        /// External-phase step (a manual transition, a deleted vessel) when the mission row has none, so every surface
+        /// shows a kind instead of a blank.
+        /// </summary>
+        private static MissionFailureKindEnum? EffectiveKind(Mission mission, BlackBoxStepEnum step)
+        {
+            if (mission.FailureKind.HasValue) return mission.FailureKind;
+            if (step == BlackBoxStepEnum.OperatorStop || BlackBoxTaxonomy.PhaseOf(step) == BlackBoxPhaseEnum.External) return MissionFailureKindEnum.OperatorAction;
+            return null;
         }
 
         /// <summary>
@@ -323,6 +344,50 @@ namespace Armada.Core.BlackBox
             if (mission.FailureKind == MissionFailureKindEnum.OperatorAction) return true;
             if (step == BlackBoxStepEnum.OperatorStop) return true;
             return BlackBoxTaxonomy.PhaseOf(step) == BlackBoxPhaseEnum.External;
+        }
+
+        /// <summary>
+        /// A capture with no exit code in its context recovers it from the mission's FailureReason and, when the capture
+        /// is not inline (sweeper or backfill), from the mission's latest <c>captain.process_exited</c> event, and notes
+        /// where it came from.
+        /// </summary>
+        private async Task RecoverExitCodeAsync(BlackBoxRecord record, Mission mission, BlackBoxCaptureContext context, CancellationToken budget, CancellationToken token)
+        {
+            if (context.ExitCode.HasValue) return;
+            int? fromReason = BlackBoxRecoveredFacts.ParseExitCode(mission.FailureReason ?? context.Reason);
+            if (fromReason.HasValue)
+            {
+                context.ExitCode = fromReason;
+                if (context.CaptureMode != BlackBoxCaptureModeEnum.Inline)
+                    BlackBoxRecordBounder.AddNote(record.Truncation, "Exit code " + fromReason.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) + " recovered from the mission's failure reason.");
+                return;
+            }
+
+            if (context.CaptureMode == BlackBoxCaptureModeEnum.Inline) return;
+            try
+            {
+                EnumerationResult<ArmadaEvent> exits = await _Database.Events.EnumerateAsync(new EnumerationQuery
+                {
+                    MissionId = mission.Id,
+                    EventType = "captain.process_exited",
+                    Order = EnumerationOrderEnum.CreatedDescending,
+                    PageSize = 1
+                }, budget).ConfigureAwait(false);
+                ArmadaEvent? last = exits.Objects.FirstOrDefault();
+                int? fromEvent = BlackBoxRecoveredFacts.ParseExitCode(last?.Message);
+                if (!fromEvent.HasValue) return;
+                context.ExitCode = fromEvent;
+                BlackBoxRecordBounder.AddNote(record.Truncation, "Exit code " + fromEvent.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) + " recovered from the captain.process_exited event of " + last!.CreatedUtc.ToString("u", System.Globalization.CultureInfo.InvariantCulture) + ".");
+            }
+            catch (OperationCanceledException) when (!token.IsCancellationRequested)
+            {
+                record.Truncation.TimedOut = true;
+                BlackBoxRecordBounder.AddNote(record.Truncation, "Capture ran out of its time budget while reading the mission's captain.process_exited event.");
+            }
+            catch (Exception e) when (!(e is OperationCanceledException))
+            {
+                _Logging.Warn(_Header + "could not read captain.process_exited for " + mission.Id + ": " + e.Message);
+            }
         }
 
         private async Task EmitStatusChangedAsync(Mission mission, MissionStatusEnum? previous, BlackBoxStepEnum step)
@@ -399,7 +464,7 @@ namespace Armada.Core.BlackBox
             record.Mechanism = MechanismOf(context.Exception, context.ExitCode, context.RuntimeFailureKind, context.FailingCommand, context.CommandExitCode, context.CommandOutput, context.GitFacts?.GitOperation, context.GitFacts?.GitStderr);
             record.Classification = new BlackBoxClassification
             {
-                Kind = mission.FailureKind,
+                Kind = EffectiveKind(mission, context.Step),
                 RawReason = mission.FailureReason ?? context.Reason,
                 SuspectedCause = context.SuspectedCause ?? FailureCauseEnum.None,
                 CauseRuleId = context.CauseRuleId,

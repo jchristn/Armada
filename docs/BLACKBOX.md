@@ -22,8 +22,7 @@ WebSocket commands and events are in [REST_API.md](REST_API.md), [MCP_API.md](MC
 [WEBSOCKET_API.md](WEBSOCKET_API.md). The design and phases are in `MISSION_BLACKBOX_PLAN.md`; where the plan and
 the code differ, this document describes the code.
 
-Places marked **Pending** describe surfaces that are designed but not merged on this branch yet; each names the work
-that delivers it and is replaced when that work lands (grep for `TODO(blackbox-docs)`).
+Work that is designed but not done yet is listed in section 14, Open items.
 
 ## Contents
 
@@ -387,6 +386,8 @@ Resources and prompts (on the HTTP MCP server, `/mcp`):
 | `armada://blackbox/{entryId}/objects/{name}` | The first 64 KB of an object (URL-encode a folder: `evidence%2Fgit-status.txt`); page the rest with `read_blackbox_object` |
 | `armada://missions/{missionId}/blackbox` | The digest of the mission's current entry |
 
+A missing or invisible entry or object is the MCP resource-not-found error (`-32002`) with the typed `NotFound` data.
+
 | Prompt | Arguments | Expands to |
 |---|---|---|
 | `review_blackbox` | `missionId` (required), `goal` (explain, fix, prevent, fix Armada, compare or clean up; default explain) | The flow above with the goal-to-tool map and the safety rules |
@@ -605,6 +606,12 @@ idempotent: running it again skips entries already moved. A corrupt or unreadabl
 stays where it was (the job ends `Failed` with `FailedEntries` and `LastError`). Only one migration runs at a time (409
 while another is unfinished); a target that fails its health check is refused with 503. `From` limits the job to
 entries on one source target. Set `blackBox.storage.target` to the new target as well, so new entries go there.
+
+Within one Admiral process the job and the entry writer (capture, enrichment and re-analysis, which rewrite
+`record.json` and the briefs) share per-entry locks (`BlackBoxEntryLocks`): a write in flight holds back the move of its
+entry, a move holds back writes to its entry, and a write re-reads the entry's location under the lock, so it lands on
+the new target and never saves the old location back over the switch. Run one Admiral against a data directory while a
+migration runs; the locks do not span processes.
 
 **Backups.** Database-target entries are inside the database backup. External-target entries are not copied: the
 backup manifest's `blackBox` section lists them (up to 10000 references), and the restore result says which restored
@@ -879,6 +886,9 @@ Site conventions (every failure write in plan 5.1 is wired; `Services.BlackBoxCa
   attempted, an expired landing deferral, a used-up rescue budget. `StatusAfter` is the status the mission kept.
 - Triage: operator stops and cancellations (`OperatorStop`, the External phase, kind `OperatorAction`, a voyage
   `Cancelled`) are `External`.
+- Kind: an `OperatorStop` or External-phase entry (`OperatorTransition`, `VesselDeleted`) whose mission row has no
+  `FailureKind` records `FailureKind` `OperatorAction` on the entry and in `classification.kind`, so every surface shows
+  a kind.
 - Every mission capture whose status changed emits `mission.status_changed` with `MissionStatusChangedPayload`
   (`PreviousStatus`), through `BlackBoxCapture.MissionStatusChanged` (the Admiral's `EmitMissionStatusChangedAsync`) or as
   an event row, whether or not the black box is enabled.
@@ -888,9 +898,11 @@ Site conventions (every failure write in plan 5.1 is wired; `Services.BlackBoxCa
   `MissionLandingHandler` passes `WorktreeExisted=false` when it had to recreate, or could not recreate, the worktree,
   and the dock head and target tip read by `LandingTargetSynchronization`. A memory-pressure deferral records one typed
   `mission.dispatch_deferred` event (`MissionDispatchDeferredPayload`) per Pending mission and reason.
-- Not captured inline: `NoEligibleCaptain` and `MemoryPressure` (waits, not failure writes) and `VesselDeleted` (written by
-  the vessel routes and MCP tools; their missions are recorded as `OperatorTransition` by `CancelMissionAsync`, and the
-  sweeper covers the rest).
+- Not captured inline: `NoEligibleCaptain` and `MemoryPressure` (waits, not failure writes). `VesselDeleted` is named by
+  the vessel delete on REST and MCP, which cancel each active mission through `CancelMissionAsync` with
+  `MissionCancelOptions` (`BlackBoxOperatorCapture.VesselDeletedCancel`), so the cancel records exactly one
+  `VesselDeleted` entry per mission; the WebSocket command records it directly. Other cancels keep `OperatorTransition`
+  or `OperatorStop`.
 
 ### 13.3 Services
 ### IBlackBoxCapture
@@ -1501,7 +1513,9 @@ request)` run only what the entry recorded:
    "Not run". Tools that return a result with `success: false` (such as `retry_landing`) count as failed.
 7. The entry is annotated (`blackbox_notes`, `authorKind` from the request, default `Agent`; human UIs pass `Operator`)
    and `blackbox.recovery_run` is emitted for dry runs and runs. The result carries per-step results.
-8. Where no `IBlackBoxActionExecutor` is wired, confirmed calls throw `NotImplementedException`.
+8. Where no `IBlackBoxActionExecutor` is wired, confirmed calls throw `BlackBoxActionsUnavailableException` (REST `503`
+   `BlackBoxActionsUnavailable`, MCP `Unavailable`). A step whose precondition is not met is refused (`Refused`,
+   `UnmetPreconditions`) on the dry run and on the confirm instead of being run.
 
 ### 13.15 Maintainer loop: bundle, trends, fixtures
 
@@ -1863,9 +1877,8 @@ Plan section 10. The pieces, in `Armada.Core.Services.Ask` unless noted:
 
 ## 14. Open items
 
-Grep for `TODO(blackbox-docs)` in this document and `TODO(blackbox-wave2` in code.
+Work not done yet:
 
 | Owner | Item | Where |
 |---|---|---|
 | Insight UIs | TUI and Helm views and commands for the section 12 extensions (overlap preview, reservations, doctor, timeline, attempt diff, nearby successes, cascade graph, recovery statistics) | `src/Armada.Tui`, `src/Armada.Helm` |
-| MCP resources | Typed errors for resource reads of a missing entry or object (they return JSON-RPC -32603 today) | `McpBlackBoxResources.cs` |

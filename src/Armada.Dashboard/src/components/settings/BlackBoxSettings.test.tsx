@@ -118,14 +118,14 @@ describe('BlackBoxSettings', () => {
     }
   });
 
-  it('explains a server that cannot migrate yet', async () => {
-    vi.mocked(migrateBlackBoxStorage).mockRejectedValue(Object.assign(new Error('NotImplemented'), { status: 501, data: null }));
+  it('explains a migration the server refused', async () => {
+    vi.mocked(migrateBlackBoxStorage).mockRejectedValue(Object.assign(new Error('The Disk store is not healthy: unreachable'), { status: 503, data: { code: 'BlackBoxStoreUnavailable' } }));
     render(<BlackBoxSettings blackBox={settings()} locked={false} onSaved={onSaved} notify={notify} />);
     await screen.findByText(/is healthy/);
     fireEvent.change(screen.getByLabelText('Move entries to'), { target: { value: 'Disk' } });
     fireEvent.click(screen.getByRole('button', { name: 'Migrate' }));
     fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Migrate' }));
-    expect(await screen.findByText('This server cannot migrate black box storage yet.')).toBeInTheDocument();
+    expect(await screen.findByText('The migration could not start: The Disk store is not healthy: unreachable')).toBeInTheDocument();
   });
 
   it('locks every field in remote proxy mode', () => {

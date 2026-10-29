@@ -999,8 +999,10 @@
       "requestRequired": true,
       "responses": {
         "200": "BlackBoxStorageMigrationJob",
+        "400": "ApiErrorResponse",
         "403": "ApiErrorResponse",
-        "501": "ApiStatusErrorResponse"
+        "409": "ApiErrorResponse",
+        "503": "ApiStatusErrorResponse"
       },
       "tags": [
         "BlackBox"
@@ -1018,8 +1020,7 @@
       "responses": {
         "200": "BlackBoxStorageMigrationJob",
         "403": "ApiErrorResponse",
-        "404": "ApiErrorResponse",
-        "501": "ApiStatusErrorResponse"
+        "404": "ApiErrorResponse"
       },
       "tags": [
         "BlackBox"
@@ -1322,7 +1323,7 @@
         "200": "BlackBoxRecommendationApplyResult",
         "404": "ApiErrorResponse",
         "409": "ApiErrorResponse",
-        "501": "ApiStatusErrorResponse"
+        "503": "ApiStatusErrorResponse"
       },
       "tags": [
         "BlackBox"
@@ -1342,7 +1343,7 @@
         "400": "ApiErrorResponse",
         "404": "ApiErrorResponse",
         "409": "ApiErrorResponse",
-        "501": "ApiStatusErrorResponse"
+        "503": "ApiStatusErrorResponse"
       },
       "tags": [
         "BlackBox"
@@ -14071,7 +14072,7 @@
           "required": false
         }
       ],
-      "description": "Run one recovery path recorded in a black box entry's analysis (pathId, for example bbx-land-001.stash-retry). It never takes a free-form command: only the steps recorded in the entry run, each authorized as if you had called that tool directly. Always dry run first (dryRun defaults to true): the dry run returns the plan and a confirmToken (10 minutes, bound to the entry, the path and the mission's current version, so a mission that changed must be re-checked). Tell the user what will happen, then run with dryRun false and that confirmToken. A path marked dataLossRisk (deleting a branch, forcing a dock reclaim) is refused without acknowledgeDataLoss true; confirm with the user before setting it. Every dry run and run is annotated on the entry (authorKind Agent). A token is single use; a missing, expired, used or foreign token, a mission that changed, or a re-analyzed plan is Conflict with Code BlackBoxConfirmationRequired: dry run again. Read the black box summary first. Quote evidence, not guesses. State the triage verdict and whether you agree. If you act, use only recovery paths or recommendations from the entry, do a dry run, tell the user what will happen, and confirm before running anything marked dataLossRisk. Annotate the entry with what you did. Name the entry with entryId (bbx_ prefix), or with missionId or voyageId for that mission's or voyage's current entry.",
+      "description": "Run one recovery path recorded in a black box entry's analysis (pathId, for example bbx-land-001.stash-retry). It never takes a free-form command: only the steps recorded in the entry run, each authorized as if you had called that tool directly. Always dry run first (dryRun defaults to true): the dry run returns the plan and a confirmToken (10 minutes, bound to the entry, the path and the mission's current version, so a mission that changed must be re-checked). Tell the user what will happen, then run with dryRun false and that confirmToken. A path marked dataLossRisk (deleting a branch, forcing a dock reclaim) is refused without acknowledgeDataLoss true; confirm with the user before setting it. Every dry run and run is annotated on the entry (authorKind Agent). A token is single use; a missing, expired, used or foreign token, a mission that changed, or a re-analyzed plan is Conflict with Code BlackBoxConfirmationRequired: dry run again. A step whose precondition is not met (restart_mission on a mission that is already Pending, retry_landing on one that is not LandingFailed, a deleted dock) is refused: refused true and unmetPreconditions name it, a refused dry run has no confirmToken and a refused confirmed run runs nothing. Read the black box summary first. Quote evidence, not guesses. State the triage verdict and whether you agree. If you act, use only recovery paths or recommendations from the entry, do a dry run, tell the user what will happen, and confirm before running anything marked dataLossRisk. Annotate the entry with what you did. Name the entry with entryId (bbx_ prefix), or with missionId or voyageId for that mission's or voyage's current entry.",
       "experimental": false
     },
     {

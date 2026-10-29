@@ -273,7 +273,7 @@ namespace Armada.Core.BlackBox
         /// data-loss risk without acknowledgeDataLoss.</exception>
         /// <exception cref="UnauthorizedAccessException">Thrown when the caller could not call a step's tool directly.</exception>
         /// <exception cref="ArgumentException">Thrown when the request is invalid or a recorded action is not runnable.</exception>
-        /// <exception cref="NotImplementedException">Thrown for a confirmed run when no action executor is wired.</exception>
+        /// <exception cref="BlackBoxActionsUnavailableException">Thrown for a confirmed run when no action executor is wired.</exception>
         Task<BlackBoxRecoveryRunResult> RunRecoveryAsync(AuthContext caller, string entryId, string pathId, BlackBoxRecoveryRunRequest request, CancellationToken token = default);
 
         /// <summary>Apply (or dry run) a configuration recommendation recorded on the entry.</summary>
@@ -288,7 +288,7 @@ namespace Armada.Core.BlackBox
         /// mission or vessel changed since the dry run.</exception>
         /// <exception cref="UnauthorizedAccessException">Thrown when the caller could not call the apply tool directly.</exception>
         /// <exception cref="ArgumentException">Thrown when the recommendation is advice only (no applyAction) or invalid.</exception>
-        /// <exception cref="NotImplementedException">Thrown for a confirmed apply when no action executor is wired.</exception>
+        /// <exception cref="BlackBoxActionsUnavailableException">Thrown for a confirmed apply when no action executor is wired.</exception>
         Task<BlackBoxRecommendationApplyResult> ApplyRecommendationAsync(AuthContext caller, string entryId, string recommendationId, BlackBoxRecommendationApplyRequest request, CancellationToken token = default);
 
         /// <summary>Maintainer bundle of up to 50 entries grouped by fingerprint (count, first and last seen, Armada

@@ -7,8 +7,8 @@ namespace Armada.Core.BlackBox
     /// <summary>
     /// Runs one recorded black box action (an existing MCP tool and its arguments) as the caller, with the same
     /// validation, authorization and tenant scoping as if the caller had called that tool directly. The Admiral wires an
-    /// implementation that invokes the registered MCP tool handler; recovery runs fail with NotImplementedException where
-    /// none is wired. Implementations must be thread-safe and must never run anything but the given action.
+    /// implementation that invokes the registered MCP tool handler; recovery runs fail with BlackBoxActionsUnavailableException
+    /// where none is wired. Implementations must be thread-safe and must never run anything but the given action.
     /// </summary>
     public interface IBlackBoxActionExecutor
     {

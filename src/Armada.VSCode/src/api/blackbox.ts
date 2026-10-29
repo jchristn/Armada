@@ -177,9 +177,11 @@ export function describeError(err: unknown): string {
       case 'badRequest':
         return `Armada rejected the request (${err.status ?? 400})${detail}.`;
       case 'unavailable':
-        return `The black box store is unavailable (503 ${err.code ?? 'BlackBoxStoreUnavailable'})${detail}. Try again later.`;
+        return err.code === 'BlackBoxActionsUnavailable'
+          ? `This Armada server cannot run black box recovery actions (503 BlackBoxActionsUnavailable)${detail}. Follow the steps by hand.`
+          : `The black box store is unavailable (503 ${err.code ?? 'BlackBoxStoreUnavailable'})${detail}. Try again later.`;
       case 'notImplemented':
-        return `This Armada server does not run that black box operation yet (501 ${err.code ?? 'NotImplemented'}): the recovery runner may not be merged on it${detail}.`;
+        return `This Armada server does not support that operation (501 ${err.code ?? 'NotImplemented'})${detail}. Upgrade the Admiral.`;
       case 'invalidResponse':
         return `Armada returned an unexpected response: ${err.message}`;
       default:

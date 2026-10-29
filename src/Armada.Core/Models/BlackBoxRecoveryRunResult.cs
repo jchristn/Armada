@@ -58,9 +58,26 @@ namespace Armada.Core.Models
         }
 
         /// <summary>
-        /// Whether every step succeeded (true for a dry run that validated).
+        /// Whether every step succeeded (true for a dry run that validated and whose preconditions are met).
         /// </summary>
         public bool Succeeded { get; set; } = false;
+
+        /// <summary>
+        /// Whether the run was refused because a step's precondition is not met (for example restart_mission on a
+        /// mission that is already Pending). A refused dry run issues no confirm token; a refused confirmed run runs
+        /// nothing.
+        /// </summary>
+        public bool Refused { get; set; } = false;
+
+        /// <summary>
+        /// The unmet preconditions, one per step that cannot run; empty when every step can run.
+        /// </summary>
+        [CollectionBound(BlackBoxLimits.MaxRecoverySteps, Reason = "At most one per recovery path step")]
+        public List<string> UnmetPreconditions
+        {
+            get => _UnmetPreconditions;
+            set => _UnmetPreconditions = value ?? new List<string>();
+        }
 
         /// <summary>
         /// Summary message.
@@ -69,6 +86,7 @@ namespace Armada.Core.Models
 
         private List<BlackBoxRecoveryStep> _Plan = new List<BlackBoxRecoveryStep>();
         private List<BlackBoxRecoveryStepResult> _StepResults = new List<BlackBoxRecoveryStepResult>();
+        private List<string> _UnmetPreconditions = new List<string>();
 
         /// <summary>
         /// Instantiate.

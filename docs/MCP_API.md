@@ -1508,7 +1508,7 @@ or voyage's **current** entry. One of the three is required (`InvalidArgument` o
 | `Conflict` | `BlackBoxObjectCorrupt` | The object's bytes do not match its SHA-256 |
 | `Conflict` | `BlackBoxConfirmationRequired` | A confirmed recovery or recommendation run without a valid `confirmToken` (missing, expired, used, another caller's, or the mission or plan changed), or a `dataLossRisk` path without `acknowledgeDataLoss` |
 | `Unavailable` | `BlackBoxStoreUnavailable` | The storage target is unreachable |
-| `Unavailable` | `NotImplemented` | A confirmed run on a server with no action executor wired |
+| `Unavailable` | `BlackBoxActionsUnavailable` | A confirmed run on a host with no action executor wired |
 | `Unavailable` | null | The black box is not available on this server (every tool on the stdio server) |
 | `InvalidArgument` | null, or `CollectionLimitExceeded` | A missing or invalid argument (format, audience, section, resolution, order, offset, length, a note body outside 1 to 8000 characters, a search query outside 1 to 200); more than 1000 `entryIds` is `CollectionLimitExceeded` |
 | `Forbidden` | null | The tool's permission level, or a recovery step whose tool the caller could not call directly |
@@ -2093,6 +2093,8 @@ Dry run:
   ],
   "StepResults": [],
   "Succeeded": true,
+  "Refused": false,
+  "UnmetPreconditions": [],
   "Message": "Would run: restart_mission {\"missionId\": \"msn_mvu1fjp0_9Wd6Uuyp262\"}. Confirm with confirmToken before 2026-10-29 21:22:14Z."
 }
 ```
@@ -2104,12 +2106,15 @@ Confirm:
 ```
 
 **Response:** `DryRun` false and `StepResults` (`Order`, `Tool`, `Succeeded`, `Message`); the first failed step stops
-the run and the rest report "Not run", and a manual step is reported, not run. Without a token (or with a used, expired
+the run and the rest report "Not run", and a manual step is reported, not run. Step preconditions (for example
+`restart_mission` needs a Failed, LandingFailed or Cancelled mission, not one already Pending) are checked on the dry
+run and on the confirm: when one is not met, `Refused` is `true`, `Succeeded` `false` and `UnmetPreconditions` names the
+step; a refused dry run has no `ConfirmToken` and a refused confirm runs nothing. Without a token (or with a used, expired
 or foreign one):
 
 ```json
 {
-  "Error": "A confirmToken is required: run run_blackbox_recovery with dryRun=true first and confirm with the token it returns.",
+  "Error": "A confirmToken is required: do a dry run of this recovery path first (dryRun true) and confirm with the token it returns.",
   "ErrorCode": "Conflict",
   "Code": "BlackBoxConfirmationRequired",
   "StatusCode": null
@@ -2117,8 +2122,8 @@ or foreign one):
 ```
 
 `InvalidArgument` without `pathId`, or when a step names an unsupported tool or another subject; `NotFound` for an
-unknown path; `Forbidden` when you could not call a step's tool directly; `Unavailable` (`NotImplemented`) without an
-action executor.
+unknown path; `Forbidden` when you could not call a step's tool directly; `Unavailable`
+(`BlackBoxActionsUnavailable`) without an action executor.
 
 ### apply_blackbox_recommendation
 
@@ -2260,6 +2265,15 @@ registered when the black box is running. Every read runs as the MCP caller thro
 | `armada://blackbox/{entryId}/record.json` | `application/json` | The record, camelCase (the `record.json` serializer) |
 | `armada://blackbox/{entryId}/objects/{name}` | the object's | The first 64 KB of one object. URL-encode a name with a folder (`evidence%2Fgit-status.txt`). A text object longer than 64 KB ends with a `[first N of M bytes; read the rest with read_blackbox_object offset N]` line; a binary object is returned as a base64 `blob` |
 | `armada://missions/{missionId}/blackbox` | `application/json` | The digest (what `get_blackbox` `format` `summary` returns) of the mission's current entry, camelCase |
+
+A read of an entry, object or mission the caller cannot see (missing, or in another tenant) is the MCP resource-not-found
+error, JSON-RPC code `-32002`, whose `data` carries the `uri` and the same typed error a black box tool returns
+(`errorCode` `NotFound`, `code` `BlackBoxNotFound` or `BlackBoxObjectMissing`). Any other black box error (an entry being
+deleted, a corrupt object, an unavailable store) is `-32602` with the same `data` shape:
+
+```json
+{ "jsonrpc": "2.0", "id": 33, "error": { "code": -32002, "message": "Black box entry bbx_missing not found.", "data": { "uri": "armada://blackbox/bbx_missing/record.json", "error": "Black box entry bbx_missing not found.", "errorCode": "NotFound", "code": "BlackBoxNotFound" } } }
+```
 
 `resources/list` is empty (there are no fixed resources); discover the templates with `resources/templates/list`:
 

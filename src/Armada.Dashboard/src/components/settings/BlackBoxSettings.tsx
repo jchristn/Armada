@@ -9,7 +9,7 @@ import type {
   BlackBoxTargetSettings,
 } from '../../types/blackbox';
 import { useLocale } from '../../context/LocaleContext';
-import { BLACKBOX_STORAGE_TARGETS, blackBoxErrorStatus, formatBlackBoxBytes } from '../../lib/blackbox';
+import { BLACKBOX_STORAGE_TARGETS, formatBlackBoxBytes } from '../../lib/blackbox';
 import { REDACTED_SECRET } from '../../lib/serverSettings';
 import ConfirmDialog from '../shared/ConfirmDialog';
 import '../blackbox/BlackBox.css';
@@ -184,9 +184,7 @@ export default function BlackBoxSettings({ blackBox, locked, onSaved, notify }: 
       setJob(started);
       follow(started.id);
     } catch (err: unknown) {
-      setMigrateError(blackBoxErrorStatus(err) === 501
-        ? t('This server cannot migrate black box storage yet.')
-        : t('The migration could not start: {{message}}', { message: err instanceof Error ? err.message : String(err) }));
+      setMigrateError(t('The migration could not start: {{message}}', { message: err instanceof Error ? err.message : String(err) }));
     }
   }
 

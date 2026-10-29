@@ -19,7 +19,7 @@ export interface EnumerationResult<T> {
 
 /** Machine-readable detail in the Data of a black box error (BlackBoxErrorDetail, or CollectionLimitErrorDetail). */
 export interface BlackBoxErrorDetail {
-  /** BlackBoxNotFound, BlackBoxDeleting, BlackBoxObjectCorrupt, BlackBoxConfirmationRequired, BlackBoxObjectMissing, BlackBoxStoreUnavailable, InvalidArgument, NotImplemented or CollectionLimitExceeded. */
+  /** BlackBoxNotFound, BlackBoxDeleting, BlackBoxObjectCorrupt, BlackBoxConfirmationRequired, BlackBoxObjectMissing, BlackBoxStoreUnavailable, BlackBoxActionsUnavailable, InvalidArgument or CollectionLimitExceeded. */
   Code?: string;
   /** The request field at fault for InvalidArgument (for example audience or section). */
   Field?: string | null;
@@ -376,6 +376,9 @@ export interface BlackBoxRecoveryResult {
   /** What each step of a real run did. */
   StepResults?: BlackBoxRecoveryStepResult[];
   Succeeded?: boolean;
+  /** True when a step's precondition is not met (no token on a dry run; nothing ran on a confirm). */
+  Refused?: boolean;
+  UnmetPreconditions?: string[];
   Message?: string | null;
 }
 

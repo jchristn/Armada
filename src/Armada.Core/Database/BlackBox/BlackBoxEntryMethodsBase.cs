@@ -529,7 +529,16 @@ namespace Armada.Core.Database.BlackBox
             if (query == null) throw new ArgumentNullException(nameof(query));
             string where = " WHERE (m.status IN ('Failed', 'LandingFailed', 'Blocked')"
                 + " OR (m.status = 'Cancelled' AND m.failure_kind IS NOT NULL AND m.failure_kind <> 'OperatorAction'))"
-                + " AND (m.last_blackbox_entry_id IS NULL OR NOT EXISTS (SELECT 1 FROM blackbox_entries e WHERE e.id = m.last_blackbox_entry_id AND e.created_utc >= m.last_update_utc))"
+                + " AND (m.last_blackbox_entry_id IS NULL OR NOT EXISTS (SELECT 1 FROM blackbox_entries e WHERE e.id = m.last_blackbox_entry_id AND ("
+                + "e.created_utc >= m.last_update_utc"
+                // An edit after the entry is not a new failure: the entry still covers the mission unless it re-entered a
+                // failure state (another status, a new attempt started or finished after the entry) or its failure kind
+                // or reason changed.
+                + " OR (COALESCE(e.status_after, '') = m.status"
+                + " AND COALESCE(e.failure_kind, '') = COALESCE(m.failure_kind, '')"
+                + " AND (m.started_utc IS NULL OR m.started_utc <= e.created_utc)"
+                + " AND (m.completed_utc IS NULL OR m.completed_utc <= e.created_utc)"
+                + " AND (m.failure_reason IS NULL OR COALESCE(e.reason_excerpt, '') = " + _Sql.TextPrefix("m.failure_reason", BlackBoxLimits.MaxEntryReasonExcerptChars) + ")))))"
                 + (updatedSince.HasValue ? " AND m.last_update_utc >= @since" : String.Empty);
             Action<DbCommand> bind = cmd => { if (updatedSince.HasValue) _Sql.AddDate(cmd, "@since", updatedSince.Value); };
             return await PageAsync("SELECT COUNT(*) FROM missions m" + where,

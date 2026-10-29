@@ -87,6 +87,16 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(f.Admin.UserId, pending.UserId);
 
                 AssertEqual(0, await f.Runtime.Insights.Outcomes.SettleAsync().ConfigureAwait(false), "nothing terminal yet");
+
+                // A failed step settles at once. It runs while the landing is still failed: retry_landing on a mission that
+                // is no longer LandingFailed is refused as an unmet precondition and never runs.
+                f.Executor.FailTools.Add("retry_landing");
+                BlackBoxRecoveryRunResult dry2 = await f.Service.RunRecoveryAsync(f.Admin, f.EntryId, StashPath, new BlackBoxRecoveryRunRequest()).ConfigureAwait(false);
+                BlackBoxRecoveryRunResult failedRun = await f.Service.RunRecoveryAsync(f.Admin, f.EntryId, StashPath, Confirm(dry2.ConfirmToken)).ConfigureAwait(false);
+                AssertFalse(failedRun.Succeeded);
+                BlackBoxRecoveryOutcome runFailed = (await f.Db.BlackBoxRecoveryOutcomes.EnumerateByEntryAsync(f.EntryId, new EnumerationQuery()).ConfigureAwait(false)).Objects.Single(o => o.PathId == StashPath);
+                AssertEqual(BlackBoxRecoveryOutcomeEnum.RunFailed, runFailed.Outcome, "a failed step settles at once");
+
                 Mission mission = (await f.Db.Missions.ReadAsync(f.MissionId).ConfigureAwait(false))!;
                 mission.Status = MissionStatusEnum.Complete;
                 mission.CompletedUtc = DateTime.UtcNow.AddSeconds(1);
@@ -97,13 +107,8 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(BlackBoxRecoveryOutcomeEnum.Succeeded, settled.Outcome); AssertEqual("Complete", settled.OutcomeStatus); AssertNotNull(settled.ResolvedUtc);
                 List<BlackBoxNote> notes = (await f.Service.EnumerateNotesAsync(f.Admin, f.EntryId, null).ConfigureAwait(false)).Objects;
                 AssertTrue(notes.Any(n => n.AuthorKind == BlackBoxNoteAuthorKindEnum.System && n.Body.Contains("worked", StringComparison.Ordinal)), "outcome noted on the entry");
-
-                f.Executor.FailTools.Add("retry_landing");
-                BlackBoxRecoveryRunResult dry2 = await f.Service.RunRecoveryAsync(f.Admin, f.EntryId, StashPath, new BlackBoxRecoveryRunRequest()).ConfigureAwait(false);
-                BlackBoxRecoveryRunResult failedRun = await f.Service.RunRecoveryAsync(f.Admin, f.EntryId, StashPath, Confirm(dry2.ConfirmToken)).ConfigureAwait(false);
-                AssertFalse(failedRun.Succeeded);
-                BlackBoxRecoveryOutcome runFailed = (await f.Db.BlackBoxRecoveryOutcomes.EnumerateByEntryAsync(f.EntryId, new EnumerationQuery()).ConfigureAwait(false)).Objects.First();
-                AssertEqual(BlackBoxRecoveryOutcomeEnum.RunFailed, runFailed.Outcome, "a failed step settles at once");
+                BlackBoxRecoveryRunResult refused = await f.Service.RunRecoveryAsync(f.Admin, f.EntryId, StashPath, new BlackBoxRecoveryRunRequest()).ConfigureAwait(false);
+                AssertTrue(refused.Refused, "retry_landing on the Complete mission is refused");
 
                 EnumerationResult<BlackBoxRecoveryStat> stats = await f.Runtime.Insights.Service.EnumerateRecoveryStatsAsync(f.Admin, null, null, null).ConfigureAwait(false);
                 AssertEqual(2L, stats.TotalRecords, "one row per path");

@@ -29,7 +29,7 @@ namespace Armada.Core.BlackBox
 
         /// <summary>
         /// Runs recorded recovery and recommendation actions as the caller (the Admiral wires one that invokes the MCP tool
-        /// handler), or null; confirmed runs then fail with NotImplementedException.
+        /// handler), or null; confirmed runs then fail with BlackBoxActionsUnavailableException.
         /// </summary>
         public IBlackBoxActionExecutor? ActionExecutor { get; set; } = null;
 
@@ -626,6 +626,18 @@ namespace Armada.Core.BlackBox
             bool dataLoss = path.DataLossRisk || plan.Any(s => s.DataLossRisk);
 
             BlackBoxRecoveryRunResult result = new BlackBoxRecoveryRunResult { EntryId = entry.Id, PathId = path.Id, Plan = plan };
+            List<string> unmet = await UnmetPreconditionsAsync(entry, record, plan, token).ConfigureAwait(false);
+            if (request.DryRun && unmet.Count > 0)
+            {
+                result.DryRun = true;
+                result.Refused = true;
+                result.Succeeded = false;
+                result.UnmetPreconditions = unmet;
+                result.Message = "Recovery path " + path.Id + " cannot run now, so no confirm token was issued: " + String.Join(" ", unmet) + " Check the " + (entry.MissionId != null ? "mission" : "voyage") + "'s current state.";
+                await EmitRecoveryAsync(entry, path.Id, null, true, false, 0, 0, caller, token).ConfigureAwait(false);
+                return result;
+            }
+
             if (request.DryRun)
             {
                 BlackBoxPendingConfirmation pending = Confirmations.Issue(BlackBoxConfirmationStore.RecoveryKind, entry.Id, path.Id, version, planHash, caller);
@@ -638,14 +650,27 @@ namespace Armada.Core.BlackBox
                 return result;
             }
 
-            if (String.IsNullOrWhiteSpace(request.ConfirmToken)) throw new BlackBoxConfirmationException("A confirmToken is required: run run_blackbox_recovery with dryRun=true first and confirm with the token it returns.");
+            if (String.IsNullOrWhiteSpace(request.ConfirmToken)) throw new BlackBoxConfirmationException("A confirmToken is required: do a dry run of this recovery path first (dryRun true) and confirm with the token it returns.");
             if (dataLoss && !request.AcknowledgeDataLoss) throw new BlackBoxConfirmationException("Recovery path " + path.Id + " can lose work; confirm again with acknowledgeDataLoss=true after the user agrees.");
             BlackBoxPendingConfirmation confirmed = Confirmations.Consume(request.ConfirmToken, BlackBoxConfirmationStore.RecoveryKind, entry.Id, path.Id, caller);
             if (!String.Equals(confirmed.SubjectVersion, version, StringComparison.Ordinal))
                 throw new BlackBoxConfirmationException("The " + (entry.MissionId != null ? "mission" : "voyage") + " changed since the dry run; check its state and run a new dry run.");
             if (!String.Equals(confirmed.PlanHash, planHash, StringComparison.Ordinal))
                 throw new BlackBoxConfirmationException("Recovery path " + path.Id + " changed since the dry run (the entry was re-analyzed); run a new dry run.");
-            IBlackBoxActionExecutor executor = ActionExecutor ?? throw new NotImplementedException("Running black box recovery actions is not available on this host (no action executor is wired).");
+            if (unmet.Count > 0)
+            {
+                result.Refused = true;
+                result.Succeeded = false;
+                result.UnmetPreconditions = unmet;
+                foreach (BlackBoxRecoveryStep step in plan)
+                    result.StepResults.Add(new BlackBoxRecoveryStepResult { Order = step.Order, Tool = step.Action?.Tool, Succeeded = false, Message = "Not run: the path's preconditions are not met." });
+                result.Message = "Recovery path " + path.Id + " was refused and nothing ran: " + String.Join(" ", unmet);
+                await AnnotateAsync(caller, entry, "Refused recovery path " + path.Id + " (" + path.Title + "): " + BlackBoxLimits.Clip(String.Join(" ", unmet), 600), request.AuthorKind, token).ConfigureAwait(false);
+                await EmitRecoveryAsync(entry, path.Id, null, false, false, 0, 0, caller, token).ConfigureAwait(false);
+                return result;
+            }
+
+            IBlackBoxActionExecutor executor = ActionExecutor ?? throw new BlackBoxActionsUnavailableException("Running black box recovery actions is not available on this host (no action executor is wired); follow the steps by hand.");
 
             bool failed = false;
             int ran = 0;
@@ -719,13 +744,13 @@ namespace Armada.Core.BlackBox
                 return result;
             }
 
-            if (String.IsNullOrWhiteSpace(request.ConfirmToken)) throw new BlackBoxConfirmationException("A confirmToken is required: run apply_blackbox_recommendation with dryRun=true first and confirm with the token it returns.");
+            if (String.IsNullOrWhiteSpace(request.ConfirmToken)) throw new BlackBoxConfirmationException("A confirmToken is required: do a dry run of this recommendation first (dryRun true) and confirm with the token it returns.");
             BlackBoxPendingConfirmation confirmed = Confirmations.Consume(request.ConfirmToken, BlackBoxConfirmationStore.RecommendationKind, entry.Id, rec.Id, caller);
             if (!String.Equals(confirmed.SubjectVersion, version, StringComparison.Ordinal))
                 throw new BlackBoxConfirmationException("The mission or vessel changed since the dry run; check the current configuration and run a new dry run.");
             if (!String.Equals(confirmed.PlanHash, planHash, StringComparison.Ordinal))
                 throw new BlackBoxConfirmationException("Recommendation " + rec.Id + " changed since the dry run (the entry was re-analyzed); run a new dry run.");
-            IBlackBoxActionExecutor executor = ActionExecutor ?? throw new NotImplementedException("Applying black box recommendations is not available on this host (no action executor is wired).");
+            IBlackBoxActionExecutor executor = ActionExecutor ?? throw new BlackBoxActionsUnavailableException("Applying black box recommendations is not available on this host (no action executor is wired); apply it by hand.");
 
             BlackBoxRecoveryStepResult outcome = await ExecuteAsync(executor, caller, rec.ApplyAction, token).ConfigureAwait(false);
             result.Succeeded = outcome.Succeeded;
@@ -965,6 +990,28 @@ namespace Armada.Core.BlackBox
             if (_Authorization.IsAuthorized(caller, requirement)) return;
             string needed = requirement.Level == PermissionLevel.AdminOnly ? "an admin" : (requirement.Level == PermissionLevel.TenantAdmin ? "a tenant admin or admin" : "an authenticated caller");
             throw new UnauthorizedAccessException(label + " runs " + action.Tool + ", which requires " + needed + "; you could not call it directly, so the black box cannot run it for you.");
+        }
+
+        private async Task<List<string>> UnmetPreconditionsAsync(BlackBoxEntry entry, BlackBoxRecord record, List<BlackBoxRecoveryStep> plan, CancellationToken token)
+        {
+            List<string> unmet = new List<string>();
+            if (!plan.Any(s => s.Action != null)) return unmet;
+            string? missionId = entry.MissionId ?? record.Subject?.MissionId;
+            string? vesselId = entry.VesselId ?? record.Subject?.VesselId;
+            string? dockId = record.Workspace?.DockId ?? record.Subject?.DockId ?? entry.DockId;
+            Mission? mission = String.IsNullOrEmpty(missionId) ? null : await _Database.Missions.ReadAsync(missionId!, token).ConfigureAwait(false);
+            bool needsVessel = plan.Any(s => s.Action?.Tool == "update_vessel");
+            bool needsDock = plan.Any(s => s.Action?.Tool == "unstick_dock" || s.Action?.Tool == "repair_dock");
+            bool vesselExists = !needsVessel || (!String.IsNullOrEmpty(vesselId) && await _Database.Vessels.ReadAsync(vesselId!, token).ConfigureAwait(false) != null);
+            bool dockExists = !needsDock || (!String.IsNullOrEmpty(dockId) && await _Database.Docks.ReadAsync(dockId!, token).ConfigureAwait(false) != null);
+            MissionStatusEnum? status = mission?.Status;
+            foreach (BlackBoxRecoveryStep step in plan.Where(s => s.Action != null))
+            {
+                string? reason = BlackBoxActionPreconditions.Check(step.Action!, status, mission?.RequiresReview ?? false, vesselExists, dockExists);
+                if (reason != null) unmet.Add("Step " + step.Order + " " + reason);
+                status = BlackBoxActionPreconditions.StatusAfter(step.Action!.Tool, status);
+            }
+            return unmet;
         }
 
         private async Task<string> SubjectVersionAsync(BlackBoxEntry entry, bool includeVessel, CancellationToken token)

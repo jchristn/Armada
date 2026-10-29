@@ -230,8 +230,9 @@ namespace Armada.Core.BlackBox.Enrichment
                     return start > 0 ? TrimToLineStart(buffer) : buffer;
                 }
             }
-            catch (Exception)
+            catch (Exception e) when (e is IOException || e is UnauthorizedAccessException || e is NotSupportedException || e is ArgumentException || e is System.Security.SecurityException)
             {
+                // Unreadable is reported to the caller as null (documented); anything else is a defect and propagates.
                 return null;
             }
         }
