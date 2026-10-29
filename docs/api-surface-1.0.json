@@ -8220,7 +8220,7 @@
           "required": false
         }
       ],
-      "description": "Add a note to a black box entry (body 1-8000 characters; recorded with authorKind Agent). Annotate what you found and what you did, so the next reader does not repeat it. Name the entry with entryId (bbx_ prefix), or with missionId or voyageId for that mission's or voyage's current entry.",
+      "description": "Add a note to a black box entry (body 1-8000 characters; recorded with authorKind Agent, or AskArmada from an Ask Armada conversation). Annotate what you found and what you did, so the next reader does not repeat it. Name the entry with entryId (bbx_ prefix), or with missionId or voyageId for that mission's or voyage's current entry.",
       "experimental": false
     },
     {
