@@ -30,6 +30,8 @@ import { useTheme } from '../../theme/ThemeContext';
 import { spacing } from '../../theme/typography';
 import type { OperationsDetailProps } from './listTypes';
 import { MissionOutputSheet, type MissionOutputRequest } from '../../components/app/MissionOutputSheet';
+import { BlackBoxPanel } from '../blackbox/BlackBoxPanel';
+import { voyageMayHaveBlackBox } from '../blackbox/blackBoxModel';
 
 interface VoyageData {
   voyage: Voyage;
@@ -72,7 +74,8 @@ export function prefillQuery(values: Record<string, string | null | undefined>):
 /**
  * Voyage detail (the dashboard's /voyages/:id): status, details, landing configuration, captain assignments,
  * timestamps, progress, playbooks, and the voyage's missions with their diff and log; cancel, retry failed,
- * delete, Run Check, Draft Release, and View JSON. Follows the voyage and its missions live.
+ * delete, Run Check, Draft Release, and View JSON. A failed or cancelled voyage shows its black box. Follows the
+ * voyage and its missions live.
  */
 export function VoyageDetail({ id, embedded }: OperationsDetailProps) {
   const { t, formatDateTime, formatRelativeTime } = useLocale();
@@ -219,6 +222,8 @@ export function VoyageDetail({ id, embedded }: OperationsDetailProps) {
           </AppText>
         </View>
       ) : null}
+
+      {voyageMayHaveBlackBox(voyage.status) ? <BlackBoxPanel source={{ kind: 'voyage', id: voyage.id }} /> : null}
 
       <Section title={t('Details')}>
         <KeyValueRow label={t('ID')} value={voyage.id} mono />
