@@ -186,7 +186,7 @@ Long-running installs accumulate conversations, job records, and import history.
 | `jobRetentionDays` | 30 | 0 to 3650 | Delete finished background jobs (Succeeded, Failed, Cancelled) older than this. The newest finished job of each kind and name per tenant is kept, because schedules such as vessel health measure from it. Harbor metrics (Harbor job records, link samples, and link events) follow the same retention. |
 | `importBatchRetentionDays` | 90 | 0 to 3650 | Delete finished vessel import batches (Completed, CompletedWithFailures, Failed) with their items and fleet recommendations. Imported vessels are not affected; batches still categorizing are kept. |
 
-Other data has its own controls. Fleet action runs (and their captured output) follow `fleetActions.runRetentionDays` (default 30). Request history follows `requestHistoryRetentionDays` (default 30). Completed voyages and missions, old signals, and old events follow `dataRetentionDays` (default 30), which currently applies to SQLite only. Vessel health findings need no retention: each evaluation replaces the previous findings for a vessel instead of adding history.
+Other data has its own controls. Fleet action runs (and their captured output) follow `fleetActions.runRetentionDays` (default 30). Request history follows `requestHistoryRetentionDays` (default 30). Completed voyages and missions, old signals, and old events follow `dataRetentionDays` (default 30), which currently applies to SQLite only. Vessel health findings need no retention: each evaluation replaces the previous findings for a vessel instead of adding history. Black box entries are not touched by any of these; they follow `blackBox.retention` and their own garbage collector (see [Black box retention and storage](OPERATIONS.md#black-box-retention-and-storage)).
 
 ## Testing an upgrade
 
@@ -494,3 +494,104 @@ v1.0.0 is the first stable release: security hardening, a frozen and documented 
 - Whole-list GET routes and `list_*` MCP tools are deprecated in favor of paged `enumerate` replacements; they keep working until 2.0.
 
 **New settings worth reviewing:** `ExcludeReviewAuthorsFromJudge` (default false), `StageCheckTimeoutMinutes` (default 15), and the `Evaluation` group (budget and concurrency for Quick probes and the fixture battery, overall and per inference host, plus `BatteryDirectory`).
+
+### Upgrading to the release that adds the black box (v1.2.0 or later)
+
+This release adds the mission and voyage black box: when a mission or voyage fails, the Admiral writes an entry with
+where, how and why it failed, the FIX THIS brief, and ranked recovery paths. It needs no action to turn on, and there
+are no breaking changes: every new table, column, field and setting is additive. What it is and how to use it are in
+[BLACKBOX.md](BLACKBOX.md).
+
+**Database.** Two schema migrations run at startup on SQLite, PostgreSQL, MySQL and SQL Server, through the normal
+[upgrade procedure](#how-an-upgrade-runs). SQLite is copied to `backups/pre-migration-*` first. On a server provider,
+take a dump first ([Server providers: dump first](#server-providers-dump-first)); with
+`database.requireBackupConfirmationForMigrations` on, the Admiral refuses to migrate until
+`database.confirmedBackupForSchemaVersion` (or `ARMADA_CONFIRM_BACKUP_FOR_SCHEMA_VERSION`) is at least the target
+version it prints (104 when you come straight to this release).
+
+| Migration | Adds |
+|---|---|
+| 103 | Tables `blackbox_entries`, `blackbox_objects` (object bytes in a BLOB column for the Database storage target; unique on `entry_id, name`), `blackbox_files`, `blackbox_links` and `blackbox_notes`, with their indexes. Nullable columns `missions.last_blackbox_entry_id`, `missions.start_commit`, `voyages.last_blackbox_entry_id` and `vessels.blackbox_retention_days`. |
+| 104 | Table `blackbox_migrations`: one row per storage migration job, so a job resumes after a restart. |
+
+No migration rewrites existing rows. The new nullable columns start empty, so missions and voyages that failed before
+the upgrade have no entry until they are captured (see backfill below).
+
+**API fields.** `Mission.LastBlackBoxEntryId`, `Mission.StartCommit`, `Voyage.LastBlackBoxEntryId` and
+`Vessel.BlackBoxRetentionDays` appear on mission, voyage and vessel reads. All are null until set. Clients that
+reject unknown fields need an update; tolerant readers need nothing. `Vessel.BlackBoxRetentionDays` is a per-vessel
+retention override in days (0 keeps that vessel's entries forever, at most 3650, null uses
+`blackBox.retention.retentionDays`); set it with `PUT /api/v1/vessels/{id}`.
+
+**Settings.** A new `blackBox` block. On the first start the Admiral writes it into the settings file with every
+property and its default (nulls included), as it does for every settings object, so expect the file to grow. Values
+outside a range are clamped when the file is read, not rejected. `PUT /api/v1/settings` validates `blackBox.storage`
+before applying anything (400 with the setting named) and applies black box changes without a restart. Storage
+secrets are masked as `********` on reads and kept when written back masked.
+
+| Setting | Default | Range or values |
+|---|---|---|
+| `blackBox.enabled` | `true` | `false` stops capture, the sweeper and garbage collection; existing entries stay readable |
+| `blackBox.captureTimeoutMs` | `2000` | 100 to 30000 |
+| `blackBox.summaryEndpointId` | `null` | A model endpoint id (`mep_...`) that writes a labeled summary; the rules summary is kept on any failure |
+| `blackBox.storage.target` | `Database` | `Database`, `Disk`, `S3`, `AzureBlob`, `GoogleCloud`, `Cifs`, `Nfs` |
+| `blackBox.storage.keyPrefix` | `armada/blackbox` | External targets only; empty restores the default |
+| `blackBox.storage.compress` | `true` | gzip objects when stored |
+| `blackBox.storage.maxEvidenceObjectBytes` | `1048576` (1 MB) | 65536 to 16777216 |
+| `blackBox.storage.maxEntryBytes` | `8388608` (8 MB) | 1048576 to 67108864 |
+| `blackBox.storage.fallbackToDatabase` | `true` | Write the entry to the database when the external store fails |
+| `blackBox.storage.disk.directory` | `null` | `null` is `{DataDirectory}/blackbox`; a relative path resolves against the data directory |
+| `blackBox.storage.s3.*` | `region` `us-east-1`, `usePathStyle` `true`, `useSsl` `true`, the rest `null` | `endpoint`, `region`, `bucket`, `accessKey`, `secretKey` |
+| `blackBox.storage.azureBlob.*` | all `null` | `accountName`, `container`, `accessKey`, `connectionString`, `endpoint` |
+| `blackBox.storage.googleCloud.*` | all `null` | `projectId`, `bucket`, `credentialsPath`, `endpoint` |
+| `blackBox.storage.cifs.*` | `port` `445`, `preferEncryption` `true`, the rest `null` | `hostname`, `port` (1 to 65535), `share`, `domain`, `username`, `password` |
+| `blackBox.storage.nfs.*` | `version` `3`, `userId` `0`, `groupId` `0`, the rest `null` | `hostname`, `exportPath`, `version` (2 to 4), `port` and `mountPort` (1 to 65535, `null` asks the portmapper) |
+| `blackBox.retention.retentionDays` | `180` | 0 to 3650 (0 keeps entries forever) |
+| `blackBox.retention.resolvedRetentionDays` | `30` | 0 to 3650 (0: resolving does not shorten retention) |
+| `blackBox.retention.keepLatestPerMission` | `true` | Keep the current entry of a mission or voyage that still exists, even past expiry |
+| `blackBox.retention.maxEntriesPerVessel` | `1000` | 10 to 100000 |
+| `blackBox.retention.maxTotalBytes` | `1073741824` (1 GB) | 16777216 (16 MB) to 1099511627776 (1 TB) |
+| `blackBox.retention.deleteWithMission` | `false` | Delete a mission's entries when the mission is purged |
+| `blackBox.retention.deleteWithVessel` | `true` | Delete a vessel's entries when the vessel is deleted |
+| `blackBox.retention.gcIntervalMinutes` | `60` | 5 to 1440 |
+| `blackBox.retention.gcBatchSize` | `200` | 10 to 1000 |
+| `blackBox.retention.orphanGraceHours` | `24` | 1 to 720 |
+| `blackBox.sweeper.intervalSeconds` | `60` | 10 to 86400 |
+| `blackBox.sweeper.pageSize` | `100` | 1 to 1000 |
+| `blackBox.sweeper.maxEnrichmentAttempts` | `5` | 1 to 20 |
+
+**Storage.** Keep the default. With `Database`, entries live in `blackbox_objects` inside the Armada database, need no
+configuration, and are inside every SQLite backup. Choose another target only if the database should not hold the
+bytes; the target is recorded per entry, so a change applies to new entries and older ones stay readable where they
+were written. To move existing entries, see
+[Black box retention and storage](OPERATIONS.md#black-box-retention-and-storage).
+
+**Failures from before the upgrade.** The sweeper starts with the Admiral and, every `blackBox.sweeper.intervalSeconds`,
+captures up to `pageSize` missions and `pageSize` voyages that failed and have no current entry, oldest first
+(missions in `Failed`, `LandingFailed` or `Blocked`, or `Cancelled` with a failure kind other than `OperatorAction`;
+voyages in `Failed` or `Cancelled`). So old failures are captured by themselves over the first sweeps. To capture them
+at once, run a backfill as a global admin:
+
+```bash
+curl -X POST -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  http://127.0.0.1:7890/api/v1/blackbox/backfill -d '{"Since": "2026-09-01T00:00:00Z", "MaxSubjects": 1000}'
+```
+
+```json
+{"Mode":"Backfill","Scanned":42,"Captured":41,"Skipped":1,"Failed":0,"EnrichmentRequeued":0,"StartedUtc":"2026-10-29T21:11:40.016805Z","FinishedUtc":"2026-10-29T21:11:52.204113Z"}
+```
+
+`Since` is optional (subjects last updated at or after it); `MaxSubjects` defaults to 1000 and is clamped to 1 to
+100000, applied to missions and to voyages separately. Backfill and sweep are idempotent: a subject with a current
+entry is skipped. Entries made this way have `CaptureMode` `Backfill` or `Sweeper` and lower fidelity than an inline
+capture: they are built from the stored rows, so the exception, command output and checkout state at the failure are
+usually missing. Their retention counts from the capture time, not from the original failure.
+
+**Doctor.** `GET /api/v1/doctor` returns 12 checks instead of 11 (`armada doctor` runs its own local checks and is
+unchanged). The new one, "Black Box Storage", passes when the configured target validates and answers its health check, fails with the reason (and what
+fallback will do) otherwise, and warns when `blackBox.enabled` is false. Scripts that assert the check count need the
+new number.
+
+**Harbors.** Black box capture and storage run on the Admiral only; a Harbor needs no change for it. Update each
+Harbor along with the Admiral as usual. How evidence is read from Harbor docks is in
+[HARBOR.md](HARBOR.md#black-box-evidence-on-harbor-hosted-missions).
