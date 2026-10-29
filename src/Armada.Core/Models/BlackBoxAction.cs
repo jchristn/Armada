@@ -18,7 +18,7 @@ namespace Armada.Core.Models
         public string Tool { get; set; } = "";
 
         /// <summary>
-        /// Tool arguments as text.
+        /// Tool arguments as text; when the action runs, true, false and whole numbers become JSON booleans and numbers.
         /// </summary>
         [CollectionBound(BlackBoxLimits.MaxActionArguments, Reason = "Capped by BlackBoxRecordBounder")]
         public Dictionary<string, string> Arguments

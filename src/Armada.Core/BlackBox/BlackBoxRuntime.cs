@@ -40,6 +40,12 @@ namespace Armada.Core.BlackBox
         /// <summary>Enrichment pipeline (add enrichers, set the advisor).</summary>
         public BlackBoxPipeline Pipeline { get; }
 
+        /// <summary>The advisor the pipeline runs (built-in rule catalog).</summary>
+        public BlackBoxAdvisor Advisor { get; }
+
+        /// <summary>Background re-analysis of entries analyzed with older rules.</summary>
+        public BlackBoxReanalyzer Reanalyzer { get; }
+
         /// <summary>Enrichment queue.</summary>
         public BlackBoxEnrichmentQueue Queue { get; }
 
@@ -70,12 +76,18 @@ namespace Armada.Core.BlackBox
             Writer = new BlackBoxEntryWriter(database, settings.BlackBox, Objects, Renderer, Redactor, Events, logging);
             Capture = new BlackBoxCapture(database, settings, Writer, Events, version, Redactor, logging);
             Pipeline = new BlackBoxPipeline(database, settings.BlackBox, Objects, Writer, Events, logging);
+            Advisor = new BlackBoxAdvisor(BlackBoxRuleCatalog.Default, logging);
+            Pipeline.Advisor = Advisor;
+            Pipeline.SummaryWriter = new ModelEndpointBlackBoxSummaryWriter(database, logging);
+            Pipeline.AddEnricher(new BlackBoxConfigurationEnricher(database, settings, logging));
+            Reanalyzer = new BlackBoxReanalyzer(database, Pipeline, logging);
             Queue = new BlackBoxEnrichmentQueue(Pipeline, logging);
             Capture.Enrichment = Queue;
             Sweeper = new BlackBoxSweeper(database, settings, Capture, Queue, logging);
             GarbageCollector = new BlackBoxGarbageCollector(database, settings.BlackBox, Stores, Events, logging);
             Service = new BlackBoxService(database, settings, Objects, Renderer, Pipeline, GarbageCollector, Sweeper, Stores, Events, logging);
             Background = new BlackBoxBackgroundService(settings, Queue, Sweeper, GarbageCollector, logging);
+            Background.Reanalyzer = Reanalyzer;
         }
 
         /// <summary>

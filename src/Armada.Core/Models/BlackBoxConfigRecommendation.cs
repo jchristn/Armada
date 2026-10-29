@@ -13,7 +13,7 @@ namespace Armada.Core.Models
     public class BlackBoxConfigRecommendation
     {
         /// <summary>
-        /// Recommendation id within the entry (for example cr1).
+        /// Stable recommendation id: the rule id in lower case, a dot and a key (for example bbx-land-001.landing-mode).
         /// </summary>
         public string Id { get; set; } = "";
 

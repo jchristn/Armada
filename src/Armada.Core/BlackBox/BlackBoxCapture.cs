@@ -213,6 +213,7 @@ namespace Armada.Core.BlackBox
                     record.Classification = new BlackBoxClassification { Kind = root?.FailureKind, RawReason = reason };
                     record.Voyage = rollup;
                     record.Related = new BlackBoxRelated { Fingerprint = entry.Fingerprint, CascadeRootEntryId = rollup.CascadeRootEntryId };
+                    record.Configuration = BlackBoxConfigurationResolver.Resolve(new BlackBoxConfigurationInputs { Settings = _Settings, Voyage = voyage, Vessel = vessel });
                     if (context.CaptureMode != BlackBoxCaptureModeEnum.Inline) BlackBoxRecordBounder.AddNote(record.Truncation, "Captured by the " + context.CaptureMode.ToString().ToLowerInvariant() + "; the failure site's volatile facts are missing.");
                     if (!String.IsNullOrWhiteSpace(context.Note)) BlackBoxRecordBounder.AddNote(record.Truncation, context.Note!);
 
@@ -425,37 +426,8 @@ namespace Armada.Core.BlackBox
 
         private BlackBoxConfiguration ConfigurationOf(Mission mission, Vessel? vessel, Voyage? voyage, Captain? captain)
         {
-            BlackBoxConfiguration config = new BlackBoxConfiguration();
-            if (voyage?.LandingMode != null) Add(config, "LandingMode", voyage.LandingMode.Value.ToString(), BlackBoxConfigSourceEnum.Voyage);
-            else if (vessel?.LandingMode != null) Add(config, "LandingMode", vessel.LandingMode.Value.ToString(), BlackBoxConfigSourceEnum.Vessel);
-            else Add(config, "LandingMode", (_Settings.LandingMode ?? LandingModeEnum.MergeAndPush).ToString(), BlackBoxConfigSourceEnum.Global);
-            if (voyage?.AutoPush != null) Add(config, "AutoPush", voyage.AutoPush.Value.ToString(), BlackBoxConfigSourceEnum.Voyage);
-            Add(config, "RequiresReview", mission.RequiresReview.ToString(), BlackBoxConfigSourceEnum.Mission);
-            Add(config, "WaitForVoyageWorkers", mission.WaitForVoyageWorkers.ToString(), BlackBoxConfigSourceEnum.Mission);
-            if (mission.DependsOnMissionId != null) Add(config, "DependsOnMissionId", mission.DependsOnMissionId, BlackBoxConfigSourceEnum.Mission);
-            if (mission.Persona != null) Add(config, "Persona", mission.Persona, BlackBoxConfigSourceEnum.Mission);
-            if (vessel != null)
-            {
-                Add(config, "AllowConcurrentMissions", vessel.AllowConcurrentMissions.ToString(), BlackBoxConfigSourceEnum.Vessel);
-                if (vessel.TestCommand != null) Add(config, "TestCommand", vessel.TestCommand, BlackBoxConfigSourceEnum.Vessel);
-                if (vessel.ProtectedPathPatterns.Count > 0) Add(config, "ProtectedPathPatterns", String.Join(", ", vessel.ProtectedPathPatterns.Take(20)), BlackBoxConfigSourceEnum.Vessel);
-                if (vessel.BlackBoxRetentionDays.HasValue) Add(config, "BlackBoxRetentionDays", vessel.BlackBoxRetentionDays.Value.ToString(), BlackBoxConfigSourceEnum.Vessel);
-            }
-            if (captain != null)
-            {
-                Add(config, "CaptainRuntime", captain.Runtime.ToString(), BlackBoxConfigSourceEnum.Captain);
-                if (captain.Model != null) Add(config, "CaptainModel", captain.Model, BlackBoxConfigSourceEnum.Captain);
-            }
-            Add(config, "StallThresholdMinutes", _Settings.StallThresholdMinutes.ToString(), BlackBoxConfigSourceEnum.Global);
-            Add(config, "StageCheckTimeoutMinutes", _Settings.StageCheckTimeoutMinutes.ToString(), BlackBoxConfigSourceEnum.Global);
-            Add(config, "MaxMissionRuntimeMinutes", _Settings.MaxMissionRuntimeMinutes.ToString(), BlackBoxConfigSourceEnum.Global);
-            Add(config, "MaxRecoveryAttempts", _Settings.MaxRecoveryAttempts.ToString(), BlackBoxConfigSourceEnum.Global);
-            return config;
-        }
-
-        private static void Add(BlackBoxConfiguration config, string setting, string? value, BlackBoxConfigSourceEnum source)
-        {
-            if (config.Values.Count < BlackBoxLimits.MaxConfigValues) config.Values.Add(new BlackBoxConfigValue { Setting = setting, Value = value, Source = source });
+            // The persona and workflow profile need reads; BlackBoxConfigurationEnricher adds them during enrichment.
+            return BlackBoxConfigurationResolver.Resolve(new BlackBoxConfigurationInputs { Settings = _Settings, Mission = mission, Vessel = vessel, Voyage = voyage, Captain = captain });
         }
 
         private static BlackBoxWorkspace WorkspaceOf(Mission mission, Vessel? vessel, Dock? dock, BlackBoxGitFacts? facts)

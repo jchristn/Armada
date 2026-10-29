@@ -11,9 +11,11 @@ namespace Armada.Core.BlackBox
 
     /// <summary>
     /// Renders the FIX THIS brief of a black box entry as Markdown for an audience: agent (brief.md, a self-contained
-    /// package to paste into a coding agent with the triage instruction), user (brief.user.md, plain language, no stack
-    /// frames or source pointers) and maintainer (brief.maintainer.md, source pointers, build identity and improvement
-    /// hypotheses first). Renders whatever sections the record has. Size: aims for <see cref="TargetBytes"/> and never
+    /// package to paste into a coding agent with the triage instruction, sections in record order), user (brief.user.md,
+    /// plain language: leads with what you can do, then why and how to prevent it; no stack frames, source pointers, rule
+    /// ids, REST commands or improvement hypotheses) and maintainer (brief.maintainer.md: leads with the code site, triage
+    /// and votes, rule ids, fingerprint and occurrences, then the improvement hypotheses with source pointers). Renders
+    /// whatever sections the record has. Size: aims for <see cref="TargetBytes"/> and never
     /// exceeds <see cref="MaxBytes"/>. Trimming order when over budget: list items (50, 25, 10, 5), then long text
     /// (4000, 1500, 500 characters), then whole sections (Evidence, Related, Attempts, Configuration, Status timeline,
     /// Workspace, Scope), then a hard cut with a marker. The output is redacted again and never contains em-dashes.
@@ -52,6 +54,9 @@ namespace Armada.Core.BlackBox
 
         private static readonly int[] _ListLimits = new int[] { 50, 25, 10, 5 };
         private static readonly int[] _TextLimits = new int[] { 4000, 1500, 500 };
+        private static readonly string[] _AgentOrder = new string[] { "Header", "Summary", "Identity", "Where", "How", "Timeline", "Why", "Conflict", "Workspace", "Scope", "Configuration", "Prevention", "Improvements", "Recovery", "Attempts", "Evidence", "Related", "Footer", "Answer" };
+        private static readonly string[] _UserOrder = new string[] { "Header", "Summary", "Recovery", "Why", "Prevention", "Where", "How", "Conflict", "Workspace", "Scope", "Configuration", "Attempts", "Evidence", "Related", "Identity", "Footer" };
+        private static readonly string[] _MaintainerOrder = new string[] { "Header", "CodeSite", "Improvements", "Summary", "Why", "How", "Where", "Timeline", "Conflict", "Workspace", "Scope", "Configuration", "Prevention", "Recovery", "Attempts", "Evidence", "Related", "Identity", "Footer" };
         private static readonly string[] _DropOrder = new string[] { "Evidence", "Related", "Attempts", "Configuration", "Timeline", "Workspace", "Scope" };
         private static readonly Regex _AbsolutePath = new Regex(@"(?:[A-Za-z]:\\|/)(?:Users|home|private|tmp|var|opt|srv|mnt|Volumes)[^\s'""`)\]]*", RegexOptions.Compiled | RegexOptions.CultureInvariant);
         private readonly BlackBoxRedactor _Redactor;
@@ -125,6 +130,17 @@ namespace Armada.Core.BlackBox
             return Cut(text, MaxBytes);
         }
 
+        /// <summary>
+        /// Replace absolute host paths (under Users, home, private, tmp, var, opt, srv, mnt, Volumes) with {path}, as
+        /// redactHosts does for briefs.
+        /// </summary>
+        /// <param name="text">Text, or null.</param>
+        /// <returns>The text with host paths replaced (empty for null).</returns>
+        public static string RedactHosts(string? text)
+        {
+            return String.IsNullOrEmpty(text) ? String.Empty : _AbsolutePath.Replace(text, "{path}");
+        }
+
         #endregion
 
         #region Private-Methods
@@ -137,7 +153,8 @@ namespace Armada.Core.BlackBox
             BlackBoxSubject s = r.Subject ?? new BlackBoxSubject { MissionId = entry.MissionId, VoyageId = entry.VoyageId, Title = entry.MissionTitle, VesselName = entry.VesselName, Attempt = entry.Attempt, SubjectType = entry.SubjectType };
             BlackBoxSite site = r.Site ?? new BlackBoxSite { Phase = entry.Phase, Step = entry.Step, ArmadaVersion = entry.ArmadaVersion, ArmadaCommit = entry.ArmadaCommit };
             string subjectLabel = s.SubjectType == BlackBoxSubjectTypeEnum.Voyage ? "voyage " + (s.VoyageId ?? "?") : "mission " + (s.MissionId ?? "?");
-            StringBuilder sb = new StringBuilder();
+            Dictionary<string, StringBuilder> sections = new Dictionary<string, StringBuilder>(StringComparer.Ordinal);
+            StringBuilder sb = Begin(sections, "Header");
 
             string heading = user ? "What went wrong" : (maintainer ? "Armada maintainer brief" : "FIX THIS");
             sb.Append("# ").Append(heading).Append(": ").Append(Inline(s.Title ?? entry.MissionTitle ?? "(untitled)")).Append(" (").Append(subjectLabel).Append(")\n\n");
@@ -166,6 +183,7 @@ namespace Armada.Core.BlackBox
             }
 
             // Summary
+            sb = Begin(sections, "Summary");
             sb.Append("## Summary\n\n");
             if (r.Analysis != null && !String.IsNullOrWhiteSpace(r.Analysis.Summary))
             {
@@ -190,6 +208,7 @@ namespace Armada.Core.BlackBox
             sb.Append('\n');
 
             // Identity
+            sb = Begin(sections, "Identity");
             sb.Append("## Identity\n\n");
             Line(sb, "Entry", entry.Id + " (attempt " + s.Attempt.ToString(CultureInfo.InvariantCulture) + (entry.SupersedesId != null ? ", supersedes " + entry.SupersedesId : String.Empty) + ")");
             Line(sb, "Mission", s.MissionId);
@@ -207,6 +226,7 @@ namespace Armada.Core.BlackBox
             sb.Append('\n');
 
             // Where
+            sb = Begin(sections, "Where");
             sb.Append("## Where it failed\n\n");
             Line(sb, "Phase / step", site.Phase + " / " + site.Step);
             Line(sb, "Host", site.Host ?? site.HostKind.ToString());
@@ -218,6 +238,7 @@ namespace Armada.Core.BlackBox
             sb.Append('\n');
 
             // How
+            sb = Begin(sections, "How");
             BlackBoxMechanism? m = r.Mechanism;
             string? reason = r.Classification?.RawReason ?? entry.ReasonExcerpt;
             sb.Append("## How it failed\n\n");
@@ -240,6 +261,7 @@ namespace Armada.Core.BlackBox
             sb.Append('\n');
 
             // Status timeline
+            sb = Begin(sections, "Timeline");
             if (!user && !dropped.Contains("Timeline") && r.Status != null && r.Status.Timeline.Count > 0)
             {
                 sb.Append("## Status timeline\n\n");
@@ -249,12 +271,15 @@ namespace Armada.Core.BlackBox
             }
 
             // Why
+            sb = Begin(sections, "Why");
             sb.Append("## Why\n\n");
             if (r.Analysis != null && r.Analysis.Why.Count > 0)
             {
                 foreach (BlackBoxFinding f in r.Analysis.Why.Take(listLimit))
                 {
-                    sb.Append("- ").Append(Inline(f.Statement)).Append(" (rule ").Append(f.RuleId).Append(", confidence ").Append(f.Confidence).Append(")");
+                    sb.Append("- ").Append(Inline(f.Statement));
+                    if (user) sb.Append(" (").Append(f.Confidence.ToString().ToLowerInvariant()).Append(" confidence)");
+                    else sb.Append(" (rule ").Append(f.RuleId).Append(", confidence ").Append(f.Confidence).Append(")");
                     if (!user && f.EvidenceRefs.Count > 0) sb.Append(" Evidence: ").Append(String.Join(", ", f.EvidenceRefs.Take(5).Select(Inline)));
                     sb.Append('\n');
                 }
@@ -268,6 +293,7 @@ namespace Armada.Core.BlackBox
             sb.Append('\n');
 
             // Conflict
+            sb = Begin(sections, "Conflict");
             BlackBoxConflict? c = r.Conflict;
             if (c != null && (c.IsConflict || c.ConflictedFiles.Count > 0 || c.ConflictingMissions.Count > 0))
             {
@@ -303,6 +329,7 @@ namespace Armada.Core.BlackBox
             }
 
             // Workspace
+            sb = Begin(sections, "Workspace");
             BlackBoxWorkspace? w = r.Workspace;
             if (w != null && !dropped.Contains("Workspace"))
             {
@@ -326,6 +353,7 @@ namespace Armada.Core.BlackBox
             }
 
             // Scope
+            sb = Begin(sections, "Scope");
             BlackBoxScope? sc = r.Scope;
             if (sc != null && !dropped.Contains("Scope") && (sc.OutOfScopeFiles.Count > 0 || sc.BoundaryFindings.Count > 0 || sc.ScopedFiles.Count > 0))
             {
@@ -345,6 +373,7 @@ namespace Armada.Core.BlackBox
             }
 
             // Configuration
+            sb = Begin(sections, "Configuration");
             if (r.Configuration != null && r.Configuration.Values.Count > 0 && !dropped.Contains("Configuration"))
             {
                 sb.Append("## Configuration in effect\n\n");
@@ -353,15 +382,16 @@ namespace Armada.Core.BlackBox
             }
 
             // Prevention
+            sb = Begin(sections, "Prevention");
             if (r.Analysis != null && r.Analysis.ConfigRecommendations.Count > 0)
             {
                 sb.Append("## What would have prevented it\n\n");
                 foreach (BlackBoxConfigRecommendation rec in r.Analysis.ConfigRecommendations.Take(listLimit))
                 {
-                    sb.Append("- ").Append(rec.Id).Append(": set ").Append(rec.Setting).Append(" on the ").Append(rec.Scope.ToString().ToLowerInvariant());
+                    sb.Append("- ").Append(user ? "Set " : rec.Id + ": set ").Append(rec.Setting).Append(" on the ").Append(rec.Scope.ToString().ToLowerInvariant());
                     if (rec.CurrentValue != null || rec.SuggestedValue != null) sb.Append(" from `").Append(Inline(rec.CurrentValue ?? "unset")).Append("` to `").Append(Inline(rec.SuggestedValue ?? "?")).Append('`');
                     if (rec.Rationale != null) sb.Append(". ").Append(Inline(rec.Rationale));
-                    if (rec.RuleId != null) sb.Append(" (rule ").Append(rec.RuleId).Append(")");
+                    if (rec.RuleId != null && !user) sb.Append(" (rule ").Append(rec.RuleId).Append(")");
                     if (rec.HowToApply != null && !user) sb.Append(" How: ").Append(Inline(rec.HowToApply));
                     sb.Append('\n');
                 }
@@ -369,6 +399,7 @@ namespace Armada.Core.BlackBox
             }
 
             // Improvements
+            sb = Begin(sections, "Improvements");
             if (!user && r.Analysis != null && r.Analysis.ArmadaImprovements.Count > 0)
             {
                 sb.Append("## What Armada could change\n\n");
@@ -385,12 +416,13 @@ namespace Armada.Core.BlackBox
             }
 
             // Recovery
-            sb.Append("## Recovery\n\n");
+            sb = Begin(sections, "Recovery");
+            sb.Append(user ? "## What you can do\n\n" : "## Recovery\n\n");
             if (r.Analysis != null && r.Analysis.RecoveryPaths.Count > 0)
             {
                 foreach (BlackBoxRecoveryPath p in r.Analysis.RecoveryPaths.OrderBy(x => x.Rank).Take(listLimit))
                 {
-                    sb.Append("### ").Append(p.Rank.ToString(CultureInfo.InvariantCulture)).Append(". ").Append(Inline(p.Title)).Append(" (").Append(p.Id).Append(")\n\n");
+                    sb.Append("### ").Append(p.Rank.ToString(CultureInfo.InvariantCulture)).Append(". ").Append(Inline(p.Title)).Append(user ? String.Empty : " (" + p.Id + ")").Append("\n\n");
                     sb.Append("Risk: ").Append(p.Risk).Append(p.DataLossRisk ? ", data-loss risk (confirm first)" : String.Empty).Append(".");
                     if (p.ExpectedOutcome != null) sb.Append(" Expected: ").Append(Inline(p.ExpectedOutcome));
                     sb.Append("\n\n");
@@ -414,6 +446,7 @@ namespace Armada.Core.BlackBox
             }
 
             // Attempts
+            sb = Begin(sections, "Attempts");
             if (r.Attempts.Count > 0 && !dropped.Contains("Attempts"))
             {
                 sb.Append("## Attempts\n\n");
@@ -429,6 +462,7 @@ namespace Armada.Core.BlackBox
             }
 
             // Evidence
+            sb = Begin(sections, "Evidence");
             if (!dropped.Contains("Evidence") && r.Evidence != null && (r.Evidence.Objects.Count > 0 || r.Evidence.CheckResults.Count > 0 || r.Evidence.RelevantEvents.Count > 0))
             {
                 sb.Append("## Evidence\n\n");
@@ -449,6 +483,7 @@ namespace Armada.Core.BlackBox
             }
 
             // Related
+            sb = Begin(sections, "Related");
             if (!dropped.Contains("Related") && r.Related != null && (r.Related.SimilarEntries.Count > 0 || r.Related.OccurrencesLast30Days > 0))
             {
                 sb.Append("## Related failures\n\n");
@@ -460,6 +495,7 @@ namespace Armada.Core.BlackBox
             }
 
             // Footer
+            sb = Begin(sections, "Footer");
             if (r.Redaction.RedactedCount > 0 || r.Truncation.Fields.Count > 0 || r.Truncation.Notes.Count > 0)
             {
                 sb.Append("## Notes on this record\n\n");
@@ -469,6 +505,7 @@ namespace Armada.Core.BlackBox
                 sb.Append('\n');
             }
 
+            sb = Begin(sections, "Answer");
             if (agent)
             {
                 sb.Append("## Your answer\n\n");
@@ -476,10 +513,41 @@ namespace Armada.Core.BlackBox
                 sb.Append("If you change the Armada installation, use the recovery paths above and annotate the entry with `annotate_blackbox` when done.\n");
             }
 
-            string text = sb.ToString();
+            // Maintainer: the code site, triage, rule ids, fingerprint and occurrences come first.
+            sb = Begin(sections, "CodeSite");
+            if (maintainer)
+            {
+                sb.Append("## Code site and triage\n\n");
+                Line(sb, "Site", site.SourceFile == null ? "unknown (no caller site recorded)" : site.SourceFile + (site.SourceLine.HasValue ? ":" + site.SourceLine.Value.ToString(CultureInfo.InvariantCulture) : String.Empty) + (site.Method != null ? " in " + (site.Component != null ? site.Component + "." : String.Empty) + site.Method : String.Empty));
+                Line(sb, "Phase / step", site.Phase + " / " + site.Step + (kind.HasValue ? " (kind " + kind.Value + ")" : String.Empty));
+                Line(sb, "Armada build", (site.ArmadaVersion ?? entry.ArmadaVersion ?? "unknown") + ((site.ArmadaCommit ?? entry.ArmadaCommit) != null ? " (commit " + (site.ArmadaCommit ?? entry.ArmadaCommit) + ")" : String.Empty));
+                BlackBoxTriageVerdict? tv = r.Analysis?.Triage;
+                Line(sb, "Triage", triage + (tv != null ? " (confidence " + tv.Confidence + ")" : String.Empty) + (tv != null && tv.TiedWith.Count > 1 ? ", tie between " + String.Join(" and ", tv.TiedWith) : String.Empty));
+                if (tv != null && tv.Votes.Count > 0) Line(sb, "Votes", String.Join(", ", tv.Votes.Take(listLimit).Select(v => v.RuleId + "=" + v.Verdict + "x" + v.Weight.ToString(CultureInfo.InvariantCulture))));
+                if (r.Analysis != null && r.Analysis.Why.Count > 0) Line(sb, "Rules", String.Join(", ", r.Analysis.Why.Select(f => f.RuleId).Distinct(StringComparer.Ordinal)) + " (rules version " + Math.Max(r.RulesVersion, entry.RulesVersion).ToString(CultureInfo.InvariantCulture) + ")");
+                Line(sb, "Fingerprint", r.Related?.Fingerprint ?? entry.Fingerprint);
+                Line(sb, "Occurrences in the last 30 days", (r.Related?.OccurrencesLast30Days ?? 0).ToString(CultureInfo.InvariantCulture) + ((r.Related?.SimilarEntries.Count ?? 0) > 0 ? ", " + r.Related!.SimilarEntries.Count(e => e.Resolution != BlackBoxResolutionEnum.Open).ToString(CultureInfo.InvariantCulture) + " of the similar entries resolved" : String.Empty));
+                if (m != null && m.StackFrames.Count > 0) Line(sb, "Top Armada frame", m.StackFrames[0]);
+                sb.Append('\n');
+            }
+
+            string[] order = user ? _UserOrder : (maintainer ? _MaintainerOrder : _AgentOrder);
+            StringBuilder assembled = new StringBuilder();
+            foreach (string name in order)
+            {
+                if (sections.TryGetValue(name, out StringBuilder? part)) assembled.Append(part);
+            }
+            string text = assembled.ToString();
             text = _Redactor.Redact(text) ?? String.Empty;
             if (redactHosts) text = _AbsolutePath.Replace(text, "{path}");
             return NoDashes(text);
+        }
+
+        private static StringBuilder Begin(Dictionary<string, StringBuilder> sections, string name)
+        {
+            StringBuilder part = new StringBuilder();
+            sections[name] = part;
+            return part;
         }
 
         private static void Line(StringBuilder sb, string label, string? value)
