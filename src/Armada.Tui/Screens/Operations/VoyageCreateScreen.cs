@@ -21,7 +21,7 @@ namespace Armada.Tui.Screens.Operations
     /// Create Voyage (W3.9, <c>/voyages/create</c>), the dashboard's VoyageCreate page: title, description, vessel,
     /// pipeline (or inherit), landing mode (or inherit), playbooks with a delivery mode, and the
     /// missions list (title, priority, description; <c>Ctrl+N</c> adds, <c>Ctrl+D</c> removes the focused one).
-    /// <c>Ctrl+S</c> creates the voyage and opens it; <c>Esc</c> returns to Voyages. Not thread-safe.
+    /// <c>Alt+P</c> previews the black box overlap warnings and brief lint of each mission, <c>Ctrl+S</c> creates the voyage and opens it (showing any warnings the response carries); <c>Esc</c> returns to Voyages. Not thread-safe.
     /// </summary>
     public class VoyageCreateScreen : OpsScreen
     {
@@ -100,7 +100,8 @@ namespace Armada.Tui.Screens.Operations
                     new KeyValuePair<string, string>("Ctrl+S", "Create Voyage"),
                     new KeyValuePair<string, string>("Ctrl+N", "Add Mission"),
                     new KeyValuePair<string, string>("Ctrl+D", "Remove"),
-                    new KeyValuePair<string, string>("Ctrl+E", "Editor")
+                    new KeyValuePair<string, string>("Ctrl+E", "Editor"),
+                    new KeyValuePair<string, string>("Alt+P", "Preview overlaps")
                 };
             }
         }
@@ -116,6 +117,7 @@ namespace Armada.Tui.Screens.Operations
                     new KeyValuePair<string, string>("Ctrl+N", "Add Mission"),
                     new KeyValuePair<string, string>("Ctrl+D", "Remove"),
                     new KeyValuePair<string, string>("Ctrl+E", "Editor"),
+                    new KeyValuePair<string, string>("Alt+P", "Preview overlaps"),
                     new KeyValuePair<string, string>("Esc", "Cancel"),
                 };
             }
@@ -247,6 +249,7 @@ namespace Armada.Tui.Screens.Operations
             {
                 Submitting = false;
                 Toast(NotificationSeverityEnum.Success, Tr("Voyage \"{{title}}\" created.", LocalizationArgs.Of("title", title)));
+                if (v != null) BlackBoxDispatchPreview.ShowWarnings(this, v.OverlapWarnings, v.BriefLintWarnings);
                 if (v != null && !String.IsNullOrEmpty(v.Id)) Context.Navigate("/voyages/" + Uri.EscapeDataString(v.Id));
             }, null, ex =>
             {
@@ -265,6 +268,9 @@ namespace Armada.Tui.Screens.Operations
             ArmadaCommand add = new ArmadaCommand(ScreenKey + ".add-mission", "Add Mission", CommandMenuEnum.Actions, AddMission, "ctrl+n");
             add.Dispatch = false;
             list.Add(add);
+            ArmadaCommand preview = new ArmadaCommand(ScreenKey + ".preview", "Preview overlaps and brief lint", CommandMenuEnum.Actions, Preview, "alt+p");
+            preview.Dispatch = false;
+            list.Add(preview);
             ArmadaCommand cancel = new ArmadaCommand(ScreenKey + ".cancel", "Cancel", CommandMenuEnum.Actions, () => Context.Navigate("/missions?tab=voyages"));
             cancel.Dispatch = false;
             list.Add(cancel);
@@ -292,7 +298,24 @@ namespace Armada.Tui.Screens.Operations
                 }
             }
 
+            if (key.Code == KeyCode.Character && key.Modifiers == KeyModifiers.Alt && Char.ToLowerInvariant((char)key.Rune) == 'p')
+            {
+                Preview();
+                return true;
+            }
+
             return Scope.HandleKey(key);
+        }
+
+        /// <summary>
+        /// The black box dispatch preview of every mission with a title or description (overlaps on the chosen vessel
+        /// and the brief lint); nothing is created.
+        /// </summary>
+        public void Preview()
+        {
+            List<KeyValuePair<string, string>> missions = new List<KeyValuePair<string, string>>();
+            for (int i = 0; i < MissionTitles.Count; i++) missions.Add(new KeyValuePair<string, string>(MissionTitles[i].Value, MissionDescriptions[i].Text));
+            BlackBoxDispatchPreview.Run(this, Vessel.Value, missions);
         }
 
         /// <inheritdoc />
